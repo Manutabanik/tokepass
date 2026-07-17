@@ -1,36 +1,36 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Tokepass
 
-## Getting Started
+Base de una plataforma de boletería digital construida con Next.js App Router,
+TypeScript, Tailwind CSS, Shadcn UI y Supabase.
 
-First, run the development server:
+## Desarrollo local
+
+1. Copia `.env.example` a `.env.local`.
+2. Completa la URL y la clave anónima de tu proyecto Supabase.
+3. Instala dependencias y ejecuta el servidor:
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+La aplicación estará disponible en `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Arquitectura
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `app/(public)`: tienda, búsqueda y acceso de compradores.
+- `app/(admin)`: Command Center protegido para organizadores.
+- `components/ui`: componentes generados por Shadcn.
+- `components/shared`: navegación y piezas compartidas de producto.
+- `lib/supabase`: clientes browser/server y sincronización de sesión.
+- `hooks`: hooks de cliente para autenticación y estado.
+- `types/database.ts`: contrato tipado del dominio y de Supabase.
+- `proxy.ts`: refresco de sesión y protección de las rutas `/admin`.
 
-## Learn More
+## Verificación
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm run lint
+npx tsc --noEmit
+npm run build
+```
