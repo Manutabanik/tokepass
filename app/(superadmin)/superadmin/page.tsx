@@ -9,9 +9,11 @@ import Link from "next/link"
 import { redirect } from "next/navigation"
 
 import {
+  SuperAdminForbiddenError,
+} from "@/lib/superadmin-errors"
+import {
   getAllOrganizers,
   getGlobalMetrics,
-  SuperAdminForbiddenError,
 } from "@/app/actions/superadmin"
 import { PageHeading } from "@/components/superadmin/page-heading"
 import { Button } from "@/components/ui/button"

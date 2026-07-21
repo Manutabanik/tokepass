@@ -5,13 +5,11 @@ import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState, useTransition } from "react"
 import { toast } from "sonner"
 
-import {
-  MAX_TICKETS_PER_PURCHASE,
-  startCheckoutWithPayment,
-} from "@/app/actions/checkout"
+import { startCheckoutWithPayment } from "@/app/actions/checkout"
 import type { EventItem } from "@/app/actions/addons"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import { MAX_TICKETS_PER_PURCHASE } from "@/lib/checkout-limits"
 import { formatCurrency } from "@/lib/format"
 import { cn } from "@/lib/utils"
 

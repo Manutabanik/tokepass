@@ -3,10 +3,9 @@
 import { revalidatePath } from "next/cache"
 
 import { createPaymentPreference } from "@/app/actions/payments"
+import { MAX_TICKETS_PER_PURCHASE } from "@/lib/checkout-limits"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
-
-const MAX_TICKETS_PER_PURCHASE = 10
 
 export type ReservedTicket = {
   ticket_id: string
@@ -257,5 +256,3 @@ export async function startCheckoutWithPayment(
     }
   }
 }
-
-export { MAX_TICKETS_PER_PURCHASE }

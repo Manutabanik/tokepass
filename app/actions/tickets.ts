@@ -126,5 +126,3 @@ export async function getMyTickets(): Promise<MyTicket[]> {
 
   return tickets
 }
-
-export { splitTicketsBySchedule } from "@/lib/ticket-schedule"

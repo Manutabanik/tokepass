@@ -2,15 +2,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
-
-export class SuperAdminForbiddenError extends Error {
-  status = 403 as const
-
-  constructor(message = "Acceso restringido al super administrador (403).") {
-    super(message)
-    this.name = "SuperAdminForbiddenError"
-  }
-}
+import { SuperAdminForbiddenError } from "@/lib/superadmin-errors"
 
 /**
  * Valida sesión + rol `super_admin` y entrega el client service-role
