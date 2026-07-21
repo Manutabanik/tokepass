@@ -45,32 +45,44 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const isAdminRoute = request.nextUrl.pathname.startsWith("/admin")
+  const { pathname } = request.nextUrl
+  const isAdminRoute = pathname.startsWith("/admin")
+  const isSuperAdminRoute =
+    pathname.startsWith("/superadmin") || pathname.startsWith("/super-admin")
+  const isPromoterRoute = pathname.startsWith("/promoter")
+  const isProtectedRoute = isAdminRoute || isSuperAdminRoute || isPromoterRoute
 
-  if (!user && isAdminRoute) {
+  if (!user && isProtectedRoute) {
     const loginUrl = request.nextUrl.clone()
-    loginUrl.pathname = "/login-organizador"
-    loginUrl.searchParams.set(
-      "next",
-      `${request.nextUrl.pathname}${request.nextUrl.search}`,
-    )
+    loginUrl.pathname = isPromoterRoute ? "/login" : "/login-organizador"
+    loginUrl.searchParams.set("next", `${pathname}${request.nextUrl.search}`)
 
     return redirectWithRefreshedCookies(loginUrl, response)
   }
 
-  if (user && isAdminRoute) {
+  if (user && isProtectedRoute) {
     const { data: profile, error } = await supabase
       .from("profiles")
       .select("role")
       .eq("id", user.id)
       .maybeSingle()
 
-    const canAccessAdmin =
-      !error &&
-      profile &&
-      (profile.role === "admin" || profile.role === "super_admin")
+    const role = error ? null : profile?.role
 
-    if (!canAccessAdmin) {
+    // The platform panel is exclusive to super admins.
+    if (isSuperAdminRoute && role !== "super_admin") {
+      const fallbackUrl = request.nextUrl.clone()
+      fallbackUrl.pathname = role === "admin" ? "/admin" : "/"
+      fallbackUrl.search = ""
+      return redirectWithRefreshedCookies(fallbackUrl, response)
+    }
+
+    // The organizer panel is open to admins and super admins.
+    if (
+      isAdminRoute &&
+      role !== "admin" &&
+      role !== "super_admin"
+    ) {
       const homeUrl = request.nextUrl.clone()
       homeUrl.pathname = "/"
       homeUrl.search = ""

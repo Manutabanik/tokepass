@@ -1,4 +1,5 @@
-import { LogOut } from "lucide-react"
+import { LogOut, ShieldCheck } from "lucide-react"
+import Link from "next/link"
 import { redirect } from "next/navigation"
 
 import { signOut } from "@/app/actions/auth"
@@ -56,6 +57,15 @@ export default async function AdminLayout({
             </div>
 
             <div className="flex items-center gap-3">
+              {profile.role === "super_admin" && (
+                <Link
+                  href="/superadmin"
+                  className="hidden items-center gap-2 rounded-xl border border-sky-500/20 bg-sky-500/10 px-3 py-2 text-xs font-medium text-sky-300 transition hover:bg-sky-500/15 sm:flex"
+                >
+                  <ShieldCheck className="size-4" aria-hidden="true" />
+                  Platform OS
+                </Link>
+              )}
               <div className="hidden text-right sm:block">
                 <p className="max-w-48 truncate text-sm font-medium text-white">
                   {profile.full_name || "Administrador"}

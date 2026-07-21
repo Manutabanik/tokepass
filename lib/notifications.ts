@@ -1,0 +1,120 @@
+/**
+ * Notificaciones outbound (email / WhatsApp webhook).
+ */
+
+export type TicketTransferNotifyPayload = {
+  receiverEmail: string
+  eventTitle: string
+  senderUserId: string
+}
+
+export type PosTicketNotifyPayload = {
+  phone: string
+  eventTitle: string
+  ticketIds: string[]
+  quantity: number
+}
+
+async function postWebhook(
+  channel: string,
+  body: Record<string, unknown>,
+): Promise<boolean> {
+  const webhookUrl = process.env.NOTIFICATION_WEBHOOK_URL?.trim()
+  if (!webhookUrl) return false
+
+  const response = await fetch(webhookUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ channel, ...body }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Webhook notify failed: ${response.status}`)
+  }
+  return true
+}
+
+export async function notifyTicketTransfer(
+  payload: TicketTransferNotifyPayload,
+): Promise<void> {
+  const message = `¡Te han enviado una entrada para ${payload.eventTitle}! Reclamala en Tokepass → Mis entradas.`
+
+  try {
+    if (
+      await postWebhook("ticket_transfer", {
+        to: payload.receiverEmail,
+        message,
+        eventTitle: payload.eventTitle,
+        senderUserId: payload.senderUserId,
+      })
+    ) {
+      return
+    }
+  } catch {
+    // fallback abajo
+  }
+
+  const resendKey = process.env.RESEND_API_KEY?.trim()
+  const fromEmail =
+    process.env.RESEND_FROM_EMAIL?.trim() || "Tokepass <onboarding@resend.dev>"
+
+  if (resendKey) {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${resendKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: fromEmail,
+        to: [payload.receiverEmail],
+        subject: `Te enviaron una entrada — ${payload.eventTitle}`,
+        text: message,
+      }),
+    })
+
+    if (!response.ok) {
+      const body = await response.text()
+      throw new Error(`Resend failed: ${response.status} ${body}`)
+    }
+    return
+  }
+
+  console.info("[notifyTicketTransfer]", {
+    to: payload.receiverEmail,
+    message,
+  })
+}
+
+export async function notifyPosTicketIssued(
+  payload: PosTicketNotifyPayload,
+): Promise<void> {
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
+    "https://tokepass.app"
+  const links = payload.ticketIds
+    .map((id) => `${siteUrl}/tickets/${id}/print`)
+    .join("\n")
+  const message = `Tu entrada Tokepass para ${payload.eventTitle} (${payload.quantity}). Abrí el QR:\n${links}`
+
+  try {
+    if (
+      await postWebhook("pos_ticket_issued", {
+        to: payload.phone,
+        phone: payload.phone,
+        message,
+        eventTitle: payload.eventTitle,
+        ticketIds: payload.ticketIds,
+      })
+    ) {
+      return
+    }
+  } catch {
+    // fallback log
+  }
+
+  console.info("[notifyPosTicketIssued]", {
+    phone: payload.phone,
+    message,
+  })
+}

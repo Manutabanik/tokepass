@@ -1,13 +1,13 @@
-import { ScanLine } from "lucide-react"
+import type { Metadata } from "next"
 
-import { AdminSectionPlaceholder } from "@/components/shared/admin-section-placeholder"
+import { DoorScanner } from "@/components/admin/door-scanner"
+
+export const metadata: Metadata = {
+  title: "Zero-Offline Scanner",
+  description:
+    "Validación de puerta Tokepass con manifiesto offline y sync diferido.",
+}
 
 export default function AdminScannerPage() {
-  return (
-    <AdminSectionPlaceholder
-      title="Escáner de entradas"
-      description="Valida accesos en tiempo real y evita entradas duplicadas."
-      icon={ScanLine}
-    />
-  )
+  return <DoorScanner />
 }

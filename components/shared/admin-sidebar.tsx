@@ -2,11 +2,14 @@
 
 import {
   CalendarDays,
+  ClipboardList,
+  GlassWater,
   Home,
   PanelLeftClose,
   PanelLeftOpen,
   PieChart,
   QrCode,
+  Store,
   Ticket,
   Users,
 } from "lucide-react"
@@ -22,9 +25,12 @@ const navigation = [
   { label: "Dashboard", href: "/admin", icon: Home },
   { label: "Mis eventos", href: "/admin/events", icon: CalendarDays },
   { label: "Taquilla / Venues", href: "/admin/venues", icon: Ticket },
+  { label: "POS Puerta", href: "/admin/pos", icon: Store },
   { label: "Finanzas & Split", href: "/admin/finances", icon: PieChart },
-  { label: "Equipo & RRPP", href: "/admin/team", icon: Users },
+  { label: "Listas / FreePass", href: "/admin/lists", icon: ClipboardList },
+  { label: "Equipo & RRPP", href: "/admin/promoters", icon: Users },
   { label: "Escáner Web", href: "/admin/scanner", icon: QrCode },
+  { label: "Escáner Barra", href: "/admin/bar-scanner", icon: GlassWater },
 ] as const
 
 export function AdminSidebar() {

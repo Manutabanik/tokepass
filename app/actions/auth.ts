@@ -194,6 +194,14 @@ export async function signInWithEmail(
     return { error: credentials.error, success: null }
   }
 
+  const nextValue = formData.get("next")
+  const nextPath =
+    typeof nextValue === "string" &&
+    nextValue.startsWith("/") &&
+    !nextValue.startsWith("//")
+      ? nextValue
+      : null
+
   const supabase = await createClient()
   const { data, error } = await supabase.auth.signInWithPassword(credentials)
 
@@ -213,6 +221,10 @@ export async function signInWithEmail(
       error: "No se pudo cargar el perfil asociado a esta cuenta.",
       success: null,
     }
+  }
+
+  if (nextPath) {
+    redirect(nextPath)
   }
 
   redirect(

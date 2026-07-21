@@ -17,12 +17,14 @@ import {
   Trash2,
   UploadCloud,
 } from "lucide-react"
+import { useRouter } from "next/navigation"
 import { useState } from "react"
 import {
   useFieldArray,
   useForm,
   type FieldPath,
 } from "react-hook-form"
+import { toast } from "sonner"
 
 import { createCompleteEvent } from "@/app/actions/events"
 import {
@@ -165,9 +167,15 @@ function NumberInput({
   )
 }
 
-export function EventCreationWizard() {
+export function EventCreationWizard({
+  targetOrganizerId = null,
+}: {
+  targetOrganizerId?: string | null
+}) {
+  const router = useRouter()
   const [activeStep, setActiveStep] = useState(0)
   const [highestStep, setHighestStep] = useState(0)
+  const [flyerFile, setFlyerFile] = useState<File | null>(null)
   const [resultMessage, setResultMessage] = useState<{
     type: "success" | "error"
     text: string
@@ -208,18 +216,33 @@ export function EventCreationWizard() {
 
   async function onSubmit(data: EventFormValues) {
     setResultMessage(null)
-    console.log("[Tokepass event wizard]", data)
 
-    const result = await createCompleteEvent(data)
+    const formData = new FormData()
+    formData.set("payload", JSON.stringify(data))
+    if (flyerFile) {
+      formData.set("flyer", flyerFile)
+    }
+    if (targetOrganizerId) {
+      formData.set("targetOrganizerId", targetOrganizerId)
+    }
 
-    setResultMessage(
-      result.success
-        ? {
-            type: "success",
-            text: "Configuración validada. Ya está lista para persistirse.",
-          }
-        : { type: "error", text: result.error },
-    )
+    const result = await createCompleteEvent(formData)
+
+    if (!result.success) {
+      setResultMessage({ type: "error", text: result.error })
+      toast.error("No se pudo crear el evento", {
+        description: result.error,
+      })
+      return
+    }
+
+    toast.success("Evento creado", {
+      description: flyerFile
+        ? "Borrador guardado con flyer en Storage."
+        : "El borrador se guardó de forma atómica en la base de datos.",
+    })
+    router.push("/admin/events")
+    router.refresh()
   }
 
   return (
@@ -364,9 +387,11 @@ export function EventCreationWizard() {
                       accept="image/png,image/jpeg,image/webp"
                       className="sr-only"
                       onChange={(event) => {
+                        const file = event.target.files?.[0] ?? null
+                        setFlyerFile(file)
                         form.setValue(
                           "basics.flyerName",
-                          event.target.files?.[0]?.name ?? null,
+                          file?.name ?? null,
                           { shouldDirty: true },
                         )
                       }}
@@ -909,9 +934,9 @@ export function EventCreationWizard() {
                   ) : (
                     <Rocket />
                   )}
-                  {form.formState.isSubmitting
-                    ? "Validando..."
-                    : "Crear evento"}
+                    {form.formState.isSubmitting
+                      ? "Creando..."
+                      : "Crear evento"}
                 </Button>
               )}
             </div>

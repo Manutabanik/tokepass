@@ -132,3 +132,26 @@
 ::selection {
   background: color-mix(in oklch, oklch(0.541 0.281 293.009) 28%, transparent);
 }
+
+@media print {
+  @page {
+    margin: 12mm;
+    size: A4;
+  }
+
+  body {
+    background: white !important;
+  }
+
+  header,
+  nav,
+  .no-print {
+    display: none !important;
+  }
+
+  .print-ticket {
+    max-width: none !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+}
