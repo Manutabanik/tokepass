@@ -41,7 +41,6 @@ export function LivingTicketQR({
       }
     }
 
-    setProgress(getTotpWindowProgress())
     void refreshToken()
 
     const intervalId = window.setInterval(() => {

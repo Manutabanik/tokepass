@@ -54,23 +54,23 @@ export function TicketSelector({
   const [addonQuantities, setAddonQuantities] = useState<Record<string, number>>(
     () => Object.fromEntries(barItems.map((item) => [item.id, 0])),
   )
-  const [resolvedRef, setResolvedRef] = useState<string | null>(
-    referralCode?.trim() || null,
-  )
+  const [storedRef] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null
+    return sessionStorage.getItem(REF_STORAGE_KEY)
+  })
+
+  const resolvedRef = referralCode?.trim() || storedRef
 
   useEffect(() => {
-    if (referralCode?.trim()) {
-      const clean = referralCode.trim()
-      sessionStorage.setItem(REF_STORAGE_KEY, clean)
-      setResolvedRef(clean)
-      return
-    }
-
-    const stored = sessionStorage.getItem(REF_STORAGE_KEY)
-    if (stored) setResolvedRef(stored)
+    const clean = referralCode?.trim()
+    if (!clean) return
+    sessionStorage.setItem(REF_STORAGE_KEY, clean)
   }, [referralCode])
 
-  useEffect(() => {
+  const barItemsKey = barItems.map((item) => item.id).join("|")
+  const [prevBarItemsKey, setPrevBarItemsKey] = useState(barItemsKey)
+  if (barItemsKey !== prevBarItemsKey) {
+    setPrevBarItemsKey(barItemsKey)
     setAddonQuantities((current) => {
       const next: Record<string, number> = {}
       for (const item of barItems) {
@@ -78,7 +78,7 @@ export function TicketSelector({
       }
       return next
     })
-  }, [barItems])
+  }
 
   const selection = useMemo(
     () =>

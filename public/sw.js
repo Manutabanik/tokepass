@@ -1,5 +1,4 @@
 /* Tokepass PWA Service Worker — Offline-First billetera /my-tickets */
-/* eslint-disable no-restricted-globals */
 
 const CACHE_VERSION = "tokepass-wallet-v3"
 const SHELL_CACHE = `${CACHE_VERSION}-shell`

@@ -13,29 +13,25 @@ import { cn } from "@/lib/utils"
 const SHOW_DELAY_MS = 1400
 
 export function InstallBanner() {
-  const {
-    canShowBanner,
-    isIos,
-    dismiss,
-    promptInstall,
-  } = usePwaInstall()
+  const { canShowBanner, isIos, dismiss, promptInstall } = usePwaInstall()
 
   const [delayPassed, setDelayPassed] = useState(false)
-  const [visible, setVisible] = useState(false)
+  const [exiting, setExiting] = useState(false)
   const [iosOpen, setIosOpen] = useState(false)
   const [installing, setInstalling] = useState(false)
   const dismissTimerRef = useRef<number | null>(null)
 
   useEffect(() => {
     if (!canShowBanner) {
-      setVisible(false)
-      setDelayPassed(false)
-      return
+      const reset = window.setTimeout(() => {
+        setDelayPassed(false)
+        setExiting(false)
+      }, 0)
+      return () => window.clearTimeout(reset)
     }
 
     const timer = window.setTimeout(() => {
       setDelayPassed(true)
-      setVisible(true)
     }, SHOW_DELAY_MS)
 
     return () => window.clearTimeout(timer)
@@ -50,7 +46,7 @@ export function InstallBanner() {
   }, [])
 
   function handleDismiss() {
-    setVisible(false)
+    setExiting(true)
     if (dismissTimerRef.current) {
       window.clearTimeout(dismissTimerRef.current)
     }
@@ -71,7 +67,7 @@ export function InstallBanner() {
         return
       }
       if (outcome === "accepted") {
-        setVisible(false)
+        setExiting(true)
         dismiss()
       }
     } finally {
@@ -79,22 +75,22 @@ export function InstallBanner() {
     }
   }
 
-  if (!canShowBanner && !iosOpen) {
+  const showChrome = canShowBanner && delayPassed
+
+  if (!showChrome && !iosOpen) {
     return null
   }
 
   return (
     <>
-      {canShowBanner && delayPassed ? (
+      {showChrome ? (
         <div
           role="dialog"
           aria-label="Instalar Tokepass"
           className={cn(
             "pointer-events-none fixed bottom-4 left-4 right-4 z-50 mx-auto max-w-lg",
             "transition-all duration-300 ease-out",
-            visible
-              ? "translate-y-0 opacity-100"
-              : "translate-y-4 opacity-0",
+            exiting ? "translate-y-4 opacity-0" : "translate-y-0 opacity-100",
           )}
         >
           <div

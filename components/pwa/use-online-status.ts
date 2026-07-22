@@ -1,31 +1,30 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useSyncExternalStore } from "react"
+
+function subscribeOnline(onStoreChange: () => void) {
+  window.addEventListener("online", onStoreChange)
+  window.addEventListener("offline", onStoreChange)
+  return () => {
+    window.removeEventListener("online", onStoreChange)
+    window.removeEventListener("offline", onStoreChange)
+  }
+}
+
+function getOnlineSnapshot() {
+  return navigator.onLine
+}
+
+function getOnlineServerSnapshot() {
+  return true
+}
 
 export function useOnlineStatus(): boolean {
-  const [online, setOnline] = useState(() =>
-    typeof navigator === "undefined" ? true : navigator.onLine,
+  return useSyncExternalStore(
+    subscribeOnline,
+    getOnlineSnapshot,
+    getOnlineServerSnapshot,
   )
-
-  useEffect(() => {
-    function handleOnline() {
-      setOnline(true)
-    }
-    function handleOffline() {
-      setOnline(false)
-    }
-
-    window.addEventListener("online", handleOnline)
-    window.addEventListener("offline", handleOffline)
-    setOnline(navigator.onLine)
-
-    return () => {
-      window.removeEventListener("online", handleOnline)
-      window.removeEventListener("offline", handleOffline)
-    }
-  }, [])
-
-  return online
 }
 
 export function useNetworkListener(

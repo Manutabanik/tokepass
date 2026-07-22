@@ -260,8 +260,11 @@ export function DoorScanner() {
   }, [])
 
   useEffect(() => {
-    void refreshManifestMeta(eventId)
-    void refreshQueueCount()
+    const timer = window.setTimeout(() => {
+      void refreshManifestMeta(eventId)
+      void refreshQueueCount()
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [eventId, refreshManifestMeta, refreshQueueCount])
 
   useEffect(() => {
@@ -273,9 +276,11 @@ export function DoorScanner() {
   }, [syncQueueToServer])
 
   useEffect(() => {
-    if (online && queueCount > 0) {
+    if (!(online && queueCount > 0)) return
+    const timer = window.setTimeout(() => {
       void syncQueueToServer()
-    }
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [online, queueCount, syncQueueToServer])
 
   const returnToIdle = useCallback((delayMs: number) => {

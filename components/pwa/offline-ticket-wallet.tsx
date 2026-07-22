@@ -28,29 +28,30 @@ export function OfflineTicketWallet({
   loadError = null,
 }: OfflineTicketWalletProps) {
   const online = useOnlineStatus()
-  const [tickets, setTickets] = useState<MyTicket[]>(initialTickets)
-  const [hydratedOffline, setHydratedOffline] = useState(false)
+  const [cachedTickets, setCachedTickets] = useState<MyTicket[] | null>(null)
+  const [cacheReady, setCacheReady] = useState(false)
 
-  useEffect(() => {
-    setTickets(initialTickets)
-  }, [initialTickets])
+  const tickets = online
+    ? initialTickets
+    : (cachedTickets ?? initialTickets)
 
-  // Sync → IndexedDB cuando hay red (incluye vaciar caché si ya no hay entradas).
+  // Sync → IndexedDB cuando hay red.
   useEffect(() => {
-    if (!online || !userId) return
-    // Evitar pisar caché local si el fetch del servidor falló.
-    if (loadError) return
+    if (!online || !userId || loadError) return
 
     void saveTicketsOffline(userId, initialTickets).catch((error: unknown) => {
       console.warn("[offline-store] sync failed", error)
     })
   }, [online, userId, initialTickets, loadError])
 
-  // Sin conexión (o SSR vacío tras F5 offline): leer billetera local.
+  // Sin conexión: leer billetera local (setState solo en callback async).
   useEffect(() => {
     if (online) {
-      setHydratedOffline(false)
-      return
+      const reset = window.setTimeout(() => {
+        setCachedTickets(null)
+        setCacheReady(false)
+      }, 0)
+      return () => window.clearTimeout(reset)
     }
 
     let cancelled = false
@@ -59,13 +60,12 @@ export function OfflineTicketWallet({
       try {
         const cached = await getTicketsOffline(userId)
         if (cancelled) return
-        if (cached.length > 0) {
-          setTickets(cached)
-        }
+        setCachedTickets(cached.length > 0 ? cached : [])
       } catch (error: unknown) {
         console.warn("[offline-store] read failed", error)
+        if (!cancelled) setCachedTickets([])
       } finally {
-        if (!cancelled) setHydratedOffline(true)
+        if (!cancelled) setCacheReady(true)
       }
     })()
 
@@ -74,27 +74,32 @@ export function OfflineTicketWallet({
     }
   }, [online, userId])
 
-  // También hidratar desde IDB si el servidor falló pero hay caché local.
+  // Servidor falló online: intentar IDB.
   useEffect(() => {
-    if (!online || !loadError || tickets.length > 0) return
+    if (!online || !loadError || initialTickets.length > 0) return
 
     let cancelled = false
     void getTicketsOffline(userId).then((cached) => {
-      if (!cancelled && cached.length > 0) setTickets(cached)
+      if (!cancelled && cached.length > 0) setCachedTickets(cached)
     })
     return () => {
       cancelled = true
     }
-  }, [online, loadError, tickets.length, userId])
+  }, [online, loadError, initialTickets.length, userId])
+
+  const displayTickets =
+    online && loadError && cachedTickets && cachedTickets.length > 0
+      ? cachedTickets
+      : tickets
 
   const { upcoming, past } = useMemo(
-    () => splitTicketsBySchedule(tickets),
-    [tickets],
+    () => splitTicketsBySchedule(displayTickets),
+    [displayTickets],
   )
 
   const showOfflineBanner = !online
   const showEmptyError =
-    online && loadError && tickets.length === 0 && !hydratedOffline
+    online && loadError && displayTickets.length === 0 && !cacheReady
 
   return (
     <div className="space-y-4">

@@ -1,7 +1,7 @@
 "use client"
 
 import { Check, Copy, Link2, LoaderCircle } from "lucide-react"
-import { useEffect, useState, useTransition } from "react"
+import { useMemo, useState, useTransition } from "react"
 import { toast } from "sonner"
 
 import {
@@ -35,15 +35,11 @@ export function PromoterDashboardClient({
 }) {
   const [claimCode, setClaimCode] = useState("")
   const [copied, setCopied] = useState(false)
-  const [shareUrl, setShareUrl] = useState("")
   const [isPending, startTransition] = useTransition()
 
-  useEffect(() => {
-    if (!metrics) {
-      setShareUrl("")
-      return
-    }
-    setShareUrl(buildShareUrl(metrics.featuredEventId, metrics.referralCode))
+  const shareUrl = useMemo(() => {
+    if (!metrics) return ""
+    return buildShareUrl(metrics.featuredEventId, metrics.referralCode)
   }, [metrics])
 
   async function handleCopy() {
