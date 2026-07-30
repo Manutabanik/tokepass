@@ -3,6 +3,11 @@
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 
+import {
+  getFreshLoginProfile,
+  postLoginDestination,
+} from "@/lib/auth/post-login"
+import { logger } from "@/lib/logger"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
@@ -210,43 +215,51 @@ export async function signInWithEmail(
     return { error: credentials.error, success: null }
   }
 
-  const nextValue = formData.get("next")
-  const nextPath =
-    typeof nextValue === "string" &&
-    nextValue.startsWith("/") &&
-    !nextValue.startsWith("//")
-      ? nextValue
-      : null
-
   const supabase = await createClient()
-  const { data, error } = await supabase.auth.signInWithPassword(credentials)
+  const { error } = await supabase.auth.signInWithPassword(credentials)
 
   if (error) {
     return { error: error.message, success: null }
   }
 
-  // Customer destinations only require a valid Auth session. A missing
-  // application profile must not lock buyers out of their ticket wallet.
-  // Organizer/platform routes still enforce profile roles in middleware.
-  if (nextPath) {
-    redirect(nextPath)
+  // Validate the newly written cookie against Supabase Auth instead of trusting
+  // only the session object returned by signInWithPassword.
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+
+  if (userError || !user) {
+    await supabase.auth.signOut()
+    return {
+      error: "No se pudo validar la nueva sesión. Intentá nuevamente.",
+      success: null,
+    }
   }
 
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("role, organizer_approval_status")
-    .eq("id", data.user.id)
-    .single()
-
-  if (profileError || !profile) {
-    // Auth succeeded; keep the customer session usable. Missing profiles are
-    // repaired by migration 00004, while privileged routes remain denied.
-    redirect("/")
+  let profile: Awaited<ReturnType<typeof getFreshLoginProfile>>
+  try {
+    profile = await getFreshLoginProfile(user.id)
+  } catch (profileError) {
+    logger.error({
+      context: "auth/login",
+      message: "fresh_profile_lookup_failed",
+      userId: user.id,
+      error: profileError,
+    })
+    await supabase.auth.signOut()
+    return {
+      error: "No se pudo verificar tu perfil. Intentá nuevamente.",
+      success: null,
+    }
   }
 
-  const approval = (profile as { organizer_approval_status?: string })
-    .organizer_approval_status
-  if (approval === "pending") {
+  // Governance restrictions only apply to organizer accounts. A customer with
+  // an organizer application pending/rejected can still use the B2C catalog.
+  if (
+    profile?.role === "admin" &&
+    profile.organizerApprovalStatus === "pending"
+  ) {
     await supabase.auth.signOut()
     return {
       error:
@@ -255,7 +268,10 @@ export async function signInWithEmail(
     }
   }
 
-  if (approval === "rejected") {
+  if (
+    profile?.role === "admin" &&
+    profile.organizerApprovalStatus === "rejected"
+  ) {
     await supabase.auth.signOut()
     return {
       error: "Tu solicitud de organizador fue rechazada.",
@@ -263,11 +279,19 @@ export async function signInWithEmail(
     }
   }
 
-  redirect(
-    profile.role === "admin" || profile.role === "super_admin"
-      ? "/admin"
-      : "/",
-  )
+  if (
+    profile?.role === "admin" &&
+    profile.organizerApprovalStatus === "suspended"
+  ) {
+    await supabase.auth.signOut()
+    return {
+      error:
+        "Tu productora está suspendida. Contactá a soporte de Tokepass para revisar el caso.",
+      success: null,
+    }
+  }
+
+  redirect(postLoginDestination(profile?.role))
 }
 
 export async function signInWithGoogle(): Promise<void> {

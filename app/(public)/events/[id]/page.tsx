@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { formatCurrency, formatEventDate } from "@/lib/format"
+import { createClient } from "@/lib/supabase/server"
 
 export async function generateMetadata({
   params,
@@ -65,11 +66,18 @@ export default async function EventDetailPage({
 }) {
   const { id } = await params
   const { ref: referralCode } = await searchParams
-  const event = await getEventDetails(id)
+  const [event, supabase] = await Promise.all([
+    getEventDetails(id),
+    createClient(),
+  ])
 
   if (!event) {
     notFound()
   }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
   let barItems: Awaited<ReturnType<typeof getEventItems>> = []
   try {
@@ -189,6 +197,7 @@ export default async function EventDetailPage({
           <aside className="lg:sticky lg:top-24" id="checkout">
             <TicketSelector
               eventId={event.id}
+              currentUserId={user?.id ?? null}
               referralCode={referralCode ?? null}
               serviceChargeRate={event.serviceChargeRate}
               scheduleDays={event.scheduleDays}

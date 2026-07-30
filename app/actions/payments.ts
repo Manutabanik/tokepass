@@ -2,6 +2,7 @@
 
 import { Preference } from "mercadopago"
 
+import { logger } from "@/lib/logger"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getMercadoPagoClient, getSiteUrl } from "@/lib/mercadopago"
 import { createClient } from "@/lib/supabase/server"
@@ -15,6 +16,9 @@ type OrderTicketRow = {
   events: {
     id: string
     title: string
+  } | null
+  seating_unit: {
+    reserved_until: string | null
   } | null
 }
 
@@ -65,13 +69,22 @@ export async function createPaymentPreference(
 
   const { data: tickets, error: ticketsError } = await supabase
     .from("tickets")
-    .select("id, events(id, title)")
+    .select(
+      "id, events(id, title), seating_unit:event_seating_units(reserved_until)",
+    )
     .eq("order_id", orderId)
 
   if (ticketsError) {
+    logger.error({
+      context: "payments/preference",
+      message: "order_tickets_load_failed",
+      orderId,
+      userId: user.id,
+      error: ticketsError.message,
+    })
     return {
       success: false,
-      error: `No se pudieron cargar los tickets: ${ticketsError.message}`,
+      error: "No se pudieron cargar las entradas de la orden.",
     }
   }
 
@@ -116,6 +129,21 @@ export async function createPaymentPreference(
   }
 
   const eventTitle = rows[0]?.events?.title ?? "Evento Tokepass"
+  const seatingExpirations = rows
+    .map((row) => row.seating_unit?.reserved_until)
+    .filter((value): value is string => Boolean(value))
+    .map((value) => new Date(value).getTime())
+    .filter(Number.isFinite)
+  const checkoutExpiresAt =
+    seatingExpirations.length > 0 ? Math.min(...seatingExpirations) : null
+
+  if (checkoutExpiresAt !== null && checkoutExpiresAt <= Date.now()) {
+    return {
+      success: false,
+      error: "La reserva de ubicación venció. Elegí tu ubicación nuevamente.",
+    }
+  }
+
   const preferenceItems: Array<{
     id: string
     title: string
@@ -151,6 +179,12 @@ export async function createPaymentPreference(
         },
         auto_return: "approved",
         notification_url: notificationUrl,
+        ...(checkoutExpiresAt !== null
+          ? {
+              expires: true,
+              expiration_date_to: new Date(checkoutExpiresAt).toISOString(),
+            }
+          : {}),
         metadata: {
           order_id: orderId,
           buyer_id: user.id,
@@ -173,16 +207,26 @@ export async function createPaymentPreference(
     }
 
     const admin = createAdminClient()
-    const { error: updateError } = await admin
+    const { data: updatedOrder, error: updateError } = await admin
       .from("orders")
       .update({ mp_preference_id: preferenceId })
       .eq("id", orderId)
       .eq("status", "pending")
+      .select("id")
+      .maybeSingle()
 
-    if (updateError) {
+    if (updateError || !updatedOrder) {
+      logger.error({
+        context: "payments/preference",
+        message: "preference_persist_failed",
+        orderId,
+        userId: user.id,
+        preferenceId,
+        error: updateError?.message ?? "order_not_pending",
+      })
       return {
         success: false,
-        error: `No se pudo guardar la preferencia: ${updateError.message}`,
+        error: "No se pudo guardar la preferencia de pago.",
       }
     }
 
@@ -192,14 +236,17 @@ export async function createPaymentPreference(
       preferenceId,
     }
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Mercado Pago no está disponible en este momento."
+    logger.error({
+      context: "payments/preference",
+      message: "preference_creation_failed",
+      orderId,
+      userId: user.id,
+      error,
+    })
 
     return {
       success: false,
-      error: `No se pudo crear el checkout: ${message}`,
+      error: "Mercado Pago no está disponible en este momento.",
     }
   }
 }

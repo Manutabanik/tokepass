@@ -215,6 +215,7 @@ export async function getEventDetails(
     )
     .eq("id", eventId)
     .eq("status", "published")
+    .neq("visibility", "guest_list_only")
     .maybeSingle()
 
   if (error) {

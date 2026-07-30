@@ -408,17 +408,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (
-      status === "approved" &&
-      payment.transaction_amount != null &&
-      order.total_amount != null
-    ) {
+    if (status === "approved") {
       const paid = Number(payment.transaction_amount)
       const expected = Number(order.total_amount)
+      const currency = firstString(payment.currency_id)
       if (
-        Number.isFinite(paid) &&
-        Number.isFinite(expected) &&
-        Math.abs(paid - expected) > 1
+        !Number.isFinite(paid) ||
+        !Number.isFinite(expected) ||
+        Math.round(paid * 100) !== Math.round(expected * 100) ||
+        currency !== "ARS"
       ) {
         logger.error({
           context: "webhooks/mercadopago",
@@ -427,11 +425,81 @@ export async function POST(request: NextRequest) {
           payment_id: mpPaymentId,
           paid,
           expected,
+          currency,
         })
-        return NextResponse.json(
-          { success: false, error: "amount_mismatch" },
-          { status: 409 },
-        )
+
+        if (
+          await alreadyProcessed(
+            admin,
+            mpPaymentId,
+            "approved_amount_mismatch_refunded",
+          )
+        ) {
+          return NextResponse.json(
+            {
+              success: true,
+              data: { idempotent: true, status: "amount_mismatch_refunded" },
+            },
+            { status: 200 },
+          )
+        }
+
+        try {
+          await refundExpiredPayment(mpPaymentId)
+          const { error: cleanupError } = await admin.rpc(
+            "expire_abandoned_order",
+            { p_order_id: orderId },
+          )
+          if (cleanupError) {
+            logger.error({
+              context: "webhooks/mercadopago",
+              message: "amount_mismatch_order_cleanup_failed",
+              order_id: orderId,
+              payment_id: mpPaymentId,
+              error: cleanupError.message,
+            })
+          } else {
+            const { error: statusError } = await admin
+              .from("orders")
+              .update({ status: "failed", mp_payment_id: mpPaymentId })
+              .eq("id", orderId)
+              .eq("status", "expired")
+            if (statusError) {
+              logger.error({
+                context: "webhooks/mercadopago",
+                message: "amount_mismatch_status_update_failed",
+                order_id: orderId,
+                payment_id: mpPaymentId,
+                error: statusError.message,
+              })
+            }
+          }
+          await recordWebhookEvent(admin, {
+            paymentId: mpPaymentId,
+            orderId,
+            status: "approved_amount_mismatch_refunded",
+            rawSummary: { paid, expected, currency },
+          })
+          return NextResponse.json(
+            {
+              success: true,
+              data: { refunded: true, status: "amount_mismatch" },
+            },
+            { status: 200 },
+          )
+        } catch (refundError) {
+          logger.error({
+            context: "webhooks/mercadopago",
+            message: "amount_mismatch_refund_failed",
+            order_id: orderId,
+            payment_id: mpPaymentId,
+            error: refundError,
+          })
+          return NextResponse.json(
+            { success: false, error: "amount_mismatch_needs_refund" },
+            { status: 500 },
+          )
+        }
       }
     }
 
@@ -638,54 +706,46 @@ export async function POST(request: NextRequest) {
       }
 
       if (order.status === "pending") {
-        await admin
-          .from("orders")
-          .update({
-            status: "failed",
-            mp_payment_id: mpPaymentId,
-          })
-          .eq("id", orderId)
-          .eq("status", "pending")
-
-        const { error: releaseItemsError } = await admin.rpc(
-          "release_order_event_items",
+        const { data: expired, error: expireError } = await admin.rpc(
+          "expire_abandoned_order",
           { p_order_id: orderId },
         )
-        if (releaseItemsError) {
+        if (expireError || !expired) {
           logger.error({
             context: "webhooks/mercadopago",
-            message: "release_item_redemptions_failed",
+            message: "failed_payment_order_cleanup_failed",
             order_id: orderId,
             payment_id: mpPaymentId,
-            error: releaseItemsError.message,
+            error: expireError?.message ?? "order_not_pending",
           })
-        }
-
-        const { data: reserved } = await admin
-          .from("tickets")
-          .select("id")
-          .eq("order_id", orderId)
-          .eq("status", "pending_payment")
-
-        const ticketIds = (reserved ?? []).map((row) => row.id)
-        if (ticketIds.length > 0) {
-          const { error: releaseTicketsError } = await admin.rpc(
-            "release_reserved_tickets",
-            { p_ticket_ids: ticketIds },
+          return NextResponse.json(
+            { success: false, error: "order_cleanup_failed" },
+            { status: 500 },
           )
-          if (releaseTicketsError) {
-            logger.error({
-              context: "webhooks/mercadopago",
-              message: "release_reserved_tickets_failed",
-              order_id: orderId,
-              payment_id: mpPaymentId,
-              error: releaseTicketsError.message,
-            })
-            return NextResponse.json(
-              { success: false, error: releaseTicketsError.message },
-              { status: 500 },
-            )
-          }
+        }
+      }
+
+      if (order.status === "pending" || order.status === "expired") {
+        const { data: failedOrder, error: failedOrderError } = await admin
+          .from("orders")
+          .update({ status: "failed", mp_payment_id: mpPaymentId })
+          .eq("id", orderId)
+          .eq("status", "expired")
+          .select("id")
+          .maybeSingle()
+
+        if (failedOrderError || !failedOrder) {
+          logger.error({
+            context: "webhooks/mercadopago",
+            message: "failed_payment_status_update_failed",
+            order_id: orderId,
+            payment_id: mpPaymentId,
+            error: failedOrderError?.message ?? "order_not_expired",
+          })
+          return NextResponse.json(
+            { success: false, error: "order_status_update_failed" },
+            { status: 500 },
+          )
         }
       }
 

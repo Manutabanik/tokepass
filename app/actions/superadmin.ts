@@ -1,8 +1,11 @@
 "use server"
 
+import { revalidatePath } from "next/cache"
+
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { SuperAdminForbiddenError } from "@/lib/superadmin-errors"
+import type { OrganizerApprovalStatus, OrderStatus } from "@/types/database"
 
 /**
  * Valida sesión + rol `super_admin` y entrega el client service-role
@@ -31,7 +34,6 @@ async function requireSuperAdmin() {
 
   return { admin: createAdminClient(), actorId: user.id }
 }
-
 export type GlobalMetrics = {
   /** Alias de la spec: total_gmV */
   total_gmV: number
@@ -56,51 +58,18 @@ export type OrganizerPlatformRow = {
  */
 export async function getGlobalMetrics(): Promise<GlobalMetrics> {
   const { admin } = await requireSuperAdmin()
+  const { data, error } = await admin.rpc("get_platform_global_metrics")
+  if (error) throw new Error(`No se pudieron calcular métricas: ${error.message}`)
 
-  const [
-    { data: paidOrders, error: ordersError },
-    { count: ticketsCount, error: ticketsError },
-    { count: organizersCount, error: organizersError },
-  ] = await Promise.all([
-    admin
-      .from("orders")
-      .select("total_amount, service_charge")
-      .eq("status", "paid"),
-    admin
-      .from("tickets")
-      .select("id", { count: "exact", head: true })
-      .in("status", ["valid", "used", "scanned"]),
-    admin
-      .from("profiles")
-      .select("id", { count: "exact", head: true })
-      .eq("role", "admin"),
-  ])
-
-  if (ordersError) {
-    throw new Error(`No se pudo calcular GMV: ${ordersError.message}`)
-  }
-  if (ticketsError) {
-    throw new Error(`No se pudieron contar tickets: ${ticketsError.message}`)
-  }
-  if (organizersError) {
-    throw new Error(
-      `No se pudieron contar productoras: ${organizersError.message}`,
-    )
-  }
-
-  let totalGmv = 0
-  let platformRevenue = 0
-  for (const order of paidOrders ?? []) {
-    totalGmv += Number(order.total_amount)
-    platformRevenue += Number(order.service_charge ?? 0)
-  }
+  const metrics = data?.[0]
+  const totalGmv = Number(metrics?.total_gmv ?? 0)
 
   return {
     total_gmV: totalGmv,
     totalGmv,
-    platform_revenue: platformRevenue,
-    total_tickets: ticketsCount ?? 0,
-    active_organizers: organizersCount ?? 0,
+    platform_revenue: Number(metrics?.platform_revenue ?? 0),
+    total_tickets: Number(metrics?.total_tickets ?? 0),
+    active_organizers: Number(metrics?.active_organizers ?? 0),
   }
 }
 
@@ -301,6 +270,9 @@ export async function completeSettlement(
       p_settlement_id: settlementId,
     })
     if (error) return { success: false, error: error.message }
+    revalidatePath("/superadmin")
+    revalidatePath("/superadmin/settlements")
+    revalidatePath("/admin/finances")
     return { success: true }
   } catch (error) {
     return {
@@ -310,38 +282,429 @@ export async function completeSettlement(
   }
 }
 
-export async function createSettlementForOrganizer(input: {
-  organizerId: string
-  grossAmount: number
-  platformFee: number
-  netAmount: number
-  periodLabel?: string
-  notes?: string
-}): Promise<{ success: true; id: string } | { success: false; error: string }> {
-  try {
-    const { admin } = await requireSuperAdmin()
-    const { data, error } = await admin
-      .from("organizer_settlements")
-      .insert({
-        organizer_id: input.organizerId,
-        gross_amount: input.grossAmount,
-        platform_fee: input.platformFee,
-        net_amount: input.netAmount,
-        status: "pending",
-        period_label: input.periodLabel?.trim() || null,
-        notes: input.notes?.trim() || null,
-      } as never)
-      .select("id")
-      .single()
+export type OrganizerGovernanceStatus = Extract<
+  OrganizerApprovalStatus,
+  "approved" | "rejected" | "suspended"
+>
 
-    if (error || !data) {
-      return { success: false, error: error?.message ?? "No se pudo crear." }
+export type OrganizerGovernanceResult =
+  | { success: true }
+  | { success: false; error: string }
+
+export type OrganizationDetails = {
+  profile: {
+    id: string
+    name: string
+    email: string
+    status: OrganizerApprovalStatus
+    serviceChargeRate: number
+    joinedAt: string
+  }
+  metrics: {
+    totalEvents: number
+    publishedEvents: number
+    ticketsSold: number
+    historicalGmv: number
+    pendingSettlementCount: number
+    pendingSettlementAmount: number
+  }
+  pendingSettlements: Array<{
+    id: string
+    periodLabel: string | null
+    grossAmount: number
+    platformFee: number
+    netAmount: number
+    createdAt: string
+  }>
+}
+
+function revalidateOrganizerGovernancePaths(organizerId: string) {
+  revalidatePath("/superadmin")
+  revalidatePath("/superadmin/organizations")
+  revalidatePath(`/superadmin/organizations/${organizerId}`)
+  revalidatePath("/admin")
+  revalidatePath("/admin/events")
+  revalidatePath("/events")
+  revalidatePath("/")
+}
+
+async function ensureOrganizerProfile(
+  admin: ReturnType<typeof createAdminClient>,
+  organizerId: string,
+) {
+  const id = organizerId.trim()
+  if (!id) return { id: null, error: "ID de productora inválido." } as const
+
+  const { data, error } = await admin
+    .from("profiles")
+    .select("id, role, organizer_approval_status")
+    .eq("id", id)
+    .maybeSingle()
+
+  const isOrganizerProfile =
+    data?.role !== "super_admin" &&
+    (data?.role === "admin" || data?.organizer_approval_status !== "none")
+  if (error || !data || !isOrganizerProfile) {
+    return {
+      id: null,
+      error: "La productora no existe o no tiene rol de organizador.",
+    } as const
+  }
+
+  return { id: data.id, error: null } as const
+}
+
+export async function updateOrganizerFeeRate(
+  organizerId: string,
+  newRate: number,
+): Promise<OrganizerGovernanceResult> {
+  try {
+    const { admin, actorId } = await requireSuperAdmin()
+    const organizer = await ensureOrganizerProfile(admin, organizerId)
+    if (organizer.error) {
+      return { success: false, error: organizer.error }
     }
-    return { success: true, id: String((data as { id: string }).id) }
+
+    if (!Number.isFinite(newRate) || newRate < 0 || newRate > 0.95) {
+      return {
+        success: false,
+        error: "La comisión debe estar entre 0% y 95%.",
+      }
+    }
+
+    const normalizedRate = Math.round(newRate * 10_000) / 10_000
+    const { error } = await admin.rpc("update_organizer_governance_tx", {
+      p_organizer_id: organizer.id,
+      p_actor_id: actorId,
+      p_status: null,
+      p_service_charge_rate: normalizedRate,
+    })
+
+    if (error) {
+      return {
+        success: false,
+        error: `No se pudo actualizar la comisión: ${error.message}`,
+      }
+    }
+
+    revalidateOrganizerGovernancePaths(organizer.id)
+    return { success: true }
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Error al crear.",
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo actualizar la comisión.",
     }
+  }
+}
+
+export async function updateOrganizerApprovalStatus(
+  organizerId: string,
+  status: OrganizerGovernanceStatus,
+): Promise<OrganizerGovernanceResult> {
+  try {
+    const { admin, actorId } = await requireSuperAdmin()
+    const organizer = await ensureOrganizerProfile(admin, organizerId)
+    if (organizer.error) {
+      return { success: false, error: organizer.error }
+    }
+
+    const allowedStatuses: OrganizerGovernanceStatus[] = [
+      "approved",
+      "rejected",
+      "suspended",
+    ]
+    if (!allowedStatuses.includes(status)) {
+      return { success: false, error: "Estado de productora inválido." }
+    }
+
+    const { error } = await admin.rpc("update_organizer_governance_tx", {
+      p_organizer_id: organizer.id,
+      p_actor_id: actorId,
+      p_status: status,
+      p_service_charge_rate: null,
+    })
+
+    if (error) {
+      return {
+        success: false,
+        error: `No se pudo actualizar el estado: ${error.message}`,
+      }
+    }
+
+    revalidateOrganizerGovernancePaths(organizer.id)
+    return { success: true }
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo actualizar el estado.",
+    }
+  }
+}
+
+export async function getOrganizationDetails(
+  organizerId: string,
+): Promise<OrganizationDetails | null> {
+  const { admin } = await requireSuperAdmin()
+  const id = organizerId.trim()
+  if (!id) return null
+
+  const { data: profile, error: profileError } = await admin
+    .from("profiles")
+    .select(
+      "id, full_name, email, role, organizer_approval_status, service_charge_rate, created_at",
+    )
+    .eq("id", id)
+    .maybeSingle()
+
+  if (profileError) throw new Error(profileError.message)
+  const isOrganizerProfile =
+    profile?.role !== "super_admin" &&
+    (profile?.role === "admin" ||
+      profile?.organizer_approval_status !== "none")
+  if (!profile || !isOrganizerProfile) return null
+
+  const [
+    { data: metricRows, error: metricsError },
+    { data: pendingSettlements, error: settlementsError },
+  ] = await Promise.all([
+    admin.rpc("get_organizer_governance_metrics", {
+      p_organizer_id: profile.id,
+    }),
+    admin
+      .from("organizer_settlements")
+      .select(
+        "id, gross_amount, platform_fee, net_amount, period_label, created_at",
+      )
+      .eq("organizer_id", profile.id)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false }),
+  ])
+
+  if (metricsError) throw new Error(metricsError.message)
+  if (settlementsError) throw new Error(settlementsError.message)
+
+  const metrics = metricRows?.[0]
+  const settlementRows = pendingSettlements ?? []
+
+  return {
+    profile: {
+      id: profile.id,
+      name: profile.full_name?.trim() || "Sin nombre",
+      email: profile.email,
+      status: profile.organizer_approval_status,
+      serviceChargeRate: Number(profile.service_charge_rate ?? 0.15),
+      joinedAt: profile.created_at,
+    },
+    metrics: {
+      totalEvents: Number(metrics?.total_events ?? 0),
+      publishedEvents: Number(metrics?.published_events ?? 0),
+      ticketsSold: Number(metrics?.tickets_sold ?? 0),
+      historicalGmv: Number(metrics?.historical_gmv ?? 0),
+      pendingSettlementCount: settlementRows.length,
+      pendingSettlementAmount: settlementRows.reduce(
+        (sum, settlement) => sum + Number(settlement.net_amount),
+        0,
+      ),
+    },
+    pendingSettlements: settlementRows.map((settlement) => ({
+      id: settlement.id,
+      periodLabel: settlement.period_label,
+      grossAmount: Number(settlement.gross_amount),
+      platformFee: Number(settlement.platform_fee),
+      netAmount: Number(settlement.net_amount),
+      createdAt: settlement.created_at,
+    })),
+  }
+}
+
+export type PlatformLedgerOrder = {
+  orderId: string
+  createdAt: string
+  status: OrderStatus
+  paymentMethod: string
+  mpPaymentId: string | null
+  eventId: string | null
+  eventTitle: string
+  organizerId: string | null
+  organizerName: string
+  buyerId: string
+  buyerName: string
+  buyerEmail: string
+  grossAmount: number
+  platformFeeAmount: number
+  organizerNetAmount: number
+  feeRate: number
+}
+
+export type PlatformLedgerTotals = {
+  gross: number
+  platformFee: number
+  organizerNet: number
+  count: number
+  paidCount: number
+}
+
+export type PlatformLedgerFilters = {
+  organizerId?: string | null
+  eventId?: string | null
+  status?: OrderStatus | "all" | null
+  limit?: number
+}
+
+export type PlatformLedgerFilterOption = {
+  id: string
+  label: string
+}
+
+export type PlatformMoneyLedger = {
+  rows: PlatformLedgerOrder[]
+  totals: PlatformLedgerTotals
+  filterOptions: {
+    organizers: PlatformLedgerFilterOption[]
+    events: PlatformLedgerFilterOption[]
+  }
+}
+
+function emptyLedgerTotals(): PlatformLedgerTotals {
+  return {
+    gross: 0,
+    platformFee: 0,
+    organizerNet: 0,
+    count: 0,
+    paidCount: 0,
+  }
+}
+
+export async function getPlatformMoneyLedger(
+  filters: PlatformLedgerFilters = {},
+): Promise<PlatformMoneyLedger> {
+  const { admin } = await requireSuperAdmin()
+
+  const status =
+    filters.status && filters.status !== "all" ? filters.status : null
+  const organizerId = filters.organizerId?.trim() || null
+  const eventId = filters.eventId?.trim() || null
+  const limit = Math.min(Math.max(filters.limit ?? 200, 1), 500)
+
+  const [
+    { data, error },
+    { data: totalsRows, error: totalsError },
+    { data: organizers, error: organizersError },
+    { data: events, error: eventsError },
+  ] =
+    await Promise.all([
+      admin.rpc("get_platform_orders_ledger", {
+        p_organizer_id: organizerId,
+        p_event_id: eventId,
+        p_status: status,
+        p_limit: limit,
+      }),
+      admin.rpc("get_platform_orders_ledger_totals", {
+        p_organizer_id: organizerId,
+        p_event_id: eventId,
+        p_status: status,
+      }),
+      admin
+        .from("profiles")
+        .select("id, full_name, email")
+        .eq("role", "admin")
+        .order("full_name", { ascending: true }),
+      admin
+        .from("events")
+        .select("id, title, organizer_id")
+        .order("date", { ascending: false })
+        .limit(300),
+    ])
+
+  if (error) {
+    throw new Error(`No se pudo cargar el ledger: ${error.message}`)
+  }
+  if (totalsError) {
+    throw new Error(`No se pudieron cargar los totales: ${totalsError.message}`)
+  }
+  if (organizersError) {
+    throw new Error(organizersError.message)
+  }
+  if (eventsError) {
+    throw new Error(eventsError.message)
+  }
+
+  type LedgerRpcRow = {
+    order_id: string
+    created_at: string
+    status: string
+    payment_method: string
+    mp_payment_id: string | null
+    event_id: string | null
+    event_title: string
+    organizer_id: string | null
+    organizer_name: string
+    buyer_id: string
+    buyer_name: string
+    buyer_email: string
+    gross_amount: number
+    platform_fee_amount: number
+    organizer_net_amount: number
+    fee_rate: number
+  }
+
+  const rows: PlatformLedgerOrder[] = ((data ?? []) as LedgerRpcRow[]).map(
+    (row) => ({
+      orderId: row.order_id,
+      createdAt: row.created_at,
+      status: (["pending", "paid", "failed", "expired"].includes(row.status)
+        ? row.status
+        : "pending") as OrderStatus,
+      paymentMethod: row.mp_payment_id?.startsWith("free:")
+        ? "free"
+        : row.payment_method,
+      mpPaymentId: row.mp_payment_id,
+      eventId: row.event_id,
+      eventTitle: row.event_title,
+      organizerId: row.organizer_id,
+      organizerName: row.organizer_name,
+      buyerId: row.buyer_id,
+      buyerName: row.buyer_name,
+      buyerEmail: row.buyer_email,
+      grossAmount: Number(row.gross_amount),
+      platformFeeAmount: Number(row.platform_fee_amount),
+      organizerNetAmount: Number(row.organizer_net_amount),
+      feeRate: Number(row.fee_rate),
+    }),
+  )
+
+  const eventOptions = (events ?? [])
+    .filter((event) => !organizerId || event.organizer_id === organizerId)
+    .map((event) => ({
+      id: event.id,
+      label: event.title,
+    }))
+
+  const aggregate = totalsRows?.[0]
+
+  return {
+    rows,
+    totals: aggregate
+      ? {
+          gross: Number(aggregate.gross),
+          platformFee: Number(aggregate.platform_fee),
+          organizerNet: Number(aggregate.organizer_net),
+          count: Number(aggregate.order_count),
+          paidCount: Number(aggregate.paid_count),
+        }
+      : emptyLedgerTotals(),
+    filterOptions: {
+      organizers: (organizers ?? []).map((organizer) => ({
+        id: organizer.id,
+        label: organizer.full_name?.trim() || organizer.email,
+      })),
+      events: eventOptions,
+    },
   }
 }

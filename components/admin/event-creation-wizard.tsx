@@ -79,10 +79,7 @@ import {
 } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { formatCurrency } from "@/lib/format"
-import {
-  allInBreakdown,
-  DEFAULT_ALL_IN_RATE,
-} from "@/lib/pricing/all-in"
+import { allInBreakdown } from "@/lib/pricing/all-in"
 import {
   eventFormSchema,
   type EventFormValues,
@@ -206,10 +203,12 @@ function NumberInput({
 }
 
 export function EventCreationWizard({
+  organizerServiceRate,
   targetOrganizerId = null,
   venues = [],
   initialData,
 }: {
+  organizerServiceRate: number
   targetOrganizerId?: string | null
   venues?: OrganizerVenue[]
   initialData?: EditableEventData
@@ -1316,7 +1315,7 @@ export function EventCreationWizard({
                         render={({ field, fieldState }) => {
                           const breakdown = allInBreakdown(
                             field.value ?? 0,
-                            DEFAULT_ALL_IN_RATE,
+                            organizerServiceRate,
                           )
                           return (
                             <FormItem>
@@ -1324,7 +1323,7 @@ export function EventCreationWizard({
                                 htmlFor={`tier-${index}-price`}
                                 className="block font-mono text-xs font-semibold uppercase tracking-wider text-zinc-300"
                               >
-                                Precio base / tu ingreso neto
+                                Precio público al comprador
                               </FormLabel>
                               <div className="relative">
                                 <CircleDollarSign className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-600" />
@@ -1341,23 +1340,23 @@ export function EventCreationWizard({
                               </div>
                               <div className="my-3 space-y-1.5 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3.5 font-mono text-xs text-zinc-400">
                                 <p>
-                                  Ingreso por entrada para tu evento:{" "}
+                                  Precio público al comprador:{" "}
                                   <span className="text-zinc-200">
-                                    {formatCurrency(breakdown.basePrice)}
+                                    {formatCurrency(breakdown.publicPrice)}
                                   </span>
                                 </p>
-                                <p className="text-emerald-400/80">
-                                  + Comisión plataforma Tokepass (
-                                  {Math.round(DEFAULT_ALL_IN_RATE * 100)}%):{" "}
+                                <p className="text-rose-300/80">
+                                  Comisión Tokepass (
+                                  {Math.round(organizerServiceRate * 100)}%): -
                                   {formatCurrency(breakdown.platformFee)}
                                 </p>
                               </div>
                               <div className="flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3">
                                 <span className="font-sans text-xs font-bold uppercase text-emerald-400">
-                                  Precio final al público (All-In)
+                                  Ingreso neto para el organizador
                                 </span>
                                 <span className="font-mono text-lg font-extrabold text-white">
-                                  {formatCurrency(breakdown.publicPrice)}
+                                  {formatCurrency(breakdown.basePrice)}
                                 </span>
                               </div>
                               <FormMessage>

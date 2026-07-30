@@ -14,6 +14,11 @@ type ProbeResult = {
   detail?: string
 }
 
+function publicProbe(probe: ProbeResult): ProbeResult {
+  if (process.env.NODE_ENV !== "production" || !probe.detail) return probe
+  return { status: probe.status, latencyMs: probe.latencyMs }
+}
+
 async function withTimeout<T>(
   promise: PromiseLike<T>,
   ms: number,
@@ -150,8 +155,8 @@ export async function GET() {
       redis: redis.latencyMs,
     },
     checks: {
-      supabase,
-      redis,
+      supabase: publicProbe(supabase),
+      redis: publicProbe(redis),
     },
   }
 
@@ -159,7 +164,7 @@ export async function GET() {
     logger.error({
       context: "api/health",
       message: "healthcheck_failed",
-      checks: body.checks,
+      checks: { supabase, redis },
     })
     return NextResponse.json(body, { status: 503 })
   }

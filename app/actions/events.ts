@@ -6,7 +6,8 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { parseScheduleDays } from "@/lib/event-schedule"
-import { allInBreakdown, DEFAULT_ALL_IN_RATE } from "@/lib/pricing/all-in"
+import { allInBreakdown } from "@/lib/pricing/all-in"
+import { getOrganizerServiceChargeRate } from "@/lib/services/organizer-pricing"
 import {
   eventFormSchema,
   type EventFormValues,
@@ -113,7 +114,7 @@ export async function createEvent(formData: FormData): Promise<Event> {
   return data
 }
 
-/** JSON contract expected by `public.create_complete_event_tx`. */
+/** JSON contract expected by the atomic event + seating RPC wrappers. */
 export type CreateCompleteEventRpcPayload = {
   title: string
   description: string
@@ -163,6 +164,7 @@ export type CreateCompleteEventRpcPayload = {
 
 function mapEventFormToRpcPayload(
   data: EventFormValues,
+  organizerServiceRate: number,
   flyerUrl: string | null = null,
 ): CreateCompleteEventRpcPayload {
   const blueprintZones = data.venue.zones ?? []
@@ -254,8 +256,9 @@ function mapEventFormToRpcPayload(
     },
     zones,
     tiers: data.tickets.map((tier) => {
-      // Form `price` is organizer net; persist public All-In + accounting split.
-      const breakdown = allInBreakdown(tier.price, DEFAULT_ALL_IN_RATE)
+      // Form `price` is the public All-In price. The server derives the
+      // organizer net with the authoritative rate read from profiles.
+      const breakdown = allInBreakdown(tier.price, organizerServiceRate)
       const dayIdRaw = tier.dayId?.trim()
       const dayId =
         !data.basics.isMultiDay ||
@@ -287,18 +290,6 @@ function mapEventFormToRpcPayload(
       : null,
     addons_enabled: data.growth.isAddonsEnabled,
   }
-}
-
-async function configureEventSeatingTiers(
-  client: SupabaseClient<Database>,
-  eventId: string,
-  payload: CreateCompleteEventRpcPayload,
-): Promise<string | null> {
-  const { error } = await client.rpc("configure_event_seating_tiers", {
-    p_event_id: eventId,
-    p_configs: payload.tiers as unknown as Json,
-  })
-  return error?.message ?? null
 }
 
 const ALLOWED_FLYER_TYPES = new Set([
@@ -368,6 +359,7 @@ export type CreateCompleteEventResult =
 
 export type EditableEventData = {
   id: string
+  organizerId: string
   title: string
   flyerUrl: string | null
   values: EventFormValues
@@ -423,7 +415,7 @@ export async function getEventForEditing(
   const { supabase, user } = await requireAuthenticatedUser()
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, organizer_approval_status")
     .eq("id", user.id)
     .maybeSingle()
 
@@ -477,6 +469,7 @@ export async function getEventForEditing(
 
   return {
     id: event.id,
+    organizerId: event.organizer_id,
     title: event.title,
     flyerUrl: event.flyer_url ?? event.image_url,
     values: {
@@ -504,7 +497,7 @@ export async function getEventForEditing(
       tickets: tiers.map((tier) => ({
         id: tier.id,
         name: tier.name,
-        price: Number(tier.base_price ?? tier.price),
+        price: Number(tier.price),
         capacity: Number(tier.capacity),
         sold: Number(tier.sold),
         timeLimit: tier.time_limit ?? "",
@@ -585,11 +578,21 @@ export async function createCompleteEvent(
 
   const { data: actorProfile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, organizer_approval_status")
     .eq("id", userId)
     .maybeSingle()
 
   const actorRole = actorProfile?.role ?? null
+  const actorCanCreate =
+    actorRole === "super_admin" ||
+    (actorRole === "admin" &&
+      actorProfile?.organizer_approval_status === "approved")
+  if (!actorCanCreate) {
+    return {
+      success: false,
+      error: "Tu cuenta de organizador no está habilitada para crear eventos.",
+    }
+  }
 
   // White-glove: solo super_admin puede crear a nombre de otra productora.
   // Un admin normal siempre queda atado a su propio ID (ignora el param).
@@ -602,14 +605,15 @@ export async function createCompleteEvent(
     const admin = createAdminClient()
     const { data: targetProfile, error: targetError } = await admin
       .from("profiles")
-      .select("id, role")
+      .select("id, role, organizer_approval_status")
       .eq("id", targetOrganizerId)
       .maybeSingle()
 
     if (
       targetError ||
       !targetProfile ||
-      (targetProfile.role !== "admin" && targetProfile.role !== "super_admin")
+      targetProfile.role !== "admin" ||
+      targetProfile.organizer_approval_status !== "approved"
     ) {
       return {
         success: false,
@@ -638,7 +642,13 @@ export async function createCompleteEvent(
 
   let rpcPayload: CreateCompleteEventRpcPayload
   try {
-    rpcPayload = mapEventFormToRpcPayload(parsed.data, flyerUrl)
+    const organizerServiceRate =
+      await getOrganizerServiceChargeRate(organizerId)
+    rpcPayload = mapEventFormToRpcPayload(
+      parsed.data,
+      organizerServiceRate,
+      flyerUrl,
+    )
   } catch (error) {
     return {
       success: false,
@@ -650,7 +660,7 @@ export async function createCompleteEvent(
   }
 
   const { data: eventId, error } = await rpcClient.rpc(
-    "create_complete_event_tx",
+    "create_complete_event_with_seating_tx",
     {
       payload: rpcPayload as unknown as Json,
       p_organizer_id: organizerId,
@@ -667,7 +677,10 @@ export async function createCompleteEvent(
 
     return {
       success: false,
-      error: error.message.replace(/^create_complete_event_tx:\s*/i, ""),
+      error: error.message.replace(
+        /^create_complete_event_with_seating_tx:\s*/i,
+        "",
+      ),
     }
   }
 
@@ -675,18 +688,6 @@ export async function createCompleteEvent(
     return {
       success: false,
       error: "La base de datos no devolvió el ID del evento.",
-    }
-  }
-
-  const seatingError = await configureEventSeatingTiers(
-    rpcClient,
-    eventId,
-    rpcPayload,
-  )
-  if (seatingError) {
-    return {
-      success: false,
-      error: `El evento se creó, pero no se pudo configurar el plano: ${seatingError}`,
     }
   }
 
@@ -703,7 +704,7 @@ export async function createCompleteEvent(
 
 /**
  * Updates event identity, venue and ticket tiers through one database
- * transaction. Tier prices in the form are organizer net values.
+ * transaction. Tier prices in the form are public All-In values.
  */
 export async function updateCompleteEvent(
   formData: FormData,
@@ -747,7 +748,7 @@ export async function updateCompleteEvent(
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, organizer_approval_status")
     .eq("id", userId)
     .maybeSingle()
 
@@ -762,6 +763,16 @@ export async function updateCompleteEvent(
   }
 
   const isSuperAdmin = profile?.role === "super_admin"
+  const isApprovedOrganizer =
+    profile?.role === "admin" &&
+    profile.organizer_approval_status === "approved"
+  if (!isSuperAdmin && !isApprovedOrganizer) {
+    return {
+      success: false,
+      error: "Tu cuenta de organizador no está habilitada para editar eventos.",
+    }
+  }
+
   if (event.organizer_id !== userId && !isSuperAdmin) {
     return { success: false, error: "No tenés permiso para editar este evento." }
   }
@@ -783,8 +794,12 @@ export async function updateCompleteEvent(
 
   let rpcPayload: CreateCompleteEventRpcPayload
   try {
+    const organizerServiceRate = await getOrganizerServiceChargeRate(
+      event.organizer_id,
+    )
     rpcPayload = mapEventFormToRpcPayload(
       parsed.data,
+      organizerServiceRate,
       uploadedFlyerUrl ?? event.flyer_url ?? event.image_url,
     )
   } catch (error) {
@@ -798,7 +813,7 @@ export async function updateCompleteEvent(
   }
 
   const { data: updatedId, error } = await mutationClient.rpc(
-    "update_complete_event_tx",
+    "update_complete_event_with_seating_tx",
     {
       p_event_id: eventId,
       payload: rpcPayload as unknown as Json,
@@ -814,19 +829,10 @@ export async function updateCompleteEvent(
     }
     return {
       success: false,
-      error: error.message.replace(/^update_complete_event_tx:\s*/i, ""),
-    }
-  }
-
-  const seatingError = await configureEventSeatingTiers(
-    mutationClient,
-    String(updatedId ?? eventId),
-    rpcPayload,
-  )
-  if (seatingError) {
-    return {
-      success: false,
-      error: `Los datos se actualizaron, pero no se pudo sincronizar el plano: ${seatingError}`,
+      error: error.message.replace(
+        /^update_complete_event_with_seating_tx:\s*/i,
+        "",
+      ),
     }
   }
 

@@ -1,37 +1,38 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
-import {
-  allInBreakdown,
-  allInPlatformFee,
-  allInPublicPrice,
-  DEFAULT_ALL_IN_RATE,
-} from "./all-in"
+import { allInBreakdown } from "./all-in"
 
 describe("all-in pricing", () => {
-  it("marks up net 50000 to public 57500 with 15%", () => {
-    assert.equal(allInPublicPrice(50000), 57500)
-    assert.equal(allInPlatformFee(50000), 7500)
-    assert.deepEqual(allInBreakdown(50000), {
-      basePrice: 50000,
-      platformFee: 7500,
-      publicPrice: 57500,
-      rate: DEFAULT_ALL_IN_RATE,
+  it("splits a public price using the organizer rate", () => {
+    assert.deepEqual(allInBreakdown(10000, 0.1), {
+      basePrice: 9000,
+      platformFee: 1000,
+      publicPrice: 10000,
+      rate: 0.1,
     })
   })
 
   it("rounds to 2 decimals", () => {
-    assert.equal(allInPublicPrice(33.33), 38.33)
-    assert.equal(allInPlatformFee(33.33), 5)
+    assert.deepEqual(allInBreakdown(33.33, 0.15), {
+      basePrice: 28.33,
+      platformFee: 5,
+      publicPrice: 33.33,
+      rate: 0.15,
+    })
   })
 
-  it("clamps negative bases to zero", () => {
-    assert.equal(allInPublicPrice(-10), 0)
-    assert.equal(allInPlatformFee(-10), 0)
+  it("clamps negative prices to zero", () => {
+    assert.deepEqual(allInBreakdown(-10, 0.15), {
+      basePrice: 0,
+      platformFee: 0,
+      publicPrice: 0,
+      rate: 0.15,
+    })
   })
 
-  it("respects custom rates", () => {
-    assert.equal(allInPublicPrice(100, 0.1), 110)
-    assert.equal(allInPlatformFee(100, 0.1), 10)
+  it("clamps rates to the supported range", () => {
+    assert.equal(allInBreakdown(100, 2).platformFee, 95)
+    assert.equal(allInBreakdown(100, -1).platformFee, 0)
   })
 })

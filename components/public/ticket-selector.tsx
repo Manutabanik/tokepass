@@ -15,8 +15,8 @@ import { toast } from "sonner"
 
 import { startCheckoutWithPayment } from "@/app/actions/checkout"
 import type { EventItem } from "@/app/actions/addons"
+import { DualSeatingSelector } from "@/components/b2c/dual-seating-selector"
 import { Button } from "@/components/ui/button"
-import { SeatingSelector } from "@/components/public/seating-selector"
 import { Separator } from "@/components/ui/separator"
 import { MAX_TICKETS_PER_PURCHASE } from "@/lib/checkout-limits"
 import { isFullPassDayId } from "@/lib/event-schedule"
@@ -41,6 +41,7 @@ type DayFilter = "all" | "passes" | string
 
 type TicketSelectorProps = {
   eventId: string
+  currentUserId?: string | null
   tiers: TicketSelectorTier[]
   scheduleDays?: ScheduleDay[]
   barItems?: EventItem[]
@@ -61,6 +62,7 @@ function roundMoney(value: number): number {
 
 export function TicketSelector({
   eventId,
+  currentUserId = null,
   tiers,
   scheduleDays = [],
   barItems = [],
@@ -231,6 +233,27 @@ export function TicketSelector({
       toast.success("Redirigiendo a Mercado Pago…")
       window.location.href = result.initPoint
     })
+  }
+
+  if (activeSeatingTier) {
+    return (
+      <DualSeatingSelector
+        eventId={eventId}
+        currentUserId={currentUserId}
+        tier={{
+          id: activeSeatingTier.id,
+          name: activeSeatingTier.name,
+          price: activeSeatingTier.price,
+          capacityPerUnit: activeSeatingTier.capacityPerUnit,
+        }}
+        units={seatingUnits.filter(
+          (unit) => unit.tierId === activeSeatingTier.id,
+        )}
+        backgroundUrl={seatingBackgroundUrl}
+        referralCode={resolvedRef}
+        onClose={() => setActiveSeatingTierId(null)}
+      />
+    )
   }
 
   if (tiers.length === 0) {
@@ -567,26 +590,6 @@ export function TicketSelector({
       <p className="mt-3 text-center text-xs text-zinc-500">
         Vas a ser redirigido a Checkout Pro de Mercado Pago.
       </p>
-      {activeSeatingTier ? (
-        <SeatingSelector
-          open
-          onOpenChange={(open) => {
-            if (!open) setActiveSeatingTierId(null)
-          }}
-          eventId={eventId}
-          tier={{
-            id: activeSeatingTier.id,
-            name: activeSeatingTier.name,
-            price: activeSeatingTier.price,
-            capacityPerUnit: activeSeatingTier.capacityPerUnit,
-          }}
-          units={seatingUnits.filter(
-            (unit) => unit.tierId === activeSeatingTier.id,
-          )}
-          backgroundUrl={seatingBackgroundUrl}
-          referralCode={resolvedRef}
-        />
-      ) : null}
     </div>
   )
 }

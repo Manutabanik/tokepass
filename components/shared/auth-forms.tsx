@@ -110,11 +110,9 @@ function ActionMessage({ state }: { state: AuthActionState }) {
 export function AuthForms({
   initialError,
   initialMode = "login",
-  nextPath,
 }: {
   initialError?: string
   initialMode?: "login" | "register"
-  nextPath?: string
 }) {
   const [mode, setMode] = useState<"login" | "register">(initialMode)
   const [loginState, loginAction] = useActionState(
@@ -131,8 +129,6 @@ export function AuthForms({
     loginState.error || loginState.success
       ? loginState
       : { error: initialError ?? null, success: null }
-  const safeNext =
-    nextPath?.startsWith("/") && !nextPath.startsWith("//") ? nextPath : null
 
   return (
     <div className="relative z-10 w-full max-w-md rounded-3xl border border-zinc-800/80 bg-zinc-900/80 p-8 shadow-2xl backdrop-blur-xl sm:p-10">
@@ -143,13 +139,9 @@ export function AuthForms({
         {isLogin ? "Ingresá a Tokepass" : "Creá tu cuenta"}
       </h1>
       <p className="mb-8 text-center text-sm text-zinc-400">
-        {safeNext
-          ? isLogin
-            ? "Iniciá sesión para continuar con tu compra."
-            : "Creá tu cuenta para continuar con tu compra."
-          : isLogin
-            ? "Tus entradas, beneficios y experiencias en un solo lugar."
-            : "Registrate para descubrir eventos y guardar tus entradas."}
+        {isLogin
+          ? "Tus entradas, beneficios y experiencias en un solo lugar."
+          : "Registrate para descubrir eventos y guardar tus entradas."}
       </p>
 
       <div className="mb-6 grid grid-cols-2 rounded-2xl border border-zinc-800/80 bg-zinc-950/80 p-1.5">
@@ -184,9 +176,6 @@ export function AuthForms({
 
       {isLogin ? (
         <form action={loginAction}>
-          {safeNext ? (
-            <input type="hidden" name="next" value={safeNext} />
-          ) : null}
           <div className="mb-6 space-y-4">
             <div>
               <label

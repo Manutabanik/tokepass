@@ -1,6 +1,11 @@
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import type { EventStatus, OrderStatus, UserRole } from "@/types/database"
+import type {
+  EventStatus,
+  OrderStatus,
+  OrganizerApprovalStatus,
+  UserRole,
+} from "@/types/database"
 
 const roleStyles: Record<UserRole, { label: string; className: string }> = {
   customer: {
@@ -61,6 +66,33 @@ const orderStatusStyles: Record<
   },
 }
 
+const organizerStatusStyles: Record<
+  OrganizerApprovalStatus,
+  { label: string; className: string }
+> = {
+  none: {
+    label: "Sin solicitud",
+    className: "border-zinc-500/20 bg-zinc-500/10 text-zinc-400",
+  },
+  pending: {
+    label: "Pendiente",
+    className: "border-amber-400/25 bg-amber-400/10 text-amber-300",
+  },
+  approved: {
+    label: "Aprobada",
+    className: "border-emerald-400/25 bg-emerald-400/10 text-emerald-300",
+  },
+  rejected: {
+    label: "Rechazada",
+    className: "border-red-400/25 bg-red-400/10 text-red-300",
+  },
+  suspended: {
+    label: "Suspendida",
+    className:
+      "border-red-500/40 bg-red-500/15 text-red-200 shadow-[0_0_16px_rgba(239,68,68,0.12)]",
+  },
+}
+
 export function RoleBadge({ role }: { role: UserRole }) {
   const style = roleStyles[role]
   return (
@@ -81,6 +113,19 @@ export function EventStatusBadge({ status }: { status: EventStatus }) {
 
 export function OrderStatusBadge({ status }: { status: OrderStatus }) {
   const style = orderStatusStyles[status]
+  return (
+    <Badge variant="outline" className={cn(style.className)}>
+      {style.label}
+    </Badge>
+  )
+}
+
+export function OrganizerStatusBadge({
+  status,
+}: {
+  status: OrganizerApprovalStatus
+}) {
+  const style = organizerStatusStyles[status]
   return (
     <Badge variant="outline" className={cn(style.className)}>
       {style.label}

@@ -13,9 +13,15 @@ export const metadata: Metadata = {
 export default async function CheckoutSuccessPage({
   searchParams,
 }: {
-  searchParams: Promise<{ order_id?: string; payment_id?: string; status?: string }>
+  searchParams: Promise<{
+    order_id?: string
+    payment_id?: string
+    status?: string
+    free?: string
+  }>
 }) {
-  const { order_id } = await searchParams
+  const { order_id, free } = await searchParams
+  const isFree = free === "1"
 
   return (
     <section className="relative isolate overflow-hidden">
@@ -31,14 +37,15 @@ export default async function CheckoutSuccessPage({
         </div>
 
         <p className="mt-10 text-sm font-semibold uppercase tracking-[0.18em] text-emerald-600">
-          Mercado Pago
+          {isFree ? "Entrada gratuita" : "Mercado Pago"}
         </p>
         <h1 className="mt-3 text-3xl font-black tracking-[-0.04em] text-zinc-950 sm:text-4xl">
-          ¡Pago recibido!
+          {isFree ? "¡Entrada emitida!" : "¡Pago recibido!"}
         </h1>
         <p className="mt-4 text-base leading-7 text-zinc-600">
-          Estamos confirmando la transacción con el webhook de Mercado Pago.
-          En segundos tus entradas quedarán disponibles en tu billetera
+          {isFree
+            ? "Tu entrada ya está disponible en tu billetera"
+            : "Estamos confirmando la transacción con el webhook de Mercado Pago. En segundos tus entradas quedarán disponibles en tu billetera"}
           {order_id ? (
             <>
               {" "}

@@ -6,6 +6,7 @@ import { notFound, redirect } from "next/navigation"
 import { getEventForEditing } from "@/app/actions/events"
 import { listOrganizerVenues } from "@/app/actions/venues"
 import { EventCreationWizard } from "@/components/admin/event-creation-wizard"
+import { getOrganizerServiceChargeRate } from "@/lib/services/organizer-pricing"
 import { createClient } from "@/lib/supabase/server"
 
 export const metadata: Metadata = {
@@ -34,6 +35,9 @@ export default async function EditEventPage({
   ])
 
   if (!initialData) notFound()
+  const organizerServiceRate = await getOrganizerServiceChargeRate(
+    initialData.organizerId,
+  )
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
@@ -61,6 +65,7 @@ export default async function EditEventPage({
 
       <EventCreationWizard
         initialData={initialData}
+        organizerServiceRate={organizerServiceRate}
         venues={venues}
       />
     </main>

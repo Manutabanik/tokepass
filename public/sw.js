@@ -1,7 +1,6 @@
 /* Tokepass PWA Service Worker — Offline-First billetera /my-tickets */
 
-const CACHE_VERSION = "tokepass-wallet-v4"
-const SHELL_CACHE = `${CACHE_VERSION}-shell`
+const CACHE_VERSION = "tokepass-wallet-v5"
 const ASSET_CACHE = `${CACHE_VERSION}-assets`
 
 const PRECACHE_URLS = [
@@ -11,9 +10,7 @@ const PRECACHE_URLS = [
   "/manifest.webmanifest",
 ]
 
-function isNavigableRequest(request) {
-  return request.mode === "navigate" || request.destination === "document"
-}
+const OFFLINE_WALLET_HTML = `<!doctype html><html lang="es"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Tokepass Offline</title><style>body{margin:0;background:#09090b;color:#fff;font-family:system-ui;display:grid;min-height:100vh;place-items:center;padding:24px;text-align:center}p{color:#a1a1aa;line-height:1.5}</style></head><body><div><h1>Modo offline</h1><p>Las entradas viven en este dispositivo. Conectate para sincronizar el estado más reciente.</p></div></body></html>`
 
 function isStaticAsset(url) {
   // Nunca cachear runtime/HMR de Next — provoca módulos stale (factory missing).
@@ -42,7 +39,7 @@ function isWalletRoute(url) {
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
-      const cache = await caches.open(SHELL_CACHE)
+      const cache = await caches.open(ASSET_CACHE)
       await Promise.allSettled(
         PRECACHE_URLS.map(async (url) => {
           try {
@@ -78,29 +75,17 @@ self.addEventListener("activate", (event) => {
   )
 })
 
-async function networkFirstWallet(request) {
-  const cache = await caches.open(SHELL_CACHE)
+async function networkOnlyWallet(request) {
   try {
-    const fresh = await fetch(request)
-    if (fresh && fresh.ok) {
-      await cache.put(request, fresh.clone())
-    }
-    return fresh
+    return await fetch(request)
   } catch {
-    const cached =
-      (await cache.match(request)) ||
-      (await cache.match("/my-tickets")) ||
-      (await caches.match("/my-tickets"))
-
-    if (cached) return cached
-
-    return new Response(
-      "<!doctype html><html lang='es'><head><meta charset='utf-8'/><meta name='viewport' content='width=device-width,initial-scale=1'/><title>Tokepass Offline</title><style>body{margin:0;background:#000;color:#fff;font-family:system-ui;display:grid;min-height:100vh;place-items:center;padding:24px;text-align:center}p{color:#a1a1aa}</style></head><body><div><h1>Tu entrada está en el dispositivo</h1><p>Abrí la billetera al menos una vez con internet. El QR vive offline.</p></div></body></html>",
-      {
-        status: 200,
-        headers: { "Content-Type": "text/html; charset=utf-8" },
+    return new Response(OFFLINE_WALLET_HTML, {
+      status: 200,
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store",
       },
-    )
+    })
   }
 }
 
@@ -129,7 +114,6 @@ async function cacheFirstAsset(request) {
 }
 
 async function cacheUrls(urls) {
-  const shell = await caches.open(SHELL_CACHE)
   const assets = await caches.open(ASSET_CACHE)
 
   await Promise.allSettled(
@@ -137,6 +121,17 @@ async function cacheUrls(urls) {
       try {
         const url = new URL(raw, self.location.origin)
         const sameOrigin = url.origin === self.location.origin
+
+        // Never persist authenticated HTML/RSC documents. Wallet data stays in
+        // IndexedDB, which is already scoped to the browsing profile.
+        if (
+          sameOrigin &&
+          (url.pathname.startsWith("/tickets/") ||
+            url.pathname === "/my-tickets" ||
+            url.pathname.startsWith("/my-tickets/"))
+        ) {
+          return
+        }
 
         let response
         try {
@@ -156,15 +151,7 @@ async function cacheUrls(urls) {
         if (!response.ok && response.type !== "opaque") return
         if (response.redirected && sameOrigin) return
 
-        if (
-          sameOrigin &&
-          (url.pathname.startsWith("/tickets/") ||
-            url.pathname === "/my-tickets")
-        ) {
-          await shell.put(url.pathname + url.search, response.clone())
-        } else {
-          await assets.put(url.href, response.clone())
-        }
+        await assets.put(url.href, response.clone())
       } catch {
         // best-effort
       }
@@ -202,13 +189,8 @@ self.addEventListener("fetch", (event) => {
     return
   }
 
-  if (isNavigableRequest(request) && isWalletRoute(url)) {
-    event.respondWith(networkFirstWallet(request))
-    return
-  }
-
-  if (isWalletRoute(url) && !isNavigableRequest(request)) {
-    event.respondWith(networkFirstWallet(request))
+  if (isWalletRoute(url)) {
+    event.respondWith(networkOnlyWallet(request))
     return
   }
 

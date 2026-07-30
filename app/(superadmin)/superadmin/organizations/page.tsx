@@ -1,9 +1,11 @@
-import { Building2 } from "lucide-react"
+import { ArrowRight, Building2 } from "lucide-react"
 import type { Metadata } from "next"
+import Link from "next/link"
 
 import { getOrganizations } from "@/app/actions/platform"
-import { RoleBadge } from "@/components/superadmin/badges"
+import { OrganizerStatusBadge } from "@/components/superadmin/badges"
 import { PageHeading } from "@/components/superadmin/page-heading"
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
@@ -18,7 +20,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { formatCurrency, formatDate, formatNumber, getInitials } from "@/lib/format"
+import {
+  formatCurrency,
+  formatDate,
+  formatNumber,
+  formatPercent,
+  getInitials,
+} from "@/lib/format"
 
 export const metadata: Metadata = {
   title: "Organizaciones",
@@ -54,8 +62,10 @@ export default async function SuperAdminOrganizationsPage() {
                   <TableHead className="text-zinc-600">Eventos</TableHead>
                   <TableHead className="text-zinc-600">Tickets</TableHead>
                   <TableHead className="text-zinc-600">GMV</TableHead>
+                  <TableHead className="text-zinc-600">Comisión</TableHead>
+                  <TableHead className="text-zinc-600">Alta</TableHead>
                   <TableHead className="pr-6 text-right text-zinc-600">
-                    Alta
+                    Gobierno
                   </TableHead>
                 </TableRow>
               </TableHeader>
@@ -75,7 +85,9 @@ export default async function SuperAdminOrganizationsPage() {
                             <p className="truncate font-medium text-zinc-200">
                               {organization.name}
                             </p>
-                            <RoleBadge role={organization.role} />
+                            <OrganizerStatusBadge
+                              status={organization.approvalStatus}
+                            />
                           </div>
                           <p className="truncate text-xs text-zinc-600">
                             {organization.email}
@@ -97,8 +109,27 @@ export default async function SuperAdminOrganizationsPage() {
                     <TableCell className="font-medium text-white">
                       {formatCurrency(organization.grossRevenue)}
                     </TableCell>
-                    <TableCell className="pr-6 text-right text-zinc-400">
+                    <TableCell className="font-mono text-sky-300">
+                      {formatPercent(organization.serviceChargeRate * 100)}
+                    </TableCell>
+                    <TableCell className="text-zinc-400">
                       {formatDate(organization.joinedAt)}
+                    </TableCell>
+                    <TableCell className="pr-6 text-right">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full border-sky-400/20 bg-sky-400/5 text-sky-200 hover:bg-sky-400/10 hover:text-white"
+                        nativeButton={false}
+                        render={
+                          <Link
+                            href={`/superadmin/organizations/${organization.id}`}
+                          />
+                        }
+                      >
+                        Gestionar
+                        <ArrowRight />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}

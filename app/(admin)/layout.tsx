@@ -37,6 +37,15 @@ export default async function AdminLayout({
     redirect("/register-organizador?pending=1")
   }
 
+  if (
+    profile?.organizer_approval_status === "rejected" ||
+    profile?.organizer_approval_status === "suspended"
+  ) {
+    redirect(
+      `/register-organizador?status=${profile.organizer_approval_status}`,
+    )
+  }
+
   const isOrganizer =
     profile?.role === "admin" || profile?.role === "super_admin"
   const staffRoles = isOrganizer ? [] : await getMyStaffRoles()

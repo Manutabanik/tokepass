@@ -9,10 +9,14 @@ export const metadata: Metadata = {
 export default async function OrganizerRegisterPage({
   searchParams,
 }: {
-  searchParams: Promise<{ pending?: string }>
+  searchParams: Promise<{
+    pending?: string
+    status?: "rejected" | "suspended"
+  }>
 }) {
   const params = await searchParams
   const pending = params.pending === "1"
+  const blockedStatus = params.status
 
   return (
     <section className="relative isolate grid min-h-[calc(100vh-4rem)] place-items-center overflow-hidden bg-[#09090b] px-4 py-16">
@@ -22,6 +26,13 @@ export default async function OrganizerRegisterPage({
           <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
             Tu cuenta de organizador está pendiente de aprobación. Todavía no
             podés entrar al Command Center.
+          </div>
+        ) : null}
+        {blockedStatus ? (
+          <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+            {blockedStatus === "suspended"
+              ? "Tu productora está suspendida y no puede operar. Contactá a soporte de Tokepass para revisar el caso."
+              : "Tu solicitud de organizador fue rechazada. Contactá a soporte si necesitás una nueva revisión."}
           </div>
         ) : null}
         <OrganizerAuthForm mode="register" />

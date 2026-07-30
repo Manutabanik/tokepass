@@ -9,9 +9,9 @@ export const metadata: Metadata = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; next?: string }>
+  searchParams: Promise<{ error?: string }>
 }) {
-  const { error, next } = await searchParams
+  const { error } = await searchParams
 
   return (
     <section className="relative flex min-h-[calc(100vh-80px)] items-center justify-center overflow-hidden bg-zinc-950 p-4">
@@ -23,7 +23,7 @@ export default async function LoginPage({
         className="pointer-events-none absolute -bottom-40 -right-40 size-96 rounded-full bg-emerald-600/10 blur-[120px]"
         aria-hidden="true"
       />
-      <AuthForms initialError={error} nextPath={next} />
+      <AuthForms initialError={error} />
     </section>
   )
 }

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 
 import { createPaymentPreference } from "@/app/actions/payments"
 import { MAX_TICKETS_PER_PURCHASE } from "@/lib/checkout-limits"
+import { logger } from "@/lib/logger"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
@@ -58,18 +59,29 @@ function isStockError(message: string): boolean {
   )
 }
 
-async function releaseTickets(ticketIds: string[]) {
-  if (ticketIds.length === 0) return
+async function cleanupPendingOrder(orderId: string): Promise<void> {
+  try {
+    const admin = createAdminClient()
+    const { error } = await admin.rpc("expire_abandoned_order", {
+      p_order_id: orderId,
+    })
 
-  const supabase = await createClient()
-  await supabase.rpc("release_reserved_tickets", {
-    p_ticket_ids: ticketIds,
-  })
-}
-
-async function releaseOrderAddons(orderId: string) {
-  const admin = createAdminClient()
-  await admin.rpc("release_order_event_items", { p_order_id: orderId })
+    if (error) {
+      logger.error({
+        context: "checkout/cleanup",
+        message: "pending_order_cleanup_failed",
+        orderId,
+        error: error.message,
+      })
+    }
+  } catch (error) {
+    logger.error({
+      context: "checkout/cleanup",
+      message: "pending_order_cleanup_failed",
+      orderId,
+      error,
+    })
+  }
 }
 
 /**
@@ -82,6 +94,67 @@ export async function processCheckout(
   eventId: string,
 ): Promise<CheckoutResult> {
   return startCheckoutWithPayment(eventId, [{ tierId, quantity }])
+}
+
+const SEATING_COLLISION_MESSAGE =
+  "Esta ubicación acaba de ser reservada por otra persona. Por favor elegí otra."
+
+/**
+ * Boundary for the numbered-seating checkout. Identity and tier ownership are
+ * re-read on the server; the database RPC takes a row lock and conditionally
+ * moves the unit from available to reserved for eight minutes.
+ */
+export async function reserveSeatAtomic(
+  eventId: string,
+  seatId: string,
+  userId: string,
+  referralCode?: string | null,
+): Promise<CheckoutResult> {
+  const cleanEventId = eventId.trim()
+  const cleanSeatId = seatId.trim()
+  const cleanUserId = userId.trim()
+
+  if (!cleanEventId || !cleanSeatId || !cleanUserId) {
+    return { success: false, error: "Datos de ubicación incompletos." }
+  }
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    return { success: false, error: "auth_required" }
+  }
+
+  if (user.id !== cleanUserId) {
+    return { success: false, error: "No tenés permiso para esta reserva." }
+  }
+
+  const { data: availableUnits, error: unitError } = await supabase.rpc(
+    "get_event_seating_availability",
+    { p_event_id: cleanEventId },
+  )
+  const unit = availableUnits?.find(
+    (candidate) => candidate.id === cleanSeatId,
+  )
+
+  if (unitError || !unit || unit.status !== "available") {
+    return { success: false, error: SEATING_COLLISION_MESSAGE }
+  }
+
+  const result = await startCheckoutWithPayment(
+    cleanEventId,
+    [{ tierId: unit.tier_id, quantity: 1, seatingUnitId: unit.id }],
+    referralCode,
+  )
+
+  if (!result.success && result.error === "out_of_stock") {
+    return { success: false, error: SEATING_COLLISION_MESSAGE }
+  }
+
+  return result
 }
 
 export async function startCheckoutWithPayment(
@@ -168,6 +241,8 @@ export async function startCheckoutWithPayment(
     quantity: item.quantity,
   }))
 
+  let pendingOrderId: string | null = null
+
   try {
     const seatingItem = seatingItems[0]
     const reservation = seatingItem?.seatingUnitId
@@ -200,9 +275,16 @@ export async function startCheckoutWithPayment(
         return { success: false, error: "out_of_stock" }
       }
 
+      logger.error({
+        context: "checkout/reservation",
+        message: "reservation_rpc_failed",
+        eventId,
+        userId: user.id,
+        error: error.message,
+      })
       return {
         success: false,
-        error: error.message || "No se pudo completar la reserva.",
+        error: "No se pudo completar la reserva. Intentá nuevamente.",
       }
     }
 
@@ -212,10 +294,10 @@ export async function startCheckoutWithPayment(
     }
 
     const orderId = rows[0].order_id
+    pendingOrderId = orderId
     const reservedTickets: ReservedTicket[] = rows.map((row) => ({
       ticket_id: row.ticket_id,
     }))
-    const ticketIds = reservedTickets.map((ticket) => ticket.ticket_id)
 
     if (addons.length > 0) {
       const { error: addonsError } = await supabase.rpc(
@@ -231,10 +313,7 @@ export async function startCheckoutWithPayment(
       )
 
       if (addonsError) {
-        await releaseTickets(ticketIds)
-        await releaseOrderAddons(orderId)
-        const admin = createAdminClient()
-        await admin.from("orders").delete().eq("id", orderId)
+        await cleanupPendingOrder(orderId)
 
         if (isStockError(addonsError.message)) {
           return { success: false, error: "out_of_stock" }
@@ -247,21 +326,72 @@ export async function startCheckoutWithPayment(
       }
     }
 
-    const preference = await createPaymentPreference(orderId)
+    const { data: pricedOrder, error: pricedOrderError } = await supabase
+      .from("orders")
+      .select("total_amount")
+      .eq("id", orderId)
+      .eq("buyer_id", user.id)
+      .maybeSingle()
 
-    if (!preference.success) {
-      await releaseOrderAddons(orderId)
-      await releaseTickets(ticketIds)
-      const admin = createAdminClient()
-      await admin.from("orders").delete().eq("id", orderId)
+    if (pricedOrderError || !pricedOrder) {
+      await cleanupPendingOrder(orderId)
       return {
         success: false,
-        error:
-          preference.error ||
-          "Mercado Pago no respondió. Intentá de nuevo en unos minutos.",
+        error: "No se pudo validar el total final de la orden.",
       }
     }
 
+    const finalTotal = Number(pricedOrder.total_amount)
+    if (!Number.isFinite(finalTotal) || finalTotal < 0) {
+      await cleanupPendingOrder(orderId)
+      return { success: false, error: "El total de la orden es inválido." }
+    }
+
+    let initPoint: string
+    if (finalTotal === 0) {
+      const admin = createAdminClient()
+      const { data: finalized, error: finalizeError } = await admin.rpc(
+        "finalize_paid_order",
+        {
+          p_order_id: orderId,
+          p_mp_payment_id: `free:${orderId}`,
+        },
+      )
+      const result = (finalized ?? {}) as { ok?: boolean; code?: string }
+
+      if (finalizeError || !result.ok) {
+        await cleanupPendingOrder(orderId)
+        logger.error({
+          context: "checkout/free",
+          message: "free_order_finalize_failed",
+          orderId,
+          userId: user.id,
+          error: finalizeError?.message ?? result.code ?? "unknown",
+        })
+        return {
+          success: false,
+          error: "No se pudo emitir la entrada gratuita.",
+        }
+      }
+
+      initPoint = `/checkout/success?order_id=${orderId}&free=1`
+    } else {
+      const preference = await createPaymentPreference(orderId)
+
+      if (!preference.success) {
+        await cleanupPendingOrder(orderId)
+        return {
+          success: false,
+          error:
+            preference.error ||
+            "Mercado Pago no respondió. Intentá de nuevo en unos minutos.",
+        }
+      }
+
+      initPoint = preference.initPoint
+    }
+
+    pendingOrderId = null
     revalidatePath(`/events/${eventId}`)
     revalidatePath("/events")
     revalidatePath("/my-tickets")
@@ -275,18 +405,27 @@ export async function startCheckoutWithPayment(
       success: true,
       tickets: reservedTickets,
       orderId,
-      initPoint: preference.initPoint,
+      initPoint,
       ...(rows[0]?.reserved_until
         ? { reservedUntil: rows[0].reserved_until }
         : {}),
     }
   } catch (error) {
+    if (pendingOrderId) {
+      await cleanupPendingOrder(pendingOrderId)
+    }
+
+    logger.error({
+      context: "checkout/start",
+      message: "unexpected_checkout_error",
+      eventId,
+      userId: user.id,
+      orderId: pendingOrderId,
+      error,
+    })
     return {
       success: false,
-      error:
-        error instanceof Error
-          ? error.message
-          : "Error inesperado durante el checkout.",
+      error: "Error inesperado durante el checkout. Intentá nuevamente.",
     }
   }
 }

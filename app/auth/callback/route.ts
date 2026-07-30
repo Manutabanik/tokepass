@@ -1,5 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server"
 
+import {
+  getFreshLoginProfile,
+  postLoginDestination,
+} from "@/lib/auth/post-login"
+import { logger } from "@/lib/logger"
 import { createClient } from "@/lib/supabase/server"
 
 export async function GET(request: NextRequest) {
@@ -16,18 +21,18 @@ export async function GET(request: NextRequest) {
       } = await supabase.auth.getUser()
 
       if (user) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("role")
-          .eq("id", user.id)
-          .single()
-
-        if (profile) {
-          const destination =
-            profile.role === "admin" || profile.role === "super_admin"
-              ? "/admin"
-              : "/"
-          return NextResponse.redirect(new URL(destination, request.url))
+        try {
+          const profile = await getFreshLoginProfile(user.id)
+          return NextResponse.redirect(
+            new URL(postLoginDestination(profile?.role), request.url),
+          )
+        } catch (profileError) {
+          logger.error({
+            context: "auth/callback",
+            message: "fresh_profile_lookup_failed",
+            userId: user.id,
+            error: profileError,
+          })
         }
       }
     }

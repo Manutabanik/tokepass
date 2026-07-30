@@ -1,4 +1,10 @@
 export type UserRole = "customer" | "admin" | "super_admin"
+export type OrganizerApprovalStatus =
+  | "none"
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "suspended"
 export type EventStatus = "draft" | "published" | "cancelled" | "completed"
 export type QrType = "dynamic" | "static"
 export type PaymentMethod = "mercadopago" | "cash_pos" | "transfer_pos"
@@ -51,7 +57,7 @@ export type Profile = {
   role: UserRole
   /** Fracción decimal: 0.15 = 15% cargo por servicio al comprador */
   service_charge_rate: number
-  organizer_approval_status: "none" | "pending" | "approved" | "rejected"
+  organizer_approval_status: OrganizerApprovalStatus
   created_at: string
   updated_at: string
 }
@@ -151,6 +157,7 @@ export type Ticket = {
   is_dynamic_qr: boolean
   max_transfers_allowed: number
   transfer_count: number
+  transferred_from_id: string | null
   scanned_at: string | null
   validated_at: string | null
   validated_by: string | null
@@ -260,6 +267,20 @@ export type Order = {
   updated_at: string
 }
 
+export type OrganizerSettlement = {
+  id: string
+  organizer_id: string
+  gross_amount: number
+  platform_fee: number
+  net_amount: number
+  status: "pending" | "completed"
+  period_label: string | null
+  notes: string | null
+  completed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
 export type OrderAddon = {
   id: string
   order_id: string
@@ -329,7 +350,7 @@ type ProfileInsert = Omit<
   role?: UserRole
   service_charge_rate?: number
   dni?: string | null
-  organizer_approval_status?: "none" | "pending" | "approved" | "rejected"
+  organizer_approval_status?: OrganizerApprovalStatus
   created_at?: string
   updated_at?: string
 }
@@ -422,6 +443,7 @@ type TicketInsert = Omit<
   | "totp_secret"
   | "max_transfers_allowed"
   | "transfer_count"
+  | "transferred_from_id"
   | "scanned_at"
   | "validated_at"
   | "validated_by"
@@ -439,6 +461,7 @@ type TicketInsert = Omit<
   totp_secret?: string
   max_transfers_allowed?: number
   transfer_count?: number
+  transferred_from_id?: string | null
   scanned_at?: string | null
   validated_at?: string | null
   validated_by?: string | null
@@ -512,6 +535,24 @@ type OrderInsert = Omit<
   mp_payment_id?: string | null
   payment_method?: PaymentMethod
   customer_phone?: string | null
+  created_at?: string
+  updated_at?: string
+}
+type OrganizerSettlementInsert = Omit<
+  OrganizerSettlement,
+  | "id"
+  | "status"
+  | "period_label"
+  | "notes"
+  | "completed_at"
+  | "created_at"
+  | "updated_at"
+> & {
+  id?: string
+  status?: "pending" | "completed"
+  period_label?: string | null
+  notes?: string | null
+  completed_at?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -667,6 +708,12 @@ export type Database = {
         Row: Order
         Insert: OrderInsert
         Update: Partial<OrderInsert>
+        Relationships: []
+      }
+      organizer_settlements: {
+        Row: OrganizerSettlement
+        Insert: OrganizerSettlementInsert
+        Update: Partial<OrganizerSettlementInsert>
         Relationships: []
       }
       order_addons: {
@@ -838,7 +885,21 @@ export type Database = {
         }
         Returns: string
       }
+      create_complete_event_with_seating_tx: {
+        Args: {
+          payload: Json
+          p_organizer_id: string
+        }
+        Returns: string
+      }
       update_complete_event_tx: {
+        Args: {
+          p_event_id: string
+          payload: Json
+        }
+        Returns: string
+      }
+      update_complete_event_with_seating_tx: {
         Args: {
           p_event_id: string
           payload: Json
@@ -850,6 +911,51 @@ export type Database = {
           p_organizer_id: string
         }
         Returns: Json
+      }
+      get_organizer_governance_metrics: {
+        Args: {
+          p_organizer_id: string
+        }
+        Returns: Array<{
+          total_events: number
+          published_events: number
+          tickets_sold: number
+          historical_gmv: number
+        }>
+      }
+      get_platform_global_metrics: {
+        Args: Record<string, never>
+        Returns: Array<{
+          total_gmv: number
+          platform_revenue: number
+          total_tickets: number
+          active_organizers: number
+        }>
+      }
+      get_platform_organizations_summary: {
+        Args: Record<string, never>
+        Returns: Array<{
+          organizer_id: string
+          organizer_name: string
+          organizer_email: string
+          organizer_role: string
+          approval_status: string
+          service_charge_rate: number
+          joined_at: string
+          total_events: number
+          published_events: number
+          tickets_sold: number
+          gross_revenue: number
+        }>
+      }
+      update_organizer_governance_tx: {
+        Args: {
+          p_organizer_id: string
+          p_actor_id: string
+          p_status?: string | null
+          p_service_charge_rate?: number | null
+        }
+        Returns: undefined
       }
       get_organizer_finance_summary: {
         Args: {
@@ -1017,6 +1123,46 @@ export type Database = {
         Args: { p_settlement_id: string }
         Returns: undefined
       }
+      get_platform_orders_ledger: {
+        Args: {
+          p_organizer_id?: string | null
+          p_event_id?: string | null
+          p_status?: string | null
+          p_limit?: number
+        }
+        Returns: {
+          order_id: string
+          created_at: string
+          status: string
+          payment_method: string
+          mp_payment_id: string | null
+          event_id: string | null
+          event_title: string
+          organizer_id: string | null
+          organizer_name: string
+          buyer_id: string
+          buyer_name: string
+          buyer_email: string
+          gross_amount: number
+          platform_fee_amount: number
+          organizer_net_amount: number
+          fee_rate: number
+        }[]
+      }
+      get_platform_orders_ledger_totals: {
+        Args: {
+          p_organizer_id?: string | null
+          p_event_id?: string | null
+          p_status?: string | null
+        }
+        Returns: {
+          gross: number
+          platform_fee: number
+          organizer_net: number
+          order_count: number
+          paid_count: number
+        }[]
+      }
       redeem_item: {
         Args: {
           p_qr_token: string
@@ -1069,6 +1215,7 @@ export type Database = {
     }
     Enums: {
       user_role: UserRole
+      organizer_approval_status: OrganizerApprovalStatus
       event_status: EventStatus
       ticket_status: TicketStatus
       zone_type: ZoneType

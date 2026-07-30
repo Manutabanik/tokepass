@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import type {
   EventStatus,
+  OrganizerApprovalStatus,
   OrderStatus,
   UserRole,
 } from "@/types/database"
@@ -188,6 +189,8 @@ export interface OrganizationSummary {
   name: string
   email: string
   role: UserRole
+  approvalStatus: OrganizerApprovalStatus
+  serviceChargeRate: number
   joinedAt: string
   totalEvents: number
   publishedEvents: number
@@ -197,67 +200,24 @@ export interface OrganizationSummary {
 
 export async function getOrganizations(): Promise<OrganizationSummary[]> {
   const { admin } = await requireSuperAdmin()
-
-  const [{ data: organizers }, { data: events }, { data: tiers }] =
-    await Promise.all([
-      admin
-        .from("profiles")
-        .select("id, full_name, email, role, created_at")
-        .in("role", ["admin", "super_admin"])
-        .order("created_at", { ascending: false }),
-      admin.from("events").select("id, organizer_id, status"),
-      admin.from("ticket_tiers").select("event_id, price, sold"),
-    ])
-
-  const eventOrganizer = new Map<string, string>()
-  const statsByOrganizer = new Map<
-    string,
-    { totalEvents: number; publishedEvents: number }
-  >()
-
-  for (const event of events ?? []) {
-    eventOrganizer.set(event.id, event.organizer_id)
-    const current = statsByOrganizer.get(event.organizer_id) ?? {
-      totalEvents: 0,
-      publishedEvents: 0,
-    }
-    current.totalEvents += 1
-    if (event.status === "published") current.publishedEvents += 1
-    statsByOrganizer.set(event.organizer_id, current)
+  const { data, error } = await admin.rpc("get_platform_organizations_summary")
+  if (error) {
+    throw new Error(`No se pudieron cargar las organizaciones: ${error.message}`)
   }
 
-  const revenueByOrganizer = new Map<
-    string,
-    { ticketsSold: number; grossRevenue: number }
-  >()
-  for (const tier of tiers ?? []) {
-    const organizerId = eventOrganizer.get(tier.event_id)
-    if (!organizerId) continue
-    const current = revenueByOrganizer.get(organizerId) ?? {
-      ticketsSold: 0,
-      grossRevenue: 0,
-    }
-    current.ticketsSold += tier.sold
-    current.grossRevenue += tier.price * tier.sold
-    revenueByOrganizer.set(organizerId, current)
-  }
-
-  return (organizers ?? []).map((organizer) => {
-    const stats = statsByOrganizer.get(organizer.id)
-    const revenue = revenueByOrganizer.get(organizer.id)
-
-    return {
-      id: organizer.id,
-      name: organizer.full_name ?? "Sin nombre",
-      email: organizer.email,
-      role: organizer.role,
-      joinedAt: organizer.created_at,
-      totalEvents: stats?.totalEvents ?? 0,
-      publishedEvents: stats?.publishedEvents ?? 0,
-      ticketsSold: revenue?.ticketsSold ?? 0,
-      grossRevenue: revenue?.grossRevenue ?? 0,
-    }
-  })
+  return (data ?? []).map((organizer) => ({
+    id: organizer.organizer_id,
+    name: organizer.organizer_name,
+    email: organizer.organizer_email,
+    role: organizer.organizer_role as UserRole,
+    approvalStatus: organizer.approval_status as OrganizerApprovalStatus,
+    serviceChargeRate: Number(organizer.service_charge_rate ?? 0.15),
+    joinedAt: organizer.joined_at,
+    totalEvents: Number(organizer.total_events),
+    publishedEvents: Number(organizer.published_events),
+    ticketsSold: Number(organizer.tickets_sold),
+    grossRevenue: Number(organizer.gross_revenue),
+  }))
 }
 
 export interface PlatformUser {
