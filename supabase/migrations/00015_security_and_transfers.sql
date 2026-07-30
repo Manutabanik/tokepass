@@ -31,7 +31,7 @@ alter table public.tickets
   alter column totp_secret set not null;
 
 alter table public.tickets
-  alter column totp_secret set default encode(gen_random_bytes(24), 'hex');
+  alter column totp_secret set default encode(extensions.gen_random_bytes(24), 'hex');
 
 do $$
 begin

@@ -19,6 +19,8 @@ type OfflineTicketWalletProps = {
   initialTickets: MyTicket[]
   barRedemptions?: MyBarRedemption[]
   loadError?: string | null
+  appleWalletEnabled?: boolean
+  googleWalletEnabled?: boolean
 }
 
 export function OfflineTicketWallet({
@@ -26,6 +28,8 @@ export function OfflineTicketWallet({
   initialTickets,
   barRedemptions = [],
   loadError = null,
+  appleWalletEnabled = false,
+  googleWalletEnabled = false,
 }: OfflineTicketWalletProps) {
   const online = useOnlineStatus()
   const [cachedTickets, setCachedTickets] = useState<MyTicket[] | null>(null)
@@ -138,6 +142,8 @@ export function OfflineTicketWallet({
           userId={userId}
           barRedemptions={online ? barRedemptions : []}
           offline={!online}
+          appleWalletEnabled={appleWalletEnabled}
+          googleWalletEnabled={googleWalletEnabled}
         />
       )}
     </div>

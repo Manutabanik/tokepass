@@ -1,11 +1,17 @@
 "use client"
 
-import { GlassWater, Ticket } from "lucide-react"
+import {
+  ArrowUpRight,
+  GlassWater,
+  History,
+  Ticket,
+} from "lucide-react"
+import { motion } from "motion/react"
 import Link from "next/link"
 
 import type { MyBarRedemption } from "@/app/actions/addons"
 import type { MyTicket } from "@/app/actions/tickets"
-import { BarWalletEmpty, LivingBarCard } from "@/components/public/living-bar-card"
+import { LivingBarCard } from "@/components/public/living-bar-card"
 import { LivingTicketCard } from "@/components/public/living-ticket-card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -14,32 +20,65 @@ function EmptyState({
   title,
   description,
   cta = false,
+  kind = "tickets",
 }: {
   title: string
   description: string
   cta?: boolean
+  kind?: "tickets" | "bar" | "history"
 }) {
+  const Icon =
+    kind === "bar" ? GlassWater : kind === "history" ? History : Ticket
+  const isBar = kind === "bar"
+
   return (
-    <div className="grid min-h-64 place-items-center rounded-[1.75rem] border border-dashed border-zinc-800 bg-zinc-950/60 px-5 py-12 text-center">
-      <div>
-        <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-zinc-900 text-zinc-400 ring-1 ring-inset ring-zinc-800">
-          <Ticket className="size-6" aria-hidden="true" />
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, ease: "easeOut" }}
+      className="relative isolate min-h-[360px] overflow-hidden rounded-3xl border border-zinc-800/80 bg-gradient-to-b from-zinc-900/80 to-zinc-950/90 px-6 py-12 text-center shadow-2xl shadow-black/25 sm:min-h-[420px] sm:px-14 sm:py-16"
+    >
+      <div
+        className={[
+          "pointer-events-none absolute -top-24 left-1/2 -z-10 size-64 -translate-x-1/2 rounded-full blur-3xl",
+          isBar ? "bg-amber-500/15" : "bg-emerald-500/15",
+        ].join(" ")}
+        aria-hidden="true"
+      />
+      <div
+        className="pointer-events-none absolute inset-x-16 bottom-0 -z-10 h-px bg-gradient-to-r from-transparent via-zinc-700/60 to-transparent"
+        aria-hidden="true"
+      />
+
+      <div className="flex min-h-[264px] flex-col items-center justify-center sm:min-h-[292px]">
+        <span
+          className={[
+            "mb-6 grid size-16 place-items-center rounded-2xl border border-zinc-700 bg-zinc-800/80 text-zinc-300 shadow-inner sm:size-20",
+            isBar
+              ? "shadow-[0_0_25px_rgba(245,158,11,0.15)]"
+              : "shadow-[0_0_25px_rgba(16,185,129,0.15)]",
+          ].join(" ")}
+        >
+          <Icon className="size-7 sm:size-8" aria-hidden="true" />
         </span>
-        <h2 className="mt-5 text-lg font-bold text-white">{title}</h2>
-        <p className="mx-auto mt-2 max-w-xs text-sm leading-6 text-zinc-500">
+        <h2 className="mb-2 text-lg font-bold text-white sm:text-xl">
+          {title}
+        </h2>
+        <p className="mx-auto mb-8 max-w-md text-sm leading-relaxed text-zinc-400 sm:text-base">
           {description}
         </p>
         {cta && (
           <Button
-            className="mt-6 h-11 rounded-full bg-white px-6 text-zinc-950 hover:bg-zinc-200"
+            className="h-12 rounded-xl bg-white px-6 text-sm font-semibold text-zinc-950 shadow-[0_0_20px_rgba(255,255,255,0.15)] transition-all hover:scale-[1.02] hover:bg-zinc-100 active:scale-[0.98] sm:text-base"
             nativeButton={false}
             render={<Link href="/events" />}
           >
             Explorar eventos
+            <ArrowUpRight className="size-4" aria-hidden="true" />
           </Button>
         )}
       </div>
-    </div>
+    </motion.div>
   )
 }
 
@@ -48,14 +87,18 @@ function TicketStack({
   userId,
   showQr,
   offline = false,
+  appleWalletEnabled = false,
+  googleWalletEnabled = false,
 }: {
   tickets: MyTicket[]
   userId: string
   showQr: boolean
   offline?: boolean
+  appleWalletEnabled?: boolean
+  googleWalletEnabled?: boolean
 }) {
   return (
-    <div className="flex flex-col gap-4">
+    <div className="grid gap-4 md:grid-cols-2 md:items-start">
       {tickets.map((ticket) => (
         <LivingTicketCard
           key={ticket.id}
@@ -63,6 +106,8 @@ function TicketStack({
           userId={userId}
           showQr={showQr}
           offline={offline}
+          appleWalletEnabled={appleWalletEnabled}
+          googleWalletEnabled={googleWalletEnabled}
         />
       ))}
     </div>
@@ -75,12 +120,16 @@ export function TicketWallet({
   userId,
   barRedemptions = [],
   offline = false,
+  appleWalletEnabled = false,
+  googleWalletEnabled = false,
 }: {
   upcoming: MyTicket[]
   past: MyTicket[]
   userId: string
   barRedemptions?: MyBarRedemption[]
   offline?: boolean
+  appleWalletEnabled?: boolean
+  googleWalletEnabled?: boolean
 }) {
   const defaultTab =
     upcoming.length > 0
@@ -93,34 +142,40 @@ export function TicketWallet({
   const redeemedBar = barRedemptions.filter((item) => item.status === "redeemed")
 
   return (
-    <Tabs defaultValue={defaultTab} className="w-full gap-5">
-      <TabsList className="grid h-12 w-full grid-cols-3 rounded-2xl bg-zinc-900 p-1 ring-1 ring-zinc-800">
+    <Tabs defaultValue={defaultTab} className="w-full gap-6">
+      <TabsList
+        aria-label="Secciones de la billetera"
+        className="inline-flex w-full items-stretch justify-start gap-1 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-1.5 shadow-lg shadow-black/20 backdrop-blur-md group-data-horizontal/tabs:h-auto sm:w-fit sm:self-start"
+      >
         <TabsTrigger
           value="upcoming"
-          className="h-10 rounded-xl text-sm font-semibold text-zinc-400 data-active:bg-zinc-800 data-active:text-white data-active:shadow-none"
+          className="h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl px-2.5 text-xs font-medium text-zinc-400 transition-all hover:bg-zinc-800/40 hover:text-white data-active:border-zinc-700/60 data-active:bg-zinc-800 data-active:text-white data-active:shadow-sm sm:h-10 sm:flex-none sm:px-4 sm:text-sm"
         >
-          Entradas
-          <span className="ml-1 tabular-nums text-zinc-500 data-active:text-zinc-300">
-            ({upcoming.length})
+          <Ticket className="hidden size-3.5 sm:block" aria-hidden="true" />
+          <span>Entradas</span>
+          <span className="rounded-md bg-zinc-800 px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums text-zinc-200 ring-1 ring-inset ring-zinc-700/60">
+            {upcoming.length}
           </span>
         </TabsTrigger>
         <TabsTrigger
           value="bar"
-          className="h-10 rounded-xl text-sm font-semibold text-zinc-400 data-active:bg-zinc-800 data-active:text-white data-active:shadow-none"
+          className="h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl px-2.5 text-xs font-medium text-zinc-400 transition-all hover:bg-zinc-800/40 hover:text-white data-active:border-zinc-700/60 data-active:bg-zinc-800 data-active:text-white data-active:shadow-sm sm:h-10 sm:flex-none sm:px-4 sm:text-sm"
         >
-          <GlassWater className="mr-1 size-3.5 opacity-70" aria-hidden="true" />
-          Consumiciones
-          <span className="ml-1 tabular-nums text-zinc-500 data-active:text-zinc-300">
-            ({barRedemptions.length})
+          <GlassWater className="hidden size-3.5 sm:block" aria-hidden="true" />
+          <span className="sm:hidden">Consumos</span>
+          <span className="hidden sm:inline">Consumiciones</span>
+          <span className="rounded-md bg-zinc-800 px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums text-zinc-200 ring-1 ring-inset ring-zinc-700/60">
+            {barRedemptions.length}
           </span>
         </TabsTrigger>
         <TabsTrigger
           value="past"
-          className="h-10 rounded-xl text-sm font-semibold text-zinc-400 data-active:bg-zinc-800 data-active:text-white data-active:shadow-none"
+          className="h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl px-2.5 text-xs font-medium text-zinc-400 transition-all hover:bg-zinc-800/40 hover:text-white data-active:border-zinc-700/60 data-active:bg-zinc-800 data-active:text-white data-active:shadow-sm sm:h-10 sm:flex-none sm:px-4 sm:text-sm"
         >
-          Pasados
-          <span className="ml-1 tabular-nums text-zinc-500 data-active:text-zinc-300">
-            ({past.length})
+          <History className="hidden size-3.5 sm:block" aria-hidden="true" />
+          <span>Pasados</span>
+          <span className="rounded-md bg-zinc-800 px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums text-zinc-200 ring-1 ring-inset ring-zinc-700/60">
+            {past.length}
           </span>
         </TabsTrigger>
       </TabsList>
@@ -132,6 +187,8 @@ export function TicketWallet({
             userId={userId}
             showQr
             offline={offline}
+            appleWalletEnabled={appleWalletEnabled}
+            googleWalletEnabled={googleWalletEnabled}
           />
         ) : (
           <EmptyState
@@ -144,7 +201,7 @@ export function TicketWallet({
 
       <TabsContent value="bar" className="mt-0 outline-none">
         {barRedemptions.length > 0 ? (
-          <div className="flex flex-col gap-4">
+          <div className="grid gap-4 md:grid-cols-2 md:items-start">
             {validBar.map((item) => (
               <LivingBarCard key={item.id} redemption={item} />
             ))}
@@ -153,7 +210,11 @@ export function TicketWallet({
             ))}
           </div>
         ) : (
-          <BarWalletEmpty />
+          <EmptyState
+            kind="bar"
+            title="Sin consumiciones"
+            description="Cuando compres tragos o combos con tu entrada, aparecerán acá con su QR de barra."
+          />
         )}
       </TabsContent>
 
@@ -162,6 +223,7 @@ export function TicketWallet({
           <TicketStack tickets={past} userId={userId} showQr={false} />
         ) : (
           <EmptyState
+            kind="history"
             title="Sin historial"
             description="Tus entradas usadas o de eventos pasados se guardan acá."
           />

@@ -155,7 +155,7 @@ begin
     updated_at = now()
   where id = v_ticket.id;
 
-  v_secret := encode(gen_random_bytes(24), 'hex');
+  v_secret := encode(extensions.gen_random_bytes(24), 'hex');
 
   insert into public.tickets (
     event_id,

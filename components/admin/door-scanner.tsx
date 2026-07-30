@@ -33,6 +33,8 @@ import {
   type ScannerEventOption,
   type ScanTicketResult,
 } from "@/app/actions/scanner"
+import { logger } from "@/lib/logger"
+import { configureZxingWasm } from "@/lib/scanner/configure-zxing"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -94,11 +96,13 @@ const ERROR_TITLES: Record<string, string> = {
   transferred: "ENTRADA TRANSFERIDA",
   cancelled: "CANCELADA",
   wrong_event: "EVENTO INCORRECTO",
+  wrong_day: "JORNADA INCORRECTA",
   not_found: "NO ENCONTRADO",
   invalid_payload: "QR INVÁLIDO",
   forbidden: "SIN PERMISO",
   auth_required: "SIN SESIÓN",
   update_failed: "ERROR",
+  unpaid: "SIN PAGO",
 }
 
 function playTone(kind: "success" | "error" | "warn") {
@@ -139,6 +143,8 @@ function vibrate(kind: "success" | "error" | "warn") {
 }
 
 export function DoorScanner() {
+  configureZxingWasm()
+
   const online = useOnlineStatus()
   const [events, setEvents] = useState<ScannerEventOption[]>([])
   const [eventId, setEventId] = useState<string>("")
@@ -199,6 +205,7 @@ export function DoorScanner() {
         queue.map((item) => ({
           ticketId: item.ticket_id,
           scannedAtLocal: item.scanned_at_local,
+          admissionsCount: item.admissions_count,
         })),
       )
 
@@ -209,7 +216,11 @@ export function DoorScanner() {
       await clearSyncQueueItems(result.data.syncedIds)
       await refreshQueueCount()
     } catch (error) {
-      console.error("[scanner] sync failed", error)
+      logger.error({
+        context: "door-scanner",
+        message: "sync_failed",
+        error,
+      })
     } finally {
       setIsSyncing(false)
     }
@@ -301,7 +312,9 @@ export function DoorScanner() {
       setVisual("success")
       setFeedback({
         title: "ENTRADA VÁLIDA",
-        subtitle: `Bienvenid@ ${ticket.owner_name}`,
+        subtitle: ticket.seating_label
+          ? `${ticket.seating_label}${ticket.seating_row_label ? ` · ${ticket.seating_row_label}` : ""} · ingreso ${ticket.admissions_used}/${ticket.max_admissions}`
+          : `Bienvenid@ ${ticket.owner_name}`,
         bonus: null,
         isFreePass: /freepass|cortes/i.test(ticket.ticket_tier),
       })
@@ -343,9 +356,9 @@ export function DoorScanner() {
         setVisual("success")
         setFeedback({
           title: "ENTRADA VÁLIDA",
-          subtitle: `${result.ticket.tierName}${
+          subtitle: `${result.ticket.seatingLabel ? `${result.ticket.seatingLabel}${result.ticket.seatingRowLabel ? ` · ${result.ticket.seatingRowLabel}` : ""} · ` : ""}${result.ticket.tierName}${
             result.ticket.ownerLabel ? ` · ${result.ticket.ownerLabel}` : ""
-          }`,
+          } · ${result.message}`,
           bonus: result.bonus,
           isFreePass: result.ticket.isFreePass,
         })
@@ -395,6 +408,18 @@ export function DoorScanner() {
         setFeedback({
           title: "ENTRADA INVÁLIDA",
           subtitle: `Estado: ${ticket.status}`,
+        })
+        returnToIdle(2800)
+        return
+      }
+
+      if (ticket.status === "pending_payment") {
+        playTone("error")
+        vibrate("error")
+        setVisual("error")
+        setFeedback({
+          title: "PAGO PENDIENTE",
+          subtitle: "Esta entrada aún no está habilitada",
         })
         returnToIdle(2800)
         return
@@ -523,7 +548,11 @@ export function DoorScanner() {
             applyServerResult(result)
           })
         } catch (error) {
-          console.error("[scanner] local validate failed", error)
+          logger.error({
+            context: "door-scanner",
+            message: "local_validate_failed",
+            error,
+          })
           cooldownRef.current = false
         }
       })()
@@ -583,9 +612,9 @@ export function DoorScanner() {
             </div>
 
             <Select
-              value={eventId || undefined}
+              value={eventId}
               onValueChange={(value) => {
-                if (value) setEventId(value)
+                setEventId(value ?? "")
               }}
             >
               <SelectTrigger className="h-12 w-full border-white/15 bg-white/10 text-left text-base text-white">

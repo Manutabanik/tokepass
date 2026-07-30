@@ -1,6 +1,10 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
+import {
+  formatDayValidityLabel,
+  parseScheduleDays,
+} from "@/lib/event-schedule"
 import type { QrType, TicketStatus } from "@/types/database"
 
 export type MyTicket = {
@@ -13,6 +17,13 @@ export type MyTicket = {
   createdAt: string
   tierName: string
   bonusReward: string | null
+  dayId: string | null
+  dayValidityLabel: string | null
+  seatingLabel: string | null
+  seatingSectorName: string | null
+  seatingRowLabel: string | null
+  maxAdmissions: number
+  admissionsUsed: number
   eventId: string
   eventTitle: string
   eventDate: string
@@ -33,9 +44,19 @@ type TicketRow = {
   max_transfers_allowed: number
   created_at: string
   is_dynamic_qr: boolean
+  max_admissions: number
+  admissions_used: number
+  event_seating_units: {
+    label: string
+    sector_name: string
+    row_label: string | null
+    layout_type: "table_combo" | "numbered_seat"
+    capacity_per_unit: number
+  } | null
   ticket_tiers: {
     name: string
     bonus_reward: string | null
+    day_id: string | null
   } | null
   events: {
     id: string
@@ -45,6 +66,7 @@ type TicketRow = {
     flyer_url: string | null
     image_url: string | null
     qr_type: QrType | null
+    schedule_days: unknown
     venues: { name: string } | null
   } | null
 }
@@ -77,7 +99,7 @@ export async function getMyTickets(): Promise<MyTicket[]> {
   const { data, error } = await supabase
     .from("tickets")
     .select(
-      "id, status, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, ticket_tiers(name, bonus_reward), events(id, title, date, location, flyer_url, image_url, qr_type, venues(name))",
+      "id, status, order_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ticket_tiers(name, bonus_reward, day_id), events(id, title, date, location, flyer_url, image_url, qr_type, schedule_days, venues(name)), orders(status)",
     )
     .eq("owner_id", user.id)
     .in("status", ["valid", "used", "scanned", "transferred"])
@@ -87,16 +109,34 @@ export async function getMyTickets(): Promise<MyTicket[]> {
     throw new Error(`No se pudieron cargar tus entradas: ${error.message}`)
   }
 
-  const tickets = ((data ?? []) as unknown as TicketRow[])
-    .map((ticket) => {
-      if (!ticket.events) return null
+  type WalletRow = TicketRow & {
+    order_id: string | null
+    orders: { status: string } | null
+  }
+
+  const tickets = ((data ?? []) as unknown as WalletRow[])
+    .flatMap((ticket) => {
+      if (!ticket.events) return []
+
+      // Never surface unpaid / pending_payment tickets as Living QR-ready.
+      if (ticket.status === "pending_payment") return []
+      if (
+        ticket.status === "valid" &&
+        ticket.order_id &&
+        ticket.orders?.status !== "paid"
+      ) {
+        return []
+      }
 
       const qrType: QrType =
         ticket.events.qr_type === "static" || ticket.is_dynamic_qr === false
           ? "static"
           : "dynamic"
 
-      return {
+      const scheduleDays = parseScheduleDays(ticket.events.schedule_days)
+      const dayId = ticket.ticket_tiers?.day_id ?? null
+
+      const mapped: MyTicket = {
         id: ticket.id,
         status: ticket.status,
         qrCode: ticket.qr_code,
@@ -106,6 +146,18 @@ export async function getMyTickets(): Promise<MyTicket[]> {
         createdAt: ticket.created_at,
         tierName: ticket.ticket_tiers?.name ?? "Entrada",
         bonusReward: ticket.ticket_tiers?.bonus_reward ?? null,
+        dayId,
+        dayValidityLabel: formatDayValidityLabel({
+          scheduleDays,
+          dayId,
+          eventTitle: ticket.events.title,
+        }),
+        seatingLabel: ticket.event_seating_units?.label ?? null,
+        seatingSectorName:
+          ticket.event_seating_units?.sector_name ?? null,
+        seatingRowLabel: ticket.event_seating_units?.row_label ?? null,
+        maxAdmissions: Number(ticket.max_admissions ?? 1),
+        admissionsUsed: Number(ticket.admissions_used ?? 0),
         eventId: ticket.events.id,
         eventTitle: ticket.events.title,
         eventDate: ticket.events.date,
@@ -115,9 +167,9 @@ export async function getMyTickets(): Promise<MyTicket[]> {
         qrType,
         holderName,
         holderDni,
-      } satisfies MyTicket
+      }
+      return [mapped]
     })
-    .filter((ticket): ticket is MyTicket => ticket !== null)
 
   tickets.sort(
     (a, b) =>

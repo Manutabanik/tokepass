@@ -41,3 +41,15 @@ export function isGoogleWalletConfigured(): boolean {
       process.env.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL,
   )
 }
+
+/** Server-only: public flag AND real credentials. Never show broken wallet CTAs. */
+export function getWalletUiFlags() {
+  return {
+    appleWalletEnabled:
+      process.env.NEXT_PUBLIC_APPLE_WALLET_ENABLED === "true" &&
+      isAppleWalletConfigured(),
+    googleWalletEnabled:
+      process.env.NEXT_PUBLIC_GOOGLE_WALLET_ENABLED === "true" &&
+      isGoogleWalletConfigured(),
+  }
+}

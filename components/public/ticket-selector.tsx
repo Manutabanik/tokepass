@@ -1,6 +1,14 @@
 "use client"
 
-import { GlassWater, LoaderCircle, Minus, Plus, Ticket } from "lucide-react"
+import {
+  CalendarDays,
+  Armchair,
+  GlassWater,
+  LoaderCircle,
+  Minus,
+  Plus,
+  Ticket,
+} from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState, useTransition } from "react"
 import { toast } from "sonner"
@@ -8,10 +16,14 @@ import { toast } from "sonner"
 import { startCheckoutWithPayment } from "@/app/actions/checkout"
 import type { EventItem } from "@/app/actions/addons"
 import { Button } from "@/components/ui/button"
+import { SeatingSelector } from "@/components/public/seating-selector"
 import { Separator } from "@/components/ui/separator"
 import { MAX_TICKETS_PER_PURCHASE } from "@/lib/checkout-limits"
-import { formatCurrency } from "@/lib/format"
+import { isFullPassDayId } from "@/lib/event-schedule"
+import { formatCurrency, formatEventDay } from "@/lib/format"
 import { cn } from "@/lib/utils"
+import type { ScheduleDay } from "@/types/events"
+import type { EventSeatingUnit } from "@/types/venues"
 
 export type TicketSelectorTier = {
   id: string
@@ -19,20 +31,28 @@ export type TicketSelectorTier = {
   price: number
   available: number
   bonusReward?: string | null
+  dayId?: string | null
+  layoutType: "general" | "table_combo" | "numbered_seat"
+  seatingSectorId?: string | null
+  capacityPerUnit: number
 }
+
+type DayFilter = "all" | "passes" | string
 
 type TicketSelectorProps = {
   eventId: string
   tiers: TicketSelectorTier[]
+  scheduleDays?: ScheduleDay[]
   barItems?: EventItem[]
-  /** Fracción decimal, ej. 0.15 = 15% */
+  /** @deprecated All-In pricing absorbs the fee; ignored. */
   serviceChargeRate?: number
   /** Código RRPP desde ?ref= — nunca se envía promoter_id al servidor */
   referralCode?: string | null
+  seatingUnits?: EventSeatingUnit[]
+  seatingBackgroundUrl?: string | null
 }
 
 const REF_STORAGE_KEY = "tokepass_ref"
-const DEFAULT_SERVICE_CHARGE_RATE = 0.15
 const MAX_ADDONS_PER_ITEM = 10
 
 function roundMoney(value: number): number {
@@ -42,12 +62,18 @@ function roundMoney(value: number): number {
 export function TicketSelector({
   eventId,
   tiers,
+  scheduleDays = [],
   barItems = [],
-  serviceChargeRate = DEFAULT_SERVICE_CHARGE_RATE,
   referralCode = null,
+  seatingUnits = [],
+  seatingBackgroundUrl = null,
 }: TicketSelectorProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  const [dayFilter, setDayFilter] = useState<DayFilter>("all")
+  const [activeSeatingTierId, setActiveSeatingTierId] = useState<string | null>(
+    null,
+  )
   const [quantities, setQuantities] = useState<Record<string, number>>(() =>
     Object.fromEntries(tiers.map((tier) => [tier.id, 0])),
   )
@@ -60,6 +86,9 @@ export function TicketSelector({
   })
 
   const resolvedRef = referralCode?.trim() || storedRef
+  const activeSeatingTier =
+    tiers.find((tier) => tier.id === activeSeatingTierId) ?? null
+  const isMultiDay = scheduleDays.length > 1
 
   useEffect(() => {
     const clean = referralCode?.trim()
@@ -79,6 +108,29 @@ export function TicketSelector({
       return next
     })
   }
+
+  const visibleTiers = useMemo(() => {
+    if (!isMultiDay || dayFilter === "all") return tiers
+    if (dayFilter === "passes") {
+      return tiers.filter((tier) => isFullPassDayId(tier.dayId))
+    }
+    return tiers.filter((tier) => tier.dayId === dayFilter)
+  }, [dayFilter, isMultiDay, tiers])
+
+  const dayTabs = useMemo(() => {
+    if (!isMultiDay) return []
+    return [
+      { id: "all" as const, label: `Todas (${tiers.length})` },
+      ...scheduleDays.map((day) => ({
+        id: day.id,
+        label: day.title || formatEventDay(day.start_time),
+      })),
+      {
+        id: "passes" as const,
+        label: `Abonos (${tiers.filter((tier) => isFullPassDayId(tier.dayId)).length})`,
+      },
+    ]
+  }, [isMultiDay, scheduleDays, tiers])
 
   const selection = useMemo(
     () =>
@@ -123,9 +175,8 @@ export function TicketSelector({
   const addonsSubtotal = roundMoney(
     addonSelection.reduce((sum, item) => sum + item.subtotal, 0),
   )
-  const subtotal = roundMoney(ticketsSubtotal + addonsSubtotal)
-  const serviceCharge = roundMoney(ticketsSubtotal * serviceChargeRate)
-  const totalAmount = roundMoney(subtotal + serviceCharge)
+  // All-In: tier.price already includes Tokepass fee.
+  const totalAmount = roundMoney(ticketsSubtotal + addonsSubtotal)
 
   function updateQuantity(tierId: string, next: number, max: number) {
     setQuantities((current) => ({
@@ -209,14 +260,54 @@ export function TicketSelector({
         </span>
       </div>
 
+      {dayTabs.length > 0 ? (
+        <div className="mt-5 inline-flex w-full flex-wrap gap-1 rounded-2xl border border-zinc-800 bg-zinc-950/60 p-1.5 shadow-lg backdrop-blur-md">
+          {dayTabs.map((tab) => {
+            const active = dayFilter === tab.id
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setDayFilter(tab.id)}
+                className={cn(
+                  "inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs transition-all sm:text-sm",
+                  active
+                    ? "border border-zinc-700/60 bg-zinc-800 font-medium text-white shadow-sm"
+                    : "text-zinc-400 hover:bg-zinc-800/40 hover:text-white",
+                )}
+              >
+                <CalendarDays
+                  className={cn(
+                    "size-3.5 shrink-0",
+                    active ? "text-emerald-400" : "text-zinc-600",
+                  )}
+                  aria-hidden="true"
+                />
+                <span className="truncate">{tab.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
+
       <div className="mt-5 space-y-3">
-        {tiers.map((tier) => {
+        {visibleTiers.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-zinc-800 px-4 py-8 text-center text-sm text-zinc-500">
+            No hay entradas para este filtro.
+          </div>
+        ) : null}
+        {visibleTiers.map((tier) => {
           const quantity = quantities[tier.id] ?? 0
           const maxSelectable = Math.min(
             MAX_TICKETS_PER_PURCHASE,
             Math.max(0, tier.available),
           )
           const soldOut = maxSelectable <= 0
+          const dayLabel = isFullPassDayId(tier.dayId)
+            ? isMultiDay
+              ? "Abono completo"
+              : null
+            : scheduleDays.find((day) => day.id === tier.dayId)?.title ?? null
 
           return (
             <div
@@ -232,6 +323,11 @@ export function TicketSelector({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="font-semibold text-white">{tier.name}</p>
+                  {dayLabel ? (
+                    <p className="mt-1 font-mono text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
+                      {dayLabel}
+                    </p>
+                  ) : null}
                   {tier.bonusReward ? (
                     <p className="mt-1 text-xs text-emerald-300">
                       {tier.bonusReward}
@@ -246,44 +342,60 @@ export function TicketSelector({
                 </p>
               </div>
 
-              <div className="mt-4 flex items-center justify-between gap-3">
-                <span className="text-xs font-medium text-zinc-500">
-                  Cantidad
-                </span>
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon-sm"
-                    disabled={soldOut || quantity === 0 || isPending}
-                    onClick={() =>
-                      updateQuantity(tier.id, quantity - 1, maxSelectable)
-                    }
-                    aria-label={`Quitar ${tier.name}`}
-                    className="rounded-full border-zinc-700 bg-zinc-950 text-zinc-200 hover:bg-zinc-900"
-                  >
-                    <Minus />
-                  </Button>
-                  <span className="w-8 text-center text-sm font-semibold tabular-nums text-white">
-                    {quantity}
+              {tier.layoutType === "general" ? (
+                <div className="mt-4 flex items-center justify-between gap-3">
+                  <span className="text-xs font-medium text-zinc-500">
+                    Cantidad
                   </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon-sm"
-                    disabled={
-                      soldOut || quantity >= maxSelectable || isPending
-                    }
-                    onClick={() =>
-                      updateQuantity(tier.id, quantity + 1, maxSelectable)
-                    }
-                    aria-label={`Agregar ${tier.name}`}
-                    className="rounded-full border-zinc-700 bg-zinc-950 text-zinc-200 hover:bg-zinc-900"
-                  >
-                    <Plus />
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon-sm"
+                      disabled={soldOut || quantity === 0 || isPending}
+                      onClick={() =>
+                        updateQuantity(tier.id, quantity - 1, maxSelectable)
+                      }
+                      aria-label={`Quitar ${tier.name}`}
+                      className="rounded-full border-zinc-700 bg-zinc-950 text-zinc-200 hover:bg-zinc-900"
+                    >
+                      <Minus />
+                    </Button>
+                    <span className="w-8 text-center text-sm font-semibold tabular-nums text-white">
+                      {quantity}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon-sm"
+                      disabled={
+                        soldOut || quantity >= maxSelectable || isPending
+                      }
+                      onClick={() =>
+                        updateQuantity(tier.id, quantity + 1, maxSelectable)
+                      }
+                      aria-label={`Agregar ${tier.name}`}
+                      className="rounded-full border-zinc-700 bg-zinc-950 text-zinc-200 hover:bg-zinc-900"
+                    >
+                      <Plus />
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <Button
+                  type="button"
+                  disabled={soldOut}
+                  onClick={() => setActiveSeatingTierId(tier.id)}
+                  className="mt-4 h-12 w-full rounded-xl bg-emerald-500 font-bold text-zinc-950 hover:bg-emerald-400"
+                >
+                  <Armchair className="size-4" aria-hidden="true" />
+                  Elegir{" "}
+                  {tier.layoutType === "table_combo" ? "mesa" : "asiento"}
+                  {tier.capacityPerUnit > 1
+                    ? ` · ${tier.capacityPerUnit} personas`
+                    : null}
+                </Button>
+              )}
             </div>
           )
         })}
@@ -422,17 +534,6 @@ export function TicketSelector({
               </span>
             </div>
           ) : null}
-          <div className="flex items-center justify-between text-zinc-400">
-            <span>
-              Cargo por servicio
-              <span className="ml-1 text-zinc-600">
-                ({Math.round(serviceChargeRate * 100)}% sobre entradas)
-              </span>
-            </span>
-            <span className="tabular-nums text-zinc-200">
-              {formatCurrency(serviceCharge)}
-            </span>
-          </div>
           <div className="border-t border-zinc-800 pt-2">
             <div className="flex items-center justify-between">
               <span className="font-medium text-zinc-300">Total a pagar</span>
@@ -442,8 +543,8 @@ export function TicketSelector({
             </div>
           </div>
         </div>
-        <p className="mt-3 text-[11px] leading-4 text-zinc-600">
-          El cargo por servicio aplica solo a las entradas.
+        <p className="mt-2 text-xs text-zinc-500">
+          Precio final sin cargos ocultos · Impuestos incluidos
         </p>
       </div>
 
@@ -466,6 +567,26 @@ export function TicketSelector({
       <p className="mt-3 text-center text-xs text-zinc-500">
         Vas a ser redirigido a Checkout Pro de Mercado Pago.
       </p>
+      {activeSeatingTier ? (
+        <SeatingSelector
+          open
+          onOpenChange={(open) => {
+            if (!open) setActiveSeatingTierId(null)
+          }}
+          eventId={eventId}
+          tier={{
+            id: activeSeatingTier.id,
+            name: activeSeatingTier.name,
+            price: activeSeatingTier.price,
+            capacityPerUnit: activeSeatingTier.capacityPerUnit,
+          }}
+          units={seatingUnits.filter(
+            (unit) => unit.tierId === activeSeatingTier.id,
+          )}
+          backgroundUrl={seatingBackgroundUrl}
+          referralCode={resolvedRef}
+        />
+      ) : null}
     </div>
   )
 }

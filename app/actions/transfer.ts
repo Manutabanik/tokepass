@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 
+import { logger } from "@/lib/logger"
 import { notifyTicketTransfer } from "@/lib/notifications"
 import { createClient } from "@/lib/supabase/server"
 
@@ -156,7 +157,11 @@ export async function transferTicketAction(
       eventTitle: row.event_title,
       senderUserId: user.id,
     }).catch((notifyError: unknown) => {
-      console.error("[transfer] notify failed", notifyError)
+      logger.error({
+        context: "transfer",
+        message: "notify_failed",
+        error: notifyError,
+      })
     })
 
     revalidatePath("/my-tickets")
@@ -191,7 +196,11 @@ export async function claimPendingTransfersAction(): Promise<number> {
   })
 
   if (error) {
-    console.error("[transfer] claim failed", error.message)
+    logger.error({
+      context: "transfer",
+      message: "claim_failed",
+      error: error.message,
+    })
     return 0
   }
 

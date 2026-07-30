@@ -147,21 +147,41 @@ export async function signUpOrganizer(
   }
 
   try {
+    const inviteOnly =
+      process.env.ORGANIZER_INVITE_ONLY === "true" ||
+      process.env.ORGANIZER_INVITE_ONLY === "1"
+    const inviteCode = process.env.ORGANIZER_INVITE_CODE?.trim()
+    const submittedInvite = formData.get("inviteCode")
+    const inviteValue =
+      typeof submittedInvite === "string" ? submittedInvite.trim() : ""
+
+    if (inviteOnly) {
+      if (!inviteCode || inviteValue !== inviteCode) {
+        return {
+          error:
+            "Registro de organizadores solo por invitación. Código inválido o ausente.",
+          success: null,
+        }
+      }
+    }
+
     const admin = createAdminClient()
+    // Never grant admin immediately — Platform OS must approve.
     const { error: profileError } = await admin.from("profiles").upsert(
       {
         id: data.user.id,
         email: credentials.email,
         full_name: fullName,
-        role: "admin",
-      },
+        role: "customer",
+        organizer_approval_status: "pending",
+      } as never,
       { onConflict: "id" },
     )
 
     if (profileError) {
       await admin.auth.admin.deleteUser(data.user.id)
       return {
-        error: `No se pudo habilitar el perfil organizador: ${profileError.message}`,
+        error: `No se pudo registrar la solicitud: ${profileError.message}`,
         success: null,
       }
     }
@@ -173,14 +193,10 @@ export async function signUpOrganizer(
     }
   }
 
-  if (data.session) {
-    redirect("/admin")
-  }
-
   return {
     error: null,
     success:
-      "Cuenta de organizador creada. Confirma tu correo para acceder al panel.",
+      "Solicitud enviada. Tu cuenta queda pendiente de aprobación antes de acceder al Command Center.",
   }
 }
 
@@ -209,22 +225,42 @@ export async function signInWithEmail(
     return { error: error.message, success: null }
   }
 
+  // Customer destinations only require a valid Auth session. A missing
+  // application profile must not lock buyers out of their ticket wallet.
+  // Organizer/platform routes still enforce profile roles in middleware.
+  if (nextPath) {
+    redirect(nextPath)
+  }
+
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, organizer_approval_status")
     .eq("id", data.user.id)
     .single()
 
   if (profileError || !profile) {
+    // Auth succeeded; keep the customer session usable. Missing profiles are
+    // repaired by migration 00004, while privileged routes remain denied.
+    redirect("/")
+  }
+
+  const approval = (profile as { organizer_approval_status?: string })
+    .organizer_approval_status
+  if (approval === "pending") {
     await supabase.auth.signOut()
     return {
-      error: "No se pudo cargar el perfil asociado a esta cuenta.",
+      error:
+        "Tu solicitud de organizador sigue pendiente de aprobación. Te avisamos cuando esté activa.",
       success: null,
     }
   }
 
-  if (nextPath) {
-    redirect(nextPath)
+  if (approval === "rejected") {
+    await supabase.auth.signOut()
+    return {
+      error: "Tu solicitud de organizador fue rechazada.",
+      success: null,
+    }
   }
 
   redirect(

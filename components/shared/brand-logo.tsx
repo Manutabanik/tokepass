@@ -18,7 +18,7 @@ export function BrandLogo({ className, inverted = false }: BrandLogoProps) {
       )}
       aria-label="Tokepass — Inicio"
     >
-      <span className="grid size-8 place-items-center rounded-xl bg-violet-600 text-sm text-white shadow-lg shadow-violet-600/25">
+      <span className="grid size-8 place-items-center rounded-xl bg-violet-600 text-sm text-white shadow-[0_0_15px_rgba(168,85,247,0.5)]">
         T
       </span>
       Tokepass

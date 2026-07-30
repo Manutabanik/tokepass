@@ -12,17 +12,17 @@ export type CreatePreferenceResult =
 
 type OrderTicketRow = {
   id: string
-  tier_id: string
-  ticket_tiers: {
-    name: string
-    price: number
-  } | null
   events: {
     id: string
     title: string
   } | null
 }
 
+/**
+ * Preferencia MP con monto All-In congelado (`orders.total_amount`).
+ * Nunca relee precios mutables de ticket_tiers / event_items.
+ * `service_charge` queda solo como ledger interno (no se factura aparte).
+ */
 export async function createPaymentPreference(
   orderId: string,
 ): Promise<CreatePreferenceResult> {
@@ -65,9 +65,7 @@ export async function createPaymentPreference(
 
   const { data: tickets, error: ticketsError } = await supabase
     .from("tickets")
-    .select(
-      "id, tier_id, ticket_tiers(name, price), events(id, title)",
-    )
+    .select("id, events(id, title)")
     .eq("order_id", orderId)
 
   if (ticketsError) {
@@ -86,99 +84,53 @@ export async function createPaymentPreference(
     }
   }
 
-  const itemsByTier = new Map<
-    string,
-    { title: string; quantity: number; unit_price: number }
-  >()
+  const frozenSubtotal = Number(order.subtotal)
+  const frozenServiceCharge = Number(order.service_charge ?? 0)
+  const frozenTotal = Number(order.total_amount)
 
-  for (const ticket of rows) {
-    const tierName = ticket.ticket_tiers?.name ?? "Entrada"
-    const eventTitle = ticket.events?.title ?? "Evento Tokepass"
-    const price = Number(ticket.ticket_tiers?.price ?? 0)
-    const key = ticket.tier_id
-    const current = itemsByTier.get(key)
-
-    if (current) {
-      current.quantity += 1
-    } else {
-      itemsByTier.set(key, {
-        title: `${eventTitle} — ${tierName}`,
-        quantity: 1,
-        unit_price: price,
-      })
-    }
+  if (
+    !Number.isFinite(frozenSubtotal) ||
+    !Number.isFinite(frozenTotal) ||
+    frozenTotal < 0 ||
+    frozenSubtotal < 0
+  ) {
+    return { success: false, error: "Montos de orden inválidos." }
   }
 
-  const preferenceItems = Array.from(itemsByTier.entries()).map(
-    ([id, item]) => ({
-      id,
-      title: item.title.slice(0, 256),
-      quantity: item.quantity,
-      unit_price: item.unit_price,
-      currency_id: "ARS" as const,
-    }),
-  )
+  const isAllIn = Math.abs(frozenSubtotal - frozenTotal) <= 0.05
+  const isLegacyMarkup =
+    Math.abs(frozenSubtotal + frozenServiceCharge - frozenTotal) <= 0.05
 
-  const { data: redemptions, error: redemptionsError } = await supabase
-    .from("item_redemptions")
-    .select("id, item_id, event_items(name, price)")
-    .eq("order_id", orderId)
-    .eq("status", "pending")
-
-  if (redemptionsError) {
+  if (!isAllIn && !isLegacyMarkup) {
     return {
       success: false,
-      error: `No se pudieron cargar las consumiciones: ${redemptionsError.message}`,
+      error: "Inconsistencia en montos congelados de la orden.",
     }
   }
 
-  type RedemptionRow = {
+  if (frozenServiceCharge > frozenTotal + 0.05) {
+    return {
+      success: false,
+      error: "Comisión interna inconsistente con el total cobrado.",
+    }
+  }
+
+  const eventTitle = rows[0]?.events?.title ?? "Evento Tokepass"
+  const preferenceItems: Array<{
     id: string
-    item_id: string
-    event_items: { name: string; price: number } | null
-  }
-
-  const barByItem = new Map<
-    string,
-    { title: string; quantity: number; unit_price: number }
-  >()
-
-  for (const row of (redemptions ?? []) as unknown as RedemptionRow[]) {
-    const name = row.event_items?.name ?? "Consumición"
-    const price = Number(row.event_items?.price ?? 0)
-    const current = barByItem.get(row.item_id)
-
-    if (current) {
-      current.quantity += 1
-    } else {
-      barByItem.set(row.item_id, {
-        title: `Barra — ${name}`.slice(0, 256),
-        quantity: 1,
-        unit_price: price,
-      })
-    }
-  }
-
-  for (const [id, item] of barByItem.entries()) {
-    preferenceItems.push({
-      id,
-      title: item.title,
-      quantity: item.quantity,
-      unit_price: item.unit_price,
-      currency_id: "ARS",
-    })
-  }
-
-  const serviceCharge = Number(order.service_charge ?? 0)
-  if (serviceCharge > 0) {
-    preferenceItems.push({
-      id: "tokepass-service-charge",
-      title: "Cargo por servicio Tokepass",
+    title: string
+    quantity: number
+    unit_price: number
+    currency_id: "ARS"
+  }> = [
+    {
+      id: `order-${orderId}-all-in`,
+      title: `${eventTitle} — entradas y consumiciones`.slice(0, 256),
       quantity: 1,
-      unit_price: serviceCharge,
+      unit_price: frozenTotal,
       currency_id: "ARS",
-    })
-  }
+    },
+  ]
 
   const siteUrl = getSiteUrl()
   const notificationUrl = `${siteUrl}/api/webhooks/mercadopago`
@@ -204,6 +156,8 @@ export async function createPaymentPreference(
           buyer_id: user.id,
           subtotal: order.subtotal,
           service_charge: order.service_charge,
+          total_amount: order.total_amount,
+          frozen_pricing: true,
         },
       },
     })

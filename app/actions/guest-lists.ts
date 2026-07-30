@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache"
 
+import { assertGuestListRateLimit, getClientIpBucket } from "@/app/actions/event-staff"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
 export type GuestListStatus = "pending" | "claimed" | "checked_in"
@@ -267,6 +269,14 @@ export async function claimFreePass(
       return { success: false, error: "auth_required" }
     }
 
+    const rate = await assertGuestListRateLimit({
+      listId: `claim:${entryId}`,
+      email: user.email,
+    })
+    if (!rate.ok) {
+      return { success: false, error: rate.error }
+    }
+
     const { data: ticketId, error } = await supabase.rpc(
       "claim_guest_list_entry",
       {
@@ -276,10 +286,21 @@ export async function claimFreePass(
     )
 
     if (error || !ticketId) {
-      return {
-        success: false,
-        error: error?.message ?? "No se pudo canjear el FreePass.",
+      const message = error?.message ?? "No se pudo canjear el FreePass."
+      if (message.includes("EMAIL_MISMATCH")) {
+        return {
+          success: false,
+          error:
+            "Este FreePass está vinculado a otro email. Ingresá con la cuenta correcta.",
+        }
       }
+      if (message.includes("EMAIL_REQUIRED")) {
+        return {
+          success: false,
+          error: "La cortesía no tiene email. Registrá de nuevo con tu email.",
+        }
+      }
+      return { success: false, error: message }
     }
 
     revalidatePath("/my-tickets")
@@ -302,25 +323,64 @@ export async function registerPublicGuest(input: {
   ActionResult<{ entryId: string; ticketId: string | null; remaining: number }>
 > {
   try {
-    const supabase = await createClient()
+    const email = input.email?.trim().toLowerCase()
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      return {
+        success: false,
+        error: "El email es obligatorio para reclamar el FreePass.",
+      }
+    }
 
-    const { data: entryId, error } = await supabase.rpc(
+    const rate = await assertGuestListRateLimit({
+      listId: input.listId,
+      email,
+    })
+    if (!rate.ok) {
+      return { success: false, error: rate.error }
+    }
+
+    const admin = createAdminClient()
+    const ipBucket = await getClientIpBucket("ip")
+    const clientKey = ipBucket.replace(/^ip:/, "") || "unknown"
+
+    const { data: entryId, error } = await admin.rpc(
       "register_guest_list_entry",
       {
         p_list_id: input.listId,
         p_full_name: input.fullName,
-        p_email: input.email?.trim() || null,
+        p_email: email,
         p_phone: input.phone?.trim() || null,
+        p_client_key: clientKey,
       },
     )
 
     if (error || !entryId) {
-      return {
-        success: false,
-        error: error?.message ?? "No se pudo registrar en la lista.",
+      const message = error?.message ?? "No se pudo registrar en la lista."
+      if (message.includes("EMAIL_REQUIRED")) {
+        return {
+          success: false,
+          error: "El email es obligatorio para reclamar el FreePass.",
+        }
       }
+      if (
+        message.includes("EMAIL_ALREADY_REGISTERED") ||
+        message.includes("23505")
+      ) {
+        return {
+          success: false,
+          error: "Ese email ya reclamó un pase en esta lista.",
+        }
+      }
+      if (message.includes("RATE_LIMITED")) {
+        return {
+          success: false,
+          error: "Demasiados intentos. Probá más tarde.",
+        }
+      }
+      return { success: false, error: message }
     }
 
+    const supabase = await createClient()
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -338,7 +398,7 @@ export async function registerPublicGuest(input: {
 
     await dispatchGuestPassNotification({
       fullName: input.fullName.trim(),
-      email: input.email,
+      email,
       phone: input.phone,
       eventTitle: publicMeta?.eventTitle ?? "Evento Tokepass",
       listName: publicMeta?.name ?? "Lista",

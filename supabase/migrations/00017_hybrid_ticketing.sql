@@ -163,7 +163,7 @@ begin
   returning id into v_order_id;
 
   for v_i in 1..p_quantity loop
-    v_secret := encode(gen_random_bytes(24), 'hex');
+    v_secret := encode(extensions.gen_random_bytes(24), 'hex');
     v_qr := 'pos_' || replace(gen_random_uuid()::text, '-', '');
 
     insert into public.tickets (

@@ -95,7 +95,7 @@ begin
     updated_at = now()
   where id = v_ticket.id;
 
-  v_secret := encode(gen_random_bytes(24), 'hex');
+  v_secret := encode(extensions.gen_random_bytes(24), 'hex');
 
   insert into public.tickets (
     event_id,
@@ -347,7 +347,7 @@ begin
     v_subtotal := v_subtotal + (v_price * v_quantity);
 
     for v_i in 1..v_quantity loop
-      v_secret := encode(gen_random_bytes(24), 'hex');
+      v_secret := encode(extensions.gen_random_bytes(24), 'hex');
 
       insert into public.tickets (
         event_id,

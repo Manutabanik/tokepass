@@ -5,7 +5,7 @@ import { useTransition } from "react"
 
 import { signOut } from "@/app/actions/auth"
 import { Button } from "@/components/ui/button"
-import { clearOfflineWalletStore } from "@/lib/offline-store"
+import { clearClientSessionArtifacts } from "@/lib/session-cleanup"
 
 export function SignOutButton({
   className,
@@ -19,9 +19,9 @@ export function SignOutButton({
   function handleSignOut() {
     startTransition(async () => {
       try {
-        await clearOfflineWalletStore()
+        await clearClientSessionArtifacts()
       } catch {
-        // Logout debe continuar aunque falle IndexedDB.
+        // Logout debe continuar aunque falle IndexedDB / SW.
       }
       await signOut()
     })

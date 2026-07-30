@@ -11,6 +11,7 @@ import {
 import { useCallback, useEffect, useRef, useState, useTransition } from "react"
 
 import { redeemItemRPC, type RedeemItemResult } from "@/app/actions/addons"
+import { configureZxingWasm } from "@/lib/scanner/configure-zxing"
 import { cn } from "@/lib/utils"
 
 type VisualState = "idle" | "success" | "error"
@@ -61,6 +62,8 @@ function formatRedeemedTime(iso: string | null): string {
 }
 
 export function BarScanner() {
+  configureZxingWasm()
+
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [visual, setVisual] = useState<VisualState>("idle")
   const [title, setTitle] = useState("")

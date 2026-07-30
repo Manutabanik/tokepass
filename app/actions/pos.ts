@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache"
 
+import { listOperableEvents } from "@/lib/event-ops-access"
+import { logger } from "@/lib/logger"
 import { notifyPosTicketIssued } from "@/lib/notifications"
 import { createClient } from "@/lib/supabase/server"
 import type { PaymentMethod, QrType } from "@/types/database"
@@ -49,39 +51,9 @@ export type PrintableTicket = {
 }
 
 export async function getPosEvents(): Promise<PosEventOption[]> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const rows = await listOperableEvents({ roles: ["cashier"] })
 
-  if (!user) throw new Error("auth_required")
-
-  const { data, error } = await supabase
-    .from("events")
-    .select(
-      "id, title, date, qr_type, ticket_tiers(id, name, price, capacity, sold)",
-    )
-    .eq("organizer_id", user.id)
-    .in("status", ["published", "draft"])
-    .order("date", { ascending: true })
-
-  if (error) throw new Error(error.message)
-
-  type Row = {
-    id: string
-    title: string
-    date: string
-    qr_type: QrType | null
-    ticket_tiers: Array<{
-      id: string
-      name: string
-      price: number
-      capacity: number
-      sold: number
-    }> | null
-  }
-
-  return ((data ?? []) as unknown as Row[]).map((event) => ({
+  return rows.map((event) => ({
     id: event.id,
     title: event.title,
     date: event.date,
@@ -171,7 +143,11 @@ export async function createPosSale(input: {
         ticketIds: rows.map((row) => row.ticket_id),
         quantity: rows.length,
       }).catch((notifyError: unknown) => {
-        console.error("[pos] notify failed", notifyError)
+        logger.error({
+          context: "pos",
+          message: "notify_failed",
+          error: notifyError,
+        })
       })
     }
 

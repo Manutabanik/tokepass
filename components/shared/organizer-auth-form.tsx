@@ -135,6 +135,22 @@ export function OrganizerAuthForm({
             />
           </div>
 
+          {mode === "register" ? (
+            <div className="grid gap-2">
+              <Label htmlFor="organizer-invite" className="text-zinc-300">
+                Código de invitación{" "}
+                <span className="text-zinc-600">(si aplica)</span>
+              </Label>
+              <Input
+                id="organizer-invite"
+                name="inviteCode"
+                autoComplete="off"
+                placeholder="Solo si el registro es invite-only"
+                className="h-11 border-white/10 bg-black/20"
+              />
+            </div>
+          ) : null}
+
           {visibleError && (
             <p role="alert" className="text-sm text-red-400">
               {visibleError}

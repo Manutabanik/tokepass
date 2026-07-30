@@ -210,3 +210,138 @@ export async function getOrganizerLabel(
     email: data.email,
   }
 }
+
+export type PlatformSettlementRow = {
+  id: string
+  organizerId: string
+  organizerName: string
+  organizerEmail: string
+  grossAmount: number
+  platformFee: number
+  netAmount: number
+  status: "pending" | "completed"
+  periodLabel: string | null
+  notes: string | null
+  completedAt: string | null
+  createdAt: string
+}
+
+export async function listPlatformSettlements(): Promise<PlatformSettlementRow[]> {
+  const { admin } = await requireSuperAdmin()
+
+  const { data: rows, error } = await admin
+    .from("organizer_settlements")
+    .select(
+      "id, organizer_id, gross_amount, platform_fee, net_amount, status, period_label, notes, completed_at, created_at",
+    )
+    .order("created_at", { ascending: false })
+    .limit(100)
+
+  if (error) throw new Error(error.message)
+
+  type SettlementRow = {
+    id: string
+    organizer_id: string
+    gross_amount: number
+    platform_fee: number
+    net_amount: number
+    status: string
+    period_label: string | null
+    notes: string | null
+    completed_at: string | null
+    created_at: string
+  }
+
+  const settlements = (rows ?? []) as unknown as SettlementRow[]
+
+  const organizerIds = [...new Set(settlements.map((r) => r.organizer_id))]
+  const { data: profiles } =
+    organizerIds.length > 0
+      ? await admin
+          .from("profiles")
+          .select("id, full_name, email")
+          .in("id", organizerIds)
+      : { data: [] as { id: string; full_name: string | null; email: string }[] }
+
+  const byId = new Map(
+    (profiles ?? []).map((p) => [
+      p.id,
+      {
+        name: p.full_name?.trim() || p.email,
+        email: p.email,
+      },
+    ]),
+  )
+
+  return settlements.map((row) => {
+    const profile = byId.get(row.organizer_id)
+    return {
+      id: row.id,
+      organizerId: row.organizer_id,
+      organizerName: profile?.name ?? "Organizador",
+      organizerEmail: profile?.email ?? "",
+      grossAmount: Number(row.gross_amount),
+      platformFee: Number(row.platform_fee),
+      netAmount: Number(row.net_amount),
+      status: row.status === "completed" ? "completed" : "pending",
+      periodLabel: row.period_label,
+      notes: row.notes,
+      completedAt: row.completed_at,
+      createdAt: String(row.created_at),
+    }
+  })
+}
+
+export async function completeSettlement(
+  settlementId: string,
+): Promise<{ success: true } | { success: false; error: string }> {
+  try {
+    const { admin } = await requireSuperAdmin()
+    const { error } = await admin.rpc("complete_organizer_settlement", {
+      p_settlement_id: settlementId,
+    })
+    if (error) return { success: false, error: error.message }
+    return { success: true }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Error al completar.",
+    }
+  }
+}
+
+export async function createSettlementForOrganizer(input: {
+  organizerId: string
+  grossAmount: number
+  platformFee: number
+  netAmount: number
+  periodLabel?: string
+  notes?: string
+}): Promise<{ success: true; id: string } | { success: false; error: string }> {
+  try {
+    const { admin } = await requireSuperAdmin()
+    const { data, error } = await admin
+      .from("organizer_settlements")
+      .insert({
+        organizer_id: input.organizerId,
+        gross_amount: input.grossAmount,
+        platform_fee: input.platformFee,
+        net_amount: input.netAmount,
+        status: "pending",
+        period_label: input.periodLabel?.trim() || null,
+        notes: input.notes?.trim() || null,
+      } as never)
+      .select("id")
+      .single()
+
+    if (error || !data) {
+      return { success: false, error: error?.message ?? "No se pudo crear." }
+    }
+    return { success: true, id: String((data as { id: string }).id) }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Error al crear.",
+    }
+  }
+}

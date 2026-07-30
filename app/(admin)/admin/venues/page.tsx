@@ -1,13 +1,7 @@
-import { Ticket } from "lucide-react"
+import { listOrganizerVenues } from "@/app/actions/venues"
+import { OrganizerVenuesManager } from "@/components/admin/organizer-venues-manager"
 
-import { AdminSectionPlaceholder } from "@/components/shared/admin-section-placeholder"
-
-export default function AdminVenuesPage() {
-  return (
-    <AdminSectionPlaceholder
-      title="Taquilla / Venues"
-      description="Administra recintos, zonas, aforos y mapas de asientos."
-      icon={Ticket}
-    />
-  )
+export default async function AdminVenuesPage() {
+  const venues = await listOrganizerVenues()
+  return <OrganizerVenuesManager initialVenues={venues} />
 }

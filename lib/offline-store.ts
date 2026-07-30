@@ -21,6 +21,13 @@ export type OfflineEventData = {
   venueName: string | null
   tierName: string
   bonusReward: string | null
+  dayId: string | null
+  dayValidityLabel: string | null
+  seatingLabel?: string | null
+  seatingSectorName?: string | null
+  seatingRowLabel?: string | null
+  maxAdmissions?: number
+  admissionsUsed?: number
   qrType: "dynamic" | "static"
   holderName: string
   holderDni: string | null
@@ -116,6 +123,13 @@ export function ticketToOfflineRecord(
       venueName: ticket.venueName,
       tierName: ticket.tierName,
       bonusReward: ticket.bonusReward,
+      dayId: ticket.dayId,
+      dayValidityLabel: ticket.dayValidityLabel,
+      seatingLabel: ticket.seatingLabel,
+      seatingSectorName: ticket.seatingSectorName,
+      seatingRowLabel: ticket.seatingRowLabel,
+      maxAdmissions: ticket.maxAdmissions,
+      admissionsUsed: ticket.admissionsUsed,
       qrType: ticket.qrType,
       holderName: ticket.holderName,
       holderDni: ticket.holderDni,
@@ -140,6 +154,13 @@ export function offlineRecordToTicket(record: OfflineTicketRecord): MyTicket {
     createdAt: record.created_at,
     tierName: record.event_data.tierName,
     bonusReward: record.event_data.bonusReward,
+    dayId: record.event_data.dayId ?? null,
+    dayValidityLabel: record.event_data.dayValidityLabel ?? null,
+    seatingLabel: record.event_data.seatingLabel ?? null,
+    seatingSectorName: record.event_data.seatingSectorName ?? null,
+    seatingRowLabel: record.event_data.seatingRowLabel ?? null,
+    maxAdmissions: record.event_data.maxAdmissions ?? 1,
+    admissionsUsed: record.event_data.admissionsUsed ?? 0,
     eventId: record.event_data.eventId,
     eventTitle: record.event_data.eventTitle,
     eventDate: record.event_data.eventDate,

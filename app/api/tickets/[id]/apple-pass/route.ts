@@ -1,37 +1,39 @@
 import { NextResponse, type NextRequest } from "next/server"
 
-import { getPrintableTicket } from "@/app/actions/pos"
-import { createClient } from "@/lib/supabase/server"
+import { isAppleWalletConfigured } from "@/lib/wallet-cache"
 
 export const runtime = "nodejs"
 
 /**
- * Apple Wallet (.pkpass).
- * Hasta cablear passkit-generator + certs → PDF imprimible (redundancia offline).
+ * Apple Wallet (.pkpass) — solo si hay issuer/certs configurados.
+ * Sin config: 501 honesto (sin redirect engañoso a PDF).
  */
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
   const { id } = await context.params
+  const publicFlag = process.env.NEXT_PUBLIC_APPLE_WALLET_ENABLED === "true"
+  const enabled = publicFlag && isAppleWalletConfigured()
 
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    return NextResponse.redirect(
-      new URL(`/login?next=/tickets/${id}/print`, request.url),
+  if (!enabled) {
+    return NextResponse.json(
+      {
+        error: "apple_wallet_not_configured",
+        message:
+          "Apple Wallet no está configurado. Usá la billetera PWA o el PDF imprimible.",
+        fallback: `/tickets/${id}/print`,
+      },
+      { status: 501 },
     )
   }
 
-  const ticket = await getPrintableTicket(id)
-  if (!ticket) {
-    return NextResponse.json({ error: "ticket_not_found" }, { status: 404 })
-  }
-
-  return NextResponse.redirect(
-    new URL(`/tickets/${id}/print?from=apple-wallet`, request.url),
+  return NextResponse.json(
+    {
+      error: "apple_wallet_not_implemented",
+      message: "Passkit aún no está cableado en este entorno.",
+      fallback: `/tickets/${id}/print`,
+    },
+    { status: 501 },
   )
 }

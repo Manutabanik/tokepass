@@ -3,6 +3,7 @@ export type EventStatus = "draft" | "published" | "cancelled" | "completed"
 export type QrType = "dynamic" | "static"
 export type PaymentMethod = "mercadopago" | "cash_pos" | "transfer_pos"
 export type TicketStatus =
+  | "pending_payment"
   | "valid"
   | "transferred"
   | "used"
@@ -13,7 +14,20 @@ export type TicketStatus =
   | "revoked"
 export type ZoneType = "general_admission" | "reserved_seating"
 export type SeatStatus = "available" | "locked" | "sold"
-export type OrderStatus = "pending" | "paid" | "failed"
+export type OrderStatus = "pending" | "paid" | "failed" | "expired"
+export type EventStaffRole = "door_staff" | "bar_staff" | "cashier"
+
+export type EventStaffAssignment = {
+  id: string
+  event_id: string
+  user_id: string
+  role: EventStaffRole
+  created_by: string | null
+  created_at: string
+  is_active: boolean
+  expires_at: string | null
+}
+
 export type GuestListEntryStatus = "pending" | "claimed" | "checked_in"
 export type ItemRedemptionStatus =
   | "pending"
@@ -37,6 +51,7 @@ export type Profile = {
   role: UserRole
   /** Fracción decimal: 0.15 = 15% cargo por servicio al comprador */
   service_charge_rate: number
+  organizer_approval_status: "none" | "pending" | "approved" | "rejected"
   created_at: string
   updated_at: string
 }
@@ -54,6 +69,26 @@ export type Event = {
   venue_id: string | null
   max_tickets_per_user: number
   qr_type: QrType
+  /** public | private | guest_list_only */
+  visibility: "public" | "private" | "guest_list_only"
+  /** Jornadas: [{id,title,start_time,end_time}, ...] */
+  schedule_days: Json
+  is_featured: boolean
+  featured_tier: "silver" | "gold" | "platinum" | null
+  featured_until: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type BoostSubscription = {
+  id: string
+  event_id: string
+  organizer_id: string
+  tier: "silver" | "gold" | "platinum"
+  amount_paid: number
+  duration_days: number
+  payment_status: "pending" | "paid" | "failed" | "refunded"
+  payment_id_mp: string | null
   created_at: string
   updated_at: string
 }
@@ -63,7 +98,14 @@ export type Venue = {
   organizer_id: string
   name: string
   location: string
+  address: string | null
+  city: string | null
+  latitude: number | null
+  longitude: number | null
   capacity: number
+  zone_blueprint: Json
+  seating_layout: Json
+  seating_background_url: string | null
   created_at: string
   updated_at: string
 }
@@ -72,12 +114,23 @@ export type TicketTier = {
   id: string
   event_id: string
   name: string
+  /** Precio final All-In publicado al comprador. */
   price: number
+  /** Ingreso neto del organizador por entrada. */
+  base_price: number
+  /** Comisión unitaria Tokepass absorbida en `price`. */
+  platform_fee: number
   capacity: number
   sold: number
   time_limit: string | null
   bonus_reward: string | null
   zone_id: string | null
+  /** NULL = abono / fecha única; si no, id de schedule_days */
+  day_id: string | null
+  visibility: "public" | "private"
+  layout_type: "general" | "table_combo" | "numbered_seat"
+  seating_sector_id: string | null
+  capacity_per_unit: number
   created_at: string
   updated_at: string
 }
@@ -92,10 +145,15 @@ export type Ticket = {
   status: TicketStatus
   order_id: string | null
   seat_id: string | null
+  seating_unit_id: string | null
+  max_admissions: number
+  admissions_used: number
   is_dynamic_qr: boolean
   max_transfers_allowed: number
   transfer_count: number
   scanned_at: string | null
+  validated_at: string | null
+  validated_by: string | null
   created_at: string
   updated_at: string
 }
@@ -133,6 +191,30 @@ export type Seat = {
   row_label: string
   seat_number: string
   status: SeatStatus
+  created_at: string
+  updated_at: string
+}
+
+export type EventSeatingUnit = {
+  id: string
+  event_id: string
+  venue_id: string | null
+  tier_id: string
+  sector_id: string
+  sector_name: string
+  layout_item_id: string
+  label: string
+  row_id: string | null
+  row_number: number | null
+  row_label: string | null
+  color: string
+  layout_type: "table_combo" | "numbered_seat"
+  capacity_per_unit: number
+  status: "available" | "reserved" | "sold" | "blocked"
+  reserved_by: string | null
+  reserved_order_id: string | null
+  reserved_until: string | null
+  sold_order_id: string | null
   created_at: string
   updated_at: string
 }
@@ -237,11 +319,17 @@ export type ItemRedemption = {
 
 type ProfileInsert = Omit<
   Profile,
-  "role" | "created_at" | "updated_at" | "service_charge_rate" | "dni"
+  | "role"
+  | "created_at"
+  | "updated_at"
+  | "service_charge_rate"
+  | "dni"
+  | "organizer_approval_status"
 > & {
   role?: UserRole
   service_charge_rate?: number
   dni?: string | null
+  organizer_approval_status?: "none" | "pending" | "approved" | "rejected"
   created_at?: string
   updated_at?: string
 }
@@ -255,6 +343,11 @@ type EventInsert = Omit<
   | "status"
   | "max_tickets_per_user"
   | "qr_type"
+  | "visibility"
+  | "schedule_days"
+  | "is_featured"
+  | "featured_tier"
+  | "featured_until"
   | "created_at"
   | "updated_at"
 > & {
@@ -266,11 +359,21 @@ type EventInsert = Omit<
   status?: EventStatus
   max_tickets_per_user?: number
   qr_type?: QrType
+  visibility?: Event["visibility"]
+  schedule_days?: Json
+  is_featured?: boolean
+  featured_tier?: Event["featured_tier"]
+  featured_until?: string | null
   created_at?: string
   updated_at?: string
 }
-type VenueInsert = Omit<Venue, "id" | "created_at" | "updated_at"> & {
+type VenueInsert = Omit<
+  Venue,
+  "id" | "seating_layout" | "seating_background_url" | "created_at" | "updated_at"
+> & {
   id?: string
+  seating_layout?: Json
+  seating_background_url?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -278,17 +381,31 @@ type TicketTierInsert = Omit<
   TicketTier,
   | "id"
   | "sold"
+  | "base_price"
+  | "platform_fee"
   | "time_limit"
   | "bonus_reward"
   | "zone_id"
+  | "day_id"
+  | "visibility"
+  | "layout_type"
+  | "seating_sector_id"
+  | "capacity_per_unit"
   | "created_at"
   | "updated_at"
 > & {
   id?: string
   sold?: number
+  base_price?: number
+  platform_fee?: number
   time_limit?: string | null
   bonus_reward?: string | null
   zone_id?: string | null
+  day_id?: string | null
+  visibility?: TicketTier["visibility"]
+  layout_type?: TicketTier["layout_type"]
+  seating_sector_id?: string | null
+  capacity_per_unit?: number
   created_at?: string
   updated_at?: string
 }
@@ -298,11 +415,16 @@ type TicketInsert = Omit<
   | "status"
   | "order_id"
   | "seat_id"
+  | "seating_unit_id"
+  | "max_admissions"
+  | "admissions_used"
   | "is_dynamic_qr"
   | "totp_secret"
   | "max_transfers_allowed"
   | "transfer_count"
   | "scanned_at"
+  | "validated_at"
+  | "validated_by"
   | "created_at"
   | "updated_at"
 > & {
@@ -310,11 +432,16 @@ type TicketInsert = Omit<
   status?: TicketStatus
   order_id?: string | null
   seat_id?: string | null
+  seating_unit_id?: string | null
+  max_admissions?: number
+  admissions_used?: number
   is_dynamic_qr?: boolean
   totp_secret?: string
   max_transfers_allowed?: number
   transfer_count?: number
   scanned_at?: string | null
+  validated_at?: string | null
+  validated_by?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -329,6 +456,26 @@ type SeatInsert = Omit<
 > & {
   id?: string
   status?: SeatStatus
+  created_at?: string
+  updated_at?: string
+}
+type EventSeatingUnitInsert = Omit<
+  EventSeatingUnit,
+  | "id"
+  | "status"
+  | "reserved_by"
+  | "reserved_order_id"
+  | "reserved_until"
+  | "sold_order_id"
+  | "created_at"
+  | "updated_at"
+> & {
+  id?: string
+  status?: EventSeatingUnit["status"]
+  reserved_by?: string | null
+  reserved_order_id?: string | null
+  reserved_until?: string | null
+  sold_order_id?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -451,6 +598,23 @@ export type Database = {
           },
         ]
       }
+      boost_subscriptions: {
+        Row: BoostSubscription
+        Insert: {
+          id?: string
+          event_id: string
+          organizer_id: string
+          tier: BoostSubscription["tier"]
+          amount_paid: number
+          duration_days: number
+          payment_status?: BoostSubscription["payment_status"]
+          payment_id_mp?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<BoostSubscription>
+        Relationships: []
+      }
       venues: {
         Row: Venue
         Insert: VenueInsert
@@ -479,6 +643,12 @@ export type Database = {
         Row: Seat
         Insert: SeatInsert
         Update: Partial<SeatInsert>
+        Relationships: []
+      }
+      event_seating_units: {
+        Row: EventSeatingUnit
+        Insert: EventSeatingUnitInsert
+        Update: Partial<EventSeatingUnitInsert>
         Relationships: []
       }
       promoters: {
@@ -515,6 +685,21 @@ export type Database = {
         Row: GuestListEntry
         Insert: GuestListEntryInsert
         Update: Partial<GuestListEntryInsert>
+        Relationships: []
+      }
+      event_staff_assignments: {
+        Row: EventStaffAssignment
+        Insert: {
+          id?: string
+          event_id: string
+          user_id: string
+          role: EventStaffRole
+          created_by?: string | null
+          created_at?: string
+          is_active?: boolean
+          expires_at?: string | null
+        }
+        Update: Partial<EventStaffAssignment>
         Relationships: []
       }
       event_items: {
@@ -569,9 +754,80 @@ export type Database = {
           total_amount: number
         }[]
       }
+      reserve_seating_unit_tx: {
+        Args: {
+          p_event_id: string
+          p_owner_id: string
+          p_tier_id: string
+          p_seating_unit_id: string
+          p_promoter_id?: string | null
+        }
+        Returns: {
+          order_id: string
+          ticket_id: string
+          seating_unit_id: string
+          reserved_until: string
+          subtotal: number
+          service_charge: number
+          total_amount: number
+        }[]
+      }
+      get_event_seating_availability: {
+        Args: {
+          p_event_id: string
+        }
+        Returns: {
+          id: string
+          tier_id: string
+          sector_id: string
+          sector_name: string
+          layout_item_id: string
+          label: string
+          row_id: string | null
+          row_number: number | null
+          row_label: string | null
+          color: string
+          layout_type: "table_combo" | "numbered_seat"
+          capacity_per_unit: number
+          status: "available" | "reserved" | "sold" | "blocked"
+          reserved_until: string | null
+        }[]
+      }
+      scan_ticket_admission: {
+        Args: {
+          p_ticket_id: string
+          p_validated_by: string
+        }
+        Returns: Json
+      }
+      configure_event_seating_tiers: {
+        Args: {
+          p_event_id: string
+          p_configs: Json
+        }
+        Returns: undefined
+      }
+      expire_seating_orders: {
+        Args: Record<string, never>
+        Returns: number
+      }
       get_event_service_charge_rate: {
         Args: {
           p_event_id: string
+        }
+        Returns: number
+      }
+      all_in_public_price: {
+        Args: {
+          p_base: number
+          p_rate?: number
+        }
+        Returns: number
+      }
+      all_in_platform_fee: {
+        Args: {
+          p_base: number
+          p_rate?: number
         }
         Returns: number
       }
@@ -582,17 +838,93 @@ export type Database = {
         }
         Returns: string
       }
+      update_complete_event_tx: {
+        Args: {
+          p_event_id: string
+          payload: Json
+        }
+        Returns: string
+      }
       get_organizer_metrics: {
         Args: {
           p_organizer_id: string
         }
         Returns: Json
       }
+      get_organizer_finance_summary: {
+        Args: {
+          p_organizer_id: string
+        }
+        Returns: Json
+      }
+      is_approved_organizer: {
+        Args: {
+          p_user_id?: string
+        }
+        Returns: boolean
+      }
       release_reserved_tickets: {
         Args: {
           p_ticket_ids: string[]
         }
         Returns: undefined
+      }
+      activate_order_tickets: {
+        Args: {
+          p_order_id: string
+        }
+        Returns: number
+      }
+      finalize_paid_order: {
+        Args: {
+          p_order_id: string
+          p_mp_payment_id: string
+        }
+        Returns: Json
+      }
+      cancel_paid_order_tickets: {
+        Args: {
+          p_order_id: string
+        }
+        Returns: number
+      }
+      is_ticket_admission_eligible: {
+        Args: {
+          p_ticket_id: string
+        }
+        Returns: boolean
+      }
+      expire_abandoned_order: {
+        Args: { p_order_id: string }
+        Returns: boolean
+      }
+      expire_abandoned_orders: {
+        Args: { p_older_than?: string }
+        Returns: number
+      }
+      consume_rate_limit: {
+        Args: {
+          p_bucket_key: string
+          p_limit: number
+          p_window_seconds: number
+        }
+        Returns: boolean
+      }
+      user_has_event_staff_role: {
+        Args: {
+          p_event_id: string
+          p_user_id: string
+          p_role: EventStaffRole
+        }
+        Returns: boolean
+      }
+      user_is_event_organizer_or_staff: {
+        Args: {
+          p_event_id: string
+          p_user_id: string
+          p_roles?: EventStaffRole[] | null
+        }
+        Returns: boolean
       }
       resolve_promoter_for_checkout: {
         Args: {
@@ -617,8 +949,13 @@ export type Database = {
           p_full_name: string
           p_email?: string | null
           p_phone?: string | null
+          p_client_key?: string | null
         }
         Returns: string
+      }
+      check_in_guest: {
+        Args: { p_ticket_id: string }
+        Returns: undefined
       }
       claim_guest_list_entry: {
         Args: {
@@ -660,6 +997,25 @@ export type Database = {
       activate_order_item_redemptions: {
         Args: { p_order_id: string }
         Returns: number
+      }
+      activate_paid_boost: {
+        Args: {
+          p_subscription_id: string
+          p_payment_id: string
+          p_featured_until: string
+        }
+        Returns: Json
+      }
+      request_organizer_settlement: {
+        Args: {
+          p_period_label?: string | null
+          p_notes?: string | null
+        }
+        Returns: string
+      }
+      complete_organizer_settlement: {
+        Args: { p_settlement_id: string }
+        Returns: undefined
       }
       redeem_item: {
         Args: {

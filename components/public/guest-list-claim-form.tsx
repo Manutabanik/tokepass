@@ -160,14 +160,19 @@ export function GuestListClaimForm({
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor="email">Email (obligatorio)</Label>
         <Input
           id="email"
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          required
           className="h-11 border-zinc-700 bg-black"
         />
+        <p className="text-xs text-zinc-500">
+          El FreePass queda vinculado a este email. Debés ingresar con la misma
+          cuenta para canjearlo.
+        </p>
       </div>
       <div className="space-y-2">
         <Label htmlFor="phone">WhatsApp</Label>

@@ -1,6 +1,6 @@
 "use client"
 
-import { GlassWater, QrCode } from "lucide-react"
+import { QrCode } from "lucide-react"
 import { useState } from "react"
 
 import type { MyBarRedemption } from "@/app/actions/addons"
@@ -89,22 +89,5 @@ export function LivingBarCard({ redemption }: { redemption: MyBarRedemption }) {
         )}
       </div>
     </article>
-  )
-}
-
-export function BarWalletEmpty() {
-  return (
-    <div className="grid min-h-64 place-items-center rounded-[1.75rem] border border-dashed border-zinc-800 bg-zinc-950/60 px-5 py-12 text-center">
-      <div>
-        <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-zinc-900 text-amber-300/80 ring-1 ring-inset ring-zinc-800">
-          <GlassWater className="size-6" aria-hidden="true" />
-        </span>
-        <h2 className="mt-5 text-lg font-bold text-white">Sin consumiciones</h2>
-        <p className="mx-auto mt-2 max-w-xs text-sm leading-6 text-zinc-500">
-          Cuando compres tragos o combos con tu entrada, aparecerán acá con su
-          QR de barra.
-        </p>
-      </div>
-    </div>
   )
 }

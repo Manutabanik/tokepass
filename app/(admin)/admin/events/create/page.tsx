@@ -4,6 +4,7 @@ import Link from "next/link"
 import { redirect } from "next/navigation"
 
 import { getOrganizerLabel } from "@/app/actions/superadmin"
+import { listOrganizerVenues } from "@/app/actions/venues"
 import { EventCreationWizard } from "@/components/admin/event-creation-wizard"
 import { createClient } from "@/lib/supabase/server"
 
@@ -50,10 +51,10 @@ export default async function CreateEventPage({
   }
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
       <Link
         href={impersonation ? "/superadmin" : "/admin/events"}
-        className="mb-6 inline-flex items-center gap-2 text-sm text-zinc-500 transition hover:text-white"
+        className="inline-flex w-fit items-center gap-2 text-sm text-zinc-500 transition hover:text-white"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
         {impersonation ? "Volver a Platform OS" : "Volver a Mis Eventos"}
@@ -62,7 +63,7 @@ export default async function CreateEventPage({
       {impersonation && (
         <div
           role="alert"
-          className="mb-6 flex items-start gap-3 rounded-2xl border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-amber-100"
+          className="flex items-start gap-3 rounded-2xl border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-amber-100"
         >
           <Sparkles className="mt-0.5 size-4 shrink-0 text-amber-300" />
           <div>
@@ -77,18 +78,23 @@ export default async function CreateEventPage({
         </div>
       )}
 
-      <div className="mb-8">
-        <p className="text-sm font-medium text-violet-400">Event Builder</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-[-0.035em] text-white sm:text-4xl">
+      <header>
+        <p className="mb-3 font-mono text-xs uppercase tracking-[0.18em] text-emerald-400">
+          Event Builder
+        </p>
+        <h1 className="mb-2 text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
           Diseña una experiencia inolvidable
         </h1>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-500">
+        <p className="max-w-2xl text-sm leading-relaxed text-zinc-400 sm:text-base">
           Configura la operación completa en cuatro pasos. Podrás guardar el
           evento como borrador antes de publicarlo.
         </p>
-      </div>
+      </header>
 
-      <EventCreationWizard targetOrganizerId={impersonation?.id ?? null} />
+      <EventCreationWizard
+        targetOrganizerId={impersonation?.id ?? null}
+        venues={await listOrganizerVenues().catch(() => [])}
+      />
     </div>
   )
 }

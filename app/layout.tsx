@@ -19,12 +19,30 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   applicationName: "Tokepass",
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
+      "http://localhost:3000",
+  ),
   title: {
     default: "Tokepass — Vive el evento",
     template: "%s | Tokepass",
   },
   description:
     "Descubre eventos y compra entradas digitales de forma simple y segura.",
+  openGraph: {
+    type: "website",
+    locale: "es_AR",
+    siteName: "Tokepass",
+    title: "Tokepass — Vive el evento",
+    description:
+      "Descubre eventos y compra entradas digitales de forma simple y segura.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Tokepass — Vive el evento",
+    description:
+      "Descubre eventos y compra entradas digitales de forma simple y segura.",
+  },
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,

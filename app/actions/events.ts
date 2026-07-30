@@ -5,6 +5,8 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import { parseScheduleDays } from "@/lib/event-schedule"
+import { allInBreakdown, DEFAULT_ALL_IN_RATE } from "@/lib/pricing/all-in"
 import {
   eventFormSchema,
   type EventFormValues,
@@ -22,6 +24,9 @@ export type OrganizerEvent = Pick<
   | "status"
   | "venue_id"
   | "created_at"
+  | "is_featured"
+  | "featured_tier"
+  | "featured_until"
 > & {
   venues: Pick<Venue, "id" | "name" | "location"> | null
 }
@@ -60,7 +65,7 @@ export async function getOrganizerEvents(): Promise<OrganizerEvent[]> {
   const { data, error } = await supabase
     .from("events")
     .select(
-      "id, title, description, date, location, image_url, status, venue_id, created_at, venues(id, name, location)",
+      "id, title, description, date, location, image_url, status, venue_id, created_at, is_featured, featured_tier, featured_until, venues(id, name, location)",
     )
     .eq("organizer_id", user.id)
     .order("date", { ascending: true })
@@ -116,6 +121,14 @@ export type CreateCompleteEventRpcPayload = {
   location: string
   image_url: string | null
   flyer_url: string | null
+  visibility: "public" | "private" | "guest_list_only"
+  schedule_days: Array<{
+    id: string
+    title: string
+    start_time: string
+    end_time: string
+  }>
+  venue_id?: string | null
   venue: {
     name: string
     location: string
@@ -129,12 +142,20 @@ export type CreateCompleteEventRpcPayload = {
     seats_per_row: number | null
   }>
   tiers: Array<{
+    id?: string
     name: string
     price: number
+    base_price: number
+    platform_fee: number
     capacity: number
     time_limit: string | null
     bonus_reward: string | null
     zone_index: number
+    day_id: string | null
+    visibility: "public" | "private"
+    layout_type: "general" | "table_combo" | "numbered_seat"
+    seating_sector_id: string | null
+    capacity_per_unit: number
   }>
   rrpp_commission: number | null
   addons_enabled: boolean
@@ -144,47 +165,140 @@ function mapEventFormToRpcPayload(
   data: EventFormValues,
   flyerUrl: string | null = null,
 ): CreateCompleteEventRpcPayload {
+  const blueprintZones = data.venue.zones ?? []
   const isGeneralAdmission = data.venue.zoneType === "general_admission"
   const capacity = isGeneralAdmission
     ? (data.venue.capacity ?? 0)
     : (data.venue.rows ?? 0) * (data.venue.seatsPerRow ?? 0)
 
+  const zones =
+    blueprintZones.length > 0
+      ? blueprintZones.map((zone) => {
+          if (zone.type === "reserved_seating") {
+            const rows = zone.rows ?? null
+            const seatsPerRow = zone.seatsPerRow ?? null
+            if (
+              !rows ||
+              !seatsPerRow ||
+              rows * seatsPerRow !== zone.capacity
+            ) {
+              throw new Error(
+                `La zona "${zone.name}" requiere filas y asientos por fila que coincidan con la capacidad (sin inventar √capacidad).`,
+              )
+            }
+            return {
+              name: zone.name,
+              type: zone.type,
+              capacity: zone.capacity,
+              rows,
+              seats_per_row: seatsPerRow,
+            }
+          }
+          return {
+            name: zone.name,
+            type: zone.type,
+            capacity: zone.capacity,
+            rows: null,
+            seats_per_row: null,
+          }
+        })
+      : [
+          {
+            name: isGeneralAdmission ? "General" : "Platea",
+            type: data.venue.zoneType,
+            capacity,
+            rows: isGeneralAdmission ? null : (data.venue.rows ?? null),
+            seats_per_row: isGeneralAdmission
+              ? null
+              : (data.venue.seatsPerRow ?? null),
+          },
+        ]
+
+  const venueCapacity =
+    zones.reduce((sum, zone) => sum + zone.capacity, 0) || capacity
+
+  const location =
+    [data.venue.venueLocation, data.venue.venueCity]
+      .map((part) => part?.trim())
+      .filter(Boolean)
+      .join(", ") || data.venue.venueName
+
+  const scheduleDays = data.basics.isMultiDay
+    ? data.basics.scheduleDays.map((day) => ({
+        id: day.id,
+        title: day.title.trim(),
+        start_time: new Date(day.startTime).toISOString(),
+        end_time: new Date(day.endTime).toISOString(),
+      }))
+    : []
+
+  const anchorDate = data.basics.isMultiDay
+    ? scheduleDays[0]?.start_time ?? new Date().toISOString()
+    : new Date(data.basics.date).toISOString()
+
   return {
     title: data.basics.title,
     description: data.basics.description,
-    date: new Date(data.basics.date).toISOString(),
-    location: data.venue.venueName,
+    date: anchorDate,
+    location,
     image_url: flyerUrl,
     flyer_url: flyerUrl,
+    visibility: data.basics.visibility,
+    schedule_days: scheduleDays,
+    venue_id:
+      data.venue.mode === "existing" ? data.venue.existingVenueId ?? null : null,
     venue: {
       name: data.venue.venueName,
-      location: data.venue.venueName,
-      capacity,
+      location,
+      capacity: venueCapacity,
     },
-    zones: [
-      {
-        name: isGeneralAdmission ? "General" : "Platea",
-        type: data.venue.zoneType,
-        capacity,
-        rows: isGeneralAdmission ? null : (data.venue.rows ?? null),
-        seats_per_row: isGeneralAdmission
+    zones,
+    tiers: data.tickets.map((tier) => {
+      // Form `price` is organizer net; persist public All-In + accounting split.
+      const breakdown = allInBreakdown(tier.price, DEFAULT_ALL_IN_RATE)
+      const dayIdRaw = tier.dayId?.trim()
+      const dayId =
+        !data.basics.isMultiDay ||
+        !dayIdRaw ||
+        dayIdRaw === "all"
           ? null
-          : (data.venue.seatsPerRow ?? null),
-      },
-    ],
-    tiers: data.tickets.map((tier) => ({
-      name: tier.name,
-      price: tier.price,
-      capacity: tier.capacity,
-      time_limit: tier.timeLimit?.trim() ? tier.timeLimit.trim() : null,
-      bonus_reward: tier.bonusReward?.trim() ? tier.bonusReward.trim() : null,
-      zone_index: 0,
-    })),
+          : dayIdRaw
+      return {
+        ...(tier.id ? { id: tier.id } : {}),
+        name: tier.name,
+        price: breakdown.publicPrice,
+        base_price: breakdown.basePrice,
+        platform_fee: breakdown.platformFee,
+        capacity: tier.capacity,
+        time_limit: tier.timeLimit?.trim() ? tier.timeLimit : null,
+        bonus_reward: tier.bonusReward?.trim() ? tier.bonusReward : null,
+        zone_index: 0,
+        day_id: dayId,
+        visibility: tier.visibility ?? "public",
+        layout_type: tier.layoutType,
+        seating_sector_id:
+          tier.layoutType === "general" ? null : tier.seatingSectorId ?? null,
+        capacity_per_unit:
+          tier.layoutType === "general" ? 1 : tier.capacityPerUnit,
+      }
+    }),
     rrpp_commission: data.growth.isRRPPEnabled
       ? (data.growth.commissionPercentage ?? null)
       : null,
     addons_enabled: data.growth.isAddonsEnabled,
   }
+}
+
+async function configureEventSeatingTiers(
+  client: SupabaseClient<Database>,
+  eventId: string,
+  payload: CreateCompleteEventRpcPayload,
+): Promise<string | null> {
+  const { error } = await client.rpc("configure_event_seating_tiers", {
+    p_event_id: eventId,
+    p_configs: payload.tiers as unknown as Json,
+  })
+  return error?.message ?? null
 }
 
 const ALLOWED_FLYER_TYPES = new Set([
@@ -251,6 +365,169 @@ async function uploadEventFlyer(
 export type CreateCompleteEventResult =
   | { success: true; eventId: string }
   | { success: false; error: string }
+
+export type EditableEventData = {
+  id: string
+  title: string
+  flyerUrl: string | null
+  values: EventFormValues
+}
+
+function toLocalDateTimeInput(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ""
+
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  })
+    .format(date)
+    .replace(" ", "T")
+}
+
+function parseVenueZones(raw: unknown): EventFormValues["venue"]["zones"] {
+  if (!Array.isArray(raw)) return undefined
+  const zones = raw.flatMap((item) => {
+    const zone = item as Record<string, unknown>
+    const name = String(zone.name ?? "").trim()
+    const capacity = Number(zone.capacity ?? 0)
+    if (!name || !Number.isFinite(capacity) || capacity < 1) return []
+    const reserved = zone.type === "reserved_seating"
+    return [
+      {
+        name,
+        type: reserved
+          ? ("reserved_seating" as const)
+          : ("general_admission" as const),
+        capacity,
+        rows: reserved ? Number(zone.rows ?? 0) || null : null,
+        seatsPerRow: reserved
+          ? Number(zone.seatsPerRow ?? zone.seats_per_row ?? 0) || null
+          : null,
+      },
+    ]
+  })
+  return zones.length > 0 ? zones : undefined
+}
+
+export async function getEventForEditing(
+  eventId: string,
+): Promise<EditableEventData | null> {
+  if (!eventId?.trim()) return null
+
+  const { supabase, user } = await requireAuthenticatedUser()
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle()
+
+  const { data: event, error: eventError } = await supabase
+    .from("events")
+    .select(
+      "id, organizer_id, title, description, date, location, image_url, flyer_url, venue_id, visibility, schedule_days",
+    )
+    .eq("id", eventId)
+    .maybeSingle()
+
+  if (eventError || !event) return null
+  if (event.organizer_id !== user.id && profile?.role !== "super_admin") {
+    return null
+  }
+
+  const [{ data: tiers, error: tiersError }, { data: venue }] =
+    await Promise.all([
+      supabase
+        .from("ticket_tiers")
+        .select(
+          "id, name, price, base_price, platform_fee, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit",
+        )
+        .eq("event_id", eventId)
+        .order("created_at"),
+      event.venue_id
+        ? supabase
+            .from("venues")
+            .select("id, name, location, city, capacity, zone_blueprint")
+            .eq("id", event.venue_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+    ])
+
+  if (tiersError || !tiers?.length) return null
+
+  const venueZones = parseVenueZones(venue?.zone_blueprint)
+  const firstZone = venueZones?.[0]
+  const venueCapacity = Number(venue?.capacity ?? 0) || 1
+  const scheduleDays = parseScheduleDays(event.schedule_days).map((day) => ({
+    id: day.id,
+    title: day.title,
+    startTime: toLocalDateTimeInput(day.start_time),
+    endTime: toLocalDateTimeInput(day.end_time),
+  }))
+  const isMultiDay = scheduleDays.length > 1
+  const visibility =
+    event.visibility === "private" || event.visibility === "guest_list_only"
+      ? event.visibility
+      : "public"
+
+  return {
+    id: event.id,
+    title: event.title,
+    flyerUrl: event.flyer_url ?? event.image_url,
+    values: {
+      basics: {
+        title: event.title,
+        date: toLocalDateTimeInput(event.date),
+        description: event.description ?? "",
+        flyerName: event.flyer_url || event.image_url ? "Flyer actual" : null,
+        visibility,
+        isMultiDay,
+        scheduleDays,
+      },
+      venue: {
+        mode: event.venue_id ? "existing" : "new",
+        existingVenueId: event.venue_id,
+        zoneType: firstZone?.type ?? "general_admission",
+        venueName: venue?.name ?? event.location,
+        venueLocation: venue?.location ?? event.location,
+        venueCity: venue?.city ?? "",
+        capacity: firstZone?.capacity ?? venueCapacity,
+        rows: firstZone?.rows ?? undefined,
+        seatsPerRow: firstZone?.seatsPerRow ?? undefined,
+        zones: venueZones,
+      },
+      tickets: tiers.map((tier) => ({
+        id: tier.id,
+        name: tier.name,
+        price: Number(tier.base_price ?? tier.price),
+        capacity: Number(tier.capacity),
+        sold: Number(tier.sold),
+        timeLimit: tier.time_limit ?? "",
+        bonusReward: tier.bonus_reward ?? "",
+        dayId: tier.day_id ?? null,
+        visibility:
+          tier.visibility === "private" ? ("private" as const) : ("public" as const),
+        layoutType:
+          tier.layout_type === "table_combo" ||
+          tier.layout_type === "numbered_seat"
+            ? tier.layout_type
+            : ("general" as const),
+        seatingSectorId: tier.seating_sector_id ?? null,
+        capacityPerUnit: Number(tier.capacity_per_unit ?? 1),
+      })),
+      growth: {
+        isRRPPEnabled: false,
+        commissionPercentage: undefined,
+        isAddonsEnabled: false,
+      },
+    },
+  }
+}
 
 /**
  * Crea el evento atómicamente. Espera FormData con:
@@ -359,7 +636,18 @@ export async function createCompleteEvent(
     flyerUrl = uploaded.url
   }
 
-  const rpcPayload = mapEventFormToRpcPayload(parsed.data, flyerUrl)
+  let rpcPayload: CreateCompleteEventRpcPayload
+  try {
+    rpcPayload = mapEventFormToRpcPayload(parsed.data, flyerUrl)
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo armar el payload del evento.",
+    }
+  }
 
   const { data: eventId, error } = await rpcClient.rpc(
     "create_complete_event_tx",
@@ -390,6 +678,18 @@ export async function createCompleteEvent(
     }
   }
 
+  const seatingError = await configureEventSeatingTiers(
+    rpcClient,
+    eventId,
+    rpcPayload,
+  )
+  if (seatingError) {
+    return {
+      success: false,
+      error: `El evento se creó, pero no se pudo configurar el plano: ${seatingError}`,
+    }
+  }
+
   revalidatePath("/admin")
   revalidatePath("/admin/events")
   revalidatePath("/events")
@@ -399,4 +699,274 @@ export async function createCompleteEvent(
   revalidatePath("/superadmin/events")
 
   return { success: true, eventId }
+}
+
+/**
+ * Updates event identity, venue and ticket tiers through one database
+ * transaction. Tier prices in the form are organizer net values.
+ */
+export async function updateCompleteEvent(
+  formData: FormData,
+): Promise<CreateCompleteEventResult> {
+  const eventId = String(formData.get("eventId") ?? "").trim()
+  const rawPayload = formData.get("payload")
+
+  if (!eventId || typeof rawPayload !== "string") {
+    return { success: false, error: "Evento o payload inválido." }
+  }
+
+  let parsedJson: unknown
+  try {
+    parsedJson = JSON.parse(rawPayload)
+  } catch {
+    return {
+      success: false,
+      error: "No se pudo interpretar la configuración del evento.",
+    }
+  }
+
+  const parsed = eventFormSchema.safeParse(parsedJson)
+  if (!parsed.success) {
+    return {
+      success: false,
+      error:
+        parsed.error.issues[0]?.message ??
+        "La configuración del evento no es válida.",
+    }
+  }
+
+  let supabase: Awaited<ReturnType<typeof createClient>>
+  let userId: string
+  try {
+    const session = await requireAuthenticatedUser()
+    supabase = session.supabase
+    userId = session.user.id
+  } catch {
+    return { success: false, error: "Debes iniciar sesión para editar." }
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", userId)
+    .maybeSingle()
+
+  const { data: event, error: eventError } = await supabase
+    .from("events")
+    .select("id, organizer_id, image_url, flyer_url")
+    .eq("id", eventId)
+    .maybeSingle()
+
+  if (eventError || !event) {
+    return { success: false, error: "Evento no encontrado." }
+  }
+
+  const isSuperAdmin = profile?.role === "super_admin"
+  if (event.organizer_id !== userId && !isSuperAdmin) {
+    return { success: false, error: "No tenés permiso para editar este evento." }
+  }
+
+  const mutationClient =
+    event.organizer_id !== userId ? createAdminClient() : supabase
+  const flyerEntry = formData.get("flyer")
+  let uploadedFlyerUrl: string | null = null
+
+  if (flyerEntry instanceof File && flyerEntry.size > 0) {
+    const uploaded = await uploadEventFlyer(
+      mutationClient,
+      event.organizer_id,
+      flyerEntry,
+    )
+    if ("error" in uploaded) return { success: false, error: uploaded.error }
+    uploadedFlyerUrl = uploaded.url
+  }
+
+  let rpcPayload: CreateCompleteEventRpcPayload
+  try {
+    rpcPayload = mapEventFormToRpcPayload(
+      parsed.data,
+      uploadedFlyerUrl ?? event.flyer_url ?? event.image_url,
+    )
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo armar la actualización.",
+    }
+  }
+
+  const { data: updatedId, error } = await mutationClient.rpc(
+    "update_complete_event_tx",
+    {
+      p_event_id: eventId,
+      payload: rpcPayload as unknown as Json,
+    },
+  )
+
+  if (error) {
+    if (uploadedFlyerUrl) {
+      const path = uploadedFlyerUrl.split("/event-flyers/")[1]
+      if (path) {
+        await mutationClient.storage.from("event-flyers").remove([path])
+      }
+    }
+    return {
+      success: false,
+      error: error.message.replace(/^update_complete_event_tx:\s*/i, ""),
+    }
+  }
+
+  const seatingError = await configureEventSeatingTiers(
+    mutationClient,
+    String(updatedId ?? eventId),
+    rpcPayload,
+  )
+  if (seatingError) {
+    return {
+      success: false,
+      error: `Los datos se actualizaron, pero no se pudo sincronizar el plano: ${seatingError}`,
+    }
+  }
+
+  revalidatePath("/admin")
+  revalidatePath("/admin/events")
+  revalidatePath(`/admin/events/${eventId}`)
+  revalidatePath(`/admin/events/${eventId}/edit`)
+  revalidatePath("/events")
+  revalidatePath(`/events/${eventId}`)
+  revalidatePath("/")
+
+  return { success: true, eventId: String(updatedId ?? eventId) }
+}
+
+export type PublishEventResult =
+  | { success: true }
+  | { success: false; error: string }
+
+/**
+ * Publica un borrador del organizador cuando cumple requisitos mínimos.
+ * Featured/Boost no se toca aquí (solo service_role vía webhook).
+ */
+export async function publishEvent(
+  eventId: string,
+): Promise<PublishEventResult> {
+  if (!eventId?.trim()) {
+    return { success: false, error: "Evento inválido." }
+  }
+
+  const { supabase, user } = await requireAuthenticatedUser()
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, organizer_approval_status")
+    .eq("id", user.id)
+    .maybeSingle()
+
+  const approval = (profile as { organizer_approval_status?: string } | null)
+    ?.organizer_approval_status
+  const isApprovedOrganizer =
+    profile?.role === "super_admin" ||
+    (profile?.role === "admin" && approval === "approved")
+
+  if (!isApprovedOrganizer) {
+    return {
+      success: false,
+      error: "Tu cuenta de organizador aún no está aprobada.",
+    }
+  }
+
+  const { data: event, error: eventError } = await supabase
+    .from("events")
+    .select(
+      "id, organizer_id, status, date, location, venue_id, venues(id, name, location)",
+    )
+    .eq("id", eventId)
+    .maybeSingle()
+
+  if (eventError) {
+    return { success: false, error: eventError.message }
+  }
+
+  if (!event || event.organizer_id !== user.id) {
+    return { success: false, error: "No tenés permiso para publicar este evento." }
+  }
+
+  if (event.status === "published") {
+    return { success: true }
+  }
+
+  if (event.status !== "draft") {
+    return {
+      success: false,
+      error: "Solo se pueden publicar eventos en borrador.",
+    }
+  }
+
+  const startsAt = new Date(event.date)
+  if (Number.isNaN(startsAt.getTime()) || startsAt.getTime() <= Date.now()) {
+    return {
+      success: false,
+      error: "La fecha de inicio debe ser futura.",
+    }
+  }
+
+  const venue = event.venues as { id: string; name: string; location: string } | null
+  const hasVenue =
+    Boolean(event.venue_id && venue?.name?.trim() && venue?.location?.trim()) ||
+    Boolean(event.location?.trim() && event.location.trim().length >= 3)
+
+  if (!hasVenue) {
+    return {
+      success: false,
+      error: "Completá los datos del venue / ubicación antes de publicar.",
+    }
+  }
+
+  const { data: tiers, error: tiersError } = await supabase
+    .from("ticket_tiers")
+    .select("id, name, price, capacity")
+    .eq("event_id", eventId)
+
+  if (tiersError) {
+    return { success: false, error: tiersError.message }
+  }
+
+  const sellable = (tiers ?? []).filter((tier) => Number(tier.capacity) > 0)
+  if (sellable.length === 0) {
+    return {
+      success: false,
+      error: "Configurá al menos un tipo de entrada (paga o gratis) con stock > 0.",
+    }
+  }
+
+  const { data: updated, error: updateError } = await supabase
+    .from("events")
+    .update({ status: "published", updated_at: new Date().toISOString() })
+    .eq("id", eventId)
+    .eq("organizer_id", user.id)
+    .eq("status", "draft")
+    .select("id")
+    .maybeSingle()
+
+  if (updateError) {
+    return { success: false, error: updateError.message }
+  }
+
+  if (!updated) {
+    return {
+      success: false,
+      error: "No se pudo publicar el evento. Recargá e intentá de nuevo.",
+    }
+  }
+
+  revalidatePath("/admin")
+  revalidatePath("/admin/events")
+  revalidatePath("/events")
+  revalidatePath(`/events/${eventId}`)
+  revalidatePath("/")
+  revalidatePath("/superadmin/events")
+
+  return { success: true }
 }

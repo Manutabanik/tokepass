@@ -6,10 +6,14 @@ import {
   ArrowLeft,
   ArrowRight,
   Building2,
+  CalendarDays,
   Check,
   CircleDollarSign,
+  EyeOff,
   Gift,
+  Globe2,
   LoaderCircle,
+  Lock,
   Plus,
   Rocket,
   Sparkles,
@@ -17,16 +21,25 @@ import {
   Trash2,
   UploadCloud,
 } from "lucide-react"
+import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 import {
   useFieldArray,
   useForm,
+  useWatch,
   type FieldPath,
 } from "react-hook-form"
 import { toast } from "sonner"
 
-import { createCompleteEvent } from "@/app/actions/events"
+import {
+  createCompleteEvent,
+  updateCompleteEvent,
+  type EditableEventData,
+} from "@/app/actions/events"
+import type { OrganizerVenue } from "@/app/actions/venues"
+import { BoostModal } from "@/components/admin/boost-modal"
+import { ScheduleDaysBuilder } from "@/components/admin/schedule-days-builder"
 import {
   Accordion,
   AccordionContent,
@@ -65,11 +78,17 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
+import { formatCurrency } from "@/lib/format"
+import {
+  allInBreakdown,
+  DEFAULT_ALL_IN_RATE,
+} from "@/lib/pricing/all-in"
 import {
   eventFormSchema,
   type EventFormValues,
 } from "@/lib/validations/event-form"
 import { cn } from "@/lib/utils"
+import { getVenueSeatingItems } from "@/types/venues"
 
 const steps = [
   {
@@ -100,10 +119,16 @@ const fieldsByStep: FieldPath<EventFormValues>[][] = [
     "basics.date",
     "basics.description",
     "basics.flyerName",
+    "basics.visibility",
+    "basics.isMultiDay",
+    "basics.scheduleDays",
   ],
   [
+    "venue.mode",
+    "venue.existingVenueId",
     "venue.zoneType",
     "venue.venueName",
+    "venue.venueLocation",
     "venue.capacity",
     "venue.rows",
     "venue.seatsPerRow",
@@ -122,13 +147,21 @@ const defaultValues: EventFormValues = {
     date: "",
     description: "",
     flyerName: null,
+    visibility: "public",
+    isMultiDay: false,
+    scheduleDays: [],
   },
   venue: {
+    mode: "new",
+    existingVenueId: null,
     zoneType: "general_admission",
     venueName: "",
+    venueLocation: "",
+    venueCity: "",
     capacity: 500,
     rows: 20,
     seatsPerRow: 20,
+    zones: undefined,
   },
   tickets: [
     {
@@ -137,6 +170,11 @@ const defaultValues: EventFormValues = {
       capacity: 500,
       timeLimit: "",
       bonusReward: "",
+      dayId: null,
+      visibility: "public",
+      layoutType: "general",
+      seatingSectorId: null,
+      capacityPerUnit: 1,
     },
   ],
   growth: {
@@ -169,13 +207,22 @@ function NumberInput({
 
 export function EventCreationWizard({
   targetOrganizerId = null,
+  venues = [],
+  initialData,
 }: {
   targetOrganizerId?: string | null
+  venues?: OrganizerVenue[]
+  initialData?: EditableEventData
 }) {
   const router = useRouter()
+  const isEditing = Boolean(initialData)
   const [activeStep, setActiveStep] = useState(0)
   const [highestStep, setHighestStep] = useState(0)
   const [flyerFile, setFlyerFile] = useState<File | null>(null)
+  const [boostEvent, setBoostEvent] = useState<{
+    id: string
+    title: string
+  } | null>(null)
   const [resultMessage, setResultMessage] = useState<{
     type: "success" | "error"
     text: string
@@ -184,17 +231,84 @@ export function EventCreationWizard({
   const form = useForm<EventFormValues>({
     resolver: zodResolver(eventFormSchema),
     mode: "onTouched",
-    defaultValues,
+    defaultValues: initialData?.values ?? defaultValues,
   })
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "tickets",
+    keyName: "fieldKey",
   })
 
-  const zoneType = form.watch("venue.zoneType")
-  const isRRPPEnabled = form.watch("growth.isRRPPEnabled")
-  const flyerName = form.watch("basics.flyerName")
+  const zoneType = useWatch({ control: form.control, name: "venue.zoneType" })
+  const venueMode = useWatch({ control: form.control, name: "venue.mode" })
+  const existingVenueId = useWatch({
+    control: form.control,
+    name: "venue.existingVenueId",
+  })
+  const isRRPPEnabled = useWatch({
+    control: form.control,
+    name: "growth.isRRPPEnabled",
+  })
+  const flyerName = useWatch({ control: form.control, name: "basics.flyerName" })
+  const isMultiDay = useWatch({
+    control: form.control,
+    name: "basics.isMultiDay",
+  })
+  const scheduleDays = useWatch({
+    control: form.control,
+    name: "basics.scheduleDays",
+  })
+  const watchedTickets = useWatch({
+    control: form.control,
+    name: "tickets",
+  })
+  const venueRows = useWatch({ control: form.control, name: "venue.rows" })
+  const venueSeatsPerRow = useWatch({
+    control: form.control,
+    name: "venue.seatsPerRow",
+  })
+  const selectedVenue = venues.find((venue) => venue.id === existingVenueId)
+  const numberedSectors =
+    selectedVenue?.seatingLayout.filter(
+      (sector) => sector.layout_type !== "general",
+    ) ?? []
+
+  function applyVenueBlueprint(venue: OrganizerVenue) {
+    const firstZone = venue.zoneBlueprint[0]
+    form.setValue("venue.mode", "existing")
+    form.setValue("venue.existingVenueId", venue.id)
+    form.setValue("venue.venueName", venue.name)
+    form.setValue("venue.venueLocation", venue.location)
+    form.setValue("venue.venueCity", venue.city ?? "")
+    form.setValue("venue.capacity", venue.capacity)
+    if (firstZone) {
+      form.setValue("venue.zoneType", firstZone.type)
+      if (firstZone.type === "general_admission") {
+        form.setValue("venue.capacity", firstZone.capacity)
+        form.setValue("venue.rows", undefined)
+        form.setValue("venue.seatsPerRow", undefined)
+      } else {
+        form.setValue("venue.rows", firstZone.rows ?? undefined)
+        form.setValue("venue.seatsPerRow", firstZone.seatsPerRow ?? undefined)
+        form.setValue(
+          "venue.capacity",
+          (firstZone.rows ?? 0) * (firstZone.seatsPerRow ?? 0) ||
+            firstZone.capacity,
+        )
+      }
+    }
+    form.setValue(
+      "venue.zones",
+      venue.zoneBlueprint.map((zone) => ({
+        name: zone.name,
+        type: zone.type,
+        capacity: zone.capacity,
+        rows: zone.rows ?? null,
+        seatsPerRow: zone.seatsPerRow ?? null,
+      })),
+    )
+  }
 
   async function moveToStep(nextStep: number) {
     if (nextStep < activeStep) {
@@ -226,13 +340,33 @@ export function EventCreationWizard({
       formData.set("targetOrganizerId", targetOrganizerId)
     }
 
-    const result = await createCompleteEvent(formData)
+    if (initialData) {
+      formData.set("eventId", initialData.id)
+    }
+
+    const result = initialData
+      ? await updateCompleteEvent(formData)
+      : await createCompleteEvent(formData)
 
     if (!result.success) {
       setResultMessage({ type: "error", text: result.error })
-      toast.error("No se pudo crear el evento", {
+      toast.error(
+        isEditing
+          ? "No se pudieron guardar los cambios"
+          : "No se pudo crear el evento",
+        {
         description: result.error,
+        },
+      )
+      return
+    }
+
+    if (isEditing) {
+      toast.success("Cambios guardados", {
+        description: "El evento y sus entradas se actualizaron correctamente.",
       })
+      router.push("/admin/events")
+      router.refresh()
       return
     }
 
@@ -241,20 +375,20 @@ export function EventCreationWizard({
         ? "Borrador guardado con flyer en Storage."
         : "El borrador se guardó de forma atómica en la base de datos.",
     })
-    router.push("/admin/events")
-    router.refresh()
+    setBoostEvent({ id: result.eventId, title: data.basics.title })
   }
 
   return (
+    <>
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)}>
         <Tabs
           value={String(activeStep)}
           onValueChange={(value) => void moveToStep(Number(value))}
-          className="gap-6"
+          className="flex flex-col gap-8"
         >
-          <TabsList className="grid h-auto w-full grid-cols-2 gap-2 rounded-2xl border border-white/8 bg-white/[0.025] p-2 lg:grid-cols-4">
-            {steps.map(({ title, description, icon: Icon }, index) => {
+          <TabsList className="grid w-full grid-cols-2 items-stretch gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/80 p-2 shadow-lg shadow-black/20 backdrop-blur-md group-data-horizontal/tabs:h-auto lg:grid-cols-4">
+            {steps.map(({ title, description }, index) => {
               const completed = index < activeStep
               const available = index <= highestStep + 1
 
@@ -263,27 +397,28 @@ export function EventCreationWizard({
                   key={title}
                   value={String(index)}
                   disabled={!available}
-                  className="h-auto min-w-0 justify-start gap-3 rounded-xl px-3 py-3 text-left data-active:bg-violet-500/12 data-active:text-white data-active:ring-1 data-active:ring-inset data-active:ring-violet-500/20"
+                  className="h-auto min-w-0 items-center justify-start gap-3 rounded-xl border border-transparent bg-transparent p-3.5 text-left text-zinc-300 opacity-60 transition-all hover:bg-zinc-800/40 hover:opacity-100 data-active:border-emerald-500/40 data-active:bg-zinc-800/90 data-active:text-white data-active:opacity-100 data-active:shadow-[0_0_20px_rgba(16,185,129,0.15)]"
                 >
                   <span
                     className={cn(
-                      "grid size-9 shrink-0 place-items-center rounded-xl bg-white/5 text-zinc-500",
-                      completed && "bg-emerald-500/10 text-emerald-400",
+                      "flex size-8 shrink-0 items-center justify-center rounded-lg bg-zinc-800 font-mono text-sm font-bold text-zinc-400",
+                      completed &&
+                        "border border-emerald-500/20 bg-emerald-500/10 text-emerald-400",
                       activeStep === index &&
-                        "bg-violet-500/15 text-violet-300",
+                        "border border-emerald-500/30 bg-emerald-500/20 text-emerald-400",
                     )}
                   >
                     {completed ? (
                       <Check className="size-4" />
                     ) : (
-                      <Icon className="size-4" />
+                      index + 1
                     )}
                   </span>
                   <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold">
-                      {index + 1}. {title}
+                    <span className="block truncate text-sm font-bold">
+                      {title}
                     </span>
-                    <span className="hidden truncate text-[11px] text-zinc-600 sm:block">
+                    <span className="block truncate text-xs text-zinc-400">
                       {description}
                     </span>
                   </span>
@@ -292,32 +427,37 @@ export function EventCreationWizard({
             })}
           </TabsList>
 
-          <Card className="border-0 bg-white/[0.035] py-0 ring-1 ring-white/8">
+          <Card className="gap-0 rounded-3xl border border-zinc-800 bg-gradient-to-b from-zinc-900/90 to-zinc-950/95 py-0 shadow-2xl shadow-black/30 ring-0 [&_[data-slot=input]]:rounded-xl [&_[data-slot=input]]:border-zinc-800 [&_[data-slot=input]]:bg-zinc-950 [&_[data-slot=input]]:text-white [&_[data-slot=input]]:shadow-inner [&_[data-slot=input]]:placeholder:text-zinc-600 [&_[data-slot=input]:focus-visible]:border-emerald-500/60 [&_[data-slot=input]:focus-visible]:bg-zinc-900 [&_[data-slot=input]:focus-visible]:ring-2 [&_[data-slot=input]:focus-visible]:ring-emerald-500/15 [&_[data-slot=select-trigger]]:rounded-xl [&_[data-slot=select-trigger]]:border-zinc-800 [&_[data-slot=select-trigger]]:bg-zinc-950/80 [&_[data-slot=select-trigger]]:text-white [&_[data-slot=select-trigger]]:shadow-inner [&_[data-slot=select-trigger]:focus-visible]:border-emerald-500/60 [&_[data-slot=select-trigger]:focus-visible]:ring-2 [&_[data-slot=select-trigger]:focus-visible]:ring-emerald-500/15">
             <TabsContent
               value="0"
               className="animate-in fade-in slide-in-from-right-2 duration-300"
             >
-              <CardHeader className="border-b border-white/8 px-6 py-6 lg:px-8">
-                <CardTitle className="text-xl text-white">
+              <CardHeader className="px-6 pt-8 sm:px-10 sm:pt-10">
+                <CardTitle className="mb-1 text-2xl font-bold text-white">
                   Esencia del Evento
                 </CardTitle>
-                <CardDescription className="text-zinc-500">
+                <CardDescription className="border-b border-zinc-800 pb-6 text-sm text-zinc-400">
                   Define cómo se presenta y cuándo ocurre la experiencia.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="grid gap-6 px-6 py-7 lg:grid-cols-2 lg:px-8">
-                <div className="space-y-6">
+              <CardContent className="grid grid-cols-1 items-start gap-8 px-6 py-8 sm:px-10 lg:grid-cols-12">
+                <div className="space-y-6 lg:col-span-7">
                   <FormField
                     control={form.control}
                     name="basics.title"
                     render={({ field, fieldState }) => (
                       <FormItem>
-                        <FormLabel htmlFor="event-title">Título</FormLabel>
+                        <FormLabel
+                          htmlFor="event-title"
+                          className="block font-mono text-xs font-semibold uppercase tracking-wider text-zinc-300"
+                        >
+                          Título
+                        </FormLabel>
                         <Input
                           {...field}
                           id="event-title"
                           placeholder="Ej. Neon City Festival"
-                          className="h-11 border-white/10 bg-black/20"
+                          className="h-12 w-full rounded-xl border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white shadow-inner transition-all placeholder:text-zinc-600 focus:border-emerald-500/60 focus:bg-zinc-900 focus:ring-2 focus:ring-emerald-500/15 focus:outline-none"
                         />
                         <FormMessage>{fieldState.error?.message}</FormMessage>
                       </FormItem>
@@ -326,36 +466,159 @@ export function EventCreationWizard({
 
                   <FormField
                     control={form.control}
-                    name="basics.date"
-                    render={({ field, fieldState }) => (
+                    name="basics.visibility"
+                    render={({ field }) => (
                       <FormItem>
-                        <FormLabel htmlFor="event-date">Fecha y hora</FormLabel>
-                        <Input
-                          {...field}
-                          id="event-date"
-                          type="datetime-local"
-                          className="h-11 border-white/10 bg-black/20 scheme-dark"
-                        />
-                        <FormMessage>{fieldState.error?.message}</FormMessage>
+                        <FormLabel className="block font-mono text-xs font-semibold uppercase tracking-wider text-zinc-300">
+                          Visibilidad del evento
+                        </FormLabel>
+                        <div className="inline-flex w-full flex-col gap-1 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-1.5 sm:w-auto sm:flex-row">
+                          {(
+                            [
+                              {
+                                value: "public" as const,
+                                label: "Evento público",
+                                hint: "Visible en portada Tokepass",
+                                icon: Globe2,
+                              },
+                              {
+                                value: "private" as const,
+                                label: "Evento privado",
+                                hint: "Solo con el enlace directo",
+                                icon: Lock,
+                              },
+                            ] as const
+                          ).map((option) => {
+                            const selected = field.value === option.value
+                            const Icon = option.icon
+                            return (
+                              <button
+                                key={option.value}
+                                type="button"
+                                onClick={() => field.onChange(option.value)}
+                                className={cn(
+                                  "flex flex-1 items-center gap-2 rounded-xl px-4 py-2.5 text-left text-sm transition-all",
+                                  selected
+                                    ? "border border-zinc-700/60 bg-zinc-800 font-medium text-white shadow-sm"
+                                    : "text-zinc-400 hover:bg-zinc-800/40 hover:text-white",
+                                )}
+                              >
+                                <Icon
+                                  className={cn(
+                                    "size-4 shrink-0",
+                                    selected
+                                      ? "text-emerald-400"
+                                      : "text-zinc-500",
+                                  )}
+                                  aria-hidden="true"
+                                />
+                                <span>
+                                  <span className="block font-medium">
+                                    {option.label}
+                                  </span>
+                                  <span className="block text-[11px] text-zinc-500">
+                                    {option.hint}
+                                  </span>
+                                </span>
+                              </button>
+                            )
+                          })}
+                        </div>
                       </FormItem>
                     )}
                   />
+
+                  <FormField
+                    control={form.control}
+                    name="basics.isMultiDay"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center justify-between gap-4 rounded-2xl border border-zinc-800 bg-zinc-950/50 px-4 py-3">
+                        <div>
+                          <FormLabel className="text-sm font-medium text-white">
+                            ¿Varias jornadas / noches?
+                          </FormLabel>
+                          <FormDescription className="text-xs text-zinc-500">
+                            Activá esto para festivales de múltiples fechas.
+                          </FormDescription>
+                        </div>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={(checked) => {
+                            field.onChange(checked)
+                            if (checked) {
+                              const current = form.getValues(
+                                "basics.scheduleDays",
+                              )
+                              if (current.length < 2) {
+                                form.setValue("basics.scheduleDays", [
+                                  {
+                                    id: crypto.randomUUID(),
+                                    title: "Día 1",
+                                    startTime: form.getValues("basics.date") || "",
+                                    endTime: "",
+                                  },
+                                  {
+                                    id: crypto.randomUUID(),
+                                    title: "Día 2",
+                                    startTime: "",
+                                    endTime: "",
+                                  },
+                                ])
+                              }
+                            } else {
+                              form.setValue("basics.scheduleDays", [])
+                            }
+                          }}
+                          aria-label="Activar evento multijornada"
+                        />
+                      </FormItem>
+                    )}
+                  />
+
+                  {isMultiDay ? (
+                    <ScheduleDaysBuilder control={form.control} />
+                  ) : (
+                    <FormField
+                      control={form.control}
+                      name="basics.date"
+                      render={({ field, fieldState }) => (
+                        <FormItem>
+                          <FormLabel
+                            htmlFor="event-date"
+                            className="block font-mono text-xs font-semibold uppercase tracking-wider text-zinc-300"
+                          >
+                            Fecha y hora
+                          </FormLabel>
+                          <Input
+                            {...field}
+                            id="event-date"
+                            type="datetime-local"
+                            className="scheme-dark h-12 w-full rounded-xl border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white shadow-inner transition-all focus:border-emerald-500/60 focus:bg-zinc-900 focus:ring-2 focus:ring-emerald-500/15 focus:outline-none"
+                          />
+                          <FormMessage>{fieldState.error?.message}</FormMessage>
+                        </FormItem>
+                      )}
+                    />
+                  )}
 
                   <FormField
                     control={form.control}
                     name="basics.description"
                     render={({ field, fieldState }) => (
                       <FormItem>
-                        <FormLabel htmlFor="event-description">
+                        <FormLabel
+                          htmlFor="event-description"
+                          className="block font-mono text-xs font-semibold uppercase tracking-wider text-zinc-300"
+                        >
                           Descripción
                         </FormLabel>
                         <Textarea
                           {...field}
                           id="event-description"
                           placeholder="Cuenta qué hace única a esta experiencia..."
-                          className="min-h-36 resize-none border-white/10 bg-black/20"
+                          className="min-h-[160px] w-full resize-y rounded-xl border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white shadow-inner transition-all placeholder:text-zinc-600 focus:border-emerald-500/60 focus:bg-zinc-900 focus:ring-2 focus:ring-emerald-500/15 focus:outline-none"
                         />
-                        <FormDescription>
+                        <FormDescription className="text-zinc-500">
                           Este texto será visible en la página de venta.
                         </FormDescription>
                         <FormMessage>{fieldState.error?.message}</FormMessage>
@@ -364,20 +627,40 @@ export function EventCreationWizard({
                   />
                 </div>
 
-                <FormItem>
-                  <FormLabel htmlFor="event-flyer">Flyer principal</FormLabel>
+                <FormItem className="flex flex-col gap-4 rounded-2xl border border-zinc-800/80 bg-zinc-950/50 p-6 lg:col-span-5 lg:self-stretch">
+                  <FormLabel
+                    htmlFor="event-flyer"
+                    className="block font-mono text-xs font-semibold uppercase tracking-wider text-zinc-300"
+                  >
+                    Flyer principal
+                  </FormLabel>
                   <label
                     htmlFor="event-flyer"
-                    className="group grid min-h-72 cursor-pointer place-items-center rounded-2xl border border-dashed border-white/12 bg-black/15 p-8 text-center transition hover:border-violet-500/40 hover:bg-violet-500/[0.04]"
+                    className="group relative flex min-h-[280px] flex-1 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-zinc-800 bg-zinc-900/40 p-8 text-center transition-all hover:border-emerald-500/50 hover:bg-zinc-900/80"
                   >
-                    <span>
-                      <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-violet-500/10 text-violet-400 transition group-hover:scale-105">
-                        <UploadCloud className="size-5" />
+                    {initialData?.flyerUrl && !flyerFile ? (
+                      <>
+                        <Image
+                          src={initialData.flyerUrl}
+                          alt={`Flyer actual de ${initialData.title}`}
+                          fill
+                          sizes="(min-width: 1024px) 380px, 100vw"
+                          className="object-cover opacity-35 transition-opacity group-hover:opacity-20"
+                        />
+                        <span className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent" />
+                      </>
+                    ) : null}
+                    <span className="relative z-10">
+                      <span className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl border border-zinc-700 bg-zinc-800/80 text-zinc-300 shadow-sm transition-all group-hover:border-emerald-500/30 group-hover:bg-emerald-500/15 group-hover:text-emerald-400">
+                        <UploadCloud className="size-5" aria-hidden="true" />
                       </span>
-                      <span className="mt-4 block font-medium text-zinc-200">
-                        {flyerName || "Sube el arte del evento"}
+                      <span className="mb-1.5 block text-sm font-semibold text-white transition-colors group-hover:text-emerald-300">
+                        {flyerName ||
+                          (isEditing
+                            ? "Reemplazar flyer actual"
+                            : "Sube el arte del evento")}
                       </span>
-                      <span className="mt-2 block text-xs leading-5 text-zinc-600">
+                      <span className="mx-auto block max-w-[220px] text-xs leading-relaxed text-zinc-500">
                         PNG, JPG o WEBP. Recomendado 1600 × 900 px.
                       </span>
                     </span>
@@ -479,6 +762,90 @@ export function EventCreationWizard({
 
                 <FormField
                   control={form.control}
+                  name="venue.mode"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Recinto</FormLabel>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            field.onChange("new")
+                            form.setValue("venue.existingVenueId", null)
+                            form.setValue("venue.zones", undefined)
+                          }}
+                          className={cn(
+                            "rounded-2xl border px-4 py-3 text-left text-sm transition",
+                            field.value === "new"
+                              ? "border-violet-500/40 bg-violet-500/10 text-violet-100"
+                              : "border-white/8 bg-black/15 text-zinc-400",
+                          )}
+                        >
+                          Crear recinto nuevo
+                        </button>
+                        <button
+                          type="button"
+                          disabled={venues.length === 0}
+                          onClick={() => field.onChange("existing")}
+                          className={cn(
+                            "rounded-2xl border px-4 py-3 text-left text-sm transition disabled:opacity-40",
+                            field.value === "existing"
+                              ? "border-violet-500/40 bg-violet-500/10 text-violet-100"
+                              : "border-white/8 bg-black/15 text-zinc-400",
+                          )}
+                        >
+                          Usar recinto guardado
+                          {venues.length === 0
+                            ? " (todavía no hay)"
+                            : ` (${venues.length})`}
+                        </button>
+                      </div>
+                    </FormItem>
+                  )}
+                />
+
+                {venueMode === "existing" ? (
+                  <FormField
+                    control={form.control}
+                    name="venue.existingVenueId"
+                    render={({ field, fieldState }) => (
+                      <FormItem>
+                        <FormLabel htmlFor="existing-venue">
+                          Seleccionar recinto
+                        </FormLabel>
+                        <Select
+                          value={field.value ?? ""}
+                          onValueChange={(value) => {
+                            const venue = venues.find((item) => item.id === value)
+                            if (venue) applyVenueBlueprint(venue)
+                          }}
+                        >
+                          <SelectTrigger
+                            id="existing-venue"
+                            className="h-11 border-white/10 bg-black/20"
+                          >
+                            <SelectValue placeholder="Elegí un recinto" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {venues.map((venue) => (
+                              <SelectItem key={venue.id} value={venue.id}>
+                                {venue.name}
+                                {venue.city ? ` · ${venue.city}` : ""}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>
+                          Importa dirección, ciudad y zone_blueprint al evento.
+                        </FormDescription>
+                        <FormMessage>{fieldState.error?.message}</FormMessage>
+                      </FormItem>
+                    )}
+                  />
+                ) : null}
+
+                <FormField
+                  control={form.control}
                   name="venue.venueName"
                   render={({ field, fieldState }) => (
                     <FormItem>
@@ -490,8 +857,26 @@ export function EventCreationWizard({
                         id="venue-name"
                         placeholder="Ej. Teatro Gran Rex"
                         className="h-11 border-white/10 bg-black/20"
+                        readOnly={venueMode === "existing"}
                       />
                       <FormMessage>{fieldState.error?.message}</FormMessage>
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="venue.venueLocation"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel htmlFor="venue-location">Dirección</FormLabel>
+                      <Input
+                        {...field}
+                        id="venue-location"
+                        placeholder="Calle y número"
+                        className="h-11 border-white/10 bg-black/20"
+                        readOnly={venueMode === "existing"}
+                      />
                     </FormItem>
                   )}
                 />
@@ -512,6 +897,7 @@ export function EventCreationWizard({
                             value={field.value}
                             onChange={field.onChange}
                             className="h-11 border-white/10 bg-black/20"
+                            disabled={venueMode === "existing"}
                           />
                           <FormMessage>
                             {fieldState.error?.message}
@@ -535,6 +921,7 @@ export function EventCreationWizard({
                               value={field.value}
                               onChange={field.onChange}
                               className="h-11 border-white/10 bg-black/20"
+                              disabled={venueMode === "existing"}
                             />
                             <FormMessage>
                               {fieldState.error?.message}
@@ -556,6 +943,7 @@ export function EventCreationWizard({
                               value={field.value}
                               onChange={field.onChange}
                               className="h-11 border-white/10 bg-black/20"
+                              disabled={venueMode === "existing"}
                             />
                             <FormMessage>
                               {fieldState.error?.message}
@@ -571,10 +959,14 @@ export function EventCreationWizard({
                   <div className="rounded-2xl border border-violet-500/15 bg-violet-500/[0.05] p-4 text-sm text-violet-200">
                     Se prepararán{" "}
                     <strong>
-                      {(form.watch("venue.rows") ?? 0) *
-                        (form.watch("venue.seatsPerRow") ?? 0)}
+                      {(venueRows ?? 0) * (venueSeatsPerRow ?? 0)}
                     </strong>{" "}
                     asientos numerados para generar el mapa inicial.
+                    {venueMode === "existing" ? (
+                      <span className="mt-1 block text-violet-300/70">
+                        Capacidad y mapa heredados del venue — no editables.
+                      </span>
+                    ) : null}
                   </div>
                 )}
               </CardContent>
@@ -593,9 +985,16 @@ export function EventCreationWizard({
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 px-6 py-7 lg:px-8">
-                {fields.map((tier, index) => (
+                {fields.map((tier, index) => {
+                  const tierLayoutType =
+                    watchedTickets?.[index]?.layoutType ?? tier.layoutType
+                  const compatibleSectors = numberedSectors.filter(
+                    (sector) => sector.layout_type === tierLayoutType,
+                  )
+
+                  return (
                   <Card
-                    key={tier.id}
+                    key={tier.fieldKey}
                     className="border-0 bg-black/20 py-0 ring-1 ring-white/8"
                   >
                     <CardHeader className="flex-row items-center justify-between border-b border-white/6 px-5 py-4">
@@ -604,14 +1003,16 @@ export function EventCreationWizard({
                           Tier {index + 1}
                         </CardTitle>
                         <CardDescription className="text-xs text-zinc-600">
-                          Configuración comercial
+                          {(tier.sold ?? 0) > 0
+                            ? `${tier.sold} reservadas/vendidas · no se puede eliminar`
+                            : "Configuración comercial"}
                         </CardDescription>
                       </div>
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon-sm"
-                        disabled={fields.length === 1}
+                        disabled={fields.length === 1 || (tier.sold ?? 0) > 0}
                         onClick={() => remove(index)}
                         className="text-zinc-600 hover:bg-red-500/10 hover:text-red-400"
                         aria-label={`Eliminar tier ${index + 1}`}
@@ -620,15 +1021,18 @@ export function EventCreationWizard({
                       </Button>
                     </CardHeader>
                     <CardContent className="space-y-5 px-5 py-5">
-                      <div className="grid gap-4 md:grid-cols-3">
+                      <div className="grid gap-4 md:grid-cols-2">
                         <FormField
                           control={form.control}
                           name={`tickets.${index}.name`}
                           render={({ field, fieldState }) => (
                             <FormItem>
-                              <FormLabel>Nombre</FormLabel>
+                              <FormLabel htmlFor={`tier-${index}-name`}>
+                                Nombre
+                              </FormLabel>
                               <Input
                                 {...field}
+                                id={`tier-${index}-name`}
                                 placeholder="Ej. Preventa 1"
                                 className="h-10 border-white/10 bg-black/20"
                               />
@@ -640,35 +1044,14 @@ export function EventCreationWizard({
                         />
                         <FormField
                           control={form.control}
-                          name={`tickets.${index}.price`}
-                          render={({ field, fieldState }) => (
-                            <FormItem>
-                              <FormLabel>Precio</FormLabel>
-                              <div className="relative">
-                                <CircleDollarSign className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-600" />
-                                <NumberInput
-                                  min={0}
-                                  step="0.01"
-                                  value={field.value}
-                                  onChange={(value) =>
-                                    field.onChange(value ?? 0)
-                                  }
-                                  className="h-10 border-white/10 bg-black/20 pl-9"
-                                />
-                              </div>
-                              <FormMessage>
-                                {fieldState.error?.message}
-                              </FormMessage>
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={form.control}
                           name={`tickets.${index}.capacity`}
                           render={({ field, fieldState }) => (
                             <FormItem>
-                              <FormLabel>Capacidad</FormLabel>
+                              <FormLabel htmlFor={`tier-${index}-capacity`}>
+                                Capacidad
+                              </FormLabel>
                               <NumberInput
+                                id={`tier-${index}-capacity`}
                                 min={1}
                                 value={field.value}
                                 onChange={(value) =>
@@ -684,9 +1067,310 @@ export function EventCreationWizard({
                         />
                       </div>
 
+                      <div className="rounded-2xl border border-zinc-800 bg-zinc-950/50 p-4">
+                        <div className="mb-4 flex items-start gap-3">
+                          <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-indigo-500/20 bg-indigo-500/10 text-indigo-300">
+                            <Armchair className="size-4" aria-hidden="true" />
+                          </span>
+                          <div>
+                            <p className="text-sm font-semibold text-white">
+                              Modalidad de acceso
+                            </p>
+                            <p className="mt-0.5 text-xs text-zinc-500">
+                              Vinculá esta entrada con un sector numerado del
+                              recinto.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <FormField
+                            control={form.control}
+                            name={`tickets.${index}.layoutType`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel
+                                  htmlFor={`tier-${index}-layout-type`}
+                                >
+                                  Tipo de acceso
+                                </FormLabel>
+                                <Select
+                                  value={field.value}
+                                  onValueChange={(value) => {
+                                    const layoutType =
+                                      value === "table_combo" ||
+                                      value === "numbered_seat"
+                                        ? value
+                                        : "general"
+                                    field.onChange(layoutType)
+                                    form.setValue(
+                                      `tickets.${index}.seatingSectorId`,
+                                      null,
+                                    )
+                                    form.setValue(
+                                      `tickets.${index}.capacityPerUnit`,
+                                      1,
+                                    )
+                                  }}
+                                >
+                                  <SelectTrigger
+                                    id={`tier-${index}-layout-type`}
+                                    className="h-10 w-full border-zinc-800 bg-zinc-950"
+                                  >
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="general">
+                                      Entrada general
+                                    </SelectItem>
+                                    <SelectItem
+                                      value="table_combo"
+                                      disabled={
+                                        !numberedSectors.some(
+                                          (sector) =>
+                                            sector.layout_type ===
+                                            "table_combo",
+                                        )
+                                      }
+                                    >
+                                      Mesa / combo cerrado
+                                    </SelectItem>
+                                    <SelectItem
+                                      value="numbered_seat"
+                                      disabled={
+                                        !numberedSectors.some(
+                                          (sector) =>
+                                            sector.layout_type ===
+                                            "numbered_seat",
+                                        )
+                                      }
+                                    >
+                                      Asiento numerado
+                                    </SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <FormDescription>
+                                  {numberedSectors.length === 0
+                                    ? "Este recinto no tiene sectores numerados configurados."
+                                    : "La entrada general no necesita selección de ubicación."}
+                                </FormDescription>
+                              </FormItem>
+                            )}
+                          />
+
+                          {tierLayoutType !== "general" ? (
+                            <FormField
+                              control={form.control}
+                              name={`tickets.${index}.seatingSectorId`}
+                              render={({ field, fieldState }) => (
+                                <FormItem>
+                                  <FormLabel
+                                    htmlFor={`tier-${index}-seating-sector`}
+                                  >
+                                    Sector del plano
+                                  </FormLabel>
+                                  <Select
+                                    value={field.value ?? ""}
+                                    onValueChange={(value) => {
+                                      field.onChange(value)
+                                      const sector = compatibleSectors.find(
+                                        (item) => item.id === value,
+                                      )
+                                      if (!sector) return
+                                      form.setValue(
+                                        `tickets.${index}.capacityPerUnit`,
+                                        sector.capacity_per_unit,
+                                      )
+                                      form.setValue(
+                                        `tickets.${index}.capacity`,
+                                        getVenueSeatingItems(sector).filter(
+                                          (item) =>
+                                            item.status === "available",
+                                        ).length,
+                                      )
+                                    }}
+                                  >
+                                    <SelectTrigger
+                                      id={`tier-${index}-seating-sector`}
+                                      className="h-10 w-full border-zinc-800 bg-zinc-950"
+                                    >
+                                      <SelectValue placeholder="Elegí un sector" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {compatibleSectors.map((sector) => (
+                                        <SelectItem
+                                          key={sector.id}
+                                          value={sector.id}
+                                        >
+                                          {sector.sector_name} ·{" "}
+                                          {
+                                            getVenueSeatingItems(sector).filter(
+                                              (item) =>
+                                                item.status === "available",
+                                            ).length
+                                          }{" "}
+                                          unidades
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <FormDescription>
+                                    {compatibleSectors.find(
+                                      (sector) => sector.id === field.value,
+                                    )?.capacity_per_unit ?? 1}{" "}
+                                    personas por QR maestro.
+                                  </FormDescription>
+                                  <FormMessage>
+                                    {fieldState.error?.message}
+                                  </FormMessage>
+                                </FormItem>
+                              )}
+                            />
+                          ) : null}
+                        </div>
+                      </div>
+
+                      {isMultiDay ? (
+                        <FormField
+                          control={form.control}
+                          name={`tickets.${index}.dayId`}
+                          render={({ field, fieldState }) => (
+                            <FormItem>
+                              <FormLabel
+                                htmlFor={`tier-${index}-day`}
+                                className="flex items-center gap-1.5"
+                              >
+                                <CalendarDays
+                                  className="size-3.5 text-emerald-400"
+                                  aria-hidden="true"
+                                />
+                                ¿Para qué fecha es válida esta entrada?
+                              </FormLabel>
+                              <Select
+                                value={field.value || "all"}
+                                onValueChange={(value) =>
+                                  field.onChange(
+                                    value === "all" ? null : value,
+                                  )
+                                }
+                              >
+                                <SelectTrigger
+                                  id={`tier-${index}-day`}
+                                  className="h-10 w-full border-white/10 bg-black/20"
+                                >
+                                  <SelectValue placeholder="Elegí jornada" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="all">
+                                    Abono completo (todas las noches)
+                                  </SelectItem>
+                                  {(scheduleDays ?? []).map((day) => (
+                                    <SelectItem key={day.id} value={day.id}>
+                                      {day.title || "Jornada sin nombre"}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage>
+                                {fieldState.error?.message}
+                              </FormMessage>
+                            </FormItem>
+                          )}
+                        />
+                      ) : null}
+
+                      <FormField
+                        control={form.control}
+                        name={`tickets.${index}.visibility`}
+                        render={({ field }) => (
+                          <FormItem className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-950/50 px-3 py-2.5">
+                            <div className="flex items-start gap-2">
+                              <EyeOff
+                                className="mt-0.5 size-4 shrink-0 text-zinc-500"
+                                aria-hidden="true"
+                              />
+                              <div>
+                                <FormLabel className="text-sm text-zinc-200">
+                                  Oculta al público
+                                </FormLabel>
+                                <FormDescription className="text-xs text-zinc-500">
+                                  Solo RRPP / enlace exclusivo
+                                </FormDescription>
+                              </div>
+                            </div>
+                            <Switch
+                              checked={field.value === "private"}
+                              onCheckedChange={(checked) =>
+                                field.onChange(
+                                  checked ? "private" : "public",
+                                )
+                              }
+                              aria-label="Ocultar entrada al público"
+                            />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name={`tickets.${index}.price`}
+                        render={({ field, fieldState }) => {
+                          const breakdown = allInBreakdown(
+                            field.value ?? 0,
+                            DEFAULT_ALL_IN_RATE,
+                          )
+                          return (
+                            <FormItem>
+                              <FormLabel
+                                htmlFor={`tier-${index}-price`}
+                                className="block font-mono text-xs font-semibold uppercase tracking-wider text-zinc-300"
+                              >
+                                Precio base / tu ingreso neto
+                              </FormLabel>
+                              <div className="relative">
+                                <CircleDollarSign className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-600" />
+                                <NumberInput
+                                  id={`tier-${index}-price`}
+                                  min={0}
+                                  step="0.01"
+                                  value={field.value}
+                                  onChange={(value) =>
+                                    field.onChange(value ?? 0)
+                                  }
+                                  className="h-12 border-zinc-800 bg-zinc-950 pl-9"
+                                />
+                              </div>
+                              <div className="my-3 space-y-1.5 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3.5 font-mono text-xs text-zinc-400">
+                                <p>
+                                  Ingreso por entrada para tu evento:{" "}
+                                  <span className="text-zinc-200">
+                                    {formatCurrency(breakdown.basePrice)}
+                                  </span>
+                                </p>
+                                <p className="text-emerald-400/80">
+                                  + Comisión plataforma Tokepass (
+                                  {Math.round(DEFAULT_ALL_IN_RATE * 100)}%):{" "}
+                                  {formatCurrency(breakdown.platformFee)}
+                                </p>
+                              </div>
+                              <div className="flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3">
+                                <span className="font-sans text-xs font-bold uppercase text-emerald-400">
+                                  Precio final al público (All-In)
+                                </span>
+                                <span className="font-mono text-lg font-extrabold text-white">
+                                  {formatCurrency(breakdown.publicPrice)}
+                                </span>
+                              </div>
+                              <FormMessage>
+                                {fieldState.error?.message}
+                              </FormMessage>
+                            </FormItem>
+                          )
+                        }}
+                      />
+
                       <Accordion>
                         <AccordionItem
-                          value={`smart-yield-${tier.id}`}
+                          value={`smart-yield-${tier.fieldKey}`}
                           className="border-0"
                         >
                           <AccordionTrigger className="rounded-xl bg-white/[0.025] px-4 text-zinc-300 hover:no-underline">
@@ -701,7 +1385,9 @@ export function EventCreationWizard({
                               name={`tickets.${index}.timeLimit`}
                               render={({ field }) => (
                                 <FormItem>
-                                  <FormLabel>Límite de ingreso</FormLabel>
+                                  <FormLabel htmlFor={`tier-${index}-time-limit`}>
+                                    Límite de ingreso
+                                  </FormLabel>
                                   <Select
                                     value={field.value || "none"}
                                     onValueChange={(value) =>
@@ -710,7 +1396,10 @@ export function EventCreationWizard({
                                       )
                                     }
                                   >
-                                    <SelectTrigger className="h-10 w-full border-white/10 bg-black/20">
+                                    <SelectTrigger
+                                      id={`tier-${index}-time-limit`}
+                                      className="h-10 w-full border-white/10 bg-black/20"
+                                    >
                                       <SelectValue placeholder="Sin límite" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -739,9 +1428,12 @@ export function EventCreationWizard({
                               name={`tickets.${index}.bonusReward`}
                               render={({ field }) => (
                                 <FormItem>
-                                  <FormLabel>Premio por llegar antes</FormLabel>
+                                  <FormLabel htmlFor={`tier-${index}-reward`}>
+                                    Premio por llegar antes
+                                  </FormLabel>
                                   <Input
                                     {...field}
+                                    id={`tier-${index}-reward`}
                                     placeholder="Ej. 1 consumición"
                                     className="h-10 border-white/10 bg-black/20"
                                   />
@@ -753,7 +1445,8 @@ export function EventCreationWizard({
                       </Accordion>
                     </CardContent>
                   </Card>
-                ))}
+                  )
+                })}
 
                 <Button
                   type="button"
@@ -765,6 +1458,11 @@ export function EventCreationWizard({
                       capacity: 100,
                       timeLimit: "",
                       bonusReward: "",
+                      dayId: null,
+                      visibility: "public",
+                      layoutType: "general",
+                      seatingSectorId: null,
+                      capacityPerUnit: 1,
                     })
                   }
                   className="h-11 w-full border-dashed border-white/12 bg-transparent text-zinc-400 hover:bg-white/[0.03] hover:text-white"
@@ -799,7 +1497,10 @@ export function EventCreationWizard({
                     <FormItem className="rounded-2xl border border-white/8 bg-black/15 p-5">
                       <div className="flex items-start justify-between gap-5">
                         <div>
-                          <FormLabel className="text-base text-white">
+                          <FormLabel
+                            htmlFor="growth-rrpp-enabled"
+                            className="text-base text-white"
+                          >
                             Sistema de RRPP / Tarjeteros
                           </FormLabel>
                           <FormDescription className="mt-1 max-w-xl">
@@ -808,6 +1509,7 @@ export function EventCreationWizard({
                           </FormDescription>
                         </div>
                         <Switch
+                          id="growth-rrpp-enabled"
                           checked={field.value}
                           onCheckedChange={field.onChange}
                           className="mt-1 data-checked:bg-violet-600"
@@ -828,8 +1530,11 @@ export function EventCreationWizard({
                             name="growth.commissionPercentage"
                             render={({ field: commission, fieldState }) => (
                               <FormItem className="max-w-sm">
-                                <FormLabel>Comisión base (%)</FormLabel>
+                                <FormLabel htmlFor="growth-commission">
+                                  Comisión base (%)
+                                </FormLabel>
                                 <NumberInput
+                                  id="growth-commission"
                                   min={1}
                                   max={100}
                                   value={commission.value}
@@ -855,7 +1560,10 @@ export function EventCreationWizard({
                     <FormItem className="rounded-2xl border border-white/8 bg-black/15 p-5">
                       <div className="flex items-start justify-between gap-5">
                         <div>
-                          <FormLabel className="text-base text-white">
+                          <FormLabel
+                            htmlFor="growth-addons-enabled"
+                            className="text-base text-white"
+                          >
                             Habilitar Add-ons
                           </FormLabel>
                           <FormDescription className="mt-1 max-w-xl">
@@ -864,6 +1572,7 @@ export function EventCreationWizard({
                           </FormDescription>
                         </div>
                         <Switch
+                          id="growth-addons-enabled"
                           checked={field.value}
                           onCheckedChange={field.onChange}
                           className="mt-1 data-checked:bg-violet-600"
@@ -872,6 +1581,18 @@ export function EventCreationWizard({
                     </FormItem>
                   )}
                 />
+
+                <div className="rounded-2xl border border-cyan-400/25 bg-gradient-to-br from-cyan-500/10 via-fuchsia-500/5 to-transparent p-5">
+                  <p className="flex items-center gap-2 font-semibold text-cyan-100">
+                    <Sparkles className="size-4 text-cyan-300" />
+                    Multiplicá tus ventas hasta x3
+                  </p>
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
+                    Al crear el evento vas a poder activar Tokepass Boost
+                    (Silver, Gold o Platinum) y destacar esta noche en la
+                    portada B2C.
+                  </p>
+                </div>
 
                 <div className="rounded-2xl border border-violet-500/15 bg-[radial-gradient(circle_at_top_right,rgba(124,58,237,0.14),transparent_55%),rgba(124,58,237,0.04)] p-5">
                   <p className="flex items-center gap-2 font-medium text-violet-200">
@@ -934,8 +1655,12 @@ export function EventCreationWizard({
                   ) : (
                     <Rocket />
                   )}
-                    {form.formState.isSubmitting
-                      ? "Creando..."
+                  {form.formState.isSubmitting
+                    ? isEditing
+                      ? "Guardando..."
+                      : "Creando..."
+                    : isEditing
+                      ? "Guardar cambios"
                       : "Crear evento"}
                 </Button>
               )}
@@ -944,5 +1669,21 @@ export function EventCreationWizard({
         </Tabs>
       </form>
     </Form>
+
+    {boostEvent ? (
+      <BoostModal
+        open={Boolean(boostEvent)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setBoostEvent(null)
+            router.push("/admin/events")
+            router.refresh()
+          }
+        }}
+        eventId={boostEvent.id}
+        eventTitle={boostEvent.title}
+      />
+    ) : null}
+    </>
   )
 }

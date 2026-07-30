@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
+import { logger } from "@/lib/logger"
 import { dispatchOrderPaidToGobi } from "@/lib/services/gobi-dispatcher"
 
 /**
@@ -17,8 +18,10 @@ export async function notifyGobiOrderPaid(
     .maybeSingle()
 
   if (orderError || !order) {
-    console.error("[notifyGobiOrderPaid] orden no encontrada", {
-      orderId,
+    logger.error({
+      context: "services/notify-gobi-order-paid",
+      message: "order_not_found",
+      order_id: orderId,
       error: orderError?.message,
     })
     return
@@ -26,8 +29,10 @@ export async function notifyGobiOrderPaid(
 
   const phone = String(order.customer_phone ?? "").trim()
   if (!phone) {
-    console.warn("[notifyGobiOrderPaid] sin customer_phone — skip Gobi", {
-      orderId,
+    logger.warn({
+      context: "services/notify-gobi-order-paid",
+      message: "missing_customer_phone_skip",
+      order_id: orderId,
     })
     return
   }

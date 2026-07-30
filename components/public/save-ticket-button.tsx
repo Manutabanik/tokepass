@@ -1,11 +1,6 @@
 "use client"
 
-import {
-  Download,
-  LoaderCircle,
-  Smartphone,
-  Wallet,
-} from "lucide-react"
+import { Download, LoaderCircle, Smartphone } from "lucide-react"
 import Link from "next/link"
 import { useState, useTransition } from "react"
 import { toast } from "sonner"
@@ -26,10 +21,15 @@ export function SaveTicketButton({
   ticket,
   userId,
   disabled = false,
+  appleWalletEnabled = false,
+  googleWalletEnabled = false,
 }: {
   ticket: MyTicket
   userId: string
   disabled?: boolean
+  /** Solo true si el server tiene PassKit/certs reales + flag público. */
+  appleWalletEnabled?: boolean
+  googleWalletEnabled?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
@@ -38,8 +38,8 @@ export function SaveTicketButton({
     startTransition(async () => {
       try {
         await upsertTicketsOffline(userId, [ticket])
-        toast.success("Entrada guardada en este teléfono", {
-          description: "Lista para usarse sin señal.",
+        toast.success("Entrada en billetera offline", {
+          description: "Living QR listo sin señal en este dispositivo.",
         })
       } catch {
         toast.error("No se pudo guardar offline en este dispositivo")
@@ -47,7 +47,7 @@ export function SaveTicketButton({
     })
   }
 
-  function persistBeforeWallet() {
+  function persistBeforePrint() {
     void upsertTicketsOffline(userId, [ticket]).catch(() => {})
     requestTicketAssetCache([
       ticket.flyerUrl,
@@ -69,7 +69,7 @@ export function SaveTicketButton({
         ) : (
           <Smartphone className="size-4" />
         )}
-        Guardar en Teléfono / Wallet
+        Guardar entrada
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -77,7 +77,8 @@ export function SaveTicketButton({
           <DialogHeader>
             <DialogTitle>Guardar entrada</DialogTitle>
             <DialogDescription className="text-zinc-400">
-              Redundancia offline: Wallet nativo, PDF o caché en el dispositivo.
+              Opciones reales disponibles hoy. El Living QR también vive en Mis
+              Entradas / PWA.
             </DialogDescription>
           </DialogHeader>
 
@@ -88,36 +89,8 @@ export function SaveTicketButton({
               onClick={persistLocal}
               className="h-12 justify-start rounded-2xl bg-emerald-500 text-zinc-950 hover:bg-emerald-400"
             >
-              <Download className="size-4" />
-              Guardar offline en este teléfono
-            </Button>
-
-            <Button
-              type="button"
-              variant="outline"
-              className="h-12 justify-start rounded-2xl border-zinc-700 bg-zinc-900 text-white hover:bg-zinc-800"
-              nativeButton={false}
-              render={
-                <a href={`/api/tickets/${ticket.id}/apple-pass`} />
-              }
-              onClick={persistBeforeWallet}
-            >
-              <Wallet className="size-4" />
-              Apple Wallet / PDF
-            </Button>
-
-            <Button
-              type="button"
-              variant="outline"
-              className="h-12 justify-start rounded-2xl border-zinc-700 bg-zinc-900 text-white hover:bg-zinc-800"
-              nativeButton={false}
-              render={
-                <a href={`/api/tickets/${ticket.id}/google-wallet`} />
-              }
-              onClick={persistBeforeWallet}
-            >
-              <Wallet className="size-4" />
-              Google Wallet / PDF
+              <Smartphone className="size-4" />
+              Abrir Billetera Web (PWA)
             </Button>
 
             <Button
@@ -126,18 +99,49 @@ export function SaveTicketButton({
               className="h-12 justify-start rounded-2xl border-zinc-700 bg-zinc-900 text-white hover:bg-zinc-800"
               nativeButton={false}
               render={<Link href={`/tickets/${ticket.id}/print`} />}
-              onClick={persistBeforeWallet}
+              onClick={persistBeforePrint}
             >
               <Download className="size-4" />
-              Descargar PDF / imprimir
+              Descargar PDF
             </Button>
+
+            {appleWalletEnabled ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-12 justify-start rounded-2xl border-zinc-700 bg-zinc-900 text-white hover:bg-zinc-800"
+                nativeButton={false}
+                render={
+                  <a href={`/api/tickets/${ticket.id}/apple-pass`} />
+                }
+                onClick={persistBeforePrint}
+              >
+                Apple Wallet
+              </Button>
+            ) : null}
+
+            {googleWalletEnabled ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-12 justify-start rounded-2xl border-zinc-700 bg-zinc-900 text-white hover:bg-zinc-800"
+                nativeButton={false}
+                render={
+                  <a href={`/api/tickets/${ticket.id}/google-wallet`} />
+                }
+                onClick={persistBeforePrint}
+              >
+                Google Wallet
+              </Button>
+            ) : null}
           </div>
 
-          <p className="text-[11px] leading-4 text-zinc-500">
-            Si Apple/Google Wallet no está configurado en el servidor, te
-            llevamos automáticamente a la vista PDF lista para guardar en Fotos
-            o Archivos.
-          </p>
+          {!appleWalletEnabled && !googleWalletEnabled ? (
+            <p className="text-[11px] leading-4 text-zinc-500">
+              Apple Wallet / Google Wallet no están configurados en este entorno.
+              Usá la billetera PWA o el PDF.
+            </p>
+          ) : null}
         </DialogContent>
       </Dialog>
     </>

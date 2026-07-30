@@ -1,9 +1,8 @@
-import { LogOut } from "lucide-react"
 import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 
-import { signOut } from "@/app/actions/auth"
 import { SuperAdminSidebar } from "@/components/shared/superadmin-sidebar"
+import { SignOutButton } from "@/components/shared/sign-out-button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { createClient } from "@/lib/supabase/server"
 import { getInitials } from "@/lib/format"
@@ -13,6 +12,7 @@ export const metadata: Metadata = {
     default: "Platform OS",
     template: "%s · Tokepass Platform OS",
   },
+  robots: { index: false, follow: false },
 }
 
 export default async function SuperAdminLayout({
@@ -69,16 +69,10 @@ export default async function SuperAdminLayout({
                   {getInitials(profile.full_name, profile.email)}
                 </AvatarFallback>
               </Avatar>
-              <form action={signOut}>
-                <button
-                  type="submit"
-                  className="grid size-9 place-items-center rounded-xl border border-white/8 text-zinc-500 transition hover:border-white/15 hover:bg-white/5 hover:text-white"
-                  aria-label="Cerrar sesión"
-                  title="Cerrar sesión"
-                >
-                  <LogOut className="size-4" aria-hidden="true" />
-                </button>
-              </form>
+              <SignOutButton
+                showLabel={false}
+                className="grid size-9 place-items-center rounded-xl border border-white/8 text-zinc-500 transition hover:border-white/15 hover:bg-white/5 hover:text-white"
+              />
             </div>
           </header>
           <main className="mx-auto w-full max-w-[1600px] p-5 sm:p-8 lg:p-10">

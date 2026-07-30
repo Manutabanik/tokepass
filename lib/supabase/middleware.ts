@@ -1,6 +1,8 @@
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
+import { isStaffOpsPath, staffHomeForRoles } from "@/types/auth"
+import type { EventStaffRole } from "@/types/auth"
 import type { Database } from "@/types/database"
 
 function redirectWithRefreshedCookies(
@@ -77,16 +79,34 @@ export async function updateSession(request: NextRequest) {
       return redirectWithRefreshedCookies(fallbackUrl, response)
     }
 
-    // The organizer panel is open to admins and super admins.
-    if (
-      isAdminRoute &&
-      role !== "admin" &&
-      role !== "super_admin"
-    ) {
-      const homeUrl = request.nextUrl.clone()
-      homeUrl.pathname = "/"
-      homeUrl.search = ""
-      return redirectWithRefreshedCookies(homeUrl, response)
+    if (isAdminRoute && role !== "admin" && role !== "super_admin") {
+      const { data: assignments } = await supabase
+        .from("event_staff_assignments")
+        .select("role")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
+
+      const staffRoles = [
+        ...new Set(
+          (assignments ?? []).map((row) => row.role as EventStaffRole),
+        ),
+      ]
+
+      if (staffRoles.length === 0) {
+        const homeUrl = request.nextUrl.clone()
+        homeUrl.pathname = "/"
+        homeUrl.search = ""
+        return redirectWithRefreshedCookies(homeUrl, response)
+      }
+
+      // Delegated staff: only scanner / bar / POS — never finances or event edit.
+      if (!isStaffOpsPath(pathname)) {
+        const staffHome = request.nextUrl.clone()
+        staffHome.pathname = staffHomeForRoles(staffRoles)
+        staffHome.search = ""
+        return redirectWithRefreshedCookies(staffHome, response)
+      }
     }
   }
 

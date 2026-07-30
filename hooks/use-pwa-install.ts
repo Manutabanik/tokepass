@@ -103,6 +103,10 @@ export function usePwaInstall() {
     }, 0)
 
     function onBeforeInstall(event: Event) {
+      const enableInDev = process.env.NEXT_PUBLIC_PWA === "1"
+      if (process.env.NODE_ENV !== "production" && !enableInDev) {
+        return
+      }
       event.preventDefault()
       setDeferredPrompt(event as BeforeInstallPromptEvent)
     }

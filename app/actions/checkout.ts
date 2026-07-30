@@ -14,6 +14,7 @@ export type ReservedTicket = {
 export type CheckoutCartItem = {
   tierId: string
   quantity: number
+  seatingUnitId?: string
 }
 
 export type CheckoutAddonItem = {
@@ -22,7 +23,13 @@ export type CheckoutAddonItem = {
 }
 
 export type CheckoutResult =
-  | { success: true; tickets: ReservedTicket[]; orderId: string; initPoint: string }
+  | {
+      success: true
+      tickets: ReservedTicket[]
+      orderId: string
+      initPoint: string
+      reservedUntil?: string
+    }
   | {
       success: false
       error: "auth_required" | "out_of_stock" | string
@@ -34,6 +41,7 @@ type ReserveTxRow = {
   subtotal: number
   service_charge: number
   total_amount: number
+  reserved_until?: string
 }
 
 function isStockError(message: string): boolean {
@@ -46,6 +54,7 @@ function isStockError(message: string): boolean {
     normalized.includes("not published") ||
     normalized.includes("not found") ||
     normalized.includes("max_tickets_per_user")
+    || normalized.includes("seating_unit_unavailable")
   )
 }
 
@@ -108,6 +117,18 @@ export async function startCheckoutWithPayment(
     }
   }
 
+  const seatingItems = items.filter((item) => item.seatingUnitId)
+  if (
+    seatingItems.length > 1 ||
+    (seatingItems.length === 1 &&
+      (items.length !== 1 || seatingItems[0]?.quantity !== 1))
+  ) {
+    return {
+      success: false,
+      error: "Comprá una ubicación numerada por operación.",
+    }
+  }
+
   for (const addon of addons) {
     if (
       !addon.itemId ||
@@ -148,12 +169,22 @@ export async function startCheckoutWithPayment(
   }))
 
   try {
-    const { data, error } = await supabase.rpc("reserve_tickets_tx", {
-      p_event_id: eventId,
-      p_owner_id: user.id,
-      p_items: rpcItems,
-      p_promoter_id: promoterId,
-    })
+    const seatingItem = seatingItems[0]
+    const reservation = seatingItem?.seatingUnitId
+      ? await supabase.rpc("reserve_seating_unit_tx", {
+          p_event_id: eventId,
+          p_owner_id: user.id,
+          p_tier_id: seatingItem.tierId,
+          p_seating_unit_id: seatingItem.seatingUnitId,
+          p_promoter_id: promoterId,
+        })
+      : await supabase.rpc("reserve_tickets_tx", {
+          p_event_id: eventId,
+          p_owner_id: user.id,
+          p_items: rpcItems,
+          p_promoter_id: promoterId,
+        })
+    const { data, error } = reservation
 
     if (error) {
       if (isStockError(error.message)) {
@@ -245,6 +276,9 @@ export async function startCheckoutWithPayment(
       tickets: reservedTickets,
       orderId,
       initPoint: preference.initPoint,
+      ...(rows[0]?.reserved_until
+        ? { reservedUntil: rows[0].reserved_until }
+        : {}),
     }
   } catch (error) {
     return {

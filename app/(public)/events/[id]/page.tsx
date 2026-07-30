@@ -35,6 +35,24 @@ export async function generateMetadata({
     description:
       event.description?.slice(0, 160) ??
       `Comprá entradas para ${event.title} en Tokepass.`,
+    openGraph: {
+      title: event.title,
+      description:
+        event.description?.slice(0, 160) ??
+        `Comprá entradas para ${event.title} en Tokepass.`,
+      type: "website",
+      images: event.imageUrl
+        ? [{ url: event.imageUrl, alt: event.title }]
+        : undefined,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: event.title,
+      description:
+        event.description?.slice(0, 160) ??
+        `Comprá entradas para ${event.title} en Tokepass.`,
+      images: event.imageUrl ? [event.imageUrl] : undefined,
+    },
   }
 }
 
@@ -127,7 +145,9 @@ export default async function EventDetailPage({
               <div className="mt-5 flex flex-col gap-3 text-sm text-zinc-400 sm:flex-row sm:flex-wrap sm:gap-x-6">
                 <span className="inline-flex items-center gap-2 capitalize">
                   <CalendarDays className="size-4 text-zinc-500" />
-                  {formatEventDate(event.date)}
+                  {event.scheduleDays.length > 1
+                    ? `${event.scheduleDays.length} jornadas · desde ${formatEventDate(event.date)}`
+                    : formatEventDate(event.date)}
                 </span>
                 <span className="inline-flex items-start gap-2">
                   <MapPin className="mt-0.5 size-4 shrink-0 text-zinc-500" />
@@ -171,13 +191,20 @@ export default async function EventDetailPage({
               eventId={event.id}
               referralCode={referralCode ?? null}
               serviceChargeRate={event.serviceChargeRate}
+              scheduleDays={event.scheduleDays}
               barItems={barItems}
+              seatingUnits={event.seatingUnits}
+              seatingBackgroundUrl={event.venue?.seating_background_url}
               tiers={event.tiers.map((tier) => ({
                 id: tier.id,
                 name: tier.name,
                 price: tier.price,
                 available: tier.available,
                 bonusReward: tier.bonus_reward,
+                dayId: tier.day_id,
+                layoutType: tier.layout_type,
+                seatingSectorId: tier.seating_sector_id,
+                capacityPerUnit: tier.capacity_per_unit,
               }))}
             />
           </aside>

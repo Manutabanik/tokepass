@@ -7,12 +7,24 @@ export type ScannerManifestTicket = {
   id: string
   event_id: string
   totp_secret: string
-  status: "valid" | "used" | "transferred" | "cancelled" | "scanned" | "revoked"
+  status:
+    | "pending_payment"
+    | "valid"
+    | "used"
+    | "transferred"
+    | "cancelled"
+    | "scanned"
+    | "revoked"
   owner_name: string
   dni: string | null
   ticket_tier: string
   scanned_at: string | null
   scanned_at_local: number | null
+  max_admissions: number
+  admissions_used: number
+  seating_label: string | null
+  seating_sector_name: string | null
+  seating_row_label: string | null
 }
 
 export type ScannerManifestMeta = {
@@ -29,6 +41,7 @@ export type SyncQueueItem = {
   event_id: string
   scanned_at_local: number
   queued_at: number
+  admissions_count: number
 }
 
 const DB_NAME = "tokepass-scanner-offline"
@@ -220,19 +233,33 @@ export async function markTicketUsedLocally(
     return null
   }
 
+  const queueStore = tx.objectStore(SYNC_QUEUE)
+  const queued = (await requestToPromise(
+    queueStore.get(ticketId),
+  )) as SyncQueueItem | undefined
+  const nextAdmissions = Math.min(
+    Math.max(1, current.max_admissions ?? 1),
+    (current.admissions_used ?? 0) + 1,
+  )
+
   const updated: ScannerManifestTicket = {
     ...current,
-    status: "used",
+    status:
+      nextAdmissions >= Math.max(1, current.max_admissions ?? 1)
+        ? "used"
+        : "valid",
+    admissions_used: nextAdmissions,
     scanned_at_local: scannedAtLocal,
     scanned_at: new Date(scannedAtLocal).toISOString(),
   }
 
   ticketStore.put(updated)
-  tx.objectStore(SYNC_QUEUE).put({
+  queueStore.put({
     ticket_id: ticketId,
     event_id: current.event_id,
     scanned_at_local: scannedAtLocal,
     queued_at: Date.now(),
+    admissions_count: (queued?.admissions_count ?? 0) + 1,
   } satisfies SyncQueueItem)
 
   await txDone(tx)
@@ -335,5 +362,17 @@ export async function downloadEventManifest(
     eventTitle: payload.eventTitle,
     qrType: payload.qrType,
     tickets,
+  })
+}
+
+/** Limpia manifiestos y cola de sync del escáner (llamar en logout). */
+export async function clearOfflineScannerStore(): Promise<void> {
+  if (!isBrowser()) return
+  await new Promise<void>((resolve, reject) => {
+    const request = indexedDB.deleteDatabase(DB_NAME)
+    request.onsuccess = () => resolve()
+    request.onerror = () =>
+      reject(request.error ?? new Error("Failed to delete scanner IndexedDB"))
+    request.onblocked = () => resolve()
   })
 }

@@ -1,11 +1,41 @@
 import { z } from "zod"
 
+import { EVENT_VISIBILITY_VALUES } from "@/types/events"
+import { TICKET_TIER_VISIBILITY_VALUES } from "@/types/tickets"
+
+export const scheduleDaySchema = z.object({
+  id: z.string().uuid(),
+  title: z.string().trim().min(2, "Nombrá la jornada."),
+  startTime: z
+    .string()
+    .min(1, "Definí el inicio de la jornada.")
+    .refine(
+      (value) => !Number.isNaN(new Date(value).getTime()),
+      "La hora de inicio no es válida.",
+    ),
+  endTime: z
+    .string()
+    .min(1, "Definí el cierre de la jornada.")
+    .refine(
+      (value) => !Number.isNaN(new Date(value).getTime()),
+      "La hora de cierre no es válida.",
+    ),
+})
+
 export const ticketTierSchema = z.object({
+  id: z.string().uuid().optional(),
   name: z.string().trim().min(2, "Ingresa un nombre para el tier."),
   price: z.number().min(0, "El precio no puede ser negativo."),
   capacity: z.number().int().min(1, "La capacidad debe ser mayor a cero."),
+  sold: z.number().int().min(0).optional(),
   timeLimit: z.string().optional(),
   bonusReward: z.string().trim().optional(),
+  /** null / "all" / "" = abono completo */
+  dayId: z.string().nullable().optional(),
+  visibility: z.enum(TICKET_TIER_VISIBILITY_VALUES),
+  layoutType: z.enum(["general", "table_combo", "numbered_seat"]),
+  seatingSectorId: z.string().trim().nullable().optional(),
+  capacityPerUnit: z.number().int().min(1).max(100),
 })
 
 export const eventFormSchema = z
@@ -15,29 +45,41 @@ export const eventFormSchema = z
         .string()
         .trim()
         .min(3, "El título debe tener al menos 3 caracteres."),
-      date: z
-        .string()
-        .min(1, "Selecciona la fecha y hora.")
-        .refine(
-          (value) => !Number.isNaN(new Date(value).getTime()),
-          "La fecha ingresada no es válida.",
-        ),
+      date: z.string(),
       description: z
         .string()
         .trim()
         .min(10, "Describe la experiencia en al menos 10 caracteres.")
         .max(2000, "La descripción es demasiado extensa."),
       flyerName: z.string().nullable(),
+      visibility: z.enum(EVENT_VISIBILITY_VALUES),
+      isMultiDay: z.boolean(),
+      scheduleDays: z.array(scheduleDaySchema),
     }),
     venue: z.object({
+      mode: z.enum(["existing", "new"]),
+      existingVenueId: z.string().uuid().optional().nullable(),
       zoneType: z.enum(["general_admission", "reserved_seating"]),
       venueName: z
         .string()
         .trim()
         .min(2, "Ingresa el nombre del recinto."),
+      venueLocation: z.string().trim().optional(),
+      venueCity: z.string().trim().optional(),
       capacity: z.number().int().positive().optional(),
       rows: z.number().int().positive().optional(),
       seatsPerRow: z.number().int().positive().optional(),
+      zones: z
+        .array(
+          z.object({
+            name: z.string().trim().min(1),
+            type: z.enum(["general_admission", "reserved_seating"]),
+            capacity: z.number().int().positive(),
+            rows: z.number().int().positive().optional().nullable(),
+            seatsPerRow: z.number().int().positive().optional().nullable(),
+          }),
+        )
+        .optional(),
     }),
     tickets: z
       .array(ticketTierSchema)
@@ -49,32 +91,95 @@ export const eventFormSchema = z
     }),
   })
   .superRefine((data, context) => {
-    if (
-      data.venue.zoneType === "general_admission" &&
-      !data.venue.capacity
-    ) {
+    const tierNames = new Set<string>()
+    for (const [index, tier] of data.tickets.entries()) {
+      const normalizedName = tier.name.trim().toLocaleLowerCase("es")
+      if (tierNames.has(normalizedName)) {
+        context.addIssue({
+          code: "custom",
+          path: ["tickets", index, "name"],
+          message: "Los nombres de las entradas deben ser únicos.",
+        })
+      }
+      tierNames.add(normalizedName)
+
+      if (tier.layoutType !== "general" && !tier.seatingSectorId) {
+        context.addIssue({
+          code: "custom",
+          path: ["tickets", index, "seatingSectorId"],
+          message: "Seleccioná el sector numerado de esta entrada.",
+        })
+      }
+    }
+
+    if (data.basics.isMultiDay) {
+      if (data.basics.scheduleDays.length < 2) {
+        context.addIssue({
+          code: "custom",
+          path: ["basics", "scheduleDays"],
+          message: "Un festival necesita al menos dos jornadas.",
+        })
+      }
+      for (const [index, day] of data.basics.scheduleDays.entries()) {
+        const start = new Date(day.startTime).getTime()
+        const end = new Date(day.endTime).getTime()
+        if (!(end > start)) {
+          context.addIssue({
+            code: "custom",
+            path: ["basics", "scheduleDays", index, "endTime"],
+            message: "El cierre debe ser posterior al inicio.",
+          })
+        }
+      }
+    } else {
+      const date = data.basics.date?.trim() ?? ""
+      if (!date || Number.isNaN(new Date(date).getTime())) {
+        context.addIssue({
+          code: "custom",
+          path: ["basics", "date"],
+          message: "Selecciona la fecha y hora.",
+        })
+      }
+    }
+
+    if (data.venue.mode === "existing" && !data.venue.existingVenueId) {
       context.addIssue({
         code: "custom",
-        path: ["venue", "capacity"],
-        message: "Define la capacidad total del espacio.",
+        path: ["venue", "existingVenueId"],
+        message: "Seleccioná un recinto guardado.",
       })
     }
 
-    if (data.venue.zoneType === "reserved_seating") {
-      if (!data.venue.rows) {
+    const hasBlueprintZones = (data.venue.zones?.length ?? 0) > 0
+
+    if (!hasBlueprintZones) {
+      if (
+        data.venue.zoneType === "general_admission" &&
+        !data.venue.capacity
+      ) {
         context.addIssue({
           code: "custom",
-          path: ["venue", "rows"],
-          message: "Define la cantidad de filas.",
+          path: ["venue", "capacity"],
+          message: "Define la capacidad total del espacio.",
         })
       }
 
-      if (!data.venue.seatsPerRow) {
-        context.addIssue({
-          code: "custom",
-          path: ["venue", "seatsPerRow"],
-          message: "Define cuántos asientos tiene cada fila.",
-        })
+      if (data.venue.zoneType === "reserved_seating") {
+        if (!data.venue.rows) {
+          context.addIssue({
+            code: "custom",
+            path: ["venue", "rows"],
+            message: "Define la cantidad de filas.",
+          })
+        }
+
+        if (!data.venue.seatsPerRow) {
+          context.addIssue({
+            code: "custom",
+            path: ["venue", "seatsPerRow"],
+            message: "Define cuántos asientos tiene cada fila.",
+          })
+        }
       }
     }
 
@@ -88,6 +193,21 @@ export const eventFormSchema = z
         message: "Define una comisión entre 1% y 100%.",
       })
     }
+
+    if (data.basics.isMultiDay) {
+      const dayIds = new Set(data.basics.scheduleDays.map((day) => day.id))
+      for (const [index, tier] of data.tickets.entries()) {
+        const dayId = tier.dayId?.trim()
+        if (dayId && dayId !== "all" && !dayIds.has(dayId)) {
+          context.addIssue({
+            code: "custom",
+            path: ["tickets", index, "dayId"],
+            message: "Elegí una jornada válida o Abono completo.",
+          })
+        }
+      }
+    }
   })
 
 export type EventFormValues = z.infer<typeof eventFormSchema>
+export type ScheduleDayFormValue = z.infer<typeof scheduleDaySchema>

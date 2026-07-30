@@ -1,3 +1,9 @@
+const EVENT_TIME_ZONE = "America/Argentina/Buenos_Aires"
+
+function normalizeIntlOutput(value: string): string {
+  return value.replace(/[\u00a0\u202f]/g, " ")
+}
+
 const currencyFormatter = new Intl.NumberFormat("es-AR", {
   style: "currency",
   currency: "ARS",
@@ -17,6 +23,7 @@ const dateFormatter = new Intl.DateTimeFormat("es-AR", {
   day: "2-digit",
   month: "short",
   year: "numeric",
+  timeZone: EVENT_TIME_ZONE,
 })
 
 const dateTimeFormatter = new Intl.DateTimeFormat("es-AR", {
@@ -25,6 +32,7 @@ const dateTimeFormatter = new Intl.DateTimeFormat("es-AR", {
   year: "numeric",
   hour: "2-digit",
   minute: "2-digit",
+  timeZone: EVENT_TIME_ZONE,
 })
 
 const eventDateFormatter = new Intl.DateTimeFormat("es-AR", {
@@ -32,57 +40,68 @@ const eventDateFormatter = new Intl.DateTimeFormat("es-AR", {
   day: "numeric",
   month: "long",
   year: "numeric",
+  timeZone: EVENT_TIME_ZONE,
 })
 
 const eventTimeFormatter = new Intl.DateTimeFormat("es-AR", {
   hour: "2-digit",
   minute: "2-digit",
+  timeZone: EVENT_TIME_ZONE,
 })
 
 export function formatCurrency(value: number): string {
-  return currencyFormatter.format(value)
+  return normalizeIntlOutput(currencyFormatter.format(value))
 }
 
 export function formatCompactCurrency(value: number): string {
-  return compactCurrencyFormatter.format(value)
+  return normalizeIntlOutput(compactCurrencyFormatter.format(value))
 }
 
 export function formatNumber(value: number): string {
-  return numberFormatter.format(value)
+  return normalizeIntlOutput(numberFormatter.format(value))
 }
 
 export function formatDate(value: string | Date): string {
-  return dateFormatter.format(new Date(value))
+  return normalizeIntlOutput(dateFormatter.format(new Date(value)))
 }
 
 export function formatDateTime(value: string | Date): string {
-  return dateTimeFormatter.format(new Date(value))
+  return normalizeIntlOutput(dateTimeFormatter.format(new Date(value)))
 }
 
 export function formatEventDate(value: string | Date): string {
   const date = new Date(value)
-  const day = eventDateFormatter.format(date)
-  const time = eventTimeFormatter.format(date)
+  const day = normalizeIntlOutput(eventDateFormatter.format(date))
+  const time = normalizeIntlOutput(eventTimeFormatter.format(date))
   return `${day} · ${time}`
 }
 
 export function formatEventDay(value: string | Date): string {
-  return eventDateFormatter.format(new Date(value))
+  return normalizeIntlOutput(eventDateFormatter.format(new Date(value)))
 }
 
 export function formatEventTime(value: string | Date): string {
-  return eventTimeFormatter.format(new Date(value))
+  return normalizeIntlOutput(eventTimeFormatter.format(new Date(value)))
 }
 
 /** Formato cartelera: "SAB 24 NOV" */
 export function formatDiscoveryDate(value: string | Date): string {
   const date = new Date(value)
-  const weekday = new Intl.DateTimeFormat("es-AR", { weekday: "short" })
+  const weekday = new Intl.DateTimeFormat("es-AR", {
+    weekday: "short",
+    timeZone: EVENT_TIME_ZONE,
+  })
     .format(date)
     .replace(".", "")
     .toUpperCase()
-  const day = new Intl.DateTimeFormat("es-AR", { day: "2-digit" }).format(date)
-  const month = new Intl.DateTimeFormat("es-AR", { month: "short" })
+  const day = new Intl.DateTimeFormat("es-AR", {
+    day: "2-digit",
+    timeZone: EVENT_TIME_ZONE,
+  }).format(date)
+  const month = new Intl.DateTimeFormat("es-AR", {
+    month: "short",
+    timeZone: EVENT_TIME_ZONE,
+  })
     .format(date)
     .replace(".", "")
     .toUpperCase()

@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "leaflet/dist/leaflet.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -131,6 +132,117 @@
 
 ::selection {
   background: color-mix(in oklch, oklch(0.541 0.281 293.009) 28%, transparent);
+}
+
+@keyframes tokepass-neon-shift {
+  0%,
+  100% {
+    background-position: 0% 50%;
+    filter: drop-shadow(0 0 10px rgba(34, 211, 238, 0.35));
+  }
+  50% {
+    background-position: 100% 50%;
+    filter: drop-shadow(0 0 18px rgba(217, 70, 239, 0.45));
+  }
+}
+
+.tokepass-neon-text {
+  background-image: linear-gradient(
+    105deg,
+    #ffffff 0%,
+    #67e8f9 28%,
+    #e879f9 58%,
+    #ffffff 100%
+  );
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: tokepass-neon-shift 5s ease-in-out infinite;
+}
+
+@keyframes tokepass-aurora-breathe {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: translate3d(2.5%, 3%, 0) scale(1.07);
+    opacity: 1;
+  }
+}
+
+.tokepass-aurora {
+  will-change: transform, opacity;
+  animation: tokepass-aurora-breathe 14s ease-in-out infinite;
+}
+
+.tokepass-aurora-magenta {
+  animation-duration: 18s;
+  animation-delay: -4s;
+}
+
+.tokepass-aurora-cyan {
+  animation-duration: 22s;
+  animation-delay: -8s;
+}
+
+.tokepass-night-grid {
+  background-image:
+    linear-gradient(to right, rgba(148, 163, 184, 0.5) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148, 163, 184, 0.5) 1px, transparent 1px);
+  background-size: 52px 52px;
+  mask-image: radial-gradient(ellipse at 50% 15%, black 8%, transparent 70%);
+}
+
+@keyframes tokepass-radar-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.tokepass-radar {
+  animation: tokepass-radar-spin 12s linear infinite;
+}
+
+.tokepass-radar-slow {
+  animation: tokepass-radar-spin 20s linear infinite reverse;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tokepass-aurora,
+  .tokepass-radar,
+  .tokepass-radar-slow,
+  .tokepass-neon-text {
+    animation: none !important;
+  }
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+.tokepass-pills-mask {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 10%,
+    black 90%,
+    transparent
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 10%,
+    black 90%,
+    transparent
+  );
 }
 
 @media print {

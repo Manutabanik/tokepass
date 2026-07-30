@@ -1,6 +1,6 @@
 /* Tokepass PWA Service Worker — Offline-First billetera /my-tickets */
 
-const CACHE_VERSION = "tokepass-wallet-v3"
+const CACHE_VERSION = "tokepass-wallet-v4"
 const SHELL_CACHE = `${CACHE_VERSION}-shell`
 const ASSET_CACHE = `${CACHE_VERSION}-assets`
 
@@ -16,11 +16,12 @@ function isNavigableRequest(request) {
 }
 
 function isStaticAsset(url) {
+  // Nunca cachear runtime/HMR de Next — provoca módulos stale (factory missing).
+  if (url.pathname.startsWith("/_next/")) return false
+
   return (
-    url.pathname.startsWith("/_next/static/") ||
     url.pathname.startsWith("/icons/") ||
     url.pathname.endsWith(".css") ||
-    url.pathname.endsWith(".js") ||
     url.pathname.endsWith(".woff2") ||
     url.pathname.endsWith(".svg") ||
     url.pathname.endsWith(".png") ||
@@ -176,6 +177,11 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return
 
   const url = new URL(request.url)
+
+  // Dejar que Next/Turbopack manejen su propio runtime y HMR.
+  if (url.origin === self.location.origin && url.pathname.startsWith("/_next/")) {
+    return
+  }
 
   // Assets de flyers en CDN/Supabase: cache-first si ya visitados.
   if (url.origin !== self.location.origin) {

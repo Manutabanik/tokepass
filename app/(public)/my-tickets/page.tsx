@@ -5,6 +5,7 @@ import { getMyBarRedemptions } from "@/app/actions/addons"
 import { getMyTickets } from "@/app/actions/tickets"
 import { OfflineTicketWallet } from "@/components/pwa/offline-ticket-wallet"
 import { createClient } from "@/lib/supabase/server"
+import { getWalletUiFlags } from "@/lib/wallet-cache"
 
 export const metadata: Metadata = {
   title: "Mis entradas",
@@ -43,22 +44,28 @@ export default async function MyTicketsPage() {
         : "No se pudieron cargar tus entradas."
   }
 
+  const walletFlags = getWalletUiFlags()
+
   return (
-    <div className="dark relative isolate min-h-[calc(100vh-4rem)] bg-zinc-950 text-zinc-100">
+    <main className="dark relative isolate min-h-[calc(100vh-4rem)] overflow-hidden bg-[#09090b] text-zinc-100">
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[360px] bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.12),transparent_42%),radial-gradient(circle_at_top_right,rgba(245,158,11,0.08),transparent_38%)]"
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[520px] bg-[radial-gradient(circle_at_22%_0%,rgba(16,185,129,0.14),transparent_35%),radial-gradient(circle_at_82%_6%,rgba(139,92,246,0.09),transparent_32%)]"
+        aria-hidden="true"
+      />
+      <div
+        className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(rgba(255,255,255,0.018)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.018)_1px,transparent_1px)] bg-[size:48px_48px] [mask-image:linear-gradient(to_bottom,black,transparent_72%)]"
         aria-hidden="true"
       />
 
-      <section className="mx-auto w-full max-w-lg px-4 pb-10 pt-8 sm:px-5">
-        <header className="mb-6">
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-emerald-400/90">
+      <section className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
+        <header className="mb-8 sm:mb-10">
+          <p className="mb-3 inline-block rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 font-mono text-xs uppercase tracking-[0.18em] text-emerald-400">
             Billetera
           </p>
-          <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] text-white">
+          <h1 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
             Mis entradas
           </h1>
-          <p className="mt-2 text-sm leading-6 text-zinc-400">
+          <p className="mt-2 max-w-xl text-sm leading-relaxed text-zinc-400 sm:text-base">
             Entradas con Living QR offline. Guardá la app en tu pantalla de
             inicio para la puerta.
           </p>
@@ -69,8 +76,10 @@ export default async function MyTicketsPage() {
           initialTickets={initialTickets}
           barRedemptions={barRedemptions}
           loadError={loadError}
+          appleWalletEnabled={walletFlags.appleWalletEnabled}
+          googleWalletEnabled={walletFlags.googleWalletEnabled}
         />
       </section>
-    </div>
+    </main>
   )
 }

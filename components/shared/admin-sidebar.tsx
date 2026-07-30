@@ -1,41 +1,26 @@
 "use client"
 
-import {
-  CalendarDays,
-  ClipboardList,
-  GlassWater,
-  Home,
-  PanelLeftClose,
-  PanelLeftOpen,
-  PieChart,
-  QrCode,
-  Store,
-  Ticket,
-  Users,
-} from "lucide-react"
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
 
+import { getAdminNavItems } from "@/components/shared/admin-nav"
 import { BrandLogo } from "@/components/shared/brand-logo"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
+import type { EventStaffRole } from "@/types/auth"
 
-const navigation = [
-  { label: "Dashboard", href: "/admin", icon: Home },
-  { label: "Mis eventos", href: "/admin/events", icon: CalendarDays },
-  { label: "Taquilla / Venues", href: "/admin/venues", icon: Ticket },
-  { label: "POS Puerta", href: "/admin/pos", icon: Store },
-  { label: "Finanzas & Split", href: "/admin/finances", icon: PieChart },
-  { label: "Listas / FreePass", href: "/admin/lists", icon: ClipboardList },
-  { label: "Equipo & RRPP", href: "/admin/promoters", icon: Users },
-  { label: "Escáner Web", href: "/admin/scanner", icon: QrCode },
-  { label: "Escáner Barra", href: "/admin/bar-scanner", icon: GlassWater },
-] as const
-
-export function AdminSidebar() {
+export function AdminSidebar({
+  mode = "organizer",
+  staffRoles = [],
+}: {
+  mode?: "organizer" | "staff"
+  staffRoles?: EventStaffRole[]
+}) {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
+  const navigation = getAdminNavItems({ mode, staffRoles })
 
   return (
     <aside
@@ -47,7 +32,11 @@ export function AdminSidebar() {
       <div className="flex h-10 items-center justify-between">
         {collapsed ? (
           <Link
-            href="/admin"
+            href={
+              mode === "organizer"
+                ? "/admin"
+                : (navigation[0]?.href ?? "/admin/scanner")
+            }
             className="grid size-10 place-items-center rounded-xl bg-violet-600 font-black text-white"
             aria-label="Tokepass Command Center"
           >
@@ -74,7 +63,7 @@ export function AdminSidebar() {
 
       <div className={cn("mt-8 px-2", collapsed && "sr-only")}>
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-600">
-          Command Center
+          {mode === "organizer" ? "Command Center" : "Ops Staff"}
         </p>
       </div>
 
@@ -109,7 +98,11 @@ export function AdminSidebar() {
         <Separator className="mb-4 bg-white/8" />
         <div className={cn("px-2", collapsed && "text-center")}>
           <p className="text-xs font-medium text-zinc-600">
-            {collapsed ? "TP" : "Tokepass · Organizer OS"}
+            {collapsed
+              ? "TP"
+              : mode === "organizer"
+                ? "Tokepass · Organizer OS"
+                : "Tokepass · Staff"}
           </p>
         </div>
       </div>

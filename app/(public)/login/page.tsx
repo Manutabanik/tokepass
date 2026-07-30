@@ -14,7 +14,15 @@ export default async function LoginPage({
   const { error, next } = await searchParams
 
   return (
-    <section className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-md items-center px-4 py-16">
+    <section className="relative flex min-h-[calc(100vh-80px)] items-center justify-center overflow-hidden bg-zinc-950 p-4">
+      <div
+        className="pointer-events-none absolute -left-40 -top-40 size-96 rounded-full bg-purple-600/15 blur-[120px]"
+        aria-hidden="true"
+      />
+      <div
+        className="pointer-events-none absolute -bottom-40 -right-40 size-96 rounded-full bg-emerald-600/10 blur-[120px]"
+        aria-hidden="true"
+      />
       <AuthForms initialError={error} nextPath={next} />
     </section>
   )

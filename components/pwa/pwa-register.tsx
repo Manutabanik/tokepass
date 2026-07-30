@@ -4,7 +4,7 @@ import { useEffect } from "react"
 
 /**
  * Registra el Service Worker de la billetera PWA.
- * Solo en producción (o si NEXT_PUBLIC_PWA=1) para no romper HMR en dev.
+ * En desarrollo: desregistra SW residuales para no romper HMR/Turbopack.
  */
 export function PwaRegister() {
   useEffect(() => {
@@ -13,7 +13,23 @@ export function PwaRegister() {
     }
 
     const enableInDev = process.env.NEXT_PUBLIC_PWA === "1"
-    if (process.env.NODE_ENV !== "production" && !enableInDev) {
+    const isProd = process.env.NODE_ENV === "production"
+
+    if (!isProd && !enableInDev) {
+      void navigator.serviceWorker.getRegistrations().then((regs) => {
+        for (const reg of regs) {
+          void reg.unregister()
+        }
+      })
+      if ("caches" in window) {
+        void caches.keys().then((keys) => {
+          for (const key of keys) {
+            if (key.startsWith("tokepass-wallet-")) {
+              void caches.delete(key)
+            }
+          }
+        })
+      }
       return
     }
 

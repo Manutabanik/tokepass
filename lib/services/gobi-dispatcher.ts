@@ -11,6 +11,8 @@
 
 import { createHmac } from "crypto"
 
+import { logger } from "@/lib/logger"
+
 export type GobiOrderPaidPayload = {
   type: "order.paid"
   order_id: string
@@ -164,8 +166,10 @@ export async function dispatchOrderPaidToGobi(
       const retryable =
         result.status >= 500 || result.status === 408 || result.status === 429
 
-      console.error("[gobi-dispatcher] Gobi rechazó order.paid", {
-        orderId: payload.order_id,
+      logger.error({
+        context: "services/gobi-dispatcher",
+        message: "gobi_rejected_order_paid",
+        order_id: payload.order_id,
         status: result.status,
         error: lastError,
         attempt,
@@ -180,8 +184,10 @@ export async function dispatchOrderPaidToGobi(
     } catch (err) {
       lastStatus = 0
       lastError = err instanceof Error ? err.message : String(err)
-      console.error("[gobi-dispatcher] fallo de red/timeout", {
-        orderId: payload.order_id,
+      logger.error({
+        context: "services/gobi-dispatcher",
+        message: "gobi_network_or_timeout",
+        order_id: payload.order_id,
         error: lastError,
         attempt,
       })

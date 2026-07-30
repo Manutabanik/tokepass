@@ -10,6 +10,7 @@ import {
   Settings,
   ShieldCheck,
   Users,
+  Wallet,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -27,6 +28,7 @@ const navigation = [
   { label: "Usuarios", href: "/superadmin/users", icon: Users },
   { label: "Eventos", href: "/superadmin/events", icon: CalendarDays },
   { label: "Órdenes", href: "/superadmin/orders", icon: Receipt },
+  { label: "Liquidaciones", href: "/superadmin/settlements", icon: Wallet },
   { label: "Ajustes", href: "/superadmin/settings", icon: Settings },
 ] as const
 

@@ -1,6 +1,7 @@
 "use client"
 
 import {
+  Armchair,
   CalendarDays,
   Clock3,
   Gift,
@@ -9,6 +10,7 @@ import {
   ShieldCheck,
   Sparkles,
   UserRound,
+  Users,
 } from "lucide-react"
 import Image from "next/image"
 import { QRCodeSVG } from "qrcode.react"
@@ -34,11 +36,15 @@ export function LivingTicketCard({
   userId,
   showQr = true,
   offline = false,
+  appleWalletEnabled = false,
+  googleWalletEnabled = false,
 }: {
   ticket: MyTicket
   userId: string
   showQr?: boolean
   offline?: boolean
+  appleWalletEnabled?: boolean
+  googleWalletEnabled?: boolean
 }) {
   const vip = isVipTier(ticket.tierName)
   const canShowLiveQr = showQr && ticket.status === "valid"
@@ -146,6 +152,33 @@ export function LivingTicketCard({
             {ticket.eventTitle}
           </h2>
 
+          {ticket.dayValidityLabel ? (
+            <p className="mt-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-400">
+              {ticket.dayValidityLabel}
+            </p>
+          ) : null}
+
+          {ticket.seatingLabel ? (
+            <div className="mt-3 rounded-xl border border-indigo-500/25 bg-indigo-500/10 px-3 py-2.5">
+              <p className="flex items-center gap-2 font-mono text-xs font-black uppercase text-indigo-200">
+                <Armchair className="size-4" aria-hidden="true" />
+                {ticket.seatingLabel}
+                {ticket.seatingSectorName
+                  ? ` · ${ticket.seatingSectorName}`
+                  : null}
+                {ticket.seatingRowLabel
+                  ? ` · ${ticket.seatingRowLabel}`
+                  : null}
+              </p>
+              <p className="mt-1 flex items-center gap-1.5 text-xs text-zinc-400">
+                <Users className="size-3.5" aria-hidden="true" />
+                QR maestro para {ticket.maxAdmissions}{" "}
+                {ticket.maxAdmissions === 1 ? "persona" : "personas"} · (
+                {ticket.admissionsUsed}/{ticket.maxAdmissions} ingresados)
+              </p>
+            </div>
+          ) : null}
+
           <div className="space-y-1.5 text-sm text-zinc-400">
             <p className="flex items-center gap-2 capitalize">
               <CalendarDays className="size-4 shrink-0 text-zinc-500" />
@@ -245,6 +278,8 @@ export function LivingTicketCard({
             ticket={ticket}
             userId={userId}
             disabled={offline}
+            appleWalletEnabled={appleWalletEnabled}
+            googleWalletEnabled={googleWalletEnabled}
           />
         ) : null}
 

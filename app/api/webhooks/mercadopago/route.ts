@@ -1,15 +1,21 @@
 import {
   InvalidWebhookSignatureError,
   Payment,
+  PaymentRefund,
   WebhookSignatureValidator,
 } from "mercadopago"
 import { NextResponse, type NextRequest } from "next/server"
 
-import { createAdminClient } from "@/lib/supabase/admin"
+import { getBoostPlan, parseBoostExternalRef } from "@/lib/boost-plans"
+import { logger } from "@/lib/logger"
 import { getMercadoPagoClient } from "@/lib/mercadopago"
 import { notifyGobiOrderPaid } from "@/lib/services/notify-gobi-order-paid"
+import { createAdminClient } from "@/lib/supabase/admin"
+import type { Json } from "@/types/database"
 
 export const runtime = "nodejs"
+
+type AdminClient = ReturnType<typeof createAdminClient>
 
 function firstString(value: string | string[] | null | undefined): string | null {
   if (Array.isArray(value)) return value[0] ?? null
@@ -49,6 +55,253 @@ async function extractPaymentId(request: NextRequest): Promise<string | null> {
   return null
 }
 
+/** Idempotency key: (payment_id, status) — allows approved → refunded transitions. */
+async function alreadyProcessed(
+  admin: AdminClient,
+  paymentId: string,
+  ledgerStatus: string,
+): Promise<boolean> {
+  const { data } = await admin
+    .from("mp_webhook_events")
+    .select("payment_id")
+    .eq("payment_id", paymentId)
+    .eq("status", ledgerStatus)
+    .maybeSingle()
+
+  return Boolean(data)
+}
+
+async function recordWebhookEvent(
+  admin: AdminClient,
+  input: {
+    paymentId: string
+    orderId: string | null
+    status: string
+    rawSummary?: Json | null
+  },
+) {
+  await admin.from("mp_webhook_events").upsert(
+    {
+      payment_id: input.paymentId,
+      order_id: input.orderId,
+      status: input.status,
+      raw_summary: input.rawSummary ?? null,
+    },
+    { onConflict: "payment_id,status" },
+  )
+}
+
+async function activateBoostFromPayment(
+  admin: AdminClient,
+  input: {
+    subscriptionId: string
+    mpPaymentId: string
+    status: string | undefined
+    transactionAmount: number | null | undefined
+  },
+) {
+  const { data: boost, error } = await admin
+    .from("boost_subscriptions")
+    .select("id, event_id, tier, duration_days, payment_status, amount_paid")
+    .eq("id", input.subscriptionId)
+    .maybeSingle()
+
+  if (error || !boost) {
+    return { ok: false as const, error: "boost_not_found" }
+  }
+
+  if (input.status === "approved") {
+    const ledgerStatus = "boost_approved"
+    if (await alreadyProcessed(admin, input.mpPaymentId, ledgerStatus)) {
+      return { ok: true as const, idempotent: true }
+    }
+
+    const plan = getBoostPlan(String(boost.tier))
+    const officialPrice = plan?.priceArs ?? null
+    const paidAmount = Number(input.transactionAmount)
+    const recordedAmount = Number(boost.amount_paid)
+    const alreadyPaid = boost.payment_status === "paid"
+
+    if (!alreadyPaid) {
+      if (
+        officialPrice == null ||
+        !Number.isFinite(paidAmount) ||
+        paidAmount + 1 < officialPrice
+      ) {
+        logger.error({
+          context: "webhooks/mercadopago",
+          message: "boost_underpayment",
+          event_id: boost.event_id,
+          payment_id: input.mpPaymentId,
+          boostId: boost.id,
+          tier: boost.tier,
+          paid: input.transactionAmount,
+          officialPrice,
+          recordedAmount: boost.amount_paid,
+        })
+        return { ok: false as const, error: "amount_mismatch" }
+      }
+
+      if (
+        Number.isFinite(recordedAmount) &&
+        Math.abs(paidAmount - recordedAmount) > 1
+      ) {
+        logger.error({
+          context: "webhooks/mercadopago",
+          message: "boost_amount_mismatch",
+          event_id: boost.event_id,
+          payment_id: input.mpPaymentId,
+          boostId: boost.id,
+          paid: input.transactionAmount,
+          expected: boost.amount_paid,
+        })
+        return { ok: false as const, error: "amount_mismatch" }
+      }
+    }
+
+    const featuredUntil = new Date()
+    featuredUntil.setDate(featuredUntil.getDate() + Number(boost.duration_days))
+
+    // Atomic activate + repair if already paid without featured window.
+    const { data: activateResult, error: activateError } = await admin.rpc(
+      "activate_paid_boost",
+      {
+        p_subscription_id: boost.id,
+        p_payment_id: input.mpPaymentId,
+        p_featured_until: featuredUntil.toISOString(),
+      },
+    )
+
+    if (activateError) {
+      return { ok: false as const, error: activateError.message }
+    }
+
+    const result = (activateResult ?? {}) as {
+      ok?: boolean
+      error?: string
+      activated?: boolean
+      repaired?: boolean
+    }
+
+    if (!result.ok) {
+      return {
+        ok: false as const,
+        error: result.error ?? "boost_activate_failed",
+      }
+    }
+
+    await recordWebhookEvent(admin, {
+      paymentId: input.mpPaymentId,
+      orderId: null,
+      status: ledgerStatus,
+      rawSummary: {
+        boost_subscription_id: boost.id,
+        event_id: boost.event_id,
+        tier: boost.tier,
+        activated: result.activated ?? false,
+        repaired: result.repaired ?? false,
+      },
+    })
+
+    return {
+      ok: true as const,
+      idempotent: !result.activated,
+    }
+  }
+
+  if (
+    input.status === "rejected" ||
+    input.status === "cancelled" ||
+    input.status === "refunded" ||
+    input.status === "charged_back"
+  ) {
+    const ledgerStatus = `boost_${input.status}`
+    if (await alreadyProcessed(admin, input.mpPaymentId, ledgerStatus)) {
+      return { ok: true as const, idempotent: true }
+    }
+
+    await admin
+      .from("boost_subscriptions")
+      .update({
+        payment_status:
+          input.status === "refunded" || input.status === "charged_back"
+            ? "refunded"
+            : "failed",
+        payment_id_mp: input.mpPaymentId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", boost.id)
+
+    if (input.status === "refunded" || input.status === "charged_back") {
+      // Only clear featured if this subscription is the one currently driving it.
+      const { data: event } = await admin
+        .from("events")
+        .select("id, is_featured, featured_tier, featured_until")
+        .eq("id", boost.event_id)
+        .maybeSingle()
+
+      const featuredUntilMs = event?.featured_until
+        ? new Date(event.featured_until).getTime()
+        : 0
+      const stillFeatured =
+        Boolean(event?.is_featured) &&
+        featuredUntilMs > Date.now() &&
+        event?.featured_tier === boost.tier
+
+      if (stillFeatured) {
+        const { data: newerActive } = await admin
+          .from("boost_subscriptions")
+          .select("id")
+          .eq("event_id", boost.event_id)
+          .eq("payment_status", "paid")
+          .neq("id", boost.id)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (!newerActive) {
+          await admin
+            .from("events")
+            .update({
+              is_featured: false,
+              featured_tier: null,
+              featured_until: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", boost.event_id)
+        }
+      }
+    }
+
+    await recordWebhookEvent(admin, {
+      paymentId: input.mpPaymentId,
+      orderId: null,
+      status: ledgerStatus,
+      rawSummary: { boost_subscription_id: boost.id },
+    })
+
+    return { ok: true as const, idempotent: false }
+  }
+
+  return { ok: true as const, ignored: true }
+}
+
+type FinalizePaidResult = {
+  ok?: boolean
+  code?: string
+  needs_refund?: boolean
+  idempotent?: boolean
+  tickets_activated?: number
+  status?: string
+  mp_payment_id?: string
+}
+
+async function refundExpiredPayment(mpPaymentId: string) {
+  const client = getMercadoPagoClient()
+  const refunds = new PaymentRefund(client)
+  await refunds.total({ payment_id: mpPaymentId })
+}
+
 export async function POST(request: NextRequest) {
   try {
     const paymentId = await extractPaymentId(request)
@@ -62,7 +315,10 @@ export async function POST(request: NextRequest) {
 
     const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET?.trim()
     if (!secret) {
-      console.error("[mp webhook] MERCADOPAGO_WEBHOOK_SECRET ausente")
+      logger.error({
+        context: "webhooks/mercadopago",
+        message: "webhook_secret_missing",
+      })
       if (isProductionRuntime()) {
         return NextResponse.json(
           { success: false, error: "webhook_misconfigured" },
@@ -80,7 +336,12 @@ export async function POST(request: NextRequest) {
         })
       } catch (error) {
         if (error instanceof InvalidWebhookSignatureError) {
-          console.error("[mp webhook] firma inválida", error.reason)
+          logger.error({
+            context: "webhooks/mercadopago",
+            message: "invalid_signature",
+            payment_id: paymentId,
+            reason: error.reason,
+          })
           return NextResponse.json(
             { success: false, error: "invalid_signature" },
             { status: 401 },
@@ -94,8 +355,8 @@ export async function POST(request: NextRequest) {
     const paymentClient = new Payment(client)
     const payment = await paymentClient.get({ id: paymentId })
 
-    const orderId = firstString(payment.external_reference)
-    if (!orderId) {
+    const externalReference = firstString(payment.external_reference)
+    if (!externalReference) {
       return NextResponse.json(
         {
           success: true,
@@ -109,19 +370,30 @@ export async function POST(request: NextRequest) {
     const mpPaymentId = String(payment.id ?? paymentId)
     const status = payment.status
 
-    // Idempotencia estricta: payment_id ya procesado → ACK sin side-effects.
-    const { data: priorEvent } = await admin
-      .from("mp_webhook_events")
-      .select("payment_id, status")
-      .eq("payment_id", mpPaymentId)
-      .maybeSingle()
-
-    if (priorEvent) {
-      return NextResponse.json(
-        { success: true, data: { idempotent: true, status: priorEvent.status } },
-        { status: 200 },
-      )
+    const boostId = parseBoostExternalRef(externalReference)
+    if (boostId) {
+      const result = await activateBoostFromPayment(admin, {
+        subscriptionId: boostId,
+        mpPaymentId,
+        status,
+        transactionAmount: payment.transaction_amount,
+      })
+      if (!result.ok) {
+        const httpStatus =
+          result.error === "boost_not_found"
+            ? 404
+            : result.error === "amount_mismatch"
+              ? 409
+              : 500
+        return NextResponse.json(
+          { success: false, error: result.error },
+          { status: httpStatus },
+        )
+      }
+      return NextResponse.json({ success: true, data: result }, { status: 200 })
     }
+
+    const orderId = externalReference
 
     const { data: order } = await admin
       .from("orders")
@@ -136,7 +408,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Defensa en profundidad: monto MP vs orden.
     if (
       status === "approved" &&
       payment.transaction_amount != null &&
@@ -149,11 +420,13 @@ export async function POST(request: NextRequest) {
         Number.isFinite(expected) &&
         Math.abs(paid - expected) > 1
       ) {
-        console.error("[mp webhook] amount mismatch", {
-          orderId,
+        logger.error({
+          context: "webhooks/mercadopago",
+          message: "amount_mismatch",
+          order_id: orderId,
+          payment_id: mpPaymentId,
           paid,
           expected,
-          paymentId: mpPaymentId,
         })
         return NextResponse.json(
           { success: false, error: "amount_mismatch" },
@@ -163,74 +436,191 @@ export async function POST(request: NextRequest) {
     }
 
     if (status === "approved") {
-      const alreadyPaid =
-        order.status === "paid" && order.mp_payment_id === mpPaymentId
+      if (await alreadyProcessed(admin, mpPaymentId, "approved")) {
+        return NextResponse.json(
+          { success: true, data: { idempotent: true, status: "approved" } },
+          { status: 200 },
+        )
+      }
 
-      if (!alreadyPaid) {
-        const { error } = await admin
-          .from("orders")
-          .update({
-            status: "paid",
-            mp_payment_id: mpPaymentId,
+      if (await alreadyProcessed(admin, mpPaymentId, "approved_expired_refunded")) {
+        return NextResponse.json(
+          {
+            success: true,
+            data: { idempotent: true, status: "approved_expired_refunded" },
+          },
+          { status: 200 },
+        )
+      }
+
+      if (await alreadyProcessed(admin, mpPaymentId, "approved_expired_needs_review")) {
+        try {
+          await refundExpiredPayment(mpPaymentId)
+          await recordWebhookEvent(admin, {
+            paymentId: mpPaymentId,
+            orderId,
+            status: "approved_expired_refunded",
+            rawSummary: { repaired_from: "needs_review" },
           })
-          .eq("id", orderId)
-          .in("status", ["pending", "paid"])
-
-        if (error) {
-          console.error("[mp webhook] update order failed", error.message)
           return NextResponse.json(
-            { success: false, error: error.message },
+            { success: true, data: { refunded: true, repaired: true } },
+            { status: 200 },
+          )
+        } catch (refundError) {
+          logger.error({
+            context: "webhooks/mercadopago",
+            message: "needs_review_refund_retry_failed",
+            order_id: orderId,
+            payment_id: mpPaymentId,
+            error: refundError,
+          })
+          return NextResponse.json(
+            { success: false, error: "expired_needs_refund" },
             { status: 500 },
           )
         }
+      }
 
-        await admin
-          .from("tickets")
-          .update({ status: "valid" })
-          .eq("order_id", orderId)
-          .neq("status", "used")
-          .neq("status", "scanned")
-          .neq("status", "revoked")
-          .neq("status", "cancelled")
-          .neq("status", "transferred")
+      const { data: finalizeRaw, error: finalizeError } = await admin.rpc(
+        "finalize_paid_order",
+        {
+          p_order_id: orderId,
+          p_mp_payment_id: mpPaymentId,
+        },
+      )
 
-        const { error: activateError } = await admin.rpc(
-          "activate_order_item_redemptions",
-          { p_order_id: orderId },
+      if (finalizeError) {
+        logger.error({
+          context: "webhooks/mercadopago",
+          message: "finalize_paid_order_failed",
+          order_id: orderId,
+          payment_id: mpPaymentId,
+          error: finalizeError.message,
+        })
+        return NextResponse.json(
+          { success: false, error: finalizeError.message },
+          { status: 500 },
         )
-        if (activateError) {
-          console.error(
-            "[mp webhook] activate item redemptions failed",
-            activateError.message,
+      }
+
+      const finalize = (finalizeRaw ?? {}) as FinalizePaidResult
+
+      if (
+        finalize.ok === false &&
+        (finalize.needs_refund === true ||
+          finalize.code === "order_expired" ||
+          finalize.code === "no_tickets")
+      ) {
+        try {
+          await refundExpiredPayment(mpPaymentId)
+          await recordWebhookEvent(admin, {
+            paymentId: mpPaymentId,
+            orderId,
+            status: "approved_expired_refunded",
+            rawSummary: {
+              reason: finalize.code ?? "order_expired",
+              order_status: order.status,
+            },
+          })
+          logger.error({
+            context: "webhooks/mercadopago",
+            message: "approved_after_expired_refunded",
+            order_id: orderId,
+            payment_id: mpPaymentId,
+            code: finalize.code,
+          })
+          return NextResponse.json(
+            {
+              success: true,
+              data: {
+                refunded: true,
+                reason: finalize.code ?? "order_expired",
+              },
+            },
+            { status: 200 },
+          )
+        } catch (refundError) {
+          logger.error({
+            context: "webhooks/mercadopago",
+            message: "expired_order_refund_failed",
+            order_id: orderId,
+            payment_id: mpPaymentId,
+            error: refundError,
+          })
+          await recordWebhookEvent(admin, {
+            paymentId: mpPaymentId,
+            orderId,
+            status: "approved_expired_needs_review",
+            rawSummary: {
+              reason: finalize.code ?? "order_expired",
+              refund_error:
+                refundError instanceof Error
+                  ? refundError.message
+                  : "refund_failed",
+            },
+          })
+          return NextResponse.json(
+            { success: false, error: "expired_needs_refund" },
+            { status: 500 },
           )
         }
       }
 
-      await admin.from("mp_webhook_events").upsert(
-        {
-          payment_id: mpPaymentId,
+      if (finalize.ok !== true) {
+        logger.error({
+          context: "webhooks/mercadopago",
+          message: "finalize_rejected",
           order_id: orderId,
-          status: "approved",
-          raw_summary: {
-            transaction_amount: payment.transaction_amount ?? null,
-          },
-        },
-        { onConflict: "payment_id" },
-      )
+          payment_id: mpPaymentId,
+          finalize,
+        })
+        const httpStatus =
+          finalize.code === "order_not_found"
+            ? 404
+            : finalize.code === "already_paid_other_payment"
+              ? 409
+              : 500
+        return NextResponse.json(
+          { success: false, error: finalize.code ?? "finalize_failed" },
+          { status: httpStatus },
+        )
+      }
 
-      // Gobi solo en la primera transición a paid (no en reintentos MP).
-      if (!alreadyPaid && order.status !== "paid") {
+      await recordWebhookEvent(admin, {
+        paymentId: mpPaymentId,
+        orderId,
+        status: "approved",
+        rawSummary: {
+          transaction_amount: payment.transaction_amount ?? null,
+          finalize_code: finalize.code ?? null,
+          tickets_activated: finalize.tickets_activated ?? null,
+        },
+      })
+
+      if (!finalize.idempotent) {
         try {
           await notifyGobiOrderPaid(admin, orderId)
         } catch (gobiErr) {
-          console.error(
-            "[mp webhook] Gobi order.paid dispatch failed",
-            gobiErr instanceof Error ? gobiErr.message : gobiErr,
-          )
+          logger.error({
+            context: "webhooks/mercadopago",
+            message: "gobi_order_paid_dispatch_failed",
+            order_id: orderId,
+            payment_id: mpPaymentId,
+            error: gobiErr,
+          })
         }
       }
 
-      return NextResponse.json({ success: true }, { status: 200 })
+      return NextResponse.json(
+        {
+          success: true,
+          data: {
+            status: "approved",
+            idempotent: Boolean(finalize.idempotent),
+          },
+        },
+        { status: 200 },
+      )
     }
 
     if (
@@ -239,6 +629,14 @@ export async function POST(request: NextRequest) {
       status === "refunded" ||
       status === "charged_back"
     ) {
+      const ledgerStatus = String(status)
+      if (await alreadyProcessed(admin, mpPaymentId, ledgerStatus)) {
+        return NextResponse.json(
+          { success: true, data: { idempotent: true, status: ledgerStatus } },
+          { status: 200 },
+        )
+      }
+
       if (order.status === "pending") {
         await admin
           .from("orders")
@@ -254,17 +652,20 @@ export async function POST(request: NextRequest) {
           { p_order_id: orderId },
         )
         if (releaseItemsError) {
-          console.error(
-            "[mp webhook] release item redemptions failed",
-            releaseItemsError.message,
-          )
+          logger.error({
+            context: "webhooks/mercadopago",
+            message: "release_item_redemptions_failed",
+            order_id: orderId,
+            payment_id: mpPaymentId,
+            error: releaseItemsError.message,
+          })
         }
 
         const { data: reserved } = await admin
           .from("tickets")
           .select("id")
           .eq("order_id", orderId)
-          .eq("status", "valid")
+          .eq("status", "pending_payment")
 
         const ticketIds = (reserved ?? []).map((row) => row.id)
         if (ticketIds.length > 0) {
@@ -273,9 +674,16 @@ export async function POST(request: NextRequest) {
             { p_ticket_ids: ticketIds },
           )
           if (releaseTicketsError) {
-            console.error(
-              "[mp webhook] release reserved tickets failed",
-              releaseTicketsError.message,
+            logger.error({
+              context: "webhooks/mercadopago",
+              message: "release_reserved_tickets_failed",
+              order_id: orderId,
+              payment_id: mpPaymentId,
+              error: releaseTicketsError.message,
+            })
+            return NextResponse.json(
+              { success: false, error: releaseTicketsError.message },
+              { status: 500 },
             )
           }
         }
@@ -283,29 +691,38 @@ export async function POST(request: NextRequest) {
 
       if (
         (status === "refunded" || status === "charged_back") &&
-        order.status === "paid"
+        (order.status === "paid" || order.mp_payment_id === mpPaymentId)
       ) {
         await admin
           .from("orders")
           .update({ status: "failed", mp_payment_id: mpPaymentId })
           .eq("id", orderId)
 
-        await admin
-          .from("tickets")
-          .update({ status: "cancelled" })
-          .eq("order_id", orderId)
-          .eq("status", "valid")
+        const { error: cancelError } = await admin.rpc(
+          "cancel_paid_order_tickets",
+          { p_order_id: orderId },
+        )
+        if (cancelError) {
+          logger.error({
+            context: "webhooks/mercadopago",
+            message: "cancel_paid_tickets_failed",
+            order_id: orderId,
+            payment_id: mpPaymentId,
+            error: cancelError.message,
+          })
+          return NextResponse.json(
+            { success: false, error: cancelError.message },
+            { status: 500 },
+          )
+        }
       }
 
-      await admin.from("mp_webhook_events").upsert(
-        {
-          payment_id: mpPaymentId,
-          order_id: orderId,
-          status: String(status),
-          raw_summary: null,
-        },
-        { onConflict: "payment_id" },
-      )
+      await recordWebhookEvent(admin, {
+        paymentId: mpPaymentId,
+        orderId,
+        status: ledgerStatus,
+        rawSummary: null,
+      })
 
       return NextResponse.json({ success: true }, { status: 200 })
     }
@@ -315,13 +732,18 @@ export async function POST(request: NextRequest) {
       { status: 200 },
     )
   } catch (error) {
-    console.error("[mp webhook] unexpected", error)
+    logger.error({
+      context: "webhooks/mercadopago",
+      message: "unexpected_webhook_error",
+      error,
+    })
+    // 5xx so Mercado Pago retries recoverable failures
     return NextResponse.json(
       {
         success: false,
         error: error instanceof Error ? error.message : "webhook_error",
       },
-      { status: 200 },
+      { status: 500 },
     )
   }
 }

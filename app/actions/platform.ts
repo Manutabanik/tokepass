@@ -424,7 +424,11 @@ export async function updateUserRole(
 
   const { error } = await admin
     .from("profiles")
-    .update({ role })
+    .update({
+      role,
+      organizer_approval_status:
+        role === "admin" || role === "super_admin" ? "approved" : "none",
+    } as never)
     .eq("id", userId)
 
   if (error) {

@@ -6,11 +6,20 @@ import {
   assertLivingMac,
   resolveScanSecret,
 } from "@/lib/scan-payload"
+import {
+  assertEventOpsAccess,
+  listOperableEvents,
+} from "@/lib/event-ops-access"
+import {
+  isTicketValidForNow,
+  parseScheduleDays,
+} from "@/lib/event-schedule"
+import { logger } from "@/lib/logger"
 import { createClient } from "@/lib/supabase/server"
 import type { QrType, TicketStatus } from "@/types/database"
 
 const TICKET_SCAN_SELECT =
-  "id, status, event_id, totp_secret, scanned_at, ticket_tiers(name, time_limit, bonus_reward), events(id, title, organizer_id, qr_type)"
+  "id, status, event_id, order_id, totp_secret, scanned_at, max_admissions, admissions_used, event_seating_units(label, sector_name, row_label), ticket_tiers(name, time_limit, bonus_reward, day_id), events(id, title, organizer_id, qr_type, date, schedule_days)"
 
 export type ScannerEventOption = {
   id: string
@@ -31,6 +40,11 @@ export type ScanTicketResult =
         ownerLabel: string | null
         eventTitle: string
         isFreePass: boolean
+        seatingLabel: string | null
+        seatingSectorName: string | null
+        seatingRowLabel: string | null
+        admissionsUsed: number
+        maxAdmissions: number
       }
       bonus: string | null
     }
@@ -43,11 +57,13 @@ export type ScanTicketResult =
         | "transferred"
         | "cancelled"
         | "wrong_event"
+        | "wrong_day"
         | "not_found"
         | "invalid_payload"
         | "forbidden"
         | "auth_required"
         | "update_failed"
+        | "unpaid"
       message: string
       scannedAt?: string | null
     }
@@ -56,18 +72,29 @@ type TicketScanRow = {
   id: string
   status: TicketStatus
   event_id: string
+  order_id: string | null
   totp_secret?: string
   scanned_at: string | null
+  max_admissions: number
+  admissions_used: number
+  event_seating_units: {
+    label: string
+    sector_name: string
+    row_label: string | null
+  } | null
   ticket_tiers: {
     name: string
     time_limit: string | null
     bonus_reward: string | null
+    day_id: string | null
   } | null
   events: {
     id: string
     title: string
     organizer_id: string
     qr_type: QrType | null
+    date: string | null
+    schedule_days: unknown
   } | null
 }
 
@@ -100,28 +127,9 @@ function isWithinTimeLimit(timeLimit: string | null): boolean {
 }
 
 export async function getScannerEvents(): Promise<ScannerEventOption[]> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser()
+  const rows = await listOperableEvents({ roles: ["door_staff"] })
 
-  if (error || !user) {
-    throw new Error("auth_required")
-  }
-
-  const { data, error: queryError } = await supabase
-    .from("events")
-    .select("id, title, date, status, qr_type")
-    .eq("organizer_id", user.id)
-    .in("status", ["published", "draft"])
-    .order("date", { ascending: true })
-
-  if (queryError) {
-    throw new Error(queryError.message)
-  }
-
-  return (data ?? []).map((event) => ({
+  return rows.map((event) => ({
     id: event.id,
     title: event.title,
     date: event.date,
@@ -244,19 +252,15 @@ export async function scanAndValidateTicket(
 
   const row = ticket as TicketScanRow
 
-  if (!row.events || row.events.organizer_id !== user.id) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single()
-
-    if (profile?.role !== "super_admin") {
-      return {
-        success: false,
-        status: "forbidden",
-        message: "No tenés permiso para validar este ticket",
-      }
+  const access = await assertEventOpsAccess(eventId, ["door_staff"])
+  if (!access.ok) {
+    return {
+      success: false,
+      status: access.reason === "auth_required" ? "auth_required" : "forbidden",
+      message:
+        access.reason === "auth_required"
+          ? "Iniciá sesión para validar"
+          : "No tenés permiso para validar este ticket",
     }
   }
 
@@ -265,6 +269,20 @@ export async function scanAndValidateTicket(
       success: false,
       status: "wrong_event",
       message: "Ticket de otro evento",
+    }
+  }
+
+  const scheduleDays = parseScheduleDays(row.events?.schedule_days)
+  const dayGate = isTicketValidForNow({
+    scheduleDays,
+    dayId: row.ticket_tiers?.day_id,
+    eventDate: row.events?.date,
+  })
+  if (!dayGate.ok) {
+    return {
+      success: false,
+      status: "wrong_day",
+      message: dayGate.message,
     }
   }
 
@@ -314,6 +332,14 @@ export async function scanAndValidateTicket(
     }
   }
 
+  if (row.status === "pending_payment") {
+    return {
+      success: false,
+      status: "unpaid",
+      message: "Pago pendiente — entrada no habilitada",
+    }
+  }
+
   if (row.status !== "valid") {
     return {
       success: false,
@@ -323,27 +349,57 @@ export async function scanAndValidateTicket(
     }
   }
 
-  const scannedAt = new Date().toISOString()
-  const { data: updated, error: updateError } = await supabase
-    .from("tickets")
-    .update({ status: "used", scanned_at: scannedAt })
-    .eq("id", row.id)
-    .eq("status", "valid")
-    .select("id, scanned_at")
-    .maybeSingle()
+  const { data: admissionOk, error: admissionError } = await supabase.rpc(
+    "is_ticket_admission_eligible",
+    { p_ticket_id: row.id },
+  )
 
-  if (updateError || !updated) {
-    const { data: again } = await supabase
-      .from("tickets")
-      .select("scanned_at")
-      .eq("id", row.id)
-      .maybeSingle()
-
+  if (admissionError) {
+    logger.error({
+      context: "actions/scanner",
+      message: "admission_check_failed",
+      error: admissionError.message,
+    })
     return {
       success: false,
-      status: "already_used",
-      message: "Ticket ya escaneado",
-      scannedAt: again?.scanned_at ?? null,
+      status: "update_failed",
+      message: "No se pudo verificar el pago del ticket",
+    }
+  }
+
+  if (!admissionOk) {
+    return {
+      success: false,
+      status: "unpaid",
+      message: "Entrada sin orden pagada — acceso denegado",
+    }
+  }
+
+  const { data: admissionResult, error: updateError } = await supabase.rpc(
+    "scan_ticket_admission",
+    {
+      p_ticket_id: row.id,
+      p_validated_by: access.userId,
+    },
+  )
+  const admission = (admissionResult ?? {}) as {
+    ok?: boolean
+    code?: string
+    admissions_used?: number
+    max_admissions?: number
+    remaining?: number
+  }
+
+  if (updateError || !admission.ok) {
+    return {
+      success: false,
+      status:
+        admission.code === "unpaid" ? "unpaid" : "already_used",
+      message:
+        admission.code === "unpaid"
+          ? "Entrada sin orden pagada — acceso denegado"
+          : "Ticket ya escaneado o sin ingresos disponibles",
+      scannedAt: row.scanned_at,
     }
   }
 
@@ -369,7 +425,10 @@ export async function scanAndValidateTicket(
   return {
     success: true,
     status: "granted",
-    message: "ACCESO PERMITIDO",
+    message:
+      (admission.remaining ?? 0) > 0
+        ? `ACCESO PERMITIDO · QUEDAN ${admission.remaining} INGRESOS`
+        : "ACCESO PERMITIDO · CUPO COMPLETO",
     ticket: {
       id: row.id,
       tierName: isFreePass
@@ -378,6 +437,13 @@ export async function scanAndValidateTicket(
       ownerLabel: null,
       eventTitle: row.events?.title ?? "Evento",
       isFreePass,
+      seatingLabel: row.event_seating_units?.label ?? null,
+      seatingSectorName: row.event_seating_units?.sector_name ?? null,
+      seatingRowLabel: row.event_seating_units?.row_label ?? null,
+      admissionsUsed: Number(admission.admissions_used ?? 1),
+      maxAdmissions: Number(
+        admission.max_admissions ?? row.max_admissions ?? 1,
+      ),
     },
     bonus,
   }
@@ -392,12 +458,24 @@ export type EventTicketManifestPayload = {
     id: string
     event_id: string
     totp_secret: string
-    status: "valid" | "used" | "transferred" | "cancelled" | "scanned" | "revoked"
+    status:
+      | "pending_payment"
+      | "valid"
+      | "used"
+      | "transferred"
+      | "cancelled"
+      | "scanned"
+      | "revoked"
     owner_name: string
     dni: string | null
     ticket_tier: string
     scanned_at: string | null
     scanned_at_local: number | null
+    max_admissions: number
+    admissions_used: number
+    seating_label: string | null
+    seating_sector_name: string | null
+    seating_row_label: string | null
   }>
 }
 
@@ -418,6 +496,15 @@ export async function fetchEventTicketManifest(
     throw new Error("auth_required")
   }
 
+  const access = await assertEventOpsAccess(eventId, ["door_staff"])
+  if (!access.ok) {
+    throw new Error(
+      access.reason === "auth_required"
+        ? "auth_required"
+        : "Sin permiso para descargar este manifiesto",
+    )
+  }
+
   const { data: event, error: eventError } = await supabase
     .from("events")
     .select("id, title, qr_type, organizer_id")
@@ -428,23 +515,10 @@ export async function fetchEventTicketManifest(
     throw new Error("Evento no encontrado")
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle()
-
-  if (
-    event.organizer_id !== user.id &&
-    profile?.role !== "super_admin"
-  ) {
-    throw new Error("Sin permiso para descargar este manifiesto")
-  }
-
   const { data, error } = await supabase
     .from("tickets")
     .select(
-      "id, event_id, totp_secret, status, scanned_at, owner_id, ticket_tiers(name)",
+      "id, event_id, totp_secret, status, scanned_at, owner_id, max_admissions, admissions_used, event_seating_units(label, sector_name, row_label), ticket_tiers(name)",
     )
     .eq("event_id", eventId)
     .in("status", ["valid", "used", "scanned"])
@@ -461,6 +535,13 @@ export async function fetchEventTicketManifest(
     scanned_at: string | null
     owner_id: string | null
     ticket_tiers: { name: string } | null
+    max_admissions: number
+    admissions_used: number
+    event_seating_units: {
+      label: string
+      sector_name: string
+      row_label: string | null
+    } | null
   }
 
   const rows = (data ?? []) as unknown as Row[]
@@ -521,6 +602,12 @@ export async function fetchEventTicketManifest(
       scanned_at_local: row.scanned_at
         ? new Date(row.scanned_at).getTime()
         : null,
+      max_admissions: Number(row.max_admissions ?? 1),
+      admissions_used: Number(row.admissions_used ?? 0),
+      seating_label: row.event_seating_units?.label ?? null,
+      seating_sector_name:
+        row.event_seating_units?.sector_name ?? null,
+      seating_row_label: row.event_seating_units?.row_label ?? null,
     }
   })
 
@@ -543,6 +630,7 @@ export async function fetchEventTicketManifest(
 export type OfflineSyncItem = {
   ticketId: string
   scannedAtLocal: number
+  admissionsCount?: number
 }
 
 export type SyncOfflineResult =
@@ -576,44 +664,41 @@ export async function syncOfflineScansBatch(
   }
 
   for (const item of items) {
-    const scannedAt = new Date(item.scannedAtLocal).toISOString()
+    const admissionsCount = Math.max(
+      1,
+      Math.min(100, Number(item.admissionsCount) || 1),
+    )
+    let syncError: string | null = null
 
-    const { data: updated, error } = await supabase
-      .from("tickets")
-      .update({ status: "used", scanned_at: scannedAt })
-      .eq("id", item.ticketId)
-      .eq("status", "valid")
-      .select("id")
-      .maybeSingle()
-
-    if (error) {
-      conflicts.push({ ticketId: item.ticketId, reason: error.message })
-      continue
-    }
-
-    if (updated) {
-      syncedIds.push(item.ticketId)
-      await supabase.rpc("mark_guest_entry_checked_in", {
+    for (let admission = 0; admission < admissionsCount; admission += 1) {
+      const { data, error } = await supabase.rpc("scan_ticket_admission", {
         p_ticket_id: item.ticketId,
+        p_validated_by: user.id,
       })
-      continue
+      const result = (data ?? {}) as { ok?: boolean; code?: string }
+      if (error) {
+        syncError = error.message
+        break
+      }
+      if (!result.ok) {
+        if (result.code === "already_used") break
+        syncError = result.code ?? "sync_failed"
+        break
+      }
     }
 
-    // Ya estaba used en servidor: consideramos sync OK (idempotente).
-    const { data: existing } = await supabase
-      .from("tickets")
-      .select("id, status")
-      .eq("id", item.ticketId)
-      .maybeSingle()
-
-    if (existing && (existing.status === "used" || existing.status === "scanned")) {
-      syncedIds.push(item.ticketId)
-    } else {
+    if (syncError) {
       conflicts.push({
         ticketId: item.ticketId,
-        reason: existing?.status ?? "not_found",
+        reason: syncError,
       })
+      continue
     }
+
+    syncedIds.push(item.ticketId)
+    await supabase.rpc("mark_guest_entry_checked_in", {
+      p_ticket_id: item.ticketId,
+    })
   }
 
   revalidatePath("/admin/scanner")
