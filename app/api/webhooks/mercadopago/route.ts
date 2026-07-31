@@ -4,6 +4,7 @@ import {
   PaymentRefund,
   WebhookSignatureValidator,
 } from "mercadopago"
+import { createClient } from "@supabase/supabase-js"
 import { NextResponse, type NextRequest } from "next/server"
 
 import { getBoostPlan, parseBoostExternalRef } from "@/lib/boost-plans"
@@ -11,13 +12,30 @@ import { parsePaymentExternalReference } from "@/lib/checkout-buyer"
 import { logger } from "@/lib/logger"
 import { getMercadoPagoClient, getMercadoPagoWebhookSecret } from "@/lib/mercadopago"
 import { notifyGobiOrderPaid } from "@/lib/services/notify-gobi-order-paid"
-import { createAdminClient } from "@/lib/supabase/admin"
-import type { Json } from "@/types/database"
+import type { Database, Json } from "@/types/database"
 
 export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
-type AdminClient = ReturnType<typeof createAdminClient>
+/**
+ * Service-role Supabase client for webhooks (bypasses RLS).
+ * Do NOT use the anon/session client — ticket/order writes would be blocked.
+ */
+function createWebhookAdminClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error(
+      "Faltan NEXT_PUBLIC_SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY.",
+    )
+  }
+  return createClient<Database>(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
+}
+
+type AdminClient = ReturnType<typeof createWebhookAdminClient>
 
 function firstString(value: string | string[] | null | undefined): string | null {
   if (Array.isArray(value)) return value[0] ?? null
@@ -25,10 +43,7 @@ function firstString(value: string | string[] | null | undefined): string | null
 }
 
 function webhookOk(data?: Record<string, unknown>) {
-  return NextResponse.json(
-    { status: "ok", received: true, ...(data ?? {}) },
-    { status: 200 },
-  )
+  return NextResponse.json({ received: true, ...(data ?? {}) }, { status: 200 })
 }
 
 async function extractPaymentId(request: NextRequest): Promise<string | null> {
@@ -43,7 +58,9 @@ async function extractPaymentId(request: NextRequest): Promise<string | null> {
   }
 
   try {
-    const body = (await request.json()) as {
+    const raw = await request.text()
+    if (!raw.trim()) return queryId
+    const body = JSON.parse(raw) as {
       data?: { id?: string | number }
       id?: string | number
       type?: string
@@ -52,23 +69,22 @@ async function extractPaymentId(request: NextRequest): Promise<string | null> {
     }
 
     if (body?.data?.id != null) return String(body.data.id)
-    const kind = body?.type ?? body?.action ?? body?.topic
+    const kind = body?.type ?? body?.action ?? body?.topic ?? topic
     if (
       (kind === "payment" ||
         kind === "payment.created" ||
         kind === "payment.updated" ||
         String(kind ?? "").startsWith("payment.")) &&
-      body?.id != null
+      (body?.id != null || queryId)
     ) {
-      return String(body.id)
+      return body?.id != null ? String(body.id) : queryId
     }
-    // Algunos payloads traen id aunque type sea payment.created
-    if (body?.id != null && body?.data == null) return String(body.id)
-  } catch {
-    // Body vacío o no JSON
+    if (body?.id != null) return String(body.id)
+  } catch (error) {
+    console.error("[WEBHOOK ERROR] payload parse failed:", error)
   }
 
-  return null
+  return queryId
 }
 
 /** Idempotency key: (payment_id, status) — allows approved → refunded transitions. */
@@ -320,6 +336,20 @@ async function refundExpiredPayment(mpPaymentId: string) {
 
 export async function POST(request: NextRequest) {
   try {
+    return await processMercadoPagoWebhook(request)
+  } catch (error) {
+    console.error("[WEBHOOK ERROR]", error)
+    logger.error({
+      context: "webhooks/mercadopago",
+      message: "unexpected_webhook_error",
+      error,
+    })
+    return NextResponse.json({ received: true }, { status: 200 })
+  }
+}
+
+async function processMercadoPagoWebhook(request: NextRequest) {
+  try {
     const paymentId = await extractPaymentId(request)
     const url = new URL(request.url)
     const typeHint =
@@ -337,11 +367,11 @@ export async function POST(request: NextRequest) {
 
     const secret = getMercadoPagoWebhookSecret()
     if (!secret) {
+      console.error("[WEBHOOK ERROR] webhook secret missing — continuing")
       logger.error({
         context: "webhooks/mercadopago",
         message: "webhook_secret_missing",
       })
-      // Continuar: no devolver 5xx (MP reintenta / Vercel puede reportar 502).
     } else {
       try {
         WebhookSignatureValidator.validate({
@@ -352,16 +382,18 @@ export async function POST(request: NextRequest) {
           toleranceSeconds: 300,
         })
       } catch (error) {
-        if (error instanceof InvalidWebhookSignatureError) {
-          logger.error({
-            context: "webhooks/mercadopago",
-            message: "invalid_signature",
-            payment_id: paymentId,
-            reason: error.reason,
-          })
-          return webhookOk({ ignored: true, reason: "invalid_signature" })
-        }
-        throw error
+        console.error("[WEBHOOK ERROR] signature validation:", error)
+        logger.error({
+          context: "webhooks/mercadopago",
+          message: "invalid_signature",
+          payment_id: paymentId,
+          reason:
+            error instanceof InvalidWebhookSignatureError
+              ? error.reason
+              : "signature_error",
+        })
+        // ACK anyway — never 401/502 to Mercado Pago.
+        return webhookOk({ ignored: true, reason: "invalid_signature" })
       }
     }
 
@@ -371,7 +403,7 @@ export async function POST(request: NextRequest) {
       const paymentClient = new Payment(client)
       payment = await paymentClient.get({ id: paymentId })
     } catch (error) {
-      console.error("[MP WEBHOOK] payment.get failed:", error)
+      console.error("[WEBHOOK ERROR] payment.get failed:", error)
       logger.error({
         context: "webhooks/mercadopago",
         message: "payment_fetch_failed",
@@ -392,8 +424,9 @@ export async function POST(request: NextRequest) {
 
     let admin: AdminClient
     try {
-      admin = createAdminClient()
+      admin = createWebhookAdminClient()
     } catch (error) {
+      console.error("[WEBHOOK ERROR] admin client unavailable:", error)
       logger.error({
         context: "webhooks/mercadopago",
         message: "admin_client_unavailable",
@@ -703,13 +736,14 @@ export async function POST(request: NextRequest) {
       })
 
       console.log(
-        `[MP WEBHOOK] Successfully issuing ticket for order: ${orderId} (payment ${mpPaymentId})`,
+        `[MP WEBHOOK] Tickets issued via finalize_paid_order for order=${orderId} payment=${mpPaymentId}`,
       )
 
       if (!finalize.idempotent) {
         try {
           await notifyGobiOrderPaid(admin, orderId)
         } catch (gobiErr) {
+          console.error("[WEBHOOK ERROR] gobi dispatch failed:", gobiErr)
           logger.error({
             context: "webhooks/mercadopago",
             message: "gobi_order_paid_dispatch_failed",
@@ -823,22 +857,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true }, { status: 200 })
     }
 
-    return NextResponse.json(
-      { success: true, data: { status } },
-      { status: 200 },
-    )
+    return webhookOk({ status: status ?? null })
   } catch (error) {
-    console.error("[MP WEBHOOK ERROR]:", error)
+    console.error("[WEBHOOK ERROR]", error)
     logger.error({
       context: "webhooks/mercadopago",
-      message: "unexpected_webhook_error",
+      message: "process_webhook_error",
       error,
     })
-    // ALWAYS 200: evita retries agresivos y 502 percibidos en el panel de MP.
-    return webhookOk({
-      handled: "error_handled",
-      error: error instanceof Error ? error.message : "webhook_error",
-    })
+    return NextResponse.json({ received: true }, { status: 200 })
   }
 }
 
