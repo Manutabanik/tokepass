@@ -79,6 +79,26 @@ export default async function EventDetailPage({
     data: { user },
   } = await supabase.auth.getUser()
 
+  let initialBuyer: {
+    buyerName?: string
+    buyerDni?: string
+    buyerEmail?: string
+  } | null = null
+
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("full_name, dni, email")
+      .eq("id", user.id)
+      .maybeSingle()
+
+    initialBuyer = {
+      buyerName: profile?.full_name ?? "",
+      buyerDni: profile?.dni ?? "",
+      buyerEmail: profile?.email ?? user.email ?? "",
+    }
+  }
+
   let barItems: Awaited<ReturnType<typeof getEventItems>> = []
   try {
     barItems = await getEventItems(event.id)
@@ -198,6 +218,7 @@ export default async function EventDetailPage({
             <TicketSelector
               eventId={event.id}
               currentUserId={user?.id ?? null}
+              initialBuyer={initialBuyer}
               referralCode={referralCode ?? null}
               serviceChargeRate={event.serviceChargeRate}
               scheduleDays={event.scheduleDays}

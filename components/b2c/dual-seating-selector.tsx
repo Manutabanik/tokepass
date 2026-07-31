@@ -17,7 +17,12 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
 import { reserveSeatAtomic } from "@/app/actions/checkout"
+import { CheckoutBuyerFields } from "@/components/public/checkout-buyer-fields"
 import { Button } from "@/components/ui/button"
+import {
+  validateCheckoutBuyer,
+  type CheckoutBuyerInfo,
+} from "@/lib/checkout-buyer"
 import { formatCurrency } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { EventSeatingUnit } from "@/types/venues"
@@ -70,6 +75,7 @@ function compareUnits(a: EventSeatingUnit, b: EventSeatingUnit): number {
 export function DualSeatingSelector({
   eventId,
   currentUserId,
+  buyer: initialBuyer,
   tier,
   units,
   backgroundUrl,
@@ -78,6 +84,7 @@ export function DualSeatingSelector({
 }: {
   eventId: string
   currentUserId: string | null
+  buyer?: CheckoutBuyerInfo | null
   tier: SeatingTier
   units: EventSeatingUnit[]
   backgroundUrl?: string | null
@@ -87,6 +94,11 @@ export function DualSeatingSelector({
   const router = useRouter()
   const [selectedId, setSelectedId] = useState("")
   const [isPending, startTransition] = useTransition()
+  const [buyer, setBuyer] = useState<CheckoutBuyerInfo>({
+    buyerName: initialBuyer?.buyerName ?? "",
+    buyerDni: initialBuyer?.buyerDni ?? "",
+    buyerEmail: initialBuyer?.buyerEmail ?? "",
+  })
   const mapNodes = useRef(new Map<string, SVGGElement>())
   const listNodes = useRef(new Map<string, HTMLButtonElement>())
 
@@ -192,12 +204,19 @@ export function DualSeatingSelector({
       return
     }
 
+    const buyerCheck = validateCheckoutBuyer(buyer)
+    if (!buyerCheck.ok) {
+      toast.error(buyerCheck.error)
+      return
+    }
+
     startTransition(async () => {
       const result = await reserveSeatAtomic(
         eventId,
         selected.id,
         currentUserId,
         referralCode,
+        buyerCheck.buyer,
       )
 
       if (!result.success) {
@@ -554,7 +573,13 @@ export function DualSeatingSelector({
 
       {selected ? (
         <div className="fixed inset-x-0 bottom-0 z-50 border-t border-zinc-800 bg-zinc-950/95 p-4 shadow-[0_-20px_50px_rgba(0,0,0,0.55)] backdrop-blur-xl">
-          <div className="mx-auto flex max-w-7xl flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mx-auto flex max-w-7xl flex-col gap-4">
+            <CheckoutBuyerFields
+              value={buyer}
+              onChange={setBuyer}
+              disabled={isPending}
+            />
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-start gap-3">
               <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-purple-500/15 text-purple-200 ring-1 ring-purple-400/30">
                 <CheckCircle2 className="size-5" aria-hidden="true" />
@@ -601,6 +626,7 @@ export function DualSeatingSelector({
                 <Clock3 className="size-3.5" aria-hidden="true" />
                 Al continuar, se reserva durante 8 minutos.
               </p>
+            </div>
             </div>
           </div>
         </div>

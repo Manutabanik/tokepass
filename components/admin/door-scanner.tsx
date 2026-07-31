@@ -8,9 +8,11 @@ import {
   Download,
   Gift,
   LoaderCircle,
+  Monitor,
   ScanLine,
   Search,
   ShieldAlert,
+  Smartphone,
   Wifi,
   WifiOff,
   XCircle,
@@ -25,6 +27,7 @@ import {
 } from "react"
 
 import { EmergencyTicketSearch } from "@/components/admin/emergency-ticket-search"
+import { TotemValidatorView } from "@/components/admin/totem-validator-view"
 import {
   fetchEventTicketManifest,
   getScannerEvents,
@@ -34,6 +37,11 @@ import {
   type ScanTicketResult,
 } from "@/app/actions/scanner"
 import { logger } from "@/lib/logger"
+import {
+  readScannerAccessMode,
+  writeScannerAccessMode,
+  type ScannerAccessMode,
+} from "@/lib/scanner/access-mode"
 import { configureZxingWasm } from "@/lib/scanner/configure-zxing"
 import { Button } from "@/components/ui/button"
 import {
@@ -44,6 +52,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useOnlineStatus } from "@/components/pwa/use-online-status"
+import { useHardwareSignal } from "@/hooks/use-hardware-signal"
 import {
   clearSyncQueueItems,
   downloadEventManifest,
@@ -143,9 +152,10 @@ function vibrate(kind: "success" | "error" | "warn") {
 }
 
 export function DoorScanner() {
-  configureZxingWasm()
-
   const online = useOnlineStatus()
+  const { sendSignal } = useHardwareSignal()
+  const [accessMode, setAccessMode] = useState<ScannerAccessMode>("guard")
+  const isTotemMode = accessMode === "totem"
   const [events, setEvents] = useState<ScannerEventOption[]>([])
   const [eventId, setEventId] = useState<string>("")
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -162,6 +172,26 @@ export function DoorScanner() {
   const [searchOpen, setSearchOpen] = useState(false)
   const cooldownRef = useRef(false)
   const resetTimerRef = useRef<number | null>(null)
+  const isTotemModeRef = useRef(isTotemMode)
+  isTotemModeRef.current = isTotemMode
+
+  useEffect(() => {
+    setAccessMode(readScannerAccessMode())
+  }, [])
+
+  useEffect(() => {
+    if (isTotemMode) return
+    configureZxingWasm()
+  }, [isTotemMode])
+
+  const setAccessModeAndPersist = useCallback((mode: ScannerAccessMode) => {
+    setAccessMode(mode)
+    writeScannerAccessMode(mode)
+    setCameraError(null)
+    setVisual("idle")
+    setFeedback(null)
+    cooldownRef.current = false
+  }, [])
 
   const selectedEvent = useMemo(
     () => events.find((event) => event.id === eventId) ?? null,
@@ -302,67 +332,91 @@ export function DoorScanner() {
       setVisual("idle")
       setFeedback(null)
       cooldownRef.current = false
+      void sendSignal("LED_OFF")
     }, delayMs)
-  }, [])
+  }, [sendSignal])
 
   const showLocalSuccess = useCallback(
     (ticket: ScannerManifestTicket) => {
       playTone("success")
       vibrate("success")
+      void sendSignal("LED_GREEN")
       setVisual("success")
+      const seating = ticket.seating_label
+        ? `${ticket.seating_label}${ticket.seating_row_label ? ` · ${ticket.seating_row_label}` : ""} · ingreso ${ticket.admissions_used}/${ticket.max_admissions}`
+        : null
       setFeedback({
-        title: "ENTRADA VÁLIDA",
-        subtitle: ticket.seating_label
-          ? `${ticket.seating_label}${ticket.seating_row_label ? ` · ${ticket.seating_row_label}` : ""} · ingreso ${ticket.admissions_used}/${ticket.max_admissions}`
-          : `Bienvenid@ ${ticket.owner_name}`,
+        title: isTotemModeRef.current
+          ? `BIENVENIDO/A ${ticket.owner_name}`
+          : "ENTRADA VÁLIDA",
+        subtitle: seating
+          ? seating
+          : isTotemModeRef.current
+            ? `Ingreso ${ticket.admissions_used}/${ticket.max_admissions}`
+            : `Bienvenid@ ${ticket.owner_name}`,
         bonus: null,
         isFreePass: /freepass|cortes/i.test(ticket.ticket_tier),
       })
-      returnToIdle(1800)
+      returnToIdle(isTotemModeRef.current ? 1500 : 1800)
     },
-    [returnToIdle],
+    [returnToIdle, sendSignal],
   )
 
   const showAlreadyUsed = useCallback(
     (when: string | number | null) => {
       playTone("error")
       vibrate("error")
+      void sendSignal("LED_RED")
       setVisual("error")
       setFeedback({
-        title: "ALERTA: ENTRADA YA USADA",
+        title: isTotemModeRef.current
+          ? "ENTRADA YA UTILIZADA"
+          : "ALERTA: ENTRADA YA USADA",
         subtitle: `a las ${formatScanTime(when)}`,
       })
-      returnToIdle(3200)
+      returnToIdle(isTotemModeRef.current ? 2500 : 3200)
     },
-    [returnToIdle],
+    [returnToIdle, sendSignal],
   )
 
   const showNotFound = useCallback(() => {
     playTone("warn")
     vibrate("warn")
+    void sendSignal("LED_RED")
     setVisual("warn")
     setFeedback({
-      title: "ENTRADA NO ENCONTRADA",
-      subtitle: "No está en el manifiesto local de este evento",
+      title: isTotemModeRef.current
+        ? "CODIGO INVALIDO"
+        : "ENTRADA NO ENCONTRADA",
+      subtitle: isTotemModeRef.current
+        ? "No se reconoce este ticket"
+        : "No está en el manifiesto local de este evento",
     })
-    returnToIdle(2500)
-  }, [returnToIdle])
+    returnToIdle(isTotemModeRef.current ? 2500 : 2500)
+  }, [returnToIdle, sendSignal])
 
   const applyServerResult = useCallback(
     (result: ScanTicketResult) => {
       if (result.success) {
         playTone("success")
         vibrate("success")
+        void sendSignal("LED_GREEN")
         setVisual("success")
+        const owner = result.ticket.ownerLabel?.trim()
         setFeedback({
-          title: "ENTRADA VÁLIDA",
+          title:
+            isTotemModeRef.current && owner
+              ? `BIENVENIDO/A ${owner}`
+              : "ENTRADA VÁLIDA",
           subtitle: `${result.ticket.seatingLabel ? `${result.ticket.seatingLabel}${result.ticket.seatingRowLabel ? ` · ${result.ticket.seatingRowLabel}` : ""} · ` : ""}${result.ticket.tierName}${
-            result.ticket.ownerLabel ? ` · ${result.ticket.ownerLabel}` : ""
+            !isTotemModeRef.current && result.ticket.ownerLabel
+              ? ` · ${result.ticket.ownerLabel}`
+              : ""
           } · ${result.message}`,
           bonus: result.bonus,
           isFreePass: result.ticket.isFreePass,
         })
-        returnToIdle(2000)
+        returnToIdle(isTotemModeRef.current ? 1500 : 2000)
         return
       }
 
@@ -378,6 +432,7 @@ export function DoorScanner() {
 
       playTone("error")
       vibrate("error")
+      void sendSignal("LED_RED")
       setVisual("error")
       setFeedback({
         title:
@@ -389,9 +444,15 @@ export function DoorScanner() {
             ? "Este ticket fue transferido a otro usuario"
             : result.message,
       })
-      returnToIdle(result.status === "transferred" ? 4000 : 3000)
+      returnToIdle(
+        isTotemModeRef.current
+          ? 2500
+          : result.status === "transferred"
+            ? 4000
+            : 3000,
+      )
     },
-    [returnToIdle, showAlreadyUsed, showNotFound],
+    [returnToIdle, sendSignal, showAlreadyUsed, showNotFound],
   )
 
   const validateLocalTicket = useCallback(
@@ -404,24 +465,26 @@ export function DoorScanner() {
       if (ticket.status === "transferred" || ticket.status === "cancelled") {
         playTone("error")
         vibrate("error")
+        void sendSignal("LED_RED")
         setVisual("error")
         setFeedback({
           title: "ENTRADA INVÁLIDA",
           subtitle: `Estado: ${ticket.status}`,
         })
-        returnToIdle(2800)
+        returnToIdle(isTotemModeRef.current ? 2500 : 2800)
         return
       }
 
       if (ticket.status === "pending_payment") {
         playTone("error")
         vibrate("error")
+        void sendSignal("LED_RED")
         setVisual("error")
         setFeedback({
           title: "PAGO PENDIENTE",
           subtitle: "Esta entrada aún no está habilitada",
         })
-        returnToIdle(2800)
+        returnToIdle(isTotemModeRef.current ? 2500 : 2800)
         return
       }
 
@@ -442,19 +505,20 @@ export function DoorScanner() {
     [
       refreshQueueCount,
       returnToIdle,
+      sendSignal,
       showAlreadyUsed,
       showLocalSuccess,
       syncQueueToServer,
     ],
   )
 
-  const handleScan = useCallback(
-    (detectedCodes: IDetectedBarcode[]) => {
+  const validateTicketToken = useCallback(
+    (rawCode: string) => {
       if (!eventId || cooldownRef.current || visual !== "idle") {
         return
       }
 
-      const raw = detectedCodes[0]?.rawValue?.trim()
+      const raw = rawCode.trim()
       if (!raw) return
 
       cooldownRef.current = true
@@ -468,24 +532,26 @@ export function DoorScanner() {
             if (!resolved) {
               playTone("error")
               vibrate("error")
+              void sendSignal("LED_RED")
               setVisual("error")
               setFeedback({
                 title: "QR INVÁLIDO",
                 subtitle: "No se pudo leer el código",
               })
-              returnToIdle(2200)
+              returnToIdle(isTotemModeRef.current ? 2500 : 2200)
               return
             }
 
             if (resolved.expired) {
               playTone("error")
               vibrate("error")
+              void sendSignal("LED_RED")
               setVisual("error")
               setFeedback({
                 title: "QR EXPIRADO",
                 subtitle: "Pedí el Living QR en pantalla (sin captura)",
               })
-              returnToIdle(2500)
+              returnToIdle(isTotemModeRef.current ? 2500 : 2500)
               return
             }
 
@@ -498,12 +564,13 @@ export function DoorScanner() {
                 if (!ok) {
                   playTone("error")
                   vibrate("error")
+                  void sendSignal("LED_RED")
                   setVisual("error")
                   setFeedback({
                     title: "QR INVÁLIDO",
                     subtitle: "Firma criptográfica no válida",
                   })
-                  returnToIdle(2200)
+                  returnToIdle(isTotemModeRef.current ? 2500 : 2200)
                   return
                 }
               } else {
@@ -534,12 +601,13 @@ export function DoorScanner() {
           if (!navigator.onLine) {
             playTone("warn")
             vibrate("warn")
+            void sendSignal("LED_RED")
             setVisual("warn")
             setFeedback({
               title: "SIN MANIFIESTO",
               subtitle: "Descargá el evento con internet antes del show",
             })
-            returnToIdle(3000)
+            returnToIdle(isTotemModeRef.current ? 2500 : 3000)
             return
           }
 
@@ -563,10 +631,20 @@ export function DoorScanner() {
       manifestMeta,
       returnToIdle,
       selectedEvent?.qrType,
+      sendSignal,
       showNotFound,
       validateLocalTicket,
       visual,
     ],
+  )
+
+  const handleScan = useCallback(
+    (detectedCodes: IDetectedBarcode[]) => {
+      const raw = detectedCodes[0]?.rawValue?.trim()
+      if (!raw) return
+      validateTicketToken(raw)
+    },
+    [validateTicketToken],
   )
 
   function handleManualNext() {
@@ -586,29 +664,70 @@ export function DoorScanner() {
         visual === "error" && "bg-red-700",
         visual === "warn" && "bg-amber-500",
         visual === "idle" && "bg-black",
+        isTotemMode && "select-none",
       )}
     >
       {visual === "idle" ? (
         <>
-          <header className="relative z-20 space-y-3 bg-gradient-to-b from-black/90 to-transparent px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))]">
+          <header
+            className={cn(
+              "relative z-20 space-y-3 bg-gradient-to-b from-black/90 to-transparent px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))]",
+              isTotemMode && "from-black via-black/95 to-transparent",
+            )}
+          >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-violet-300">
-                  Zero-Offline Scanner
+                  {isTotemMode ? "Totem / Kiosco" : "Zero-Offline Scanner"}
                 </p>
                 <h1 className="mt-1 text-2xl font-black tracking-tight">
                   Escáner Tokepass
                 </h1>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="shrink-0 border-white/20 bg-white/5 text-white hover:bg-white/10"
-                nativeButton={false}
-                render={<a href="/admin" />}
+              {!isTotemMode ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 border-white/20 bg-white/5 text-white hover:bg-white/10"
+                  nativeButton={false}
+                  render={<a href="/admin" />}
+                >
+                  Salir
+                </Button>
+              ) : null}
+            </div>
+
+            <div
+              className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-white/5 p-1"
+              role="group"
+              aria-label="Modo de acceso"
+            >
+              <button
+                type="button"
+                onClick={() => setAccessModeAndPersist("guard")}
+                className={cn(
+                  "inline-flex h-11 items-center justify-center gap-2 rounded-xl text-xs font-bold transition-colors",
+                  !isTotemMode
+                    ? "bg-violet-600 text-white"
+                    : "text-zinc-400 hover:text-white",
+                )}
               >
-                Salir
-              </Button>
+                <Smartphone className="size-4" aria-hidden="true" />
+                Modo Guardia
+              </button>
+              <button
+                type="button"
+                onClick={() => setAccessModeAndPersist("totem")}
+                className={cn(
+                  "inline-flex h-11 items-center justify-center gap-2 rounded-xl text-xs font-bold transition-colors",
+                  isTotemMode
+                    ? "bg-emerald-600 text-white"
+                    : "text-zinc-400 hover:text-white",
+                )}
+              >
+                <Monitor className="size-4" aria-hidden="true" />
+                Modo Tótem
+              </button>
             </div>
 
             <Select
@@ -665,7 +784,12 @@ export function DoorScanner() {
               ) : null}
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div
+              className={cn(
+                "grid gap-2",
+                isTotemMode ? "grid-cols-2" : "grid-cols-3",
+              )}
+            >
               <Button
                 type="button"
                 disabled={!eventId || !online || isDownloading}
@@ -692,15 +816,17 @@ export function DoorScanner() {
                 )}
                 Sincronizar
               </Button>
-              <Button
-                type="button"
-                disabled={!eventId || !hasLocalManifest}
-                onClick={() => setSearchOpen(true)}
-                className="h-12 rounded-2xl bg-zinc-800 text-xs font-bold text-white hover:bg-zinc-700"
-              >
-                <Search className="size-4" />
-                Buscador
-              </Button>
+              {!isTotemMode ? (
+                <Button
+                  type="button"
+                  disabled={!eventId || !hasLocalManifest}
+                  onClick={() => setSearchOpen(true)}
+                  className="h-12 rounded-2xl bg-zinc-800 text-xs font-bold text-white hover:bg-zinc-700"
+                >
+                  <Search className="size-4" />
+                  Buscador
+                </Button>
+              ) : null}
             </div>
           </header>
 
@@ -714,10 +840,18 @@ export function DoorScanner() {
                 <div>
                   <ScanLine className="mx-auto size-12 text-zinc-500" />
                   <p className="mt-4 text-lg text-zinc-300">
-                    Seleccioná un evento para activar la cámara
+                    Seleccioná un evento para activar{" "}
+                    {isTotemMode ? "el lector HID" : "la cámara"}
                   </p>
                 </div>
               </div>
+            ) : isTotemMode ? (
+              <TotemValidatorView
+                enabled={visual === "idle"}
+                eventTitle={selectedEvent?.title}
+                hasManifest={hasLocalManifest}
+                onScan={validateTicketToken}
+              />
             ) : cameraError ? (
               <div className="grid h-full place-items-center px-6 text-center">
                 <div>
@@ -767,16 +901,18 @@ export function DoorScanner() {
             )}
           </div>
 
-          <EmergencyTicketSearch
-            eventId={eventId}
-            open={searchOpen}
-            onOpenChange={setSearchOpen}
-            onValidate={(ticket) => {
-              setSearchOpen(false)
-              cooldownRef.current = true
-              void validateLocalTicket(ticket)
-            }}
-          />
+          {!isTotemMode ? (
+            <EmergencyTicketSearch
+              eventId={eventId}
+              open={searchOpen}
+              onOpenChange={setSearchOpen}
+              onValidate={(ticket) => {
+                setSearchOpen(false)
+                cooldownRef.current = true
+                void validateLocalTicket(ticket)
+              }}
+            />
+          ) : null}
         </>
       ) : (
         <div className="flex h-full flex-col items-center justify-center px-6 text-center">
@@ -820,14 +956,16 @@ export function DoorScanner() {
             </div>
           ) : null}
 
-          <Button
-            type="button"
-            size="lg"
-            onClick={handleManualNext}
-            className="mt-10 h-14 rounded-full bg-white px-8 text-base font-bold text-black hover:bg-zinc-100"
-          >
-            Escanear siguiente
-          </Button>
+          {!isTotemMode ? (
+            <Button
+              type="button"
+              size="lg"
+              onClick={handleManualNext}
+              className="mt-10 h-14 rounded-full bg-white px-8 text-base font-bold text-black hover:bg-zinc-100"
+            >
+              Escanear siguiente
+            </Button>
+          ) : null}
         </div>
       )}
     </div>

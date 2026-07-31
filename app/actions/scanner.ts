@@ -515,16 +515,33 @@ export async function fetchEventTicketManifest(
     throw new Error("Evento no encontrado")
   }
 
-  const { data, error } = await supabase
+  let data:
+    | Array<Record<string, unknown>>
+    | null = null
+
+  const withHolder = await supabase
     .from("tickets")
     .select(
-      "id, event_id, totp_secret, status, scanned_at, owner_id, max_admissions, admissions_used, event_seating_units(label, sector_name, row_label), ticket_tiers(name)",
+      "id, event_id, totp_secret, status, scanned_at, owner_id, max_admissions, admissions_used, holder_name, holder_dni, holder_email, event_seating_units(label, sector_name, row_label), ticket_tiers(name)",
     )
     .eq("event_id", eventId)
     .in("status", ["valid", "used", "scanned"])
 
-  if (error) {
-    throw new Error(error.message)
+  if (withHolder.error) {
+    const fallback = await supabase
+      .from("tickets")
+      .select(
+        "id, event_id, totp_secret, status, scanned_at, owner_id, max_admissions, admissions_used, event_seating_units(label, sector_name, row_label), ticket_tiers(name)",
+      )
+      .eq("event_id", eventId)
+      .in("status", ["valid", "used", "scanned"])
+
+    if (fallback.error) {
+      throw new Error(fallback.error.message)
+    }
+    data = fallback.data as Array<Record<string, unknown>> | null
+  } else {
+    data = withHolder.data as Array<Record<string, unknown>> | null
   }
 
   type Row = {
@@ -534,6 +551,9 @@ export async function fetchEventTicketManifest(
     status: EventTicketManifestPayload["tickets"][number]["status"]
     scanned_at: string | null
     owner_id: string | null
+    holder_name?: string | null
+    holder_dni?: string | null
+    holder_email?: string | null
     ticket_tiers: { name: string } | null
     max_admissions: number
     admissions_used: number
@@ -595,8 +615,12 @@ export async function fetchEventTicketManifest(
       event_id: row.event_id,
       totp_secret: row.totp_secret,
       status: row.status,
-      owner_name: owner?.full_name?.trim() || owner?.email || "Sin nombre",
-      dni: owner?.dni ?? null,
+      owner_name:
+        row.holder_name?.trim() ||
+        owner?.full_name?.trim() ||
+        owner?.email ||
+        "Sin nombre",
+      dni: row.holder_dni ?? owner?.dni ?? null,
       ticket_tier: row.ticket_tiers?.name ?? "Entrada",
       scanned_at: row.scanned_at,
       scanned_at_local: row.scanned_at

@@ -4,6 +4,11 @@ import { revalidatePath } from "next/cache"
 
 import { createPaymentPreference } from "@/app/actions/payments"
 import { MAX_TICKETS_PER_PURCHASE } from "@/lib/checkout-limits"
+import {
+  validateCheckoutBuyer,
+  type CheckoutBuyerInfo,
+  type NormalizedCheckoutBuyer,
+} from "@/lib/checkout-buyer"
 import { logger } from "@/lib/logger"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
@@ -84,6 +89,40 @@ async function cleanupPendingOrder(orderId: string): Promise<void> {
   }
 }
 
+async function applyHolderIdentityToOrder(input: {
+  orderId: string
+  buyer: NormalizedCheckoutBuyer
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from("tickets")
+    .update({
+      holder_name: input.buyer.buyerName,
+      holder_dni: input.buyer.buyerDni,
+      holder_email: input.buyer.buyerEmail,
+    })
+    .eq("order_id", input.orderId)
+
+  if (error) {
+    logger.error({
+      context: "checkout/holder",
+      message: "holder_persist_failed",
+      orderId: input.orderId,
+      error: error.message,
+    })
+    // Columnas ausentes (migración P23 no aplicada): no bloquear el pago.
+    if (/holder_/i.test(error.message) || /column/i.test(error.message)) {
+      return { ok: true }
+    }
+    return {
+      ok: false,
+      error: "No se pudieron guardar los datos del asistente.",
+    }
+  }
+
+  return { ok: true }
+}
+
 /**
  * Reserva tickets → crea orden pending → preferencia MP → URL de pago.
  * Si Mercado Pago falla, hace rollback de la reserva.
@@ -109,6 +148,7 @@ export async function reserveSeatAtomic(
   seatId: string,
   userId: string,
   referralCode?: string | null,
+  buyer?: CheckoutBuyerInfo | null,
 ): Promise<CheckoutResult> {
   const cleanEventId = eventId.trim()
   const cleanSeatId = seatId.trim()
@@ -148,6 +188,8 @@ export async function reserveSeatAtomic(
     cleanEventId,
     [{ tierId: unit.tier_id, quantity: 1, seatingUnitId: unit.id }],
     referralCode,
+    [],
+    buyer,
   )
 
   if (!result.success && result.error === "out_of_stock") {
@@ -162,10 +204,17 @@ export async function startCheckoutWithPayment(
   items: CheckoutCartItem[],
   referralCode?: string | null,
   addons: CheckoutAddonItem[] = [],
+  buyerInfo?: CheckoutBuyerInfo | null,
 ): Promise<CheckoutResult> {
   if (!eventId || items.length === 0) {
     return { success: false, error: "Datos de compra incompletos." }
   }
+
+  const buyerValidation = validateCheckoutBuyer(buyerInfo)
+  if (!buyerValidation.ok) {
+    return { success: false, error: buyerValidation.error }
+  }
+  const buyer = buyerValidation.buyer
 
   const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0)
 
@@ -222,6 +271,15 @@ export async function startCheckoutWithPayment(
     return { success: false, error: "auth_required" }
   }
 
+  await supabase
+    .from("profiles")
+    .update({
+      full_name: buyer.buyerName,
+      dni: buyer.buyerDni,
+      email: buyer.buyerEmail,
+    })
+    .eq("id", user.id)
+
   // Nunca confiar en promoter_id del cliente: solo resolver ?ref=CODE en servidor.
   let promoterId: string | null = null
   const cleanRef = referralCode?.trim()
@@ -244,6 +302,16 @@ export async function startCheckoutWithPayment(
   let pendingOrderId: string | null = null
 
   try {
+    // Libera holds pending abandonados del comprador (si la migración P22 está aplicada).
+    try {
+      await supabase.rpc("expire_buyer_pending_event_orders", {
+        p_owner_id: user.id,
+        p_event_id: eventId,
+      })
+    } catch {
+      // RPC ausente en entornos sin P22 todavía — reserve_tickets_tx cubre el caso.
+    }
+
     const seatingItem = seatingItems[0]
     const reservation = seatingItem?.seatingUnitId
       ? await supabase.rpc("reserve_seating_unit_tx", {
@@ -298,6 +366,15 @@ export async function startCheckoutWithPayment(
     const reservedTickets: ReservedTicket[] = rows.map((row) => ({
       ticket_id: row.ticket_id,
     }))
+
+    const holderApplied = await applyHolderIdentityToOrder({
+      orderId,
+      buyer,
+    })
+    if (!holderApplied.ok) {
+      await cleanupPendingOrder(orderId)
+      return { success: false, error: holderApplied.error }
+    }
 
     if (addons.length > 0) {
       const { error: addonsError } = await supabase.rpc(
@@ -428,4 +505,45 @@ export async function startCheckoutWithPayment(
       error: "Error inesperado durante el checkout. Intentá nuevamente.",
     }
   }
+}
+
+export type CreateCheckoutPreferenceInput = {
+  eventId: string
+  ticketTypeId: string
+  quantity: number
+  /** Ignorado: el precio lo congela el servidor (All-In). */
+  unitPrice?: number
+  buyerEmail?: string | null
+  buyerName?: string | null
+  buyerDni?: string | null
+  referralCode?: string | null
+}
+
+/**
+ * Facade pedida por Checkout Preference API.
+ * Internamente: reserva atómica → `createPaymentPreference(orderId)` → initPoint.
+ * No confía en `unitPrice` del cliente.
+ */
+export async function createCheckoutPreference(
+  input: CreateCheckoutPreferenceInput,
+): Promise<CheckoutResult> {
+  const eventId = input.eventId?.trim()
+  const ticketTypeId = input.ticketTypeId?.trim()
+  const quantity = input.quantity
+
+  if (!eventId || !ticketTypeId) {
+    return { success: false, error: "Datos de compra incompletos." }
+  }
+
+  return startCheckoutWithPayment(
+    eventId,
+    [{ tierId: ticketTypeId, quantity }],
+    input.referralCode,
+    [],
+    {
+      buyerName: input.buyerName ?? "",
+      buyerDni: input.buyerDni ?? "",
+      buyerEmail: input.buyerEmail ?? "",
+    },
+  )
 }

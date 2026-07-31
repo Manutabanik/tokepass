@@ -191,6 +191,10 @@ export type Ticket = {
   scanned_at: string | null
   validated_at: string | null
   validated_by: string | null
+  /** Asistente declarado en checkout (lookup de puerta). */
+  holder_name: string | null
+  holder_dni: string | null
+  holder_email: string | null
   created_at: string
   updated_at: string
 }
@@ -492,6 +496,9 @@ type TicketInsert = Omit<
   | "scanned_at"
   | "validated_at"
   | "validated_by"
+  | "holder_name"
+  | "holder_dni"
+  | "holder_email"
   | "created_at"
   | "updated_at"
 > & {
@@ -510,6 +517,9 @@ type TicketInsert = Omit<
   scanned_at?: string | null
   validated_at?: string | null
   validated_by?: string | null
+  holder_name?: string | null
+  holder_dni?: string | null
+  holder_email?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -861,6 +871,20 @@ export type Database = {
     }
     Views: Record<string, never>
     Functions: {
+      expire_buyer_pending_event_orders: {
+        Args: {
+          p_owner_id: string
+          p_event_id: string
+        }
+        Returns: number
+      }
+      count_user_event_tickets_for_limit: {
+        Args: {
+          p_event_id: string
+          p_owner_id: string
+        }
+        Returns: number
+      }
       reserve_tickets_tx: {
         Args: {
           p_event_id: string

@@ -5,24 +5,37 @@ const enforce =
 if (!enforce) process.exit(0)
 
 const errors = []
-const required = [
-  "NEXT_PUBLIC_SUPABASE_URL",
-  "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-  "SUPABASE_SERVICE_ROLE_KEY",
-  "NEXT_PUBLIC_SITE_URL",
-  "MERCADOPAGO_ACCESS_TOKEN",
-  "MERCADOPAGO_WEBHOOK_SECRET",
-  "CRON_SECRET",
+
+function firstConfigured(...names) {
+  for (const name of names) {
+    const value = process.env[name]?.trim()
+    if (value && !/your-|xxxxxxxxx|example/i.test(value)) return { name, value }
+  }
+  return null
+}
+
+const requiredGroups = [
+  ["NEXT_PUBLIC_SUPABASE_URL"],
+  ["NEXT_PUBLIC_SUPABASE_ANON_KEY"],
+  ["SUPABASE_SERVICE_ROLE_KEY"],
+  ["NEXT_PUBLIC_SITE_URL", "NEXT_PUBLIC_BASE_URL"],
+  ["MERCADOPAGO_ACCESS_TOKEN", "MP_ACCESS_TOKEN"],
+  ["MERCADOPAGO_WEBHOOK_SECRET", "MP_WEBHOOK_SECRET"],
+  ["CRON_SECRET"],
 ]
 
-for (const name of required) {
-  const value = process.env[name]?.trim()
-  if (!value || /your-|xxxxxxxxx|example/i.test(value)) {
-    errors.push(`${name} no está configurada`)
+for (const group of requiredGroups) {
+  const found = firstConfigured(...group)
+  if (!found) {
+    errors.push(
+      group.length === 1
+        ? `${group[0]} no está configurada`
+        : `${group.join(" o ")} no está configurada`,
+    )
   }
 }
 
-for (const name of ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SITE_URL"]) {
+for (const name of ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SITE_URL", "NEXT_PUBLIC_BASE_URL"]) {
   const value = process.env[name]?.trim()
   if (!value) continue
 
@@ -30,7 +43,7 @@ for (const name of ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SITE_URL"]) {
     const url = new URL(value)
     if (url.protocol !== "https:") errors.push(`${name} debe usar HTTPS`)
     if (
-      name === "NEXT_PUBLIC_SITE_URL" &&
+      (name === "NEXT_PUBLIC_SITE_URL" || name === "NEXT_PUBLIC_BASE_URL") &&
       (url.pathname !== "/" ||
         url.search ||
         url.hash ||
@@ -43,15 +56,15 @@ for (const name of ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SITE_URL"]) {
   }
 }
 
-for (const name of [
-  "SUPABASE_SERVICE_ROLE_KEY",
-  "MERCADOPAGO_ACCESS_TOKEN",
-  "MERCADOPAGO_WEBHOOK_SECRET",
-  "CRON_SECRET",
+for (const group of [
+  ["SUPABASE_SERVICE_ROLE_KEY"],
+  ["MERCADOPAGO_ACCESS_TOKEN", "MP_ACCESS_TOKEN"],
+  ["MERCADOPAGO_WEBHOOK_SECRET", "MP_WEBHOOK_SECRET"],
+  ["CRON_SECRET"],
 ]) {
-  const value = process.env[name]?.trim()
-  if (value && value.length < 24) {
-    errors.push(`${name} es demasiado corta`)
+  const found = firstConfigured(...group)
+  if (found && found.value.length < 24) {
+    errors.push(`${found.name} es demasiado corta`)
   }
 }
 

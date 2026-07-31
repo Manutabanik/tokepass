@@ -7,8 +7,9 @@ import {
 import { NextResponse, type NextRequest } from "next/server"
 
 import { getBoostPlan, parseBoostExternalRef } from "@/lib/boost-plans"
+import { parsePaymentExternalReference } from "@/lib/checkout-buyer"
 import { logger } from "@/lib/logger"
-import { getMercadoPagoClient } from "@/lib/mercadopago"
+import { getMercadoPagoClient, getMercadoPagoWebhookSecret } from "@/lib/mercadopago"
 import { notifyGobiOrderPaid } from "@/lib/services/notify-gobi-order-paid"
 import { createAdminClient } from "@/lib/supabase/admin"
 import type { Json } from "@/types/database"
@@ -313,7 +314,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET?.trim()
+    const secret = getMercadoPagoWebhookSecret()
     if (!secret) {
       logger.error({
         context: "webhooks/mercadopago",
@@ -393,7 +394,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, data: result }, { status: 200 })
     }
 
-    const orderId = externalReference
+    const parsedRef = parsePaymentExternalReference(externalReference)
+    const orderId =
+      parsedRef.orderId ??
+      (externalReference.match(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+      )
+        ? externalReference
+        : null)
+
+    if (!orderId) {
+      return NextResponse.json(
+        {
+          success: true,
+          data: { ignored: true, reason: "unrecognized_external_reference" },
+        },
+        { status: 200 },
+      )
+    }
 
     const { data: order } = await admin
       .from("orders")

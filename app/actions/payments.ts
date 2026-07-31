@@ -3,8 +3,20 @@
 import { Preference } from "mercadopago"
 
 import { logger } from "@/lib/logger"
+import {
+  buildPaymentExternalReference,
+  normalizeCheckoutBuyer,
+} from "@/lib/checkout-buyer"
+import {
+  getMercadoPagoClient,
+  getSiteUrl,
+  resolveCheckoutInitPoint,
+} from "@/lib/mercadopago"
+import {
+  buildCheckoutBackUrls,
+  buildPreferencePayer,
+} from "@/lib/payments/mercadopago"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { getMercadoPagoClient, getSiteUrl } from "@/lib/mercadopago"
 import { createClient } from "@/lib/supabase/server"
 
 export type CreatePreferenceResult =
@@ -144,6 +156,27 @@ export async function createPaymentPreference(
     }
   }
 
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name, dni, email")
+    .eq("id", user.id)
+    .maybeSingle()
+
+  const { data: holderTicket } = await supabase
+    .from("tickets")
+    .select("holder_name, holder_dni, holder_email")
+    .eq("order_id", orderId)
+    .limit(1)
+    .maybeSingle()
+
+  const buyer = normalizeCheckoutBuyer({
+    buyerName:
+      holderTicket?.holder_name ?? profile?.full_name ?? "",
+    buyerDni: holderTicket?.holder_dni ?? profile?.dni ?? "",
+    buyerEmail:
+      holderTicket?.holder_email ?? profile?.email ?? user.email ?? "",
+  })
+
   const preferenceItems: Array<{
     id: string
     title: string
@@ -160,8 +193,17 @@ export async function createPaymentPreference(
     },
   ]
 
-  const siteUrl = getSiteUrl()
-  const notificationUrl = `${siteUrl}/api/webhooks/mercadopago`
+  const urls = buildCheckoutBackUrls(getSiteUrl(), orderId)
+  const payer = buildPreferencePayer({
+    email: buyer?.buyerEmail ?? profile?.email ?? user.email,
+    fullName: buyer?.buyerName ?? profile?.full_name,
+    dni: buyer?.buyerDni ?? profile?.dni,
+  })
+  const externalReference = buildPaymentExternalReference({
+    orderId,
+    userId: user.id,
+    buyer,
+  })
 
   try {
     const client = getMercadoPagoClient()
@@ -170,15 +212,16 @@ export async function createPaymentPreference(
     const created = await preference.create({
       body: {
         items: preferenceItems,
-        external_reference: orderId,
+        ...(payer ? { payer } : {}),
+        external_reference: externalReference,
         statement_descriptor: "TOKEPASS",
         back_urls: {
-          success: `${siteUrl}/checkout/success?order_id=${orderId}`,
-          failure: `${siteUrl}/checkout/failure?order_id=${orderId}`,
-          pending: `${siteUrl}/checkout/pending?order_id=${orderId}`,
+          success: urls.success,
+          failure: urls.failure,
+          pending: urls.pending,
         },
         auto_return: "approved",
-        notification_url: notificationUrl,
+        notification_url: urls.notificationUrl,
         ...(checkoutExpiresAt !== null
           ? {
               expires: true,
@@ -188,6 +231,9 @@ export async function createPaymentPreference(
         metadata: {
           order_id: orderId,
           buyer_id: user.id,
+          buyer_name: buyer?.buyerName ?? null,
+          buyer_dni: buyer?.buyerDni ?? null,
+          buyer_email: buyer?.buyerEmail ?? null,
           subtotal: order.subtotal,
           service_charge: order.service_charge,
           total_amount: order.total_amount,
@@ -196,7 +242,7 @@ export async function createPaymentPreference(
       },
     })
 
-    const initPoint = created.init_point ?? created.sandbox_init_point
+    const initPoint = resolveCheckoutInitPoint(created)
     const preferenceId = created.id
 
     if (!initPoint || !preferenceId) {

@@ -16,8 +16,13 @@ import { toast } from "sonner"
 import { startCheckoutWithPayment } from "@/app/actions/checkout"
 import type { EventItem } from "@/app/actions/addons"
 import { DualSeatingSelector } from "@/components/b2c/dual-seating-selector"
+import { CheckoutBuyerFields } from "@/components/public/checkout-buyer-fields"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import {
+  validateCheckoutBuyer,
+  type CheckoutBuyerInfo,
+} from "@/lib/checkout-buyer"
 import { MAX_TICKETS_PER_PURCHASE } from "@/lib/checkout-limits"
 import { isFullPassDayId } from "@/lib/event-schedule"
 import { formatCurrency, formatEventDay } from "@/lib/format"
@@ -42,6 +47,7 @@ type DayFilter = "all" | "passes" | string
 type TicketSelectorProps = {
   eventId: string
   currentUserId?: string | null
+  initialBuyer?: Partial<CheckoutBuyerInfo> | null
   tiers: TicketSelectorTier[]
   scheduleDays?: ScheduleDay[]
   barItems?: EventItem[]
@@ -63,6 +69,7 @@ function roundMoney(value: number): number {
 export function TicketSelector({
   eventId,
   currentUserId = null,
+  initialBuyer = null,
   tiers,
   scheduleDays = [],
   barItems = [],
@@ -76,6 +83,11 @@ export function TicketSelector({
   const [activeSeatingTierId, setActiveSeatingTierId] = useState<string | null>(
     null,
   )
+  const [buyer, setBuyer] = useState<CheckoutBuyerInfo>({
+    buyerName: initialBuyer?.buyerName ?? "",
+    buyerDni: initialBuyer?.buyerDni ?? "",
+    buyerEmail: initialBuyer?.buyerEmail ?? "",
+  })
   const [quantities, setQuantities] = useState<Record<string, number>>(() =>
     Object.fromEntries(tiers.map((tier) => [tier.id, 0])),
   )
@@ -197,6 +209,12 @@ export function TicketSelector({
   function handleReserve() {
     if (selection.length === 0 || isPending) return
 
+    const buyerCheck = validateCheckoutBuyer(buyer)
+    if (!buyerCheck.ok) {
+      toast.error(buyerCheck.error)
+      return
+    }
+
     startTransition(async () => {
       const result = await startCheckoutWithPayment(
         eventId,
@@ -209,6 +227,7 @@ export function TicketSelector({
           itemId: item.id,
           quantity: item.quantity,
         })),
+        buyerCheck.buyer,
       )
 
       if (!result.success) {
@@ -240,6 +259,7 @@ export function TicketSelector({
       <DualSeatingSelector
         eventId={eventId}
         currentUserId={currentUserId}
+        buyer={buyer}
         tier={{
           id: activeSeatingTier.id,
           name: activeSeatingTier.name,
@@ -408,7 +428,14 @@ export function TicketSelector({
                 <Button
                   type="button"
                   disabled={soldOut}
-                  onClick={() => setActiveSeatingTierId(tier.id)}
+                  onClick={() => {
+                    const buyerCheck = validateCheckoutBuyer(buyer)
+                    if (!buyerCheck.ok) {
+                      toast.error(buyerCheck.error)
+                      return
+                    }
+                    setActiveSeatingTierId(tier.id)
+                  }}
                   className="mt-4 h-12 w-full rounded-xl bg-emerald-500 font-bold text-zinc-950 hover:bg-emerald-400"
                 >
                   <Armchair className="size-4" aria-hidden="true" />
@@ -528,6 +555,14 @@ export function TicketSelector({
           </div>
         </>
       ) : null}
+
+      <Separator className="my-5 bg-zinc-800" />
+
+      <CheckoutBuyerFields
+        value={buyer}
+        onChange={setBuyer}
+        disabled={isPending}
+      />
 
       <Separator className="my-5 bg-zinc-800" />
 
