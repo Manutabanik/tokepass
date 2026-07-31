@@ -9,7 +9,9 @@ import {
 } from "@/lib/checkout-buyer"
 import {
   getMercadoPagoClient,
+  getMercadoPagoSandboxBuyerEmail,
   getSiteUrl,
+  isMercadoPagoSandboxMode,
   resolveCheckoutInitPoint,
 } from "@/lib/mercadopago"
 import {
@@ -194,10 +196,13 @@ export async function createPaymentPreference(
   ]
 
   const urls = buildCheckoutBackUrls(getSiteUrl(), orderId)
+  const sandboxMode = isMercadoPagoSandboxMode()
   const payer = buildPreferencePayer({
     email: buyer?.buyerEmail ?? profile?.email ?? user.email,
     fullName: buyer?.buyerName ?? profile?.full_name,
     dni: buyer?.buyerDni ?? profile?.dni,
+    sandboxMode,
+    sandboxBuyerEmail: getMercadoPagoSandboxBuyerEmail(),
   })
   const externalReference = buildPaymentExternalReference({
     orderId,
@@ -238,6 +243,7 @@ export async function createPaymentPreference(
           service_charge: order.service_charge,
           total_amount: order.total_amount,
           frozen_pricing: true,
+          sandbox_mode: sandboxMode,
         },
       },
     })
@@ -251,6 +257,18 @@ export async function createPaymentPreference(
         error: "Mercado Pago no devolvió una URL de checkout.",
       }
     }
+
+    // Temporary sandbox verification log (requested for local testing).
+    console.log("Redirecting to:", initPoint)
+    logger.info({
+      context: "payments/preference",
+      message: "checkout_redirect_url",
+      orderId,
+      sandboxMode,
+      redirectUrl: initPoint,
+      hasSandboxInitPoint: Boolean(created.sandbox_init_point),
+      hasInitPoint: Boolean(created.init_point),
+    })
 
     const admin = createAdminClient()
     const { data: updatedOrder, error: updateError } = await admin

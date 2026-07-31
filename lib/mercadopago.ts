@@ -43,6 +43,22 @@ export function isMercadoPagoSandboxToken(accessToken?: string): boolean {
   return token.startsWith("TEST-")
 }
 
+/** Sandbox de prueba: token TEST- o entorno local/preview (no production). */
+export function isMercadoPagoSandboxMode(accessToken?: string): boolean {
+  if (isMercadoPagoSandboxToken(accessToken)) return true
+  if (process.env.MP_FORCE_SANDBOX === "1") return true
+  if (process.env.VERCEL_ENV === "production") return false
+  return process.env.NODE_ENV !== "production"
+}
+
+export function getMercadoPagoSandboxBuyerEmail(): string | null {
+  const email =
+    process.env.MP_SANDBOX_BUYER_EMAIL?.trim() ||
+    process.env.MERCADOPAGO_SANDBOX_BUYER_EMAIL?.trim() ||
+    ""
+  return email || null
+}
+
 export function getMercadoPagoClient() {
   return new MercadoPagoConfig({
     accessToken: getMercadoPagoAccessToken(),
@@ -97,12 +113,15 @@ export function getSiteUrl() {
   return "http://localhost:3000"
 }
 
-/** Preferencia sandbox si el access token es TEST-; si no, init_point productivo. */
+/**
+ * En modo sandbox prioriza `sandbox_init_point`.
+ * En producción usa `init_point` (con fallback a sandbox si falta).
+ */
 export function resolveCheckoutInitPoint(created: {
   init_point?: string | null
   sandbox_init_point?: string | null
 }): string | null {
-  if (isMercadoPagoSandboxToken()) {
+  if (isMercadoPagoSandboxMode()) {
     return created.sandbox_init_point ?? created.init_point ?? null
   }
   return created.init_point ?? created.sandbox_init_point ?? null
