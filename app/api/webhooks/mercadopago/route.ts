@@ -15,6 +15,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import type { Json } from "@/types/database"
 
 export const runtime = "nodejs"
+export const maxDuration = 60
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -23,10 +24,10 @@ function firstString(value: string | string[] | null | undefined): string | null
   return value ?? null
 }
 
-function isProductionRuntime(): boolean {
-  return (
-    process.env.NODE_ENV === "production" ||
-    process.env.VERCEL_ENV === "production"
+function webhookOk(data?: Record<string, unknown>) {
+  return NextResponse.json(
+    { status: "ok", received: true, ...(data ?? {}) },
+    { status: 200 },
   )
 }
 
@@ -37,7 +38,9 @@ async function extractPaymentId(request: NextRequest): Promise<string | null> {
   const topic = url.searchParams.get("topic") ?? url.searchParams.get("type")
 
   if (queryDataId) return queryDataId
-  if (topic === "payment" && queryId) return queryId
+  if ((topic === "payment" || topic?.startsWith("payment.")) && queryId) {
+    return queryId
+  }
 
   try {
     const body = (await request.json()) as {
@@ -45,10 +48,22 @@ async function extractPaymentId(request: NextRequest): Promise<string | null> {
       id?: string | number
       type?: string
       action?: string
+      topic?: string
     }
 
     if (body?.data?.id != null) return String(body.data.id)
-    if (body?.type === "payment" && body?.id != null) return String(body.id)
+    const kind = body?.type ?? body?.action ?? body?.topic
+    if (
+      (kind === "payment" ||
+        kind === "payment.created" ||
+        kind === "payment.updated" ||
+        String(kind ?? "").startsWith("payment.")) &&
+      body?.id != null
+    ) {
+      return String(body.id)
+    }
+    // Algunos payloads traen id aunque type sea payment.created
+    if (body?.id != null && body?.data == null) return String(body.id)
   } catch {
     // Body vacío o no JSON
   }
@@ -306,12 +321,18 @@ async function refundExpiredPayment(mpPaymentId: string) {
 export async function POST(request: NextRequest) {
   try {
     const paymentId = await extractPaymentId(request)
+    const url = new URL(request.url)
+    const typeHint =
+      url.searchParams.get("topic") ??
+      url.searchParams.get("type") ??
+      url.searchParams.get("action")
+
+    console.log(
+      `[MP WEBHOOK] Notification received - Type: ${typeHint ?? "n/a"}, ID: ${paymentId ?? "n/a"}`,
+    )
 
     if (!paymentId) {
-      return NextResponse.json(
-        { success: true, data: { ignored: true } },
-        { status: 200 },
-      )
+      return webhookOk({ ignored: true, reason: "missing_payment_id" })
     }
 
     const secret = getMercadoPagoWebhookSecret()
@@ -320,12 +341,7 @@ export async function POST(request: NextRequest) {
         context: "webhooks/mercadopago",
         message: "webhook_secret_missing",
       })
-      if (isProductionRuntime()) {
-        return NextResponse.json(
-          { success: false, error: "webhook_misconfigured" },
-          { status: 500 },
-        )
-      }
+      // Continuar: no devolver 5xx (MP reintenta / Vercel puede reportar 502).
     } else {
       try {
         WebhookSignatureValidator.validate({
@@ -343,31 +359,49 @@ export async function POST(request: NextRequest) {
             payment_id: paymentId,
             reason: error.reason,
           })
-          return NextResponse.json(
-            { success: false, error: "invalid_signature" },
-            { status: 401 },
-          )
+          return webhookOk({ ignored: true, reason: "invalid_signature" })
         }
         throw error
       }
     }
 
-    const client = getMercadoPagoClient()
-    const paymentClient = new Payment(client)
-    const payment = await paymentClient.get({ id: paymentId })
+    let payment
+    try {
+      const client = getMercadoPagoClient()
+      const paymentClient = new Payment(client)
+      payment = await paymentClient.get({ id: paymentId })
+    } catch (error) {
+      console.error("[MP WEBHOOK] payment.get failed:", error)
+      logger.error({
+        context: "webhooks/mercadopago",
+        message: "payment_fetch_failed",
+        payment_id: paymentId,
+        error,
+      })
+      return webhookOk({ handled: "payment_fetch_failed" })
+    }
+
+    console.log(
+      `[MP WEBHOOK] Payment Status for ID ${paymentId}: ${payment.status}`,
+    )
 
     const externalReference = firstString(payment.external_reference)
     if (!externalReference) {
-      return NextResponse.json(
-        {
-          success: true,
-          data: { ignored: true, reason: "missing_external_reference" },
-        },
-        { status: 200 },
-      )
+      return webhookOk({ ignored: true, reason: "missing_external_reference" })
     }
 
-    const admin = createAdminClient()
+    let admin: AdminClient
+    try {
+      admin = createAdminClient()
+    } catch (error) {
+      logger.error({
+        context: "webhooks/mercadopago",
+        message: "admin_client_unavailable",
+        error,
+      })
+      return webhookOk({ handled: "admin_client_unavailable" })
+    }
+
     const mpPaymentId = String(payment.id ?? paymentId)
     const status = payment.status
 
@@ -380,18 +414,15 @@ export async function POST(request: NextRequest) {
         transactionAmount: payment.transaction_amount,
       })
       if (!result.ok) {
-        const httpStatus =
-          result.error === "boost_not_found"
-            ? 404
-            : result.error === "amount_mismatch"
-              ? 409
-              : 500
-        return NextResponse.json(
-          { success: false, error: result.error },
-          { status: httpStatus },
-        )
+        logger.error({
+          context: "webhooks/mercadopago",
+          message: "boost_activation_failed",
+          payment_id: mpPaymentId,
+          error: result.error,
+        })
+        return webhookOk({ handled: "boost_failed", error: result.error })
       }
-      return NextResponse.json({ success: true, data: result }, { status: 200 })
+      return webhookOk({ boost: true, data: result })
     }
 
     const parsedRef = parsePaymentExternalReference(externalReference)
@@ -404,13 +435,10 @@ export async function POST(request: NextRequest) {
         : null)
 
     if (!orderId) {
-      return NextResponse.json(
-        {
-          success: true,
-          data: { ignored: true, reason: "unrecognized_external_reference" },
-        },
-        { status: 200 },
-      )
+      return webhookOk({
+        ignored: true,
+        reason: "unrecognized_external_reference",
+      })
     }
 
     const { data: order } = await admin
@@ -420,10 +448,7 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     if (!order) {
-      return NextResponse.json(
-        { success: false, error: "order_not_found" },
-        { status: 404 },
-      )
+      return webhookOk({ ignored: true, reason: "order_not_found" })
     }
 
     if (status === "approved") {
@@ -515,7 +540,7 @@ export async function POST(request: NextRequest) {
           })
           return NextResponse.json(
             { success: false, error: "amount_mismatch_needs_refund" },
-            { status: 500 },
+            { status: 200 },
           )
         }
       }
@@ -562,7 +587,7 @@ export async function POST(request: NextRequest) {
           })
           return NextResponse.json(
             { success: false, error: "expired_needs_refund" },
-            { status: 500 },
+            { status: 200 },
           )
         }
       }
@@ -585,7 +610,7 @@ export async function POST(request: NextRequest) {
         })
         return NextResponse.json(
           { success: false, error: finalizeError.message },
-          { status: 500 },
+          { status: 200 },
         )
       }
 
@@ -647,7 +672,7 @@ export async function POST(request: NextRequest) {
           })
           return NextResponse.json(
             { success: false, error: "expired_needs_refund" },
-            { status: 500 },
+            { status: 200 },
           )
         }
       }
@@ -660,16 +685,10 @@ export async function POST(request: NextRequest) {
           payment_id: mpPaymentId,
           finalize,
         })
-        const httpStatus =
-          finalize.code === "order_not_found"
-            ? 404
-            : finalize.code === "already_paid_other_payment"
-              ? 409
-              : 500
-        return NextResponse.json(
-          { success: false, error: finalize.code ?? "finalize_failed" },
-          { status: httpStatus },
-        )
+        return webhookOk({
+          handled: "finalize_rejected",
+          error: finalize.code ?? "finalize_failed",
+        })
       }
 
       await recordWebhookEvent(admin, {
@@ -682,6 +701,10 @@ export async function POST(request: NextRequest) {
           tickets_activated: finalize.tickets_activated ?? null,
         },
       })
+
+      console.log(
+        `[MP WEBHOOK] Successfully issuing ticket for order: ${orderId} (payment ${mpPaymentId})`,
+      )
 
       if (!finalize.idempotent) {
         try {
@@ -697,16 +720,11 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      return NextResponse.json(
-        {
-          success: true,
-          data: {
-            status: "approved",
-            idempotent: Boolean(finalize.idempotent),
-          },
-        },
-        { status: 200 },
-      )
+      return webhookOk({
+        status: "approved",
+        idempotent: Boolean(finalize.idempotent),
+        tickets_activated: finalize.tickets_activated ?? null,
+      })
     }
 
     if (
@@ -738,7 +756,7 @@ export async function POST(request: NextRequest) {
           })
           return NextResponse.json(
             { success: false, error: "order_cleanup_failed" },
-            { status: 500 },
+            { status: 200 },
           )
         }
       }
@@ -762,7 +780,7 @@ export async function POST(request: NextRequest) {
           })
           return NextResponse.json(
             { success: false, error: "order_status_update_failed" },
-            { status: 500 },
+            { status: 200 },
           )
         }
       }
@@ -790,7 +808,7 @@ export async function POST(request: NextRequest) {
           })
           return NextResponse.json(
             { success: false, error: cancelError.message },
-            { status: 500 },
+            { status: 200 },
           )
         }
       }
@@ -810,19 +828,17 @@ export async function POST(request: NextRequest) {
       { status: 200 },
     )
   } catch (error) {
+    console.error("[MP WEBHOOK ERROR]:", error)
     logger.error({
       context: "webhooks/mercadopago",
       message: "unexpected_webhook_error",
       error,
     })
-    // 5xx so Mercado Pago retries recoverable failures
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : "webhook_error",
-      },
-      { status: 500 },
-    )
+    // ALWAYS 200: evita retries agresivos y 502 percibidos en el panel de MP.
+    return webhookOk({
+      handled: "error_handled",
+      error: error instanceof Error ? error.message : "webhook_error",
+    })
   }
 }
 

@@ -13,6 +13,7 @@ export {
   getMercadoPagoSandboxBuyerEmail,
   getMercadoPagoWebhookSecret,
   getSiteUrl,
+  isLocalSiteUrl,
   isMercadoPagoSandboxMode,
   isMercadoPagoSandboxToken,
   resolveCheckoutInitPoint,
@@ -64,8 +65,8 @@ export function splitBuyerName(fullName: string | null | undefined): {
 
 /**
  * Arma el payer de Checkout Pro.
- * En sandbox: usa MP_SANDBOX_BUYER_EMAIL si existe; si no, omite email
- * para evitar rechazo de cuentas reales vs usuarios de prueba.
+ * En sandbox: solo email de prueba (MP_SANDBOX_BUYER_EMAIL). Sin email de prueba,
+ * se omite el payer completo (name/DNI reales suelen romper Sandbox).
  */
 export function buildPreferencePayer(input: {
   email?: string | null
@@ -74,14 +75,15 @@ export function buildPreferencePayer(input: {
   sandboxMode?: boolean
   sandboxBuyerEmail?: string | null
 }): CheckoutPreferenceBuyer | undefined {
-  const { name, surname } = splitBuyerName(input.fullName)
-  const dni = input.dni?.replace(/\D/g, "") || undefined
-
-  let email = input.email?.trim() || undefined
   if (input.sandboxMode) {
     const sandboxEmail = input.sandboxBuyerEmail?.trim()
-    email = sandboxEmail || undefined
+    if (!sandboxEmail) return undefined
+    return { email: sandboxEmail }
   }
+
+  const email = input.email?.trim() || undefined
+  const { name, surname } = splitBuyerName(input.fullName)
+  const dni = input.dni?.replace(/\D/g, "") || undefined
 
   if (!email && !name && !dni) return undefined
 

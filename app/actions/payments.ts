@@ -3,15 +3,14 @@
 import { Preference } from "mercadopago"
 
 import { logger } from "@/lib/logger"
-import {
-  buildPaymentExternalReference,
-  normalizeCheckoutBuyer,
-} from "@/lib/checkout-buyer"
+import { normalizeCheckoutBuyer } from "@/lib/checkout-buyer"
 import {
   getMercadoPagoClient,
   getMercadoPagoSandboxBuyerEmail,
   getSiteUrl,
+  isLocalSiteUrl,
   isMercadoPagoSandboxMode,
+  isMercadoPagoSandboxToken,
   resolveCheckoutInitPoint,
 } from "@/lib/mercadopago"
 import {
@@ -195,8 +194,10 @@ export async function createPaymentPreference(
     },
   ]
 
-  const urls = buildCheckoutBackUrls(getSiteUrl(), orderId)
+  const siteUrl = getSiteUrl()
+  const urls = buildCheckoutBackUrls(siteUrl, orderId)
   const sandboxMode = isMercadoPagoSandboxMode()
+  const localSite = isLocalSiteUrl(siteUrl)
   const payer = buildPreferencePayer({
     email: buyer?.buyerEmail ?? profile?.email ?? user.email,
     fullName: buyer?.buyerName ?? profile?.full_name,
@@ -204,11 +205,8 @@ export async function createPaymentPreference(
     sandboxMode,
     sandboxBuyerEmail: getMercadoPagoSandboxBuyerEmail(),
   })
-  const externalReference = buildPaymentExternalReference({
-    orderId,
-    userId: user.id,
-    buyer,
-  })
+  // UUID plano: más compatible con MP que JSON en external_reference.
+  const externalReference = orderId
 
   try {
     const client = getMercadoPagoClient()
@@ -225,8 +223,10 @@ export async function createPaymentPreference(
           failure: urls.failure,
           pending: urls.pending,
         },
-        auto_return: "approved",
-        notification_url: urls.notificationUrl,
+        // auto_return exige HTTPS público; con localhost MP muestra "Algo salió mal".
+        ...(!localSite ? { auto_return: "approved" as const } : {}),
+        // notification_url localhost es inalcanzable para MP; omitir en local.
+        ...(!localSite ? { notification_url: urls.notificationUrl } : {}),
         ...(checkoutExpiresAt !== null
           ? {
               expires: true,
@@ -251,15 +251,48 @@ export async function createPaymentPreference(
     const initPoint = resolveCheckoutInitPoint(created)
     const preferenceId = created.id
 
-    if (!initPoint || !preferenceId) {
+    console.log("Redirecting to:", initPoint)
+    console.log("MP preference URLs:", {
+      sandbox_init_point: created.sandbox_init_point ?? null,
+      init_point: created.init_point ?? null,
+      sandboxMode,
+      testToken: isMercadoPagoSandboxToken(),
+      localSite,
+      hasPayerEmail: Boolean(payer?.email),
+    })
+
+    if (!preferenceId) {
       return {
         success: false,
-        error: "Mercado Pago no devolvió una URL de checkout.",
+        error: "Mercado Pago no devolvió una preferencia válida.",
       }
     }
 
-    // Temporary sandbox verification log (requested for local testing).
-    console.log("Redirecting to:", initPoint)
+    if (!initPoint) {
+      logger.error({
+        context: "payments/preference",
+        message: "sandbox_init_point_missing",
+        orderId,
+        sandboxMode,
+        testToken: isMercadoPagoSandboxToken(),
+        hasSandboxInitPoint: Boolean(created.sandbox_init_point),
+        hasInitPoint: Boolean(created.init_point),
+      })
+      return {
+        success: false,
+        error:
+          "Sandbox no devolvió sandbox_init_point. Usá credenciales TEST- de Mercado Pago (no APP_USR de producción) en MP_ACCESS_TOKEN.",
+      }
+    }
+
+    if (sandboxMode && !/sandbox/i.test(initPoint)) {
+      return {
+        success: false,
+        error:
+          "La URL de checkout no es de Sandbox. Verificá que MP_ACCESS_TOKEN empiece con TEST-.",
+      }
+    }
+
     logger.info({
       context: "payments/preference",
       message: "checkout_redirect_url",
@@ -300,6 +333,7 @@ export async function createPaymentPreference(
       preferenceId,
     }
   } catch (error) {
+    console.error("Error creating MP Preference:", error)
     logger.error({
       context: "payments/preference",
       message: "preference_creation_failed",

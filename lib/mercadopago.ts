@@ -43,7 +43,7 @@ export function isMercadoPagoSandboxToken(accessToken?: string): boolean {
   return token.startsWith("TEST-")
 }
 
-/** Sandbox de prueba: token TEST- o entorno local/preview (no production). */
+/** Sandbox de prueba: token TEST-, force flag, o entorno local/preview. */
 export function isMercadoPagoSandboxMode(accessToken?: string): boolean {
   if (isMercadoPagoSandboxToken(accessToken)) return true
   if (process.env.MP_FORCE_SANDBOX === "1") return true
@@ -113,16 +113,32 @@ export function getSiteUrl() {
   return "http://localhost:3000"
 }
 
+export function isLocalSiteUrl(siteUrl?: string): boolean {
+  try {
+    const host = new URL(siteUrl ?? getSiteUrl()).hostname
+    return host === "localhost" || host === "127.0.0.1"
+  } catch {
+    return true
+  }
+}
+
 /**
- * En modo sandbox prioriza `sandbox_init_point`.
- * En producción usa `init_point` (con fallback a sandbox si falta).
+ * En modo sandbox prioriza SIEMPRE `sandbox_init_point`.
+ * En producción usa `init_point`.
+ * Si estamos en sandbox y no hay sandbox_init_point, retorna null (no usar prod).
  */
 export function resolveCheckoutInitPoint(created: {
   init_point?: string | null
   sandbox_init_point?: string | null
 }): string | null {
+  const sandboxUrl = created.sandbox_init_point?.trim() || null
+  const prodUrl = created.init_point?.trim() || null
+
   if (isMercadoPagoSandboxMode()) {
-    return created.sandbox_init_point ?? created.init_point ?? null
+    if (sandboxUrl) return sandboxUrl
+    if (prodUrl && /sandbox/i.test(prodUrl)) return prodUrl
+    return null
   }
-  return created.init_point ?? created.sandbox_init_point ?? null
+
+  return prodUrl ?? sandboxUrl
 }

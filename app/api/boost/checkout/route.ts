@@ -4,7 +4,7 @@ import { z } from "zod"
 
 import { boostExternalRef, getBoostPlan } from "@/lib/boost-plans"
 import { logger } from "@/lib/logger"
-import { getMercadoPagoClient, getSiteUrl } from "@/lib/mercadopago"
+import { getMercadoPagoClient, getSiteUrl, isLocalSiteUrl, resolveCheckoutInitPoint } from "@/lib/mercadopago"
 import { createClient } from "@/lib/supabase/server"
 
 export const runtime = "nodejs"
@@ -99,17 +99,20 @@ export async function POST(request: NextRequest) {
     const siteUrl = getSiteUrl()
     const preference = new Preference(getMercadoPagoClient())
     const externalReference = boostExternalRef(subscription.id)
+    const localSite = isLocalSiteUrl(siteUrl)
 
     const created = await preference.create({
       body: {
         external_reference: externalReference,
-        notification_url: `${siteUrl}/api/webhooks/mercadopago`,
+        ...(!localSite
+          ? { notification_url: `${siteUrl}/api/webhooks/mercadopago` }
+          : {}),
         back_urls: {
           success: `${siteUrl}/admin/events?boost=success&event=${event.id}`,
           pending: `${siteUrl}/admin/events?boost=pending&event=${event.id}`,
           failure: `${siteUrl}/admin/events?boost=failure&event=${event.id}`,
         },
-        auto_return: "approved",
+        ...(!localSite ? { auto_return: "approved" as const } : {}),
         items: [
           {
             id: `boost-${plan.tier}`,
@@ -128,10 +131,14 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    const initPoint = created.init_point ?? created.sandbox_init_point
+    const initPoint = resolveCheckoutInitPoint(created)
     if (!initPoint) {
       return NextResponse.json(
-        { success: false, error: "Mercado Pago no devolvió checkout." },
+        {
+          success: false,
+          error:
+            "Sandbox no devolvió sandbox_init_point. Usá credenciales TEST- en MP_ACCESS_TOKEN.",
+        },
         { status: 502 },
       )
     }

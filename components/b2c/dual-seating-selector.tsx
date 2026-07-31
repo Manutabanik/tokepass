@@ -239,7 +239,7 @@ export function DualSeatingSelector({
       }
 
       toast.success("Ubicación reservada durante 8 minutos.")
-      window.location.assign(result.initPoint)
+      window.location.href = result.initPoint
     })
   }
 
