@@ -39,7 +39,7 @@ export function SaveTicketButton({
       try {
         await upsertTicketsOffline(userId, [ticket])
         toast.success("Entrada en billetera offline", {
-          description: "Living QR listo sin señal en este dispositivo.",
+          description: "QR dinámico listo sin señal en este dispositivo.",
         })
       } catch {
         toast.error("No se pudo guardar offline en este dispositivo")
@@ -77,8 +77,8 @@ export function SaveTicketButton({
           <DialogHeader>
             <DialogTitle>Guardar entrada</DialogTitle>
             <DialogDescription className="text-zinc-400">
-              Opciones reales disponibles hoy. El Living QR también vive en Mis
-              Entradas / PWA.
+              El QR dinámico también queda disponible en Mis entradas, incluso
+              sin conexión.
             </DialogDescription>
           </DialogHeader>
 
@@ -90,7 +90,7 @@ export function SaveTicketButton({
               className="h-12 justify-start rounded-2xl bg-emerald-500 text-zinc-950 hover:bg-emerald-400"
             >
               <Smartphone className="size-4" />
-              Abrir Billetera Web (PWA)
+              Guardar en la billetera web
             </Button>
 
             <Button

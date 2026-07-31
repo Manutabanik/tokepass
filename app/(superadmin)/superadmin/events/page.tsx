@@ -1,5 +1,6 @@
-import { CalendarDays, MapPin } from "lucide-react"
+import { CalendarDays, ChevronRight, MapPin } from "lucide-react"
 import type { Metadata } from "next"
+import Link from "next/link"
 
 import { getPlatformEvents } from "@/app/actions/platform"
 import { EventStatusBadge } from "@/components/superadmin/badges"
@@ -62,13 +63,22 @@ export default async function SuperAdminEventsPage() {
                     className="border-white/8 hover:bg-white/[0.025]"
                   >
                     <TableCell className="max-w-72 py-4 pl-6">
-                      <p className="truncate font-medium text-zinc-200">
-                        {event.title}
-                      </p>
-                      <p className="mt-1 flex items-center gap-1 truncate text-xs text-zinc-600">
-                        <MapPin className="size-3" aria-hidden="true" />
-                        {event.location}
-                      </p>
+                      <Link
+                        href={`/superadmin/events/${event.id}`}
+                        className="group block"
+                      >
+                        <p className="flex items-center gap-1 truncate font-medium text-zinc-200 group-hover:text-white">
+                          {event.title}
+                          <ChevronRight
+                            className="size-3.5 shrink-0 text-zinc-600 group-hover:text-sky-300"
+                            aria-hidden="true"
+                          />
+                        </p>
+                        <p className="mt-1 flex items-center gap-1 truncate text-xs text-zinc-600">
+                          <MapPin className="size-3" aria-hidden="true" />
+                          {event.location}
+                        </p>
+                      </Link>
                     </TableCell>
                     <TableCell>
                       <p className="truncate text-sm text-zinc-300">

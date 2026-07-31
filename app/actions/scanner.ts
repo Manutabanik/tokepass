@@ -164,6 +164,18 @@ export async function scanAndValidateTicket(
     }
   }
 
+  const access = await assertEventOpsAccess(eventId, ["door_staff"])
+  if (!access.ok) {
+    return {
+      success: false,
+      status: access.reason === "auth_required" ? "auth_required" : "forbidden",
+      message:
+        access.reason === "auth_required"
+          ? "Iniciá sesión para validar"
+          : "No tenés permiso para validar esta entrada",
+    }
+  }
+
   const { data: eventMeta } = await supabase
     .from("events")
     .select("id, qr_type, organizer_id")
@@ -251,18 +263,6 @@ export async function scanAndValidateTicket(
   }
 
   const row = ticket as TicketScanRow
-
-  const access = await assertEventOpsAccess(eventId, ["door_staff"])
-  if (!access.ok) {
-    return {
-      success: false,
-      status: access.reason === "auth_required" ? "auth_required" : "forbidden",
-      message:
-        access.reason === "auth_required"
-          ? "Iniciá sesión para validar"
-          : "No tenés permiso para validar este ticket",
-    }
-  }
 
   if (row.event_id !== eventId) {
     return {

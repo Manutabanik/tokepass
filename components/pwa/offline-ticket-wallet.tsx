@@ -48,16 +48,9 @@ export function OfflineTicketWallet({
     })
   }, [online, userId, initialTickets, loadError])
 
-  // Sin conexión: leer billetera local (setState solo en callback async).
+  // Precarga inmediata: si la red cae o el SSR falla, la copia local ya está
+  // disponible sin iniciar una lectura tardía de IndexedDB.
   useEffect(() => {
-    if (online) {
-      const reset = window.setTimeout(() => {
-        setCachedTickets(null)
-        setCacheReady(false)
-      }, 0)
-      return () => window.clearTimeout(reset)
-    }
-
     let cancelled = false
 
     void (async () => {
@@ -76,7 +69,7 @@ export function OfflineTicketWallet({
     return () => {
       cancelled = true
     }
-  }, [online, userId])
+  }, [userId])
 
   // Servidor falló online: intentar IDB.
   useEffect(() => {
@@ -121,7 +114,7 @@ export function OfflineTicketWallet({
               variant="outline"
               className="rounded-full border-amber-500/40 bg-transparent px-2 py-0 text-[10px] font-semibold uppercase tracking-wide text-amber-200"
             >
-              Modo Guardado / QR Offline Protegido
+              Modo offline · acceso válido para ingreso
             </Badge>
             <p className="mt-1.5 text-sm leading-5 text-amber-100/90">
               Tu entrada está guardada en tu dispositivo y lista para ser

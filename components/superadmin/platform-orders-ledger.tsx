@@ -41,6 +41,7 @@ const STATUS_OPTIONS: Array<{ value: "all" | OrderStatus; label: string }> = [
   { value: "pending", label: "Pendiente" },
   { value: "failed", label: "Fallida" },
   { value: "expired", label: "Expirada" },
+  { value: "refunded", label: "Reembolsada" },
 ]
 
 function paymentMethodLabel(method: string): string {

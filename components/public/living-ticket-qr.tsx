@@ -13,7 +13,8 @@ import {
 import { cn } from "@/lib/utils"
 
 /**
- * Living QR offline-capable: HMAC(totp_secret, ticketId:window) — sin filtrar la semilla.
+ * QR dinámico offline: el payload no expone la semilla, aunque el dispositivo
+ * autorizado debe conservarla localmente para poder firmar sin conexión.
  */
 export function LivingTicketQR({
   ticketId,
@@ -61,9 +62,12 @@ export function LivingTicketQR({
 
   return (
     <div className={cn("mx-auto w-full max-w-[260px] text-center", className)}>
-      <div className="relative mx-auto grid place-items-center">
+      <div
+        className="relative mx-auto grid select-none place-items-center"
+        onContextMenu={(event) => event.preventDefault()}
+      >
         <div className="absolute inset-0 rounded-[1.75rem] bg-emerald-400/15 blur-2xl" />
-        <div className="relative rounded-[1.35rem] bg-white p-3.5 shadow-[0_0_32px_rgba(255,255,255,0.08)]">
+        <div className="pointer-events-none relative rounded-[1.35rem] bg-white p-3.5 shadow-[0_0_32px_rgba(255,255,255,0.08)]">
           {token ? (
             <QRCodeSVG
               value={token}

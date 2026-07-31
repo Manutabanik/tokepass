@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { SuperAdminForbiddenError } from "@/lib/superadmin-errors"
-import type { OrganizerApprovalStatus, OrderStatus } from "@/types/database"
+import type { OrganizerApprovalStatus, OrderStatus, OrganizerGuaranteeStatus, OrganizerRiskTier } from "@/types/database"
 
 /**
  * Valida sesión + rol `super_admin` y entrega el client service-role
@@ -297,7 +297,12 @@ export type OrganizationDetails = {
     name: string
     email: string
     status: OrganizerApprovalStatus
+    /** Comisión canónica (custom_commission_rate). */
     serviceChargeRate: number
+    riskTier: OrganizerRiskTier
+    guaranteeStatus: OrganizerGuaranteeStatus
+    mpUserId: string | null
+    hasMpAccessToken: boolean
     joinedAt: string
   }
   metrics: {
@@ -457,7 +462,7 @@ export async function getOrganizationDetails(
   const { data: profile, error: profileError } = await admin
     .from("profiles")
     .select(
-      "id, full_name, email, role, organizer_approval_status, service_charge_rate, created_at",
+      "id, full_name, email, role, organizer_approval_status, service_charge_rate, risk_tier, guarantee_status, created_at",
     )
     .eq("id", id)
     .maybeSingle()
@@ -472,6 +477,7 @@ export async function getOrganizationDetails(
   const [
     { data: metricRows, error: metricsError },
     { data: pendingSettlements, error: settlementsError },
+    { data: mpConnect, error: mpConnectError },
   ] = await Promise.all([
     admin.rpc("get_organizer_governance_metrics", {
       p_organizer_id: profile.id,
@@ -484,10 +490,16 @@ export async function getOrganizationDetails(
       .eq("organizer_id", profile.id)
       .eq("status", "pending")
       .order("created_at", { ascending: false }),
+    admin
+      .from("organizer_mp_connect")
+      .select("mp_user_id, access_token, status")
+      .eq("organizer_id", profile.id)
+      .maybeSingle(),
   ])
 
   if (metricsError) throw new Error(metricsError.message)
   if (settlementsError) throw new Error(settlementsError.message)
+  if (mpConnectError) throw new Error(mpConnectError.message)
 
   const metrics = metricRows?.[0]
   const settlementRows = pendingSettlements ?? []
@@ -499,6 +511,13 @@ export async function getOrganizationDetails(
       email: profile.email,
       status: profile.organizer_approval_status,
       serviceChargeRate: Number(profile.service_charge_rate ?? 0.15),
+      riskTier:
+        (profile.risk_tier as OrganizerRiskTier | null) ?? "TIER_1_CUSTODY",
+      guaranteeStatus:
+        (profile.guarantee_status as OrganizerGuaranteeStatus | null) ??
+        "NONE",
+      mpUserId: mpConnect?.mp_user_id ?? null,
+      hasMpAccessToken: Boolean(mpConnect?.access_token),
       joinedAt: profile.created_at,
     },
     metrics: {
@@ -520,6 +539,90 @@ export async function getOrganizationDetails(
       netAmount: Number(settlement.net_amount),
       createdAt: settlement.created_at,
     })),
+  }
+}
+
+export type OrganizerRiskMatrixInput = {
+  riskTier: OrganizerRiskTier
+  guaranteeStatus: OrganizerGuaranteeStatus
+  /** Comisión decimal (0.15 = 15%). Alias de custom_commission_rate. */
+  customCommissionRate: number
+  mpUserId: string | null
+  /** Si se envía string vacío y clearMpAccessToken=false, no se toca. */
+  mpAccessToken?: string | null
+  clearMpAccessToken?: boolean
+}
+
+export async function updateOrganizerRiskMatrix(
+  organizerId: string,
+  input: OrganizerRiskMatrixInput,
+): Promise<OrganizerGovernanceResult> {
+  try {
+    const { admin, actorId } = await requireSuperAdmin()
+    const organizer = await ensureOrganizerProfile(admin, organizerId)
+    if (organizer.error) {
+      return { success: false, error: organizer.error }
+    }
+
+    const allowedTiers: OrganizerRiskTier[] = [
+      "TIER_1_CUSTODY",
+      "TIER_2_INSTANT_SPLIT",
+      "TIER_3_ENTERPRISE",
+    ]
+    const allowedGuarantees: OrganizerGuaranteeStatus[] = [
+      "NONE",
+      "PROMISSORY_NOTE_SIGNED",
+      "INSURANCE_BOND_ACTIVE",
+    ]
+
+    if (!allowedTiers.includes(input.riskTier)) {
+      return { success: false, error: "Nivel de riesgo inválido." }
+    }
+    if (!allowedGuarantees.includes(input.guaranteeStatus)) {
+      return { success: false, error: "Estado de garantía inválido." }
+    }
+    if (
+      !Number.isFinite(input.customCommissionRate) ||
+      input.customCommissionRate < 0 ||
+      input.customCommissionRate > 0.95
+    ) {
+      return {
+        success: false,
+        error: "La comisión debe estar entre 0% y 95%.",
+      }
+    }
+
+    const normalizedRate =
+      Math.round(input.customCommissionRate * 10_000) / 10_000
+
+    const { error } = await admin.rpc("update_organizer_risk_matrix_tx", {
+      p_organizer_id: organizer.id,
+      p_actor_id: actorId,
+      p_risk_tier: input.riskTier,
+      p_guarantee_status: input.guaranteeStatus,
+      p_service_charge_rate: normalizedRate,
+      p_mp_user_id: input.mpUserId,
+      p_mp_access_token: input.mpAccessToken ?? null,
+      p_clear_mp_access_token: Boolean(input.clearMpAccessToken),
+    })
+
+    if (error) {
+      return {
+        success: false,
+        error: `No se pudo actualizar la matriz de riesgo: ${error.message}`,
+      }
+    }
+
+    revalidateOrganizerGovernancePaths(organizer.id)
+    return { success: true }
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo actualizar la matriz de riesgo.",
+    }
   }
 }
 
@@ -591,6 +694,8 @@ export async function getPlatformMoneyLedger(
   const organizerId = filters.organizerId?.trim() || null
   const eventId = filters.eventId?.trim() || null
   const limit = Math.min(Math.max(filters.limit ?? 200, 1), 500)
+  // RPC histórico aún valida sin `refunded`; filtramos client-side ese estado.
+  const rpcStatus = status === "refunded" ? null : status
 
   const [
     { data, error },
@@ -602,13 +707,13 @@ export async function getPlatformMoneyLedger(
       admin.rpc("get_platform_orders_ledger", {
         p_organizer_id: organizerId,
         p_event_id: eventId,
-        p_status: status,
-        p_limit: limit,
+        p_status: rpcStatus,
+        p_limit: status === "refunded" ? Math.min(limit * 3, 500) : limit,
       }),
       admin.rpc("get_platform_orders_ledger_totals", {
         p_organizer_id: organizerId,
         p_event_id: eventId,
-        p_status: status,
+        p_status: rpcStatus,
       }),
       admin
         .from("profiles")
@@ -654,11 +759,13 @@ export async function getPlatformMoneyLedger(
     fee_rate: number
   }
 
-  const rows: PlatformLedgerOrder[] = ((data ?? []) as LedgerRpcRow[]).map(
-    (row) => ({
+  const rows: PlatformLedgerOrder[] = ((data ?? []) as LedgerRpcRow[])
+    .map((row) => ({
       orderId: row.order_id,
       createdAt: row.created_at,
-      status: (["pending", "paid", "failed", "expired"].includes(row.status)
+      status: (["pending", "paid", "failed", "expired", "refunded"].includes(
+        row.status,
+      )
         ? row.status
         : "pending") as OrderStatus,
       paymentMethod: row.mp_payment_id?.startsWith("free:")
@@ -676,8 +783,9 @@ export async function getPlatformMoneyLedger(
       platformFeeAmount: Number(row.platform_fee_amount),
       organizerNetAmount: Number(row.organizer_net_amount),
       feeRate: Number(row.fee_rate),
-    }),
-  )
+    }))
+    .filter((row) => (status === "refunded" ? row.status === "refunded" : true))
+    .slice(0, limit)
 
   const eventOptions = (events ?? [])
     .filter((event) => !organizerId || event.organizer_id === organizerId)

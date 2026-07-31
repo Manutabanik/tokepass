@@ -11,6 +11,8 @@ import {
   Sparkles,
   UserRound,
   Users,
+  Wifi,
+  WifiOff,
 } from "lucide-react"
 import Image from "next/image"
 import { QRCodeSVG } from "qrcode.react"
@@ -29,6 +31,24 @@ function isVipTier(tierName: string): boolean {
 
 function isUsedStatus(status: MyTicket["status"]): boolean {
   return status === "used" || status === "scanned"
+}
+
+function normalizeLocationLabel(label: string): string {
+  return label
+    .replace(/\bmesa\s*#?\s*(\d+)\b/i, "MESA #$1")
+    .replace(/\bfila\s*#?\s*(\d+)\b/i, "FILA $1")
+    .toUpperCase()
+}
+
+function formatPrimaryLocation(ticket: MyTicket): string {
+  const label = normalizeLocationLabel(ticket.seatingLabel ?? "")
+  if (
+    ticket.seatingLayoutType === "table_combo" &&
+    !label.startsWith("MESA")
+  ) {
+    return `MESA #${label.replace(/^#/, "")}`
+  }
+  return label
 }
 
 export function LivingTicketCard({
@@ -101,6 +121,24 @@ export function LivingTicketCard({
             <Badge
               variant="outline"
               className={cn(
+                "rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.12em]",
+                offline
+                  ? "border-amber-400/40 bg-amber-400/10 text-amber-200"
+                  : "border-emerald-400/35 bg-emerald-400/10 text-emerald-200",
+              )}
+            >
+              {offline ? (
+                <WifiOff className="size-3" aria-hidden="true" />
+              ) : (
+                <Wifi className="size-3" aria-hidden="true" />
+              )}
+              {offline
+                ? "Modo offline · acceso válido para ingreso"
+                : "Conectado · entrada verificada"}
+            </Badge>
+            <Badge
+              variant="outline"
+              className={cn(
                 "rounded-full border-0 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide",
                 vip
                   ? "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/40"
@@ -138,14 +176,6 @@ export function LivingTicketCard({
                 Transferida
               </Badge>
             )}
-            {offline && canShowLiveQr ? (
-              <Badge
-                variant="outline"
-                className="rounded-full border-emerald-500/35 bg-emerald-500/10 text-emerald-200"
-              >
-                Lista offline
-              </Badge>
-            ) : null}
           </div>
 
           <h2 className="text-xl font-black leading-tight tracking-[-0.03em] text-white sm:text-2xl">
@@ -159,15 +189,15 @@ export function LivingTicketCard({
           ) : null}
 
           {ticket.seatingLabel ? (
-            <div className="mt-3 rounded-xl border border-indigo-500/25 bg-indigo-500/10 px-3 py-2.5">
-              <p className="flex items-center gap-2 font-mono text-xs font-black uppercase text-indigo-200">
+            <div className="mt-3 rounded-xl border border-emerald-400/45 bg-emerald-400/10 px-3 py-3 shadow-[inset_0_0_18px_rgba(52,211,153,0.05)]">
+              <p className="flex items-center gap-2 font-mono text-sm font-black tracking-[0.08em] text-emerald-100">
                 <Armchair className="size-4" aria-hidden="true" />
-                {ticket.seatingLabel}
+                {formatPrimaryLocation(ticket)}
                 {ticket.seatingSectorName
-                  ? ` · ${ticket.seatingSectorName}`
+                  ? ` · ${normalizeLocationLabel(ticket.seatingSectorName)}`
                   : null}
                 {ticket.seatingRowLabel
-                  ? ` · ${ticket.seatingRowLabel}`
+                  ? ` · ${normalizeLocationLabel(ticket.seatingRowLabel)}`
                   : null}
               </p>
               <p className="mt-1 flex items-center gap-1.5 text-xs text-zinc-400">
@@ -177,7 +207,14 @@ export function LivingTicketCard({
                 {ticket.admissionsUsed}/{ticket.maxAdmissions} ingresados)
               </p>
             </div>
-          ) : null}
+          ) : (
+            <div className="mt-3 rounded-xl border border-zinc-700/80 bg-zinc-900/80 px-3 py-2.5">
+              <p className="flex items-center gap-2 font-mono text-xs font-black uppercase tracking-[0.08em] text-zinc-200">
+                <Users className="size-4 text-emerald-300" aria-hidden="true" />
+                Entrada General / Pista
+              </p>
+            </div>
+          )}
 
           <div className="space-y-1.5 text-sm text-zinc-400">
             <p className="flex items-center gap-2 capitalize">
@@ -215,7 +252,7 @@ export function LivingTicketCard({
             <div className="min-w-0">
               <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300/90">
                 <Sparkles className="size-3" aria-hidden="true" />
-                Smart Yield
+                Beneficio incluido
               </p>
               <p className="mt-0.5 text-sm font-semibold text-emerald-50">
                 {ticket.bonusReward}
@@ -225,12 +262,15 @@ export function LivingTicketCard({
         )}
 
         {canShowLiveQr ? (
-          <div className="rounded-[1.5rem] border border-zinc-800/80 bg-black/40 px-3 py-5 sm:px-4">
+          <div
+            className="rounded-[1.5rem] border border-zinc-800/80 bg-black/40 px-3 py-5 sm:px-4"
+            onContextMenu={(event) => event.preventDefault()}
+          >
             <p className="mb-4 text-center text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-500">
-              {isStatic ? "QR fijo · imprimible" : "Living QR · puerta"}
+              {isStatic ? "QR fijo · imprimible" : "QR dinámico · ingreso"}
             </p>
             {isStatic ? (
-              <div className="mx-auto w-fit rounded-[1.35rem] bg-white p-3.5">
+              <div className="pointer-events-none mx-auto w-fit select-none rounded-[1.35rem] bg-white p-3.5">
                 <QRCodeSVG
                   value={ticket.totpSecret}
                   size={208}
@@ -262,12 +302,23 @@ export function LivingTicketCard({
                 aria-hidden="true"
               />
               <span>
-                <span className="font-bold uppercase tracking-wide text-sky-200">
-                  Consejo:{" "}
-                </span>
-                Podés presentar este QR directamente desde la app, desde tu
-                Apple/Google Wallet o como captura/PDF. El primer escaneo en
-                puerta validará tu acceso.
+                {isStatic ? (
+                  <>
+                    <span className="font-bold uppercase tracking-wide text-sky-200">
+                      Ingreso:{" "}
+                    </span>
+                    Podés presentar este código desde la aplicación, la billetera
+                    del teléfono o el PDF emitido.
+                  </>
+                ) : (
+                  <>
+                    <span className="font-bold uppercase tracking-wide text-sky-200">
+                      Seguridad:{" "}
+                    </span>
+                    Abrí esta entrada al llegar. El código cambia cada 15
+                    segundos y las capturas vencen automáticamente.
+                  </>
+                )}
               </span>
             </p>
           </div>
@@ -298,6 +349,10 @@ export function LivingTicketCard({
 
         <p className="text-center font-mono text-[10px] tracking-wider text-zinc-600">
           #{ticket.id.slice(0, 8).toUpperCase()}
+        </p>
+        <p className="border-t border-zinc-800/80 pt-3 text-center text-[10px] leading-4 text-zinc-500">
+          Entrada emitida bajo responsabilidad exclusiva del Organizador.
+          Prohibida su reventa.
         </p>
       </div>
     </article>

@@ -21,6 +21,7 @@ import {
   updateOrganizerApprovalStatus,
   updateOrganizerFeeRate,
 } from "@/app/actions/superadmin"
+import { OrganizerRiskMatrixCard } from "@/components/superadmin/organizer-risk-matrix-card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -308,6 +309,8 @@ export function OrganizationGovernancePanel({
           </CardContent>
         </Card>
       </div>
+
+      <OrganizerRiskMatrixCard organization={organization} />
     </div>
   )
 }

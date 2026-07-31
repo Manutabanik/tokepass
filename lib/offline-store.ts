@@ -8,9 +8,11 @@ import type { TicketStatus } from "@/types/database"
 import { requestTicketAssetCache } from "@/lib/wallet-cache"
 
 const DB_NAME = "tokepass-offline"
-const DB_VERSION = 2
+const DB_VERSION = 3
 const TICKETS_STORE = "tickets"
 const META_STORE = "meta"
+const KEYS_STORE = "keys"
+const WALLET_KEY_ID = "wallet-aes-gcm-v1"
 
 export type OfflineEventData = {
   eventId: string
@@ -26,6 +28,7 @@ export type OfflineEventData = {
   seatingLabel?: string | null
   seatingSectorName?: string | null
   seatingRowLabel?: string | null
+  seatingLayoutType?: "table_combo" | "numbered_seat" | null
   maxAdmissions?: number
   admissionsUsed?: number
   qrType: "dynamic" | "static"
@@ -46,6 +49,19 @@ export type OfflineTicketRecord = {
   created_at: string
   synced_at: number
 }
+
+type EncryptedOfflineTicketRecord = {
+  ticket_id: string
+  user_id: string
+  sealed: true
+  iv: string
+  ciphertext: string
+  synced_at: number
+}
+
+type StoredOfflineTicketRecord =
+  | OfflineTicketRecord
+  | EncryptedOfflineTicketRecord
 
 type MetaRecord = {
   key: string
@@ -86,6 +102,10 @@ function openDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(META_STORE)) {
         db.createObjectStore(META_STORE, { keyPath: "key" })
       }
+
+      if (!db.objectStoreNames.contains(KEYS_STORE)) {
+        db.createObjectStore(KEYS_STORE, { keyPath: "id" })
+      }
     }
   })
 }
@@ -104,6 +124,114 @@ function txDone(tx: IDBTransaction): Promise<void> {
     tx.onerror = () => reject(tx.error ?? new Error("Transacción IndexedDB fallida"))
     tx.onabort = () => reject(tx.error ?? new Error("Transacción IndexedDB abortada"))
   })
+}
+
+let walletKeyPromise: Promise<CryptoKey> | null = null
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = ""
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return window.btoa(binary)
+}
+
+function base64ToBytes(value: string): Uint8Array<ArrayBuffer> {
+  const binary = window.atob(value)
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index)
+  }
+  return bytes
+}
+
+async function loadOrCreateWalletKey(): Promise<CryptoKey> {
+  if (!crypto.subtle) {
+    throw new Error("WebCrypto no disponible")
+  }
+
+  const candidate = await crypto.subtle.generateKey(
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"],
+  )
+  const db = await openDb()
+  const tx = db.transaction(KEYS_STORE, "readwrite")
+  const store = tx.objectStore(KEYS_STORE)
+  const existing = (await requestToPromise(
+    store.get(WALLET_KEY_ID),
+  )) as { id: string; key: CryptoKey } | undefined
+  const key = existing?.key ?? candidate
+
+  if (!existing) {
+    store.put({ id: WALLET_KEY_ID, key })
+  }
+
+  await txDone(tx)
+  db.close()
+  return key
+}
+
+function getWalletKey(): Promise<CryptoKey> {
+  walletKeyPromise ??= loadOrCreateWalletKey().catch((error) => {
+    walletKeyPromise = null
+    throw error
+  })
+  return walletKeyPromise
+}
+
+function recordAad(ticketId: string, userId: string): ArrayBuffer {
+  const encoded = new TextEncoder().encode(
+    `tokepass-wallet-v1:${ticketId}:${userId}`,
+  )
+  return encoded.buffer.slice(
+    encoded.byteOffset,
+    encoded.byteOffset + encoded.byteLength,
+  ) as ArrayBuffer
+}
+
+async function sealOfflineRecord(
+  record: OfflineTicketRecord,
+): Promise<EncryptedOfflineTicketRecord> {
+  const key = await getWalletKey()
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  const plaintext = new TextEncoder().encode(JSON.stringify(record))
+  const ciphertext = await crypto.subtle.encrypt(
+    {
+      name: "AES-GCM",
+      iv,
+      additionalData: recordAad(record.ticket_id, record.user_id),
+    },
+    key,
+    plaintext,
+  )
+
+  return {
+    ticket_id: record.ticket_id,
+    user_id: record.user_id,
+    sealed: true,
+    iv: bytesToBase64(iv),
+    ciphertext: bytesToBase64(new Uint8Array(ciphertext)),
+    synced_at: record.synced_at,
+  }
+}
+
+async function unsealOfflineRecord(
+  stored: StoredOfflineTicketRecord,
+): Promise<OfflineTicketRecord> {
+  if (!("sealed" in stored)) return stored
+
+  const key = await getWalletKey()
+  const plaintext = await crypto.subtle.decrypt(
+    {
+      name: "AES-GCM",
+      iv: base64ToBytes(stored.iv),
+      additionalData: recordAad(stored.ticket_id, stored.user_id),
+    },
+    key,
+    base64ToBytes(stored.ciphertext),
+  )
+  return JSON.parse(
+    new TextDecoder().decode(plaintext),
+  ) as OfflineTicketRecord
 }
 
 export function ticketToOfflineRecord(
@@ -128,6 +256,7 @@ export function ticketToOfflineRecord(
       seatingLabel: ticket.seatingLabel,
       seatingSectorName: ticket.seatingSectorName,
       seatingRowLabel: ticket.seatingRowLabel,
+      seatingLayoutType: ticket.seatingLayoutType,
       maxAdmissions: ticket.maxAdmissions,
       admissionsUsed: ticket.admissionsUsed,
       qrType: ticket.qrType,
@@ -159,6 +288,7 @@ export function offlineRecordToTicket(record: OfflineTicketRecord): MyTicket {
     seatingLabel: record.event_data.seatingLabel ?? null,
     seatingSectorName: record.event_data.seatingSectorName ?? null,
     seatingRowLabel: record.event_data.seatingRowLabel ?? null,
+    seatingLayoutType: record.event_data.seatingLayoutType ?? null,
     maxAdmissions: record.event_data.maxAdmissions ?? 1,
     admissionsUsed: record.event_data.admissionsUsed ?? 0,
     eventId: record.event_data.eventId,
@@ -184,15 +314,20 @@ async function putTicketsAndMeta(
       ticket.status === "used" ||
       ticket.status === "scanned",
   )
+  const encryptedActive = await Promise.all(
+    active.map((ticket) =>
+      sealOfflineRecord(ticketToOfflineRecord(ticket, userId)),
+    ),
+  )
 
   // Lectura fuera de la tx de escritura (Safari/WebKit auto-commit).
-  let existing: OfflineTicketRecord[] = []
+  let existing: StoredOfflineTicketRecord[] = []
   if (mode === "replace") {
     const readDb = await openDb()
     const readTx = readDb.transaction(TICKETS_STORE, "readonly")
     existing = (await requestToPromise(
       readTx.objectStore(TICKETS_STORE).getAll(),
-    )) as OfflineTicketRecord[]
+    )) as StoredOfflineTicketRecord[]
     await txDone(readTx)
     readDb.close()
   }
@@ -224,8 +359,8 @@ async function putTicketsAndMeta(
     }
   }
 
-  for (const ticket of active) {
-    ticketStore.put(ticketToOfflineRecord(ticket, userId))
+  for (const ticket of encryptedActive) {
+    ticketStore.put(ticket)
   }
 
   metaStore.put({
@@ -283,9 +418,24 @@ export async function getTicketsOffline(
   const db = await openDb()
   const tx = db.transaction(TICKETS_STORE, "readonly")
   const store = tx.objectStore(TICKETS_STORE)
-  const rows = (await requestToPromise(store.getAll())) as OfflineTicketRecord[]
+  const storedRows = (await requestToPromise(
+    store.getAll(),
+  )) as StoredOfflineTicketRecord[]
   await txDone(tx)
   db.close()
+
+  const rows = (
+    await Promise.all(
+      storedRows.map(async (stored) => {
+        try {
+          return await unsealOfflineRecord(stored)
+        } catch (error) {
+          console.warn("[offline-store] registro cifrado inválido", error)
+          return null
+        }
+      }),
+    )
+  ).filter((row): row is OfflineTicketRecord => row !== null)
 
   const filtered = userId
     ? rows.filter((row) => row.user_id === userId)
@@ -329,9 +479,14 @@ export async function clearOfflineWalletStore(): Promise<void> {
   if (!isBrowser()) return
 
   const db = await openDb()
-  const tx = db.transaction([TICKETS_STORE, META_STORE], "readwrite")
+  const tx = db.transaction(
+    [TICKETS_STORE, META_STORE, KEYS_STORE],
+    "readwrite",
+  )
   tx.objectStore(TICKETS_STORE).clear()
   tx.objectStore(META_STORE).clear()
+  tx.objectStore(KEYS_STORE).clear()
   await txDone(tx)
   db.close()
+  walletKeyPromise = null
 }

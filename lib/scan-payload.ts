@@ -92,6 +92,16 @@ export type ResolvedScan =
       enforceFreshness: boolean
     }
 
+export function isLivingWindowAccepted(
+  timestampBlock: number,
+  currentBlock: number = getTotpWindow(),
+): boolean {
+  return (
+    Number.isInteger(timestampBlock) &&
+    Math.abs(timestampBlock - currentBlock) <= LIVING_QR_GRACE_BLOCKS
+  )
+}
+
 export function resolveScanSecret(
   rawPayload: string,
   qrType: QrType,
@@ -131,7 +141,8 @@ export function resolveScanSecret(
 
   if (!living) return null
 
-  const expired = living.timestampBlock < currentBlock - LIVING_QR_GRACE_BLOCKS
+  // Rechaza tanto capturas vencidas como ventanas futuras manipuladas.
+  const expired = !isLivingWindowAccepted(living.timestampBlock, currentBlock)
 
   if (living.version === 2) {
     return {

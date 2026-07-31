@@ -22,6 +22,7 @@ export type MyTicket = {
   seatingLabel: string | null
   seatingSectorName: string | null
   seatingRowLabel: string | null
+  seatingLayoutType: "table_combo" | "numbered_seat" | null
   maxAdmissions: number
   admissionsUsed: number
   eventId: string
@@ -156,6 +157,8 @@ export async function getMyTickets(): Promise<MyTicket[]> {
         seatingSectorName:
           ticket.event_seating_units?.sector_name ?? null,
         seatingRowLabel: ticket.event_seating_units?.row_label ?? null,
+        seatingLayoutType:
+          ticket.event_seating_units?.layout_type ?? null,
         maxAdmissions: Number(ticket.max_admissions ?? 1),
         admissionsUsed: Number(ticket.admissions_used ?? 0),
         eventId: ticket.events.id,

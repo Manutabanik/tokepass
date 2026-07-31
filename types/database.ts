@@ -20,7 +20,20 @@ export type TicketStatus =
   | "revoked"
 export type ZoneType = "general_admission" | "reserved_seating"
 export type SeatStatus = "available" | "locked" | "sold"
-export type OrderStatus = "pending" | "paid" | "failed" | "expired"
+export type OrderStatus =
+  | "pending"
+  | "paid"
+  | "failed"
+  | "expired"
+  | "refunded"
+export type OrganizerRiskTier =
+  | "TIER_1_CUSTODY"
+  | "TIER_2_INSTANT_SPLIT"
+  | "TIER_3_ENTERPRISE"
+export type OrganizerGuaranteeStatus =
+  | "NONE"
+  | "PROMISSORY_NOTE_SIGNED"
+  | "INSURANCE_BOND_ACTIVE"
 export type EventStaffRole = "door_staff" | "bar_staff" | "cashier"
 
 export type EventStaffAssignment = {
@@ -55,11 +68,28 @@ export type Profile = {
   full_name: string | null
   dni: string | null
   role: UserRole
-  /** Fracción decimal: 0.15 = 15% cargo por servicio al comprador */
+  /**
+   * Comisión Tokepass (custom_commission_rate canónica).
+   * Fracción decimal: 0.15 = 15% sobre precio público All-In.
+   */
   service_charge_rate: number
   organizer_approval_status: OrganizerApprovalStatus
+  risk_tier: OrganizerRiskTier
+  guarantee_status: OrganizerGuaranteeStatus
   created_at: string
   updated_at: string
+}
+
+export type OrganizerMpConnect = {
+  organizer_id: string
+  mp_user_id: string | null
+  /** Solo service_role. Nunca enviar al browser. */
+  access_token: string | null
+  status: "disconnected" | "connected" | "revoked" | "error"
+  connected_at: string | null
+  revoked_at: string | null
+  updated_at: string
+  created_at: string
 }
 
 export type Event = {
@@ -281,6 +311,17 @@ export type OrganizerSettlement = {
   updated_at: string
 }
 
+export type PlatformOpsAudit = {
+  id: string
+  actor_id: string | null
+  action: string
+  event_id: string | null
+  organizer_id: string | null
+  reason: string | null
+  metadata: Json
+  created_at: string
+}
+
 export type OrderAddon = {
   id: string
   order_id: string
@@ -346,11 +387,15 @@ type ProfileInsert = Omit<
   | "service_charge_rate"
   | "dni"
   | "organizer_approval_status"
+  | "risk_tier"
+  | "guarantee_status"
 > & {
   role?: UserRole
   service_charge_rate?: number
   dni?: string | null
   organizer_approval_status?: OrganizerApprovalStatus
+  risk_tier?: OrganizerRiskTier
+  guarantee_status?: OrganizerGuaranteeStatus
   created_at?: string
   updated_at?: string
 }
@@ -716,6 +761,36 @@ export type Database = {
         Update: Partial<OrganizerSettlementInsert>
         Relationships: []
       }
+      platform_ops_audit: {
+        Row: PlatformOpsAudit
+        Insert: {
+          id?: string
+          actor_id?: string | null
+          action: string
+          event_id?: string | null
+          organizer_id?: string | null
+          reason?: string | null
+          metadata?: Json
+          created_at?: string
+        }
+        Update: Partial<PlatformOpsAudit>
+        Relationships: []
+      }
+      organizer_mp_connect: {
+        Row: OrganizerMpConnect
+        Insert: {
+          organizer_id: string
+          mp_user_id?: string | null
+          access_token?: string | null
+          status?: OrganizerMpConnect["status"]
+          connected_at?: string | null
+          revoked_at?: string | null
+          updated_at?: string
+          created_at?: string
+        }
+        Update: Partial<OrganizerMpConnect>
+        Relationships: []
+      }
       order_addons: {
         Row: OrderAddon
         Insert: OrderAddonInsert
@@ -956,6 +1031,34 @@ export type Database = {
           p_service_charge_rate?: number | null
         }
         Returns: undefined
+      }
+      update_organizer_risk_matrix_tx: {
+        Args: {
+          p_organizer_id: string
+          p_actor_id: string
+          p_risk_tier?: string | null
+          p_guarantee_status?: string | null
+          p_service_charge_rate?: number | null
+          p_mp_user_id?: string | null
+          p_mp_access_token?: string | null
+          p_clear_mp_access_token?: boolean
+        }
+        Returns: undefined
+      }
+      execute_mass_event_refund_tx: {
+        Args: {
+          p_event_id: string
+          p_actor_id: string
+          p_reason: string
+        }
+        Returns: Array<{
+          order_id: string
+          mp_payment_id: string | null
+          total_amount: number
+          risk_tier: string
+          organizer_id: string
+          tickets_cancelled: number
+        }>
       }
       get_organizer_finance_summary: {
         Args: {
@@ -1216,6 +1319,8 @@ export type Database = {
     Enums: {
       user_role: UserRole
       organizer_approval_status: OrganizerApprovalStatus
+      organizer_risk_tier: OrganizerRiskTier
+      organizer_guarantee_status: OrganizerGuaranteeStatus
       event_status: EventStatus
       ticket_status: TicketStatus
       zone_type: ZoneType

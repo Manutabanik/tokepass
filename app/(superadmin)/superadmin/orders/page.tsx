@@ -11,7 +11,13 @@ export const metadata: Metadata = {
   title: "Money Ledger · Órdenes",
 }
 
-const ORDER_STATUSES = new Set(["pending", "paid", "failed", "expired"])
+const ORDER_STATUSES = new Set([
+  "pending",
+  "paid",
+  "failed",
+  "expired",
+  "refunded",
+])
 
 export default async function SuperAdminOrdersPage({
   searchParams,

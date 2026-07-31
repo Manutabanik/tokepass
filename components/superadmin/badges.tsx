@@ -64,6 +64,10 @@ const orderStatusStyles: Record<
     label: "Expirada",
     className: "border-zinc-500/20 bg-zinc-500/10 text-zinc-400",
   },
+  refunded: {
+    label: "Reembolsada",
+    className: "border-amber-400/25 bg-amber-400/10 text-amber-200",
+  },
 }
 
 const organizerStatusStyles: Record<

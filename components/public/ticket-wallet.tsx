@@ -193,7 +193,7 @@ export function TicketWallet({
         ) : (
           <EmptyState
             title="Sin entradas próximas"
-            description="Cuando compres un evento, tu Living Ticket aparecerá aquí listo para la puerta."
+            description="Cuando compres una entrada, aparecerá acá lista para presentar en el ingreso."
             cta
           />
         )}
