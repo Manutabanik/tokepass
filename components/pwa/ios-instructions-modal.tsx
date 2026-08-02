@@ -1,6 +1,6 @@
 "use client"
 
-import { Share } from "lucide-react"
+import { Share, Smartphone } from "lucide-react"
 
 import {
   Dialog,
