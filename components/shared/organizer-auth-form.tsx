@@ -1,6 +1,6 @@
 "use client"
 
-import { Building2, LoaderCircle, ShieldCheck } from "lucide-react"
+import { LoaderCircle } from "lucide-react"
 import Link from "next/link"
 import { useActionState } from "react"
 import { useFormStatus } from "react-dom"
@@ -10,6 +10,7 @@ import {
   signUpOrganizer,
   type AuthActionState,
 } from "@/app/actions/auth"
+import { BrandLogo } from "@/components/shared/brand-logo"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -66,9 +67,15 @@ export function OrganizerAuthForm({
   return (
     <Card className="w-full border-0 bg-white/[0.04] py-0 text-white ring-1 ring-white/10 shadow-2xl shadow-black/30">
       <CardHeader className="border-b border-white/8 px-7 py-7 text-center">
-        <span className="mx-auto mb-3 grid size-12 place-items-center rounded-2xl bg-violet-500/15 text-violet-300 ring-1 ring-inset ring-violet-500/20">
-          <Building2 className="size-5" aria-hidden="true" />
-        </span>
+        <div className="mb-4 flex justify-center">
+          <BrandLogo
+            inverted
+            href="/"
+            tagline="Organizadores"
+            size="lg"
+            className="flex-col items-center gap-3"
+          />
+        </div>
         <CardTitle className="text-2xl font-bold tracking-tight">
           {mode === "login"
             ? "Acceso para organizadores"

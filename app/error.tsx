@@ -25,10 +25,14 @@ export default function Error({
     <main className="relative isolate grid min-h-[70vh] place-items-center overflow-hidden bg-[#09090b] px-6 py-16 text-zinc-100">
       <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,rgba(124,58,237,0.2),transparent_45%)]" />
       <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-zinc-950/70 p-8 text-center">
-        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-violet-300/80">
-          Tokepass
-        </p>
-        <h1 className="mt-3 text-3xl font-black tracking-tight text-white">
+        <img
+          src="/brand/tokepass-mark.png"
+          alt="Tokepass"
+          width={48}
+          height={48}
+          className="mx-auto size-12 rounded-[0.85rem] object-cover ring-1 ring-white/15"
+        />
+        <h1 className="mt-4 text-3xl font-black tracking-tight text-white">
           No pudimos cargar esta vista
         </h1>
         <p className="mt-3 text-sm leading-6 text-zinc-400">

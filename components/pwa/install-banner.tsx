@@ -116,9 +116,9 @@ export function InstallBanner() {
             </button>
 
             <div className="flex gap-3 pr-8">
-              <span className="relative mt-0.5 size-12 shrink-0 overflow-hidden rounded-xl bg-zinc-900 ring-1 ring-zinc-700">
+              <span className="relative mt-0.5 size-12 shrink-0 overflow-hidden rounded-xl bg-black ring-1 ring-violet-400/30">
                 <Image
-                  src="/icons/icon-192.png"
+                  src="/brand/tokepass-mark.png"
                   alt=""
                   width={48}
                   height={48}

@@ -1,6 +1,6 @@
 "use client"
 
-import { MonitorSmartphone, QrCode } from "lucide-react"
+import { MonitorSmartphone } from "lucide-react"
 import { useEffect } from "react"
 
 import { useTotemScanner } from "@/hooks/use-totem-scanner"
@@ -74,16 +74,22 @@ export function TotemValidatorView({
       />
 
       <div className="relative mb-10 grid place-items-center">
-        <div className="absolute size-56 animate-pulse rounded-full bg-emerald-400/10 blur-2xl" />
-        <div className="absolute size-40 animate-[ping_2.4s_ease-in-out_infinite] rounded-full border border-emerald-400/30" />
-        <div className="relative grid size-28 place-items-center rounded-[2rem] border border-emerald-400/40 bg-emerald-500/10 shadow-[0_0_40px_rgba(16,185,129,0.25)]">
-          <QrCode className="size-14 text-emerald-300" aria-hidden="true" />
+        <div className="absolute size-56 animate-pulse rounded-full bg-violet-400/10 blur-2xl" />
+        <div className="absolute size-40 animate-[ping_2.4s_ease-in-out_infinite] rounded-full border border-violet-400/30" />
+        <div className="relative size-28 overflow-hidden rounded-[2rem] bg-black shadow-[0_0_40px_rgba(167,139,250,0.3)] ring-1 ring-violet-400/40">
+          <img
+            src="/brand/tokepass-mark.png"
+            alt="Tokepass"
+            width={112}
+            height={112}
+            className="size-full object-cover"
+          />
         </div>
       </div>
 
-      <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em] text-emerald-300/90">
+      <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em] text-violet-300/90">
         <MonitorSmartphone className="size-3.5" aria-hidden="true" />
-        Modo tótem · lector USB HID
+        Tokepass · modo tótem · USB HID
       </p>
 
       <h2 className="mt-4 max-w-3xl text-3xl font-black tracking-tight text-white sm:text-5xl">

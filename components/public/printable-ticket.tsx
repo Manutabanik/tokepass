@@ -1,8 +1,10 @@
 "use client"
 
+import Image from "next/image"
 import { QRCodeSVG } from "qrcode.react"
 
 import type { PrintableTicket } from "@/app/actions/pos"
+import { BRAND_MARK_SRC } from "@/components/shared/brand-logo"
 import { formatEventDay, formatEventTime } from "@/lib/format"
 
 export function PrintableTicketView({ ticket }: { ticket: PrintableTicket }) {
@@ -10,10 +12,21 @@ export function PrintableTicketView({ ticket }: { ticket: PrintableTicket }) {
     <div className="print-ticket mx-auto max-w-[420px] bg-white text-zinc-950">
       <article className="overflow-hidden rounded-2xl border border-zinc-200 shadow-sm print:rounded-none print:border-0 print:shadow-none">
         <header className="border-b border-zinc-200 bg-zinc-950 px-6 py-5 text-white">
-          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-400">
-            Tokepass
-          </p>
-          <h1 className="mt-2 text-2xl font-black leading-tight tracking-tight">
+          <div className="flex items-center gap-2.5">
+            <span className="size-8 overflow-hidden rounded-lg bg-black ring-1 ring-white/15">
+              <Image
+                src={BRAND_MARK_SRC}
+                alt=""
+                width={32}
+                height={32}
+                className="size-full object-cover"
+              />
+            </span>
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-violet-300">
+              Tokepass
+            </p>
+          </div>
+          <h1 className="mt-3 text-2xl font-black leading-tight tracking-tight">
             {ticket.eventTitle}
           </h1>
         </header>

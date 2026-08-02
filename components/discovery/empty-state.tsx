@@ -1,6 +1,6 @@
 "use client"
 
-import { Headphones, Radio, Sparkles } from "lucide-react"
+import { Radio, Sparkles } from "lucide-react"
 import { motion } from "motion/react"
 
 import type { CatalogEvent } from "@/app/actions/public-events"
@@ -31,8 +31,14 @@ export function EmptyState({
             className="tokepass-radar-slow absolute inset-5 rounded-full border border-violet-400/35"
             aria-hidden="true"
           />
-          <span className="relative grid size-14 place-items-center rounded-2xl border border-white/10 bg-gradient-to-br from-violet-600/40 to-cyan-500/30 text-cyan-200 shadow-[0_0_28px_rgba(124,58,237,0.45)] backdrop-blur-md">
-            <Headphones className="size-7" aria-hidden="true" />
+          <span className="relative size-14 overflow-hidden rounded-2xl bg-black shadow-[0_0_28px_rgba(167,139,250,0.45)] ring-1 ring-white/15">
+            <img
+              src="/brand/tokepass-mark.png"
+              alt=""
+              width={56}
+              height={56}
+              className="size-full object-cover"
+            />
           </span>
         </div>
 

@@ -31,19 +31,22 @@ export function AdminSidebar({
     >
       <div className="flex h-10 items-center justify-between">
         {collapsed ? (
-          <Link
+          <BrandLogo
+            inverted
+            markOnly
             href={
               mode === "organizer"
                 ? "/admin"
                 : (navigation[0]?.href ?? "/admin/scanner")
             }
-            className="grid size-10 place-items-center rounded-xl bg-violet-600 font-black text-white"
-            aria-label="Tokepass Command Center"
-          >
-            T
-          </Link>
+            className="justify-center"
+          />
         ) : (
-          <BrandLogo inverted className="px-1" />
+          <BrandLogo
+            inverted
+            href={mode === "organizer" ? "/admin" : "/admin/scanner"}
+            className="px-0.5"
+          />
         )}
 
         <button

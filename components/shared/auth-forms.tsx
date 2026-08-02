@@ -10,6 +10,7 @@ import {
   signUpWithEmail,
   type AuthActionState,
 } from "@/app/actions/auth"
+import { BrandLogo } from "@/components/shared/brand-logo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
@@ -132,11 +133,14 @@ export function AuthForms({
 
   return (
     <div className="relative z-10 w-full max-w-md rounded-3xl border border-zinc-800/80 bg-zinc-900/80 p-8 shadow-2xl backdrop-blur-xl sm:p-10">
+      <div className="mb-5 flex justify-center">
+        <BrandLogo inverted href="/" size="lg" />
+      </div>
       <span className="mb-2 block text-center font-mono text-xs font-bold uppercase tracking-widest text-purple-400">
         Bienvenido
       </span>
       <h1 className="mb-1.5 text-center text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
-        {isLogin ? "Ingresá a Tokepass" : "Creá tu cuenta"}
+        {isLogin ? "Ingresá a tu cuenta" : "Creá tu cuenta"}
       </h1>
       <p className="mb-8 text-center text-sm text-zinc-400">
         {isLogin

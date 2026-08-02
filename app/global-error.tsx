@@ -26,10 +26,14 @@ export default function GlobalError({
       <body className="min-h-screen bg-[#09090b] text-zinc-100 antialiased">
         <main className="grid min-h-screen place-items-center px-6">
           <div className="w-full max-w-md rounded-3xl border border-white/10 bg-zinc-950/80 p-8 text-center shadow-2xl shadow-black/40">
-            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-violet-300/80">
-              Tokepass
-            </p>
-            <h1 className="mt-3 text-2xl font-black tracking-tight text-white">
+            <img
+              src="/brand/tokepass-mark.png"
+              alt="Tokepass"
+              width={48}
+              height={48}
+              className="mx-auto size-12 rounded-[0.85rem] object-cover ring-1 ring-white/15"
+            />
+            <h1 className="mt-4 text-2xl font-black tracking-tight text-white">
               Algo se rompió
             </h1>
             <p className="mt-3 text-sm leading-6 text-zinc-400">

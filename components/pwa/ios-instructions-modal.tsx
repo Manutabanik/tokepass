@@ -1,6 +1,6 @@
 "use client"
 
-import { Share, Smartphone } from "lucide-react"
+import { Share } from "lucide-react"
 
 import {
   Dialog,
@@ -87,11 +87,17 @@ export function IosInstructionsModal({
               </div>
               <span className="text-zinc-600">→</span>
               <div className="flex flex-col items-center gap-1">
-                <span className="grid size-10 place-items-center rounded-xl bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/35">
-                  <Smartphone className="size-5" />
+                <span className="size-10 overflow-hidden rounded-xl bg-black ring-1 ring-violet-400/40">
+                  <img
+                    src="/brand/tokepass-mark.png"
+                    alt=""
+                    width={40}
+                    height={40}
+                    className="size-full object-cover"
+                  />
                 </span>
                 <span className="text-[10px] font-medium text-zinc-500">
-                  Inicio
+                  Tokepass
                 </span>
               </div>
             </div>

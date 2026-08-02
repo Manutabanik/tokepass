@@ -1,6 +1,7 @@
 import { Ticket, UserRound } from "lucide-react"
 import Link from "next/link"
 
+import { BrandLogo } from "@/components/shared/brand-logo"
 import { SignOutButton } from "@/components/shared/sign-out-button"
 import { createClient } from "@/lib/supabase/server"
 import { cn } from "@/lib/utils"
@@ -19,21 +20,12 @@ export async function PublicNavbar() {
         "shadow-[0_4px_30px_rgba(0,0,0,0.5)] transition-all duration-300",
       )}
     >
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3.5 lg:px-8">
+      <div className="mx-auto flex h-[4.25rem] max-w-7xl items-center justify-between px-4 lg:px-8">
         <div className="flex min-w-0 items-center">
-          <Link
-            href="/"
-            className="inline-flex shrink-0 items-center gap-2.5 text-xl font-extrabold tracking-tight text-white"
-            aria-label="Tokepass — Inicio"
-          >
-            <span className="grid size-8 place-items-center rounded-xl bg-violet-600 text-sm font-black text-white shadow-[0_0_15px_rgba(168,85,247,0.5)]">
-              T
-            </span>
-            Tokepass
-          </Link>
+          <BrandLogo inverted className="shrink-0" />
 
           <nav
-            className="ml-10 hidden items-center gap-8 md:flex"
+            className="ml-8 hidden items-center gap-7 md:flex lg:ml-10 lg:gap-8"
             aria-label="Principal"
           >
             <Link

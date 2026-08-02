@@ -676,13 +676,22 @@ export function DoorScanner() {
             )}
           >
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-violet-300">
-                  {isTotemMode ? "Totem / Kiosco" : "Zero-Offline Scanner"}
-                </p>
-                <h1 className="mt-1 text-2xl font-black tracking-tight">
-                  Escáner Tokepass
-                </h1>
+              <div className="flex min-w-0 flex-1 items-start gap-3">
+                <img
+                  src="/brand/tokepass-mark.png"
+                  alt=""
+                  width={40}
+                  height={40}
+                  className="mt-0.5 size-10 shrink-0 rounded-[0.7rem] object-cover ring-1 ring-white/15"
+                />
+                <div className="min-w-0">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-violet-300">
+                    {isTotemMode ? "Totem / Kiosco" : "Zero-Offline Scanner"}
+                  </p>
+                  <h1 className="mt-1 text-2xl font-black tracking-tight">
+                    Escáner Tokepass
+                  </h1>
+                </div>
               </div>
               {!isTotemMode ? (
                 <Button

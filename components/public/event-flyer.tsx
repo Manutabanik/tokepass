@@ -1,6 +1,7 @@
 import Image from "next/image"
 import type { ReactNode } from "react"
 
+import { BRAND_MARK_SRC } from "@/components/shared/brand-logo"
 import { cn } from "@/lib/utils"
 
 const gradients = [
@@ -57,9 +58,15 @@ export function EventFlyer({
       )}
     >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.12),transparent_45%)]" />
-      <div className="absolute left-5 top-5 grid size-10 place-items-center rounded-xl bg-white/10 text-sm font-black tracking-tight ring-1 ring-white/15 backdrop-blur">
-        T
-      </div>
+      <span className="absolute left-5 top-5 size-10 overflow-hidden rounded-xl bg-black ring-1 ring-white/20 shadow-lg shadow-black/40">
+        <Image
+          src={BRAND_MARK_SRC}
+          alt=""
+          width={40}
+          height={40}
+          className="size-full object-cover"
+        />
+      </span>
       <div className="relative z-10">
         <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/60">
           Tokepass

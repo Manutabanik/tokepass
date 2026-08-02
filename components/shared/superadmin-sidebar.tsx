@@ -8,7 +8,6 @@ import {
   PanelLeftOpen,
   Receipt,
   Settings,
-  ShieldCheck,
   Users,
   Wallet,
 } from "lucide-react"
@@ -16,6 +15,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
 
+import { BrandLogo } from "@/components/shared/brand-logo"
 import { cn } from "@/lib/utils"
 
 const navigation = [
@@ -43,27 +43,27 @@ export function SuperAdminSidebar() {
         collapsed ? "w-20" : "w-72",
       )}
     >
-      <div className="flex h-10 items-center justify-between">
-        <Link
-          href="/superadmin"
-          className={cn(
-            "flex items-center gap-2.5 font-black tracking-tight text-white",
-            collapsed && "justify-center",
-          )}
-          aria-label="Tokepass Platform OS"
-        >
-          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 text-white shadow-lg shadow-indigo-950/40">
-            <ShieldCheck className="size-4" />
-          </span>
-          {!collapsed && (
-            <span className="leading-tight">
-              Tokepass
-              <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-sky-400">
-                Platform OS
-              </span>
-            </span>
-          )}
-        </Link>
+      <div
+        className={cn(
+          "flex items-center justify-between",
+          collapsed ? "h-10" : "min-h-12",
+        )}
+      >
+        {collapsed ? (
+          <BrandLogo
+            inverted
+            markOnly
+            href="/superadmin"
+            className="justify-center"
+          />
+        ) : (
+          <BrandLogo
+            inverted
+            href="/superadmin"
+            tagline="Platform OS"
+            className="px-0.5"
+          />
+        )}
 
         <button
           type="button"

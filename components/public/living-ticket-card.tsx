@@ -101,7 +101,16 @@ export function LivingTicketCard({
             priority={canShowLiveQr}
           />
         ) : (
-          <div className="flex h-full w-full items-end bg-gradient-to-br from-zinc-950 via-zinc-900 to-emerald-950 p-4">
+          <div className="relative flex h-full w-full items-end bg-gradient-to-br from-zinc-950 via-zinc-900 to-violet-950 p-4">
+            <span className="absolute left-4 top-4 size-9 overflow-hidden rounded-xl bg-black ring-1 ring-white/20">
+              <Image
+                src="/brand/tokepass-mark.png"
+                alt=""
+                width={36}
+                height={36}
+                className="size-full object-cover"
+              />
+            </span>
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/55">
                 Tokepass
