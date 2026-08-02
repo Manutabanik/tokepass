@@ -30,7 +30,7 @@ const sizeClass = {
 
 /**
  * Crisp vector mark — black tile, rounded white T, violet capsule.
- * Inline SVG so the header never depends on image optimization / cache.
+ * Clear gap between stem and capsule (matches the brand PNG).
  */
 export function BrandMarkSvg({
   className,
@@ -48,13 +48,12 @@ export function BrandMarkSvg({
     >
       {title ? <title>{title}</title> : null}
       <rect width="128" height="128" rx="28" fill="#050505" />
-      {/* Rounded T */}
-      <path
-        fill="#ffffff"
-        d="M30 34h68a8 8 0 0 1 0 16H72.5v52a9 9 0 0 1-18 0V50H30a8 8 0 0 1 0-16Z"
-      />
-      {/* Violet capsule under stem */}
-      <rect x="48" y="98" width="32" height="12" rx="6" fill="#A78BFA" />
+      {/* Top bar of the T */}
+      <rect x="24" y="28" width="80" height="22" rx="11" fill="#ffffff" />
+      {/* Stem — ends at y=82 */}
+      <rect x="53" y="40" width="22" height="42" rx="11" fill="#ffffff" />
+      {/* Violet capsule — gap below stem, padding above tile edge */}
+      <rect x="50" y="92" width="28" height="12" rx="6" fill="#A78BFA" />
     </svg>
   )
 }
@@ -67,14 +66,14 @@ export function BrandMark({
   return (
     <span
       className={cn(
-        "relative shrink-0 overflow-hidden rounded-[0.9rem]",
-        "bg-black ring-1 ring-white/15",
+        "relative grid shrink-0 place-items-center overflow-hidden rounded-[0.9rem]",
+        "bg-[#050505] ring-1 ring-white/15",
         "shadow-[0_0_0_1px_rgba(0,0,0,0.5),0_10px_28px_rgba(0,0,0,0.45)]",
         markOnly ? "size-10" : sizeClass[size],
         className,
       )}
     >
-      <BrandMarkSvg />
+      <BrandMarkSvg className="size-full" />
     </span>
   )
 }
