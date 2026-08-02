@@ -16,16 +16,16 @@ export async function PublicNavbar() {
     <header
       className={cn(
         "sticky top-0 z-50 w-full",
-        "border-b border-white/10 bg-slate-950/70 backdrop-blur-2xl",
+        "border-b border-white/10 bg-slate-950/80 backdrop-blur-2xl",
         "shadow-[0_4px_30px_rgba(0,0,0,0.5)] transition-all duration-300",
       )}
     >
-      <div className="mx-auto flex h-[4.25rem] max-w-7xl items-center justify-between px-4 lg:px-8">
+      <div className="mx-auto flex h-[4.75rem] max-w-7xl items-center justify-between px-4 sm:h-[5.25rem] lg:px-8">
         <div className="flex min-w-0 items-center">
-          <BrandLogo inverted className="shrink-0" />
+          <BrandLogo inverted size="header" className="shrink-0" />
 
           <nav
-            className="ml-8 hidden items-center gap-7 md:flex lg:ml-10 lg:gap-8"
+            className="ml-7 hidden items-center gap-7 md:flex lg:ml-10 lg:gap-8"
             aria-label="Principal"
           >
             <Link

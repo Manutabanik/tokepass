@@ -1,8 +1,8 @@
-import Image from "next/image"
 import Link from "next/link"
 
 import { cn } from "@/lib/utils"
 
+/** Public PNG fallback for favicons / PWA / plain <img> contexts. */
 export const BRAND_MARK_SRC = "/brand/tokepass-mark.png"
 
 interface BrandLogoProps {
@@ -17,41 +17,64 @@ interface BrandLogoProps {
   href?: string | null
   /** Prefer true in primary headers. */
   priority?: boolean
-  /** Mark pixel size hint for layout. */
-  size?: "sm" | "md" | "lg"
+  /** Mark size. `header` is the large public-navbar treatment. */
+  size?: "sm" | "md" | "lg" | "header"
 }
 
 const sizeClass = {
   sm: "size-8",
-  md: "size-9 sm:size-[2.45rem]",
+  md: "size-9 sm:size-10",
   lg: "size-12",
+  header: "size-11 sm:size-12 lg:size-[3.25rem]",
 } as const
+
+/**
+ * Crisp vector mark — black tile, rounded white T, violet capsule.
+ * Inline SVG so the header never depends on image optimization / cache.
+ */
+export function BrandMarkSvg({
+  className,
+  title,
+}: {
+  className?: string
+  title?: string
+}) {
+  return (
+    <svg
+      viewBox="0 0 128 128"
+      role={title ? "img" : "presentation"}
+      aria-hidden={title ? undefined : true}
+      className={cn("block size-full", className)}
+    >
+      {title ? <title>{title}</title> : null}
+      <rect width="128" height="128" rx="28" fill="#050505" />
+      {/* Rounded T */}
+      <path
+        fill="#ffffff"
+        d="M30 34h68a8 8 0 0 1 0 16H72.5v52a9 9 0 0 1-18 0V50H30a8 8 0 0 1 0-16Z"
+      />
+      {/* Violet capsule under stem */}
+      <rect x="48" y="98" width="32" height="12" rx="6" fill="#A78BFA" />
+    </svg>
+  )
+}
 
 export function BrandMark({
   className,
   size = "md",
-  priority = false,
   markOnly = false,
-}: Pick<BrandLogoProps, "className" | "size" | "priority" | "markOnly">) {
+}: Pick<BrandLogoProps, "className" | "size" | "markOnly">) {
   return (
     <span
       className={cn(
-        "relative shrink-0 overflow-hidden rounded-[0.72rem]",
-        "bg-black ring-1 ring-white/12",
-        "shadow-[0_0_0_1px_rgba(0,0,0,0.45),0_6px_18px_rgba(0,0,0,0.35)]",
+        "relative shrink-0 overflow-hidden rounded-[0.9rem]",
+        "bg-black ring-1 ring-white/15",
+        "shadow-[0_0_0_1px_rgba(0,0,0,0.5),0_10px_28px_rgba(0,0,0,0.45)]",
         markOnly ? "size-10" : sizeClass[size],
         className,
       )}
     >
-      <Image
-        src={BRAND_MARK_SRC}
-        alt=""
-        width={80}
-        height={80}
-        priority={priority}
-        sizes="48px"
-        className="size-full object-cover"
-      />
+      <BrandMarkSvg />
     </span>
   )
 }
@@ -62,18 +85,19 @@ export function BrandLogo({
   markOnly = false,
   tagline,
   href = "/",
-  priority = true,
   size = "md",
 }: BrandLogoProps) {
+  const isHeader = size === "header"
+
   const content = (
     <>
       <BrandMark
         size={size}
-        priority={priority}
         markOnly={markOnly}
         className={cn(
           "transition duration-300",
-          "group-hover:ring-violet-400/45 group-hover:shadow-[0_0_20px_rgba(167,139,250,0.35)]",
+          "group-hover:ring-violet-400/50 group-hover:shadow-[0_0_28px_rgba(167,139,250,0.45)]",
+          isHeader && "rounded-[1rem] sm:rounded-[1.1rem]",
         )}
       />
 
@@ -81,7 +105,10 @@ export function BrandLogo({
         <span className="flex min-w-0 flex-col leading-none">
           <span
             className={cn(
-              "text-[1.15rem] font-black tracking-[-0.045em] sm:text-[1.25rem]",
+              "font-black tracking-[-0.045em]",
+              isHeader
+                ? "text-[1.35rem] sm:text-[1.55rem] lg:text-[1.7rem]"
+                : "text-[1.15rem] sm:text-[1.25rem]",
               inverted ? "text-white" : "text-zinc-950",
             )}
           >
@@ -90,42 +117,38 @@ export function BrandLogo({
           {tagline ? (
             <span
               className={cn(
-                "mt-1 text-[10px] font-semibold uppercase tracking-[0.18em]",
+                "mt-1 font-semibold uppercase tracking-[0.18em]",
+                isHeader ? "text-[11px]" : "text-[10px]",
                 inverted ? "text-violet-300" : "text-violet-600",
               )}
             >
               {tagline}
             </span>
-          ) : null}
+          ) : (
+            isHeader && (
+              <span className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-violet-300/90 sm:text-[11px]">
+                Boletería digital
+              </span>
+            )
+          )}
         </span>
       ) : null}
     </>
   )
 
+  const shellClass = cn(
+    "group inline-flex items-center",
+    isHeader ? "gap-3 sm:gap-3.5" : "gap-2.5",
+    inverted ? "text-white" : "text-zinc-950",
+    className,
+  )
+
   if (href === null) {
-    return (
-      <span
-        className={cn(
-          "group inline-flex items-center gap-2.5",
-          inverted ? "text-white" : "text-zinc-950",
-          className,
-        )}
-      >
-        {content}
-      </span>
-    )
+    return <span className={shellClass}>{content}</span>
   }
 
   return (
-    <Link
-      href={href}
-      className={cn(
-        "group inline-flex items-center gap-2.5",
-        inverted ? "text-white" : "text-zinc-950",
-        className,
-      )}
-      aria-label="Tokepass — Inicio"
-    >
+    <Link href={href} className={shellClass} aria-label="Tokepass — Inicio">
       {content}
     </Link>
   )

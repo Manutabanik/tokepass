@@ -5,7 +5,6 @@ import { motion } from "motion/react"
 
 import { FilterPills } from "@/components/discovery/filter-pills"
 import { SearchBar } from "@/components/discovery/search-bar"
-import { BrandLogo } from "@/components/shared/brand-logo"
 import type { DiscoveryMoodId } from "@/lib/discovery-filters"
 
 type HeroSectionProps = {
@@ -35,12 +34,6 @@ export function HeroSection({
         transition={{ duration: 0.5, ease: "easeOut" }}
         className="mx-auto flex max-w-4xl flex-col items-center px-5 text-center"
       >
-        <BrandLogo
-          inverted
-          href="/"
-          size="lg"
-          className="mb-6 flex-col items-center gap-3 sm:mb-8"
-        />
         <h1 className="text-balance text-4xl font-black leading-tight tracking-tight text-white sm:text-5xl lg:text-7xl lg:leading-none">
           <span className="block lg:inline">Tu próxima gran noche </span>
           <span className="mt-1 block bg-gradient-to-r from-purple-400 via-fuchsia-400 to-cyan-400 bg-clip-text pb-1 text-transparent drop-shadow-[0_0_35px_rgba(168,85,247,0.5)] sm:mt-1.5 lg:mt-0 lg:inline">
