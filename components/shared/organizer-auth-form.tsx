@@ -1,6 +1,6 @@
 "use client"
 
-import { LoaderCircle } from "lucide-react"
+import { LoaderCircle, ShieldCheck } from "lucide-react"
 import Link from "next/link"
 import { useActionState } from "react"
 import { useFormStatus } from "react-dom"
