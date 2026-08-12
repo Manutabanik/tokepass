@@ -1,12 +1,15 @@
 "use client"
 
 import {
+  ArrowRightLeft,
   Ban,
-  MessageCircle,
+  History,
   Mail,
+  MessageCircle,
   MoreHorizontal,
   Plus,
   Printer,
+  RefreshCw,
   Search,
   Ticket,
   UserRoundPen,
@@ -42,25 +45,36 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { formatNumber } from "@/lib/format"
 import {
+  custodyChannelLabel,
   formatCheckInLabel,
   matchesIssuedTicketQuery,
   MOCK_ISSUED_TICKET_METRICS,
   MOCK_ISSUED_TICKETS,
+  nextMockTicketCode,
+  type CustodyTransferEvent,
   type IssuedTicketRow,
   type IssuedTicketUiStatus,
 } from "@/lib/admin/issued-tickets-mock"
+import { formatDateTime, formatNumber } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 type StatusTab = "all" | IssuedTicketUiStatus
 
-type ModalKind = "resend" | "holder" | "cancel" | "courtesy" | null
+type ModalKind =
+  | "resend"
+  | "holder"
+  | "cancel"
+  | "courtesy"
+  | "transfer"
+  | "custody"
+  | null
 
 const TAB_LABELS: { value: StatusTab; label: string }[] = [
   { value: "all", label: "Todas" },
   { value: "available", label: "Disponibles" },
   { value: "checked_in", label: "Ingresadas" },
+  { value: "transferred", label: "Transferidos / Reasignados" },
   { value: "cancelled", label: "Anuladas" },
 ]
 
@@ -73,12 +87,20 @@ function StatusBadge({ ticket }: { ticket: IssuedTicketRow }) {
       </span>
     )
   }
+  if (ticket.status === "transferred") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/15 px-2.5 py-1 text-[11px] font-semibold text-amber-100">
+        <RefreshCw className="size-3" aria-hidden />
+        Transferido / Reasignado
+      </span>
+    )
+  }
   if (ticket.status === "checked_in") {
     return (
       <span className="inline-flex flex-col items-start gap-0.5 rounded-full border border-sky-500/35 bg-sky-500/15 px-2.5 py-1 text-[11px] font-semibold text-sky-100">
         <span className="inline-flex items-center gap-1.5">
           <span className="size-1.5 rounded-full bg-sky-400" aria-hidden />
-          Ingresó
+          Ingresado
         </span>
         {ticket.checkedInAt ? (
           <span className="pl-3 text-[10px] font-medium text-sky-200/80">
@@ -91,9 +113,62 @@ function StatusBadge({ ticket }: { ticket: IssuedTicketRow }) {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-100">
       <span className="size-1.5 rounded-full bg-emerald-400" aria-hidden />
-      Válido / Sin ingresar
+      Válido
     </span>
   )
+}
+
+function TransferLinkChip({
+  ticket,
+  onOpenCustody,
+}: {
+  ticket: IssuedTicketRow
+  onOpenCustody: () => void
+}) {
+  if (ticket.status === "transferred" && ticket.transferredTo) {
+    return (
+      <button
+        type="button"
+        onClick={onOpenCustody}
+        className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-left text-[11px] font-medium text-amber-100 transition hover:bg-amber-500/20"
+      >
+        <RefreshCw className="size-3 shrink-0" aria-hidden />
+        <span className="truncate">
+          Transferido a {ticket.transferredTo.name} (#{ticket.transferredTo.code}
+          )
+        </span>
+        <History className="size-3 shrink-0 opacity-70" aria-hidden />
+      </button>
+    )
+  }
+  if (ticket.receivedFrom) {
+    return (
+      <button
+        type="button"
+        onClick={onOpenCustody}
+        className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-lg border border-violet-500/30 bg-violet-500/10 px-2 py-1 text-left text-[11px] font-medium text-violet-100 transition hover:bg-violet-500/20"
+      >
+        <ArrowRightLeft className="size-3 shrink-0" aria-hidden />
+        <span className="truncate">
+          Recibido de {ticket.receivedFrom.name} (#{ticket.receivedFrom.code})
+        </span>
+        <History className="size-3 shrink-0 opacity-70" aria-hidden />
+      </button>
+    )
+  }
+  if (ticket.custodyChain.length > 0) {
+    return (
+      <button
+        type="button"
+        onClick={onOpenCustody}
+        className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1 text-[11px] font-medium text-zinc-300 transition hover:bg-zinc-800"
+      >
+        <History className="size-3" aria-hidden />
+        Ver cadena de custodia
+      </button>
+    )
+  }
+  return null
 }
 
 function RowActionsMenu({
@@ -101,23 +176,25 @@ function RowActionsMenu({
   onResend,
   onPrint,
   onEditHolder,
+  onTransfer,
   onCancel,
 }: {
   ticket: IssuedTicketRow
   onResend: () => void
   onPrint: () => void
   onEditHolder: () => void
+  onTransfer: () => void
   onCancel: () => void
 }) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
+  const locked =
+    ticket.status === "cancelled" || ticket.status === "transferred"
 
   useEffect(() => {
     if (!open) return
     function onPointerDown(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false)
-      }
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
     }
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") setOpen(false)
@@ -141,25 +218,32 @@ function RowActionsMenu({
       label: "Reenviar entrada",
       icon: <Mail className="size-4" aria-hidden />,
       onClick: onResend,
-      disabled: ticket.status === "cancelled",
+      disabled: locked || ticket.status === "checked_in",
     },
     {
       label: "Descargar / Imprimir PDF",
       icon: <Printer className="size-4" aria-hidden />,
       onClick: onPrint,
+      disabled: ticket.status === "transferred",
     },
     {
       label: "Cambiar titular / Email",
       icon: <UserRoundPen className="size-4" aria-hidden />,
       onClick: onEditHolder,
-      disabled: ticket.status === "cancelled",
+      disabled: locked,
+    },
+    {
+      label: "Transferir / Reasignar a otra persona",
+      icon: <RefreshCw className="size-4" aria-hidden />,
+      onClick: onTransfer,
+      disabled: locked || ticket.status === "checked_in",
     },
     {
       label: "Inhabilitar / Cancelar ticket",
       icon: <Ban className="size-4" aria-hidden />,
       onClick: onCancel,
       danger: true,
-      disabled: ticket.status === "cancelled",
+      disabled: locked,
     },
   ]
 
@@ -179,7 +263,7 @@ function RowActionsMenu({
       {open ? (
         <div
           role="menu"
-          className="absolute right-0 top-10 z-30 w-64 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 py-1 shadow-2xl shadow-black/50"
+          className="absolute right-0 top-10 z-30 w-72 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 py-1 shadow-2xl shadow-black/50"
         >
           {items.map((item) => (
             <button
@@ -208,6 +292,90 @@ function RowActionsMenu({
   )
 }
 
+function CustodyTimeline({
+  ticket,
+  events,
+}: {
+  ticket: IssuedTicketRow
+  events: CustodyTransferEvent[]
+}) {
+  const original = ticket.originalBuyer
+  const current =
+    ticket.status === "transferred" && ticket.transferredTo
+      ? {
+          name: ticket.transferredTo.name,
+          email:
+            events.at(-1)?.to.email ??
+            "Titular actual (ver ticket destino)",
+          dni: events.at(-1)?.to.dni ?? "—",
+          code: ticket.transferredTo.code,
+        }
+      : {
+          name: ticket.holderName,
+          email: ticket.holderEmail,
+          dni: ticket.holderDni,
+          code: ticket.code,
+        }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
+          Comprador original
+        </p>
+        <p className="mt-2 font-semibold text-white">{original.name}</p>
+        <p className="text-xs text-zinc-400">
+          {original.email} · DNI {original.dni}
+        </p>
+        <p className="mt-1 text-xs text-zinc-500">
+          Compra: {formatDateTime(ticket.purchasedAt)}
+        </p>
+      </div>
+
+      {events.length === 0 ? (
+        <p className="text-sm text-zinc-500">
+          Esta entrada no tiene transferencias registradas.
+        </p>
+      ) : (
+        <ol className="space-y-3">
+          {events.map((event) => (
+            <li
+              key={`${event.fromTicketId}-${event.toTicketId}-${event.at}`}
+              className="rounded-2xl border border-amber-500/25 bg-amber-500/[0.07] p-4"
+            >
+              <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-200">
+                <RefreshCw className="size-3" aria-hidden />
+                Acción
+              </p>
+              <p className="mt-2 text-sm text-amber-50">
+                {custodyChannelLabel(event.channel)} el{" "}
+                {formatDateTime(event.at)}
+              </p>
+              <p className="mt-2 text-xs text-zinc-400">
+                De {event.from.name} (#{event.fromTicketCode}) → {event.to.name}{" "}
+                (#{event.toTicketCode})
+              </p>
+            </li>
+          ))}
+        </ol>
+      )}
+
+      <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.07] p-4">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-300/90">
+          Titular actual
+        </p>
+        <p className="mt-2 font-semibold text-white">{current.name}</p>
+        <p className="text-xs text-zinc-400">
+          {current.email} · DNI {current.dni}
+        </p>
+        <p className="mt-1 font-mono text-xs text-emerald-200/90">
+          QR vigente: #{current.code}
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export function IssuedTicketsManager({
   eventId,
   eventTitle,
@@ -225,6 +393,10 @@ export function IssuedTicketsManager({
   const [holderName, setHolderName] = useState("")
   const [holderEmail, setHolderEmail] = useState("")
   const [holderDni, setHolderDni] = useState("")
+
+  const [transferName, setTransferName] = useState("")
+  const [transferEmail, setTransferEmail] = useState("")
+  const [transferDni, setTransferDni] = useState("")
 
   const [courtesyName, setCourtesyName] = useState("")
   const [courtesyEmail, setCourtesyEmail] = useState("")
@@ -245,7 +417,8 @@ export function IssuedTicketsManager({
     const total = tickets.length
     const checkedIn = tickets.filter((t) => t.status === "checked_in").length
     const pending = tickets.filter((t) => t.status === "available").length
-    return { total, checkedIn, pending }
+    const transferred = tickets.filter((t) => t.status === "transferred").length
+    return { total, checkedIn, pending, transferred }
   }, [tickets])
 
   function openModal(kind: ModalKind, ticket?: IssuedTicketRow) {
@@ -254,6 +427,9 @@ export function IssuedTicketsManager({
       setHolderName(ticket.holderName)
       setHolderEmail(ticket.holderEmail)
       setHolderDni(ticket.holderDni)
+      setTransferName("")
+      setTransferEmail("")
+      setTransferDni("")
     } else {
       setActiveTicketId(null)
     }
@@ -266,6 +442,12 @@ export function IssuedTicketsManager({
   }
 
   function handlePrint(ticket: IssuedTicketRow) {
+    if (ticket.status === "transferred") {
+      toast.error("Este QR ya no es válido", {
+        description: "Abrí el ticket del titular actual desde la cadena.",
+      })
+      return
+    }
     toast.message("Abriendo ticket para imprimir", {
       description: `#${ticket.code} · ${ticket.holderName}`,
     })
@@ -330,13 +512,102 @@ export function IssuedTicketsManager({
     setTickets((current) =>
       current.map((ticket) =>
         ticket.id === activeTicketId
-          ? { ...ticket, status: "cancelled", checkedInAt: null }
+          ? {
+              ...ticket,
+              status: "cancelled",
+              checkedInAt: null,
+              transferredTo: null,
+            }
           : ticket,
       ),
     )
     toast.success("Ticket anulado", {
       description: "El QR ya no será válido en el escáner.",
     })
+    closeModal()
+  }
+
+  function confirmTransfer() {
+    if (!activeTicket || !activeTicketId) return
+    const name = transferName.trim()
+    const email = transferEmail.trim().toLowerCase()
+    const dni = transferDni.trim()
+    if (name.length < 3 || !email.includes("@") || dni.length < 6) {
+      toast.error("Completá nombre, email y DNI del nuevo titular.")
+      return
+    }
+    if (email === activeTicket.holderEmail.toLowerCase()) {
+      toast.error("El nuevo titular debe ser otra persona.")
+      return
+    }
+
+    const newCode = nextMockTicketCode(tickets)
+    const newId = `tkt-transfer-${Date.now()}`
+    const now = new Date().toISOString()
+    const fromParty = {
+      name: activeTicket.holderName,
+      email: activeTicket.holderEmail,
+      dni: activeTicket.holderDni,
+    }
+    const toParty = { name, email, dni }
+    const event: CustodyTransferEvent = {
+      at: now,
+      channel: "admin_reassign",
+      from: fromParty,
+      to: toParty,
+      fromTicketCode: activeTicket.code,
+      toTicketCode: newCode,
+      fromTicketId: activeTicket.id,
+      toTicketId: newId,
+    }
+    const chain = [...activeTicket.custodyChain, event]
+
+    const newTicket: IssuedTicketRow = {
+      id: newId,
+      code: newCode,
+      holderName: name,
+      holderEmail: email,
+      holderDni: dni,
+      sectorLabel: activeTicket.sectorLabel,
+      status: "available",
+      checkedInAt: null,
+      purchasedAt: activeTicket.purchasedAt,
+      ticketUrl: `https://www.tokepass.com.ar/tickets/${newId}`,
+      originalBuyer: activeTicket.originalBuyer,
+      transferredTo: null,
+      receivedFrom: {
+        name: activeTicket.holderName,
+        code: activeTicket.code,
+        ticketId: activeTicket.id,
+      },
+      custodyChain: chain,
+    }
+
+    setTickets((current) => [
+      newTicket,
+      ...current.map((ticket) =>
+        ticket.id === activeTicketId
+          ? {
+              ...ticket,
+              status: "transferred" as const,
+              checkedInAt: null,
+              transferredTo: {
+                name,
+                code: newCode,
+                ticketId: newId,
+              },
+              custodyChain: chain,
+            }
+          : ticket,
+      ),
+    ])
+
+    toast.success("Transferencia completada", {
+      description: `QR #${activeTicket.code} invalidado. Nuevo #${newCode} enviado a ${email}.`,
+    })
+    setTransferName("")
+    setTransferEmail("")
+    setTransferDni("")
     closeModal()
   }
 
@@ -348,8 +619,9 @@ export function IssuedTicketsManager({
       toast.error("Completá los datos de la cortesía.")
       return
     }
-    const code = `TK-${String(86000 + tickets.length)}`
+    const code = nextMockTicketCode(tickets)
     const id = `tkt-courtesy-${Date.now()}`
+    const buyer = { name, email, dni }
     const next: IssuedTicketRow = {
       id,
       code,
@@ -359,7 +631,12 @@ export function IssuedTicketsManager({
       sectorLabel: courtesySector.trim() || "Campo General",
       status: "available",
       checkedInAt: null,
+      purchasedAt: new Date().toISOString(),
       ticketUrl: `https://www.tokepass.com.ar/tickets/${id}`,
+      originalBuyer: buyer,
+      transferredTo: null,
+      receivedFrom: null,
+      custodyChain: [],
     }
     setTickets((current) => [next, ...current])
     setCourtesyName("")
@@ -389,7 +666,8 @@ export function IssuedTicketsManager({
             Entradas emitidas y clientes
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-400 sm:text-base">
-            Buscá compradores, reenviá entradas o resolvé reclamos al instante.
+            Buscá compradores, reenviá entradas, transferí titulares o resolvé
+            reclamos con trazabilidad completa.
           </p>
         </header>
         <Button
@@ -403,7 +681,7 @@ export function IssuedTicketsManager({
         </Button>
       </div>
 
-      <section className="grid gap-3 sm:grid-cols-3">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           icon={<Ticket className="size-4 text-emerald-400" />}
           label="Total emitidas"
@@ -420,7 +698,13 @@ export function IssuedTicketsManager({
           icon={<Search className="size-4 text-amber-300" />}
           label="Pendientes de ingreso"
           value={formatNumber(MOCK_ISSUED_TICKET_METRICS.pending)}
-          hint={`En lista: ${formatNumber(liveMetrics.pending)} disponibles`}
+          hint={`En lista: ${formatNumber(liveMetrics.pending)} válidos`}
+        />
+        <MetricCard
+          icon={<RefreshCw className="size-4 text-orange-300" />}
+          label="Transferidos"
+          value={formatNumber(liveMetrics.transferred)}
+          hint="QR originales invalidados"
         />
       </section>
 
@@ -430,7 +714,7 @@ export function IssuedTicketsManager({
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Buscá por nombre, apellido, DNI, email o código…"
+            placeholder="Buscá por nombre, DNI, email, código o historial de transferencia…"
             className="h-14 rounded-2xl border-zinc-800 bg-black pl-12 text-base text-white placeholder:text-zinc-600"
             aria-label="Buscar entradas emitidas"
           />
@@ -498,6 +782,10 @@ export function IssuedTicketsManager({
                       <p className="mt-2 text-xs text-zinc-400 md:hidden">
                         {ticket.sectorLabel}
                       </p>
+                      <TransferLinkChip
+                        ticket={ticket}
+                        onOpenCustody={() => openModal("custody", ticket)}
+                      />
                     </TableCell>
                     <TableCell className="hidden max-w-[240px] truncate px-4 py-3 text-sm text-zinc-300 md:table-cell">
                       {ticket.sectorLabel}
@@ -514,6 +802,7 @@ export function IssuedTicketsManager({
                         onResend={() => openModal("resend", ticket)}
                         onPrint={() => handlePrint(ticket)}
                         onEditHolder={() => openModal("holder", ticket)}
+                        onTransfer={() => openModal("transfer", ticket)}
                         onCancel={() => openModal("cancel", ticket)}
                       />
                     </TableCell>
@@ -575,7 +864,8 @@ export function IssuedTicketsManager({
           <DialogHeader>
             <DialogTitle>Cambiar titular / Email</DialogTitle>
             <DialogDescription className="text-zinc-400">
-              Corregí los datos si el comprador se equivocó en el checkout.
+              Corrección de datos del mismo titular. Para ceder la entrada usá
+              Transferir / Reasignar.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -625,6 +915,96 @@ export function IssuedTicketsManager({
               Guardar cambios
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={modal === "transfer"}
+        onOpenChange={(open) => !open && closeModal()}
+      >
+        <DialogContent className="border-zinc-800 bg-zinc-950 text-white sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Transferir / Reasignar</DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              {activeTicket
+                ? `Se invalida #${activeTicket.code} y se emite un QR nuevo al destinatario.`
+                : "Seleccioná una entrada."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100/90">
+              El QR actual dejará de pasar en puerta. Queda registro en la
+              cadena de custodia.
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="transfer-name">Nombre y apellido</Label>
+              <Input
+                id="transfer-name"
+                value={transferName}
+                onChange={(e) => setTransferName(e.target.value)}
+                className="border-zinc-700 bg-zinc-900"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="transfer-email">Email del nuevo titular</Label>
+              <Input
+                id="transfer-email"
+                type="email"
+                value={transferEmail}
+                onChange={(e) => setTransferEmail(e.target.value)}
+                className="border-zinc-700 bg-zinc-900"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="transfer-dni">DNI</Label>
+              <Input
+                id="transfer-dni"
+                value={transferDni}
+                onChange={(e) => setTransferDni(e.target.value)}
+                className="border-zinc-700 bg-zinc-900"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:justify-end">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={closeModal}
+              className="text-zinc-400"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={confirmTransfer}
+              className="rounded-xl bg-amber-500 text-zinc-950 hover:bg-amber-400"
+            >
+              <RefreshCw className="size-4" />
+              Confirmar transferencia
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={modal === "custody"}
+        onOpenChange={(open) => !open && closeModal()}
+      >
+        <DialogContent className="max-h-[85dvh] overflow-y-auto border-zinc-800 bg-zinc-950 text-white sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Cadena de custodia</DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              {activeTicket
+                ? `Historial de #${activeTicket.code} · ${activeTicket.sectorLabel}`
+                : "Seleccioná una entrada."}
+            </DialogDescription>
+          </DialogHeader>
+          {activeTicket ? (
+            <CustodyTimeline
+              ticket={activeTicket}
+              events={activeTicket.custodyChain}
+            />
+          ) : null}
         </DialogContent>
       </Dialog>
 
