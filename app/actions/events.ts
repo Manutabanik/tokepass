@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import { isPlatformOwnerRole } from "@/lib/auth/platform-owner"
 import { parseScheduleDays } from "@/lib/event-schedule"
 import { allInBreakdown } from "@/lib/pricing/all-in"
 import {
@@ -1328,7 +1329,7 @@ export async function getEventCommercialSettings(
     .eq("id", user.id)
     .maybeSingle()
 
-  if (profile?.role !== "super_admin") return null
+  if (!isPlatformOwnerRole(profile?.role)) return null
 
   const admin = createAdminClient()
   const { data: event } = await admin
@@ -1356,8 +1357,9 @@ export type UpdateEventCommercialSettingsResult =
   | { success: false; error: string }
 
 /**
- * SuperAdmin-only: fees, free-ticket cap, Tokepass sponsorship.
- * Recomputes tier base_price / platform_fee from public All-In price.
+ * Platform owner only (super_admin / PLATFORM_OWNER): fees, free-ticket cap,
+ * Tokepass sponsorship. Recomputes tier base_price / platform_fee from public
+ * All-In price.
  */
 export async function updateEventCommercialSettings(
   eventId: string,
@@ -1379,13 +1381,17 @@ export async function updateEventCommercialSettings(
     .eq("id", user.id)
     .maybeSingle()
 
-  if (profile?.role !== "super_admin") {
-    return { success: false, error: "Solo SuperAdmin puede editar estos valores." }
+  if (!isPlatformOwnerRole(profile?.role)) {
+    return {
+      success: false,
+      error: "Solo el dueño de la plataforma puede editar estos valores.",
+    }
   }
 
   const percentage = Number(input.platformFeePercentage)
   const fixed = Number(input.platformFixedFee)
   const maxFree = Math.floor(Number(input.maxFreeTickets))
+  const sponsored = Boolean(input.isSponsoredByTokepass)
 
   if (!Number.isFinite(percentage) || percentage < 0 || percentage > 95) {
     return { success: false, error: "El porcentaje debe estar entre 0 y 95." }
@@ -1401,10 +1407,11 @@ export async function updateEventCommercialSettings(
     platformFeePercentage: percentage,
     platformFixedFee: fixed,
     maxFreeTickets: maxFree,
-    isSponsoredByTokepass: Boolean(input.isSponsoredByTokepass),
+    isSponsoredByTokepass: sponsored,
   }
 
   const admin = createAdminClient()
+
   const { error: updateError } = await admin
     .from("events")
     .update({
@@ -1453,6 +1460,7 @@ export async function updateEventCommercialSettings(
   revalidatePath(`/events/${eventId}`)
   revalidatePath(`/superadmin/events/${eventId}`)
   revalidatePath("/superadmin/events")
+  revalidatePath("/")
 
   return { success: true, recalculatedTiers }
 }

@@ -54,27 +54,47 @@ export function EventCommercialSettingsForm({
   return (
     <form
       onSubmit={onSubmit}
-      className="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-950/80 p-6"
+      className="space-y-6 rounded-2xl border border-violet-500/20 bg-violet-500/[0.04] p-6 ring-1 ring-white/8"
     >
       <div className="flex items-start gap-3">
         <span className="grid size-10 place-items-center rounded-xl bg-violet-500/15 text-violet-300 ring-1 ring-violet-400/30">
           <Shield className="size-5" aria-hidden="true" />
         </span>
         <div>
-          <h2 className="text-lg font-bold text-white">
-            Fees y anti-fraude (SuperAdmin)
-          </h2>
+          <h2 className="text-lg font-bold text-white">Settings comerciales</h2>
           <p className="mt-1 text-sm text-zinc-400">
-            Estos valores rigen el split All-In del evento y el tope de entradas
-            a $0. Solo SuperAdmin puede modificarlos.
+            Solo el dueño de la plataforma puede editar comisión, tope de
+            cortesías y auspicio. Los organizadores no tienen acceso a estos
+            controles.
           </p>
         </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3">
+        <div className="flex items-start gap-3">
+          <Sparkles className="mt-0.5 size-4 text-amber-300" aria-hidden="true" />
+          <div>
+            <p className="text-sm font-semibold text-amber-50">
+              Evento Auspiciado / Destacado en Tokepass
+            </p>
+            <p className="mt-0.5 text-xs text-amber-100/70">
+              Prioriza el evento en la home, muestra el badge de Auspiciado y
+              bonifica la comisión Tokepass (fee % y fijo = 0).
+            </p>
+          </div>
+        </div>
+        <Switch
+          checked={sponsored}
+          onCheckedChange={setSponsored}
+          disabled={pending}
+          aria-label="Evento Auspiciado / Destacado en Tokepass"
+        />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="platform_fee_percentage">
-            Comisión plataforma (%)
+            Comisión / Service Fee (%)
           </Label>
           <Input
             id="platform_fee_percentage"
@@ -102,7 +122,9 @@ export function EventCommercialSettingsForm({
           />
         </div>
         <div className="space-y-2 sm:col-span-2">
-          <Label htmlFor="max_free_tickets">Máx. entradas gratuitas</Label>
+          <Label htmlFor="max_free_tickets">
+            Tope de entradas gratuitas / Cortesías
+          </Label>
           <Input
             id="max_free_tickets"
             type="number"
@@ -118,27 +140,6 @@ export function EventCommercialSettingsForm({
             FreePass de listas).
           </p>
         </div>
-      </div>
-
-      <div className="flex items-center justify-between gap-4 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3">
-        <div className="flex items-start gap-3">
-          <Sparkles className="mt-0.5 size-4 text-amber-300" aria-hidden="true" />
-          <div>
-            <p className="text-sm font-semibold text-amber-50">
-              Auspiciado por Tokepass
-            </p>
-            <p className="mt-0.5 text-xs text-amber-100/70">
-              Bonifica la comisión Tokepass (fee % y fijo = 0) y muestra branding
-              premium en la ficha y la entrada.
-            </p>
-          </div>
-        </div>
-        <Switch
-          checked={sponsored}
-          onCheckedChange={setSponsored}
-          disabled={pending}
-          aria-label="Auspiciado por Tokepass"
-        />
       </div>
 
       <Button

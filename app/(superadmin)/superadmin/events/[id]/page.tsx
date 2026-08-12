@@ -8,7 +8,9 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 
+import { getEventCommercialSettings } from "@/app/actions/events"
 import { getMassRefundPreview } from "@/app/actions/superadmin-refunds"
+import { EventCommercialSettingsForm } from "@/components/admin/event-commercial-settings-form"
 import { EventStatusBadge } from "@/components/superadmin/badges"
 import { EventMassRefundDangerZone } from "@/components/superadmin/event-mass-refund-danger-zone"
 import { PageHeading } from "@/components/superadmin/page-heading"
@@ -30,7 +32,10 @@ export default async function SuperAdminEventDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const preview = await getMassRefundPreview(id)
+  const [preview, commercial] = await Promise.all([
+    getMassRefundPreview(id),
+    getEventCommercialSettings(id),
+  ])
 
   if (!preview) notFound()
 
@@ -85,6 +90,12 @@ export default async function SuperAdminEventDetailPage({
         </Card>
       </div>
 
+      {commercial ? (
+        <div className="mb-6">
+          <EventCommercialSettingsForm initial={commercial} />
+        </div>
+      ) : null}
+
       <Card className="mb-6 border-0 bg-white/[0.035] py-0 ring-1 ring-white/8">
         <CardHeader className="border-b border-white/8 px-6 py-5">
           <CardTitle className="flex items-center gap-2 text-white">
@@ -108,12 +119,6 @@ export default async function SuperAdminEventDetailPage({
             className="inline-flex text-sm text-sky-300 hover:text-sky-200"
           >
             Abrir gobierno financiero
-          </Link>
-          <Link
-            href={`/admin/events/${id}/settings`}
-            className="mt-2 inline-flex text-sm text-violet-300 hover:text-violet-200"
-          >
-            Settings comerciales del evento
           </Link>
         </CardContent>
       </Card>

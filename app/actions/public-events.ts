@@ -25,6 +25,7 @@ export type CatalogEvent = {
   isFeatured: boolean
   featuredTier: "silver" | "gold" | "platinum" | null
   featuredUntil: string | null
+  isSponsoredByTokepass: boolean
 }
 
 export type EventDetails = {
@@ -91,6 +92,7 @@ type EventListRow = {
   is_featured: boolean | null
   featured_tier: "silver" | "gold" | "platinum" | null
   featured_until: string | null
+  is_sponsored_by_tokepass: boolean | null
   venues: { name: string; location: string } | null
   ticket_tiers: { price: number; capacity: number; sold: number }[] | null
   profiles: { full_name: string | null } | null
@@ -177,7 +179,7 @@ export async function getPublishedEvents(
   let query = supabase
     .from("events")
     .select(
-      "id, title, description, date, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, venues(name, location), ticket_tiers(price, capacity, sold), profiles!events_organizer_id_fkey(full_name)",
+      "id, title, description, date, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, venues(name, location), ticket_tiers(price, capacity, sold), profiles!events_organizer_id_fkey(full_name)",
     )
     .eq("status", "published")
     .eq("visibility", "public")
@@ -222,6 +224,7 @@ export async function getPublishedEvents(
       isFeatured: stillActive,
       featuredTier: stillActive ? event.featured_tier : null,
       featuredUntil: stillActive ? featuredUntil : null,
+      isSponsoredByTokepass: Boolean(event.is_sponsored_by_tokepass),
     }
   })
 

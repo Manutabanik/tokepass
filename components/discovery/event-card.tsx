@@ -45,6 +45,7 @@ export function EventCard({
   const city = eventCityLabel(event)
   const place = event.venueName ?? event.location
   const boosted = isBoostActive(event)
+  const sponsored = Boolean(event.isSponsoredByTokepass)
 
   return (
     <motion.article
@@ -88,7 +89,12 @@ export function EventCard({
           <div className="absolute inset-0 bg-gradient-to-t from-black via-black/55 to-transparent" />
 
           <div className="absolute left-3 top-3 flex max-w-[calc(100%-1.5rem)] flex-wrap gap-1.5">
-            {boosted ? (
+            {sponsored ? (
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/40 bg-amber-400/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-50 shadow-[0_0_14px_rgba(251,191,36,0.35)] backdrop-blur-md">
+                <Crown className="size-3" aria-hidden="true" />
+                Auspiciado
+              </span>
+            ) : boosted ? (
               <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/40 bg-amber-400/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-50 shadow-[0_0_14px_rgba(251,191,36,0.35)] backdrop-blur-md">
                 <Crown className="size-3" aria-hidden="true" />
                 Destacado

@@ -4,7 +4,6 @@ import {
   GlassWater,
   Pencil,
   QrCode,
-  Settings2,
   Ticket,
   Users,
 } from "lucide-react"
@@ -12,6 +11,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
 
+import { SponsorshipRequestBanner } from "@/components/admin/sponsorship-request-banner"
 import { Badge } from "@/components/ui/badge"
 import { createClient } from "@/lib/supabase/server"
 import { formatEventDate, formatNumber } from "@/lib/format"
@@ -40,7 +40,9 @@ export default async function ManageEventPage({
     supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
     supabase
       .from("events")
-      .select("id, title, date, location, status, organizer_id")
+      .select(
+        "id, title, date, location, status, organizer_id, is_sponsored_by_tokepass",
+      )
       .eq("id", id)
       .maybeSingle(),
   ])
@@ -71,16 +73,6 @@ export default async function ManageEventPage({
       description: "Título, fecha, flyer, lugar y entradas.",
       icon: Pencil,
     },
-    ...(profile?.role === "super_admin"
-      ? [
-          {
-            href: `/admin/events/${id}/settings`,
-            label: "Settings comerciales",
-            description: "Fees, tope de gratis y auspicio Tokepass.",
-            icon: Settings2,
-          },
-        ]
-      : []),
     {
       href: `/admin/events/${id}/lists`,
       label: "Listas digitales",
@@ -100,6 +92,9 @@ export default async function ManageEventPage({
       icon: QrCode,
     },
   ]
+
+  const showSponsorshipCta =
+    event.organizer_id === user.id && !event.is_sponsored_by_tokepass
 
   return (
     <main className="mx-auto w-full max-w-5xl space-y-8 px-4 py-8 sm:px-6">
@@ -122,6 +117,11 @@ export default async function ManageEventPage({
           >
             {event.status}
           </Badge>
+          {event.is_sponsored_by_tokepass ? (
+            <Badge className="rounded-full border border-amber-400/40 bg-amber-500/15 text-amber-100">
+              Auspiciado
+            </Badge>
+          ) : null}
         </div>
         <p className="mt-3 text-sm text-zinc-400">
           {formatEventDate(event.date)} · {event.location}
@@ -146,6 +146,13 @@ export default async function ManageEventPage({
           </p>
         </div>
       </section>
+
+      {showSponsorshipCta ? (
+        <SponsorshipRequestBanner
+          eventId={event.id}
+          eventTitle={event.title}
+        />
+      ) : null}
 
       <section>
         <h2 className="text-lg font-bold text-white">Operación del evento</h2>

@@ -10,7 +10,23 @@ export function isBoostActive(event: {
   return new Date(event.featuredUntil).getTime() > Date.now()
 }
 
+/** Prioridad en home: auspicio Tokepass o boost pago activo. */
+export function isHomePriority(event: {
+  isFeatured?: boolean | null
+  featuredUntil?: string | null
+  isSponsoredByTokepass?: boolean | null
+}): boolean {
+  if (event.isSponsoredByTokepass) return true
+  return isBoostActive(event)
+}
+
 export function compareFeaturedThenDate(a: CatalogEvent, b: CatalogEvent): number {
+  const aSponsored = Boolean(a.isSponsoredByTokepass)
+  const bSponsored = Boolean(b.isSponsoredByTokepass)
+  if (aSponsored !== bSponsored) {
+    return aSponsored ? -1 : 1
+  }
+
   const aActive = isBoostActive(a)
   const bActive = isBoostActive(b)
 
@@ -37,5 +53,5 @@ export function pickFeaturedRail(
   events: CatalogEvent[],
   limit = 8,
 ): CatalogEvent[] {
-  return events.filter(isBoostActive).slice(0, limit)
+  return events.filter(isHomePriority).slice(0, limit)
 }
