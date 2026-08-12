@@ -270,28 +270,28 @@
 
 /*
   Tailwind Preflight sets `img { max-width: 100%; height: auto }`, which
-  collapses Leaflet tiles into a blank gray map. Override inside map panes.
+  collapses Leaflet tiles into a blank gray map.
+
+  Only override max-width/max-height. Do NOT set width/height with !important —
+  that overrides Leaflet's inline 256×256 tile sizes and blanks the map.
 */
 .leaflet-container {
-  width: 100%;
-  height: 100%;
+  width: 100% !important;
+  height: 100% !important;
   z-index: 0;
-  background: #09090b;
+  background: #09090b !important;
   font: inherit;
 }
 
-.leaflet-container .leaflet-tile,
-.leaflet-container img.leaflet-tile,
-.leaflet-pane img {
+.leaflet-container .leaflet-tile-pane img,
+.leaflet-container .leaflet-layer img,
+.leaflet-container img.leaflet-tile {
   max-width: none !important;
   max-height: none !important;
-  /* Tailwind Preflight also sets height:auto — unset so tiles keep 256px grid */
-  height: unset !important;
-  width: unset !important;
 }
 
 .leaflet-container .leaflet-marker-icon,
 .leaflet-container .leaflet-marker-shadow {
   max-width: none !important;
-  height: unset !important;
+  max-height: none !important;
 }

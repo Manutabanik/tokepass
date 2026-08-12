@@ -56,6 +56,10 @@ const imgSrc = [
   "https://*.mercadopago.com.ar",
   "https://*.basemaps.cartocdn.com",
   "https://basemaps.cartocdn.com",
+  "https://a.basemaps.cartocdn.com",
+  "https://b.basemaps.cartocdn.com",
+  "https://c.basemaps.cartocdn.com",
+  "https://d.basemaps.cartocdn.com",
   "https://*.tile.openstreetmap.org",
   "https://tile.openstreetmap.org",
 ]

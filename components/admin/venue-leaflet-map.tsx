@@ -15,13 +15,12 @@ import {
   type VenueCoordinates,
 } from "@/lib/seating/venue-geo"
 
-import "leaflet/dist/leaflet.css"
-
 export type { VenueCoordinates }
 export { VENUE_MAP_DEFAULT, googleMapsDeepLink } from "@/lib/seating/venue-geo"
 
+/** Prefer host without {s} so CSP/img-src matching is unambiguous. */
 const CARTO_DARK_URL =
-  "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+  "https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"
 
 const markerIcon = divIcon({
   className: "tokepass-map-marker",
@@ -116,8 +115,8 @@ export function VenueLeafletMap({
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
         url={CARTO_DARK_URL}
-        subdomains="abcd"
         maxZoom={20}
+        detectRetina
       />
       <FlyToCoordinates
         coordinates={center}
