@@ -54,7 +54,7 @@ export function EventLocationMapInner({
       touchZoom={false}
       keyboard={false}
       style={{ height: "100%", width: "100%" }}
-      className="tokepass-leaflet-map h-full w-full bg-zinc-950 [&_.leaflet-control-attribution]:hidden"
+      className="tokepass-leaflet-map h-full w-full bg-[#e8e4dc] [&_.leaflet-control-attribution]:hidden"
     >
       <MapSizeFix />
       <TileLayer

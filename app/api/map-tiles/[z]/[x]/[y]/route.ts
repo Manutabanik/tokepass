@@ -9,16 +9,16 @@ type Upstream = {
   minBytes: number
 }
 
-/** Prefer Carto dark; fall back to Esri dark gray if Carto returns empty/blocked. */
+/** Bright, readable basemap (Voyager). Esri streets as fallback. */
 const UPSTREAMS: Upstream[] = [
   {
     buildUrl: (z, x, y) =>
-      `https://basemaps.cartocdn.com/dark_all/${z}/${x}/${y}.png`,
+      `https://basemaps.cartocdn.com/rastertiles/voyager/${z}/${x}/${y}.png`,
     minBytes: 200,
   },
   {
     buildUrl: (z, x, y) =>
-      `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/${z}/${y}/${x}`,
+      `https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/${z}/${y}/${x}`,
     minBytes: 200,
   },
 ]

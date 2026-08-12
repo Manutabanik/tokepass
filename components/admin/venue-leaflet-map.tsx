@@ -111,7 +111,7 @@ export function VenueLeafletMap({
       zoom={mapZoom}
       scrollWheelZoom
       style={{ height: "100%", width: "100%", minHeight: 300 }}
-      className="tokepass-leaflet-map h-full w-full bg-zinc-950 [&_.leaflet-control-attribution]:bg-black/50 [&_.leaflet-control-attribution]:text-[10px] [&_.leaflet-control-attribution]:text-zinc-400"
+      className="tokepass-leaflet-map h-full w-full bg-[#e8e4dc] [&_.leaflet-control-attribution]:bg-white/80 [&_.leaflet-control-attribution]:text-[10px] [&_.leaflet-control-attribution]:text-zinc-600"
     >
       <MapSizeFix />
       <TileLayer
