@@ -89,10 +89,11 @@ export function VenueLeafletMap({
       scrollWheelZoom
       className="h-full w-full bg-zinc-950 [&_.leaflet-control-attribution]:bg-black/50 [&_.leaflet-control-attribution]:text-[10px] [&_.leaflet-control-attribution]:text-zinc-400"
     >
-      {/* OSM tiles — 100% gratis / open source */}
+      {/* CartoDB Dark Matter — alinea con el panel oscuro Tokepass */}
       <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+        subdomains="abcd"
       />
       <FlyToCoordinates
         coordinates={center}

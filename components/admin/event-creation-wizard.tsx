@@ -40,12 +40,11 @@ import {
 } from "@/app/actions/events"
 import { PublishEventConfirmDialog } from "@/components/admin/publish-event-confirm-dialog"
 import type { OrganizerVenue } from "@/app/actions/venues"
+import { createVenue } from "@/app/actions/venues"
 import { BoostModal } from "@/components/admin/boost-modal"
+import { EventVenueStep } from "@/components/admin/event-venue-step"
 import { ScheduleDaysBuilder } from "@/components/admin/schedule-days-builder"
-import {
-  SavedVenuePickerDialog,
-  VenueSeatPricingPanel,
-} from "@/components/admin/venue-seat-pricing-panel"
+import { VenueSeatPricingPanel } from "@/components/admin/venue-seat-pricing-panel"
 import {
   Accordion,
   AccordionContent,
@@ -169,6 +168,10 @@ const defaultValues: EventFormValues = {
     capacity: 500,
     rows: 20,
     seatsPerRow: 20,
+    latitude: null,
+    longitude: null,
+    seatingBackgroundUrl: null,
+    saveVenueForReuse: true,
     zones: undefined,
   },
   tickets: [
@@ -243,8 +246,12 @@ export function EventCreationWizard({
     open: boolean
     eventId: string
   }>({ open: false, eventId: "" })
-  const [venuePickerOpen, setVenuePickerOpen] = useState(false)
   const [venuePricingMap, setVenuePricingMap] = useState<VenuePricingMap>({})
+  const [venueCatalog, setVenueCatalog] = useState<OrganizerVenue[]>(venues)
+
+  useEffect(() => {
+    setVenueCatalog(venues)
+  }, [venues])
 
   const form = useForm<EventFormValues>({
     resolver: zodResolver(eventFormSchema),
@@ -258,7 +265,6 @@ export function EventCreationWizard({
     keyName: "fieldKey",
   })
 
-  const zoneType = useWatch({ control: form.control, name: "venue.zoneType" })
   const venueMode = useWatch({ control: form.control, name: "venue.mode" })
   const existingVenueId = useWatch({
     control: form.control,
@@ -281,12 +287,7 @@ export function EventCreationWizard({
     control: form.control,
     name: "tickets",
   })
-  const venueRows = useWatch({ control: form.control, name: "venue.rows" })
-  const venueSeatsPerRow = useWatch({
-    control: form.control,
-    name: "venue.seatsPerRow",
-  })
-  const selectedVenue = venues.find((venue) => venue.id === existingVenueId)
+  const selectedVenue = venueCatalog.find((venue) => venue.id === existingVenueId)
   const numberedSectors =
     selectedVenue?.seatingLayout.filter(
       (sector) => sector.layout_type !== "general",
@@ -350,41 +351,7 @@ export function EventCreationWizard({
     syncTicketPricesFromVenue(next)
   }
 
-  function applyVenueBlueprint(venue: OrganizerVenue) {
-    const firstZone = venue.zoneBlueprint[0]
-    form.setValue("venue.mode", "existing")
-    form.setValue("venue.existingVenueId", venue.id)
-    form.setValue("venue.venueName", venue.name)
-    form.setValue("venue.venueLocation", venue.location)
-    form.setValue("venue.venueCity", venue.city ?? "")
-    form.setValue("venue.capacity", venue.capacity)
-    if (firstZone) {
-      form.setValue("venue.zoneType", firstZone.type)
-      if (firstZone.type === "general_admission") {
-        form.setValue("venue.capacity", firstZone.capacity)
-        form.setValue("venue.rows", undefined)
-        form.setValue("venue.seatsPerRow", undefined)
-      } else {
-        form.setValue("venue.rows", firstZone.rows ?? undefined)
-        form.setValue("venue.seatsPerRow", firstZone.seatsPerRow ?? undefined)
-        form.setValue(
-          "venue.capacity",
-          (firstZone.rows ?? 0) * (firstZone.seatsPerRow ?? 0) ||
-            firstZone.capacity,
-        )
-      }
-    }
-    form.setValue(
-      "venue.zones",
-      venue.zoneBlueprint.map((zone) => ({
-        name: zone.name,
-        type: zone.type,
-        capacity: zone.capacity,
-        rows: zone.rows ?? null,
-        seatsPerRow: zone.seatsPerRow ?? null,
-      })),
-    )
-
+  function handleApplySavedVenue(venue: OrganizerVenue) {
     const pricing = buildEmptyPricingMap(venue)
     const currentTickets = form.getValues("tickets")
     for (const tier of currentTickets) {
@@ -395,12 +362,10 @@ export function EventCreationWizard({
     }
     setVenuePricingMap(pricing)
 
-    // Si hay un solo tier genérico vacío, sugerir un tier por sector del recinto.
     const pricable = listPricableSectors(venue)
     const isSingleBlank =
       currentTickets.length === 1 &&
-      (!currentTickets[0]?.name ||
-        currentTickets[0]?.name === "General") &&
+      (!currentTickets[0]?.name || currentTickets[0]?.name === "General") &&
       (currentTickets[0]?.price ?? 0) === 0 &&
       !currentTickets[0]?.seatingSectorId &&
       !(currentTickets[0]?.sold && currentTickets[0].sold > 0)
@@ -432,8 +397,7 @@ export function EventCreationWizard({
             dayId: null,
             visibility: "public" as const,
             layoutType,
-            seatingSectorId:
-              layoutType === "general" ? null : sector.id,
+            seatingSectorId: layoutType === "general" ? null : sector.id,
             capacityPerUnit: layoutSector?.capacity_per_unit ?? 1,
           }
         }),
@@ -465,8 +429,46 @@ export function EventCreationWizard({
   ) {
     setResultMessage(null)
 
+    let payloadData = data
+    if (
+      data.venue.mode === "new" &&
+      data.venue.saveVenueForReuse &&
+      !data.venue.existingVenueId
+    ) {
+      const persist = await createVenue({
+        name: data.venue.venueName.trim(),
+        location:
+          [data.venue.venueLocation, data.venue.venueCity]
+            .map((part) => part?.trim())
+            .filter(Boolean)
+            .join(", ") || data.venue.venueName.trim(),
+        city: data.venue.venueCity?.trim() || undefined,
+        latitude: data.venue.latitude ?? null,
+        longitude: data.venue.longitude ?? null,
+        capacity: data.venue.capacity ?? 1,
+        zones: data.venue.zones,
+        seatingBackgroundUrl: data.venue.seatingBackgroundUrl ?? null,
+      })
+      if (!persist.success) {
+        toast.error(persist.error)
+        setResultMessage({ type: "error", text: persist.error })
+        return
+      }
+      payloadData = {
+        ...data,
+        venue: {
+          ...data.venue,
+          mode: "existing",
+          existingVenueId: persist.data.id,
+          saveVenueForReuse: false,
+        },
+      }
+      form.setValue("venue.mode", "existing")
+      form.setValue("venue.existingVenueId", persist.data.id)
+    }
+
     const formData = new FormData()
-    formData.set("payload", JSON.stringify(data))
+    formData.set("payload", JSON.stringify(payloadData))
     if (flyerFile) {
       formData.set("flyer", flyerFile)
     }
@@ -837,320 +839,29 @@ export function EventCreationWizard({
               className="animate-in fade-in slide-in-from-right-2 duration-300"
             >
               <CardHeader className="border-b border-white/8 px-6 py-6 lg:px-8">
-                <CardTitle className="text-xl text-white">
-                  Diseño del lugar
-                </CardTitle>
+                <CardTitle className="text-xl text-white">El lugar</CardTitle>
                 <CardDescription className="text-zinc-500">
-                  Definí dónde es el evento y cómo se organiza el espacio.
+                  Elegí un lugar guardado o creá uno nuevo acá mismo, con mapa y
+                  zonas.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-7 px-6 py-7 lg:px-8">
-                <FormField
-                  control={form.control}
-                  name="venue.zoneType"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>¿Qué tipo de espacio es?</FormLabel>
-                      <div className="grid gap-3 md:grid-cols-2">
-                        {[
-                          {
-                            value: "general_admission" as const,
-                            title: "Entradas generales",
-                            description:
-                              "Entradas generales (sin asiento numerado).",
-                            icon: Building2,
-                          },
-                          {
-                            value: "reserved_seating" as const,
-                            title: "Asientos o mesas numeradas",
-                            description:
-                              "Asientos o mesas numeradas (a elección).",
-                            icon: Armchair,
-                          },
-                        ].map((option) => {
-                          const selected = field.value === option.value
-                          const Icon = option.icon
-
-                          return (
-                            <button
-                              key={option.value}
-                              type="button"
-                              onClick={() => field.onChange(option.value)}
-                              className={cn(
-                                "flex gap-4 rounded-2xl border p-5 text-left transition duration-200",
-                                selected
-                                  ? "border-violet-500/40 bg-violet-500/10 ring-1 ring-inset ring-violet-500/15"
-                                  : "border-white/8 bg-black/15 hover:border-white/15 hover:bg-white/[0.03]",
-                              )}
-                            >
-                              <span
-                                className={cn(
-                                  "grid size-11 shrink-0 place-items-center rounded-xl bg-white/5 text-zinc-500",
-                                  selected &&
-                                    "bg-violet-500/15 text-violet-300",
-                                )}
-                              >
-                                <Icon className="size-5" />
-                              </span>
-                              <span>
-                                <span className="block font-semibold text-zinc-200">
-                                  {option.title}
-                                </span>
-                                <span className="mt-1 block text-xs leading-5 text-zinc-500">
-                                  {option.description}
-                                </span>
-                              </span>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="venue.mode"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Lugar del evento</FormLabel>
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            field.onChange("new")
-                            form.setValue("venue.existingVenueId", null)
-                            form.setValue("venue.zones", undefined)
-                            setVenuePricingMap({})
-                          }}
-                          className={cn(
-                            "rounded-2xl border px-4 py-3 text-left text-sm transition",
-                            field.value === "new"
-                              ? "border-violet-500/40 bg-violet-500/10 text-violet-100"
-                              : "border-white/8 bg-black/15 text-zinc-400",
-                          )}
-                        >
-                          Crear lugar nuevo
-                        </button>
-                        <button
-                          type="button"
-                          disabled={venues.length === 0}
-                          onClick={() => {
-                            field.onChange("existing")
-                            setVenuePickerOpen(true)
-                          }}
-                          className={cn(
-                            "rounded-2xl border px-4 py-3 text-left text-sm transition disabled:opacity-40",
-                            field.value === "existing"
-                              ? "border-violet-500/40 bg-violet-500/10 text-violet-100"
-                              : "border-white/8 bg-black/15 text-zinc-400",
-                          )}
-                        >
-                          Usar lugar guardado
-                          {venues.length === 0
-                            ? " (todavía no hay)"
-                            : ` (${venues.length})`}
-                        </button>
-                      </div>
-                    </FormItem>
-                  )}
-                />
-
-                <SavedVenuePickerDialog
-                  open={venuePickerOpen}
-                  onOpenChange={setVenuePickerOpen}
-                  venues={venues}
-                  selectedVenueId={existingVenueId ?? null}
-                  onSelect={applyVenueBlueprint}
-                />
-
-                {venueMode === "existing" ? (
-                  <FormField
-                    control={form.control}
-                    name="venue.existingVenueId"
-                    render={({ field, fieldState }) => (
-                      <FormItem>
-                        <FormLabel htmlFor="existing-venue">
-                          Seleccionar lugar
-                        </FormLabel>
-                        <div className="flex flex-col gap-2 sm:flex-row">
-                          <Select
-                            value={field.value ?? ""}
-                            onValueChange={(value) => {
-                              const venue = venues.find(
-                                (item) => item.id === value,
-                              )
-                              if (venue) applyVenueBlueprint(venue)
-                            }}
-                          >
-                            <SelectTrigger
-                              id="existing-venue"
-                              className="h-11 flex-1 border-white/10 bg-black/20"
-                            >
-                              <SelectValue placeholder="Elegí un lugar" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {venues.map((venue) => (
-                                <SelectItem key={venue.id} value={venue.id}>
-                                  {venue.name}
-                                  {venue.city ? ` · ${venue.city}` : ""}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-11 border-white/10"
-                            onClick={() => setVenuePickerOpen(true)}
-                          >
-                            Ver lista
-                          </Button>
-                        </div>
-                        <FormDescription>
-                          Importá dirección, ciudad, mapa y zonas al evento.
-                        </FormDescription>
-                        <FormMessage>{fieldState.error?.message}</FormMessage>
-                      </FormItem>
-                    )}
-                  />
-                ) : null}
-
-                {venueMode === "existing" && selectedVenue ? (
-                  <VenueSeatPricingPanel
-                    venue={selectedVenue}
-                    pricingMap={venuePricingMap}
-                    onPricingChange={handleVenuePricingChange}
-                    eventTitle={eventTitle}
-                  />
-                ) : null}
-
-                <FormField
-                  control={form.control}
-                  name="venue.venueName"
-                  render={({ field, fieldState }) => (
-                    <FormItem>
-                      <FormLabel htmlFor="venue-name">
-                        Nombre del lugar
-                      </FormLabel>
-                      <Input
-                        {...field}
-                        id="venue-name"
-                        placeholder="Ej: Estadio Aldo Cantoni, Boliche Complejo X, Teatro Central"
-                        className="h-11 border-white/10 bg-black/20"
-                        readOnly={venueMode === "existing"}
+                <EventVenueStep
+                  form={form}
+                  venues={venueCatalog}
+                  onVenuesChange={setVenueCatalog}
+                  onAppliedVenue={handleApplySavedVenue}
+                  pricingSlot={
+                    selectedVenue ? (
+                      <VenueSeatPricingPanel
+                        venue={selectedVenue}
+                        pricingMap={venuePricingMap}
+                        onPricingChange={handleVenuePricingChange}
+                        eventTitle={eventTitle}
                       />
-                      <FormMessage>{fieldState.error?.message}</FormMessage>
-                    </FormItem>
-                  )}
+                    ) : null
+                  }
                 />
-
-                <FormField
-                  control={form.control}
-                  name="venue.venueLocation"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel htmlFor="venue-location">Dirección</FormLabel>
-                      <Input
-                        {...field}
-                        id="venue-location"
-                        placeholder="Ej: Av. España 1234, San Juan"
-                        className="h-11 border-white/10 bg-black/20"
-                        readOnly={venueMode === "existing"}
-                      />
-                    </FormItem>
-                  )}
-                />
-
-                <div className="grid gap-5 md:grid-cols-2">
-                  {zoneType === "general_admission" ? (
-                    <FormField
-                      control={form.control}
-                      name="venue.capacity"
-                      render={({ field, fieldState }) => (
-                        <FormItem className="animate-in fade-in duration-300">
-                          <FormLabel htmlFor="venue-capacity">
-                            Cantidad de personas
-                          </FormLabel>
-                          <NumberInput
-                            id="venue-capacity"
-                            min={1}
-                            value={field.value}
-                            onChange={field.onChange}
-                            className="h-11 border-white/10 bg-black/20"
-                            disabled={venueMode === "existing"}
-                          />
-                          <FormMessage>
-                            {fieldState.error?.message}
-                          </FormMessage>
-                        </FormItem>
-                      )}
-                    />
-                  ) : (
-                    <>
-                      <FormField
-                        control={form.control}
-                        name="venue.rows"
-                        render={({ field, fieldState }) => (
-                          <FormItem className="animate-in fade-in duration-300">
-                            <FormLabel htmlFor="venue-rows">
-                              Cantidad de filas
-                            </FormLabel>
-                            <NumberInput
-                              id="venue-rows"
-                              min={1}
-                              value={field.value}
-                              onChange={field.onChange}
-                              className="h-11 border-white/10 bg-black/20"
-                              disabled={venueMode === "existing"}
-                            />
-                            <FormMessage>
-                              {fieldState.error?.message}
-                            </FormMessage>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="venue.seatsPerRow"
-                        render={({ field, fieldState }) => (
-                          <FormItem className="animate-in fade-in duration-300">
-                            <FormLabel htmlFor="venue-seats-per-row">
-                              Asientos por fila
-                            </FormLabel>
-                            <NumberInput
-                              id="venue-seats-per-row"
-                              min={1}
-                              value={field.value}
-                              onChange={field.onChange}
-                              className="h-11 border-white/10 bg-black/20"
-                              disabled={venueMode === "existing"}
-                            />
-                            <FormMessage>
-                              {fieldState.error?.message}
-                            </FormMessage>
-                          </FormItem>
-                        )}
-                      />
-                    </>
-                  )}
-                </div>
-
-                {zoneType === "reserved_seating" && (
-                  <div className="rounded-2xl border border-violet-500/15 bg-violet-500/[0.05] p-4 text-sm text-violet-200">
-                    Se prepararán{" "}
-                    <strong>
-                      {(venueRows ?? 0) * (venueSeatsPerRow ?? 0)}
-                    </strong>{" "}
-                    asientos numerados para generar el mapa inicial.
-                    {venueMode === "existing" ? (
-                      <span className="mt-1 block text-violet-300/70">
-                        Cantidad de personas y mapa heredados del lugar — no
-                        editables.
-                      </span>
-                    ) : null}
-                  </div>
-                )}
               </CardContent>
             </TabsContent>
 

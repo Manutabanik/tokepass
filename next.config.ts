@@ -38,6 +38,8 @@ const connectSrc = [
   "https://*.upstash.io",
   upstashHostname ? `https://${upstashHostname}` : null,
   "https://nominatim.openstreetmap.org",
+  "https://apis.datos.gob.ar",
+  "https://*.datos.gob.ar",
   "https://vitals.vercel-insights.com",
   "https://va.vercel-scripts.com",
 ]
@@ -53,6 +55,7 @@ const imgSrc = [
   "https://*.mercadopago.com",
   "https://*.mercadopago.com.ar",
   "https://*.basemaps.cartocdn.com",
+  "https://*.tile.openstreetmap.org",
 ]
   .filter(Boolean)
   .join(" ")

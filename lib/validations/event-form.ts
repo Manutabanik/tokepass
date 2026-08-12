@@ -72,6 +72,10 @@ export const eventFormSchema = z
       capacity: z.number().int().positive().optional(),
       rows: z.number().int().positive().optional(),
       seatsPerRow: z.number().int().positive().optional(),
+      latitude: z.number().nullable().optional(),
+      longitude: z.number().nullable().optional(),
+      seatingBackgroundUrl: z.string().nullable().optional(),
+      saveVenueForReuse: z.boolean(),
       zones: z
         .array(
           z.object({

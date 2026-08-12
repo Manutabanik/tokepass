@@ -6,7 +6,6 @@ import {
   PieChart,
   QrCode,
   Store,
-  Ticket,
   UserRound,
   Users,
   type LucideIcon,
@@ -24,7 +23,6 @@ export type AdminNavItem = {
 export const ORGANIZER_NAV: AdminNavItem[] = [
   { label: "Inicio", href: "/admin", icon: Home },
   { label: "Mis eventos", href: "/admin/events", icon: CalendarDays },
-  { label: "Lugares", href: "/admin/venues", icon: Ticket },
   { label: "Cobrar en puerta", href: "/admin/pos", icon: Store },
   { label: "Ventas y dinero", href: "/admin/finances", icon: PieChart },
   { label: "Listas y FreePass", href: "/admin/lists", icon: ClipboardList },

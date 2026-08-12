@@ -559,6 +559,10 @@ export async function getEventForEditing(
         capacity: firstZone?.capacity ?? venueCapacity,
         rows: firstZone?.rows ?? undefined,
         seatsPerRow: firstZone?.seatsPerRow ?? undefined,
+        latitude: null,
+        longitude: null,
+        seatingBackgroundUrl: null,
+        saveVenueForReuse: false,
         zones: venueZones,
       },
       tickets: tiers.map((tier) => ({
