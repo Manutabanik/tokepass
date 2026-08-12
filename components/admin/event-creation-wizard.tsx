@@ -24,7 +24,7 @@ import {
 } from "lucide-react"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   useFieldArray,
   useForm,
@@ -42,6 +42,10 @@ import { PublishEventConfirmDialog } from "@/components/admin/publish-event-conf
 import type { OrganizerVenue } from "@/app/actions/venues"
 import { BoostModal } from "@/components/admin/boost-modal"
 import { ScheduleDaysBuilder } from "@/components/admin/schedule-days-builder"
+import {
+  SavedVenuePickerDialog,
+  VenueSeatPricingPanel,
+} from "@/components/admin/venue-seat-pricing-panel"
 import {
   Accordion,
   AccordionContent,
@@ -82,6 +86,11 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { formatCurrency } from "@/lib/format"
 import { allInBreakdown } from "@/lib/pricing/all-in"
+import {
+  buildEmptyPricingMap,
+  listPricableSectors,
+  type VenuePricingMap,
+} from "@/lib/seating/venue-adapter"
 import {
   eventFormSchema,
   type EventFormValues,
@@ -234,6 +243,8 @@ export function EventCreationWizard({
     open: boolean
     eventId: string
   }>({ open: false, eventId: "" })
+  const [venuePickerOpen, setVenuePickerOpen] = useState(false)
+  const [venuePricingMap, setVenuePricingMap] = useState<VenuePricingMap>({})
 
   const form = useForm<EventFormValues>({
     resolver: zodResolver(eventFormSchema),
@@ -280,6 +291,64 @@ export function EventCreationWizard({
     selectedVenue?.seatingLayout.filter(
       (sector) => sector.layout_type !== "general",
     ) ?? []
+  const eventTitle = useWatch({ control: form.control, name: "basics.title" })
+
+  useEffect(() => {
+    if (!selectedVenue) {
+      setVenuePricingMap({})
+      return
+    }
+    setVenuePricingMap((current) => {
+      const empty = buildEmptyPricingMap(selectedVenue)
+      const next: VenuePricingMap = { ...empty }
+      for (const key of Object.keys(empty)) {
+        if (current[key] != null) next[key] = current[key]
+      }
+      const tickets = form.getValues("tickets")
+      for (const tier of tickets) {
+        const sectorKey =
+          tier.seatingSectorId && next[tier.seatingSectorId] != null
+            ? tier.seatingSectorId
+            : Object.keys(empty).find((id) => {
+                const sector = listPricableSectors(selectedVenue).find(
+                  (item) => item.id === id,
+                )
+                return (
+                  sector?.name.trim().toLocaleLowerCase("es") ===
+                  tier.name.trim().toLocaleLowerCase("es")
+                )
+              })
+        if (!sectorKey) continue
+        const existing = next[sectorKey]
+        const existingPrice =
+          typeof existing === "number" ? existing : existing?.price
+        if ((existingPrice ?? 0) === 0 && (tier.price ?? 0) > 0) {
+          next[sectorKey] = tier.price
+        }
+      }
+      return next
+    })
+  }, [form, selectedVenue])
+
+  function syncTicketPricesFromVenue(pricing: VenuePricingMap) {
+    const tickets = form.getValues("tickets")
+    tickets.forEach((tier, index) => {
+      if (!tier.seatingSectorId) return
+      const entry = pricing[tier.seatingSectorId]
+      if (entry == null) return
+      const price = typeof entry === "number" ? entry : entry.price
+      if (Number.isFinite(price) && price !== tier.price) {
+        form.setValue(`tickets.${index}.price`, Math.max(0, price), {
+          shouldDirty: true,
+        })
+      }
+    })
+  }
+
+  function handleVenuePricingChange(next: VenuePricingMap) {
+    setVenuePricingMap(next)
+    syncTicketPricesFromVenue(next)
+  }
 
   function applyVenueBlueprint(venue: OrganizerVenue) {
     const firstZone = venue.zoneBlueprint[0]
@@ -315,6 +384,61 @@ export function EventCreationWizard({
         seatsPerRow: zone.seatsPerRow ?? null,
       })),
     )
+
+    const pricing = buildEmptyPricingMap(venue)
+    const currentTickets = form.getValues("tickets")
+    for (const tier of currentTickets) {
+      if (tier.seatingSectorId && pricing[tier.seatingSectorId] == null) continue
+      if (tier.seatingSectorId && Number.isFinite(tier.price)) {
+        pricing[tier.seatingSectorId] = tier.price
+      }
+    }
+    setVenuePricingMap(pricing)
+
+    // Si hay un solo tier genérico vacío, sugerir un tier por sector del recinto.
+    const pricable = listPricableSectors(venue)
+    const isSingleBlank =
+      currentTickets.length === 1 &&
+      (!currentTickets[0]?.name ||
+        currentTickets[0]?.name === "General") &&
+      (currentTickets[0]?.price ?? 0) === 0 &&
+      !currentTickets[0]?.seatingSectorId &&
+      !(currentTickets[0]?.sold && currentTickets[0].sold > 0)
+
+    if (isSingleBlank && pricable.length > 0) {
+      const hasSeatingLayout = venue.seatingLayout.length > 0
+      form.setValue(
+        "tickets",
+        pricable.map((sector) => {
+          const layoutSector = venue.seatingLayout.find((s) => s.id === sector.id)
+          const layoutType = hasSeatingLayout
+            ? (layoutSector?.layout_type ??
+              (sector.type === "general" ? "general" : "numbered_seat"))
+            : "general"
+          const availableUnits = layoutSector
+            ? getVenueSeatingItems(layoutSector).filter(
+                (item) => item.status !== "blocked",
+              ).length
+            : venue.capacity
+          return {
+            name: sector.name,
+            price: 0,
+            capacity:
+              sector.type === "general" || !hasSeatingLayout
+                ? Math.max(1, venue.capacity)
+                : Math.max(1, availableUnits || venue.capacity),
+            timeLimit: "",
+            bonusReward: "",
+            dayId: null,
+            visibility: "public" as const,
+            layoutType,
+            seatingSectorId:
+              layoutType === "general" ? null : sector.id,
+            capacityPerUnit: layoutSector?.capacity_per_unit ?? 1,
+          }
+        }),
+      )
+    }
   }
 
   async function moveToStep(nextStep: number) {
@@ -797,6 +921,7 @@ export function EventCreationWizard({
                             field.onChange("new")
                             form.setValue("venue.existingVenueId", null)
                             form.setValue("venue.zones", undefined)
+                            setVenuePricingMap({})
                           }}
                           className={cn(
                             "rounded-2xl border px-4 py-3 text-left text-sm transition",
@@ -810,7 +935,10 @@ export function EventCreationWizard({
                         <button
                           type="button"
                           disabled={venues.length === 0}
-                          onClick={() => field.onChange("existing")}
+                          onClick={() => {
+                            field.onChange("existing")
+                            setVenuePickerOpen(true)
+                          }}
                           className={cn(
                             "rounded-2xl border px-4 py-3 text-left text-sm transition disabled:opacity-40",
                             field.value === "existing"
@@ -828,6 +956,14 @@ export function EventCreationWizard({
                   )}
                 />
 
+                <SavedVenuePickerDialog
+                  open={venuePickerOpen}
+                  onOpenChange={setVenuePickerOpen}
+                  venues={venues}
+                  selectedVenueId={existingVenueId ?? null}
+                  onSelect={applyVenueBlueprint}
+                />
+
                 {venueMode === "existing" ? (
                   <FormField
                     control={form.control}
@@ -837,34 +973,55 @@ export function EventCreationWizard({
                         <FormLabel htmlFor="existing-venue">
                           Seleccionar recinto
                         </FormLabel>
-                        <Select
-                          value={field.value ?? ""}
-                          onValueChange={(value) => {
-                            const venue = venues.find((item) => item.id === value)
-                            if (venue) applyVenueBlueprint(venue)
-                          }}
-                        >
-                          <SelectTrigger
-                            id="existing-venue"
-                            className="h-11 border-white/10 bg-black/20"
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                          <Select
+                            value={field.value ?? ""}
+                            onValueChange={(value) => {
+                              const venue = venues.find(
+                                (item) => item.id === value,
+                              )
+                              if (venue) applyVenueBlueprint(venue)
+                            }}
                           >
-                            <SelectValue placeholder="Elegí un recinto" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {venues.map((venue) => (
-                              <SelectItem key={venue.id} value={venue.id}>
-                                {venue.name}
-                                {venue.city ? ` · ${venue.city}` : ""}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                            <SelectTrigger
+                              id="existing-venue"
+                              className="h-11 flex-1 border-white/10 bg-black/20"
+                            >
+                              <SelectValue placeholder="Elegí un recinto" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {venues.map((venue) => (
+                                <SelectItem key={venue.id} value={venue.id}>
+                                  {venue.name}
+                                  {venue.city ? ` · ${venue.city}` : ""}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-11 border-white/10"
+                            onClick={() => setVenuePickerOpen(true)}
+                          >
+                            Ver lista
+                          </Button>
+                        </div>
                         <FormDescription>
-                          Importa dirección, ciudad y zone_blueprint al evento.
+                          Importa dirección, ciudad, plano y sectores al evento.
                         </FormDescription>
                         <FormMessage>{fieldState.error?.message}</FormMessage>
                       </FormItem>
                     )}
+                  />
+                ) : null}
+
+                {venueMode === "existing" && selectedVenue ? (
+                  <VenueSeatPricingPanel
+                    venue={selectedVenue}
+                    pricingMap={venuePricingMap}
+                    onPricingChange={handleVenuePricingChange}
+                    eventTitle={eventTitle}
                   />
                 ) : null}
 
@@ -1009,6 +1166,14 @@ export function EventCreationWizard({
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 px-6 py-7 lg:px-8">
+                {venueMode === "existing" && selectedVenue ? (
+                  <VenueSeatPricingPanel
+                    venue={selectedVenue}
+                    pricingMap={venuePricingMap}
+                    onPricingChange={handleVenuePricingChange}
+                    eventTitle={eventTitle}
+                  />
+                ) : null}
                 {fields.map((tier, index) => {
                   const tierLayoutType =
                     watchedTickets?.[index]?.layoutType ?? tier.layoutType
