@@ -11,16 +11,16 @@ import {
 } from "react-leaflet"
 
 import {
+  TOKEPASS_BASEMAP_ATTRIBUTION,
+  TOKEPASS_BASEMAP_URL,
+} from "@/lib/maps/basemap"
+import {
   VENUE_MAP_DEFAULT,
   type VenueCoordinates,
 } from "@/lib/seating/venue-geo"
 
 export type { VenueCoordinates }
 export { VENUE_MAP_DEFAULT, googleMapsDeepLink } from "@/lib/seating/venue-geo"
-
-/** Prefer host without {s} so CSP/img-src matching is unambiguous. */
-const CARTO_DARK_URL =
-  "https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"
 
 const markerIcon = divIcon({
   className: "tokepass-map-marker",
@@ -103,25 +103,25 @@ export function VenueLeafletMap({
   zoom?: number
 }) {
   const center = coordinates ?? VENUE_MAP_DEFAULT
+  const mapZoom = coordinates ? Math.max(zoom, 15) : 12
 
   return (
     <MapContainer
       center={[center.latitude, center.longitude]}
-      zoom={coordinates ? Math.max(zoom, 15) : 12}
+      zoom={mapZoom}
       scrollWheelZoom
-      className="h-full w-full bg-zinc-950 [&_.leaflet-control-attribution]:bg-black/50 [&_.leaflet-control-attribution]:text-[10px] [&_.leaflet-control-attribution]:text-zinc-400"
+      style={{ height: "100%", width: "100%", minHeight: 300 }}
+      className="tokepass-leaflet-map h-full w-full bg-zinc-950 [&_.leaflet-control-attribution]:bg-black/50 [&_.leaflet-control-attribution]:text-[10px] [&_.leaflet-control-attribution]:text-zinc-400"
     >
       <MapSizeFix />
       <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-        url={CARTO_DARK_URL}
+        attribution={TOKEPASS_BASEMAP_ATTRIBUTION}
+        url={TOKEPASS_BASEMAP_URL}
         maxZoom={20}
-        detectRetina
+        tileSize={256}
+        zoomOffset={0}
       />
-      <FlyToCoordinates
-        coordinates={center}
-        zoom={coordinates ? Math.max(zoom, 15) : 12}
-      />
+      <FlyToCoordinates coordinates={center} zoom={mapZoom} />
       <MapClickHandler onChange={onChange} />
       {coordinates ? (
         <Marker

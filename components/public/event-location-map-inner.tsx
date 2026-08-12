@@ -4,6 +4,11 @@ import { divIcon } from "leaflet"
 import { useEffect } from "react"
 import { MapContainer, Marker, TileLayer, useMap } from "react-leaflet"
 
+import {
+  TOKEPASS_BASEMAP_ATTRIBUTION,
+  TOKEPASS_BASEMAP_URL,
+} from "@/lib/maps/basemap"
+
 const markerIcon = divIcon({
   className: "tokepass-event-map-marker",
   html: `
@@ -48,14 +53,16 @@ export function EventLocationMapInner({
       doubleClickZoom={false}
       touchZoom={false}
       keyboard={false}
-      className="h-full w-full bg-zinc-950 [&_.leaflet-control-attribution]:hidden"
+      style={{ height: "100%", width: "100%" }}
+      className="tokepass-leaflet-map h-full w-full bg-zinc-950 [&_.leaflet-control-attribution]:hidden"
     >
       <MapSizeFix />
       <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-        url="https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"
+        attribution={TOKEPASS_BASEMAP_ATTRIBUTION}
+        url={TOKEPASS_BASEMAP_URL}
         maxZoom={20}
-        detectRetina
+        tileSize={256}
+        zoomOffset={0}
       />
       <Marker position={[latitude, longitude]} icon={markerIcon} />
     </MapContainer>
