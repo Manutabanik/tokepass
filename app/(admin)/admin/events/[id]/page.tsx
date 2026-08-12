@@ -74,6 +74,12 @@ export default async function ManageEventPage({
       icon: Pencil,
     },
     {
+      href: `/admin/events/${id}/tickets`,
+      label: "Entradas emitidas",
+      description: "Buscá clientes, reenviá tickets y resolvé reclamos.",
+      icon: Ticket,
+    },
+    {
       href: `/admin/events/${id}/lists`,
       label: "Listas digitales",
       description: "Cupos, invitados y check-in.",
