@@ -694,8 +694,6 @@ export async function getPlatformMoneyLedger(
   const organizerId = filters.organizerId?.trim() || null
   const eventId = filters.eventId?.trim() || null
   const limit = Math.min(Math.max(filters.limit ?? 200, 1), 500)
-  // RPC histórico aún valida sin `refunded`; filtramos client-side ese estado.
-  const rpcStatus = status === "refunded" ? null : status
 
   const [
     { data, error },
@@ -707,13 +705,13 @@ export async function getPlatformMoneyLedger(
       admin.rpc("get_platform_orders_ledger", {
         p_organizer_id: organizerId,
         p_event_id: eventId,
-        p_status: rpcStatus,
-        p_limit: status === "refunded" ? Math.min(limit * 3, 500) : limit,
+        p_status: status,
+        p_limit: limit,
       }),
       admin.rpc("get_platform_orders_ledger_totals", {
         p_organizer_id: organizerId,
         p_event_id: eventId,
-        p_status: rpcStatus,
+        p_status: status,
       }),
       admin
         .from("profiles")
@@ -784,7 +782,6 @@ export async function getPlatformMoneyLedger(
       organizerNetAmount: Number(row.organizer_net_amount),
       feeRate: Number(row.fee_rate),
     }))
-    .filter((row) => (status === "refunded" ? row.status === "refunded" : true))
     .slice(0, limit)
 
   const eventOptions = (events ?? [])

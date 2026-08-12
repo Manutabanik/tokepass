@@ -37,7 +37,8 @@ export default async function SuperAdminOrdersPage({
       ? (rawStatus as OrderStatus | "all")
       : "all"
 
-  let ledger: Awaited<ReturnType<typeof getPlatformMoneyLedger>>
+  let ledger: Awaited<ReturnType<typeof getPlatformMoneyLedger>> | null = null
+  let errorMessage: string | null = null
 
   try {
     ledger = await getPlatformMoneyLedger({
@@ -49,7 +50,32 @@ export default async function SuperAdminOrdersPage({
     if (error instanceof SuperAdminForbiddenError) {
       redirect("/")
     }
-    throw error
+    errorMessage =
+      error instanceof Error
+        ? error.message
+        : "No se pudo cargar el ledger de órdenes."
+  }
+
+  if (errorMessage || !ledger) {
+    return (
+      <div className="space-y-6">
+        <PageHeading
+          eyebrow="Platform Money Ledger"
+          title="Auditoría de órdenes"
+          description="Desglose soberano All-In: bruto cobrado, comisión Tokepass y neto a liquidar por productora."
+        />
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-8 text-amber-50">
+          <h2 className="text-lg font-bold">Ledger no disponible</h2>
+          <p className="mt-2 text-sm text-amber-100/80">
+            {errorMessage ?? "Error desconocido al consultar órdenes."}
+          </p>
+          <p className="mt-4 text-xs text-amber-100/60">
+            Si acabás de desplegar, aplicá la migración P25 en Supabase (fix del
+            RPC <code className="font-mono">get_platform_orders_ledger</code>).
+          </p>
+        </div>
+      </div>
+    )
   }
 
   return (
