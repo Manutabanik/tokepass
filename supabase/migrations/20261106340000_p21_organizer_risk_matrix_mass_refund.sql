@@ -415,11 +415,11 @@ begin
     raise exception 'ORGANIZER_NOT_FOUND' using errcode = 'P0002';
   end if;
 
-  update public.events
+  update public.events as e
   set
     status = 'cancelled'::public.event_status,
     updated_at = now()
-  where id = p_event_id;
+  where e.id = p_event_id;
 
   for v_order_id, v_mp_payment_id, v_total_amount in
     select distinct o.id, o.mp_payment_id, o.total_amount
@@ -432,13 +432,13 @@ begin
           and t.event_id = p_event_id
       )
   loop
-    update public.tickets
+    update public.tickets as t
     set
       status = 'cancelled'::public.ticket_status,
       updated_at = now()
-    where order_id = v_order_id
-      and event_id = p_event_id
-      and status::text in (
+    where t.order_id = v_order_id
+      and t.event_id = p_event_id
+      and t.status::text in (
         'valid',
         'pending_payment',
         'used',
@@ -448,12 +448,12 @@ begin
     get diagnostics v_ticket_count = row_count;
     v_total_tickets := v_total_tickets + coalesce(v_ticket_count, 0);
 
-    update public.orders
+    update public.orders as o
     set
       status = 'refunded',
       updated_at = now()
-    where id = v_order_id
-      and status = 'paid';
+    where o.id = v_order_id
+      and o.status = 'paid';
 
     v_orders_count := v_orders_count + 1;
 
