@@ -201,7 +201,7 @@ export async function signUpOrganizer(
   return {
     error: null,
     success:
-      "Solicitud enviada. Tu cuenta queda pendiente de aprobación antes de acceder al Command Center.",
+      "Solicitud enviada. Tu cuenta queda pendiente de aprobación antes de acceder a Tu Panel.",
   }
 }
 

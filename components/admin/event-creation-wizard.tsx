@@ -100,23 +100,23 @@ import { getVenueSeatingItems } from "@/types/venues"
 
 const steps = [
   {
-    title: "Esencia",
-    description: "Identidad del evento",
+    title: "Lo básico",
+    description: "Nombre, fecha y flyer",
     icon: Sparkles,
   },
   {
-    title: "Arquitectura",
-    description: "Recinto y capacidad",
+    title: "El lugar",
+    description: "Dónde y cuánta gente entra",
     icon: Building2,
   },
   {
-    title: "Economía",
-    description: "Tickets y beneficios",
+    title: "Entradas",
+    description: "Precios y cupos",
     icon: Ticket,
   },
   {
-    title: "Crecimiento",
-    description: "RRPP y upselling",
+    title: "Difusión",
+    description: "Promotores y extras",
     icon: Rocket,
   },
 ] as const
@@ -582,10 +582,10 @@ export function EventCreationWizard({
             >
               <CardHeader className="px-6 pt-8 sm:px-10 sm:pt-10">
                 <CardTitle className="mb-1 text-2xl font-bold text-white">
-                  Esencia del Evento
+                  Datos del evento
                 </CardTitle>
                 <CardDescription className="border-b border-zinc-800 pb-6 text-sm text-zinc-400">
-                  Define cómo se presenta y cuándo ocurre la experiencia.
+                  Contá cómo se llama, cuándo es y qué van a vivir.
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid grid-cols-1 items-start gap-8 px-6 py-8 sm:px-10 lg:grid-cols-12">
@@ -604,7 +604,7 @@ export function EventCreationWizard({
                         <Input
                           {...field}
                           id="event-title"
-                          placeholder="Ej. Neon City Festival"
+                          placeholder="Ej. Fiesta de Año Nuevo en el Complejo X"
                           className="h-12 w-full rounded-xl border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white shadow-inner transition-all placeholder:text-zinc-600 focus:border-emerald-500/60 focus:bg-zinc-900 focus:ring-2 focus:ring-emerald-500/15 focus:outline-none"
                         />
                         <FormMessage>{fieldState.error?.message}</FormMessage>
@@ -838,10 +838,10 @@ export function EventCreationWizard({
             >
               <CardHeader className="border-b border-white/8 px-6 py-6 lg:px-8">
                 <CardTitle className="text-xl text-white">
-                  Arquitectura Física
+                  Diseño del lugar
                 </CardTitle>
                 <CardDescription className="text-zinc-500">
-                  Modela el espacio para controlar aforo y asignación.
+                  Definí dónde es el evento y cómo se organiza el espacio.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-7 px-6 py-7 lg:px-8">
@@ -855,16 +855,16 @@ export function EventCreationWizard({
                         {[
                           {
                             value: "general_admission" as const,
-                            title: "Espacio General / Boliche",
+                            title: "Entradas generales",
                             description:
-                              "Control por aforo, sin ubicación individual.",
+                              "Entradas generales (sin asiento numerado).",
                             icon: Building2,
                           },
                           {
                             value: "reserved_seating" as const,
-                            title: "Asientos Numerados / Teatro",
+                            title: "Asientos o mesas numeradas",
                             description:
-                              "Cada comprador selecciona una ubicación.",
+                              "Asientos o mesas numeradas (a elección).",
                             icon: Armchair,
                           },
                         ].map((option) => {
@@ -913,7 +913,7 @@ export function EventCreationWizard({
                   name="venue.mode"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Recinto</FormLabel>
+                      <FormLabel>Lugar del evento</FormLabel>
                       <div className="grid gap-2 sm:grid-cols-2">
                         <button
                           type="button"
@@ -930,7 +930,7 @@ export function EventCreationWizard({
                               : "border-white/8 bg-black/15 text-zinc-400",
                           )}
                         >
-                          Crear recinto nuevo
+                          Crear lugar nuevo
                         </button>
                         <button
                           type="button"
@@ -946,7 +946,7 @@ export function EventCreationWizard({
                               : "border-white/8 bg-black/15 text-zinc-400",
                           )}
                         >
-                          Usar recinto guardado
+                          Usar lugar guardado
                           {venues.length === 0
                             ? " (todavía no hay)"
                             : ` (${venues.length})`}
@@ -971,7 +971,7 @@ export function EventCreationWizard({
                     render={({ field, fieldState }) => (
                       <FormItem>
                         <FormLabel htmlFor="existing-venue">
-                          Seleccionar recinto
+                          Seleccionar lugar
                         </FormLabel>
                         <div className="flex flex-col gap-2 sm:flex-row">
                           <Select
@@ -987,7 +987,7 @@ export function EventCreationWizard({
                               id="existing-venue"
                               className="h-11 flex-1 border-white/10 bg-black/20"
                             >
-                              <SelectValue placeholder="Elegí un recinto" />
+                              <SelectValue placeholder="Elegí un lugar" />
                             </SelectTrigger>
                             <SelectContent>
                               {venues.map((venue) => (
@@ -1008,7 +1008,7 @@ export function EventCreationWizard({
                           </Button>
                         </div>
                         <FormDescription>
-                          Importa dirección, ciudad, plano y sectores al evento.
+                          Importá dirección, ciudad, mapa y zonas al evento.
                         </FormDescription>
                         <FormMessage>{fieldState.error?.message}</FormMessage>
                       </FormItem>
@@ -1031,12 +1031,12 @@ export function EventCreationWizard({
                   render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel htmlFor="venue-name">
-                        Nombre del recinto
+                        Nombre del lugar
                       </FormLabel>
                       <Input
                         {...field}
                         id="venue-name"
-                        placeholder="Ej. Teatro Gran Rex"
+                        placeholder="Ej: Estadio Aldo Cantoni, Boliche Complejo X, Teatro Central"
                         className="h-11 border-white/10 bg-black/20"
                         readOnly={venueMode === "existing"}
                       />
@@ -1054,7 +1054,7 @@ export function EventCreationWizard({
                       <Input
                         {...field}
                         id="venue-location"
-                        placeholder="Calle y número"
+                        placeholder="Ej: Av. España 1234, San Juan"
                         className="h-11 border-white/10 bg-black/20"
                         readOnly={venueMode === "existing"}
                       />
@@ -1070,7 +1070,7 @@ export function EventCreationWizard({
                       render={({ field, fieldState }) => (
                         <FormItem className="animate-in fade-in duration-300">
                           <FormLabel htmlFor="venue-capacity">
-                            Capacidad total
+                            Cantidad de personas
                           </FormLabel>
                           <NumberInput
                             id="venue-capacity"
@@ -1145,7 +1145,8 @@ export function EventCreationWizard({
                     asientos numerados para generar el mapa inicial.
                     {venueMode === "existing" ? (
                       <span className="mt-1 block text-violet-300/70">
-                        Capacidad y mapa heredados del venue — no editables.
+                        Cantidad de personas y mapa heredados del lugar — no
+                        editables.
                       </span>
                     ) : null}
                   </div>
@@ -1159,10 +1160,10 @@ export function EventCreationWizard({
             >
               <CardHeader className="border-b border-white/8 px-6 py-6 lg:px-8">
                 <CardTitle className="text-xl text-white">
-                  Economía y Tiers
+                  Entradas y precios
                 </CardTitle>
                 <CardDescription className="text-zinc-500">
-                  Diseña tu estrategia de precios, cupos y recompensas.
+                  Definí precios, cupos y recompensas.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 px-6 py-7 lg:px-8">
@@ -1189,12 +1190,12 @@ export function EventCreationWizard({
                     <CardHeader className="flex-row items-center justify-between border-b border-white/6 px-5 py-4">
                       <div>
                         <CardTitle className="text-sm text-white">
-                          Tier {index + 1}
+                          Entrada {index + 1}
                         </CardTitle>
                         <CardDescription className="text-xs text-zinc-600">
                           {(tier.sold ?? 0) > 0
                             ? `${tier.sold} reservadas/vendidas · no se puede eliminar`
-                            : "Configuración comercial"}
+                            : "Nombre, precio y cupo"}
                         </CardDescription>
                       </div>
                       <Button
@@ -1204,7 +1205,7 @@ export function EventCreationWizard({
                         disabled={fields.length === 1 || (tier.sold ?? 0) > 0}
                         onClick={() => remove(index)}
                         className="text-zinc-600 hover:bg-red-500/10 hover:text-red-400"
-                        aria-label={`Eliminar tier ${index + 1}`}
+                        aria-label={`Eliminar entrada ${index + 1}`}
                       >
                         <Trash2 />
                       </Button>
@@ -1237,7 +1238,7 @@ export function EventCreationWizard({
                           render={({ field, fieldState }) => (
                             <FormItem>
                               <FormLabel htmlFor={`tier-${index}-capacity`}>
-                                Capacidad
+                                Cantidad de personas
                               </FormLabel>
                               <NumberInput
                                 id={`tier-${index}-capacity`}
@@ -1266,8 +1267,8 @@ export function EventCreationWizard({
                               Modalidad de acceso
                             </p>
                             <p className="mt-0.5 text-xs text-zinc-500">
-                              Vinculá esta entrada con un sector numerado del
-                              recinto.
+                              Vinculá esta entrada con una zona numerada del
+                              lugar.
                             </p>
                           </div>
                         </div>
@@ -1339,8 +1340,8 @@ export function EventCreationWizard({
                                 </Select>
                                 <FormDescription>
                                   {numberedSectors.length === 0
-                                    ? "Este recinto no tiene sectores numerados configurados."
-                                    : "La entrada general no necesita selección de ubicación."}
+                                    ? "Este lugar no tiene zonas numeradas configuradas."
+                                    : "La entrada general no necesita selección de asiento."}
                                 </FormDescription>
                               </FormItem>
                             )}
@@ -1355,7 +1356,7 @@ export function EventCreationWizard({
                                   <FormLabel
                                     htmlFor={`tier-${index}-seating-sector`}
                                   >
-                                    Sector del plano
+                                    Zona del mapa
                                   </FormLabel>
                                   <Select
                                     value={field.value ?? ""}
@@ -1382,7 +1383,7 @@ export function EventCreationWizard({
                                       id={`tier-${index}-seating-sector`}
                                       className="h-10 w-full border-zinc-800 bg-zinc-950"
                                     >
-                                      <SelectValue placeholder="Elegí un sector" />
+                                      <SelectValue placeholder="Elegí una zona" />
                                     </SelectTrigger>
                                     <SelectContent>
                                       {compatibleSectors.map((sector) => (
@@ -1482,7 +1483,7 @@ export function EventCreationWizard({
                                   Oculta al público
                                 </FormLabel>
                                 <FormDescription className="text-xs text-zinc-500">
-                                  Solo RRPP / enlace exclusivo
+                                  Solo promotores y RRPP / enlace exclusivo
                                 </FormDescription>
                               </div>
                             </div>
@@ -1676,10 +1677,10 @@ export function EventCreationWizard({
             >
               <CardHeader className="border-b border-white/8 px-6 py-6 lg:px-8">
                 <CardTitle className="text-xl text-white">
-                  Motor de Crecimiento
+                  Difusión y extras
                 </CardTitle>
                 <CardDescription className="text-zinc-500">
-                  Activa canales de distribución y aumenta el ticket promedio.
+                  Activá canales de difusión y sumá extras al ticket.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 px-6 py-7 lg:px-8">
@@ -1694,11 +1695,11 @@ export function EventCreationWizard({
                             htmlFor="growth-rrpp-enabled"
                             className="text-base text-white"
                           >
-                            Sistema de RRPP / Tarjeteros
+                            Promotores y RRPP
                           </FormLabel>
                           <FormDescription className="mt-1 max-w-xl">
-                            Crea enlaces atribuibles y liquida comisiones
-                            automáticamente mediante Split Payment.
+                            Activá enlaces para que tus promotores vendan y cobren
+                            su comisión automáticamente.
                           </FormDescription>
                         </div>
                         <Switch
@@ -1757,11 +1758,11 @@ export function EventCreationWizard({
                             htmlFor="growth-addons-enabled"
                             className="text-base text-white"
                           >
-                            Habilitar Add-ons
+                            Habilitar extras
                           </FormLabel>
                           <FormDescription className="mt-1 max-w-xl">
-                            Suma Parking, botellas, merchandising o experiencias
-                            premium al checkout.
+                            Sumá estacionamiento, botellas, merch o experiencias
+                            premium al proceso de pago.
                           </FormDescription>
                         </div>
                         <Switch
@@ -1783,7 +1784,7 @@ export function EventCreationWizard({
                   <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
                     Al crear el evento vas a poder activar Tokepass Boost
                     (Silver, Gold o Platinum) y destacar esta noche en la
-                    portada B2C.
+                    portada para compradores.
                   </p>
                 </div>
 

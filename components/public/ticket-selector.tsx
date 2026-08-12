@@ -668,7 +668,7 @@ export function TicketSelector({
         )}
       </Button>
       <p className="mt-3 text-center text-xs text-zinc-500">
-        Vas a ser redirigido a Checkout Pro de Mercado Pago.
+        Vas a ser redirigido al pago con Mercado Pago.
       </p>
     </div>
   )

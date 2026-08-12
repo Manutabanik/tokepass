@@ -114,7 +114,7 @@ export function EventCommercialSettingsForm({
             className="border-zinc-700 bg-zinc-900"
           />
           <p className="text-xs text-zinc-500">
-            Suma de capacidades de tiers a precio $0 (excluye cortesía /
+            Suma de cupos de entradas a precio $0 (no incluye cortesía ni
             FreePass de listas).
           </p>
         </div>
@@ -128,7 +128,7 @@ export function EventCommercialSettingsForm({
               Auspiciado por Tokepass
             </p>
             <p className="mt-0.5 text-xs text-amber-100/70">
-              Bonifica infraestructura (fee % y fijo = 0) y muestra branding
+              Bonifica la comisión Tokepass (fee % y fijo = 0) y muestra branding
               premium en la ficha y la entrada.
             </p>
           </div>

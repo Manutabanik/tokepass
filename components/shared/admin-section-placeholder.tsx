@@ -13,7 +13,7 @@ export function AdminSectionPlaceholder({
 }: AdminSectionPlaceholderProps) {
   return (
     <>
-      <p className="text-sm font-medium text-violet-400">Command Center</p>
+      <p className="text-sm font-medium text-violet-400">Tu Panel</p>
       <h1 className="mt-1 text-3xl font-bold tracking-tight text-white">
         {title}
       </h1>

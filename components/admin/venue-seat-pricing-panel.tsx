@@ -93,10 +93,10 @@ export function VenueSeatPricingPanel({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-emerald-100">
-            Precios por sector del recinto
+            Precios por zona del lugar
           </p>
           <p className="mt-1 text-xs leading-5 text-zinc-500">
-            Asigná el precio que verá el comprador en cada sector. En
+            Asigná el precio que verá el comprador en cada zona. En
             numerados podés definir precio por fila.
           </p>
         </div>
@@ -116,7 +116,7 @@ export function VenueSeatPricingPanel({
         <div className="relative aspect-[16/7] overflow-hidden rounded-xl border border-white/10 bg-black/40">
           <Image
             src={venue.seatingBackgroundUrl}
-            alt={`Plano de ${venue.name}`}
+            alt={`Mapa de ${venue.name}`}
             fill
             className="object-contain"
             sizes="(max-width: 768px) 100vw, 640px"
@@ -124,12 +124,12 @@ export function VenueSeatPricingPanel({
           />
           <div className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-lg bg-black/70 px-2.5 py-1 text-[11px] text-zinc-200">
             <MapPinned className="size-3.5 text-emerald-400" />
-            Plano de referencia
+            Imagen o mapa del lugar
           </div>
         </div>
       ) : (
         <p className="rounded-xl border border-dashed border-white/10 bg-black/20 px-3 py-3 text-xs text-zinc-500">
-          Este recinto no tiene plano de referencia cargado.
+          Este lugar no tiene imagen o mapa cargado.
         </p>
       )}
 
@@ -182,7 +182,7 @@ export function VenueSeatPricingPanel({
                     htmlFor={`sector-price-${sector.id}`}
                     className="text-xs text-zinc-500"
                   >
-                    Precio del sector
+                    Precio de la zona
                   </Label>
                   <Input
                     id={`sector-price-${sector.id}`}
@@ -293,9 +293,9 @@ export function SavedVenuePickerDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85dvh] border-white/10 bg-[#121216] text-zinc-100 sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Recintos guardados</DialogTitle>
+          <DialogTitle>Lugares guardados</DialogTitle>
           <DialogDescription className="text-zinc-500">
-            Elegí un recinto para importar plano, sectores y capacidad.
+            Elegí un lugar para importar mapa, zonas y capacidad de gente.
           </DialogDescription>
         </DialogHeader>
         <ul className="max-h-[55dvh] space-y-2 overflow-y-auto pr-1">
@@ -329,8 +329,8 @@ export function SavedVenuePickerDialog({
                     {" · "}
                     {venue.capacity} cupos
                     {" · "}
-                    {sectorCount} sector{sectorCount === 1 ? "" : "es"}
-                    {venue.seatingBackgroundUrl ? " · con plano" : ""}
+                    {sectorCount} zona{sectorCount === 1 ? "" : "s"}
+                    {venue.seatingBackgroundUrl ? " · con mapa" : ""}
                   </span>
                 </button>
               </li>

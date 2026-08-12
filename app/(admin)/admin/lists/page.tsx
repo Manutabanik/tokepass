@@ -34,8 +34,8 @@ export default async function AdminListsHubPage() {
           Listas digitales
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-zinc-500">
-          Elegí un evento para crear listas RRPP, prensa y cortesías con QR
-          dinámico.
+          Elegí un evento para crear listas de promotores y RRPP, prensa y
+          cortesías con QR dinámico.
         </p>
       </div>
 

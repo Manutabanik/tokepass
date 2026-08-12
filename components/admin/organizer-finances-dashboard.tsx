@@ -62,12 +62,12 @@ export function OrganizerFinancesDashboard({
             Liquidaciones
           </p>
           <h1 className="mt-2 text-3xl font-black tracking-tight text-white">
-            Finanzas
+            Ventas y Dinero
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-zinc-400">
-            Venta bruta All-In. El efectivo POS ya está en mano del organizador,
-            pero su comisión Tokepass (15%) se descuenta del saldo liquidable de
-            Mercado Pago.
+            Venta bruta All-In. El efectivo de boletería ya está en mano del
+            organizador, pero su comisión Tokepass (15%) se descuenta del saldo
+            liquidable de Mercado Pago.
           </p>
         </div>
         <Button
@@ -83,7 +83,7 @@ export function OrganizerFinancesDashboard({
                 toast.error(result.error)
                 return
               }
-              toast.success("Liquidación solicitada — Platform OS la completará.")
+              toast.success("Pediste la liquidación. El equipo de Tokepass la va a completar.")
               router.refresh()
             })
           }}

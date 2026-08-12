@@ -7,6 +7,7 @@ import {
   QrCode,
   Store,
   Ticket,
+  UserRound,
   Users,
   type LucideIcon,
 } from "lucide-react"
@@ -21,22 +22,23 @@ export type AdminNavItem = {
 }
 
 export const ORGANIZER_NAV: AdminNavItem[] = [
-  { label: "Dashboard", href: "/admin", icon: Home },
+  { label: "Inicio", href: "/admin", icon: Home },
   { label: "Mis eventos", href: "/admin/events", icon: CalendarDays },
-  { label: "Recintos", href: "/admin/venues", icon: Ticket },
-  { label: "POS Puerta", href: "/admin/pos", icon: Store },
-  { label: "Finanzas", href: "/admin/finances", icon: PieChart },
-  { label: "Listas / FreePass", href: "/admin/lists", icon: ClipboardList },
-  { label: "Equipo & Staff", href: "/admin/team", icon: Users },
-  { label: "RRPP", href: "/admin/promoters", icon: Users },
-  { label: "Escáner Web", href: "/admin/scanner", icon: QrCode },
-  { label: "Escáner Barra", href: "/admin/bar-scanner", icon: GlassWater },
+  { label: "Lugares", href: "/admin/venues", icon: Ticket },
+  { label: "Cobrar en puerta", href: "/admin/pos", icon: Store },
+  { label: "Ventas y dinero", href: "/admin/finances", icon: PieChart },
+  { label: "Listas y FreePass", href: "/admin/lists", icon: ClipboardList },
+  { label: "Equipo y staff", href: "/admin/team", icon: Users },
+  { label: "Promotores y RRPP", href: "/admin/promoters", icon: Users },
+  { label: "Escáner web", href: "/admin/scanner", icon: QrCode },
+  { label: "Escáner de barra", href: "/admin/bar-scanner", icon: GlassWater },
+  { label: "Mi perfil", href: "/admin/profile", icon: UserRound },
 ]
 
 const STAFF_NAV_META: AdminNavItem[] = [
-  { label: "Escáner Web", href: "/admin/scanner", icon: QrCode },
-  { label: "Escáner Barra", href: "/admin/bar-scanner", icon: GlassWater },
-  { label: "POS Puerta", href: "/admin/pos", icon: Store },
+  { label: "Escáner web", href: "/admin/scanner", icon: QrCode },
+  { label: "Escáner de barra", href: "/admin/bar-scanner", icon: GlassWater },
+  { label: "Cobrar en puerta", href: "/admin/pos", icon: Store },
 ]
 
 export function getAdminNavItems(input: {

@@ -79,7 +79,8 @@ export default async function EventBarItemsPage({
               {event.title}
             </h1>
             <p className="mt-2 text-sm text-zinc-500">
-              Tragos, combos y merch. Se venden en checkout y se canjean en{" "}
+              Tragos, combos y merch. Se venden en el proceso de pago y se canjean
+              en{" "}
               <Link href="/admin/bar-scanner" className="text-amber-300 underline">
                 Escáner Barra
               </Link>

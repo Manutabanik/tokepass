@@ -25,7 +25,7 @@ export default async function OrganizerRegisterPage({
         {pending ? (
           <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
             Tu cuenta de organizador está pendiente de aprobación. Todavía no
-            podés entrar al Command Center.
+            podés entrar a Tu Panel.
           </div>
         ) : null}
         {blockedStatus ? (

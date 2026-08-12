@@ -16,7 +16,7 @@ import { createClient } from "@/lib/supabase/server"
 
 export const metadata: Metadata = {
   title: "Editar evento",
-  description: "Actualizá la experiencia, el recinto y sus entradas.",
+  description: "Actualizá la experiencia, el lugar y sus entradas.",
 }
 
 export default async function EditEventPage({
@@ -79,7 +79,7 @@ export default async function EditEventPage({
           Editar experiencia: {initialData.title}
         </h1>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-400 sm:text-base">
-          Actualizá la identidad, el recinto y la estrategia de entradas. Los
+          Actualizá la identidad, el lugar y la estrategia de entradas. Los
           cambios se aplican de forma atómica sin alterar órdenes históricas.
         </p>
       </header>

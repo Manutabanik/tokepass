@@ -1,20 +1,55 @@
 "use client"
 
 import { CarFront, Copy, MapPinned, Navigation } from "lucide-react"
+import dynamic from "next/dynamic"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 
+const EventLocationMapInner = dynamic(
+  () =>
+    import("@/components/public/event-location-map-inner").then(
+      (mod) => mod.EventLocationMapInner,
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-full w-full items-center justify-center bg-zinc-900 text-xs text-zinc-500">
+        Cargando mapa…
+      </div>
+    ),
+  },
+)
+
 export function EventLocationPanel({
   venueName,
   address,
+  latitude = null,
+  longitude = null,
 }: {
   venueName: string
   address: string
+  latitude?: number | null
+  longitude?: number | null
 }) {
-  const query = encodeURIComponent([venueName, address].filter(Boolean).join(", "))
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${query}`
-  const uberUrl = `https://m.uber.com/ul/?action=setPickup&dropoff[formatted_address]=${query}`
+  const hasCoords =
+    latitude != null &&
+    longitude != null &&
+    Number.isFinite(latitude) &&
+    Number.isFinite(longitude)
+
+  const mapsUrl = hasCoords
+    ? `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`
+    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+        [venueName, address].filter(Boolean).join(", "),
+      )}`
+
+  const uberQuery = encodeURIComponent(
+    [venueName, address].filter(Boolean).join(", "),
+  )
+  const uberUrl = hasCoords
+    ? `https://m.uber.com/ul/?action=setPickup&dropoff[latitude]=${latitude}&dropoff[longitude]=${longitude}&dropoff[formatted_address]=${uberQuery}`
+    : `https://m.uber.com/ul/?action=setPickup&dropoff[formatted_address]=${uberQuery}`
 
   async function copyAddress() {
     try {
@@ -34,27 +69,29 @@ export function EventLocationPanel({
           href={mapsUrl}
           target="_blank"
           rel="noreferrer"
-          className="group relative block aspect-[16/10] overflow-hidden bg-[radial-gradient(ellipse_at_center,_#1f2937_0%,_#09090b_70%)]"
+          className="group relative block h-48 overflow-hidden rounded-t-2xl sm:h-56"
           aria-label="Abrir mapa"
         >
-          <div
-            className="absolute inset-0 opacity-40"
-            style={{
-              backgroundImage:
-                "linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px)",
-              backgroundSize: "28px 28px",
-            }}
-            aria-hidden="true"
-          />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_40%,rgba(16,185,129,0.18),transparent_45%)]" />
-          <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-[60%] flex-col items-center">
-            <span className="grid size-12 place-items-center rounded-full bg-emerald-500 text-zinc-950 shadow-[0_0_0_10px_rgba(16,185,129,0.18)] transition group-hover:scale-105">
-              <MapPinned className="size-6" aria-hidden="true" />
-            </span>
-            <span className="mt-3 rounded-full bg-black/55 px-3 py-1 text-[11px] font-semibold text-zinc-100 backdrop-blur-sm">
-              Ver en Maps
-            </span>
-          </div>
+          {hasCoords ? (
+            <div className="pointer-events-none absolute inset-0">
+              <EventLocationMapInner
+                latitude={latitude!}
+                longitude={longitude!}
+              />
+            </div>
+          ) : (
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_#1f2937_0%,_#09090b_70%)]">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_40%,rgba(16,185,129,0.18),transparent_45%)]" />
+              <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-[60%] flex-col items-center">
+                <span className="grid size-12 place-items-center rounded-full bg-emerald-500 text-zinc-950 shadow-[0_0_0_10px_rgba(16,185,129,0.18)]">
+                  <MapPinned className="size-6" aria-hidden="true" />
+                </span>
+                <span className="mt-3 rounded-full bg-black/55 px-3 py-1 text-[11px] font-semibold text-zinc-100 backdrop-blur-sm">
+                  Ver en Maps
+                </span>
+              </div>
+            </div>
+          )}
         </a>
 
         <div className="space-y-4 p-4 sm:p-5">
@@ -79,9 +116,7 @@ export function EventLocationPanel({
             <Button
               className="h-11 rounded-xl bg-emerald-500 text-zinc-950 hover:bg-emerald-400"
               nativeButton={false}
-              render={
-                <a href={mapsUrl} target="_blank" rel="noreferrer" />
-              }
+              render={<a href={mapsUrl} target="_blank" rel="noreferrer" />}
             >
               <Navigation className="size-4" aria-hidden="true" />
               Cómo llegar
@@ -90,9 +125,7 @@ export function EventLocationPanel({
               variant="outline"
               className="h-11 rounded-xl border-zinc-700 bg-zinc-950 text-zinc-100 hover:bg-zinc-900"
               nativeButton={false}
-              render={
-                <a href={uberUrl} target="_blank" rel="noreferrer" />
-              }
+              render={<a href={uberUrl} target="_blank" rel="noreferrer" />}
             >
               <CarFront className="size-4" aria-hidden="true" />
               Pedir Uber
@@ -100,7 +133,7 @@ export function EventLocationPanel({
           </div>
 
           <p className="text-xs leading-5 text-zinc-500">
-            Consultá accesibilidad y estacionamiento con el venue. Llegá con
+            Consultá accesibilidad y estacionamiento con el lugar. Llegá con
             margen: el ingreso puede demorar en horarios pico.
           </p>
         </div>

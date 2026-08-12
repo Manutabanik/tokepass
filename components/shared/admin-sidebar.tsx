@@ -66,7 +66,7 @@ export function AdminSidebar({
 
       <div className={cn("mt-8 px-2", collapsed && "sr-only")}>
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-600">
-          {mode === "organizer" ? "Command Center" : "Ops Staff"}
+          {mode === "organizer" ? "Tu Panel" : "Acceso staff"}
         </p>
       </div>
 

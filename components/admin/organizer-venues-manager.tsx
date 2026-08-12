@@ -225,14 +225,14 @@ export function OrganizerVenuesManager({
       <header className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="mb-2 inline-block rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 font-mono text-xs text-emerald-400">
-            INFRAESTRUCTURA
+            LUGARES
           </p>
           <h1 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
-            Recintos y Espacios
+            Lugares del evento
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-400 sm:text-base">
-            Administrá los lugares de tus eventos, configurá ubicaciones en el
-            mapa y diseñá los sectores de capacidad.
+            Administrá los locales de tus eventos, ubicá el pin en el mapa y
+            armá las zonas con su capacidad de gente.
           </p>
         </div>
         <Button
@@ -241,7 +241,7 @@ export function OrganizerVenuesManager({
           className="h-11 rounded-xl bg-emerald-500 px-5 font-bold text-zinc-950 shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:bg-emerald-400"
         >
           <Plus className="size-4" aria-hidden="true" />
-          Nuevo Recinto
+          Nuevo lugar
         </Button>
       </header>
 
@@ -295,10 +295,10 @@ export function OrganizerVenuesManager({
               }
 
               toast.success(
-                draft.id ? "Recinto actualizado" : "Recinto creado",
+                draft.id ? "Lugar actualizado" : "Lugar creado",
                 {
                   description:
-                    "La ubicación y los sectores quedaron guardados.",
+                    "La ubicación y las zonas quedaron guardadas.",
                 },
               )
               setDraft(null)
@@ -308,10 +308,10 @@ export function OrganizerVenuesManager({
         >
           <div className="mb-8 border-b border-zinc-800 pb-6">
             <h2 className="text-2xl font-bold text-white">
-              {draft.id ? "Editar recinto" : "Nuevo recinto"}
+              {draft.id ? "Editar lugar" : "Nuevo lugar"}
             </h2>
             <p className="mt-1 text-sm text-zinc-400">
-              Datos operativos, capacidad, sectores y posición geográfica.
+              Nombre, capacidad, zonas y ubicación en el mapa.
             </p>
           </div>
 
@@ -331,7 +331,7 @@ export function OrganizerVenuesManager({
                       htmlFor="venue-name"
                       className="font-mono text-xs uppercase tracking-wider text-zinc-300"
                     >
-                      Nombre del recinto
+                      Nombre del lugar
                     </Label>
                     <Input
                       id="venue-name"
@@ -340,7 +340,7 @@ export function OrganizerVenuesManager({
                       onChange={(event) =>
                         setDraft({ ...draft, name: event.target.value })
                       }
-                      placeholder="Ej. Estadio Obras"
+                      placeholder="Ej: Estadio Aldo Cantoni, Boliche Complejo X, Teatro Central"
                       className="h-12 rounded-xl border-zinc-800 bg-zinc-950"
                     />
                   </div>
@@ -350,7 +350,7 @@ export function OrganizerVenuesManager({
                       htmlFor="venue-capacity"
                       className="font-mono text-xs uppercase tracking-wider text-zinc-300"
                     >
-                      Capacidad máxima general
+                      Capacidad de gente
                     </Label>
                     <Input
                       id="venue-capacity"
@@ -373,12 +373,12 @@ export function OrganizerVenuesManager({
               <section className="flex items-center justify-between gap-4 rounded-2xl border border-indigo-500/20 bg-indigo-500/5 p-4">
                 <div>
                   <h3 className="text-sm font-semibold text-white">
-                    ¿Este recinto tiene ubicaciones numeradas, filas o mesas
+                    ¿Este lugar tiene asientos numerados, filas o mesas
                     asignadas?
                   </h3>
                   <p className="mt-1 text-xs leading-relaxed text-zinc-500">
                     Apagado mantiene una configuración simple. Activado habilita
-                    sectores y filas asimétricas.
+                    zonas y filas con distinta cantidad de asientos.
                   </p>
                 </div>
                 <Switch
@@ -404,7 +404,7 @@ export function OrganizerVenuesManager({
                   </span>
                   <div className="min-w-0 flex-1">
                     <h3 className="text-sm font-semibold text-white">
-                      Plano de referencia opcional
+                      Imagen o mapa del lugar (Opcional)
                     </h3>
                     <p className="mt-1 text-xs leading-relaxed text-zinc-500">
                       Subí un PNG o WEBP de hasta 3 MB para usarlo como fondo
@@ -417,13 +417,13 @@ export function OrganizerVenuesManager({
                           backgroundImage: `url("${draft.seatingBackgroundUrl}")`,
                         }}
                         role="img"
-                        aria-label="Vista previa del plano del recinto"
+                        aria-label="Vista previa del mapa del lugar"
                       />
                     ) : null}
                     <div className="mt-3 flex flex-wrap gap-2">
                       <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl bg-zinc-800 px-4 text-xs font-semibold text-zinc-200 transition hover:bg-zinc-700">
                         <UploadCloud className="size-4" aria-hidden="true" />
-                        {uploadPending ? "Subiendo…" : "Subir plano"}
+                        {uploadPending ? "Subiendo…" : "Subir imagen"}
                         <input
                           type="file"
                           accept="image/png,image/webp"
@@ -465,7 +465,7 @@ export function OrganizerVenuesManager({
                           }
                           className="h-10 rounded-xl text-xs text-zinc-500 hover:text-red-400"
                         >
-                          Quitar plano
+                          Quitar imagen
                         </Button>
                       ) : null}
                     </div>
@@ -475,7 +475,7 @@ export function OrganizerVenuesManager({
               ) : null}
 
               <div className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/60 px-4 py-3 text-xs">
-                <span className="text-zinc-500">Capacidad distribuida</span>
+                <span className="text-zinc-500">Personas por zona</span>
                 <span
                   className={
                     sectorCapacity > Number(draft.capacity || 0)
@@ -524,7 +524,7 @@ export function OrganizerVenuesManager({
               disabled={pending}
               className="h-12 rounded-xl bg-emerald-500 px-6 font-bold text-zinc-950 shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:bg-emerald-400"
             >
-              {pending ? "Guardando…" : "Guardar Recinto"}
+              {pending ? "Guardando…" : "Guardar lugar"}
             </Button>
             <Button
               type="button"
@@ -541,7 +541,7 @@ export function OrganizerVenuesManager({
       {initialVenues.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-zinc-800 bg-zinc-950/40 px-6 py-16 text-center">
           <Building2 className="mx-auto size-9 text-zinc-700" />
-          <h2 className="mt-4 font-bold text-white">Todavía no hay recintos</h2>
+          <h2 className="mt-4 font-bold text-white">Todavía no hay lugares</h2>
           <p className="mt-2 text-sm text-zinc-500">
             Creá el primero para reutilizarlo en todos tus eventos.
           </p>
@@ -598,7 +598,7 @@ export function OrganizerVenuesManager({
                     onClick={() => {
                       if (
                         !window.confirm(
-                          `¿Eliminar el recinto "${venue.name}"?`,
+                          `¿Eliminar el lugar "${venue.name}"?`,
                         )
                       ) {
                         return
@@ -609,7 +609,7 @@ export function OrganizerVenuesManager({
                           toast.error(result.error)
                           return
                         }
-                        toast.success("Recinto eliminado")
+                        toast.success("Lugar eliminado")
                         router.refresh()
                       })
                     }}
@@ -633,7 +633,7 @@ export function OrganizerVenuesManager({
                 </span>
                 <span className="rounded-full bg-zinc-900 px-2.5 py-1">
                   {venue.zoneBlueprint.length}{" "}
-                  {venue.zoneBlueprint.length === 1 ? "sector" : "sectores"}
+                  {venue.zoneBlueprint.length === 1 ? "zona" : "zonas"}
                 </span>
                 {venue.latitude != null ? (
                   <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-emerald-400">

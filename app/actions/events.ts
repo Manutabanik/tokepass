@@ -1003,7 +1003,7 @@ export async function publishEvent(
   if (!hasVenue) {
     return {
       success: false,
-      error: "Completá los datos del venue / ubicación antes de publicar.",
+      error: "Completá los datos del lugar / ubicación antes de publicar.",
     }
   }
 

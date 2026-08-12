@@ -68,7 +68,7 @@ export default async function ManageEventPage({
     {
       href: `/admin/events/${id}/edit`,
       label: "Editar experiencia",
-      description: "Título, fecha, flyer, venue y entradas.",
+      description: "Título, fecha, flyer, lugar y entradas.",
       icon: Pencil,
     },
     ...(profile?.role === "super_admin"

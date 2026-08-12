@@ -8,7 +8,7 @@ import { AdminMobileNav } from "@/components/shared/admin-mobile-nav"
 import { AdminSidebar } from "@/components/shared/admin-sidebar"
 import { BrandLogo } from "@/components/shared/brand-logo"
 import { SignOutButton } from "@/components/shared/sign-out-button"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { createClient } from "@/lib/supabase/server"
 
 export const metadata: Metadata = {
@@ -29,7 +29,9 @@ export default async function AdminLayout({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("email, full_name, role, organizer_approval_status")
+    .select(
+      "email, full_name, public_name, avatar_url, role, organizer_approval_status",
+    )
     .eq("id", user.id)
     .single()
 
@@ -55,7 +57,11 @@ export default async function AdminLayout({
     redirect("/")
   }
 
-  const initials = (profile.full_name ?? profile.email)
+  const displayName =
+    profile.public_name?.trim() ||
+    profile.full_name?.trim() ||
+    profile.email
+  const initials = displayName
     .split(/\s|@/)
     .filter(Boolean)
     .slice(0, 2)
@@ -63,10 +69,13 @@ export default async function AdminLayout({
     .join("")
 
   const orgLabel =
+    profile.public_name?.trim() ||
     profile.full_name?.trim() ||
     (isOrganizer ? "Organización Tokepass" : "Staff Tokepass")
   const userLabel =
-    profile.full_name || (isOrganizer ? "Administrador" : "Staff")
+    profile.public_name?.trim() ||
+    profile.full_name ||
+    (isOrganizer ? "Administrador" : "Staff")
   const mode = isOrganizer ? ("organizer" as const) : ("staff" as const)
 
   return (
@@ -87,7 +96,7 @@ export default async function AdminLayout({
             </div>
             <div className="hidden lg:block">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-600">
-                {isOrganizer ? "Command Center" : "Ops Staff"}
+                {isOrganizer ? "Tu Panel" : "Acceso staff"}
               </p>
               <p className="text-sm text-zinc-400">
                 {isOrganizer
@@ -112,6 +121,9 @@ export default async function AdminLayout({
                 </p>
               </div>
               <Avatar>
+                {profile.avatar_url ? (
+                  <AvatarImage src={profile.avatar_url} alt={userLabel} />
+                ) : null}
                 <AvatarFallback className="bg-violet-500/15 text-violet-300">
                   {initials || "AD"}
                 </AvatarFallback>

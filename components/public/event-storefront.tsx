@@ -4,7 +4,6 @@ import {
   Music2,
   ShieldCheck,
   Sparkles,
-  UserRound,
 } from "lucide-react"
 
 import type { EventDetails } from "@/app/actions/public-events"
@@ -17,6 +16,7 @@ import { EventAboutExpandable } from "@/components/public/event-about-expandable
 import { EventFlyer } from "@/components/public/event-flyer"
 import { EventLocationPanel } from "@/components/public/event-location-panel"
 import { EventStickyBuyBar } from "@/components/public/event-sticky-buy-bar"
+import { OrganizerAvatar } from "@/components/public/organizer-avatar"
 import { TicketSelector } from "@/components/public/ticket-selector"
 import {
   Accordion,
@@ -78,6 +78,8 @@ export function EventStorefront({
     event.description?.trim() ||
     "El organizador todavía no cargó una descripción detallada."
   const organizerName = event.organizerName?.trim() || "Organizador Tokepass"
+  const organizerBio =
+    event.organizerBio?.trim() || "Productora en Tokepass"
 
   return (
     <div className="relative isolate min-h-screen bg-zinc-950 pb-28 text-zinc-100 lg:pb-12">
@@ -167,7 +169,12 @@ export function EventStorefront({
               </div>
             </header>
 
-            <EventLocationPanel venueName={venueName} address={address} />
+            <EventLocationPanel
+              venueName={venueName}
+              address={address}
+              latitude={event.venue?.latitude ?? null}
+              longitude={event.venue?.longitude ?? null}
+            />
 
             <section id="tickets" className="scroll-mt-24 space-y-4">
               <div className="flex items-end justify-between gap-3">
@@ -253,7 +260,7 @@ export function EventStorefront({
                   <AccordionContent className="text-zinc-400">
                     Verificá la política de edad del organizador en puerta. Si el
                     evento es +18, deberás presentar DNI vigente. Tokepass no
-                    garantiza el ingreso si no cumplís los requisitos del venue.
+                    garantiza el ingreso si no cumplís los requisitos del lugar.
                   </AccordionContent>
                 </AccordionItem>
                 <AccordionItem value="bring">
@@ -281,9 +288,10 @@ export function EventStorefront({
             </section>
 
             <section className="flex items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4">
-              <span className="grid size-12 shrink-0 place-items-center rounded-full bg-zinc-800 text-zinc-200 ring-1 ring-white/10">
-                <UserRound className="size-5" aria-hidden="true" />
-              </span>
+              <OrganizerAvatar
+                name={organizerName}
+                avatarUrl={event.organizerAvatarUrl}
+              />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="truncate font-bold text-white">{organizerName}</p>
@@ -295,9 +303,7 @@ export function EventStorefront({
                     Verificado
                   </Badge>
                 </div>
-                <p className="mt-0.5 text-xs text-zinc-500">
-                  Productora en Tokepass
-                </p>
+                <p className="mt-0.5 text-xs text-zinc-500">{organizerBio}</p>
               </div>
               <Button
                 type="button"

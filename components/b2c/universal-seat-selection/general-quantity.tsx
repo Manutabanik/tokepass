@@ -29,7 +29,7 @@ export function UniversalGeneralQuantity({
           Seleccioná la cantidad
         </h2>
         <p className="mt-1 text-sm text-zinc-500">
-          Máximo {max} entradas por compra en este sector.
+          Máximo {max} entradas por compra en esta zona.
         </p>
       </div>
 

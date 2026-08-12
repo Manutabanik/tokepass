@@ -268,7 +268,7 @@ export function DoorScanner() {
       setLoadError(
         error instanceof Error
           ? error.message
-          : "No se pudo descargar el manifiesto",
+          : "No se pudieron bajar las entradas para trabajar sin conexión",
       )
     } finally {
       setIsDownloading(false)
@@ -414,7 +414,7 @@ export function DoorScanner() {
         : "ENTRADA NO ENCONTRADA",
       subtitle: isTotemModeRef.current
         ? "No se reconoce este ticket"
-        : "No está en el manifiesto local de este evento",
+        : "No está en la lista local de este evento",
     })
     returnToIdle(isTotemModeRef.current ? 2500 : 2500)
   }, [returnToIdle, sendSignal])
@@ -741,7 +741,7 @@ export function DoorScanner() {
                 />
                 <div className="min-w-0">
                   <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-violet-300">
-                    {isTotemMode ? "Totem / Kiosco" : "Zero-Offline Scanner"}
+                    {isTotemMode ? "Modo tótem" : "Escáner web"}
                   </p>
                   <h1 className="mt-1 text-2xl font-black tracking-tight">
                     Escáner Tokepass
@@ -837,7 +837,7 @@ export function DoorScanner() {
                 </span>
               ) : (
                 <span className="rounded-full bg-red-500/20 px-2.5 py-1 text-[11px] font-semibold text-red-200">
-                  Sin manifiesto local
+                  Sin lista de entradas descargada
                 </span>
               )}
 
@@ -958,7 +958,7 @@ export function DoorScanner() {
                   <p className="mt-1 text-xs text-zinc-500">
                     {hasLocalManifest
                       ? "Validación local Instantánea · sync cuando haya red"
-                      : "Descargá el manifiesto antes de operar sin señal"}
+                      : "Descargá la lista de entradas antes de operar sin señal"}
                   </p>
                 </div>
               </div>

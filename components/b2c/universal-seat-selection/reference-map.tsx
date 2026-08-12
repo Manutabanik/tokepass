@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils"
 
 export function UniversalReferenceMap({
   imageUrl,
-  alt = "Plano del recinto",
+  alt = "Mapa del lugar",
   highlightedColor,
 }: {
   imageUrl?: string | null
@@ -41,7 +41,7 @@ export function UniversalReferenceMap({
             <Map className="size-6" aria-hidden="true" />
           </span>
           <p className="max-w-[14rem] text-center text-sm text-zinc-500">
-            Plano de referencia del venue
+            Imagen o mapa del lugar
           </p>
           {highlightedColor ? (
             <span
@@ -52,7 +52,7 @@ export function UniversalReferenceMap({
                 className="size-2.5 rounded-full"
                 style={{ backgroundColor: highlightedColor }}
               />
-              Sector activo
+              Zona activa
             </span>
           ) : null}
         </div>
@@ -61,7 +61,7 @@ export function UniversalReferenceMap({
       <Button
         type="button"
         size="icon"
-        aria-label={expanded ? "Cerrar vista completa" : "Expandir plano"}
+        aria-label={expanded ? "Cerrar vista completa" : "Expandir mapa"}
         className="absolute right-3 top-3 z-10 size-10 rounded-full border-0 bg-black/55 text-white shadow-lg backdrop-blur-md hover:bg-black/70"
         onClick={() => setExpanded((value) => !value)}
       >
@@ -82,7 +82,7 @@ export function UniversalReferenceMap({
           <div className="mx-auto flex h-full w-full max-w-5xl flex-col gap-3">
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-zinc-200">
-                Vista completa del plano
+                Vista completa del mapa
               </p>
               <Button
                 type="button"
@@ -107,7 +107,7 @@ export function UniversalReferenceMap({
                 </div>
               ) : (
                 <div className="grid h-full place-items-center bg-zinc-900 text-sm text-zinc-500">
-                  Sin imagen de plano cargada
+                  Todavía no hay imagen del lugar
                 </div>
               )}
             </div>

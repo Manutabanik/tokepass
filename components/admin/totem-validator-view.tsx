@@ -115,7 +115,7 @@ export function TotemValidatorView({
       >
         {hasManifest
           ? "Manifiesto local listo · validación offline"
-          : "Sin manifiesto · se requiere red para validar"}
+          : "Sin lista local · hace falta conexión para validar"}
       </p>
     </div>
   )

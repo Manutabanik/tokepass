@@ -44,10 +44,18 @@ export type EventDetails = {
   isSponsoredByTokepass: boolean
   maxFreeTickets: number
   organizerName: string | null
+  organizerBio: string | null
+  organizerAvatarUrl: string | null
   venue:
     | Pick<
         Venue,
-        "id" | "name" | "location" | "capacity" | "seating_background_url"
+        | "id"
+        | "name"
+        | "location"
+        | "capacity"
+        | "seating_background_url"
+        | "latitude"
+        | "longitude"
       >
     | null
   seatingUnits: EventSeatingUnit[]
@@ -107,7 +115,13 @@ type EventDetailRow = {
   venues:
     | Pick<
         Venue,
-        "id" | "name" | "location" | "capacity" | "seating_background_url"
+        | "id"
+        | "name"
+        | "location"
+        | "capacity"
+        | "seating_background_url"
+        | "latitude"
+        | "longitude"
       >
     | null
   ticket_tiers: Array<
@@ -239,7 +253,7 @@ async function loadEventDetails(
   let query = supabase
     .from("events")
     .select(
-      "id, title, description, date, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, is_sponsored_by_tokepass, max_free_tickets, platform_fee_percentage, platform_fixed_fee, venues(id, name, location, capacity, seating_background_url), ticket_tiers(id, name, price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit), profiles!events_organizer_id_fkey(full_name)",
+      "id, title, description, date, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, is_sponsored_by_tokepass, max_free_tickets, platform_fee_percentage, platform_fixed_fee, venues(id, name, location, capacity, seating_background_url, latitude, longitude), ticket_tiers(id, name, price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit), profiles!events_organizer_id_fkey(full_name)",
     )
     .eq("id", eventId)
 
@@ -315,6 +329,32 @@ async function loadEventDetails(
     platformFixedFee = 0
   }
 
+  let organizerName = event.profiles?.full_name?.trim() || null
+  let organizerBio: string | null = null
+  let organizerAvatarUrl: string | null = null
+
+  if (event.organizer_id) {
+    const { data: publicProfile } = await supabase.rpc(
+      "get_public_organizer_profile",
+      { p_organizer_id: event.organizer_id },
+    )
+    const row = Array.isArray(publicProfile) ? publicProfile[0] : publicProfile
+    if (row && typeof row === "object") {
+      const profileRow = row as {
+        public_name?: string | null
+        public_bio?: string | null
+        avatar_url?: string | null
+        full_name?: string | null
+      }
+      organizerName =
+        profileRow.public_name?.trim() ||
+        profileRow.full_name?.trim() ||
+        organizerName
+      organizerBio = profileRow.public_bio?.trim() || null
+      organizerAvatarUrl = profileRow.avatar_url?.trim() || null
+    }
+  }
+
   return {
     id: event.id,
     title: event.title,
@@ -332,7 +372,9 @@ async function loadEventDetails(
     platformFixedFee,
     isSponsoredByTokepass,
     maxFreeTickets: Number(event.max_free_tickets ?? 100),
-    organizerName: event.profiles?.full_name?.trim() || null,
+    organizerName,
+    organizerBio,
+    organizerAvatarUrl,
     venue: event.venues,
     seatingUnits: (seatingRows ?? []).map((unit) => ({
       id: unit.id,

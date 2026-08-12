@@ -409,7 +409,7 @@ export function LivingTicketCard({
           <div className="flex items-center justify-center gap-2 rounded-xl border border-amber-400/30 bg-gradient-to-r from-amber-500/10 via-violet-500/10 to-amber-500/10 px-3 py-2 text-center">
             <Sparkles className="size-3.5 text-amber-300" aria-hidden="true" />
             <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-100/90">
-              Infraestructura bonificada por Tokepass
+              Comisión Tokepass bonificada
             </p>
           </div>
         ) : null}

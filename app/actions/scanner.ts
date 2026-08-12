@@ -535,7 +535,7 @@ export async function fetchEventTicketManifest(
     throw new Error(
       access.reason === "auth_required"
         ? "auth_required"
-        : "Sin permiso para descargar este manifiesto",
+        : "Sin permiso para descargar la lista de este evento",
     )
   }
 

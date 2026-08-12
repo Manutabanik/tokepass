@@ -40,7 +40,7 @@ function SubmitButton({ mode }: { mode: "login" | "register" }) {
       {pending
         ? "Procesando..."
         : mode === "login"
-          ? "Entrar al Command Center"
+          ? "Entrar a Tu Panel"
           : "Crear cuenta de organizador"}
     </Button>
   )
@@ -79,12 +79,12 @@ export function OrganizerAuthForm({
         <CardTitle className="text-2xl font-bold tracking-tight">
           {mode === "login"
             ? "Acceso para organizadores"
-            : "Crea tu organización"}
+            : "Creá tu organización"}
         </CardTitle>
         <CardDescription className="mx-auto max-w-sm leading-6 text-zinc-500">
           {mode === "login"
-            ? "Gestiona eventos, ventas, accesos y equipos desde un solo lugar."
-            : "Publica experiencias y administra toda tu operación con Tokepass."}
+            ? "Gestioná eventos, ventas, accesos y equipos desde un solo lugar."
+            : "Publicá experiencias y administrá toda tu operación con Tokepass."}
         </CardDescription>
       </CardHeader>
 

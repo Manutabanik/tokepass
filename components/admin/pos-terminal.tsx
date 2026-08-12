@@ -105,7 +105,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
       <div className="rounded-3xl border border-dashed border-zinc-800 bg-zinc-950/60 px-5 py-12 text-center">
         <Ticket className="mx-auto size-8 text-zinc-600" />
         <p className="mt-3 text-sm text-zinc-500">
-          No hay eventos disponibles para vender en taquilla.
+          No hay eventos disponibles para cobrar en puerta.
         </p>
       </div>
     )

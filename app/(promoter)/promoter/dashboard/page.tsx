@@ -6,7 +6,7 @@ import { PromoterDashboardClient } from "@/components/promoter/promoter-dashboar
 import { createClient } from "@/lib/supabase/server"
 
 export const metadata: Metadata = {
-  title: "Panel RRPP",
+  title: "Panel de promotores",
   description: "Tu link de ventas y comisiones en Tokepass.",
 }
 

@@ -169,11 +169,11 @@ export function SmartVenueBuilder({
     <section className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="font-bold text-white">Sectores del recinto</h3>
+          <h3 className="font-bold text-white">Zonas o sectores del lugar</h3>
           <p className="mt-1 text-xs text-zinc-500">
             {structured
-              ? "Cada sector puede tener filas independientes y asimétricas."
-              : "Solo necesitás nombre y capacidad para vender entradas generales."}
+              ? "Cada zona puede tener filas con distinta cantidad de asientos."
+              : "Solo necesitás nombre y cantidad de personas para vender entradas generales."}
           </p>
         </div>
         <Button
@@ -183,7 +183,7 @@ export function SmartVenueBuilder({
           className="rounded-lg bg-zinc-800 px-3 text-xs font-semibold text-emerald-400 hover:bg-zinc-700"
         >
           <Plus className="size-3.5" aria-hidden="true" />
-          Agregar sector
+          Agregar zona
         </Button>
       </div>
 
@@ -201,7 +201,7 @@ export function SmartVenueBuilder({
                     htmlFor={`zone-${zone.key}-name`}
                     className="text-[10px] uppercase tracking-wider text-zinc-500"
                   >
-                    Nombre libre del sector
+                    Nombre de la zona (Ej: VIP, Campo, Platea)
                   </Label>
                   <Input
                     id={`zone-${zone.key}-name`}
@@ -212,8 +212,8 @@ export function SmartVenueBuilder({
                     }
                     placeholder={
                       zoneIndex === 0
-                        ? "Ala Izquierda"
-                        : "Tribuna Sur / Sector Central"
+                        ? "VIP"
+                        : "Campo / Platea"
                     }
                     className="mt-1.5 h-10 border-zinc-800 bg-zinc-950"
                   />
@@ -273,7 +273,7 @@ export function SmartVenueBuilder({
                     htmlFor={`zone-${zone.key}-capacity`}
                     className="text-[10px] uppercase tracking-wider text-zinc-500"
                   >
-                    Capacidad total
+                    Cantidad de personas
                   </Label>
                   <Input
                     id={`zone-${zone.key}-capacity`}
@@ -298,7 +298,7 @@ export function SmartVenueBuilder({
                       onChange(zones.filter((item) => item.key !== zone.key))
                     }
                     className="text-zinc-500 hover:bg-red-500/10 hover:text-red-400"
-                    aria-label={`Eliminar sector ${zone.name || zoneIndex + 1}`}
+                    aria-label={`Eliminar zona ${zone.name || zoneIndex + 1}`}
                   >
                     <Trash2 className="size-4" />
                   </Button>
@@ -312,10 +312,10 @@ export function SmartVenueBuilder({
                       <Rows3 className="size-4 text-indigo-300" aria-hidden="true" />
                       <div>
                         <h4 className="text-sm font-semibold text-white">
-                          Filas asimétricas
+                          Filas con distinta cantidad de asientos
                         </h4>
                         <p className="text-[11px] text-zinc-500">
-                          Cada fila define su propia cantidad y capacidad.
+                          Cada fila define su propia cantidad de asientos.
                         </p>
                       </div>
                     </div>
@@ -329,7 +329,7 @@ export function SmartVenueBuilder({
                             updateZone(zone.key, { color: event.target.value })
                           }
                           className="size-8 rounded-lg border border-zinc-700 bg-zinc-900 p-1"
-                          aria-label={`Color de ${zone.name || "sector"}`}
+                          aria-label={`Color de ${zone.name || "zona"}`}
                         />
                       </label>
                       <Button

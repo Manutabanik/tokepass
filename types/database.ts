@@ -71,6 +71,12 @@ export type Profile = {
   id: string
   email: string
   full_name: string | null
+  /** Nombre público de productora (storefront). */
+  public_name: string | null
+  /** Bajada corta visible en el detalle del evento. */
+  public_bio: string | null
+  /** Logo / foto público. */
+  avatar_url: string | null
   dni: string | null
   role: UserRole
   /**
@@ -896,6 +902,17 @@ export type Database = {
     }
     Views: Record<string, never>
     Functions: {
+      get_public_organizer_profile: {
+        Args: {
+          p_organizer_id: string
+        }
+        Returns: {
+          public_name: string | null
+          public_bio: string | null
+          avatar_url: string | null
+          full_name: string | null
+        }[]
+      }
       expire_buyer_pending_event_orders: {
         Args: {
           p_owner_id: string

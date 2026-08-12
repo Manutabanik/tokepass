@@ -77,7 +77,7 @@ export function PromoterDashboardClient({
       <div className="mx-auto w-full max-w-md space-y-6 px-4 py-10">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-emerald-400">
-            Tokepass RRPP
+            Promotores y RRPP
           </p>
           <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] text-white">
             Activá tu panel

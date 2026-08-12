@@ -24,9 +24,12 @@ export const scheduleDaySchema = z.object({
 
 export const ticketTierSchema = z.object({
   id: z.string().uuid().optional(),
-  name: z.string().trim().min(2, "Ingresa un nombre para el tier."),
+  name: z.string().trim().min(2, "Ingresá un nombre para el tipo de entrada."),
   price: z.number().min(0, "El precio no puede ser negativo."),
-  capacity: z.number().int().min(1, "La capacidad debe ser mayor a cero."),
+  capacity: z
+    .number()
+    .int()
+    .min(1, "La cantidad de personas debe ser mayor a cero."),
   sold: z.number().int().min(0).optional(),
   timeLimit: z.string().optional(),
   bonusReward: z.string().trim().optional(),
@@ -49,7 +52,7 @@ export const eventFormSchema = z
       description: z
         .string()
         .trim()
-        .min(10, "Describe la experiencia en al menos 10 caracteres.")
+        .min(10, "Describí la experiencia en al menos 10 caracteres.")
         .max(2000, "La descripción es demasiado extensa."),
       flyerName: z.string().nullable(),
       visibility: z.enum(EVENT_VISIBILITY_VALUES),
@@ -63,7 +66,7 @@ export const eventFormSchema = z
       venueName: z
         .string()
         .trim()
-        .min(2, "Ingresa el nombre del recinto."),
+        .min(2, "Ingresá el nombre del lugar."),
       venueLocation: z.string().trim().optional(),
       venueCity: z.string().trim().optional(),
       capacity: z.number().int().positive().optional(),
@@ -83,7 +86,7 @@ export const eventFormSchema = z
     }),
     tickets: z
       .array(ticketTierSchema)
-      .min(1, "Debes crear al menos un tipo de entrada."),
+      .min(1, "Creá al menos un tipo de entrada."),
     growth: z.object({
       isRRPPEnabled: z.boolean(),
       commissionPercentage: z.number().min(1).max(100).optional(),
@@ -107,7 +110,7 @@ export const eventFormSchema = z
         context.addIssue({
           code: "custom",
           path: ["tickets", index, "seatingSectorId"],
-          message: "Seleccioná el sector numerado de esta entrada.",
+          message: "Seleccioná la zona numerada de esta entrada.",
         })
       }
     }
@@ -137,7 +140,7 @@ export const eventFormSchema = z
         context.addIssue({
           code: "custom",
           path: ["basics", "date"],
-          message: "Selecciona la fecha y hora.",
+          message: "Seleccioná la fecha y hora.",
         })
       }
     }
@@ -146,7 +149,7 @@ export const eventFormSchema = z
       context.addIssue({
         code: "custom",
         path: ["venue", "existingVenueId"],
-        message: "Seleccioná un recinto guardado.",
+        message: "Seleccioná un lugar guardado.",
       })
     }
 
@@ -160,7 +163,7 @@ export const eventFormSchema = z
         context.addIssue({
           code: "custom",
           path: ["venue", "capacity"],
-          message: "Define la capacidad total del espacio.",
+          message: "Definí cuántas personas entran al espacio.",
         })
       }
 
@@ -169,7 +172,7 @@ export const eventFormSchema = z
           context.addIssue({
             code: "custom",
             path: ["venue", "rows"],
-            message: "Define la cantidad de filas.",
+            message: "Definí la cantidad de filas.",
           })
         }
 
@@ -177,7 +180,7 @@ export const eventFormSchema = z
           context.addIssue({
             code: "custom",
             path: ["venue", "seatsPerRow"],
-            message: "Define cuántos asientos tiene cada fila.",
+            message: "Definí cuántos asientos tiene cada fila.",
           })
         }
       }
@@ -190,7 +193,7 @@ export const eventFormSchema = z
       context.addIssue({
         code: "custom",
         path: ["growth", "commissionPercentage"],
-        message: "Define una comisión entre 1% y 100%.",
+        message: "Definí una comisión entre 1% y 100%.",
       })
     }
 

@@ -78,7 +78,7 @@ function normalizeSeatingLayout(
 ): { success: true; data: VenueSeatingLayout } | { success: false; error: string } {
   const layout = raw ?? []
   if (layout.length > 50) {
-    return { success: false, error: "El plano admite hasta 50 sectores." }
+    return { success: false, error: "El mapa admite hasta 50 zonas." }
   }
 
   const sectorIds = new Set<string>()
@@ -96,7 +96,7 @@ function normalizeSeatingLayout(
     if (!id || sectorIds.has(id) || !sectorName) {
       return {
         success: false,
-        error: "Cada sector de ubicaciones necesita un identificador y nombre únicos.",
+        error: "Cada zona de ubicaciones necesita un identificador y nombre únicos.",
       }
     }
     sectorIds.add(id)
@@ -116,7 +116,7 @@ function normalizeSeatingLayout(
     ) {
       return {
         success: false,
-        error: `La capacidad por unidad de "${sectorName}" es inválida.`,
+        error: `La cantidad de personas por unidad de "${sectorName}" es inválida.`,
       }
     }
 
@@ -129,7 +129,7 @@ function normalizeSeatingLayout(
     if (sourceRows.length > 200) {
       return {
         success: false,
-        error: `El sector "${sectorName}" admite hasta 200 filas.`,
+        error: `La zona "${sectorName}" admite hasta 200 filas.`,
       }
     }
 
@@ -229,7 +229,7 @@ function normalizeSeatingLayout(
     if (totalItems > 5000) {
       return {
         success: false,
-        error: "El recinto admite hasta 5.000 ubicaciones numeradas.",
+        error: "El lugar admite hasta 5.000 ubicaciones numeradas.",
       }
     }
 
@@ -367,7 +367,7 @@ function normalizeVenueInput(input: VenueMutationInput):
   if (!Number.isInteger(capacity) || capacity < 1) {
     return {
       success: false,
-      error: "La capacidad máxima debe ser un entero mayor a cero.",
+      error: "La cantidad máxima de personas debe ser un entero mayor a cero.",
     }
   }
   if (
@@ -377,7 +377,7 @@ function normalizeVenueInput(input: VenueMutationInput):
     (longitude != null &&
       (!Number.isFinite(longitude) || longitude < -180 || longitude > 180))
   ) {
-    return { success: false, error: "Las coordenadas del recinto son inválidas." }
+    return { success: false, error: "Las coordenadas del lugar son inválidas." }
   }
 
   const zones = input.zones ?? []
@@ -387,7 +387,7 @@ function normalizeVenueInput(input: VenueMutationInput):
     if (!zone.name || !Number.isInteger(zone.capacity) || zone.capacity < 1) {
       return {
         success: false,
-        error: "Cada sector necesita nombre y capacidad válida.",
+        error: "Cada zona necesita nombre y cantidad de personas válida.",
       }
     }
     if (zone.type === "reserved_seating") {
@@ -416,7 +416,7 @@ function normalizeVenueInput(input: VenueMutationInput):
   if (sectorCapacity > capacity) {
     return {
       success: false,
-      error: "La suma de sectores no puede superar la capacidad máxima.",
+      error: "La suma de las zonas no puede superar la cantidad máxima de personas.",
     }
   }
 
@@ -547,7 +547,7 @@ export async function createVenue(
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Error al crear venue.",
+      error: error instanceof Error ? error.message : "No pudimos crear el lugar.",
     }
   }
 }
@@ -591,14 +591,14 @@ export async function updateVenue(input: {
       .maybeSingle()
 
     if (error) return { success: false, error: error.message }
-    if (!data) return { success: false, error: "Venue no encontrado." }
+    if (!data) return { success: false, error: "No encontramos ese lugar." }
 
     revalidatePath("/admin/venues")
     return { success: true, data: undefined }
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Error al actualizar.",
+      error: error instanceof Error ? error.message : "No pudimos actualizar el lugar.",
     }
   }
 }
@@ -619,7 +619,7 @@ export async function deleteVenue(venueId: string): Promise<ActionResult> {
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Error al eliminar.",
+      error: error instanceof Error ? error.message : "No pudimos eliminar el lugar.",
     }
   }
 }
@@ -631,16 +631,16 @@ export async function uploadVenueSeatingBackground(
     const { supabase, userId } = await requireOrganizer()
     const file = formData.get("file")
     if (!(file instanceof File) || file.size === 0) {
-      return { success: false, error: "Seleccioná una imagen de plano." }
+      return { success: false, error: "Seleccioná una imagen o mapa del lugar." }
     }
     if (!["image/png", "image/webp"].includes(file.type)) {
-      return { success: false, error: "El plano debe ser PNG o WEBP." }
+      return { success: false, error: "La imagen debe ser PNG o WEBP." }
     }
     if (file.size > 3 * 1024 * 1024) {
-      return { success: false, error: "El plano no puede superar los 3 MB." }
+      return { success: false, error: "La imagen no puede superar los 3 MB." }
     }
 
-    const safeName = (file.name || "plano.png")
+    const safeName = (file.name || "mapa.png")
       .normalize("NFKD")
       .replace(/[^\w.\-]+/g, "-")
       .replace(/-+/g, "-")
@@ -658,21 +658,21 @@ export async function uploadVenueSeatingBackground(
     if (error) {
       return {
         success: false,
-        error: `No se pudo subir el plano: ${error.message}`,
+        error: `No pudimos subir la imagen: ${error.message}`,
       }
     }
 
     const { data } = supabase.storage.from("event-flyers").getPublicUrl(path)
     if (!data.publicUrl) {
       await supabase.storage.from("event-flyers").remove([path])
-      return { success: false, error: "No se pudo publicar el plano." }
+      return { success: false, error: "No pudimos publicar la imagen." }
     }
 
     return { success: true, data: { url: data.publicUrl } }
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Error al subir el plano.",
+      error: error instanceof Error ? error.message : "No pudimos subir la imagen.",
     }
   }
 }

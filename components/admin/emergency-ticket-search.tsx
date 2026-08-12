@@ -47,7 +47,7 @@ export function EmergencyTicketSearch({
       return "Escribí al menos 2 caracteres (nombre o DNI)."
     }
     if (!isPending && results.length === 0) {
-      return "Sin coincidencias en el manifiesto local."
+      return "No encontramos coincidencias en la lista local."
     }
     return null
   }, [query, isPending, results.length])
@@ -58,7 +58,7 @@ export function EmergencyTicketSearch({
         <DialogHeader>
           <DialogTitle>Buscador de emergencia</DialogTitle>
           <DialogDescription className="text-zinc-400">
-            Filtra el manifiesto offline por nombre o DNI. Un tap valida.
+            Buscá por nombre o DNI en las entradas guardadas sin conexión. Un toque valida.
           </DialogDescription>
         </DialogHeader>
 

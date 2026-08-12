@@ -30,7 +30,7 @@ import {
 import { formatCurrency, formatDateTime } from "@/lib/format"
 
 export const metadata: Metadata = {
-  title: "Dashboard",
+  title: "Inicio",
 }
 
 const orderStatusPresentation: Record<

@@ -8,7 +8,7 @@ import { EventCommercialSettingsForm } from "@/components/admin/event-commercial
 import { createClient } from "@/lib/supabase/server"
 
 export const metadata: Metadata = {
-  title: "Settings comerciales del evento",
+  title: "Ajustes de ventas del evento",
 }
 
 export default async function EventCommercialSettingsPage({

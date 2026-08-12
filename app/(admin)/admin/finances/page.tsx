@@ -12,16 +12,16 @@ export default async function AdminFinancesPage() {
     errorMessage =
       error instanceof Error
         ? error.message
-        : "Aplicá la migración P2/P3 (get_organizer_finance_summary) en Supabase."
+        : "No pudimos cargar el resumen. Reintentá más tarde."
   }
 
   if (!summary || errorMessage) {
     return (
       <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-8 text-amber-50">
-        <h1 className="text-xl font-bold">Finanzas no disponibles</h1>
+        <h1 className="text-xl font-bold">Ventas y Dinero no disponibles</h1>
         <p className="mt-2 text-sm text-amber-100/80">
           {errorMessage ??
-            "Aplicá la migración P2/P3 (get_organizer_finance_summary) en Supabase."}
+            "No pudimos cargar el resumen. Reintentá más tarde."}
         </p>
       </div>
     )

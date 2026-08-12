@@ -148,7 +148,7 @@ export async function createPromoter(input: {
       return { success: false, error: "Debés iniciar sesión." }
     }
     if (error instanceof Error && error.message === "forbidden") {
-      return { success: false, error: "No tenés permiso para gestionar RRPP." }
+      return { success: false, error: "No tenés permiso para gestionar promotores y RRPP." }
     }
     return {
       success: false,

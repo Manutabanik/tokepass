@@ -597,7 +597,7 @@ export function DualSeatingSelector({
                 </p>
                 <p className="mt-1 flex items-center gap-1.5 text-sm text-zinc-400">
                   <Users className="size-4" aria-hidden="true" />
-                  Capacidad: incluye acceso para {selected.capacityPerUnit}{" "}
+                  Incluye acceso para {selected.capacityPerUnit}{" "}
                   {selected.capacityPerUnit === 1 ? "persona" : "personas"}
                 </p>
               </div>

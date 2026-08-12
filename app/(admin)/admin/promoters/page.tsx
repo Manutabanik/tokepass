@@ -22,8 +22,8 @@ import {
 import { formatCurrency, formatPercent } from "@/lib/format"
 
 export const metadata: Metadata = {
-  title: "RRPP / Promotores",
-  description: "Gestioná tu equipo de relacionistas y sus comisiones.",
+  title: "Promotores y RRPP",
+  description: "Gestioná tu equipo de promotores y sus comisiones.",
 }
 
 export default async function AdminPromotersPage() {
@@ -50,10 +50,10 @@ export default async function AdminPromotersPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.16em] text-violet-300">
-            Growth
+            Difusión
           </p>
           <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] text-white">
-            Relacionistas (RRPP)
+            Promotores y RRPP
           </h1>
           <p className="mt-2 max-w-xl text-sm leading-6 text-zinc-400">
             Invitá a tu equipo, compartí links con{" "}
@@ -77,7 +77,7 @@ export default async function AdminPromotersPage() {
         </Card>
         <Card className="border-white/8 bg-white/[0.03]">
           <CardHeader className="pb-2">
-            <CardDescription>Entradas vía RRPP</CardDescription>
+            <CardDescription>Entradas vía promotores</CardDescription>
             <CardTitle className="text-3xl text-white">{totalTickets}</CardTitle>
           </CardHeader>
         </Card>
@@ -108,7 +108,7 @@ export default async function AdminPromotersPage() {
             <div className="grid place-items-center rounded-2xl border border-dashed border-white/10 px-4 py-14 text-center">
               <Users className="size-8 text-zinc-600" aria-hidden="true" />
               <p className="mt-4 text-base font-semibold text-white">
-                Todavía no tenés RRPP
+                Todavía no tenés promotores
               </p>
               <p className="mt-2 max-w-sm text-sm text-zinc-500">
                 Agregá el primero y compartí su link en Instagram / WhatsApp.

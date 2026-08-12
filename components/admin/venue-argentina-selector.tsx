@@ -355,7 +355,7 @@ export function VenueArgentinaSelector({
               htmlFor="venue-ar-name"
               className="font-mono text-[10px] uppercase tracking-wider text-zinc-400"
             >
-              Nombre del recinto
+              Nombre del lugar
             </Label>
             <Input
               id="venue-ar-name"
@@ -364,7 +364,7 @@ export function VenueArgentinaSelector({
               onChange={(event) =>
                 emit({ ...state, venueName: event.target.value })
               }
-              placeholder="Ej. Estadio Cantoni"
+              placeholder="Ej: Estadio Aldo Cantoni, Boliche Complejo X, Teatro Central"
               className={inputClassName}
             />
           </div>
@@ -373,7 +373,7 @@ export function VenueArgentinaSelector({
               htmlFor="venue-ar-capacity"
               className="font-mono text-[10px] uppercase tracking-wider text-zinc-400"
             >
-              Capacidad
+              Cantidad de personas
             </Label>
             <Input
               id="venue-ar-capacity"
@@ -471,7 +471,7 @@ export function VenueArgentinaSelector({
           htmlFor="venue-ar-address"
           className="font-mono text-[10px] uppercase tracking-wider text-zinc-400"
         >
-          Dirección exacta (OpenStreetMap)
+          Dirección exacta
         </Label>
         <div className="relative">
           <Search
@@ -499,9 +499,9 @@ export function VenueArgentinaSelector({
             }}
             placeholder={
               state.department
-                ? `Calle y número en ${state.department.name}…`
+                ? `Ej: Av. España 1234, ${state.department.name}`
                 : state.province
-                  ? `Calle y número en ${state.province.name}…`
+                  ? `Ej: Av. España 1234, ${state.province.name}`
                   : "Elegí provincia primero"
             }
             className={cn(inputClassName, "pl-9 pr-10")}

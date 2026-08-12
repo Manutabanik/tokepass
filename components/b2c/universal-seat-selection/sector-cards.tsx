@@ -23,7 +23,7 @@ export function UniversalSectorCards({
           Paso 1
         </p>
         <h2 className="mt-1 text-lg font-bold tracking-tight text-white">
-          Seleccioná tu sector
+          Seleccioná tu zona
         </h2>
       </div>
 

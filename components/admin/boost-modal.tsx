@@ -74,7 +74,7 @@ export function BoostModal({
           <DialogDescription className="text-zinc-400">
             Multiplicá las ventas de{" "}
             <span className="font-medium text-zinc-200">{eventTitle}</span>{" "}
-            destacando el evento en la portada B2C.
+            destacando el evento en la portada para compradores.
           </DialogDescription>
         </DialogHeader>
 

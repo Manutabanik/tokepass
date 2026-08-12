@@ -58,7 +58,7 @@ export function AdminMobileNav({
           <BrandLogo inverted />
           <SheetTitle className="sr-only">Navegación</SheetTitle>
           <SheetDescription>
-            {mode === "organizer" ? "Command Center" : "Ops Staff"}
+            {mode === "organizer" ? "Tu Panel" : "Acceso staff"}
           </SheetDescription>
           <div className="rounded-xl border border-white/8 bg-white/5 px-3 py-2 text-left">
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">

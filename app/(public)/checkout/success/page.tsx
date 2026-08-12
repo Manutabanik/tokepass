@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 
 export const metadata: Metadata = {
   title: "Pago iniciado",
-  description: "Tu checkout de Mercado Pago fue procesado.",
+  description: "Tu pago con Mercado Pago fue procesado.",
 }
 
 export default async function CheckoutSuccessPage({

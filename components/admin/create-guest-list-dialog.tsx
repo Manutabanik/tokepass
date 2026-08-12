@@ -80,7 +80,7 @@ export function CreateGuestListDialog({ eventId }: { eventId: string }) {
                 id="list-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Lista RRPP Tomás"
+                placeholder="Lista promotores Tomás"
                 required
                 className="border-white/10 bg-zinc-950"
               />

@@ -6,8 +6,8 @@ import { PosTerminal } from "@/components/admin/pos-terminal"
 import { createClient } from "@/lib/supabase/server"
 
 export const metadata: Metadata = {
-  title: "POS Taquilla",
-  description: "Punto de venta físico en puerta — Tokepass.",
+  title: "Boletería",
+  description: "Cobrá en puerta en efectivo o transferencia — Tokepass.",
 }
 
 export default async function AdminPosPage() {
@@ -36,10 +36,10 @@ export default async function AdminPosPage() {
           Puerta
         </p>
         <h1 className="mt-1 text-3xl font-black tracking-tight text-white">
-          POS Taquilla
+          Boletería
         </h1>
         <p className="mt-2 text-sm text-zinc-500">
-          Cobrá en efectivo o transferencia y emití QR al instante.
+          Cobrá en efectivo o transferencia y emití el QR al instante.
         </p>
       </header>
 
