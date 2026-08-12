@@ -14,7 +14,7 @@
  *   import "leaflet/dist/leaflet.css"
  *
  * Deep link al cliente (Google Maps / apps):
- *   import { googleMapsDeepLink } from "@/components/admin/venue-leaflet-map"
+ *   import { googleMapsDeepLink } from "@/lib/seating/venue-geo"
  *   const href = googleMapsDeepLink(coords.lat, coords.lng)
  *   // <a href={href} target="_blank" rel="noreferrer">Cómo llegar</a>
  */
@@ -33,7 +33,7 @@ import {
   googleMapsDeepLink,
   VENUE_MAP_DEFAULT,
   type VenueCoordinates,
-} from "@/components/admin/venue-leaflet-map"
+} from "@/lib/seating/venue-geo"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {

@@ -10,16 +10,13 @@ import {
   useMapEvents,
 } from "react-leaflet"
 
-export type VenueCoordinates = {
-  latitude: number
-  longitude: number
-}
+import {
+  VENUE_MAP_DEFAULT,
+  type VenueCoordinates,
+} from "@/lib/seating/venue-geo"
 
-/** Default: Obelisco, CABA */
-export const VENUE_MAP_DEFAULT: VenueCoordinates = {
-  latitude: -34.6037,
-  longitude: -58.3816,
-}
+export type { VenueCoordinates }
+export { VENUE_MAP_DEFAULT, googleMapsDeepLink } from "@/lib/seating/venue-geo"
 
 const markerIcon = divIcon({
   className: "tokepass-map-marker",
@@ -119,13 +116,4 @@ export function VenueLeafletMap({
       ) : null}
     </MapContainer>
   )
-}
-
-/**
- * Deep link al frontend del asistente (Google Maps / apps nativas).
- * Usá las coordenadas guardadas del recinto:
- *   googleMapsDeepLink(lat, lng) → abre la ubicación exacta
- */
-export function googleMapsDeepLink(lat: number, lng: number): string {
-  return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
 }

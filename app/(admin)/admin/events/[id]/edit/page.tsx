@@ -34,21 +34,36 @@ export default async function EditEventPage({
     redirect(`/login-organizador?next=/admin/events/${id}/edit`)
   }
 
-  const [initialData, venues, eventFees] = await Promise.all([
-    getEventForEditing(id),
-    listOrganizerVenues().catch(() => []),
-    supabase
-      .from("events")
-      .select(
-        "platform_fee_percentage, platform_fixed_fee, is_sponsored_by_tokepass",
-      )
-      .eq("id", id)
-      .maybeSingle(),
-  ])
+  let initialData: Awaited<ReturnType<typeof getEventForEditing>> = null
+  let venues: Awaited<ReturnType<typeof listOrganizerVenues>> = []
+  let feeRow: {
+    platform_fee_percentage: number | null
+    platform_fixed_fee: number | null
+    is_sponsored_by_tokepass: boolean | null
+  } | null = null
+
+  try {
+    const [eventData, venueList, eventFees] = await Promise.all([
+      getEventForEditing(id),
+      listOrganizerVenues().catch(() => []),
+      supabase
+        .from("events")
+        .select(
+          "platform_fee_percentage, platform_fixed_fee, is_sponsored_by_tokepass",
+        )
+        .eq("id", id)
+        .maybeSingle(),
+    ])
+    initialData = eventData
+    venues = venueList
+    feeRow = eventFees.data
+  } catch (error) {
+    console.error("[EditEventPage]", id, error)
+    notFound()
+  }
 
   if (!initialData) notFound()
 
-  const feeRow = eventFees.data
   const feeConfig = {
     platformFeePercentage: Number(
       feeRow?.platform_fee_percentage ?? DEFAULT_PLATFORM_FEE_PERCENTAGE,

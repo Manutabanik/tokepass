@@ -443,7 +443,9 @@ export function EventVenueStep({
                   detail:
                     sector.layout_type === "general"
                       ? "Entradas generales"
-                      : `${sector.rows.length} fila${sector.rows.length === 1 ? "" : "s"}`,
+                      : `${(sector.rows ?? []).length} fila${
+                          (sector.rows ?? []).length === 1 ? "" : "s"
+                        }`,
                 }))
               : selectedVenue.zoneBlueprint.map((zone, index) => ({
                   id: `z-${index}`,

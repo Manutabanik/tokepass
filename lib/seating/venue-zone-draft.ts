@@ -76,7 +76,7 @@ export function zonesToDraft(
     )
     const legacyItems = seating ? getVenueSeatingItems(seating) : []
     const seatingRows =
-      seating?.rows.length
+      seating?.rows?.length
         ? seating.rows
         : legacyItems.length > 0
           ? [

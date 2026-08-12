@@ -33,8 +33,9 @@ export type VenueSeatingLayout = VenueSeatingSector[]
 export function getVenueSeatingItems(
   sector: VenueSeatingSector,
 ): VenueSeatingItem[] {
-  if (sector.rows.length > 0) {
-    return sector.rows.flatMap((row) => row.items)
+  const rows = sector.rows ?? []
+  if (rows.length > 0) {
+    return rows.flatMap((row) => row.items ?? [])
   }
   return sector.items ?? []
 }

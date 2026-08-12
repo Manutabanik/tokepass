@@ -27,40 +27,73 @@ export default async function AdminLayout({
     redirect("/login-organizador")
   }
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select(
       "email, full_name, public_name, avatar_url, role, organizer_approval_status",
     )
     .eq("id", user.id)
-    .single()
+    .maybeSingle()
 
-  if (profile?.organizer_approval_status === "pending") {
+  // P29 aún no aplicada: reintentar sin columnas nuevas.
+  const legacyProfile =
+    profileError || !profile
+      ? (
+          await supabase
+            .from("profiles")
+            .select("email, full_name, role, organizer_approval_status")
+            .eq("id", user.id)
+            .maybeSingle()
+        ).data
+      : null
+
+  const resolvedProfile = profile
+    ? {
+        email: profile.email,
+        full_name: profile.full_name,
+        public_name: profile.public_name ?? null,
+        avatar_url: profile.avatar_url ?? null,
+        role: profile.role,
+        organizer_approval_status: profile.organizer_approval_status,
+      }
+    : legacyProfile
+      ? {
+          email: legacyProfile.email,
+          full_name: legacyProfile.full_name,
+          public_name: null as string | null,
+          avatar_url: null as string | null,
+          role: legacyProfile.role,
+          organizer_approval_status: legacyProfile.organizer_approval_status,
+        }
+      : null
+
+  if (resolvedProfile?.organizer_approval_status === "pending") {
     redirect("/register-organizador?pending=1")
   }
 
   if (
-    profile?.organizer_approval_status === "rejected" ||
-    profile?.organizer_approval_status === "suspended"
+    resolvedProfile?.organizer_approval_status === "rejected" ||
+    resolvedProfile?.organizer_approval_status === "suspended"
   ) {
     redirect(
-      `/register-organizador?status=${profile.organizer_approval_status}`,
+      `/register-organizador?status=${resolvedProfile.organizer_approval_status}`,
     )
   }
 
   const isOrganizer =
-    profile?.role === "admin" || profile?.role === "super_admin"
+    resolvedProfile?.role === "admin" ||
+    resolvedProfile?.role === "super_admin"
   const staffRoles = isOrganizer ? [] : await getMyStaffRoles()
   const isStaff = !isOrganizer && staffRoles.length > 0
 
-  if (!profile || (!isOrganizer && !isStaff)) {
+  if (!resolvedProfile || (!isOrganizer && !isStaff)) {
     redirect("/")
   }
 
   const displayName =
-    profile.public_name?.trim() ||
-    profile.full_name?.trim() ||
-    profile.email
+    resolvedProfile.public_name?.trim() ||
+    resolvedProfile.full_name?.trim() ||
+    resolvedProfile.email
   const initials = displayName
     .split(/\s|@/)
     .filter(Boolean)
@@ -69,12 +102,12 @@ export default async function AdminLayout({
     .join("")
 
   const orgLabel =
-    profile.public_name?.trim() ||
-    profile.full_name?.trim() ||
+    resolvedProfile.public_name?.trim() ||
+    resolvedProfile.full_name?.trim() ||
     (isOrganizer ? "Organización Tokepass" : "Staff Tokepass")
   const userLabel =
-    profile.public_name?.trim() ||
-    profile.full_name ||
+    resolvedProfile.public_name?.trim() ||
+    resolvedProfile.full_name ||
     (isOrganizer ? "Administrador" : "Staff")
   const mode = isOrganizer ? ("organizer" as const) : ("staff" as const)
 
@@ -90,7 +123,7 @@ export default async function AdminLayout({
                 staffRoles={staffRoles}
                 orgLabel={orgLabel}
                 userLabel={userLabel}
-                userEmail={profile.email}
+                userEmail={resolvedProfile.email}
               />
               <BrandLogo inverted />
             </div>
@@ -117,12 +150,15 @@ export default async function AdminLayout({
                   {userLabel}
                 </p>
                 <p className="max-w-48 truncate text-xs text-zinc-500">
-                  {profile.email}
+                  {resolvedProfile.email}
                 </p>
               </div>
               <Avatar>
-                {profile.avatar_url ? (
-                  <AvatarImage src={profile.avatar_url} alt={userLabel} />
+                {resolvedProfile.avatar_url ? (
+                  <AvatarImage
+                    src={resolvedProfile.avatar_url}
+                    alt={userLabel}
+                  />
                 ) : null}
                 <AvatarFallback className="bg-violet-500/15 text-violet-300">
                   {initials || "AD"}

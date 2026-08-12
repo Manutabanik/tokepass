@@ -479,28 +479,28 @@ export async function getEventForEditing(
 ): Promise<EditableEventData | null> {
   if (!eventId?.trim()) return null
 
-  const { supabase, user } = await requireAuthenticatedUser()
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role, organizer_approval_status")
-    .eq("id", user.id)
-    .maybeSingle()
+  try {
+    const { supabase, user } = await requireAuthenticatedUser()
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role, organizer_approval_status")
+      .eq("id", user.id)
+      .maybeSingle()
 
-  const { data: event, error: eventError } = await supabase
-    .from("events")
-    .select(
-      "id, organizer_id, title, description, date, location, image_url, flyer_url, venue_id, visibility, schedule_days",
-    )
-    .eq("id", eventId)
-    .maybeSingle()
+    const { data: event, error: eventError } = await supabase
+      .from("events")
+      .select(
+        "id, organizer_id, title, description, date, location, image_url, flyer_url, venue_id, visibility, schedule_days",
+      )
+      .eq("id", eventId)
+      .maybeSingle()
 
-  if (eventError || !event) return null
-  if (event.organizer_id !== user.id && profile?.role !== "super_admin") {
-    return null
-  }
+    if (eventError || !event) return null
+    if (event.organizer_id !== user.id && profile?.role !== "super_admin") {
+      return null
+    }
 
-  const [{ data: tiers, error: tiersError }, { data: venue }] =
-    await Promise.all([
+    const [{ data: tiers, error: tiersError }, venueResult] = await Promise.all([
       supabase
         .from("ticket_tiers")
         .select(
@@ -511,85 +511,122 @@ export async function getEventForEditing(
       event.venue_id
         ? supabase
             .from("venues")
-            .select("id, name, location, city, capacity, zone_blueprint")
+            .select(
+              "id, name, location, city, capacity, zone_blueprint, latitude, longitude, seating_background_url",
+            )
             .eq("id", event.venue_id)
             .maybeSingle()
         : Promise.resolve({ data: null, error: null }),
     ])
 
-  if (tiersError || !tiers?.length) return null
+    if (tiersError || !tiers?.length) return null
 
-  const venueZones = parseVenueZones(venue?.zone_blueprint)
-  const firstZone = venueZones?.[0]
-  const venueCapacity = Number(venue?.capacity ?? 0) || 1
-  const scheduleDays = parseScheduleDays(event.schedule_days).map((day) => ({
-    id: day.id,
-    title: day.title,
-    startTime: toLocalDateTimeInput(day.start_time),
-    endTime: toLocalDateTimeInput(day.end_time),
-  }))
-  const isMultiDay = scheduleDays.length > 1
-  const visibility =
-    event.visibility === "private" || event.visibility === "guest_list_only"
-      ? event.visibility
-      : "public"
+    let venue = venueResult.data
+    if (event.venue_id && (venueResult.error || !venue)) {
+      const fallback = await supabase
+        .from("venues")
+        .select("id, name, location, city, capacity, zone_blueprint")
+        .eq("id", event.venue_id)
+        .maybeSingle()
+      venue = fallback.data
+        ? {
+            ...fallback.data,
+            latitude: null,
+            longitude: null,
+            seating_background_url: null,
+          }
+        : null
+    }
 
-  return {
-    id: event.id,
-    organizerId: event.organizer_id,
-    title: event.title,
-    flyerUrl: event.flyer_url ?? event.image_url,
-    values: {
-      basics: {
-        title: event.title,
-        date: toLocalDateTimeInput(event.date),
-        description: event.description ?? "",
-        flyerName: event.flyer_url || event.image_url ? "Flyer actual" : null,
-        visibility,
-        isMultiDay,
-        scheduleDays,
+    const venueZones = parseVenueZones(venue?.zone_blueprint)
+    const firstZone = venueZones?.[0]
+    const venueCapacity = Number(venue?.capacity ?? 0) || 1
+    const scheduleDays = parseScheduleDays(event.schedule_days).map((day) => ({
+      id: day.id,
+      title: day.title,
+      startTime: toLocalDateTimeInput(day.start_time),
+      endTime: toLocalDateTimeInput(day.end_time),
+    }))
+    const isMultiDay = scheduleDays.length > 1
+    const visibility =
+      event.visibility === "private" || event.visibility === "guest_list_only"
+        ? event.visibility
+        : "public"
+
+    const latitude =
+      venue?.latitude == null || !Number.isFinite(Number(venue.latitude))
+        ? null
+        : Number(venue.latitude)
+    const longitude =
+      venue?.longitude == null || !Number.isFinite(Number(venue.longitude))
+        ? null
+        : Number(venue.longitude)
+
+    return {
+      id: event.id,
+      organizerId: event.organizer_id,
+      title: event.title,
+      flyerUrl: event.flyer_url ?? event.image_url,
+      values: {
+        basics: {
+          title: event.title,
+          date: toLocalDateTimeInput(event.date),
+          description: event.description ?? "",
+          flyerName: event.flyer_url || event.image_url ? "Flyer actual" : null,
+          visibility,
+          isMultiDay,
+          scheduleDays,
+        },
+        venue: {
+          mode: event.venue_id ? "existing" : "new",
+          existingVenueId: event.venue_id,
+          zoneType: firstZone?.type ?? "general_admission",
+          venueName: venue?.name ?? event.location,
+          venueLocation: venue?.location ?? event.location,
+          venueCity: venue?.city ?? "",
+          capacity: firstZone?.capacity ?? venueCapacity,
+          rows: firstZone?.rows ?? undefined,
+          seatsPerRow: firstZone?.seatsPerRow ?? undefined,
+          latitude,
+          longitude,
+          seatingBackgroundUrl:
+            typeof venue?.seating_background_url === "string"
+              ? venue.seating_background_url
+              : null,
+          saveVenueForReuse: false,
+          zones: venueZones,
+        },
+        tickets: tiers.map((tier) => ({
+          id: tier.id,
+          name: String(tier.name ?? "Entrada"),
+          price: Number(tier.price) || 0,
+          capacity: Math.max(1, Number(tier.capacity) || 1),
+          sold: Math.max(0, Number(tier.sold) || 0),
+          timeLimit: tier.time_limit ?? "",
+          bonusReward: tier.bonus_reward ?? "",
+          dayId: tier.day_id ?? null,
+          visibility:
+            tier.visibility === "private"
+              ? ("private" as const)
+              : ("public" as const),
+          layoutType:
+            tier.layout_type === "table_combo" ||
+            tier.layout_type === "numbered_seat"
+              ? tier.layout_type
+              : ("general" as const),
+          seatingSectorId: tier.seating_sector_id ?? null,
+          capacityPerUnit: Math.max(1, Number(tier.capacity_per_unit ?? 1) || 1),
+        })),
+        growth: {
+          isRRPPEnabled: false,
+          commissionPercentage: undefined,
+          isAddonsEnabled: false,
+        },
       },
-      venue: {
-        mode: event.venue_id ? "existing" : "new",
-        existingVenueId: event.venue_id,
-        zoneType: firstZone?.type ?? "general_admission",
-        venueName: venue?.name ?? event.location,
-        venueLocation: venue?.location ?? event.location,
-        venueCity: venue?.city ?? "",
-        capacity: firstZone?.capacity ?? venueCapacity,
-        rows: firstZone?.rows ?? undefined,
-        seatsPerRow: firstZone?.seatsPerRow ?? undefined,
-        latitude: null,
-        longitude: null,
-        seatingBackgroundUrl: null,
-        saveVenueForReuse: false,
-        zones: venueZones,
-      },
-      tickets: tiers.map((tier) => ({
-        id: tier.id,
-        name: tier.name,
-        price: Number(tier.price),
-        capacity: Number(tier.capacity),
-        sold: Number(tier.sold),
-        timeLimit: tier.time_limit ?? "",
-        bonusReward: tier.bonus_reward ?? "",
-        dayId: tier.day_id ?? null,
-        visibility:
-          tier.visibility === "private" ? ("private" as const) : ("public" as const),
-        layoutType:
-          tier.layout_type === "table_combo" ||
-          tier.layout_type === "numbered_seat"
-            ? tier.layout_type
-            : ("general" as const),
-        seatingSectorId: tier.seating_sector_id ?? null,
-        capacityPerUnit: Number(tier.capacity_per_unit ?? 1),
-      })),
-      growth: {
-        isRRPPEnabled: false,
-        commissionPercentage: undefined,
-        isAddonsEnabled: false,
-      },
-    },
+    }
+  } catch (error) {
+    console.error("[getEventForEditing]", eventId, error)
+    return null
   }
 }
 

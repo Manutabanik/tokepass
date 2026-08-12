@@ -98,12 +98,13 @@ function sectorFromLayout(
     }
   }
 
+  const sectorRows = sector.rows ?? []
   const groups: UniversalSeatGroup[] =
-    sector.rows.length > 0
-      ? sector.rows.map((row) => ({
+    sectorRows.length > 0
+      ? sectorRows.map((row) => ({
           id: row.row_id,
           name: row.row_label || `Fila ${row.row_number}`,
-          seats: mapItemsToSeats(row.items, options?.occupancyBySeatId),
+          seats: mapItemsToSeats(row.items ?? [], options?.occupancyBySeatId),
         }))
       : [
           {

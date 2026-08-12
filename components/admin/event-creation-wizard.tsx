@@ -22,7 +22,6 @@ import {
   Trash2,
   UploadCloud,
 } from "lucide-react"
-import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import {
@@ -790,12 +789,11 @@ export function EventCreationWizard({
                   >
                     {initialData?.flyerUrl && !flyerFile ? (
                       <>
-                        <Image
+                        {/* eslint-disable-next-line @next/next/no-img-element -- flyer host may vary; avoid next/image remotePatterns 500 */}
+                        <img
                           src={initialData.flyerUrl}
                           alt={`Flyer actual de ${initialData.title}`}
-                          fill
-                          sizes="(min-width: 1024px) 380px, 100vw"
-                          className="object-cover opacity-35 transition-opacity group-hover:opacity-20"
+                          className="absolute inset-0 size-full object-cover opacity-35 transition-opacity group-hover:opacity-20"
                         />
                         <span className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent" />
                       </>

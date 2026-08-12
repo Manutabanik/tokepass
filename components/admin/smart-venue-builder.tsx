@@ -58,8 +58,12 @@ function createEmptyRow(index: number, layoutType: VenueLayoutType): VenueRowDra
 
 export function createEmptyZone(structured = false): VenueZoneDraft {
   const layoutType = structured ? "table_combo" : "general"
+  const key =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `zone-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   return {
-    key: crypto.randomUUID(),
+    key,
     name: "",
     type: "general_admission",
     layoutType,

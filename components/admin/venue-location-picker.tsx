@@ -7,7 +7,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import type { VenueCoordinates } from "@/components/admin/venue-leaflet-map"
+import type { VenueCoordinates } from "@/lib/seating/venue-geo"
 
 const VenueLeafletMap = dynamic(
   () =>
