@@ -22,7 +22,10 @@ import {
   type OrganizerVenue,
   type VenueZoneBlueprint,
 } from "@/app/actions/venues"
-import { VenueLocationPicker } from "@/components/admin/venue-location-picker"
+import {
+  VenueArgentinaSelector,
+  type VenueArgentinaValue,
+} from "@/components/admin/venue-argentina-selector"
 import {
   createEmptyZone,
   SmartVenueBuilder,
@@ -46,6 +49,10 @@ type Draft = {
   capacity: string
   latitude: number | null
   longitude: number | null
+  provinceId: string | null
+  provinceName: string | null
+  departmentId: string | null
+  departmentName: string | null
   zones: VenueZoneDraft[]
   structured: boolean
   seatingBackgroundUrl: string | null
@@ -59,9 +66,40 @@ function emptyDraft(): Draft {
     capacity: "",
     latitude: null,
     longitude: null,
+    provinceId: null,
+    provinceName: null,
+    departmentId: null,
+    departmentName: null,
     zones: [createEmptyZone()],
     structured: false,
     seatingBackgroundUrl: null,
+  }
+}
+
+function locationLabel(draft: Draft): string {
+  if (draft.departmentName && draft.provinceName) {
+    return `${draft.departmentName}, ${draft.provinceName}`
+  }
+  return draft.city.trim()
+}
+
+function draftToLocationValue(draft: Draft): VenueArgentinaValue {
+  return {
+    venueName: draft.name,
+    province:
+      draft.provinceId && draft.provinceName
+        ? { id: draft.provinceId, name: draft.provinceName }
+        : null,
+    department:
+      draft.departmentId && draft.departmentName
+        ? { id: draft.departmentId, name: draft.departmentName }
+        : null,
+    address: draft.address,
+    coordinates:
+      draft.latitude != null && draft.longitude != null
+        ? { lat: draft.latitude, lng: draft.longitude }
+        : null,
+    capacity: Number(draft.capacity) || 0,
   }
 }
 
@@ -213,10 +251,27 @@ export function OrganizerVenuesManager({
           onSubmit={(event) => {
             event.preventDefault()
             startTransition(async () => {
+              if (!draft.provinceId || !draft.departmentId) {
+                toast.error(
+                  "Seleccioná provincia y departamento de los listados oficiales.",
+                )
+                return
+              }
+              if (!draft.address.trim()) {
+                toast.error("Elegí una dirección exacta en el buscador.")
+                return
+              }
+              if (draft.latitude == null || draft.longitude == null) {
+                toast.error(
+                  "Falta el pin en el mapa. Seleccioná una dirección o tocá el mapa.",
+                )
+                return
+              }
+
               const payload = {
                 name: draft.name,
-                location: draft.address,
-                city: draft.city,
+                location: draft.address.trim(),
+                city: locationLabel(draft),
                 latitude: draft.latitude,
                 longitude: draft.longitude,
                 capacity: Number(draft.capacity),
@@ -290,26 +345,7 @@ export function OrganizerVenuesManager({
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="venue-city"
-                      className="font-mono text-xs uppercase tracking-wider text-zinc-300"
-                    >
-                      Ciudad
-                    </Label>
-                    <Input
-                      id="venue-city"
-                      required
-                      value={draft.city}
-                      onChange={(event) =>
-                        setDraft({ ...draft, city: event.target.value })
-                      }
-                      placeholder="Ciudad Autónoma de Buenos Aires"
-                      className="h-12 rounded-xl border-zinc-800 bg-zinc-950"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
+                  <div className="space-y-2 sm:col-span-2">
                     <Label
                       htmlFor="venue-capacity"
                       className="font-mono text-xs uppercase tracking-wider text-zinc-300"
@@ -326,25 +362,6 @@ export function OrganizerVenuesManager({
                         setDraft({ ...draft, capacity: event.target.value })
                       }
                       placeholder="2500"
-                      className="h-12 rounded-xl border-zinc-800 bg-zinc-950"
-                    />
-                  </div>
-
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label
-                      htmlFor="venue-address"
-                      className="font-mono text-xs uppercase tracking-wider text-zinc-300"
-                    >
-                      Dirección
-                    </Label>
-                    <Input
-                      id="venue-address"
-                      required
-                      value={draft.address}
-                      onChange={(event) =>
-                        setDraft({ ...draft, address: event.target.value })
-                      }
-                      placeholder="Av. del Libertador 7395"
                       className="h-12 rounded-xl border-zinc-800 bg-zinc-950"
                     />
                   </div>
@@ -473,31 +490,27 @@ export function OrganizerVenuesManager({
             </div>
 
             <div className="lg:col-span-5">
-              <VenueLocationPicker
-                address={draft.address}
-                city={draft.city}
-                coordinates={
-                  draft.latitude != null && draft.longitude != null
-                    ? {
-                        latitude: draft.latitude,
-                        longitude: draft.longitude,
-                      }
-                    : null
-                }
-                onAddressChange={(address) =>
-                  setDraft((current) =>
-                    current ? { ...current, address } : current,
-                  )
-                }
-                onCityChange={(city) =>
-                  setDraft((current) =>
-                    current ? { ...current, city } : current,
-                  )
-                }
-                onCoordinatesChange={({ latitude, longitude }) =>
+              <VenueArgentinaSelector
+                key={draft.id ?? "new-venue"}
+                showIdentityFields={false}
+                value={draftToLocationValue(draft)}
+                onChange={(location) =>
                   setDraft((current) =>
                     current
-                      ? { ...current, latitude, longitude }
+                      ? {
+                          ...current,
+                          address: location.address,
+                          city:
+                            location.department && location.province
+                              ? `${location.department.name}, ${location.province.name}`
+                              : current.city,
+                          latitude: location.coordinates?.lat ?? null,
+                          longitude: location.coordinates?.lng ?? null,
+                          provinceId: location.province?.id ?? null,
+                          provinceName: location.province?.name ?? null,
+                          departmentId: location.department?.id ?? null,
+                          departmentName: location.department?.name ?? null,
+                        }
                       : current,
                   )
                 }
@@ -552,11 +565,15 @@ export function OrganizerVenuesManager({
                       setDraft({
                         id: venue.id,
                         name: venue.name,
-                        address: venue.address,
+                        address: venue.address || venue.location,
                         city: venue.city ?? "",
                         capacity: String(venue.capacity),
                         latitude: venue.latitude,
                         longitude: venue.longitude,
+                        provinceId: null,
+                        provinceName: null,
+                        departmentId: null,
+                        departmentName: null,
                         zones: zonesToDraft(
                           venue.id,
                           venue.zoneBlueprint,

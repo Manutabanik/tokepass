@@ -1,6 +1,7 @@
 "use client"
 
 import { divIcon, type Marker as LeafletMarker } from "leaflet"
+import { useEffect } from "react"
 import {
   MapContainer,
   Marker,
@@ -8,14 +9,14 @@ import {
   useMap,
   useMapEvents,
 } from "react-leaflet"
-import { useEffect } from "react"
 
 export type VenueCoordinates = {
   latitude: number
   longitude: number
 }
 
-const BUENOS_AIRES: VenueCoordinates = {
+/** Default: Obelisco, CABA */
+export const VENUE_MAP_DEFAULT: VenueCoordinates = {
   latitude: -34.6037,
   longitude: -58.3816,
 }
@@ -35,14 +36,21 @@ const markerIcon = divIcon({
   iconAnchor: [18, 36],
 })
 
-function RecenterMap({ coordinates }: { coordinates: VenueCoordinates }) {
+function FlyToCoordinates({
+  coordinates,
+  zoom,
+}: {
+  coordinates: VenueCoordinates
+  zoom: number
+}) {
   const map = useMap()
 
   useEffect(() => {
-    map.setView([coordinates.latitude, coordinates.longitude], map.getZoom(), {
+    map.flyTo([coordinates.latitude, coordinates.longitude], zoom, {
       animate: true,
+      duration: 0.85,
     })
-  }, [coordinates.latitude, coordinates.longitude, map])
+  }, [coordinates.latitude, coordinates.longitude, map, zoom])
 
   return null
 }
@@ -66,24 +74,30 @@ function MapClickHandler({
 export function VenueLeafletMap({
   coordinates,
   onChange,
+  zoom = 12,
 }: {
   coordinates: VenueCoordinates | null
   onChange: (coordinates: VenueCoordinates) => void
+  zoom?: number
 }) {
-  const center = coordinates ?? BUENOS_AIRES
+  const center = coordinates ?? VENUE_MAP_DEFAULT
 
   return (
     <MapContainer
       center={[center.latitude, center.longitude]}
-      zoom={coordinates ? 16 : 12}
+      zoom={coordinates ? Math.max(zoom, 15) : 12}
       scrollWheelZoom
-      className="h-full w-full bg-zinc-950"
+      className="h-full w-full bg-zinc-950 [&_.leaflet-control-attribution]:bg-black/50 [&_.leaflet-control-attribution]:text-[10px] [&_.leaflet-control-attribution]:text-zinc-400"
     >
+      {/* OSM tiles — 100% gratis / open source */}
       <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
-        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      <RecenterMap coordinates={center} />
+      <FlyToCoordinates
+        coordinates={center}
+        zoom={coordinates ? Math.max(zoom, 15) : 12}
+      />
       <MapClickHandler onChange={onChange} />
       {coordinates ? (
         <Marker
@@ -104,4 +118,13 @@ export function VenueLeafletMap({
       ) : null}
     </MapContainer>
   )
+}
+
+/**
+ * Deep link al frontend del asistente (Google Maps / apps nativas).
+ * Usá las coordenadas guardadas del recinto:
+ *   googleMapsDeepLink(lat, lng) → abre la ubicación exacta
+ */
+export function googleMapsDeepLink(lat: number, lng: number): string {
+  return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
 }
