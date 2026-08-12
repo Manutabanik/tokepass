@@ -285,9 +285,13 @@
 .leaflet-pane img {
   max-width: none !important;
   max-height: none !important;
+  /* Tailwind Preflight also sets height:auto — unset so tiles keep 256px grid */
+  height: unset !important;
+  width: unset !important;
 }
 
 .leaflet-container .leaflet-marker-icon,
 .leaflet-container .leaflet-marker-shadow {
   max-width: none !important;
+  height: unset !important;
 }
