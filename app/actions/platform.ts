@@ -106,6 +106,7 @@ export async function getPlatformOverview(): Promise<PlatformOverview> {
     published: 0,
     cancelled: 0,
     completed: 0,
+    archived: 0,
   }
   for (const event of events ?? []) {
     eventsByStatus[event.status] = (eventsByStatus[event.status] ?? 0) + 1

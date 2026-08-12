@@ -30,6 +30,7 @@ export type OrganizerEvent = Pick<
   | "featured_until"
 > & {
   venues: Pick<Venue, "id" | "name" | "location"> | null
+  ticketsSold: number
 }
 
 async function requireAuthenticatedUser() {
@@ -75,7 +76,31 @@ export async function getOrganizerEvents(): Promise<OrganizerEvent[]> {
     throw new Error(`No se pudieron cargar los eventos: ${error.message}`)
   }
 
-  return data
+  const events = data ?? []
+  if (events.length === 0) return []
+
+  const eventIds = events.map((event) => event.id)
+  const { data: ticketRows, error: ticketsError } = await supabase
+    .from("tickets")
+    .select("event_id, status")
+    .in("event_id", eventIds)
+    .in("status", ["valid", "used", "scanned", "pending_payment"])
+
+  if (ticketsError) {
+    throw new Error(
+      `No se pudo calcular ventas por evento: ${ticketsError.message}`,
+    )
+  }
+
+  const soldByEvent = new Map<string, number>()
+  for (const row of ticketRows ?? []) {
+    soldByEvent.set(row.event_id, (soldByEvent.get(row.event_id) ?? 0) + 1)
+  }
+
+  return events.map((event) => ({
+    ...event,
+    ticketsSold: soldByEvent.get(event.id) ?? 0,
+  }))
 }
 
 export async function createEvent(formData: FormData): Promise<Event> {
@@ -975,4 +1000,180 @@ export async function publishEvent(
   revalidatePath("/superadmin/events")
 
   return { success: true }
+}
+
+export type DeleteOrArchiveEventResult =
+  | { success: true; mode: "deleted" | "cancelled" | "archived" }
+  | { success: false; error: string }
+
+/**
+ * Borrado seguro:
+ * - Sin entradas vendidas/comprometidas → DELETE físico
+ * - Con ventas → soft delete (`cancelled`) para preservar auditoría
+ */
+export async function deleteOrArchiveEvent(
+  eventId: string,
+): Promise<DeleteOrArchiveEventResult> {
+  if (!eventId?.trim()) {
+    return { success: false, error: "Evento inválido." }
+  }
+
+  const { supabase, user } = await requireAuthenticatedUser()
+
+  const { data: event, error: eventError } = await supabase
+    .from("events")
+    .select("id, organizer_id, status, title")
+    .eq("id", eventId)
+    .maybeSingle()
+
+  if (eventError) {
+    return { success: false, error: eventError.message }
+  }
+  if (!event || event.organizer_id !== user.id) {
+    return { success: false, error: "No tenés permiso sobre este evento." }
+  }
+
+  if (event.status === "cancelled") {
+    return { success: false, error: "El evento ya está cancelado." }
+  }
+
+  const { count, error: countError } = await supabase
+    .from("tickets")
+    .select("id", { count: "exact", head: true })
+    .eq("event_id", eventId)
+    .in("status", ["valid", "used", "scanned", "pending_payment"])
+
+  if (countError) {
+    return { success: false, error: countError.message }
+  }
+
+  const ticketsSold = count ?? 0
+
+  if (ticketsSold === 0) {
+    const { error: deleteError } = await supabase
+      .from("events")
+      .delete()
+      .eq("id", eventId)
+      .eq("organizer_id", user.id)
+
+    if (deleteError) {
+      return { success: false, error: deleteError.message }
+    }
+
+    revalidatePath("/admin")
+    revalidatePath("/admin/events")
+    revalidatePath("/events")
+    revalidatePath("/")
+    revalidatePath("/superadmin/events")
+    return { success: true, mode: "deleted" }
+  }
+
+  const { data: updated, error: updateError } = await supabase
+    .from("events")
+    .update({
+      status: "cancelled",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", eventId)
+    .eq("organizer_id", user.id)
+    .select("id")
+    .maybeSingle()
+
+  if (updateError) {
+    return { success: false, error: updateError.message }
+  }
+  if (!updated) {
+    return {
+      success: false,
+      error: "No se pudo cancelar el evento. Recargá e intentá de nuevo.",
+    }
+  }
+
+  revalidatePath("/admin")
+  revalidatePath("/admin/events")
+  revalidatePath(`/admin/events/${eventId}`)
+  revalidatePath(`/events/${eventId}`)
+  revalidatePath("/events")
+  revalidatePath("/")
+  revalidatePath("/superadmin/events")
+
+  return { success: true, mode: "cancelled" }
+}
+
+export async function archiveEvent(
+  eventId: string,
+): Promise<DeleteOrArchiveEventResult> {
+  if (!eventId?.trim()) {
+    return { success: false, error: "Evento inválido." }
+  }
+
+  const { supabase, user } = await requireAuthenticatedUser()
+
+  const { data: event, error: eventError } = await supabase
+    .from("events")
+    .select("id, organizer_id, status")
+    .eq("id", eventId)
+    .maybeSingle()
+
+  if (eventError) {
+    return { success: false, error: eventError.message }
+  }
+  if (!event || event.organizer_id !== user.id) {
+    return { success: false, error: "No tenés permiso sobre este evento." }
+  }
+
+  if (event.status === "archived") {
+    return { success: true, mode: "archived" }
+  }
+
+  if (event.status === "cancelled") {
+    return {
+      success: false,
+      error: "Un evento cancelado no se puede archivar.",
+    }
+  }
+
+  const { count, error: countError } = await supabase
+    .from("tickets")
+    .select("id", { count: "exact", head: true })
+    .eq("event_id", eventId)
+    .in("status", ["valid", "used", "scanned", "pending_payment"])
+
+  if (countError) {
+    return { success: false, error: countError.message }
+  }
+
+  if ((count ?? 0) > 0 && event.status === "published") {
+    return {
+      success: false,
+      error:
+        "Hay entradas vendidas. Usá Eliminar para cancelar el evento y preservar la auditoría.",
+    }
+  }
+
+  const { data: updated, error: updateError } = await supabase
+    .from("events")
+    .update({
+      status: "archived",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", eventId)
+    .eq("organizer_id", user.id)
+    .select("id")
+    .maybeSingle()
+
+  if (updateError) {
+    return { success: false, error: updateError.message }
+  }
+  if (!updated) {
+    return { success: false, error: "No se pudo archivar el evento." }
+  }
+
+  revalidatePath("/admin")
+  revalidatePath("/admin/events")
+  revalidatePath(`/events/${eventId}`)
+  revalidatePath("/events")
+  revalidatePath("/")
+
+  return { success: true, mode: "archived" }
 }

@@ -5,7 +5,12 @@ export type OrganizerApprovalStatus =
   | "approved"
   | "rejected"
   | "suspended"
-export type EventStatus = "draft" | "published" | "cancelled" | "completed"
+export type EventStatus =
+  | "draft"
+  | "published"
+  | "cancelled"
+  | "completed"
+  | "archived"
 export type QrType = "dynamic" | "static"
 export type PaymentMethod = "mercadopago" | "cash_pos" | "transfer_pos"
 export type TicketStatus =

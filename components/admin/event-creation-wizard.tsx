@@ -16,6 +16,7 @@ import {
   Lock,
   Plus,
   Rocket,
+  Save,
   Sparkles,
   Ticket,
   Trash2,
@@ -34,6 +35,7 @@ import { toast } from "sonner"
 
 import {
   createCompleteEvent,
+  publishEvent,
   updateCompleteEvent,
   type EditableEventData,
 } from "@/app/actions/events"
@@ -327,7 +329,10 @@ export function EventCreationWizard({
     }
   }
 
-  async function onSubmit(data: EventFormValues) {
+  async function onSubmit(
+    data: EventFormValues,
+    intent: "draft" | "publish" = "draft",
+  ) {
     setResultMessage(null)
 
     const formData = new FormData()
@@ -354,9 +359,27 @@ export function EventCreationWizard({
           ? "No se pudieron guardar los cambios"
           : "No se pudo crear el evento",
         {
-        description: result.error,
+          description: result.error,
         },
       )
+      return
+    }
+
+    if (intent === "publish") {
+      const published = await publishEvent(result.eventId)
+      if (!published.success) {
+        toast.error("Se guardó el borrador, pero no se pudo publicar", {
+          description: published.error,
+        })
+        router.push(`/events/preview/${result.eventId}`)
+        router.refresh()
+        return
+      }
+      toast.success("Evento publicado", {
+        description: "Ya es visible en el catálogo y acepta compras.",
+      })
+      router.push(`/events/${result.eventId}`)
+      router.refresh()
       return
     }
 
@@ -369,10 +392,10 @@ export function EventCreationWizard({
       return
     }
 
-    toast.success("Evento creado", {
+    toast.success("Borrador guardado", {
       description: flyerFile
-        ? "Borrador guardado con flyer en Storage."
-        : "El borrador se guardó de forma atómica en la base de datos.",
+        ? "Borrador con flyer listo para previsualizar."
+        : "Podés previsualizarlo o publicarlo cuando quieras.",
     })
     setBoostEvent({ id: result.eventId, title: data.basics.title })
   }
@@ -380,7 +403,9 @@ export function EventCreationWizard({
   return (
     <>
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)}>
+      <form
+        onSubmit={form.handleSubmit((data) => onSubmit(data, "draft"))}
+      >
         <Tabs
           value={String(activeStep)}
           onValueChange={(value) => void moveToStep(Number(value))}
@@ -1643,25 +1668,44 @@ export function EventCreationWizard({
                   <ArrowRight />
                 </Button>
               ) : (
-                <Button
-                  key="submit"
-                  type="submit"
-                  disabled={form.formState.isSubmitting}
-                  className="bg-violet-600 text-white hover:bg-violet-500"
-                >
-                  {form.formState.isSubmitting ? (
-                    <LoaderCircle className="animate-spin" />
-                  ) : (
-                    <Rocket />
-                  )}
-                  {form.formState.isSubmitting
-                    ? isEditing
-                      ? "Guardando..."
-                      : "Creando..."
-                    : isEditing
-                      ? "Guardar cambios"
-                      : "Crear evento"}
-                </Button>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <Button
+                    key="draft"
+                    type="submit"
+                    disabled={form.formState.isSubmitting}
+                    variant="outline"
+                    className="border-zinc-700 bg-zinc-900 text-zinc-100 hover:bg-zinc-800"
+                  >
+                    {form.formState.isSubmitting ? (
+                      <LoaderCircle className="animate-spin" />
+                    ) : (
+                      <Save />
+                    )}
+                    {form.formState.isSubmitting
+                      ? "Guardando…"
+                      : "Guardar como borrador"}
+                  </Button>
+                  <Button
+                    key="publish"
+                    type="button"
+                    disabled={form.formState.isSubmitting}
+                    className="bg-emerald-600 text-white hover:bg-emerald-500"
+                    onClick={() =>
+                      void form.handleSubmit((data) =>
+                        onSubmit(data, "publish"),
+                      )()
+                    }
+                  >
+                    {form.formState.isSubmitting ? (
+                      <LoaderCircle className="animate-spin" />
+                    ) : (
+                      <Rocket />
+                    )}
+                    {form.formState.isSubmitting
+                      ? "Publicando…"
+                      : "Publicar evento"}
+                  </Button>
+                </div>
               )}
             </div>
           </Card>

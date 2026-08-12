@@ -93,6 +93,7 @@ type EventDetailRow = {
   flyer_url: string | null
   status: Event["status"]
   visibility: Event["visibility"] | null
+  organizer_id?: string
   schedule_days: unknown
   venues:
     | Pick<
@@ -206,23 +207,60 @@ export async function getPublishedEvents(
 export async function getEventDetails(
   eventId: string,
 ): Promise<EventDetails | null> {
+  return loadEventDetails(eventId, { mode: "public" })
+}
+
+/**
+ * Vista previa privada: organizador dueño (o super_admin) puede abrir borradores
+ * y eventos no públicos para probar compra / QR.
+ */
+export async function getPreviewEventDetails(
+  eventId: string,
+): Promise<EventDetails | null> {
+  return loadEventDetails(eventId, { mode: "preview" })
+}
+
+async function loadEventDetails(
+  eventId: string,
+  options: { mode: "public" | "preview" },
+): Promise<EventDetails | null> {
   const supabase = await createClient()
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("events")
     .select(
-      "id, title, description, date, location, image_url, flyer_url, status, visibility, schedule_days, venues(id, name, location, capacity, seating_background_url), ticket_tiers(id, name, price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit)",
+      "id, title, description, date, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, venues(id, name, location, capacity, seating_background_url), ticket_tiers(id, name, price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit)",
     )
     .eq("id", eventId)
-    .eq("status", "published")
-    .neq("visibility", "guest_list_only")
-    .maybeSingle()
+
+  if (options.mode === "public") {
+    query = query.eq("status", "published").neq("visibility", "guest_list_only")
+  }
+
+  const { data, error } = await query.maybeSingle()
 
   if (error) {
     throw new Error(`No se pudo cargar el evento: ${error.message}`)
   }
 
   if (!data) return null
+
+  if (options.mode === "preview") {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return null
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle()
+
+    const isOwner = data.organizer_id === user.id
+    const isSuperAdmin = profile?.role === "super_admin"
+    if (!isOwner && !isSuperAdmin) return null
+  }
 
   const { data: seatingRows, error: seatingError } = await supabase.rpc(
     "get_event_seating_availability",

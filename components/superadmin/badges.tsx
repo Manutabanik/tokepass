@@ -42,6 +42,10 @@ const eventStatusStyles: Record<
     label: "Finalizado",
     className: "border-zinc-500/20 bg-zinc-500/10 text-zinc-400",
   },
+  archived: {
+    label: "Archivado",
+    className: "border-zinc-500/20 bg-zinc-500/10 text-zinc-400",
+  },
 }
 
 const orderStatusStyles: Record<
