@@ -55,7 +55,9 @@ const imgSrc = [
   "https://*.mercadopago.com",
   "https://*.mercadopago.com.ar",
   "https://*.basemaps.cartocdn.com",
+  "https://basemaps.cartocdn.com",
   "https://*.tile.openstreetmap.org",
+  "https://tile.openstreetmap.org",
 ]
   .filter(Boolean)
   .join(" ")

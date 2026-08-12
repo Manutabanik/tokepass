@@ -1,7 +1,8 @@
 "use client"
 
 import { divIcon } from "leaflet"
-import { MapContainer, Marker, TileLayer } from "react-leaflet"
+import { useEffect } from "react"
+import { MapContainer, Marker, TileLayer, useMap } from "react-leaflet"
 
 import "leaflet/dist/leaflet.css"
 
@@ -19,6 +20,17 @@ const markerIcon = divIcon({
   iconSize: [34, 34],
   iconAnchor: [17, 34],
 })
+
+function MapSizeFix() {
+  const map = useMap()
+  useEffect(() => {
+    const run = () => map.invalidateSize({ pan: false })
+    run()
+    const t = window.setTimeout(run, 120)
+    return () => window.clearTimeout(t)
+  }, [map])
+  return null
+}
 
 export function EventLocationMapInner({
   latitude,
@@ -40,10 +52,12 @@ export function EventLocationMapInner({
       keyboard={false}
       className="h-full w-full bg-zinc-950 [&_.leaflet-control-attribution]:hidden"
     >
+      <MapSizeFix />
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
         url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         subdomains="abcd"
+        maxZoom={20}
       />
       <Marker position={[latitude, longitude]} icon={markerIcon} />
     </MapContainer>

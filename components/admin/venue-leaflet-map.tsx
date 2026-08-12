@@ -15,8 +15,13 @@ import {
   type VenueCoordinates,
 } from "@/lib/seating/venue-geo"
 
+import "leaflet/dist/leaflet.css"
+
 export type { VenueCoordinates }
 export { VENUE_MAP_DEFAULT, googleMapsDeepLink } from "@/lib/seating/venue-geo"
+
+const CARTO_DARK_URL =
+  "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
 
 const markerIcon = divIcon({
   className: "tokepass-map-marker",
@@ -33,6 +38,26 @@ const markerIcon = divIcon({
   iconAnchor: [18, 36],
 })
 
+/** Recompute tile layout after dynamic mount / tab reveal. */
+function MapSizeFix() {
+  const map = useMap()
+
+  useEffect(() => {
+    const run = () => map.invalidateSize({ pan: false })
+    run()
+    const t1 = window.setTimeout(run, 80)
+    const t2 = window.setTimeout(run, 300)
+    window.addEventListener("resize", run)
+    return () => {
+      window.clearTimeout(t1)
+      window.clearTimeout(t2)
+      window.removeEventListener("resize", run)
+    }
+  }, [map])
+
+  return null
+}
+
 function FlyToCoordinates({
   coordinates,
   zoom,
@@ -43,6 +68,7 @@ function FlyToCoordinates({
   const map = useMap()
 
   useEffect(() => {
+    map.invalidateSize({ pan: false })
     map.flyTo([coordinates.latitude, coordinates.longitude], zoom, {
       animate: true,
       duration: 0.85,
@@ -86,11 +112,12 @@ export function VenueLeafletMap({
       scrollWheelZoom
       className="h-full w-full bg-zinc-950 [&_.leaflet-control-attribution]:bg-black/50 [&_.leaflet-control-attribution]:text-[10px] [&_.leaflet-control-attribution]:text-zinc-400"
     >
-      {/* CartoDB Dark Matter — alinea con el panel oscuro Tokepass */}
+      <MapSizeFix />
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+        url={CARTO_DARK_URL}
         subdomains="abcd"
+        maxZoom={20}
       />
       <FlyToCoordinates
         coordinates={center}
