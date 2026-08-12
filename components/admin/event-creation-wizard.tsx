@@ -35,10 +35,10 @@ import { toast } from "sonner"
 
 import {
   createCompleteEvent,
-  publishEvent,
   updateCompleteEvent,
   type EditableEventData,
 } from "@/app/actions/events"
+import { PublishEventConfirmDialog } from "@/components/admin/publish-event-confirm-dialog"
 import type { OrganizerVenue } from "@/app/actions/venues"
 import { BoostModal } from "@/components/admin/boost-modal"
 import { ScheduleDaysBuilder } from "@/components/admin/schedule-days-builder"
@@ -206,11 +206,13 @@ function NumberInput({
 
 export function EventCreationWizard({
   organizerServiceRate,
+  platformFixedFee = 0,
   targetOrganizerId = null,
   venues = [],
   initialData,
 }: {
   organizerServiceRate: number
+  platformFixedFee?: number
   targetOrganizerId?: string | null
   venues?: OrganizerVenue[]
   initialData?: EditableEventData
@@ -228,6 +230,10 @@ export function EventCreationWizard({
     type: "success" | "error"
     text: string
   } | null>(null)
+  const [publishConfirm, setPublishConfirm] = useState<{
+    open: boolean
+    eventId: string
+  }>({ open: false, eventId: "" })
 
   const form = useForm<EventFormValues>({
     resolver: zodResolver(eventFormSchema),
@@ -366,20 +372,14 @@ export function EventCreationWizard({
     }
 
     if (intent === "publish") {
-      const published = await publishEvent(result.eventId)
-      if (!published.success) {
-        toast.error("Se guardó el borrador, pero no se pudo publicar", {
-          description: published.error,
-        })
-        router.push(`/events/preview/${result.eventId}`)
-        router.refresh()
-        return
-      }
-      toast.success("Evento publicado", {
-        description: "Ya es visible en el catálogo y acepta compras.",
-      })
-      router.push(`/events/${result.eventId}`)
-      router.refresh()
+      toast.success(
+        isEditing ? "Cambios guardados" : "Borrador listo",
+        {
+          description:
+            "Confirmá la publicación y si querés purgar las entradas de prueba.",
+        },
+      )
+      setPublishConfirm({ open: true, eventId: result.eventId })
       return
     }
 
@@ -1341,6 +1341,7 @@ export function EventCreationWizard({
                           const breakdown = allInBreakdown(
                             field.value ?? 0,
                             organizerServiceRate,
+                            platformFixedFee,
                           )
                           return (
                             <FormItem>
@@ -1372,8 +1373,11 @@ export function EventCreationWizard({
                                 </p>
                                 <p className="text-rose-300/80">
                                   Comisión Tokepass (
-                                  {Math.round(organizerServiceRate * 100)}%): -
-                                  {formatCurrency(breakdown.platformFee)}
+                                  {Math.round(organizerServiceRate * 100)}%
+                                  {platformFixedFee > 0
+                                    ? ` + ${formatCurrency(platformFixedFee)}`
+                                    : ""}
+                                  ): -{formatCurrency(breakdown.platformFee)}
                                 </p>
                               </div>
                               <div className="flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3">
@@ -1727,6 +1731,18 @@ export function EventCreationWizard({
         eventTitle={boostEvent.title}
       />
     ) : null}
+
+    <PublishEventConfirmDialog
+      eventId={publishConfirm.eventId}
+      open={publishConfirm.open}
+      onOpenChange={(open) =>
+        setPublishConfirm((current) => ({ ...current, open }))
+      }
+      onPublished={() => {
+        router.push(`/events/${publishConfirm.eventId}`)
+        router.refresh()
+      }}
+    />
     </>
   )
 }

@@ -25,6 +25,9 @@ export type ScannerManifestTicket = {
   seating_label: string | null
   seating_sector_name: string | null
   seating_row_label: string | null
+  is_test: boolean
+  /** Precio público del tier; 0 = gratuita. */
+  tier_price: number
 }
 
 export type ScannerManifestMeta = {
@@ -34,6 +37,7 @@ export type ScannerManifestMeta = {
   ticketCount: number
   qrType: "dynamic" | "static"
   eventTitle: string
+  eventStatus: string
 }
 
 export type SyncQueueItem = {
@@ -136,6 +140,7 @@ export async function hashManifest(
 export async function saveEventManifest(input: {
   eventId: string
   eventTitle: string
+  eventStatus?: string
   qrType: "dynamic" | "static"
   tickets: ScannerManifestTicket[]
 }): Promise<ScannerManifestMeta> {
@@ -147,6 +152,7 @@ export async function saveEventManifest(input: {
     ticketCount: input.tickets.length,
     qrType: input.qrType,
     eventTitle: input.eventTitle,
+    eventStatus: input.eventStatus ?? "published",
   }
 
   const db = await openDb()
@@ -163,7 +169,10 @@ export async function saveEventManifest(input: {
   }
 
   for (const ticket of input.tickets) {
-    ticketStore.put(ticket)
+    ticketStore.put({
+      ...ticket,
+      is_test: Boolean(ticket.is_test),
+    })
   }
 
   tx.objectStore(MANIFESTS).put(meta)
@@ -334,6 +343,7 @@ export async function downloadEventManifest(
   fetcher: (eventId: string) => Promise<{
     eventId: string
     eventTitle: string
+    eventStatus?: string
     qrType: "dynamic" | "static"
     hash: string
     tickets: ScannerManifestTicket[]
@@ -351,15 +361,22 @@ export async function downloadEventManifest(
     if (pendingIds.has(ticket.id)) {
       return {
         ...ticket,
+        is_test: Boolean(ticket.is_test),
+        tier_price: Number(ticket.tier_price ?? 0),
         status: "used" as const,
       }
     }
-    return ticket
+    return {
+      ...ticket,
+      is_test: Boolean(ticket.is_test),
+      tier_price: Number(ticket.tier_price ?? 0),
+    }
   })
 
   return saveEventManifest({
     eventId: payload.eventId,
     eventTitle: payload.eventTitle,
+    eventStatus: payload.eventStatus,
     qrType: payload.qrType,
     tickets,
   })

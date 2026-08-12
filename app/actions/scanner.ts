@@ -19,7 +19,7 @@ import { createClient } from "@/lib/supabase/server"
 import type { QrType, TicketStatus } from "@/types/database"
 
 const TICKET_SCAN_SELECT =
-  "id, status, event_id, order_id, totp_secret, scanned_at, max_admissions, admissions_used, event_seating_units(label, sector_name, row_label), ticket_tiers(name, time_limit, bonus_reward, day_id), events(id, title, organizer_id, qr_type, date, schedule_days)"
+  "id, status, event_id, order_id, totp_secret, scanned_at, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label), ticket_tiers(name, price, time_limit, bonus_reward, day_id), events(id, title, organizer_id, qr_type, date, schedule_days, status)"
 
 export type ScannerEventOption = {
   id: string
@@ -34,6 +34,7 @@ export type ScanTicketResult =
       success: true
       status: "granted"
       message: string
+      isTestScan?: boolean
       ticket: {
         id: string
         tierName: string
@@ -64,6 +65,7 @@ export type ScanTicketResult =
         | "auth_required"
         | "update_failed"
         | "unpaid"
+        | "test_ticket_live"
       message: string
       scannedAt?: string | null
     }
@@ -77,6 +79,7 @@ type TicketScanRow = {
   scanned_at: string | null
   max_admissions: number
   admissions_used: number
+  is_test?: boolean | null
   event_seating_units: {
     label: string
     sector_name: string
@@ -84,6 +87,7 @@ type TicketScanRow = {
   } | null
   ticket_tiers: {
     name: string
+    price?: number | null
     time_limit: string | null
     bonus_reward: string | null
     day_id: string | null
@@ -95,10 +99,15 @@ type TicketScanRow = {
     qr_type: QrType | null
     date: string | null
     schedule_days: unknown
+    status?: string | null
   } | null
 }
 
-function isFreePassTier(tierName: string | null | undefined): boolean {
+function isFreePassTier(
+  tierName: string | null | undefined,
+  tierPrice?: number | null,
+): boolean {
+  if (tierPrice != null && Number(tierPrice) === 0) return true
   if (!tierName) return false
   const normalized = tierName.toLowerCase()
   return (
@@ -349,6 +358,17 @@ export async function scanAndValidateTicket(
     }
   }
 
+  const eventStatus = row.events?.status ?? null
+  const isTestTicket = Boolean(row.is_test)
+
+  if (isTestTicket && eventStatus !== "draft") {
+    return {
+      success: false,
+      status: "test_ticket_live",
+      message: "ENTRADA DE PRUEBA / INVÁLIDA PARA EVENTO EN VIVO",
+    }
+  }
+
   const { data: admissionOk, error: admissionError } = await supabase.rpc(
     "is_ticket_admission_eligible",
     { p_ticket_id: row.id },
@@ -388,9 +408,17 @@ export async function scanAndValidateTicket(
     admissions_used?: number
     max_admissions?: number
     remaining?: number
+    is_test_scan?: boolean
   }
 
   if (updateError || !admission.ok) {
+    if (admission.code === "test_ticket_live") {
+      return {
+        success: false,
+        status: "test_ticket_live",
+        message: "ENTRADA DE PRUEBA / INVÁLIDA PARA EVENTO EN VIVO",
+      }
+    }
     return {
       success: false,
       status:
@@ -408,10 +436,10 @@ export async function scanAndValidateTicket(
   })
 
   const tier = row.ticket_tiers
-  const isFreePass = isFreePassTier(tier?.name)
+  const isFreePass = isFreePassTier(tier?.name, tier?.price)
   const bonus =
     isFreePass
-      ? "CORTESÍA / FREEPASS"
+      ? "ENTRADA GRATUITA ($0) · NO COBRAR"
       : tier?.bonus_reward && isWithinTimeLimit(tier.time_limit)
         ? tier.bonus_reward
         : null
@@ -425,10 +453,13 @@ export async function scanAndValidateTicket(
   return {
     success: true,
     status: "granted",
+    isTestScan: Boolean(admission.is_test_scan) || (isTestTicket && eventStatus === "draft"),
     message:
-      (admission.remaining ?? 0) > 0
-        ? `ACCESO PERMITIDO · QUEDAN ${admission.remaining} INGRESOS`
-        : "ACCESO PERMITIDO · CUPO COMPLETO",
+      isTestTicket && eventStatus === "draft"
+        ? "LECTURA DE PRUEBA OK (EVENTO EN BORRADOR)"
+        : (admission.remaining ?? 0) > 0
+          ? `ACCESO PERMITIDO · QUEDAN ${admission.remaining} INGRESOS`
+          : "ACCESO PERMITIDO · CUPO COMPLETO",
     ticket: {
       id: row.id,
       tierName: isFreePass
@@ -452,6 +483,7 @@ export async function scanAndValidateTicket(
 export type EventTicketManifestPayload = {
   eventId: string
   eventTitle: string
+  eventStatus: string
   qrType: QrType
   hash: string
   tickets: Array<{
@@ -476,6 +508,8 @@ export type EventTicketManifestPayload = {
     seating_label: string | null
     seating_sector_name: string | null
     seating_row_label: string | null
+    is_test: boolean
+    tier_price: number
   }>
 }
 
@@ -507,7 +541,7 @@ export async function fetchEventTicketManifest(
 
   const { data: event, error: eventError } = await supabase
     .from("events")
-    .select("id, title, qr_type, organizer_id")
+    .select("id, title, qr_type, organizer_id, status")
     .eq("id", eventId)
     .maybeSingle()
 
@@ -522,7 +556,7 @@ export async function fetchEventTicketManifest(
   const withHolder = await supabase
     .from("tickets")
     .select(
-      "id, event_id, totp_secret, status, scanned_at, owner_id, max_admissions, admissions_used, holder_name, holder_dni, holder_email, event_seating_units(label, sector_name, row_label), ticket_tiers(name)",
+      "id, event_id, totp_secret, status, scanned_at, owner_id, max_admissions, admissions_used, is_test, holder_name, holder_dni, holder_email, event_seating_units(label, sector_name, row_label), ticket_tiers(name, price)",
     )
     .eq("event_id", eventId)
     .in("status", ["valid", "used", "scanned"])
@@ -531,7 +565,7 @@ export async function fetchEventTicketManifest(
     const fallback = await supabase
       .from("tickets")
       .select(
-        "id, event_id, totp_secret, status, scanned_at, owner_id, max_admissions, admissions_used, event_seating_units(label, sector_name, row_label), ticket_tiers(name)",
+        "id, event_id, totp_secret, status, scanned_at, owner_id, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label), ticket_tiers(name, price)",
       )
       .eq("event_id", eventId)
       .in("status", ["valid", "used", "scanned"])
@@ -554,7 +588,8 @@ export async function fetchEventTicketManifest(
     holder_name?: string | null
     holder_dni?: string | null
     holder_email?: string | null
-    ticket_tiers: { name: string } | null
+    is_test?: boolean | null
+    ticket_tiers: { name: string; price?: number | null } | null
     max_admissions: number
     admissions_used: number
     event_seating_units: {
@@ -608,7 +643,13 @@ export async function fetchEventTicketManifest(
     }
   }
 
-  const tickets = rows.map((row) => {
+  const tickets = rows
+    .filter((row) => {
+      // Defense in depth: never put draft/test tickets on a live-door manifest.
+      if (event.status === "published" && Boolean(row.is_test)) return false
+      return true
+    })
+    .map((row) => {
     const owner = row.owner_id ? ownerMap.get(row.owner_id) : null
     return {
       id: row.id,
@@ -632,11 +673,13 @@ export async function fetchEventTicketManifest(
       seating_sector_name:
         row.event_seating_units?.sector_name ?? null,
       seating_row_label: row.event_seating_units?.row_label ?? null,
+      is_test: Boolean(row.is_test),
+      tier_price: Number(row.ticket_tiers?.price ?? 0),
     }
   })
 
   const hashSource = tickets
-    .map((t) => `${t.id}:${t.status}:${t.totp_secret}`)
+    .map((t) => `${t.id}:${t.status}:${t.totp_secret}:${t.is_test ? 1 : 0}`)
     .sort()
     .join("|")
 
@@ -645,6 +688,7 @@ export async function fetchEventTicketManifest(
   return {
     eventId: event.id,
     eventTitle: event.title,
+    eventStatus: event.status,
     qrType: event.qr_type === "static" ? "static" : "dynamic",
     hash,
     tickets,

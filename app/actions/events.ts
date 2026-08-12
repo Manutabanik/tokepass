@@ -7,7 +7,13 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { parseScheduleDays } from "@/lib/event-schedule"
 import { allInBreakdown } from "@/lib/pricing/all-in"
-import { getOrganizerServiceChargeRate } from "@/lib/services/organizer-pricing"
+import {
+  defaultEventFeeConfig,
+  eventFeeRate,
+  eventFixedFee,
+  sumFreeTicketCapacity,
+  type EventFeeConfig,
+} from "@/lib/pricing/event-fees"
 import {
   eventFormSchema,
   type EventFormValues,
@@ -187,9 +193,42 @@ export type CreateCompleteEventRpcPayload = {
   addons_enabled: boolean
 }
 
+function assertFreeTicketCapacityAllowed(
+  tickets: EventFormValues["tickets"],
+  maxFreeTickets: number,
+  isSuperAdmin: boolean,
+): string | null {
+  if (isSuperAdmin) return null
+  const freeCapacity = sumFreeTicketCapacity(tickets)
+  if (freeCapacity <= maxFreeTickets) return null
+  return `El cupo total de entradas gratuitas (${freeCapacity}) supera el máximo permitido (${maxFreeTickets}). Pedile a Tokepass que amplíe el límite o bajá la capacidad de los tiers a $0.`
+}
+
+async function loadEventFeeConfig(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  eventId: string,
+): Promise<EventFeeConfig> {
+  const { data } = await supabase
+    .from("events")
+    .select(
+      "platform_fee_percentage, platform_fixed_fee, max_free_tickets, is_sponsored_by_tokepass",
+    )
+    .eq("id", eventId)
+    .maybeSingle()
+
+  if (!data) return defaultEventFeeConfig()
+
+  return {
+    platformFeePercentage: Number(data.platform_fee_percentage ?? 8),
+    platformFixedFee: Number(data.platform_fixed_fee ?? 0),
+    maxFreeTickets: Number(data.max_free_tickets ?? 100),
+    isSponsoredByTokepass: Boolean(data.is_sponsored_by_tokepass),
+  }
+}
+
 function mapEventFormToRpcPayload(
   data: EventFormValues,
-  organizerServiceRate: number,
+  feeConfig: EventFeeConfig,
   flyerUrl: string | null = null,
 ): CreateCompleteEventRpcPayload {
   const blueprintZones = data.venue.zones ?? []
@@ -281,9 +320,12 @@ function mapEventFormToRpcPayload(
     },
     zones,
     tiers: data.tickets.map((tier) => {
-      // Form `price` is the public All-In price. The server derives the
-      // organizer net with the authoritative rate read from profiles.
-      const breakdown = allInBreakdown(tier.price, organizerServiceRate)
+      // Form `price` is the public All-In price. Split uses event fee config.
+      const breakdown = allInBreakdown(
+        tier.price,
+        eventFeeRate(feeConfig),
+        eventFixedFee(feeConfig),
+      )
       const dayIdRaw = tier.dayId?.trim()
       const dayId =
         !data.basics.isMultiDay ||
@@ -667,13 +709,16 @@ export async function createCompleteEvent(
 
   let rpcPayload: CreateCompleteEventRpcPayload
   try {
-    const organizerServiceRate =
-      await getOrganizerServiceChargeRate(organizerId)
-    rpcPayload = mapEventFormToRpcPayload(
-      parsed.data,
-      organizerServiceRate,
-      flyerUrl,
+    const feeConfig = defaultEventFeeConfig()
+    const freeCapError = assertFreeTicketCapacityAllowed(
+      parsed.data.tickets,
+      feeConfig.maxFreeTickets,
+      actorRole === "super_admin",
     )
+    if (freeCapError) {
+      return { success: false, error: freeCapError }
+    }
+    rpcPayload = mapEventFormToRpcPayload(parsed.data, feeConfig, flyerUrl)
   } catch (error) {
     return {
       success: false,
@@ -819,12 +864,18 @@ export async function updateCompleteEvent(
 
   let rpcPayload: CreateCompleteEventRpcPayload
   try {
-    const organizerServiceRate = await getOrganizerServiceChargeRate(
-      event.organizer_id,
+    const feeConfig = await loadEventFeeConfig(supabase, eventId)
+    const freeCapError = assertFreeTicketCapacityAllowed(
+      parsed.data.tickets,
+      feeConfig.maxFreeTickets,
+      isSuperAdmin,
     )
+    if (freeCapError) {
+      return { success: false, error: freeCapError }
+    }
     rpcPayload = mapEventFormToRpcPayload(
       parsed.data,
-      organizerServiceRate,
+      feeConfig,
       uploadedFlyerUrl ?? event.flyer_url ?? event.image_url,
     )
   } catch (error) {
@@ -873,7 +924,7 @@ export async function updateCompleteEvent(
 }
 
 export type PublishEventResult =
-  | { success: true }
+  | { success: true; purgedTestTickets?: number }
   | { success: false; error: string }
 
 /**
@@ -882,6 +933,7 @@ export type PublishEventResult =
  */
 export async function publishEvent(
   eventId: string,
+  options: { purgeTestTickets?: boolean } = {},
 ): Promise<PublishEventResult> {
   if (!eventId?.trim()) {
     return { success: false, error: "Evento inválido." }
@@ -925,7 +977,7 @@ export async function publishEvent(
   }
 
   if (event.status === "published") {
-    return { success: true }
+    return { success: true, purgedTestTickets: 0 }
   }
 
   if (event.status !== "draft") {
@@ -972,6 +1024,21 @@ export async function publishEvent(
     }
   }
 
+  let purgedTestTickets = 0
+  if (options.purgeTestTickets !== false) {
+    const { data: purged, error: purgeError } = await supabase.rpc(
+      "purge_event_test_tickets",
+      { p_event_id: eventId },
+    )
+    if (purgeError) {
+      return {
+        success: false,
+        error: `No se pudieron purgar las entradas de prueba: ${purgeError.message}`,
+      }
+    }
+    purgedTestTickets = Number(purged ?? 0)
+  }
+
   const { data: updated, error: updateError } = await supabase
     .from("events")
     .update({ status: "published", updated_at: new Date().toISOString() })
@@ -996,10 +1063,36 @@ export async function publishEvent(
   revalidatePath("/admin/events")
   revalidatePath("/events")
   revalidatePath(`/events/${eventId}`)
+  revalidatePath(`/events/preview/${eventId}`)
   revalidatePath("/")
   revalidatePath("/superadmin/events")
+  revalidatePath("/my-tickets")
 
-  return { success: true }
+  return { success: true, purgedTestTickets }
+}
+
+export async function countEventTestTickets(
+  eventId: string,
+): Promise<number> {
+  if (!eventId?.trim()) return 0
+  const { supabase, user } = await requireAuthenticatedUser()
+
+  const { data: event } = await supabase
+    .from("events")
+    .select("organizer_id")
+    .eq("id", eventId)
+    .maybeSingle()
+
+  if (!event || event.organizer_id !== user.id) return 0
+
+  const { count, error } = await supabase
+    .from("tickets")
+    .select("id", { count: "exact", head: true })
+    .eq("event_id", eventId)
+    .eq("is_test", true)
+
+  if (error) return 0
+  return count ?? 0
 }
 
 export type DeleteOrArchiveEventResult =
@@ -1177,3 +1270,149 @@ export async function archiveEvent(
 
   return { success: true, mode: "archived" }
 }
+
+export type EventCommercialSettings = EventFeeConfig & {
+  eventId: string
+  title: string
+}
+
+export async function getEventCommercialSettings(
+  eventId: string,
+): Promise<EventCommercialSettings | null> {
+  if (!eventId?.trim()) return null
+  const { supabase, user } = await requireAuthenticatedUser()
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle()
+
+  if (profile?.role !== "super_admin") return null
+
+  const admin = createAdminClient()
+  const { data: event } = await admin
+    .from("events")
+    .select(
+      "id, title, platform_fee_percentage, platform_fixed_fee, max_free_tickets, is_sponsored_by_tokepass",
+    )
+    .eq("id", eventId)
+    .maybeSingle()
+
+  if (!event) return null
+
+  return {
+    eventId: event.id,
+    title: event.title,
+    platformFeePercentage: Number(event.platform_fee_percentage ?? 8),
+    platformFixedFee: Number(event.platform_fixed_fee ?? 0),
+    maxFreeTickets: Number(event.max_free_tickets ?? 100),
+    isSponsoredByTokepass: Boolean(event.is_sponsored_by_tokepass),
+  }
+}
+
+export type UpdateEventCommercialSettingsResult =
+  | { success: true; recalculatedTiers: number }
+  | { success: false; error: string }
+
+/**
+ * SuperAdmin-only: fees, free-ticket cap, Tokepass sponsorship.
+ * Recomputes tier base_price / platform_fee from public All-In price.
+ */
+export async function updateEventCommercialSettings(
+  eventId: string,
+  input: {
+    platformFeePercentage: number
+    platformFixedFee: number
+    maxFreeTickets: number
+    isSponsoredByTokepass: boolean
+  },
+): Promise<UpdateEventCommercialSettingsResult> {
+  if (!eventId?.trim()) {
+    return { success: false, error: "Evento inválido." }
+  }
+
+  const { supabase, user } = await requireAuthenticatedUser()
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle()
+
+  if (profile?.role !== "super_admin") {
+    return { success: false, error: "Solo SuperAdmin puede editar estos valores." }
+  }
+
+  const percentage = Number(input.platformFeePercentage)
+  const fixed = Number(input.platformFixedFee)
+  const maxFree = Math.floor(Number(input.maxFreeTickets))
+
+  if (!Number.isFinite(percentage) || percentage < 0 || percentage > 95) {
+    return { success: false, error: "El porcentaje debe estar entre 0 y 95." }
+  }
+  if (!Number.isFinite(fixed) || fixed < 0) {
+    return { success: false, error: "El cargo fijo no puede ser negativo." }
+  }
+  if (!Number.isFinite(maxFree) || maxFree < 0) {
+    return { success: false, error: "El máximo de entradas gratis es inválido." }
+  }
+
+  const feeConfig: EventFeeConfig = {
+    platformFeePercentage: percentage,
+    platformFixedFee: fixed,
+    maxFreeTickets: maxFree,
+    isSponsoredByTokepass: Boolean(input.isSponsoredByTokepass),
+  }
+
+  const admin = createAdminClient()
+  const { error: updateError } = await admin
+    .from("events")
+    .update({
+      platform_fee_percentage: feeConfig.platformFeePercentage,
+      platform_fixed_fee: feeConfig.platformFixedFee,
+      max_free_tickets: feeConfig.maxFreeTickets,
+      is_sponsored_by_tokepass: feeConfig.isSponsoredByTokepass,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", eventId)
+
+  if (updateError) {
+    return { success: false, error: updateError.message }
+  }
+
+  const { data: tiers, error: tiersError } = await admin
+    .from("ticket_tiers")
+    .select("id, price")
+    .eq("event_id", eventId)
+
+  if (tiersError) {
+    return { success: false, error: tiersError.message }
+  }
+
+  let recalculatedTiers = 0
+  for (const tier of tiers ?? []) {
+    const breakdown = allInBreakdown(
+      Number(tier.price),
+      eventFeeRate(feeConfig),
+      eventFixedFee(feeConfig),
+    )
+    const { error } = await admin
+      .from("ticket_tiers")
+      .update({
+        base_price: breakdown.basePrice,
+        platform_fee: breakdown.platformFee,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", tier.id)
+    if (!error) recalculatedTiers += 1
+  }
+
+  revalidatePath(`/admin/events/${eventId}`)
+  revalidatePath(`/admin/events/${eventId}/settings`)
+  revalidatePath(`/admin/events/${eventId}/edit`)
+  revalidatePath(`/events/${eventId}`)
+  revalidatePath(`/superadmin/events/${eventId}`)
+  revalidatePath("/superadmin/events")
+
+  return { success: true, recalculatedTiers }
+}
+

@@ -346,42 +346,87 @@ export function TicketSelector({
             Math.max(0, tier.available),
           )
           const soldOut = maxSelectable <= 0
+          const lowStock =
+            !soldOut && tier.available > 0 && tier.available <= 15
+          const isVip = /\bvip\b/i.test(tier.name)
           const dayLabel = isFullPassDayId(tier.dayId)
             ? isMultiDay
               ? "Abono completo"
               : null
             : scheduleDays.find((day) => day.id === tier.dayId)?.title ?? null
+          const perkLines = (tier.bonusReward ?? "")
+            .split(/[·|•\n]/)
+            .map((part) => part.trim())
+            .filter(Boolean)
 
           return (
             <div
               key={tier.id}
               className={cn(
-                "rounded-2xl border px-4 py-4 transition",
+                "rounded-2xl border px-4 py-4 shadow-lg shadow-black/20 transition",
                 quantity > 0
-                  ? "border-emerald-500/40 bg-emerald-500/10"
-                  : "border-zinc-800 bg-zinc-950/60",
-                soldOut && "opacity-60",
+                  ? "border-emerald-500/45 bg-emerald-500/10"
+                  : isVip
+                    ? "border-amber-500/35 bg-gradient-to-br from-amber-500/10 via-zinc-950 to-zinc-950"
+                    : "border-zinc-800 bg-zinc-950/70",
+                soldOut && "border-zinc-800/80 bg-zinc-950/40 opacity-70 grayscale",
               )}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="font-semibold text-white">{tier.name}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p
+                      className={cn(
+                        "font-semibold text-white",
+                        soldOut && "text-zinc-400 line-through",
+                      )}
+                    >
+                      {tier.name}
+                    </p>
+                    {soldOut ? (
+                      <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-400">
+                        Agotado
+                      </span>
+                    ) : null}
+                    {lowStock ? (
+                      <span className="rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                        Últimas {tier.available}
+                      </span>
+                    ) : null}
+                  </div>
                   {dayLabel ? (
                     <p className="mt-1 font-mono text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
                       {dayLabel}
                     </p>
                   ) : null}
-                  {tier.bonusReward ? (
-                    <p className="mt-1 text-xs text-emerald-300">
-                      {tier.bonusReward}
+                  {perkLines.length > 0 ? (
+                    <ul className="mt-2 space-y-1">
+                      {perkLines.map((line) => (
+                        <li
+                          key={line}
+                          className="flex items-start gap-2 text-xs text-zinc-400"
+                        >
+                          <span className="mt-1 size-1.5 shrink-0 rounded-full bg-emerald-400" />
+                          <span>{line}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-1 text-xs text-zinc-500">
+                      Acceso digital con Living QR Tokepass
                     </p>
-                  ) : null}
-                  <p className="mt-1 text-xs text-zinc-500">
-                    {soldOut ? "Agotado" : `${tier.available} disponibles`}
+                  )}
+                  <p className="mt-2 text-xs text-zinc-500">
+                    {soldOut ? "Sin stock" : `${tier.available} disponibles`}
                   </p>
                 </div>
-                <p className="shrink-0 text-lg font-bold tracking-tight text-white">
-                  {formatCurrency(tier.price)}
+                <p
+                  className={cn(
+                    "shrink-0 text-lg font-bold tracking-tight",
+                    soldOut ? "text-zinc-500 line-through" : "text-white",
+                  )}
+                >
+                  {tier.price === 0 ? "Gratis" : formatCurrency(tier.price)}
                 </p>
               </div>
 

@@ -6,7 +6,12 @@ import { notFound, redirect } from "next/navigation"
 import { getEventForEditing } from "@/app/actions/events"
 import { listOrganizerVenues } from "@/app/actions/venues"
 import { EventCreationWizard } from "@/components/admin/event-creation-wizard"
-import { getOrganizerServiceChargeRate } from "@/lib/services/organizer-pricing"
+import {
+  DEFAULT_PLATFORM_FEE_PERCENTAGE,
+  DEFAULT_PLATFORM_FIXED_FEE,
+  eventFeeRate,
+  eventFixedFee,
+} from "@/lib/pricing/event-fees"
 import { createClient } from "@/lib/supabase/server"
 
 export const metadata: Metadata = {
@@ -29,15 +34,31 @@ export default async function EditEventPage({
     redirect(`/login-organizador?next=/admin/events/${id}/edit`)
   }
 
-  const [initialData, venues] = await Promise.all([
+  const [initialData, venues, eventFees] = await Promise.all([
     getEventForEditing(id),
     listOrganizerVenues().catch(() => []),
+    supabase
+      .from("events")
+      .select(
+        "platform_fee_percentage, platform_fixed_fee, is_sponsored_by_tokepass",
+      )
+      .eq("id", id)
+      .maybeSingle(),
   ])
 
   if (!initialData) notFound()
-  const organizerServiceRate = await getOrganizerServiceChargeRate(
-    initialData.organizerId,
-  )
+
+  const feeRow = eventFees.data
+  const feeConfig = {
+    platformFeePercentage: Number(
+      feeRow?.platform_fee_percentage ?? DEFAULT_PLATFORM_FEE_PERCENTAGE,
+    ),
+    platformFixedFee: Number(
+      feeRow?.platform_fixed_fee ?? DEFAULT_PLATFORM_FIXED_FEE,
+    ),
+    maxFreeTickets: 100,
+    isSponsoredByTokepass: Boolean(feeRow?.is_sponsored_by_tokepass),
+  }
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
@@ -65,7 +86,8 @@ export default async function EditEventPage({
 
       <EventCreationWizard
         initialData={initialData}
-        organizerServiceRate={organizerServiceRate}
+        organizerServiceRate={eventFeeRate(feeConfig)}
+        platformFixedFee={eventFixedFee(feeConfig)}
         venues={venues}
       />
     </main>

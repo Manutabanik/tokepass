@@ -4,6 +4,7 @@ import {
   GlassWater,
   Pencil,
   QrCode,
+  Settings2,
   Ticket,
   Users,
 } from "lucide-react"
@@ -70,6 +71,16 @@ export default async function ManageEventPage({
       description: "Título, fecha, flyer, venue y entradas.",
       icon: Pencil,
     },
+    ...(profile?.role === "super_admin"
+      ? [
+          {
+            href: `/admin/events/${id}/settings`,
+            label: "Settings comerciales",
+            description: "Fees, tope de gratis y auspicio Tokepass.",
+            icon: Settings2,
+          },
+        ]
+      : []),
     {
       href: `/admin/events/${id}/lists`,
       label: "Listas digitales",

@@ -117,6 +117,14 @@ export type Event = {
   is_featured: boolean
   featured_tier: "silver" | "gold" | "platinum" | null
   featured_until: string | null
+  /** Comisión % Tokepass (ej. 8.00 = 8%). */
+  platform_fee_percentage: number
+  /** Cargo fijo ARS por entrada paga (split All-In). */
+  platform_fixed_fee: number
+  /** Tope de capacidad total en tiers a $0. */
+  max_free_tickets: number
+  /** Auspicio Tokepass: fees a 0 + branding. */
+  is_sponsored_by_tokepass: boolean
   created_at: string
   updated_at: string
 }
@@ -200,6 +208,8 @@ export type Ticket = {
   holder_name: string | null
   holder_dni: string | null
   holder_email: string | null
+  /** Generada en borrador/preview; inválida en puerta de evento published. */
+  is_test: boolean
   created_at: string
   updated_at: string
 }
@@ -423,6 +433,10 @@ type EventInsert = Omit<
   | "is_featured"
   | "featured_tier"
   | "featured_until"
+  | "platform_fee_percentage"
+  | "platform_fixed_fee"
+  | "max_free_tickets"
+  | "is_sponsored_by_tokepass"
   | "created_at"
   | "updated_at"
 > & {
@@ -439,6 +453,10 @@ type EventInsert = Omit<
   is_featured?: boolean
   featured_tier?: Event["featured_tier"]
   featured_until?: string | null
+  platform_fee_percentage?: number
+  platform_fixed_fee?: number
+  max_free_tickets?: number
+  is_sponsored_by_tokepass?: boolean
   created_at?: string
   updated_at?: string
 }
@@ -504,6 +522,7 @@ type TicketInsert = Omit<
   | "holder_name"
   | "holder_dni"
   | "holder_email"
+  | "is_test"
   | "created_at"
   | "updated_at"
 > & {
@@ -525,6 +544,7 @@ type TicketInsert = Omit<
   holder_name?: string | null
   holder_dni?: string | null
   holder_email?: string | null
+  is_test?: boolean
   created_at?: string
   updated_at?: string
 }
@@ -968,6 +988,12 @@ export type Database = {
         }
         Returns: number
       }
+      get_event_platform_fixed_fee: {
+        Args: {
+          p_event_id: string
+        }
+        Returns: number
+      }
       all_in_public_price: {
         Args: {
           p_base: number
@@ -1088,6 +1114,12 @@ export type Database = {
           organizer_id: string
           tickets_cancelled: number
         }>
+      }
+      purge_event_test_tickets: {
+        Args: {
+          p_event_id: string
+        }
+        Returns: number
       }
       get_organizer_finance_summary: {
         Args: {

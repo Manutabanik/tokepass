@@ -39,6 +39,11 @@ export type EventDetails = {
   scheduleDays: ScheduleDay[]
   /** Fracción decimal del cargo Tokepass (ej. 0.15) */
   serviceChargeRate: number
+  /** Cargo fijo ARS por entrada paga (split All-In). */
+  platformFixedFee: number
+  isSponsoredByTokepass: boolean
+  maxFreeTickets: number
+  organizerName: string | null
   venue:
     | Pick<
         Venue,
@@ -95,6 +100,10 @@ type EventDetailRow = {
   visibility: Event["visibility"] | null
   organizer_id?: string
   schedule_days: unknown
+  is_sponsored_by_tokepass?: boolean | null
+  max_free_tickets?: number | null
+  platform_fee_percentage?: number | null
+  platform_fixed_fee?: number | null
   venues:
     | Pick<
         Venue,
@@ -118,6 +127,7 @@ type EventDetailRow = {
       | "capacity_per_unit"
     >
   > | null
+  profiles?: { full_name: string | null } | null
 }
 
 function computeStartingPrice(tiers: { price: number }[] | null): number | null {
@@ -229,7 +239,7 @@ async function loadEventDetails(
   let query = supabase
     .from("events")
     .select(
-      "id, title, description, date, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, venues(id, name, location, capacity, seating_background_url), ticket_tiers(id, name, price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit)",
+      "id, title, description, date, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, is_sponsored_by_tokepass, max_free_tickets, platform_fee_percentage, platform_fixed_fee, venues(id, name, location, capacity, seating_background_url), ticket_tiers(id, name, price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit), profiles!events_organizer_id_fkey(full_name)",
     )
     .eq("id", eventId)
 
@@ -278,7 +288,7 @@ async function loadEventDetails(
     .filter((tier) => tier.visibility !== "private")
     .sort((a, b) => Number(a.price) - Number(b.price))
 
-  let serviceChargeRate = 0.15
+  let serviceChargeRate = 0.08
   const { data: rate } = await supabase.rpc("get_event_service_charge_rate", {
     p_event_id: eventId,
   })
@@ -286,6 +296,23 @@ async function loadEventDetails(
     serviceChargeRate = rate
   } else if (rate != null && Number.isFinite(Number(rate))) {
     serviceChargeRate = Number(rate)
+  }
+
+  let platformFixedFee = Number(event.platform_fixed_fee ?? 0)
+  const { data: fixedFeeRpc } = await supabase.rpc(
+    "get_event_platform_fixed_fee",
+    { p_event_id: eventId },
+  )
+  if (typeof fixedFeeRpc === "number" && Number.isFinite(fixedFeeRpc)) {
+    platformFixedFee = fixedFeeRpc
+  } else if (fixedFeeRpc != null && Number.isFinite(Number(fixedFeeRpc))) {
+    platformFixedFee = Number(fixedFeeRpc)
+  }
+
+  const isSponsoredByTokepass = Boolean(event.is_sponsored_by_tokepass)
+  if (isSponsoredByTokepass) {
+    serviceChargeRate = 0
+    platformFixedFee = 0
   }
 
   return {
@@ -302,6 +329,10 @@ async function loadEventDetails(
         : "public",
     scheduleDays,
     serviceChargeRate,
+    platformFixedFee,
+    isSponsoredByTokepass,
+    maxFreeTickets: Number(event.max_free_tickets ?? 100),
+    organizerName: event.profiles?.full_name?.trim() || null,
     venue: event.venues,
     seatingUnits: (seatingRows ?? []).map((unit) => ({
       id: unit.id,

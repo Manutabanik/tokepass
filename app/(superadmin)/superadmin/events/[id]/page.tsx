@@ -109,6 +109,12 @@ export default async function SuperAdminEventDetailPage({
           >
             Abrir gobierno financiero
           </Link>
+          <Link
+            href={`/admin/events/${id}/settings`}
+            className="mt-2 inline-flex text-sm text-violet-300 hover:text-violet-200"
+          >
+            Settings comerciales del evento
+          </Link>
         </CardContent>
       </Card>
 

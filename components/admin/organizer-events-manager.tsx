@@ -25,10 +25,10 @@ import { toast } from "sonner"
 import {
   archiveEvent,
   deleteOrArchiveEvent,
-  publishEvent,
   type OrganizerEvent,
 } from "@/app/actions/events"
 import { BoostModal } from "@/components/admin/boost-modal"
+import { PublishEventConfirmDialog } from "@/components/admin/publish-event-confirm-dialog"
 import { EventStatusBadge } from "@/components/superadmin/badges"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -46,34 +46,25 @@ import { cn } from "@/lib/utils"
 
 function PublishEventButton({ eventId }: { eventId: string }) {
   const router = useRouter()
-  const [pending, startTransition] = useTransition()
+  const [open, setOpen] = useState(false)
 
   return (
-    <Button
-      type="button"
-      disabled={pending}
-      className="h-10 rounded-full bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-60"
-      onClick={() => {
-        startTransition(async () => {
-          const result = await publishEvent(eventId)
-          if (!result.success) {
-            toast.error(result.error)
-            return
-          }
-          toast.success("Evento publicado", {
-            description: "Ya es visible en el catálogo y acepta compras.",
-          })
-          router.refresh()
-        })
-      }}
-    >
-      {pending ? (
-        <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-      ) : (
+    <>
+      <Button
+        type="button"
+        className="h-10 rounded-full bg-emerald-600 text-white hover:bg-emerald-500"
+        onClick={() => setOpen(true)}
+      >
         <Rocket className="size-4" aria-hidden="true" />
-      )}
-      {pending ? "Publicando…" : "Publicar"}
-    </Button>
+        Publicar
+      </Button>
+      <PublishEventConfirmDialog
+        eventId={eventId}
+        open={open}
+        onOpenChange={setOpen}
+        onPublished={() => router.refresh()}
+      />
+    </>
   )
 }
 

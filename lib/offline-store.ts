@@ -34,6 +34,9 @@ export type OfflineEventData = {
   qrType: "dynamic" | "static"
   holderName: string
   holderDni: string | null
+  isTest?: boolean
+  tierPrice?: number
+  isSponsoredByTokepass?: boolean
 }
 
 export type OfflineTicketRecord = {
@@ -48,6 +51,7 @@ export type OfflineTicketRecord = {
   max_transfers_allowed: number
   created_at: string
   synced_at: number
+  is_test?: boolean
 }
 
 type EncryptedOfflineTicketRecord = {
@@ -262,6 +266,9 @@ export function ticketToOfflineRecord(
       qrType: ticket.qrType,
       holderName: ticket.holderName,
       holderDni: ticket.holderDni,
+      isTest: ticket.isTest,
+      tierPrice: ticket.tierPrice,
+      isSponsoredByTokepass: ticket.isSponsoredByTokepass,
     },
     status: ticket.status,
     qr_code: ticket.qrCode,
@@ -269,6 +276,7 @@ export function ticketToOfflineRecord(
     max_transfers_allowed: ticket.maxTransfersAllowed,
     created_at: ticket.createdAt,
     synced_at: Date.now(),
+    is_test: ticket.isTest,
   }
 }
 
@@ -300,6 +308,11 @@ export function offlineRecordToTicket(record: OfflineTicketRecord): MyTicket {
     qrType: record.event_data.qrType ?? "dynamic",
     holderName: record.event_data.holderName ?? "Titular",
     holderDni: record.event_data.holderDni ?? null,
+    isTest: Boolean(record.is_test ?? record.event_data.isTest),
+    tierPrice: Number(record.event_data.tierPrice ?? 0),
+    isSponsoredByTokepass: Boolean(
+      record.event_data.isSponsoredByTokepass,
+    ),
   }
 }
 

@@ -34,6 +34,10 @@ export type MyTicket = {
   qrType: QrType
   holderName: string
   holderDni: string | null
+  isTest: boolean
+  /** Precio público All-In del tier (0 = gratuita). */
+  tierPrice: number
+  isSponsoredByTokepass: boolean
 }
 
 type TicketRow = {
@@ -47,6 +51,7 @@ type TicketRow = {
   is_dynamic_qr: boolean
   max_admissions: number
   admissions_used: number
+  is_test?: boolean | null
   event_seating_units: {
     label: string
     sector_name: string
@@ -58,6 +63,7 @@ type TicketRow = {
     name: string
     bonus_reward: string | null
     day_id: string | null
+    price?: number | null
   } | null
   events: {
     id: string
@@ -68,6 +74,7 @@ type TicketRow = {
     image_url: string | null
     qr_type: QrType | null
     schedule_days: unknown
+    is_sponsored_by_tokepass?: boolean | null
     venues: { name: string } | null
   } | null
 }
@@ -100,7 +107,7 @@ export async function getMyTickets(): Promise<MyTicket[]> {
   const { data, error } = await supabase
     .from("tickets")
     .select(
-      "id, status, order_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ticket_tiers(name, bonus_reward, day_id), events(id, title, date, location, flyer_url, image_url, qr_type, schedule_days, venues(name)), orders(status)",
+      "id, status, order_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ticket_tiers(name, bonus_reward, day_id, price), events(id, title, date, location, flyer_url, image_url, qr_type, schedule_days, is_sponsored_by_tokepass, venues(name)), orders(status)",
     )
     .eq("owner_id", user.id)
     .in("status", ["valid", "used", "scanned", "transferred"])
@@ -170,6 +177,11 @@ export async function getMyTickets(): Promise<MyTicket[]> {
         qrType,
         holderName,
         holderDni,
+        isTest: Boolean(ticket.is_test),
+        tierPrice: Number(ticket.ticket_tiers?.price ?? 0),
+        isSponsoredByTokepass: Boolean(
+          ticket.events.is_sponsored_by_tokepass,
+        ),
       }
       return [mapped]
     })

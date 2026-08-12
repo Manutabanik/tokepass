@@ -71,7 +71,7 @@ import {
 } from "@/lib/scan-payload"
 import { cn } from "@/lib/utils"
 
-type VisualState = "idle" | "success" | "error" | "warn"
+type VisualState = "idle" | "success" | "success_free" | "error" | "warn"
 
 type Feedback = {
   title: string
@@ -112,6 +112,7 @@ const ERROR_TITLES: Record<string, string> = {
   auth_required: "SIN SESIÓN",
   update_failed: "ERROR",
   unpaid: "SIN PAGO",
+  test_ticket_live: "ENTRADA DE PRUEBA",
 }
 
 function playTone(kind: "success" | "error" | "warn") {
@@ -341,7 +342,30 @@ export function DoorScanner() {
       playTone("success")
       vibrate("success")
       void sendSignal("LED_GREEN")
-      setVisual("success")
+      const isFree =
+        Number(ticket.tier_price) === 0 ||
+        /freepass|cortes/i.test(ticket.ticket_tier)
+      setVisual(isFree ? "success_free" : "success")
+      if (ticket.is_test) {
+        setFeedback({
+          title: "LECTURA DE PRUEBA OK",
+          subtitle: "EVENTO EN BORRADOR · No válido en puerta en vivo",
+          bonus: null,
+          isFreePass: false,
+        })
+        returnToIdle(isTotemModeRef.current ? 1500 : 2200)
+        return
+      }
+      if (isFree) {
+        setFeedback({
+          title: "ENTRADA GRATUITA ($0)",
+          subtitle: "NO COBRAR EN PUERTA",
+          bonus: null,
+          isFreePass: true,
+        })
+        returnToIdle(isTotemModeRef.current ? 1800 : 2500)
+        return
+      }
       const seating = ticket.seating_label
         ? `${ticket.seating_label}${ticket.seating_row_label ? ` · ${ticket.seating_row_label}` : ""} · ingreso ${ticket.admissions_used}/${ticket.max_admissions}`
         : null
@@ -355,7 +379,7 @@ export function DoorScanner() {
             ? `Ingreso ${ticket.admissions_used}/${ticket.max_admissions}`
             : `Bienvenid@ ${ticket.owner_name}`,
         bonus: null,
-        isFreePass: /freepass|cortes/i.test(ticket.ticket_tier),
+        isFreePass: false,
       })
       returnToIdle(isTotemModeRef.current ? 1500 : 1800)
     },
@@ -401,22 +425,30 @@ export function DoorScanner() {
         playTone("success")
         vibrate("success")
         void sendSignal("LED_GREEN")
-        setVisual("success")
+        const isFree = Boolean(result.ticket.isFreePass)
+        setVisual(isFree ? "success_free" : "success")
         const owner = result.ticket.ownerLabel?.trim()
         setFeedback({
-          title:
-            isTotemModeRef.current && owner
-              ? `BIENVENIDO/A ${owner}`
-              : "ENTRADA VÁLIDA",
-          subtitle: `${result.ticket.seatingLabel ? `${result.ticket.seatingLabel}${result.ticket.seatingRowLabel ? ` · ${result.ticket.seatingRowLabel}` : ""} · ` : ""}${result.ticket.tierName}${
-            !isTotemModeRef.current && result.ticket.ownerLabel
-              ? ` · ${result.ticket.ownerLabel}`
-              : ""
-          } · ${result.message}`,
+          title: result.isTestScan
+            ? "LECTURA DE PRUEBA OK"
+            : isFree
+              ? "ENTRADA GRATUITA ($0)"
+              : isTotemModeRef.current && owner
+                ? `BIENVENIDO/A ${owner}`
+                : "ENTRADA VÁLIDA",
+          subtitle: result.isTestScan
+            ? "EVENTO EN BORRADOR · No válido en puerta en vivo"
+            : isFree
+              ? "NO COBRAR EN PUERTA"
+              : `${result.ticket.seatingLabel ? `${result.ticket.seatingLabel}${result.ticket.seatingRowLabel ? ` · ${result.ticket.seatingRowLabel}` : ""} · ` : ""}${result.ticket.tierName}${
+                  !isTotemModeRef.current && result.ticket.ownerLabel
+                    ? ` · ${result.ticket.ownerLabel}`
+                    : ""
+                } · ${result.message}`,
           bonus: result.bonus,
-          isFreePass: result.ticket.isFreePass,
+          isFreePass: isFree,
         })
-        returnToIdle(isTotemModeRef.current ? 1500 : 2000)
+        returnToIdle(isTotemModeRef.current ? 1500 : isFree ? 2500 : 2000)
         return
       }
 
@@ -436,18 +468,23 @@ export function DoorScanner() {
       setVisual("error")
       setFeedback({
         title:
-          result.status === "transferred"
-            ? "ENTRADA INVÁLIDA"
-            : (ERROR_TITLES[result.status] ?? "ACCESO DENEGADO"),
+          result.status === "test_ticket_live"
+            ? "ENTRADA DE PRUEBA"
+            : result.status === "transferred"
+              ? "ENTRADA INVÁLIDA"
+              : (ERROR_TITLES[result.status] ?? "ACCESO DENEGADO"),
         subtitle:
-          result.status === "transferred"
-            ? "Este ticket fue transferido a otro usuario"
-            : result.message,
+          result.status === "test_ticket_live"
+            ? "INVÁLIDA PARA EVENTO EN VIVO"
+            : result.status === "transferred"
+              ? "Este ticket fue transferido a otro usuario"
+              : result.message,
       })
       returnToIdle(
         isTotemModeRef.current
           ? 2500
-          : result.status === "transferred"
+          : result.status === "transferred" ||
+              result.status === "test_ticket_live"
             ? 4000
             : 3000,
       )
@@ -457,6 +494,21 @@ export function DoorScanner() {
 
   const validateLocalTicket = useCallback(
     async (ticket: ScannerManifestTicket) => {
+      const eventStatus =
+        selectedEvent?.status ?? manifestMeta?.eventStatus ?? null
+      if (ticket.is_test && eventStatus !== "draft") {
+        playTone("error")
+        vibrate("error")
+        void sendSignal("LED_RED")
+        setVisual("error")
+        setFeedback({
+          title: "ENTRADA DE PRUEBA",
+          subtitle: "INVÁLIDA PARA EVENTO EN VIVO",
+        })
+        returnToIdle(isTotemModeRef.current ? 2500 : 3500)
+        return
+      }
+
       if (ticket.status === "used" || ticket.status === "scanned") {
         showAlreadyUsed(ticket.scanned_at_local ?? ticket.scanned_at)
         return
@@ -503,8 +555,10 @@ export function DoorScanner() {
       }
     },
     [
+      manifestMeta?.eventStatus,
       refreshQueueCount,
       returnToIdle,
+      selectedEvent?.status,
       sendSignal,
       showAlreadyUsed,
       showLocalSuccess,
@@ -661,6 +715,7 @@ export function DoorScanner() {
       className={cn(
         "fixed inset-0 z-[80] flex flex-col text-white transition-colors duration-200",
         visual === "success" && "bg-emerald-500",
+        visual === "success_free" && "bg-cyan-500",
         visual === "error" && "bg-red-700",
         visual === "warn" && "bg-amber-500",
         visual === "idle" && "bg-black",
@@ -925,7 +980,7 @@ export function DoorScanner() {
         </>
       ) : (
         <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-          {visual === "success" ? (
+          {visual === "success" || visual === "success_free" ? (
             <CheckCircle2 className="size-28 drop-shadow-2xl" strokeWidth={2.5} />
           ) : visual === "warn" ? (
             <ShieldAlert className="size-28 drop-shadow-2xl" strokeWidth={2.5} />
@@ -942,18 +997,21 @@ export function DoorScanner() {
             </p>
           ) : null}
 
-          {visual === "success" && feedback?.isFreePass ? (
+          {(visual === "success" || visual === "success_free") &&
+          feedback?.isFreePass ? (
             <div className="mt-8 rounded-2xl bg-black/25 px-6 py-5 ring-2 ring-white/30">
               <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/70">
-                Badge especial
+                Anti-fraude puerta
               </p>
               <p className="mt-2 text-3xl font-black tracking-tight">
-                CORTESÍA / FREEPASS
+                ENTRADA GRATUITA ($0) · NO COBRAR
               </p>
             </div>
           ) : null}
 
-          {visual === "success" && feedback?.bonus && !feedback.isFreePass ? (
+          {(visual === "success" || visual === "success_free") &&
+          feedback?.bonus &&
+          !feedback.isFreePass ? (
             <div className="mt-8 flex items-center gap-3 rounded-2xl bg-black/20 px-5 py-4 text-left ring-1 ring-white/20">
               <Gift className="size-10 shrink-0" />
               <div>

@@ -2,8 +2,10 @@
 
 import {
   Armchair,
+  Ban,
   CalendarDays,
   Clock3,
+  FlaskConical,
   Gift,
   IdCard,
   MapPin,
@@ -67,6 +69,7 @@ export function LivingTicketCard({
   googleWalletEnabled?: boolean
 }) {
   const vip = isVipTier(ticket.tierName)
+  const isFree = Number(ticket.tierPrice) === 0
   const canShowLiveQr = showQr && ticket.status === "valid"
   const isStatic = ticket.qrType === "static"
   const canTransfer =
@@ -81,8 +84,50 @@ export function LivingTicketCard({
         vip
           ? "border border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.3)]"
           : "border border-zinc-800",
+        ticket.isTest && "border-amber-400/60",
+        isFree && !ticket.isTest && "border-rose-500/50",
       )}
     >
+      {ticket.isTest ? (
+        <>
+          <div
+            className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
+            aria-hidden="true"
+          >
+            <span className="-rotate-12 rounded-xl border-2 border-amber-300/80 bg-amber-500/25 px-4 py-2 text-center text-[11px] font-black uppercase tracking-[0.16em] text-amber-100 shadow-[0_0_24px_rgba(245,158,11,0.35)] backdrop-blur-[2px]">
+              Test / Borrador
+              <span className="mt-0.5 block text-[10px] font-bold tracking-[0.12em] text-amber-50/90">
+                No válido en puerta
+              </span>
+            </span>
+          </div>
+          <Badge className="absolute left-3 top-3 z-30 rounded-full border-0 bg-amber-500 text-[10px] font-bold uppercase tracking-wide text-zinc-950">
+            <FlaskConical className="size-3" aria-hidden="true" />
+            Sandbox
+          </Badge>
+        </>
+      ) : null}
+
+      {isFree && !ticket.isTest ? (
+        <>
+          <div
+            className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
+            aria-hidden="true"
+          >
+            <span className="-rotate-12 rounded-xl border-2 border-rose-400/90 bg-rose-600/30 px-4 py-2 text-center text-[11px] font-black uppercase tracking-[0.14em] text-rose-50 shadow-[0_0_28px_rgba(225,29,72,0.4)] backdrop-blur-[2px]">
+              Entrada gratuita
+              <span className="mt-0.5 block text-[10px] font-bold tracking-[0.1em] text-rose-50/95">
+                Prohibida su venta en puerta
+              </span>
+            </span>
+          </div>
+          <Badge className="absolute right-3 top-3 z-30 rounded-full border-0 bg-rose-500 text-[10px] font-bold uppercase tracking-wide text-white">
+            <Ban className="size-3" aria-hidden="true" />
+            $0
+          </Badge>
+        </>
+      ) : null}
+
       {vip && (
         <div
           className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(245,158,11,0.14),transparent_42%)]"
@@ -359,6 +404,16 @@ export function LivingTicketCard({
         <p className="text-center font-mono text-[10px] tracking-wider text-zinc-600">
           #{ticket.id.slice(0, 8).toUpperCase()}
         </p>
+
+        {ticket.isSponsoredByTokepass ? (
+          <div className="flex items-center justify-center gap-2 rounded-xl border border-amber-400/30 bg-gradient-to-r from-amber-500/10 via-violet-500/10 to-amber-500/10 px-3 py-2 text-center">
+            <Sparkles className="size-3.5 text-amber-300" aria-hidden="true" />
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-100/90">
+              Infraestructura bonificada por Tokepass
+            </p>
+          </div>
+        ) : null}
+
         <p className="border-t border-zinc-800/80 pt-3 text-center text-[10px] leading-4 text-zinc-500">
           Entrada emitida bajo responsabilidad exclusiva del Organizador.
           Prohibida su reventa.
