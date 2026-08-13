@@ -61,7 +61,7 @@ export default async function CreateEventPage({
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
       <Link
         href={impersonation ? "/superadmin" : "/admin/events"}
-        className="inline-flex w-fit items-center gap-2 text-sm text-zinc-500 transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-900 dark:hover:text-white"
+        className="inline-flex w-fit items-center gap-2 text-sm text-zinc-500 transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
         {impersonation ? "Volver a Platform OS" : "Volver a Mis Eventos"}
