@@ -2,6 +2,7 @@
 
 import { Preference } from "mercadopago"
 
+import { resolveCheckoutExpiresAt } from "@/lib/checkout-hold"
 import { logger } from "@/lib/logger"
 import { normalizeCheckoutBuyer } from "@/lib/checkout-buyer"
 import {
@@ -60,7 +61,7 @@ export async function createPaymentPreference(
   const { data: order, error: orderError } = await supabase
     .from("orders")
     .select(
-      "id, buyer_id, total_amount, subtotal, service_charge, status, mp_preference_id",
+      "id, buyer_id, total_amount, subtotal, service_charge, status, mp_preference_id, created_at",
     )
     .eq("id", orderId)
     .maybeSingle()
@@ -102,12 +103,34 @@ export async function createPaymentPreference(
   }
 
   const rows = (tickets ?? []) as unknown as OrderTicketRow[]
+  const isStoreOnlyOrder = rows.length === 0
 
-  if (rows.length === 0) {
-    return {
-      success: false,
-      error: "La orden no tiene tickets asociados.",
+  let eventTitle = rows[0]?.events?.title ?? "Evento Tokepass"
+
+  if (isStoreOnlyOrder) {
+    const { data: storeRows, error: storeError } = await supabase
+      .from("item_redemptions")
+      .select("id, event_items(name, events(title))")
+      .eq("order_id", orderId)
+      .limit(5)
+
+    if (storeError || !storeRows?.length) {
+      return {
+        success: false,
+        error: "La orden no tiene tickets ni productos asociados.",
+      }
     }
+
+    type StoreJoin = {
+      event_items: {
+        name: string
+        events: { title: string } | null
+      } | null
+    }
+    const first = storeRows[0] as unknown as StoreJoin
+    eventTitle =
+      first.event_items?.events?.title ??
+      "Tokepass — Tienda de Extras"
   }
 
   const frozenSubtotal = Number(order.subtotal)
@@ -141,19 +164,26 @@ export async function createPaymentPreference(
     }
   }
 
-  const eventTitle = rows[0]?.events?.title ?? "Evento Tokepass"
+  // Preferencia MP: expires + expiration_date_to = fin del hold (máx. now+8m;
+  // seating usa reserved_until si es más corto). Preference API field name.
   const seatingExpirations = rows
     .map((row) => row.seating_unit?.reserved_until)
     .filter((value): value is string => Boolean(value))
-    .map((value) => new Date(value).getTime())
-    .filter(Number.isFinite)
-  const checkoutExpiresAt =
-    seatingExpirations.length > 0 ? Math.min(...seatingExpirations) : null
+  const earliestSeating =
+    seatingExpirations.length > 0
+      ? seatingExpirations.reduce((a, b) =>
+          new Date(a).getTime() <= new Date(b).getTime() ? a : b,
+        )
+      : null
+  const checkoutExpiresAt = resolveCheckoutExpiresAt(earliestSeating).getTime()
 
-  if (checkoutExpiresAt !== null && checkoutExpiresAt <= Date.now()) {
+  if (checkoutExpiresAt <= Date.now()) {
     return {
       success: false,
-      error: "La reserva de ubicación venció. Elegí tu ubicación nuevamente.",
+      error:
+        earliestSeating
+          ? "La reserva de ubicación venció. Elegí tu ubicación nuevamente."
+          : "El tiempo para pagar esta orden venció. Volvé a armar el carrito.",
     }
   }
 
@@ -187,7 +217,10 @@ export async function createPaymentPreference(
   }> = [
     {
       id: `order-${orderId}-all-in`,
-      title: `${eventTitle} — entradas y consumiciones`.slice(0, 256),
+      title: (isStoreOnlyOrder
+        ? `${eventTitle} — extras`
+        : `${eventTitle} — entradas`
+      ).slice(0, 256),
       quantity: 1,
       unit_price: frozenTotal,
       currency_id: "ARS",
@@ -227,12 +260,9 @@ export async function createPaymentPreference(
         ...(!localSite ? { auto_return: "approved" as const } : {}),
         // notification_url localhost es inalcanzable para MP; omitir en local.
         ...(!localSite ? { notification_url: urls.notificationUrl } : {}),
-        ...(checkoutExpiresAt !== null
-          ? {
-              expires: true,
-              expiration_date_to: new Date(checkoutExpiresAt).toISOString(),
-            }
-          : {}),
+        // Preference API: expires + expiration_date_to (= now+8m o reserved_until).
+        expires: true,
+        expiration_date_to: new Date(checkoutExpiresAt).toISOString(),
         metadata: {
           order_id: orderId,
           buyer_id: user.id,

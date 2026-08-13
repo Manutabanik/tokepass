@@ -7,7 +7,7 @@ import { IssuedTicketsManager } from "@/components/admin/issued-tickets-manager"
 import { createClient } from "@/lib/supabase/server"
 
 export const metadata: Metadata = {
-  title: "Entradas emitidas",
+  title: "Lista de Compradores",
   description: "Buscá compradores, reenviá entradas y resolvé reclamos.",
 }
 

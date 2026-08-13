@@ -199,7 +199,10 @@ export function EventMultimediaForm({
         </Button>
       </section>
 
-      <section className="space-y-4 rounded-2xl border border-zinc-200 bg-white p-5 dark:border-white/10 dark:bg-zinc-950/70 sm:p-6">
+      <section
+        id="flyer-historias"
+        className="scroll-mt-24 space-y-4 rounded-2xl border border-zinc-200 bg-white p-5 dark:border-white/10 dark:bg-zinc-950/70 sm:p-6"
+      >
         <div className="flex items-start gap-3">
           <span className="grid size-10 place-items-center rounded-xl bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-300">
             <Share2 className="size-5" aria-hidden />

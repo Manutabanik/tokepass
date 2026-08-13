@@ -35,9 +35,9 @@ import {
 import { formatCurrency, formatNumber, getInitials } from "@/lib/format"
 
 export const metadata: Metadata = {
-  title: "Platform OS",
+  title: "Resumen",
   description:
-    "Dashboard global de Tokepass: GMV, tickets emitidos y gestión white-glove de productoras.",
+    "Panel de control de Tokepass: plata recaudada, entradas emitidas y productoras.",
 }
 
 export default async function SuperAdminDashboardPage() {
@@ -58,36 +58,36 @@ export default async function SuperAdminDashboardPage() {
 
   const kpis = [
     {
-      label: "Ganancia Plataforma",
+      label: "Ganancia de Tokepass",
       value: formatCurrency(metrics.platform_revenue),
-      helper: "Suma de service_charge en órdenes pagadas",
+      helper: "Lo que nos queda de comisión en las compras pagadas",
       icon: Sparkles,
       accent: "text-emerald-400",
       iconWrap: "bg-emerald-500/15 text-emerald-300 ring-emerald-400/25",
       featured: true,
     },
     {
-      label: "Volumen Procesado (GMV)",
+      label: "Dinero procesado",
       value: formatCurrency(metrics.totalGmv),
-      helper: "Total cobrado a compradores (subtotal + fee)",
+      helper: "Total que pagaron los compradores (entradas + comisión)",
       icon: CircleDollarSign,
       accent: "text-amber-300",
       iconWrap: "bg-amber-500/10 text-amber-300 ring-amber-500/15",
       featured: false,
     },
     {
-      label: "Tickets Emitidos",
+      label: "Entradas emitidas",
       value: formatNumber(metrics.total_tickets),
-      helper: "Válidos + escaneados",
+      helper: "Entradas válidas y las que ya se escanearon en puerta",
       icon: TicketCheck,
       accent: "text-white",
       iconWrap: "bg-sky-500/10 text-sky-400 ring-sky-500/15",
       featured: false,
     },
     {
-      label: "Productoras Activas",
+      label: "Productoras activas",
       value: formatNumber(metrics.active_organizers),
-      helper: "Cuentas con rol organizador",
+      helper: "Cuentas con permiso de organizador",
       icon: Building2,
       accent: "text-white",
       iconWrap: "bg-violet-500/10 text-violet-300 ring-violet-500/15",
@@ -98,9 +98,9 @@ export default async function SuperAdminDashboardPage() {
   return (
     <>
       <PageHeading
-        eyebrow="Platform OS · Owner"
-        title="Gobierno global"
-        description="Ganancia real de Tokepass (service charge) vs GMV bruto, y white-glove sobre productoras."
+        eyebrow="Dueño de la Plataforma"
+        title="Resumen general"
+        description="Mirás de un vistazo cuánto genera Tokepass, cuánto se movió en ventas y cómo van las productoras."
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -139,8 +139,8 @@ export default async function SuperAdminDashboardPage() {
         <CardHeader className="border-b border-white/8 px-5 py-5 sm:px-6">
           <CardTitle className="text-base text-white">Productoras</CardTitle>
           <CardDescription className="text-zinc-500">
-            Facturación por órdenes pagadas atribuidas a sus eventos. Usá
-            “Crear Evento” para operar en su nombre.
+            Ventas confirmadas de cada productora. Con “Crear evento” podés
+            armar un evento a nombre de ellas.
           </CardDescription>
         </CardHeader>
         <CardContent className="px-0 pb-0">
@@ -202,7 +202,7 @@ export default async function SuperAdminDashboardPage() {
                           />
                         }
                       >
-                        Crear Evento
+                        Crear evento
                       </Button>
                     </TableCell>
                   </TableRow>

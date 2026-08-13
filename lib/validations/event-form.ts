@@ -3,6 +3,18 @@ import { z } from "zod"
 import { EVENT_VISIBILITY_VALUES } from "@/types/events"
 import { TICKET_TIER_VISIBILITY_VALUES } from "@/types/tickets"
 
+/** ATP = Apta Todo Público. */
+export const AGE_RESTRICTION_VALUES = ["atp", "16", "18"] as const
+export type AgeRestriction = (typeof AGE_RESTRICTION_VALUES)[number]
+
+export const AGE_RESTRICTION_LABELS: Record<AgeRestriction, string> = {
+  atp: "ATP",
+  "16": "+16",
+  "18": "+18",
+}
+
+export const MAX_EVENT_FLYER_BYTES = 5 * 1024 * 1024
+
 export const scheduleDaySchema = z.object({
   id: z.string().uuid(),
   title: z.string().trim().min(2, "Nombrá la jornada."),
@@ -25,9 +37,11 @@ export const scheduleDaySchema = z.object({
 export const ticketTierSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().trim().min(2, "Ingresá un nombre para el tipo de entrada."),
-  price: z.number().min(0, "El precio no puede ser negativo."),
+  price: z
+    .number({ error: "Indicá el precio de la entrada." })
+    .min(0, "El precio no puede ser negativo."),
   capacity: z
-    .number()
+    .number({ error: "Indicá la capacidad de esta entrada." })
     .int()
     .min(1, "La cantidad de personas debe ser mayor a cero."),
   sold: z.number().int().min(0).optional(),
@@ -49,6 +63,8 @@ export const eventFormSchema = z
         .trim()
         .min(3, "El título debe tener al menos 3 caracteres."),
       date: z.string(),
+      /** Hora de cierre (solo jornada única). */
+      endDate: z.string(),
       description: z
         .string()
         .trim()
@@ -59,6 +75,9 @@ export const eventFormSchema = z
       isMultiDay: z.boolean(),
       scheduleDays: z.array(scheduleDaySchema),
       categoryId: z.string().uuid("Seleccioná una categoría de la lista."),
+      ageRestriction: z.enum(AGE_RESTRICTION_VALUES, {
+        error: "Seleccioná la restricción de edad.",
+      }),
     }),
     venue: z.object({
       mode: z.enum(["existing", "new"]),
@@ -92,9 +111,6 @@ export const eventFormSchema = z
     tickets: z
       .array(ticketTierSchema)
       .min(1, "Creá al menos un tipo de entrada."),
-    growth: z.object({
-      isAddonsEnabled: z.boolean(),
-    }),
   })
   .superRefine((data, context) => {
     const tierNames = new Set<string>()
@@ -143,7 +159,22 @@ export const eventFormSchema = z
         context.addIssue({
           code: "custom",
           path: ["basics", "date"],
-          message: "Seleccioná la fecha y hora.",
+          message: "Seleccioná la fecha y hora de inicio.",
+        })
+      }
+
+      const endDate = data.basics.endDate?.trim() ?? ""
+      if (!endDate || Number.isNaN(new Date(endDate).getTime())) {
+        context.addIssue({
+          code: "custom",
+          path: ["basics", "endDate"],
+          message: "Seleccioná la hora de finalización.",
+        })
+      } else if (date && new Date(endDate).getTime() <= new Date(date).getTime()) {
+        context.addIssue({
+          code: "custom",
+          path: ["basics", "endDate"],
+          message: "La finalización debe ser posterior al inicio.",
         })
       }
     }

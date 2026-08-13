@@ -1,7 +1,6 @@
-import { ArrowLeft, Building2, WalletCards } from "lucide-react"
+import { ArrowLeft, Building2, Construction, WalletCards } from "lucide-react"
 import type { Metadata } from "next"
 import Link from "next/link"
-import { notFound } from "next/navigation"
 
 import { getOrganizationDetails } from "@/app/actions/superadmin"
 import { OrganizationGovernancePanel } from "@/components/superadmin/organization-governance-panel"
@@ -9,9 +8,10 @@ import { PageHeading } from "@/components/superadmin/page-heading"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatCurrency, formatDate, getInitials } from "@/lib/format"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 export const metadata: Metadata = {
-  title: "Gobierno de productora",
+  title: "Detalles de la Productora",
 }
 
 export default async function SuperAdminOrganizationDetailPage({
@@ -20,9 +20,77 @@ export default async function SuperAdminOrganizationDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const organization = await getOrganizationDetails(id)
+  let organization: Awaited<ReturnType<typeof getOrganizationDetails>> = null
+  let loadError: string | null = null
 
-  if (!organization) notFound()
+  try {
+    organization = await getOrganizationDetails(id)
+  } catch (error) {
+    loadError =
+      error instanceof Error
+        ? error.message
+        : "No pudimos cargar los datos de la productora."
+  }
+
+  // Fallback mínimo si el perfil existe pero el detalle completo falló / no califica.
+  if (!organization) {
+    const admin = createAdminClient()
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("id, full_name, email, created_at")
+      .eq("id", id)
+      .maybeSingle()
+
+    return (
+      <>
+        <Link
+          href="/superadmin/organizations"
+          className="mb-7 inline-flex items-center gap-2 text-sm text-zinc-500 transition hover:text-white"
+        >
+          <ArrowLeft className="size-4" aria-hidden="true" />
+          Volver a productoras
+        </Link>
+
+        <PageHeading
+          eyebrow="Productora"
+          title="Detalles de la Productora"
+          description={
+            profile
+              ? `${profile.full_name?.trim() || profile.email} · ${profile.email}`
+              : "No encontramos esta productora en la base."
+          }
+        />
+
+        <Card className="border-0 bg-white/[0.035] py-0 ring-1 ring-white/8">
+          <CardContent className="grid min-h-56 place-items-center px-6 py-12 text-center">
+            <div>
+              <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-amber-500/10 text-amber-300 ring-1 ring-amber-400/20">
+                <Construction className="size-5" aria-hidden="true" />
+              </span>
+              <p className="mt-4 text-base font-semibold text-white">
+                {profile
+                  ? "Resumen en construcción"
+                  : "Productora no encontrada"}
+              </p>
+              <p className="mx-auto mt-2 max-w-md text-sm text-zinc-500">
+                {loadError
+                  ? `Hubo un problema al armar el detalle: ${loadError}`
+                  : profile
+                    ? "La ficha básica está, pero todavía no pudimos armar el panel completo de finanzas. Probá más tarde o revisá las migraciones de gobierno."
+                    : "Revisá el enlace o volvé al listado de productoras."}
+              </p>
+              {profile ? (
+                <p className="mt-4 font-mono text-xs text-zinc-600">
+                  ID · {profile.id.slice(0, 8)} · Alta{" "}
+                  {formatDate(profile.created_at)}
+                </p>
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
+      </>
+    )
+  }
 
   return (
     <>
@@ -31,13 +99,13 @@ export default async function SuperAdminOrganizationDetailPage({
         className="mb-7 inline-flex items-center gap-2 text-sm text-zinc-500 transition hover:text-white"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
-        Volver a organizaciones
+        Volver a productoras
       </Link>
 
       <PageHeading
-        eyebrow="God Mode · Productora"
-        title={organization.profile.name}
-        description={`${organization.profile.email} · Alta ${formatDate(organization.profile.joinedAt)}`}
+        eyebrow="Productora"
+        title="Detalles de la Productora"
+        description={`${organization.profile.name} · ${organization.profile.email} · Alta ${formatDate(organization.profile.joinedAt)}`}
         actions={
           <div className="flex items-center gap-3 rounded-2xl border border-white/8 bg-white/[0.025] px-4 py-3">
             <span className="grid size-10 place-items-center rounded-xl bg-violet-500/10 text-sm font-bold text-violet-200 ring-1 ring-violet-400/20">
@@ -47,7 +115,7 @@ export default async function SuperAdminOrganizationDetailPage({
               )}
             </span>
             <div>
-              <p className="text-xs text-zinc-600">ID de productora</p>
+              <p className="text-xs text-zinc-600">Identificador</p>
               <p className="font-mono text-xs text-zinc-300">
                 {organization.profile.id.slice(0, 8)}
               </p>
@@ -66,7 +134,7 @@ export default async function SuperAdminOrganizationDetailPage({
               Liquidaciones pendientes
             </CardTitle>
             <p className="mt-1 text-xs text-zinc-600">
-              Obligaciones abiertas con esta productora.
+              Plata que todavía le debemos transferir a esta productora.
             </p>
           </div>
           <Badge
@@ -98,7 +166,7 @@ export default async function SuperAdminOrganizationDetailPage({
                       Neto {formatCurrency(settlement.netAmount)}
                     </p>
                     <p className="mt-1 text-xs text-zinc-600">
-                      Bruto {formatCurrency(settlement.grossAmount)} · Fee{" "}
+                      Bruto {formatCurrency(settlement.grossAmount)} · Comisión{" "}
                       {formatCurrency(settlement.platformFee)}
                     </p>
                   </div>

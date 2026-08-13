@@ -3,7 +3,7 @@
 import { WifiOff } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 
-import type { MyBarRedemption } from "@/app/actions/addons"
+import type { MyStoreRedemption } from "@/app/actions/addons"
 import type { MyTicket } from "@/app/actions/tickets"
 import { useOnlineStatus } from "@/components/pwa/use-online-status"
 import { TicketWallet } from "@/components/public/ticket-wallet"
@@ -17,7 +17,7 @@ import { splitTicketsBySchedule } from "@/lib/ticket-schedule"
 type OfflineTicketWalletProps = {
   userId: string
   initialTickets: MyTicket[]
-  barRedemptions?: MyBarRedemption[]
+  barRedemptions?: MyStoreRedemption[]
   loadError?: string | null
   appleWalletEnabled?: boolean
   googleWalletEnabled?: boolean

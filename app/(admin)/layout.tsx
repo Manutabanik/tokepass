@@ -130,11 +130,11 @@ export default async function AdminLayout({
             </div>
             <div className="hidden lg:block">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-600">
-                {isOrganizer ? "Tu Panel" : "Acceso staff"}
+                {isOrganizer ? "Tu panel" : "Acceso staff"}
               </p>
               <p className="text-sm text-zinc-600 dark:text-zinc-400">
                 {isOrganizer
-                  ? "Panel del organizador"
+                  ? "Gestioná tus ventas y eventos"
                   : "Acceso limitado a puerta / barra / caja"}
               </p>
             </div>
@@ -145,7 +145,7 @@ export default async function AdminLayout({
                 className="hidden items-center gap-2 rounded-full border border-zinc-200 px-3 py-1.5 text-xs text-zinc-600 dark:border-white/10 dark:text-zinc-400 sm:flex"
               >
                 <ShieldCheck className="size-3.5" aria-hidden="true" />
-                Escáner
+                Control de Puerta
               </Link>
               <div className="hidden text-right sm:block">
                 <p className="max-w-48 truncate text-sm font-medium text-zinc-900 dark:text-white">

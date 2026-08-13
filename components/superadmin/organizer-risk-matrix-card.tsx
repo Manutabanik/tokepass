@@ -42,27 +42,27 @@ const tiers: Array<{
 }> = [
   {
     id: "TIER_1_CUSTODY",
-    title: "Tier 1 · Custodia Tokepass",
+    title: "Nivel bajo · Custodia estándar",
     description:
-      "El dinero de las ventas permanece en retención hasta 48 hs hábiles post-evento. Ideal para productoras nuevas o sin historial.",
+      "Estado financiero seguro: la plata de las ventas queda retenida hasta 48 hs hábiles después del evento. Ideal para productoras nuevas o sin historial.",
     icon: Shield,
     accent:
       "border-emerald-400/35 bg-emerald-500/10 text-emerald-100 ring-emerald-400/20",
   },
   {
     id: "TIER_2_INSTANT_SPLIT",
-    title: "Tier 2 · Split instantáneo",
+    title: "Nivel medio · Cobro al instante",
     description:
-      "División inmediata vía Mercado Pago Connect: neto al productor y comisión a Tokepass. Requiere cuenta vinculada.",
+      "Al cobrarse la entrada, se reparte al toque: neto al organizador y comisión a Tokepass. Hace falta tener Mercado Pago vinculado.",
     icon: Zap,
     accent:
       "border-sky-400/35 bg-sky-500/10 text-sky-100 ring-sky-400/20",
   },
   {
     id: "TIER_3_ENTERPRISE",
-    title: "Tier 3 · Enterprise VIP",
+    title: "Nivel alto · Cuenta VIP",
     description:
-      "Split instantáneo + tasa preferencial configurable + garantía legal verificada.",
+      "Cobro al instante, comisión preferencial a medida y garantía legal verificada.",
     icon: Crown,
     accent:
       "border-violet-400/35 bg-violet-500/10 text-violet-100 ring-violet-400/20",
@@ -105,7 +105,7 @@ export function OrganizerRiskMatrixCard({
       !organization.profile.hasMpAccessToken
     ) {
       toast.error(
-        "Tier 2/3 requieren Mercado Pago Connect (user id o access token).",
+        "Los niveles medio y alto necesitan Mercado Pago vinculado (ID de usuario o token de acceso).",
       )
       return
     }
@@ -148,14 +148,19 @@ export function OrganizerRiskMatrixCard({
               Matriz de riesgo y finanzas
             </CardTitle>
             <CardDescription className="mt-1 text-zinc-500">
-              Custodia vs split Connect · comisión dinámica · garantía legal.
+              Acá configurás cómo se maneja la plata: retención, cobro al
+              instante, comisión y garantías.
             </CardDescription>
           </div>
           <Badge
             variant="outline"
-            className="border-zinc-700 bg-black/30 font-mono text-[10px] uppercase tracking-wide text-zinc-300"
+            className="border-zinc-700 bg-black/30 text-[10px] font-medium tracking-wide text-zinc-300"
           >
-            {riskTier.replaceAll("_", " ")}
+            {riskTier === "TIER_1_CUSTODY"
+              ? "Estado Financiero Seguro"
+              : riskTier === "TIER_2_INSTANT_SPLIT"
+                ? "Cobro al instante"
+                : "Cuenta VIP"}
           </Badge>
         </div>
       </CardHeader>

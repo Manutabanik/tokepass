@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   LoaderCircle,
   ScanLine,
+  ShoppingBag,
   XCircle,
 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState, useTransition } from "react"
@@ -61,13 +62,14 @@ function formatRedeemedTime(iso: string | null): string {
   }
 }
 
-export function BarScanner() {
+export function StoreScanner() {
   configureZxingWasm()
 
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [visual, setVisual] = useState<VisualState>("idle")
   const [title, setTitle] = useState("")
   const [subtitle, setSubtitle] = useState<string | null>(null)
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const cooldownRef = useRef(false)
   const resetTimerRef = useRef<number | null>(null)
@@ -88,6 +90,7 @@ export function BarScanner() {
       setVisual("idle")
       setTitle("")
       setSubtitle(null)
+      setImageUrl(null)
       cooldownRef.current = false
     }, delayMs)
   }, [])
@@ -98,26 +101,28 @@ export function BarScanner() {
         playTone("success")
         vibrate("success")
         setVisual("success")
-        setTitle(`ENTREGAR: 1x ${result.itemName.toUpperCase()}`)
-        setSubtitle(null)
-        returnToIdle(1800)
+        setTitle(`Entregar: 1x ${result.itemName}`)
+        setSubtitle(result.itemDescription)
+        setImageUrl(result.itemImageUrl)
+        returnToIdle(2200)
         return
       }
 
       playTone("error")
       vibrate("error")
       setVisual("error")
+      setImageUrl(result.alreadyRedeemed ? result.itemImageUrl ?? null : null)
 
       if (result.alreadyRedeemed) {
-        setTitle("¡ALERTA! ESTA CONSUMICIÓN YA FUE ENTREGADA")
+        setTitle(`Alerta: ${result.itemName} ya fue entregado`)
         setSubtitle(
-          `A LAS ${formatRedeemedTime(result.previousRedeemedAt).toUpperCase()}`,
+          `A las ${formatRedeemedTime(result.previousRedeemedAt)}`,
         )
         returnToIdle(2800)
         return
       }
 
-      setTitle(result.message.toUpperCase())
+      setTitle(result.message)
       setSubtitle(null)
       returnToIdle(2200)
     },
@@ -133,10 +138,7 @@ export function BarScanner() {
 
       cooldownRef.current = true
       startTransition(async () => {
-        const started = performance.now()
         const result = await redeemItemRPC(raw)
-        // Objetivo < 2s end-to-end; el feedback visual cubre el resto.
-        void started
         applyResult(result)
       })
     },
@@ -144,24 +146,43 @@ export function BarScanner() {
   )
 
   return (
-    <div className="relative flex min-h-[100dvh] flex-col bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white">
+    <div className="relative flex min-h-[100dvh] flex-col bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">
       {visual === "success" ? (
         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-emerald-600 px-6 text-center">
-          <CheckCircle2 className="size-20 text-white" aria-hidden="true" />
-          <p className="mt-6 text-3xl font-black leading-tight tracking-tight sm:text-5xl">
+          <CheckCircle2 className="size-16 text-white" aria-hidden="true" />
+          {imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={imageUrl}
+              alt=""
+              className="mt-6 size-28 rounded-2xl object-cover ring-2 ring-white/40"
+            />
+          ) : null}
+          <p className="mt-6 text-3xl font-black leading-tight tracking-tight sm:text-4xl">
             {title}
           </p>
+          {subtitle ? (
+            <p className="mt-3 max-w-md text-base text-emerald-50/90">{subtitle}</p>
+          ) : null}
         </div>
       ) : null}
 
       {visual === "error" ? (
         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-red-700 px-6 text-center">
-          <XCircle className="size-20 text-white" aria-hidden="true" />
+          <XCircle className="size-16 text-white" aria-hidden="true" />
+          {imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={imageUrl}
+              alt=""
+              className="mt-6 size-24 rounded-2xl object-cover opacity-80"
+            />
+          ) : null}
           <p className="mt-6 text-3xl font-black leading-tight tracking-tight sm:text-4xl">
             {title}
           </p>
           {subtitle ? (
-            <p className="mt-4 text-2xl font-bold tracking-wide text-zinc-900 dark:text-white/95 sm:text-3xl">
+            <p className="mt-4 text-2xl font-bold tracking-wide text-white/95">
               {subtitle}
             </p>
           ) : null}
@@ -170,13 +191,16 @@ export function BarScanner() {
 
       <header className="flex items-center justify-between gap-3 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-amber-400/90">
-            Barra
+          <p className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.2em] text-violet-400/90">
+            <ShoppingBag className="size-3.5" aria-hidden="true" />
+            Tienda
           </p>
-          <h1 className="text-xl font-black tracking-tight">Escáner de consumiciones</h1>
+          <h1 className="text-xl font-black tracking-tight">
+            Escáner de Tienda / Canjes
+          </h1>
         </div>
         {isPending ? (
-          <LoaderCircle className="size-5 animate-spin text-amber-300" />
+          <LoaderCircle className="size-5 animate-spin text-violet-300" />
         ) : (
           <ScanLine className="size-5 text-zinc-500" aria-hidden="true" />
         )}
@@ -187,7 +211,9 @@ export function BarScanner() {
           <div className="grid h-full min-h-[55dvh] place-items-center px-6 text-center">
             <div>
               <CameraOff className="mx-auto size-10 text-zinc-500" />
-              <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">{cameraError}</p>
+              <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
+                {cameraError}
+              </p>
             </div>
           </div>
         ) : (
@@ -213,7 +239,7 @@ export function BarScanner() {
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <div
             className={cn(
-              "size-56 rounded-3xl border-2 border-amber-400/70 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]",
+              "size-56 rounded-3xl border-2 border-violet-400/70 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]",
               visual !== "idle" && "opacity-40",
             )}
           />
@@ -221,8 +247,11 @@ export function BarScanner() {
       </div>
 
       <p className="px-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4 text-center text-xs text-zinc-500">
-        Apuntá al QR de barra del cliente. Validación atómica en menos de 2s.
+        Apuntá al QR de canje del cliente. Validación atómica en menos de 2s.
       </p>
     </div>
   )
 }
+
+/** @deprecated Prefer StoreScanner */
+export const BarScanner = StoreScanner

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 
 import { createPaymentPreference } from "@/app/actions/payments"
+import { resolveCheckoutExpiresAt } from "@/lib/checkout-hold"
 import { MAX_TICKETS_PER_PURCHASE } from "@/lib/checkout-limits"
 import {
   validateCheckoutBuyer,
@@ -34,6 +35,8 @@ export type CheckoutResult =
       tickets: ReservedTicket[]
       orderId: string
       initPoint: string
+      /** ISO fin del hold (8m). Fuente de verdad UX del countdown. */
+      expiresAt: string
       reservedUntil?: string
     }
   | {
@@ -274,12 +277,14 @@ export async function startCheckoutWithPayment(
     return { success: false, error: "auth_required" }
   }
 
+  // Progressive profiling: DNI + teléfono permanentes en el perfil.
+  // email no está en column grant → no lo tocamos acá.
   await supabase
     .from("profiles")
     .update({
       full_name: buyer.buyerName,
       dni: buyer.buyerDni,
-      email: buyer.buyerEmail,
+      phone: buyer.buyerPhone || null,
     })
     .eq("id", user.id)
 
@@ -505,14 +510,16 @@ export async function startCheckoutWithPayment(
     revalidatePath("/superadmin")
     revalidatePath("/super-admin")
 
+    const reservedUntil = rows[0]?.reserved_until
+    const expiresAt = resolveCheckoutExpiresAt(reservedUntil).toISOString()
+
     return {
       success: true,
       tickets: reservedTickets,
       orderId,
       initPoint,
-      ...(rows[0]?.reserved_until
-        ? { reservedUntil: rows[0].reserved_until }
-        : {}),
+      expiresAt,
+      ...(reservedUntil ? { reservedUntil } : {}),
     }
   } catch (error) {
     if (pendingOrderId) {
@@ -571,6 +578,7 @@ export async function createCheckoutPreference(
       buyerName: input.buyerName ?? "",
       buyerDni: input.buyerDni ?? "",
       buyerEmail: input.buyerEmail ?? "",
+      buyerPhone: "",
     },
   )
 }

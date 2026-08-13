@@ -3,7 +3,6 @@
 import {
   CalendarDays,
   Armchair,
-  GlassWater,
   LoaderCircle,
   Minus,
   Plus,
@@ -14,11 +13,11 @@ import { useEffect, useMemo, useState, useTransition } from "react"
 import { toast } from "sonner"
 
 import { startCheckoutWithPayment, reserveSeatAtomic } from "@/app/actions/checkout"
-import type { EventItem } from "@/app/actions/addons"
 import type { ValidatedPromo } from "@/app/actions/coupons"
 import { validatePromoCode } from "@/app/actions/coupons"
 import { UniversalSeatSelectionFlow } from "@/components/b2c/universal-seat-selection"
 import { CheckoutBuyerFields } from "@/components/public/checkout-buyer-fields"
+import { CheckoutCountdown } from "@/components/public/checkout-countdown"
 import { PromoCodeInput } from "@/components/public/promo-code-input"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -66,7 +65,6 @@ type TicketSelectorProps = {
   initialBuyer?: Partial<CheckoutBuyerInfo> | null
   tiers: TicketSelectorTier[]
   scheduleDays?: ScheduleDay[]
-  barItems?: EventItem[]
   /** @deprecated All-In pricing absorbs the fee; ignored. */
   serviceChargeRate?: number
   /** Código RRPP desde ?ref= — nunca se envía promoter_id al servidor */
@@ -80,8 +78,6 @@ type TicketSelectorProps = {
   pixels?: EventPixelConfig
 }
 
-const MAX_ADDONS_PER_ITEM = 10
-
 function roundMoney(value: number): number {
   return Math.round(value * 100) / 100
 }
@@ -93,7 +89,6 @@ export function TicketSelector({
   initialBuyer = null,
   tiers,
   scheduleDays = [],
-  barItems = [],
   referralCode = null,
   seatingUnits = [],
   seatingBackgroundUrl = null,
@@ -111,18 +106,36 @@ export function TicketSelector({
     buyerName: initialBuyer?.buyerName ?? "",
     buyerDni: initialBuyer?.buyerDni ?? "",
     buyerEmail: initialBuyer?.buyerEmail ?? "",
+    buyerPhone: initialBuyer?.buyerPhone ?? "",
   })
   const [quantities, setQuantities] = useState<Record<string, number>>(() =>
     Object.fromEntries(tiers.map((tier) => [tier.id, 0])),
   )
-  const [addonQuantities, setAddonQuantities] = useState<Record<string, number>>(
-    () => Object.fromEntries(barItems.map((item) => [item.id, 0])),
-  )
   const [appliedPromo, setAppliedPromo] = useState<ValidatedPromo | null>(null)
+  const [paymentHold, setPaymentHold] = useState<{
+    initPoint: string
+    expiresAt: string
+  } | null>(null)
   const [storedRef] = useState<string | null>(() => {
     if (typeof window === "undefined") return null
     return getStoredReferralCode()
   })
+
+  function enterPaymentHold(result: {
+    initPoint: string
+    expiresAt: string
+  }) {
+    if (result.initPoint.startsWith("/")) {
+      window.location.href = result.initPoint
+      return
+    }
+    setShowSeatFlow(false)
+    setPaymentHold({
+      initPoint: result.initPoint,
+      expiresAt: result.expiresAt,
+    })
+    toast.success("Entrada reservada. Completá el pago a tiempo.")
+  }
 
   const resolvedRef = referralCode?.trim() || storedRef
   const isMultiDay = scheduleDays.length > 1
@@ -177,19 +190,6 @@ export function TicketSelector({
     persistReferralCode(clean)
   }, [referralCode])
 
-  const barItemsKey = barItems.map((item) => item.id).join("|")
-  const [prevBarItemsKey, setPrevBarItemsKey] = useState(barItemsKey)
-  if (barItemsKey !== prevBarItemsKey) {
-    setPrevBarItemsKey(barItemsKey)
-    setAddonQuantities((current) => {
-      const next: Record<string, number> = {}
-      for (const item of barItems) {
-        next[item.id] = current[item.id] ?? 0
-      }
-      return next
-    })
-  }
-
   const visibleTiers = useMemo(() => {
     if (!isMultiDay || dayFilter === "all") return tiers
     if (dayFilter === "passes") {
@@ -232,32 +232,12 @@ export function TicketSelector({
     [quantities, tiers],
   )
 
-  const addonSelection = useMemo(
-    () =>
-      barItems
-        .map((item) => {
-          const quantity = addonQuantities[item.id] ?? 0
-          return {
-            ...item,
-            quantity,
-            subtotal: quantity * item.price,
-            maxSelectable: Math.min(MAX_ADDONS_PER_ITEM, Math.max(0, item.stock)),
-          }
-        })
-        .filter((item) => item.quantity > 0),
-    [addonQuantities, barItems],
-  )
-
   const totalTickets = selection.reduce((sum, tier) => sum + tier.quantity, 0)
-  const totalAddons = addonSelection.reduce((sum, item) => sum + item.quantity, 0)
   const ticketsSubtotal = roundMoney(
     selection.reduce((sum, tier) => sum + tier.subtotal, 0),
   )
-  const addonsSubtotal = roundMoney(
-    addonSelection.reduce((sum, item) => sum + item.subtotal, 0),
-  )
   // All-In: tier.price already includes Tokepass fee.
-  const cartSubtotal = roundMoney(ticketsSubtotal + addonsSubtotal)
+  const cartSubtotal = ticketsSubtotal
   const discountAmount = appliedPromo
     ? Math.min(appliedPromo.discountAmount, cartSubtotal)
     : 0
@@ -295,13 +275,6 @@ export function TicketSelector({
     setQuantities((current) => ({
       ...current,
       [tierId]: Math.min(Math.max(0, next), max),
-    }))
-  }
-
-  function updateAddonQuantity(itemId: string, next: number, max: number) {
-    setAddonQuantities((current) => ({
-      ...current,
-      [itemId]: Math.min(Math.max(0, next), max),
     }))
   }
 
@@ -344,10 +317,7 @@ export function TicketSelector({
           quantity: tier.quantity,
         })),
         resolvedRef,
-        addonSelection.map((item) => ({
-          itemId: item.id,
-          quantity: item.quantity,
-        })),
+        [],
         buyerCheck.buyer,
         appliedPromo?.promoCodeId ?? null,
       )
@@ -359,7 +329,7 @@ export function TicketSelector({
         }
 
         if (result.error === "out_of_stock") {
-          toast.error("Stock insuficiente (entradas o consumiciones)")
+          toast.error("Stock insuficiente de entradas")
           router.refresh()
           return
         }
@@ -371,8 +341,7 @@ export function TicketSelector({
         return
       }
 
-      toast.success("Redirigiendo a Mercado Pago…")
-      window.location.href = result.initPoint
+      enterPaymentHold(result)
     })
   }
 
@@ -436,7 +405,7 @@ export function TicketSelector({
             return
           }
           if (result.error === "out_of_stock") {
-            toast.error("Stock insuficiente")
+            toast.error("Stock insuficiente de entradas")
             router.refresh()
             return
           }
@@ -446,8 +415,7 @@ export function TicketSelector({
           return
         }
 
-        toast.success("Redirigiendo a Mercado Pago…")
-        window.location.href = result.initPoint
+        enterPaymentHold(result)
       })
       return
     }
@@ -519,9 +487,41 @@ export function TicketSelector({
         return
       }
 
-      toast.success("Ubicación reservada durante 8 minutos.")
-      window.location.href = result.initPoint
+      enterPaymentHold(result)
     })
+  }
+
+  if (paymentHold) {
+    return (
+      <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 shadow-2xl shadow-black/40 sm:p-6">
+        <CheckoutCountdown
+          expiresAt={paymentHold.expiresAt}
+          redirectTo={`/events/${eventId}`}
+          onExpired={() => setPaymentHold(null)}
+        />
+        <p className="mt-4 text-sm text-zinc-400">
+          Tu cupo está bloqueado. Pagá antes de que venza el reloj o el stock
+          vuelve a estar disponible.
+        </p>
+        <a
+          href={paymentHold.initPoint}
+          className="mt-5 inline-flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-[#009EE3] px-5 text-sm font-black text-white transition hover:bg-[#08A8EE] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+        >
+          Ir a pagar con Mercado Pago
+        </a>
+        <Button
+          type="button"
+          variant="ghost"
+          className="mt-3 w-full text-zinc-400 hover:text-white"
+          onClick={() => {
+            setPaymentHold(null)
+            router.refresh()
+          }}
+        >
+          Cancelar y elegir de nuevo
+        </Button>
+      </div>
+    )
   }
 
   if (showSeatFlow && universalPayload) {
@@ -753,111 +753,6 @@ export function TicketSelector({
         })}
       </div>
 
-      {barItems.length > 0 ? (
-        <>
-          <Separator className="my-5 bg-zinc-800" />
-          <div className="flex items-start gap-3">
-            <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/30">
-              <GlassWater className="size-4" aria-hidden="true" />
-            </span>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-400/90">
-                Barra
-              </p>
-              <h3 className="mt-1 text-lg font-bold tracking-tight text-white">
-                Añade tus Consumiciones con Descuento
-              </h3>
-              <p className="mt-1 text-xs leading-5 text-zinc-500">
-                Opcional. Se suman a tu orden y las canjeás en barra con QR
-                vivo.
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-4 space-y-3">
-            {barItems.map((item) => {
-              const quantity = addonQuantities[item.id] ?? 0
-              const maxSelectable = Math.min(
-                MAX_ADDONS_PER_ITEM,
-                Math.max(0, item.stock),
-              )
-              const soldOut = maxSelectable <= 0
-
-              return (
-                <div
-                  key={item.id}
-                  className={cn(
-                    "rounded-2xl border px-4 py-4 transition",
-                    quantity > 0
-                      ? "border-amber-500/40 bg-amber-500/10"
-                      : "border-zinc-800 bg-zinc-950/60",
-                    soldOut && "opacity-60",
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-semibold text-white">{item.name}</p>
-                      {item.description ? (
-                        <p className="mt-1 text-xs text-zinc-400">
-                          {item.description}
-                        </p>
-                      ) : null}
-                      <p className="mt-1 text-xs text-zinc-500">
-                        {soldOut
-                          ? "Agotado"
-                          : `${item.stock} en stock`}
-                      </p>
-                    </div>
-                    <p className="shrink-0 text-lg font-bold tracking-tight text-white">
-                      {formatCurrency(item.price)}
-                    </p>
-                  </div>
-
-                  <div className="mt-4 flex items-center justify-between gap-3">
-                    <span className="text-xs font-medium text-zinc-500">
-                      Cantidad
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon-sm"
-                        disabled={soldOut || quantity === 0 || isPending}
-                        onClick={() =>
-                          updateAddonQuantity(item.id, quantity - 1, maxSelectable)
-                        }
-                        aria-label={`Quitar ${item.name}`}
-                        className="rounded-full border-zinc-700 bg-zinc-950 text-zinc-200 hover:bg-zinc-900"
-                      >
-                        <Minus />
-                      </Button>
-                      <span className="w-8 text-center text-sm font-semibold tabular-nums text-white">
-                        {quantity}
-                      </span>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon-sm"
-                        disabled={
-                          soldOut || quantity >= maxSelectable || isPending
-                        }
-                        onClick={() =>
-                          updateAddonQuantity(item.id, quantity + 1, maxSelectable)
-                        }
-                        aria-label={`Agregar ${item.name}`}
-                        className="rounded-full border-zinc-700 bg-zinc-950 text-zinc-200 hover:bg-zinc-900"
-                      >
-                        <Plus />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </>
-      ) : null}
-
       <Separator className="my-5 bg-zinc-800" />
 
       <CheckoutBuyerFields
@@ -895,16 +790,6 @@ export function TicketSelector({
               {formatCurrency(ticketsSubtotal)}
             </span>
           </div>
-          {totalAddons > 0 ? (
-            <div className="flex items-center justify-between text-zinc-400">
-              <span>
-                Consumiciones · {totalAddons}
-              </span>
-              <span className="tabular-nums text-zinc-200">
-                {formatCurrency(addonsSubtotal)}
-              </span>
-            </div>
-          ) : null}
           {appliedPromo && discountAmount > 0 ? (
             <div className="flex items-center justify-between text-emerald-400">
               <span>

@@ -89,7 +89,7 @@ export function OrganizerAuthForm({
         <CardDescription className="mx-auto max-w-sm leading-6 text-zinc-500">
           {mode === "login"
             ? "Gestioná eventos, ventas, accesos y equipos desde un solo lugar."
-            : "Publicá experiencias y administrá toda tu operación con Tokepass."}
+            : "Creá la cuenta y después completá la postulación KYB en Postular productora."}
         </CardDescription>
       </CardHeader>
 
@@ -174,19 +174,27 @@ export function OrganizerAuthForm({
           )}
 
           {state.success && (
-            <p
+            <div
               role="status"
-              className="rounded-xl bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300"
+              className="space-y-2 rounded-xl bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300"
             >
-              {state.success}
-            </p>
+              <p>{state.success}</p>
+              {mode === "register" ? (
+                <Link
+                  href="/postular-productora"
+                  className="inline-flex font-semibold text-emerald-200 underline underline-offset-2 hover:text-white"
+                >
+                  Ir a postular productora
+                </Link>
+              ) : null}
+            </div>
           )}
 
           <SubmitButton mode={mode} />
         </form>
 
         <div className="mt-5 flex items-center justify-center gap-2 text-sm text-zinc-500">
-          {mode === "login" ? "¿Primera vez en Tokepass?" : "¿Ya tienes cuenta?"}
+          {mode === "login" ? "¿Primera vez en Tokepass?" : "¿Ya tenés cuenta?"}
           <Link
             href={
               mode === "login"
@@ -195,7 +203,7 @@ export function OrganizerAuthForm({
             }
             className="font-medium text-violet-400 hover:text-violet-300"
           >
-            {mode === "login" ? "Crear organización" : "Ingresar"}
+            {mode === "login" ? "Crear cuenta" : "Ingresar"}
           </Link>
         </div>
 

@@ -2,12 +2,14 @@ export type CheckoutBuyerInfo = {
   buyerName: string
   buyerDni: string
   buyerEmail: string
+  buyerPhone: string
 }
 
 export type NormalizedCheckoutBuyer = {
   buyerName: string
   buyerDni: string
   buyerEmail: string
+  buyerPhone: string
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -19,10 +21,11 @@ export function normalizeCheckoutBuyer(
   const buyerName = input.buyerName?.trim().replace(/\s+/g, " ") ?? ""
   const buyerDni = (input.buyerDni ?? "").replace(/\D/g, "")
   const buyerEmail = input.buyerEmail?.trim().toLowerCase() ?? ""
+  const buyerPhone = (input.buyerPhone ?? "").replace(/\D/g, "")
 
-  if (!buyerName && !buyerDni && !buyerEmail) return null
+  if (!buyerName && !buyerDni && !buyerEmail && !buyerPhone) return null
 
-  return { buyerName, buyerDni, buyerEmail }
+  return { buyerName, buyerDni, buyerEmail, buyerPhone }
 }
 
 export function validateCheckoutBuyer(
@@ -32,7 +35,7 @@ export function validateCheckoutBuyer(
   if (!buyer) {
     return {
       ok: false,
-      error: "Completá nombre, DNI y email del asistente.",
+      error: "Completá nombre, DNI, teléfono y email del asistente.",
     }
   }
 
@@ -47,6 +50,13 @@ export function validateCheckoutBuyer(
     return {
       ok: false,
       error: "El DNI debe tener entre 7 y 10 dígitos.",
+    }
+  }
+
+  if (buyer.buyerPhone.length < 8 || buyer.buyerPhone.length > 15) {
+    return {
+      ok: false,
+      error: "Ingresá un teléfono / WhatsApp válido.",
     }
   }
 

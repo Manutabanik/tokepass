@@ -111,10 +111,10 @@ export function OrganizerEventsManager({
             Cartelera
           </p>
           <h1 className="mt-2 text-3xl font-black tracking-tight text-zinc-900 dark:text-white">
-            Mis eventos
+            Mis Eventos
           </h1>
           <p className="mt-2 max-w-xl text-sm text-zinc-600 dark:text-zinc-400">
-            Guardá borradores, previsualizá compras de prueba y publicá cuando
+            Creá borradores, previsualizá compras de prueba y publicá cuando
             esté listo.
           </p>
         </div>
@@ -124,7 +124,7 @@ export function OrganizerEventsManager({
           render={<Link href="/admin/events/create" />}
         >
           <Plus className="size-4" aria-hidden="true" />
-          Nuevo evento
+          Nuevo Evento
         </Button>
       </div>
 

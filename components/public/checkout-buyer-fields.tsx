@@ -1,6 +1,6 @@
 "use client"
 
-import { IdCard, Mail, UserRound } from "lucide-react"
+import { IdCard, Mail, Phone, UserRound } from "lucide-react"
 
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -32,7 +32,8 @@ export function CheckoutBuyerFields({
           Datos del asistente
         </p>
         <p className="mt-1 text-xs leading-5 text-zinc-500">
-          Requeridos para el pago y para buscar la entrada por DNI en puerta.
+          Se guardan en tu perfil para la próxima compra y para buscarte por DNI
+          en puerta.
         </p>
       </div>
 
@@ -80,6 +81,33 @@ export function CheckoutBuyerFields({
             })
           }
           placeholder="Solo números"
+          className="h-11 rounded-xl border-zinc-700 bg-zinc-900 text-white placeholder:text-zinc-600"
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label
+          htmlFor="buyer-phone"
+          className="inline-flex items-center gap-1.5 text-zinc-300"
+        >
+          <Phone className="size-3.5" aria-hidden="true" />
+          Teléfono / WhatsApp
+        </Label>
+        <Input
+          id="buyer-phone"
+          name="buyerPhone"
+          type="tel"
+          inputMode="tel"
+          autoComplete="tel"
+          disabled={disabled}
+          value={value.buyerPhone}
+          onChange={(event) =>
+            onChange({
+              ...value,
+              buyerPhone: event.target.value.replace(/\D/g, "").slice(0, 15),
+            })
+          }
+          placeholder="Ej. 1123456789"
           className="h-11 rounded-xl border-zinc-700 bg-zinc-900 text-white placeholder:text-zinc-600"
         />
       </div>

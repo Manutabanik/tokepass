@@ -256,7 +256,7 @@ export async function signUpOrganizer(
         email: credentials.email,
         full_name: fullName,
         role: "customer",
-        organizer_approval_status: "pending",
+        organizer_approval_status: "none",
       } as never,
       { onConflict: "id" },
     )
@@ -291,7 +291,7 @@ export async function signUpOrganizer(
   return {
     error: null,
     success:
-      "Solicitud enviada. Tu cuenta queda pendiente de aprobación antes de acceder a Tu Panel.",
+      "Cuenta creada. Completá la postulación KYB en /postular-productora para que validemos tu productora.",
   }
 }
 

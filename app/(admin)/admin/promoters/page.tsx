@@ -112,9 +112,11 @@ export default async function AdminPromotersPage() {
             Equipo comercial
           </CardTitle>
           <CardDescription>
-            GMV referido: {formatCurrency(totalRevenue)}. Las comisiones se
-            estiman sobre órdenes{" "}
-            <span className="text-emerald-600 dark:text-emerald-300">paid</span>
+            Ventas traídas: {formatCurrency(totalRevenue)}. Las comisiones se
+            estiman sobre compras ya{" "}
+            <span className="text-emerald-600 dark:text-emerald-300">
+              pagadas
+            </span>
             .
           </CardDescription>
         </CardHeader>

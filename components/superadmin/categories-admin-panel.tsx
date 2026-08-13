@@ -127,7 +127,8 @@ export function CategoriesAdminPanel({
               {editingId ? "Editar categoría" : "Nueva categoría"}
             </h2>
             <p className="mt-1 text-xs text-zinc-500">
-              Nombre, slug único e icon_name de Lucide (ej. mic2, trophy, theater).
+              Poné un nombre claro, un identificador corto (sin espacios) y el
+              nombre del ícono (por ejemplo mic2, trophy o theater).
             </p>
           </div>
           <span className="grid size-10 place-items-center rounded-xl border border-white/10 bg-black/30 text-zinc-200">
@@ -150,7 +151,7 @@ export function CategoriesAdminPanel({
           </label>
           <label className="space-y-1.5 sm:col-span-1">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
-              Slug
+              Identificador corto
             </span>
             <Input
               value={slug}
@@ -161,7 +162,7 @@ export function CategoriesAdminPanel({
           </label>
           <label className="space-y-1.5 sm:col-span-1">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
-              Icono Lucide
+              Nombre del ícono
             </span>
             <Input
               value={iconName}

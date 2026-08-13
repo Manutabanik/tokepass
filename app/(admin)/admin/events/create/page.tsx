@@ -66,7 +66,7 @@ export default async function CreateEventPage({
         className="inline-flex w-fit items-center gap-2 text-sm text-zinc-500 transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
-        {impersonation ? "Volver a Platform OS" : "Volver a Mis Eventos"}
+        {impersonation ? "Volver al Panel de Control" : "Volver a Mis Eventos"}
       </Link>
 
       {impersonation && (
@@ -77,11 +77,10 @@ export default async function CreateEventPage({
           <Sparkles className="mt-0.5 size-4 shrink-0 text-amber-300" />
           <div>
             <p className="text-sm font-semibold text-amber-200">
-              Modo Dios: Creando evento a nombre de {impersonation.name}
+              Estás creando un evento a nombre de {impersonation.name}
             </p>
             <p className="mt-1 text-xs text-amber-200/70">
-              White-glove service. El evento quedará bajo el organizador
-              seleccionado, no bajo tu cuenta.
+              El evento queda bajo esa productora, no bajo tu cuenta.
             </p>
           </div>
         </div>
@@ -89,14 +88,14 @@ export default async function CreateEventPage({
 
       <header>
         <p className="mb-3 font-mono text-xs uppercase tracking-[0.18em] text-emerald-400">
-          Event Builder
+          Nuevo Evento
         </p>
         <h1 className="mb-2 text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-white sm:text-4xl">
-          Diseña una experiencia inolvidable
+          Creá tu evento
         </h1>
         <p className="max-w-2xl text-sm leading-relaxed text-zinc-600 dark:text-zinc-400 sm:text-base">
-          Configura la operación completa en cuatro pasos. Podrás guardar el
-          evento como borrador antes de publicarlo.
+          Completá los datos en tres pasos. Guardá el borrador y potenciale
+          barra, galería y difusión desde el panel del evento.
         </p>
       </header>
 

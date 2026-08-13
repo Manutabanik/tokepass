@@ -468,16 +468,13 @@ export async function getOrganizationDetails(
     .maybeSingle()
 
   if (profileError) throw new Error(profileError.message)
-  const isOrganizerProfile =
-    profile?.role !== "super_admin" &&
-    (profile?.role === "admin" ||
-      profile?.organizer_approval_status !== "none")
-  if (!profile || !isOrganizerProfile) return null
+  // SuperAdmin puede abrir cualquier perfil linkeado; no devolvemos 404 por rol.
+  if (!profile) return null
 
   const [
-    { data: metricRows, error: metricsError },
-    { data: pendingSettlements, error: settlementsError },
-    { data: mpConnect, error: mpConnectError },
+    metricsResult,
+    settlementsResult,
+    mpConnectResult,
   ] = await Promise.all([
     admin.rpc("get_organizer_governance_metrics", {
       p_organizer_id: profile.id,
@@ -497,17 +494,15 @@ export async function getOrganizationDetails(
       .maybeSingle(),
   ])
 
-  if (metricsError) throw new Error(metricsError.message)
-  if (settlementsError) throw new Error(settlementsError.message)
-  if (mpConnectError) throw new Error(mpConnectError.message)
-
-  const metrics = metricRows?.[0]
-  const settlementRows = pendingSettlements ?? []
+  // No tumbar la página si un RPC auxiliar falta: devolvemos ceros.
+  const metrics = metricsResult.data?.[0]
+  const settlementRows = settlementsResult.data ?? []
+  const mpConnect = mpConnectResult.data
 
   return {
     profile: {
       id: profile.id,
-      name: profile.full_name?.trim() || "Sin nombre",
+      name: profile.full_name?.trim() || profile.email || "Sin nombre",
       email: profile.email,
       status: profile.organizer_approval_status,
       serviceChargeRate: Number(profile.service_charge_rate ?? 0.15),

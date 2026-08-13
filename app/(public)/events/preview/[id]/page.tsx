@@ -1,7 +1,6 @@
 import type { Metadata } from "next"
 import { notFound, redirect } from "next/navigation"
 
-import { getEventItems } from "@/app/actions/addons"
 import { getPreviewEventDetails } from "@/app/actions/public-events"
 import { EventPreviewBanner } from "@/components/public/event-preview-banner"
 import { EventStorefront } from "@/components/public/event-storefront"
@@ -45,16 +44,9 @@ export default async function EventPreviewPage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, dni, email")
+    .select("full_name, dni, email, phone")
     .eq("id", user.id)
     .maybeSingle()
-
-  let barItems: Awaited<ReturnType<typeof getEventItems>> = []
-  try {
-    barItems = await getEventItems(event.id)
-  } catch {
-    barItems = []
-  }
 
   return (
     <div>
@@ -70,8 +62,8 @@ export default async function EventPreviewPage({
           buyerName: profile?.full_name ?? "",
           buyerDni: profile?.dni ?? "",
           buyerEmail: profile?.email ?? user.email ?? "",
+          buyerPhone: profile?.phone ?? "",
         }}
-        barItems={barItems}
       />
     </div>
   )

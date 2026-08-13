@@ -4,7 +4,7 @@ import { getOrganizerEvents } from "@/app/actions/events"
 import { OrganizerEventsManager } from "@/components/admin/organizer-events-manager"
 
 export const metadata: Metadata = {
-  title: "Mis eventos",
+  title: "Mis Eventos",
   description: "Administrá tu cartelera y destacá eventos con Tokepass Boost.",
 }
 

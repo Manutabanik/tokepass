@@ -76,26 +76,26 @@ export function PlatformOrdersLedger({
 }) {
   const kpis = [
     {
-      label: "Total Bruto",
+      label: "Total cobrado",
       value: formatCurrency(totals.gross),
-      helper: `${totals.paidCount} órdenes pagadas en filtro`,
+      helper: `${totals.paidCount} compras pagadas con estos filtros`,
       icon: CircleDollarSign,
       accent: "text-white",
       wrap: "bg-white/[0.04] ring-white/10",
     },
     {
-      label: "Comisión Tokepass",
+      label: "Comisión de la ticketera",
       value: formatCurrency(totals.platformFee),
-      helper: "Tu ganancia del filtro activo",
+      helper: "Lo que se queda Tokepass con estos filtros",
       icon: Sparkles,
       accent: "text-emerald-300",
       wrap: "bg-emerald-500/10 ring-emerald-400/25",
       featured: true,
     },
     {
-      label: "Total a Liquidar",
+      label: "A liquidar a productoras",
       value: formatCurrency(totals.organizerNet),
-      helper: "Neto acumulado a productoras",
+      helper: "Plata que les corresponde a las productoras",
       icon: Wallet,
       accent: "text-zinc-300",
       wrap: "bg-zinc-500/10 ring-zinc-400/20",
@@ -143,7 +143,7 @@ export function PlatformOrdersLedger({
         <CardHeader className="border-b border-white/8 px-5 py-5 sm:px-6">
           <CardTitle className="flex items-center gap-2 text-base text-white">
             <Filter className="size-4 text-sky-400" />
-            Filtros del ledger
+            Filtros del listado
           </CardTitle>
           <form
             method="get"
@@ -238,7 +238,7 @@ export function PlatformOrdersLedger({
                       Monto bruto
                     </TableHead>
                     <TableHead className="text-right text-zinc-600">
-                      Comisión Tokepass
+                      Comisión de la ticketera
                     </TableHead>
                     <TableHead className="text-right text-zinc-600">
                       Neto productora
@@ -305,7 +305,7 @@ export function PlatformOrdersLedger({
               <div className="grid gap-3 border-t border-white/8 bg-black/20 px-5 py-4 sm:grid-cols-3 sm:px-6">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.14em] text-zinc-600">
-                    Pie · Total bruto
+                    Total cobrado
                   </p>
                   <p className="mt-1 font-mono text-lg font-bold text-white">
                     {formatCurrency(totals.gross)}
@@ -313,7 +313,7 @@ export function PlatformOrdersLedger({
                 </div>
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.14em] text-zinc-600">
-                    Pie · Comisión Tokepass
+                    Comisión de la ticketera
                   </p>
                   <p className="mt-1 font-mono text-lg font-bold text-emerald-300">
                     {formatCurrency(totals.platformFee)}
@@ -321,7 +321,7 @@ export function PlatformOrdersLedger({
                 </div>
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.14em] text-zinc-600">
-                    Pie · Total a liquidar
+                    A liquidar
                   </p>
                   <p className="mt-1 font-mono text-lg font-bold text-zinc-300">
                     {formatCurrency(totals.organizerNet)}
@@ -336,7 +336,7 @@ export function PlatformOrdersLedger({
                   <Receipt className="size-5" aria-hidden="true" />
                 </span>
                 <p className="mt-4 text-sm text-zinc-500">
-                  No hay órdenes para el filtro seleccionado.
+                  No hay compras para el filtro seleccionado.
                 </p>
               </div>
             </div>

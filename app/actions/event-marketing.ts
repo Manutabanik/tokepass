@@ -198,7 +198,22 @@ export async function getPurchaseAnalyticsForOrder(
     .eq("order_id", clean)
 
   const ticketRows = tickets ?? []
-  const eventId = ticketRows[0]?.event_id
+  let eventId = ticketRows[0]?.event_id ?? ""
+
+  if (!eventId) {
+    const { data: storeLink } = await supabase
+      .from("item_redemptions")
+      .select("event_items(event_id)")
+      .eq("order_id", clean)
+      .limit(1)
+      .maybeSingle()
+
+    const linked = storeLink as unknown as {
+      event_items: { event_id: string } | null
+    } | null
+    eventId = linked?.event_items?.event_id ?? ""
+  }
+
   if (!eventId) {
     return {
       pixels: emptyPixelConfig(),

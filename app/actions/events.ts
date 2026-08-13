@@ -16,7 +16,10 @@ import {
   type EventFeeConfig,
 } from "@/lib/pricing/event-fees"
 import {
+  AGE_RESTRICTION_VALUES,
+  MAX_EVENT_FLYER_BYTES,
   eventFormSchema,
+  type AgeRestriction,
   type EventFormValues,
 } from "@/lib/validations/event-form"
 import type { Database, Event, Json, Venue } from "@/types/database"
@@ -52,21 +55,6 @@ async function requireAuthenticatedUser() {
   }
 
   return { supabase, user }
-}
-
-function requiredText(formData: FormData, field: string, label: string) {
-  const value = formData.get(field)
-
-  if (typeof value !== "string" || !value.trim()) {
-    throw new Error(`${label} es obligatorio.`)
-  }
-
-  return value.trim()
-}
-
-function optionalText(formData: FormData, field: string) {
-  const value = formData.get(field)
-  return typeof value === "string" && value.trim() ? value.trim() : null
 }
 
 export async function getOrganizerEvents(): Promise<OrganizerEvent[]> {
@@ -110,51 +98,18 @@ export async function getOrganizerEvents(): Promise<OrganizerEvent[]> {
   }))
 }
 
-export async function createEvent(formData: FormData): Promise<Event> {
-  const { supabase, user } = await requireAuthenticatedUser()
-  const title = requiredText(formData, "title", "El título")
-  const location = requiredText(formData, "location", "La ubicación")
-  const dateValue = requiredText(formData, "date", "La fecha")
-  const parsedDate = new Date(dateValue)
-
-  if (Number.isNaN(parsedDate.getTime())) {
-    throw new Error("La fecha del evento no es válida.")
-  }
-
-  const { data, error } = await supabase
-    .from("events")
-    .insert({
-      organizer_id: user.id,
-      title,
-      description: optionalText(formData, "description"),
-      date: parsedDate.toISOString(),
-      location,
-      image_url: optionalText(formData, "imageUrl"),
-      venue_id: optionalText(formData, "venueId"),
-      status: "draft",
-    })
-    .select("*")
-    .single()
-
-  if (error) {
-    throw new Error(`No se pudo crear el evento: ${error.message}`)
-  }
-
-  revalidatePath("/admin")
-  revalidatePath("/admin/events")
-
-  return data
-}
-
 /** JSON contract expected by the atomic event + seating RPC wrappers. */
 export type CreateCompleteEventRpcPayload = {
   title: string
   description: string
   date: string
+  ends_at: string | null
   location: string
   image_url: string | null
   flyer_url: string | null
   visibility: "public" | "private" | "guest_list_only"
+  category_id: string
+  age_restriction: AgeRestriction
   schedule_days: Array<{
     id: string
     title: string
@@ -303,14 +258,24 @@ function mapEventFormToRpcPayload(
     ? scheduleDays[0]?.start_time ?? new Date().toISOString()
     : new Date(data.basics.date).toISOString()
 
+  const endsAt =
+    !data.basics.isMultiDay && data.basics.endDate?.trim()
+      ? new Date(data.basics.endDate).toISOString()
+      : data.basics.isMultiDay
+        ? scheduleDays[scheduleDays.length - 1]?.end_time ?? null
+        : null
+
   return {
     title: data.basics.title,
     description: data.basics.description,
     date: anchorDate,
+    ends_at: endsAt,
     location,
     image_url: flyerUrl,
     flyer_url: flyerUrl,
     visibility: data.basics.visibility,
+    category_id: data.basics.categoryId,
+    age_restriction: data.basics.ageRestriction,
     schedule_days: scheduleDays,
     venue_id:
       data.venue.mode === "existing" ? data.venue.existingVenueId ?? null : null,
@@ -354,8 +319,16 @@ function mapEventFormToRpcPayload(
       }
     }),
     rrpp_commission: null,
-    addons_enabled: data.growth.isAddonsEnabled,
+    addons_enabled: false,
   }
+}
+
+function parseAgeRestriction(raw: unknown): AgeRestriction {
+  const value = String(raw ?? "").trim()
+  if ((AGE_RESTRICTION_VALUES as readonly string[]).includes(value)) {
+    return value as AgeRestriction
+  }
+  return "atp"
 }
 
 const ALLOWED_FLYER_TYPES = new Set([
@@ -364,7 +337,7 @@ const ALLOWED_FLYER_TYPES = new Set([
   "image/png",
   "image/webp",
 ])
-const MAX_FLYER_BYTES = 5 * 1024 * 1024
+const MAX_FLYER_BYTES = MAX_EVENT_FLYER_BYTES
 
 function sanitizeFileName(name: string): string {
   return name
@@ -489,7 +462,7 @@ export async function getEventForEditing(
     const { data: event, error: eventError } = await supabase
       .from("events")
       .select(
-        "id, organizer_id, title, description, date, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id",
+        "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction",
       )
       .eq("id", eventId)
       .maybeSingle()
@@ -570,12 +543,16 @@ export async function getEventForEditing(
         basics: {
           title: event.title,
           date: toLocalDateTimeInput(event.date),
+          endDate: event.ends_at
+            ? toLocalDateTimeInput(event.ends_at)
+            : "",
           description: event.description ?? "",
           flyerName: event.flyer_url || event.image_url ? "Flyer actual" : null,
           visibility,
           isMultiDay,
           scheduleDays,
           categoryId: event.category_id ?? "",
+          ageRestriction: parseAgeRestriction(event.age_restriction),
         },
         venue: {
           mode: event.venue_id ? "existing" : "new",
@@ -617,9 +594,6 @@ export async function getEventForEditing(
           seatingSectorId: tier.seating_sector_id ?? null,
           capacityPerUnit: Math.max(1, Number(tier.capacity_per_unit ?? 1) || 1),
         })),
-        growth: {
-          isAddonsEnabled: false,
-        },
       },
     }
   } catch (error) {
@@ -800,22 +774,9 @@ export async function createCompleteEvent(
     }
   }
 
-  const categoryId = parsed.data.basics.categoryId
-  if (categoryId) {
-    const { error: categoryError } = await rpcClient
-      .from("events")
-      .update({ category_id: categoryId })
-      .eq("id", eventId)
-    if (categoryError) {
-      return {
-        success: false,
-        error: `Evento creado, pero no se pudo asignar la categoría: ${categoryError.message}`,
-      }
-    }
-  }
-
   revalidatePath("/admin")
   revalidatePath("/admin/events")
+  revalidatePath(`/admin/events/${eventId}`)
   revalidatePath("/events")
   revalidatePath("/")
   revalidatePath("/superadmin")
@@ -962,19 +923,6 @@ export async function updateCompleteEvent(
         /^update_complete_event_with_seating_tx:\s*/i,
         "",
       ),
-    }
-  }
-
-  const categoryId = parsed.data.basics.categoryId
-  const { error: categoryError } = await mutationClient
-    .from("events")
-    .update({ category_id: categoryId || null })
-    .eq("id", eventId)
-
-  if (categoryError) {
-    return {
-      success: false,
-      error: `Evento actualizado, pero no se pudo guardar la categoría: ${categoryError.message}`,
     }
   }
 
@@ -1384,6 +1332,10 @@ export type UpdateEventCommercialSettingsResult =
  * Platform owner only (super_admin / PLATFORM_OWNER): fees, free-ticket cap,
  * Tokepass sponsorship. Recomputes tier base_price / platform_fee from public
  * All-In price.
+ *
+ * Auth: misma fuente que `app/(superadmin)/layout.tsx` → `profiles.role === "super_admin"`.
+ * Persistencia: service-role (bypass RLS de organizer). El trigger P28/P38 permite
+ * mutar columnas comerciales cuando `auth.role() = 'service_role'`.
  */
 export async function updateEventCommercialSettings(
   eventId: string,
@@ -1399,13 +1351,13 @@ export async function updateEventCommercialSettings(
   }
 
   const { supabase, user } = await requireAuthenticatedUser()
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("role")
     .eq("id", user.id)
     .maybeSingle()
 
-  if (!isPlatformOwnerRole(profile?.role)) {
+  if (profileError || !isPlatformOwnerRole(profile?.role)) {
     return {
       success: false,
       error: "Solo el dueño de la plataforma puede editar estos valores.",

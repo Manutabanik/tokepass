@@ -3,16 +3,16 @@
 import {
   Armchair,
   CheckCircle2,
-  Clock3,
   ListFilter,
   MoveRight,
   Users,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { useEffect, useMemo, useState, useTransition } from "react"
+import { useMemo, useState, useTransition } from "react"
 import { toast } from "sonner"
 
 import { startCheckoutWithPayment } from "@/app/actions/checkout"
+import { CheckoutCountdown } from "@/components/public/checkout-countdown"
 import {
   Dialog,
   DialogContent,
@@ -29,12 +29,6 @@ type SeatingTier = {
   name: string
   price: number
   capacityPerUnit: number
-}
-
-function formatCountdown(totalSeconds: number): string {
-  const minutes = Math.floor(Math.max(0, totalSeconds) / 60)
-  const seconds = Math.max(0, totalSeconds) % 60
-  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
 }
 
 export function SeatingSelector({
@@ -59,9 +53,8 @@ export function SeatingSelector({
   const [selectedId, setSelectedId] = useState("")
   const [checkout, setCheckout] = useState<{
     initPoint: string
-    reservedUntil: string
+    expiresAt: string
   } | null>(null)
-  const [remainingSeconds, setRemainingSeconds] = useState(0)
 
   const selected = units.find((unit) => unit.id === selectedId) ?? null
   const rowGroups = useMemo(() => {
@@ -93,28 +86,6 @@ export function SeatingSelector({
     )
   }, [units])
 
-  useEffect(() => {
-    if (!checkout) return
-    const update = () => {
-      const seconds = Math.max(
-        0,
-        Math.ceil(
-          (new Date(checkout.reservedUntil).getTime() - Date.now()) / 1000,
-        ),
-      )
-      setRemainingSeconds(seconds)
-      if (seconds === 0) {
-        setCheckout(null)
-        setSelectedId("")
-        toast.error("La reserva venció. Elegí otra ubicación.")
-        router.refresh()
-      }
-    }
-    update()
-    const timer = window.setInterval(update, 1000)
-    return () => window.clearInterval(timer)
-  }, [checkout, router])
-
   function beginReservation() {
     if (!selected || pending || checkout) return
 
@@ -143,16 +114,16 @@ export function SeatingSelector({
         return
       }
 
-      if (!result.reservedUntil) {
+      if (result.initPoint.startsWith("/")) {
         window.location.href = result.initPoint
         return
       }
 
       setCheckout({
         initPoint: result.initPoint,
-        reservedUntil: result.reservedUntil,
+        expiresAt: result.expiresAt,
       })
-      toast.success("Ubicación reservada por 8 minutos")
+      toast.success("Ubicación reservada. Completá el pago a tiempo.")
     })
   }
 
@@ -178,10 +149,15 @@ export function SeatingSelector({
         </DialogHeader>
 
         {checkout ? (
-          <div className="flex items-center justify-center gap-2 border-b border-amber-500/20 bg-amber-500/10 px-5 py-3 font-mono text-sm font-bold text-amber-300">
-            <Clock3 className="size-4" aria-hidden="true" />
-            Tu ubicación está reservada por{" "}
-            {formatCountdown(remainingSeconds)}
+          <div className="border-b border-zinc-800 px-5 py-3 sm:px-7">
+            <CheckoutCountdown
+              expiresAt={checkout.expiresAt}
+              redirectTo={`/events/${eventId}`}
+              onExpired={() => {
+                setCheckout(null)
+                setSelectedId("")
+              }}
+            />
           </div>
         ) : null}
 

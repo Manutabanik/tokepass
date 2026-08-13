@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server"
 
+import { GA_CHECKOUT_HOLD_INTERVAL } from "@/lib/checkout-hold"
 import { logger } from "@/lib/logger"
 import { createAdminClient } from "@/lib/supabase/admin"
 
@@ -23,7 +24,9 @@ function authorizeCron(request: NextRequest): boolean {
 }
 
 /**
- * Cancels pending checkout orders older than 30 minutes and restores stock.
+ * Libera stock de checkouts abandonados.
+ * - GA / pending: TTL = GA_CHECKOUT_HOLD_INTERVAL (8m), batch 2500 en RPC.
+ * - Seating: reserved_until (8m) vía expire_seating_orders.
  * Secure with CRON_SECRET (Vercel Cron sends Authorization: Bearer …).
  */
 export async function GET(request: NextRequest) {
@@ -38,7 +41,7 @@ export async function GET(request: NextRequest) {
       { data: seatingData, error: seatingError },
     ] = await Promise.all([
       admin.rpc("expire_abandoned_orders", {
-        p_older_than: "30 minutes",
+        p_older_than: GA_CHECKOUT_HOLD_INTERVAL,
       }),
       admin.rpc("expire_seating_orders"),
     ])
@@ -63,6 +66,7 @@ export async function GET(request: NextRequest) {
       message: "expire_abandoned_orders_ok",
       expiredCount: Number(data ?? 0),
       expiredSeatingCount: Number(seatingData ?? 0),
+      holdInterval: GA_CHECKOUT_HOLD_INTERVAL,
     })
 
     return NextResponse.json({
@@ -70,6 +74,7 @@ export async function GET(request: NextRequest) {
       data: {
         expiredCount: Number(data ?? 0),
         expiredSeatingCount: Number(seatingData ?? 0),
+        holdInterval: GA_CHECKOUT_HOLD_INTERVAL,
       },
     })
   } catch (error) {

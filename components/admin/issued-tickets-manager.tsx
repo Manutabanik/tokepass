@@ -700,11 +700,11 @@ export function IssuedTicketsManager({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <header className="min-w-0">
           <h1 className="text-3xl font-black tracking-tight text-zinc-900 dark:text-white sm:text-4xl">
-            Entradas emitidas y clientes
+            Lista de Compradores
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-600 dark:text-zinc-400 sm:text-base">
-            Buscá compradores, reenviá entradas, transferí titulares o resolvé
-            reclamos con trazabilidad completa.
+            Buscá compradores, reenviá entradas, cambiá el titular o resolvé
+            reclamos. Descargá la lista cuando la necesites.
           </p>
         </header>
         <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
@@ -716,7 +716,7 @@ export function IssuedTicketsManager({
             className="h-11 rounded-xl border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900"
           >
             <Download className="mr-2 h-4 w-4" aria-hidden />
-            {exportPending ? "Exportando…" : "Exportar Audiencia (CSV)"}
+            {exportPending ? "Exportando…" : "Descargar lista (CSV)"}
           </Button>
           <Button
             type="button"

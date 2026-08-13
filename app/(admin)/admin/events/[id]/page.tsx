@@ -1,31 +1,37 @@
 import {
   Activity,
   ArrowLeft,
-  Clapperboard,
+  ArrowRight,
   ClipboardList,
-  GlassWater,
+  ImageIcon,
   Megaphone,
   Pencil,
   QrCode,
+  Share2,
+  ShoppingBag,
   Ticket,
   TicketPercent,
   Users,
+  Wallet,
 } from "lucide-react"
 import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
 
+import { EventCommandHeader } from "@/components/admin/event-command-header"
 import { SponsorshipRequestBanner } from "@/components/admin/sponsorship-request-banner"
-import { Badge } from "@/components/ui/badge"
 import { createClient } from "@/lib/supabase/server"
-import { formatEventDate, formatNumber } from "@/lib/format"
+import { formatCurrency, formatEventDate, formatNumber } from "@/lib/format"
 
 export const metadata: Metadata = {
-  title: "Gestionar evento",
+  title: "Centro de mando del evento",
 }
 
 const actionClass =
-  "group rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/70 p-5 transition hover:border-zinc-300 dark:hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-100 dark:hover:bg-zinc-900"
+  "group rounded-2xl border border-zinc-200 bg-white p-5 transition hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950/70 dark:hover:border-zinc-700 dark:hover:bg-zinc-900"
+
+const dressCardClass =
+  "group flex h-full flex-col rounded-2xl border border-zinc-200 bg-gradient-to-b from-white to-zinc-50 p-5 transition hover:border-emerald-500/40 hover:shadow-[0_12px_40px_rgba(16,185,129,0.08)] dark:border-zinc-800 dark:from-zinc-950/80 dark:to-zinc-950 dark:hover:border-emerald-500/35"
 
 export default async function ManageEventPage({
   params,
@@ -58,7 +64,7 @@ export default async function ManageEventPage({
 
   const { data: tiers } = await supabase
     .from("ticket_tiers")
-    .select("capacity, sold")
+    .select("capacity, sold, price")
     .eq("event_id", id)
 
   const capacity = (tiers ?? []).reduce(
@@ -69,60 +75,83 @@ export default async function ManageEventPage({
     (sum, tier) => sum + Number(tier.sold),
     0,
   )
+  const recaudacion = (tiers ?? []).reduce(
+    (sum, tier) => sum + Number(tier.sold) * Number(tier.price),
+    0,
+  )
+
+  const dressCards = [
+    {
+      href: `/admin/events/${id}/multimedia`,
+      title: "Fotos y Videos",
+      description:
+        "Agregá un link de YouTube o una galería de fotos para que tu evento se vea increíble.",
+      icon: ImageIcon,
+      accent: "text-violet-500 dark:text-violet-300",
+      iconWrap: "bg-violet-500/10",
+    },
+    {
+      href: `/admin/events/${id}/store`,
+      title: "Tienda de Extras",
+      description:
+        "Vendé merch, comida, bebidas o servicios. Cada unidad tiene QR de canje propio.",
+      icon: ShoppingBag,
+      accent: "text-emerald-600 dark:text-emerald-300",
+      iconWrap: "bg-emerald-500/10",
+    },
+    {
+      href: `/admin/events/${id}/multimedia#flyer-historias`,
+      title: "Flyer para Historias",
+      description:
+        "Subí la imagen vertical que tus compradores van a compartir en Instagram al comprar su entrada.",
+      icon: Share2,
+      accent: "text-fuchsia-600 dark:text-fuchsia-300",
+      iconWrap: "bg-fuchsia-500/10",
+    },
+  ] as const
 
   const actions = [
     {
       href: `/admin/events/${id}/edit`,
-      label: "Editar experiencia",
-      description: "Título, fecha, flyer, lugar y entradas.",
+      label: "Editar Datos",
+      description: "Título, fecha, flyer, lugar y tipos de entrada.",
       icon: Pencil,
     },
     {
       href: `/admin/events/${id}/tickets`,
-      label: "Entradas emitidas",
-      description: "Buscá clientes, reenviá tickets y resolvé reclamos.",
+      label: "Lista de Compradores",
+      description: "Buscá compradores, reenviá entradas y resolvé reclamos.",
       icon: Ticket,
     },
     {
       href: `/admin/events/${id}/lists`,
       label: "Listas digitales",
-      description: "Cupos, invitados y check-in.",
+      description: "Cupos, invitados y control de ingreso.",
       icon: ClipboardList,
     },
     {
-      href: `/admin/events/${id}/bar`,
-      label: "Preventa de barra",
-      description: "Productos, stock y consumiciones.",
-      icon: GlassWater,
-    },
-    {
       href: `/admin/events/${id}/marketing`,
-      label: "Marketing · Píxeles",
-      description: "Meta, TikTok y GA4 para medir conversiones.",
+      label: "Marketing y anuncios",
+      description: "Conectá Meta, TikTok y Google para medir ventas.",
       icon: Megaphone,
-    },
-    {
-      href: `/admin/events/${id}/multimedia`,
-      label: "Multimedia & Experiencia",
-      description: "Spot YouTube/Vimeo y galería (máx. 4 fotos).",
-      icon: Clapperboard,
     },
     {
       href: `/admin/events/${id}/coupons`,
       label: "Cupones y descuentos",
-      description: "Códigos promocionales % o monto fijo.",
+      description: "Códigos promocionales con porcentaje o monto fijo.",
       icon: TicketPercent,
     },
     {
       href: `/admin/events/${id}/live`,
       label: "Monitor en vivo",
-      description: "Aforo e ingresos en tiempo real (día del evento).",
+      description: "Aforo e ingresos en tiempo real el día del evento.",
       icon: Activity,
     },
     {
       href: "/admin/scanner",
-      label: "Escáner de puerta",
-      description: "Validá entradas y controlá accesos.",
+      label: "Control de Puerta",
+      description:
+        "Escaneá los códigos QR o buscá al comprador por nombre si se quedó sin batería.",
       icon: QrCode,
     },
   ]
@@ -137,41 +166,34 @@ export default async function ManageEventPage({
         className="inline-flex items-center gap-2 text-sm text-zinc-500 transition hover:text-zinc-900 dark:hover:text-white"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
-        Volver a Mis eventos
+        Volver a Mis Eventos
       </Link>
 
-      <header>
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-3xl font-black tracking-tight text-zinc-900 dark:text-white sm:text-4xl">
-            {event.title}
-          </h1>
-          <Badge
-            variant="outline"
-            className="rounded-full border-zinc-300 dark:border-zinc-700 uppercase"
-          >
-            {event.status}
-          </Badge>
-          {event.is_sponsored_by_tokepass ? (
-            <Badge className="rounded-full border border-amber-400/40 bg-amber-500/15 text-amber-100">
-              Auspiciado
-            </Badge>
-          ) : null}
-        </div>
-        <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400">
-          {formatEventDate(event.date)} · {event.location}
-        </p>
-      </header>
+      <EventCommandHeader
+        eventId={event.id}
+        title={event.title}
+        subtitle={`${formatEventDate(event.date)} · ${event.location}`}
+        status={event.status}
+        isSponsored={Boolean(event.is_sponsored_by_tokepass)}
+      />
 
-      <section className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/70 p-5">
-          <Ticket className="size-5 text-emerald-400" aria-hidden="true" />
+      <section className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950/70">
+          <Ticket className="size-5 text-emerald-500 dark:text-emerald-400" aria-hidden="true" />
           <p className="mt-4 text-3xl font-black text-zinc-900 dark:text-white">
             {formatNumber(sold)}
           </p>
-          <p className="mt-1 text-sm text-zinc-500">Entradas reservadas/vendidas</p>
+          <p className="mt-1 text-sm text-zinc-500">Entradas Vendidas</p>
         </div>
-        <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/70 p-5">
-          <Users className="size-5 text-violet-400" aria-hidden="true" />
+        <div className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950/70">
+          <Wallet className="size-5 text-sky-500 dark:text-sky-300" aria-hidden="true" />
+          <p className="mt-4 text-3xl font-black text-zinc-900 dark:text-white">
+            {formatCurrency(recaudacion)}
+          </p>
+          <p className="mt-1 text-sm text-zinc-500">Recaudación</p>
+        </div>
+        <div className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950/70">
+          <Users className="size-5 text-violet-500 dark:text-violet-300" aria-hidden="true" />
           <p className="mt-4 text-3xl font-black text-zinc-900 dark:text-white">
             {formatNumber(Math.max(0, capacity - sold))}
           </p>
@@ -188,16 +210,58 @@ export default async function ManageEventPage({
         />
       ) : null}
 
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-lg font-bold text-zinc-900 dark:text-white">
+            Vestí tu evento
+          </h2>
+          <p className="mt-1 text-sm text-zinc-500">
+            Completá multimedia, barra y el flyer de historias antes de
+            publicar.
+          </p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          {dressCards.map(
+            ({ href, title, description, icon: Icon, accent, iconWrap }) => (
+              <Link key={href} href={href} className={dressCardClass}>
+                <span
+                  className={`grid size-11 place-items-center rounded-xl ${iconWrap} ${accent}`}
+                >
+                  <Icon className="size-5" aria-hidden="true" />
+                </span>
+                <h3 className="mt-4 font-bold text-zinc-900 dark:text-white">
+                  {title}
+                </h3>
+                <p className="mt-2 flex-1 text-sm leading-6 text-zinc-500">
+                  {description}
+                </p>
+                <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-700 transition group-hover:gap-2 dark:text-emerald-300">
+                  Configurar
+                  <ArrowRight className="size-3.5" aria-hidden="true" />
+                </span>
+              </Link>
+            ),
+          )}
+        </div>
+      </section>
+
       <section>
-        <h2 className="text-lg font-bold text-zinc-900 dark:text-white">Operación del evento</h2>
+        <h2 className="text-lg font-bold text-zinc-900 dark:text-white">
+          Operación del evento
+        </h2>
+        <p className="mt-1 text-sm text-zinc-500">
+          Accesos a compradores, puerta, cupones y el resto del día a día.
+        </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           {actions.map(({ href, label, description, icon: Icon }) => (
             <Link key={href} href={href} className={actionClass}>
               <Icon
-                className="size-5 text-zinc-600 dark:text-zinc-400 transition group-hover:text-emerald-400"
+                className="size-5 text-zinc-500 transition group-hover:text-emerald-500 dark:text-zinc-400 dark:group-hover:text-emerald-400"
                 aria-hidden="true"
               />
-              <h3 className="mt-4 font-bold text-zinc-900 dark:text-white">{label}</h3>
+              <h3 className="mt-4 font-bold text-zinc-900 dark:text-white">
+                {label}
+              </h3>
               <p className="mt-1 text-sm text-zinc-500">{description}</p>
             </Link>
           ))}

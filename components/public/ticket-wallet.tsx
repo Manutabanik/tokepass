@@ -2,16 +2,16 @@
 
 import {
   ArrowUpRight,
-  GlassWater,
   History,
+  ShoppingBag,
   Ticket,
 } from "lucide-react"
 import { motion } from "motion/react"
 import Link from "next/link"
 
-import type { MyBarRedemption } from "@/app/actions/addons"
+import type { MyStoreRedemption } from "@/app/actions/addons"
 import type { MyTicket } from "@/app/actions/tickets"
-import { LivingBarCard } from "@/components/public/living-bar-card"
+import { LivingStoreCard } from "@/components/public/living-store-card"
 import { LivingTicketCard } from "@/components/public/living-ticket-card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -28,7 +28,7 @@ function EmptyState({
   kind?: "tickets" | "bar" | "history"
 }) {
   const Icon =
-    kind === "bar" ? GlassWater : kind === "history" ? History : Ticket
+    kind === "bar" ? ShoppingBag : kind === "history" ? History : Ticket
   const isBar = kind === "bar"
 
   return (
@@ -126,7 +126,7 @@ export function TicketWallet({
   upcoming: MyTicket[]
   past: MyTicket[]
   userId: string
-  barRedemptions?: MyBarRedemption[]
+  barRedemptions?: MyStoreRedemption[]
   offline?: boolean
   appleWalletEnabled?: boolean
   googleWalletEnabled?: boolean
@@ -161,9 +161,9 @@ export function TicketWallet({
           value="bar"
           className="h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl px-2.5 text-xs font-medium text-zinc-400 transition-all hover:bg-zinc-800/40 hover:text-white data-active:border-zinc-700/60 data-active:bg-zinc-800 data-active:text-white data-active:shadow-sm sm:h-10 sm:flex-none sm:px-4 sm:text-sm"
         >
-          <GlassWater className="hidden size-3.5 sm:block" aria-hidden="true" />
-          <span className="sm:hidden">Consumos</span>
-          <span className="hidden sm:inline">Consumiciones</span>
+          <ShoppingBag className="hidden size-3.5 sm:block" aria-hidden="true" />
+          <span className="sm:hidden">Extras</span>
+          <span className="hidden sm:inline">Mis Extras</span>
           <span className="rounded-md bg-zinc-800 px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums text-zinc-200 ring-1 ring-inset ring-zinc-700/60">
             {barRedemptions.length}
           </span>
@@ -203,17 +203,17 @@ export function TicketWallet({
         {barRedemptions.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-2 md:items-start">
             {validBar.map((item) => (
-              <LivingBarCard key={item.id} redemption={item} />
+              <LivingStoreCard key={item.id} redemption={item} />
             ))}
             {redeemedBar.map((item) => (
-              <LivingBarCard key={item.id} redemption={item} />
+              <LivingStoreCard key={item.id} redemption={item} />
             ))}
           </div>
         ) : (
           <EmptyState
             kind="bar"
             title="Sin consumiciones"
-            description="Cuando compres tragos o combos con tu entrada, aparecerán acá con su QR de barra."
+            description="Cuando compres merch, comida o bebidas desde la Tienda de Extras, aparecen acá con su QR de canje."
           />
         )}
       </TabsContent>

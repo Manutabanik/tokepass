@@ -17,7 +17,7 @@ const roleStyles: Record<UserRole, { label: string; className: string }> = {
     className: "border-violet-400/20 bg-violet-400/10 text-violet-300",
   },
   super_admin: {
-    label: "Super admin",
+    label: "Dueño de la plataforma",
     className: "border-sky-400/20 bg-sky-400/10 text-sky-300",
   },
 }

@@ -22,23 +22,10 @@ export function PlatformSettlementsPanel({
   const [pending, startTransition] = useTransition()
 
   return (
-    <div className="space-y-8">
-      <div>
-        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-sky-400/80">
-          Platform OS
-        </p>
-        <h1 className="mt-2 text-3xl font-black tracking-tight text-white">
-          Liquidaciones
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm text-zinc-400">
-          Completá las solicitudes pending cuando el pago al organizador esté
-          transferido.
-        </p>
-      </div>
-
+    <div className="space-y-4">
       {initialRows.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-zinc-800 px-6 py-12 text-center text-sm text-zinc-500">
-          No hay liquidaciones todavía.
+          No hay liquidaciones legacy.
         </div>
       ) : (
         <div className="grid gap-2">
@@ -59,7 +46,7 @@ export function PlatformSettlementsPanel({
                   {formatCurrency(row.netAmount)}
                 </p>
                 <p className="text-xs text-zinc-600">
-                  Bruto {formatCurrency(row.grossAmount)} · Fee{" "}
+                  Bruto {formatCurrency(row.grossAmount)} · Comisión{" "}
                   {formatCurrency(row.platformFee)} ·{" "}
                   {new Date(row.createdAt).toLocaleString("es-AR")}
                 </p>
@@ -74,7 +61,7 @@ export function PlatformSettlementsPanel({
                       : "border-amber-500/40 text-amber-100",
                   )}
                 >
-                  {row.status}
+                  {row.status === "completed" ? "Transferida" : "Pendiente"}
                 </Badge>
                 {row.status === "pending" ? (
                   <Button
@@ -89,12 +76,12 @@ export function PlatformSettlementsPanel({
                           toast.error(result.error)
                           return
                         }
-                        toast.success("Liquidación marcada como completed")
+                        toast.success("Liquidación marcada como transferida")
                         router.refresh()
                       })
                     }}
                   >
-                    Completar
+                    Marcar como Transferido
                   </Button>
                 ) : null}
               </div>

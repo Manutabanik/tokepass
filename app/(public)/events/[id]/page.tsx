@@ -1,7 +1,6 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 
-import { getEventItems } from "@/app/actions/addons"
 import { getEventDetails } from "@/app/actions/public-events"
 import { getActiveResaleListingsForEvent } from "@/app/actions/resale"
 import { EventStorefront } from "@/components/public/event-storefront"
@@ -71,12 +70,13 @@ export default async function EventDetailPage({
     buyerName?: string
     buyerDni?: string
     buyerEmail?: string
+    buyerPhone?: string
   } | null = null
 
   if (user) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("full_name, dni, email")
+      .select("full_name, dni, email, phone")
       .eq("id", user.id)
       .maybeSingle()
 
@@ -84,14 +84,8 @@ export default async function EventDetailPage({
       buyerName: profile?.full_name ?? "",
       buyerDni: profile?.dni ?? "",
       buyerEmail: profile?.email ?? user.email ?? "",
+      buyerPhone: profile?.phone ?? "",
     }
-  }
-
-  let barItems: Awaited<ReturnType<typeof getEventItems>> = []
-  try {
-    barItems = await getEventItems(event.id)
-  } catch {
-    barItems = []
   }
 
   const resaleListings = await getActiveResaleListingsForEvent(event.id)
@@ -102,7 +96,6 @@ export default async function EventDetailPage({
       currentUserId={user?.id ?? null}
       referralCode={referralCode ?? null}
       initialBuyer={initialBuyer}
-      barItems={barItems}
       resaleListings={resaleListings}
     />
   )

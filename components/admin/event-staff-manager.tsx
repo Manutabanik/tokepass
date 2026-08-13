@@ -17,7 +17,7 @@ import { EVENT_STAFF_ROLES, type EventStaffRole } from "@/types/auth"
 
 const ROLE_LABEL: Record<EventStaffRole, string> = {
   door_staff: "Puerta (scanner)",
-  bar_staff: "Barra",
+  bar_staff: "Tienda / Canjes",
   cashier: "Caja / POS",
 }
 

@@ -53,8 +53,8 @@ export function AdminSidebar({
           type="button"
           onClick={() => setCollapsed((current) => !current)}
           className="grid size-9 place-items-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/5 dark:hover:text-white"
-          aria-label={collapsed ? "Expandir sidebar" : "Colapsar sidebar"}
-          title={collapsed ? "Expandir" : "Colapsar"}
+          aria-label={collapsed ? "Expandir menú" : "Cerrar menú"}
+          title={collapsed ? "Expandir" : "Cerrar"}
         >
           {collapsed ? (
             <PanelLeftOpen className="size-4" />
@@ -66,11 +66,11 @@ export function AdminSidebar({
 
       <div className={cn("mt-8 px-2", collapsed && "sr-only")}>
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-600">
-          {mode === "organizer" ? "Tu Panel" : "Acceso staff"}
+          {mode === "organizer" ? "Tu panel" : "Acceso staff"}
         </p>
       </div>
 
-      <nav className="mt-3 space-y-1" aria-label="Navegación administrativa">
+      <nav className="mt-3 space-y-1" aria-label="Menú del organizador">
         {navigation.map(({ label, href, icon: Icon }) => {
           const active =
             href === "/admin"
@@ -104,7 +104,7 @@ export function AdminSidebar({
             {collapsed
               ? "TP"
               : mode === "organizer"
-                ? "Tokepass · Organizer OS"
+                ? "Tokepass · Panel del Organizador"
                 : "Tokepass · Staff"}
           </p>
         </div>

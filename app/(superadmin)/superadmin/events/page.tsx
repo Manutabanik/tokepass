@@ -31,9 +31,9 @@ export default async function SuperAdminEventsPage() {
   return (
     <>
       <PageHeading
-        eyebrow="Cartelera global"
+        eyebrow="Cartelera"
         title="Todos los eventos"
-        description="Vista completa de la actividad de eventos en la plataforma, sin importar el organizador."
+        description="Acá ves todos los eventos de la plataforma, sin importar qué productora los creó."
       />
 
       <Card className="border-0 bg-white/[0.035] py-0 ring-1 ring-white/8">

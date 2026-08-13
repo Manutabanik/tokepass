@@ -9,8 +9,8 @@ import { getInitials } from "@/lib/format"
 
 export const metadata: Metadata = {
   title: {
-    default: "Platform OS",
-    template: "%s · Tokepass Platform OS",
+    default: "Panel de control",
+    template: "%s · Tokepass",
   },
   robots: { index: false, follow: false },
 }
@@ -45,20 +45,20 @@ export default async function SuperAdminLayout({
           <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-white/8 bg-[#0b0b0f]/85 px-5 backdrop-blur-xl sm:px-8">
             <div>
               <p className="flex items-center gap-2 text-sm font-medium text-zinc-300">
-                Platform OS
+                Panel de control
                 <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-300">
-                  Owner
+                  Dueño de la Plataforma
                 </span>
               </p>
               <p className="text-xs text-zinc-600">
-                Gobierno global de Tokepass
+                Panel de Control Central
               </p>
             </div>
 
             <div className="flex items-center gap-3">
               <div className="hidden text-right sm:block">
                 <p className="max-w-48 truncate text-sm font-medium text-white">
-                  {profile.full_name || "Super administrador"}
+                  {profile.full_name || "Dueño de la plataforma"}
                 </p>
                 <p className="max-w-48 truncate text-xs text-zinc-500">
                   {profile.email}

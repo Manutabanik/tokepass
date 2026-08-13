@@ -2,7 +2,9 @@ import { ArrowRight, CheckCircle2, Ticket } from "lucide-react"
 import type { Metadata } from "next"
 import Link from "next/link"
 
+import { getEventItems, userHasEventTicket } from "@/app/actions/addons"
 import { getPurchaseAnalyticsForOrder } from "@/app/actions/event-marketing"
+import { EventStoreUpsell } from "@/components/public/event-store-upsell"
 import { PurchaseAnalyticsTracker } from "@/components/public/purchase-analytics-tracker"
 import { SocialShareButton } from "@/components/public/social-share-button"
 import { CheckoutWalletPrecache } from "@/components/pwa/checkout-wallet-precache"
@@ -31,6 +33,14 @@ export default async function CheckoutSuccessPage({
     ? await getPurchaseAnalyticsForOrder(order_id)
     : null
 
+  const eventId = purchaseAnalytics?.eventId?.trim() || ""
+  const [storeItems, canPurchase] = eventId
+    ? await Promise.all([
+        getEventItems(eventId).catch(() => []),
+        userHasEventTicket(eventId).catch(() => false),
+      ])
+    : [[], false]
+
   return (
     <section className="relative isolate overflow-hidden">
       <CheckoutWalletPrecache />
@@ -45,7 +55,7 @@ export default async function CheckoutSuccessPage({
       ) : null}
       <div className="absolute inset-x-0 top-0 -z-10 h-[480px] bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.18),transparent_42%),radial-gradient(circle_at_top_right,rgba(124,58,237,0.1),transparent_40%)]" />
 
-      <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-lg flex-col items-center justify-center px-4 py-20 text-center sm:px-6">
+      <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-lg flex-col items-center px-4 py-20 text-center sm:px-6">
         <div className="relative">
           <div className="absolute -inset-6 rounded-full bg-emerald-400/20 blur-2xl" />
           <span className="relative grid size-24 place-items-center rounded-full bg-emerald-500 text-white shadow-2xl shadow-emerald-500/30">
@@ -102,6 +112,17 @@ export default async function CheckoutSuccessPage({
             <ArrowRight aria-hidden="true" />
           </Button>
         </div>
+
+        {eventId && storeItems.length > 0 ? (
+          <div className="mt-12 w-full text-left">
+            <EventStoreUpsell
+              eventId={eventId}
+              eventTitle={purchaseAnalytics?.eventTitle ?? "tu evento"}
+              items={storeItems}
+              canPurchase={canPurchase || Boolean(purchaseAnalytics?.ticketIds.length)}
+            />
+          </div>
+        ) : null}
       </div>
     </section>
   )

@@ -30,7 +30,7 @@ import {
 import { formatCurrency, formatDateTime } from "@/lib/format"
 
 export const metadata: Metadata = {
-  title: "Inicio",
+  title: "Resumen de Ventas",
 }
 
 const orderStatusPresentation: Record<
@@ -56,30 +56,30 @@ export default async function AdminDashboardPage() {
 
   const kpis = [
     {
-      label: "Ingresos Totales",
+      label: "Plata recaudada",
       value: formatCurrency(metrics.totalRevenue),
       helper:
         metrics.totalRevenue > 0
-          ? "GMV acumulado de tu operación"
-          : "Sin ventas registradas aún",
+          ? "Ventas acumuladas de tus eventos"
+          : "Todavía no tenés ventas",
       icon: DollarSign,
     },
     {
-      label: "Entradas Vendidas",
+      label: "Entradas vendidas",
       value: String(metrics.ticketsSold),
       helper:
         metrics.ticketsSold > 0
-          ? "Válidas + escaneadas"
-          : "Todavía no emitiste tickets",
+          ? "Entradas válidas + ya ingresadas"
+          : "Todavía no vendiste entradas",
       icon: Ticket,
     },
     {
-      label: "Eventos Activos",
+      label: "Eventos activos",
       value: String(metrics.activeEvents),
       helper:
         metrics.activeEvents > 0
-          ? "Publicados en cartelera"
-          : "Publicá un evento para vender",
+          ? "Publicados y a la venta"
+          : "Publicá un evento para empezar a vender",
       icon: Calendar,
     },
   ] as const
@@ -90,14 +90,14 @@ export default async function AdminDashboardPage() {
         <div>
           <div className="mb-3 flex items-center gap-2 text-sm font-medium text-violet-400">
             <Sparkles className="size-4" aria-hidden="true" />
-            Resumen ejecutivo
+            Resumen de Ventas
           </div>
           <h1 className="text-3xl font-bold tracking-[-0.03em] text-zinc-900 dark:text-white sm:text-4xl">
-            Buen día, equipo.
+            Buen día.
           </h1>
           <p className="mt-2 max-w-xl text-sm leading-6 text-zinc-500">
-            Métricas reales de tu operación: ingresos, tickets y actividad
-            reciente.
+            Acá ves cuánta plata entró, cuántas entradas vendiste y las últimas
+            compras.
           </p>
         </div>
       </div>
@@ -128,7 +128,7 @@ export default async function AdminDashboardPage() {
         <Card className="border-0 bg-white/[0.035] py-0 ring-1 ring-white/8">
           <CardHeader className="border-b border-zinc-200 dark:border-white/8 px-5 py-5 sm:px-6">
             <CardTitle className="text-base text-zinc-900 dark:text-white">
-              Últimas Transacciones
+              Últimas compras
             </CardTitle>
             <CardDescription className="text-zinc-500">
               Las ventas más recientes de tus eventos.
@@ -190,11 +190,11 @@ export default async function AdminDashboardPage() {
                     <Ticket className="size-6" aria-hidden="true" />
                   </span>
                   <h3 className="mt-5 text-base font-semibold text-zinc-900 dark:text-white">
-                    Tus ventas aparecerán aquí
+                    Tus ventas van a aparecer acá
                   </h3>
                   <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-zinc-500">
-                    Cuando los compradores reserven entradas, vas a ver el
-                    detalle de cada transacción en esta tabla.
+                    Cuando alguien compre una entrada, vas a ver el detalle de
+                    cada compra en esta tabla.
                   </p>
                 </div>
               </div>
@@ -207,10 +207,12 @@ export default async function AdminDashboardPage() {
             <span className="mb-4 grid size-12 place-items-center rounded-2xl bg-violet-500/15 text-violet-300 ring-1 ring-inset ring-violet-400/15">
               <CalendarPlus className="size-5" aria-hidden="true" />
             </span>
-            <CardTitle className="text-lg text-zinc-900 dark:text-white">Quick Actions</CardTitle>
+            <CardTitle className="text-lg text-zinc-900 dark:text-white">
+              Empezá por acá
+            </CardTitle>
             <CardDescription className="leading-6 text-zinc-500">
-              Lanzá una nueva experiencia y configurá tickets, zonas y
-              crecimiento en minutos.
+              Creá tu evento, armá los tipos de entrada y publicá cuando esté
+              listo.
             </CardDescription>
           </CardHeader>
           <CardContent className="px-6 pb-6">
@@ -221,7 +223,7 @@ export default async function AdminDashboardPage() {
               className="h-14 w-full rounded-2xl bg-violet-600 text-base font-semibold text-white shadow-xl shadow-violet-950/40 hover:bg-violet-500"
             >
               <Plus className="size-5" aria-hidden="true" />
-              Crear Nuevo Evento
+              Nuevo Evento
             </Button>
             <p className="mt-4 text-center text-xs text-zinc-600">
               Se guarda como borrador hasta que lo publiques.

@@ -29,6 +29,11 @@ import { cn } from "@/lib/utils"
 
 const CONFIRM_PHRASE = "CONFIRMAR CANCELACION"
 
+function riskLabel(tier: string) {
+  if (tier === "TIER_1_CUSTODY") return "Estado Financiero Seguro"
+  return `Nivel de Riesgo: ${tier.replaceAll("_", " ")}`
+}
+
 export function EventMassRefundDangerZone({
   preview,
 }: {
@@ -53,8 +58,8 @@ export function EventMassRefundDangerZone({
         return
       }
 
-      toast.success("Protocolo de reembolso masivo ejecutado", {
-        description: `${formatNumber(result.data.ordersRefunded)} órdenes · ${formatNumber(result.data.ticketsCancelled)} entradas anuladas`,
+      toast.success("Devolución masiva ejecutada", {
+        description: `${formatNumber(result.data.ordersRefunded)} compras · ${formatNumber(result.data.ticketsCancelled)} entradas anuladas`,
       })
       setOpen(false)
       setConfirmText("")
@@ -69,14 +74,14 @@ export function EventMassRefundDangerZone({
         <div>
           <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-red-300">
             <OctagonAlert className="size-3.5" aria-hidden="true" />
-            Danger Zone
+            Zona de Peligro
           </p>
           <h2 className="mt-2 text-xl font-black text-white">
-            Cancelar evento y reembolso masivo
+            Cancelar evento y devolver la plata
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-red-100/70">
-            Protocolo de emergencia para anular entradas válidas y disparar el
-            motor de devoluciones según el risk tier de la productora.
+            Usá esto solo en caso de fuerza mayor. Anula todas las entradas y
+            dispara la devolución del dinero a los compradores.
           </p>
         </div>
         <div className="rounded-2xl border border-red-500/20 bg-black/30 px-4 py-3 text-right">
@@ -92,7 +97,7 @@ export function EventMassRefundDangerZone({
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-white/8 bg-black/25 px-3 py-3">
           <p className="text-[10px] uppercase tracking-wide text-zinc-500">
-            Órdenes pagadas
+            Compras pagadas
           </p>
           <p className="mt-1 font-mono text-lg font-bold text-white">
             {formatNumber(preview.paidOrders)}
@@ -100,7 +105,7 @@ export function EventMassRefundDangerZone({
         </div>
         <div className="rounded-xl border border-white/8 bg-black/25 px-3 py-3">
           <p className="text-[10px] uppercase tracking-wide text-zinc-500">
-            Monto a devolver
+            Plata a devolver
           </p>
           <p className="mt-1 font-mono text-lg font-bold text-white">
             {formatCurrency(preview.refundableAmount)}
@@ -108,10 +113,10 @@ export function EventMassRefundDangerZone({
         </div>
         <div className="rounded-xl border border-white/8 bg-black/25 px-3 py-3">
           <p className="text-[10px] uppercase tracking-wide text-zinc-500">
-            Risk tier
+            Estado financiero
           </p>
-          <p className="mt-1 font-mono text-sm font-bold text-amber-200">
-            {preview.riskTier.replaceAll("_", " ")}
+          <p className="mt-1 text-sm font-bold text-amber-200">
+            {riskLabel(preview.riskTier)}
           </p>
         </div>
       </div>
@@ -126,7 +131,7 @@ export function EventMassRefundDangerZone({
         )}
       >
         <AlertTriangle className="size-4" aria-hidden="true" />
-        Cancelar evento y ejecutar reembolso masivo
+        Cancelar evento y devolver la plata
       </Button>
 
       {preview.eventStatus === "cancelled" ? (
@@ -140,11 +145,11 @@ export function EventMassRefundDangerZone({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-200">
               <ShieldAlert className="size-5" aria-hidden="true" />
-              Emergency Protocol Modal
+              Confirmá la cancelación
             </DialogTitle>
             <DialogDescription className="text-zinc-400">
-              Estás por anular {formatNumber(preview.validTickets)} entradas
-              válidas y disparar el protocolo de reembolso de{" "}
+              Tené cuidado: vas a anular {formatNumber(preview.validTickets)}{" "}
+              entradas y devolver la plata de{" "}
               <span className="font-semibold text-zinc-200">
                 {preview.eventTitle}
               </span>
@@ -174,14 +179,14 @@ export function EventMassRefundDangerZone({
                 htmlFor="mass-refund-reason"
                 className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500"
               >
-                Motivo legal de la suspensión
+                Motivo de la cancelación
               </label>
               <Input
                 id="mass-refund-reason"
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
                 disabled={isPending}
-                placeholder="Ej: Suspensión por tormenta eléctrica / disposición municipal"
+                placeholder="Ej: Suspendido por tormenta / disposición municipal"
                 className="h-11 border-zinc-700 bg-black/40 text-sm"
               />
             </div>
@@ -195,7 +200,7 @@ export function EventMassRefundDangerZone({
               onClick={() => setOpen(false)}
               className="border-zinc-700 bg-transparent text-zinc-300"
             >
-              Abortar
+              Volver
             </Button>
             <Button
               type="button"
@@ -208,7 +213,7 @@ export function EventMassRefundDangerZone({
               ) : (
                 <OctagonAlert />
               )}
-              Ejecutar protocolo
+              Confirmar y devolver
             </Button>
           </DialogFooter>
         </DialogContent>

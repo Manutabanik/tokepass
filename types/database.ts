@@ -78,6 +78,8 @@ export type Profile = {
   /** Logo / foto público. */
   avatar_url: string | null
   dni: string | null
+  /** Teléfono / WhatsApp (progressive profiling). */
+  phone: string | null
   role: UserRole
   /**
    * Comisión Tokepass (custom_commission_rate canónica).
@@ -87,6 +89,23 @@ export type Profile = {
   organizer_approval_status: OrganizerApprovalStatus
   risk_tier: OrganizerRiskTier
   guarantee_status: OrganizerGuaranteeStatus
+  created_at: string
+  updated_at: string
+}
+
+export type OrganizerApplicationStatus = "pending" | "approved" | "rejected"
+
+export type OrganizerApplication = {
+  id: string
+  company_name: string
+  cuit_cuil: string
+  responsible_dni: string
+  cbu_alias: string
+  social_media_url: string
+  status: OrganizerApplicationStatus
+  review_notes: string | null
+  reviewed_by: string | null
+  reviewed_at: string | null
   created_at: string
   updated_at: string
 }
@@ -148,6 +167,10 @@ export type Event = {
   social_share_image_url: string | null
   /** Taxonomía centralizada (Super Admin). */
   category_id: string | null
+  /** ATP | +16 | +18 (enum DB: atp, 16, 18). */
+  age_restriction: "atp" | "16" | "18"
+  /** Cierre de jornada única; multijornada usa schedule_days. */
+  ends_at: string | null
   created_at: string
   updated_at: string
 }
@@ -259,6 +282,25 @@ export type TicketTransfer = {
 
 export type TicketResaleListingStatus = "active" | "sold" | "cancelled"
 export type PayoutPendingStatus = "pending" | "paid" | "cancelled"
+export type PayoutRequestStatus =
+  | "pending"
+  | "processing"
+  | "completed"
+  | "rejected"
+
+export type PayoutRequest = {
+  id: string
+  organizer_id: string
+  event_id: string | null
+  amount: number
+  status: PayoutRequestStatus
+  cbu_destination: string
+  admin_notes: string | null
+  reviewed_by: string | null
+  reviewed_at: string | null
+  created_at: string
+  updated_at: string
+}
 
 export type TicketResaleListing = {
   id: string
@@ -468,6 +510,13 @@ export type GuestListEntry = {
   updated_at: string
 }
 
+export type EventItemCategory =
+  | "drinks"
+  | "food"
+  | "merch"
+  | "services"
+  | "upgrades"
+
 export type EventItem = {
   id: string
   event_id: string
@@ -476,6 +525,8 @@ export type EventItem = {
   price: number
   stock: number
   is_active: boolean
+  image_url: string | null
+  category: EventItemCategory
   created_at: string
   updated_at: string
 }
@@ -500,6 +551,7 @@ type ProfileInsert = Omit<
   | "updated_at"
   | "service_charge_rate"
   | "dni"
+  | "phone"
   | "organizer_approval_status"
   | "risk_tier"
   | "guarantee_status"
@@ -507,6 +559,7 @@ type ProfileInsert = Omit<
   role?: UserRole
   service_charge_rate?: number
   dni?: string | null
+  phone?: string | null
   organizer_approval_status?: OrganizerApprovalStatus
   risk_tier?: OrganizerRiskTier
   guarantee_status?: OrganizerGuaranteeStatus
@@ -542,6 +595,8 @@ type EventInsert = Omit<
   | "gallery_urls"
   | "social_share_image_url"
   | "category_id"
+  | "age_restriction"
+  | "ends_at"
   | "created_at"
   | "updated_at"
 > & {
@@ -551,6 +606,8 @@ type EventInsert = Omit<
   flyer_url?: string | null
   venue_id?: string | null
   category_id?: string | null
+  age_restriction?: Event["age_restriction"]
+  ends_at?: string | null
   status?: EventStatus
   max_tickets_per_user?: number
   qr_type?: QrType
@@ -810,12 +867,16 @@ type EventItemInsert = Omit<
   | "id"
   | "description"
   | "is_active"
+  | "image_url"
+  | "category"
   | "created_at"
   | "updated_at"
 > & {
   id?: string
   description?: string | null
   is_active?: boolean
+  image_url?: string | null
+  category?: EventItemCategory
   created_at?: string
   updated_at?: string
 }
@@ -844,6 +905,36 @@ export type Database = {
         Row: Profile
         Insert: ProfileInsert
         Update: Partial<ProfileInsert>
+        Relationships: []
+      }
+      organizer_applications: {
+        Row: OrganizerApplication
+        Insert: {
+          id: string
+          company_name: string
+          cuit_cuil: string
+          responsible_dni: string
+          cbu_alias: string
+          social_media_url: string
+          status?: OrganizerApplicationStatus
+          review_notes?: string | null
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<{
+          company_name: string
+          cuit_cuil: string
+          responsible_dni: string
+          cbu_alias: string
+          social_media_url: string
+          status: OrganizerApplicationStatus
+          review_notes: string | null
+          reviewed_by: string | null
+          reviewed_at: string | null
+          updated_at: string
+        }>
         Relationships: []
       }
       events: {
@@ -969,12 +1060,6 @@ export type Database = {
         Update: Partial<PromoterReferralVisitInsert>
         Relationships: []
       }
-      addons: {
-        Row: Addon
-        Insert: AddonInsert
-        Update: Partial<AddonInsert>
-        Relationships: []
-      }
       promo_codes: {
         Row: PromoCode
         Insert: PromoCodeInsert
@@ -1021,12 +1106,6 @@ export type Database = {
           created_at?: string
         }
         Update: Partial<OrganizerMpConnect>
-        Relationships: []
-      }
-      order_addons: {
-        Row: OrderAddon
-        Insert: OrderAddonInsert
-        Update: Partial<OrderAddonInsert>
         Relationships: []
       }
       guest_lists: {
@@ -1114,6 +1193,33 @@ export type Database = {
           updated_at?: string
         }
         Update: Partial<PayoutPending>
+        Relationships: []
+      }
+      payout_requests: {
+        Row: PayoutRequest
+        Insert: {
+          id?: string
+          organizer_id: string
+          event_id?: string | null
+          amount: number
+          status?: PayoutRequestStatus
+          cbu_destination: string
+          admin_notes?: string | null
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<{
+          event_id: string | null
+          amount: number
+          status: PayoutRequestStatus
+          cbu_destination: string
+          admin_notes: string | null
+          reviewed_by: string | null
+          reviewed_at: string | null
+          updated_at: string
+        }>
         Relationships: []
       }
       mp_webhook_events: {
@@ -1539,6 +1645,14 @@ export type Database = {
         }
         Returns: number
       }
+      create_store_order_tx: {
+        Args: {
+          p_event_id: string
+          p_owner_id: string
+          p_items: Json
+        }
+        Returns: string
+      }
       release_order_event_items: {
         Args: { p_order_id: string }
         Returns: undefined
@@ -1561,6 +1675,25 @@ export type Database = {
           p_notes?: string | null
         }
         Returns: string
+      }
+      request_organizer_payout: {
+        Args: {
+          p_amount: number
+          p_cbu_destination: string
+          p_event_id?: string | null
+        }
+        Returns: string
+      }
+      complete_organizer_payout: {
+        Args: { p_payout_id: string }
+        Returns: undefined
+      }
+      reject_organizer_payout: {
+        Args: {
+          p_payout_id: string
+          p_admin_notes?: string | null
+        }
+        Returns: undefined
       }
       complete_organizer_settlement: {
         Args: { p_settlement_id: string }
@@ -1615,6 +1748,8 @@ export type Database = {
           redemption_id: string
           item_name: string
           item_description: string | null
+          item_image_url: string | null
+          item_category: string | null
           redeemed_at: string | null
           already_redeemed: boolean
           previous_redeemed_at: string | null
@@ -1677,6 +1812,7 @@ export type Database = {
       order_status: OrderStatus
       ticket_resale_listing_status: TicketResaleListingStatus
       payout_pending_status: PayoutPendingStatus
+      payout_request_status: PayoutRequestStatus
     }
     CompositeTypes: Record<string, never>
   }

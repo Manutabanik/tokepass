@@ -41,11 +41,11 @@ export function EventCommercialSettingsForm({
         toast.error(result.error)
         return
       }
-      toast.success("Configuración comercial guardada", {
+      toast.success("Reglas comerciales guardadas", {
         description:
           result.recalculatedTiers > 0
-            ? `Se recalcularon ${result.recalculatedTiers} tipos de entrada.`
-            : "Sin tiers para recalcular.",
+            ? `Actualizamos los precios de ${result.recalculatedTiers} tipos de entrada.`
+            : "No había tipos de entrada para actualizar.",
       })
       router.refresh()
     })
@@ -61,11 +61,13 @@ export function EventCommercialSettingsForm({
           <Shield className="size-5" aria-hidden="true" />
         </span>
         <div>
-          <h2 className="text-lg font-bold text-zinc-900 dark:text-white">Settings comerciales</h2>
+          <h2 className="text-lg font-bold text-zinc-900 dark:text-white">
+            Reglas Comerciales
+          </h2>
           <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-            Solo el dueño de la plataforma puede editar comisión, tope de
-            cortesías y auspicio. Los organizadores no tienen acceso a estos
-            controles.
+            Acá configurás cuánto le cobramos al comprador por usar Tokepass y si
+            le hacemos algún descuento al organizador. Solo vos, como dueño de la
+            plataforma, podés cambiar estos valores.
           </p>
         </div>
       </div>
@@ -75,11 +77,12 @@ export function EventCommercialSettingsForm({
           <Sparkles className="mt-0.5 size-4 text-amber-300" aria-hidden="true" />
           <div>
             <p className="text-sm font-semibold text-amber-50">
-              Evento Auspiciado / Destacado en Tokepass
+              Auspicio en Portada
             </p>
             <p className="mt-0.5 text-xs text-amber-100/70">
-              Prioriza el evento en la home, muestra el badge de Auspiciado y
-              bonifica la comisión Tokepass (fee % y fijo = 0).
+              Si lo activás, el evento aparece primero en Destacados, muestra el
+              sello de Auspiciado y Tokepass no le cobra comisión al comprador
+              (queda en cero).
             </p>
           </div>
         </div>
@@ -87,14 +90,14 @@ export function EventCommercialSettingsForm({
           checked={sponsored}
           onCheckedChange={setSponsored}
           disabled={pending}
-          aria-label="Evento Auspiciado / Destacado en Tokepass"
+          aria-label="Auspicio en Portada"
         />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="platform_fee_percentage">
-            Comisión / Service Fee (%)
+            Comisión de la ticketera (%)
           </Label>
           <Input
             id="platform_fee_percentage"
@@ -107,9 +110,13 @@ export function EventCommercialSettingsForm({
             disabled={pending || sponsored}
             className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
           />
+          <p className="text-xs text-zinc-500">
+            Porcentaje que se suma al precio de la entrada al momento del pago.
+            Ejemplo: 8 significa un 8%.
+          </p>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="platform_fixed_fee">Cargo fijo (ARS)</Label>
+          <Label htmlFor="platform_fixed_fee">Cargo fijo por entrada (ARS)</Label>
           <Input
             id="platform_fixed_fee"
             type="number"
@@ -120,10 +127,14 @@ export function EventCommercialSettingsForm({
             disabled={pending || sponsored}
             className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
           />
+          <p className="text-xs text-zinc-500">
+            Monto fijo en pesos que se suma a cada entrada paga, además del
+            porcentaje.
+          </p>
         </div>
         <div className="space-y-2 sm:col-span-2">
           <Label htmlFor="max_free_tickets">
-            Tope de entradas gratuitas / Cortesías
+            Tope de cortesías (entradas sin cargo)
           </Label>
           <Input
             id="max_free_tickets"
@@ -136,8 +147,8 @@ export function EventCommercialSettingsForm({
             className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
           />
           <p className="text-xs text-zinc-500">
-            Suma de cupos de entradas a precio $0 (no incluye cortesía ni
-            FreePass de listas).
+            Cantidad máxima de entradas a $0 que puede crear el organizador para
+            este evento. No incluye invitaciones de lista de invitados.
           </p>
         </div>
       </div>
@@ -152,7 +163,7 @@ export function EventCommercialSettingsForm({
         ) : (
           <Save className="size-4" aria-hidden="true" />
         )}
-        Guardar configuración
+        Guardar reglas
       </Button>
     </form>
   )

@@ -3,6 +3,7 @@
 import {
   Building2,
   CalendarDays,
+  ClipboardList,
   LayoutDashboard,
   PanelLeftClose,
   PanelLeftOpen,
@@ -20,16 +21,21 @@ import { BrandLogo } from "@/components/shared/brand-logo"
 import { cn } from "@/lib/utils"
 
 const navigation = [
-  { label: "Overview", href: "/superadmin", icon: LayoutDashboard },
+  { label: "Resumen", href: "/superadmin", icon: LayoutDashboard },
   {
-    label: "Organizaciones",
-    href: "/superadmin/organizations",
+    label: "Solicitudes",
+    href: "/superadmin/applications",
+    icon: ClipboardList,
+  },
+  {
+    label: "Productoras",
+    href: "/superadmin/organizers",
     icon: Building2,
   },
-  { label: "Usuarios", href: "/superadmin/users", icon: Users },
+  { label: "Compradores", href: "/superadmin/buyers", icon: Users },
   { label: "Eventos", href: "/superadmin/events", icon: CalendarDays },
   { label: "Categorías", href: "/superadmin/categories", icon: Tags },
-  { label: "Órdenes", href: "/superadmin/orders", icon: Receipt },
+  { label: "Compras", href: "/superadmin/orders", icon: Receipt },
   { label: "Liquidaciones", href: "/superadmin/settlements", icon: Wallet },
   { label: "Ajustes", href: "/superadmin/settings", icon: Settings },
 ] as const
@@ -62,7 +68,7 @@ export function SuperAdminSidebar() {
           <BrandLogo
             inverted
             href="/superadmin"
-            tagline="Platform OS"
+            tagline="Dueño de la Plataforma"
             className="px-0.5"
           />
         )}
@@ -95,11 +101,11 @@ export function SuperAdminSidebar() {
 
       <div className={cn("mt-8 px-2", collapsed && "sr-only")}>
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-600">
-          Control de plataforma
+          Menú principal
         </p>
       </div>
 
-      <nav className="mt-3 space-y-1" aria-label="Navegación de plataforma">
+      <nav className="mt-3 space-y-1" aria-label="Menú del panel">
         {navigation.map(({ label, href, icon: Icon }) => {
           const active =
             href === "/superadmin"
@@ -126,20 +132,15 @@ export function SuperAdminSidebar() {
         })}
       </nav>
 
-      <div className="mt-auto">
-        <Link
-          href="/admin"
-          title={collapsed ? "Panel organizador" : undefined}
+      <div className="mt-auto px-2 pt-4">
+        <p
           className={cn(
-            "flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium text-zinc-500 transition hover:bg-white/5 hover:text-white",
-            collapsed && "justify-center px-0",
+            "text-[11px] text-zinc-600",
+            collapsed && "sr-only",
           )}
         >
-          <LayoutDashboard className="size-[18px] shrink-0" aria-hidden="true" />
-          <span className={cn(collapsed && "sr-only")}>
-            Ir al panel organizador
-          </span>
-        </Link>
+          Panel de Control Central
+        </p>
       </div>
     </aside>
   )

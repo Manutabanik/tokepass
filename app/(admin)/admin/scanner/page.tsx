@@ -3,9 +3,9 @@ import type { Metadata } from "next"
 import { DoorScanner } from "@/components/admin/door-scanner"
 
 export const metadata: Metadata = {
-  title: "Escáner web",
+  title: "Control de Puerta (Escáner)",
   description:
-    "Validá entradas en la puerta, incluso sin conexión, y sincronizá después.",
+    "Escaneá los códigos QR desde tu celular o buscá al comprador por nombre si se quedó sin batería.",
 }
 
 export default function AdminScannerPage() {

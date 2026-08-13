@@ -16,8 +16,8 @@ import {
 import { createClient } from "@/lib/supabase/server"
 
 export const metadata: Metadata = {
-  title: "Editar evento",
-  description: "Actualizá la experiencia, el lugar y sus entradas.",
+  title: "Datos del Evento",
+  description: "Actualizá el lugar y los tipos de entradas.",
 }
 
 export default async function EditEventPage({
@@ -86,20 +86,20 @@ export default async function EditEventPage({
         className="inline-flex w-fit items-center gap-2 text-sm text-zinc-500 transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
-        Volver a Mis eventos
+        Volver a Mis Eventos
       </Link>
 
       <header>
         <p className="mb-3 inline-flex items-center gap-2 font-mono text-xs uppercase tracking-[0.18em] text-emerald-400">
           <Pencil className="size-3.5" aria-hidden="true" />
-          Event Editor
+          Datos del Evento
         </p>
         <h1 className="text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-white sm:text-4xl">
-          Editar experiencia: {initialData.title}
+          Editá: {initialData.title}
         </h1>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-600 dark:text-zinc-400 sm:text-base">
-          Actualizá la identidad, el lugar y la estrategia de entradas. Los
-          cambios se aplican de forma atómica sin alterar órdenes históricas.
+          Actualizá el título, el lugar y los tipos de entradas. Los cambios no
+          afectan las compras que ya se hicieron.
         </p>
       </header>
 

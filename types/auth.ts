@@ -15,6 +15,7 @@ export type EventStaffRole = (typeof EVENT_STAFF_ROLES)[number]
 export const STAFF_ROUTE_ALLOWLIST = [
   "/admin/scanner",
   "/admin/bar-scanner",
+  "/admin/store-scanner",
   "/admin/pos",
 ] as const
 
@@ -28,7 +29,7 @@ export function isStaffOpsPath(pathname: string): boolean {
 
 export function staffHomeForRoles(roles: EventStaffRole[]): string {
   if (roles.includes("door_staff")) return "/admin/scanner"
-  if (roles.includes("bar_staff")) return "/admin/bar-scanner"
+  if (roles.includes("bar_staff")) return "/admin/store-scanner"
   if (roles.includes("cashier")) return "/admin/pos"
   return "/admin/scanner"
 }
@@ -36,7 +37,7 @@ export function staffHomeForRoles(roles: EventStaffRole[]): string {
 export function navAllowedForStaffRoles(roles: EventStaffRole[]): string[] {
   const hrefs: string[] = []
   if (roles.includes("door_staff")) hrefs.push("/admin/scanner")
-  if (roles.includes("bar_staff")) hrefs.push("/admin/bar-scanner")
+  if (roles.includes("bar_staff")) hrefs.push("/admin/store-scanner")
   if (roles.includes("cashier")) hrefs.push("/admin/pos")
   return hrefs
 }

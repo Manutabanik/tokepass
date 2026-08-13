@@ -16,7 +16,7 @@ export function RevenueChart({ data }: { data: RevenuePoint[] }) {
           </p>
         </div>
         <span className="rounded-full bg-white/5 px-2.5 py-1 text-xs text-zinc-400">
-          GMV emitido
+          Ventas brutas
         </span>
       </div>
 

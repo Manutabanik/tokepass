@@ -8,7 +8,6 @@ import {
 } from "lucide-react"
 
 import type { EventDetails } from "@/app/actions/public-events"
-import type { getEventItems } from "@/app/actions/addons"
 import type { ResaleListingPublic } from "@/app/actions/resale"
 import {
   AddToCalendarButton,
@@ -43,8 +42,8 @@ type EventStorefrontProps = {
     buyerName?: string
     buyerDni?: string
     buyerEmail?: string
+    buyerPhone?: string
   } | null
-  barItems: Awaited<ReturnType<typeof getEventItems>>
   resaleListings?: ResaleListingPublic[]
   showBackLink?: boolean
 }
@@ -69,7 +68,6 @@ export function EventStorefront({
   currentUserId,
   referralCode = null,
   initialBuyer = null,
-  barItems,
   resaleListings = [],
   showBackLink = true,
 }: EventStorefrontProps) {
@@ -232,7 +230,6 @@ export function EventStorefront({
                   referralCode={referralCode}
                   serviceChargeRate={event.serviceChargeRate}
                   scheduleDays={event.scheduleDays}
-                  barItems={barItems}
                   seatingUnits={event.seatingUnits}
                   seatingBackgroundUrl={event.venue?.seating_background_url}
                   seatingLayout={event.venue?.seating_layout ?? []}
@@ -385,7 +382,6 @@ export function EventStorefront({
             referralCode={referralCode}
             serviceChargeRate={event.serviceChargeRate}
             scheduleDays={event.scheduleDays}
-            barItems={barItems}
             seatingUnits={event.seatingUnits}
             seatingBackgroundUrl={event.venue?.seating_background_url}
             seatingLayout={event.venue?.seating_layout ?? []}

@@ -141,14 +141,14 @@ export function OrganizationGovernancePanel({
     {
       label: "Entradas vendidas",
       value: formatNumber(organization.metrics.ticketsSold),
-      helper: "Tickets confirmados",
+      helper: "Entradas confirmadas",
       icon: TicketCheck,
       accent: "text-sky-300",
     },
     {
-      label: "GMV histórico",
+      label: "Ventas históricas",
       value: formatCurrency(organization.metrics.historicalGmv),
-      helper: "Órdenes pagadas",
+      helper: "Compras ya pagadas",
       icon: CircleDollarSign,
       accent: "text-emerald-300",
     },
@@ -192,8 +192,8 @@ export function OrganizationGovernancePanel({
                   Estado y ciclo de vida
                 </CardTitle>
                 <CardDescription className="mt-1 text-zinc-500">
-                  Las restricciones se aplican inmediatamente en la base de
-                  datos.
+                  Los cambios se aplican al toque: podés pausar o reactivar a
+                  esta productora cuando haga falta.
                 </CardDescription>
               </div>
               <Badge
@@ -249,10 +249,11 @@ export function OrganizationGovernancePanel({
         <Card className="border-0 bg-gradient-to-br from-sky-500/10 via-white/[0.04] to-white/[0.02] py-0 ring-1 ring-sky-400/20">
           <CardHeader className="border-b border-white/8 px-6 py-6">
             <CardTitle className="text-white">
-              Override de comisión · All-In Fee
+              Comisión de la ticketera
             </CardTitle>
             <CardDescription className="text-zinc-500">
-              Porcentaje retenido por Tokepass sobre el precio público.
+              Definí qué porcentaje se queda Tokepass sobre el precio que ve el
+              comprador. Se aplica a los eventos nuevos de esta productora.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5 px-6 py-6">
@@ -260,7 +261,7 @@ export function OrganizationGovernancePanel({
               htmlFor="organizer-fee-rate"
               className="block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500"
             >
-              Comisión personalizada
+              Porcentaje de comisión
             </label>
             <div className="relative">
               <Input

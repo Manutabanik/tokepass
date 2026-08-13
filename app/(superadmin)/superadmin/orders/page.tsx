@@ -8,7 +8,7 @@ import { SuperAdminForbiddenError } from "@/lib/superadmin-errors"
 import type { OrderStatus } from "@/types/database"
 
 export const metadata: Metadata = {
-  title: "Money Ledger · Órdenes",
+  title: "Compras",
 }
 
 const ORDER_STATUSES = new Set([
@@ -53,25 +53,25 @@ export default async function SuperAdminOrdersPage({
     errorMessage =
       error instanceof Error
         ? error.message
-        : "No se pudo cargar el ledger de órdenes."
+        : "No se pudo cargar el listado de compras."
   }
 
   if (errorMessage || !ledger) {
     return (
       <div className="space-y-6">
         <PageHeading
-          eyebrow="Platform Money Ledger"
-          title="Auditoría de órdenes"
-          description="Desglose soberano All-In: bruto cobrado, comisión Tokepass y neto a liquidar por productora."
+          eyebrow="Dinero en movimiento"
+          title="Compras de la plataforma"
+          description="Acá ves cuánto se cobró, cuánto se queda Tokepass y cuánto le corresponde a cada productora."
         />
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-8 text-amber-50">
-          <h2 className="text-lg font-bold">Ledger no disponible</h2>
+          <h2 className="text-lg font-bold">No pudimos cargar las compras</h2>
           <p className="mt-2 text-sm text-amber-100/80">
-            {errorMessage ?? "Error desconocido al consultar órdenes."}
+            {errorMessage ?? "Hubo un problema al consultar las compras."}
           </p>
           <p className="mt-4 text-xs text-amber-100/60">
-            Si acabás de desplegar, aplicá la migración P25 en Supabase (fix del
-            RPC <code className="font-mono">get_platform_orders_ledger</code>).
+            Si acabás de publicar cambios, asegurate de aplicar las migraciones
+            de dinero en Supabase y volvé a intentar.
           </p>
         </div>
       </div>
@@ -81,9 +81,9 @@ export default async function SuperAdminOrdersPage({
   return (
     <>
       <PageHeading
-        eyebrow="Platform Money Ledger"
-        title="Auditoría de órdenes"
-        description="Desglose soberano All-In: bruto cobrado, comisión Tokepass y neto a liquidar por productora."
+        eyebrow="Dinero en movimiento"
+        title="Compras de la plataforma"
+        description="Acá ves cuánto se cobró, cuánto se queda Tokepass y cuánto le corresponde a cada productora."
       />
 
       <PlatformOrdersLedger

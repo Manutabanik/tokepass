@@ -226,6 +226,7 @@ export async function assignEventStaff(input: {
     revalidatePath("/admin/scanner")
     revalidatePath("/admin/pos")
     revalidatePath("/admin/bar-scanner")
+    revalidatePath("/admin/store-scanner")
     return { success: true, data: undefined }
   } catch (error) {
     return {

@@ -18,6 +18,7 @@ import { toast } from "sonner"
 
 import { reserveSeatAtomic } from "@/app/actions/checkout"
 import { CheckoutBuyerFields } from "@/components/public/checkout-buyer-fields"
+import { CheckoutCountdown } from "@/components/public/checkout-countdown"
 import { Button } from "@/components/ui/button"
 import {
   validateCheckoutBuyer,
@@ -94,10 +95,15 @@ export function DualSeatingSelector({
   const router = useRouter()
   const [selectedId, setSelectedId] = useState("")
   const [isPending, startTransition] = useTransition()
+  const [paymentHold, setPaymentHold] = useState<{
+    initPoint: string
+    expiresAt: string
+  } | null>(null)
   const [buyer, setBuyer] = useState<CheckoutBuyerInfo>({
     buyerName: initialBuyer?.buyerName ?? "",
     buyerDni: initialBuyer?.buyerDni ?? "",
     buyerEmail: initialBuyer?.buyerEmail ?? "",
+    buyerPhone: initialBuyer?.buyerPhone ?? "",
   })
   const mapNodes = useRef(new Map<string, SVGGElement>())
   const listNodes = useRef(new Map<string, HTMLButtonElement>())
@@ -238,8 +244,15 @@ export function DualSeatingSelector({
         return
       }
 
-      toast.success("Ubicación reservada durante 8 minutos.")
-      window.location.href = result.initPoint
+      toast.success("Ubicación reservada. Completá el pago a tiempo.")
+      if (result.initPoint.startsWith("/")) {
+        window.location.href = result.initPoint
+        return
+      }
+      setPaymentHold({
+        initPoint: result.initPoint,
+        expiresAt: result.expiresAt,
+      })
     })
   }
 
@@ -248,6 +261,40 @@ export function DualSeatingSelector({
       ? tier.name.toUpperCase()
       : `${tier.name} ${selected.label}`.toUpperCase()
     : ""
+
+  if (paymentHold) {
+    return (
+      <section className="relative rounded-3xl border border-zinc-800 bg-zinc-900/80 p-4 shadow-2xl shadow-black/50 backdrop-blur-xl sm:p-6">
+        <CheckoutCountdown
+          expiresAt={paymentHold.expiresAt}
+          redirectTo={`/events/${eventId}`}
+          onExpired={() => {
+            setPaymentHold(null)
+            setSelectedId("")
+          }}
+        />
+        <a
+          href={paymentHold.initPoint}
+          className="mt-5 inline-flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-[#009EE3] px-5 text-sm font-black text-white transition hover:bg-[#08A8EE]"
+        >
+          Ir a pagar con Mercado Pago
+          <ArrowRight aria-hidden="true" />
+        </a>
+        <Button
+          type="button"
+          variant="ghost"
+          className="mt-3 w-full text-zinc-400 hover:text-white"
+          onClick={() => {
+            setPaymentHold(null)
+            setSelectedId("")
+            router.refresh()
+          }}
+        >
+          Cancelar y elegir de nuevo
+        </Button>
+      </section>
+    )
+  }
 
   return (
     <section className="relative rounded-3xl border border-zinc-800 bg-zinc-900/80 p-4 pb-24 shadow-2xl shadow-black/50 backdrop-blur-xl sm:p-6 sm:pb-24">

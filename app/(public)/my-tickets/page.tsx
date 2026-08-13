@@ -1,8 +1,12 @@
 import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 
-import { getMyBarRedemptions } from "@/app/actions/addons"
+import {
+  getEventItems,
+  getMyStoreRedemptions,
+} from "@/app/actions/addons"
 import { getMyTickets } from "@/app/actions/tickets"
+import { EventStoreUpsell } from "@/components/public/event-store-upsell"
 import { OfflineTicketWallet } from "@/components/pwa/offline-ticket-wallet"
 import { createClient } from "@/lib/supabase/server"
 import { getWalletUiFlags } from "@/lib/wallet-cache"
@@ -24,16 +28,16 @@ export default async function MyTicketsPage() {
   }
 
   let initialTickets: Awaited<ReturnType<typeof getMyTickets>> = []
-  let barRedemptions: Awaited<ReturnType<typeof getMyBarRedemptions>> = []
+  let storeRedemptions: Awaited<ReturnType<typeof getMyStoreRedemptions>> = []
   let loadError: string | null = null
 
   try {
     const [tickets, redemptions] = await Promise.all([
       getMyTickets(),
-      getMyBarRedemptions(),
+      getMyStoreRedemptions(),
     ])
     initialTickets = tickets
-    barRedemptions = redemptions
+    storeRedemptions = redemptions
   } catch (error) {
     if (error instanceof Error && error.message === "auth_required") {
       redirect("/login?next=/my-tickets")
@@ -46,6 +50,32 @@ export default async function MyTicketsPage() {
 
   const walletFlags = getWalletUiFlags()
 
+  const eligibleEvents = new Map<
+    string,
+    { title: string }
+  >()
+  for (const ticket of initialTickets) {
+    if (
+      ticket.status === "valid" ||
+      ticket.status === "used" ||
+      ticket.status === "scanned"
+    ) {
+      eligibleEvents.set(ticket.eventId, { title: ticket.eventTitle })
+    }
+  }
+
+  const storeBlocks = await Promise.all(
+    [...eligibleEvents.entries()].map(async ([eventId, meta]) => {
+      try {
+        const items = await getEventItems(eventId)
+        if (items.length === 0) return null
+        return { eventId, title: meta.title, items }
+      } catch {
+        return null
+      }
+    }),
+  )
+
   return (
     <main className="dark relative isolate min-h-[calc(100vh-4rem)] overflow-hidden bg-[#09090b] text-zinc-100">
       <div
@@ -57,8 +87,8 @@ export default async function MyTicketsPage() {
         aria-hidden="true"
       />
 
-      <section className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
-        <header className="mb-8 sm:mb-10">
+      <section className="mx-auto w-full max-w-4xl space-y-8 px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
+        <header>
           <p className="mb-3 inline-block rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 font-mono text-xs uppercase tracking-[0.18em] text-emerald-400">
             Billetera
           </p>
@@ -66,19 +96,36 @@ export default async function MyTicketsPage() {
             Mis entradas
           </h1>
           <p className="mt-2 max-w-xl text-sm leading-relaxed text-zinc-400 sm:text-base">
-            Entradas con Living QR offline. Guardá la app en tu pantalla de
-            inicio para la puerta.
+            Entradas con Living QR offline. Después de comprar, sumá extras
+            desde la Tienda.
           </p>
         </header>
 
         <OfflineTicketWallet
           userId={user.id}
           initialTickets={initialTickets}
-          barRedemptions={barRedemptions}
+          barRedemptions={storeRedemptions}
           loadError={loadError}
           appleWalletEnabled={walletFlags.appleWalletEnabled}
           googleWalletEnabled={walletFlags.googleWalletEnabled}
         />
+
+        {storeBlocks.filter(Boolean).length > 0 ? (
+          <div className="space-y-4">
+            <h2 className="text-lg font-bold text-white">Tienda de Extras</h2>
+            {storeBlocks.map((block) =>
+              block ? (
+                <EventStoreUpsell
+                  key={block.eventId}
+                  eventId={block.eventId}
+                  eventTitle={block.title}
+                  items={block.items}
+                  canPurchase
+                />
+              ) : null,
+            )}
+          </div>
+        ) : null}
       </section>
     </main>
   )

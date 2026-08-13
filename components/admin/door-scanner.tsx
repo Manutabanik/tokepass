@@ -741,11 +741,15 @@ export function DoorScanner() {
                 />
                 <div className="min-w-0">
                   <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-violet-300">
-                    {isTotemMode ? "Modo tótem" : "Escáner web"}
+                    {isTotemMode ? "Modo tótem" : "Control de Puerta"}
                   </p>
                   <h1 className="mt-1 text-2xl font-black tracking-tight">
-                    Escáner Tokepass
+                    Control de Puerta (Escáner)
                   </h1>
+                  <p className="mt-1 max-w-md text-xs leading-5 text-zinc-400">
+                    Escaneá los códigos QR desde tu celular o buscá al comprador
+                    por nombre si se quedó sin batería.
+                  </p>
                 </div>
               </div>
               {!isTotemMode ? (
@@ -808,7 +812,7 @@ export function DoorScanner() {
                   <SelectItem key={event.id} value={event.id}>
                     {event.title}
                     {event.qrType === "static" ? " · QR fijo" : ""}
-                    {event.status === "draft" ? " (draft)" : ""}
+                    {event.status === "draft" ? " (borrador)" : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -828,12 +832,12 @@ export function DoorScanner() {
                 ) : (
                   <WifiOff className="size-3.5" />
                 )}
-                {online ? "Online" : "Offline"}
+                {online ? "Con conexión" : "Sin conexión"}
               </span>
 
               {hasLocalManifest ? (
                 <span className="rounded-full bg-violet-500/20 px-2.5 py-1 text-[11px] font-semibold text-violet-200">
-                  {manifestMeta?.ticketCount ?? 0} tickets en dispositivo
+                  {manifestMeta?.ticketCount ?? 0} entradas en el celular
                 </span>
               ) : (
                 <span className="rounded-full bg-red-500/20 px-2.5 py-1 text-[11px] font-semibold text-red-200">
@@ -843,7 +847,7 @@ export function DoorScanner() {
 
               {queueCount > 0 ? (
                 <span className="rounded-full bg-sky-500/20 px-2.5 py-1 text-[11px] font-semibold text-sky-200">
-                  {queueCount} pendientes de sync
+                  {queueCount} pendientes de sincronizar
                 </span>
               ) : null}
             </div>
@@ -888,7 +892,7 @@ export function DoorScanner() {
                   className="h-12 rounded-2xl bg-zinc-800 text-xs font-bold text-zinc-900 dark:text-white hover:bg-zinc-700"
                 >
                   <Search className="size-4" />
-                  Buscador
+                  Buscar por nombre
                 </Button>
               ) : null}
             </div>

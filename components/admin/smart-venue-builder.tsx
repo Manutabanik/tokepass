@@ -277,7 +277,7 @@ export function SmartVenueBuilder({
                     htmlFor={`zone-${zone.key}-capacity`}
                     className="text-[10px] uppercase tracking-wider text-zinc-500"
                   >
-                    Cantidad de personas
+                    Capacidad (Aforo máximo)
                   </Label>
                   <Input
                     id={`zone-${zone.key}-capacity`}

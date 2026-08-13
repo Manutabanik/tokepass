@@ -12,6 +12,7 @@ import {
   EyeOff,
   Gift,
   Globe2,
+  IdCard,
   LoaderCircle,
   Lock,
   Plus,
@@ -40,7 +41,6 @@ import {
 import { PublishEventConfirmDialog } from "@/components/admin/publish-event-confirm-dialog"
 import type { OrganizerVenue } from "@/app/actions/venues"
 import { createVenue } from "@/app/actions/venues"
-import { BoostModal } from "@/components/admin/boost-modal"
 import { EventVenueStep } from "@/components/admin/event-venue-step"
 import { ScheduleDaysBuilder } from "@/components/admin/schedule-days-builder"
 import { VenueSeatPricingPanel } from "@/components/admin/venue-seat-pricing-panel"
@@ -90,6 +90,9 @@ import {
   type VenuePricingMap,
 } from "@/lib/seating/venue-adapter"
 import {
+  AGE_RESTRICTION_LABELS,
+  AGE_RESTRICTION_VALUES,
+  MAX_EVENT_FLYER_BYTES,
   eventFormSchema,
   type EventFormValues,
 } from "@/lib/validations/event-form"
@@ -98,24 +101,19 @@ import { getVenueSeatingItems } from "@/types/venues"
 
 const steps = [
   {
-    title: "Lo básico",
-    description: "Nombre, fecha y flyer",
+    title: "Identidad",
+    description: "Info, fechas, categoría y flyer",
     icon: Sparkles,
   },
   {
-    title: "El lugar",
+    title: "Lugar de la Fiesta",
     description: "Dónde y cuánta gente entra",
     icon: Building2,
   },
   {
-    title: "Entradas",
+    title: "Tipos de Entrada",
     description: "Precios y cupos",
     icon: Ticket,
-  },
-  {
-    title: "Difusión",
-    description: "Promotores y extras",
-    icon: Rocket,
   },
 ] as const
 
@@ -123,10 +121,12 @@ const fieldsByStep: FieldPath<EventFormValues>[][] = [
   [
     "basics.title",
     "basics.date",
+    "basics.endDate",
     "basics.description",
     "basics.flyerName",
     "basics.visibility",
     "basics.categoryId",
+    "basics.ageRestriction",
     "basics.isMultiDay",
     "basics.scheduleDays",
   ],
@@ -141,19 +141,34 @@ const fieldsByStep: FieldPath<EventFormValues>[][] = [
     "venue.seatsPerRow",
   ],
   ["tickets"],
-  ["growth.isAddonsEnabled"],
 ]
+
+const blankTicket = (): EventFormValues["tickets"][number] =>
+  ({
+    name: "",
+    price: undefined as unknown as number,
+    capacity: undefined as unknown as number,
+    timeLimit: "",
+    bonusReward: "",
+    dayId: null,
+    visibility: "public",
+    layoutType: "general",
+    seatingSectorId: null,
+    capacityPerUnit: 1,
+  })
 
 const defaultValues: EventFormValues = {
   basics: {
     title: "",
     date: "",
+    endDate: "",
     description: "",
     flyerName: null,
     visibility: "public",
     isMultiDay: false,
     scheduleDays: [],
     categoryId: "",
+    ageRestriction: "" as unknown as EventFormValues["basics"]["ageRestriction"],
   },
   venue: {
     mode: "new",
@@ -162,32 +177,16 @@ const defaultValues: EventFormValues = {
     venueName: "",
     venueLocation: "",
     venueCity: "",
-    capacity: 500,
-    rows: 20,
-    seatsPerRow: 20,
+    capacity: undefined,
+    rows: undefined,
+    seatsPerRow: undefined,
     latitude: null,
     longitude: null,
     seatingBackgroundUrl: null,
     saveVenueForReuse: true,
     zones: undefined,
   },
-  tickets: [
-    {
-      name: "General",
-      price: 0,
-      capacity: 500,
-      timeLimit: "",
-      bonusReward: "",
-      dayId: null,
-      visibility: "public",
-      layoutType: "general",
-      seatingSectorId: null,
-      capacityPerUnit: 1,
-    },
-  ],
-  growth: {
-    isAddonsEnabled: false,
-  },
+  tickets: [blankTicket()],
 }
 
 function NumberInput({
@@ -231,10 +230,7 @@ export function EventCreationWizard({
   const [activeStep, setActiveStep] = useState(0)
   const [highestStep, setHighestStep] = useState(0)
   const [flyerFile, setFlyerFile] = useState<File | null>(null)
-  const [boostEvent, setBoostEvent] = useState<{
-    id: string
-    title: string
-  } | null>(null)
+  const [flyerError, setFlyerError] = useState<string | null>(null)
   const [resultMessage, setResultMessage] = useState<{
     type: "success" | "error"
     text: string
@@ -358,8 +354,11 @@ export function EventCreationWizard({
     const pricable = listPricableSectors(venue)
     const isSingleBlank =
       currentTickets.length === 1 &&
-      (!currentTickets[0]?.name || currentTickets[0]?.name === "General") &&
-      (currentTickets[0]?.price ?? 0) === 0 &&
+      !currentTickets[0]?.name?.trim() &&
+      (currentTickets[0]?.price == null ||
+        !Number.isFinite(currentTickets[0]?.price)) &&
+      (currentTickets[0]?.capacity == null ||
+        !Number.isFinite(currentTickets[0]?.capacity)) &&
       !currentTickets[0]?.seatingSectorId &&
       !(currentTickets[0]?.sold && currentTickets[0].sold > 0)
 
@@ -380,7 +379,7 @@ export function EventCreationWizard({
             : venue.capacity
           return {
             name: sector.name,
-            price: 0,
+            price: undefined as unknown as number,
             capacity:
               sector.type === "general" || !hasSeatingLayout
                 ? Math.max(1, venue.capacity)
@@ -421,6 +420,15 @@ export function EventCreationWizard({
     intent: "draft" | "publish" = "draft",
   ) {
     setResultMessage(null)
+
+    if (flyerFile && flyerFile.size > MAX_EVENT_FLYER_BYTES) {
+      const message =
+        "El flyer supera los 5MB. Comprimilo o elegí otra imagen."
+      setFlyerError(message)
+      form.setError("basics.flyerName", { type: "manual", message })
+      setActiveStep(0)
+      return
+    }
 
     let payloadData = data
     if (
@@ -502,21 +510,13 @@ export function EventCreationWizard({
       return
     }
 
-    if (isEditing) {
-      toast.success("Cambios guardados", {
-        description: "El evento y sus entradas se actualizaron correctamente.",
-      })
-      router.push("/admin/events")
-      router.refresh()
-      return
-    }
-
-    toast.success("Borrador guardado", {
+    toast.success(isEditing ? "Cambios guardados" : "Borrador guardado", {
       description: flyerFile
-        ? "Borrador con flyer listo para previsualizar."
-        : "Podés previsualizarlo o publicarlo cuando quieras.",
+        ? "Borrador con flyer listo. Completá barra y multimedia cuando quieras."
+        : "Podés potenciar el evento desde el panel.",
     })
-    setBoostEvent({ id: result.eventId, title: data.basics.title })
+    router.push(`/admin/events/${result.eventId}`)
+    router.refresh()
   }
 
   return (
@@ -530,7 +530,7 @@ export function EventCreationWizard({
           onValueChange={(value) => void moveToStep(Number(value))}
           className="flex flex-col gap-8"
         >
-          <TabsList className="grid w-full grid-cols-2 items-stretch gap-3 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/80 p-2 shadow-lg shadow-zinc-200/70 dark:shadow-black/20 backdrop-blur-md group-data-horizontal/tabs:h-auto lg:grid-cols-4">
+          <TabsList className="grid w-full grid-cols-1 items-stretch gap-3 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/80 p-2 shadow-lg shadow-zinc-200/70 dark:shadow-black/20 backdrop-blur-md group-data-horizontal/tabs:h-auto sm:grid-cols-3">
             {steps.map(({ title, description }, index) => {
               const completed = index < activeStep
               const available = index <= highestStep + 1
@@ -577,10 +577,11 @@ export function EventCreationWizard({
             >
               <CardHeader className="px-6 pt-8 sm:px-10 sm:pt-10">
                 <CardTitle className="mb-1 text-2xl font-bold text-zinc-900 dark:text-white">
-                  Datos del evento
+                  Identidad del evento
                 </CardTitle>
                 <CardDescription className="border-b border-zinc-200 dark:border-zinc-800 pb-6 text-sm text-zinc-600 dark:text-zinc-400">
-                  Contá cómo se llama, cuándo es y qué van a vivir.
+                  Nombre, fechas, categoría, edad y flyer. Lo esencial para
+                  publicar.
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid grid-cols-1 items-start gap-8 px-6 py-8 sm:px-10 lg:grid-cols-12">
@@ -639,6 +640,43 @@ export function EventCreationWizard({
                         <p className="text-xs text-zinc-500 dark:text-zinc-400">
                           Lista definida por Tokepass. No se pueden crear etiquetas libres.
                         </p>
+                        <FormMessage>{fieldState.error?.message}</FormMessage>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="basics.ageRestriction"
+                    render={({ field, fieldState }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-1.5 font-mono text-xs font-semibold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
+                          <IdCard className="size-3.5" aria-hidden="true" />
+                          Restricción de edad
+                        </FormLabel>
+                        <Select
+                          value={field.value || undefined}
+                          onValueChange={(value) =>
+                            field.onChange(
+                              value as EventFormValues["basics"]["ageRestriction"],
+                            )
+                          }
+                        >
+                          <SelectTrigger className="h-12 w-full rounded-xl">
+                            <SelectValue placeholder="Elegí ATP, +16 o +18" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {AGE_RESTRICTION_VALUES.map((value) => (
+                              <SelectItem key={value} value={value}>
+                                {AGE_RESTRICTION_LABELS[value]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription className="text-xs text-zinc-500">
+                          Se muestra en la ficha pública. El control de DNI es
+                          responsabilidad de la puerta.
+                        </FormDescription>
                         <FormMessage>{fieldState.error?.message}</FormMessage>
                       </FormItem>
                     )}
@@ -758,27 +796,53 @@ export function EventCreationWizard({
                   {isMultiDay ? (
                     <ScheduleDaysBuilder control={form.control} />
                   ) : (
-                    <FormField
-                      control={form.control}
-                      name="basics.date"
-                      render={({ field, fieldState }) => (
-                        <FormItem>
-                          <FormLabel
-                            htmlFor="event-date"
-                            className="block font-mono text-xs font-semibold uppercase tracking-wider text-zinc-700 dark:text-zinc-300"
-                          >
-                            Fecha y hora
-                          </FormLabel>
-                          <Input
-                            {...field}
-                            id="event-date"
-                            type="datetime-local"
-                            className="scheme-light dark:scheme-dark h-12 w-full rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 py-3 text-sm text-zinc-900 dark:text-white shadow-inner transition-all focus:border-emerald-500/60 focus:bg-zinc-100 dark:focus:bg-zinc-900 focus:ring-2 focus:ring-emerald-500/15 focus:outline-none"
-                          />
-                          <FormMessage>{fieldState.error?.message}</FormMessage>
-                        </FormItem>
-                      )}
-                    />
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <FormField
+                        control={form.control}
+                        name="basics.date"
+                        render={({ field, fieldState }) => (
+                          <FormItem>
+                            <FormLabel
+                              htmlFor="event-date"
+                              className="block font-mono text-xs font-semibold uppercase tracking-wider text-zinc-700 dark:text-zinc-300"
+                            >
+                              Fecha y hora de inicio
+                            </FormLabel>
+                            <Input
+                              {...field}
+                              id="event-date"
+                              type="datetime-local"
+                              className="scheme-light dark:scheme-dark h-12 w-full rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 py-3 text-sm text-zinc-900 dark:text-white shadow-inner transition-all focus:border-emerald-500/60 focus:bg-zinc-100 dark:focus:bg-zinc-900 focus:ring-2 focus:ring-emerald-500/15 focus:outline-none"
+                            />
+                            <FormMessage>{fieldState.error?.message}</FormMessage>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="basics.endDate"
+                        render={({ field, fieldState }) => (
+                          <FormItem>
+                            <FormLabel
+                              htmlFor="event-end-date"
+                              className="block font-mono text-xs font-semibold uppercase tracking-wider text-zinc-700 dark:text-zinc-300"
+                            >
+                              Hora de finalización
+                            </FormLabel>
+                            <Input
+                              {...field}
+                              id="event-end-date"
+                              type="datetime-local"
+                              className="scheme-light dark:scheme-dark h-12 w-full rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 py-3 text-sm text-zinc-900 dark:text-white shadow-inner transition-all focus:border-emerald-500/60 focus:bg-zinc-100 dark:focus:bg-zinc-900 focus:ring-2 focus:ring-emerald-500/15 focus:outline-none"
+                            />
+                            <FormDescription className="text-xs text-zinc-500">
+                              Debe ser posterior al inicio (útil si cruza medianoche).
+                            </FormDescription>
+                            <FormMessage>{fieldState.error?.message}</FormMessage>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
                   )}
 
                   <FormField
@@ -837,10 +901,11 @@ export function EventCreationWizard({
                         {flyerName ||
                           (isEditing
                             ? "Reemplazar flyer actual"
-                            : "Sube el arte del evento")}
+                            : "Subí el arte del evento")}
                       </span>
-                      <span className="mx-auto block max-w-[220px] text-xs leading-relaxed text-zinc-500">
-                        PNG, JPG o WEBP. Recomendado 1600 × 900 px.
+                      <span className="mx-auto block max-w-[240px] text-xs leading-relaxed text-zinc-500">
+                        Tamaño máximo 5MB. Recomendamos formato horizontal
+                        1600x900px (PNG, JPG o WEBP).
                       </span>
                     </span>
                     <Input
@@ -850,6 +915,24 @@ export function EventCreationWizard({
                       className="sr-only"
                       onChange={(event) => {
                         const file = event.target.files?.[0] ?? null
+                        if (file && file.size > MAX_EVENT_FLYER_BYTES) {
+                          setFlyerFile(null)
+                          setFlyerError(
+                            "El flyer supera los 5MB. Comprimilo o elegí otra imagen.",
+                          )
+                          form.setValue("basics.flyerName", null, {
+                            shouldDirty: true,
+                          })
+                          form.setError("basics.flyerName", {
+                            type: "manual",
+                            message:
+                              "El flyer supera los 5MB. Comprimilo o elegí otra imagen.",
+                          })
+                          event.target.value = ""
+                          return
+                        }
+                        setFlyerError(null)
+                        form.clearErrors("basics.flyerName")
                         setFlyerFile(file)
                         form.setValue(
                           "basics.flyerName",
@@ -859,6 +942,13 @@ export function EventCreationWizard({
                       }}
                     />
                   </label>
+                  {(flyerError ||
+                    form.formState.errors.basics?.flyerName?.message) && (
+                    <p className="text-sm text-red-400" role="alert">
+                      {flyerError ??
+                        form.formState.errors.basics?.flyerName?.message}
+                    </p>
+                  )}
                 </FormItem>
               </CardContent>
             </TabsContent>
@@ -868,7 +958,9 @@ export function EventCreationWizard({
               className="animate-in fade-in slide-in-from-right-2 duration-300"
             >
               <CardHeader className="border-b border-zinc-200 dark:border-white/8 px-6 py-6 lg:px-8">
-                <CardTitle className="text-xl text-zinc-900 dark:text-white">El lugar</CardTitle>
+                <CardTitle className="text-xl text-zinc-900 dark:text-white">
+                  Lugar de la Fiesta
+                </CardTitle>
                 <CardDescription className="text-zinc-500">
                   Elegí un lugar guardado o creá uno nuevo acá mismo, con mapa y
                   zonas.
@@ -900,10 +992,11 @@ export function EventCreationWizard({
             >
               <CardHeader className="border-b border-zinc-200 dark:border-white/8 px-6 py-6 lg:px-8">
                 <CardTitle className="text-xl text-zinc-900 dark:text-white">
-                  Entradas y precios
+                  Tipos de Entrada
                 </CardTitle>
                 <CardDescription className="text-zinc-500">
-                  Definí precios, cupos y recompensas.
+                  Completá vos el nombre, el precio y la capacidad. No hay
+                  valores por defecto: evitamos publicar gratis por accidente.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 px-6 py-7 lg:px-8">
@@ -958,12 +1051,12 @@ export function EventCreationWizard({
                           render={({ field, fieldState }) => (
                             <FormItem>
                               <FormLabel htmlFor={`tier-${index}-name`}>
-                                Nombre
+                                Nombre de la entrada
                               </FormLabel>
                               <Input
                                 {...field}
                                 id={`tier-${index}-name`}
-                                placeholder="Ej. Preventa 1"
+                                placeholder="Ej. General, VIP, Preventa"
                                 className="h-10 border-zinc-200 dark:border-white/10 bg-zinc-100 dark:bg-black/20"
                               />
                               <FormMessage>
@@ -978,17 +1071,20 @@ export function EventCreationWizard({
                           render={({ field, fieldState }) => (
                             <FormItem>
                               <FormLabel htmlFor={`tier-${index}-capacity`}>
-                                Cantidad de personas
+                                Capacidad (Aforo máximo)
                               </FormLabel>
                               <NumberInput
                                 id={`tier-${index}-capacity`}
                                 min={1}
+                                placeholder="Ej. 200"
                                 value={field.value}
-                                onChange={(value) =>
-                                  field.onChange(value ?? 0)
-                                }
+                                onChange={(value) => field.onChange(value)}
                                 className="h-10 border-zinc-200 dark:border-white/10 bg-zinc-100 dark:bg-black/20"
                               />
+                              <p className="text-xs text-zinc-500">
+                                Cantidad máxima de esta entrada. Limitá el cupo
+                                si querés generar urgencia.
+                              </p>
                               <FormMessage>
                                 {fieldState.error?.message}
                               </FormMessage>
@@ -1255,7 +1351,7 @@ export function EventCreationWizard({
                                 htmlFor={`tier-${index}-price`}
                                 className="block font-mono text-xs font-semibold uppercase tracking-wider text-zinc-700 dark:text-zinc-300"
                               >
-                                Precio público al comprador
+                                Precio que ve el comprador
                               </FormLabel>
                               <div className="relative">
                                 <CircleDollarSign className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-600" />
@@ -1263,16 +1359,15 @@ export function EventCreationWizard({
                                   id={`tier-${index}-price`}
                                   min={0}
                                   step="0.01"
+                                  placeholder="Ej. 15000"
                                   value={field.value}
-                                  onChange={(value) =>
-                                    field.onChange(value ?? 0)
-                                  }
+                                  onChange={(value) => field.onChange(value)}
                                   className="h-12 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 pl-9"
                                 />
                               </div>
                               <div className="my-3 space-y-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/60 p-3.5 font-mono text-xs text-zinc-600 dark:text-zinc-400">
                                 <p>
-                                  Precio público al comprador:{" "}
+                                  Precio que ve el comprador:{" "}
                                   <span className="text-zinc-800 dark:text-zinc-200">
                                     {formatCurrency(breakdown.publicPrice)}
                                   </span>
@@ -1288,12 +1383,17 @@ export function EventCreationWizard({
                               </div>
                               <div className="flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3">
                                 <span className="font-sans text-xs font-bold uppercase text-emerald-400">
-                                  Ingreso neto para el organizador
+                                  Te queda en mano
                                 </span>
                                 <span className="font-mono text-lg font-extrabold text-zinc-900 dark:text-white">
                                   {formatCurrency(breakdown.basePrice)}
                                 </span>
                               </div>
+                              <p className="text-xs leading-5 text-zinc-500">
+                                Hacerme cargo de la comisión (El comprador paga
+                                el precio exacto, la comisión se descuenta de tu
+                                ganancia).
+                              </p>
                               <FormMessage>
                                 {fieldState.error?.message}
                               </FormMessage>
@@ -1310,7 +1410,7 @@ export function EventCreationWizard({
                           <AccordionTrigger className="rounded-xl bg-zinc-50 dark:bg-white/[0.025] px-4 text-zinc-700 dark:text-zinc-300 hover:no-underline">
                             <span className="flex items-center gap-2">
                               <Gift className="size-4 text-violet-400" />
-                              Opciones avanzadas · Smart Yield
+                              Opciones avanzadas
                             </span>
                           </AccordionTrigger>
                           <AccordionContent className="grid gap-4 px-4 pt-4 md:grid-cols-2">
@@ -1385,20 +1485,7 @@ export function EventCreationWizard({
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() =>
-                    append({
-                      name: `Preventa ${fields.length + 1}`,
-                      price: 0,
-                      capacity: 100,
-                      timeLimit: "",
-                      bonusReward: "",
-                      dayId: null,
-                      visibility: "public",
-                      layoutType: "general",
-                      seatingSectorId: null,
-                      capacityPerUnit: 1,
-                    })
-                  }
+                  onClick={() => append(blankTicket())}
                   className="h-11 w-full border-dashed border-zinc-300 dark:border-white/12 bg-transparent text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-white/[0.03] hover:text-zinc-900 dark:hover:text-white"
                 >
                   <Plus />
@@ -1408,94 +1495,6 @@ export function EventCreationWizard({
                 <FormMessage>
                   {form.formState.errors.tickets?.root?.message}
                 </FormMessage>
-              </CardContent>
-            </TabsContent>
-
-            <TabsContent
-              value="3"
-              className="animate-in fade-in slide-in-from-right-2 duration-300"
-            >
-              <CardHeader className="border-b border-zinc-200 dark:border-white/8 px-6 py-6 lg:px-8">
-                <CardTitle className="text-xl text-zinc-900 dark:text-white">
-                  Difusión y extras
-                </CardTitle>
-                <CardDescription className="text-zinc-500">
-                  Activá canales de difusión y sumá extras al ticket.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4 px-6 py-7 lg:px-8">
-                <div className="rounded-2xl border border-violet-500/25 bg-violet-500/5 p-5">
-                  <p className="text-base font-semibold text-zinc-900 dark:text-white">
-                    Promotores y RRPP
-                  </p>
-                  <p className="mt-1 max-w-xl text-sm text-zinc-600 dark:text-zinc-400">
-                    Los códigos de referido y las comisiones se gestionan en el
-                    panel de Promotores (no en la creación del evento). Compartí
-                    links con{" "}
-                    <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs dark:bg-black/30">
-                      ?ref=CODIGO
-                    </code>{" "}
-                    desde cualquier página de Tokepass.
-                  </p>
-                  <a
-                    href="/admin/promoters"
-                    className="mt-4 inline-flex h-10 items-center rounded-full border border-violet-500/40 bg-violet-500/15 px-4 text-sm font-semibold text-violet-800 transition hover:bg-violet-500/25 dark:text-violet-100"
-                  >
-                    Ir a Promotores y RRPP
-                  </a>
-                </div>
-
-                <FormField
-                  control={form.control}
-                  name="growth.isAddonsEnabled"
-                  render={({ field }) => (
-                    <FormItem className="rounded-2xl border border-zinc-200 dark:border-white/8 bg-zinc-50 dark:bg-black/15 p-5">
-                      <div className="flex items-start justify-between gap-5">
-                        <div>
-                          <FormLabel
-                            htmlFor="growth-addons-enabled"
-                            className="text-base text-zinc-900 dark:text-white"
-                          >
-                            Habilitar extras
-                          </FormLabel>
-                          <FormDescription className="mt-1 max-w-xl">
-                            Sumá estacionamiento, botellas, merch o experiencias
-                            premium al proceso de pago.
-                          </FormDescription>
-                        </div>
-                        <Switch
-                          id="growth-addons-enabled"
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                          className="mt-1 data-checked:bg-violet-600"
-                        />
-                      </div>
-                    </FormItem>
-                  )}
-                />
-
-                <div className="rounded-2xl border border-cyan-400/25 bg-gradient-to-br from-cyan-500/10 via-fuchsia-500/5 to-transparent p-5">
-                  <p className="flex items-center gap-2 font-semibold text-cyan-100">
-                    <Sparkles className="size-4 text-cyan-300" />
-                    Multiplicá tus ventas hasta x3
-                  </p>
-                  <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-                    Al crear el evento vas a poder activar Tokepass Boost
-                    (Silver, Gold o Platinum) y destacar esta noche en la
-                    portada para compradores.
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-violet-500/15 bg-[radial-gradient(circle_at_top_right,rgba(124,58,237,0.14),transparent_55%),rgba(124,58,237,0.04)] p-5">
-                  <p className="flex items-center gap-2 font-medium text-violet-200">
-                    <Rocket className="size-4" />
-                    Configuración lista para escalar
-                  </p>
-                  <p className="mt-2 max-w-2xl text-xs leading-5 text-zinc-500">
-                    Podrás sumar promotores y productos específicos después de
-                    crear el evento.
-                  </p>
-                </div>
 
                 {resultMessage && (
                   <p
@@ -1551,7 +1550,7 @@ export function EventCreationWizard({
                     )}
                     {form.formState.isSubmitting
                       ? "Guardando…"
-                      : "Guardar como borrador"}
+                      : "Guardar Borrador"}
                   </Button>
                   <Button
                     key="publish"
@@ -1571,7 +1570,7 @@ export function EventCreationWizard({
                     )}
                     {form.formState.isSubmitting
                       ? "Publicando…"
-                      : "Publicar evento"}
+                      : "Publicar Evento"}
                   </Button>
                 </div>
               )}
@@ -1581,32 +1580,19 @@ export function EventCreationWizard({
       </form>
     </Form>
 
-    {boostEvent ? (
-      <BoostModal
-        open={Boolean(boostEvent)}
-        onOpenChange={(open) => {
-          if (!open) {
-            setBoostEvent(null)
-            router.push("/admin/events")
-            router.refresh()
-          }
+    {publishConfirm.open ? (
+      <PublishEventConfirmDialog
+        eventId={publishConfirm.eventId}
+        open={publishConfirm.open}
+        onOpenChange={(open) =>
+          setPublishConfirm((current) => ({ ...current, open }))
+        }
+        onPublished={() => {
+          router.push(`/admin/events/${publishConfirm.eventId}`)
+          router.refresh()
         }}
-        eventId={boostEvent.id}
-        eventTitle={boostEvent.title}
       />
     ) : null}
-
-    <PublishEventConfirmDialog
-      eventId={publishConfirm.eventId}
-      open={publishConfirm.open}
-      onOpenChange={(open) =>
-        setPublishConfirm((current) => ({ ...current, open }))
-      }
-      onPublished={() => {
-        router.push(`/events/${publishConfirm.eventId}`)
-        router.refresh()
-      }}
-    />
     </>
   )
 }

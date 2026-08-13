@@ -56,9 +56,10 @@ export function EmergencyTicketSearch({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85dvh] overflow-hidden border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Buscador de emergencia</DialogTitle>
+          <DialogTitle>Buscar comprador</DialogTitle>
           <DialogDescription className="text-zinc-600 dark:text-zinc-400">
-            Buscá por nombre o DNI en las entradas guardadas sin conexión. Un toque valida.
+            Escaneá los códigos QR desde tu celular o buscá al comprador por
+            nombre si se quedó sin batería.
           </DialogDescription>
         </DialogHeader>
 

@@ -18,7 +18,7 @@ import type { UserRole } from "@/types/database"
 const roleOptions: { value: UserRole; label: string }[] = [
   { value: "customer", label: "Cliente" },
   { value: "admin", label: "Organizador" },
-  { value: "super_admin", label: "Super admin" },
+  { value: "super_admin", label: "Dueño de la plataforma" },
 ]
 
 export function UserRoleManager({
