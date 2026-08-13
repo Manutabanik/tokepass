@@ -108,7 +108,7 @@ export function BrandLogo({
               isHeader
                 ? "text-[1.35rem] sm:text-[1.55rem] lg:text-[1.7rem]"
                 : "text-[1.15rem] sm:text-[1.25rem]",
-              inverted ? "text-white" : "text-zinc-950",
+              inverted ? "text-zinc-950 dark:text-white" : "text-zinc-950 dark:text-white",
             )}
           >
             Tokepass
@@ -118,14 +118,16 @@ export function BrandLogo({
               className={cn(
                 "mt-1 font-semibold uppercase tracking-[0.18em]",
                 isHeader ? "text-[11px]" : "text-[10px]",
-                inverted ? "text-violet-300" : "text-violet-600",
+                inverted
+                  ? "text-violet-600 dark:text-violet-300"
+                  : "text-violet-600 dark:text-violet-300",
               )}
             >
               {tagline}
             </span>
           ) : (
             isHeader && (
-              <span className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-violet-300/90 sm:text-[11px]">
+              <span className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-violet-600/90 dark:text-violet-300/90 sm:text-[11px]">
                 Boletería digital
               </span>
             )
@@ -138,7 +140,7 @@ export function BrandLogo({
   const shellClass = cn(
     "group inline-flex items-center",
     isHeader ? "gap-3 sm:gap-3.5" : "gap-2.5",
-    inverted ? "text-white" : "text-zinc-950",
+    "text-zinc-950 dark:text-white",
     className,
   )
 

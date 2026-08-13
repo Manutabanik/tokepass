@@ -34,7 +34,7 @@ export function FeaturedCarousel({ events }: { events: CatalogEvent[] }) {
           <p className="text-xs font-medium uppercase tracking-[0.18em] text-zinc-500">
             Destacados
           </p>
-          <h2 className="mt-1 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+          <h2 className="mt-1 text-2xl font-bold tracking-tight text-zinc-900 dark:text-white sm:text-3xl">
             Lo que no te podés perder
           </h2>
         </div>
@@ -43,7 +43,7 @@ export function FeaturedCarousel({ events }: { events: CatalogEvent[] }) {
             <button
               type="button"
               onClick={() => scrollBy(-1)}
-              className="grid size-10 place-items-center rounded-full border border-white/10 bg-zinc-900 text-white transition hover:bg-zinc-800"
+              className="grid size-10 place-items-center rounded-full border border-zinc-200 bg-white text-zinc-800 transition hover:bg-zinc-100 dark:border-white/10 dark:bg-zinc-900 dark:text-white dark:hover:bg-zinc-800"
               aria-label="Anterior"
             >
               <ChevronLeft className="size-5" />
@@ -51,7 +51,7 @@ export function FeaturedCarousel({ events }: { events: CatalogEvent[] }) {
             <button
               type="button"
               onClick={() => scrollBy(1)}
-              className="grid size-10 place-items-center rounded-full border border-white/10 bg-zinc-900 text-white transition hover:bg-zinc-800"
+              className="grid size-10 place-items-center rounded-full border border-zinc-200 bg-white text-zinc-800 transition hover:bg-zinc-100 dark:border-white/10 dark:bg-zinc-900 dark:text-white dark:hover:bg-zinc-800"
               aria-label="Siguiente"
             >
               <ChevronRight className="size-5" />
@@ -77,9 +77,8 @@ export function FeaturedCarousel({ events }: { events: CatalogEvent[] }) {
               key={event.id}
               href={`/events/${event.id}`}
               className={cn(
-                "group relative block w-[min(88vw,34rem)] shrink-0 snap-start overflow-hidden rounded-2xl",
-                "border border-white/8 bg-zinc-900",
-                "transition-transform duration-300 hover:scale-[1.02]",
+                "group relative block w-[min(88vw,34rem)] shrink-0 snap-start overflow-hidden rounded-2xl border transition-transform duration-300 hover:scale-[1.02]",
+                "border-zinc-200 bg-white dark:border-white/8 dark:bg-zinc-900",
                 "sm:w-[min(70vw,40rem)]",
               )}
             >
@@ -94,7 +93,7 @@ export function FeaturedCarousel({ events }: { events: CatalogEvent[] }) {
                     className="object-cover transition-transform duration-500 group-hover:scale-[1.03]"
                   />
                 ) : (
-                  <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-950" />
+                  <div className="absolute inset-0 bg-gradient-to-br from-zinc-200 to-zinc-400 dark:from-zinc-800 dark:to-zinc-950" />
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent" />
 

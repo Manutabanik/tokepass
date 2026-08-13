@@ -24,10 +24,10 @@ export function UniversalCheckoutBar({
   const total = selectionTotal(selection)
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-zinc-950/90 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl">
+    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-200 bg-white/90 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl dark:border-white/10 dark:bg-zinc-950/90">
       <div className="mx-auto flex max-w-lg items-center gap-3 px-4">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-white">
+          <p className="truncate text-sm font-semibold text-zinc-900 dark:text-white">
             {selectionSummary(selection)}
           </p>
           <p className="mt-0.5 text-xs text-zinc-500">

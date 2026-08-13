@@ -19,7 +19,7 @@ export default async function EventsPage({
   const events = await getPublishedEvents(q)
 
   return (
-    <div className="relative isolate min-h-[calc(100vh-4rem)] overflow-x-clip bg-zinc-950 text-zinc-100">
+    <div className="relative isolate min-h-[calc(100vh-4rem)] overflow-x-clip bg-slate-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
       <AnimatedBackground />
 
       <div className="relative mx-auto max-w-7xl px-4 pb-24 pt-8 sm:px-6 lg:px-8 lg:pb-28 lg:pt-10">

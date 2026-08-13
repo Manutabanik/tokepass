@@ -102,16 +102,16 @@ export function UniversalSeatSelectionFlow({
   }
 
   return (
-    <div className="relative min-h-screen bg-zinc-950 pb-28 text-zinc-100">
+    <div className="relative min-h-screen bg-slate-50 pb-28 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
       <div className="mx-auto max-w-lg space-y-8 px-4 py-6 sm:px-6">
         <header className="space-y-1">
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-zinc-500">
             Elegí tu lugar
           </p>
-          <h1 className="text-2xl font-black tracking-tight text-white">
+          <h1 className="text-2xl font-black tracking-tight text-zinc-900 dark:text-white">
             {eventTitle}
           </h1>
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-zinc-600 dark:text-zinc-500">
             Mirá el mapa y elegí zona, cantidad o asiento.
           </p>
         </header>

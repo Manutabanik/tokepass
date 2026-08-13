@@ -42,8 +42,8 @@ export function FilterPills({ mood, onMoodChange }: FilterPillsProps) {
               className={cn(
                 "inline-flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-all",
                 active
-                  ? "border border-purple-500/30 bg-purple-600/20 text-purple-300"
-                  : "border border-white/10 bg-transparent text-zinc-400 hover:border-white/20 hover:text-zinc-200",
+                  ? "border border-purple-500/30 bg-purple-600/15 text-purple-700 dark:bg-purple-600/20 dark:text-purple-300"
+                  : "border border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:text-zinc-900 dark:border-white/10 dark:bg-transparent dark:text-zinc-400 dark:hover:border-white/20 dark:hover:text-zinc-200",
               )}
             >
               <Icon className="size-3.5 shrink-0" aria-hidden="true" />

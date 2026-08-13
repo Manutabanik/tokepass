@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { buildSearchSuggestions } from "@/lib/discovery-filters"
 import { cn } from "@/lib/utils"
 
@@ -90,19 +91,21 @@ export function PublicNavbarClient({
   return (
     <header
       className={cn(
-        "sticky top-0 z-50 w-full border-b border-white/8",
-        "bg-zinc-950/85 backdrop-blur-xl",
+        "sticky top-0 z-50 w-full border-b",
+        "border-zinc-200/80 bg-white/85 backdrop-blur-xl",
+        "dark:border-white/8 dark:bg-zinc-950/85",
       )}
     >
       <div className="mx-auto grid h-16 max-w-7xl grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3 sm:h-[4.25rem] sm:gap-4 sm:px-4 lg:gap-6 lg:px-8">
-        <BrandLogo inverted size="header" className="shrink-0" />
+        <BrandLogo size="header" className="shrink-0" />
 
         <div ref={wrapRef} className="relative mx-auto w-full max-w-xl">
           <form
             onSubmit={handleSubmit}
             className={cn(
-              "flex items-center gap-2 rounded-full border border-white/10 bg-zinc-900/80 pl-3 pr-1.5",
-              "transition-colors focus-within:border-white/20",
+              "flex items-center gap-2 rounded-full border pl-3 pr-1.5 transition-colors",
+              "border-zinc-200 bg-zinc-100/80 focus-within:border-zinc-300",
+              "dark:border-white/10 dark:bg-zinc-900/80 dark:focus-within:border-white/20",
             )}
           >
             <Search
@@ -121,14 +124,14 @@ export function PublicNavbarClient({
                 role="combobox"
                 aria-expanded={open && suggestions.length > 0}
                 aria-controls={listId}
-                className="h-10 w-full border-0 bg-transparent text-sm text-white outline-none placeholder:text-zinc-500"
+                className="h-10 w-full border-0 bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-500 dark:text-white"
               />
             </label>
             {query ? (
               <button
                 type="button"
                 onClick={() => setQuery("")}
-                className="grid size-8 place-items-center rounded-full text-zinc-500 transition hover:bg-white/5 hover:text-white"
+                className="grid size-8 place-items-center rounded-full text-zinc-500 transition hover:bg-zinc-200/80 hover:text-zinc-900 dark:hover:bg-white/5 dark:hover:text-white"
                 aria-label="Limpiar búsqueda"
               >
                 <X className="size-3.5" aria-hidden="true" />
@@ -140,16 +143,16 @@ export function PublicNavbarClient({
             <ul
               id={listId}
               role="listbox"
-              className="absolute left-0 right-0 top-[calc(100%+0.4rem)] z-50 overflow-hidden rounded-2xl border border-white/10 bg-zinc-900/95 py-1 shadow-2xl backdrop-blur-xl"
+              className="absolute left-0 right-0 top-[calc(100%+0.4rem)] z-50 overflow-hidden rounded-2xl border border-zinc-200 bg-white py-1 shadow-2xl dark:border-white/10 dark:bg-zinc-900/95 dark:backdrop-blur-xl"
             >
               {suggestions.map((item) => (
                 <li key={item.id} role="option">
                   <Link
                     href={item.href}
                     onClick={() => setOpen(false)}
-                    className="block px-4 py-2.5 transition hover:bg-white/5"
+                    className="block px-4 py-2.5 transition hover:bg-zinc-100 dark:hover:bg-white/5"
                   >
-                    <p className="truncate text-sm font-medium text-white">
+                    <p className="truncate text-sm font-medium text-zinc-900 dark:text-white">
                       {item.label}
                     </p>
                     {item.meta ? (
@@ -164,16 +167,17 @@ export function PublicNavbarClient({
           ) : null}
         </div>
 
-        <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2.5">
           <Select
             value={city}
             onValueChange={(value) => value && setCity(value)}
           >
             <SelectTrigger
               className={cn(
-                "h-9 max-w-[7.5rem] gap-1 rounded-full border-white/10 bg-transparent px-2.5 text-xs font-medium text-zinc-300 shadow-none",
-                "hover:bg-white/5 hover:text-white sm:max-w-[12rem] sm:px-3 sm:text-sm",
-                "focus-visible:ring-0 dark:bg-transparent dark:hover:bg-white/5",
+                "h-9 max-w-[7.5rem] gap-1 rounded-full border px-2.5 text-xs font-medium shadow-none sm:max-w-[12rem] sm:px-3 sm:text-sm",
+                "border-zinc-200 bg-transparent text-zinc-700 hover:bg-zinc-100",
+                "dark:border-white/10 dark:bg-transparent dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white",
+                "focus-visible:ring-0",
               )}
               aria-label={`Ubicación: ${cityLabel}`}
             >
@@ -182,7 +186,7 @@ export function PublicNavbarClient({
             </SelectTrigger>
             <SelectContent
               align="end"
-              className="max-h-64 rounded-xl border-white/10 bg-zinc-900 text-zinc-100"
+              className="max-h-64 rounded-xl border-zinc-200 bg-white text-zinc-900 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100"
             >
               <SelectItem value="todas">Todo el país</SelectItem>
               {cities.map((item) => (
@@ -193,24 +197,26 @@ export function PublicNavbarClient({
             </SelectContent>
           </Select>
 
+          <ThemeToggle />
+
           {isAuthenticated ? (
             <>
               <Link
                 href="/my-tickets"
-                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 text-sm font-medium text-white transition hover:bg-white/10 sm:px-3.5"
+                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-zinc-200 bg-zinc-100 px-3 text-sm font-medium text-zinc-900 transition hover:bg-zinc-200 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10 sm:px-3.5"
               >
                 <UserRound className="size-3.5" aria-hidden="true" />
                 <span className="hidden sm:inline">Mi cuenta</span>
               </Link>
               <SignOutButton
                 showLabel={false}
-                className="hidden rounded-full text-zinc-400 hover:bg-white/5 hover:text-white md:inline-flex"
+                className="hidden rounded-full text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-white md:inline-flex"
               />
             </>
           ) : (
             <Link
               href="/login"
-              className="inline-flex h-9 items-center rounded-full bg-white px-3.5 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200 sm:px-4"
+              className="inline-flex h-9 items-center rounded-full bg-zinc-950 px-3.5 text-sm font-semibold text-white transition hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200 sm:px-4"
             >
               Ingresar
             </Link>

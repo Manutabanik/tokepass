@@ -9,6 +9,7 @@ import { AdminSidebar } from "@/components/shared/admin-sidebar"
 import { BrandLogo } from "@/components/shared/brand-logo"
 import { SignOutButton } from "@/components/shared/sign-out-button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { createClient } from "@/lib/supabase/server"
 
 export const metadata: Metadata = {
@@ -112,11 +113,11 @@ export default async function AdminLayout({
   const mode = isOrganizer ? ("organizer" as const) : ("staff" as const)
 
   return (
-    <div className="dark min-h-screen bg-[#0c0c0f] text-zinc-100">
+    <div className="min-h-screen bg-slate-50 text-zinc-900 dark:bg-[#0c0c0f] dark:text-zinc-100">
       <div className="flex min-h-screen">
         <AdminSidebar mode={mode} staffRoles={staffRoles} />
         <div className="min-w-0 flex-1">
-          <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-white/8 bg-[#0c0c0f]/85 px-5 backdrop-blur-xl sm:px-8">
+          <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-zinc-200 bg-white/85 px-5 backdrop-blur-xl dark:border-white/8 dark:bg-[#0c0c0f]/85 sm:px-8">
             <div className="flex items-center gap-2 lg:hidden">
               <AdminMobileNav
                 mode={mode}
@@ -125,28 +126,29 @@ export default async function AdminLayout({
                 userLabel={userLabel}
                 userEmail={resolvedProfile.email}
               />
-              <BrandLogo inverted />
+              <BrandLogo />
             </div>
             <div className="hidden lg:block">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-600">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-600">
                 {isOrganizer ? "Tu Panel" : "Acceso staff"}
               </p>
-              <p className="text-sm text-zinc-400">
+              <p className="text-sm text-zinc-600 dark:text-zinc-400">
                 {isOrganizer
                   ? "Panel del organizador"
                   : "Acceso limitado a puerta / barra / caja"}
               </p>
             </div>
             <div className="flex items-center gap-3">
+              <ThemeToggle />
               <Link
                 href="/admin/scanner"
-                className="hidden items-center gap-2 rounded-full border border-white/10 px-3 py-1.5 text-xs text-zinc-400 sm:flex"
+                className="hidden items-center gap-2 rounded-full border border-zinc-200 px-3 py-1.5 text-xs text-zinc-600 dark:border-white/10 dark:text-zinc-400 sm:flex"
               >
                 <ShieldCheck className="size-3.5" aria-hidden="true" />
                 Escáner
               </Link>
               <div className="hidden text-right sm:block">
-                <p className="max-w-48 truncate text-sm font-medium text-white">
+                <p className="max-w-48 truncate text-sm font-medium text-zinc-900 dark:text-white">
                   {userLabel}
                 </p>
                 <p className="max-w-48 truncate text-xs text-zinc-500">
@@ -160,13 +162,13 @@ export default async function AdminLayout({
                     alt={userLabel}
                   />
                 ) : null}
-                <AvatarFallback className="bg-violet-500/15 text-violet-300">
+                <AvatarFallback className="bg-violet-500/15 text-violet-700 dark:text-violet-300">
                   {initials || "AD"}
                 </AvatarFallback>
               </Avatar>
               <SignOutButton
                 showLabel={false}
-                className="hidden size-9 place-items-center rounded-xl border border-white/8 text-zinc-500 transition hover:border-white/15 hover:bg-white/5 hover:text-white sm:grid"
+                className="hidden size-9 place-items-center rounded-xl border border-zinc-200 text-zinc-500 transition hover:border-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:border-white/8 dark:hover:border-white/15 dark:hover:bg-white/5 dark:hover:text-white sm:grid"
               />
             </div>
           </header>

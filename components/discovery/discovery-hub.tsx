@@ -69,10 +69,10 @@ export function DiscoveryHub({
             <p className="text-xs font-medium uppercase tracking-[0.18em] text-zinc-500">
               Cartelera
             </p>
-            <h2 className="mt-1 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+            <h2 className="mt-1 text-2xl font-bold tracking-tight text-zinc-900 dark:text-white sm:text-3xl">
               {isBrowsing ? "Resultados" : "Próximos eventos"}
             </h2>
-            <p className="mt-1.5 text-sm text-zinc-500">
+            <p className="mt-1.5 text-sm text-zinc-500 dark:text-zinc-500">
               {gridEvents.length} evento{gridEvents.length === 1 ? "" : "s"}
             </p>
           </div>

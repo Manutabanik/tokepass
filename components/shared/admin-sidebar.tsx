@@ -25,14 +25,15 @@ export function AdminSidebar({
   return (
     <aside
       className={cn(
-        "hidden h-screen shrink-0 border-r border-white/8 bg-[#09090b] p-4 text-zinc-300 transition-[width] duration-300 lg:sticky lg:top-0 lg:flex lg:flex-col",
+        "hidden h-screen shrink-0 border-r p-4 transition-[width] duration-300 lg:sticky lg:top-0 lg:flex lg:flex-col",
+        "border-zinc-200 bg-white text-zinc-700",
+        "dark:border-white/8 dark:bg-[#09090b] dark:text-zinc-300",
         collapsed ? "w-20" : "w-72",
       )}
     >
       <div className="flex h-10 items-center justify-between">
         {collapsed ? (
           <BrandLogo
-            inverted
             markOnly
             href={
               mode === "organizer"
@@ -43,7 +44,6 @@ export function AdminSidebar({
           />
         ) : (
           <BrandLogo
-            inverted
             href={mode === "organizer" ? "/admin" : "/admin/scanner"}
             className="px-0.5"
           />
@@ -52,7 +52,7 @@ export function AdminSidebar({
         <button
           type="button"
           onClick={() => setCollapsed((current) => !current)}
-          className="grid size-9 place-items-center rounded-lg text-zinc-500 transition hover:bg-white/5 hover:text-white"
+          className="grid size-9 place-items-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/5 dark:hover:text-white"
           aria-label={collapsed ? "Expandir sidebar" : "Colapsar sidebar"}
           title={collapsed ? "Expandir" : "Colapsar"}
         >
@@ -65,7 +65,7 @@ export function AdminSidebar({
       </div>
 
       <div className={cn("mt-8 px-2", collapsed && "sr-only")}>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-600">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-600">
           {mode === "organizer" ? "Tu Panel" : "Acceso staff"}
         </p>
       </div>
@@ -85,8 +85,8 @@ export function AdminSidebar({
               className={cn(
                 "flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition",
                 active
-                  ? "bg-violet-500/12 text-violet-300 ring-1 ring-inset ring-violet-500/15"
-                  : "text-zinc-500 hover:bg-white/5 hover:text-white",
+                  ? "bg-violet-500/12 text-violet-700 ring-1 ring-inset ring-violet-500/20 dark:text-violet-300 dark:ring-violet-500/15"
+                  : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/5 dark:hover:text-white",
                 collapsed && "justify-center px-0",
               )}
             >
@@ -98,9 +98,9 @@ export function AdminSidebar({
       </nav>
 
       <div className="mt-auto">
-        <Separator className="mb-4 bg-white/8" />
+        <Separator className="mb-4 bg-zinc-200 dark:bg-white/8" />
         <div className={cn("px-2", collapsed && "text-center")}>
-          <p className="text-xs font-medium text-zinc-600">
+          <p className="text-xs font-medium text-zinc-500 dark:text-zinc-600">
             {collapsed
               ? "TP"
               : mode === "organizer"
