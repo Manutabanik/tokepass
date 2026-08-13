@@ -92,8 +92,6 @@ export const eventFormSchema = z
       .array(ticketTierSchema)
       .min(1, "Creá al menos un tipo de entrada."),
     growth: z.object({
-      isRRPPEnabled: z.boolean(),
-      commissionPercentage: z.number().min(1).max(100).optional(),
       isAddonsEnabled: z.boolean(),
     }),
   })
@@ -188,17 +186,6 @@ export const eventFormSchema = z
           })
         }
       }
-    }
-
-    if (
-      data.growth.isRRPPEnabled &&
-      !data.growth.commissionPercentage
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["growth", "commissionPercentage"],
-        message: "Definí una comisión entre 1% y 100%.",
-      })
     }
 
     if (data.basics.isMultiDay) {

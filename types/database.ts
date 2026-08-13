@@ -131,6 +131,15 @@ export type Event = {
   max_free_tickets: number
   /** Auspicio Tokepass: fees a 0 + branding. */
   is_sponsored_by_tokepass: boolean
+  /** Meta Pixel ID (opcional). */
+  meta_pixel_id: string | null
+  meta_pixel_enabled: boolean
+  /** TikTok Pixel ID (opcional). */
+  tiktok_pixel_id: string | null
+  tiktok_pixel_enabled: boolean
+  /** GA4 Measurement ID G-… (opcional). */
+  ga4_measurement_id: string | null
+  ga4_enabled: boolean
   created_at: string
   updated_at: string
 }
@@ -293,6 +302,16 @@ export type Promoter = {
   updated_at: string
 }
 
+export type PromoterReferralVisit = {
+  id: string
+  promoter_id: string
+  referral_code: string
+  path: string | null
+  event_id: string | null
+  visitor_key: string | null
+  created_at: string
+}
+
 export type Addon = {
   id: string
   event_id: string
@@ -443,6 +462,12 @@ type EventInsert = Omit<
   | "platform_fixed_fee"
   | "max_free_tickets"
   | "is_sponsored_by_tokepass"
+  | "meta_pixel_id"
+  | "meta_pixel_enabled"
+  | "tiktok_pixel_id"
+  | "tiktok_pixel_enabled"
+  | "ga4_measurement_id"
+  | "ga4_enabled"
   | "created_at"
   | "updated_at"
 > & {
@@ -463,6 +488,12 @@ type EventInsert = Omit<
   platform_fixed_fee?: number
   max_free_tickets?: number
   is_sponsored_by_tokepass?: boolean
+  meta_pixel_id?: string | null
+  meta_pixel_enabled?: boolean
+  tiktok_pixel_id?: string | null
+  tiktok_pixel_enabled?: boolean
+  ga4_measurement_id?: string | null
+  ga4_enabled?: boolean
   created_at?: string
   updated_at?: string
 }
@@ -592,6 +623,16 @@ type PromoterInsert = Omit<Promoter, "id" | "created_at" | "updated_at"> & {
   id?: string
   created_at?: string
   updated_at?: string
+}
+type PromoterReferralVisitInsert = Omit<
+  PromoterReferralVisit,
+  "id" | "path" | "event_id" | "visitor_key" | "created_at"
+> & {
+  id?: string
+  path?: string | null
+  event_id?: string | null
+  visitor_key?: string | null
+  created_at?: string
 }
 type AddonInsert = Omit<Addon, "id" | "created_at" | "updated_at"> & {
   id?: string
@@ -782,6 +823,12 @@ export type Database = {
         Row: Promoter
         Insert: PromoterInsert
         Update: Partial<PromoterInsert>
+        Relationships: []
+      }
+      promoter_referral_visits: {
+        Row: PromoterReferralVisit
+        Insert: PromoterReferralVisitInsert
+        Update: Partial<PromoterReferralVisitInsert>
         Relationships: []
       }
       addons: {

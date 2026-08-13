@@ -8,8 +8,10 @@ import type {
 } from "@/lib/seating/universal-seat-types"
 import {
   getVenueSeatingItems,
+  type EventSeatingUnit,
   type VenueSeatingItem,
   type VenueSeatingLayout,
+  type VenueSeatingRow,
   type VenueSeatingSector,
 } from "@/types/venues"
 
@@ -259,4 +261,173 @@ export function listPricableSectors(venue: OrganizerVenue): Array<{
     type: sector.type,
     groupCount: sector.type === "numbered" ? sector.groups.length : 0,
   }))
+}
+
+export type CheckoutUniversalTier = {
+  id: string
+  name: string
+  price: number
+  available: number
+  seatingSectorId?: string | null
+  layoutType: "general" | "table_combo" | "numbered_seat"
+}
+
+/**
+ * Arma el payload Universal para checkout B2C a partir del layout del venue,
+ * precios de tiers y ocupación runtime de `event_seating_units`.
+ */
+export function buildUniversalSeatPayloadForCheckout(input: {
+  venueId: string
+  venueName: string
+  seatingLayout: VenueSeatingLayout
+  seatingBackgroundUrl: string | null
+  capacity?: number
+  tiers: CheckoutUniversalTier[]
+  seatingUnits: EventSeatingUnit[]
+  maxPerUser?: number
+}): VenueUniversalSeatPayload {
+  const pricingMap: VenuePricingMap = {}
+  for (const tier of input.tiers) {
+    if (tier.seatingSectorId) {
+      pricingMap[tier.seatingSectorId] = tier.price
+    }
+    pricingMap[tier.name] = pricingMap[tier.name] ?? tier.price
+  }
+
+  const occupancyBySeatId: Record<string, SeatStatus> = {}
+  for (const unit of input.seatingUnits) {
+    occupancyBySeatId[unit.layoutItemId] =
+      unit.status === "available"
+        ? "available"
+        : unit.status === "blocked"
+          ? "blocked"
+          : "occupied"
+  }
+
+  const layout =
+    input.seatingLayout.length > 0
+      ? input.seatingLayout
+      : synthesizeLayoutFromEventUnits(input.seatingUnits)
+
+  const payload = mapVenueToUniversalSeatData(
+    {
+      id: input.venueId,
+      name: input.venueName,
+      seatingLayout: layout,
+      zoneBlueprint: [],
+      seatingBackgroundUrl: input.seatingBackgroundUrl,
+      capacity: input.capacity ?? 0,
+    },
+    pricingMap,
+    {
+      occupancyBySeatId,
+      maxPerUser: input.maxPerUser ?? MAX_TICKETS_PER_PURCHASE,
+    },
+  )
+
+  const knownIds = new Set(payload.sectors.map((sector) => sector.id))
+  const knownNames = new Set(
+    payload.sectors.map((sector) => sector.name.toLowerCase()),
+  )
+
+  for (const tier of input.tiers) {
+    if (tier.layoutType !== "general") continue
+    const sectorId = tier.seatingSectorId?.trim() || `tier-${tier.id}`
+    if (knownIds.has(sectorId) || knownNames.has(tier.name.toLowerCase())) {
+      continue
+    }
+    payload.sectors.push({
+      id: sectorId,
+      name: tier.name,
+      color: "#10b981",
+      price: tier.price,
+      type: "general",
+      maxPerUser: Math.max(
+        1,
+        Math.min(
+          input.maxPerUser ?? MAX_TICKETS_PER_PURCHASE,
+          Math.max(0, tier.available) || MAX_TICKETS_PER_PURCHASE,
+        ),
+      ),
+    })
+    knownIds.add(sectorId)
+  }
+
+  return payload
+}
+
+function synthesizeLayoutFromEventUnits(
+  units: EventSeatingUnit[],
+): VenueSeatingLayout {
+  if (units.length === 0) return []
+
+  const bySector = new Map<
+    string,
+    {
+      sectorName: string
+      color: string
+      layoutType: EventSeatingUnit["layoutType"]
+      capacityPerUnit: number
+      rows: Map<string, VenueSeatingRow>
+    }
+  >()
+
+  for (const unit of units) {
+    let sector = bySector.get(unit.sectorId)
+    if (!sector) {
+      sector = {
+        sectorName: unit.sectorName,
+        color: unit.color || "#f97316",
+        layoutType: unit.layoutType,
+        capacityPerUnit: unit.capacityPerUnit,
+        rows: new Map(),
+      }
+      bySector.set(unit.sectorId, sector)
+    }
+
+    const rowKey = unit.rowId ?? `${unit.sectorId}-all`
+    let row = sector.rows.get(rowKey)
+    if (!row) {
+      row = {
+        row_id: rowKey,
+        row_number: unit.rowNumber ?? sector.rows.size + 1,
+        row_label: unit.rowLabel ?? "Ubicaciones",
+        items: [],
+      }
+      sector.rows.set(rowKey, row)
+    }
+
+    row.items.push({
+      id: unit.layoutItemId,
+      label: unit.label,
+      capacity: unit.capacityPerUnit,
+      status: unit.status === "blocked" ? "blocked" : "available",
+    })
+  }
+
+  return [...bySector.entries()].map(([id, sector]) => ({
+    id,
+    sector_name: sector.sectorName,
+    color: sector.color,
+    pricing_tier_id: null,
+    layout_type: sector.layoutType,
+    capacity_per_unit: sector.capacityPerUnit,
+    rows: [...sector.rows.values()].sort(
+      (a, b) => a.row_number - b.row_number,
+    ),
+  }))
+}
+
+/** Resuelve el tier de checkout asociado a un sector Universal. */
+export function resolveTierIdForUniversalSector(
+  sectorId: string,
+  sectorName: string,
+  tiers: CheckoutUniversalTier[],
+): string | null {
+  const bySector = tiers.find((tier) => tier.seatingSectorId === sectorId)
+  if (bySector) return bySector.id
+  const byName = tiers.find(
+    (tier) => tier.name.toLowerCase() === sectorName.toLowerCase(),
+  )
+  return byName?.id ?? null
 }

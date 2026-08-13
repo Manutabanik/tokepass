@@ -25,6 +25,13 @@ import {
 } from "react"
 import { toast } from "sonner"
 
+import {
+  cancelTicketAdmin,
+  getIssuedTicketsForEvent,
+  reassignTicketAdmin,
+  resendTicketEmailAdmin,
+  updateTicketHolderAdmin,
+} from "@/app/actions/issued-tickets"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -49,13 +56,11 @@ import {
   custodyChannelLabel,
   formatCheckInLabel,
   matchesIssuedTicketQuery,
-  MOCK_ISSUED_TICKET_METRICS,
-  MOCK_ISSUED_TICKETS,
-  nextMockTicketCode,
   type CustodyTransferEvent,
+  type IssuedTicketMetrics,
   type IssuedTicketRow,
   type IssuedTicketUiStatus,
-} from "@/lib/admin/issued-tickets-mock"
+} from "@/lib/admin/issued-tickets"
 import { formatDateTime, formatNumber } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
@@ -383,7 +388,15 @@ export function IssuedTicketsManager({
   eventId: string
   eventTitle: string
 }) {
-  const [tickets, setTickets] = useState<IssuedTicketRow[]>(MOCK_ISSUED_TICKETS)
+  const [tickets, setTickets] = useState<IssuedTicketRow[]>([])
+  const [metrics, setMetrics] = useState<IssuedTicketMetrics>({
+    totalIssued: 0,
+    checkedIn: 0,
+    pending: 0,
+    transferred: 0,
+  })
+  const [loading, setLoading] = useState(true)
+  const [actionPending, setActionPending] = useState(false)
   const [query, setQuery] = useState("")
   const deferredQuery = useDeferredValue(query)
   const [tab, setTab] = useState<StatusTab>("all")
@@ -398,6 +411,8 @@ export function IssuedTicketsManager({
   const [transferEmail, setTransferEmail] = useState("")
   const [transferDni, setTransferDni] = useState("")
 
+  const [cancelReason, setCancelReason] = useState("")
+
   const [courtesyName, setCourtesyName] = useState("")
   const [courtesyEmail, setCourtesyEmail] = useState("")
   const [courtesyDni, setCourtesyDni] = useState("")
@@ -406,20 +421,73 @@ export function IssuedTicketsManager({
   const activeTicket =
     tickets.find((ticket) => ticket.id === activeTicketId) ?? null
 
+  async function refreshTickets(opts?: {
+    search?: string
+    status?: StatusTab
+    silent?: boolean
+  }) {
+    if (!opts?.silent) setLoading(true)
+    const statusFilter =
+      opts?.status && opts.status !== "all" ? opts.status : undefined
+    const result = await getIssuedTicketsForEvent(
+      eventId,
+      opts?.search,
+      statusFilter,
+    )
+    if (!result.success) {
+      toast.error("No se pudieron cargar las entradas", {
+        description: result.error,
+      })
+      if (!opts?.silent) setLoading(false)
+      return
+    }
+    setTickets(result.data.tickets)
+    setMetrics(result.data.metrics)
+    if (!opts?.silent) setLoading(false)
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      setLoading(true)
+      const statusFilter = tab !== "all" ? tab : undefined
+      const result = await getIssuedTicketsForEvent(
+        eventId,
+        deferredQuery,
+        statusFilter,
+      )
+      if (cancelled) return
+      if (!result.success) {
+        toast.error("No se pudieron cargar las entradas", {
+          description: result.error,
+        })
+        setTickets([])
+        setLoading(false)
+        return
+      }
+      setTickets(result.data.tickets)
+      setMetrics(result.data.metrics)
+      setLoading(false)
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [eventId, deferredQuery, tab])
+
   const filtered = useMemo(() => {
+    // El servidor ya filtra; mantenemos un pass local por si el deferral
+    // aún no disparó el fetch.
     return tickets.filter((ticket) => {
       if (tab !== "all" && ticket.status !== tab) return false
       return matchesIssuedTicketQuery(ticket, deferredQuery)
     })
   }, [tickets, tab, deferredQuery])
 
-  const liveMetrics = useMemo(() => {
-    const total = tickets.length
-    const checkedIn = tickets.filter((t) => t.status === "checked_in").length
-    const pending = tickets.filter((t) => t.status === "available").length
-    const transferred = tickets.filter((t) => t.status === "transferred").length
-    return { total, checkedIn, pending, transferred }
-  }, [tickets])
+  const checkedInPct =
+    metrics.totalIssued > 0
+      ? Math.round((metrics.checkedIn / metrics.totalIssued) * 100)
+      : 0
 
   function openModal(kind: ModalKind, ticket?: IssuedTicketRow) {
     if (ticket) {
@@ -430,6 +498,7 @@ export function IssuedTicketsManager({
       setTransferName("")
       setTransferEmail("")
       setTransferDni("")
+      setCancelReason("")
     } else {
       setActiveTicketId(null)
     }
@@ -437,6 +506,7 @@ export function IssuedTicketsManager({
   }
 
   function closeModal() {
+    if (actionPending) return
     setModal(null)
     setActiveTicketId(null)
   }
@@ -454,33 +524,41 @@ export function IssuedTicketsManager({
     window.open(`/tickets/${ticket.id}/print`, "_blank", "noopener,noreferrer")
   }
 
-  function confirmResend(channel: "email" | "whatsapp") {
+  async function confirmResend(channel: "email" | "whatsapp") {
     if (!activeTicket) return
-    if (channel === "email") {
-      toast.success("Entrada reenviada por email", {
-        description: `Enviamos #${activeTicket.code} a ${activeTicket.holderEmail}`,
+    if (channel === "whatsapp") {
+      const message = [
+        `Hola ${activeTicket.holderName},`,
+        `Te reenviamos tu entrada Tokepass para "${eventTitle}".`,
+        `Código: #${activeTicket.code}`,
+        activeTicket.ticketUrl,
+      ].join("\n")
+      window.open(
+        `https://wa.me/?text=${encodeURIComponent(message)}`,
+        "_blank",
+        "noopener,noreferrer",
+      )
+      toast.success("Listo para WhatsApp", {
+        description: "Se abrió el chat con el mensaje precargado.",
       })
       closeModal()
       return
     }
-    const message = [
-      `Hola ${activeTicket.holderName},`,
-      `Te reenviamos tu entrada Tokepass para "${eventTitle}".`,
-      `Código: #${activeTicket.code}`,
-      activeTicket.ticketUrl,
-    ].join("\n")
-    window.open(
-      `https://wa.me/?text=${encodeURIComponent(message)}`,
-      "_blank",
-      "noopener,noreferrer",
-    )
-    toast.success("Listo para WhatsApp", {
-      description: "Se abrió el chat con el mensaje precargado.",
+
+    setActionPending(true)
+    const result = await resendTicketEmailAdmin(activeTicket.id)
+    setActionPending(false)
+    if (!result.success) {
+      toast.error("No se pudo reenviar", { description: result.error })
+      return
+    }
+    toast.success("Entrada reenviada por email", {
+      description: `Enviamos #${activeTicket.code} a ${result.data.email}`,
     })
     closeModal()
   }
 
-  function confirmHolderUpdate() {
+  async function confirmHolderUpdate() {
     if (!activeTicketId) return
     const name = holderName.trim()
     const email = holderEmail.trim()
@@ -489,45 +567,50 @@ export function IssuedTicketsManager({
       toast.error("Revisá nombre, email y DNI.")
       return
     }
-    setTickets((current) =>
-      current.map((ticket) =>
-        ticket.id === activeTicketId
-          ? {
-              ...ticket,
-              holderName: name,
-              holderEmail: email,
-              holderDni: dni,
-            }
-          : ticket,
-      ),
-    )
+    setActionPending(true)
+    const result = await updateTicketHolderAdmin(activeTicketId, {
+      name,
+      email,
+      dni,
+    })
+    setActionPending(false)
+    if (!result.success) {
+      toast.error("No se pudo actualizar", { description: result.error })
+      return
+    }
     toast.success("Titular actualizado", {
       description: `${name} · ${email}`,
     })
     closeModal()
+    await refreshTickets({
+      search: deferredQuery,
+      status: tab,
+      silent: true,
+    })
   }
 
-  function confirmCancel() {
+  async function confirmCancel() {
     if (!activeTicketId) return
-    setTickets((current) =>
-      current.map((ticket) =>
-        ticket.id === activeTicketId
-          ? {
-              ...ticket,
-              status: "cancelled",
-              checkedInAt: null,
-              transferredTo: null,
-            }
-          : ticket,
-      ),
-    )
+    const reason = cancelReason.trim() || "Anulado por el organizador"
+    setActionPending(true)
+    const result = await cancelTicketAdmin(activeTicketId, reason)
+    setActionPending(false)
+    if (!result.success) {
+      toast.error("No se pudo anular", { description: result.error })
+      return
+    }
     toast.success("Ticket anulado", {
       description: "El QR ya no será válido en el escáner.",
     })
     closeModal()
+    await refreshTickets({
+      search: deferredQuery,
+      status: tab,
+      silent: true,
+    })
   }
 
-  function confirmTransfer() {
+  async function confirmTransfer() {
     if (!activeTicket || !activeTicketId) return
     const name = transferName.trim()
     const email = transferEmail.trim().toLowerCase()
@@ -541,122 +624,43 @@ export function IssuedTicketsManager({
       return
     }
 
-    const newCode = nextMockTicketCode(tickets)
-    const newId = `tkt-transfer-${Date.now()}`
-    const now = new Date().toISOString()
-    const fromParty = {
-      name: activeTicket.holderName,
-      email: activeTicket.holderEmail,
-      dni: activeTicket.holderDni,
+    setActionPending(true)
+    const result = await reassignTicketAdmin(activeTicketId, {
+      name,
+      email,
+      dni,
+    })
+    setActionPending(false)
+    if (!result.success) {
+      toast.error("No se pudo reasignar", { description: result.error })
+      return
     }
-    const toParty = { name, email, dni }
-    const event: CustodyTransferEvent = {
-      at: now,
-      channel: "admin_reassign",
-      from: fromParty,
-      to: toParty,
-      fromTicketCode: activeTicket.code,
-      toTicketCode: newCode,
-      fromTicketId: activeTicket.id,
-      toTicketId: newId,
-    }
-    const chain = [...activeTicket.custodyChain, event]
-
-    const newTicket: IssuedTicketRow = {
-      id: newId,
-      code: newCode,
-      holderName: name,
-      holderEmail: email,
-      holderDni: dni,
-      sectorLabel: activeTicket.sectorLabel,
-      status: "available",
-      checkedInAt: null,
-      purchasedAt: activeTicket.purchasedAt,
-      ticketUrl: `https://www.tokepass.com.ar/tickets/${newId}`,
-      originalBuyer: activeTicket.originalBuyer,
-      transferredTo: null,
-      receivedFrom: {
-        name: activeTicket.holderName,
-        code: activeTicket.code,
-        ticketId: activeTicket.id,
-      },
-      custodyChain: chain,
-    }
-
-    setTickets((current) => [
-      newTicket,
-      ...current.map((ticket) =>
-        ticket.id === activeTicketId
-          ? {
-              ...ticket,
-              status: "transferred" as const,
-              checkedInAt: null,
-              transferredTo: {
-                name,
-                code: newCode,
-                ticketId: newId,
-              },
-              custodyChain: chain,
-            }
-          : ticket,
-      ),
-    ])
 
     toast.success("Transferencia completada", {
-      description: `QR #${activeTicket.code} invalidado. Nuevo #${newCode} enviado a ${email}.`,
+      description: `QR #${activeTicket.code} invalidado. Nuevo #${result.data.code} enviado a ${email}.`,
     })
     setTransferName("")
     setTransferEmail("")
     setTransferDni("")
     closeModal()
+    await refreshTickets({
+      search: deferredQuery,
+      status: tab,
+      silent: true,
+    })
   }
 
   function confirmCourtesy() {
-    const name = courtesyName.trim()
-    const email = courtesyEmail.trim()
-    const dni = courtesyDni.trim()
-    if (name.length < 3 || !email.includes("@") || dni.length < 6) {
-      toast.error("Completá los datos de la cortesía.")
-      return
-    }
-    const code = nextMockTicketCode(tickets)
-    const id = `tkt-courtesy-${Date.now()}`
-    const buyer = { name, email, dni }
-    const next: IssuedTicketRow = {
-      id,
-      code,
-      holderName: name,
-      holderEmail: email,
-      holderDni: dni,
-      sectorLabel: courtesySector.trim() || "Campo General",
-      status: "available",
-      checkedInAt: null,
-      purchasedAt: new Date().toISOString(),
-      ticketUrl: `https://www.tokepass.com.ar/tickets/${id}`,
-      originalBuyer: buyer,
-      transferredTo: null,
-      receivedFrom: null,
-      custodyChain: [],
-    }
-    setTickets((current) => [next, ...current])
+    toast.message("Cortesías desde Listas", {
+      description:
+        "Emití FreePass / cortesías desde Listas de invitados del evento.",
+    })
     setCourtesyName("")
     setCourtesyEmail("")
     setCourtesyDni("")
     setCourtesySector("Campo General")
-    toast.success("Cortesía emitida", {
-      description: `#${code} lista para reenviar o imprimir.`,
-    })
     closeModal()
   }
-
-  const checkedInPct =
-    MOCK_ISSUED_TICKET_METRICS.totalIssued > 0
-      ? Math.round(
-          (MOCK_ISSUED_TICKET_METRICS.checkedIn /
-            MOCK_ISSUED_TICKET_METRICS.totalIssued) *
-            100,
-        )
-      : 0
 
   return (
     <div className="space-y-6">
@@ -685,25 +689,25 @@ export function IssuedTicketsManager({
         <MetricCard
           icon={<Ticket className="size-4 text-emerald-400" />}
           label="Total emitidas"
-          value={formatNumber(MOCK_ISSUED_TICKET_METRICS.totalIssued)}
-          hint={`Mock visible: ${formatNumber(liveMetrics.total)} filas`}
+          value={loading ? "…" : formatNumber(metrics.totalIssued)}
+          hint={`${formatNumber(filtered.length)} en vista actual`}
         />
         <MetricCard
           icon={<Users className="size-4 text-sky-400" />}
           label="Ya ingresaron"
-          value={formatNumber(MOCK_ISSUED_TICKET_METRICS.checkedIn)}
+          value={loading ? "…" : formatNumber(metrics.checkedIn)}
           hint={`${checkedInPct}% del total`}
         />
         <MetricCard
           icon={<Search className="size-4 text-amber-300" />}
           label="Pendientes de ingreso"
-          value={formatNumber(MOCK_ISSUED_TICKET_METRICS.pending)}
-          hint={`En lista: ${formatNumber(liveMetrics.pending)} válidos`}
+          value={loading ? "…" : formatNumber(metrics.pending)}
+          hint="Entradas válidas sin check-in"
         />
         <MetricCard
           icon={<RefreshCw className="size-4 text-orange-300" />}
           label="Transferidos"
-          value={formatNumber(liveMetrics.transferred)}
+          value={loading ? "…" : formatNumber(metrics.transferred)}
           hint="QR originales invalidados"
         />
       </section>
@@ -754,7 +758,16 @@ export function IssuedTicketsManager({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.length === 0 ? (
+              {loading ? (
+                <TableRow className="border-zinc-200 dark:border-zinc-800 hover:bg-transparent">
+                  <TableCell
+                    colSpan={5}
+                    className="px-4 py-12 text-center text-sm text-zinc-500"
+                  >
+                    Cargando entradas emitidas…
+                  </TableCell>
+                </TableRow>
+              ) : filtered.length === 0 ? (
                 <TableRow className="border-zinc-200 dark:border-zinc-800 hover:bg-transparent">
                   <TableCell
                     colSpan={5}
@@ -814,10 +827,12 @@ export function IssuedTicketsManager({
         </div>
 
         <p className="text-xs text-zinc-600">
-          Vista con datos mock para el evento{" "}
-          <span className="font-mono text-zinc-500">{eventId.slice(0, 8)}</span>.
-          Mostrando {formatNumber(filtered.length)} de{" "}
-          {formatNumber(tickets.length)} filas cargadas.
+          Evento{" "}
+          <span className="font-medium text-zinc-700 dark:text-zinc-300">
+            {eventTitle}
+          </span>
+          . Mostrando {formatNumber(filtered.length)} de{" "}
+          {formatNumber(metrics.totalIssued)} entradas emitidas.
         </p>
       </section>
 
@@ -838,10 +853,11 @@ export function IssuedTicketsManager({
             <Button
               type="button"
               className="h-11 justify-start rounded-xl bg-emerald-600 text-white hover:bg-emerald-500"
-              onClick={() => confirmResend("email")}
+              disabled={actionPending}
+              onClick={() => void confirmResend("email")}
             >
               <Mail className="size-4" />
-              Reenviar por email
+              {actionPending ? "Enviando…" : "Reenviar por email"}
             </Button>
             <Button
               type="button"
@@ -909,10 +925,11 @@ export function IssuedTicketsManager({
             </Button>
             <Button
               type="button"
-              onClick={confirmHolderUpdate}
+              onClick={() => void confirmHolderUpdate()}
+              disabled={actionPending}
               className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-500"
             >
-              Guardar cambios
+              {actionPending ? "Guardando…" : "Guardar cambios"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -976,11 +993,12 @@ export function IssuedTicketsManager({
             </Button>
             <Button
               type="button"
-              onClick={confirmTransfer}
+              onClick={() => void confirmTransfer()}
+              disabled={actionPending}
               className="rounded-xl bg-amber-500 text-zinc-950 hover:bg-amber-400"
             >
               <RefreshCw className="size-4" />
-              Confirmar transferencia
+              {actionPending ? "Reasignando…" : "Confirmar transferencia"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1021,22 +1039,36 @@ export function IssuedTicketsManager({
                 : "Seleccioná una entrada."}
             </DialogDescription>
           </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="cancel-reason">Motivo de anulación</Label>
+              <Input
+                id="cancel-reason"
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="Ej. duplicado, reclamo, fraude…"
+                className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
+              />
+            </div>
+          </div>
           <DialogFooter className="gap-2 sm:justify-end">
             <Button
               type="button"
               variant="ghost"
               onClick={closeModal}
+              disabled={actionPending}
               className="text-zinc-600 dark:text-zinc-400"
             >
               Volver
             </Button>
             <Button
               type="button"
-              onClick={confirmCancel}
+              onClick={() => void confirmCancel()}
+              disabled={actionPending}
               className="rounded-xl bg-red-600 text-white hover:bg-red-500"
             >
               <Ban className="size-4" />
-              Anular ticket
+              {actionPending ? "Anulando…" : "Anular ticket"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Suspense } from "react";
 
 import { ThemeProvider } from "@/components/providers/theme-provider";
+import { ReferralCapture } from "@/components/public/referral-capture";
 import { InstallBanner } from "@/components/pwa/install-banner";
 import { PwaRegister } from "@/components/pwa/pwa-register";
 import { Toaster } from "@/components/ui/sonner";
@@ -89,6 +91,9 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
+          <Suspense fallback={null}>
+            <ReferralCapture />
+          </Suspense>
           {children}
           <PwaRegister />
           <InstallBanner />

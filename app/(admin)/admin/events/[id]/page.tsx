@@ -2,6 +2,7 @@ import {
   ArrowLeft,
   ClipboardList,
   GlassWater,
+  Megaphone,
   Pencil,
   QrCode,
   Ticket,
@@ -90,6 +91,12 @@ export default async function ManageEventPage({
       label: "Preventa de barra",
       description: "Productos, stock y consumiciones.",
       icon: GlassWater,
+    },
+    {
+      href: `/admin/events/${id}/marketing`,
+      label: "Marketing · Píxeles",
+      description: "Meta, TikTok y GA4 para medir conversiones.",
+      icon: Megaphone,
     },
     {
       href: "/admin/scanner",

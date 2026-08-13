@@ -353,9 +353,7 @@ function mapEventFormToRpcPayload(
           tier.layoutType === "general" ? 1 : tier.capacityPerUnit,
       }
     }),
-    rrpp_commission: data.growth.isRRPPEnabled
-      ? (data.growth.commissionPercentage ?? null)
-      : null,
+    rrpp_commission: null,
     addons_enabled: data.growth.isAddonsEnabled,
   }
 }
@@ -619,8 +617,6 @@ export async function getEventForEditing(
           capacityPerUnit: Math.max(1, Number(tier.capacity_per_unit ?? 1) || 1),
         })),
         growth: {
-          isRRPPEnabled: false,
-          commissionPercentage: undefined,
           isAddonsEnabled: false,
         },
       },

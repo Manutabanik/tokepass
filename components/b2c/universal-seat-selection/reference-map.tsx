@@ -21,10 +21,10 @@ export function UniversalReferenceMap({
   const frame = (
     <div
       className={cn(
-        "relative overflow-hidden bg-zinc-900",
+        "relative overflow-hidden bg-zinc-100 dark:bg-zinc-900",
         expanded
           ? "h-full w-full"
-          : "aspect-[16/9] w-full rounded-2xl border border-zinc-800",
+          : "aspect-[16/9] w-full rounded-2xl border border-zinc-200 dark:border-zinc-800",
       )}
     >
       {imageUrl ? (
@@ -36,8 +36,8 @@ export function UniversalReferenceMap({
           sizes="(max-width: 768px) 100vw, 720px"
         />
       ) : (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[radial-gradient(ellipse_at_center,rgba(39,39,42,0.9),#09090b_70%)]">
-          <span className="grid size-14 place-items-center rounded-2xl border border-zinc-700 bg-zinc-950 text-zinc-400">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[radial-gradient(ellipse_at_center,rgba(244,244,245,0.95),#f8fafc_70%)] dark:bg-[radial-gradient(ellipse_at_center,rgba(39,39,42,0.9),#09090b_70%)]">
+          <span className="grid size-14 place-items-center rounded-2xl border border-zinc-300 bg-white text-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-400">
             <Map className="size-6" aria-hidden="true" />
           </span>
           <p className="max-w-[14rem] text-center text-sm text-zinc-500">

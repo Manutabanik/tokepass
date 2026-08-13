@@ -19,10 +19,10 @@ export function UniversalSectorCards({
   return (
     <section className="space-y-3">
       <div>
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-400/90">
+        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-600 dark:text-emerald-400/90">
           Paso 1
         </p>
-        <h2 className="mt-1 text-lg font-bold tracking-tight text-white">
+        <h2 className="mt-1 text-lg font-bold tracking-tight text-zinc-900 dark:text-white">
           Seleccioná tu zona
         </h2>
       </div>
@@ -37,10 +37,10 @@ export function UniversalSectorCards({
               onClick={() => onSelect(sector.id)}
               className={cn(
                 "relative rounded-2xl border px-4 py-4 text-left transition",
-                "bg-zinc-900/70 hover:border-zinc-600",
+                "bg-white hover:border-zinc-400 dark:bg-zinc-900/70 dark:hover:border-zinc-600",
                 active
-                  ? "border-transparent ring-2 ring-offset-2 ring-offset-zinc-950"
-                  : "border-zinc-800",
+                  ? "border-transparent ring-2 ring-offset-2 ring-offset-slate-50 dark:ring-offset-zinc-950"
+                  : "border-zinc-200 dark:border-zinc-800",
               )}
               style={
                 active
@@ -62,18 +62,18 @@ export function UniversalSectorCards({
 
               <span className="flex items-center gap-3">
                 <span
-                  className="size-3.5 shrink-0 rounded-full ring-2 ring-white/10"
+                  className="size-3.5 shrink-0 rounded-full ring-2 ring-zinc-200 dark:ring-white/10"
                   style={{ backgroundColor: sector.color }}
                   aria-hidden="true"
                 />
                 <span className="min-w-0">
-                  <span className="block truncate font-semibold text-white">
+                  <span className="block truncate font-semibold text-zinc-900 dark:text-white">
                     {sector.name}
                   </span>
-                  <span className="mt-1 block text-sm text-zinc-400">
+                  <span className="mt-1 block text-sm text-zinc-500 dark:text-zinc-400">
                     Precio desde {formatCurrency(sector.price)}
                   </span>
-                  <span className="mt-2 inline-flex rounded-full bg-zinc-950 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-500 ring-1 ring-zinc-800">
+                  <span className="mt-2 inline-flex rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-600 ring-1 ring-zinc-200 dark:bg-zinc-950 dark:text-zinc-500 dark:ring-zinc-800">
                     {sector.type === "general" ? "Sin numerar" : "Numerado"}
                   </span>
                 </span>

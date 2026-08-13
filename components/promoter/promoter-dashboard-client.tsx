@@ -166,6 +166,22 @@ export function PromoterDashboardClient({
         <Card className="border-zinc-800 bg-zinc-950 py-0 shadow-none">
           <CardHeader className="px-5 pb-2 pt-5">
             <CardDescription className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
+              Clics / visitas
+            </CardDescription>
+            <CardTitle className="text-5xl font-black tracking-[-0.05em] text-white">
+              {metrics.clickCount}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-5 pb-5">
+            <p className="text-sm text-zinc-500">
+              Visitas únicas (1h) con tu ?ref=
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-zinc-800 bg-zinc-950 py-0 shadow-none">
+          <CardHeader className="px-5 pb-2 pt-5">
+            <CardDescription className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
               Ventas totales
             </CardDescription>
             <CardTitle className="text-5xl font-black tracking-[-0.05em] text-white">

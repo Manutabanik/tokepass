@@ -12,6 +12,7 @@ import {
   AddToCalendarButton,
   EventDetailTopActions,
 } from "@/components/public/event-detail-actions"
+import { AnalyticsTracker } from "@/components/public/analytics-tracker"
 import { EventAboutExpandable } from "@/components/public/event-about-expandable"
 import { EventFlyer } from "@/components/public/event-flyer"
 import { EventLocationPanel } from "@/components/public/event-location-panel"
@@ -83,6 +84,13 @@ export function EventStorefront({
 
   return (
     <div className="relative isolate min-h-screen bg-zinc-950 pb-28 text-zinc-100 lg:pb-12">
+      <AnalyticsTracker
+        config={event.pixels}
+        trackPageView
+        contentName={event.title}
+        contentIds={[event.id]}
+        value={startingPrice ?? undefined}
+      />
       {event.isSponsoredByTokepass ? (
         <div className="border-b border-amber-400/35 bg-gradient-to-r from-amber-950 via-zinc-950 to-amber-950">
           <div className="mx-auto flex max-w-3xl items-center justify-center gap-2 px-4 py-2.5 text-center">
@@ -199,6 +207,7 @@ export function EventStorefront({
               <div className="lg:hidden">
                 <TicketSelector
                   eventId={event.id}
+                  eventTitle={event.title}
                   currentUserId={currentUserId}
                   initialBuyer={initialBuyer}
                   referralCode={referralCode}
@@ -207,6 +216,11 @@ export function EventStorefront({
                   barItems={barItems}
                   seatingUnits={event.seatingUnits}
                   seatingBackgroundUrl={event.venue?.seating_background_url}
+                  seatingLayout={event.venue?.seating_layout ?? []}
+                  venueId={event.venue?.id}
+                  venueName={event.venue?.name}
+                  venueCapacity={event.venue?.capacity}
+                  pixels={event.pixels}
                   tiers={event.tiers.map((tier) => ({
                     id: tier.id,
                     name: tier.name,
@@ -340,6 +354,7 @@ export function EventStorefront({
         >
           <TicketSelector
             eventId={event.id}
+            eventTitle={event.title}
             currentUserId={currentUserId}
             initialBuyer={initialBuyer}
             referralCode={referralCode}
@@ -348,6 +363,11 @@ export function EventStorefront({
             barItems={barItems}
             seatingUnits={event.seatingUnits}
             seatingBackgroundUrl={event.venue?.seating_background_url}
+            seatingLayout={event.venue?.seating_layout ?? []}
+            venueId={event.venue?.id}
+            venueName={event.venue?.name}
+            venueCapacity={event.venue?.capacity}
+            pixels={event.pixels}
             tiers={event.tiers.map((tier) => ({
               id: tier.id,
               name: tier.name,

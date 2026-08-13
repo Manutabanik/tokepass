@@ -1,15 +1,20 @@
 "use server"
 
+import { createHash } from "crypto"
 import { revalidatePath } from "next/cache"
+import { headers } from "next/headers"
 
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import { normalizeReferralCode } from "@/lib/referral"
 
 export type PromoterRow = {
   id: string
   name: string
   referralCode: string
   commissionRate: number
+  /** Visitas / clics registrados con ?ref= */
+  clickCount: number
   ticketsSold: number
   revenueGenerated: number
   estimatedCommission: number
@@ -21,6 +26,7 @@ export type PromoterMetrics = {
   name: string
   referralCode: string
   commissionRate: number
+  clickCount: number
   ticketsSold: number
   revenueGenerated: number
   estimatedCommission: number
@@ -176,11 +182,25 @@ export async function getOrganizerPromoters(): Promise<PromoterRow[]> {
   const admin = createAdminClient()
   const promoterIds = promoters.map((row) => row.id)
 
-  const { data: orders } = await admin
-    .from("orders")
-    .select("id, promoter_id, total_amount, subtotal, status")
-    .in("promoter_id", promoterIds)
-    .eq("status", "paid")
+  const [{ data: orders }, { data: visitRows }] = await Promise.all([
+    admin
+      .from("orders")
+      .select("id, promoter_id, total_amount, subtotal, status")
+      .in("promoter_id", promoterIds)
+      .eq("status", "paid"),
+    admin
+      .from("promoter_referral_visits")
+      .select("promoter_id")
+      .in("promoter_id", promoterIds),
+  ])
+
+  const clickByPromoter = new Map<string, number>()
+  for (const visit of visitRows ?? []) {
+    clickByPromoter.set(
+      visit.promoter_id,
+      (clickByPromoter.get(visit.promoter_id) ?? 0) + 1,
+    )
+  }
 
   const orderIds = (orders ?? []).map((order) => order.id)
   const ticketsByOrder = new Map<string, number>()
@@ -230,6 +250,7 @@ export async function getOrganizerPromoters(): Promise<PromoterRow[]> {
       name: promoter.name,
       referralCode: promoter.referral_code,
       commissionRate: rate,
+      clickCount: clickByPromoter.get(promoter.id) ?? 0,
       ticketsSold: metric.ticketsSold,
       revenueGenerated: metric.revenueGenerated,
       estimatedCommission: metric.revenueGenerated * rate,
@@ -285,11 +306,17 @@ export async function getPromoterMetrics(
 
   const admin = createAdminClient()
 
-  const { data: orders } = await admin
-    .from("orders")
-    .select("id, total_amount, subtotal")
-    .eq("promoter_id", promoter.id)
-    .eq("status", "paid")
+  const [{ data: orders }, { count: clickCount }] = await Promise.all([
+    admin
+      .from("orders")
+      .select("id, total_amount, subtotal")
+      .eq("promoter_id", promoter.id)
+      .eq("status", "paid"),
+    admin
+      .from("promoter_referral_visits")
+      .select("id", { count: "exact", head: true })
+      .eq("promoter_id", promoter.id),
+  ])
 
   const orderIds = (orders ?? []).map((order) => order.id)
   let ticketsSold = 0
@@ -323,10 +350,73 @@ export async function getPromoterMetrics(
     name: promoter.name,
     referralCode: promoter.referral_code,
     commissionRate,
+    clickCount: clickCount ?? 0,
     ticketsSold,
     revenueGenerated,
     estimatedCommission: revenueGenerated * commissionRate,
     featuredEventId: featuredEvent?.id ?? null,
+  }
+}
+
+export async function trackReferralVisit(input: {
+  referralCode: string
+  path?: string | null
+  visitorKey?: string | null
+  eventId?: string | null
+}): Promise<{ success: boolean }> {
+  try {
+    const code = normalizeReferralCode(input.referralCode)
+    if (!code) return { success: false }
+
+    const admin = createAdminClient()
+    const { data: promoter } = await admin
+      .from("promoters")
+      .select("id, referral_code")
+      .ilike("referral_code", code)
+      .maybeSingle()
+
+    if (!promoter) return { success: false }
+
+    const headerStore = await headers()
+    const forwarded = headerStore.get("x-forwarded-for")?.split(",")[0]?.trim()
+    const ua = headerStore.get("user-agent") ?? ""
+    const rawVisitor =
+      input.visitorKey?.trim() ||
+      `${forwarded ?? "anon"}|${ua.slice(0, 120)}`
+    const visitorKey = createHash("sha256")
+      .update(rawVisitor)
+      .digest("hex")
+      .slice(0, 32)
+
+    // Dedupe: mismo visitante + mismo promotor en la última hora.
+    const since = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+    const { count } = await admin
+      .from("promoter_referral_visits")
+      .select("id", { count: "exact", head: true })
+      .eq("promoter_id", promoter.id)
+      .eq("visitor_key", visitorKey)
+      .gte("created_at", since)
+
+    if ((count ?? 0) > 0) return { success: true }
+
+    const path = input.path?.trim().slice(0, 500) || null
+    let eventId: string | null = input.eventId?.trim() || null
+    if (!eventId && path) {
+      const match = path.match(/^\/events\/([0-9a-f-]{36})/i)
+      if (match?.[1]) eventId = match[1]
+    }
+
+    await admin.from("promoter_referral_visits").insert({
+      promoter_id: promoter.id,
+      referral_code: promoter.referral_code,
+      path,
+      event_id: eventId,
+      visitor_key: visitorKey,
+    })
+
+    return { success: true }
+  } catch {
+    return { success: false }
   }
 }
 

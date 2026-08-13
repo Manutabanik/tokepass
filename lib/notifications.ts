@@ -86,6 +86,77 @@ export async function notifyTicketTransfer(
   })
 }
 
+export type LivingTicketEmailPayload = {
+  toEmail: string
+  holderName: string
+  eventTitle: string
+  ticketId: string
+  ticketCode: string
+}
+
+export async function notifyLivingTicketEmail(
+  payload: LivingTicketEmailPayload,
+): Promise<void> {
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
+    "https://tokepass.app"
+  const ticketUrl = `${siteUrl}/tickets/${payload.ticketId}`
+  const message = [
+    `Hola ${payload.holderName},`,
+    `Tu entrada Tokepass para ${payload.eventTitle} está lista.`,
+    `Código: #${payload.ticketCode}`,
+    `Abrí tu Living QR: ${ticketUrl}`,
+  ].join("\n")
+
+  try {
+    if (
+      await postWebhook("living_ticket_email", {
+        to: payload.toEmail,
+        message,
+        eventTitle: payload.eventTitle,
+        ticketId: payload.ticketId,
+        ticketUrl,
+      })
+    ) {
+      return
+    }
+  } catch {
+    // fallback abajo
+  }
+
+  const resendKey = process.env.RESEND_API_KEY?.trim()
+  const fromEmail =
+    process.env.RESEND_FROM_EMAIL?.trim() || "Tokepass <onboarding@resend.dev>"
+
+  if (resendKey) {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${resendKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: fromEmail,
+        to: [payload.toEmail],
+        subject: `Tu entrada Tokepass — ${payload.eventTitle}`,
+        text: message,
+      }),
+    })
+
+    if (!response.ok) {
+      const body = await response.text()
+      throw new Error(`Resend failed: ${response.status} ${body}`)
+    }
+    return
+  }
+
+  console.info("[notifyLivingTicketEmail]", {
+    to: payload.toEmail,
+    ticketId: payload.ticketId,
+    message,
+  })
+}
+
 export async function notifyPosTicketIssued(
   payload: PosTicketNotifyPayload,
 ): Promise<void> {

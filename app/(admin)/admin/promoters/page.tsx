@@ -19,7 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { formatCurrency, formatPercent } from "@/lib/format"
+import { formatCurrency, formatNumber, formatPercent } from "@/lib/format"
 
 export const metadata: Metadata = {
   title: "Promotores y RRPP",
@@ -44,12 +44,17 @@ export default async function AdminPromotersPage() {
     0,
   )
   const totalTickets = promoters.reduce((sum, row) => sum + row.ticketsSold, 0)
+  const totalClicks = promoters.reduce((sum, row) => sum + row.clickCount, 0)
+  const totalCommission = promoters.reduce(
+    (sum, row) => sum + row.estimatedCommission,
+    0,
+  )
 
   return (
     <div className="space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.16em] text-violet-300">
+          <p className="text-sm font-semibold uppercase tracking-[0.16em] text-violet-600 dark:text-violet-300">
             Difusión
           </p>
           <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] text-zinc-900 dark:text-white">
@@ -57,56 +62,70 @@ export default async function AdminPromotersPage() {
           </h1>
           <p className="mt-2 max-w-xl text-sm leading-6 text-zinc-600 dark:text-zinc-400">
             Invitá a tu equipo, compartí links con{" "}
-            <code className="rounded bg-white/5 px-1.5 py-0.5 text-violet-200">
+            <code className="rounded bg-zinc-100 px-1.5 py-0.5 text-violet-700 dark:bg-white/5 dark:text-violet-200">
               ?ref=CODIGO
             </code>{" "}
-            y medí comisiones solo sobre órdenes pagadas.
+            (válido en toda Tokepass) y medí clics, ventas y comisiones.
           </p>
         </div>
         <AddPromoterDialog />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card className="border-zinc-200 dark:border-white/8 bg-white/[0.03]">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card className="border-zinc-200 bg-white dark:border-white/8 dark:bg-white/[0.03]">
           <CardHeader className="pb-2">
             <CardDescription>Promotores activos</CardDescription>
             <CardTitle className="text-3xl text-zinc-900 dark:text-white">
-              {promoters.length}
+              {formatNumber(promoters.length)}
             </CardTitle>
           </CardHeader>
         </Card>
-        <Card className="border-zinc-200 dark:border-white/8 bg-white/[0.03]">
+        <Card className="border-zinc-200 bg-white dark:border-white/8 dark:bg-white/[0.03]">
           <CardHeader className="pb-2">
-            <CardDescription>Entradas vía promotores</CardDescription>
-            <CardTitle className="text-3xl text-zinc-900 dark:text-white">{totalTickets}</CardTitle>
+            <CardDescription>Clics / visitas</CardDescription>
+            <CardTitle className="text-3xl text-zinc-900 dark:text-white">
+              {formatNumber(totalClicks)}
+            </CardTitle>
           </CardHeader>
         </Card>
-        <Card className="border-zinc-200 dark:border-white/8 bg-white/[0.03]">
+        <Card className="border-zinc-200 bg-white dark:border-white/8 dark:bg-white/[0.03]">
           <CardHeader className="pb-2">
-            <CardDescription>GMV referido</CardDescription>
-            <CardTitle className="text-3xl text-emerald-300">
-              {formatCurrency(totalRevenue)}
+            <CardDescription>Entradas vía promotores</CardDescription>
+            <CardTitle className="text-3xl text-zinc-900 dark:text-white">
+              {formatNumber(totalTickets)}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card className="border-zinc-200 bg-white dark:border-white/8 dark:bg-white/[0.03]">
+          <CardHeader className="pb-2">
+            <CardDescription>Comisión acumulada</CardDescription>
+            <CardTitle className="text-3xl text-emerald-600 dark:text-emerald-300">
+              {formatCurrency(totalCommission)}
             </CardTitle>
           </CardHeader>
         </Card>
       </div>
 
-      <Card className="border-zinc-200 dark:border-white/8 bg-white/[0.03]">
+      <Card className="border-zinc-200 bg-white dark:border-white/8 dark:bg-white/[0.03]">
         <CardHeader>
-          <CardTitle className="text-zinc-900 dark:text-white">Equipo comercial</CardTitle>
+          <CardTitle className="text-zinc-900 dark:text-white">
+            Equipo comercial
+          </CardTitle>
           <CardDescription>
-            Las comisiones se calculan sobre órdenes con status{" "}
-            <span className="text-emerald-300">paid</span> (Mercado Pago).
+            GMV referido: {formatCurrency(totalRevenue)}. Las comisiones se
+            estiman sobre órdenes{" "}
+            <span className="text-emerald-600 dark:text-emerald-300">paid</span>
+            .
           </CardDescription>
         </CardHeader>
         <CardContent>
           {loadError ? (
-            <p className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-6 text-sm text-red-200">
+            <p className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-6 text-sm text-red-700 dark:text-red-200">
               {loadError}
             </p>
           ) : promoters.length === 0 ? (
-            <div className="grid place-items-center rounded-2xl border border-dashed border-zinc-200 dark:border-white/10 px-4 py-14 text-center">
-              <Users className="size-8 text-zinc-600" aria-hidden="true" />
+            <div className="grid place-items-center rounded-2xl border border-dashed border-zinc-200 px-4 py-14 text-center dark:border-white/10">
+              <Users className="size-8 text-zinc-500" aria-hidden="true" />
               <p className="mt-4 text-base font-semibold text-zinc-900 dark:text-white">
                 Todavía no tenés promotores
               </p>
@@ -117,15 +136,21 @@ export default async function AdminPromotersPage() {
           ) : (
             <Table>
               <TableHeader>
-                <TableRow className="border-zinc-200 dark:border-white/8 hover:bg-transparent">
+                <TableRow className="border-zinc-200 hover:bg-transparent dark:border-white/8">
                   <TableHead className="text-zinc-500">Nombre</TableHead>
                   <TableHead className="text-zinc-500">Código</TableHead>
-                  <TableHead className="text-zinc-500">Comisión</TableHead>
+                  <TableHead className="text-zinc-500">Comisión %</TableHead>
+                  <TableHead className="text-right text-zinc-500">
+                    Clics
+                  </TableHead>
                   <TableHead className="text-right text-zinc-500">
                     Entradas
                   </TableHead>
                   <TableHead className="text-right text-zinc-500">
-                    Ingresos
+                    Recaudación
+                  </TableHead>
+                  <TableHead className="text-right text-zinc-500">
+                    A pagar
                   </TableHead>
                 </TableRow>
               </TableHeader>
@@ -133,21 +158,21 @@ export default async function AdminPromotersPage() {
                 {promoters.map((promoter) => (
                   <TableRow
                     key={promoter.id}
-                    className="border-zinc-200 dark:border-white/8 hover:bg-white/[0.02]"
+                    className="border-zinc-200 hover:bg-zinc-50 dark:border-white/8 dark:hover:bg-white/[0.02]"
                   >
                     <TableCell className="font-medium text-zinc-900 dark:text-white">
                       {promoter.name}
                       {!promoter.userId && (
                         <Badge
                           variant="outline"
-                          className="ml-2 rounded-full border-amber-500/30 bg-amber-500/10 text-[10px] text-amber-300"
+                          className="ml-2 rounded-full border-amber-500/30 bg-amber-500/10 text-[10px] text-amber-700 dark:text-amber-300"
                         >
                           Sin reclamar
                         </Badge>
                       )}
                     </TableCell>
                     <TableCell>
-                      <code className="rounded-lg bg-white dark:bg-zinc-950 px-2 py-1 text-xs font-semibold tracking-wide text-violet-300 ring-1 ring-white/10">
+                      <code className="rounded-lg bg-zinc-100 px-2 py-1 text-xs font-semibold tracking-wide text-violet-700 ring-1 ring-zinc-200 dark:bg-zinc-950 dark:text-violet-300 dark:ring-white/10">
                         {promoter.referralCode}
                       </code>
                     </TableCell>
@@ -155,10 +180,16 @@ export default async function AdminPromotersPage() {
                       {formatPercent(promoter.commissionRate * 100, 0)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-zinc-800 dark:text-zinc-200">
-                      {promoter.ticketsSold}
+                      {formatNumber(promoter.clickCount)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums text-emerald-300">
+                    <TableCell className="text-right tabular-nums text-zinc-800 dark:text-zinc-200">
+                      {formatNumber(promoter.ticketsSold)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-zinc-800 dark:text-zinc-200">
                       {formatCurrency(promoter.revenueGenerated)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums font-semibold text-emerald-600 dark:text-emerald-300">
+                      {formatCurrency(promoter.estimatedCommission)}
                     </TableCell>
                   </TableRow>
                 ))}

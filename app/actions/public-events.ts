@@ -5,7 +5,8 @@ import { parseScheduleDays } from "@/lib/event-schedule"
 import { sortCatalogForHome } from "@/lib/services/events-service"
 import type { Event, TicketTier, Venue } from "@/types/database"
 import type { ScheduleDay } from "@/types/events"
-import type { EventSeatingUnit } from "@/types/venues"
+import type { EventSeatingUnit, VenueSeatingLayout } from "@/types/venues"
+import type { EventPixelConfig } from "@/lib/analytics/pixels"
 
 export type CatalogEvent = {
   id: string
@@ -48,7 +49,7 @@ export type EventDetails = {
   organizerBio: string | null
   organizerAvatarUrl: string | null
   venue:
-    | Pick<
+    | (Pick<
         Venue,
         | "id"
         | "name"
@@ -57,7 +58,9 @@ export type EventDetails = {
         | "seating_background_url"
         | "latitude"
         | "longitude"
-      >
+      > & {
+        seating_layout: VenueSeatingLayout
+      })
     | null
   seatingUnits: EventSeatingUnit[]
   tiers: Array<
@@ -77,6 +80,7 @@ export type EventDetails = {
       | "capacity_per_unit"
     > & { available: number }
   >
+  pixels: EventPixelConfig
 }
 
 type EventListRow = {
@@ -114,8 +118,14 @@ type EventDetailRow = {
   max_free_tickets?: number | null
   platform_fee_percentage?: number | null
   platform_fixed_fee?: number | null
+  meta_pixel_id?: string | null
+  meta_pixel_enabled?: boolean | null
+  tiktok_pixel_id?: string | null
+  tiktok_pixel_enabled?: boolean | null
+  ga4_measurement_id?: string | null
+  ga4_enabled?: boolean | null
   venues:
-    | Pick<
+    | (Pick<
         Venue,
         | "id"
         | "name"
@@ -124,7 +134,9 @@ type EventDetailRow = {
         | "seating_background_url"
         | "latitude"
         | "longitude"
-      >
+      > & {
+        seating_layout?: unknown
+      })
     | null
   ticket_tiers: Array<
     Pick<
@@ -256,7 +268,7 @@ async function loadEventDetails(
   let query = supabase
     .from("events")
     .select(
-      "id, title, description, date, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, is_sponsored_by_tokepass, max_free_tickets, platform_fee_percentage, platform_fixed_fee, venues(id, name, location, capacity, seating_background_url, latitude, longitude), ticket_tiers(id, name, price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit), profiles!events_organizer_id_fkey(full_name)",
+      "id, title, description, date, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, is_sponsored_by_tokepass, max_free_tickets, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, venues(id, name, location, capacity, seating_background_url, seating_layout, latitude, longitude), ticket_tiers(id, name, price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit), profiles!events_organizer_id_fkey(full_name)",
     )
     .eq("id", eventId)
 
@@ -378,7 +390,20 @@ async function loadEventDetails(
     organizerName,
     organizerBio,
     organizerAvatarUrl,
-    venue: event.venues,
+    venue: event.venues
+      ? {
+          id: event.venues.id,
+          name: event.venues.name,
+          location: event.venues.location,
+          capacity: event.venues.capacity,
+          seating_background_url: event.venues.seating_background_url,
+          latitude: event.venues.latitude,
+          longitude: event.venues.longitude,
+          seating_layout: parsePublicSeatingLayout(
+            event.venues.seating_layout,
+          ),
+        }
+      : null,
     seatingUnits: (seatingRows ?? []).map((unit) => ({
       id: unit.id,
       tierId: unit.tier_id,
@@ -400,5 +425,18 @@ async function loadEventDetails(
       price: Number(tier.price),
       available: Math.max(0, tier.capacity - tier.sold),
     })),
+    pixels: {
+      metaPixelId: event.meta_pixel_id ?? null,
+      metaPixelEnabled: Boolean(event.meta_pixel_enabled),
+      tiktokPixelId: event.tiktok_pixel_id ?? null,
+      tiktokPixelEnabled: Boolean(event.tiktok_pixel_enabled),
+      ga4MeasurementId: event.ga4_measurement_id ?? null,
+      ga4Enabled: Boolean(event.ga4_enabled),
+    },
   }
+}
+
+function parsePublicSeatingLayout(raw: unknown): VenueSeatingLayout {
+  if (!Array.isArray(raw)) return []
+  return raw as VenueSeatingLayout
 }

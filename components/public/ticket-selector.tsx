@@ -13,9 +13,9 @@ import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState, useTransition } from "react"
 import { toast } from "sonner"
 
-import { startCheckoutWithPayment } from "@/app/actions/checkout"
+import { startCheckoutWithPayment, reserveSeatAtomic } from "@/app/actions/checkout"
 import type { EventItem } from "@/app/actions/addons"
-import { DualSeatingSelector } from "@/components/b2c/dual-seating-selector"
+import { UniversalSeatSelectionFlow } from "@/components/b2c/universal-seat-selection"
 import { CheckoutBuyerFields } from "@/components/public/checkout-buyer-fields"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -26,9 +26,21 @@ import {
 import { MAX_TICKETS_PER_PURCHASE } from "@/lib/checkout-limits"
 import { isFullPassDayId } from "@/lib/event-schedule"
 import { formatCurrency, formatEventDay } from "@/lib/format"
+import {
+  emptyPixelConfig,
+  trackAddToCart,
+  trackInitiateCheckout,
+  type EventPixelConfig,
+} from "@/lib/analytics/pixels"
+import { getStoredReferralCode, persistReferralCode } from "@/lib/referral"
+import type { UniversalSeatSelection } from "@/lib/seating/universal-seat-types"
+import {
+  buildUniversalSeatPayloadForCheckout,
+  resolveTierIdForUniversalSector,
+} from "@/lib/seating/venue-adapter"
 import { cn } from "@/lib/utils"
 import type { ScheduleDay } from "@/types/events"
-import type { EventSeatingUnit } from "@/types/venues"
+import type { EventSeatingUnit, VenueSeatingLayout } from "@/types/venues"
 
 export type TicketSelectorTier = {
   id: string
@@ -46,6 +58,7 @@ type DayFilter = "all" | "passes" | string
 
 type TicketSelectorProps = {
   eventId: string
+  eventTitle?: string
   currentUserId?: string | null
   initialBuyer?: Partial<CheckoutBuyerInfo> | null
   tiers: TicketSelectorTier[]
@@ -57,9 +70,13 @@ type TicketSelectorProps = {
   referralCode?: string | null
   seatingUnits?: EventSeatingUnit[]
   seatingBackgroundUrl?: string | null
+  seatingLayout?: VenueSeatingLayout
+  venueId?: string | null
+  venueName?: string | null
+  venueCapacity?: number | null
+  pixels?: EventPixelConfig
 }
 
-const REF_STORAGE_KEY = "tokepass_ref"
 const MAX_ADDONS_PER_ITEM = 10
 
 function roundMoney(value: number): number {
@@ -68,6 +85,7 @@ function roundMoney(value: number): number {
 
 export function TicketSelector({
   eventId,
+  eventTitle = "Selección de entradas",
   currentUserId = null,
   initialBuyer = null,
   tiers,
@@ -76,13 +94,16 @@ export function TicketSelector({
   referralCode = null,
   seatingUnits = [],
   seatingBackgroundUrl = null,
+  seatingLayout = [],
+  venueId = null,
+  venueName = null,
+  venueCapacity = null,
+  pixels: _pixels = emptyPixelConfig(),
 }: TicketSelectorProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [dayFilter, setDayFilter] = useState<DayFilter>("all")
-  const [activeSeatingTierId, setActiveSeatingTierId] = useState<string | null>(
-    null,
-  )
+  const [showSeatFlow, setShowSeatFlow] = useState(false)
   const [buyer, setBuyer] = useState<CheckoutBuyerInfo>({
     buyerName: initialBuyer?.buyerName ?? "",
     buyerDni: initialBuyer?.buyerDni ?? "",
@@ -96,18 +117,60 @@ export function TicketSelector({
   )
   const [storedRef] = useState<string | null>(() => {
     if (typeof window === "undefined") return null
-    return sessionStorage.getItem(REF_STORAGE_KEY)
+    return getStoredReferralCode()
   })
 
   const resolvedRef = referralCode?.trim() || storedRef
-  const activeSeatingTier =
-    tiers.find((tier) => tier.id === activeSeatingTierId) ?? null
   const isMultiDay = scheduleDays.length > 1
+
+  const hasSeatingFlow =
+    seatingUnits.length > 0 ||
+    seatingLayout.length > 0 ||
+    tiers.some((tier) => tier.layoutType !== "general")
+
+  const universalPayload = useMemo(() => {
+    if (!hasSeatingFlow) return null
+    return buildUniversalSeatPayloadForCheckout({
+      venueId: venueId ?? `event-${eventId}`,
+      venueName: venueName ?? eventTitle,
+      seatingLayout,
+      seatingBackgroundUrl,
+      capacity: venueCapacity ?? undefined,
+      tiers: tiers.map((tier) => ({
+        id: tier.id,
+        name: tier.name,
+        price: tier.price,
+        available: tier.available,
+        seatingSectorId: tier.seatingSectorId,
+        layoutType: tier.layoutType,
+      })),
+      seatingUnits,
+    })
+  }, [
+    eventId,
+    eventTitle,
+    hasSeatingFlow,
+    seatingBackgroundUrl,
+    seatingLayout,
+    seatingUnits,
+    tiers,
+    venueCapacity,
+    venueId,
+    venueName,
+  ])
+
+  const seatIdByLayoutItem = useMemo(() => {
+    const map = new Map<string, EventSeatingUnit>()
+    for (const unit of seatingUnits) {
+      map.set(unit.layoutItemId, unit)
+    }
+    return map
+  }, [seatingUnits])
 
   useEffect(() => {
     const clean = referralCode?.trim()
     if (!clean) return
-    sessionStorage.setItem(REF_STORAGE_KEY, clean)
+    persistReferralCode(clean)
   }, [referralCode])
 
   const barItemsKey = barItems.map((item) => item.id).join("|")
@@ -206,6 +269,22 @@ export function TicketSelector({
     }))
   }
 
+  function fireCartPixels(input: {
+    contentIds: string[]
+    value: number
+    numItems: number
+  }) {
+    const payload = {
+      contentName: eventTitle,
+      contentIds: input.contentIds,
+      value: input.value,
+      currency: "ARS" as const,
+      numItems: input.numItems,
+    }
+    trackAddToCart(payload)
+    trackInitiateCheckout(payload)
+  }
+
   function handleReserve() {
     if (selection.length === 0 || isPending) return
 
@@ -214,6 +293,12 @@ export function TicketSelector({
       toast.error(buyerCheck.error)
       return
     }
+
+    fireCartPixels({
+      contentIds: selection.map((tier) => tier.id),
+      value: totalAmount,
+      numItems: totalTickets,
+    })
 
     startTransition(async () => {
       const result = await startCheckoutWithPayment(
@@ -254,24 +339,164 @@ export function TicketSelector({
     })
   }
 
-  if (activeSeatingTier) {
+  function openSeatFlow() {
+    const buyerCheck = validateCheckoutBuyer(buyer)
+    if (!buyerCheck.ok) {
+      toast.error(buyerCheck.error)
+      return
+    }
+    if (!universalPayload || universalPayload.sectors.length === 0) {
+      toast.error("No hay ubicaciones configuradas para este evento.")
+      return
+    }
+    setShowSeatFlow(true)
+  }
+
+  function handleUniversalContinue(selectionPayload: UniversalSeatSelection) {
+    const buyerCheck = validateCheckoutBuyer(buyer)
+    if (!buyerCheck.ok) {
+      toast.error(buyerCheck.error)
+      return
+    }
+
+    if (selectionPayload.kind === "general") {
+      const tierId = resolveTierIdForUniversalSector(
+        selectionPayload.sectorId,
+        selectionPayload.sectorName,
+        tiers.map((tier) => ({
+          id: tier.id,
+          name: tier.name,
+          price: tier.price,
+          available: tier.available,
+          seatingSectorId: tier.seatingSectorId,
+          layoutType: tier.layoutType,
+        })),
+      )
+      if (!tierId) {
+        toast.error("No encontramos la categoría de esa zona.")
+        return
+      }
+
+      fireCartPixels({
+        contentIds: [tierId],
+        value: selectionPayload.unitPrice * selectionPayload.quantity,
+        numItems: selectionPayload.quantity,
+      })
+
+      startTransition(async () => {
+        const result = await startCheckoutWithPayment(
+          eventId,
+          [{ tierId, quantity: selectionPayload.quantity }],
+          resolvedRef,
+          [],
+          buyerCheck.buyer,
+        )
+
+        if (!result.success) {
+          if (result.error === "auth_required") {
+            router.push(`/login?next=/events/${eventId}`)
+            return
+          }
+          if (result.error === "out_of_stock") {
+            toast.error("Stock insuficiente")
+            router.refresh()
+            return
+          }
+          toast.error("No se pudo iniciar el pago", {
+            description: result.error,
+          })
+          return
+        }
+
+        toast.success("Redirigiendo a Mercado Pago…")
+        window.location.href = result.initPoint
+      })
+      return
+    }
+
+    const seat = selectionPayload.seats[0]
+    if (!seat) {
+      toast.error("Elegí una ubicación para continuar.")
+      return
+    }
+    if (selectionPayload.seats.length > 1) {
+      toast.error("Comprá una ubicación numerada por operación.")
+      return
+    }
+
+    const unit = seatIdByLayoutItem.get(seat.id)
+    if (!unit) {
+      toast.error("Esa ubicación ya no está disponible.", {
+        description: "Actualizá la página e intentá de nuevo.",
+      })
+      router.refresh()
+      return
+    }
+    if (unit.status !== "available") {
+      toast.error(
+        "Esta ubicación acaba de ser reservada por otra persona. Por favor elegí otra.",
+      )
+      router.refresh()
+      return
+    }
+
+    if (!currentUserId) {
+      router.push(`/login?next=/events/${eventId}`)
+      return
+    }
+
+    fireCartPixels({
+      contentIds: [unit.id],
+      value: selectionPayload.unitPrice,
+      numItems: 1,
+    })
+
+    startTransition(async () => {
+      const result = await reserveSeatAtomic(
+        eventId,
+        unit.id,
+        currentUserId,
+        resolvedRef,
+        buyerCheck.buyer,
+      )
+
+      if (!result.success) {
+        if (result.error === "auth_required") {
+          router.push(`/login?next=/events/${eventId}`)
+          return
+        }
+        if (
+          result.error.includes("reservada por otra persona")
+        ) {
+          toast.error(
+            "Esta ubicación acaba de ser reservada por otra persona. Por favor elegí otra.",
+          )
+          router.refresh()
+          return
+        }
+        toast.error("No se pudo reservar la ubicación", {
+          description: result.error,
+        })
+        return
+      }
+
+      toast.success("Ubicación reservada durante 8 minutos.")
+      window.location.href = result.initPoint
+    })
+  }
+
+  if (showSeatFlow && universalPayload) {
     return (
-      <DualSeatingSelector
-        eventId={eventId}
-        currentUserId={currentUserId}
-        buyer={buyer}
-        tier={{
-          id: activeSeatingTier.id,
-          name: activeSeatingTier.name,
-          price: activeSeatingTier.price,
-          capacityPerUnit: activeSeatingTier.capacityPerUnit,
-        }}
-        units={seatingUnits.filter(
-          (unit) => unit.tierId === activeSeatingTier.id,
-        )}
-        backgroundUrl={seatingBackgroundUrl}
-        referralCode={resolvedRef}
-        onClose={() => setActiveSeatingTierId(null)}
+      <UniversalSeatSelectionFlow
+        embedded
+        pending={isPending}
+        eventTitle={eventTitle}
+        mapImageUrl={
+          universalPayload.mapImageUrl ?? seatingBackgroundUrl ?? null
+        }
+        sectors={universalPayload.sectors}
+        onBack={() => setShowSeatFlow(false)}
+        onContinue={handleUniversalContinue}
       />
     )
   }
@@ -472,15 +697,8 @@ export function TicketSelector({
               ) : (
                 <Button
                   type="button"
-                  disabled={soldOut}
-                  onClick={() => {
-                    const buyerCheck = validateCheckoutBuyer(buyer)
-                    if (!buyerCheck.ok) {
-                      toast.error(buyerCheck.error)
-                      return
-                    }
-                    setActiveSeatingTierId(tier.id)
-                  }}
+                  disabled={soldOut || !hasSeatingFlow}
+                  onClick={openSeatFlow}
                   className="mt-4 h-12 w-full rounded-xl bg-emerald-500 font-bold text-zinc-950 hover:bg-emerald-400"
                 >
                   <Armchair className="size-4" aria-hidden="true" />

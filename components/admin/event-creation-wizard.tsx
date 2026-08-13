@@ -140,11 +140,7 @@ const fieldsByStep: FieldPath<EventFormValues>[][] = [
     "venue.seatsPerRow",
   ],
   ["tickets"],
-  [
-    "growth.isRRPPEnabled",
-    "growth.commissionPercentage",
-    "growth.isAddonsEnabled",
-  ],
+  ["growth.isAddonsEnabled"],
 ]
 
 const defaultValues: EventFormValues = {
@@ -188,8 +184,6 @@ const defaultValues: EventFormValues = {
     },
   ],
   growth: {
-    isRRPPEnabled: false,
-    commissionPercentage: undefined,
     isAddonsEnabled: false,
   },
 }
@@ -268,10 +262,6 @@ export function EventCreationWizard({
   const existingVenueId = useWatch({
     control: form.control,
     name: "venue.existingVenueId",
-  })
-  const isRRPPEnabled = useWatch({
-    control: form.control,
-    name: "growth.isRRPPEnabled",
   })
   const flyerName = useWatch({ control: form.control, name: "basics.flyerName" })
   const isMultiDay = useWatch({
@@ -1393,68 +1383,26 @@ export function EventCreationWizard({
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 px-6 py-7 lg:px-8">
-                <FormField
-                  control={form.control}
-                  name="growth.isRRPPEnabled"
-                  render={({ field }) => (
-                    <FormItem className="rounded-2xl border border-zinc-200 dark:border-white/8 bg-zinc-50 dark:bg-black/15 p-5">
-                      <div className="flex items-start justify-between gap-5">
-                        <div>
-                          <FormLabel
-                            htmlFor="growth-rrpp-enabled"
-                            className="text-base text-zinc-900 dark:text-white"
-                          >
-                            Promotores y RRPP
-                          </FormLabel>
-                          <FormDescription className="mt-1 max-w-xl">
-                            Activá enlaces para que tus promotores vendan y cobren
-                            su comisión automáticamente.
-                          </FormDescription>
-                        </div>
-                        <Switch
-                          id="growth-rrpp-enabled"
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                          className="mt-1 data-checked:bg-violet-600"
-                        />
-                      </div>
-
-                      <div
-                        className={cn(
-                          "grid transition-all duration-300",
-                          isRRPPEnabled
-                            ? "mt-5 grid-rows-[1fr] opacity-100"
-                            : "grid-rows-[0fr] opacity-0",
-                        )}
-                      >
-                        <div className="overflow-hidden">
-                          <FormField
-                            control={form.control}
-                            name="growth.commissionPercentage"
-                            render={({ field: commission, fieldState }) => (
-                              <FormItem className="max-w-sm">
-                                <FormLabel htmlFor="growth-commission">
-                                  Comisión base (%)
-                                </FormLabel>
-                                <NumberInput
-                                  id="growth-commission"
-                                  min={1}
-                                  max={100}
-                                  value={commission.value}
-                                  onChange={commission.onChange}
-                                  className="h-11 border-zinc-200 dark:border-white/10 bg-zinc-100 dark:bg-black/20"
-                                />
-                                <FormMessage>
-                                  {fieldState.error?.message}
-                                </FormMessage>
-                              </FormItem>
-                            )}
-                          />
-                        </div>
-                      </div>
-                    </FormItem>
-                  )}
-                />
+                <div className="rounded-2xl border border-violet-500/25 bg-violet-500/5 p-5">
+                  <p className="text-base font-semibold text-zinc-900 dark:text-white">
+                    Promotores y RRPP
+                  </p>
+                  <p className="mt-1 max-w-xl text-sm text-zinc-600 dark:text-zinc-400">
+                    Los códigos de referido y las comisiones se gestionan en el
+                    panel de Promotores (no en la creación del evento). Compartí
+                    links con{" "}
+                    <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs dark:bg-black/30">
+                      ?ref=CODIGO
+                    </code>{" "}
+                    desde cualquier página de Tokepass.
+                  </p>
+                  <a
+                    href="/admin/promoters"
+                    className="mt-4 inline-flex h-10 items-center rounded-full border border-violet-500/40 bg-violet-500/15 px-4 text-sm font-semibold text-violet-800 transition hover:bg-violet-500/25 dark:text-violet-100"
+                  >
+                    Ir a Promotores y RRPP
+                  </a>
+                </div>
 
                 <FormField
                   control={form.control}

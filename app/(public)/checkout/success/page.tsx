@@ -2,8 +2,11 @@ import { ArrowRight, CheckCircle2, Ticket } from "lucide-react"
 import type { Metadata } from "next"
 import Link from "next/link"
 
+import { getPurchaseAnalyticsForOrder } from "@/app/actions/event-marketing"
+import { PurchaseAnalyticsTracker } from "@/components/public/purchase-analytics-tracker"
 import { CheckoutWalletPrecache } from "@/components/pwa/checkout-wallet-precache"
 import { Button } from "@/components/ui/button"
+import { hasActivePixels } from "@/lib/analytics/pixels"
 
 export const metadata: Metadata = {
   title: "Pago iniciado",
@@ -23,9 +26,22 @@ export default async function CheckoutSuccessPage({
   const { order_id, free } = await searchParams
   const isFree = free === "1"
 
+  const purchaseAnalytics = order_id
+    ? await getPurchaseAnalyticsForOrder(order_id)
+    : null
+
   return (
     <section className="relative isolate overflow-hidden">
       <CheckoutWalletPrecache />
+      {purchaseAnalytics && hasActivePixels(purchaseAnalytics.pixels) ? (
+        <PurchaseAnalyticsTracker
+          pixels={purchaseAnalytics.pixels}
+          eventTitle={purchaseAnalytics.eventTitle}
+          orderId={purchaseAnalytics.orderId}
+          value={purchaseAnalytics.value}
+          ticketIds={purchaseAnalytics.ticketIds}
+        />
+      ) : null}
       <div className="absolute inset-x-0 top-0 -z-10 h-[480px] bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.18),transparent_42%),radial-gradient(circle_at_top_right,rgba(124,58,237,0.1),transparent_40%)]" />
 
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-lg flex-col items-center justify-center px-4 py-20 text-center sm:px-6">
