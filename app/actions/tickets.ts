@@ -38,6 +38,8 @@ export type MyTicket = {
   /** Precio público All-In del tier (0 = gratuita). */
   tierPrice: number
   isSponsoredByTokepass: boolean
+  /** Listado activo en marketplace de reventa (si existe). */
+  activeResaleListingId: string | null
 }
 
 type TicketRow = {
@@ -182,9 +184,26 @@ export async function getMyTickets(): Promise<MyTicket[]> {
         isSponsoredByTokepass: Boolean(
           ticket.events.is_sponsored_by_tokepass,
         ),
+        activeResaleListingId: null,
       }
       return [mapped]
     })
+
+  const ticketIds = tickets.map((t) => t.id)
+  if (ticketIds.length > 0) {
+    const { data: listings } = await supabase
+      .from("ticket_resale_listings")
+      .select("id, ticket_id")
+      .in("ticket_id", ticketIds)
+      .eq("status", "active")
+
+    const byTicket = new Map(
+      (listings ?? []).map((row) => [row.ticket_id, row.id]),
+    )
+    for (const ticket of tickets) {
+      ticket.activeResaleListingId = byTicket.get(ticket.id) ?? null
+    }
+  }
 
   tickets.sort(
     (a, b) =>

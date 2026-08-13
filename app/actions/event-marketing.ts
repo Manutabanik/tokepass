@@ -160,6 +160,10 @@ export type PurchaseAnalyticsPayload = {
   pixels: EventPixelConfig
   eventId: string
   eventTitle: string
+  /** Flyer público del evento (share hype / OG). */
+  eventImageUrl: string | null
+  /** Flyer vertical custom del organizador (Stories full-bleed). */
+  socialShareImageUrl: string | null
   orderId: string
   value: number
   currency: "ARS"
@@ -200,6 +204,8 @@ export async function getPurchaseAnalyticsForOrder(
       pixels: emptyPixelConfig(),
       eventId: "",
       eventTitle: "Evento Tokepass",
+      eventImageUrl: null,
+      socialShareImageUrl: null,
       orderId: clean,
       value: Number(order.total_amount) || 0,
       currency: "ARS",
@@ -210,7 +216,7 @@ export async function getPurchaseAnalyticsForOrder(
   const { data: event } = await supabase
     .from("events")
     .select(
-      "id, title, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled",
+      "id, title, flyer_url, image_url, social_share_image_url, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled",
     )
     .eq("id", eventId)
     .maybeSingle()
@@ -228,6 +234,8 @@ export async function getPurchaseAnalyticsForOrder(
     pixels: hasAnyConfigured(pixels) ? pixels : emptyPixelConfig(),
     eventId,
     eventTitle: event?.title ?? "Evento Tokepass",
+    eventImageUrl: event?.flyer_url ?? event?.image_url ?? null,
+    socialShareImageUrl: event?.social_share_image_url?.trim() || null,
     orderId: clean,
     value: Number(order.total_amount) || 0,
     currency: "ARS",

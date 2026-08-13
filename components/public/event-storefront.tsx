@@ -4,18 +4,23 @@ import {
   Music2,
   ShieldCheck,
   Sparkles,
+  Ticket,
 } from "lucide-react"
 
 import type { EventDetails } from "@/app/actions/public-events"
 import type { getEventItems } from "@/app/actions/addons"
+import type { ResaleListingPublic } from "@/app/actions/resale"
 import {
   AddToCalendarButton,
   EventDetailTopActions,
 } from "@/components/public/event-detail-actions"
 import { AnalyticsTracker } from "@/components/public/analytics-tracker"
 import { EventAboutExpandable } from "@/components/public/event-about-expandable"
+import { EventExperienceGallery } from "@/components/public/event-experience-gallery"
 import { EventFlyer } from "@/components/public/event-flyer"
 import { EventLocationPanel } from "@/components/public/event-location-panel"
+import { EventPromoSpotButton } from "@/components/public/event-promo-spot"
+import { EventResaleListings } from "@/components/public/event-resale-listings"
 import { EventStickyBuyBar } from "@/components/public/event-sticky-buy-bar"
 import { OrganizerAvatar } from "@/components/public/organizer-avatar"
 import { TicketSelector } from "@/components/public/ticket-selector"
@@ -40,6 +45,7 @@ type EventStorefrontProps = {
     buyerEmail?: string
   } | null
   barItems: Awaited<ReturnType<typeof getEventItems>>
+  resaleListings?: ResaleListingPublic[]
   showBackLink?: boolean
 }
 
@@ -64,6 +70,7 @@ export function EventStorefront({
   referralCode = null,
   initialBuyer = null,
   barItems,
+  resaleListings = [],
   showBackLink = true,
 }: EventStorefrontProps) {
   const startingPrice =
@@ -175,6 +182,18 @@ export function EventStorefront({
                   details={event.description}
                 />
               </div>
+
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  className="h-12 rounded-2xl bg-emerald-500 px-5 text-sm font-bold text-zinc-950 hover:bg-emerald-400"
+                  nativeButton={false}
+                  render={<a href="#tickets" />}
+                >
+                  <Ticket className="size-4" aria-hidden="true" />
+                  {soldOut ? "Agotado" : "Comprar entradas"}
+                </Button>
+                <EventPromoSpotButton promoVideoUrl={event.promoVideoUrl} />
+              </div>
             </header>
 
             <EventLocationPanel
@@ -236,6 +255,13 @@ export function EventStorefront({
               </div>
             </section>
 
+            <EventResaleListings
+              listings={resaleListings}
+              currentUserId={currentUserId}
+            />
+
+            <EventExperienceGallery urls={event.galleryUrls} />
+
             <EventAboutExpandable description={description} />
 
             {event.scheduleDays.length > 1 ? (
@@ -283,9 +309,8 @@ export function EventStorefront({
                   </AccordionTrigger>
                   <AccordionContent className="text-zinc-400">
                     Llevá tu Living QR en el celular con batería. Evitá capturas
-                    de pantalla: los códigos dinámicos vencen. No se permite
-                    reventa en puerta ni ingreso con entradas de terceros no
-                    transferidas oficialmente.
+                    de pantalla: los códigos dinámicos vencen. La reventa solo es
+                    válida a través del marketplace oficial de Tokepass.
                   </AccordionContent>
                 </AccordionItem>
                 <AccordionItem value="refunds">

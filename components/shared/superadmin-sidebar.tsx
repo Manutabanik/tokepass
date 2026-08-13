@@ -8,6 +8,7 @@ import {
   PanelLeftOpen,
   Receipt,
   Settings,
+  Tags,
   Users,
   Wallet,
 } from "lucide-react"
@@ -27,6 +28,7 @@ const navigation = [
   },
   { label: "Usuarios", href: "/superadmin/users", icon: Users },
   { label: "Eventos", href: "/superadmin/events", icon: CalendarDays },
+  { label: "Categorías", href: "/superadmin/categories", icon: Tags },
   { label: "Órdenes", href: "/superadmin/orders", icon: Receipt },
   { label: "Liquidaciones", href: "/superadmin/settlements", icon: Wallet },
   { label: "Ajustes", href: "/superadmin/settings", icon: Settings },

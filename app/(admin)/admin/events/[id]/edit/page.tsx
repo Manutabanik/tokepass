@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
 
+import { getActiveEventCategories } from "@/app/actions/categories"
 import { getEventForEditing } from "@/app/actions/events"
 import { listOrganizerVenues } from "@/app/actions/venues"
 import { EventCreationWizard } from "@/components/admin/event-creation-wizard"
@@ -36,6 +37,7 @@ export default async function EditEventPage({
 
   let initialData: Awaited<ReturnType<typeof getEventForEditing>> = null
   let venues: Awaited<ReturnType<typeof listOrganizerVenues>> = []
+  let categories: Awaited<ReturnType<typeof getActiveEventCategories>> = []
   let feeRow: {
     platform_fee_percentage: number | null
     platform_fixed_fee: number | null
@@ -43,9 +45,10 @@ export default async function EditEventPage({
   } | null = null
 
   try {
-    const [eventData, venueList, eventFees] = await Promise.all([
+    const [eventData, venueList, categoryList, eventFees] = await Promise.all([
       getEventForEditing(id),
       listOrganizerVenues().catch(() => []),
+      getActiveEventCategories().catch(() => []),
       supabase
         .from("events")
         .select(
@@ -56,6 +59,7 @@ export default async function EditEventPage({
     ])
     initialData = eventData
     venues = venueList
+    categories = categoryList
     feeRow = eventFees.data
   } catch (error) {
     console.error("[EditEventPage]", id, error)
@@ -104,6 +108,7 @@ export default async function EditEventPage({
         organizerServiceRate={eventFeeRate(feeConfig)}
         platformFixedFee={eventFixedFee(feeConfig)}
         venues={venues}
+        categories={categories}
       />
     </main>
   )

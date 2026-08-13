@@ -58,6 +58,7 @@ export const eventFormSchema = z
       visibility: z.enum(EVENT_VISIBILITY_VALUES),
       isMultiDay: z.boolean(),
       scheduleDays: z.array(scheduleDaySchema),
+      categoryId: z.string().uuid("Seleccioná una categoría de la lista."),
     }),
     venue: z.object({
       mode: z.enum(["existing", "new"]),

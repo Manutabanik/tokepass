@@ -149,6 +149,7 @@ export async function reserveSeatAtomic(
   userId: string,
   referralCode?: string | null,
   buyer?: CheckoutBuyerInfo | null,
+  promoCodeId?: string | null,
 ): Promise<CheckoutResult> {
   const cleanEventId = eventId.trim()
   const cleanSeatId = seatId.trim()
@@ -190,6 +191,7 @@ export async function reserveSeatAtomic(
     referralCode,
     [],
     buyer,
+    promoCodeId,
   )
 
   if (!result.success && result.error === "out_of_stock") {
@@ -205,6 +207,7 @@ export async function startCheckoutWithPayment(
   referralCode?: string | null,
   addons: CheckoutAddonItem[] = [],
   buyerInfo?: CheckoutBuyerInfo | null,
+  promoCodeId?: string | null,
 ): Promise<CheckoutResult> {
   if (!eventId || items.length === 0) {
     return { success: false, error: "Datos de compra incompletos." }
@@ -399,6 +402,30 @@ export async function startCheckoutWithPayment(
         return {
           success: false,
           error: addonsError.message || "No se pudieron reservar las consumiciones.",
+        }
+      }
+    }
+
+    const cleanPromoId = promoCodeId?.trim() || null
+    if (cleanPromoId) {
+      const { data: promoRows, error: promoError } = await supabase.rpc(
+        "apply_promo_code_to_order",
+        {
+          p_order_id: orderId,
+          p_owner_id: user.id,
+          p_promo_code_id: cleanPromoId,
+        },
+      )
+
+      const promoResult = Array.isArray(promoRows) ? promoRows[0] : promoRows
+      if (promoError || !promoResult?.ok) {
+        await cleanupPendingOrder(orderId)
+        return {
+          success: false,
+          error:
+            promoResult?.message ||
+            promoError?.message ||
+            "No se pudo aplicar el cupón.",
         }
       }
     }

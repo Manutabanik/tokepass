@@ -2,7 +2,9 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { parseScheduleDays } from "@/lib/event-schedule"
-import { sortCatalogForHome } from "@/lib/services/events-service"
+import { fisherYatesShuffle, FEATURED_CAROUSEL_LIMIT } from "@/lib/featured-rotation"
+import type { FeaturedRotationResult } from "@/lib/featured-rotation"
+import { isHomePriority, sortCatalogForHome } from "@/lib/services/events-service"
 import type { Event, TicketTier, Venue } from "@/types/database"
 import type { ScheduleDay } from "@/types/events"
 import type { EventSeatingUnit, VenueSeatingLayout } from "@/types/venues"
@@ -27,6 +29,8 @@ export type CatalogEvent = {
   featuredTier: "silver" | "gold" | "platinum" | null
   featuredUntil: string | null
   isSponsoredByTokepass: boolean
+  /** FK event_categories — taxonomía centralizada. */
+  categoryId: string | null
 }
 
 export type EventDetails = {
@@ -81,6 +85,10 @@ export type EventDetails = {
     > & { available: number }
   >
   pixels: EventPixelConfig
+  /** Spot YouTube/Vimeo (URL). */
+  promoVideoUrl: string | null
+  /** Hasta 4 fotos de galería. */
+  galleryUrls: string[]
 }
 
 type EventListRow = {
@@ -97,6 +105,7 @@ type EventListRow = {
   featured_tier: "silver" | "gold" | "platinum" | null
   featured_until: string | null
   is_sponsored_by_tokepass: boolean | null
+  category_id: string | null
   venues: { name: string; location: string } | null
   ticket_tiers: { price: number; capacity: number; sold: number }[] | null
   profiles: { full_name: string | null } | null
@@ -124,6 +133,8 @@ type EventDetailRow = {
   tiktok_pixel_enabled?: boolean | null
   ga4_measurement_id?: string | null
   ga4_enabled?: boolean | null
+  promo_video_url?: string | null
+  gallery_urls?: string[] | null
   venues:
     | (Pick<
         Venue,
@@ -191,7 +202,7 @@ export async function getPublishedEvents(
   let query = supabase
     .from("events")
     .select(
-      "id, title, description, date, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, venues(name, location), ticket_tiers(price, capacity, sold), profiles!events_organizer_id_fkey(full_name)",
+      "id, title, description, date, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location), ticket_tiers(price, capacity, sold), profiles!events_organizer_id_fkey(full_name)",
     )
     .eq("status", "published")
     .eq("visibility", "public")
@@ -211,36 +222,85 @@ export async function getPublishedEvents(
     throw new Error(`No se pudieron cargar los eventos: ${error.message}`)
   }
 
-  const mapped = ((data ?? []) as unknown as EventListRow[]).map((event) => {
-    const inventory = computeInventory(event.ticket_tiers)
-    const featuredUntil = event.featured_until
-    const stillActive =
-      Boolean(event.is_featured) &&
-      Boolean(featuredUntil) &&
-      new Date(String(featuredUntil)).getTime() > Date.now()
-
-    return {
-      id: event.id,
-      title: event.title,
-      description: event.description,
-      date: event.date,
-      location: event.location,
-      imageUrl: event.flyer_url ?? event.image_url,
-      status: event.status,
-      venueName: event.venues?.name ?? null,
-      venueLocation: event.venues?.location ?? null,
-      organizerName: event.profiles?.full_name ?? null,
-      startingPrice: computeStartingPrice(event.ticket_tiers),
-      soldRatio: inventory.soldRatio,
-      ticketsLeft: inventory.ticketsLeft,
-      isFeatured: stillActive,
-      featuredTier: stillActive ? event.featured_tier : null,
-      featuredUntil: stillActive ? featuredUntil : null,
-      isSponsoredByTokepass: Boolean(event.is_sponsored_by_tokepass),
-    }
-  })
+  const mapped = ((data ?? []) as unknown as EventListRow[]).map(mapEventListRow)
 
   return sortCatalogForHome(mapped)
+}
+
+function mapEventListRow(event: EventListRow): CatalogEvent {
+  const inventory = computeInventory(event.ticket_tiers)
+  const featuredUntil = event.featured_until
+  const stillActive =
+    Boolean(event.is_featured) &&
+    Boolean(featuredUntil) &&
+    new Date(String(featuredUntil)).getTime() > Date.now()
+
+  return {
+    id: event.id,
+    title: event.title,
+    description: event.description,
+    date: event.date,
+    location: event.location,
+    imageUrl: event.flyer_url ?? event.image_url,
+    status: event.status,
+    venueName: event.venues?.name ?? null,
+    venueLocation: event.venues?.location ?? null,
+    organizerName: event.profiles?.full_name ?? null,
+    startingPrice: computeStartingPrice(event.ticket_tiers),
+    soldRatio: inventory.soldRatio,
+    ticketsLeft: inventory.ticketsLeft,
+    isFeatured: stillActive,
+    featuredTier: stillActive ? event.featured_tier : null,
+    featuredUntil: stillActive ? featuredUntil : null,
+    isSponsoredByTokepass: Boolean(event.is_sponsored_by_tokepass),
+    categoryId: event.category_id ?? null,
+  }
+}
+
+/**
+ * Eventos para el Hero / Destacados.
+ * Incluye auspicio Tokepass y boosts activos; Fisher–Yates + tope 6.
+ * Un solo elegible también entra al carrusel.
+ */
+export async function getFeaturedEvents(options?: {
+  province?: string | null
+}): Promise<FeaturedRotationResult<CatalogEvent>> {
+  const supabase = await createClient()
+  const province = options?.province?.trim().toLowerCase() ?? ""
+
+  const { data, error } = await supabase
+    .from("events")
+    .select(
+      "id, title, description, date, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location), ticket_tiers(price, capacity, sold), profiles!events_organizer_id_fkey(full_name)",
+    )
+    .eq("status", "published")
+    .eq("visibility", "public")
+    .gte("date", startOfTodayIso())
+    .or("is_sponsored_by_tokepass.eq.true,is_featured.eq.true")
+
+  if (error) {
+    throw new Error(`No se pudieron cargar los destacados: ${error.message}`)
+  }
+
+  let mapped = ((data ?? []) as unknown as EventListRow[])
+    .map(mapEventListRow)
+    .filter((event) => isHomePriority(event))
+
+  if (province && province !== "todas") {
+    mapped = mapped.filter((event) => {
+      const place =
+        `${event.venueLocation ?? ""} ${event.location} ${event.venueName ?? ""}`.toLowerCase()
+      return place.includes(province)
+    })
+  }
+
+  const pool = fisherYatesShuffle(mapped)
+
+  return {
+    pool,
+    totalSponsored: pool.length,
+    events: pool.slice(0, FEATURED_CAROUSEL_LIMIT),
+  }
 }
 
 export async function getEventDetails(
@@ -268,7 +328,7 @@ async function loadEventDetails(
   let query = supabase
     .from("events")
     .select(
-      "id, title, description, date, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, is_sponsored_by_tokepass, max_free_tickets, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, venues(id, name, location, capacity, seating_background_url, seating_layout, latitude, longitude), ticket_tiers(id, name, price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit), profiles!events_organizer_id_fkey(full_name)",
+      "id, title, description, date, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, is_sponsored_by_tokepass, max_free_tickets, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, venues(id, name, location, capacity, seating_background_url, seating_layout, latitude, longitude), ticket_tiers(id, name, price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit), profiles!events_organizer_id_fkey(full_name)",
     )
     .eq("id", eventId)
 
@@ -433,6 +493,13 @@ async function loadEventDetails(
       ga4MeasurementId: event.ga4_measurement_id ?? null,
       ga4Enabled: Boolean(event.ga4_enabled),
     },
+    promoVideoUrl: event.promo_video_url?.trim() || null,
+    galleryUrls: Array.isArray(event.gallery_urls)
+      ? event.gallery_urls.filter(
+          (item): item is string =>
+            typeof item === "string" && item.trim().length > 0,
+        ).slice(0, 4)
+      : [],
   }
 }
 

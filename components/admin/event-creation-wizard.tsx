@@ -126,6 +126,7 @@ const fieldsByStep: FieldPath<EventFormValues>[][] = [
     "basics.description",
     "basics.flyerName",
     "basics.visibility",
+    "basics.categoryId",
     "basics.isMultiDay",
     "basics.scheduleDays",
   ],
@@ -152,6 +153,7 @@ const defaultValues: EventFormValues = {
     visibility: "public",
     isMultiDay: false,
     scheduleDays: [],
+    categoryId: "",
   },
   venue: {
     mode: "new",
@@ -214,12 +216,14 @@ export function EventCreationWizard({
   platformFixedFee = 0,
   targetOrganizerId = null,
   venues = [],
+  categories = [],
   initialData,
 }: {
   organizerServiceRate: number
   platformFixedFee?: number
   targetOrganizerId?: string | null
   venues?: OrganizerVenue[]
+  categories?: Array<{ id: string; name: string; slug: string; iconName: string | null }>
   initialData?: EditableEventData
 }) {
   const router = useRouter()
@@ -598,6 +602,43 @@ export function EventCreationWizard({
                           placeholder="Ej. Fiesta de Año Nuevo en el Complejo X"
                           className="h-12 w-full rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 py-3 text-sm text-zinc-900 dark:text-white shadow-inner transition-all placeholder:text-zinc-400 dark:placeholder:text-zinc-600 focus:border-emerald-500/60 focus:bg-zinc-100 dark:focus:bg-zinc-900 focus:ring-2 focus:ring-emerald-500/15 focus:outline-none"
                         />
+                        <FormMessage>{fieldState.error?.message}</FormMessage>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="basics.categoryId"
+                    render={({ field, fieldState }) => (
+                      <FormItem>
+                        <FormLabel className="block font-mono text-xs font-semibold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
+                          Categoría
+                        </FormLabel>
+                        <Select
+                          value={field.value || undefined}
+                          onValueChange={(value) => field.onChange(value ?? "")}
+                        >
+                          <SelectTrigger className="h-12 w-full rounded-xl">
+                            <SelectValue placeholder="Elegí una categoría" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {categories.length === 0 ? (
+                              <SelectItem value="__empty" disabled>
+                                No hay categorías activas
+                              </SelectItem>
+                            ) : (
+                              categories.map((category) => (
+                                <SelectItem key={category.id} value={category.id}>
+                                  {category.name}
+                                </SelectItem>
+                              ))
+                            )}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                          Lista definida por Tokepass. No se pueden crear etiquetas libres.
+                        </p>
                         <FormMessage>{fieldState.error?.message}</FormMessage>
                       </FormItem>
                     )}

@@ -6,6 +6,8 @@ import { redirect } from "next/navigation"
 import {
   getFreshLoginProfile,
   postLoginDestination,
+  safeInternalNextPath,
+  type FreshLoginProfile,
 } from "@/lib/auth/post-login"
 import { logger } from "@/lib/logger"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -28,6 +30,38 @@ async function getAuthCallbackUrl() {
   return `${siteUrl}/auth/callback`
 }
 
+function mapAuthErrorMessage(message: string): string {
+  const normalized = message.toLowerCase()
+  if (
+    normalized.includes("invalid login credentials") ||
+    normalized.includes("invalid_credentials")
+  ) {
+    return "Email o contraseña incorrectos."
+  }
+  if (normalized.includes("email not confirmed")) {
+    return "Confirmá tu email antes de ingresar. Revisá tu bandeja de entrada."
+  }
+  if (
+    normalized.includes("user already registered") ||
+    normalized.includes("already been registered")
+  ) {
+    return "Este email ya está registrado. Iniciá sesión o recuperá tu contraseña."
+  }
+  if (normalized.includes("password should be at least")) {
+    return "La contraseña debe tener al menos 8 caracteres."
+  }
+  if (normalized.includes("rate limit") || normalized.includes("too many")) {
+    return "Demasiados intentos. Esperá un momento e intentá de nuevo."
+  }
+  if (normalized.includes("signup is disabled")) {
+    return "El registro está temporalmente deshabilitado."
+  }
+  if (normalized.includes("is invalid") && normalized.includes("email")) {
+    return "Ingresá un email válido."
+  }
+  return message
+}
+
 function readCredentials(formData: FormData) {
   const email = formData.get("email")
   const password = formData.get("password")
@@ -47,7 +81,41 @@ function readCredentials(formData: FormData) {
     ok: true,
     email: email.trim().toLowerCase(),
     password,
+    next: safeInternalNextPath(formData.get("next")),
   } as const
+}
+
+async function resolveLoginProfile(
+  userId: string,
+): Promise<FreshLoginProfile | null> {
+  try {
+    return await getFreshLoginProfile(userId)
+  } catch (profileError) {
+    logger.error({
+      context: "auth/login",
+      message: "fresh_profile_lookup_failed_fallback",
+      userId,
+      error: profileError,
+    })
+
+    // Fallback: own-profile RLS (login must not hard-fail if service role hiccups).
+    const supabase = await createClient()
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("role, organizer_approval_status")
+      .eq("id", userId)
+      .maybeSingle()
+
+    if (error) {
+      throw new Error(`profile_fallback_failed: ${error.message}`)
+    }
+    if (!data) return null
+
+    return {
+      role: data.role,
+      organizerApprovalStatus: data.organizer_approval_status,
+    }
+  }
 }
 
 export async function signUpWithEmail(
@@ -85,16 +153,25 @@ export async function signUpWithEmail(
   })
 
   if (error) {
-    return { error: error.message, success: null }
+    return { error: mapAuthErrorMessage(error.message), success: null }
+  }
+
+  // Supabase may return a fake user with empty identities when email exists.
+  if (data.user && !data.user.identities?.length) {
+    return {
+      error:
+        "Este email ya está registrado. Iniciá sesión o utilizá otra cuenta.",
+      success: null,
+    }
   }
 
   if (data.session) {
-    redirect("/")
+    redirect(credentials.next || "/")
   }
 
   return {
     error: null,
-    success: "Cuenta creada. Revisa tu correo para confirmar el registro.",
+    success: "Cuenta creada. Revisá tu correo para confirmar el registro.",
   }
 }
 
@@ -112,6 +189,25 @@ export async function signUpOrganizer(
     return {
       error: "La contraseña debe tener al menos 8 caracteres.",
       success: null,
+    }
+  }
+
+  // Validate invite BEFORE creating the Auth user (avoid orphan accounts).
+  const inviteOnly =
+    process.env.ORGANIZER_INVITE_ONLY === "true" ||
+    process.env.ORGANIZER_INVITE_ONLY === "1"
+  const inviteCode = process.env.ORGANIZER_INVITE_CODE?.trim()
+  const submittedInvite = formData.get("inviteCode")
+  const inviteValue =
+    typeof submittedInvite === "string" ? submittedInvite.trim() : ""
+
+  if (inviteOnly) {
+    if (!inviteCode || inviteValue !== inviteCode) {
+      return {
+        error:
+          "Registro de organizadores solo por invitación. Código inválido o ausente.",
+        success: null,
+      }
     }
   }
 
@@ -136,40 +232,22 @@ export async function signUpOrganizer(
 
   if (error || !data.user) {
     return {
-      error: error?.message ?? "No se pudo crear la cuenta de organizador.",
+      error: mapAuthErrorMessage(
+        error?.message ?? "No se pudo crear la cuenta de organizador.",
+      ),
       success: null,
     }
   }
 
-  // Supabase puede ocultar que un email ya existe devolviendo un usuario sin
-  // identities. Nunca promovemos cuentas preexistentes desde este endpoint.
   if (!data.user.identities?.length) {
     return {
       error:
-        "Este email ya está registrado. Inicia sesión o utiliza otra cuenta.",
+        "Este email ya está registrado. Iniciá sesión o utilizá otra cuenta.",
       success: null,
     }
   }
 
   try {
-    const inviteOnly =
-      process.env.ORGANIZER_INVITE_ONLY === "true" ||
-      process.env.ORGANIZER_INVITE_ONLY === "1"
-    const inviteCode = process.env.ORGANIZER_INVITE_CODE?.trim()
-    const submittedInvite = formData.get("inviteCode")
-    const inviteValue =
-      typeof submittedInvite === "string" ? submittedInvite.trim() : ""
-
-    if (inviteOnly) {
-      if (!inviteCode || inviteValue !== inviteCode) {
-        return {
-          error:
-            "Registro de organizadores solo por invitación. Código inválido o ausente.",
-          success: null,
-        }
-      }
-    }
-
     const admin = createAdminClient()
     // Never grant admin immediately — Platform OS must approve.
     const { error: profileError } = await admin.from("profiles").upsert(
@@ -190,10 +268,22 @@ export async function signUpOrganizer(
         success: null,
       }
     }
-  } catch {
+  } catch (setupError) {
+    logger.error({
+      context: "auth/register-organizer",
+      message: "organizer_profile_setup_failed",
+      userId: data.user.id,
+      error: setupError,
+    })
+    try {
+      const admin = createAdminClient()
+      await admin.auth.admin.deleteUser(data.user.id)
+    } catch {
+      // best-effort cleanup
+    }
     return {
       error:
-        "El registro de organizadores requiere SUPABASE_SERVICE_ROLE_KEY en el servidor.",
+        "El registro de organizadores requiere configuración de servidor (SERVICE_ROLE). Intentá más tarde.",
       success: null,
     }
   }
@@ -216,10 +306,13 @@ export async function signInWithEmail(
   }
 
   const supabase = await createClient()
-  const { error } = await supabase.auth.signInWithPassword(credentials)
+  const { error } = await supabase.auth.signInWithPassword({
+    email: credentials.email,
+    password: credentials.password,
+  })
 
   if (error) {
-    return { error: error.message, success: null }
+    return { error: mapAuthErrorMessage(error.message), success: null }
   }
 
   // Validate the newly written cookie against Supabase Auth instead of trusting
@@ -237,13 +330,13 @@ export async function signInWithEmail(
     }
   }
 
-  let profile: Awaited<ReturnType<typeof getFreshLoginProfile>>
+  let profile: FreshLoginProfile | null
   try {
-    profile = await getFreshLoginProfile(user.id)
+    profile = await resolveLoginProfile(user.id)
   } catch (profileError) {
     logger.error({
       context: "auth/login",
-      message: "fresh_profile_lookup_failed",
+      message: "profile_lookup_failed",
       userId: user.id,
       error: profileError,
     })
@@ -291,7 +384,25 @@ export async function signInWithEmail(
     }
   }
 
-  redirect(postLoginDestination(profile?.role))
+  // Pending organizer applicants (still role=customer) logging into the
+  // organizer portal should see a clear message instead of a silent / redirect.
+  const loginSource = formData.get("loginSource")
+  if (
+    loginSource === "organizer" &&
+    profile?.organizerApprovalStatus === "pending" &&
+    profile.role !== "admin" &&
+    profile.role !== "super_admin"
+  ) {
+    await supabase.auth.signOut()
+    return {
+      error:
+        "Tu solicitud de organizador sigue pendiente de aprobación. Te avisamos cuando esté activa.",
+      success: null,
+    }
+  }
+
+  const fallback = postLoginDestination(profile?.role)
+  redirect(credentials.next || fallback)
 }
 
 export async function signInWithGoogle(): Promise<void> {
@@ -308,7 +419,9 @@ export async function signInWithGoogle(): Promise<void> {
     const loginUrl = new URL("/login", redirectTo)
     loginUrl.searchParams.set(
       "error",
-      error?.message ?? "No se pudo iniciar sesión con Google.",
+      mapAuthErrorMessage(
+        error?.message ?? "No se pudo iniciar sesión con Google.",
+      ),
     )
     redirect(loginUrl.toString())
   }

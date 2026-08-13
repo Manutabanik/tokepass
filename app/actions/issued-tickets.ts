@@ -12,6 +12,12 @@ import {
   type IssuedTicketRow,
   type IssuedTicketUiStatus,
 } from "@/lib/admin/issued-tickets"
+import {
+  audienceCsvFilename,
+  audienceRowsFromTickets,
+  buildAudienceCsv,
+  withUtf8Bom,
+} from "@/lib/admin/audience-csv"
 import { assertEventOpsAccess } from "@/lib/event-ops-access"
 import { logger } from "@/lib/logger"
 import {
@@ -404,6 +410,98 @@ export async function getIssuedTicketsForEvent(
         error instanceof Error
           ? error.message
           : "No se pudieron cargar las entradas.",
+    }
+  }
+}
+
+export async function exportEventTicketsCSV(
+  eventId: string,
+): Promise<
+  ActionResult<{ csv: string; filename: string; rowCount: number }>
+> {
+  try {
+    const access = await requireEventAccess(eventId)
+    if (!access.ok) return { success: false, error: access.error }
+
+    const { admin } = access
+
+    const [{ data: event }, { data: ticketRows, error: ticketsError }] =
+      await Promise.all([
+        admin
+          .from("events")
+          .select("id, title, organizer_id")
+          .eq("id", eventId)
+          .maybeSingle(),
+        admin
+          .from("tickets")
+          .select(
+            "id, status, qr_code, holder_name, holder_email, holder_dni, scanned_at, validated_at, admissions_used, created_at, transferred_from_id, owner_id, order_id, tier_id, seat_id, seating_unit_id, max_admissions, is_dynamic_qr, max_transfers_allowed, transfer_count, is_test, event_seating_units(label, sector_name, row_label), ticket_tiers(name)",
+          )
+          .eq("event_id", eventId)
+          .eq("is_test", false)
+          .neq("status", "pending_payment")
+          .order("created_at", { ascending: false }),
+      ])
+
+    if (ticketsError) {
+      return { success: false, error: ticketsError.message }
+    }
+
+    const tickets = (ticketRows ?? []) as unknown as TicketDbRow[]
+    const ticketIds = tickets.map((row) => row.id)
+
+    let transfers: TransferDbRow[] = []
+    if (ticketIds.length > 0) {
+      const { data: transferRows, error: transferError } = await admin
+        .from("ticket_transfers")
+        .select(
+          "id, sender_id, receiver_email, original_ticket_id, new_ticket_id, created_at",
+        )
+        .or(
+          `original_ticket_id.in.(${ticketIds.join(",")}),new_ticket_id.in.(${ticketIds.join(",")})`,
+        )
+        .order("created_at", { ascending: true })
+
+      if (transferError) {
+        return { success: false, error: transferError.message }
+      }
+      transfers = (transferRows ?? []) as TransferDbRow[]
+    }
+
+    const allRows = buildIssuedRows({
+      tickets,
+      transfers,
+      organizerId: event?.organizer_id ?? null,
+    })
+
+    const exportable = audienceRowsFromTickets(allRows)
+    const csv = withUtf8Bom(buildAudienceCsv(allRows))
+    const filename = audienceCsvFilename(
+      event?.title ?? "evento",
+      eventId,
+    )
+
+    return {
+      success: true,
+      data: {
+        csv,
+        filename,
+        rowCount: exportable.length,
+      },
+    }
+  } catch (error) {
+    logger.error({
+      context: "issued-tickets",
+      message: "export_csv_failed",
+      event_id: eventId,
+      error,
+    })
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo exportar la audiencia.",
     }
   }
 }

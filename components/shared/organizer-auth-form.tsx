@@ -49,9 +49,11 @@ function SubmitButton({ mode }: { mode: "login" | "register" }) {
 export function OrganizerAuthForm({
   mode,
   initialError,
+  nextPath,
 }: {
   mode: "login" | "register"
   initialError?: string
+  nextPath?: string | null
 }) {
   const [loginState, loginAction] = useActionState(
     signInWithEmail,
@@ -63,6 +65,9 @@ export function OrganizerAuthForm({
   )
   const state = mode === "login" ? loginState : registerState
   const visibleError = state.error || initialError
+  const safeNext = nextPath?.startsWith("/") && !nextPath.startsWith("//")
+    ? nextPath
+    : null
 
   return (
     <Card className="w-full border-0 bg-white/[0.04] py-0 text-white ring-1 ring-white/10 shadow-2xl shadow-black/30">
@@ -93,6 +98,10 @@ export function OrganizerAuthForm({
           action={mode === "login" ? loginAction : registerAction}
           className="space-y-4"
         >
+          {mode === "login" ? (
+            <input type="hidden" name="loginSource" value="organizer" />
+          ) : null}
+          {safeNext ? <input type="hidden" name="next" value={safeNext} /> : null}
           {mode === "register" && (
             <div className="grid gap-2">
               <Label htmlFor="organizer-name" className="text-zinc-300">

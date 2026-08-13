@@ -140,6 +140,25 @@ export type Event = {
   /** GA4 Measurement ID G-… (opcional). */
   ga4_measurement_id: string | null
   ga4_enabled: boolean
+  /** Spot YouTube/Vimeo (solo URL; sin video en Storage). */
+  promo_video_url: string | null
+  /** Hasta 4 URLs de galería (imágenes ligeras). */
+  gallery_urls: string[] | null
+  /** Flyer vertical 9:16 para Stories post-compra (opcional). */
+  social_share_image_url: string | null
+  /** Taxonomía centralizada (Super Admin). */
+  category_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type EventCategory = {
+  id: string
+  name: string
+  slug: string
+  icon_name: string | null
+  is_active: boolean
+  sort_order: number
   created_at: string
   updated_at: string
 }
@@ -238,6 +257,39 @@ export type TicketTransfer = {
   created_at: string
 }
 
+export type TicketResaleListingStatus = "active" | "sold" | "cancelled"
+export type PayoutPendingStatus = "pending" | "paid" | "cancelled"
+
+export type TicketResaleListing = {
+  id: string
+  ticket_id: string
+  seller_id: string
+  event_id: string
+  price: number
+  platform_fee_amount: number
+  seller_net_amount: number
+  status: TicketResaleListingStatus
+  buyer_id: string | null
+  mp_preference_id: string | null
+  mp_payment_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type PayoutPending = {
+  id: string
+  seller_id: string
+  listing_id: string
+  event_id: string
+  gross_amount: number
+  platform_fee: number
+  net_amount: number
+  mp_payment_id: string | null
+  status: PayoutPendingStatus
+  created_at: string
+  updated_at: string
+}
+
 export type MpWebhookEvent = {
   payment_id: string
   order_id: string | null
@@ -322,6 +374,22 @@ export type Addon = {
   updated_at: string
 }
 
+export type PromoDiscountType = "percentage" | "fixed_amount"
+
+export type PromoCode = {
+  id: string
+  event_id: string
+  code: string
+  discount_type: PromoDiscountType
+  discount_value: number
+  max_uses: number | null
+  current_uses: number
+  valid_until: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
 export type Order = {
   id: string
   buyer_id: string
@@ -333,6 +401,8 @@ export type Order = {
   total_amount: number
   status: OrderStatus
   promoter_id: string | null
+  promo_code_id: string | null
+  discount_amount: number
   mp_preference_id: string | null
   mp_payment_id: string | null
   payment_method: PaymentMethod
@@ -468,6 +538,10 @@ type EventInsert = Omit<
   | "tiktok_pixel_enabled"
   | "ga4_measurement_id"
   | "ga4_enabled"
+  | "promo_video_url"
+  | "gallery_urls"
+  | "social_share_image_url"
+  | "category_id"
   | "created_at"
   | "updated_at"
 > & {
@@ -476,6 +550,7 @@ type EventInsert = Omit<
   image_url?: string | null
   flyer_url?: string | null
   venue_id?: string | null
+  category_id?: string | null
   status?: EventStatus
   max_tickets_per_user?: number
   qr_type?: QrType
@@ -494,6 +569,9 @@ type EventInsert = Omit<
   tiktok_pixel_enabled?: boolean
   ga4_measurement_id?: string | null
   ga4_enabled?: boolean
+  promo_video_url?: string | null
+  gallery_urls?: string[] | null
+  social_share_image_url?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -646,6 +724,8 @@ type OrderInsert = Omit<
   | "subtotal"
   | "service_charge"
   | "promoter_id"
+  | "promo_code_id"
+  | "discount_amount"
   | "mp_preference_id"
   | "mp_payment_id"
   | "payment_method"
@@ -658,10 +738,24 @@ type OrderInsert = Omit<
   subtotal?: number
   service_charge?: number
   promoter_id?: string | null
+  promo_code_id?: string | null
+  discount_amount?: number
   mp_preference_id?: string | null
   mp_payment_id?: string | null
   payment_method?: PaymentMethod
   customer_phone?: string | null
+  created_at?: string
+  updated_at?: string
+}
+type PromoCodeInsert = Omit<
+  PromoCode,
+  "id" | "current_uses" | "is_active" | "created_at" | "updated_at"
+> & {
+  id?: string
+  current_uses?: number
+  is_active?: boolean
+  max_uses?: number | null
+  valid_until?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -764,7 +858,36 @@ export type Database = {
             referencedRelation: "venues"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "events_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "event_categories"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      event_categories: {
+        Row: EventCategory
+        Insert: {
+          id?: string
+          name: string
+          slug: string
+          icon_name?: string | null
+          is_active?: boolean
+          sort_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<{
+          name: string
+          slug: string
+          icon_name: string | null
+          is_active: boolean
+          sort_order: number
+          updated_at: string
+        }>
+        Relationships: []
       }
       boost_subscriptions: {
         Row: BoostSubscription
@@ -799,7 +922,22 @@ export type Database = {
         Row: Ticket
         Insert: TicketInsert
         Update: Partial<TicketInsert>
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "tickets_tier_id_fkey"
+            columns: ["tier_id"]
+            isOneToOne: false
+            referencedRelation: "ticket_tiers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       event_zones: {
         Row: EventZone
@@ -835,6 +973,12 @@ export type Database = {
         Row: Addon
         Insert: AddonInsert
         Update: Partial<AddonInsert>
+        Relationships: []
+      }
+      promo_codes: {
+        Row: PromoCode
+        Insert: PromoCodeInsert
+        Update: Partial<PromoCodeInsert>
         Relationships: []
       }
       orders: {
@@ -932,6 +1076,44 @@ export type Database = {
           created_at?: string
         }
         Update: Partial<TicketTransfer>
+        Relationships: []
+      }
+      ticket_resale_listings: {
+        Row: TicketResaleListing
+        Insert: {
+          id?: string
+          ticket_id: string
+          seller_id: string
+          event_id: string
+          price: number
+          platform_fee_amount?: number
+          seller_net_amount?: number
+          status?: TicketResaleListingStatus
+          buyer_id?: string | null
+          mp_preference_id?: string | null
+          mp_payment_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<TicketResaleListing>
+        Relationships: []
+      }
+      payouts_pending: {
+        Row: PayoutPending
+        Insert: {
+          id?: string
+          seller_id: string
+          listing_id: string
+          event_id: string
+          gross_amount: number
+          platform_fee?: number
+          net_amount: number
+          mp_payment_id?: string | null
+          status?: PayoutPendingStatus
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<PayoutPending>
         Relationships: []
       }
       mp_webhook_events: {
@@ -1267,6 +1449,39 @@ export type Database = {
         }
         Returns: string | null
       }
+      validate_promo_code: {
+        Args: {
+          p_event_id: string
+          p_code: string
+          p_cart_subtotal?: number
+        }
+        Returns: Array<{
+          ok: boolean
+          promo_code_id: string | null
+          code: string | null
+          discount_type: PromoDiscountType | null
+          discount_value: number | null
+          discount_amount: number
+          message: string
+        }>
+      }
+      apply_promo_code_to_order: {
+        Args: {
+          p_order_id: string
+          p_owner_id: string
+          p_promo_code_id: string
+        }
+        Returns: Array<{
+          ok: boolean
+          discount_amount: number
+          total_amount: number
+          message: string
+        }>
+      }
+      release_order_promo_code: {
+        Args: { p_order_id: string }
+        Returns: undefined
+      }
       claim_promoter_by_code: {
         Args: {
           p_code: string
@@ -1409,6 +1624,7 @@ export type Database = {
         Args: {
           p_ticket_id: string
           p_receiver_email: string
+          p_acting_seller_id?: string | null
         }
         Returns: {
           transfer_id: string
@@ -1417,6 +1633,14 @@ export type Database = {
           receiver_email: string
           receiver_user_id: string | null
         }[]
+      }
+      complete_ticket_resale_purchase: {
+        Args: {
+          p_listing_id: string
+          p_buyer_user_id: string
+          p_mp_payment_id: string
+        }
+        Returns: Json
       }
       claim_pending_ticket_transfers: {
         Args: { p_user_id: string }
@@ -1451,6 +1675,8 @@ export type Database = {
       zone_type: ZoneType
       seat_status: SeatStatus
       order_status: OrderStatus
+      ticket_resale_listing_status: TicketResaleListingStatus
+      payout_pending_status: PayoutPendingStatus
     }
     CompositeTypes: Record<string, never>
   }

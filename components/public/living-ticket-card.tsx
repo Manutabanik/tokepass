@@ -21,6 +21,7 @@ import { QRCodeSVG } from "qrcode.react"
 
 import type { MyTicket } from "@/app/actions/tickets"
 import { LivingTicketQR } from "@/components/public/living-ticket-qr"
+import { ResaleTicketDialog } from "@/components/public/resale-ticket-dialog"
 import { SaveTicketButton } from "@/components/public/save-ticket-button"
 import { TransferTicketDialog } from "@/components/public/transfer-ticket-dialog"
 import { Badge } from "@/components/ui/badge"
@@ -74,6 +75,15 @@ export function LivingTicketCard({
   const isStatic = ticket.qrType === "static"
   const canTransfer =
     ticket.status === "valid" &&
+    ticket.transferCount < ticket.maxTransfersAllowed &&
+    !offline &&
+    !ticket.activeResaleListingId
+
+  const canResale =
+    ticket.status === "valid" &&
+    ticket.tierPrice > 0 &&
+    !ticket.isTest &&
+    ticket.admissionsUsed === 0 &&
     ticket.transferCount < ticket.maxTransfersAllowed &&
     !offline
 
@@ -395,9 +405,19 @@ export function LivingTicketCard({
           />
         ) : null}
 
+        {canResale || ticket.activeResaleListingId ? (
+          <ResaleTicketDialog
+            ticketId={ticket.id}
+            eventTitle={ticket.eventTitle}
+            tierPrice={ticket.tierPrice}
+            activeListingId={ticket.activeResaleListingId}
+            disabled={offline}
+          />
+        ) : null}
+
         {ticket.status === "valid" && offline ? (
           <p className="text-center text-[11px] text-zinc-600">
-            Transferencias disponibles cuando vuelvas a tener conexión.
+            Transferencias y reventa disponibles cuando vuelvas a tener conexión.
           </p>
         ) : null}
 
@@ -416,7 +436,7 @@ export function LivingTicketCard({
 
         <p className="border-t border-zinc-800/80 pt-3 text-center text-[10px] leading-4 text-zinc-500">
           Entrada emitida bajo responsabilidad exclusiva del Organizador.
-          Prohibida su reventa.
+          La reventa solo es válida a través del marketplace oficial de Tokepass.
         </p>
       </div>
     </article>

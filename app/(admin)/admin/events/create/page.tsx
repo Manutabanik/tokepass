@@ -3,6 +3,7 @@ import { ArrowLeft, Sparkles } from "lucide-react"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 
+import { getActiveEventCategories } from "@/app/actions/categories"
 import { getOrganizerLabel } from "@/app/actions/superadmin"
 import { listOrganizerVenues } from "@/app/actions/venues"
 import { EventCreationWizard } from "@/components/admin/event-creation-wizard"
@@ -55,6 +56,7 @@ export default async function CreateEventPage({
   }
 
   const venues = await listOrganizerVenues().catch(() => [])
+  const categories = await getActiveEventCategories().catch(() => [])
   const organizerServiceRate = DEFAULT_PLATFORM_FEE_PERCENTAGE / 100
 
   return (
@@ -103,6 +105,7 @@ export default async function CreateEventPage({
         platformFixedFee={DEFAULT_PLATFORM_FIXED_FEE}
         targetOrganizerId={impersonation?.id ?? null}
         venues={venues}
+        categories={categories}
       />
     </div>
   )

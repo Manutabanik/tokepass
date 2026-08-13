@@ -2,7 +2,7 @@
 
 import { MapPin, Search, UserRound, X } from "lucide-react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import {
   useEffect,
   useId,
@@ -26,6 +26,9 @@ import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { buildSearchSuggestions } from "@/lib/discovery-filters"
 import { cn } from "@/lib/utils"
 
+const navLinkClass =
+  "rounded-full px-3 py-2 text-sm font-medium text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white"
+
 export function PublicNavbarClient({
   isAuthenticated,
 }: {
@@ -33,20 +36,21 @@ export function PublicNavbarClient({
 }) {
   const controls = useDiscoveryControls()
   const router = useRouter()
+  const pathname = usePathname()
   const listId = useId()
   const wrapRef = useRef<HTMLDivElement>(null)
   const [localQuery, setLocalQuery] = useState("")
   const [localCity, setLocalCity] = useState("todas")
   const [open, setOpen] = useState(false)
 
+  const isHome = pathname === "/"
   const query = controls?.query ?? localQuery
   const city = controls?.city ?? localCity
   const cities = controls?.cities ?? []
-  const events = controls?.events ?? []
 
   const suggestions = useMemo(
-    () => buildSearchSuggestions(events, query),
-    [events, query],
+    () => buildSearchSuggestions(controls?.events ?? [], query),
+    [controls?.events, query],
   )
 
   useEffect(() => {
@@ -91,111 +95,136 @@ export function PublicNavbarClient({
   return (
     <header
       className={cn(
-        "sticky top-0 z-50 w-full border-b",
-        "border-zinc-200/80 bg-white/85 backdrop-blur-xl",
-        "dark:border-white/8 dark:bg-zinc-950/85",
+        "sticky top-0 z-50 w-full border-b backdrop-blur-xl",
+        "border-zinc-200/70 bg-white/80",
+        "dark:border-white/8 dark:bg-[#030712]/80",
       )}
     >
-      <div className="mx-auto grid h-16 max-w-7xl grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3 sm:h-[4.25rem] sm:gap-4 sm:px-4 lg:gap-6 lg:px-8">
+      <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-3 sm:h-[4.25rem] sm:gap-5 sm:px-4 lg:px-8">
         <BrandLogo size="header" className="shrink-0" />
 
-        <div ref={wrapRef} className="relative mx-auto w-full max-w-xl">
-          <form
-            onSubmit={handleSubmit}
-            className={cn(
-              "flex items-center gap-2 rounded-full border pl-3 pr-1.5 transition-colors",
-              "border-zinc-200 bg-zinc-100/80 focus-within:border-zinc-300",
-              "dark:border-white/10 dark:bg-zinc-900/80 dark:focus-within:border-white/20",
-            )}
+        {isHome ? (
+          <nav
+            className="hidden min-w-0 flex-1 items-center justify-center gap-1 md:flex lg:gap-2"
+            aria-label="Principal"
           >
-            <Search
-              className="size-4 shrink-0 text-zinc-500"
-              aria-hidden="true"
-            />
-            <label className="min-w-0 flex-1">
-              <span className="sr-only">Buscar eventos</span>
-              <input
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                onFocus={() => setOpen(query.trim().length >= 2)}
-                placeholder="Evento, artista o provincia…"
-                autoComplete="off"
-                role="combobox"
-                aria-expanded={open && suggestions.length > 0}
-                aria-controls={listId}
-                className="h-10 w-full border-0 bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-500 dark:text-white"
-              />
-            </label>
-            {query ? (
-              <button
-                type="button"
-                onClick={() => setQuery("")}
-                className="grid size-8 place-items-center rounded-full text-zinc-500 transition hover:bg-zinc-200/80 hover:text-zinc-900 dark:hover:bg-white/5 dark:hover:text-white"
-                aria-label="Limpiar búsqueda"
-              >
-                <X className="size-3.5" aria-hidden="true" />
-              </button>
-            ) : null}
-          </form>
-
-          {open && suggestions.length > 0 ? (
-            <ul
-              id={listId}
-              role="listbox"
-              className="absolute left-0 right-0 top-[calc(100%+0.4rem)] z-50 overflow-hidden rounded-2xl border border-zinc-200 bg-white py-1 shadow-2xl dark:border-white/10 dark:bg-zinc-900/95 dark:backdrop-blur-xl"
-            >
-              {suggestions.map((item) => (
-                <li key={item.id} role="option">
-                  <Link
-                    href={item.href}
-                    onClick={() => setOpen(false)}
-                    className="block px-4 py-2.5 transition hover:bg-zinc-100 dark:hover:bg-white/5"
-                  >
-                    <p className="truncate text-sm font-medium text-zinc-900 dark:text-white">
-                      {item.label}
-                    </p>
-                    {item.meta ? (
-                      <p className="truncate text-xs text-zinc-500">
-                        {item.meta}
-                      </p>
-                    ) : null}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-
-        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2.5">
-          <Select
-            value={city}
-            onValueChange={(value) => value && setCity(value)}
-          >
-            <SelectTrigger
+            <Link href="#discovery-results" className={navLinkClass}>
+              Explorar
+            </Link>
+            <Link href="/my-tickets" className={navLinkClass}>
+              Mis Entradas
+            </Link>
+            <Link
+              href="/login-organizador"
               className={cn(
-                "h-9 max-w-[7.5rem] gap-1 rounded-full border px-2.5 text-xs font-medium shadow-none sm:max-w-[12rem] sm:px-3 sm:text-sm",
-                "border-zinc-200 bg-transparent text-zinc-700 hover:bg-zinc-100",
-                "dark:border-white/10 dark:bg-transparent dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white",
-                "focus-visible:ring-0",
+                navLinkClass,
+                "border border-violet-300/70 text-violet-700 hover:bg-violet-50 dark:border-violet-400/40 dark:text-violet-200 dark:hover:bg-violet-500/10",
               )}
-              aria-label={`Ubicación: ${cityLabel}`}
             >
-              <MapPin className="size-3.5 shrink-0 text-zinc-400" />
-              <SelectValue placeholder="Todo el país" />
-            </SelectTrigger>
-            <SelectContent
-              align="end"
-              className="max-h-64 rounded-xl border-zinc-200 bg-white text-zinc-900 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100"
+              Organizar Eventos
+            </Link>
+          </nav>
+        ) : (
+          <div ref={wrapRef} className="relative mx-auto min-w-0 max-w-xl flex-1">
+            <form
+              onSubmit={handleSubmit}
+              className={cn(
+                "flex items-center gap-2 rounded-full border pl-3 pr-1.5 transition-colors",
+                "border-zinc-200 bg-zinc-100/80 focus-within:border-violet-300",
+                "dark:border-white/10 dark:bg-zinc-900/80 dark:focus-within:border-violet-500/40",
+              )}
             >
-              <SelectItem value="todas">Todo el país</SelectItem>
-              {cities.map((item) => (
-                <SelectItem key={item} value={item.toLowerCase()}>
-                  {item}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+              <Search
+                className="size-4 shrink-0 text-zinc-500"
+                aria-hidden="true"
+              />
+              <label className="min-w-0 flex-1">
+                <span className="sr-only">Buscar eventos</span>
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  onFocus={() => setOpen(query.trim().length >= 2)}
+                  placeholder="Evento, artista o provincia…"
+                  autoComplete="off"
+                  role="combobox"
+                  aria-expanded={open && suggestions.length > 0}
+                  aria-controls={listId}
+                  className="h-10 w-full border-0 bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-500 dark:text-white"
+                />
+              </label>
+              {query ? (
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  className="grid size-8 place-items-center rounded-full text-zinc-500 transition hover:bg-zinc-200/80 hover:text-zinc-900 dark:hover:bg-white/5 dark:hover:text-white"
+                  aria-label="Limpiar búsqueda"
+                >
+                  <X className="size-3.5" aria-hidden="true" />
+                </button>
+              ) : null}
+            </form>
+
+            {open && suggestions.length > 0 ? (
+              <ul
+                id={listId}
+                role="listbox"
+                className="absolute left-0 right-0 top-[calc(100%+0.4rem)] z-50 overflow-hidden rounded-2xl border border-zinc-200 bg-white py-1 shadow-2xl dark:border-white/10 dark:bg-zinc-900/95 dark:backdrop-blur-xl"
+              >
+                {suggestions.map((item) => (
+                  <li key={item.id} role="option" aria-selected={false}>
+                    <Link
+                      href={item.href}
+                      onClick={() => setOpen(false)}
+                      className="block px-4 py-2.5 transition hover:bg-zinc-100 dark:hover:bg-white/5"
+                    >
+                      <p className="truncate text-sm font-medium text-zinc-900 dark:text-white">
+                        {item.label}
+                      </p>
+                      {item.meta ? (
+                        <p className="truncate text-xs text-zinc-500">
+                          {item.meta}
+                        </p>
+                      ) : null}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        )}
+
+        <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2.5">
+          {!isHome ? (
+            <Select
+              value={city}
+              onValueChange={(value) => value && setCity(value)}
+            >
+              <SelectTrigger
+                className={cn(
+                  "hidden h-9 max-w-[12rem] gap-1 rounded-full border px-3 text-sm font-medium shadow-none sm:inline-flex",
+                  "border-zinc-200 bg-transparent text-zinc-700 hover:bg-zinc-100",
+                  "dark:border-white/10 dark:bg-transparent dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white",
+                  "focus-visible:ring-0",
+                )}
+                aria-label={`Ubicación: ${cityLabel}`}
+              >
+                <MapPin className="size-3.5 shrink-0 text-zinc-400" />
+                <SelectValue placeholder="Todo el país" />
+              </SelectTrigger>
+              <SelectContent
+                align="end"
+                className="max-h-64 rounded-xl border-zinc-200 bg-white text-zinc-900 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100"
+              >
+                <SelectItem value="todas">Todo el país</SelectItem>
+                {cities.map((item) => (
+                  <SelectItem key={item} value={item.toLowerCase()}>
+                    {item}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : null}
 
           <ThemeToggle />
 
@@ -216,8 +245,13 @@ export function PublicNavbarClient({
           ) : (
             <Link
               href="/login"
-              className="inline-flex h-9 items-center rounded-full bg-zinc-950 px-3.5 text-sm font-semibold text-white transition hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200 sm:px-4"
+              className={cn(
+                "inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold text-white sm:px-4",
+                "bg-gradient-to-r from-violet-600 to-fuchsia-600",
+                "shadow-sm transition hover:from-violet-500 hover:to-fuchsia-500 hover:shadow-md",
+              )}
             >
+              <UserRound className="size-3.5" aria-hidden="true" />
               Ingresar
             </Link>
           )}

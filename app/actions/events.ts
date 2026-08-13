@@ -489,7 +489,7 @@ export async function getEventForEditing(
     const { data: event, error: eventError } = await supabase
       .from("events")
       .select(
-        "id, organizer_id, title, description, date, location, image_url, flyer_url, venue_id, visibility, schedule_days",
+        "id, organizer_id, title, description, date, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id",
       )
       .eq("id", eventId)
       .maybeSingle()
@@ -575,6 +575,7 @@ export async function getEventForEditing(
           visibility,
           isMultiDay,
           scheduleDays,
+          categoryId: event.category_id ?? "",
         },
         venue: {
           mode: event.venue_id ? "existing" : "new",
@@ -799,6 +800,20 @@ export async function createCompleteEvent(
     }
   }
 
+  const categoryId = parsed.data.basics.categoryId
+  if (categoryId) {
+    const { error: categoryError } = await rpcClient
+      .from("events")
+      .update({ category_id: categoryId })
+      .eq("id", eventId)
+    if (categoryError) {
+      return {
+        success: false,
+        error: `Evento creado, pero no se pudo asignar la categoría: ${categoryError.message}`,
+      }
+    }
+  }
+
   revalidatePath("/admin")
   revalidatePath("/admin/events")
   revalidatePath("/events")
@@ -947,6 +962,19 @@ export async function updateCompleteEvent(
         /^update_complete_event_with_seating_tx:\s*/i,
         "",
       ),
+    }
+  }
+
+  const categoryId = parsed.data.basics.categoryId
+  const { error: categoryError } = await mutationClient
+    .from("events")
+    .update({ category_id: categoryId || null })
+    .eq("id", eventId)
+
+  if (categoryError) {
+    return {
+      success: false,
+      error: `Evento actualizado, pero no se pudo guardar la categoría: ${categoryError.message}`,
     }
   }
 

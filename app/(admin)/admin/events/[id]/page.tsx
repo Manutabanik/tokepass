@@ -1,11 +1,14 @@
 import {
+  Activity,
   ArrowLeft,
+  Clapperboard,
   ClipboardList,
   GlassWater,
   Megaphone,
   Pencil,
   QrCode,
   Ticket,
+  TicketPercent,
   Users,
 } from "lucide-react"
 import type { Metadata } from "next"
@@ -97,6 +100,24 @@ export default async function ManageEventPage({
       label: "Marketing · Píxeles",
       description: "Meta, TikTok y GA4 para medir conversiones.",
       icon: Megaphone,
+    },
+    {
+      href: `/admin/events/${id}/multimedia`,
+      label: "Multimedia & Experiencia",
+      description: "Spot YouTube/Vimeo y galería (máx. 4 fotos).",
+      icon: Clapperboard,
+    },
+    {
+      href: `/admin/events/${id}/coupons`,
+      label: "Cupones y descuentos",
+      description: "Códigos promocionales % o monto fijo.",
+      icon: TicketPercent,
+    },
+    {
+      href: `/admin/events/${id}/live`,
+      label: "Monitor en vivo",
+      description: "Aforo e ingresos en tiempo real (día del evento).",
+      icon: Activity,
     },
     {
       href: "/admin/scanner",

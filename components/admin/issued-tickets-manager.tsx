@@ -3,6 +3,7 @@
 import {
   ArrowRightLeft,
   Ban,
+  Download,
   History,
   Mail,
   MessageCircle,
@@ -21,12 +22,14 @@ import {
   useMemo,
   useRef,
   useState,
+  useTransition,
   type ReactNode,
 } from "react"
 import { toast } from "sonner"
 
 import {
   cancelTicketAdmin,
+  exportEventTicketsCSV,
   getIssuedTicketsForEvent,
   reassignTicketAdmin,
   resendTicketEmailAdmin,
@@ -417,9 +420,39 @@ export function IssuedTicketsManager({
   const [courtesyEmail, setCourtesyEmail] = useState("")
   const [courtesyDni, setCourtesyDni] = useState("")
   const [courtesySector, setCourtesySector] = useState("Campo General")
+  const [exportPending, startExport] = useTransition()
 
   const activeTicket =
     tickets.find((ticket) => ticket.id === activeTicketId) ?? null
+
+  function downloadAudienceCsv() {
+    startExport(async () => {
+      const result = await exportEventTicketsCSV(eventId)
+      if (!result.success) {
+        toast.error("No se pudo exportar la audiencia", {
+          description: result.error,
+        })
+        return
+      }
+
+      const blob = new Blob([result.data.csv], {
+        type: "text/csv;charset=utf-8;",
+      })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement("a")
+      anchor.href = url
+      anchor.download = result.data.filename
+      anchor.rel = "noopener"
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      URL.revokeObjectURL(url)
+
+      toast.success("Audiencia exportada", {
+        description: `${result.data.rowCount} fila${result.data.rowCount === 1 ? "" : "s"} · ${result.data.filename}`,
+      })
+    })
+  }
 
   async function refreshTickets(opts?: {
     search?: string
@@ -674,15 +707,27 @@ export function IssuedTicketsManager({
             reclamos con trazabilidad completa.
           </p>
         </header>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => openModal("courtesy")}
-          className="h-11 shrink-0 rounded-xl border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-100 dark:hover:bg-zinc-900"
-        >
-          <Plus className="size-4" aria-hidden />
-          Emitir entrada manual / Cortesía
-        </Button>
+        <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={exportPending || loading}
+            onClick={downloadAudienceCsv}
+            className="h-11 rounded-xl border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900"
+          >
+            <Download className="mr-2 h-4 w-4" aria-hidden />
+            {exportPending ? "Exportando…" : "Exportar Audiencia (CSV)"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => openModal("courtesy")}
+            className="h-11 rounded-xl border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900"
+          >
+            <Plus className="size-4" aria-hidden />
+            Emitir entrada manual / Cortesía
+          </Button>
+        </div>
       </div>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

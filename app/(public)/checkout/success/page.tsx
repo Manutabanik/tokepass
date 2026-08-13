@@ -4,6 +4,7 @@ import Link from "next/link"
 
 import { getPurchaseAnalyticsForOrder } from "@/app/actions/event-marketing"
 import { PurchaseAnalyticsTracker } from "@/components/public/purchase-analytics-tracker"
+import { SocialShareButton } from "@/components/public/social-share-button"
 import { CheckoutWalletPrecache } from "@/components/pwa/checkout-wallet-precache"
 import { Button } from "@/components/ui/button"
 import { hasActivePixels } from "@/lib/analytics/pixels"
@@ -52,13 +53,13 @@ export default async function CheckoutSuccessPage({
           </span>
         </div>
 
-        <p className="mt-10 text-sm font-semibold uppercase tracking-[0.18em] text-emerald-600">
+        <p className="mt-10 text-sm font-semibold uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400">
           {isFree ? "Entrada gratuita" : "Mercado Pago"}
         </p>
-        <h1 className="mt-3 text-3xl font-black tracking-[-0.04em] text-zinc-950 sm:text-4xl">
+        <h1 className="mt-3 text-3xl font-black tracking-[-0.04em] text-zinc-950 dark:text-white sm:text-4xl">
           {isFree ? "¡Entrada emitida!" : "¡Pago recibido!"}
         </h1>
-        <p className="mt-4 text-base leading-7 text-zinc-600">
+        <p className="mt-4 text-base leading-7 text-zinc-600 dark:text-zinc-400">
           {isFree
             ? "Tu entrada ya está disponible en tu billetera"
             : "Estamos confirmando la transacción con el webhook de Mercado Pago. En segundos tus entradas quedarán disponibles en tu billetera"}
@@ -72,7 +73,15 @@ export default async function CheckoutSuccessPage({
           .
         </p>
 
-        <div className="mt-10 flex w-full flex-col gap-3 sm:flex-row sm:justify-center">
+        <div className="mt-10 flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center">
+          {purchaseAnalytics ? (
+            <SocialShareButton
+              eventTitle={purchaseAnalytics.eventTitle}
+              eventImageUrl={purchaseAnalytics.eventImageUrl}
+              customStoryUrl={purchaseAnalytics.socialShareImageUrl}
+              className="sm:min-w-[240px]"
+            />
+          ) : null}
           <Button
             size="lg"
             className="h-12 rounded-full bg-violet-600 px-6 text-white hover:bg-violet-700"

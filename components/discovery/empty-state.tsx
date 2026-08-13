@@ -58,14 +58,9 @@ export function EmptyState({
             <Sparkles className="size-4 text-violet-300" aria-hidden="true" />
             Recomendados para vos
           </p>
-          <div className="-mx-4 flex gap-4 overflow-x-auto px-4 pb-2 scrollbar-none sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
             {fallbackEvents.slice(0, 6).map((event, index) => (
-              <div
-                key={event.id}
-                className="w-[78vw] max-w-[300px] shrink-0 sm:w-auto sm:max-w-none"
-              >
-                <EventCard event={event} index={index} />
-              </div>
+              <EventCard key={event.id} event={event} index={index} />
             ))}
           </div>
         </div>

@@ -11,6 +11,7 @@ import { getBoostPlan, parseBoostExternalRef } from "@/lib/boost-plans"
 import { parsePaymentExternalReference } from "@/lib/checkout-buyer"
 import { logger } from "@/lib/logger"
 import { getMercadoPagoClient, getMercadoPagoWebhookSecret } from "@/lib/mercadopago"
+import { parseResaleExternalRef } from "@/lib/resale"
 import { notifyGobiOrderPaid } from "@/lib/services/notify-gobi-order-paid"
 import type { Database, Json } from "@/types/database"
 
@@ -318,6 +319,142 @@ async function activateBoostFromPayment(
   return { ok: true as const, ignored: true }
 }
 
+async function activateResaleFromPayment(
+  admin: AdminClient,
+  input: {
+    listingId: string
+    mpPaymentId: string
+    status: string | undefined
+    transactionAmount: number | null | undefined
+    currencyId: string | null
+    metadataBuyerId: string | null
+  },
+) {
+  const { data: listing, error } = await admin
+    .from("ticket_resale_listings")
+    .select(
+      "id, price, status, seller_id, buyer_id, mp_payment_id, event_id",
+    )
+    .eq("id", input.listingId)
+    .maybeSingle()
+
+  if (error || !listing) {
+    return { ok: false as const, error: "listing_not_found" }
+  }
+
+  if (input.status === "approved") {
+    const ledgerStatus = "resale_approved"
+    if (await alreadyProcessed(admin, input.mpPaymentId, ledgerStatus)) {
+      return { ok: true as const, idempotent: true }
+    }
+
+    if (
+      listing.status === "sold" &&
+      listing.mp_payment_id === input.mpPaymentId
+    ) {
+      await recordWebhookEvent(admin, {
+        paymentId: input.mpPaymentId,
+        orderId: null,
+        status: ledgerStatus,
+        rawSummary: { listing_id: listing.id, idempotent: true },
+      })
+      return { ok: true as const, idempotent: true }
+    }
+
+    const paid = Number(input.transactionAmount)
+    const expected = Number(listing.price)
+    if (
+      !Number.isFinite(paid) ||
+      !Number.isFinite(expected) ||
+      Math.round(paid * 100) !== Math.round(expected * 100) ||
+      input.currencyId !== "ARS"
+    ) {
+      logger.error({
+        context: "webhooks/mercadopago",
+        message: "resale_amount_mismatch",
+        listing_id: listing.id,
+        payment_id: input.mpPaymentId,
+        paid,
+        expected,
+        currency: input.currencyId,
+      })
+      return { ok: false as const, error: "amount_mismatch" }
+    }
+
+    const buyerId = listing.buyer_id || input.metadataBuyerId
+    if (!buyerId) {
+      return { ok: false as const, error: "buyer_missing" }
+    }
+
+    const { data: completeRaw, error: completeError } = await admin.rpc(
+      "complete_ticket_resale_purchase",
+      {
+        p_listing_id: listing.id,
+        p_buyer_user_id: buyerId,
+        p_mp_payment_id: input.mpPaymentId,
+      },
+    )
+
+    if (completeError) {
+      return { ok: false as const, error: completeError.message }
+    }
+
+    const complete = (completeRaw ?? {}) as {
+      ok?: boolean
+      code?: string
+      idempotent?: boolean
+      message?: string
+    }
+
+    if (!complete.ok) {
+      return {
+        ok: false as const,
+        error: complete.code ?? complete.message ?? "resale_complete_failed",
+      }
+    }
+
+    await recordWebhookEvent(admin, {
+      paymentId: input.mpPaymentId,
+      orderId: null,
+      status: ledgerStatus,
+      rawSummary: {
+        listing_id: listing.id,
+        event_id: listing.event_id,
+        buyer_id: buyerId,
+        result: complete,
+      },
+    })
+
+    return {
+      ok: true as const,
+      idempotent: Boolean(complete.idempotent),
+    }
+  }
+
+  if (
+    input.status === "rejected" ||
+    input.status === "cancelled" ||
+    input.status === "refunded" ||
+    input.status === "charged_back"
+  ) {
+    const ledgerStatus = `resale_${input.status}`
+    if (await alreadyProcessed(admin, input.mpPaymentId, ledgerStatus)) {
+      return { ok: true as const, idempotent: true }
+    }
+
+    await recordWebhookEvent(admin, {
+      paymentId: input.mpPaymentId,
+      orderId: null,
+      status: ledgerStatus,
+      rawSummary: { listing_id: listing.id },
+    })
+
+    return { ok: true as const, idempotent: false }
+  }
+
+  return { ok: true as const, ignored: true }
+}
+
 type FinalizePaidResult = {
   ok?: boolean
   code?: string
@@ -456,6 +593,36 @@ async function processMercadoPagoWebhook(request: NextRequest) {
         return webhookOk({ handled: "boost_failed", error: result.error })
       }
       return webhookOk({ boost: true, data: result })
+    }
+
+    const resaleListingId = parseResaleExternalRef(externalReference)
+    if (resaleListingId) {
+      const result = await activateResaleFromPayment(admin, {
+        listingId: resaleListingId,
+        mpPaymentId,
+        status,
+        transactionAmount: payment.transaction_amount,
+        currencyId: firstString(payment.currency_id),
+        metadataBuyerId:
+          typeof payment.metadata === "object" &&
+          payment.metadata &&
+          "buyer_id" in payment.metadata
+            ? String(
+                (payment.metadata as Record<string, unknown>).buyer_id ?? "",
+              ) || null
+            : null,
+      })
+      if (!result.ok) {
+        logger.error({
+          context: "webhooks/mercadopago",
+          message: "resale_activation_failed",
+          payment_id: mpPaymentId,
+          listing_id: resaleListingId,
+          error: result.error,
+        })
+        return webhookOk({ handled: "resale_failed", error: result.error })
+      }
+      return webhookOk({ resale: true, data: result })
     }
 
     const parsedRef = parsePaymentExternalReference(externalReference)

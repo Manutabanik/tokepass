@@ -1,86 +1,18 @@
 import type { CatalogEvent } from "@/app/actions/public-events"
+import {
+  categoryKeywords,
+  DEFAULT_DISCOVERY_CATEGORIES,
+  findCategory,
+  type DiscoveryCategory,
+  type DiscoveryMoodId,
+} from "@/lib/discovery-categories"
 
-export type DiscoveryMoodId =
-  | "all"
-  | "fiestas"
-  | "recitales"
-  | "teatro"
-  | "deportes"
-
-export const DISCOVERY_MOODS: Array<{
-  id: DiscoveryMoodId
-  label: string
-}> = [
-  { id: "all", label: "Todos" },
-  { id: "fiestas", label: "Fiestas" },
-  { id: "recitales", label: "Recitales" },
-  { id: "teatro", label: "Teatro & Cultura" },
-  { id: "deportes", label: "Deportes" },
-]
-
-const KEYWORDS: Record<Exclude<DiscoveryMoodId, "all">, string[]> = {
-  fiestas: [
-    "fiesta",
-    "party",
-    "boliche",
-    "disco",
-    "cachengue",
-    "reggaeton",
-    "perreo",
-    "cumbia",
-    "trap",
-    "previa",
-    "after",
-    "electro",
-    "electr",
-    "techno",
-    "house",
-    "dj",
-    "rave",
-    "trance",
-    "beats",
-    "festival",
-    "fest",
-  ],
-  recitales: [
-    "recital",
-    "show",
-    "concierto",
-    "live",
-    "banda",
-    "tour",
-    "arena",
-    "musica",
-    "música",
-  ],
-  teatro: [
-    "teatro",
-    "obra",
-    "cultura",
-    "stand up",
-    "standup",
-    "comedia",
-    "danza",
-    "ballet",
-    "cine",
-    "musical",
-  ],
-  deportes: [
-    "deporte",
-    "futbol",
-    "fútbol",
-    "partido",
-    "basquet",
-    "básquet",
-    "tenis",
-    "running",
-    "maratón",
-    "maraton",
-    "boxeo",
-    "mma",
-    "carrera",
-  ],
-}
+export type { DiscoveryMoodId, DiscoveryCategory }
+export {
+  DEFAULT_DISCOVERY_CATEGORIES,
+  DISCOVERY_MOODS,
+  findCategory,
+} from "@/lib/discovery-categories"
 
 /** Eventos de hoy (00:00 → 23:59:59 local). */
 export function isTonight(dateIso: string): boolean {
@@ -117,13 +49,19 @@ export function filterCatalogEvents(
   events: CatalogEvent[],
   options: {
     query?: string
-    mood?: DiscoveryMoodId
+    /** @deprecated Prefer `categoryId`. */
+    mood?: DiscoveryMoodId | string
+    categoryId?: string
+    tagId?: string | null
     city?: string
+    categories?: DiscoveryCategory[]
   },
 ): CatalogEvent[] {
   const q = options.query?.trim().toLowerCase() ?? ""
   const city = options.city?.trim().toLowerCase() ?? ""
-  const mood = options.mood ?? "all"
+  const categoryId = options.categoryId ?? options.mood ?? "all"
+  const categories = options.categories ?? DEFAULT_DISCOVERY_CATEGORIES
+  const category = findCategory(categories, categoryId)
 
   return events.filter((event) => {
     if (q) {
@@ -138,8 +76,17 @@ export function filterCatalogEvents(
       if (!place.includes(city)) return false
     }
 
-    if (mood === "all") return true
-    return matchesKeyword(event, KEYWORDS[mood])
+    if (!category || category.id === "all") return true
+
+    // Match exacto por FK de taxonomía (preferido).
+    if (event.categoryId) {
+      return event.categoryId === category.id
+    }
+
+    // Fallback heurístico solo si el evento aún no tiene category_id.
+    const keys = categoryKeywords(category, options.tagId)
+    if (keys.length === 0) return false
+    return matchesKeyword(event, keys)
   })
 }
 

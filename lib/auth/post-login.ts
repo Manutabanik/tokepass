@@ -11,6 +11,15 @@ export type FreshLoginProfile = {
   organizerApprovalStatus: OrganizerApprovalStatus
 }
 
+/** Only same-origin relative paths (open-redirect safe). */
+export function safeInternalNextPath(raw: unknown): string | null {
+  if (typeof raw !== "string") return null
+  const path = raw.trim()
+  if (!path.startsWith("/") || path.startsWith("//")) return null
+  if (path.includes("://") || path.includes("\\")) return null
+  return path
+}
+
 /**
  * Reads authorization state directly from Postgres through the service role.
  * The access token is used only to identify the authenticated user; JWT claims

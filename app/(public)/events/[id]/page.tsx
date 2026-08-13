@@ -3,6 +3,7 @@ import { notFound } from "next/navigation"
 
 import { getEventItems } from "@/app/actions/addons"
 import { getEventDetails } from "@/app/actions/public-events"
+import { getActiveResaleListingsForEvent } from "@/app/actions/resale"
 import { EventStorefront } from "@/components/public/event-storefront"
 import { createClient } from "@/lib/supabase/server"
 
@@ -93,6 +94,8 @@ export default async function EventDetailPage({
     barItems = []
   }
 
+  const resaleListings = await getActiveResaleListingsForEvent(event.id)
+
   return (
     <EventStorefront
       event={event}
@@ -100,6 +103,7 @@ export default async function EventDetailPage({
       referralCode={referralCode ?? null}
       initialBuyer={initialBuyer}
       barItems={barItems}
+      resaleListings={resaleListings}
     />
   )
 }

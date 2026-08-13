@@ -15,8 +15,11 @@ import { toast } from "sonner"
 
 import { startCheckoutWithPayment, reserveSeatAtomic } from "@/app/actions/checkout"
 import type { EventItem } from "@/app/actions/addons"
+import type { ValidatedPromo } from "@/app/actions/coupons"
+import { validatePromoCode } from "@/app/actions/coupons"
 import { UniversalSeatSelectionFlow } from "@/components/b2c/universal-seat-selection"
 import { CheckoutBuyerFields } from "@/components/public/checkout-buyer-fields"
+import { PromoCodeInput } from "@/components/public/promo-code-input"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import {
@@ -115,6 +118,7 @@ export function TicketSelector({
   const [addonQuantities, setAddonQuantities] = useState<Record<string, number>>(
     () => Object.fromEntries(barItems.map((item) => [item.id, 0])),
   )
+  const [appliedPromo, setAppliedPromo] = useState<ValidatedPromo | null>(null)
   const [storedRef] = useState<string | null>(() => {
     if (typeof window === "undefined") return null
     return getStoredReferralCode()
@@ -253,7 +257,39 @@ export function TicketSelector({
     addonSelection.reduce((sum, item) => sum + item.subtotal, 0),
   )
   // All-In: tier.price already includes Tokepass fee.
-  const totalAmount = roundMoney(ticketsSubtotal + addonsSubtotal)
+  const cartSubtotal = roundMoney(ticketsSubtotal + addonsSubtotal)
+  const discountAmount = appliedPromo
+    ? Math.min(appliedPromo.discountAmount, cartSubtotal)
+    : 0
+  const totalAmount = roundMoney(Math.max(0, cartSubtotal - discountAmount))
+
+  useEffect(() => {
+    if (!appliedPromo) return
+    const code = appliedPromo.code
+    let cancelled = false
+    void validatePromoCode(code, eventId, cartSubtotal).then((result) => {
+      if (cancelled) return
+      if (!result.success) {
+        setAppliedPromo(null)
+        toast.error(result.error)
+        return
+      }
+      setAppliedPromo((previous) => {
+        if (
+          previous &&
+          previous.promoCodeId === result.data.promoCodeId &&
+          previous.discountAmount === result.data.discountAmount
+        ) {
+          return previous
+        }
+        return result.data
+      })
+    })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only recheck when cart/code changes
+  }, [appliedPromo?.code, cartSubtotal, eventId])
 
   function updateQuantity(tierId: string, next: number, max: number) {
     setQuantities((current) => ({
@@ -313,6 +349,7 @@ export function TicketSelector({
           quantity: item.quantity,
         })),
         buyerCheck.buyer,
+        appliedPromo?.promoCodeId ?? null,
       )
 
       if (!result.success) {
@@ -390,6 +427,7 @@ export function TicketSelector({
           resolvedRef,
           [],
           buyerCheck.buyer,
+          appliedPromo?.promoCodeId ?? null,
         )
 
         if (!result.success) {
@@ -458,6 +496,7 @@ export function TicketSelector({
         currentUserId,
         resolvedRef,
         buyerCheck.buyer,
+        appliedPromo?.promoCodeId ?? null,
       )
 
       if (!result.success) {
@@ -829,6 +868,17 @@ export function TicketSelector({
 
       <Separator className="my-5 bg-zinc-800" />
 
+      <PromoCodeInput
+        eventId={eventId}
+        cartSubtotal={cartSubtotal}
+        applied={appliedPromo}
+        onApplied={setAppliedPromo}
+        onCleared={() => setAppliedPromo(null)}
+        disabled={isPending || cartSubtotal <= 0}
+      />
+
+      <Separator className="my-5 bg-zinc-800" />
+
       <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
         <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-zinc-500">
           Resumen de pago
@@ -852,6 +902,16 @@ export function TicketSelector({
               </span>
               <span className="tabular-nums text-zinc-200">
                 {formatCurrency(addonsSubtotal)}
+              </span>
+            </div>
+          ) : null}
+          {appliedPromo && discountAmount > 0 ? (
+            <div className="flex items-center justify-between text-emerald-400">
+              <span>
+                Descuento ({appliedPromo.code})
+              </span>
+              <span className="tabular-nums">
+                −{formatCurrency(discountAmount)}
               </span>
             </div>
           ) : null}

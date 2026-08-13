@@ -313,6 +313,7 @@ export function offlineRecordToTicket(record: OfflineTicketRecord): MyTicket {
     isSponsoredByTokepass: Boolean(
       record.event_data.isSponsoredByTokepass,
     ),
+    activeResaleListingId: null,
   }
 }
 
