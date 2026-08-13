@@ -108,6 +108,16 @@ export function formatDiscoveryDate(value: string | Date): string {
   return `${weekday} ${day} ${month}`
 }
 
+/** Formato card: "SÁB 15 AGO • 23:30 HS" */
+export function formatDiscoveryDateTime(value: string | Date): string {
+  const date = new Date(value)
+  const dayPart = formatDiscoveryDate(date)
+  const time = normalizeIntlOutput(
+    eventTimeFormatter.format(date),
+  ).replace(/\s/g, "")
+  return `${dayPart} • ${time} HS`
+}
+
 export function formatPercent(value: number, fractionDigits = 1): string {
   return `${value.toFixed(fractionDigits)}%`
 }

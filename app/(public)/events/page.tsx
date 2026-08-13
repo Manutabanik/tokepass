@@ -7,7 +7,7 @@ import { DiscoveryHub } from "@/components/discovery/discovery-hub"
 export const metadata: Metadata = {
   title: "Eventos",
   description:
-    "Descubrí fiestas, festivales y noches en Tokepass. Filtrá por vibra y conseguí tu entrada.",
+    "Descubrí fiestas, recitales y noches en Tokepass. Filtrá por categoría y conseguí tu entrada.",
 }
 
 export default async function EventsPage({
@@ -19,10 +19,10 @@ export default async function EventsPage({
   const events = await getPublishedEvents(q)
 
   return (
-    <div className="relative isolate min-h-[calc(100vh-4rem)] overflow-x-clip bg-[#030712] text-zinc-100">
+    <div className="relative isolate min-h-[calc(100vh-4rem)] overflow-x-clip bg-zinc-950 text-zinc-100">
       <AnimatedBackground />
 
-      <div className="relative mx-auto max-w-7xl px-5 pb-20 pt-4 sm:px-6 lg:px-8">
+      <div className="relative mx-auto max-w-7xl px-4 pb-24 pt-8 sm:px-6 lg:px-8 lg:pb-28 lg:pt-10">
         <DiscoveryHub events={events} initialQuery={q ?? ""} />
       </div>
     </div>

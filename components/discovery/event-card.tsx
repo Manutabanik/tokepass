@@ -1,27 +1,23 @@
 "use client"
 
-import {
-  ArrowRight,
-  Crown,
-  Flame,
-  MapPin,
-  Ticket,
-} from "lucide-react"
-import { motion } from "motion/react"
+import { MapPin, Music2, Ticket } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 
 import type { CatalogEvent } from "@/app/actions/public-events"
-import { eventCityLabel, urgencyLabel } from "@/lib/discovery-filters"
-import { formatCurrency, formatDiscoveryDate } from "@/lib/format"
+import {
+  eventCityLabel,
+  eventSecondaryBadge,
+  urgencyLabel,
+} from "@/lib/discovery-filters"
+import { formatCurrency, formatDiscoveryDateTime } from "@/lib/format"
 import { isBoostActive } from "@/lib/services/events-service"
 import { cn } from "@/lib/utils"
 
 const fallbackGradients = [
-  "from-[#030712] via-[#1e1b4b] to-[#831843]",
-  "from-[#030712] via-[#0e7490] to-[#312e81]",
-  "from-[#030712] via-[#4c1d95] to-[#155e75]",
-  "from-[#030712] via-[#9d174d] to-[#0f766e]",
+  "from-zinc-900 via-zinc-800 to-zinc-700",
+  "from-zinc-900 via-violet-950 to-zinc-800",
+  "from-zinc-900 via-sky-950 to-zinc-800",
 ]
 
 function gradientForId(id: string) {
@@ -42,111 +38,104 @@ export function EventCard({
   index?: number
 }) {
   const urgency = urgencyLabel(event)
+  const secondary = eventSecondaryBadge(event)
   const city = eventCityLabel(event)
   const place = event.venueName ?? event.location
   const boosted = isBoostActive(event)
   const sponsored = Boolean(event.isSponsoredByTokepass)
 
   return (
-    <motion.article
-      layout
-      initial={{ opacity: 0, y: 20 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-24px" }}
-      transition={{ duration: 0.35, delay: Math.min(index * 0.04, 0.2) }}
+    <article
       className="h-full"
+      style={{ animationDelay: `${Math.min(index * 40, 200)}ms` }}
     >
       <Link
         href={`/events/${event.id}`}
         className={cn(
-          "group relative flex h-full flex-col overflow-hidden rounded-2xl",
-          "border border-white/10 bg-slate-950/55 backdrop-blur-xl",
-          "transition-all duration-300",
-          "hover:-translate-y-1.5 hover:border-fuchsia-500/60",
-          "hover:shadow-[0_10px_30px_rgba(168,85,247,0.3)]",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400/50",
+          "group flex h-full flex-col overflow-hidden rounded-2xl",
+          "border border-white/8 bg-zinc-900/40",
+          "transition-all duration-300 hover:scale-[1.02] hover:border-white/15",
+          "hover:bg-zinc-900/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30",
         )}
       >
-        <div className="relative aspect-[4/5] w-full overflow-hidden">
+        <div className="relative aspect-[16/10] w-full overflow-hidden">
           {event.imageUrl ? (
             <Image
               src={event.imageUrl}
               alt={event.title}
               fill
               priority={priority}
-              sizes="(max-width: 640px) 85vw, (max-width: 1024px) 45vw, 25vw"
-              className="object-cover transition-transform duration-500 ease-out will-change-transform group-hover:scale-[1.05]"
+              sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, 30vw"
+              className="object-cover transition-transform duration-500 group-hover:scale-[1.04]"
             />
           ) : (
             <div
               className={cn(
-                "absolute inset-0 bg-gradient-to-br transition-transform duration-500 group-hover:scale-[1.05]",
+                "absolute inset-0 bg-gradient-to-br",
                 gradientForId(event.id),
               )}
             />
           )}
 
-          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/55 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/80 via-transparent to-transparent" />
 
           <div className="absolute left-3 top-3 flex max-w-[calc(100%-1.5rem)] flex-wrap gap-1.5">
-            {sponsored ? (
-              <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/40 bg-amber-400/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-50 shadow-[0_0_14px_rgba(251,191,36,0.35)] backdrop-blur-md">
-                <Crown className="size-3" aria-hidden="true" />
-                Auspiciado
-              </span>
-            ) : boosted ? (
-              <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/40 bg-amber-400/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-50 shadow-[0_0_14px_rgba(251,191,36,0.35)] backdrop-blur-md">
-                <Crown className="size-3" aria-hidden="true" />
+            {sponsored || boosted ? (
+              <span className="inline-flex items-center rounded-full border border-white/15 bg-black/50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white backdrop-blur-md">
                 Destacado
               </span>
             ) : null}
             {urgency ? (
-              <span className="inline-flex items-center gap-1 rounded-full border border-rose-400/45 bg-rose-500/20 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-rose-50 shadow-[0_0_14px_rgba(244,63,94,0.4)] backdrop-blur-md">
-                <Flame className="size-3" aria-hidden="true" />
-                Agotando Preventa
+              <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-black/50 px-2.5 py-1 text-[10px] font-semibold text-white backdrop-blur-md">
+                <Ticket className="size-3" aria-hidden="true" />
+                {urgency}
               </span>
             ) : null}
-            <span className="inline-flex max-w-full items-center gap-1 truncate rounded-full border border-white/10 bg-black/45 px-2.5 py-1 text-[10px] font-semibold text-white/95 backdrop-blur-md">
-              <MapPin className="size-3 shrink-0 text-cyan-300" aria-hidden="true" />
-              <span className="truncate">{city}</span>
+            {secondary ? (
+              <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-black/50 px-2.5 py-1 text-[10px] font-semibold text-white backdrop-blur-md">
+                <Music2 className="size-3" aria-hidden="true" />
+                {secondary}
+              </span>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="flex flex-1 flex-col gap-3 p-4 sm:p-5">
+          <p className="text-xs font-medium uppercase tracking-[0.14em] text-zinc-400">
+            {formatDiscoveryDateTime(event.date)}
+          </p>
+
+          <h3 className="line-clamp-2 text-lg font-bold leading-snug text-white">
+            {event.title}
+          </h3>
+
+          <p className="flex items-start gap-1.5 text-sm text-zinc-400">
+            <MapPin
+              className="mt-0.5 size-3.5 shrink-0 text-zinc-500"
+              aria-hidden="true"
+            />
+            <span className="min-w-0 truncate">
+              {place}
+              {city && city !== place ? ` · ${city}` : ""}
+            </span>
+          </p>
+
+          <div className="mt-auto flex items-center justify-between gap-3 pt-1">
+            <div className="min-w-0">
+              <p className="text-[11px] text-zinc-500">Desde</p>
+              <p className="truncate text-base font-semibold text-white">
+                {event.startingPrice != null
+                  ? formatCurrency(event.startingPrice)
+                  : "Ver precios"}
+              </p>
+            </div>
+
+            <span className="inline-flex shrink-0 items-center rounded-full bg-white px-3.5 py-2 text-sm font-semibold text-zinc-950 transition group-hover:bg-zinc-100">
+              Comprar entradas
             </span>
           </div>
-
-          <div className="absolute inset-x-0 bottom-0 space-y-2 p-4">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-200/90">
-              {formatDiscoveryDate(event.date)}
-            </p>
-            <h3 className="line-clamp-2 text-xl font-black leading-tight tracking-[-0.03em] text-white">
-              {event.title}
-            </h3>
-            <p className="truncate text-sm text-slate-300">{place}</p>
-          </div>
-        </div>
-
-        <div className="relative flex items-center justify-between gap-3 px-4 py-3.5">
-          <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-              Desde
-            </p>
-            <p className="truncate text-base font-extrabold text-white">
-              {event.startingPrice != null
-                ? formatCurrency(event.startingPrice)
-                : "Ver precios"}
-            </p>
-          </div>
-
-          <span
-            className={cn(
-              "inline-flex shrink-0 items-center gap-1.5 rounded-full bg-gradient-to-r from-purple-600 to-fuchsia-600 px-3.5 py-2.5 text-sm font-bold text-white",
-              "shadow-[0_0_18px_rgba(168,85,247,0.35)]",
-            )}
-          >
-            <Ticket className="size-3.5" aria-hidden="true" />
-            Conseguir Entrada
-            <ArrowRight className="size-3.5 opacity-90" aria-hidden="true" />
-          </span>
         </div>
       </Link>
-    </motion.article>
+    </article>
   )
 }

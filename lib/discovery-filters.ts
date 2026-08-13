@@ -2,29 +2,28 @@ import type { CatalogEvent } from "@/app/actions/public-events"
 
 export type DiscoveryMoodId =
   | "all"
-  | "tonight"
-  | "cachengue"
-  | "electronica"
-  | "festivales"
+  | "fiestas"
   | "recitales"
+  | "teatro"
+  | "deportes"
 
 export const DISCOVERY_MOODS: Array<{
   id: DiscoveryMoodId
   label: string
 }> = [
   { id: "all", label: "Todos" },
-  { id: "tonight", label: "Hoy se sale" },
-  { id: "cachengue", label: "Cachengue & Previa" },
-  { id: "electronica", label: "Electrónica & Beats" },
-  { id: "festivales", label: "Festivales & Masivos" },
-  { id: "recitales", label: "Recitales & Shows" },
+  { id: "fiestas", label: "Fiestas" },
+  { id: "recitales", label: "Recitales" },
+  { id: "teatro", label: "Teatro & Cultura" },
+  { id: "deportes", label: "Deportes" },
 ]
 
-const KEYWORDS: Record<
-  Exclude<DiscoveryMoodId, "all" | "tonight">,
-  string[]
-> = {
-  cachengue: [
+const KEYWORDS: Record<Exclude<DiscoveryMoodId, "all">, string[]> = {
+  fiestas: [
+    "fiesta",
+    "party",
+    "boliche",
+    "disco",
     "cachengue",
     "reggaeton",
     "perreo",
@@ -32,8 +31,6 @@ const KEYWORDS: Record<
     "trap",
     "previa",
     "after",
-  ],
-  electronica: [
     "electro",
     "electr",
     "techno",
@@ -42,8 +39,9 @@ const KEYWORDS: Record<
     "rave",
     "trance",
     "beats",
+    "festival",
+    "fest",
   ],
-  festivales: ["festival", "fest", "open air", "al aire", "masivo"],
   recitales: [
     "recital",
     "show",
@@ -52,6 +50,35 @@ const KEYWORDS: Record<
     "banda",
     "tour",
     "arena",
+    "musica",
+    "música",
+  ],
+  teatro: [
+    "teatro",
+    "obra",
+    "cultura",
+    "stand up",
+    "standup",
+    "comedia",
+    "danza",
+    "ballet",
+    "cine",
+    "musical",
+  ],
+  deportes: [
+    "deporte",
+    "futbol",
+    "fútbol",
+    "partido",
+    "basquet",
+    "básquet",
+    "tenis",
+    "running",
+    "maratón",
+    "maraton",
+    "boxeo",
+    "mma",
+    "carrera",
   ],
 }
 
@@ -112,7 +139,6 @@ export function filterCatalogEvents(
     }
 
     if (mood === "all") return true
-    if (mood === "tonight") return isTonight(event.date)
     return matchesKeyword(event, KEYWORDS[mood])
   })
 }
@@ -133,7 +159,9 @@ export function pickTonight(events: CatalogEvent[], limit = 8): CatalogEvent[] {
 
 export function pickFestivals(events: CatalogEvent[], limit = 8): CatalogEvent[] {
   return events
-    .filter((event) => matchesKeyword(event, KEYWORDS.festivales))
+    .filter((event) =>
+      matchesKeyword(event, ["festival", "fest", "open air", "al aire", "masivo"]),
+    )
     .slice(0, limit)
 }
 
@@ -160,15 +188,73 @@ export function eventCityLabel(event: CatalogEvent): string {
   return raw.split(",")[0]?.trim() || event.location
 }
 
+export type EventBadgeKind = "urgency" | "live" | "featured" | "sponsored"
+
 export function urgencyLabel(event: CatalogEvent): string | null {
   if (event.soldRatio != null && event.soldRatio >= 0.85) {
-    return "Agotando Preventa"
+    return "Últimas entradas"
   }
   if (event.ticketsLeft != null && event.ticketsLeft > 0 && event.ticketsLeft <= 40) {
-    return "Pocos Tickets"
+    return "Últimas entradas"
   }
   if (event.soldRatio != null && event.soldRatio >= 0.6) {
-    return "Agotando Preventa"
+    return "Últimas entradas"
   }
   return null
+}
+
+export function eventSecondaryBadge(event: CatalogEvent): string | null {
+  const haystack =
+    `${event.title} ${event.description ?? ""}`.toLowerCase()
+  if (
+    ["live", "en vivo", "recital", "concierto", "banda", "dj"].some((k) =>
+      haystack.includes(k),
+    )
+  ) {
+    return "Música en vivo"
+  }
+  return null
+}
+
+/** Autocomplete suggestions from catalog (title, artist/organizer, place). */
+export function buildSearchSuggestions(
+  events: CatalogEvent[],
+  query: string,
+  limit = 8,
+): Array<{ id: string; label: string; href: string; meta: string }> {
+  const q = query.trim().toLowerCase()
+  if (q.length < 2) return []
+
+  const seen = new Set<string>()
+  const out: Array<{ id: string; label: string; href: string; meta: string }> =
+    []
+
+  for (const event of events) {
+    const fields = [
+      event.title,
+      event.organizerName ?? "",
+      event.venueName ?? "",
+      eventCityLabel(event),
+    ]
+    const hit = fields.some((field) => field.toLowerCase().includes(q))
+    if (!hit || seen.has(event.id)) continue
+    seen.add(event.id)
+    out.push({
+      id: event.id,
+      label: event.title,
+      href: `/events/${event.id}`,
+      meta: [formatSuggestionMeta(event)].filter(Boolean).join(" · "),
+    })
+    if (out.length >= limit) break
+  }
+
+  return out
+}
+
+function formatSuggestionMeta(event: CatalogEvent): string {
+  const parts = [
+    event.organizerName,
+    event.venueName ?? eventCityLabel(event),
+  ].filter(Boolean)
+  return parts.join(" · ")
 }

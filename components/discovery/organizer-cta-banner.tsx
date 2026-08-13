@@ -1,0 +1,30 @@
+"use client"
+
+import Link from "next/link"
+import { ArrowRight } from "lucide-react"
+
+export function OrganizerCtaBanner() {
+  return (
+    <section className="relative overflow-hidden rounded-3xl border border-white/8 bg-zinc-900/60 px-6 py-12 sm:px-10 sm:py-14">
+      <div
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(124,58,237,0.18),_transparent_55%)]"
+        aria-hidden="true"
+      />
+      <div className="relative mx-auto max-w-2xl text-center">
+        <h2 className="text-balance text-3xl font-bold tracking-tight text-white sm:text-4xl">
+          Publicá tu evento en Tokepass
+        </h2>
+        <p className="mx-auto mt-4 max-w-lg text-pretty text-base text-zinc-400 sm:text-lg">
+          La plataforma de boletería digital más rápida, segura e intuitiva.
+        </p>
+        <Link
+          href="/login-organizador"
+          className="mt-8 inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-zinc-950 transition hover:scale-[1.02] hover:bg-zinc-100"
+        >
+          Crear mi evento gratis
+          <ArrowRight className="size-4" aria-hidden="true" />
+        </Link>
+      </div>
+    </section>
+  )
+}

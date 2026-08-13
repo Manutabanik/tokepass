@@ -29,12 +29,12 @@ export default async function HomePage({
   }
 
   return (
-    <div className="relative isolate min-h-[calc(100vh-4rem)] overflow-x-clip bg-[#030712] text-zinc-100">
+    <div className="relative isolate min-h-[calc(100vh-4rem)] overflow-x-clip bg-zinc-950 text-zinc-100">
       <AnimatedBackground />
 
-      <div className="relative mx-auto max-w-7xl px-5 pb-20 pt-4 sm:px-6 lg:px-8 lg:pb-28">
+      <div className="relative mx-auto max-w-7xl px-4 pb-24 pt-8 sm:px-6 lg:px-8 lg:pb-28 lg:pt-10">
         {loadError ? (
-          <div className="mt-16 rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-10 text-center text-sm text-red-200 backdrop-blur-xl">
+          <div className="mt-16 rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-10 text-center text-sm text-red-200">
             {loadError}
           </div>
         ) : (
