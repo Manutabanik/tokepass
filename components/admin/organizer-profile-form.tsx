@@ -84,16 +84,16 @@ export function OrganizerProfileForm({
         <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-emerald-400/90">
           Tu Panel
         </p>
-        <h1 className="text-3xl font-black tracking-tight text-white">
+        <h1 className="text-3xl font-black tracking-tight text-zinc-900 dark:text-white">
           Mi perfil de organizador
         </h1>
-        <p className="text-sm leading-6 text-zinc-400">
+        <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
           Así te van a ver los compradores en la ficha de tus eventos: logo,
           nombre público y una bajada corta.
         </p>
       </header>
 
-      <section className="rounded-3xl border border-zinc-800 bg-zinc-950/70 p-6 sm:p-8">
+      <section className="rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/70 p-6 sm:p-8">
         <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
           <div className="relative">
             <div className="relative size-24 overflow-hidden rounded-full bg-violet-500/20 ring-2 ring-violet-500/30">
@@ -118,7 +118,7 @@ export function OrganizerProfileForm({
               onClick={() => fileRef.current?.click()}
               className={cn(
                 "absolute -bottom-1 -right-1 grid size-9 place-items-center rounded-full",
-                "border border-zinc-700 bg-zinc-900 text-zinc-200 shadow-lg hover:bg-zinc-800",
+                "border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 shadow-lg hover:bg-zinc-800",
                 avatarPending && "opacity-60",
               )}
               aria-label="Cambiar foto de perfil"
@@ -141,11 +141,11 @@ export function OrganizerProfileForm({
           </div>
 
           <div className="min-w-0 flex-1 text-center sm:text-left">
-            <p className="flex items-center justify-center gap-2 text-sm font-semibold text-white sm:justify-start">
+            <p className="flex items-center justify-center gap-2 text-sm font-semibold text-zinc-900 dark:text-white sm:justify-start">
               <UserRound className="size-4 text-zinc-500" aria-hidden="true" />
               Vista previa
             </p>
-            <p className="mt-1 truncate text-lg font-bold text-white">
+            <p className="mt-1 truncate text-lg font-bold text-zinc-900 dark:text-white">
               {displayName}
             </p>
             <p className="mt-0.5 text-sm text-zinc-500">
@@ -164,7 +164,7 @@ export function OrganizerProfileForm({
               onChange={(event) => setPublicName(event.target.value)}
               placeholder='Ej: "Productora Tokepass", "En Vivo Producciones"'
               maxLength={80}
-              className="h-11 border-zinc-800 bg-zinc-950"
+              className="h-11 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950"
             />
           </div>
 
@@ -177,7 +177,7 @@ export function OrganizerProfileForm({
               placeholder='Ej: "Productora en Tokepass", "Eventos masivos"'
               maxLength={160}
               rows={3}
-              className="resize-none border-zinc-800 bg-zinc-950"
+              className="resize-none border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950"
             />
             <p className="text-xs text-zinc-600">
               {publicBio.length}/160 · se muestra debajo de tu nombre en el
@@ -192,7 +192,7 @@ export function OrganizerProfileForm({
               value={fullName}
               onChange={(event) => setFullName(event.target.value)}
               placeholder="Nombre de la cuenta / contacto"
-              className="h-11 border-zinc-800 bg-zinc-950"
+              className="h-11 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950"
             />
             <p className="text-xs text-zinc-600">
               Solo para tu panel. El público ve el nombre público.

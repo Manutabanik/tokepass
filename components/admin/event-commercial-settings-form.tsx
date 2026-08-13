@@ -61,8 +61,8 @@ export function EventCommercialSettingsForm({
           <Shield className="size-5" aria-hidden="true" />
         </span>
         <div>
-          <h2 className="text-lg font-bold text-white">Settings comerciales</h2>
-          <p className="mt-1 text-sm text-zinc-400">
+          <h2 className="text-lg font-bold text-zinc-900 dark:text-white">Settings comerciales</h2>
+          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
             Solo el dueño de la plataforma puede editar comisión, tope de
             cortesías y auspicio. Los organizadores no tienen acceso a estos
             controles.
@@ -105,7 +105,7 @@ export function EventCommercialSettingsForm({
             value={percentage}
             onChange={(e) => setPercentage(e.target.value)}
             disabled={pending || sponsored}
-            className="border-zinc-700 bg-zinc-900"
+            className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
           />
         </div>
         <div className="space-y-2">
@@ -118,7 +118,7 @@ export function EventCommercialSettingsForm({
             value={fixedFee}
             onChange={(e) => setFixedFee(e.target.value)}
             disabled={pending || sponsored}
-            className="border-zinc-700 bg-zinc-900"
+            className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
           />
         </div>
         <div className="space-y-2 sm:col-span-2">
@@ -133,7 +133,7 @@ export function EventCommercialSettingsForm({
             value={maxFree}
             onChange={(e) => setMaxFree(e.target.value)}
             disabled={pending}
-            className="border-zinc-700 bg-zinc-900"
+            className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
           />
           <p className="text-xs text-zinc-500">
             Suma de cupos de entradas a precio $0 (no incluye cortesía ni

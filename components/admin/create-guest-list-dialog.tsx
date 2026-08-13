@@ -64,11 +64,11 @@ export function CreateGuestListDialog({ eventId }: { eventId: string }) {
         Nueva Lista
       </Button>
 
-      <DialogContent className="border-white/10 bg-[#121216] text-zinc-100 sm:max-w-md">
+      <DialogContent className="border-zinc-200 dark:border-white/10 bg-[#121216] text-zinc-900 dark:text-zinc-100 sm:max-w-md">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Nueva lista digital</DialogTitle>
-            <DialogDescription className="text-zinc-400">
+            <DialogDescription className="text-zinc-600 dark:text-zinc-400">
               Definí cupos y la hora límite de ingreso (Smart Yield).
             </DialogDescription>
           </DialogHeader>
@@ -82,7 +82,7 @@ export function CreateGuestListDialog({ eventId }: { eventId: string }) {
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Lista promotores Tomás"
                 required
-                className="border-white/10 bg-zinc-950"
+                className="border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-950"
               />
             </div>
             <div className="space-y-2">
@@ -94,7 +94,7 @@ export function CreateGuestListDialog({ eventId }: { eventId: string }) {
                 value={maxGuests}
                 onChange={(e) => setMaxGuests(e.target.value)}
                 required
-                className="border-white/10 bg-zinc-950"
+                className="border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-950"
               />
             </div>
             <div className="space-y-2">
@@ -105,7 +105,7 @@ export function CreateGuestListDialog({ eventId }: { eventId: string }) {
                 value={validUntilLocal}
                 onChange={(e) => setValidUntilLocal(e.target.value)}
                 required
-                className="border-white/10 bg-zinc-950"
+                className="border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-950"
               />
             </div>
           </div>

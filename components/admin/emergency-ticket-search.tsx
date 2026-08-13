@@ -54,10 +54,10 @@ export function EmergencyTicketSearch({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85dvh] overflow-hidden border-zinc-800 bg-zinc-950 text-white sm:max-w-md">
+      <DialogContent className="max-h-[85dvh] overflow-hidden border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Buscador de emergencia</DialogTitle>
-          <DialogDescription className="text-zinc-400">
+          <DialogDescription className="text-zinc-600 dark:text-zinc-400">
             Buscá por nombre o DNI en las entradas guardadas sin conexión. Un toque valida.
           </DialogDescription>
         </DialogHeader>
@@ -69,13 +69,13 @@ export function EmergencyTicketSearch({
             onChange={(event) => handleQuery(event.target.value)}
             placeholder="Nombre, apellido o DNI"
             autoFocus
-            className="h-14 rounded-2xl border-zinc-700 bg-black pl-10 text-base text-white"
+            className="h-14 rounded-2xl border-zinc-300 dark:border-zinc-700 bg-black pl-10 text-base text-zinc-900 dark:text-white"
           />
         </div>
 
         <div className="max-h-[50dvh] space-y-2 overflow-y-auto pr-1">
           {isPending ? (
-            <p className="flex items-center gap-2 py-6 text-sm text-zinc-400">
+            <p className="flex items-center gap-2 py-6 text-sm text-zinc-600 dark:text-zinc-400">
               <LoaderCircle className="size-4 animate-spin" />
               Buscando…
             </p>
@@ -94,17 +94,17 @@ export function EmergencyTicketSearch({
                 "flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition",
                 ticket.status === "valid"
                   ? "border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20"
-                  : "border-zinc-800 bg-zinc-900 opacity-80",
+                  : "border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 opacity-80",
               )}
             >
               <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-black/40 text-emerald-300">
                 <UserCheck className="size-5" />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate font-semibold text-white">
+                <span className="block truncate font-semibold text-zinc-900 dark:text-white">
                   {ticket.owner_name}
                 </span>
-                <span className="mt-0.5 block truncate text-xs text-zinc-400">
+                <span className="mt-0.5 block truncate text-xs text-zinc-600 dark:text-zinc-400">
                   {ticket.ticket_tier}
                   {ticket.dni ? ` · DNI ${ticket.dni}` : ""}
                   {ticket.status !== "valid" ? ` · ${ticket.status}` : ""}

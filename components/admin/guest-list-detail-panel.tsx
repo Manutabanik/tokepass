@@ -142,10 +142,10 @@ export function GuestListDetailPanel({
   }
 
   return (
-    <div className="space-y-5 rounded-[1.5rem] border border-white/8 bg-white/[0.03] p-5">
+    <div className="space-y-5 rounded-[1.5rem] border border-zinc-200 dark:border-white/8 bg-white/[0.03] p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h3 className="text-lg font-bold text-white">{list.name}</h3>
+          <h3 className="text-lg font-bold text-zinc-900 dark:text-white">{list.name}</h3>
           <p className="mt-1 text-sm text-zinc-500">
             {list.usedGuests}/{list.maxGuests} cupos · límite{" "}
             {formatDateTime(list.validUntil)}
@@ -175,20 +175,20 @@ export function GuestListDetailPanel({
 
       <form
         onSubmit={handleAddSingle}
-        className="grid gap-2 rounded-2xl border border-white/8 bg-zinc-950/50 p-3 sm:grid-cols-[1fr_1fr_auto]"
+        className="grid gap-2 rounded-2xl border border-zinc-200 dark:border-white/8 bg-zinc-50 dark:bg-zinc-950/50 p-3 sm:grid-cols-[1fr_1fr_auto]"
       >
         <Input
           value={singleName}
           onChange={(e) => setSingleName(e.target.value)}
           placeholder="Nombre completo"
           required
-          className="border-white/10 bg-zinc-950"
+          className="border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-950"
         />
         <Input
           value={singlePhone}
           onChange={(e) => setSinglePhone(e.target.value)}
           placeholder="WhatsApp (opcional)"
-          className="border-white/10 bg-zinc-950"
+          className="border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-950"
         />
         <Button
           type="submit"
@@ -206,7 +206,7 @@ export function GuestListDetailPanel({
       ) : (
         <Table>
           <TableHeader>
-            <TableRow className="border-white/8 hover:bg-transparent">
+            <TableRow className="border-zinc-200 dark:border-white/8 hover:bg-transparent">
               <TableHead className="text-zinc-500">Invitado</TableHead>
               <TableHead className="text-zinc-500">Contacto</TableHead>
               <TableHead className="text-zinc-500">Estado</TableHead>
@@ -218,9 +218,9 @@ export function GuestListDetailPanel({
               return (
                 <TableRow
                   key={entry.id}
-                  className="border-white/8 hover:bg-white/[0.02]"
+                  className="border-zinc-200 dark:border-white/8 hover:bg-white/[0.02]"
                 >
-                  <TableCell className="font-medium text-zinc-200">
+                  <TableCell className="font-medium text-zinc-800 dark:text-zinc-200">
                     {entry.fullName}
                   </TableCell>
                   <TableCell className="text-zinc-500">
@@ -242,13 +242,13 @@ export function GuestListDetailPanel({
       )}
 
       <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
-        <DialogContent className="border-white/10 bg-[#121216] text-zinc-100 sm:max-w-lg">
+        <DialogContent className="border-zinc-200 dark:border-white/10 bg-[#121216] text-zinc-900 dark:text-zinc-100 sm:max-w-lg">
           <form onSubmit={handleBulkSubmit}>
             <DialogHeader>
               <DialogTitle>Carga masiva</DialogTitle>
-              <DialogDescription className="text-zinc-400">
+              <DialogDescription className="text-zinc-600 dark:text-zinc-400">
                 Una persona por línea. Formato:{" "}
-                <code className="text-zinc-300">Nombre, teléfono, email</code>
+                <code className="text-zinc-700 dark:text-zinc-300">Nombre, teléfono, email</code>
               </DialogDescription>
             </DialogHeader>
             <div className="mt-4 space-y-2">
@@ -259,7 +259,7 @@ export function GuestListDetailPanel({
                 onChange={(e) => setBulkText(e.target.value)}
                 rows={10}
                 placeholder={"Tomás Pérez, +54911..., tomas@mail.com\nVIP Prensa"}
-                className="border-white/10 bg-zinc-950 font-mono text-xs"
+                className="border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-950 font-mono text-xs"
               />
             </div>
             <DialogFooter className="mt-6">

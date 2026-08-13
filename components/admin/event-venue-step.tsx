@@ -65,7 +65,7 @@ const EventLocationMapInner = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="grid h-full place-items-center bg-zinc-950 text-xs text-zinc-500">
+      <div className="grid h-full place-items-center bg-white dark:bg-zinc-950 text-xs text-zinc-500">
         Cargando mapa…
       </div>
     ),
@@ -333,7 +333,7 @@ export function EventVenueStep({
             "rounded-2xl border px-4 py-3 text-left text-sm transition disabled:opacity-40",
             venueMode === "existing" && !editingSaved
               ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-100"
-              : "border-white/8 bg-black/15 text-zinc-400",
+              : "border-zinc-200 dark:border-white/8 bg-zinc-50 dark:bg-black/15 text-zinc-600 dark:text-zinc-400",
           )}
         >
           Elegir un lugar guardado
@@ -348,7 +348,7 @@ export function EventVenueStep({
             "rounded-2xl border px-4 py-3 text-left text-sm transition",
             showCreateForm && (venueMode === "new" || editingSaved)
               ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-100"
-              : "border-white/8 bg-black/15 text-zinc-400",
+              : "border-zinc-200 dark:border-white/8 bg-zinc-50 dark:bg-black/15 text-zinc-600 dark:text-zinc-400",
           )}
         >
           Crear un lugar nuevo
@@ -356,13 +356,13 @@ export function EventVenueStep({
       </div>
 
       {venueMode === "existing" && !editingSaved && selectedVenue ? (
-        <div className="space-y-4 rounded-2xl border border-white/8 bg-black/20 p-4 sm:p-5">
+        <div className="space-y-4 rounded-2xl border border-zinc-200 dark:border-white/8 bg-zinc-100 dark:bg-black/20 p-4 sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-base font-semibold text-white">
+              <p className="text-base font-semibold text-zinc-900 dark:text-white">
                 {selectedVenue.name}
               </p>
-              <p className="mt-1 text-sm text-zinc-400">
+              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
                 {[selectedVenue.location, selectedVenue.city]
                   .filter(Boolean)
                   .join(" · ")}
@@ -382,7 +382,7 @@ export function EventVenueStep({
               type="button"
               variant="outline"
               size="sm"
-              className="border-white/10 text-zinc-300"
+              className="border-zinc-200 dark:border-white/10 text-zinc-700 dark:text-zinc-300"
               onClick={startEditSavedVenue}
             >
               <Pencil className="size-3.5" />
@@ -403,7 +403,7 @@ export function EventVenueStep({
                     if (venue) applySavedVenue(venue)
                   }}
                 >
-                  <SelectTrigger className="h-11 border-white/10 bg-black/20">
+                  <SelectTrigger className="h-11 border-zinc-200 dark:border-white/10 bg-zinc-100 dark:bg-black/20">
                     <SelectValue placeholder="Elegí un lugar" />
                   </SelectTrigger>
                   <SelectContent>
@@ -422,14 +422,14 @@ export function EventVenueStep({
 
           {selectedVenue.latitude != null &&
           selectedVenue.longitude != null ? (
-            <div className="h-48 overflow-hidden rounded-2xl border border-zinc-800 sm:h-56">
+            <div className="h-48 overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 sm:h-56">
               <EventLocationMapInner
                 latitude={selectedVenue.latitude}
                 longitude={selectedVenue.longitude}
               />
             </div>
           ) : (
-            <p className="rounded-xl border border-dashed border-white/10 px-3 py-3 text-xs text-zinc-500">
+            <p className="rounded-xl border border-dashed border-zinc-200 dark:border-white/10 px-3 py-3 text-xs text-zinc-500">
               Este lugar todavía no tiene coordenadas en el mapa.
             </p>
           )}
@@ -459,14 +459,14 @@ export function EventVenueStep({
             ).map((item) => (
               <li
                 key={item.id}
-                className="flex items-center gap-2 rounded-xl border border-white/8 bg-black/25 px-3 py-2.5 text-sm"
+                className="flex items-center gap-2 rounded-xl border border-zinc-200 dark:border-white/8 bg-black/25 px-3 py-2.5 text-sm"
               >
                 <span
                   className="size-2.5 rounded-full"
                   style={{ backgroundColor: item.color }}
                   aria-hidden
                 />
-                <span className="min-w-0 flex-1 truncate text-zinc-200">
+                <span className="min-w-0 flex-1 truncate text-zinc-800 dark:text-zinc-200">
                   {item.name}
                 </span>
                 <span className="text-[11px] text-zinc-500">{item.detail}</span>
@@ -479,7 +479,7 @@ export function EventVenueStep({
       ) : null}
 
       {showCreateForm ? (
-        <div className="space-y-6 rounded-2xl border border-white/8 bg-black/15 p-4 sm:p-5">
+        <div className="space-y-6 rounded-2xl border border-zinc-200 dark:border-white/8 bg-zinc-50 dark:bg-black/15 p-4 sm:p-5">
           {editingSaved ? (
             <p className="text-sm text-emerald-300/90">
               Estás editando un lugar guardado. Los cambios se aplican a futuros
@@ -529,7 +529,7 @@ export function EventVenueStep({
                           "flex gap-4 rounded-2xl border p-5 text-left transition duration-200",
                           selected
                             ? "border-emerald-500/40 bg-emerald-500/10 ring-1 ring-inset ring-emerald-500/15"
-                            : "border-white/8 bg-black/15 hover:border-white/15",
+                            : "border-zinc-200 dark:border-white/8 bg-zinc-50 dark:bg-black/15 hover:border-white/15",
                         )}
                       >
                         <span
@@ -541,7 +541,7 @@ export function EventVenueStep({
                           <Icon className="size-5" />
                         </span>
                         <span>
-                          <span className="block font-semibold text-zinc-200">
+                          <span className="block font-semibold text-zinc-800 dark:text-zinc-200">
                             {option.title}
                           </span>
                           <span className="mt-1 block text-xs leading-5 text-zinc-500">
@@ -569,15 +569,15 @@ export function EventVenueStep({
           />
 
           {structured ? (
-            <div className="space-y-3 rounded-2xl border border-white/8 bg-black/20 p-4">
+            <div className="space-y-3 rounded-2xl border border-zinc-200 dark:border-white/8 bg-zinc-100 dark:bg-black/20 p-4">
               <div className="flex items-center gap-2">
                 <ImageIcon className="size-4 text-emerald-400" />
-                <Label className="text-sm text-zinc-200">
+                <Label className="text-sm text-zinc-800 dark:text-zinc-200">
                   Imagen o mapa del lugar (Opcional)
                 </Label>
               </div>
               {backgroundUrl ? (
-                <div className="relative aspect-[16/7] overflow-hidden rounded-xl border border-zinc-800">
+                <div className="relative aspect-[16/7] overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
                   <Image
                     src={backgroundUrl}
                     alt="Plano de referencia"
@@ -588,7 +588,7 @@ export function EventVenueStep({
                   />
                 </div>
               ) : null}
-              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-700 bg-zinc-950/60 px-4 py-6 text-sm text-zinc-400 hover:border-emerald-500/40 hover:text-emerald-200">
+              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950/60 px-4 py-6 text-sm text-zinc-600 dark:text-zinc-400 hover:border-emerald-500/40 hover:text-emerald-200">
                 {pendingUpload ? (
                   <LoaderCircle className="size-4 animate-spin" />
                 ) : (
@@ -623,7 +623,7 @@ export function EventVenueStep({
                             : Number(event.target.value),
                         )
                       }
-                      className="h-11 border-white/10 bg-black/20"
+                      className="h-11 border-zinc-200 dark:border-white/10 bg-zinc-100 dark:bg-black/20"
                     />
                   <FormMessage>{fieldState.error?.message}</FormMessage>
                 </FormItem>
@@ -635,9 +635,9 @@ export function EventVenueStep({
             control={form.control}
             name="venue.saveVenueForReuse"
             render={({ field }) => (
-              <FormItem className="flex flex-row items-start justify-between gap-3 rounded-2xl border border-white/8 bg-black/20 px-4 py-3">
+              <FormItem className="flex flex-row items-start justify-between gap-3 rounded-2xl border border-zinc-200 dark:border-white/8 bg-zinc-100 dark:bg-black/20 px-4 py-3">
                 <div className="space-y-1">
-                  <FormLabel className="text-sm font-medium text-zinc-100">
+                  <FormLabel className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                     Guardar este lugar para futuros eventos
                   </FormLabel>
                   <FormDescription className="text-xs text-zinc-500">

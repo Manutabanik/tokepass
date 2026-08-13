@@ -61,7 +61,7 @@ export default async function CreateEventPage({
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
       <Link
         href={impersonation ? "/superadmin" : "/admin/events"}
-        className="inline-flex w-fit items-center gap-2 text-sm text-zinc-500 transition hover:text-white"
+        className="inline-flex w-fit items-center gap-2 text-sm text-zinc-500 transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-900 dark:hover:text-white"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
         {impersonation ? "Volver a Platform OS" : "Volver a Mis Eventos"}
@@ -89,10 +89,10 @@ export default async function CreateEventPage({
         <p className="mb-3 font-mono text-xs uppercase tracking-[0.18em] text-emerald-400">
           Event Builder
         </p>
-        <h1 className="mb-2 text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
+        <h1 className="mb-2 text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-white sm:text-4xl">
           Diseña una experiencia inolvidable
         </h1>
-        <p className="max-w-2xl text-sm leading-relaxed text-zinc-400 sm:text-base">
+        <p className="max-w-2xl text-sm leading-relaxed text-zinc-600 dark:text-zinc-400 sm:text-base">
           Configura la operación completa en cuatro pasos. Podrás guardar el
           evento como borrador antes de publicarlo.
         </p>

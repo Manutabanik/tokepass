@@ -63,7 +63,7 @@ export default async function EventBarItemsPage({
       <div>
         <Link
           href="/admin/events"
-          className="mb-5 inline-flex items-center gap-2 text-sm text-zinc-500 transition hover:text-white"
+          className="mb-5 inline-flex items-center gap-2 text-sm text-zinc-500 transition hover:text-zinc-900 dark:hover:text-white"
         >
           <ArrowLeft className="size-4" />
           Volver a eventos
@@ -75,7 +75,7 @@ export default async function EventBarItemsPage({
           </span>
           <div>
             <p className="text-sm font-medium text-amber-400">Pre-venta barra</p>
-            <h1 className="mt-1 text-3xl font-black tracking-[-0.035em] text-white">
+            <h1 className="mt-1 text-3xl font-black tracking-[-0.035em] text-zinc-900 dark:text-white">
               {event.title}
             </h1>
             <p className="mt-2 text-sm text-zinc-500">
@@ -90,7 +90,7 @@ export default async function EventBarItemsPage({
         </div>
       </div>
 
-      <Card className="border-white/8 bg-zinc-950/40">
+      <Card className="border-zinc-200 dark:border-white/8 bg-zinc-50 dark:bg-zinc-950/40">
         <CardHeader>
           <CardTitle>Nuevo producto</CardTitle>
           <CardDescription>
@@ -102,7 +102,7 @@ export default async function EventBarItemsPage({
         </CardContent>
       </Card>
 
-      <Card className="border-white/8 bg-zinc-950/40">
+      <Card className="border-zinc-200 dark:border-white/8 bg-zinc-50 dark:bg-zinc-950/40">
         <CardHeader>
           <CardTitle>Catálogo</CardTitle>
           <CardDescription>
@@ -119,10 +119,10 @@ export default async function EventBarItemsPage({
             (items ?? []).map((item) => (
               <div
                 key={item.id}
-                className="flex items-start justify-between gap-3 rounded-2xl border border-zinc-800 bg-zinc-950/70 px-4 py-3"
+                className="flex items-start justify-between gap-3 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/70 px-4 py-3"
               >
                 <div className="min-w-0">
-                  <p className="font-semibold text-white">{item.name}</p>
+                  <p className="font-semibold text-zinc-900 dark:text-white">{item.name}</p>
                   {item.description ? (
                     <p className="mt-1 text-xs text-zinc-500">{item.description}</p>
                   ) : null}
@@ -131,7 +131,7 @@ export default async function EventBarItemsPage({
                     {!item.is_active ? " · inactivo" : null}
                   </p>
                 </div>
-                <p className="shrink-0 font-bold tabular-nums text-white">
+                <p className="shrink-0 font-bold tabular-nums text-zinc-900 dark:text-white">
                   {formatCurrency(Number(item.price))}
                 </p>
               </div>

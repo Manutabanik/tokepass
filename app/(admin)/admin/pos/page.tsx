@@ -35,7 +35,7 @@ export default async function AdminPosPage() {
         <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-400/90">
           Puerta
         </p>
-        <h1 className="mt-1 text-3xl font-black tracking-tight text-white">
+        <h1 className="mt-1 text-3xl font-black tracking-tight text-zinc-900 dark:text-white">
           Boletería
         </h1>
         <p className="mt-2 text-sm text-zinc-500">

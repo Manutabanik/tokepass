@@ -25,10 +25,10 @@ export default async function AdminVenuesPage({
       <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-emerald-400/90">
         Lugares
       </p>
-      <h1 className="text-3xl font-black tracking-tight text-white">
+      <h1 className="text-3xl font-black tracking-tight text-zinc-900 dark:text-white">
         Ahora se configuran en el evento
       </h1>
-      <p className="text-sm leading-6 text-zinc-400">
+      <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
         Para no duplicar pantallas, creá o reutilizá lugares directamente en el
         paso «El lugar» al armar tu evento.
       </p>

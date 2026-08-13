@@ -144,7 +144,7 @@ export function BarScanner() {
   )
 
   return (
-    <div className="relative flex min-h-[100dvh] flex-col bg-zinc-950 text-white">
+    <div className="relative flex min-h-[100dvh] flex-col bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white">
       {visual === "success" ? (
         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-emerald-600 px-6 text-center">
           <CheckCircle2 className="size-20 text-white" aria-hidden="true" />
@@ -161,7 +161,7 @@ export function BarScanner() {
             {title}
           </p>
           {subtitle ? (
-            <p className="mt-4 text-2xl font-bold tracking-wide text-white/95 sm:text-3xl">
+            <p className="mt-4 text-2xl font-bold tracking-wide text-zinc-900 dark:text-white/95 sm:text-3xl">
               {subtitle}
             </p>
           ) : null}
@@ -187,7 +187,7 @@ export function BarScanner() {
           <div className="grid h-full min-h-[55dvh] place-items-center px-6 text-center">
             <div>
               <CameraOff className="mx-auto size-10 text-zinc-500" />
-              <p className="mt-4 text-sm text-zinc-400">{cameraError}</p>
+              <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">{cameraError}</p>
             </div>
           </div>
         ) : (

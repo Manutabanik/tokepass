@@ -57,7 +57,7 @@ const VenueLeafletMap = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="grid h-full place-items-center bg-zinc-950 text-sm text-zinc-500">
+      <div className="grid h-full place-items-center bg-white dark:bg-zinc-950 text-sm text-zinc-500">
         <span className="inline-flex items-center gap-2">
           <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
           Cargando mapa…
@@ -86,13 +86,13 @@ type VenueArgentinaSelectorProps = {
 }
 
 const selectClassName = cn(
-  "h-11 w-full appearance-none rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-white",
+  "h-11 w-full appearance-none rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 text-sm text-zinc-900 dark:text-white",
   "outline-none transition focus:border-transparent focus:ring-2 focus:ring-emerald-500",
   "disabled:cursor-not-allowed disabled:opacity-50",
 )
 
 const inputClassName = cn(
-  "h-11 rounded-lg border-zinc-800 bg-zinc-900 text-sm text-white",
+  "h-11 rounded-lg border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 text-sm text-zinc-900 dark:text-white",
   "focus-visible:border-transparent focus-visible:ring-2 focus-visible:ring-emerald-500",
 )
 
@@ -331,7 +331,7 @@ export function VenueArgentinaSelector({
   return (
     <div
       className={cn(
-        "space-y-5 rounded-2xl border border-zinc-800 bg-zinc-950 p-5",
+        "space-y-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5",
         className,
       )}
     >
@@ -340,7 +340,7 @@ export function VenueArgentinaSelector({
           <MapPinned className="size-5" aria-hidden="true" />
         </span>
         <div>
-          <h3 className="font-bold text-white">Ubicación en Argentina</h3>
+          <h3 className="font-bold text-zinc-900 dark:text-white">Ubicación en Argentina</h3>
           <p className="mt-1 text-xs leading-relaxed text-zinc-500">
             Georef (provincias/departamentos) + Nominatim (dirección) + Leaflet
             (mapa). Sin API keys de pago.
@@ -353,7 +353,7 @@ export function VenueArgentinaSelector({
           <div className="space-y-2 sm:col-span-2">
             <Label
               htmlFor="venue-ar-name"
-              className="font-mono text-[10px] uppercase tracking-wider text-zinc-400"
+              className="font-mono text-[10px] uppercase tracking-wider text-zinc-600 dark:text-zinc-400"
             >
               Nombre del lugar
             </Label>
@@ -371,7 +371,7 @@ export function VenueArgentinaSelector({
           <div className="space-y-2 sm:col-span-2">
             <Label
               htmlFor="venue-ar-capacity"
-              className="font-mono text-[10px] uppercase tracking-wider text-zinc-400"
+              className="font-mono text-[10px] uppercase tracking-wider text-zinc-600 dark:text-zinc-400"
             >
               Cantidad de personas
             </Label>
@@ -398,7 +398,7 @@ export function VenueArgentinaSelector({
         <div className="space-y-2">
           <Label
             htmlFor="venue-ar-province"
-            className="font-mono text-[10px] uppercase tracking-wider text-zinc-400"
+            className="font-mono text-[10px] uppercase tracking-wider text-zinc-600 dark:text-zinc-400"
           >
             Provincia
           </Label>
@@ -430,7 +430,7 @@ export function VenueArgentinaSelector({
         <div className="space-y-2">
           <Label
             htmlFor="venue-ar-department"
-            className="font-mono text-[10px] uppercase tracking-wider text-zinc-400"
+            className="font-mono text-[10px] uppercase tracking-wider text-zinc-600 dark:text-zinc-400"
           >
             Departamento / Partido
           </Label>
@@ -469,7 +469,7 @@ export function VenueArgentinaSelector({
       <div className="relative z-50 space-y-2">
         <Label
           htmlFor="venue-ar-address"
-          className="font-mono text-[10px] uppercase tracking-wider text-zinc-400"
+          className="font-mono text-[10px] uppercase tracking-wider text-zinc-600 dark:text-zinc-400"
         >
           Dirección exacta
         </Label>
@@ -516,13 +516,13 @@ export function VenueArgentinaSelector({
           <ul
             id={listboxId}
             role="listbox"
-            className="absolute left-0 right-0 top-[calc(100%+0.35rem)] z-50 max-h-56 overflow-auto rounded-md border border-zinc-700 bg-zinc-800 py-1 shadow-lg"
+            className="absolute left-0 right-0 top-[calc(100%+0.35rem)] z-50 max-h-56 overflow-auto rounded-md border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 py-1 shadow-lg"
           >
             {results.map((result) => (
               <li key={result.placeId} role="option">
                 <button
                   type="button"
-                  className="block w-full px-3 py-2.5 text-left text-xs leading-relaxed text-zinc-200 transition hover:bg-zinc-700 hover:text-white"
+                  className="block w-full px-3 py-2.5 text-left text-xs leading-relaxed text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-700 hover:text-zinc-900 dark:hover:text-white"
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => chooseResult(result)}
                 >
@@ -542,7 +542,7 @@ export function VenueArgentinaSelector({
         )}
       </div>
 
-      <div className="relative z-0 mt-4 h-[300px] w-full overflow-hidden rounded-xl border border-zinc-800">
+      <div className="relative z-0 mt-4 h-[300px] w-full overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
         <VenueLeafletMap
           coordinates={
             state.coordinates
@@ -558,7 +558,7 @@ export function VenueArgentinaSelector({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-zinc-400">
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">
           {state.coordinates
             ? `Coordenadas: ${state.coordinates.lat.toFixed(6)}, ${state.coordinates.lng.toFixed(6)} · arrastrá el pin para afinar`
             : `Mapa centrado en Obelisco (${VENUE_MAP_DEFAULT.latitude}, ${VENUE_MAP_DEFAULT.longitude}) · elegí una dirección`}

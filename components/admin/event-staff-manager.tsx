@@ -48,17 +48,17 @@ export function EventStaffManager({
         <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-violet-300/80">
           Equipo
         </p>
-        <h1 className="mt-2 text-3xl font-black tracking-tight text-white">
+        <h1 className="mt-2 text-3xl font-black tracking-tight text-zinc-900 dark:text-white">
           Staff por evento
         </h1>
-        <p className="mt-2 max-w-2xl text-sm text-zinc-400">
+        <p className="mt-2 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
           Delegá puerta, barra o caja sin compartir tu cuenta de organizador.
           El staff solo ve las herramientas de su rol.
         </p>
       </div>
 
       <form
-        className="grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-950/60 p-5 sm:grid-cols-2 lg:grid-cols-4"
+        className="grid gap-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/60 p-5 sm:grid-cols-2 lg:grid-cols-4"
         onSubmit={(event) => {
           event.preventDefault()
           startTransition(async () => {
@@ -79,7 +79,7 @@ export function EventStaffManager({
             id="staff-event"
             value={eventId}
             onChange={(e) => setEventId(e.target.value)}
-            className="flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm text-white"
+            className="flex h-10 w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900 px-3 text-sm text-zinc-900 dark:text-white"
             required
           >
             {events.map((event) => (
@@ -98,7 +98,7 @@ export function EventStaffManager({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="staff@ejemplo.com"
-            className="border-zinc-700 bg-zinc-900"
+            className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
           />
         </div>
         <div className="space-y-2">
@@ -107,7 +107,7 @@ export function EventStaffManager({
             id="staff-role"
             value={role}
             onChange={(e) => setRole(e.target.value as EventStaffRole)}
-            className="flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm text-white"
+            className="flex h-10 w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900 px-3 text-sm text-zinc-900 dark:text-white"
           >
             {EVENT_STAFF_ROLES.map((value) => (
               <option key={value} value={value}>
@@ -128,7 +128,7 @@ export function EventStaffManager({
       </form>
 
       {sorted.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-zinc-800 px-6 py-12 text-center text-sm text-zinc-500">
+        <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 px-6 py-12 text-center text-sm text-zinc-500">
           Todavía no hay staff delegado.
         </div>
       ) : (
@@ -136,10 +136,10 @@ export function EventStaffManager({
           {sorted.map((row) => (
             <div
               key={row.id}
-              className="flex flex-col gap-3 rounded-xl border border-zinc-800 bg-zinc-950/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+              className="flex flex-col gap-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
             >
               <div>
-                <p className="font-medium text-white">
+                <p className="font-medium text-zinc-900 dark:text-white">
                   {row.userName ?? row.userEmail}
                 </p>
                 <p className="text-sm text-zinc-500">
@@ -149,7 +149,7 @@ export function EventStaffManager({
               <Button
                 type="button"
                 variant="ghost"
-                className="text-zinc-400"
+                className="text-zinc-600 dark:text-zinc-400"
                 disabled={pending}
                 onClick={() => {
                   startTransition(async () => {

@@ -108,7 +108,7 @@ export default async function EventGuestListsPage({
       <div>
         <Link
           href="/admin/lists"
-          className="mb-5 inline-flex items-center gap-2 text-sm text-zinc-500 transition hover:text-white"
+          className="mb-5 inline-flex items-center gap-2 text-sm text-zinc-500 transition hover:text-zinc-900 dark:hover:text-white"
         >
           <ArrowLeft className="size-4" />
           Volver a Listas
@@ -117,7 +117,7 @@ export default async function EventGuestListsPage({
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-sm font-medium text-violet-400">FreePass</p>
-            <h1 className="mt-1 text-3xl font-black tracking-[-0.035em] text-white">
+            <h1 className="mt-1 text-3xl font-black tracking-[-0.035em] text-zinc-900 dark:text-white">
               Listas · {event.title}
             </h1>
             <p className="mt-2 max-w-2xl text-sm text-zinc-500">
@@ -139,7 +139,7 @@ export default async function EventGuestListsPage({
               <Icon className="size-4 text-zinc-500" />
             </CardHeader>
             <CardContent className="px-5 pb-5">
-              <CardTitle className="text-3xl text-white">{value}</CardTitle>
+              <CardTitle className="text-3xl text-zinc-900 dark:text-white">{value}</CardTitle>
             </CardContent>
           </Card>
         ))}

@@ -17,7 +17,7 @@ const VenueLeafletMap = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="grid h-full place-items-center bg-zinc-950 text-sm text-zinc-500">
+      <div className="grid h-full place-items-center bg-white dark:bg-zinc-950 text-sm text-zinc-500">
         <LoaderCircle className="mr-2 inline size-4 animate-spin" />
         Cargando mapa…
       </div>
@@ -115,13 +115,13 @@ export function VenueLocationPicker({
   }
 
   return (
-    <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/50 p-5">
+    <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800/80 bg-zinc-50 dark:bg-zinc-950/50 p-5">
       <div className="flex items-start gap-3">
         <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-400">
           <MapPin className="size-5" aria-hidden="true" />
         </span>
         <div>
-          <h3 className="font-bold text-white">Ubicación exacta</h3>
+          <h3 className="font-bold text-zinc-900 dark:text-white">Ubicación exacta</h3>
           <p className="mt-1 text-xs leading-relaxed text-zinc-500">
             Buscá la dirección y arrastrá el pin para ajustar el acceso.
           </p>
@@ -145,14 +145,14 @@ export function VenueLocationPicker({
             }}
             placeholder="Av. Corrientes 1660, CABA"
             aria-label="Buscar dirección"
-            className="h-12 rounded-xl border-zinc-800 bg-zinc-950 pl-9 text-sm text-white"
+            className="h-12 rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 pl-9 text-sm text-zinc-900 dark:text-white"
           />
         </div>
         <Button
           type="button"
           onClick={() => void searchAddress()}
           disabled={searching}
-          className="h-12 rounded-xl bg-zinc-800 px-4 text-white hover:bg-zinc-700"
+          className="h-12 rounded-xl bg-zinc-800 px-4 text-zinc-900 dark:text-white hover:bg-zinc-700"
           aria-label="Buscar en el mapa"
         >
           {searching ? (
@@ -164,13 +164,13 @@ export function VenueLocationPicker({
       </div>
 
       {results.length > 0 ? (
-        <div className="mt-2 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 shadow-xl">
+        <div className="mt-2 overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-xl">
           {results.map((result) => (
             <button
               key={result.place_id}
               type="button"
               onClick={() => chooseResult(result)}
-              className="block w-full border-b border-zinc-800/70 px-3 py-2.5 text-left text-xs leading-relaxed text-zinc-300 transition last:border-0 hover:bg-zinc-900 hover:text-white"
+              className="block w-full border-b border-zinc-200 dark:border-zinc-800/70 px-3 py-2.5 text-left text-xs leading-relaxed text-zinc-700 dark:text-zinc-300 transition last:border-0 hover:bg-zinc-100 dark:hover:bg-zinc-100 dark:hover:bg-zinc-900 hover:text-zinc-900 dark:hover:text-white"
             >
               {result.display_name}
             </button>
@@ -182,7 +182,7 @@ export function VenueLocationPicker({
         <p className="mt-2 text-xs text-zinc-500">{message}</p>
       ) : null}
 
-      <div className="relative mt-4 h-[340px] w-full overflow-hidden rounded-2xl border border-zinc-800 shadow-inner">
+      <div className="relative mt-4 h-[340px] w-full overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-inner">
         <VenueLeafletMap
           coordinates={coordinates}
           onChange={onCoordinatesChange}
@@ -202,7 +202,7 @@ export function VenueLocationPicker({
             value={coordinates?.latitude.toFixed(6) ?? ""}
             readOnly
             placeholder="—"
-            className="mt-1 h-9 border-zinc-800 bg-zinc-950 font-mono text-xs text-zinc-400"
+            className="mt-1 h-9 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 font-mono text-xs text-zinc-600 dark:text-zinc-400"
           />
         </div>
         <div>
@@ -217,7 +217,7 @@ export function VenueLocationPicker({
             value={coordinates?.longitude.toFixed(6) ?? ""}
             readOnly
             placeholder="—"
-            className="mt-1 h-9 border-zinc-800 bg-zinc-950 font-mono text-xs text-zinc-400"
+            className="mt-1 h-9 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 font-mono text-xs text-zinc-600 dark:text-zinc-400"
           />
         </div>
       </div>

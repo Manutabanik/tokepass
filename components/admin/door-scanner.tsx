@@ -713,7 +713,7 @@ export function DoorScanner() {
   return (
     <div
       className={cn(
-        "fixed inset-0 z-[80] flex flex-col text-white transition-colors duration-200",
+        "fixed inset-0 z-[80] flex flex-col text-zinc-900 dark:text-white transition-colors duration-200",
         visual === "success" && "bg-emerald-500",
         visual === "success_free" && "bg-cyan-500",
         visual === "error" && "bg-red-700",
@@ -752,7 +752,7 @@ export function DoorScanner() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="shrink-0 border-white/20 bg-white/5 text-white hover:bg-white/10"
+                  className="shrink-0 border-white/20 bg-white/5 text-zinc-900 dark:text-white hover:bg-white/10"
                   nativeButton={false}
                   render={<a href="/admin" />}
                 >
@@ -762,7 +762,7 @@ export function DoorScanner() {
             </div>
 
             <div
-              className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-white/5 p-1"
+              className="grid grid-cols-2 gap-2 rounded-2xl border border-zinc-200 dark:border-white/10 bg-white/5 p-1"
               role="group"
               aria-label="Modo de acceso"
             >
@@ -773,7 +773,7 @@ export function DoorScanner() {
                   "inline-flex h-11 items-center justify-center gap-2 rounded-xl text-xs font-bold transition-colors",
                   !isTotemMode
                     ? "bg-violet-600 text-white"
-                    : "text-zinc-400 hover:text-white",
+                    : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white",
                 )}
               >
                 <Smartphone className="size-4" aria-hidden="true" />
@@ -786,7 +786,7 @@ export function DoorScanner() {
                   "inline-flex h-11 items-center justify-center gap-2 rounded-xl text-xs font-bold transition-colors",
                   isTotemMode
                     ? "bg-emerald-600 text-white"
-                    : "text-zinc-400 hover:text-white",
+                    : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white",
                 )}
               >
                 <Monitor className="size-4" aria-hidden="true" />
@@ -800,7 +800,7 @@ export function DoorScanner() {
                 setEventId(value ?? "")
               }}
             >
-              <SelectTrigger className="h-12 w-full border-white/15 bg-white/10 text-left text-base text-white">
+              <SelectTrigger className="h-12 w-full border-white/15 bg-white/10 text-left text-base text-zinc-900 dark:text-white">
                 <SelectValue placeholder="Elegí el evento activo" />
               </SelectTrigger>
               <SelectContent>
@@ -885,7 +885,7 @@ export function DoorScanner() {
                   type="button"
                   disabled={!eventId || !hasLocalManifest}
                   onClick={() => setSearchOpen(true)}
-                  className="h-12 rounded-2xl bg-zinc-800 text-xs font-bold text-white hover:bg-zinc-700"
+                  className="h-12 rounded-2xl bg-zinc-800 text-xs font-bold text-zinc-900 dark:text-white hover:bg-zinc-700"
                 >
                   <Search className="size-4" />
                   Buscador
@@ -903,7 +903,7 @@ export function DoorScanner() {
               <div className="grid h-full place-items-center px-6 text-center">
                 <div>
                   <ScanLine className="mx-auto size-12 text-zinc-500" />
-                  <p className="mt-4 text-lg text-zinc-300">
+                  <p className="mt-4 text-lg text-zinc-700 dark:text-zinc-300">
                     Seleccioná un evento para activar{" "}
                     {isTotemMode ? "el lector HID" : "la cámara"}
                   </p>
@@ -921,7 +921,7 @@ export function DoorScanner() {
                 <div>
                   <CameraOff className="mx-auto size-12 text-amber-400" />
                   <p className="mt-4 text-xl font-bold">Cámara bloqueada</p>
-                  <p className="mt-2 max-w-sm text-sm leading-6 text-zinc-400">
+                  <p className="mt-2 max-w-sm text-sm leading-6 text-zinc-600 dark:text-zinc-400">
                     {cameraError}
                   </p>
                 </div>
@@ -952,7 +952,7 @@ export function DoorScanner() {
                   }}
                 />
                 <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/60 to-transparent px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-16 text-center">
-                  <p className="text-sm font-medium text-zinc-300">
+                  <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
                     {selectedEvent?.title}
                   </p>
                   <p className="mt-1 text-xs text-zinc-500">
@@ -992,7 +992,7 @@ export function DoorScanner() {
             {feedback?.title}
           </p>
           {feedback?.subtitle ? (
-            <p className="mt-4 max-w-md text-lg font-medium text-white/90 sm:text-2xl">
+            <p className="mt-4 max-w-md text-lg font-medium text-zinc-900 dark:text-white/90 sm:text-2xl">
               {feedback.subtitle}
             </p>
           ) : null}
@@ -1000,7 +1000,7 @@ export function DoorScanner() {
           {(visual === "success" || visual === "success_free") &&
           feedback?.isFreePass ? (
             <div className="mt-8 rounded-2xl bg-black/25 px-6 py-5 ring-2 ring-white/30">
-              <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/70">
+              <p className="text-xs font-bold uppercase tracking-[0.22em] text-zinc-900 dark:text-white/70">
                 Anti-fraude puerta
               </p>
               <p className="mt-2 text-3xl font-black tracking-tight">
@@ -1012,10 +1012,10 @@ export function DoorScanner() {
           {(visual === "success" || visual === "success_free") &&
           feedback?.bonus &&
           !feedback.isFreePass ? (
-            <div className="mt-8 flex items-center gap-3 rounded-2xl bg-black/20 px-5 py-4 text-left ring-1 ring-white/20">
+            <div className="mt-8 flex items-center gap-3 rounded-2xl bg-zinc-100 dark:bg-black/20 px-5 py-4 text-left ring-1 ring-white/20">
               <Gift className="size-10 shrink-0" />
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/70">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-900 dark:text-white/70">
                   Smart Yield · Entregar
                 </p>
                 <p className="text-2xl font-black">{feedback.bonus}</p>

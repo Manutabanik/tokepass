@@ -49,7 +49,7 @@ export function CreateBarItemForm({ eventId }: { eventId: string }) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="space-y-4 rounded-2xl border border-white/8 bg-zinc-950/60 p-5"
+      className="space-y-4 rounded-2xl border border-zinc-200 dark:border-white/8 bg-white dark:bg-zinc-950/60 p-5"
     >
       <div className="space-y-2">
         <Label htmlFor="bar-name">Nombre</Label>
@@ -59,7 +59,7 @@ export function CreateBarItemForm({ eventId }: { eventId: string }) {
           onChange={(e) => setName(e.target.value)}
           placeholder="Fernet Branca + 2 Cocas"
           required
-          className="border-zinc-800 bg-zinc-950"
+          className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950"
         />
       </div>
       <div className="space-y-2">
@@ -69,7 +69,7 @@ export function CreateBarItemForm({ eventId }: { eventId: string }) {
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="Combo de pre-venta"
-          className="min-h-20 border-zinc-800 bg-zinc-950"
+          className="min-h-20 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950"
         />
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -83,7 +83,7 @@ export function CreateBarItemForm({ eventId }: { eventId: string }) {
             value={price}
             onChange={(e) => setPrice(e.target.value)}
             required
-            className="border-zinc-800 bg-zinc-950"
+            className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950"
           />
         </div>
         <div className="space-y-2">
@@ -96,7 +96,7 @@ export function CreateBarItemForm({ eventId }: { eventId: string }) {
             value={stock}
             onChange={(e) => setStock(e.target.value)}
             required
-            className="border-zinc-800 bg-zinc-950"
+            className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950"
           />
         </div>
       </div>

@@ -66,14 +66,14 @@ export function BoostModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto border-zinc-800 bg-zinc-950 text-zinc-100 sm:max-w-3xl">
+      <DialogContent className="max-h-[90vh] overflow-y-auto border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="text-xl font-black tracking-tight">
             Tokepass Boost
           </DialogTitle>
-          <DialogDescription className="text-zinc-400">
+          <DialogDescription className="text-zinc-600 dark:text-zinc-400">
             Multiplicá las ventas de{" "}
-            <span className="font-medium text-zinc-200">{eventTitle}</span>{" "}
+            <span className="font-medium text-zinc-800 dark:text-zinc-200">{eventTitle}</span>{" "}
             destacando el evento en la portada para compradores.
           </DialogDescription>
         </DialogHeader>
@@ -91,11 +91,11 @@ export function BoostModal({
                   "rounded-2xl border p-4 text-left transition",
                   selected
                     ? "border-cyan-400/50 bg-cyan-400/10 shadow-[0_0_24px_rgba(34,211,238,0.2)]"
-                    : "border-zinc-800 bg-zinc-900/60 hover:border-zinc-600",
+                    : "border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900/60 hover:border-zinc-600",
                 )}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="inline-flex items-center gap-1.5 text-sm font-bold text-white">
+                  <span className="inline-flex items-center gap-1.5 text-sm font-bold text-zinc-900 dark:text-white">
                     <Icon className="size-4 text-cyan-300" aria-hidden="true" />
                     {plan.name}
                   </span>
@@ -103,7 +103,7 @@ export function BoostModal({
                     {plan.multiplierLabel}
                   </span>
                 </div>
-                <p className="mt-3 text-2xl font-black text-white">
+                <p className="mt-3 text-2xl font-black text-zinc-900 dark:text-white">
                   {formatCurrency(plan.priceArs)}
                 </p>
                 <p className="mt-1 text-xs text-zinc-500">
@@ -113,7 +113,7 @@ export function BoostModal({
                   {plan.benefits.map((benefit) => (
                     <li
                       key={benefit}
-                      className="flex items-start gap-1.5 text-[11px] leading-4 text-zinc-400"
+                      className="flex items-start gap-1.5 text-[11px] leading-4 text-zinc-600 dark:text-zinc-400"
                     >
                       <Check
                         className="mt-0.5 size-3 shrink-0 text-emerald-400"

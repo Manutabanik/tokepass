@@ -30,7 +30,7 @@ export default async function AdminListsHubPage() {
     <div className="mx-auto max-w-5xl space-y-8">
       <div>
         <p className="text-sm font-medium text-violet-400">FreePass</p>
-        <h1 className="mt-2 text-3xl font-black tracking-[-0.035em] text-white">
+        <h1 className="mt-2 text-3xl font-black tracking-[-0.035em] text-zinc-900 dark:text-white">
           Listas digitales
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-zinc-500">
@@ -60,7 +60,7 @@ export default async function AdminListsHubPage() {
             <Link key={event.id} href={`/admin/events/${event.id}/lists`}>
               <Card className="h-full border-0 bg-white/[0.035] transition hover:bg-white/[0.05] hover:ring-violet-500/20 ring-1 ring-white/8">
                 <CardHeader>
-                  <CardTitle className="text-white">{event.title}</CardTitle>
+                  <CardTitle className="text-zinc-900 dark:text-white">{event.title}</CardTitle>
                   <CardDescription className="capitalize">
                     {formatEventDate(event.date)}
                   </CardDescription>

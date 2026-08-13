@@ -25,7 +25,7 @@ export function GuestListsManager({
 
   if (lists.length === 0) {
     return (
-      <div className="rounded-[1.5rem] border border-dashed border-white/10 px-6 py-16 text-center text-sm text-zinc-500">
+      <div className="rounded-[1.5rem] border border-dashed border-zinc-200 dark:border-white/10 px-6 py-16 text-center text-sm text-zinc-500">
         Creá tu primera lista para empezar a emitir FreePass.
       </div>
     )
@@ -43,7 +43,7 @@ export function GuestListsManager({
               "shrink-0 rounded-full px-4 py-2 text-sm font-medium transition",
               selectedId === list.id
                 ? "bg-white text-zinc-950"
-                : "bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white",
+                : "bg-white/5 text-zinc-600 dark:text-zinc-400 hover:bg-white/10 hover:text-zinc-900 dark:hover:text-white",
             )}
           >
             {list.name}

@@ -43,10 +43,10 @@ export function SponsorshipRequestBanner({
             <Sparkles className="size-3.5" aria-hidden="true" />
             Crecimiento
           </p>
-          <h2 className="text-lg font-bold tracking-tight text-white sm:text-xl">
+          <h2 className="text-lg font-bold tracking-tight text-zinc-900 dark:text-white sm:text-xl">
             Destacá tu evento con Auspicio Tokepass
           </h2>
-          <p className="max-w-xl text-sm leading-relaxed text-zinc-400">
+          <p className="max-w-xl text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
             Aumentá tus ventas promocionando tu evento en los primeros lugares
             de la plataforma.
           </p>

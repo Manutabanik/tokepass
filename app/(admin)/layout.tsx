@@ -168,7 +168,7 @@ export default async function AdminLayout({
               </Avatar>
               <SignOutButton
                 showLabel={false}
-                className="hidden size-9 place-items-center rounded-xl border border-zinc-200 text-zinc-500 transition hover:border-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:border-white/8 dark:hover:border-white/15 dark:hover:bg-white/5 dark:hover:text-white sm:grid"
+                className="hidden size-9 place-items-center rounded-xl border border-zinc-200 text-zinc-500 transition hover:border-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:border-white/8 dark:hover:border-white/15 dark:hover:bg-white/5 dark:hover:text-zinc-900 dark:hover:text-white sm:grid"
               />
             </div>
           </header>

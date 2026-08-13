@@ -21,7 +21,7 @@ export const metadata: Metadata = {
 }
 
 const actionClass =
-  "group rounded-2xl border border-zinc-800 bg-zinc-950/70 p-5 transition hover:border-zinc-700 hover:bg-zinc-900"
+  "group rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/70 p-5 transition hover:border-zinc-300 dark:hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-100 dark:hover:bg-zinc-900"
 
 export default async function ManageEventPage({
   params,
@@ -106,7 +106,7 @@ export default async function ManageEventPage({
     <main className="mx-auto w-full max-w-5xl space-y-8 px-4 py-8 sm:px-6">
       <Link
         href="/admin/events"
-        className="inline-flex items-center gap-2 text-sm text-zinc-500 transition hover:text-white"
+        className="inline-flex items-center gap-2 text-sm text-zinc-500 transition hover:text-zinc-900 dark:hover:text-white"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
         Volver a Mis eventos
@@ -114,12 +114,12 @@ export default async function ManageEventPage({
 
       <header>
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl">
+          <h1 className="text-3xl font-black tracking-tight text-zinc-900 dark:text-white sm:text-4xl">
             {event.title}
           </h1>
           <Badge
             variant="outline"
-            className="rounded-full border-zinc-700 uppercase"
+            className="rounded-full border-zinc-300 dark:border-zinc-700 uppercase"
           >
             {event.status}
           </Badge>
@@ -129,22 +129,22 @@ export default async function ManageEventPage({
             </Badge>
           ) : null}
         </div>
-        <p className="mt-3 text-sm text-zinc-400">
+        <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400">
           {formatEventDate(event.date)} · {event.location}
         </p>
       </header>
 
       <section className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-5">
+        <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/70 p-5">
           <Ticket className="size-5 text-emerald-400" aria-hidden="true" />
-          <p className="mt-4 text-3xl font-black text-white">
+          <p className="mt-4 text-3xl font-black text-zinc-900 dark:text-white">
             {formatNumber(sold)}
           </p>
           <p className="mt-1 text-sm text-zinc-500">Entradas reservadas/vendidas</p>
         </div>
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-5">
+        <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/70 p-5">
           <Users className="size-5 text-violet-400" aria-hidden="true" />
-          <p className="mt-4 text-3xl font-black text-white">
+          <p className="mt-4 text-3xl font-black text-zinc-900 dark:text-white">
             {formatNumber(Math.max(0, capacity - sold))}
           </p>
           <p className="mt-1 text-sm text-zinc-500">
@@ -161,15 +161,15 @@ export default async function ManageEventPage({
       ) : null}
 
       <section>
-        <h2 className="text-lg font-bold text-white">Operación del evento</h2>
+        <h2 className="text-lg font-bold text-zinc-900 dark:text-white">Operación del evento</h2>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           {actions.map(({ href, label, description, icon: Icon }) => (
             <Link key={href} href={href} className={actionClass}>
               <Icon
-                className="size-5 text-zinc-400 transition group-hover:text-emerald-400"
+                className="size-5 text-zinc-600 dark:text-zinc-400 transition group-hover:text-emerald-400"
                 aria-hidden="true"
               />
-              <h3 className="mt-4 font-bold text-white">{label}</h3>
+              <h3 className="mt-4 font-bold text-zinc-900 dark:text-white">{label}</h3>
               <p className="mt-1 text-sm text-zinc-500">{description}</p>
             </Link>
           ))}

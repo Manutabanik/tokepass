@@ -92,7 +92,7 @@ export default async function AdminDashboardPage() {
             <Sparkles className="size-4" aria-hidden="true" />
             Resumen ejecutivo
           </div>
-          <h1 className="text-3xl font-bold tracking-[-0.03em] text-white sm:text-4xl">
+          <h1 className="text-3xl font-bold tracking-[-0.03em] text-zinc-900 dark:text-white sm:text-4xl">
             Buen día, equipo.
           </h1>
           <p className="mt-2 max-w-xl text-sm leading-6 text-zinc-500">
@@ -115,7 +115,7 @@ export default async function AdminDashboardPage() {
                   <Icon className="size-[18px]" aria-hidden="true" />
                 </span>
               </div>
-              <p className="mt-5 text-3xl font-bold tracking-[-0.045em] text-white sm:text-4xl">
+              <p className="mt-5 text-3xl font-bold tracking-[-0.045em] text-zinc-900 dark:text-white sm:text-4xl">
                 {value}
               </p>
               <p className="mt-2 text-xs text-zinc-600">{helper}</p>
@@ -126,8 +126,8 @@ export default async function AdminDashboardPage() {
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[1.4fr_0.8fr]">
         <Card className="border-0 bg-white/[0.035] py-0 ring-1 ring-white/8">
-          <CardHeader className="border-b border-white/8 px-5 py-5 sm:px-6">
-            <CardTitle className="text-base text-white">
+          <CardHeader className="border-b border-zinc-200 dark:border-white/8 px-5 py-5 sm:px-6">
+            <CardTitle className="text-base text-zinc-900 dark:text-white">
               Últimas Transacciones
             </CardTitle>
             <CardDescription className="text-zinc-500">
@@ -139,7 +139,7 @@ export default async function AdminDashboardPage() {
             {metrics.recentSales.length > 0 ? (
               <Table>
                 <TableHeader>
-                  <TableRow className="border-white/8 hover:bg-transparent">
+                  <TableRow className="border-zinc-200 dark:border-white/8 hover:bg-transparent">
                     <TableHead className="pl-6 text-zinc-600">
                       Comprador
                     </TableHead>
@@ -159,15 +159,15 @@ export default async function AdminDashboardPage() {
                     return (
                       <TableRow
                         key={sale.id}
-                        className="border-white/8 hover:bg-white/[0.025]"
+                        className="border-zinc-200 dark:border-white/8 hover:bg-white/[0.025]"
                       >
-                        <TableCell className="py-4 pl-6 font-medium text-zinc-200">
+                        <TableCell className="py-4 pl-6 font-medium text-zinc-800 dark:text-zinc-200">
                           {sale.buyerName}
                         </TableCell>
-                        <TableCell className="text-zinc-400">
+                        <TableCell className="text-zinc-600 dark:text-zinc-400">
                           {formatDateTime(sale.date)}
                         </TableCell>
-                        <TableCell className="font-semibold tabular-nums text-white">
+                        <TableCell className="font-semibold tabular-nums text-zinc-900 dark:text-white">
                           {formatCurrency(sale.amount)}
                         </TableCell>
                         <TableCell className="pr-6 text-right">
@@ -189,7 +189,7 @@ export default async function AdminDashboardPage() {
                   <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-violet-500/10 text-violet-400 ring-1 ring-inset ring-violet-500/15">
                     <Ticket className="size-6" aria-hidden="true" />
                   </span>
-                  <h3 className="mt-5 text-base font-semibold text-white">
+                  <h3 className="mt-5 text-base font-semibold text-zinc-900 dark:text-white">
                     Tus ventas aparecerán aquí
                   </h3>
                   <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-zinc-500">
@@ -207,7 +207,7 @@ export default async function AdminDashboardPage() {
             <span className="mb-4 grid size-12 place-items-center rounded-2xl bg-violet-500/15 text-violet-300 ring-1 ring-inset ring-violet-400/15">
               <CalendarPlus className="size-5" aria-hidden="true" />
             </span>
-            <CardTitle className="text-lg text-white">Quick Actions</CardTitle>
+            <CardTitle className="text-lg text-zinc-900 dark:text-white">Quick Actions</CardTitle>
             <CardDescription className="leading-6 text-zinc-500">
               Lanzá una nueva experiencia y configurá tickets, zonas y
               crecimiento en minutos.

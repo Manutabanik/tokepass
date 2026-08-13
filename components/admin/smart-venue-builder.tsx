@@ -173,7 +173,7 @@ export function SmartVenueBuilder({
     <section className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="font-bold text-white">Zonas o sectores del lugar</h3>
+          <h3 className="font-bold text-zinc-900 dark:text-white">Zonas o sectores del lugar</h3>
           <p className="mt-1 text-xs text-zinc-500">
             {structured
               ? "Cada zona puede tener filas con distinta cantidad de asientos."
@@ -197,7 +197,7 @@ export function SmartVenueBuilder({
           return (
             <article
               key={zone.key}
-              className="rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-4"
+              className="rounded-2xl border border-zinc-200 dark:border-zinc-800/80 bg-white dark:bg-zinc-950/60 p-4"
             >
               <div className="grid gap-3 sm:grid-cols-12">
                 <div className={structured ? "sm:col-span-5" : "sm:col-span-8"}>
@@ -219,7 +219,7 @@ export function SmartVenueBuilder({
                         ? "VIP"
                         : "Campo / Platea"
                     }
-                    className="mt-1.5 h-10 border-zinc-800 bg-zinc-950"
+                    className="mt-1.5 h-10 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950"
                   />
                 </div>
 
@@ -256,7 +256,7 @@ export function SmartVenueBuilder({
                     >
                       <SelectTrigger
                         id={`zone-${zone.key}-type`}
-                        className="mt-1.5 h-10 w-full border-zinc-800 bg-zinc-950"
+                        className="mt-1.5 h-10 w-full border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950"
                       >
                         <SelectValue />
                       </SelectTrigger>
@@ -289,7 +289,7 @@ export function SmartVenueBuilder({
                     onChange={(event) =>
                       updateZone(zone.key, { capacity: event.target.value })
                     }
-                    className="mt-1.5 h-10 border-zinc-800 bg-zinc-950"
+                    className="mt-1.5 h-10 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950"
                   />
                 </div>
 
@@ -310,12 +310,12 @@ export function SmartVenueBuilder({
               </div>
 
               {structured ? (
-                <div className="mt-4 border-t border-zinc-800/70 pt-4">
+                <div className="mt-4 border-t border-zinc-200 dark:border-zinc-800/70 pt-4">
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
                       <Rows3 className="size-4 text-indigo-300" aria-hidden="true" />
                       <div>
-                        <h4 className="text-sm font-semibold text-white">
+                        <h4 className="text-sm font-semibold text-zinc-900 dark:text-white">
                           Filas con distinta cantidad de asientos
                         </h4>
                         <p className="text-[11px] text-zinc-500">
@@ -332,7 +332,7 @@ export function SmartVenueBuilder({
                           onChange={(event) =>
                             updateZone(zone.key, { color: event.target.value })
                           }
-                          className="size-8 rounded-lg border border-zinc-700 bg-zinc-900 p-1"
+                          className="size-8 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900 p-1"
                           aria-label={`Color de ${zone.name || "zona"}`}
                         />
                       </label>
@@ -362,7 +362,7 @@ export function SmartVenueBuilder({
                     {zone.rows.map((row, rowIndex) => (
                       <div
                         key={row.key}
-                        className="rounded-xl border border-zinc-800 bg-zinc-950/80 p-4"
+                        className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/80 p-4"
                       >
                         <div className="grid gap-3 sm:grid-cols-12">
                           <div className="sm:col-span-4">
@@ -382,7 +382,7 @@ export function SmartVenueBuilder({
                                 })
                               }
                               placeholder="Fila 1 - Frente al escenario"
-                              className="mt-1.5 h-10 border-zinc-800 bg-zinc-950"
+                              className="mt-1.5 h-10 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950"
                             />
                           </div>
                           <div className="sm:col-span-2">
@@ -403,7 +403,7 @@ export function SmartVenueBuilder({
                                   itemCount: event.target.value,
                                 })
                               }
-                              className="mt-1.5 h-10 border-zinc-800 bg-zinc-950"
+                              className="mt-1.5 h-10 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950"
                             />
                           </div>
                           <div className="sm:col-span-2">
@@ -421,7 +421,7 @@ export function SmartVenueBuilder({
                                   labelPrefix: event.target.value,
                                 })
                               }
-                              className="mt-1.5 h-10 border-zinc-800 bg-zinc-950"
+                              className="mt-1.5 h-10 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950"
                             />
                           </div>
                           <div className="sm:col-span-2">
@@ -443,7 +443,7 @@ export function SmartVenueBuilder({
                                   capacityPerUnit: event.target.value,
                                 })
                               }
-                              className="mt-1.5 h-10 border-zinc-800 bg-zinc-950"
+                              className="mt-1.5 h-10 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950"
                             />
                           </div>
                           <div className="flex items-end gap-1 sm:col-span-2">
@@ -476,7 +476,7 @@ export function SmartVenueBuilder({
                         </div>
 
                         {row.items.length > 0 ? (
-                          <div className="mt-3 border-t border-zinc-800/70 pt-3">
+                          <div className="mt-3 border-t border-zinc-200 dark:border-zinc-800/70 pt-3">
                             <div className="mb-2 flex items-center justify-between gap-2">
                               <p className="text-[11px] text-zinc-500">
                                 {row.items.length} ubicaciones ·{" "}
@@ -491,7 +491,7 @@ export function SmartVenueBuilder({
                                 type="button"
                                 size="sm"
                                 onClick={() => addManualItem(zone, row)}
-                                className="h-7 rounded-lg bg-zinc-800 px-2 text-[10px] text-zinc-300 hover:bg-zinc-700"
+                                className="h-7 rounded-lg bg-zinc-800 px-2 text-[10px] text-zinc-700 dark:text-zinc-300 hover:bg-zinc-700"
                               >
                                 <Plus className="size-3" aria-hidden="true" />
                                 Añadir ubicación
@@ -521,7 +521,7 @@ export function SmartVenueBuilder({
                                       className={cn(
                                         "h-10 min-w-0 flex-1 truncate rounded-lg border px-2 pr-6 font-mono text-[10px] font-bold",
                                         blocked
-                                          ? "border-zinc-800 bg-zinc-900 text-zinc-600"
+                                          ? "border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 text-zinc-600"
                                           : "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
                                       )}
                                       title={
@@ -558,7 +558,7 @@ export function SmartVenueBuilder({
                             </div>
                           </div>
                         ) : (
-                          <p className="mt-3 rounded-lg border border-dashed border-zinc-800 px-3 py-4 text-center text-xs text-zinc-600">
+                          <p className="mt-3 rounded-lg border border-dashed border-zinc-200 dark:border-zinc-800 px-3 py-4 text-center text-xs text-zinc-600">
                             Configurá la cantidad y generá esta fila.
                           </p>
                         )}

@@ -34,7 +34,7 @@ export function ScheduleDaysBuilder({
     <section className="space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="flex items-center gap-2 font-bold text-white">
+          <h3 className="flex items-center gap-2 font-bold text-zinc-900 dark:text-white">
             <CalendarRange className="size-4 text-emerald-400" aria-hidden="true" />
             Jornadas del festival
           </h3>
@@ -48,7 +48,7 @@ export function ScheduleDaysBuilder({
         {fields.map((field, index) => (
           <article
             key={field.id}
-            className="mb-3 rounded-xl border border-zinc-800 bg-zinc-950/60 p-4"
+            className="mb-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/60 p-4"
           >
             <div className="mb-3 flex items-center justify-between gap-2">
               <p className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">
@@ -87,7 +87,7 @@ export function ScheduleDaysBuilder({
                           ? "Día 1 - Noche de apertura"
                           : "Día 2 - Cierre"
                       }
-                      className="h-10 border-zinc-800 bg-zinc-950"
+                      className="h-10 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950"
                     />
                     <FormMessage>{fieldState.error?.message}</FormMessage>
                   </FormItem>
@@ -110,7 +110,7 @@ export function ScheduleDaysBuilder({
                         {...startField}
                         id={`schedule-day-${index}-start`}
                         type="datetime-local"
-                        className="scheme-dark h-10 border-zinc-800 bg-zinc-950"
+                        className="scheme-light dark:scheme-dark h-10 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950"
                       />
                       <FormMessage>{fieldState.error?.message}</FormMessage>
                     </FormItem>
@@ -131,7 +131,7 @@ export function ScheduleDaysBuilder({
                         {...endField}
                         id={`schedule-day-${index}-end`}
                         type="datetime-local"
-                        className="scheme-dark h-10 border-zinc-800 bg-zinc-950"
+                        className="scheme-light dark:scheme-dark h-10 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950"
                       />
                       <FormMessage>{fieldState.error?.message}</FormMessage>
                     </FormItem>

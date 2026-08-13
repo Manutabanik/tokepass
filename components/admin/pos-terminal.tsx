@@ -102,7 +102,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
 
   if (events.length === 0) {
     return (
-      <div className="rounded-3xl border border-dashed border-zinc-800 bg-zinc-950/60 px-5 py-12 text-center">
+      <div className="rounded-3xl border border-dashed border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/60 px-5 py-12 text-center">
         <Ticket className="mx-auto size-8 text-zinc-600" />
         <p className="mt-3 text-sm text-zinc-500">
           No hay eventos disponibles para cobrar en puerta.
@@ -114,9 +114,9 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
   return (
     <div className="mx-auto w-full max-w-md space-y-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
       <div className="space-y-2">
-        <Label className="text-zinc-400">Evento</Label>
+        <Label className="text-zinc-600 dark:text-zinc-400">Evento</Label>
         <Select value={eventId} onValueChange={(v) => v && onEventChange(v)}>
-          <SelectTrigger className="h-14 rounded-2xl border-zinc-800 bg-zinc-950 text-base text-white">
+          <SelectTrigger className="h-14 rounded-2xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-base text-zinc-900 dark:text-white">
             <SelectValue placeholder="Elegí evento" />
           </SelectTrigger>
           <SelectContent>
@@ -130,12 +130,12 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
       </div>
 
       <div className="space-y-2">
-        <Label className="text-zinc-400">Tipo de entrada</Label>
+        <Label className="text-zinc-600 dark:text-zinc-400">Tipo de entrada</Label>
         <Select
           value={selectedTierId}
           onValueChange={(v) => v && setTierId(v)}
         >
-          <SelectTrigger className="h-14 rounded-2xl border-zinc-800 bg-zinc-950 text-base text-white">
+          <SelectTrigger className="h-14 rounded-2xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-base text-zinc-900 dark:text-white">
             <SelectValue placeholder="Elegí tipo" />
           </SelectTrigger>
           <SelectContent>
@@ -153,27 +153,27 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
         ) : null}
       </div>
 
-      <div className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3">
-        <span className="text-sm font-medium text-zinc-400">Cantidad</span>
+      <div className="flex items-center justify-between rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 py-3">
+        <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Cantidad</span>
         <div className="flex items-center gap-3">
           <Button
             type="button"
             size="icon"
             variant="outline"
-            className="size-12 rounded-full border-zinc-700"
+            className="size-12 rounded-full border-zinc-300 dark:border-zinc-700"
             disabled={quantity <= 1 || isPending}
             onClick={() => setQuantity((q) => Math.max(1, q - 1))}
           >
             <Minus />
           </Button>
-          <span className="w-8 text-center text-2xl font-black tabular-nums text-white">
+          <span className="w-8 text-center text-2xl font-black tabular-nums text-zinc-900 dark:text-white">
             {quantity}
           </span>
           <Button
             type="button"
             size="icon"
             variant="outline"
-            className="size-12 rounded-full border-zinc-700"
+            className="size-12 rounded-full border-zinc-300 dark:border-zinc-700"
             disabled={
               isPending ||
               !selectedTierItem ||
@@ -191,7 +191,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="pos-phone" className="text-zinc-400">
+        <Label htmlFor="pos-phone" className="text-zinc-600 dark:text-zinc-400">
           Teléfono / WhatsApp (opcional)
         </Label>
         <Input
@@ -200,14 +200,14 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
           placeholder="+54 9 11 ..."
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
-          className="h-14 rounded-2xl border-zinc-800 bg-zinc-950 text-base text-white"
+          className="h-14 rounded-2xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-base text-zinc-900 dark:text-white"
         />
       </div>
 
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-4">
+      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 py-4">
         <div className="flex items-center justify-between">
           <span className="text-sm text-zinc-500">Total</span>
-          <span className="text-3xl font-black tabular-nums text-white">
+          <span className="text-3xl font-black tabular-nums text-zinc-900 dark:text-white">
             {formatCurrency(total)}
           </span>
         </div>
@@ -251,26 +251,26 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
           if (!open) setResult(null)
         }}
       >
-        <DialogContent className="max-h-[90dvh] overflow-y-auto border-zinc-800 bg-zinc-950 text-white sm:max-w-md">
+        <DialogContent className="max-h-[90dvh] overflow-y-auto border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Venta registrada</DialogTitle>
-            <DialogDescription className="text-zinc-400">
+            <DialogDescription className="text-zinc-600 dark:text-zinc-400">
               Mostrá el QR en pantalla o enviá el link al cliente.
             </DialogDescription>
           </DialogHeader>
 
           {result ? (
             <div className="space-y-4">
-              <p className="text-sm text-zinc-400">
+              <p className="text-sm text-zinc-600 dark:text-zinc-400">
                 Total cobrado:{" "}
-                <span className="font-semibold text-white">
+                <span className="font-semibold text-zinc-900 dark:text-white">
                   {formatCurrency(result.totalAmount)}
                 </span>
               </p>
               {result.tickets.map((ticket, index) => (
                 <div
                   key={ticket.id}
-                  className="rounded-2xl border border-zinc-800 bg-black/40 px-4 py-4 text-center"
+                  className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-black/40 px-4 py-4 text-center"
                 >
                   <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
                     Entrada {index + 1}

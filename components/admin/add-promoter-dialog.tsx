@@ -60,11 +60,11 @@ export function AddPromoterDialog() {
         Agregar promotor
       </Button>
 
-      <DialogContent className="border-white/10 bg-[#121216] text-zinc-100 sm:max-w-md">
+      <DialogContent className="border-zinc-200 dark:border-white/10 bg-[#121216] text-zinc-900 dark:text-zinc-100 sm:max-w-md">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Agregar promotor</DialogTitle>
-            <DialogDescription className="text-zinc-400">
+            <DialogDescription className="text-zinc-600 dark:text-zinc-400">
               Generamos un código de referido único para su link de ventas.
             </DialogDescription>
           </DialogHeader>
@@ -78,7 +78,7 @@ export function AddPromoterDialog() {
                 onChange={(event) => setName(event.target.value)}
                 placeholder="Tomás VIP"
                 required
-                className="border-white/10 bg-zinc-950"
+                className="border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-950"
               />
             </div>
             <div className="space-y-2">
@@ -92,7 +92,7 @@ export function AddPromoterDialog() {
                 value={commissionPercent}
                 onChange={(event) => setCommissionPercent(event.target.value)}
                 required
-                className="border-white/10 bg-zinc-950"
+                className="border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-950"
               />
               <p className="text-xs text-zinc-500">
                 Ej: 10 = 10% sobre el total de órdenes pagadas.

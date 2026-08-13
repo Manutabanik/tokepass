@@ -110,10 +110,10 @@ export function OrganizerEventsManager({
           <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-violet-300/80">
             Cartelera
           </p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-white">
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-zinc-900 dark:text-white">
             Mis eventos
           </h1>
-          <p className="mt-2 max-w-xl text-sm text-zinc-400">
+          <p className="mt-2 max-w-xl text-sm text-zinc-600 dark:text-zinc-400">
             Guardá borradores, previsualizá compras de prueba y publicá cuando
             esté listo.
           </p>
@@ -146,10 +146,10 @@ export function OrganizerEventsManager({
               <Rocket className="size-5" aria-hidden="true" />
             </span>
             <div>
-              <p className="font-bold text-white">
+              <p className="font-bold text-zinc-900 dark:text-white">
                 Multiplicá tus ventas hasta x3
               </p>
-              <p className="mt-1 text-sm text-zinc-400">
+              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
                 Destacá este evento en la portada con Tokepass Boost (Silver,
                 Gold o Platinum).
               </p>
@@ -159,10 +159,10 @@ export function OrganizerEventsManager({
       </div>
 
       {events.length === 0 ? (
-        <div className="grid min-h-64 place-items-center rounded-[1.75rem] border border-dashed border-zinc-800 bg-zinc-950/50 px-6 py-12 text-center">
+        <div className="grid min-h-64 place-items-center rounded-[1.75rem] border border-dashed border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/50 px-6 py-12 text-center">
           <div>
             <CalendarDays className="mx-auto size-8 text-zinc-600" />
-            <p className="mt-4 text-lg font-bold text-white">Sin eventos aún</p>
+            <p className="mt-4 text-lg font-bold text-zinc-900 dark:text-white">Sin eventos aún</p>
             <p className="mt-2 text-sm text-zinc-500">
               Creá tu primera noche como borrador y previsualizala antes de
               publicar.
@@ -179,9 +179,9 @@ export function OrganizerEventsManager({
             return (
               <article
                 key={event.id}
-                className="flex flex-col gap-4 rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4 sm:flex-row sm:items-center"
+                className="flex flex-col gap-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/70 p-4 sm:flex-row sm:items-center"
               >
-                <div className="relative size-20 shrink-0 overflow-hidden rounded-xl bg-zinc-900">
+                <div className="relative size-20 shrink-0 overflow-hidden rounded-xl bg-zinc-100 dark:bg-zinc-900">
                   {event.image_url ? (
                     <Image
                       src={event.image_url}
@@ -199,7 +199,7 @@ export function OrganizerEventsManager({
 
                 <div className="min-w-0 flex-1 space-y-1.5">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="truncate text-base font-bold text-white">
+                    <h2 className="truncate text-base font-bold text-zinc-900 dark:text-white">
                       {event.title}
                     </h2>
                     <EventStatusBadge status={event.status} />
@@ -240,7 +240,7 @@ export function OrganizerEventsManager({
                     <PublishEventButton eventId={event.id} />
                   ) : null}
                   <Button
-                    className="h-10 rounded-xl border border-zinc-700/80 bg-zinc-800 px-4 text-sm font-medium text-white shadow-sm transition-all hover:bg-zinc-700"
+                    className="h-10 rounded-xl border border-zinc-300 dark:border-zinc-700/80 bg-zinc-100 dark:bg-zinc-800 px-4 text-sm font-medium text-zinc-900 dark:text-white shadow-sm transition-all hover:bg-zinc-700"
                     nativeButton={false}
                     render={<Link href={`/admin/events/${event.id}`} />}
                   >
@@ -248,7 +248,7 @@ export function OrganizerEventsManager({
                     Gestionar
                   </Button>
                   <Button
-                    className="h-10 rounded-xl border border-zinc-800 bg-zinc-900 px-4 text-sm font-medium text-zinc-300 transition-all hover:border-zinc-700 hover:bg-zinc-800 hover:text-white"
+                    className="h-10 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 text-sm font-medium text-zinc-700 dark:text-zinc-300 transition-all hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white"
                     nativeButton={false}
                     render={<Link href={`/admin/events/${event.id}/edit`} />}
                   >
@@ -260,7 +260,7 @@ export function OrganizerEventsManager({
                       type="button"
                       variant="outline"
                       disabled={pendingArchive}
-                      className="h-10 rounded-xl border-zinc-700 bg-transparent px-4 text-zinc-300 hover:bg-zinc-900"
+                      className="h-10 rounded-xl border-zinc-300 dark:border-zinc-700 bg-transparent px-4 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900"
                       onClick={() => {
                         startArchive(async () => {
                           const result = await archiveEvent(event.id)
@@ -321,13 +321,13 @@ export function OrganizerEventsManager({
           if (!open) setDeleteTarget(null)
         }}
       >
-        <DialogContent className="border-zinc-800 bg-zinc-950 text-zinc-100 sm:max-w-md">
+        <DialogContent className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-white">
+            <DialogTitle className="flex items-center gap-2 text-zinc-900 dark:text-white">
               <TriangleAlert className="size-4 text-red-300" aria-hidden="true" />
               Confirmar eliminación
             </DialogTitle>
-            <DialogDescription className="text-zinc-400">
+            <DialogDescription className="text-zinc-600 dark:text-zinc-400">
               {deleteTarget && deleteTarget.ticketsSold > 0
                 ? `“${deleteTarget.title}” tiene ${deleteTarget.ticketsSold} entrada(s) vendidas o en compra. Se marcará como cancelado para preservar la auditoría financiera.`
                 : `“${deleteTarget?.title ?? "Este evento"}” no tiene ventas. Se eliminará de forma permanente.`}
@@ -337,7 +337,7 @@ export function OrganizerEventsManager({
             <Button
               type="button"
               variant="outline"
-              className="border-zinc-700"
+              className="border-zinc-300 dark:border-zinc-700"
               onClick={() => setDeleteTarget(null)}
             >
               Abortar

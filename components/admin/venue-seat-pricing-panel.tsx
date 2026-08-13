@@ -105,7 +105,7 @@ export function VenueSeatPricingPanel({
           variant="outline"
           size="sm"
           onClick={() => setPreviewOpen(true)}
-          className="border-emerald-500/30 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/15 hover:text-white"
+          className="border-emerald-500/30 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/15 hover:text-zinc-900 dark:hover:text-white"
         >
           <Eye className="size-4" />
           Ver vista previa de selección de entradas
@@ -113,7 +113,7 @@ export function VenueSeatPricingPanel({
       </div>
 
       {venue.seatingBackgroundUrl ? (
-        <div className="relative aspect-[16/7] overflow-hidden rounded-xl border border-white/10 bg-black/40">
+        <div className="relative aspect-[16/7] overflow-hidden rounded-xl border border-zinc-200 dark:border-white/10 bg-black/40">
           <Image
             src={venue.seatingBackgroundUrl}
             alt={`Mapa de ${venue.name}`}
@@ -122,13 +122,13 @@ export function VenueSeatPricingPanel({
             sizes="(max-width: 768px) 100vw, 640px"
             unoptimized
           />
-          <div className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-lg bg-black/70 px-2.5 py-1 text-[11px] text-zinc-200">
+          <div className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-lg bg-black/70 px-2.5 py-1 text-[11px] text-zinc-800 dark:text-zinc-200">
             <MapPinned className="size-3.5 text-emerald-400" />
             Imagen o mapa del lugar
           </div>
         </div>
       ) : (
-        <p className="rounded-xl border border-dashed border-white/10 bg-black/20 px-3 py-3 text-xs text-zinc-500">
+        <p className="rounded-xl border border-dashed border-zinc-200 dark:border-white/10 bg-zinc-100 dark:bg-black/20 px-3 py-3 text-xs text-zinc-500">
           Este lugar no tiene imagen o mapa cargado.
         </p>
       )}
@@ -146,7 +146,7 @@ export function VenueSeatPricingPanel({
           return (
             <li
               key={sector.id}
-              className="rounded-xl border border-white/8 bg-black/25 px-3 py-3"
+              className="rounded-xl border border-zinc-200 dark:border-white/8 bg-black/25 px-3 py-3"
             >
               <div className="flex flex-wrap items-end gap-3">
                 <div className="min-w-0 flex-1">
@@ -156,7 +156,7 @@ export function VenueSeatPricingPanel({
                       style={{ backgroundColor: sector.color }}
                       aria-hidden
                     />
-                    <p className="truncate text-sm font-medium text-zinc-100">
+                    <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
                       {sector.name}
                     </p>
                     <span className="rounded-md bg-white/5 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-zinc-500">
@@ -193,7 +193,7 @@ export function VenueSeatPricingPanel({
                     onChange={(event) =>
                       setSectorPrice(sector.id, Number(event.target.value))
                     }
-                    className="mt-1 h-10 border-white/10 bg-black/30"
+                    className="mt-1 h-10 border-zinc-200 dark:border-white/10 bg-black/30"
                   />
                 </div>
               </div>
@@ -207,7 +207,7 @@ export function VenueSeatPricingPanel({
                       <div key={group.id} className="flex items-center gap-2">
                         <Label
                           htmlFor={`group-price-${group.id}`}
-                          className="min-w-0 flex-1 truncate text-xs text-zinc-400"
+                          className="min-w-0 flex-1 truncate text-xs text-zinc-600 dark:text-zinc-400"
                         >
                           {group.name}
                         </Label>
@@ -224,7 +224,7 @@ export function VenueSeatPricingPanel({
                               Number(event.target.value),
                             )
                           }
-                          className="h-9 w-28 border-white/10 bg-black/30"
+                          className="h-9 w-28 border-zinc-200 dark:border-white/10 bg-black/30"
                         />
                       </div>
                     )
@@ -249,9 +249,9 @@ export function VenueSeatPricingPanel({
       </p>
 
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-h-[92dvh] gap-0 overflow-hidden border-zinc-800 bg-zinc-950 p-0 text-zinc-100 sm:max-w-3xl">
-          <DialogHeader className="border-b border-white/8 px-5 py-4">
-            <DialogTitle className="text-base text-white">
+        <DialogContent className="max-h-[92dvh] gap-0 overflow-hidden border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-0 text-zinc-900 dark:text-zinc-100 sm:max-w-3xl">
+          <DialogHeader className="border-b border-zinc-200 dark:border-white/8 px-5 py-4">
+            <DialogTitle className="text-base text-zinc-900 dark:text-white">
               Vista previa · selección de entradas
             </DialogTitle>
             <DialogDescription className="text-zinc-500">
@@ -291,7 +291,7 @@ export function SavedVenuePickerDialog({
 }: SavedVenuePickerDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85dvh] border-white/10 bg-[#121216] text-zinc-100 sm:max-w-lg">
+      <DialogContent className="max-h-[85dvh] border-zinc-200 dark:border-white/10 bg-[#121216] text-zinc-900 dark:text-zinc-100 sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Lugares guardados</DialogTitle>
           <DialogDescription className="text-zinc-500">
@@ -317,10 +317,10 @@ export function SavedVenuePickerDialog({
                     "w-full rounded-2xl border px-4 py-3 text-left transition",
                     selected
                       ? "border-emerald-500/40 bg-emerald-500/10"
-                      : "border-white/8 bg-black/20 hover:border-white/15 hover:bg-black/30",
+                      : "border-zinc-200 dark:border-white/8 bg-zinc-100 dark:bg-black/20 hover:border-white/15 hover:bg-black/30",
                   )}
                 >
-                  <span className="block font-medium text-zinc-100">
+                  <span className="block font-medium text-zinc-900 dark:text-zinc-100">
                     {venue.name}
                   </span>
                   <span className="mt-1 block text-xs text-zinc-500">

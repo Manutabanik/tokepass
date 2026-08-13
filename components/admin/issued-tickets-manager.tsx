@@ -161,7 +161,7 @@ function TransferLinkChip({
       <button
         type="button"
         onClick={onOpenCustody}
-        className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1 text-[11px] font-medium text-zinc-300 transition hover:bg-zinc-800"
+        className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900 px-2 py-1 text-[11px] font-medium text-zinc-700 dark:text-zinc-300 transition hover:bg-zinc-800"
       >
         <History className="size-3" aria-hidden />
         Ver cadena de custodia
@@ -253,7 +253,7 @@ function RowActionsMenu({
         type="button"
         variant="ghost"
         size="icon"
-        className="size-9 text-zinc-400 hover:bg-white/5 hover:text-white"
+        className="size-9 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-white"
         aria-label={`Acciones de ${ticket.code}`}
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
@@ -263,7 +263,7 @@ function RowActionsMenu({
       {open ? (
         <div
           role="menu"
-          className="absolute right-0 top-10 z-30 w-72 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 py-1 shadow-2xl shadow-black/50"
+          className="absolute right-0 top-10 z-30 w-72 overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 py-1 shadow-2xl shadow-black/50"
         >
           {items.map((item) => (
             <button
@@ -279,7 +279,7 @@ function RowActionsMenu({
                 "flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm transition disabled:cursor-not-allowed disabled:opacity-40",
                 item.danger
                   ? "text-red-300 hover:bg-red-500/10"
-                  : "text-zinc-200 hover:bg-white/5",
+                  : "text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-white/5",
               )}
             >
               {item.icon}
@@ -319,12 +319,12 @@ function CustodyTimeline({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4">
+      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900/60 p-4">
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
           Comprador original
         </p>
-        <p className="mt-2 font-semibold text-white">{original.name}</p>
-        <p className="text-xs text-zinc-400">
+        <p className="mt-2 font-semibold text-zinc-900 dark:text-white">{original.name}</p>
+        <p className="text-xs text-zinc-600 dark:text-zinc-400">
           {original.email} · DNI {original.dni}
         </p>
         <p className="mt-1 text-xs text-zinc-500">
@@ -351,7 +351,7 @@ function CustodyTimeline({
                 {custodyChannelLabel(event.channel)} el{" "}
                 {formatDateTime(event.at)}
               </p>
-              <p className="mt-2 text-xs text-zinc-400">
+              <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">
                 De {event.from.name} (#{event.fromTicketCode}) → {event.to.name}{" "}
                 (#{event.toTicketCode})
               </p>
@@ -364,8 +364,8 @@ function CustodyTimeline({
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-300/90">
           Titular actual
         </p>
-        <p className="mt-2 font-semibold text-white">{current.name}</p>
-        <p className="text-xs text-zinc-400">
+        <p className="mt-2 font-semibold text-zinc-900 dark:text-white">{current.name}</p>
+        <p className="text-xs text-zinc-600 dark:text-zinc-400">
           {current.email} · DNI {current.dni}
         </p>
         <p className="mt-1 font-mono text-xs text-emerald-200/90">
@@ -662,10 +662,10 @@ export function IssuedTicketsManager({
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <header className="min-w-0">
-          <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl">
+          <h1 className="text-3xl font-black tracking-tight text-zinc-900 dark:text-white sm:text-4xl">
             Entradas emitidas y clientes
           </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-400 sm:text-base">
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-600 dark:text-zinc-400 sm:text-base">
             Buscá compradores, reenviá entradas, transferí titulares o resolvé
             reclamos con trazabilidad completa.
           </p>
@@ -674,7 +674,7 @@ export function IssuedTicketsManager({
           type="button"
           variant="outline"
           onClick={() => openModal("courtesy")}
-          className="h-11 shrink-0 rounded-xl border-zinc-700 bg-zinc-950 text-zinc-100 hover:bg-zinc-900"
+          className="h-11 shrink-0 rounded-xl border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-100 dark:hover:bg-zinc-900"
         >
           <Plus className="size-4" aria-hidden />
           Emitir entrada manual / Cortesía
@@ -708,14 +708,14 @@ export function IssuedTicketsManager({
         />
       </section>
 
-      <section className="space-y-4 rounded-3xl border border-zinc-800 bg-zinc-950/70 p-4 sm:p-5">
+      <section className="space-y-4 rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/70 p-4 sm:p-5">
         <div className="relative">
           <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-zinc-500" />
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Buscá por nombre, DNI, email, código o historial de transferencia…"
-            className="h-14 rounded-2xl border-zinc-800 bg-black pl-12 text-base text-white placeholder:text-zinc-600"
+            className="h-14 rounded-2xl border-zinc-200 dark:border-zinc-800 bg-black pl-12 text-base text-zinc-900 dark:text-white placeholder:text-zinc-600"
             aria-label="Buscar entradas emitidas"
           />
         </div>
@@ -725,12 +725,12 @@ export function IssuedTicketsManager({
           onValueChange={(value) => setTab(value as StatusTab)}
           className="gap-4"
         >
-          <TabsList className="h-auto w-full flex-wrap justify-start gap-1 rounded-2xl border border-zinc-800 bg-zinc-900/80 p-1.5 group-data-horizontal/tabs:h-auto">
+          <TabsList className="h-auto w-full flex-wrap justify-start gap-1 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/80 p-1.5 group-data-horizontal/tabs:h-auto">
             {TAB_LABELS.map((item) => (
               <TabsTrigger
                 key={item.value}
                 value={item.value}
-                className="rounded-xl px-3 py-2 text-xs data-active:bg-zinc-800 data-active:text-white sm:text-sm"
+                className="rounded-xl px-3 py-2 text-xs data-active:bg-zinc-800 data-active:text-zinc-900 dark:text-white sm:text-sm"
               >
                 {item.label}
               </TabsTrigger>
@@ -738,10 +738,10 @@ export function IssuedTicketsManager({
           </TabsList>
         </Tabs>
 
-        <div className="overflow-hidden rounded-2xl border border-zinc-800">
+        <div className="overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800">
           <Table>
             <TableHeader>
-              <TableRow className="border-zinc-800 hover:bg-transparent">
+              <TableRow className="border-zinc-200 dark:border-zinc-800 hover:bg-transparent">
                 <TableHead className="px-4 text-zinc-500">Comprador</TableHead>
                 <TableHead className="hidden px-4 text-zinc-500 md:table-cell">
                   Ubicación / Entrada
@@ -755,7 +755,7 @@ export function IssuedTicketsManager({
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <TableRow className="border-zinc-800 hover:bg-transparent">
+                <TableRow className="border-zinc-200 dark:border-zinc-800 hover:bg-transparent">
                   <TableCell
                     colSpan={5}
                     className="px-4 py-12 text-center text-sm text-zinc-500"
@@ -767,10 +767,10 @@ export function IssuedTicketsManager({
                 filtered.map((ticket) => (
                   <TableRow
                     key={ticket.id}
-                    className="border-zinc-800 hover:bg-white/[0.03]"
+                    className="border-zinc-200 dark:border-zinc-800 hover:bg-white/[0.03]"
                   >
                     <TableCell className="px-4 py-3 align-top">
-                      <p className="font-semibold text-white">
+                      <p className="font-semibold text-zinc-900 dark:text-white">
                         {ticket.holderName}
                       </p>
                       <p className="mt-0.5 text-xs text-zinc-500">
@@ -779,7 +779,7 @@ export function IssuedTicketsManager({
                       <p className="text-xs text-zinc-500">
                         DNI {ticket.holderDni}
                       </p>
-                      <p className="mt-2 text-xs text-zinc-400 md:hidden">
+                      <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-400 md:hidden">
                         {ticket.sectorLabel}
                       </p>
                       <TransferLinkChip
@@ -787,10 +787,10 @@ export function IssuedTicketsManager({
                         onOpenCustody={() => openModal("custody", ticket)}
                       />
                     </TableCell>
-                    <TableCell className="hidden max-w-[240px] truncate px-4 py-3 text-sm text-zinc-300 md:table-cell">
+                    <TableCell className="hidden max-w-[240px] truncate px-4 py-3 text-sm text-zinc-700 dark:text-zinc-300 md:table-cell">
                       {ticket.sectorLabel}
                     </TableCell>
-                    <TableCell className="px-4 py-3 font-mono text-sm text-zinc-200">
+                    <TableCell className="px-4 py-3 font-mono text-sm text-zinc-800 dark:text-zinc-200">
                       #{ticket.code}
                     </TableCell>
                     <TableCell className="px-4 py-3">
@@ -825,10 +825,10 @@ export function IssuedTicketsManager({
         open={modal === "resend"}
         onOpenChange={(open) => !open && closeModal()}
       >
-        <DialogContent className="border-zinc-800 bg-zinc-950 text-white sm:max-w-md">
+        <DialogContent className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Reenviar entrada</DialogTitle>
-            <DialogDescription className="text-zinc-400">
+            <DialogDescription className="text-zinc-600 dark:text-zinc-400">
               {activeTicket
                 ? `#${activeTicket.code} · ${activeTicket.holderName}`
                 : "Seleccioná una entrada."}
@@ -846,7 +846,7 @@ export function IssuedTicketsManager({
             <Button
               type="button"
               variant="outline"
-              className="h-11 justify-start rounded-xl border-zinc-700 bg-zinc-900 text-zinc-100"
+              className="h-11 justify-start rounded-xl border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
               onClick={() => confirmResend("whatsapp")}
             >
               <MessageCircle className="size-4" />
@@ -860,10 +860,10 @@ export function IssuedTicketsManager({
         open={modal === "holder"}
         onOpenChange={(open) => !open && closeModal()}
       >
-        <DialogContent className="border-zinc-800 bg-zinc-950 text-white sm:max-w-md">
+        <DialogContent className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Cambiar titular / Email</DialogTitle>
-            <DialogDescription className="text-zinc-400">
+            <DialogDescription className="text-zinc-600 dark:text-zinc-400">
               Corrección de datos del mismo titular. Para ceder la entrada usá
               Transferir / Reasignar.
             </DialogDescription>
@@ -875,7 +875,7 @@ export function IssuedTicketsManager({
                 id="holder-name"
                 value={holderName}
                 onChange={(e) => setHolderName(e.target.value)}
-                className="border-zinc-700 bg-zinc-900"
+                className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
               />
             </div>
             <div className="space-y-1.5">
@@ -885,7 +885,7 @@ export function IssuedTicketsManager({
                 type="email"
                 value={holderEmail}
                 onChange={(e) => setHolderEmail(e.target.value)}
-                className="border-zinc-700 bg-zinc-900"
+                className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
               />
             </div>
             <div className="space-y-1.5">
@@ -894,7 +894,7 @@ export function IssuedTicketsManager({
                 id="holder-dni"
                 value={holderDni}
                 onChange={(e) => setHolderDni(e.target.value)}
-                className="border-zinc-700 bg-zinc-900"
+                className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
               />
             </div>
           </div>
@@ -903,7 +903,7 @@ export function IssuedTicketsManager({
               type="button"
               variant="ghost"
               onClick={closeModal}
-              className="text-zinc-400"
+              className="text-zinc-600 dark:text-zinc-400"
             >
               Cancelar
             </Button>
@@ -922,10 +922,10 @@ export function IssuedTicketsManager({
         open={modal === "transfer"}
         onOpenChange={(open) => !open && closeModal()}
       >
-        <DialogContent className="border-zinc-800 bg-zinc-950 text-white sm:max-w-md">
+        <DialogContent className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Transferir / Reasignar</DialogTitle>
-            <DialogDescription className="text-zinc-400">
+            <DialogDescription className="text-zinc-600 dark:text-zinc-400">
               {activeTicket
                 ? `Se invalida #${activeTicket.code} y se emite un QR nuevo al destinatario.`
                 : "Seleccioná una entrada."}
@@ -942,7 +942,7 @@ export function IssuedTicketsManager({
                 id="transfer-name"
                 value={transferName}
                 onChange={(e) => setTransferName(e.target.value)}
-                className="border-zinc-700 bg-zinc-900"
+                className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
               />
             </div>
             <div className="space-y-1.5">
@@ -952,7 +952,7 @@ export function IssuedTicketsManager({
                 type="email"
                 value={transferEmail}
                 onChange={(e) => setTransferEmail(e.target.value)}
-                className="border-zinc-700 bg-zinc-900"
+                className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
               />
             </div>
             <div className="space-y-1.5">
@@ -961,7 +961,7 @@ export function IssuedTicketsManager({
                 id="transfer-dni"
                 value={transferDni}
                 onChange={(e) => setTransferDni(e.target.value)}
-                className="border-zinc-700 bg-zinc-900"
+                className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
               />
             </div>
           </div>
@@ -970,7 +970,7 @@ export function IssuedTicketsManager({
               type="button"
               variant="ghost"
               onClick={closeModal}
-              className="text-zinc-400"
+              className="text-zinc-600 dark:text-zinc-400"
             >
               Cancelar
             </Button>
@@ -990,10 +990,10 @@ export function IssuedTicketsManager({
         open={modal === "custody"}
         onOpenChange={(open) => !open && closeModal()}
       >
-        <DialogContent className="max-h-[85dvh] overflow-y-auto border-zinc-800 bg-zinc-950 text-white sm:max-w-lg">
+        <DialogContent className="max-h-[85dvh] overflow-y-auto border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Cadena de custodia</DialogTitle>
-            <DialogDescription className="text-zinc-400">
+            <DialogDescription className="text-zinc-600 dark:text-zinc-400">
               {activeTicket
                 ? `Historial de #${activeTicket.code} · ${activeTicket.sectorLabel}`
                 : "Seleccioná una entrada."}
@@ -1012,10 +1012,10 @@ export function IssuedTicketsManager({
         open={modal === "cancel"}
         onOpenChange={(open) => !open && closeModal()}
       >
-        <DialogContent className="border-zinc-800 bg-zinc-950 text-white sm:max-w-md">
+        <DialogContent className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Inhabilitar ticket</DialogTitle>
-            <DialogDescription className="text-zinc-400">
+            <DialogDescription className="text-zinc-600 dark:text-zinc-400">
               {activeTicket
                 ? `Vas a anular #${activeTicket.code} de ${activeTicket.holderName}. El QR dejará de pasar en puerta.`
                 : "Seleccioná una entrada."}
@@ -1026,7 +1026,7 @@ export function IssuedTicketsManager({
               type="button"
               variant="ghost"
               onClick={closeModal}
-              className="text-zinc-400"
+              className="text-zinc-600 dark:text-zinc-400"
             >
               Volver
             </Button>
@@ -1046,10 +1046,10 @@ export function IssuedTicketsManager({
         open={modal === "courtesy"}
         onOpenChange={(open) => !open && closeModal()}
       >
-        <DialogContent className="border-zinc-800 bg-zinc-950 text-white sm:max-w-md">
+        <DialogContent className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Emitir entrada manual / Cortesía</DialogTitle>
-            <DialogDescription className="text-zinc-400">
+            <DialogDescription className="text-zinc-600 dark:text-zinc-400">
               Ideal para pago en efectivo en oficina o invitados especiales.
             </DialogDescription>
           </DialogHeader>
@@ -1060,7 +1060,7 @@ export function IssuedTicketsManager({
                 id="courtesy-name"
                 value={courtesyName}
                 onChange={(e) => setCourtesyName(e.target.value)}
-                className="border-zinc-700 bg-zinc-900"
+                className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
               />
             </div>
             <div className="space-y-1.5">
@@ -1070,7 +1070,7 @@ export function IssuedTicketsManager({
                 type="email"
                 value={courtesyEmail}
                 onChange={(e) => setCourtesyEmail(e.target.value)}
-                className="border-zinc-700 bg-zinc-900"
+                className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
               />
             </div>
             <div className="space-y-1.5">
@@ -1079,7 +1079,7 @@ export function IssuedTicketsManager({
                 id="courtesy-dni"
                 value={courtesyDni}
                 onChange={(e) => setCourtesyDni(e.target.value)}
-                className="border-zinc-700 bg-zinc-900"
+                className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
               />
             </div>
             <div className="space-y-1.5">
@@ -1088,7 +1088,7 @@ export function IssuedTicketsManager({
                 id="courtesy-sector"
                 value={courtesySector}
                 onChange={(e) => setCourtesySector(e.target.value)}
-                className="border-zinc-700 bg-zinc-900"
+                className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
               />
             </div>
           </div>
@@ -1097,7 +1097,7 @@ export function IssuedTicketsManager({
               type="button"
               variant="ghost"
               onClick={closeModal}
-              className="text-zinc-400"
+              className="text-zinc-600 dark:text-zinc-400"
             >
               Cancelar
             </Button>
@@ -1128,12 +1128,12 @@ function MetricCard({
   hint: string
 }) {
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
+    <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/70 p-4">
       <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">
         {icon}
         {label}
       </div>
-      <p className="mt-3 text-3xl font-black tracking-tight text-white">
+      <p className="mt-3 text-3xl font-black tracking-tight text-zinc-900 dark:text-white">
         {value}
       </p>
       <p className="mt-1 text-xs text-zinc-500">{hint}</p>
