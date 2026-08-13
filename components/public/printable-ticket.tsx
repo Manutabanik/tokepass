@@ -5,78 +5,89 @@ import { QRCodeSVG } from "qrcode.react"
 
 import type { PrintableTicket } from "@/app/actions/pos"
 import { BRAND_MARK_SRC } from "@/components/shared/brand-logo"
-import { formatEventDay, formatEventTime } from "@/lib/format"
+import { formatCurrency, formatEventDay, formatEventTime } from "@/lib/format"
 
+/**
+ * Ticket térmico 80mm (fallback visual ~58mm vía CSS print).
+ * QR = totp_secret crudo (is_dynamic_qr=false en POS) → aceptado en puerta.
+ */
 export function PrintableTicketView({ ticket }: { ticket: PrintableTicket }) {
+  const priceLabel =
+    ticket.tierPrice != null ? formatCurrency(ticket.tierPrice) : null
+
   return (
-    <div className="print-ticket mx-auto max-w-[420px] bg-white text-zinc-950">
-      <article className="overflow-hidden rounded-2xl border border-zinc-200 shadow-sm print:rounded-none print:border-0 print:shadow-none">
-        <header className="border-b border-zinc-200 bg-zinc-950 px-6 py-5 text-white">
-          <div className="flex items-center gap-2.5">
-            <span className="size-8 overflow-hidden rounded-lg bg-black ring-1 ring-white/15">
-              <Image
-                src={BRAND_MARK_SRC}
-                alt=""
-                width={32}
-                height={32}
-                className="size-full object-cover"
-              />
-            </span>
-            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-violet-300">
-              Tokepass
-            </p>
-          </div>
-          <h1 className="mt-3 text-2xl font-black leading-tight tracking-tight">
-            {ticket.eventTitle}
-          </h1>
-        </header>
-
-        <div className="space-y-5 px-6 py-6">
-          <dl className="grid gap-3 text-sm">
-            <div className="flex justify-between gap-4 border-b border-zinc-100 pb-2">
-              <dt className="text-zinc-500">Fecha</dt>
-              <dd className="text-right font-semibold capitalize">
-                {formatEventDay(ticket.eventDate)}
-                <span className="mt-0.5 block text-xs font-normal text-zinc-500">
-                  {formatEventTime(ticket.eventDate)}
-                </span>
-              </dd>
-            </div>
-            <div className="flex justify-between gap-4 border-b border-zinc-100 pb-2">
-              <dt className="text-zinc-500">Lugar</dt>
-              <dd className="max-w-[60%] text-right font-semibold">
-                {ticket.eventLocation}
-              </dd>
-            </div>
-            <div className="flex justify-between gap-4 border-b border-zinc-100 pb-2">
-              <dt className="text-zinc-500">Titular</dt>
-              <dd className="text-right font-semibold">{ticket.holderName}</dd>
-            </div>
-            <div className="flex justify-between gap-4">
-              <dt className="text-zinc-500">Tipo</dt>
-              <dd className="text-right font-semibold">{ticket.tierName}</dd>
-            </div>
-          </dl>
-
-          <div className="flex flex-col items-center gap-3 rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-6">
-            <QRCodeSVG
-              value={ticket.qrPayload}
-              size={240}
-              level="H"
-              includeMargin
-              bgColor="#ffffff"
-              fgColor="#09090b"
+    <div className="print-ticket mx-auto max-w-[300px] bg-white p-2 text-center text-black">
+      <article className="overflow-hidden print:shadow-none">
+        <div className="flex flex-col items-center gap-1 pb-2">
+          <span className="size-10 overflow-hidden rounded-lg bg-black">
+            <Image
+              src={BRAND_MARK_SRC}
+              alt="Tokepass"
+              width={40}
+              height={40}
+              className="size-full object-cover"
+              priority
             />
-            <p className="font-mono text-[10px] tracking-wider text-zinc-500">
-              #{ticket.id.slice(0, 8).toUpperCase()}
-            </p>
-          </div>
-
-          <p className="text-center text-[11px] leading-5 text-zinc-500">
-            Este código QR es único. El primer escaneo en puerta le otorgará el
-            acceso y congelará la entrada para evitar duplicados.
+          </span>
+          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-zinc-600">
+            Tokepass
           </p>
         </div>
+
+        <h1 className="text-base font-black leading-tight tracking-tight text-black">
+          {ticket.eventTitle}
+        </h1>
+
+        <p className="mt-1 text-[11px] capitalize text-zinc-700">
+          {formatEventDay(ticket.eventDate)}
+          {" · "}
+          {formatEventTime(ticket.eventDate)}
+        </p>
+        <p className="mt-0.5 text-[10px] leading-snug text-zinc-600">
+          {ticket.eventLocation}
+        </p>
+
+        <div className="my-3 border-y border-dashed border-zinc-400 py-2">
+          <p className="text-sm font-bold text-black">{ticket.tierName}</p>
+          {priceLabel ? (
+            <p className="mt-0.5 text-lg font-black tabular-nums text-black">
+              {priceLabel}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="flex flex-col items-center gap-2 py-2">
+          <div className="inline-block bg-white p-1">
+            <QRCodeSVG
+              value={ticket.qrPayload}
+              size={220}
+              level="H"
+              includeMargin={false}
+              bgColor="#ffffff"
+              fgColor="#000000"
+              className="print-ticket-qr"
+            />
+          </div>
+          <p className="font-mono text-[9px] tracking-wider text-zinc-500">
+            #{ticket.id.slice(0, 8).toUpperCase()}
+          </p>
+        </div>
+
+        <div className="mt-1 space-y-0.5 text-sm">
+          <p className="font-semibold text-black">{ticket.holderName}</p>
+          {ticket.holderDni ? (
+            <p className="text-xs tabular-nums text-zinc-800">
+              DNI {ticket.holderDni}
+            </p>
+          ) : null}
+        </div>
+
+        <p className="mt-3 text-[10px] font-medium leading-snug text-zinc-700">
+          Conservar este ticket para el ingreso
+        </p>
+        <p className="mt-1 text-[9px] leading-snug text-zinc-500">
+          El primer escaneo en puerta otorga el acceso.
+        </p>
       </article>
     </div>
   )

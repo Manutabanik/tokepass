@@ -65,7 +65,7 @@ function SheetContent({
           side === "right" &&
             "inset-y-0 right-0 border-l border-white/8 data-open:slide-in-from-right data-closed:slide-out-to-right",
           side === "bottom" &&
-            "relative inset-x-0 bottom-0 max-h-[min(92dvh,100%)] w-full rounded-t-3xl border border-zinc-200/80 bg-white text-zinc-900 shadow-2xl data-open:slide-in-from-bottom data-closed:slide-out-to-bottom dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-100",
+            "inset-x-0 bottom-0 max-h-[min(92dvh,100%)] w-full rounded-t-3xl border border-zinc-200/80 bg-white text-zinc-900 shadow-2xl data-open:slide-in-from-bottom data-closed:slide-out-to-bottom dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-100",
           side === "top" &&
             "inset-x-0 top-0 max-h-[min(92dvh,100%)] w-full rounded-b-3xl border border-zinc-200/80 bg-white text-zinc-900 shadow-2xl data-open:slide-in-from-top data-closed:slide-out-to-top dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-100",
           className,

@@ -48,7 +48,7 @@ export function GuestListClaimForm({
       toast.success("FreePass canjeado", {
         description: "Ya está en tu billetera Tokepass.",
       })
-      router.push("/my-tickets")
+      router.push("/cuenta/entradas")
     })
   }
 
@@ -71,7 +71,7 @@ export function GuestListClaimForm({
 
       if (result.data.ticketId) {
         toast.success("¡Listo! FreePass en tu billetera")
-        router.push("/my-tickets")
+        router.push("/cuenta/entradas")
         return
       }
 

@@ -499,27 +499,42 @@ export function TicketSelector({
           redirectTo={`/events/${eventId}`}
           onExpired={() => setPaymentHold(null)}
         />
-        <p className="mt-4 text-sm text-zinc-400">
-          Tu cupo está bloqueado. Pagá antes de que venza el reloj o el stock
-          vuelve a estar disponible.
+        <p className="mt-4 text-base text-zinc-400">
+          Tu cupo está bloqueado. Pagá antes de que venza el reloj.
         </p>
-        <a
-          href={paymentHold.initPoint}
-          className="mt-5 inline-flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-[#009EE3] px-5 text-sm font-black text-white transition hover:bg-[#08A8EE] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+        <div className="hidden sm:block">
+          <a
+            href={paymentHold.initPoint}
+            className="mt-5 inline-flex min-h-12 h-14 w-full items-center justify-center gap-2 rounded-xl bg-[#009EE3] px-5 text-base font-black text-white transition hover:bg-[#08A8EE] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+          >
+            Pagar
+          </a>
+          <Button
+            type="button"
+            variant="ghost"
+            className="mt-3 min-h-12 w-full text-zinc-400 hover:text-white"
+            onClick={() => {
+              setPaymentHold(null)
+              router.refresh()
+            }}
+          >
+            Cancelar y elegir de nuevo
+          </Button>
+        </div>
+        <div
+          className={cn(
+            "fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-zinc-950/95 px-4 pt-3",
+            "pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-xl sm:hidden",
+          )}
         >
-          Ir a pagar con Mercado Pago
-        </a>
-        <Button
-          type="button"
-          variant="ghost"
-          className="mt-3 w-full text-zinc-400 hover:text-white"
-          onClick={() => {
-            setPaymentHold(null)
-            router.refresh()
-          }}
-        >
-          Cancelar y elegir de nuevo
-        </Button>
+          <a
+            href={paymentHold.initPoint}
+            className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl bg-[#009EE3] text-base font-black text-white"
+          >
+            Pagar
+          </a>
+        </div>
+        <div className="h-24 sm:hidden" aria-hidden="true" />
       </div>
     )
   }
@@ -576,8 +591,8 @@ export function TicketSelector({
                 key={tab.id}
                 type="button"
                 onClick={() => setDayFilter(tab.id)}
-                className={cn(
-                  "inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs transition-all sm:text-sm",
+                  className={cn(
+                  "inline-flex min-h-12 flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-sm transition-all",
                   active
                     ? "border border-zinc-700/60 bg-zinc-800 font-medium text-white shadow-sm"
                     : "text-zinc-400 hover:bg-zinc-800/40 hover:text-white",
@@ -686,8 +701,10 @@ export function TicketSelector({
                 </div>
                 <p
                   className={cn(
-                    "shrink-0 text-lg font-bold tracking-tight",
-                    soldOut ? "text-zinc-500 line-through" : "text-white",
+                    "shrink-0 text-2xl font-black tracking-tight tabular-nums sm:text-xl",
+                    soldOut
+                      ? "text-zinc-500 line-through"
+                      : "text-emerald-300",
                   )}
                 >
                   {tier.price === 0 ? "Gratis" : formatCurrency(tier.price)}
@@ -695,31 +712,30 @@ export function TicketSelector({
               </div>
 
               {tier.layoutType === "general" ? (
-                <div className="mt-4 flex items-center justify-between gap-3">
-                  <span className="text-xs font-medium text-zinc-500">
+                <div className="mt-5 flex items-center justify-between gap-3">
+                  <span className="text-sm font-medium text-zinc-400">
                     Cantidad
                   </span>
-                  <div className="flex items-center gap-2">
-                    <Button
+                  <div className="flex items-center gap-3">
+                    <button
                       type="button"
-                      variant="outline"
-                      size="icon-sm"
                       disabled={soldOut || quantity === 0 || isPending}
                       onClick={() =>
                         updateQuantity(tier.id, quantity - 1, maxSelectable)
                       }
                       aria-label={`Quitar ${tier.name}`}
-                      className="rounded-full border-zinc-700 bg-zinc-950 text-zinc-200 hover:bg-zinc-900"
+                      className={cn(
+                        "inline-flex size-12 min-h-12 min-w-12 items-center justify-center rounded-2xl border border-zinc-600 bg-zinc-900 text-white",
+                        "transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40",
+                      )}
                     >
-                      <Minus />
-                    </Button>
-                    <span className="w-8 text-center text-sm font-semibold tabular-nums text-white">
+                      <Minus className="size-5" aria-hidden="true" />
+                    </button>
+                    <span className="min-w-10 text-center text-2xl font-black tabular-nums text-white">
                       {quantity}
                     </span>
-                    <Button
+                    <button
                       type="button"
-                      variant="outline"
-                      size="icon-sm"
                       disabled={
                         soldOut || quantity >= maxSelectable || isPending
                       }
@@ -727,10 +743,13 @@ export function TicketSelector({
                         updateQuantity(tier.id, quantity + 1, maxSelectable)
                       }
                       aria-label={`Agregar ${tier.name}`}
-                      className="rounded-full border-zinc-700 bg-zinc-950 text-zinc-200 hover:bg-zinc-900"
+                      className={cn(
+                        "inline-flex size-12 min-h-12 min-w-12 items-center justify-center rounded-2xl border border-emerald-400/50 bg-emerald-500 text-zinc-950",
+                        "transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40",
+                      )}
                     >
-                      <Plus />
-                    </Button>
+                      <Plus className="size-5" aria-hidden="true" />
+                    </button>
                   </div>
                 </div>
               ) : (
@@ -738,7 +757,7 @@ export function TicketSelector({
                   type="button"
                   disabled={soldOut || !hasSeatingFlow}
                   onClick={openSeatFlow}
-                  className="mt-4 h-12 w-full rounded-xl bg-emerald-500 font-bold text-zinc-950 hover:bg-emerald-400"
+                  className="mt-4 min-h-12 h-12 w-full rounded-xl bg-emerald-500 text-base font-bold text-zinc-950 hover:bg-emerald-400"
                 >
                   <Armchair className="size-4" aria-hidden="true" />
                   Elegir{" "}
@@ -776,14 +795,14 @@ export function TicketSelector({
 
       <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
         <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-zinc-500">
-          Resumen de pago
+          Resumen
         </p>
-        <div className="mt-3 space-y-2 text-sm">
+        <div className="mt-3 space-y-2 text-base">
           <div className="flex items-center justify-between text-zinc-400">
             <span>
               Entradas
               {totalTickets > 0
-                ? ` · ${totalTickets} ${totalTickets === 1 ? "entrada" : "entradas"}`
+                ? ` · ${totalTickets}`
                 : null}
             </span>
             <span className="tabular-nums text-zinc-200">
@@ -792,9 +811,7 @@ export function TicketSelector({
           </div>
           {appliedPromo && discountAmount > 0 ? (
             <div className="flex items-center justify-between text-emerald-400">
-              <span>
-                Descuento ({appliedPromo.code})
-              </span>
+              <span>Descuento ({appliedPromo.code})</span>
               <span className="tabular-nums">
                 −{formatCurrency(discountAmount)}
               </span>
@@ -802,37 +819,76 @@ export function TicketSelector({
           ) : null}
           <div className="border-t border-zinc-800 pt-2">
             <div className="flex items-center justify-between">
-              <span className="font-medium text-zinc-300">Total a pagar</span>
-              <span className="text-xl font-bold tracking-tight text-white tabular-nums">
+              <span className="font-medium text-zinc-300">Total</span>
+              <span className="text-2xl font-black tracking-tight text-white tabular-nums">
                 {formatCurrency(totalAmount)}
               </span>
             </div>
           </div>
         </div>
-        <p className="mt-2 text-xs text-zinc-500">
-          Precio final sin cargos ocultos · Impuestos incluidos
+        <p className="mt-2 text-sm text-zinc-500">
+          Precio final. Sin cargos ocultos.
         </p>
       </div>
 
+      {/* Desktop CTA */}
       <Button
         type="button"
         size="lg"
         disabled={totalTickets === 0 || isPending}
         onClick={handleReserve}
-        className="mt-5 h-12 w-full rounded-full bg-white text-zinc-950 shadow-lg shadow-white/10 hover:bg-zinc-200 disabled:opacity-50"
+        className="mt-5 hidden min-h-12 h-12 w-full rounded-full bg-white text-base font-bold text-zinc-950 shadow-lg shadow-white/10 hover:bg-zinc-200 disabled:opacity-50 sm:inline-flex"
       >
         {isPending ? (
           <>
             <LoaderCircle className="animate-spin" aria-hidden="true" />
             Preparando pago...
           </>
+        ) : totalAmount > 0 ? (
+          `Pagar ${formatCurrency(totalAmount)}`
         ) : (
-          "Pagar con Mercado Pago"
+          "Continuar al Pago"
         )}
       </Button>
-      <p className="mt-3 text-center text-xs text-zinc-500">
-        Vas a ser redirigido al pago con Mercado Pago.
+      <p className="mt-3 hidden text-center text-sm text-zinc-500 sm:block">
+        Vas a ser redirigido a Mercado Pago.
       </p>
+
+      {/* Mobile sticky conversion bar */}
+      <div
+        className={cn(
+          "fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-zinc-950/95 px-4 pt-3",
+          "pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-xl sm:hidden",
+        )}
+      >
+        <div className="mx-auto flex max-w-lg items-center gap-3">
+          <div className="min-w-0 shrink-0">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+              Total
+            </p>
+            <p className="text-xl font-black tabular-nums text-white">
+              {formatCurrency(totalAmount)}
+            </p>
+          </div>
+          <Button
+            type="button"
+            disabled={totalTickets === 0 || isPending}
+            onClick={handleReserve}
+            className="min-h-12 min-w-[48px] flex-1 rounded-2xl bg-emerald-500 text-base font-black text-zinc-950 hover:bg-emerald-400 disabled:opacity-50"
+          >
+            {isPending ? (
+              <LoaderCircle className="animate-spin" aria-hidden="true" />
+            ) : totalTickets === 0 ? (
+              "Elegí entradas"
+            ) : totalAmount > 0 ? (
+              `Pagar ${formatCurrency(totalAmount)}`
+            ) : (
+              "Continuar al Pago"
+            )}
+          </Button>
+        </div>
+      </div>
+      <div className="h-24 sm:hidden" aria-hidden="true" />
     </div>
   )
 }

@@ -49,8 +49,8 @@ export async function getFreshLoginProfile(
 
 export function postLoginDestination(
   role: UserRole | null | undefined,
-): "/superadmin" | "/admin" | "/" {
+): "/superadmin" | "/admin" | "/cuenta" {
   if (role === "super_admin") return "/superadmin"
   if (role === "admin") return "/admin"
-  return "/"
+  return "/cuenta"
 }

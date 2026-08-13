@@ -18,6 +18,7 @@ import {
   rejectOrganizerApplication,
   type OrganizerApplicationRow,
 } from "@/app/actions/organizer-kyb"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Sheet,
@@ -83,7 +84,46 @@ export function OrganizerApplicationsPanel({
 
   return (
     <>
-      <div className="overflow-hidden rounded-2xl border border-white/8 bg-white/[0.03]">
+      {/* Mobile cards */}
+      <div className="grid gap-3 md:hidden">
+        {applications.map((row) => (
+          <article
+            key={row.id}
+            className="rounded-2xl border border-white/10 bg-black/30 p-4"
+          >
+            <p className="text-lg font-bold text-white">{row.company_name}</p>
+            <p className="mt-1 text-sm text-zinc-500">
+              {row.applicantName ?? "Sin nombre"} · {row.applicantEmail}
+            </p>
+            <p className="mt-1 font-mono text-xs text-zinc-600">
+              CUIT {row.cuit_cuil}
+            </p>
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge
+                  variant="outline"
+                  className="rounded-full border-amber-500/40 text-[10px] uppercase text-amber-100"
+                >
+                  Pendiente
+                </Badge>
+                <span className="text-xs text-zinc-500">
+                  {formatDate(row.created_at)}
+                </span>
+              </div>
+              <Button
+                type="button"
+                className="min-h-12 shrink-0 rounded-xl bg-sky-600 px-4 font-bold text-white hover:bg-sky-500"
+                onClick={() => setSelected(row)}
+              >
+                Revisar
+              </Button>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      {/* Desktop table */}
+      <div className="hidden overflow-hidden rounded-2xl border border-white/8 bg-white/[0.03] md:block">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-white/8 text-xs uppercase tracking-wide text-zinc-600">
             <tr>
@@ -118,7 +158,7 @@ export function OrganizerApplicationsPanel({
                     type="button"
                     size="sm"
                     variant="outline"
-                    className="border-white/15 bg-transparent text-zinc-200"
+                    className="min-h-11 border-white/15 bg-transparent text-zinc-200"
                     onClick={() => setSelected(row)}
                   >
                     Revisar
@@ -136,8 +176,11 @@ export function OrganizerApplicationsPanel({
           if (!open) setSelected(null)
         }}
       >
-        <SheetContent className="border-white/10 bg-zinc-950 text-zinc-100 sm:max-w-md">
-          <SheetHeader>
+        <SheetContent
+          side="bottom"
+          className="max-h-[92dvh] gap-0 overflow-y-auto border-white/10 bg-zinc-950 p-0 text-zinc-100 sm:inset-y-0 sm:left-auto sm:right-0 sm:h-full sm:max-h-none sm:w-full sm:max-w-md sm:rounded-none sm:border-l sm:border-t-0"
+        >
+          <SheetHeader className="border-b border-white/8 px-5 py-4 text-left">
             <SheetTitle className="flex items-center gap-2 text-white">
               <Building2 className="size-5 text-violet-300" />
               {selected?.company_name}
@@ -148,7 +191,7 @@ export function OrganizerApplicationsPanel({
           </SheetHeader>
 
           {selected ? (
-            <div className="mt-6 space-y-4 text-sm">
+            <div className="space-y-4 px-5 py-5 text-sm">
               <Info
                 icon={<IdCard className="size-4" />}
                 label="Solicitante"
@@ -183,7 +226,7 @@ export function OrganizerApplicationsPanel({
                   }
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-1 inline-flex items-center gap-1.5 text-sky-300 hover:text-sky-200"
+                  className="mt-1 inline-flex min-h-12 items-center gap-1.5 text-sky-300 hover:text-sky-200"
                 >
                   {selected.social_media_url}
                   <ExternalLink className="size-3.5" />
@@ -195,12 +238,12 @@ export function OrganizerApplicationsPanel({
             </div>
           ) : null}
 
-          <SheetFooter className="mt-8 gap-2 sm:flex-col">
+          <SheetFooter className="gap-2 border-t border-white/8 px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:flex-col">
             <Button
               type="button"
               disabled={pending}
               onClick={runApprove}
-              className="w-full bg-emerald-600 text-white hover:bg-emerald-500"
+              className="min-h-12 w-full bg-emerald-600 font-bold text-white hover:bg-emerald-500"
             >
               {pending ? (
                 <LoaderCircle className="animate-spin" />
@@ -214,7 +257,7 @@ export function OrganizerApplicationsPanel({
               disabled={pending}
               variant="outline"
               onClick={runReject}
-              className="w-full border-red-500/40 bg-red-500/10 text-red-200 hover:bg-red-500/20"
+              className="min-h-12 w-full border-red-500/40 bg-red-500/10 font-semibold text-red-200 hover:bg-red-500/20"
             >
               <XCircle />
               Rechazar

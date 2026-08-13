@@ -43,6 +43,35 @@ export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request })
   response = captureReferralFromRequest(request, response)
 
+  const { pathname } = request.nextUrl
+
+  // Rutas legacy B2C → portal /cuenta (308 permanente)
+  const legacyDestinations: Record<string, string> = {
+    "/my-tickets": "/cuenta/entradas",
+    "/mis-tickets": "/cuenta/entradas",
+    "/my-orders": "/cuenta/compras",
+    "/profile": "/cuenta/perfil",
+  }
+  const legacyExact = legacyDestinations[pathname]
+  if (legacyExact) {
+    const url = request.nextUrl.clone()
+    url.pathname = legacyExact
+    return NextResponse.redirect(url, 308)
+  }
+  if (
+    pathname.startsWith("/my-tickets/") ||
+    pathname.startsWith("/mis-tickets/")
+  ) {
+    const url = request.nextUrl.clone()
+    url.pathname = "/cuenta/entradas"
+    return NextResponse.redirect(url, 308)
+  }
+  if (pathname.startsWith("/my-orders/")) {
+    const url = request.nextUrl.clone()
+    url.pathname = "/cuenta/compras"
+    return NextResponse.redirect(url, 308)
+  }
+
   const supabase = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -70,7 +99,6 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const { pathname } = request.nextUrl
   const isAdminRoute = pathname.startsWith("/admin")
   const isSuperAdminRoute =
     pathname.startsWith("/superadmin") || pathname.startsWith("/super-admin")

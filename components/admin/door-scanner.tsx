@@ -596,7 +596,7 @@ export function DoorScanner() {
               return
             }
 
-            if (resolved.expired) {
+            if (resolved.enforceFreshness && resolved.expired) {
               playTone("error")
               vibrate("error")
               void sendSignal("LED_RED")
@@ -979,24 +979,42 @@ export function DoorScanner() {
                 cooldownRef.current = true
                 void validateLocalTicket(ticket)
               }}
+              onValidateMany={(tickets) => {
+                setSearchOpen(false)
+                cooldownRef.current = true
+                void (async () => {
+                  for (const ticket of tickets) {
+                    await validateLocalTicket(ticket)
+                  }
+                })()
+              }}
             />
           ) : null}
         </>
       ) : (
         <div className="flex h-full flex-col items-center justify-center px-6 text-center">
           {visual === "success" || visual === "success_free" ? (
-            <CheckCircle2 className="size-28 drop-shadow-2xl" strokeWidth={2.5} />
+            <CheckCircle2
+              className="size-36 text-white drop-shadow-2xl sm:size-44"
+              strokeWidth={2.5}
+            />
           ) : visual === "warn" ? (
-            <ShieldAlert className="size-28 drop-shadow-2xl" strokeWidth={2.5} />
+            <ShieldAlert
+              className="size-36 text-white drop-shadow-2xl sm:size-44"
+              strokeWidth={2.5}
+            />
           ) : (
-            <XCircle className="size-28 drop-shadow-2xl" strokeWidth={2.5} />
+            <XCircle
+              className="size-36 text-white drop-shadow-2xl sm:size-44"
+              strokeWidth={2.5}
+            />
           )}
 
-          <p className="mt-8 text-4xl font-black tracking-tight sm:text-6xl">
+          <p className="mt-8 text-5xl font-black tracking-tight text-white sm:text-7xl">
             {feedback?.title}
           </p>
           {feedback?.subtitle ? (
-            <p className="mt-4 max-w-md text-lg font-medium text-zinc-900 dark:text-white/90 sm:text-2xl">
+            <p className="mt-4 max-w-md text-xl font-bold text-white/95 sm:text-2xl">
               {feedback.subtitle}
             </p>
           ) : null}
@@ -1032,9 +1050,9 @@ export function DoorScanner() {
               type="button"
               size="lg"
               onClick={handleManualNext}
-              className="mt-10 h-14 rounded-full bg-white px-8 text-base font-bold text-black hover:bg-zinc-100"
+              className="mt-10 min-h-14 h-14 rounded-full bg-white px-8 text-base font-black text-black hover:bg-zinc-100"
             >
-              Escanear siguiente
+              Siguiente
             </Button>
           ) : null}
         </div>

@@ -53,6 +53,8 @@ export const ticketTierSchema = z.object({
   layoutType: z.enum(["general", "table_combo", "numbered_seat"]),
   seatingSectorId: z.string().trim().nullable().optional(),
   capacityPerUnit: z.number().int().min(1).max(100),
+  /** QRs independientes por unidad (mesa). */
+  admitCount: z.number().int().min(1).max(50),
 })
 
 export const eventFormSchema = z

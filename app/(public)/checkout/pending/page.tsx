@@ -38,7 +38,7 @@ export default async function CheckoutPendingPage({
         <Button
           className="h-12 rounded-full bg-violet-600 px-6 text-white hover:bg-violet-700"
           nativeButton={false}
-          render={<Link href="/my-tickets" />}
+          render={<Link href="/cuenta/entradas" />}
         >
           Ir a mis entradas
         </Button>

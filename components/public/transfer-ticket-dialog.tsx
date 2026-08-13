@@ -23,10 +23,14 @@ export function TransferTicketDialog({
   ticketId,
   eventTitle,
   disabled = false,
+  triggerLabel = "Enviar / Regalar a un amigo",
+  triggerClassName,
 }: {
   ticketId: string
   eventTitle: string
   disabled?: boolean
+  triggerLabel?: string
+  triggerClassName?: string
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -72,10 +76,13 @@ export function TransferTicketDialog({
         variant="outline"
         disabled={disabled}
         onClick={() => setOpen(true)}
-        className="h-11 w-full rounded-full border-zinc-700 bg-zinc-950 text-zinc-100 hover:bg-zinc-900"
+        className={
+          triggerClassName ??
+          "h-11 w-full rounded-full border border-emerald-500/35 bg-emerald-500/10 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/20"
+        }
       >
         <Send className="size-4" aria-hidden="true" />
-        Enviar / Regalar
+        {triggerLabel}
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>

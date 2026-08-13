@@ -3,13 +3,20 @@
 import { MapPin, Music2, Ticket } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
+import { useEffect, useState } from "react"
 
 import type { CatalogEvent } from "@/app/actions/public-events"
+import { listMyFavoriteEventIds } from "@/app/actions/favorites"
+import { FavoriteToggleButton } from "@/components/public/favorite-toggle-button"
 import {
   eventCityLabel,
   eventSecondaryBadge,
   urgencyLabel,
 } from "@/lib/discovery-filters"
+import {
+  getFavoriteIdsCache,
+  setFavoriteIdsCache,
+} from "@/lib/favorite-ids-cache"
 import { formatCurrency, formatDiscoveryDateTime } from "@/lib/format"
 import { isBoostActive } from "@/lib/services/events-service"
 import { cn } from "@/lib/utils"
@@ -19,6 +26,14 @@ const fallbackGradients = [
   "from-violet-100 via-zinc-100 to-zinc-200 dark:from-zinc-900 dark:via-violet-950 dark:to-zinc-800",
   "from-sky-100 via-zinc-100 to-zinc-200 dark:from-zinc-900 dark:via-sky-950 dark:to-zinc-800",
 ]
+
+function loadFavoriteIds() {
+  const cached = getFavoriteIdsCache()
+  if (cached) return cached
+  const promise = listMyFavoriteEventIds().catch(() => [])
+  setFavoriteIdsCache(promise)
+  return promise
+}
 
 function gradientForId(id: string) {
   let hash = 0
@@ -43,12 +58,39 @@ export function EventCard({
   const place = event.venueName ?? event.location
   const boosted = isBoostActive(event)
   const sponsored = Boolean(event.isSponsoredByTokepass)
+  const [favorited, setFavorited] = useState(false)
+  const [favReady, setFavReady] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    void loadFavoriteIds().then((ids) => {
+      if (!cancelled) {
+        setFavorited(ids.includes(event.id))
+        setFavReady(true)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [event.id])
 
   return (
     <article
-      className="h-full"
+      className="relative h-full"
       style={{ animationDelay: `${Math.min(index * 40, 200)}ms` }}
     >
+      <div className="absolute right-3 top-3 z-20">
+        {favReady ? (
+          <FavoriteToggleButton
+            key={`${event.id}-${favorited ? "1" : "0"}`}
+            eventId={event.id}
+            initiallyFavorited={favorited}
+            className="size-11 shadow-md"
+          />
+        ) : (
+          <span className="block size-11 rounded-full bg-black/30" />
+        )}
+      </div>
       <Link
         href={`/events/${event.id}`}
         className={cn(
@@ -79,7 +121,7 @@ export function EventCard({
 
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent" />
 
-          <div className="absolute left-3 top-3 flex max-w-[calc(100%-1.5rem)] flex-wrap gap-1.5">
+          <div className="absolute left-3 top-3 flex max-w-[calc(100%-3.5rem)] flex-wrap gap-1.5">
             {sponsored || boosted ? (
               <span className="inline-flex items-center rounded-full border border-white/20 bg-black/50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white backdrop-blur-md">
                 Destacado

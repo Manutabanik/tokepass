@@ -787,12 +787,71 @@ export function IssuedTicketsManager({
           </TabsList>
         </Tabs>
 
-        <div className="overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800">
+        <div className="overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 max-md:border-0 max-md:bg-transparent">
+          {/* Mobile: tarjetas apiladas */}
+          <div className="grid gap-3 md:hidden">
+            {loading ? (
+              <p className="rounded-2xl border border-zinc-200 px-4 py-12 text-center text-sm text-zinc-500 dark:border-zinc-800">
+                Cargando entradas…
+              </p>
+            ) : filtered.length === 0 ? (
+              <p className="rounded-2xl border border-dashed border-zinc-200 px-4 py-12 text-center text-sm text-zinc-500 dark:border-zinc-800">
+                No hay entradas que coincidan.
+              </p>
+            ) : (
+              filtered.map((ticket) => (
+                <article
+                  key={ticket.id}
+                  className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950/70"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-base font-bold text-zinc-900 dark:text-white">
+                        {ticket.holderName}
+                      </p>
+                      <p className="mt-0.5 truncate text-sm text-zinc-500">
+                        {ticket.holderEmail}
+                      </p>
+                      <p className="text-sm text-zinc-500">
+                        DNI {ticket.holderDni}
+                      </p>
+                    </div>
+                    <StatusBadge ticket={ticket} />
+                  </div>
+                  <div className="mt-3 flex items-end justify-between gap-3">
+                    <div>
+                      <p className="font-mono text-lg font-black text-zinc-900 dark:text-white">
+                        #{ticket.code}
+                      </p>
+                      <p className="mt-1 text-sm text-zinc-500">
+                        {ticket.sectorLabel}
+                      </p>
+                    </div>
+                    <RowActionsMenu
+                      ticket={ticket}
+                      onResend={() => openModal("resend", ticket)}
+                      onPrint={() => handlePrint(ticket)}
+                      onEditHolder={() => openModal("holder", ticket)}
+                      onTransfer={() => openModal("transfer", ticket)}
+                      onCancel={() => openModal("cancel", ticket)}
+                    />
+                  </div>
+                  <TransferLinkChip
+                    ticket={ticket}
+                    onOpenCustody={() => openModal("custody", ticket)}
+                  />
+                </article>
+              ))
+            )}
+          </div>
+
+          {/* Desktop: tabla */}
+          <div className="hidden md:block">
           <Table>
             <TableHeader>
               <TableRow className="border-zinc-200 dark:border-zinc-800 hover:bg-transparent">
                 <TableHead className="px-4 text-zinc-500">Comprador</TableHead>
-                <TableHead className="hidden px-4 text-zinc-500 md:table-cell">
+                <TableHead className="px-4 text-zinc-500">
                   Ubicación / Entrada
                 </TableHead>
                 <TableHead className="px-4 text-zinc-500">Código</TableHead>
@@ -837,15 +896,12 @@ export function IssuedTicketsManager({
                       <p className="text-xs text-zinc-500">
                         DNI {ticket.holderDni}
                       </p>
-                      <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-400 md:hidden">
-                        {ticket.sectorLabel}
-                      </p>
                       <TransferLinkChip
                         ticket={ticket}
                         onOpenCustody={() => openModal("custody", ticket)}
                       />
                     </TableCell>
-                    <TableCell className="hidden max-w-[240px] truncate px-4 py-3 text-sm text-zinc-700 dark:text-zinc-300 md:table-cell">
+                    <TableCell className="max-w-[240px] truncate px-4 py-3 text-sm text-zinc-700 dark:text-zinc-300">
                       {ticket.sectorLabel}
                     </TableCell>
                     <TableCell className="px-4 py-3 font-mono text-sm text-zinc-800 dark:text-zinc-200">
@@ -869,6 +925,7 @@ export function IssuedTicketsManager({
               )}
             </TableBody>
           </Table>
+          </div>
         </div>
 
         <p className="text-xs text-zinc-600">

@@ -119,11 +119,11 @@ export function OrganizerEventsManager({
           </p>
         </div>
         <Button
-          className="h-11 rounded-full bg-violet-600 text-white hover:bg-violet-500"
+          className="min-h-12 h-12 rounded-full bg-violet-600 text-base text-white hover:bg-violet-500"
           nativeButton={false}
           render={<Link href="/admin/events/create" />}
         >
-          <Plus className="size-4" aria-hidden="true" />
+          <Plus className="size-5" aria-hidden="true" />
           Nuevo Evento
         </Button>
       </div>

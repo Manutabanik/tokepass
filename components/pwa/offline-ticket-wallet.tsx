@@ -1,12 +1,16 @@
 "use client"
 
 import { WifiOff } from "lucide-react"
+import { useSearchParams } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
 
 import type { MyStoreRedemption } from "@/app/actions/addons"
 import type { MyTicket } from "@/app/actions/tickets"
 import { useOnlineStatus } from "@/components/pwa/use-online-status"
-import { TicketWallet } from "@/components/public/ticket-wallet"
+import {
+  TicketWallet,
+  type StoreOfferBlock,
+} from "@/components/public/ticket-wallet"
 import { Badge } from "@/components/ui/badge"
 import {
   getTicketsOffline,
@@ -18,6 +22,7 @@ type OfflineTicketWalletProps = {
   userId: string
   initialTickets: MyTicket[]
   barRedemptions?: MyStoreRedemption[]
+  storeOffers?: StoreOfferBlock[]
   loadError?: string | null
   appleWalletEnabled?: boolean
   googleWalletEnabled?: boolean
@@ -27,29 +32,38 @@ export function OfflineTicketWallet({
   userId,
   initialTickets,
   barRedemptions = [],
+  storeOffers = [],
   loadError = null,
   appleWalletEnabled = false,
   googleWalletEnabled = false,
 }: OfflineTicketWalletProps) {
   const online = useOnlineStatus()
+  const searchParams = useSearchParams()
   const [cachedTickets, setCachedTickets] = useState<MyTicket[] | null>(null)
   const [cacheReady, setCacheReady] = useState(false)
+
+  const tabParam = searchParams.get("tab")
+  const initialTab =
+    tabParam === "extras" || tabParam === "bar"
+      ? ("bar" as const)
+      : tabParam === "past"
+        ? ("past" as const)
+        : tabParam === "entradas" || tabParam === "upcoming"
+          ? ("upcoming" as const)
+          : undefined
 
   const tickets = online
     ? initialTickets
     : (cachedTickets ?? initialTickets)
 
-  // Sync → IndexedDB cuando hay red.
   useEffect(() => {
     if (!online || !userId || loadError) return
 
-    void saveTicketsOffline(userId, initialTickets).catch((error: unknown) => {
-      console.warn("[offline-store] sync failed", error)
+    void saveTicketsOffline(userId, initialTickets).catch(() => {
+      // Sync offline best-effort
     })
   }, [online, userId, initialTickets, loadError])
 
-  // Precarga inmediata: si la red cae o el SSR falla, la copia local ya está
-  // disponible sin iniciar una lectura tardía de IndexedDB.
   useEffect(() => {
     let cancelled = false
 
@@ -58,8 +72,7 @@ export function OfflineTicketWallet({
         const cached = await getTicketsOffline(userId)
         if (cancelled) return
         setCachedTickets(cached.length > 0 ? cached : [])
-      } catch (error: unknown) {
-        console.warn("[offline-store] read failed", error)
+      } catch {
         if (!cancelled) setCachedTickets([])
       } finally {
         if (!cancelled) setCacheReady(true)
@@ -71,7 +84,6 @@ export function OfflineTicketWallet({
     }
   }, [userId])
 
-  // Servidor falló online: intentar IDB.
   useEffect(() => {
     if (!online || !loadError || initialTickets.length > 0) return
 
@@ -134,9 +146,11 @@ export function OfflineTicketWallet({
           past={past}
           userId={userId}
           barRedemptions={online ? barRedemptions : []}
+          storeOffers={online ? storeOffers : []}
           offline={!online}
           appleWalletEnabled={appleWalletEnabled}
           googleWalletEnabled={googleWalletEnabled}
+          initialTab={initialTab}
         />
       )}
     </div>

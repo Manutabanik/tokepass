@@ -144,6 +144,7 @@ export type CreateCompleteEventRpcPayload = {
     layout_type: "general" | "table_combo" | "numbered_seat"
     seating_sector_id: string | null
     capacity_per_unit: number
+    admit_count?: number
   }>
   rrpp_commission: number | null
   addons_enabled: boolean
@@ -316,10 +317,45 @@ function mapEventFormToRpcPayload(
           tier.layoutType === "general" ? null : tier.seatingSectorId ?? null,
         capacity_per_unit:
           tier.layoutType === "general" ? 1 : tier.capacityPerUnit,
+        admit_count:
+          tier.layoutType === "general"
+            ? Math.max(1, Math.min(50, tier.admitCount ?? 1))
+            : 1,
       }
     }),
     rrpp_commission: null,
     addons_enabled: false,
+  }
+}
+
+async function syncTierAdmitCounts(
+  client: SupabaseClient<Database>,
+  eventId: string,
+  tickets: EventFormValues["tickets"],
+) {
+  const { data: tiers } = await client
+    .from("ticket_tiers")
+    .select("id, name")
+    .eq("event_id", eventId)
+
+  if (!tiers?.length) return
+
+  for (const tier of tiers) {
+    const match =
+      tickets.find((t) => t.id && t.id === tier.id) ??
+      tickets.find((t) => t.name.trim() === tier.name.trim())
+    if (!match) continue
+    const admit =
+      match.layoutType === "general"
+        ? Math.max(1, Math.min(50, match.admitCount ?? 1))
+        : 1
+    await client
+      .from("ticket_tiers")
+      .update({
+        admit_count: admit,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", tier.id)
   }
 }
 
@@ -476,7 +512,7 @@ export async function getEventForEditing(
       supabase
         .from("ticket_tiers")
         .select(
-          "id, name, price, base_price, platform_fee, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit",
+          "id, name, price, base_price, platform_fee, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, admit_count",
         )
         .eq("event_id", eventId)
         .order("created_at"),
@@ -593,6 +629,7 @@ export async function getEventForEditing(
               : ("general" as const),
           seatingSectorId: tier.seating_sector_id ?? null,
           capacityPerUnit: Math.max(1, Number(tier.capacity_per_unit ?? 1) || 1),
+          admitCount: Math.max(1, Number((tier as { admit_count?: number }).admit_count ?? 1) || 1),
         })),
       },
     }
@@ -774,6 +811,12 @@ export async function createCompleteEvent(
     }
   }
 
+  await syncTierAdmitCounts(
+    rpcClient,
+    String(eventId),
+    parsed.data.tickets,
+  )
+
   revalidatePath("/admin")
   revalidatePath("/admin/events")
   revalidatePath(`/admin/events/${eventId}`)
@@ -925,6 +968,8 @@ export async function updateCompleteEvent(
       ),
     }
   }
+
+  await syncTierAdmitCounts(mutationClient, eventId, parsed.data.tickets)
 
   revalidatePath("/admin")
   revalidatePath("/admin/events")
@@ -1080,7 +1125,7 @@ export async function publishEvent(
   revalidatePath(`/events/preview/${eventId}`)
   revalidatePath("/")
   revalidatePath("/superadmin/events")
-  revalidatePath("/my-tickets")
+  revalidatePath("/cuenta/entradas")
 
   return { success: true, purgedTestTickets }
 }

@@ -56,7 +56,7 @@ export default async function SuperAdminEventDetailPage({
         actions={<EventStatusBadge status={preview.eventStatus} />}
       />
 
-      <div className="mb-6 grid gap-4 md:grid-cols-3">
+      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
         <Card className="border-0 bg-white/[0.035] py-0 ring-1 ring-white/8">
           <CardContent className="px-5 py-5">
             <p className="text-xs uppercase tracking-[0.14em] text-zinc-600">

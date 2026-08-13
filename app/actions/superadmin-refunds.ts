@@ -267,7 +267,7 @@ export async function executeMassEventRefund(
     revalidatePath(`/superadmin/events/${id}`)
     revalidatePath("/superadmin/orders")
     revalidatePath("/superadmin/settlements")
-    revalidatePath("/my-tickets")
+    revalidatePath("/cuenta/entradas")
     revalidatePath("/events")
 
     return {

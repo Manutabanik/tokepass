@@ -246,13 +246,17 @@
 }
 
 @media print {
+  /* Térmica 80mm (estándar POS). Fallback 58mm vía clase .print-ticket-58. */
   @page {
-    margin: 12mm;
-    size: A4;
+    size: 80mm auto;
+    margin: 0;
   }
 
   body {
     background: white !important;
+    color: black !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
   header,
@@ -262,9 +266,37 @@
   }
 
   .print-ticket {
-    max-width: none !important;
+    width: 80mm !important;
+    max-width: 80mm !important;
+    margin: 0 auto !important;
+    padding: 2mm !important;
     box-shadow: none !important;
     border: none !important;
+    background: white !important;
+    color: black !important;
+  }
+
+  .print-ticket.print-ticket-58,
+  .print-width-58 .print-ticket {
+    width: 58mm !important;
+    max-width: 58mm !important;
+  }
+
+  .print-ticket-qr {
+    width: 48mm !important;
+    height: 48mm !important;
+    max-width: 100% !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 

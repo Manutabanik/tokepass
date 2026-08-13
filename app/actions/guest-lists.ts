@@ -105,7 +105,7 @@ function revalidateGuestPaths(eventId: string, listId?: string) {
   revalidatePath(`/admin/events/${eventId}/lists`)
   revalidatePath("/admin/lists")
   revalidatePath("/admin/scanner")
-  revalidatePath("/my-tickets")
+  revalidatePath("/cuenta/entradas")
   if (listId) {
     revalidatePath(`/lists/claim/${listId}`)
   }
@@ -303,7 +303,7 @@ export async function claimFreePass(
       return { success: false, error: message }
     }
 
-    revalidatePath("/my-tickets")
+    revalidatePath("/cuenta/entradas")
     return { success: true, data: { ticketId: String(ticketId) } }
   } catch (error) {
     return {

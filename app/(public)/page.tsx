@@ -20,9 +20,9 @@ export const metadata: Metadata = {
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>
+  searchParams: Promise<{ q?: string; location?: string; category?: string }>
 }) {
-  const { q } = await searchParams
+  const { q, location, category } = await searchParams
   let events: Awaited<ReturnType<typeof getPublishedEvents>> = []
   let featured: FeaturedRotationResult<
     Awaited<ReturnType<typeof getPublishedEvents>>[number]
@@ -65,6 +65,8 @@ export default async function HomePage({
           <DiscoveryHub
             events={events}
             initialQuery={q ?? ""}
+            initialLocation={location?.trim() || "todas"}
+            initialCategoryId={category?.trim() || "all"}
             initialFeatured={featured}
             categories={categories}
           />

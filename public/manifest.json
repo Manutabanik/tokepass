@@ -1,8 +1,8 @@
 {
-  "name": "Tokepass - Mis Entradas",
+  "name": "Tokepass - Boletería Digital",
   "short_name": "Tokepass",
   "description": "Billetera digital Tokepass: Living Tickets con QR dinámico, incluso sin conexión.",
-  "start_url": "/my-tickets",
+  "start_url": "/cuenta/entradas",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",

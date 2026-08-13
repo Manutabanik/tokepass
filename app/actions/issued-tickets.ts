@@ -556,7 +556,7 @@ export async function cancelTicketAdmin(
 
     revalidatePath(`/admin/events/${access.eventId}/tickets`)
     revalidatePath("/admin/scanner")
-    revalidatePath("/my-tickets")
+    revalidatePath("/cuenta/entradas")
 
     return { success: true, data: { ticketId } }
   } catch (error) {
@@ -689,7 +689,7 @@ export async function updateTicketHolderAdmin(
     if (error) return { success: false, error: error.message }
 
     revalidatePath(`/admin/events/${access.eventId}/tickets`)
-    revalidatePath("/my-tickets")
+    revalidatePath("/cuenta/entradas")
 
     return { success: true, data: { ticketId } }
   } catch (error) {
@@ -914,7 +914,7 @@ export async function reassignTicketAdmin(
 
     revalidatePath(`/admin/events/${access.eventId}/tickets`)
     revalidatePath("/admin/scanner")
-    revalidatePath("/my-tickets")
+    revalidatePath("/cuenta/entradas")
 
     return {
       success: true,

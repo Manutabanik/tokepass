@@ -177,7 +177,7 @@ export async function createResaleListingAction(
       }
     }
 
-    revalidatePath("/my-tickets")
+    revalidatePath("/cuenta/entradas")
     revalidatePath(`/events/${ticket.event_id}`)
 
     return {
@@ -239,7 +239,7 @@ export async function cancelResaleListingAction(
       return { success: false, error: error.message }
     }
 
-    revalidatePath("/my-tickets")
+    revalidatePath("/cuenta/entradas")
     revalidatePath(`/events/${listing.event_id}`)
 
     return { success: true, data: { listingId } }

@@ -440,7 +440,7 @@ export async function redeemItemRPC(
 
   revalidatePath("/admin/bar-scanner")
   revalidatePath("/admin/store-scanner")
-  revalidatePath("/my-tickets")
+  revalidatePath("/cuenta/entradas")
 
   return {
     success: true,
@@ -595,7 +595,7 @@ export async function createEventItem(input: {
   revalidatePath(`/admin/events/${input.eventId}/bar`)
   revalidatePath(`/admin/events/${input.eventId}`)
   revalidatePath(`/events/${input.eventId}`)
-  revalidatePath("/my-tickets")
+  revalidatePath("/cuenta/entradas")
 
   return { success: true, id: data.id }
 }
@@ -694,7 +694,7 @@ export async function startStoreCheckout(
     }
   }
 
-  revalidatePath("/my-tickets")
+  revalidatePath("/cuenta/entradas")
   revalidatePath(`/events/${cleanEventId}`)
 
   return {

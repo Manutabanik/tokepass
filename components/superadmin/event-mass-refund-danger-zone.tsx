@@ -40,6 +40,7 @@ export function EventMassRefundDangerZone({
   preview: MassRefundPreview
 }) {
   const router = useRouter()
+  const [armed, setArmed] = useState(false)
   const [open, setOpen] = useState(false)
   const [confirmText, setConfirmText] = useState("")
   const [reason, setReason] = useState("")
@@ -47,6 +48,11 @@ export function EventMassRefundDangerZone({
 
   const canSubmit =
     confirmText.trim() === CONFIRM_PHRASE && reason.trim().length >= 8
+
+  function resetConfirm() {
+    setConfirmText("")
+    setReason("")
+  }
 
   function handleExecute() {
     if (!canSubmit) return
@@ -62,8 +68,8 @@ export function EventMassRefundDangerZone({
         description: `${formatNumber(result.data.ordersRefunded)} compras · ${formatNumber(result.data.ticketsCancelled)} entradas anuladas`,
       })
       setOpen(false)
-      setConfirmText("")
-      setReason("")
+      setArmed(false)
+      resetConfirm()
       router.refresh()
     })
   }
@@ -85,7 +91,7 @@ export function EventMassRefundDangerZone({
           </p>
         </div>
         <div className="rounded-2xl border border-red-500/20 bg-black/30 px-4 py-3 text-right">
-          <p className="font-mono text-2xl font-black text-red-200">
+          <p className="font-mono text-2xl font-black text-red-200 sm:text-3xl">
             {formatNumber(preview.validTickets)}
           </p>
           <p className="text-[11px] uppercase tracking-wide text-red-300/70">
@@ -121,18 +127,53 @@ export function EventMassRefundDangerZone({
         </div>
       </div>
 
-      <Button
-        type="button"
-        disabled={preview.eventStatus === "cancelled" || isPending}
-        onClick={() => setOpen(true)}
-        className={cn(
-          "mt-6 h-12 w-full rounded-2xl bg-red-600 text-sm font-bold uppercase tracking-wide text-white",
-          "shadow-[0_0_28px_rgba(220,38,38,0.35)] hover:bg-red-500",
-        )}
-      >
-        <AlertTriangle className="size-4" aria-hidden="true" />
-        Cancelar evento y devolver la plata
-      </Button>
+      {!armed ? (
+        <Button
+          type="button"
+          disabled={preview.eventStatus === "cancelled" || isPending}
+          onClick={() => setArmed(true)}
+          className={cn(
+            "mt-6 min-h-12 h-12 w-full rounded-2xl border border-red-500/40 bg-red-950/40 text-sm font-bold uppercase tracking-wide text-red-100",
+            "hover:bg-red-900/50",
+          )}
+        >
+          <AlertTriangle className="size-4" aria-hidden="true" />
+          Armar cancelación (paso 1 de 2)
+        </Button>
+      ) : (
+        <div className="mt-6 space-y-3">
+          <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-3 text-center text-xs leading-5 text-amber-100">
+            Acción armada. Tocá de nuevo solo si querés abrir la confirmación
+            final. Podés desarmar si fue un toque accidental.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isPending}
+              onClick={() => setArmed(false)}
+              className="min-h-12 border-zinc-700 bg-transparent text-zinc-300"
+            >
+              Desarmar
+            </Button>
+            <Button
+              type="button"
+              disabled={preview.eventStatus === "cancelled" || isPending}
+              onClick={() => {
+                resetConfirm()
+                setOpen(true)
+              }}
+              className={cn(
+                "min-h-12 rounded-2xl bg-red-600 text-sm font-bold uppercase tracking-wide text-white",
+                "shadow-[0_0_28px_rgba(220,38,38,0.35)] hover:bg-red-500",
+              )}
+            >
+              <AlertTriangle className="size-4" aria-hidden="true" />
+              Abrir confirmación (paso 2)
+            </Button>
+          </div>
+        </div>
+      )}
 
       {preview.eventStatus === "cancelled" ? (
         <p className="mt-3 text-center text-xs text-red-200/70">
@@ -140,7 +181,13 @@ export function EventMassRefundDangerZone({
         </p>
       ) : null}
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next)
+          if (!next) resetConfirm()
+        }}
+      >
         <DialogContent className="border-red-500/30 bg-zinc-950 text-zinc-100 sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-200">
@@ -170,8 +217,10 @@ export function EventMassRefundDangerZone({
                 value={confirmText}
                 onChange={(event) => setConfirmText(event.target.value)}
                 disabled={isPending}
-                className="h-11 border-red-500/30 bg-black/40 font-mono text-sm"
+                className="min-h-12 border-red-500/30 bg-black/40 font-mono text-base"
                 autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
               />
             </div>
             <div>
@@ -187,7 +236,7 @@ export function EventMassRefundDangerZone({
                 onChange={(event) => setReason(event.target.value)}
                 disabled={isPending}
                 placeholder="Ej: Suspendido por tormenta / disposición municipal"
-                className="h-11 border-zinc-700 bg-black/40 text-sm"
+                className="min-h-12 border-zinc-700 bg-black/40 text-base"
               />
             </div>
           </div>
@@ -198,7 +247,7 @@ export function EventMassRefundDangerZone({
               variant="outline"
               disabled={isPending}
               onClick={() => setOpen(false)}
-              className="border-zinc-700 bg-transparent text-zinc-300"
+              className="min-h-12 border-zinc-700 bg-transparent text-zinc-300"
             >
               Volver
             </Button>
@@ -206,7 +255,7 @@ export function EventMassRefundDangerZone({
               type="button"
               disabled={!canSubmit || isPending}
               onClick={handleExecute}
-              className="bg-red-600 text-white hover:bg-red-500"
+              className="min-h-12 bg-red-600 text-white hover:bg-red-500"
             >
               {isPending ? (
                 <LoaderCircle className="animate-spin" />

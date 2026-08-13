@@ -139,8 +139,19 @@ export function resolveScanSecret(
     }
   }
 
-  if (!living) return null
-
+  if (!living) {
+    // Fallback papel / boletería POS: secreto crudo (hex) sin ventana TOTP.
+    // Compatible con tickets emitidos en /admin/pos (is_dynamic_qr=false).
+    if (cleaned.length >= 16 && !cleaned.includes(".")) {
+      return {
+        mode: "secret",
+        totpSecret: cleaned,
+        expired: false,
+        enforceFreshness: false,
+      }
+    }
+    return null
+  }
   // Rechaza tanto capturas vencidas como ventanas futuras manipuladas.
   const expired = !isLivingWindowAccepted(living.timestampBlock, currentBlock)
 

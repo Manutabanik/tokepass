@@ -2,6 +2,7 @@
 
 import { Flame } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
+import { usePathname, useRouter } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
 
 import type { CatalogEvent } from "@/app/actions/public-events"
@@ -11,10 +12,10 @@ import { FeaturedCarousel } from "@/components/discovery/featured-carousel"
 import { HeroSection } from "@/components/discovery/hero-section"
 import { OrganizerCtaBanner } from "@/components/discovery/organizer-cta-banner"
 import { publishDiscoveryControls } from "@/components/discovery/discovery-controls-store"
+import { useArgentinaProvinces } from "@/hooks/use-argentina-provinces"
 import type { DiscoveryCategory } from "@/lib/discovery-categories"
 import {
   DEFAULT_DISCOVERY_CATEGORIES,
-  extractCities,
   filterCatalogEvents,
   pickUpcoming,
 } from "@/lib/discovery-filters"
@@ -24,41 +25,75 @@ import { isFeaturedRailEligible } from "@/lib/featured-rotation"
 export function DiscoveryHub({
   events,
   initialQuery = "",
+  initialLocation = "todas",
+  initialCategoryId = "all",
   initialFeatured,
   categories = DEFAULT_DISCOVERY_CATEGORIES,
 }: {
   events: CatalogEvent[]
   initialQuery?: string
+  /** Nombre de provincia Georef, o `todas`. */
+  initialLocation?: string
+  /** UUID de categoría (o `all`). */
+  initialCategoryId?: string
   /** Pool de destacados mezclado en el server (Fisher–Yates). */
   initialFeatured?: FeaturedRotationResult<CatalogEvent>
   /** Categorías / tags — hoy default local; mañana desde DB. */
   categories?: DiscoveryCategory[]
 }) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const { provinces, isLoading: locationsLoading } = useArgentinaProvinces()
+
   const [query, setQuery] = useState(initialQuery)
-  const [categoryId, setCategoryId] = useState("all")
+  const [categoryId, setCategoryId] = useState(initialCategoryId)
   const [tagId, setTagId] = useState<string | null>(null)
-  const [city, setCity] = useState("todas")
-
-  const cities = useMemo(() => extractCities(events), [events])
-
-  const featuredPool = useMemo(() => {
-    if (initialFeatured?.pool && initialFeatured.pool.length > 0) {
-      return initialFeatured.pool
-    }
-    return events.filter(isFeaturedRailEligible)
-  }, [events, initialFeatured])
+  const [city, setCity] = useState(initialLocation)
 
   useEffect(() => {
     publishDiscoveryControls({
       query,
       onQueryChange: setQuery,
       city,
-      cities,
+      cities: provinces,
       onCityChange: setCity,
       events,
     })
     return () => publishDiscoveryControls(null)
-  }, [query, city, cities, events])
+  }, [query, city, provinces, events])
+
+  useEffect(() => {
+    const nextParams = new URLSearchParams()
+    if (query.trim()) nextParams.set("q", query.trim())
+    if (city && city !== "todas") nextParams.set("location", city)
+    if (categoryId && categoryId !== "all") nextParams.set("category", categoryId)
+
+    const currentParams =
+      typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search)
+        : new URLSearchParams()
+
+    const keys = new Set([
+      ...nextParams.keys(),
+      ...currentParams.keys(),
+    ])
+    let same = true
+    for (const key of keys) {
+      if ((nextParams.get(key) ?? "") !== (currentParams.get(key) ?? "")) {
+        same = false
+        break
+      }
+    }
+    if (same) return
+
+    const next = nextParams.toString()
+    router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false })
+  }, [query, city, categoryId, pathname, router])
+
+  const featuredPool = useMemo(
+    () => featuredPoolSafe(events, initialFeatured),
+    [events, initialFeatured],
+  )
 
   const filtered = useMemo(
     () =>
@@ -80,14 +115,21 @@ export function DiscoveryHub({
 
   const gridEvents = isBrowsing ? filtered : events
 
+  const resultsSubtitle = isBrowsing
+    ? city !== "todas" && filtered.length === 0
+      ? `Todavía no hay eventos en ${city}`
+      : `${gridEvents.length} evento${gridEvents.length === 1 ? "" : "s"}`
+    : `${gridEvents.length} evento${gridEvents.length === 1 ? "" : "s"}`
+
   return (
     <div className="space-y-12 sm:space-y-16">
       <HeroSection
         query={query}
         onQueryChange={setQuery}
         city={city}
-        cities={cities}
+        cities={provinces}
         onCityChange={setCity}
+        locationsLoading={locationsLoading}
         categoryId={categoryId}
         onCategoryChange={setCategoryId}
         tagId={tagId}
@@ -108,7 +150,7 @@ export function DiscoveryHub({
               </h2>
             </div>
             <p className="mt-1.5 text-sm text-zinc-500 dark:text-zinc-400">
-              {gridEvents.length} evento{gridEvents.length === 1 ? "" : "s"}
+              {resultsSubtitle}
             </p>
           </div>
         </div>
@@ -148,4 +190,14 @@ export function DiscoveryHub({
       <OrganizerCtaBanner />
     </div>
   )
+}
+
+function featuredPoolSafe(
+  events: CatalogEvent[],
+  initialFeatured?: FeaturedRotationResult<CatalogEvent>,
+) {
+  if (initialFeatured?.pool && initialFeatured.pool.length > 0) {
+    return initialFeatured.pool
+  }
+  return events.filter(isFeaturedRailEligible)
 }

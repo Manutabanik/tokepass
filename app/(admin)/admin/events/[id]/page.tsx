@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   ArrowRight,
   ClipboardList,
+  Gift,
   ImageIcon,
   Megaphone,
   Pencil,
@@ -128,6 +129,12 @@ export default async function ManageEventPage({
       label: "Listas digitales",
       description: "Cupos, invitados y control de ingreso.",
       icon: ClipboardList,
+    },
+    {
+      href: `/admin/events/${id}/complimentary`,
+      label: "Emitir cortesías",
+      description: "CSV nominado, lote innombrado, mesas y combos.",
+      icon: Gift,
     },
     {
       href: `/admin/events/${id}/marketing`,

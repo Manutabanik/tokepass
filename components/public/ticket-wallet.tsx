@@ -7,24 +7,36 @@ import {
   Ticket,
 } from "lucide-react"
 import { motion } from "motion/react"
+import Image from "next/image"
 import Link from "next/link"
+import { useMemo } from "react"
 
-import type { MyStoreRedemption } from "@/app/actions/addons"
+import type { EventItem, MyStoreRedemption } from "@/app/actions/addons"
 import type { MyTicket } from "@/app/actions/tickets"
+import { EventStoreUpsell } from "@/components/public/event-store-upsell"
 import { LivingStoreCard } from "@/components/public/living-store-card"
 import { LivingTicketCard } from "@/components/public/living-ticket-card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { formatEventDay, formatEventTime } from "@/lib/format"
+
+export type StoreOfferBlock = {
+  eventId: string
+  title: string
+  items: EventItem[]
+}
 
 function EmptyState({
   title,
   description,
-  cta = false,
+  ctaHref,
+  ctaLabel,
   kind = "tickets",
 }: {
   title: string
   description: string
-  cta?: boolean
+  ctaHref?: string
+  ctaLabel?: string
   kind?: "tickets" | "bar" | "history"
 }) {
   const Icon =
@@ -45,10 +57,6 @@ function EmptyState({
         ].join(" ")}
         aria-hidden="true"
       />
-      <div
-        className="pointer-events-none absolute inset-x-16 bottom-0 -z-10 h-px bg-gradient-to-r from-transparent via-zinc-700/60 to-transparent"
-        aria-hidden="true"
-      />
 
       <div className="flex min-h-[264px] flex-col items-center justify-center sm:min-h-[292px]">
         <span
@@ -67,49 +75,182 @@ function EmptyState({
         <p className="mx-auto mb-8 max-w-md text-sm leading-relaxed text-zinc-400 sm:text-base">
           {description}
         </p>
-        {cta && (
+        {ctaHref && ctaLabel ? (
           <Button
             className="h-12 rounded-xl bg-white px-6 text-sm font-semibold text-zinc-950 shadow-[0_0_20px_rgba(255,255,255,0.15)] transition-all hover:scale-[1.02] hover:bg-zinc-100 active:scale-[0.98] sm:text-base"
             nativeButton={false}
-            render={<Link href="/events" />}
+            render={<Link href={ctaHref} />}
           >
-            Explorar eventos
+            {ctaLabel}
             <ArrowUpRight className="size-4" aria-hidden="true" />
           </Button>
-        )}
+        ) : null}
       </div>
     </motion.div>
   )
 }
 
-function TicketStack({
-  tickets,
-  userId,
-  showQr,
-  offline = false,
-  appleWalletEnabled = false,
-  googleWalletEnabled = false,
-}: {
+type TicketEventGroup = {
+  eventId: string
+  eventTitle: string
+  eventDate: string
+  eventLocation: string
+  flyerUrl: string | null
   tickets: MyTicket[]
-  userId: string
-  showQr: boolean
-  offline?: boolean
-  appleWalletEnabled?: boolean
-  googleWalletEnabled?: boolean
+}
+
+function groupTicketsByEvent(tickets: MyTicket[]): TicketEventGroup[] {
+  const map = new Map<string, TicketEventGroup>()
+  for (const ticket of tickets) {
+    const existing = map.get(ticket.eventId)
+    if (existing) {
+      existing.tickets.push(ticket)
+      if (!existing.flyerUrl && ticket.flyerUrl) {
+        existing.flyerUrl = ticket.flyerUrl
+      }
+      continue
+    }
+    map.set(ticket.eventId, {
+      eventId: ticket.eventId,
+      eventTitle: ticket.eventTitle,
+      eventDate: ticket.eventDate,
+      eventLocation: ticket.venueName ?? ticket.eventLocation,
+      flyerUrl: ticket.flyerUrl,
+      tickets: [ticket],
+    })
+  }
+  return [...map.values()].sort(
+    (a, b) =>
+      new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime(),
+  )
+}
+
+type ExtraEventGroup = {
+  eventId: string
+  eventTitle: string
+  eventDate: string
+  redemptions: MyStoreRedemption[]
+}
+
+function groupExtrasByEvent(
+  redemptions: MyStoreRedemption[],
+): ExtraEventGroup[] {
+  const map = new Map<string, ExtraEventGroup>()
+  for (const item of redemptions) {
+    const existing = map.get(item.eventId)
+    if (existing) {
+      existing.redemptions.push(item)
+      continue
+    }
+    map.set(item.eventId, {
+      eventId: item.eventId,
+      eventTitle: item.eventTitle,
+      eventDate: item.eventDate,
+      redemptions: [item],
+    })
+  }
+  return [...map.values()].sort(
+    (a, b) =>
+      new Date(b.eventDate).getTime() - new Date(a.eventDate).getTime(),
+  )
+}
+
+function EventGroupHeader({
+  eventId,
+  title,
+  date,
+  location,
+  flyerUrl,
+  countLabel,
+}: {
+  eventId: string
+  title: string
+  date: string
+  location?: string
+  flyerUrl?: string | null
+  countLabel: string
 }) {
   return (
-    <div className="grid gap-4 md:grid-cols-2 md:items-start">
-      {tickets.map((ticket) => (
-        <LivingTicketCard
-          key={ticket.id}
-          ticket={ticket}
-          userId={userId}
-          showQr={showQr}
-          offline={offline}
-          appleWalletEnabled={appleWalletEnabled}
-          googleWalletEnabled={googleWalletEnabled}
-        />
-      ))}
+    <div className="mb-3 flex flex-wrap items-center gap-3 border-b border-zinc-800/80 pb-3">
+      <div className="relative size-14 shrink-0 overflow-hidden rounded-xl bg-zinc-800 ring-1 ring-zinc-700/60">
+        {flyerUrl ? (
+          <Image
+            src={flyerUrl}
+            alt=""
+            fill
+            sizes="56px"
+            className="object-cover"
+          />
+        ) : (
+          <span className="grid size-full place-items-center text-zinc-600">
+            <Ticket className="size-5" aria-hidden="true" />
+          </span>
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <h3 className="truncate text-lg font-bold tracking-tight text-white">
+          {title}
+        </h3>
+        <p className="mt-0.5 text-sm text-zinc-500">
+          {formatEventDay(date)} · {formatEventTime(date)}
+          {location ? ` · ${location}` : null}
+        </p>
+      </div>
+      <div className="flex shrink-0 flex-col items-end gap-1.5 sm:flex-row sm:items-center">
+        <span className="rounded-full bg-zinc-800 px-2.5 py-1 font-mono text-[11px] font-semibold text-zinc-300 ring-1 ring-inset ring-zinc-700/60">
+          {countLabel}
+        </span>
+        <Link
+          href={`/events/${eventId}`}
+          className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-400 hover:text-emerald-300"
+        >
+          Ver evento
+          <ArrowUpRight className="size-3.5" aria-hidden="true" />
+        </Link>
+      </div>
+    </div>
+  )
+}
+
+function ExtrasUpsellCard({
+  title,
+  flyerUrl,
+  storeHref,
+}: {
+  title: string
+  flyerUrl?: string | null
+  storeHref: string
+}) {
+  return (
+    <div className="flex flex-col gap-3 rounded-2xl border border-dashed border-amber-500/30 bg-amber-500/5 p-4 sm:flex-row sm:items-center">
+      <div className="relative size-12 shrink-0 overflow-hidden rounded-xl bg-zinc-800">
+        {flyerUrl ? (
+          <Image
+            src={flyerUrl}
+            alt=""
+            fill
+            sizes="48px"
+            className="object-cover"
+          />
+        ) : (
+          <span className="grid size-full place-items-center text-amber-300/80">
+            <ShoppingBag className="size-5" aria-hidden="true" />
+          </span>
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-white">{title}</p>
+        <p className="mt-0.5 text-sm text-zinc-400">
+          ¿Querés sumar tragos o servicios para este evento?
+        </p>
+      </div>
+      <Button
+        className="h-11 shrink-0 rounded-xl bg-amber-500 font-semibold text-zinc-950 hover:bg-amber-400"
+        nativeButton={false}
+        render={<Link href={storeHref} />}
+      >
+        Tienda de extras
+      </Button>
     </div>
   )
 }
@@ -119,108 +260,269 @@ export function TicketWallet({
   past,
   userId,
   barRedemptions = [],
+  storeOffers = [],
   offline = false,
   appleWalletEnabled = false,
   googleWalletEnabled = false,
+  initialTab,
 }: {
   upcoming: MyTicket[]
   past: MyTicket[]
   userId: string
   barRedemptions?: MyStoreRedemption[]
+  storeOffers?: StoreOfferBlock[]
   offline?: boolean
   appleWalletEnabled?: boolean
   googleWalletEnabled?: boolean
+  initialTab?: "upcoming" | "bar" | "past"
 }) {
   const defaultTab =
-    upcoming.length > 0
+    initialTab ??
+    (upcoming.length > 0
       ? "upcoming"
       : barRedemptions.length > 0
         ? "bar"
-        : "past"
+        : "past")
+
+  const upcomingGroups = useMemo(
+    () => groupTicketsByEvent(upcoming),
+    [upcoming],
+  )
+  const pastGroups = useMemo(() => groupTicketsByEvent(past), [past])
+  const extraGroups = useMemo(
+    () => groupExtrasByEvent(barRedemptions),
+    [barRedemptions],
+  )
 
   const validBar = barRedemptions.filter((item) => item.status === "valid")
-  const redeemedBar = barRedemptions.filter((item) => item.status === "redeemed")
+  const hasOffers = storeOffers.length > 0 && !offline
+
+  const eventsMissingExtras = useMemo(() => {
+    const withExtras = new Set(extraGroups.map((g) => g.eventId))
+    const offerByEvent = new Map(
+      storeOffers.map((block) => [block.eventId, block]),
+    )
+    return upcomingGroups
+      .filter((group) => !withExtras.has(group.eventId))
+      .map((group) => ({
+        ...group,
+        hasStore: offerByEvent.has(group.eventId),
+      }))
+  }, [upcomingGroups, extraGroups, storeOffers])
 
   return (
-    <Tabs defaultValue={defaultTab} className="w-full gap-6">
-      <TabsList
-        aria-label="Secciones de la billetera"
-        className="inline-flex w-full items-stretch justify-start gap-1 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-1.5 shadow-lg shadow-black/20 backdrop-blur-md group-data-horizontal/tabs:h-auto sm:w-fit sm:self-start"
-      >
-        <TabsTrigger
-          value="upcoming"
-          className="h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl px-2.5 text-xs font-medium text-zinc-400 transition-all hover:bg-zinc-800/40 hover:text-white data-active:border-zinc-700/60 data-active:bg-zinc-800 data-active:text-white data-active:shadow-sm sm:h-10 sm:flex-none sm:px-4 sm:text-sm"
+    <Tabs key={defaultTab} defaultValue={defaultTab} className="w-full gap-6">
+      <div className="-mx-1 overflow-x-auto whitespace-nowrap px-1 pb-1 scrollbar-none">
+        <TabsList
+          aria-label="Secciones de la billetera"
+          className="inline-flex w-max min-w-full flex-nowrap items-stretch justify-start gap-1 whitespace-nowrap rounded-2xl border border-zinc-800 bg-zinc-900/60 p-1.5 shadow-lg shadow-black/20 backdrop-blur-md group-data-horizontal/tabs:h-auto sm:w-fit sm:min-w-0 sm:self-start"
         >
-          <Ticket className="hidden size-3.5 sm:block" aria-hidden="true" />
-          <span>Entradas</span>
-          <span className="rounded-md bg-zinc-800 px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums text-zinc-200 ring-1 ring-inset ring-zinc-700/60">
-            {upcoming.length}
-          </span>
-        </TabsTrigger>
-        <TabsTrigger
-          value="bar"
-          className="h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl px-2.5 text-xs font-medium text-zinc-400 transition-all hover:bg-zinc-800/40 hover:text-white data-active:border-zinc-700/60 data-active:bg-zinc-800 data-active:text-white data-active:shadow-sm sm:h-10 sm:flex-none sm:px-4 sm:text-sm"
-        >
-          <ShoppingBag className="hidden size-3.5 sm:block" aria-hidden="true" />
-          <span className="sm:hidden">Extras</span>
-          <span className="hidden sm:inline">Mis Extras</span>
-          <span className="rounded-md bg-zinc-800 px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums text-zinc-200 ring-1 ring-inset ring-zinc-700/60">
-            {barRedemptions.length}
-          </span>
-        </TabsTrigger>
-        <TabsTrigger
-          value="past"
-          className="h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl px-2.5 text-xs font-medium text-zinc-400 transition-all hover:bg-zinc-800/40 hover:text-white data-active:border-zinc-700/60 data-active:bg-zinc-800 data-active:text-white data-active:shadow-sm sm:h-10 sm:flex-none sm:px-4 sm:text-sm"
-        >
-          <History className="hidden size-3.5 sm:block" aria-hidden="true" />
-          <span>Pasados</span>
-          <span className="rounded-md bg-zinc-800 px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums text-zinc-200 ring-1 ring-inset ring-zinc-700/60">
-            {past.length}
-          </span>
-        </TabsTrigger>
-      </TabsList>
+          <TabsTrigger
+            value="upcoming"
+            className="h-10 min-w-[7.5rem] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-xs font-medium text-zinc-400 transition-all hover:bg-zinc-800/40 hover:text-white data-active:border-zinc-700/60 data-active:bg-zinc-800 data-active:text-white data-active:shadow-sm sm:min-w-0 sm:px-4 sm:text-sm"
+          >
+            <Ticket className="hidden size-3.5 sm:block" aria-hidden="true" />
+            <span>Entradas</span>
+            <span className="rounded-md bg-zinc-800 px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums text-zinc-200 ring-1 ring-inset ring-zinc-700/60">
+              {upcoming.length}
+            </span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="bar"
+            className="h-10 min-w-[7.5rem] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-xs font-medium text-zinc-400 transition-all hover:bg-zinc-800/40 hover:text-white data-active:border-zinc-700/60 data-active:bg-zinc-800 data-active:text-white data-active:shadow-sm sm:min-w-0 sm:px-4 sm:text-sm"
+          >
+            <ShoppingBag
+              className="hidden size-3.5 sm:block"
+              aria-hidden="true"
+            />
+            <span>Mis Extras</span>
+            <span className="rounded-md bg-zinc-800 px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums text-zinc-200 ring-1 ring-inset ring-zinc-700/60">
+              {validBar.length}
+            </span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="past"
+            className="h-10 min-w-[7.5rem] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-xs font-medium text-zinc-400 transition-all hover:bg-zinc-800/40 hover:text-white data-active:border-zinc-700/60 data-active:bg-zinc-800 data-active:text-white data-active:shadow-sm sm:min-w-0 sm:px-4 sm:text-sm"
+          >
+            <History className="hidden size-3.5 sm:block" aria-hidden="true" />
+            <span>Pasados</span>
+            <span className="rounded-md bg-zinc-800 px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums text-zinc-200 ring-1 ring-inset ring-zinc-700/60">
+              {past.length}
+            </span>
+          </TabsTrigger>
+        </TabsList>
+      </div>
 
       <TabsContent value="upcoming" className="mt-0 outline-none">
-        {upcoming.length > 0 ? (
-          <TicketStack
-            tickets={upcoming}
-            userId={userId}
-            showQr
-            offline={offline}
-            appleWalletEnabled={appleWalletEnabled}
-            googleWalletEnabled={googleWalletEnabled}
-          />
-        ) : (
-          <EmptyState
-            title="Sin entradas próximas"
-            description="Cuando compres una entrada, aparecerá acá lista para presentar en el ingreso."
-            cta
-          />
-        )}
-      </TabsContent>
-
-      <TabsContent value="bar" className="mt-0 outline-none">
-        {barRedemptions.length > 0 ? (
-          <div className="grid gap-4 md:grid-cols-2 md:items-start">
-            {validBar.map((item) => (
-              <LivingStoreCard key={item.id} redemption={item} />
-            ))}
-            {redeemedBar.map((item) => (
-              <LivingStoreCard key={item.id} redemption={item} />
+        {upcomingGroups.length > 0 ? (
+          <div className="space-y-8">
+            {upcomingGroups.map((group) => (
+              <section key={group.eventId}>
+                <EventGroupHeader
+                  eventId={group.eventId}
+                  title={group.eventTitle}
+                  date={group.eventDate}
+                  location={group.eventLocation}
+                  flyerUrl={group.flyerUrl}
+                  countLabel={
+                    group.tickets.length === 1
+                      ? "1 entrada activa"
+                      : `${group.tickets.length} entradas activas`
+                  }
+                />
+                <div className="grid gap-4 md:grid-cols-2 md:items-start">
+                  {group.tickets.map((ticket) => (
+                    <LivingTicketCard
+                      key={ticket.id}
+                      ticket={ticket}
+                      userId={userId}
+                      showQr
+                      offline={offline}
+                      appleWalletEnabled={appleWalletEnabled}
+                      googleWalletEnabled={googleWalletEnabled}
+                    />
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
         ) : (
           <EmptyState
-            kind="bar"
-            title="Sin consumiciones"
-            description="Cuando compres merch, comida o bebidas desde la Tienda de Extras, aparecen acá con su QR de canje."
+            title="Sin entradas activas"
+            description="Cuando compres una entrada, aparece acá lista para presentar en el ingreso."
+            ctaHref="/events"
+            ctaLabel="Explorar eventos"
           />
         )}
       </TabsContent>
 
+      <TabsContent value="bar" className="mt-0 space-y-8 outline-none">
+        {extraGroups.length > 0 ? (
+          <div className="space-y-8">
+            <div>
+              <h2 className="text-base font-bold text-white">
+                Tus consumiciones
+              </h2>
+              <p className="mt-1 text-sm text-zinc-500">
+                Canjealas en barra o tienda con el QR de cada extra.
+              </p>
+            </div>
+            {extraGroups.map((group) => (
+              <section key={group.eventId}>
+                <EventGroupHeader
+                  eventId={group.eventId}
+                  title={group.eventTitle}
+                  date={group.eventDate}
+                  countLabel={
+                    group.redemptions.length === 1
+                      ? "1 extra"
+                      : `${group.redemptions.length} extras`
+                  }
+                />
+                <div className="grid gap-4 md:grid-cols-2 md:items-start">
+                  {group.redemptions.map((item) => (
+                    <LivingStoreCard key={item.id} redemption={item} />
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        ) : null}
+
+        {eventsMissingExtras.length > 0 && !offline ? (
+          <div className="space-y-3">
+            {extraGroups.length === 0 ? (
+              <div>
+                <h2 className="text-base font-bold text-white">
+                  Tus consumiciones
+                </h2>
+                <p className="mt-1 text-sm text-zinc-500">
+                  Todavía no compraste extras. Sumá tragos o servicios para tus
+                  eventos.
+                </p>
+              </div>
+            ) : (
+              <h3 className="text-sm font-semibold text-zinc-300">
+                Sumá extras a tus eventos
+              </h3>
+            )}
+            {eventsMissingExtras.map((group) => (
+              <ExtrasUpsellCard
+                key={group.eventId}
+                title={group.eventTitle}
+                flyerUrl={group.flyerUrl}
+                storeHref={
+                  group.hasStore
+                    ? `#extras-${group.eventId}`
+                    : `/events/${group.eventId}`
+                }
+              />
+            ))}
+          </div>
+        ) : null}
+
+        {extraGroups.length === 0 && eventsMissingExtras.length === 0 ? (
+          <EmptyState
+            kind="bar"
+            title="Todavía no tenés extras"
+            description="Cuando haya tienda en tus eventos, vas a poder comprar tragos y merch acá."
+            ctaHref="/events"
+            ctaLabel="Explorar eventos"
+          />
+        ) : null}
+
+        {hasOffers ? (
+          <div id="extras-tienda" className="scroll-mt-24 space-y-4">
+            <div className="flex items-center gap-2">
+              <ShoppingBag className="size-4 text-amber-300" aria-hidden="true" />
+              <h3 className="text-base font-bold text-white">
+                Tienda de extras
+              </h3>
+            </div>
+            {storeOffers.map((block) => (
+              <div key={block.eventId} id={`extras-${block.eventId}`} className="scroll-mt-28">
+                <EventStoreUpsell
+                  eventId={block.eventId}
+                  eventTitle={block.title}
+                  items={block.items}
+                  canPurchase
+                />
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </TabsContent>
+
       <TabsContent value="past" className="mt-0 outline-none">
-        {past.length > 0 ? (
-          <TicketStack tickets={past} userId={userId} showQr={false} />
+        {pastGroups.length > 0 ? (
+          <div className="space-y-8">
+            {pastGroups.map((group) => (
+              <section key={group.eventId}>
+                <EventGroupHeader
+                  eventId={group.eventId}
+                  title={group.eventTitle}
+                  date={group.eventDate}
+                  location={group.eventLocation}
+                  flyerUrl={group.flyerUrl}
+                  countLabel={
+                    group.tickets.length === 1
+                      ? "1 entrada"
+                      : `${group.tickets.length} entradas`
+                  }
+                />
+                <div className="grid gap-4 md:grid-cols-2 md:items-start">
+                  {group.tickets.map((ticket) => (
+                    <LivingTicketCard
+                      key={ticket.id}
+                      ticket={ticket}
+                      userId={userId}
+                      showQr={false}
+                    />
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
         ) : (
           <EmptyState
             kind="history"

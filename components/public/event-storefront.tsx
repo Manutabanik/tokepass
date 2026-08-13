@@ -183,12 +183,12 @@ export function EventStorefront({
 
               <div className="flex flex-wrap gap-3">
                 <Button
-                  className="h-12 rounded-2xl bg-emerald-500 px-5 text-sm font-bold text-zinc-950 hover:bg-emerald-400"
+                  className="min-h-12 h-12 rounded-2xl bg-emerald-500 px-5 text-base font-bold text-zinc-950 hover:bg-emerald-400"
                   nativeButton={false}
                   render={<a href="#tickets" />}
                 >
                   <Ticket className="size-4" aria-hidden="true" />
-                  {soldOut ? "Agotado" : "Comprar entradas"}
+                  {soldOut ? "Agotado" : "Comprar Entradas"}
                 </Button>
                 <EventPromoSpotButton promoVideoUrl={event.promoVideoUrl} />
               </div>

@@ -1,6 +1,6 @@
-/* Tokepass PWA Service Worker — Offline-First billetera /my-tickets */
+/* Tokepass PWA Service Worker — Offline-First billetera /cuenta/entradas */
 
-const CACHE_VERSION = "tokepass-wallet-v5"
+const CACHE_VERSION = "tokepass-wallet-v6"
 const ASSET_CACHE = `${CACHE_VERSION}-assets`
 
 const PRECACHE_URLS = [
@@ -8,6 +8,7 @@ const PRECACHE_URLS = [
   "/icons/icon-512.png",
   "/icons/apple-touch-icon.png",
   "/manifest.webmanifest",
+  "/brand/tokepass-mark.png",
 ]
 
 const OFFLINE_WALLET_HTML = `<!doctype html><html lang="es"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Tokepass Offline</title><style>body{margin:0;background:#09090b;color:#fff;font-family:system-ui;display:grid;min-height:100vh;place-items:center;padding:24px;text-align:center}p{color:#a1a1aa;line-height:1.5}</style></head><body><div><h1>Modo offline</h1><p>Las entradas viven en este dispositivo. Conectate para sincronizar el estado más reciente.</p></div></body></html>`
@@ -18,6 +19,7 @@ function isStaticAsset(url) {
 
   return (
     url.pathname.startsWith("/icons/") ||
+    url.pathname.startsWith("/brand/") ||
     url.pathname.endsWith(".css") ||
     url.pathname.endsWith(".woff2") ||
     url.pathname.endsWith(".svg") ||
@@ -30,9 +32,23 @@ function isStaticAsset(url) {
 
 function isWalletRoute(url) {
   return (
+    url.pathname === "/cuenta/entradas" ||
+    url.pathname.startsWith("/cuenta/entradas/") ||
     url.pathname === "/my-tickets" ||
     url.pathname.startsWith("/my-tickets/") ||
     url.pathname.startsWith("/tickets/")
+  )
+}
+
+function shouldSkipDocumentCache(url) {
+  return (
+    url.pathname.startsWith("/cuenta/") ||
+    url.pathname === "/cuenta" ||
+    url.pathname.startsWith("/tickets/") ||
+    url.pathname === "/my-tickets" ||
+    url.pathname.startsWith("/my-tickets/") ||
+    url.pathname === "/mis-tickets" ||
+    url.pathname.startsWith("/mis-tickets/")
   )
 }
 
@@ -123,13 +139,13 @@ async function cacheUrls(urls) {
         const sameOrigin = url.origin === self.location.origin
 
         // Never persist authenticated HTML/RSC documents. Wallet data stays in
-        // IndexedDB, which is already scoped to the browsing profile.
-        if (
-          sameOrigin &&
-          (url.pathname.startsWith("/tickets/") ||
-            url.pathname === "/my-tickets" ||
-            url.pathname.startsWith("/my-tickets/"))
-        ) {
+        // IndexedDB (totp_secret / Living QR), scoped to the browsing profile.
+        if (sameOrigin && shouldSkipDocumentCache(url)) {
+          return
+        }
+
+        // Solo assets de imagen / estáticos para flyers offline.
+        if (sameOrigin && !isStaticAsset(url)) {
           return
         }
 

@@ -1,44 +1,13 @@
 "use client"
 
-import {
-  Building2,
-  CalendarDays,
-  ClipboardList,
-  LayoutDashboard,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Receipt,
-  Settings,
-  Tags,
-  Users,
-  Wallet,
-} from "lucide-react"
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
 
 import { BrandLogo } from "@/components/shared/brand-logo"
+import { SUPERADMIN_NAV } from "@/components/shared/superadmin-mobile-nav"
 import { cn } from "@/lib/utils"
-
-const navigation = [
-  { label: "Resumen", href: "/superadmin", icon: LayoutDashboard },
-  {
-    label: "Solicitudes",
-    href: "/superadmin/applications",
-    icon: ClipboardList,
-  },
-  {
-    label: "Productoras",
-    href: "/superadmin/organizers",
-    icon: Building2,
-  },
-  { label: "Compradores", href: "/superadmin/buyers", icon: Users },
-  { label: "Eventos", href: "/superadmin/events", icon: CalendarDays },
-  { label: "Categorías", href: "/superadmin/categories", icon: Tags },
-  { label: "Compras", href: "/superadmin/orders", icon: Receipt },
-  { label: "Liquidaciones", href: "/superadmin/settlements", icon: Wallet },
-  { label: "Ajustes", href: "/superadmin/settings", icon: Settings },
-] as const
 
 export function SuperAdminSidebar() {
   const pathname = usePathname()
@@ -47,7 +16,7 @@ export function SuperAdminSidebar() {
   return (
     <aside
       className={cn(
-        "hidden h-screen shrink-0 border-r border-white/8 bg-[#08080b] p-4 text-zinc-300 transition-[width] duration-300 lg:sticky lg:top-0 lg:flex lg:flex-col",
+        "hidden h-screen shrink-0 border-r border-white/8 bg-[#08080b] p-4 text-zinc-300 transition-[width] duration-300 md:sticky md:top-0 md:flex md:flex-col",
         collapsed ? "w-20" : "w-72",
       )}
     >
@@ -106,7 +75,7 @@ export function SuperAdminSidebar() {
       </div>
 
       <nav className="mt-3 space-y-1" aria-label="Menú del panel">
-        {navigation.map(({ label, href, icon: Icon }) => {
+        {SUPERADMIN_NAV.map(({ label, href, icon: Icon }) => {
           const active =
             href === "/superadmin"
               ? pathname === href

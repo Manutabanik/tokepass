@@ -1,0 +1,178 @@
+"use client"
+
+import { Menu } from "@base-ui/react/menu"
+import {
+  Bell,
+  Heart,
+  LogOut,
+  Receipt,
+  ShoppingBag,
+  Ticket,
+  UserRound,
+} from "lucide-react"
+import { useTransition } from "react"
+
+import { signOut } from "@/app/actions/auth"
+import { NotificationDot } from "@/components/account/notification-dot"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useUserNotifications } from "@/hooks/use-user-notifications"
+import { clearClientSessionArtifacts } from "@/lib/session-cleanup"
+import { cn } from "@/lib/utils"
+
+export function AccountAvatarMenu({
+  initials,
+  label,
+  email,
+  avatarUrl,
+}: {
+  initials: string
+  label: string
+  email: string
+  avatarUrl?: string | null
+}) {
+  const [pending, startTransition] = useTransition()
+  const { hasUnread } = useUserNotifications()
+
+  function handleSignOut() {
+    startTransition(async () => {
+      try {
+        await clearClientSessionArtifacts()
+      } catch {
+        // continuar logout
+      }
+      await signOut()
+    })
+  }
+
+  return (
+    <Menu.Root>
+      <Menu.Trigger
+        className={cn(
+          "relative inline-flex size-11 items-center justify-center rounded-full outline-none",
+          "ring-1 ring-zinc-200 transition hover:bg-zinc-100",
+          "dark:ring-white/15 dark:hover:bg-white/10",
+          "focus-visible:ring-2 focus-visible:ring-emerald-400",
+          "hidden md:inline-flex",
+        )}
+        aria-label={
+          hasUnread
+            ? `Menú de ${label}. Tenés notificaciones sin leer`
+            : `Menú de ${label}`
+        }
+      >
+        <Avatar size="default" className="size-10 bg-emerald-500/15">
+          {avatarUrl ? (
+            <AvatarImage src={avatarUrl} alt="" className="object-cover" />
+          ) : null}
+          <AvatarFallback className="bg-gradient-to-br from-emerald-500/30 to-teal-500/20 text-sm font-bold text-emerald-900 dark:text-emerald-100">
+            {initials}
+          </AvatarFallback>
+        </Avatar>
+        <NotificationDot show={hasUnread} />
+      </Menu.Trigger>
+
+      <Menu.Portal>
+        <Menu.Positioner sideOffset={8} align="end" className="z-50">
+          <Menu.Popup
+            className={cn(
+              "min-w-64 origin-[var(--transform-origin)] rounded-2xl border p-1.5 shadow-xl outline-none",
+              "border-zinc-200 bg-white text-zinc-900",
+              "dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-100",
+              "data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95",
+              "data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+            )}
+          >
+            <div className="border-b border-zinc-100 px-3 py-2.5 dark:border-white/8">
+              <p className="truncate text-sm font-semibold">{label}</p>
+              <p className="truncate text-[11px] text-zinc-500">
+                {email || "Tu cuenta Tokepass"}
+              </p>
+            </div>
+
+            <Menu.LinkItem
+              href="/cuenta/notificaciones"
+              closeOnClick
+              className={menuItemClass}
+            >
+              <span className="relative inline-flex">
+                <Bell className="size-4 shrink-0 opacity-70" aria-hidden="true" />
+                <NotificationDot
+                  show={hasUnread}
+                  className="-right-1 -top-1 size-2 ring-1"
+                />
+              </span>
+              Notificaciones
+            </Menu.LinkItem>
+            <Menu.LinkItem
+              href="/cuenta/entradas"
+              closeOnClick
+              className={menuItemClass}
+            >
+              <Ticket className="size-4 shrink-0 opacity-70" aria-hidden="true" />
+              Mi Billetera
+            </Menu.LinkItem>
+            <Menu.LinkItem
+              href="/cuenta/entradas?tab=extras"
+              closeOnClick
+              className={menuItemClass}
+            >
+              <ShoppingBag
+                className="size-4 shrink-0 opacity-70"
+                aria-hidden="true"
+              />
+              Mis Extras / Consumiciones
+            </Menu.LinkItem>
+            <Menu.LinkItem
+              href="/cuenta/compras"
+              closeOnClick
+              className={menuItemClass}
+            >
+              <Receipt className="size-4 shrink-0 opacity-70" aria-hidden="true" />
+              Mis compras
+            </Menu.LinkItem>
+            <Menu.LinkItem
+              href="/cuenta/favoritos"
+              closeOnClick
+              className={menuItemClass}
+            >
+              <Heart className="size-4 shrink-0 opacity-70" aria-hidden="true" />
+              Favoritos
+            </Menu.LinkItem>
+            <Menu.LinkItem
+              href="/cuenta/perfil"
+              closeOnClick
+              className={menuItemClass}
+            >
+              <UserRound
+                className="size-4 shrink-0 opacity-70"
+                aria-hidden="true"
+              />
+              Mi Perfil y Datos
+            </Menu.LinkItem>
+
+            <div className="my-1 h-px bg-zinc-100 dark:bg-white/8" />
+
+            <Menu.Item
+              disabled={pending}
+              onClick={handleSignOut}
+              className={cn(
+                "flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold outline-none",
+                "text-red-600 data-highlighted:bg-red-50",
+                "dark:text-red-300 dark:data-highlighted:bg-red-500/10",
+              )}
+            >
+              <LogOut className="size-4 shrink-0" aria-hidden="true" />
+              Cerrar sesión
+            </Menu.Item>
+          </Menu.Popup>
+        </Menu.Positioner>
+      </Menu.Portal>
+    </Menu.Root>
+  )
+}
+
+const menuItemClass = cn(
+  "flex cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium outline-none no-underline",
+  "text-zinc-700 data-highlighted:bg-zinc-100",
+  "dark:text-zinc-200 dark:data-highlighted:bg-white/5",
+)

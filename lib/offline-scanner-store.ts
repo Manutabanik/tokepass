@@ -28,6 +28,10 @@ export type ScannerManifestTicket = {
   is_test: boolean
   /** Precio público del tier; 0 = gratuita. */
   tier_price: number
+  /** Agrupa QRs de una misma mesa. */
+  group_id: string | null
+  group_slot: number | null
+  batch_id: string | null
 }
 
 export type ScannerManifestMeta = {
@@ -332,6 +336,25 @@ export async function searchManifestTickets(
       return name.includes(q) || dni.includes(q) || tier.includes(q)
     })
     .slice(0, limit)
+}
+
+/** Todos los QRs de una misma mesa/agrupación en el manifiesto local. */
+export async function getManifestTicketsByGroup(
+  eventId: string,
+  groupId: string,
+): Promise<ScannerManifestTicket[]> {
+  if (!eventId || !groupId) return []
+  const db = await openDb()
+  const tx = db.transaction(TICKETS, "readonly")
+  const rows = (await requestToPromise(
+    tx.objectStore(TICKETS).index("by_event").getAll(eventId),
+  )) as ScannerManifestTicket[]
+  await txDone(tx)
+  db.close()
+
+  return rows
+    .filter((row) => row.group_id === groupId)
+    .sort((a, b) => (a.group_slot ?? 0) - (b.group_slot ?? 0))
 }
 
 /**

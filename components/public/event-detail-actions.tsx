@@ -3,19 +3,15 @@
 import {
   ArrowLeft,
   CalendarPlus,
-  Heart,
   Share2,
 } from "lucide-react"
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 
+import { listMyFavoriteEventIds } from "@/app/actions/favorites"
+import { FavoriteToggleButton } from "@/components/public/favorite-toggle-button"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
-
-function favoriteKey(eventId: string) {
-  return `tokepass_fav_${eventId}`
-}
 
 function buildGoogleCalendarUrl(input: {
   title: string
@@ -52,13 +48,15 @@ export function EventDetailTopActions({
   title: string
   showBackLink: boolean
 }) {
-  const [favorite, setFavorite] = useState(false)
+  const [favorited, setFavorited] = useState(false)
 
   useEffect(() => {
-    try {
-      setFavorite(localStorage.getItem(favoriteKey(eventId)) === "1")
-    } catch {
-      setFavorite(false)
+    let cancelled = false
+    void listMyFavoriteEventIds().then((ids) => {
+      if (!cancelled) setFavorited(ids.includes(eventId))
+    })
+    return () => {
+      cancelled = true
     }
   }, [eventId])
 
@@ -76,54 +74,33 @@ export function EventDetailTopActions({
     }
   }
 
-  function toggleFavorite() {
-    const next = !favorite
-    setFavorite(next)
-    try {
-      localStorage.setItem(favoriteKey(eventId), next ? "1" : "0")
-    } catch {
-      // private mode
-    }
-    toast.success(next ? "Guardado en favoritos" : "Quitado de favoritos")
-  }
-
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between px-4 pt-[max(0.85rem,env(safe-area-inset-top))]">
       {showBackLink ? (
         <Button
           variant="secondary"
           size="icon"
-          className="pointer-events-auto size-11 rounded-full border-0 bg-black/45 text-white shadow-lg shadow-black/30 backdrop-blur-md hover:bg-black/60"
+          className="pointer-events-auto size-12 rounded-full border-0 bg-black/45 text-white shadow-lg shadow-black/30 backdrop-blur-md hover:bg-black/60"
           nativeButton={false}
           render={<Link href="/" aria-label="Volver" />}
         >
           <ArrowLeft className="size-5" aria-hidden="true" />
         </Button>
       ) : (
-        <span className="size-11" />
+        <span className="size-12" />
       )}
 
       <div className="pointer-events-auto flex items-center gap-2">
-        <Button
-          type="button"
-          variant="secondary"
-          size="icon"
-          aria-label={favorite ? "Quitar de favoritos" : "Guardar favorito"}
-          aria-pressed={favorite}
-          className="size-11 rounded-full border-0 bg-black/45 text-white shadow-lg shadow-black/30 backdrop-blur-md hover:bg-black/60"
-          onClick={toggleFavorite}
-        >
-          <Heart
-            className={cn("size-5", favorite && "fill-rose-500 text-rose-500")}
-            aria-hidden="true"
-          />
-        </Button>
+        <FavoriteToggleButton
+          eventId={eventId}
+          initiallyFavorited={favorited}
+        />
         <Button
           type="button"
           variant="secondary"
           size="icon"
           aria-label="Compartir evento"
-          className="size-11 rounded-full border-0 bg-black/45 text-white shadow-lg shadow-black/30 backdrop-blur-md hover:bg-black/60"
+          className="size-12 rounded-full border-0 bg-black/45 text-white shadow-lg shadow-black/30 backdrop-blur-md hover:bg-black/60"
           onClick={() => void share()}
         >
           <Share2 className="size-5" aria-hidden="true" />

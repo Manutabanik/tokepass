@@ -16,9 +16,9 @@ export const metadata: Metadata = {
 export default async function EventsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>
+  searchParams: Promise<{ q?: string; location?: string; category?: string }>
 }) {
-  const { q } = await searchParams
+  const { q, location, category } = await searchParams
   const [events, dbCategories] = await Promise.all([
     getPublishedEvents(q),
     getActiveEventCategories().catch(() => []),
@@ -36,6 +36,8 @@ export default async function EventsPage({
         <DiscoveryHub
           events={events}
           initialQuery={q ?? ""}
+          initialLocation={location?.trim() || "todas"}
+          initialCategoryId={category?.trim() || "all"}
           categories={categories}
         />
       </div>

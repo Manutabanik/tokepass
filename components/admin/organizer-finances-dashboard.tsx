@@ -283,14 +283,19 @@ export function OrganizerFinancesDashboard({
               <Label htmlFor="payout-amount">Monto a retirar (ARS)</Label>
               <Input
                 id="payout-amount"
-                type="number"
+                type="text"
+                inputMode="decimal"
+                pattern="[0-9]*"
+                autoComplete="off"
                 min={1}
                 step="0.01"
                 max={available}
                 value={amount}
-                onChange={(event) => setAmount(event.target.value)}
+                onChange={(event) =>
+                  setAmount(event.target.value.replace(/[^\d.]/g, ""))
+                }
                 disabled={pending}
-                className="h-11"
+                className="min-h-12 h-12 text-base"
               />
             </div>
             <div className="space-y-2">
@@ -300,8 +305,10 @@ export function OrganizerFinancesDashboard({
                 value={cbu}
                 onChange={(event) => setCbu(event.target.value)}
                 disabled={pending}
+                inputMode="numeric"
+                autoCapitalize="none"
                 placeholder="Confirmá la cuenta de destino"
-                className="h-11"
+                className="min-h-12 h-12 text-base"
               />
               <p className="text-xs text-zinc-500">
                 Tokepass te transfiere acá cuando apruebe el retiro.

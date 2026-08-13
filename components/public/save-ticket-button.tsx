@@ -52,7 +52,7 @@ export function SaveTicketButton({
     requestTicketAssetCache([
       ticket.flyerUrl,
       `/tickets/${ticket.id}/print`,
-      "/my-tickets",
+      "/cuenta/entradas",
     ])
   }
 

@@ -155,6 +155,7 @@ const blankTicket = (): EventFormValues["tickets"][number] =>
     layoutType: "general",
     seatingSectorId: null,
     capacityPerUnit: 1,
+    admitCount: 1,
   })
 
 const defaultValues: EventFormValues = {
@@ -192,6 +193,7 @@ const defaultValues: EventFormValues = {
 function NumberInput({
   value,
   onChange,
+  className,
   ...props
 }: Omit<React.ComponentProps<typeof Input>, "value" | "onChange"> & {
   value: number | undefined
@@ -199,12 +201,16 @@ function NumberInput({
 }) {
   return (
     <Input
-      type="number"
+      type="text"
+      inputMode="numeric"
+      pattern="[0-9]*"
+      autoComplete="off"
       value={value ?? ""}
       onChange={(event) => {
-        const nextValue = event.target.value
+        const nextValue = event.target.value.replace(/[^\d.]/g, "")
         onChange(nextValue === "" ? undefined : Number(nextValue))
       }}
+      className={cn("min-h-12 h-12 text-base", className)}
       {...props}
     />
   )
@@ -391,6 +397,7 @@ export function EventCreationWizard({
             layoutType,
             seatingSectorId: layoutType === "general" ? null : sector.id,
             capacityPerUnit: layoutSector?.capacity_per_unit ?? 1,
+            admitCount: 1,
           }
         }),
       )
@@ -1093,7 +1100,38 @@ export function EventCreationWizard({
                         />
                       </div>
 
-                      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/50 p-4">
+                      {form.watch(`tickets.${index}.layoutType`) ===
+                      "general" ? (
+                        <FormField
+                          control={form.control}
+                          name={`tickets.${index}.admitCount`}
+                          render={({ field, fieldState }) => (
+                            <FormItem>
+                              <FormLabel htmlFor={`tier-${index}-admit`}>
+                                Personas por unidad (QRs)
+                              </FormLabel>
+                              <NumberInput
+                                id={`tier-${index}-admit`}
+                                min={1}
+                                max={50}
+                                placeholder="1"
+                                value={field.value}
+                                onChange={(value) => field.onChange(value)}
+                                className="h-10 border-zinc-200 bg-zinc-100 dark:border-white/10 dark:bg-black/20"
+                              />
+                              <p className="text-xs text-zinc-500">
+                                Ej: Mesa para 4 → 4. Genera QRs independientes
+                                por cada compra.
+                              </p>
+                              <FormMessage>
+                                {fieldState.error?.message}
+                              </FormMessage>
+                            </FormItem>
+                          )}
+                        />
+                      ) : null}
+
+                      <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950/50">
                         <div className="mb-4 flex items-start gap-3">
                           <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-indigo-500/20 bg-indigo-500/10 text-indigo-300">
                             <Armchair className="size-4" aria-hidden="true" />
@@ -1512,13 +1550,19 @@ export function EventCreationWizard({
               </CardContent>
             </TabsContent>
 
-            <div className="flex items-center justify-between border-t border-zinc-200 dark:border-white/8 px-6 py-5 lg:px-8">
+            <div
+              className={cn(
+                "sticky z-30 flex items-center justify-between gap-3 border-t border-zinc-200 bg-white/95 px-4 py-4 backdrop-blur-xl",
+                "dark:border-white/8 dark:bg-[#0c0c0f]/95",
+                "bottom-[calc(4.5rem+env(safe-area-inset-bottom))] lg:bottom-0 lg:static lg:border-t lg:bg-transparent lg:px-6 lg:py-5 lg:backdrop-blur-none lg:px-8",
+              )}
+            >
               <Button
                 type="button"
                 variant="ghost"
                 disabled={activeStep === 0 || form.formState.isSubmitting}
                 onClick={() => setActiveStep((current) => current - 1)}
-                className="text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-white"
+                className="min-h-12 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-white"
               >
                 <ArrowLeft />
                 Anterior
@@ -1529,9 +1573,9 @@ export function EventCreationWizard({
                   key="next"
                   type="button"
                   onClick={() => void moveToStep(activeStep + 1)}
-                  className="bg-violet-600 text-white hover:bg-violet-500"
+                  className="min-h-12 bg-violet-600 text-base text-white hover:bg-violet-500"
                 >
-                  Continuar
+                  Siguiente
                   <ArrowRight />
                 </Button>
               ) : (
@@ -1541,7 +1585,7 @@ export function EventCreationWizard({
                     type="submit"
                     disabled={form.formState.isSubmitting}
                     variant="outline"
-                    className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900 text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    className="min-h-12 border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900 text-base text-zinc-900 dark:text-zinc-100 hover:bg-zinc-200 dark:hover:bg-zinc-800"
                   >
                     {form.formState.isSubmitting ? (
                       <LoaderCircle className="animate-spin" />
@@ -1550,13 +1594,13 @@ export function EventCreationWizard({
                     )}
                     {form.formState.isSubmitting
                       ? "Guardando…"
-                      : "Guardar Borrador"}
+                      : "Guardar"}
                   </Button>
                   <Button
                     key="publish"
                     type="button"
                     disabled={form.formState.isSubmitting}
-                    className="bg-emerald-600 text-white hover:bg-emerald-500"
+                    className="min-h-12 bg-emerald-600 text-base text-white hover:bg-emerald-500"
                     onClick={() =>
                       void form.handleSubmit((data) =>
                         onSubmit(data, "publish"),
@@ -1570,7 +1614,7 @@ export function EventCreationWizard({
                     )}
                     {form.formState.isSubmitting
                       ? "Publicando…"
-                      : "Publicar Evento"}
+                      : "Publicar"}
                   </Button>
                 </div>
               )}

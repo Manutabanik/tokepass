@@ -1,7 +1,8 @@
 "use client"
 
 /** Hero Living Stage — cartelera cinemática B2C (dark + light). */
-import { motion } from "motion/react"
+import { motion, useReducedMotion } from "motion/react"
+import { useEffect, useState } from "react"
 
 import { SearchBar } from "@/components/discovery/search-bar"
 import type { DiscoveryCategory } from "@/lib/discovery-categories"
@@ -13,6 +14,7 @@ type HeroSectionProps = {
   city: string
   cities: string[]
   onCityChange: (value: string) => void
+  locationsLoading?: boolean
   categoryId: string
   onCategoryChange: (value: string) => void
   tagId: string | null
@@ -27,6 +29,7 @@ export function HeroSection({
   city,
   cities,
   onCityChange,
+  locationsLoading = false,
   categoryId,
   onCategoryChange,
   tagId,
@@ -34,12 +37,31 @@ export function HeroSection({
   categories = DEFAULT_DISCOVERY_CATEGORIES,
   resultCount,
 }: HeroSectionProps) {
+  const reduceMotion = useReducedMotion()
+  const [isMobile, setIsMobile] = useState(true)
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)")
+    function sync() {
+      setIsMobile(mq.matches)
+    }
+    sync()
+    mq.addEventListener("change", sync)
+    return () => mq.removeEventListener("change", sync)
+  }, [])
+
+  const skipMotion = Boolean(reduceMotion || isMobile)
+
   return (
     <section className="relative overflow-x-clip pb-4 pt-10 sm:pb-6 sm:pt-14 lg:pt-20">
       <motion.div
-        initial={{ opacity: 0, y: 18 }}
+        initial={skipMotion ? false : { opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: "easeOut" }}
+        transition={
+          skipMotion
+            ? { duration: 0 }
+            : { duration: 0.5, ease: "easeOut" }
+        }
         className="mx-auto flex max-w-4xl flex-col items-center px-5 text-center"
       >
         <h1 className="text-balance text-4xl font-black leading-[1.05] tracking-tight text-zinc-900 sm:text-5xl dark:text-white lg:text-7xl lg:leading-none">
@@ -49,7 +71,7 @@ export function HeroSection({
           </span>
         </h1>
 
-        <p className="mx-auto mt-5 max-w-xl text-pretty text-sm leading-relaxed text-zinc-600 sm:mt-6 sm:text-base dark:text-slate-300/90 lg:text-lg">
+        <p className="mx-auto mt-5 max-w-xl text-pretty text-base leading-relaxed text-zinc-600 sm:mt-6 dark:text-slate-300/90 lg:text-lg">
           Descubrí las mejores fiestas, festivales y recitales de tu ciudad.
           Asegurá tu lugar en 2 clicks y llevá tu entrada 100% offline.
         </p>
@@ -62,6 +84,7 @@ export function HeroSection({
           city={city}
           cities={cities}
           onCityChange={onCityChange}
+          locationsLoading={locationsLoading}
           categoryId={categoryId}
           onCategoryChange={onCategoryChange}
           tagId={tagId}

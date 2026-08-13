@@ -1,8 +1,9 @@
 "use client"
 
-import { LoaderCircle, Search, UserCheck } from "lucide-react"
+import { LoaderCircle, Search, UserCheck, Users } from "lucide-react"
 import { useMemo, useState, useTransition } from "react"
 
+import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -12,7 +13,10 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import type { ScannerManifestTicket } from "@/lib/offline-scanner-store"
-import { searchManifestTickets } from "@/lib/offline-scanner-store"
+import {
+  getManifestTicketsByGroup,
+  searchManifestTickets,
+} from "@/lib/offline-scanner-store"
 import { cn } from "@/lib/utils"
 
 export function EmergencyTicketSearch({
@@ -20,11 +24,13 @@ export function EmergencyTicketSearch({
   open,
   onOpenChange,
   onValidate,
+  onValidateMany,
 }: {
   eventId: string
   open: boolean
   onOpenChange: (open: boolean) => void
   onValidate: (ticket: ScannerManifestTicket) => void
+  onValidateMany?: (tickets: ScannerManifestTicket[]) => void
 }) {
   const [query, setQuery] = useState("")
   const [results, setResults] = useState<ScannerManifestTicket[]>([])
@@ -52,14 +58,28 @@ export function EmergencyTicketSearch({
     return null
   }, [query, isPending, results.length])
 
+  async function validateWholeGroup(ticket: ScannerManifestTicket) {
+    if (!ticket.group_id || !onValidateMany) {
+      onValidate(ticket)
+      return
+    }
+    const group = await getManifestTicketsByGroup(eventId, ticket.group_id)
+    const validOnes = group.filter((t) => t.status === "valid")
+    if (validOnes.length <= 1) {
+      onValidate(ticket)
+      return
+    }
+    onValidateMany(validOnes)
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85dvh] overflow-hidden border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white sm:max-w-md">
+      <DialogContent className="max-h-[85dvh] overflow-hidden border-zinc-200 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Buscar comprador</DialogTitle>
+          <DialogTitle>Ingreso por DNI</DialogTitle>
           <DialogDescription className="text-zinc-600 dark:text-zinc-400">
-            Escaneá los códigos QR desde tu celular o buscá al comprador por
-            nombre si se quedó sin batería.
+            Buscá por nombre o DNI. Si es una mesa, podés validar un acceso o
+            todos juntos.
           </DialogDescription>
         </DialogHeader>
 
@@ -70,7 +90,7 @@ export function EmergencyTicketSearch({
             onChange={(event) => handleQuery(event.target.value)}
             placeholder="Nombre, apellido o DNI"
             autoFocus
-            className="h-14 rounded-2xl border-zinc-300 dark:border-zinc-700 bg-black pl-10 text-base text-zinc-900 dark:text-white"
+            className="h-14 rounded-2xl border-zinc-300 bg-black pl-10 text-base text-zinc-900 dark:border-zinc-700 dark:text-white"
           />
         </div>
 
@@ -87,40 +107,65 @@ export function EmergencyTicketSearch({
           ) : null}
 
           {results.map((ticket) => (
-            <button
+            <div
               key={ticket.id}
-              type="button"
-              onClick={() => onValidate(ticket)}
               className={cn(
-                "flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition",
+                "rounded-2xl border px-4 py-3",
                 ticket.status === "valid"
-                  ? "border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20"
-                  : "border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 opacity-80",
+                  ? "border-emerald-500/30 bg-emerald-500/10"
+                  : "border-zinc-200 bg-zinc-100 opacity-80 dark:border-zinc-800 dark:bg-zinc-900",
               )}
             >
-              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-black/40 text-emerald-300">
-                <UserCheck className="size-5" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-semibold text-zinc-900 dark:text-white">
-                  {ticket.owner_name}
+              <div className="flex items-start gap-3">
+                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-black/40 text-emerald-300">
+                  {ticket.group_id ? (
+                    <Users className="size-5" />
+                  ) : (
+                    <UserCheck className="size-5" />
+                  )}
                 </span>
-                <span className="mt-0.5 block truncate text-xs text-zinc-600 dark:text-zinc-400">
-                  {ticket.ticket_tier}
-                  {ticket.dni ? ` · DNI ${ticket.dni}` : ""}
-                  {ticket.status !== "valid" ? ` · ${ticket.status}` : ""}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-semibold text-zinc-900 dark:text-white">
+                    {ticket.owner_name}
+                  </span>
+                  <span className="mt-0.5 block truncate text-xs text-zinc-600 dark:text-zinc-400">
+                    {ticket.ticket_tier}
+                    {ticket.group_slot
+                      ? ` · Acceso ${ticket.group_slot}`
+                      : ""}
+                    {ticket.dni ? ` · DNI ${ticket.dni}` : ""}
+                    {ticket.status !== "valid" ? ` · ${ticket.status}` : ""}
+                  </span>
                 </span>
-              </span>
+              </div>
               {ticket.status === "valid" ? (
-                <span className="text-xs font-bold uppercase tracking-wide text-emerald-300">
-                  Validar
-                </span>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="min-h-10 flex-1 rounded-xl bg-emerald-600 font-bold text-white hover:bg-emerald-500"
+                    onClick={() => onValidate(ticket)}
+                  >
+                    Validar 1
+                  </Button>
+                  {ticket.group_id && onValidateMany ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="min-h-10 flex-1 rounded-xl"
+                      onClick={() => void validateWholeGroup(ticket)}
+                    >
+                      Validar mesa
+                    </Button>
+                  ) : null}
+                </div>
               ) : (
-                <span className="text-xs font-bold uppercase tracking-wide text-red-300">
+                <p className="mt-2 text-xs font-bold uppercase tracking-wide text-red-300">
                   Usada
-                </span>
+                </p>
               )}
-            </button>
+            </div>
           ))}
         </div>
       </DialogContent>

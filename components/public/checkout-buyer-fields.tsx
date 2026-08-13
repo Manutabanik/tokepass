@@ -14,6 +14,9 @@ type CheckoutBuyerFieldsProps = {
   className?: string
 }
 
+const fieldInputClass =
+  "min-h-12 h-12 rounded-xl border-zinc-700 bg-zinc-900 text-base text-white placeholder:text-zinc-600 md:text-base"
+
 export function CheckoutBuyerFields({
   value,
   onChange,
@@ -29,18 +32,17 @@ export function CheckoutBuyerFields({
     >
       <div>
         <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-zinc-500">
-          Datos del asistente
+          Tus datos
         </p>
-        <p className="mt-1 text-xs leading-5 text-zinc-500">
-          Se guardan en tu perfil para la próxima compra y para buscarte por DNI
-          en puerta.
+        <p className="mt-1 text-sm leading-5 text-zinc-500">
+          Los usamos para tu entrada y para encontrarte en la puerta.
         </p>
       </div>
 
       <div className="space-y-1.5">
         <Label
           htmlFor="buyer-name"
-          className="inline-flex items-center gap-1.5 text-zinc-300"
+          className="inline-flex min-h-11 items-center gap-1.5 text-zinc-300"
         >
           <UserRound className="size-3.5" aria-hidden="true" />
           Nombre y apellido
@@ -49,28 +51,31 @@ export function CheckoutBuyerFields({
           id="buyer-name"
           name="buyerName"
           autoComplete="name"
+          autoCapitalize="words"
           disabled={disabled}
           value={value.buyerName}
           onChange={(event) =>
             onChange({ ...value, buyerName: event.target.value })
           }
           placeholder="Ej. Ana Pérez"
-          className="h-11 rounded-xl border-zinc-700 bg-zinc-900 text-white placeholder:text-zinc-600"
+          className={fieldInputClass}
         />
       </div>
 
       <div className="space-y-1.5">
         <Label
           htmlFor="buyer-dni"
-          className="inline-flex items-center gap-1.5 text-zinc-300"
+          className="inline-flex min-h-11 items-center gap-1.5 text-zinc-300"
         >
           <IdCard className="size-3.5" aria-hidden="true" />
-          DNI del asistente
+          DNI
         </Label>
         <Input
           id="buyer-dni"
           name="buyerDni"
+          type="tel"
           inputMode="numeric"
+          pattern="[0-9]*"
           autoComplete="off"
           disabled={disabled}
           value={value.buyerDni}
@@ -81,14 +86,14 @@ export function CheckoutBuyerFields({
             })
           }
           placeholder="Solo números"
-          className="h-11 rounded-xl border-zinc-700 bg-zinc-900 text-white placeholder:text-zinc-600"
+          className={fieldInputClass}
         />
       </div>
 
       <div className="space-y-1.5">
         <Label
           htmlFor="buyer-phone"
-          className="inline-flex items-center gap-1.5 text-zinc-300"
+          className="inline-flex min-h-11 items-center gap-1.5 text-zinc-300"
         >
           <Phone className="size-3.5" aria-hidden="true" />
           Teléfono / WhatsApp
@@ -97,7 +102,8 @@ export function CheckoutBuyerFields({
           id="buyer-phone"
           name="buyerPhone"
           type="tel"
-          inputMode="tel"
+          inputMode="numeric"
+          pattern="[0-9]*"
           autoComplete="tel"
           disabled={disabled}
           value={value.buyerPhone}
@@ -108,30 +114,34 @@ export function CheckoutBuyerFields({
             })
           }
           placeholder="Ej. 1123456789"
-          className="h-11 rounded-xl border-zinc-700 bg-zinc-900 text-white placeholder:text-zinc-600"
+          className={fieldInputClass}
         />
       </div>
 
       <div className="space-y-1.5">
         <Label
           htmlFor="buyer-email"
-          className="inline-flex items-center gap-1.5 text-zinc-300"
+          className="inline-flex min-h-11 items-center gap-1.5 text-zinc-300"
         >
           <Mail className="size-3.5" aria-hidden="true" />
-          Confirmación de correo
+          Tu Email
         </Label>
         <Input
           id="buyer-email"
           name="buyerEmail"
           type="email"
+          inputMode="email"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           autoComplete="email"
           disabled={disabled}
           value={value.buyerEmail}
           onChange={(event) =>
             onChange({ ...value, buyerEmail: event.target.value })
           }
-          placeholder="tu@email.com"
-          className="h-11 rounded-xl border-zinc-700 bg-zinc-900 text-white placeholder:text-zinc-600"
+          placeholder="tunombre@email.com"
+          className={fieldInputClass}
         />
       </div>
     </div>

@@ -20,10 +20,12 @@ export function LivingTicketQR({
   ticketId,
   totpSecret,
   className,
+  size = 208,
 }: {
   ticketId: string
   totpSecret?: string
   className?: string
+  size?: number
 }) {
   const secret = totpSecret || ticketId
   const [token, setToken] = useState("")
@@ -71,7 +73,7 @@ export function LivingTicketQR({
           {token ? (
             <QRCodeSVG
               value={token}
-              size={208}
+              size={size}
               level="M"
               includeMargin={false}
               bgColor="#ffffff"
@@ -79,7 +81,10 @@ export function LivingTicketQR({
               className="mx-auto"
             />
           ) : (
-            <div className="size-[208px] animate-pulse rounded-xl bg-zinc-100" />
+            <div
+              className="animate-pulse rounded-xl bg-zinc-100"
+              style={{ width: size, height: size }}
+            />
           )}
         </div>
       </div>

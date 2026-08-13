@@ -164,7 +164,8 @@ export async function transferTicketAction(
       })
     })
 
-    revalidatePath("/my-tickets")
+    revalidatePath("/cuenta/entradas")
+    revalidatePath("/cuenta")
     revalidatePath("/admin/scanner")
 
     return {
@@ -206,7 +207,8 @@ export async function claimPendingTransfersAction(): Promise<number> {
 
   const count = typeof data === "number" ? data : 0
   if (count > 0) {
-    revalidatePath("/my-tickets")
+    revalidatePath("/cuenta/entradas")
+    revalidatePath("/cuenta")
   }
   return count
 }

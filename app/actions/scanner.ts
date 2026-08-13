@@ -19,7 +19,7 @@ import { createClient } from "@/lib/supabase/server"
 import type { QrType, TicketStatus } from "@/types/database"
 
 const TICKET_SCAN_SELECT =
-  "id, status, event_id, order_id, totp_secret, scanned_at, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label), ticket_tiers(name, price, time_limit, bonus_reward, day_id), events(id, title, organizer_id, qr_type, date, schedule_days, status)"
+  "id, status, event_id, order_id, totp_secret, scanned_at, max_admissions, admissions_used, is_test, is_dynamic_qr, event_seating_units(label, sector_name, row_label), ticket_tiers(name, price, time_limit, bonus_reward, day_id), events(id, title, organizer_id, qr_type, date, schedule_days, status)"
 
 export type ScannerEventOption = {
   id: string
@@ -80,6 +80,7 @@ type TicketScanRow = {
   max_admissions: number
   admissions_used: number
   is_test?: boolean | null
+  is_dynamic_qr?: boolean | null
   event_seating_units: {
     label: string
     sector_name: string
@@ -214,14 +215,6 @@ export async function scanAndValidateTicket(
     }
   }
 
-  if (resolved.enforceFreshness && resolved.expired) {
-    return {
-      success: false,
-      status: "expired_qr",
-      message: "QR Expirado (Captura de pantalla)",
-    }
-  }
-
   let ticket: unknown = null
 
   if (resolved.mode === "v2") {
@@ -272,6 +265,19 @@ export async function scanAndValidateTicket(
   }
 
   const row = ticket as TicketScanRow
+
+  // Refuerzo: tickets de boletería física nunca rotan por ventana temporal.
+  if (
+    row.is_dynamic_qr !== false &&
+    resolved.enforceFreshness &&
+    resolved.expired
+  ) {
+    return {
+      success: false,
+      status: "expired_qr",
+      message: "QR Expirado (Captura de pantalla)",
+    }
+  }
 
   if (row.event_id !== eventId) {
     return {
@@ -445,7 +451,7 @@ export async function scanAndValidateTicket(
         : null
 
   revalidatePath("/admin/scanner")
-  revalidatePath("/my-tickets")
+  revalidatePath("/cuenta/entradas")
   if (guestEntry) {
     revalidatePath("/admin/lists")
   }
@@ -510,6 +516,9 @@ export type EventTicketManifestPayload = {
     seating_row_label: string | null
     is_test: boolean
     tier_price: number
+    group_id: string | null
+    group_slot: number | null
+    batch_id: string | null
   }>
 }
 
@@ -556,7 +565,7 @@ export async function fetchEventTicketManifest(
   const withHolder = await supabase
     .from("tickets")
     .select(
-      "id, event_id, totp_secret, status, scanned_at, owner_id, max_admissions, admissions_used, is_test, holder_name, holder_dni, holder_email, event_seating_units(label, sector_name, row_label), ticket_tiers(name, price)",
+      "id, event_id, totp_secret, status, scanned_at, owner_id, max_admissions, admissions_used, is_test, holder_name, holder_dni, holder_email, group_id, group_slot, batch_id, event_seating_units(label, sector_name, row_label), ticket_tiers(name, price)",
     )
     .eq("event_id", eventId)
     .in("status", ["valid", "used", "scanned"])
@@ -588,6 +597,9 @@ export async function fetchEventTicketManifest(
     holder_name?: string | null
     holder_dni?: string | null
     holder_email?: string | null
+    group_id?: string | null
+    group_slot?: number | null
+    batch_id?: string | null
     is_test?: boolean | null
     ticket_tiers: { name: string; price?: number | null } | null
     max_admissions: number
@@ -675,6 +687,10 @@ export async function fetchEventTicketManifest(
       seating_row_label: row.event_seating_units?.row_label ?? null,
       is_test: Boolean(row.is_test),
       tier_price: Number(row.ticket_tiers?.price ?? 0),
+      group_id: row.group_id ?? null,
+      group_slot:
+        row.group_slot == null ? null : Number(row.group_slot),
+      batch_id: row.batch_id ?? null,
     }
   })
 

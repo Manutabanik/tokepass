@@ -102,7 +102,7 @@ export function EventStoreUpsell({
 
       if (!result.success) {
         if (result.error === "auth_required") {
-          router.push(`/login?next=/my-tickets`)
+          router.push(`/login?next=/cuenta/entradas`)
           return
         }
         if (result.error === "out_of_stock") {
@@ -132,7 +132,7 @@ export function EventStoreUpsell({
       >
         <CheckoutCountdown
           expiresAt={paymentHold.expiresAt}
-          redirectTo="/my-tickets"
+          redirectTo="/cuenta/entradas"
           onExpired={() => setPaymentHold(null)}
         />
         <a

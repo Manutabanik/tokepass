@@ -36,10 +36,10 @@ export function AnimatedBackground() {
         }}
       />
 
-      {/* Left violet wash */}
-      <div className="absolute -left-32 top-0 h-[520px] w-[520px] rounded-full bg-violet-400/25 blur-[100px] dark:bg-violet-600/35 dark:blur-[120px]" />
+      {/* Left violet wash — lighter on mobile CPUs */}
+      <div className="absolute -left-32 top-0 hidden h-[520px] w-[520px] rounded-full bg-violet-400/25 blur-[100px] md:block dark:bg-violet-600/35 dark:blur-[120px]" />
       {/* Center cyan/indigo bloom behind headline */}
-      <div className="absolute left-1/2 top-24 h-[380px] w-[640px] -translate-x-1/2 rounded-full bg-fuchsia-300/20 blur-[90px] dark:bg-indigo-500/25 dark:blur-[110px]" />
+      <div className="absolute left-1/2 top-24 hidden h-[380px] w-[640px] -translate-x-1/2 rounded-full bg-fuchsia-300/20 blur-[90px] md:block dark:bg-indigo-500/25 dark:blur-[110px]" />
       {/* Soft bottom fade */}
       <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-[#f4f2f8] to-transparent dark:from-[#030712]" />
     </div>

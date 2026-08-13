@@ -99,8 +99,9 @@ export function PromoCodeInput({
             onChange={(event) => setCode(event.target.value.toUpperCase())}
             placeholder="MEGA20"
             disabled={disabled || pending}
+            autoCapitalize="characters"
             className={cn(
-              "h-10 flex-1 rounded-xl border-zinc-700 bg-zinc-950 font-mono uppercase text-white",
+              "min-h-12 h-12 flex-1 rounded-xl border-zinc-700 bg-zinc-950 font-mono uppercase text-base text-white",
               "placeholder:normal-case placeholder:text-zinc-500",
             )}
             onKeyDown={(event) => {
@@ -114,7 +115,7 @@ export function PromoCodeInput({
             type="button"
             disabled={disabled || pending || !code.trim()}
             onClick={apply}
-            className="h-10 rounded-xl bg-zinc-100 px-4 text-zinc-950 hover:bg-white"
+            className="min-h-12 h-12 min-w-12 rounded-xl bg-zinc-100 px-4 text-base text-zinc-950 hover:bg-white"
           >
             {pending ? (
               <Loader2 className="size-4 animate-spin" aria-hidden />

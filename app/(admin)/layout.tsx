@@ -4,13 +4,17 @@ import Link from "next/link"
 import { redirect } from "next/navigation"
 
 import { getMyStaffRoles } from "@/app/actions/event-staff"
-import { AdminMobileNav } from "@/components/shared/admin-mobile-nav"
+import {
+  AdminBottomNav,
+  ADMIN_BOTTOM_NAV_SPACE,
+} from "@/components/shared/admin-bottom-nav"
 import { AdminSidebar } from "@/components/shared/admin-sidebar"
 import { BrandLogo } from "@/components/shared/brand-logo"
 import { SignOutButton } from "@/components/shared/sign-out-button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { createClient } from "@/lib/supabase/server"
+import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = {
   robots: { index: false, follow: false },
@@ -36,7 +40,6 @@ export default async function AdminLayout({
     .eq("id", user.id)
     .maybeSingle()
 
-  // P29 aún no aplicada: reintentar sin columnas nuevas.
   const legacyProfile =
     profileError || !profile
       ? (
@@ -117,15 +120,8 @@ export default async function AdminLayout({
       <div className="flex min-h-screen">
         <AdminSidebar mode={mode} staffRoles={staffRoles} />
         <div className="min-w-0 flex-1">
-          <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-zinc-200 bg-white/85 px-5 backdrop-blur-xl dark:border-white/8 dark:bg-[#0c0c0f]/85 sm:px-8">
-            <div className="flex items-center gap-2 lg:hidden">
-              <AdminMobileNav
-                mode={mode}
-                staffRoles={staffRoles}
-                orgLabel={orgLabel}
-                userLabel={userLabel}
-                userEmail={resolvedProfile.email}
-              />
+          <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-zinc-200 bg-white/85 px-4 backdrop-blur-xl dark:border-white/8 dark:bg-[#0c0c0f]/85 sm:h-16 sm:px-8">
+            <div className="flex min-w-0 items-center gap-2 lg:hidden">
               <BrandLogo />
             </div>
             <div className="hidden lg:block">
@@ -138,14 +134,14 @@ export default async function AdminLayout({
                   : "Acceso limitado a puerta / barra / caja"}
               </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               <ThemeToggle />
               <Link
                 href="/admin/scanner"
-                className="hidden items-center gap-2 rounded-full border border-zinc-200 px-3 py-1.5 text-xs text-zinc-600 dark:border-white/10 dark:text-zinc-400 sm:flex"
+                className="hidden min-h-11 items-center gap-2 rounded-full border border-zinc-200 px-3 py-2 text-xs text-zinc-600 dark:border-white/10 dark:text-zinc-400 sm:inline-flex"
               >
-                <ShieldCheck className="size-3.5" aria-hidden="true" />
-                Control de Puerta
+                <ShieldCheck className="size-4" aria-hidden="true" />
+                Escáner
               </Link>
               <div className="hidden text-right sm:block">
                 <p className="max-w-48 truncate text-sm font-medium text-zinc-900 dark:text-white">
@@ -168,15 +164,28 @@ export default async function AdminLayout({
               </Avatar>
               <SignOutButton
                 showLabel={false}
-                className="hidden size-9 place-items-center rounded-xl border border-zinc-200 text-zinc-500 transition hover:border-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:border-white/8 dark:hover:border-white/15 dark:hover:bg-white/5 dark:hover:text-zinc-900 dark:hover:text-white sm:grid"
+                className="hidden size-11 place-items-center rounded-xl border border-zinc-200 text-zinc-500 transition hover:border-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:border-white/8 dark:hover:border-white/15 dark:hover:bg-white/5 dark:hover:text-white sm:grid"
               />
             </div>
           </header>
-          <main className="mx-auto w-full max-w-[1600px] p-5 sm:p-8 lg:p-10">
+          <main
+            className={cn(
+              "mx-auto w-full max-w-[1600px] p-4 sm:p-8 lg:p-10",
+              ADMIN_BOTTOM_NAV_SPACE,
+            )}
+          >
             {children}
           </main>
         </div>
       </div>
+
+      <AdminBottomNav
+        mode={mode}
+        staffRoles={staffRoles}
+        orgLabel={orgLabel}
+        userLabel={userLabel}
+        userEmail={resolvedProfile.email}
+      />
     </div>
   )
 }

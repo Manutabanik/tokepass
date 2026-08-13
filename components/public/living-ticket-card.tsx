@@ -4,6 +4,7 @@ import {
   Armchair,
   Ban,
   CalendarDays,
+  ChevronRight,
   Clock3,
   FlaskConical,
   Gift,
@@ -17,6 +18,7 @@ import {
   WifiOff,
 } from "lucide-react"
 import Image from "next/image"
+import Link from "next/link"
 import { QRCodeSVG } from "qrcode.react"
 
 import type { MyTicket } from "@/app/actions/tickets"
@@ -420,6 +422,14 @@ export function LivingTicketCard({
             Transferencias y reventa disponibles cuando vuelvas a tener conexión.
           </p>
         ) : null}
+
+        <Link
+          href={`/cuenta/entradas/${ticket.id}`}
+          className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-zinc-700 bg-zinc-900/80 text-sm font-semibold text-zinc-100 transition hover:border-zinc-500 hover:bg-zinc-800"
+        >
+          Ver detalle de la entrada
+          <ChevronRight className="size-4 opacity-70" aria-hidden="true" />
+        </Link>
 
         <p className="text-center font-mono text-[10px] tracking-wider text-zinc-600">
           #{ticket.id.slice(0, 8).toUpperCase()}

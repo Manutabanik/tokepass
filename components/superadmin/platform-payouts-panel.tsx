@@ -83,7 +83,75 @@ export function PlatformPayoutsPanel({
 
   return (
     <>
-      <div className="overflow-hidden rounded-2xl border border-white/8 bg-white/[0.03]">
+      {/* Mobile data cards */}
+      <div className="grid gap-3 md:hidden">
+        {initialRows.map((row) => (
+          <article
+            key={row.id}
+            className="rounded-2xl border border-white/10 bg-black/30 p-4"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-lg font-bold text-white">
+                  {row.organizerName}
+                </p>
+                <p className="mt-0.5 truncate text-sm text-zinc-500">
+                  {row.organizerEmail}
+                </p>
+                <p className="mt-1 text-xs text-zinc-600">
+                  {row.eventTitle ?? "Retiro general"}
+                </p>
+              </div>
+              <Badge
+                variant="outline"
+                className="shrink-0 rounded-full border-amber-500/40 text-[10px] uppercase text-amber-100"
+              >
+                Pendiente
+              </Badge>
+            </div>
+            <p className="mt-4 font-mono text-3xl font-black tabular-nums text-emerald-300">
+              {formatCurrency(row.amount)}
+            </p>
+            <p className="mt-1 font-mono text-xs text-zinc-500">
+              CBU {row.cbuDestination}
+            </p>
+            <p className="mt-1 text-xs text-zinc-600">
+              {formatDateTime(row.createdAt)}
+            </p>
+            <div className="mt-4 grid gap-2">
+              <Button
+                type="button"
+                disabled={pending}
+                onClick={() => markTransferred(row)}
+                className="min-h-12 w-full rounded-xl bg-emerald-600 font-bold text-white hover:bg-emerald-500"
+              >
+                {pending ? (
+                  <LoaderCircle className="size-4 animate-spin" />
+                ) : (
+                  <CheckCircle className="size-4" />
+                )}
+                Marcar como Transferido
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={pending}
+                onClick={() => {
+                  setRejectTarget(row)
+                  setRejectNotes("")
+                }}
+                className="min-h-12 w-full rounded-xl border-red-500/40 bg-red-500/10 font-semibold text-red-200 hover:bg-red-500/20"
+              >
+                <XCircle className="size-4" />
+                Rechazar
+              </Button>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      {/* Desktop table */}
+      <div className="hidden overflow-hidden rounded-2xl border border-white/8 bg-white/[0.03] md:block">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-white/8 text-xs uppercase tracking-wide text-zinc-600">
             <tr>
@@ -133,7 +201,7 @@ export function PlatformPayoutsPanel({
                       size="sm"
                       disabled={pending}
                       onClick={() => markTransferred(row)}
-                      className="bg-emerald-600 text-white hover:bg-emerald-500"
+                      className="min-h-11 bg-emerald-600 text-white hover:bg-emerald-500"
                     >
                       {pending ? (
                         <LoaderCircle className="size-3.5 animate-spin" />
@@ -151,7 +219,7 @@ export function PlatformPayoutsPanel({
                         setRejectTarget(row)
                         setRejectNotes("")
                       }}
-                      className="border-red-500/40 bg-red-500/10 text-red-200 hover:bg-red-500/20"
+                      className="min-h-11 border-red-500/40 bg-red-500/10 text-red-200 hover:bg-red-500/20"
                     >
                       <XCircle className="size-3.5" />
                       Rechazar
@@ -189,7 +257,7 @@ export function PlatformPayoutsPanel({
               value={rejectNotes}
               onChange={(event) => setRejectNotes(event.target.value)}
               placeholder="Ej. CBU incorrecto"
-              className="h-11 border-zinc-700 bg-black/40"
+              className="min-h-12 border-zinc-700 bg-black/40 text-base"
             />
           </div>
           <DialogFooter className="gap-2">
@@ -198,7 +266,7 @@ export function PlatformPayoutsPanel({
               variant="outline"
               disabled={pending}
               onClick={() => setRejectTarget(null)}
-              className="border-zinc-700"
+              className="min-h-12 border-zinc-700"
             >
               Volver
             </Button>
@@ -206,7 +274,7 @@ export function PlatformPayoutsPanel({
               type="button"
               disabled={pending}
               onClick={confirmReject}
-              className="bg-red-600 text-white hover:bg-red-500"
+              className="min-h-12 bg-red-600 text-white hover:bg-red-500"
             >
               {pending ? (
                 <LoaderCircle className="animate-spin" />

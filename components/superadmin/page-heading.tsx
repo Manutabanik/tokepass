@@ -14,7 +14,7 @@ export function PageHeading({
   actions,
 }: PageHeadingProps) {
   return (
-    <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+    <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
       <div>
         <p className="text-sm font-medium text-sky-400">{eyebrow}</p>
         <h1 className="mt-2 text-3xl font-bold tracking-[-0.035em] text-white sm:text-4xl">
@@ -26,7 +26,9 @@ export function PageHeading({
           </p>
         )}
       </div>
-      {actions}
+      {actions ? (
+        <div className="w-full sm:w-auto sm:max-w-xs">{actions}</div>
+      ) : null}
     </div>
   )
 }

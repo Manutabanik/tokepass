@@ -25,14 +25,14 @@ export default async function SuperAdminBuyersPage({
         title="Compradores"
         description="Perfiles base de la plataforma. El DNI y el teléfono se guardan al comprar (progressive profiling)."
         actions={
-          <form className="relative w-full max-w-xs">
+          <form className="relative w-full">
             <Input
               name="q"
               type="search"
               defaultValue={q ?? ""}
               placeholder="Buscar nombre, email, DNI…"
               aria-label="Buscar compradores"
-              className="h-10 border-white/10 bg-black/20"
+              className="min-h-12 w-full border-white/10 bg-black/20 text-base"
             />
           </form>
         }

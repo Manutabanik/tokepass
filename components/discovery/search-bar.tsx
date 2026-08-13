@@ -1,7 +1,7 @@
 "use client"
 
 import { ArrowRight, MapPin, Search, SlidersHorizontal } from "lucide-react"
-import { motion } from "motion/react"
+import { motion, useReducedMotion } from "motion/react"
 import { useMemo, useState, type FormEvent } from "react"
 
 import {
@@ -28,6 +28,7 @@ type SearchBarProps = {
   city: string
   cities: string[]
   onCityChange: (value: string) => void
+  locationsLoading?: boolean
   categoryId: string
   onCategoryChange: (value: string) => void
   tagId: string | null
@@ -43,12 +44,20 @@ function scrollToResults() {
   })
 }
 
+function locationLabel(city: string, cities: string[]): string {
+  if (city === "todas") return "Todas las ubicaciones"
+  return (
+    cities.find((item) => item.toLowerCase() === city.toLowerCase()) ?? city
+  )
+}
+
 export function SearchBar({
   query,
   onQueryChange,
   city,
   cities,
   onCityChange,
+  locationsLoading = false,
   categoryId,
   onCategoryChange,
   tagId,
@@ -57,12 +66,10 @@ export function SearchBar({
   resultCount,
 }: SearchBarProps) {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const reduceMotion = useReducedMotion()
 
   const category = findCategory(categories, categoryId)
-  const cityLabel =
-    city === "todas"
-      ? "Todo el país"
-      : cities.find((item) => item.toLowerCase() === city) ?? city
+  const cityLabel = locationLabel(city, cities)
 
   const mobileSummary = useMemo(() => {
     const parts = [
@@ -87,10 +94,14 @@ export function SearchBar({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 14 }}
+      initial={reduceMotion ? false : { opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: 0.08, ease: "easeOut" }}
-      className="mx-auto w-full max-w-4xl px-4 lg:px-0"
+      transition={
+        reduceMotion
+          ? { duration: 0 }
+          : { duration: 0.4, delay: 0.08, ease: "easeOut" }
+      }
+      className="mx-auto w-full max-w-4xl px-4 lg:px-0 motion-reduce:transform-none"
     >
       <MobileSearchTrigger
         onClick={() => setMobileOpen(true)}
@@ -105,6 +116,7 @@ export function SearchBar({
         city={city}
         cities={cities}
         onCityChange={onCityChange}
+        locationsLoading={locationsLoading}
         categoryId={categoryId}
         onCategoryChange={onCategoryChange}
         tagId={tagId}
@@ -137,7 +149,7 @@ export function SearchBar({
               value={query}
               onChange={(event) => onQueryChange(event.target.value)}
               placeholder="Evento, artista…"
-              className="min-w-0 flex-1 border-0 bg-transparent text-sm font-medium text-zinc-900 outline-none placeholder:text-zinc-400 focus:ring-0 dark:text-white dark:placeholder:text-zinc-500"
+              className="min-w-0 flex-1 border-0 bg-transparent text-base font-medium text-zinc-900 outline-none placeholder:text-zinc-400 focus:ring-0 md:text-sm dark:text-white dark:placeholder:text-zinc-500"
             />
           </span>
         </label>
@@ -151,6 +163,7 @@ export function SearchBar({
           <Select
             value={city}
             onValueChange={(value) => value && onCityChange(value)}
+            disabled={locationsLoading && cities.length === 0}
           >
             <SelectTrigger
               className={cn(
@@ -165,7 +178,15 @@ export function SearchBar({
                 className="size-3.5 shrink-0 text-zinc-400"
                 aria-hidden="true"
               />
-              <SelectValue placeholder="Todo el país" />
+              <SelectValue placeholder="Todas las ubicaciones">
+                {(value: string | null) =>
+                  !value || value === "todas"
+                    ? locationsLoading && cities.length === 0
+                      ? "Cargando…"
+                      : "Todas las ubicaciones"
+                    : locationLabel(value, cities)
+                }
+              </SelectValue>
             </SelectTrigger>
             <SelectContent
               side="bottom"
@@ -177,12 +198,17 @@ export function SearchBar({
                 "dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100",
               )}
             >
-              <SelectItem value="todas">Todo el país</SelectItem>
+              <SelectItem value="todas">Todas las ubicaciones</SelectItem>
               {cities.map((item) => (
-                <SelectItem key={item} value={item.toLowerCase()}>
+                <SelectItem key={item} value={item}>
                   {item}
                 </SelectItem>
               ))}
+              {locationsLoading && cities.length === 0 ? (
+                <p className="px-2 py-2 text-xs text-zinc-500">
+                  Cargando provincias…
+                </p>
+              ) : null}
             </SelectContent>
           </Select>
         </div>
@@ -208,13 +234,17 @@ export function SearchBar({
                 "dark:text-zinc-100 dark:hover:bg-white/[0.04]",
                 "focus-visible:ring-0",
               )}
-              aria-label={`Categoría: ${category?.label ?? "Todos"}`}
+              aria-label={`Categoría: ${category?.label ?? "Todas"}`}
             >
               <SlidersHorizontal
                 className="size-3.5 shrink-0 text-zinc-400"
                 aria-hidden="true"
               />
-              <SelectValue placeholder="Todas" />
+              <SelectValue placeholder="Todas">
+                {(value: string | null) =>
+                  findCategory(categories, value ?? "")?.label ?? "Todas"
+                }
+              </SelectValue>
             </SelectTrigger>
             <SelectContent
               side="bottom"

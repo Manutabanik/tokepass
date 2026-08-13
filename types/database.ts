@@ -12,7 +12,11 @@ export type EventStatus =
   | "completed"
   | "archived"
 export type QrType = "dynamic" | "static"
-export type PaymentMethod = "mercadopago" | "cash_pos" | "transfer_pos"
+export type PaymentMethod =
+  | "mercadopago"
+  | "cash_pos"
+  | "transfer_pos"
+  | "card_pos"
 export type TicketStatus =
   | "pending_payment"
   | "valid"
@@ -150,6 +154,8 @@ export type Event = {
   max_free_tickets: number
   /** Auspicio Tokepass: fees a 0 + branding. */
   is_sponsored_by_tokepass: boolean
+  /** SHA-256 hex del PIN de supervisor POS (cortesías / anulaciones). */
+  pos_supervisor_pin_hash: string | null
   /** Meta Pixel ID (opcional). */
   meta_pixel_id: string | null
   meta_pixel_enabled: boolean
@@ -237,6 +243,8 @@ export type TicketTier = {
   layout_type: "general" | "table_combo" | "numbered_seat"
   seating_sector_id: string | null
   capacity_per_unit: number
+  /** QRs independientes por unidad vendida (mesa/agrupación). */
+  admit_count: number
   created_at: string
   updated_at: string
 }
@@ -265,6 +273,11 @@ export type Ticket = {
   holder_name: string | null
   holder_dni: string | null
   holder_email: string | null
+  /** Agrupa N QRs de una misma mesa/unidad. */
+  group_id: string | null
+  group_slot: number | null
+  /** Lote de emisión masiva de cortesías. */
+  batch_id: string | null
   /** Generada en borrador/preview; inválida en puerta de evento published. */
   is_test: boolean
   created_at: string
@@ -449,6 +462,39 @@ export type Order = {
   mp_payment_id: string | null
   payment_method: PaymentMethod
   customer_phone: string | null
+  cashier_shift_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type UserFavorite = {
+  id: string
+  user_id: string
+  event_id: string
+  created_at: string
+}
+
+export type UserFavoriteInsert = {
+  id?: string
+  user_id: string
+  event_id: string
+  created_at?: string
+}
+
+export type CashierShift = {
+  id: string
+  event_id: string
+  cashier_id: string
+  start_amount: number
+  end_amount_expected: number | null
+  end_amount_counted: number | null
+  cash_sales_total: number
+  card_sales_total: number
+  transfer_sales_total: number
+  tickets_sold: number
+  status: "open" | "closed"
+  opened_at: string
+  closed_at: string | null
   created_at: string
   updated_at: string
 }
@@ -527,8 +573,18 @@ export type EventItem = {
   is_active: boolean
   image_url: string | null
   category: EventItemCategory
+  includes_tier_id: string | null
+  includes_tier_qty: number
   created_at: string
   updated_at: string
+}
+
+export type TicketTierComboItem = {
+  id: string
+  tier_id: string
+  event_item_id: string
+  quantity: number
+  created_at: string
 }
 
 export type ItemRedemption = {
@@ -585,6 +641,7 @@ type EventInsert = Omit<
   | "platform_fixed_fee"
   | "max_free_tickets"
   | "is_sponsored_by_tokepass"
+  | "pos_supervisor_pin_hash"
   | "meta_pixel_id"
   | "meta_pixel_enabled"
   | "tiktok_pixel_id"
@@ -620,6 +677,7 @@ type EventInsert = Omit<
   platform_fixed_fee?: number
   max_free_tickets?: number
   is_sponsored_by_tokepass?: boolean
+  pos_supervisor_pin_hash?: string | null
   meta_pixel_id?: string | null
   meta_pixel_enabled?: boolean
   tiktok_pixel_id?: string | null
@@ -656,6 +714,7 @@ type TicketTierInsert = Omit<
   | "layout_type"
   | "seating_sector_id"
   | "capacity_per_unit"
+  | "admit_count"
   | "created_at"
   | "updated_at"
 > & {
@@ -671,6 +730,7 @@ type TicketTierInsert = Omit<
   layout_type?: TicketTier["layout_type"]
   seating_sector_id?: string | null
   capacity_per_unit?: number
+  admit_count?: number
   created_at?: string
   updated_at?: string
 }
@@ -694,6 +754,9 @@ type TicketInsert = Omit<
   | "holder_name"
   | "holder_dni"
   | "holder_email"
+  | "group_id"
+  | "group_slot"
+  | "batch_id"
   | "is_test"
   | "created_at"
   | "updated_at"
@@ -716,6 +779,9 @@ type TicketInsert = Omit<
   holder_name?: string | null
   holder_dni?: string | null
   holder_email?: string | null
+  group_id?: string | null
+  group_slot?: number | null
+  batch_id?: string | null
   is_test?: boolean
   created_at?: string
   updated_at?: string
@@ -787,6 +853,7 @@ type OrderInsert = Omit<
   | "mp_payment_id"
   | "payment_method"
   | "customer_phone"
+  | "cashier_shift_id"
   | "created_at"
   | "updated_at"
 > & {
@@ -801,6 +868,7 @@ type OrderInsert = Omit<
   mp_payment_id?: string | null
   payment_method?: PaymentMethod
   customer_phone?: string | null
+  cashier_shift_id?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -869,6 +937,8 @@ type EventItemInsert = Omit<
   | "is_active"
   | "image_url"
   | "category"
+  | "includes_tier_id"
+  | "includes_tier_qty"
   | "created_at"
   | "updated_at"
 > & {
@@ -877,6 +947,8 @@ type EventItemInsert = Omit<
   is_active?: boolean
   image_url?: string | null
   category?: EventItemCategory
+  includes_tier_id?: string | null
+  includes_tier_qty?: number
   created_at?: string
   updated_at?: string
 }
@@ -1072,6 +1144,28 @@ export type Database = {
         Update: Partial<OrderInsert>
         Relationships: []
       }
+      cashier_shifts: {
+        Row: CashierShift
+        Insert: {
+          id?: string
+          event_id: string
+          cashier_id: string
+          start_amount?: number
+          end_amount_expected?: number | null
+          end_amount_counted?: number | null
+          cash_sales_total?: number
+          card_sales_total?: number
+          transfer_sales_total?: number
+          tickets_sold?: number
+          status?: "open" | "closed"
+          opened_at?: string
+          closed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<CashierShift>
+        Relationships: []
+      }
       organizer_settlements: {
         Row: OrganizerSettlement
         Insert: OrganizerSettlementInsert
@@ -1141,6 +1235,18 @@ export type Database = {
         Update: Partial<EventItemInsert>
         Relationships: []
       }
+      ticket_tier_combo_items: {
+        Row: TicketTierComboItem
+        Insert: {
+          id?: string
+          tier_id: string
+          event_item_id: string
+          quantity?: number
+          created_at?: string
+        }
+        Update: Partial<TicketTierComboItem>
+        Relationships: []
+      }
       item_redemptions: {
         Row: ItemRedemption
         Insert: ItemRedemptionInsert
@@ -1155,6 +1261,12 @@ export type Database = {
           created_at?: string
         }
         Update: Partial<TicketTransfer>
+        Relationships: []
+      }
+      user_favorites: {
+        Row: UserFavorite
+        Insert: UserFavoriteInsert
+        Update: Partial<UserFavoriteInsert>
         Relationships: []
       }
       ticket_resale_listings: {
@@ -1789,6 +1901,10 @@ export type Database = {
           p_payment_method: string
           p_staff_id: string
           p_customer_phone?: string | null
+          p_customer_dni?: string | null
+          p_customer_name?: string | null
+          p_shift_id?: string | null
+          p_supervisor_pin?: string | null
         }
         Returns: {
           order_id: string
@@ -1798,6 +1914,89 @@ export type Database = {
           unit_price: number
           total_amount: number
         }[]
+      }
+      set_pos_supervisor_pin: {
+        Args: { p_event_id: string; p_pin: string }
+        Returns: boolean
+      }
+      verify_pos_supervisor_pin: {
+        Args: { p_event_id: string; p_pin: string }
+        Returns: boolean
+      }
+      void_pos_order: {
+        Args: { p_order_id: string; p_supervisor_pin: string }
+        Returns: {
+          id: string
+          buyer_id: string
+          subtotal: number
+          service_charge: number
+          total_amount: number
+          status: string
+          payment_method: string
+          cashier_shift_id: string | null
+        }
+      }
+      open_cashier_shift: {
+        Args: {
+          p_event_id: string
+          p_start_amount?: number
+        }
+        Returns: {
+          id: string
+          event_id: string
+          cashier_id: string
+          start_amount: number
+          end_amount_expected: number | null
+          end_amount_counted: number | null
+          cash_sales_total: number
+          card_sales_total: number
+          transfer_sales_total: number
+          tickets_sold: number
+          status: string
+          opened_at: string
+          closed_at: string | null
+        }
+      }
+      close_cashier_shift: {
+        Args: {
+          p_shift_id: string
+          p_counted_amount?: number | null
+        }
+        Returns: {
+          id: string
+          event_id: string
+          cashier_id: string
+          start_amount: number
+          end_amount_expected: number | null
+          end_amount_counted: number | null
+          cash_sales_total: number
+          card_sales_total: number
+          transfer_sales_total: number
+          tickets_sold: number
+          status: string
+          opened_at: string
+          closed_at: string | null
+        }
+      }
+      fulfill_tier_combo_items: {
+        Args: {
+          p_order_id: string
+          p_tier_id: string
+          p_owner_id: string
+          p_status?: string
+        }
+        Returns: number
+      }
+      issue_complimentary_batch_tx: {
+        Args: {
+          p_event_id: string
+          p_staff_id: string
+          p_tier_id: string
+          p_mode: string
+          p_guests?: Json
+          p_unnamed_count?: number
+        }
+        Returns: Json
       }
     }
     Enums: {

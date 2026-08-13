@@ -103,14 +103,14 @@ export default async function SuperAdminDashboardPage() {
         description="Mirás de un vistazo cuánto genera Tokepass, cuánto se movió en ventas y cómo van las productoras."
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {kpis.map(
           ({ label, value, helper, icon: Icon, accent, iconWrap, featured }) => (
             <Card
               key={label}
               className={
                 featured
-                  ? "border-0 bg-gradient-to-br from-emerald-500/15 via-white/[0.04] to-white/[0.02] py-0 ring-1 ring-emerald-400/30 md:col-span-2 xl:col-span-1"
+                  ? "border-0 bg-gradient-to-br from-emerald-500/15 via-white/[0.04] to-white/[0.02] py-0 ring-1 ring-emerald-400/30 sm:col-span-2 xl:col-span-1"
                   : "border-0 bg-white/[0.035] py-0 ring-1 ring-white/8"
               }
             >
@@ -124,7 +124,7 @@ export default async function SuperAdminDashboardPage() {
                   </span>
                 </div>
                 <p
-                  className={`mt-5 font-bold tracking-[-0.04em] ${accent} ${featured ? "text-4xl" : "text-3xl"}`}
+                  className={`mt-5 break-words font-bold tracking-[-0.04em] ${accent} text-3xl sm:text-4xl`}
                 >
                   {value}
                 </p>
@@ -149,52 +149,38 @@ export default async function SuperAdminDashboardPage() {
               Todavía no hay productoras registradas.
             </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="border-white/8 hover:bg-transparent">
-                  <TableHead className="pl-6 text-zinc-600">Nombre</TableHead>
-                  <TableHead className="text-zinc-600">Email</TableHead>
-                  <TableHead className="text-right text-zinc-600">
-                    Eventos activos
-                  </TableHead>
-                  <TableHead className="text-right text-zinc-600">
-                    Volumen facturado
-                  </TableHead>
-                  <TableHead className="pr-6 text-right text-zinc-600">
-                    Acciones
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <>
+              <div className="grid gap-3 p-4 md:hidden">
                 {organizers.map((organizer) => (
-                  <TableRow
+                  <article
                     key={organizer.id}
-                    className="border-white/8 hover:bg-white/[0.025]"
+                    className="rounded-2xl border border-white/10 bg-black/30 p-4"
                   >
-                    <TableCell className="py-4 pl-6">
-                      <div className="flex items-center gap-3">
-                        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-sky-500/10 text-xs font-medium text-sky-300">
-                          {getInitials(organizer.name, organizer.email)}
-                        </span>
-                        <span className="font-medium text-zinc-200">
+                    <div className="flex items-start gap-3">
+                      <span className="grid size-11 shrink-0 place-items-center rounded-full bg-sky-500/10 text-sm font-medium text-sky-300">
+                        {getInitials(organizer.name, organizer.email)}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-lg font-bold text-white">
                           {organizer.name}
-                        </span>
+                        </p>
+                        <p className="mt-1 truncate text-sm text-zinc-500">
+                          {organizer.email}
+                        </p>
                       </div>
-                    </TableCell>
-                    <TableCell className="text-zinc-400">
-                      {organizer.email}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums text-zinc-300">
-                      {formatNumber(organizer.activeEvents)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums text-emerald-400">
-                      {formatCurrency(organizer.billedVolume)}
-                    </TableCell>
-                    <TableCell className="pr-6 text-right">
+                    </div>
+                    <div className="mt-4 flex items-end justify-between gap-3">
+                      <div>
+                        <p className="text-2xl font-black tabular-nums text-emerald-300">
+                          {formatCurrency(organizer.billedVolume)}
+                        </p>
+                        <p className="text-[10px] uppercase tracking-wide text-zinc-600">
+                          {formatNumber(organizer.activeEvents)} eventos activos
+                        </p>
+                      </div>
                       <Button
+                        className="min-h-12 shrink-0 rounded-xl border-white/15 bg-transparent px-4 font-semibold text-zinc-200 hover:bg-white/5 hover:text-white"
                         variant="outline"
-                        size="sm"
-                        className="rounded-full border-white/15 bg-transparent text-zinc-200 hover:bg-white/5 hover:text-white"
                         nativeButton={false}
                         render={
                           <Link
@@ -204,11 +190,74 @@ export default async function SuperAdminDashboardPage() {
                       >
                         Crear evento
                       </Button>
-                    </TableCell>
-                  </TableRow>
+                    </div>
+                  </article>
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-white/8 hover:bg-transparent">
+                      <TableHead className="pl-6 text-zinc-600">Nombre</TableHead>
+                      <TableHead className="text-zinc-600">Email</TableHead>
+                      <TableHead className="text-right text-zinc-600">
+                        Eventos activos
+                      </TableHead>
+                      <TableHead className="text-right text-zinc-600">
+                        Volumen facturado
+                      </TableHead>
+                      <TableHead className="pr-6 text-right text-zinc-600">
+                        Acciones
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {organizers.map((organizer) => (
+                      <TableRow
+                        key={organizer.id}
+                        className="border-white/8 hover:bg-white/[0.025]"
+                      >
+                        <TableCell className="py-4 pl-6">
+                          <div className="flex items-center gap-3">
+                            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-sky-500/10 text-xs font-medium text-sky-300">
+                              {getInitials(organizer.name, organizer.email)}
+                            </span>
+                            <span className="font-medium text-zinc-200">
+                              {organizer.name}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-zinc-400">
+                          {organizer.email}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums text-zinc-300">
+                          {formatNumber(organizer.activeEvents)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums text-emerald-400">
+                          {formatCurrency(organizer.billedVolume)}
+                        </TableCell>
+                        <TableCell className="pr-6 text-right">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="min-h-11 rounded-full border-white/15 bg-transparent text-zinc-200 hover:bg-white/5 hover:text-white"
+                            nativeButton={false}
+                            render={
+                              <Link
+                                href={`/admin/events/create?organizerId=${organizer.id}`}
+                              />
+                            }
+                          >
+                            Crear evento
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

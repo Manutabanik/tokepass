@@ -14,10 +14,15 @@ export const metadata: Metadata = {
 
 export default async function TicketPrintPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ autoprint?: string }>
 }) {
   const { id } = await params
+  const query = await searchParams
+  const autoPrint = query.autoprint === "1" || query.autoprint === "true"
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -32,14 +37,18 @@ export default async function TicketPrintPage({
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-zinc-100 px-4 py-8 text-zinc-950">
-      <div className="no-print mx-auto mb-6 flex max-w-[420px] items-center justify-between gap-3">
-        <Link
-          href="/my-tickets"
-          className="text-sm font-medium text-zinc-600 hover:text-zinc-950"
-        >
-          ← Volver a billetera
-        </Link>
-        <PrintTicketActions />
+      <div className="no-print mx-auto mb-6 flex max-w-[300px] items-center justify-between gap-3">
+        {!autoPrint ? (
+          <Link
+            href="/cuenta/entradas"
+            className="text-sm font-medium text-zinc-600 hover:text-zinc-950"
+          >
+            ← Volver
+          </Link>
+        ) : (
+          <span />
+        )}
+        <PrintTicketActions autoPrint={autoPrint} />
       </div>
 
       <PrintableTicketView ticket={ticket} />

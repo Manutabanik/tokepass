@@ -46,7 +46,7 @@ export function AdminMobileNav({
             type="button"
             variant="ghost"
             size="icon"
-            className="lg:hidden text-zinc-300 hover:bg-white/5 hover:text-white"
+            className="lg:hidden size-11 text-zinc-300 hover:bg-white/5 hover:text-white"
             aria-label="Abrir menú"
           />
         }

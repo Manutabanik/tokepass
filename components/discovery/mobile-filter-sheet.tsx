@@ -6,7 +6,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react"
-import { useMemo } from "react"
+import { useEffect, useMemo, useRef } from "react"
 
 import {
   Sheet,
@@ -31,6 +31,7 @@ type MobileFilterSheetProps = {
   city: string
   cities: string[]
   onCityChange: (value: string) => void
+  locationsLoading?: boolean
   categoryId: string
   onCategoryChange: (value: string) => void
   tagId: string | null
@@ -40,6 +41,10 @@ type MobileFilterSheetProps = {
   onApply: () => void
 }
 
+/**
+ * Modal fullscreen en mobile: evita que el teclado virtual colapse
+ * filtros inline / dropdowns sobre el hero.
+ */
 export function MobileFilterSheet({
   open,
   onOpenChange,
@@ -48,6 +53,7 @@ export function MobileFilterSheet({
   city,
   cities,
   onCityChange,
+  locationsLoading = false,
   categoryId,
   onCategoryChange,
   tagId,
@@ -56,6 +62,7 @@ export function MobileFilterSheet({
   resultCount,
   onApply,
 }: MobileFilterSheetProps) {
+  const inputRef = useRef<HTMLInputElement>(null)
   const activeCategory = useMemo(
     () => findCategory(categories, categoryId),
     [categories, categoryId],
@@ -65,16 +72,24 @@ export function MobileFilterSheet({
   const countLabel =
     resultCount === 1 ? "Mostrar 1 evento" : `Mostrar ${resultCount} eventos`
 
+  useEffect(() => {
+    if (!open) return
+    const id = window.setTimeout(() => inputRef.current?.focus(), 80)
+    return () => window.clearTimeout(id)
+  }, [open])
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="bottom"
         showCloseButton={false}
-        className="gap-0 p-0"
+        className={cn(
+          "inset-0 h-dvh max-h-none w-full gap-0 rounded-none border-0 p-0",
+          "bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100",
+          "data-open:slide-in-from-bottom data-closed:slide-out-to-bottom",
+        )}
       >
-        <div className="mx-auto mt-3 h-1 w-10 shrink-0 rounded-full bg-zinc-300 dark:bg-zinc-600" />
-
-        <SheetHeader className="border-b border-zinc-200/80 px-5 pb-4 pt-3 text-left dark:border-white/10">
+        <SheetHeader className="shrink-0 border-b border-zinc-200/80 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] text-left dark:border-white/10 sm:px-5">
           <div className="flex items-start justify-between gap-3">
             <div>
               <SheetTitle className="text-lg font-semibold text-zinc-900 dark:text-white">
@@ -87,29 +102,33 @@ export function MobileFilterSheet({
             <button
               type="button"
               onClick={() => onOpenChange(false)}
-              className="grid size-9 shrink-0 place-items-center rounded-full text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/10 dark:hover:text-white"
+              className="grid size-11 shrink-0 place-items-center rounded-full text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/10 dark:hover:text-white"
               aria-label="Cerrar filtros"
             >
-              <X className="size-4" aria-hidden="true" />
+              <X className="size-5" aria-hidden="true" />
             </button>
           </div>
         </SheetHeader>
 
-        <div className="min-h-0 flex-1 space-y-7 overflow-y-auto px-5 py-5 pb-28">
+        <div className="min-h-0 flex-1 space-y-7 overflow-y-auto overscroll-contain px-4 py-5 pb-28 sm:px-5">
           <label className="block space-y-2">
             <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
               Buscar
             </span>
-            <span className="flex items-center gap-3 rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3.5 dark:border-white/10 dark:bg-white/[0.04]">
+            <span className="flex min-h-12 items-center gap-3 rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
               <Search
                 className="size-4 shrink-0 text-zinc-400"
                 aria-hidden="true"
               />
               <input
+                ref={inputRef}
                 type="search"
                 value={query}
                 onChange={(event) => onQueryChange(event.target.value)}
                 placeholder="Evento, artista…"
+                enterKeyHint="search"
+                autoComplete="off"
+                autoCorrect="off"
                 className="min-w-0 flex-1 border-0 bg-transparent text-base text-zinc-900 outline-none placeholder:text-zinc-400 dark:text-white dark:placeholder:text-zinc-500"
               />
             </span>
@@ -125,7 +144,8 @@ export function MobileFilterSheet({
               aria-label="Categorías"
             >
               {categories.map((item) => {
-                const Icon = resolveCategoryIcon(item.iconName ?? item.icon) ?? Sparkles
+                const Icon =
+                  resolveCategoryIcon(item.iconName ?? item.icon) ?? Sparkles
                 const active = categoryId === item.id
                 return (
                   <button
@@ -159,11 +179,9 @@ export function MobileFilterSheet({
                     <button
                       key={tag.id}
                       type="button"
-                      onClick={() =>
-                        onTagChange(active ? null : tag.id)
-                      }
+                      onClick={() => onTagChange(active ? null : tag.id)}
                       className={cn(
-                        "inline-flex shrink-0 items-center rounded-full border px-3.5 py-2 text-sm font-medium transition",
+                        "inline-flex min-h-11 shrink-0 items-center rounded-full border px-3.5 text-sm font-medium transition",
                         active
                           ? "border-violet-500/50 bg-violet-600 text-white dark:bg-violet-500"
                           : "border-zinc-200 bg-zinc-50 text-zinc-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300",
@@ -181,21 +199,27 @@ export function MobileFilterSheet({
             <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
               Ubicación
             </p>
-            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-              <LocationChip
-                active={city === "todas"}
-                label="Todo el país"
-                onClick={() => onCityChange("todas")}
-              />
-              {cities.map((item) => (
+            {locationsLoading && cities.length === 0 ? (
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                Cargando provincias…
+              </p>
+            ) : (
+              <div className="flex max-h-48 flex-wrap gap-2 overflow-y-auto pb-1">
                 <LocationChip
-                  key={item}
-                  active={city === item.toLowerCase()}
-                  label={item}
-                  onClick={() => onCityChange(item.toLowerCase())}
+                  active={city === "todas"}
+                  label="Todas las ubicaciones"
+                  onClick={() => onCityChange("todas")}
                 />
-              ))}
-            </div>
+                {cities.map((item) => (
+                  <LocationChip
+                    key={item}
+                    active={city.toLowerCase() === item.toLowerCase()}
+                    label={item}
+                    onClick={() => onCityChange(item)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -207,7 +231,7 @@ export function MobileFilterSheet({
               onOpenChange(false)
             }}
             className={cn(
-              "flex h-12 w-full items-center justify-center rounded-2xl text-sm font-semibold text-white",
+              "flex h-12 w-full items-center justify-center rounded-2xl text-base font-semibold text-white",
               "bg-gradient-to-r from-violet-600 to-fuchsia-600",
               "shadow-sm transition hover:from-violet-500 hover:to-fuchsia-500 hover:shadow-md",
               "active:scale-[0.99]",
@@ -235,7 +259,7 @@ function LocationChip({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-2.5 text-sm font-medium transition",
+        "inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition",
         active
           ? "border-violet-500/50 bg-violet-500/10 text-violet-800 dark:border-violet-400/40 dark:bg-violet-500/15 dark:text-violet-100"
           : "border-zinc-200 bg-white text-zinc-700 dark:border-white/10 dark:bg-white/[0.03] dark:text-zinc-300",
@@ -247,7 +271,7 @@ function LocationChip({
   )
 }
 
-/** Trigger pastilla — solo mobile. */
+/** Trigger pastilla — solo mobile. No abre teclado: abre el modal. */
 export function MobileSearchTrigger({
   onClick,
   summary,
@@ -266,14 +290,14 @@ export function MobileSearchTrigger({
         "md:hidden",
       )}
     >
-      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-zinc-100 dark:bg-white/10">
+      <span className="grid size-11 shrink-0 place-items-center rounded-full bg-zinc-100 dark:bg-white/10">
         <Search className="size-4 text-zinc-700 dark:text-zinc-200" aria-hidden />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-semibold text-zinc-900 dark:text-white">
+        <span className="block truncate text-base font-semibold text-zinc-900 dark:text-white">
           ¿Qué vas a hacer hoy?
         </span>
-        <span className="block truncate text-xs text-zinc-500 dark:text-zinc-400">
+        <span className="block truncate text-sm text-zinc-500 dark:text-zinc-400">
           {summary?.trim() || "Buscar filtros"}
         </span>
       </span>

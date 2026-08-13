@@ -503,7 +503,7 @@ export async function startCheckoutWithPayment(
     pendingOrderId = null
     revalidatePath(`/events/${eventId}`)
     revalidatePath("/events")
-    revalidatePath("/my-tickets")
+    revalidatePath("/cuenta/entradas")
     revalidatePath("/admin")
     revalidatePath("/admin/promoters")
     revalidatePath("/promoter/dashboard")

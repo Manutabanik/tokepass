@@ -28,3 +28,8 @@ export function splitTicketsBySchedule(tickets: MyTicket[]): {
 
   return { upcoming, past }
 }
+
+/** Solo `valid` de eventos futuros (hub / contador de billetera). */
+export function countActiveTickets(tickets: MyTicket[]): number {
+  return splitTicketsBySchedule(tickets).upcoming.length
+}

@@ -198,10 +198,14 @@ export function AuthForms({
                 id="login-email"
                 type="email"
                 name="email"
-                placeholder="tu@email.com"
+                inputMode="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                placeholder="Tu Email"
                 autoComplete="email"
                 required
-                className="h-12 rounded-xl border-zinc-800 bg-zinc-950 px-4 py-3.5 text-sm text-white placeholder:text-zinc-600 focus-visible:border-purple-500/80 focus-visible:ring-2 focus-visible:ring-purple-500/20"
+                className="h-12 min-h-12 rounded-xl border-zinc-800 bg-zinc-950 px-4 py-3.5 text-base text-white placeholder:text-zinc-600 focus-visible:border-purple-500/80 focus-visible:ring-2 focus-visible:ring-purple-500/20"
               />
             </div>
             <div>
@@ -218,7 +222,7 @@ export function AuthForms({
                 placeholder="Ingresá tu contraseña"
                 autoComplete="current-password"
                 required
-                className="h-12 rounded-xl border-zinc-800 bg-zinc-950 px-4 py-3.5 text-sm text-white placeholder:text-zinc-600 focus-visible:border-purple-500/80 focus-visible:ring-2 focus-visible:ring-purple-500/20"
+                className="h-12 min-h-12 rounded-xl border-zinc-800 bg-zinc-950 px-4 py-3.5 text-base text-white placeholder:text-zinc-600 focus-visible:border-purple-500/80 focus-visible:ring-2 focus-visible:ring-purple-500/20"
               />
             </div>
           </div>
@@ -244,7 +248,7 @@ export function AuthForms({
                 name="fullName"
                 placeholder="Tu nombre"
                 autoComplete="name"
-                className="h-12 rounded-xl border-zinc-800 bg-zinc-950 px-4 py-3.5 text-sm text-white placeholder:text-zinc-600 focus-visible:border-purple-500/80 focus-visible:ring-2 focus-visible:ring-purple-500/20"
+                className="h-12 min-h-12 rounded-xl border-zinc-800 bg-zinc-950 px-4 py-3.5 text-base text-white placeholder:text-zinc-600 focus-visible:border-purple-500/80 focus-visible:ring-2 focus-visible:ring-purple-500/20"
               />
             </div>
             <div>
@@ -258,10 +262,14 @@ export function AuthForms({
                 id="register-email"
                 type="email"
                 name="email"
-                placeholder="tu@email.com"
+                inputMode="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                placeholder="Tu Email"
                 autoComplete="email"
                 required
-                className="h-12 rounded-xl border-zinc-800 bg-zinc-950 px-4 py-3.5 text-sm text-white placeholder:text-zinc-600 focus-visible:border-purple-500/80 focus-visible:ring-2 focus-visible:ring-purple-500/20"
+                className="h-12 min-h-12 rounded-xl border-zinc-800 bg-zinc-950 px-4 py-3.5 text-base text-white placeholder:text-zinc-600 focus-visible:border-purple-500/80 focus-visible:ring-2 focus-visible:ring-purple-500/20"
               />
             </div>
             <div>
@@ -279,7 +287,7 @@ export function AuthForms({
                 autoComplete="new-password"
                 minLength={8}
                 required
-                className="h-12 rounded-xl border-zinc-800 bg-zinc-950 px-4 py-3.5 text-sm text-white placeholder:text-zinc-600 focus-visible:border-purple-500/80 focus-visible:ring-2 focus-visible:ring-purple-500/20"
+                className="h-12 min-h-12 rounded-xl border-zinc-800 bg-zinc-950 px-4 py-3.5 text-base text-white placeholder:text-zinc-600 focus-visible:border-purple-500/80 focus-visible:ring-2 focus-visible:ring-purple-500/20"
               />
             </div>
           </div>

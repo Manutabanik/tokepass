@@ -50,4 +50,14 @@ describe("Living QR time window", () => {
       enforceFreshness: false,
     })
   })
+
+  it("accepts raw POS paper secrets even when the event is Living QR dynamic", () => {
+    const posSecret = "a".repeat(48)
+    assert.deepEqual(resolveScanSecret(posSecret, "dynamic"), {
+      mode: "secret",
+      totpSecret: posSecret,
+      expired: false,
+      enforceFreshness: false,
+    })
+  })
 })

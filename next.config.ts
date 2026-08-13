@@ -170,6 +170,45 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async redirects() {
+    return [
+      {
+        source: "/my-tickets",
+        destination: "/cuenta/entradas",
+        permanent: true,
+      },
+      {
+        source: "/my-tickets/:path*",
+        destination: "/cuenta/entradas",
+        permanent: true,
+      },
+      {
+        source: "/mis-tickets",
+        destination: "/cuenta/entradas",
+        permanent: true,
+      },
+      {
+        source: "/mis-tickets/:path*",
+        destination: "/cuenta/entradas",
+        permanent: true,
+      },
+      {
+        source: "/my-orders",
+        destination: "/cuenta/compras",
+        permanent: true,
+      },
+      {
+        source: "/my-orders/:path*",
+        destination: "/cuenta/compras",
+        permanent: true,
+      },
+      {
+        source: "/profile",
+        destination: "/cuenta/perfil",
+        permanent: true,
+      },
+    ]
+  },
   async headers() {
     return [
       {

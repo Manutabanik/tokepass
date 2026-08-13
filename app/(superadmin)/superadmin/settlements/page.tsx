@@ -67,7 +67,7 @@ export default async function SuperAdminSettlementsPage() {
       <PlatformPayoutsHeader />
 
       {ledgerTotals ? (
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <Card className="border-0 bg-white/[0.035] py-0 ring-1 ring-white/8">
             <CardContent className="px-5 py-5">
               <div className="flex items-start justify-between gap-3">
@@ -75,7 +75,7 @@ export default async function SuperAdminSettlementsPage() {
                   <p className="text-xs uppercase tracking-[0.14em] text-zinc-600">
                     Total cobrado (pagado)
                   </p>
-                  <p className="mt-3 text-3xl font-black text-white">
+                  <p className="mt-3 break-words text-3xl font-black text-white sm:text-4xl">
                     {formatCurrency(ledgerTotals.gross)}
                   </p>
                   <p className="mt-1 text-xs text-zinc-600">
@@ -96,7 +96,7 @@ export default async function SuperAdminSettlementsPage() {
                   <p className="text-xs uppercase tracking-[0.14em] text-zinc-600">
                     Comisión de la ticketera
                   </p>
-                  <p className="mt-3 text-3xl font-black text-emerald-300">
+                  <p className="mt-3 break-words text-3xl font-black text-emerald-300 sm:text-4xl">
                     {formatCurrency(ledgerTotals.platformFee)}
                   </p>
                   <p className="mt-1 text-xs text-zinc-600">
@@ -117,7 +117,7 @@ export default async function SuperAdminSettlementsPage() {
                   <p className="text-xs uppercase tracking-[0.14em] text-zinc-600">
                     A pagar a productoras
                   </p>
-                  <p className="mt-3 text-3xl font-black text-zinc-300">
+                  <p className="mt-3 break-words text-3xl font-black text-zinc-300 sm:text-4xl">
                     {formatCurrency(ledgerTotals.organizerNet)}
                   </p>
                   <p className="mt-1 text-xs text-zinc-600">

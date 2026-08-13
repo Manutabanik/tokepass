@@ -1,0 +1,242 @@
+"use client"
+
+import {
+  ArrowLeft,
+  CalendarDays,
+  MapPin,
+  Printer,
+  ShieldCheck,
+} from "lucide-react"
+import Image from "next/image"
+import Link from "next/link"
+import { useEffect, useState } from "react"
+
+import type { MyTicket } from "@/app/actions/tickets"
+import { LivingTicketQR } from "@/components/public/living-ticket-qr"
+import { SaveTicketButton } from "@/components/public/save-ticket-button"
+import { TransferTicketDialog } from "@/components/public/transfer-ticket-dialog"
+import { useOnlineStatus } from "@/components/pwa/use-online-status"
+import { Button } from "@/components/ui/button"
+import { formatEventDay, formatEventTime } from "@/lib/format"
+import { getTicketsOffline } from "@/lib/offline-store"
+import { QRCodeSVG } from "qrcode.react"
+
+export function TicketDetailView({
+  ticket: initialTicket,
+  userId,
+  appleWalletEnabled = false,
+  googleWalletEnabled = false,
+}: {
+  ticket: MyTicket
+  userId: string
+  appleWalletEnabled?: boolean
+  googleWalletEnabled?: boolean
+}) {
+  const online = useOnlineStatus()
+  const [ticket, setTicket] = useState(initialTicket)
+
+  useEffect(() => {
+    setTicket(initialTicket)
+  }, [initialTicket])
+
+  useEffect(() => {
+    if (online) return
+    void getTicketsOffline(userId).then((cached) => {
+      const local = cached.find((row) => row.id === initialTicket.id)
+      if (local) setTicket(local)
+    })
+  }, [online, userId, initialTicket.id])
+
+  const canShowQr = ticket.status === "valid"
+  const isStatic = ticket.qrType === "static"
+  const canTransfer =
+    ticket.status === "valid" &&
+    ticket.transferCount < ticket.maxTransfersAllowed &&
+    online &&
+    !ticket.activeResaleListingId
+
+  const mapsHref = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+    ticket.venueName
+      ? `${ticket.venueName}, ${ticket.eventLocation}`
+      : ticket.eventLocation,
+  )}`
+
+  const seatingLabel = [
+    ticket.seatingSectorName,
+    ticket.seatingLabel,
+    ticket.seatingRowLabel ? `Fila ${ticket.seatingRowLabel}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ")
+
+  return (
+    <div className="mx-auto w-full max-w-lg space-y-6 px-4 py-6 sm:px-6">
+      <Link
+        href="/cuenta/entradas"
+        className="inline-flex min-h-12 items-center gap-2 text-sm font-medium text-zinc-400 transition hover:text-white"
+      >
+        <ArrowLeft className="size-4" />
+        Volver a mis entradas
+      </Link>
+
+      <header className="overflow-hidden rounded-3xl border border-white/10 bg-zinc-950">
+        <div className="relative aspect-[16/9] w-full bg-zinc-900">
+          {ticket.flyerUrl ? (
+            <Image
+              src={ticket.flyerUrl}
+              alt=""
+              fill
+              priority
+              sizes="(max-width: 640px) 100vw, 512px"
+              className="object-cover"
+            />
+          ) : null}
+          <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent" />
+          <div className="absolute inset-x-0 bottom-0 space-y-1 p-4">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-300/90">
+              Detalle de la entrada
+            </p>
+            <h1 className="text-2xl font-black tracking-tight text-white">
+              {ticket.eventTitle}
+            </h1>
+          </div>
+        </div>
+        <div className="space-y-2 border-t border-white/8 px-4 py-4 text-sm text-zinc-300">
+          <p className="flex items-center gap-2">
+            <CalendarDays className="size-4 text-zinc-500" />
+            {formatEventDay(ticket.eventDate)} · {formatEventTime(ticket.eventDate)}
+          </p>
+          <p className="flex items-start gap-2">
+            <MapPin className="mt-0.5 size-4 shrink-0 text-zinc-500" />
+            <span>
+              {ticket.venueName ?? ticket.eventLocation}
+              {ticket.venueName ? (
+                <span className="mt-0.5 block text-xs text-zinc-500">
+                  {ticket.eventLocation}
+                </span>
+              ) : null}
+            </span>
+          </p>
+          <p className="rounded-xl bg-white/5 px-3 py-2 font-semibold text-white">
+            {ticket.tierName}
+            {seatingLabel ? ` · ${seatingLabel}` : ""}
+          </p>
+        </div>
+      </header>
+
+      {canShowQr ? (
+        <div className="rounded-3xl border border-white/10 bg-white p-5 text-center text-zinc-950 shadow-2xl shadow-black/40">
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-zinc-500">
+            {isStatic ? "QR de ingreso" : "Living QR"}
+          </p>
+          <div className="mx-auto mt-4 inline-block rounded-2xl bg-white p-2">
+            {isStatic ? (
+              <QRCodeSVG
+                value={ticket.totpSecret}
+                size={260}
+                level="H"
+                includeMargin
+                bgColor="#ffffff"
+                fgColor="#09090b"
+              />
+            ) : (
+              <LivingTicketQR
+                ticketId={ticket.id}
+                totpSecret={ticket.totpSecret}
+                size={240}
+              />
+            )}
+          </div>
+          <p className="mt-3 font-mono text-xs tracking-wider text-zinc-500">
+            #{ticket.id.slice(0, 8).toUpperCase()}
+          </p>
+          <p className="mt-3 flex items-start justify-center gap-2 text-left text-xs leading-5 text-zinc-600">
+            <ShieldCheck className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+            {isStatic
+              ? "Presentá este código en puerta. También sirve el PDF impreso."
+              : "Abrí esta pantalla al llegar. El código cambia cada 15 segundos."}
+          </p>
+          {!online ? (
+            <p className="mt-2 text-xs font-medium text-amber-700">
+              Modo offline · QR válido para ingreso
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <div className="rounded-3xl border border-dashed border-zinc-700 bg-zinc-900/50 px-5 py-10 text-center text-sm text-zinc-400">
+          Esta entrada ya no muestra QR vivo
+          {ticket.status === "transferred" ? " (fue transferida)" : ""}.
+        </div>
+      )}
+
+      <div className="grid gap-3">
+        {canTransfer ? (
+          <TransferTicketDialog
+            ticketId={ticket.id}
+            eventTitle={ticket.eventTitle}
+            triggerLabel="Regalar a un amigo"
+            triggerClassName="min-h-12 w-full rounded-2xl"
+          />
+        ) : null}
+
+        {ticket.status === "valid" ? (
+          <>
+            <SaveTicketButton
+              ticket={ticket}
+              userId={userId}
+              disabled={!online}
+              appleWalletEnabled={appleWalletEnabled}
+              googleWalletEnabled={googleWalletEnabled}
+            />
+            <Button
+              className="min-h-12 w-full rounded-2xl border border-white/15 bg-white/5 text-white hover:bg-white/10"
+              variant="outline"
+              nativeButton={false}
+              render={
+                <Link href={`/tickets/${ticket.id}/print`} target="_blank" />
+              }
+            >
+              <Printer className="size-4" />
+              Guardar / Imprimir
+            </Button>
+          </>
+        ) : null}
+
+        <Button
+          className="min-h-12 w-full rounded-2xl"
+          variant="outline"
+          nativeButton={false}
+          render={
+            <a href={mapsHref} target="_blank" rel="noreferrer" />
+          }
+        >
+          <MapPin className="size-4" />
+          Ver ubicación en el mapa
+        </Button>
+
+        <Button
+          className="min-h-12 w-full rounded-2xl"
+          variant="ghost"
+          nativeButton={false}
+          render={<Link href={`/events/${ticket.eventId}`} />}
+        >
+          Ver evento
+        </Button>
+      </div>
+
+      <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-zinc-400">
+        <h2 className="text-sm font-semibold text-white">Términos de acceso</h2>
+        <ul className="mt-2 list-disc space-y-1.5 pl-4 leading-relaxed">
+          <li>El primer escaneo válido en puerta otorga el ingreso.</li>
+          <li>
+            La entrada es personal. Transferila solo desde Tokepass.
+          </li>
+          <li>
+            El organizador es responsable del evento y de las condiciones de
+            acceso.
+          </li>
+        </ul>
+      </section>
+    </div>
+  )
+}

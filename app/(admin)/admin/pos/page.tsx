@@ -7,7 +7,8 @@ import { createClient } from "@/lib/supabase/server"
 
 export const metadata: Metadata = {
   title: "Boletería",
-  description: "Cobrá en puerta en efectivo o transferencia — Tokepass.",
+  description:
+    "Cobrá en puerta: efectivo, Posnet o transferencia — Tokepass.",
 }
 
 export default async function AdminPosPage() {
@@ -39,7 +40,8 @@ export default async function AdminPosPage() {
           Boletería
         </h1>
         <p className="mt-2 text-sm text-zinc-500">
-          Cobrá en efectivo o transferencia y emití el QR al instante.
+          Abrí la caja, cobrá (efectivo / Posnet / transferencia) e imprimí el
+          ticket térmico.
         </p>
       </header>
 

@@ -50,6 +50,8 @@ function paymentMethodLabel(method: string): string {
       return "POS efectivo"
     case "transfer_pos":
       return "POS transferencia"
+    case "card_pos":
+      return "POS Posnet / tarjeta"
     case "mercadopago":
       return "Mercado Pago"
     default:

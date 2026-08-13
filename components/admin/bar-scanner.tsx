@@ -148,8 +148,8 @@ export function StoreScanner() {
   return (
     <div className="relative flex min-h-[100dvh] flex-col bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">
       {visual === "success" ? (
-        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-emerald-600 px-6 text-center">
-          <CheckCircle2 className="size-16 text-white" aria-hidden="true" />
+        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-emerald-500 px-6 text-center">
+          <CheckCircle2 className="size-36 text-white sm:size-44" strokeWidth={2.5} aria-hidden="true" />
           {imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -158,18 +158,18 @@ export function StoreScanner() {
               className="mt-6 size-28 rounded-2xl object-cover ring-2 ring-white/40"
             />
           ) : null}
-          <p className="mt-6 text-3xl font-black leading-tight tracking-tight sm:text-4xl">
+          <p className="mt-6 text-5xl font-black leading-tight tracking-tight text-white sm:text-6xl">
             {title}
           </p>
           {subtitle ? (
-            <p className="mt-3 max-w-md text-base text-emerald-50/90">{subtitle}</p>
+            <p className="mt-3 max-w-md text-xl font-bold text-white/95">{subtitle}</p>
           ) : null}
         </div>
       ) : null}
 
       {visual === "error" ? (
         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-red-700 px-6 text-center">
-          <XCircle className="size-16 text-white" aria-hidden="true" />
+          <XCircle className="size-36 text-white sm:size-44" strokeWidth={2.5} aria-hidden="true" />
           {imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -178,7 +178,7 @@ export function StoreScanner() {
               className="mt-6 size-24 rounded-2xl object-cover opacity-80"
             />
           ) : null}
-          <p className="mt-6 text-3xl font-black leading-tight tracking-tight sm:text-4xl">
+          <p className="mt-6 text-5xl font-black leading-tight tracking-tight text-white sm:text-6xl">
             {title}
           </p>
           {subtitle ? (

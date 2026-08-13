@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation"
 
-export default function MisTicketsRedirectPage() {
-  redirect("/my-tickets")
+/** Alias legacy → portal de cuenta */
+export default function MisTicketsAliasPage() {
+  redirect("/cuenta/entradas")
 }
