@@ -35,8 +35,6 @@ const EVENT_SOLD_OUT_ERROR = "El evento o sector se encuentra agotado"
 const GENERIC_CHECKOUT_ERROR =
   "Ocurrió un error al procesar tu solicitud"
 
-export type { CheckoutCartItem, CheckoutAddonItem }
-
 export type ReservedTicket = {
   ticket_id: string
 }
