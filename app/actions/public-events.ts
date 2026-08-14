@@ -12,6 +12,7 @@ import { isEventUuid } from "@/lib/seo/site"
 import type { Event, TicketTier, Venue } from "@/types/database"
 import type { ScheduleDay } from "@/types/events"
 import type { EventSeatingUnit, SeatingSectorSummary, VenueSeatingLayout } from "@/types/venues"
+import { parseVenueMap, type InteractiveVenueMap } from "@/types/venue-map"
 import type { EventPixelConfig } from "@/lib/analytics/pixels"
 import type { PublicSponsor } from "@/lib/sponsors"
 
@@ -76,6 +77,7 @@ export type EventDetails = {
         | "longitude"
       > & {
         seating_layout: VenueSeatingLayout
+        venue_map: InteractiveVenueMap
       })
     | null
   seatingUnits: EventSeatingUnit[]
@@ -187,6 +189,7 @@ type EventDetailRow = {
         | "longitude"
       > & {
         seating_layout?: unknown
+        venue_map?: unknown
       })
     | null
   ticket_tiers: Array<
@@ -441,7 +444,7 @@ async function loadEventDetails(
   let query = supabase
     .from("events")
     .select(
-      "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, venues(id, name, location, address, city, capacity, seating_background_url, seating_layout, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category), profiles!events_organizer_id_fkey(full_name)",
+      "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, venues(id, name, location, address, city, capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category), profiles!events_organizer_id_fkey(full_name)",
     )
     .eq("id", resolvedId)
 
@@ -615,6 +618,7 @@ async function loadEventDetails(
           seating_layout: parsePublicSeatingLayout(
             event.venues.seating_layout,
           ),
+          venue_map: parseVenueMap(event.venues.venue_map),
         }
       : null,
     seatingUnits: [],

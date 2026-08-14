@@ -1,5 +1,7 @@
 import type { VenueZoneBlueprint } from "@/app/actions/venues"
 import type { VenueZoneDraft } from "@/components/admin/smart-venue-builder"
+import { venueMapToSeatingLayout } from "@/lib/seating/venue-map-geometry"
+import type { InteractiveVenueMap } from "@/types/venue-map"
 import {
   getVenueSeatingItems,
   type VenueSeatingLayout,
@@ -118,4 +120,43 @@ export function totalDraftCapacity(
     (sum, zone) => sum + draftZoneCapacity(zone, structured),
     0,
   )
+}
+
+export function venueMapToZoneDrafts(map: InteractiveVenueMap): VenueZoneDraft[] {
+  const layout = venueMapToSeatingLayout(map)
+  return layout.map((sector) => {
+    const element =
+      (map.elements ?? []).find((item) => item.id === sector.id) ??
+      (map.elements ?? []).find((item) => item.groupId === sector.id)
+    const isGeneral = sector.layout_type === "general"
+    const isTable = sector.layout_type === "table_combo"
+    const itemCount = sector.rows.reduce(
+      (sum, row) =>
+        sum + row.items.filter((item) => item.status !== "blocked").length,
+      0,
+    )
+    const capacity = isGeneral
+      ? Math.max(1, element?.capacity ?? 1)
+      : isTable
+        ? sector.capacity_per_unit
+        : itemCount
+    return {
+      key: sector.id,
+      name: sector.sector_name,
+      type: isGeneral
+        ? ("general_admission" as const)
+        : ("reserved_seating" as const),
+      layoutType: sector.layout_type,
+      capacity: String(capacity),
+      rows: sector.rows.map((row) => ({
+        key: row.row_id,
+        label: row.row_label,
+        itemCount: String(row.items.length),
+        labelPrefix: isTable ? "Mesa " : "Butaca ",
+        capacityPerUnit: String(sector.capacity_per_unit),
+        items: row.items,
+      })),
+      color: sector.color,
+    }
+  })
 }

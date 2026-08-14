@@ -4,15 +4,20 @@ import { Expand, Shrink, Map } from "lucide-react"
 import Image from "next/image"
 import { useState } from "react"
 
+import { VenueMapCanvas } from "@/components/venue/venue-map-canvas"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { venueMapHasInventory } from "@/lib/seating/venue-map-geometry"
+import type { InteractiveVenueMap } from "@/types/venue-map"
 
 export function UniversalReferenceMap({
   imageUrl,
+  venueMap,
   alt = "Mapa del lugar",
   highlightedColor,
 }: {
   imageUrl?: string | null
+  venueMap?: InteractiveVenueMap | null
   alt?: string
   highlightedColor?: string | null
 }) {
@@ -27,7 +32,9 @@ export function UniversalReferenceMap({
           : "aspect-[16/9] w-full rounded-2xl border border-zinc-200 dark:border-zinc-800",
       )}
     >
-      {imageUrl ? (
+      {venueMap && venueMapHasInventory(venueMap) ? (
+        <VenueMapCanvas map={venueMap} className="h-full w-full bg-zinc-950" />
+      ) : imageUrl ? (
         <Image
           src={imageUrl}
           alt={alt}
@@ -95,7 +102,9 @@ export function UniversalReferenceMap({
               </Button>
             </div>
             <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-zinc-800">
-              {imageUrl ? (
+              {venueMap && venueMapHasInventory(venueMap) ? (
+                <VenueMapCanvas map={venueMap} className="h-full w-full bg-zinc-950" />
+              ) : imageUrl ? (
                 <div className="relative h-full w-full bg-zinc-900">
                   <Image
                     src={imageUrl}

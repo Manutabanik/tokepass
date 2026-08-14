@@ -26,6 +26,7 @@ import {
   VenueArgentinaSelector,
   type VenueArgentinaValue,
 } from "@/components/admin/venue-argentina-selector"
+import { InteractiveVenueMapEditor } from "@/components/admin/interactive-venue-map-editor"
 import {
   createEmptyZone,
   SmartVenueBuilder,
@@ -36,6 +37,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { formatNumber } from "@/lib/format"
+import {
+  seatingLayoutToVenueMap,
+  venueMapCapacity,
+  venueMapHasInventory,
+  venueMapToSeatingLayout,
+} from "@/lib/seating/venue-map-geometry"
+import { venueMapToZoneDrafts } from "@/lib/seating/venue-zone-draft"
+import { emptyVenueMap, parseVenueMap, type InteractiveVenueMap } from "@/types/venue-map"
 import {
   getVenueSeatingItems,
   type VenueSeatingLayout,
@@ -56,6 +65,7 @@ type Draft = {
   zones: VenueZoneDraft[]
   structured: boolean
   seatingBackgroundUrl: string | null
+  venueMap: InteractiveVenueMap
 }
 
 function emptyDraft(): Draft {
@@ -73,6 +83,7 @@ function emptyDraft(): Draft {
     zones: [createEmptyZone()],
     structured: false,
     seatingBackgroundUrl: null,
+    venueMap: emptyVenueMap(),
   }
 }
 
@@ -268,22 +279,26 @@ export function OrganizerVenuesManager({
                 return
               }
 
+              const fromMap =
+                draft.structured && venueMapHasInventory(draft.venueMap)
+              const mapDrafts = fromMap
+                ? venueMapToZoneDrafts(draft.venueMap)
+                : draft.zones
               const payload = {
                 name: draft.name,
                 location: draft.address.trim(),
                 city: locationLabel(draft),
                 latitude: draft.latitude,
                 longitude: draft.longitude,
-                capacity: Number(draft.capacity),
-                zones: draftZonesToBlueprint(
-                  draft.zones,
-                  draft.structured,
-                ),
-                seatingLayout: draftZonesToSeatingLayout(
-                  draft.zones,
-                  draft.structured,
-                ),
+                capacity: fromMap
+                  ? Math.max(1, venueMapCapacity(draft.venueMap))
+                  : Number(draft.capacity),
+                zones: draftZonesToBlueprint(mapDrafts, draft.structured),
+                seatingLayout: fromMap
+                  ? venueMapToSeatingLayout(draft.venueMap)
+                  : draftZonesToSeatingLayout(draft.zones, draft.structured),
                 seatingBackgroundUrl: draft.seatingBackgroundUrl,
+                venueMap: draft.venueMap,
               }
               const result = draft.id
                 ? await updateVenue({ id: draft.id, ...payload })
@@ -390,11 +405,42 @@ export function OrganizerVenuesManager({
                 />
               </section>
 
-              <SmartVenueBuilder
-                structured={draft.structured}
-                zones={draft.zones}
-                onChange={(zones) => setDraft({ ...draft, zones })}
-              />
+              {draft.structured ? (
+                <div className="space-y-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground">
+                      Plano de asientos
+                    </h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Escenario, sectores en abanico, pasillos y etiquetas de nivel.
+                    </p>
+                  </div>
+                  <InteractiveVenueMapEditor
+                    value={draft.venueMap}
+                    onChange={(next) => {
+                      const numbered = venueMapToZoneDrafts(next)
+                      setDraft({
+                        ...draft,
+                        venueMap: next,
+                        zones:
+                          numbered.length > 0
+                            ? numbered
+                            : draft.zones,
+                        capacity:
+                          numbered.length > 0
+                            ? String(Math.max(1, venueMapCapacity(next)))
+                            : draft.capacity,
+                      })
+                    }}
+                  />
+                </div>
+              ) : (
+                <SmartVenueBuilder
+                  structured={draft.structured}
+                  zones={draft.zones}
+                  onChange={(zones) => setDraft({ ...draft, zones })}
+                />
+              )}
 
               {draft.structured ? (
                 <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800/80 bg-zinc-50 dark:bg-zinc-950/50 p-5">
@@ -583,6 +629,10 @@ export function OrganizerVenuesManager({
                           (sector) => sector.layout_type !== "general",
                         ),
                         seatingBackgroundUrl: venue.seatingBackgroundUrl,
+                        venueMap: seatingLayoutToVenueMap(
+                          venue.seatingLayout,
+                          parseVenueMap(venue.venueMap),
+                        ),
                       })
                     }
                     className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 text-foreground hover:bg-muted dark:hover:bg-zinc-800 hover:text-foreground"

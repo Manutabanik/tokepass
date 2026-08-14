@@ -8,7 +8,7 @@ import { useEffect, useMemo, useState } from "react"
 import type { CatalogEvent } from "@/app/actions/public-events"
 import { EmptyState } from "@/components/discovery/empty-state"
 import { EventCard } from "@/components/discovery/event-card"
-import { FeaturedCarousel } from "@/components/discovery/featured-carousel"
+import { FeaturedHeroSection } from "@/components/public/featured-hero-section"
 import { HeroSection } from "@/components/discovery/hero-section"
 import { OrganizerCtaBanner } from "@/components/discovery/organizer-cta-banner"
 import { publishDiscoveryControls } from "@/components/discovery/discovery-controls-store"
@@ -138,7 +138,7 @@ export function DiscoveryHub({
         resultCount={filtered.length}
       />
 
-      <FeaturedCarousel pool={featuredPool} province={city} />
+      <FeaturedHeroSection pool={featuredPool} province={city} />
 
       <section className="space-y-6" id="discovery-results">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">

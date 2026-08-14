@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 
 import { createClient } from "@/lib/supabase/server"
 import type { Json } from "@/types/database"
+import { parseVenueMap, serializeVenueMap, type InteractiveVenueMap } from "@/types/venue-map"
 import type {
   VenueSeatingLayout,
   VenueSeatingRow,
@@ -29,6 +30,7 @@ export type OrganizerVenue = {
   capacity: number
   zoneBlueprint: VenueZoneBlueprint[]
   seatingLayout: VenueSeatingLayout
+  venueMap: InteractiveVenueMap
   seatingBackgroundUrl: string | null
   createdAt: string
   updatedAt: string
@@ -47,6 +49,7 @@ type VenueMutationInput = {
   capacity: number
   zones?: VenueZoneBlueprint[]
   seatingLayout?: VenueSeatingLayout
+  venueMap?: InteractiveVenueMap | null
   seatingBackgroundUrl?: string | null
 }
 
@@ -347,6 +350,7 @@ function normalizeVenueInput(input: VenueMutationInput):
         capacity: number
         zones: VenueZoneBlueprint[]
         seatingLayout: VenueSeatingLayout
+        venueMap: InteractiveVenueMap
         seatingBackgroundUrl: string | null
       }
     }
@@ -431,6 +435,7 @@ function normalizeVenueInput(input: VenueMutationInput):
       capacity,
       zones,
       seatingLayout: seating.data,
+      venueMap: serializeVenueMap(parseVenueMap(input.venueMap)),
       seatingBackgroundUrl,
     },
   }
@@ -492,6 +497,7 @@ export async function listOrganizerVenues(): Promise<OrganizerVenue[]> {
       capacity: Number(r.capacity),
       zoneBlueprint: parseBlueprint(r.zone_blueprint),
       seatingLayout: parseSeatingLayout(r.seating_layout),
+      venueMap: parseVenueMap(r.venue_map),
       seatingBackgroundUrl:
         typeof r.seating_background_url === "string"
           ? r.seating_background_url
@@ -518,6 +524,7 @@ export async function createVenue(
       capacity,
       zones,
       seatingLayout,
+      venueMap,
       seatingBackgroundUrl,
     } = normalized.data
     const { data, error } = await supabase
@@ -533,6 +540,7 @@ export async function createVenue(
         capacity,
         zone_blueprint: zones as unknown as Json,
         seating_layout: seatingLayout as unknown as Json,
+        venue_map: serializeVenueMap(venueMap) as unknown as Json,
         seating_background_url: seatingBackgroundUrl,
       } as never)
       .select("id")
@@ -568,6 +576,7 @@ export async function updateVenue(input: {
       capacity,
       zones,
       seatingLayout,
+      venueMap,
       seatingBackgroundUrl,
     } = normalized.data
     const { data, error } = await supabase
@@ -582,6 +591,7 @@ export async function updateVenue(input: {
         capacity,
         zone_blueprint: zones as unknown as Json,
         seating_layout: seatingLayout as unknown as Json,
+        venue_map: serializeVenueMap(venueMap) as unknown as Json,
         seating_background_url: seatingBackgroundUrl,
         updated_at: new Date().toISOString(),
       } as never)

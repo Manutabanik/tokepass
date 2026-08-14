@@ -1,7 +1,7 @@
 "use client"
 
 import { ArrowLeft, LoaderCircle } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { UniversalCheckoutBar } from "@/components/b2c/universal-seat-selection/checkout-bar"
@@ -10,18 +10,30 @@ import { UniversalNumberedSeatPicker } from "@/components/b2c/universal-seat-sel
 import { UniversalReferenceMap } from "@/components/b2c/universal-seat-selection/reference-map"
 import { UniversalSectorCards } from "@/components/b2c/universal-seat-selection/sector-cards"
 import {
+  InteractiveSeatingCanvas,
+  type InteractiveSelectedSeat,
+} from "@/components/public/interactive-seating-canvas"
+import {
   UNIVERSAL_SEAT_MOCK,
+  type SeatStatus,
   type UniversalSeat,
   type UniversalSeatSelection,
   type UniversalSector,
 } from "@/lib/seating/universal-seat-types"
 import { hydrateNumberedSectorFromUnits } from "@/lib/seating/venue-adapter"
+import {
+  elementInventorySectorId,
+  venueMapHasInventory,
+} from "@/lib/seating/venue-map-geometry"
+import { isSellableElement } from "@/types/venue-map"
+import type { InteractiveVenueMap } from "@/types/venue-map"
 import type { EventSeatingUnit } from "@/types/venues"
 import { cn } from "@/lib/utils"
 
 type UniversalSeatSelectionFlowProps = {
   sectors?: UniversalSector[]
   mapImageUrl?: string | null
+  venueMap?: InteractiveVenueMap | null
   eventTitle?: string
   pending?: boolean
   embedded?: boolean
@@ -33,6 +45,7 @@ type UniversalSeatSelectionFlowProps = {
 export function UniversalSeatSelectionFlow({
   sectors = UNIVERSAL_SEAT_MOCK,
   mapImageUrl = null,
+  venueMap = null,
   eventTitle = "Selección de entradas",
   pending = false,
   embedded = false,
@@ -49,6 +62,13 @@ export function UniversalSeatSelectionFlow({
   >({})
   const [loadingSectorId, setLoadingSectorId] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [mapOccupancy, setMapOccupancy] = useState<Record<string, SeatStatus>>(
+    {},
+  )
+  const [mapHydrating, setMapHydrating] = useState(false)
+  const mapHydrated = useRef(false)
+
+  const hasInteractiveMap = venueMapHasInventory(venueMap)
 
   const resolvedSectors = useMemo(
     () =>
@@ -99,6 +119,68 @@ export function UniversalSeatSelectionFlow({
     }
   }, [groupId, quantity, sector, selectedSeatIds])
 
+  useEffect(() => {
+    if (!hasInteractiveMap || !venueMap || !onLoadSectorUnits || mapHydrated.current) {
+      return
+    }
+    mapHydrated.current = true
+    let cancelled = false
+    setMapHydrating(true)
+    void (async () => {
+      const occupancy: Record<string, SeatStatus> = {}
+      try {
+        const ids = [
+          ...venueMap.sectors.map((item) => item.id),
+          ...(venueMap.elements ?? [])
+            .filter(isSellableElement)
+            .map((item) => elementInventorySectorId(item)),
+        ]
+        const packs = await Promise.all(
+          [...new Set(ids)].map(async (id) => ({
+            id,
+            units: await onLoadSectorUnits(id),
+          })),
+        )
+        if (cancelled) return
+        for (const pack of packs) {
+          for (const unit of pack.units) {
+            occupancy[unit.layoutItemId] =
+              unit.status === "available"
+                ? "available"
+                : unit.status === "blocked"
+                  ? "blocked"
+                  : "occupied"
+          }
+        }
+        setMapOccupancy(occupancy)
+      } catch {
+        if (!cancelled) {
+          setLoadError("No se pudieron cargar las ubicaciones del plano.")
+        }
+      } finally {
+        if (!cancelled) setMapHydrating(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [hasInteractiveMap, onLoadSectorUnits, venueMap])
+
+  function handleCanvasContinue(seats: InteractiveSelectedSeat[]) {
+    const seat = seats[0]
+    if (!seat || pending) return
+    onContinue?.({
+      kind: "numbered",
+      sectorId: seat.sectorId,
+      sectorName: seat.sectorName,
+      color: seat.color,
+      unitPrice: seat.price,
+      groupId: `${seat.sectorId}-row-${seat.row}`,
+      groupName: `Fila ${seat.row}`,
+      seats: [{ id: seat.id, label: `${seat.row}-${seat.number}` }],
+    })
+  }
+
   async function handleSelectSector(nextId: string) {
     setSectorId(nextId)
     setQuantity(1)
@@ -135,9 +217,110 @@ export function UniversalSeatSelectionFlow({
 
   function handleToggleSeat(seat: UniversalSeat) {
     if (seat.status !== "available") return
-    // Checkout actual permite 1 ubicación numerada por operación.
     setSelectedSeatIds((current) =>
       current.includes(seat.id) ? [] : [seat.id],
+    )
+  }
+
+  const generalSectors = useMemo(
+    () => resolvedSectors.filter((item) => item.type === "general"),
+    [resolvedSectors],
+  )
+  const priceBySectorId = useMemo(() => {
+    const prices: Record<string, number> = {}
+    for (const item of resolvedSectors) {
+      prices[item.id] = item.price
+      prices[item.name] = item.price
+    }
+    return prices
+  }, [resolvedSectors])
+
+  if (hasInteractiveMap && venueMap) {
+    return (
+      <div
+        className={cn(
+          "relative text-zinc-100",
+          embedded ? "space-y-6" : "min-h-screen bg-zinc-950 pb-8",
+        )}
+      >
+        <div className="mx-auto max-w-6xl space-y-4 px-4 py-4 sm:px-6">
+          <header className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold tracking-[0.18em] text-zinc-500 uppercase">
+                Elegí tu lugar
+              </p>
+              <h1 className="text-2xl font-black tracking-tight text-white">
+                {eventTitle}
+              </h1>
+              <p className="text-sm text-zinc-500">
+                Tocá la butaca en el plano. Sin pasos intermedios.
+              </p>
+            </div>
+            {onBack ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={pending}
+                onClick={onBack}
+                className="shrink-0 rounded-full border-white/10 bg-zinc-950 text-zinc-300 hover:bg-zinc-800"
+              >
+                <ArrowLeft aria-hidden="true" />
+                Volver
+              </Button>
+            ) : null}
+          </header>
+
+          {mapHydrating ? (
+            <div className="flex h-[600px] items-center justify-center rounded-3xl border border-white/10 bg-zinc-950 md:h-[650px]">
+              <LoaderCircle className="size-6 animate-spin text-emerald-400" />
+            </div>
+          ) : (
+            <InteractiveSeatingCanvas
+              map={venueMap}
+              occupancyBySeatId={mapOccupancy}
+              priceBySectorId={priceBySectorId}
+              pending={pending}
+              onContinue={handleCanvasContinue}
+            />
+          )}
+
+          {loadError ? (
+            <p className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
+              {loadError}
+            </p>
+          ) : null}
+
+          {generalSectors.length > 0 ? (
+            <div className="space-y-4 pb-24">
+              <UniversalSectorCards
+                sectors={generalSectors}
+                selectedId={sectorId}
+                onSelect={handleSelectSector}
+              />
+              {sector?.type === "general" ? (
+                <UniversalGeneralQuantity
+                  quantity={quantity}
+                  maxPerUser={sector.maxPerUser}
+                  accentColor={sector.color}
+                  onChange={setQuantity}
+                />
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+
+        {sector?.type === "general" ? (
+          <UniversalCheckoutBar
+            selection={selection}
+            pending={pending}
+            sticky={embedded}
+            onContinue={() => {
+              if (!selection || pending) return
+              onContinue?.(selection)
+            }}
+          />
+        ) : null}
+      </div>
     )
   }
 
@@ -181,6 +364,7 @@ export function UniversalSeatSelectionFlow({
 
         <UniversalReferenceMap
           imageUrl={mapImageUrl}
+          venueMap={venueMap}
           highlightedColor={sector?.color}
         />
 

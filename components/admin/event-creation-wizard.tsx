@@ -177,6 +177,8 @@ const defaultValues: EventFormValues = {
     latitude: null,
     longitude: null,
     seatingBackgroundUrl: null,
+    venueMap: null,
+    seatingLayout: undefined,
     saveVenueForReuse: true,
     zones: undefined,
   },
@@ -488,6 +490,12 @@ export function EventCreationWizard({
         capacity: data.venue.capacity ?? 1,
         zones: data.venue.zones,
         seatingBackgroundUrl: data.venue.seatingBackgroundUrl ?? null,
+        seatingLayout: Array.isArray(data.venue.seatingLayout)
+          ? (data.venue.seatingLayout as never)
+          : undefined,
+        venueMap: data.venue.venueMap
+          ? (data.venue.venueMap as never)
+          : undefined,
       })
       if (!persist.success) {
         toast.error(persist.error)

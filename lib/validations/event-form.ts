@@ -97,6 +97,8 @@ const eventFormObject = z
       latitude: z.number().nullable().optional(),
       longitude: z.number().nullable().optional(),
       seatingBackgroundUrl: z.string().nullable().optional(),
+      venueMap: z.unknown().optional().nullable(),
+      seatingLayout: z.unknown().optional(),
       saveVenueForReuse: z.boolean(),
       zones: z
         .array(
@@ -297,6 +299,8 @@ export const draftEventSchema = z.object({
       latitude: z.number().nullable().optional(),
       longitude: z.number().nullable().optional(),
       seatingBackgroundUrl: z.string().nullable().optional(),
+      venueMap: z.unknown().optional().nullable(),
+      seatingLayout: z.unknown().optional(),
       saveVenueForReuse: z.boolean().optional().default(true),
       zones: z.array(z.any()).optional(),
     })
@@ -461,6 +465,8 @@ export function coerceDraftEventForm(
       latitude: venue.latitude ?? null,
       longitude: venue.longitude ?? null,
       seatingBackgroundUrl: venue.seatingBackgroundUrl ?? null,
+      venueMap: venue.venueMap ?? null,
+      seatingLayout: venue.seatingLayout,
       saveVenueForReuse: venue.saveVenueForReuse ?? true,
       zones: zones as EventFormValues["venue"]["zones"],
     },

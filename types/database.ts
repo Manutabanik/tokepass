@@ -193,6 +193,8 @@ export type Event = {
   ends_at: string | null
   /** URL pública /eventos/{slug}. Estable una vez asignado. */
   slug: string
+  /** Plano visual del recinto (editor SVG). */
+  venue_map: Json
   created_at: string
   updated_at: string
 }
@@ -256,6 +258,7 @@ export type Venue = {
   capacity: number
   zone_blueprint: Json
   seating_layout: Json
+  venue_map: Json
   seating_background_url: string | null
   created_at: string
   updated_at: string
@@ -741,6 +744,7 @@ type EventInsert = Omit<
   | "age_restriction"
   | "ends_at"
   | "slug"
+  | "venue_map"
   | "created_at"
   | "updated_at"
 > & {
@@ -775,15 +779,22 @@ type EventInsert = Omit<
   gallery_urls?: string[] | null
   social_share_image_url?: string | null
   slug?: string
+  venue_map?: Json
   created_at?: string
   updated_at?: string
 }
 type VenueInsert = Omit<
   Venue,
-  "id" | "seating_layout" | "seating_background_url" | "created_at" | "updated_at"
+  | "id"
+  | "seating_layout"
+  | "venue_map"
+  | "seating_background_url"
+  | "created_at"
+  | "updated_at"
 > & {
   id?: string
   seating_layout?: Json
+  venue_map?: Json
   seating_background_url?: string | null
   created_at?: string
   updated_at?: string

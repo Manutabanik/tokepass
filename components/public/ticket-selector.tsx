@@ -46,6 +46,7 @@ import {
 import { cn } from "@/lib/utils"
 import type { ScheduleDay } from "@/types/events"
 import { getEventSeatingUnitsForSector } from "@/app/actions/public-events"
+import type { InteractiveVenueMap } from "@/types/venue-map"
 import type { EventSeatingUnit, SeatingSectorSummary, VenueSeatingLayout } from "@/types/venues"
 
 import type { TicketSelectorTier } from "@/components/public/ticket-tier-selector"
@@ -66,6 +67,7 @@ type TicketSelectorProps = {
   seatingUnits?: EventSeatingUnit[]
   seatingSectorSummaries?: SeatingSectorSummary[]
   seatingBackgroundUrl?: string | null
+  venueMap?: InteractiveVenueMap | null
   seatingLayout?: VenueSeatingLayout
   venueId?: string | null
   venueName?: string | null
@@ -113,6 +115,7 @@ export function TicketSelector({
   seatingUnits = [],
   seatingSectorSummaries = [],
   seatingBackgroundUrl = null,
+  venueMap = null,
   seatingLayout = [],
   venueId = null,
   venueName = null,
@@ -547,6 +550,7 @@ export function TicketSelector({
         mapImageUrl={
           universalPayload.mapImageUrl ?? seatingBackgroundUrl ?? null
         }
+        venueMap={venueMap}
         sectors={universalPayload.sectors}
         onBack={() => setShowSeatFlow(false)}
         onContinue={handleUniversalContinue}

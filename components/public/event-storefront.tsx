@@ -298,6 +298,7 @@ export function EventStorefront({
                         seatingUnits={event.seatingUnits}
                         seatingSectorSummaries={event.seatingSectorSummaries}
                         seatingBackgroundUrl={event.venue?.seating_background_url}
+                        venueMap={event.venue?.venue_map ?? null}
                         seatingLayout={event.venue?.seating_layout ?? []}
                         venueId={event.venue?.id}
                         venueName={event.venue?.name}
@@ -482,6 +483,7 @@ export function EventStorefront({
                 seatingUnits={event.seatingUnits}
                 seatingSectorSummaries={event.seatingSectorSummaries}
                 seatingBackgroundUrl={event.venue?.seating_background_url}
+                venueMap={event.venue?.venue_map ?? null}
                 seatingLayout={event.venue?.seating_layout ?? []}
                 venueId={event.venue?.id}
                 venueName={event.venue?.name}

@@ -534,7 +534,7 @@ export async function getEventForEditing(
         ? supabase
             .from("venues")
             .select(
-              "id, name, location, city, capacity, zone_blueprint, latitude, longitude, seating_background_url, seating_layout",
+              "id, name, location, city, capacity, zone_blueprint, latitude, longitude, seating_background_url, seating_layout, venue_map",
             )
             .eq("id", event.venue_id)
             .maybeSingle()
@@ -547,7 +547,7 @@ export async function getEventForEditing(
     if (event.venue_id && (venueResult.error || !venue)) {
       const fallback = await supabase
         .from("venues")
-        .select("id, name, location, city, capacity, zone_blueprint, seating_layout")
+        .select("id, name, location, city, capacity, zone_blueprint, seating_layout, venue_map")
         .eq("id", event.venue_id)
         .maybeSingle()
       venue = fallback.data
@@ -671,6 +671,8 @@ export async function getEventForEditing(
             typeof venue?.seating_background_url === "string"
               ? venue.seating_background_url
               : null,
+          venueMap: venue?.venue_map ?? null,
+          seatingLayout: venue?.seating_layout,
           saveVenueForReuse: false,
           zones: venueZones,
         },

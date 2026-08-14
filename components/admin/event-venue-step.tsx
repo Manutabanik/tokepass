@@ -24,6 +24,7 @@ import {
   VenueArgentinaSelector,
   type VenueArgentinaValue,
 } from "@/components/admin/venue-argentina-selector"
+import { InteractiveVenueMapEditor } from "@/components/admin/interactive-venue-map-editor"
 import {
   createEmptyZone,
   SmartVenueBuilder,
@@ -52,10 +53,18 @@ import {
   draftZonesToBlueprint,
   draftZonesToSeatingLayout,
   totalDraftCapacity,
+  venueMapToZoneDrafts,
   zonesToDraft,
 } from "@/lib/seating/venue-zone-draft"
+import {
+  seatingLayoutToVenueMap,
+  venueMapCapacity,
+  venueMapHasInventory,
+  venueMapToSeatingLayout,
+} from "@/lib/seating/venue-map-geometry"
 import type { EventFormValues } from "@/lib/validations/event-form"
 import { cn } from "@/lib/utils"
+import { emptyVenueMap, parseVenueMap } from "@/types/venue-map"
 
 const EventLocationMapInner = dynamic(
   () =>
@@ -105,6 +114,9 @@ export function EventVenueStep({
   const [backgroundUrl, setBackgroundUrl] = useState<string | null>(
     form.getValues("venue.seatingBackgroundUrl") || null,
   )
+  const [venueMap, setVenueMap] = useState(() =>
+    parseVenueMap(form.getValues("venue.venueMap")),
+  )
   const [pendingSave, startSaveTransition] = useTransition()
   const [pendingUpload, startUploadTransition] = useTransition()
 
@@ -149,7 +161,10 @@ export function EventVenueStep({
     setEditingSaved(false)
     setZoneDrafts([createEmptyZone(structured)])
     setBackgroundUrl(null)
+    setVenueMap(emptyVenueMap())
     form.setValue("venue.seatingBackgroundUrl", null)
+    form.setValue("venue.venueMap", emptyVenueMap())
+    form.setValue("venue.seatingLayout", [])
   }
 
   function applySavedVenue(venue: OrganizerVenue) {
@@ -183,8 +198,17 @@ export function EventVenueStep({
     )
     form.setValue("venue.saveVenueForReuse", false)
     setBackgroundUrl(venue.seatingBackgroundUrl)
+    const nextMap = seatingLayoutToVenueMap(
+      venue.seatingLayout,
+      parseVenueMap(venue.venueMap),
+    )
+    setVenueMap(nextMap)
+    form.setValue("venue.venueMap", nextMap)
+    form.setValue("venue.seatingLayout", venue.seatingLayout)
     setZoneDrafts(
-      zonesToDraft(venue.id, venue.zoneBlueprint, venue.seatingLayout),
+      nextMap.sectors.length > 0 || (nextMap.elements?.length ?? 0) > 0
+        ? venueMapToZoneDrafts(nextMap)
+        : zonesToDraft(venue.id, venue.zoneBlueprint, venue.seatingLayout),
     )
     setEditingSaved(false)
     onAppliedVenue?.(venue)
@@ -215,10 +239,19 @@ export function EventVenueStep({
     }
 
     const nextStructured = values.zoneType === "reserved_seating"
-    const blueprint = draftZonesToBlueprint(zoneDrafts, nextStructured)
-    const seatingLayout = draftZonesToSeatingLayout(zoneDrafts, nextStructured)
+    const fromMap = nextStructured && venueMapHasInventory(venueMap)
+    const mapLayout = fromMap
+      ? venueMapToSeatingLayout(venueMap)
+      : draftZonesToSeatingLayout(zoneDrafts, nextStructured)
+    const mapDrafts = fromMap
+      ? venueMapToZoneDrafts(venueMap)
+      : zoneDrafts
+    const blueprint = draftZonesToBlueprint(mapDrafts, nextStructured)
+    const seatingLayout = mapLayout
     const capacity =
-      totalDraftCapacity(zoneDrafts, nextStructured) ||
+      (fromMap
+        ? venueMapCapacity(venueMap)
+        : totalDraftCapacity(mapDrafts, nextStructured)) ||
       values.capacity ||
       1
 
@@ -232,6 +265,7 @@ export function EventVenueStep({
         capacity,
         zones: blueprint,
         seatingLayout,
+        venueMap: nextStructured ? venueMap : parseVenueMap(null),
         seatingBackgroundUrl: backgroundUrl,
       }
 
@@ -268,6 +302,7 @@ export function EventVenueStep({
         capacity: payload.capacity,
         zoneBlueprint: payload.zones,
         seatingLayout: payload.seatingLayout,
+        venueMap: payload.venueMap,
         seatingBackgroundUrl: payload.seatingBackgroundUrl,
         createdAt: previous?.createdAt ?? now,
         updatedAt: now,
@@ -596,11 +631,39 @@ export function EventVenueStep({
 
           {showZones ? (
             <>
-          <SmartVenueBuilder
-            structured={structured}
-            zones={zoneDrafts}
-            onChange={(next) => syncZonesToForm(next, structured)}
-          />
+          {structured ? (
+            <div className="space-y-3">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">
+                  Plano de asientos
+                </h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Construí el recinto como en el plano real: escenario, platea,
+                  pullman, pasillos y color por precio.
+                </p>
+              </div>
+              <InteractiveVenueMapEditor
+                value={venueMap}
+                onChange={(next, layout) => {
+                  setVenueMap(next)
+                  form.setValue("venue.venueMap", next, { shouldDirty: true })
+                  form.setValue("venue.seatingLayout", layout, {
+                    shouldDirty: true,
+                  })
+                  const drafts = venueMapToZoneDrafts(next)
+                  if (drafts.length > 0) {
+                    syncZonesToForm(drafts, true)
+                  }
+                }}
+              />
+            </div>
+          ) : (
+            <SmartVenueBuilder
+              structured={structured}
+              zones={zoneDrafts}
+              onChange={(next) => syncZonesToForm(next, structured)}
+            />
+          )}
 
           {structured ? (
             <div className="space-y-3 rounded-2xl border border-border bg-muted/60 p-4">
@@ -742,8 +805,11 @@ export function buildVenuePersistPayload(input: {
   formValues: EventFormValues["venue"]
   zoneDrafts: VenueZoneDraft[]
   backgroundUrl: string | null
+  venueMap?: ReturnType<typeof parseVenueMap>
 }) {
   const structured = input.formValues.zoneType === "reserved_seating"
+  const map = input.venueMap
+  const fromMap = structured && map && venueMapHasInventory(map)
   return {
     name: input.formValues.venueName.trim(),
     location: (input.formValues.venueLocation ?? "").trim(),
@@ -751,11 +817,16 @@ export function buildVenuePersistPayload(input: {
     latitude: input.formValues.latitude ?? null,
     longitude: input.formValues.longitude ?? null,
     capacity:
-      totalDraftCapacity(input.zoneDrafts, structured) ||
+      (fromMap ? venueMapCapacity(map) : totalDraftCapacity(input.zoneDrafts, structured)) ||
       input.formValues.capacity ||
       1,
-    zones: draftZonesToBlueprint(input.zoneDrafts, structured),
-    seatingLayout: draftZonesToSeatingLayout(input.zoneDrafts, structured),
+    zones: fromMap
+      ? draftZonesToBlueprint(venueMapToZoneDrafts(map), structured)
+      : draftZonesToBlueprint(input.zoneDrafts, structured),
+    seatingLayout: fromMap
+      ? venueMapToSeatingLayout(map)
+      : draftZonesToSeatingLayout(input.zoneDrafts, structured),
+    venueMap: map ?? parseVenueMap(null),
     seatingBackgroundUrl: input.backgroundUrl,
   }
 }
