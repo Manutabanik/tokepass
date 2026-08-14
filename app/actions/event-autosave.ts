@@ -15,7 +15,12 @@ import {
 } from "@/app/actions/events"
 
 export type AutosaveEventDraftResult =
-  | { ok: true; eventId: string; mode: "created" | "updated" | "skipped" }
+  | {
+      ok: true
+      eventId: string
+      venueId?: string | null
+      mode: "created" | "updated" | "skipped"
+    }
   | { ok: false; error: string }
 
 function hasMinimumDraftContent(values: EventFormValues): boolean {
@@ -64,6 +69,7 @@ export async function autosaveEventDraft(input: {
   }
 
   let eventId = input.eventId
+  let venueId: string | null = null
 
   if (eventId) {
     formData.set("eventId", eventId)
@@ -72,12 +78,14 @@ export async function autosaveEventDraft(input: {
       return { ok: false, error: result.error }
     }
     eventId = result.eventId
+    venueId = result.venueId
   } else {
     const result = await createCompleteEvent(formData)
     if (!result.success) {
       return { ok: false, error: result.error }
     }
     eventId = result.eventId
+    venueId = result.venueId
   }
 
   if (input.zoneTierPricing && input.zoneTierPricing.length > 0) {
@@ -91,6 +99,7 @@ export async function autosaveEventDraft(input: {
   return {
     ok: true,
     eventId,
+    venueId,
     mode: input.eventId ? "updated" : "created",
   }
 }

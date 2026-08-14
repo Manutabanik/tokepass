@@ -45,6 +45,7 @@ import {
   venueMapToSeatingLayout,
 } from "@/lib/seating/venue-map-geometry"
 import { venueMapToZoneDrafts } from "@/lib/seating/venue-zone-draft"
+import { composeVenuePlace } from "@/lib/venues/compose-location"
 import { emptyVenueMap, parseVenueMap, type InteractiveVenueMap } from "@/types/venue-map"
 import {
   getVenueSeatingItems,
@@ -89,10 +90,14 @@ function emptyDraft(): Draft {
 }
 
 function locationLabel(draft: Draft): string {
-  if (draft.departmentName && draft.provinceName) {
-    return `${draft.departmentName}, ${draft.provinceName}`
-  }
-  return draft.city.trim()
+  return (
+    composeVenuePlace({
+      street: draft.address,
+      department: draft.departmentName,
+      province: draft.provinceName,
+      city: draft.city,
+    }).city ?? draft.city.trim()
+  )
 }
 
 function draftToLocationValue(draft: Draft): VenueArgentinaValue {
@@ -286,10 +291,16 @@ export function OrganizerVenuesManager({
               const mapDrafts = fromMap
                 ? venueMapToZoneDrafts(draft.venueMap)
                 : draft.zones
+              const place = composeVenuePlace({
+                street: draft.address,
+                department: draft.departmentName,
+                province: draft.provinceName,
+                city: draft.city,
+              })
               const payload = {
                 name: draft.name,
-                location: draft.address.trim(),
-                city: locationLabel(draft),
+                location: place.street || draft.address.trim(),
+                city: place.city || locationLabel(draft),
                 latitude: draft.latitude,
                 longitude: draft.longitude,
                 capacity: fromMap

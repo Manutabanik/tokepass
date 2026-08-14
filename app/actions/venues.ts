@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 
 import { createClient } from "@/lib/supabase/server"
 import type { Json } from "@/types/database"
+import { composeVenuePlace, venueDedupeKey } from "@/lib/venues/compose-location"
 import { parseVenueMap, serializeVenueMap, type InteractiveVenueMap } from "@/types/venue-map"
 import type {
   VenueSeatingLayout,
@@ -470,15 +471,22 @@ function parseBlueprint(raw: unknown): VenueZoneBlueprint[] {
 
 export async function listOrganizerVenues(): Promise<OrganizerVenue[]> {
   const { supabase, userId } = await requireOrganizer()
-  const { data, error } = await supabase
-    .from("venues")
-    .select("*")
-    .eq("organizer_id", userId)
-    .order("created_at", { ascending: false })
+  const [{ data, error }, { data: eventRows }] = await Promise.all([
+    supabase
+      .from("venues")
+      .select("*")
+      .eq("organizer_id", userId)
+      .order("updated_at", { ascending: false }),
+    supabase
+      .from("events")
+      .select("venue_id, status")
+      .eq("organizer_id", userId)
+      .not("venue_id", "is", null),
+  ])
 
   if (error) throw new Error(error.message)
 
-  return (data ?? []).map((row) => {
+  const mapped = (data ?? []).map((row) => {
     const r = row as Record<string, unknown>
     return {
       id: String(r.id),
@@ -505,6 +513,66 @@ export async function listOrganizerVenues(): Promise<OrganizerVenue[]> {
       createdAt: String(r.created_at),
       updatedAt: String(r.updated_at),
     }
+  })
+
+  const eventCount = new Map<string, number>()
+  const liveCount = new Map<string, number>()
+  for (const row of eventRows ?? []) {
+    const id = row.venue_id
+    if (!id) continue
+    eventCount.set(id, (eventCount.get(id) ?? 0) + 1)
+    if (row.status === "published" || row.status === "paused") {
+      liveCount.set(id, (liveCount.get(id) ?? 0) + 1)
+    }
+  }
+
+  const best = new Map<string, OrganizerVenue>()
+  for (const venue of mapped) {
+    const cleaned = composeVenuePlace({
+      street: venue.address || venue.location,
+      city: venue.city,
+    })
+    const next: OrganizerVenue = {
+      ...venue,
+      location: cleaned.display || venue.location,
+      address: cleaned.street || venue.address,
+      city: cleaned.city ?? venue.city,
+    }
+    const key = venueDedupeKey({
+      name: next.name,
+      city: next.city,
+      location: next.address,
+    })
+    const current = best.get(key)
+    if (!current) {
+      best.set(key, next)
+      continue
+    }
+    const nextScore =
+      (liveCount.get(next.id) ?? 0) * 1000 + (eventCount.get(next.id) ?? 0)
+    const currentScore =
+      (liveCount.get(current.id) ?? 0) * 1000 + (eventCount.get(current.id) ?? 0)
+    const nextHasGeo = next.latitude != null && next.longitude != null
+    const currentHasGeo = current.latitude != null && current.longitude != null
+    if (
+      nextScore > currentScore ||
+      (nextScore === currentScore && nextHasGeo && !currentHasGeo) ||
+      (nextScore === currentScore &&
+        nextHasGeo === currentHasGeo &&
+        next.updatedAt > current.updatedAt)
+    ) {
+      best.set(key, next)
+    }
+  }
+
+  return [...best.values()].sort((left, right) => {
+    const leftLive = liveCount.get(left.id) ?? 0
+    const rightLive = liveCount.get(right.id) ?? 0
+    if (rightLive !== leftLive) return rightLive - leftLive
+    const leftEvents = eventCount.get(left.id) ?? 0
+    const rightEvents = eventCount.get(right.id) ?? 0
+    if (rightEvents !== leftEvents) return rightEvents - leftEvents
+    return right.updatedAt.localeCompare(left.updatedAt)
   })
 }
 

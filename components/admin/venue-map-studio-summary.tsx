@@ -24,8 +24,8 @@ export function VenueMapStudioSummary({
             Mapa y Distribución del Recinto
           </h3>
           <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-            Diseñá la distribución de mesas, tablones, butacas y sectores de tu
-            evento.
+            Diseñá la distribución y asigná precio y capacidad de cada zona en
+            el mismo panel, sin pasar a otro paso.
           </p>
           <p className="mt-3 text-sm font-medium text-foreground">
             {venueMapStudioStatus(map)}

@@ -7,6 +7,17 @@ import {
   type CheckoutBuyerInfo,
   type NormalizedCheckoutBuyer,
 } from "@/lib/checkout-buyer"
+import {
+  applyActivePhaseToTier,
+  decidePhaseCart,
+  isMissingPhasesSchema,
+  isPhaseStockError,
+  mapPublicPhaseRow,
+  PHASE_ROLLOVER_MESSAGE,
+  PHASE_STOCK_CLAMP_MESSAGE,
+  type PhaseRolloverInfo,
+  type PublicTicketPhase,
+} from "@/lib/inventory/active-phase"
 import { isPastEvent, isSoldOut } from "@/lib/event-status"
 import { logger } from "@/lib/logger"
 import { captureCriticalException } from "@/lib/sentry/capture"
@@ -39,6 +50,8 @@ export type ReservedTicket = {
   ticket_id: string
 }
 
+export type { PhaseRolloverInfo }
+
 export type CheckoutResult =
   | {
       success: true
@@ -52,7 +65,8 @@ export type CheckoutResult =
     }
   | {
       success: false
-      error: "auth_required" | "out_of_stock" | string
+      error: "auth_required" | "out_of_stock" | "phase_rollover" | string
+      phaseRollover?: PhaseRolloverInfo
     }
 
 type ReserveTxRow = {
@@ -102,6 +116,200 @@ function mapReserveRpcError(message: string): CheckoutResult | null {
   }
 
   return null
+}
+
+type CheckoutSupabase = Awaited<ReturnType<typeof createClient>>
+
+type AtomicReserveRow = {
+  reservation_id: string
+  order_id: string
+  phase_id: string | null
+  ticket_id: string
+  unit_price: number
+  quantity: number
+}
+
+async function loadCheckoutTierPhases(
+  supabase: CheckoutSupabase,
+  tierIds: string[],
+): Promise<Map<string, PublicTicketPhase[]>> {
+  const byTier = new Map<string, PublicTicketPhase[]>()
+  if (tierIds.length === 0) return byTier
+
+  const { data, error } = await supabase
+    .from("ticket_tier_phases")
+    .select(
+      "id, tier_id, name, price, capacity_limit, sold, start_time, end_time, status",
+    )
+    .in("tier_id", tierIds)
+    .order("start_time", { ascending: true, nullsFirst: false })
+
+  if (error) {
+    if (!isMissingPhasesSchema(error.message)) {
+      logger.error({
+        context: "checkout/phases",
+        message: "ticket_phases_load_failed",
+        error: error.message,
+      })
+    }
+    return byTier
+  }
+
+  for (const row of data ?? []) {
+    const list = byTier.get(row.tier_id) ?? []
+    list.push(mapPublicPhaseRow(row))
+    byTier.set(row.tier_id, list)
+  }
+  return byTier
+}
+
+function phaseRolloverResult(
+  tierId: string,
+  phase: PublicTicketPhase,
+  available: number,
+  message: string,
+): CheckoutResult {
+  return {
+    success: false,
+    error: "phase_rollover",
+    phaseRollover: {
+      tierId,
+      phaseId: phase.id,
+      phaseName: phase.name,
+      price: phase.price,
+      available: Math.max(0, available),
+      message,
+    },
+  }
+}
+
+async function evaluateCartPhaseRollover(
+  supabase: CheckoutSupabase,
+  eventId: string,
+  items: CheckoutCartItem[],
+): Promise<CheckoutResult | null> {
+  const quantityItems = items.filter(
+    (item) => !(item.seatingUnitId || (item.seatingIds?.length ?? 0) > 0),
+  )
+  if (quantityItems.length === 0) return null
+
+  const tierIds = [...new Set(quantityItems.map((item) => item.tierId))]
+  const [{ data: tierRows }, phasesByTier] = await Promise.all([
+    supabase
+      .from("ticket_tiers")
+      .select("id, price, capacity, sold")
+      .eq("event_id", eventId)
+      .in("id", tierIds),
+    loadCheckoutTierPhases(supabase, tierIds),
+  ])
+
+  const tierById = new Map((tierRows ?? []).map((row) => [row.id, row]))
+
+  for (const item of quantityItems) {
+    const phases = phasesByTier.get(item.tierId) ?? []
+    if (phases.length === 0) continue
+
+    const tier = tierById.get(item.tierId)
+    const tierAvailable = Math.max(
+      0,
+      Number(tier?.capacity ?? 0) - Number(tier?.sold ?? 0),
+    )
+    const decision = decidePhaseCart(phases, item.quantity)
+
+    if (decision.kind === "ok") continue
+
+    if (decision.kind === "sold_out") {
+      return { success: false, error: EVENT_SOLD_OUT_ERROR }
+    }
+
+    if (decision.kind === "clamp") {
+      const priced = applyActivePhaseToTier(
+        { price: decision.phase.price, available: tierAvailable },
+        [decision.phase],
+      )
+      return phaseRolloverResult(
+        item.tierId,
+        decision.phase,
+        priced.available,
+        PHASE_STOCK_CLAMP_MESSAGE,
+      )
+    }
+
+    const priced = applyActivePhaseToTier(
+      { price: decision.phase.price, available: tierAvailable },
+      phases.map((phase) =>
+        phase.id === decision.phase.id
+          ? { ...phase, status: "active" as const }
+          : phase.status === "active"
+            ? { ...phase, status: "sold_out" as const }
+            : phase,
+      ),
+    )
+    return phaseRolloverResult(
+      item.tierId,
+      decision.phase,
+      priced.available,
+      PHASE_ROLLOVER_MESSAGE,
+    )
+  }
+
+  return null
+}
+
+async function resolvePhaseRolloverAfterError(
+  supabase: CheckoutSupabase,
+  eventId: string,
+  items: CheckoutCartItem[],
+): Promise<CheckoutResult> {
+  const rollover = await evaluateCartPhaseRollover(supabase, eventId, items)
+  if (rollover) return rollover
+  return { success: false, error: EVENT_SOLD_OUT_ERROR }
+}
+
+async function reserveGeneralAdmissionAtomic(
+  supabase: CheckoutSupabase,
+  input: {
+    eventId: string
+    ownerId: string
+    tierId: string
+    quantity: number
+    phaseId?: string | null
+    promoterId?: string | null
+  },
+) {
+  const reservation = await supabase.rpc("reserve_tickets_atomic", {
+    p_event_id: input.eventId,
+    p_owner_id: input.ownerId,
+    p_tier_id: input.tierId,
+    p_quantity: input.quantity,
+    p_phase_id: input.phaseId ?? null,
+  })
+
+  if (reservation.error && isMissingPhasesSchema(reservation.error.message)) {
+    return { missing: true as const, reservation: null }
+  }
+
+  if (reservation.error || !reservation.data) {
+    return { missing: false as const, reservation }
+  }
+
+  if (input.promoterId) {
+    const { error: promoterError } = await supabase
+      .from("tickets")
+      .update({ promoter_id: input.promoterId })
+      .eq("order_id", reservation.data[0]?.order_id)
+      .eq("owner_id", input.ownerId)
+    if (promoterError) {
+      logger.error({
+        context: "checkout/reservation",
+        message: "atomic_promoter_attach_failed",
+        orderId: reservation.data[0]?.order_id,
+        error: promoterError.message,
+      })
+    }
+  }
+
+  return { missing: false as const, reservation }
 }
 
 async function cleanupPendingOrder(orderId: string): Promise<void> {
@@ -683,31 +891,90 @@ export async function startCheckoutWithPayment(
     const hasBundle = (tierMeta ?? []).some(
       (row) => row.tier_type === "bundle" || row.category === "bundle",
     )
-    const reservation =
-      (seatingUnitId && hasExtras) || hasBundle
-        ? await supabase.rpc("reserve_unified_cart_tx", {
-            p_event_id: payload.eventId,
-            p_owner_id: user.id,
-            p_items: rpcItems,
-            p_promoter_id: promoterId,
-          })
-        : seatingUnitId
-          ? await supabase.rpc("reserve_seating_unit_tx", {
-              p_event_id: payload.eventId,
-              p_owner_id: user.id,
-              p_tier_id: seatingItem?.tierId ?? cartItems[0]?.tierId,
-              p_seating_unit_id: seatingUnitId,
-              p_promoter_id: promoterId,
-            })
-          : await supabase.rpc("reserve_tickets_tx", {
+    const quantityItems = cartItems.filter(
+      (item) => !(item.seatingUnitId || (item.seatingIds?.length ?? 0) > 0),
+    )
+    const canUseAtomic =
+      !seatingUnitId &&
+      !hasBundle &&
+      quantityItems.length === 1 &&
+      cartItems.length === 1
+
+    const phaseGate = await evaluateCartPhaseRollover(
+      supabase,
+      payload.eventId,
+      cartItems,
+    )
+    if (phaseGate) return phaseGate
+
+    let reservation: {
+      data: ReserveTxRow[] | AtomicReserveRow[] | null
+      error: { message: string } | null
+    }
+
+    if (canUseAtomic) {
+      const item = quantityItems[0]
+      const phasesByTier = await loadCheckoutTierPhases(supabase, [item.tierId])
+      const decision = decidePhaseCart(
+        phasesByTier.get(item.tierId) ?? [],
+        item.quantity,
+      )
+      const phaseId = decision.kind === "ok" ? decision.phase.id : null
+      const atomic = await reserveGeneralAdmissionAtomic(supabase, {
+        eventId: payload.eventId,
+        ownerId: user.id,
+        tierId: item.tierId,
+        quantity: item.quantity,
+        phaseId,
+        promoterId,
+      })
+      if (atomic.missing) {
+        reservation = await supabase.rpc("reserve_tickets_tx", {
+          p_event_id: payload.eventId,
+          p_owner_id: user.id,
+          p_items: rpcItems,
+          p_promoter_id: promoterId,
+        })
+      } else {
+        reservation = atomic.reservation ?? {
+          data: null,
+          error: { message: "No se pudo completar la reserva atómica." },
+        }
+      }
+    } else {
+      reservation =
+        (seatingUnitId && hasExtras) || hasBundle
+          ? await supabase.rpc("reserve_unified_cart_tx", {
               p_event_id: payload.eventId,
               p_owner_id: user.id,
               p_items: rpcItems,
               p_promoter_id: promoterId,
             })
+          : seatingUnitId
+            ? await supabase.rpc("reserve_seating_unit_tx", {
+                p_event_id: payload.eventId,
+                p_owner_id: user.id,
+                p_tier_id: seatingItem?.tierId ?? cartItems[0]?.tierId,
+                p_seating_unit_id: seatingUnitId,
+                p_promoter_id: promoterId,
+              })
+            : await supabase.rpc("reserve_tickets_tx", {
+                p_event_id: payload.eventId,
+                p_owner_id: user.id,
+                p_items: rpcItems,
+                p_promoter_id: promoterId,
+              })
+    }
     const { data, error } = reservation
 
     if (error) {
+      if (isPhaseStockError(error.message)) {
+        return resolvePhaseRolloverAfterError(
+          supabase,
+          payload.eventId,
+          cartItems,
+        )
+      }
       const mapped = mapReserveRpcError(error.message)
       if (mapped) return mapped
 
@@ -1035,6 +1302,11 @@ export async function startCheckoutWithPayment(
   } catch (error) {
     if (pendingOrderId) {
       await cleanupPendingOrder(pendingOrderId)
+    }
+
+    const message = error instanceof Error ? error.message : String(error ?? "")
+    if (isPhaseStockError(message)) {
+      return resolvePhaseRolloverAfterError(supabase, payload.eventId, cartItems)
     }
 
     captureCriticalException(error, "checkout/start", {

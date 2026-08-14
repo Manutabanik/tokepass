@@ -14,6 +14,12 @@ import { isPastEvent } from "@/lib/event-status"
 import { isHomePriority, sortCatalogForHome } from "@/lib/services/events-service"
 import { isEventUuid } from "@/lib/seo/site"
 import { decodeEventParam, eventSlugSuffix, uuidPrefixFromSlugSuffix } from "@/lib/seo/event-slug"
+import {
+  applyActivePhaseToTier,
+  isMissingPhasesSchema,
+  mapPublicPhaseRow,
+  type PublicTicketPhase,
+} from "@/lib/inventory/active-phase"
 import { parseBundleItems, serializeBundleItems } from "@/lib/inventory/unified-inventory"
 import type { Event, TicketTier, Venue } from "@/types/database"
 import type { ScheduleDay } from "@/types/events"
@@ -118,7 +124,7 @@ export type EventDetails = {
       | "bundle_type"
       | "description"
       | "highlight_badge"
-    > & { available: number }
+    > & { available: number; phases: PublicTicketPhase[] }
   >
   /** Tab inicial del picker. auto = el de más stock restante. */
   defaultTicketTab: "auto" | "seated" | "general" | "bundle" | "addon"
@@ -505,6 +511,40 @@ async function loadVenueMapJson(
   return data.venue_map
 }
 
+async function loadPublicTicketPhases(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  tierIds: string[],
+): Promise<Map<string, PublicTicketPhase[]>> {
+  const byTier = new Map<string, PublicTicketPhase[]>()
+  if (tierIds.length === 0) return byTier
+
+  const { data, error } = await supabase
+    .from("ticket_tier_phases")
+    .select(
+      "id, tier_id, name, price, capacity_limit, sold, start_time, end_time, status",
+    )
+    .in("tier_id", tierIds)
+    .order("start_time", { ascending: true, nullsFirst: false })
+
+  if (error) {
+    if (!isMissingPhasesSchema(error.message)) {
+      logger.error({
+        context: "public-events",
+        message: "ticket_phases_load_failed",
+        error,
+      })
+    }
+    return byTier
+  }
+
+  for (const row of data ?? []) {
+    const list = byTier.get(row.tier_id) ?? []
+    list.push(mapPublicPhaseRow(row))
+    byTier.set(row.tier_id, list)
+  }
+  return byTier
+}
+
 async function loadEventCoreRow(
   supabase: Awaited<ReturnType<typeof createClient>>,
   eventId: string,
@@ -640,6 +680,10 @@ async function loadEventDetails(
   const tiers = [...(event.ticket_tiers ?? [])]
     .filter((tier) => tier.visibility !== "private")
     .sort((a, b) => Number(a.price) - Number(b.price))
+  const phasesByTier = await loadPublicTicketPhases(
+    supabase,
+    tiers.map((tier) => tier.id),
+  )
 
   const { data: comboRows } =
     tiers.length > 0
@@ -805,37 +849,48 @@ async function loadEventDetails(
       }
       return map
     })(),
-    tiers: tiers.map((tier) => ({
-      ...tier,
-      category: tier.category ?? "standard",
-      list_price: tier.list_price == null ? null : Number(tier.list_price),
-      price: Number(tier.price),
-      available: Math.max(0, tier.capacity - tier.sold),
-      tier_type:
-        (tier as { tier_type?: TicketTier["tier_type"] }).tier_type ??
-        (tier.layout_type === "numbered_seat" ||
-        tier.layout_type === "table_combo"
-          ? "seated"
-          : tier.category === "bundle"
-            ? "bundle"
-            : "general"),
-      bundle_items: serializeBundleItems(
-        parseBundleItems(
-          (tier as { bundle_items?: unknown }).bundle_items,
+    tiers: tiers.map((tier) => {
+      const phases = phasesByTier.get(tier.id) ?? []
+      const priced = applyActivePhaseToTier(
+        {
+          price: Number(tier.price),
+          available: Math.max(0, tier.capacity - tier.sold),
+        },
+        phases,
+      )
+      return {
+        ...tier,
+        category: tier.category ?? "standard",
+        list_price: tier.list_price == null ? null : Number(tier.list_price),
+        price: priced.price,
+        available: priced.available,
+        phases,
+        tier_type:
+          (tier as { tier_type?: TicketTier["tier_type"] }).tier_type ??
+          (tier.layout_type === "numbered_seat" ||
+          tier.layout_type === "table_combo"
+            ? "seated"
+            : tier.category === "bundle"
+              ? "bundle"
+              : "general"),
+        bundle_items: serializeBundleItems(
+          parseBundleItems(
+            (tier as { bundle_items?: unknown }).bundle_items,
+          ),
+        ) as TicketTier["bundle_items"],
+        bundle_type:
+          (tier as { bundle_type?: TicketTier["bundle_type"] }).bundle_type ??
+          null,
+        description:
+          typeof (tier as { description?: string | null }).description === "string"
+            ? String((tier as { description?: string | null }).description).trim() ||
+              null
+            : null,
+        highlight_badge: parseTicketHighlightBadge(
+          (tier as { highlight_badge?: string | null }).highlight_badge,
         ),
-      ) as TicketTier["bundle_items"],
-      bundle_type:
-        (tier as { bundle_type?: TicketTier["bundle_type"] }).bundle_type ??
-        null,
-      description:
-        typeof (tier as { description?: string | null }).description === "string"
-          ? String((tier as { description?: string | null }).description).trim() ||
-            null
-          : null,
-      highlight_badge: parseTicketHighlightBadge(
-        (tier as { highlight_badge?: string | null }).highlight_badge,
-      ),
-    })),
+      }
+    }),
     defaultTicketTab: parseDefaultTicketTab(
       (event as { default_ticket_tab?: string | null }).default_ticket_tab,
     ),

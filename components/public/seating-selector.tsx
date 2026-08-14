@@ -104,6 +104,14 @@ export function SeatingSelector({
           router.refresh()
           return
         }
+        if (result.error === "phase_rollover") {
+          toast.warning(
+            result.phaseRollover?.message ??
+              "La fase de venta acaba de agotarse. El carrito se actualizó con el nuevo precio disponible.",
+          )
+          router.refresh()
+          return
+        }
         toast.error("No se pudo reservar la ubicación", {
           description: result.error,
         })

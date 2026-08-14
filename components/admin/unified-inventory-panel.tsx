@@ -4,8 +4,10 @@ import {
   Armchair,
   Car,
   Gift,
+  Layers,
   LayoutGrid,
   Plus,
+  PlusCircle,
   Sparkles,
   Ticket,
   Trash2,
@@ -52,6 +54,14 @@ import {
   layoutTypeForInventory,
   type InventoryTierType,
 } from "@/lib/inventory/unified-inventory"
+import { CapacityBudgetBar } from "@/components/admin/capacity-budget-bar"
+import {
+  createBlankPhase,
+  occupiesVenueBudget,
+  phaseLimitSum,
+  venueCapacityBudget,
+} from "@/lib/inventory/capacity-budget"
+import { isMapBackedTicket } from "@/lib/seating/venue-map-pricing"
 import type { EventFormValues } from "@/lib/validations/event-form"
 
 export function createInventoryTicket(
@@ -81,6 +91,7 @@ export function createInventoryTicket(
     bundleType: tierType === "bundle" ? "cross_sell_pack" : null,
     description: "",
     highlightBadge: null,
+    phases: [],
   }
 }
 
@@ -91,6 +102,8 @@ type Props = {
 export function UnifiedInventoryPanel({ form }: Props) {
   const tickets = form.watch("tickets") ?? []
   const scheduleDays = form.watch("basics.scheduleDays") ?? []
+  const venueCapacity = form.watch("venue.capacity")
+  const budget = venueCapacityBudget(venueCapacity, tickets)
   const [bundleOpen, setBundleOpen] = useState(false)
   const [editingBundleIndex, setEditingBundleIndex] = useState<number | null>(
     null,
@@ -126,14 +139,16 @@ export function UnifiedInventoryPanel({ form }: Props) {
     )
   }
 
-  const grouped = tickets.map((tier, index) => {
-    const tierType = inferInventoryTierType({
-      tierType: tier.tierType,
-      layoutType: tier.layoutType,
-      bundleItems: tier.bundleItems,
+  const grouped = tickets
+    .map((tier, index) => {
+      const tierType = inferInventoryTierType({
+        tierType: tier.tierType,
+        layoutType: tier.layoutType,
+        bundleItems: tier.bundleItems,
+      })
+      return { index, tierType, key: tier.id ?? `ticket-${index}`, tier }
     })
-    return { index, tierType, key: tier.id ?? `ticket-${index}` }
-  })
+    .filter((item) => !isMapBackedTicket(item.tier))
 
   const generals = grouped.filter((item) => item.tierType === "general")
   const addons = grouped.filter((item) => item.tierType === "addon")
@@ -178,13 +193,14 @@ export function UnifiedInventoryPanel({ form }: Props) {
 
   return (
     <div className="space-y-5">
+      <CapacityBudgetBar venueCapacity={venueCapacity} tickets={tickets} />
       <div>
         <p className="text-sm font-semibold text-foreground">
-          Gestión completa de inventario
+          Tickets generales, adicionales y combos
         </p>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          Combiná mapa numerado, generales de campo, adicionales y combos en el
-          mismo evento. El stock se reserva junto en el checkout.
+          Las zonas del mapa se cobran en el paso anterior. Acá solo van
+          entradas sin asiento fijo, extras y promociones.
         </p>
       </div>
 
@@ -232,7 +248,7 @@ export function UnifiedInventoryPanel({ form }: Props) {
         onAdd={() => append(createInventoryTicket("general"))}
       >
         {generals.length === 0 ? (
-          <EmptyHint text="Todavía no hay sectores generales. El mapa numerado puede convivir con esta lista." />
+          <EmptyHint text="Opcional. Sumá una general de predio si no alcanza con las zonas del mapa." />
         ) : (
           generals.map((item) => (
             <InventoryRow
@@ -240,6 +256,13 @@ export function UnifiedInventoryPanel({ form }: Props) {
               form={form}
               index={item.index}
               capacityLabel="Capacidad máxima"
+              venueRemaining={
+                budget.remaining +
+                (occupiesVenueBudget(tickets[item.index]!)
+                  ? Math.max(0, Number(tickets[item.index]?.capacity) || 0)
+                  : 0)
+              }
+              showPhases
               onRemove={() => remove(item.index)}
             />
           ))
@@ -430,14 +453,24 @@ function InventoryRow({
   index,
   capacityLabel,
   showListPrice = false,
+  showPhases = false,
+  venueRemaining,
   onRemove,
 }: {
   form: UseFormReturn<EventFormValues>
   index: number
   capacityLabel: string
   showListPrice?: boolean
+  showPhases?: boolean
+  venueRemaining?: number
   onRemove: () => void
 }) {
+  const phases = form.watch(`tickets.${index}.phases`) ?? []
+  const parentCapacity = Number(form.watch(`tickets.${index}.capacity`)) || 0
+  const parentPrice = Number(form.watch(`tickets.${index}.price`)) || 0
+  const phaseCap = phaseLimitSum(phases)
+  const phaseRemaining = Math.max(1, parentCapacity - phaseCap)
+
   return (
     <div className="space-y-3 rounded-xl border border-border bg-card p-3">
       <div className="grid gap-3 sm:grid-cols-[1fr_7rem_7rem_auto]">
@@ -459,25 +492,47 @@ function InventoryRow({
         <FormField
           control={form.control}
           name={`tickets.${index}.capacity`}
-          render={({ field, fieldState }) => (
+          render={({ field, fieldState }) => {
+            const maxAllowed =
+              venueRemaining != null && venueRemaining > 0
+                ? venueRemaining
+                : undefined
+            const overflow =
+              maxAllowed != null &&
+              Number(field.value) > 0 &&
+              Number(field.value) > maxAllowed
+            return (
             <FormItem>
               <FormLabel>{capacityLabel}</FormLabel>
               <Input
                 type="number"
                 min={1}
+                max={maxAllowed}
                 value={field.value ?? ""}
-                onChange={(event) =>
-                  field.onChange(
-                    event.target.value === ""
-                      ? undefined
-                      : Number(event.target.value),
-                  )
-                }
+                onChange={(event) => {
+                  if (event.target.value === "") {
+                    field.onChange(undefined)
+                    return
+                  }
+                  const next = Number(event.target.value)
+                  if (!Number.isFinite(next)) return
+                  if (maxAllowed != null && next > maxAllowed) {
+                    field.onChange(maxAllowed)
+                    return
+                  }
+                  field.onChange(next)
+                }}
                 className="h-11"
               />
+              {overflow ? (
+                <p className="text-xs text-red-500" role="alert">
+                  Superás el saldo del recinto ({maxAllowed} disponibles).
+                </p>
+              ) : null}
               <FormMessage>{fieldState.error?.message}</FormMessage>
             </FormItem>
-          )}
+            )
+          }}
         />
         <FormField
           control={form.control}
@@ -565,6 +620,145 @@ function InventoryRow({
             </FormItem>
           )}
         />
+      ) : null}
+
+      {showPhases ? (
+        <div className="space-y-3 rounded-xl border border-dashed border-border bg-muted/40 p-3">
+          <div className="flex items-start gap-2">
+            <Layers
+              className="mt-0.5 size-4 shrink-0 text-emerald-700 dark:text-emerald-400"
+              aria-hidden="true"
+            />
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                Lotes de precio
+              </p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                El sistema cambiará al siguiente lote automáticamente cuando
+                este se agote. La suma de los lotes no puede superar{" "}
+                {parentCapacity || 0} entradas de este tipo.
+              </p>
+            </div>
+          </div>
+
+          {phases.map((phase, phaseIndex) => {
+            const sold = phase.sold ?? 0
+            const otherSum = phaseLimitSum(phases, phaseIndex)
+            const maxLot = Math.max(sold || 1, parentCapacity - otherSum)
+            return (
+              <div
+                key={phase.id ?? `phase-${phaseIndex}`}
+                className="grid gap-2 rounded-lg border border-border bg-card p-3 sm:grid-cols-[1fr_7rem_7rem_auto]"
+              >
+                <FormField
+                  control={form.control}
+                  name={`tickets.${index}.phases.${phaseIndex}.name`}
+                  render={({ field, fieldState }) => (
+                    <FormItem>
+                      <FormLabel>Nombre del lote</FormLabel>
+                      <Input
+                        {...field}
+                        className="h-10"
+                        placeholder="Preventa 1"
+                      />
+                      <FormMessage>{fieldState.error?.message}</FormMessage>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name={`tickets.${index}.phases.${phaseIndex}.price`}
+                  render={({ field, fieldState }) => (
+                    <FormItem>
+                      <FormLabel>Precio</FormLabel>
+                      <PriceInput
+                        value={field.value}
+                        onValueChange={(value) => {
+                          field.onChange(value ?? 0)
+                          if (phaseIndex === 0) {
+                            form.setValue(`tickets.${index}.price`, value ?? 0, {
+                              shouldDirty: true,
+                            })
+                          }
+                        }}
+                        className="h-10"
+                      />
+                      <FormMessage>{fieldState.error?.message}</FormMessage>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name={`tickets.${index}.phases.${phaseIndex}.capacityLimit`}
+                  render={({ field, fieldState }) => (
+                    <FormItem>
+                      <FormLabel>Límite</FormLabel>
+                      <Input
+                        type="number"
+                        min={Math.max(1, sold)}
+                        max={maxLot}
+                        value={field.value ?? ""}
+                        onChange={(event) => {
+                          if (event.target.value === "") {
+                            field.onChange(undefined)
+                            return
+                          }
+                          const next = Number(event.target.value)
+                          if (!Number.isFinite(next)) return
+                          if (next > maxLot) {
+                            field.onChange(maxLot)
+                            return
+                          }
+                          field.onChange(Math.max(sold || 1, next))
+                        }}
+                        className="h-10"
+                      />
+                      <FormMessage>{fieldState.error?.message}</FormMessage>
+                    </FormItem>
+                  )}
+                />
+                <div className="flex items-end">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    disabled={sold > 0}
+                    onClick={() => {
+                      form.setValue(
+                        `tickets.${index}.phases`,
+                        phases.filter((_, current) => current !== phaseIndex),
+                        { shouldDirty: true },
+                      )
+                    }}
+                    aria-label={`Quitar lote ${phase.name || phaseIndex + 1}`}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              </div>
+            )
+          })}
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={phaseCap >= parentCapacity && parentCapacity > 0}
+            onClick={() => {
+              form.setValue(
+                `tickets.${index}.phases`,
+                [
+                  ...phases,
+                  createBlankPhase(phases.length, phaseRemaining, parentPrice),
+                ],
+                { shouldDirty: true },
+              )
+            }}
+          >
+            <PlusCircle className="size-4" />
+            Agregar Lote de Precio
+          </Button>
+        </div>
       ) : null}
     </div>
   )

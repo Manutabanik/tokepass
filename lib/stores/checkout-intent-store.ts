@@ -2,6 +2,7 @@
 
 import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
+import { useShallow } from "zustand/react/shallow"
 
 import { cartItemCount } from "@/lib/checkout/cart"
 import type { CheckoutBuyerInfo } from "@/lib/checkout-buyer"
@@ -101,19 +102,40 @@ export const useCheckoutIntentStore = create<CheckoutIntentState>()(
         buyer,
         subtotal,
         holdExpiresAt,
-      }) =>
+      }) => {
+        const current = get()
+        const nextSlug = eventSlug ?? current.eventSlug
+        const nextHold =
+          holdExpiresAt === undefined ? current.holdExpiresAt : holdExpiresAt
+        if (
+          current.eventId === eventId &&
+          current.eventSlug === nextSlug &&
+          current.subtotal === subtotal &&
+          current.holdExpiresAt === nextHold &&
+          current.selectedSeat === selectedSeat &&
+          current.buyer.buyerName === buyer.buyerName &&
+          current.buyer.buyerDni === buyer.buyerDni &&
+          current.buyer.buyerEmail === buyer.buyerEmail &&
+          current.buyer.buyerPhone === buyer.buyerPhone &&
+          sameQuantities(current.quantities, quantities)
+        ) {
+          return
+        }
         set({
           eventId,
-          eventSlug: eventSlug ?? get().eventSlug,
+          eventSlug: nextSlug,
           quantities,
           selectedSeat,
           buyer,
           subtotal,
-          holdExpiresAt:
-            holdExpiresAt === undefined ? get().holdExpiresAt : holdExpiresAt,
-        }),
+          holdExpiresAt: nextHold,
+        })
+      },
 
-      setHoldExpiresAt: (holdExpiresAt) => set({ holdExpiresAt }),
+      setHoldExpiresAt: (holdExpiresAt) => {
+        if (get().holdExpiresAt === holdExpiresAt) return
+        set({ holdExpiresAt })
+      },
 
       consumePendingAction: () => {
         const action = get().pendingAction
@@ -158,6 +180,17 @@ export const useCheckoutIntentStore = create<CheckoutIntentState>()(
   ),
 )
 
+function sameQuantities(
+  left: Record<string, number>,
+  right: Record<string, number>,
+) {
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)])
+  for (const key of keys) {
+    if ((left[key] ?? 0) !== (right[key] ?? 0)) return false
+  }
+  return true
+}
+
 export function useIsGuestCheckout(currentUserId?: string | null) {
   const mode = useCheckoutIntentStore((state) => state.mode)
   const isGuest = useCheckoutIntentStore((state) => state.isGuest)
@@ -165,14 +198,16 @@ export function useIsGuestCheckout(currentUserId?: string | null) {
 }
 
 export function useActiveCheckoutSelection(eventId: string) {
-  return useCheckoutIntentStore((state) => {
-    if (state.eventId !== eventId) {
-      return { active: false, itemCount: 0, subtotal: 0 }
-    }
-    const itemCount = cartItemCount(
-      state.quantities,
-      Boolean(state.selectedSeat),
-    )
-    return { active: itemCount > 0, itemCount, subtotal: state.subtotal }
-  })
+  return useCheckoutIntentStore(
+    useShallow((state) => {
+      if (state.eventId !== eventId) {
+        return { active: false, itemCount: 0, subtotal: 0 }
+      }
+      const itemCount = cartItemCount(
+        state.quantities,
+        Boolean(state.selectedSeat),
+      )
+      return { active: itemCount > 0, itemCount, subtotal: state.subtotal }
+    }),
+  )
 }

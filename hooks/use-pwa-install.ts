@@ -107,6 +107,9 @@ export function usePwaInstall() {
       if (process.env.NODE_ENV !== "production" && !enableInDev) {
         return
       }
+      if (isPwaStandalone() || readDismissedRecently()) {
+        return
+      }
       event.preventDefault()
       setDeferredPrompt(event as BeforeInstallPromptEvent)
     }

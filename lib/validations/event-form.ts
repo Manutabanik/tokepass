@@ -41,6 +41,25 @@ export const scheduleDaySchema = z.object({
     ),
 })
 
+export const ticketPhaseSchema = z.object({
+  id: z.string().uuid().optional(),
+  name: z.string().trim().min(2, "Nombrá el lote."),
+  price: z
+    .number({ error: "Indicá el precio de este lote." })
+    .min(0, "El precio no puede ser negativo."),
+  capacityLimit: z
+    .number({ error: "Indicá el cupo de este lote." })
+    .int()
+    .min(1, "El lote necesita al menos 1 entrada."),
+  startTime: z.string().nullable().optional(),
+  endTime: z.string().nullable().optional(),
+  status: z
+    .enum(["scheduled", "active", "sold_out"])
+    .optional()
+    .default("scheduled"),
+  sold: z.number().int().min(0).optional(),
+})
+
 export const ticketTierSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().trim().min(2, "Ingresá un nombre para el tipo de entrada."),
@@ -88,6 +107,7 @@ export const ticketTierSchema = z.object({
     .optional()
     .default([]),
   bundleType: z.enum(BUNDLE_TYPES).nullable().optional(),
+  phases: z.array(ticketPhaseSchema).optional().default([]),
 })
 
 const eventFormObject = z
@@ -237,6 +257,44 @@ const eventFormObject = z
 
     const hasBlueprintZones = (data.venue.zones?.length ?? 0) > 0
     const usesSeatingMap = Boolean(data.venue.includesSeatingMap)
+    const venueBudgetMax = Math.max(0, Number(data.venue.capacity) || 0)
+    let venueAllocated = 0
+    for (const [index, tier] of data.tickets.entries()) {
+      const type = tier.tierType ?? "general"
+      const occupies =
+        Boolean(tier.seatingSectorId) ||
+        type === "general" ||
+        type === "seated" ||
+        tier.layoutType === "numbered_seat" ||
+        tier.layoutType === "table_combo"
+      const addonOrBundle = type === "addon" || type === "bundle"
+      if (occupies && !addonOrBundle) {
+        venueAllocated += Number(tier.capacity) || 0
+      }
+
+      const phases = tier.phases ?? []
+      const phaseSum = phases.reduce(
+        (sum, phase) => sum + (Number(phase.capacityLimit) || 0),
+        0,
+      )
+      if (phases.length > 0 && phaseSum > (Number(tier.capacity) || 0)) {
+        context.addIssue({
+          code: "custom",
+          path: ["tickets", index, "phases"],
+          message:
+            "La suma de los lotes no puede superar la capacidad de esta entrada.",
+        })
+      }
+    }
+
+    if (venueBudgetMax > 0 && venueAllocated > venueBudgetMax) {
+      context.addIssue({
+        code: "custom",
+        path: ["tickets"],
+        message: `El stock asignado (${venueAllocated}) supera la capacidad del recinto (${venueBudgetMax}).`,
+      })
+    }
+
     const ticketCapacity = data.tickets.reduce(
       (sum, tier) => sum + (Number(tier.capacity) || 0),
       0,
@@ -328,6 +386,7 @@ const draftTicketSchema = z.object({
     .optional()
     .default([]),
   bundleType: z.enum(BUNDLE_TYPES).nullable().optional(),
+  phases: z.array(ticketPhaseSchema).optional().default([]),
 })
 
 /** Autoguardado de borrador: no exige descripción, precio ni venue completo. */
@@ -424,6 +483,7 @@ function blankDraftTicket(): EventFormValues["tickets"][number] {
     listPrice: null,
     bundleItems: [],
     bundleType: null,
+    phases: [],
   }
 }
 
@@ -480,6 +540,7 @@ export function coerceDraftEventForm(
       bundleType: tier.bundleType ?? null,
       description: (tier.description ?? "").trim().slice(0, TICKET_DESCRIPTION_MAX),
       highlightBadge: tier.highlightBadge === "bestseller" ? "bestseller" : null,
+      phases: tier.phases ?? [],
     }))
 
   const venue = raw.venue ?? {

@@ -2,6 +2,7 @@
 
 import {
   Armchair,
+  Clock,
   LayoutGrid,
   Minus,
   Plus,
@@ -22,6 +23,7 @@ import {
   type DefaultTicketTab,
 } from "@/lib/checkout/ticket-picker"
 import { formatCurrency } from "@/lib/format"
+import { resolveSalePhases } from "@/lib/inventory/active-phase"
 import {
   inferInventoryTierType,
   isQuantityInventoryType,
@@ -293,49 +295,76 @@ function QuantityList({
   return (
     <ul className="space-y-2">
       {tiers.map((tier) => {
+        const sale = resolveSalePhases(tier.phases)
+        const current = sale.current
         const max = Math.max(0, tier.available)
         const quantity = quantities[tier.id] ?? 0
         const description = tier.description?.trim() || ""
         const highlight = resolveTicketHighlightBadge(tier, tiers)
+        const priceLabel = current
+          ? `${current.name} - ${formatCurrency(current.price)}`
+          : formatCurrency(tier.price)
         return (
           <li
             key={tier.id}
             className={cn(
-              "flex items-center justify-between gap-3 rounded-2xl border bg-muted/30 px-3 py-3",
+              "rounded-2xl border bg-muted/30 px-3 py-3",
               highlight === "bestseller"
                 ? "border-amber-500/40 bg-amber-500/5"
                 : "border-border",
             )}
           >
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-sm font-medium text-foreground">{tier.name}</p>
-                {highlight === "bestseller" ? (
-                  <Badge
-                    variant="secondary"
-                    className="h-5 gap-1 bg-amber-500/15 text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200"
-                  >
-                    <Sparkles className="size-3" aria-hidden="true" />
-                    Más vendida
-                  </Badge>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-medium text-foreground">{tier.name}</p>
+                  {highlight === "bestseller" ? (
+                    <Badge
+                      variant="secondary"
+                      className="h-5 gap-1 bg-amber-500/15 text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200"
+                    >
+                      <Sparkles className="size-3" aria-hidden="true" />
+                      Más vendida
+                    </Badge>
+                  ) : null}
+                </div>
+                {description ? (
+                  <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
+                    {description}
+                  </p>
                 ) : null}
-              </div>
-              {description ? (
-                <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
-                  {description}
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {priceLabel}
+                  {max === 0 ? " · agotado" : ` · ${max} disponibles`}
                 </p>
-              ) : null}
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                {formatCurrency(tier.price)}
-                {max === 0 ? " · agotado" : ` · ${max} disponibles`}
-              </p>
+              </div>
+              <Stepper
+                value={quantity}
+                max={max}
+                disabled={isPending || max === 0}
+                onChange={(next) => onQuantityChange(tier.id, next, max)}
+              />
             </div>
-            <Stepper
-              value={quantity}
-              max={max}
-              disabled={isPending || max === 0}
-              onChange={(next) => onQuantityChange(tier.id, next, max)}
-            />
+            {sale.upcoming.length > 0 ? (
+              <ul className="mt-2 space-y-1 border-t border-border/70 pt-2">
+                {sale.upcoming.map((phase) => (
+                  <li
+                    key={phase.id}
+                    className="flex items-center justify-between gap-2 text-xs text-muted-foreground"
+                  >
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <Clock className="size-3 shrink-0" aria-hidden="true" />
+                      <span className="truncate">
+                        {phase.name} - {formatCurrency(phase.price)}
+                      </span>
+                    </span>
+                    <span className="shrink-0 font-medium uppercase tracking-wide">
+                      Próximamente
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </li>
         )
       })}

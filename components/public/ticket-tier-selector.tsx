@@ -17,6 +17,7 @@ import { isFullPassDayId } from "@/lib/event-schedule"
 import { formatCurrency, formatEventDay } from "@/lib/format"
 import { MAX_TICKETS_PER_PURCHASE } from "@/lib/checkout-limits"
 import type { TicketHighlightBadge } from "@/lib/checkout/ticket-picker"
+import type { PublicTicketPhase } from "@/lib/inventory/active-phase"
 import type { InventoryTierType } from "@/lib/inventory/unified-inventory"
 import {
   discountPercent,
@@ -44,6 +45,7 @@ export type TicketSelectorTier = {
   description?: string | null
   highlightBadge?: TicketHighlightBadge | null
   sold?: number
+  phases?: PublicTicketPhase[]
 }
 
 type DayFilter = "all" | string

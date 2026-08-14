@@ -25,7 +25,9 @@ import {
 } from "@/components/admin/venue-argentina-selector"
 import { InteractiveVenueMapStudio } from "@/components/admin/interactive-venue-map-studio"
 import { VenueMapStudioSummary } from "@/components/admin/venue-map-studio-summary"
-import { UnifiedInventoryPanel } from "@/components/admin/unified-inventory-panel"
+import { useEventFormStore } from "@/lib/stores/event-form-store"
+import { listVenuePriceGroups } from "@/lib/seating/venue-price-groups"
+import { venueMapToPricingMap } from "@/lib/seating/venue-map-pricing"
 import {
   createEmptyZone,
   type VenueZoneDraft,
@@ -48,7 +50,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { formatDiscoveryDateTime, formatNumber } from "@/lib/format"
+import { formatCurrency, formatDiscoveryDateTime, formatNumber } from "@/lib/format"
 import {
   draftZonesToBlueprint,
   draftZonesToSeatingLayout,
@@ -62,6 +64,7 @@ import {
   venueMapHasInventory,
   venueMapToSeatingLayout,
 } from "@/lib/seating/venue-map-geometry"
+import { composeVenuePlace } from "@/lib/venues/compose-location"
 import type { EventFormValues } from "@/lib/validations/event-form"
 import { cn } from "@/lib/utils"
 import { emptyVenueMap, parseVenueMap } from "@/types/venue-map"
@@ -104,6 +107,7 @@ type EventVenueStepProps = {
   pricingSlot?: ReactNode
   /** Parte del wizard: ubicación vs. zonas, o todo junto. */
   focus?: "location" | "zones" | "all"
+  onMapInventoryChange?: (map: ReturnType<typeof parseVenueMap>) => void
 }
 
 export function EventVenueStep({
@@ -113,6 +117,7 @@ export function EventVenueStep({
   onAppliedVenue,
   pricingSlot,
   focus = "all",
+  onMapInventoryChange,
 }: EventVenueStepProps) {
   const showLocation = focus !== "zones"
   const showZones = focus !== "location"
@@ -144,6 +149,36 @@ export function EventVenueStep({
   const [studioOpen, setStudioOpen] = useState(false)
   const [pendingSave, startSaveTransition] = useTransition()
   const [pendingUpload, startUploadTransition] = useTransition()
+
+  function emitMapInventory(next: ReturnType<typeof parseVenueMap>) {
+    const pricing = venueMapToPricingMap(next)
+    useEventFormStore.getState().setVenuePricingMap(pricing)
+    onMapInventoryChange?.(next)
+  }
+
+  function persistMapToForm(
+    next: ReturnType<typeof parseVenueMap>,
+    options?: { syncDrafts?: boolean },
+  ) {
+    setVenueMap(next)
+    form.setValue("venue.venueMap", next, { shouldDirty: true })
+    form.setValue("venue.seatingLayout", venueMapToSeatingLayout(next), {
+      shouldDirty: true,
+    })
+    if (options?.syncDrafts) {
+      const drafts = venueMapToZoneDrafts(next)
+      if (drafts.length > 0) {
+        syncZonesToForm(drafts, true)
+      }
+    }
+    emitMapInventory(next)
+  }
+
+  function openStudio() {
+    form.setValue("venue.includesSeatingMap", true, { shouldDirty: true })
+    form.setValue("venue.zoneType", "reserved_seating", { shouldDirty: true })
+    setStudioOpen(true)
+  }
 
   const geoValue = useMemo<Partial<VenueArgentinaValue>>(() => {
     const watchedCity = form.watch("venue.venueCity")
@@ -220,7 +255,7 @@ export function EventVenueStep({
     form.setValue("venue.mode", "existing")
     form.setValue("venue.existingVenueId", venue.id)
     form.setValue("venue.venueName", venue.name)
-    form.setValue("venue.venueLocation", venue.location)
+    form.setValue("venue.venueLocation", venue.address || venue.location)
     form.setValue("venue.venueCity", venue.city ?? "")
     const parsed = parsePlaceParts(venue.city)
     form.setValue("venue.department", parsed.department)
@@ -259,13 +294,14 @@ export function EventVenueStep({
         : zonesToDraft(venue.id, venue.zoneBlueprint, venue.seatingLayout),
     )
     setEditingSaved(false)
+    emitMapInventory(nextMap)
     onAppliedVenue?.(venue)
   }
 
   function startEditSavedVenue() {
     if (!selectedVenue) return
     applySavedVenue(selectedVenue)
-    form.setValue("venue.mode", "new")
+    form.setValue("venue.mode", "existing")
     form.setValue("venue.existingVenueId", selectedVenue.id)
     form.setValue("venue.saveVenueForReuse", true)
     setEditingSaved(true)
@@ -306,10 +342,16 @@ export function EventVenueStep({
       1
 
     startSaveTransition(async () => {
+      const place = composeVenuePlace({
+        street: values.venueLocation,
+        department: values.department,
+        province: values.province,
+        city: values.venueCity,
+      })
       const payload = {
         name: values.venueName.trim(),
-        location: values.venueLocation!.trim(),
-        city: values.venueCity?.trim() || undefined,
+        location: place.street || values.venueLocation!.trim(),
+        city: place.city || values.venueCity?.trim() || undefined,
         latitude: values.latitude ?? null,
         longitude: values.longitude ?? null,
         capacity,
@@ -319,7 +361,7 @@ export function EventVenueStep({
         seatingBackgroundUrl: backgroundUrl,
       }
 
-      const editingId = editingSaved ? values.existingVenueId : null
+      const editingId = values.existingVenueId?.trim() || null
       const result = editingId
         ? await updateVenue({ id: editingId, ...payload })
         : await createVenue(payload)
@@ -594,6 +636,18 @@ export function EventVenueStep({
           </ul>
           ) : null}
 
+          {showZones ? (
+            <MapStudioFields
+              form={form}
+              venueMap={venueMap}
+              selectedVenueName={selectedVenue?.name}
+              studioOpen={studioOpen}
+              onOpenStudio={openStudio}
+              onCloseStudio={() => setStudioOpen(false)}
+              onPersistMap={persistMapToForm}
+            />
+          ) : null}
+
           {focus === "all" ? pricingSlot : null}
         </div>
       ) : null}
@@ -623,8 +677,8 @@ export function EventVenueStep({
                         Incluye mapa de asientos / mesas / tablones
                       </FormLabel>
                       <FormDescription className="mt-1 text-xs leading-5">
-                        Opcional. Activalo para diseñar ubicaciones numeradas
-                        sin reemplazar entradas generales ni adicionales.
+                        Activalo para trazar zonas en el estudio. Precio y
+                        cupo se definen ahí, no en Tickets y Combos.
                       </FormDescription>
                     </div>
                   </div>
@@ -656,87 +710,51 @@ export function EventVenueStep({
 
           {showZones ? (
             <>
-          {structured ? (
-            <div className="space-y-3">
-              <VenueMapStudioSummary
-                map={venueMap}
-                onOpen={() => setStudioOpen(true)}
-              />
-              <InteractiveVenueMapStudio
-                open={studioOpen}
-                eventTitle={form.watch("basics.title") || "Evento"}
-                eventDate={
-                  form.watch("basics.date")
-                    ? formatDiscoveryDateTime(form.watch("basics.date"))
-                    : undefined
-                }
-                venueLabel={
-                  form.watch("venue.venueName") || selectedVenue?.name || undefined
-                }
-                value={venueMap}
-                onClose={() => setStudioOpen(false)}
-                onSave={(next, layout) => {
-                  setVenueMap(next)
-                  form.setValue("venue.venueMap", next, { shouldDirty: true })
-                  form.setValue("venue.seatingLayout", layout, {
-                    shouldDirty: true,
-                  })
-                  const drafts = venueMapToZoneDrafts(next)
-                  if (drafts.length > 0) {
-                    syncZonesToForm(drafts, true)
-                  }
-                  setStudioOpen(false)
-                }}
-                onChange={(next) => {
-                  setVenueMap(next)
-                  form.setValue("venue.venueMap", next, { shouldDirty: true })
-                  form.setValue(
-                    "venue.seatingLayout",
-                    venueMapToSeatingLayout(next),
-                    { shouldDirty: true },
-                  )
-                }}
-              />
-              <div className="space-y-3 rounded-2xl border border-border bg-muted/60 p-4">
-                <div className="flex items-center gap-2">
-                  <ImageIcon className="size-4 text-emerald-700 dark:text-emerald-400" />
-                  <Label className="text-sm text-foreground">
-                    Imagen o mapa del lugar (Opcional)
-                  </Label>
-                </div>
-                {backgroundUrl ? (
-                  <div className="relative aspect-[16/7] overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
-                    <Image
-                      src={backgroundUrl}
-                      alt="Plano de referencia"
-                      fill
-                      className="object-contain"
-                      sizes="640px"
-                      unoptimized
-                    />
-                  </div>
-                ) : null}
-                <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950/60 px-4 py-6 text-sm text-muted-foreground hover:border-emerald-500/40 hover:text-emerald-800 dark:text-emerald-200">
-                  {pendingUpload ? (
-                    <LoaderCircle className="size-4 animate-spin" />
-                  ) : (
-                    <UploadCloud className="size-4" />
-                  )}
-                  Subir plano de referencia
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    className="hidden"
-                    onChange={(event) =>
-                      onBackgroundFile(event.target.files?.[0] ?? null)
-                    }
-                  />
-                </label>
-              </div>
+          <MapStudioFields
+            form={form}
+            venueMap={venueMap}
+            selectedVenueName={selectedVenue?.name}
+            studioOpen={studioOpen}
+            onOpenStudio={openStudio}
+            onCloseStudio={() => setStudioOpen(false)}
+            onPersistMap={persistMapToForm}
+          />
+          <div className="space-y-3 rounded-2xl border border-border bg-muted/60 p-4">
+            <div className="flex items-center gap-2">
+              <ImageIcon className="size-4 text-emerald-700 dark:text-emerald-400" />
+              <Label className="text-sm text-foreground">
+                Imagen o mapa del lugar (Opcional)
+              </Label>
             </div>
-          ) : null}
-
-          <UnifiedInventoryPanel form={form} />
+            {backgroundUrl ? (
+              <div className="relative aspect-[16/7] overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
+                <Image
+                  src={backgroundUrl}
+                  alt="Plano de referencia"
+                  fill
+                  className="object-contain"
+                  sizes="640px"
+                  unoptimized
+                />
+              </div>
+            ) : null}
+            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950/60 px-4 py-6 text-sm text-muted-foreground hover:border-emerald-500/40 hover:text-emerald-800 dark:text-emerald-200">
+              {pendingUpload ? (
+                <LoaderCircle className="size-4 animate-spin" />
+              ) : (
+                <UploadCloud className="size-4" />
+              )}
+              Subir plano de referencia
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(event) =>
+                  onBackgroundFile(event.target.files?.[0] ?? null)
+                }
+              />
+            </label>
+          </div>
 
           <FormField
             control={form.control}
@@ -834,6 +852,81 @@ export function EventVenueStep({
             : null}
         </div>
       ) : null}
+    </div>
+  )
+}
+
+function MapStudioFields({
+  form,
+  venueMap,
+  selectedVenueName,
+  studioOpen,
+  onOpenStudio,
+  onCloseStudio,
+  onPersistMap,
+}: {
+  form: UseFormReturn<EventFormValues>
+  venueMap: ReturnType<typeof parseVenueMap>
+  selectedVenueName?: string
+  studioOpen: boolean
+  onOpenStudio: () => void
+  onCloseStudio: () => void
+  onPersistMap: (
+    next: ReturnType<typeof parseVenueMap>,
+    options?: { syncDrafts?: boolean },
+  ) => void
+}) {
+  const groups = listVenuePriceGroups(venueMap)
+  return (
+    <div className="space-y-3">
+      <VenueMapStudioSummary map={venueMap} onOpen={onOpenStudio} />
+      {groups.length > 0 ? (
+        <ul className="grid gap-2 sm:grid-cols-2">
+          {groups.map((group) => (
+            <li
+              key={group.key}
+              className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-muted px-3 py-2.5 text-sm dark:border-white/8 dark:bg-black/25"
+            >
+              <span
+                className="size-2.5 shrink-0 rounded-full"
+                style={{ backgroundColor: group.color }}
+                aria-hidden
+              />
+              <span className="min-w-0 flex-1 truncate text-foreground">
+                {group.name}
+              </span>
+              <span className="shrink-0 text-[11px] text-muted-foreground">
+                {group.count} {group.unit}
+                {group.price > 0 ? ` · ${formatCurrency(group.price)}` : ""}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="rounded-xl border border-dashed border-zinc-200 px-3 py-3 text-xs text-muted-foreground dark:border-white/10">
+          Trazá un polígono o zona en el estudio y definí precio y capacidad
+          en el panel lateral. Esas tarifas quedan en el mapa.
+        </p>
+      )}
+      <InteractiveVenueMapStudio
+        open={studioOpen}
+        eventTitle={form.watch("basics.title") || "Evento"}
+        eventDate={
+          form.watch("basics.date")
+            ? formatDiscoveryDateTime(form.watch("basics.date"))
+            : undefined
+        }
+        venueLabel={
+          form.watch("venue.venueName") || selectedVenueName || undefined
+        }
+        value={venueMap}
+        onClose={onCloseStudio}
+        onSave={(next) => {
+          onPersistMap(next, { syncDrafts: true })
+          onCloseStudio()
+        }}
+        onChange={(next) => onPersistMap(next)}
+      />
     </div>
   )
 }

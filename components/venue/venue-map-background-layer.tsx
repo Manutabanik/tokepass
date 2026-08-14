@@ -20,6 +20,7 @@ export function VenueMapBackgroundLayer({
       opacity={map.backgroundOpacity ?? 0.4}
       preserveAspectRatio="xMidYMid meet"
       pointerEvents="none"
+      className="pointer-events-none"
     />
   )
 }

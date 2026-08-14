@@ -2,17 +2,11 @@
 
 import { zodResolver } from "@hookform/resolvers/zod"
 import {
-  Armchair,
   ArrowLeft,
   ArrowRight,
   Building2,
-  CalendarDays,
-  Car,
   Check,
-  CircleDollarSign,
   CreditCard,
-  EyeOff,
-  Gift,
   Globe2,
   IdCard,
   LoaderCircle,
@@ -22,13 +16,11 @@ import {
   Save,
   Sparkles,
   Ticket,
-  Trash2,
   UploadCloud,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import {
-  useFieldArray,
   useForm,
   useWatch,
   type Resolver,
@@ -46,19 +38,14 @@ import type { OrganizerVenue } from "@/app/actions/venues"
 import { createVenue } from "@/app/actions/venues"
 import { EventSponsorsManager } from "@/components/admin/event-sponsors-manager"
 import { EventVenueStep } from "@/components/admin/event-venue-step"
-import { createInventoryTicket } from "@/components/admin/unified-inventory-panel"
+import {
+  createInventoryTicket,
+  UnifiedInventoryPanel,
+} from "@/components/admin/unified-inventory-panel"
 import { ScheduleDaysBuilder } from "@/components/admin/schedule-days-builder"
-import { VenueSeatPricingPanel } from "@/components/admin/venue-seat-pricing-panel"
-import { ZoneTierPricingMatrix } from "@/components/admin/zone-tier-pricing-matrix"
 import { useEventFormAutosave } from "@/hooks/use-event-form-autosave"
 import type { ZoneTierPriceDraft } from "@/lib/stores/event-form-store"
 import { useEventFormStore } from "@/lib/stores/event-form-store"
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -76,7 +63,6 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
-import { PriceInput } from "@/components/ui/price-input"
 import {
   Select,
   SelectContent,
@@ -92,13 +78,15 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import { formatCurrency } from "@/lib/format"
-import { allInBreakdown } from "@/lib/pricing/all-in"
+import type { VenuePricingMap } from "@/lib/seating/venue-adapter"
 import {
-  buildEmptyPricingMap,
-  listPricableSectors,
-  type VenuePricingMap,
-} from "@/lib/seating/venue-adapter"
+  mapBackedTicketsUnchanged,
+  migrateLegacyWizardStep,
+  syncMapBackedTickets,
+  venueMapToPricingMap,
+} from "@/lib/seating/venue-map-pricing"
+import { seatingLayoutToVenueMap } from "@/lib/seating/venue-map-geometry"
+import { parseVenueMap } from "@/types/venue-map"
 import {
   AGE_RESTRICTION_LABELS,
   AGE_RESTRICTION_VALUES,
@@ -107,9 +95,7 @@ import {
   publishEventSchema,
   type EventFormValues,
 } from "@/lib/validations/event-form"
-import { inferInventoryTierType } from "@/lib/inventory/unified-inventory"
 import { cn } from "@/lib/utils"
-import { getVenueSeatingItems } from "@/types/venues"
 
 const steps = [
   {
@@ -118,23 +104,18 @@ const steps = [
     icon: Sparkles,
   },
   {
-    title: "Lugar y Mapa",
-    description: "Provincia, dirección y mapa",
+    title: "Mapa y Sectores",
+    description: "Lugar, inventario visual y precios",
     icon: MapPin,
   },
   {
-    title: "Zonas y Sectores",
-    description: "Sectores y numeración",
-    icon: Building2,
-  },
-  {
-    title: "Entradas y Combos",
-    description: "Precios, tarifas y combos",
+    title: "Tickets y Combos",
+    description: "Generales, extras y promociones",
     icon: Ticket,
   },
   {
-    title: "Cobros y Publicación",
-    description: "Pagos, privacidad y publicar",
+    title: "Configuración Final",
+    description: "Cobros, privacidad y publicar",
     icon: CreditCard,
   },
 ] as const
@@ -144,6 +125,7 @@ const blankTicket = (): EventFormValues["tickets"][number] => ({
   name: "",
   price: undefined as unknown as number,
   capacity: undefined as unknown as number,
+  phases: [],
 })
 
 const defaultValues: EventFormValues = {
@@ -186,75 +168,7 @@ const defaultValues: EventFormValues = {
   ticketsDefaultTab: "auto",
 }
 
-function NumberInput({
-  value,
-  onChange,
-  className,
-  emptyAsZero = false,
-  ...props
-}: Omit<React.ComponentProps<typeof Input>, "value" | "onChange"> & {
-  value: number | undefined
-  onChange: (value: number | undefined) => void
-  emptyAsZero?: boolean
-}) {
-  const [focused, setFocused] = useState(false)
-  const [draft, setDraft] = useState("")
-
-  useEffect(() => {
-    if (focused) return
-    setDraft(
-      value == null || Number.isNaN(Number(value)) ? "" : String(value),
-    )
-  }, [focused, value])
-
-  return (
-    <Input
-      type="text"
-      inputMode="decimal"
-      autoComplete="off"
-      value={
-        focused
-          ? draft
-          : value == null || Number.isNaN(Number(value))
-            ? ""
-            : String(value)
-      }
-      onFocus={() => {
-        setFocused(true)
-        setDraft(
-          value == null || Number.isNaN(Number(value)) ? "" : String(value),
-        )
-      }}
-      onChange={(event) => {
-        const rawValue = event.target.value
-        if (rawValue === "") {
-          setDraft("")
-          return
-        }
-        if (!/^\d*[.,]?\d{0,2}$/.test(rawValue)) return
-        const numericValue = Number.parseFloat(rawValue.replace(",", "."))
-        if (Number.isNaN(numericValue)) return
-        setDraft(rawValue.replace(",", "."))
-        onChange(numericValue)
-      }}
-      onBlur={() => {
-        setFocused(false)
-        if (draft === "") {
-          onChange(emptyAsZero ? 0 : undefined)
-          return
-        }
-        const numericValue = Number.parseFloat(draft.replace(",", "."))
-        if (!Number.isNaN(numericValue)) onChange(numericValue)
-      }}
-      className={cn("min-h-12 h-12 text-base", className)}
-      {...props}
-    />
-  )
-}
-
 export function EventCreationWizard({
-  organizerServiceRate,
-  platformFixedFee = 0,
   targetOrganizerId = null,
   venues = [],
   categories = [],
@@ -270,7 +184,6 @@ export function EventCreationWizard({
   const router = useRouter()
   const isEditing = Boolean(initialData)
   const [activeStep, setActiveStep] = useState(0)
-  const [highestStep, setHighestStep] = useState(0)
   const [flyerFile, setFlyerFile] = useState<File | null>(null)
   const [flyerError, setFlyerError] = useState<string | null>(null)
   const [resultMessage, setResultMessage] = useState<{
@@ -285,11 +198,8 @@ export function EventCreationWizard({
   const [zoneTierPricing, setZoneTierPricing] = useState<ZoneTierPriceDraft[]>(
     () => initialData?.zoneTierPricing ?? [],
   )
-  const [venueCatalog, setVenueCatalog] = useState<OrganizerVenue[]>(venues)
-
-  useEffect(() => {
-    setVenueCatalog(venues)
-  }, [venues])
+  const [localVenues, setLocalVenues] = useState<OrganizerVenue[] | null>(null)
+  const venueCatalog = localVenues ?? venues
 
   const form = useForm<EventFormValues>({
     resolver: zodResolver(draftEventSchema) as Resolver<EventFormValues>,
@@ -298,36 +208,11 @@ export function EventCreationWizard({
     defaultValues: initialData?.values ?? defaultValues,
   })
 
-  const { fields } = useFieldArray({
-    control: form.control,
-    name: "tickets",
-    keyName: "fieldKey",
-  })
-
-  const venueMode = useWatch({ control: form.control, name: "venue.mode" })
-  const existingVenueId = useWatch({
-    control: form.control,
-    name: "venue.existingVenueId",
-  })
   const flyerName = useWatch({ control: form.control, name: "basics.flyerName" })
   const isMultiDay = useWatch({
     control: form.control,
     name: "basics.isMultiDay",
   })
-  const scheduleDays = useWatch({
-    control: form.control,
-    name: "basics.scheduleDays",
-  })
-  const watchedTickets = useWatch({
-    control: form.control,
-    name: "tickets",
-  })
-  const selectedVenue = venueCatalog.find((venue) => venue.id === existingVenueId)
-  const numberedSectors =
-    selectedVenue?.seatingLayout.filter(
-      (sector) => sector.layout_type !== "general",
-    ) ?? []
-  const eventTitle = useWatch({ control: form.control, name: "basics.title" })
 
   const draftKey = initialData ? `edit:${initialData.id}` : "create"
   const { persistedEventId, flushAutosave } = useEventFormAutosave({
@@ -347,147 +232,44 @@ export function EventCreationWizard({
 
   useEffect(() => {
     const apply = () => {
-      const persisted = useEventFormStore.getState().wizardStep
-      if (
-        typeof persisted === "number" &&
-        persisted >= 0 &&
-        persisted < steps.length
-      ) {
+      const persisted = migrateLegacyWizardStep(
+        useEventFormStore.getState().wizardStep,
+      )
+      if (persisted >= 0 && persisted < steps.length) {
         setActiveStep(persisted)
-        setHighestStep(steps.length - 1)
+        setWizardStep(persisted)
       }
     }
     apply()
     const persistApi = useEventFormStore.persist
     if (persistApi.hasHydrated()) return
     return persistApi.onFinishHydration(apply)
-  }, [])
+  }, [setWizardStep])
 
-  useEffect(() => {
-    if (!selectedVenue) {
-      setVenuePricingMap({})
-      return
+  function applyMapInventory(map: ReturnType<typeof parseVenueMap>) {
+    const pricing = venueMapToPricingMap(map)
+    setVenuePricingMap(pricing)
+    useEventFormStore.getState().setVenuePricingMap(pricing)
+    const current = form.getValues("tickets") ?? []
+    const next = syncMapBackedTickets(current, map)
+    if (!mapBackedTicketsUnchanged(current, next)) {
+      form.setValue("tickets", next, { shouldDirty: true })
     }
-    setVenuePricingMap((current) => {
-      const empty = buildEmptyPricingMap(selectedVenue)
-      const next: VenuePricingMap = { ...empty }
-      for (const key of Object.keys(empty)) {
-        if (current[key] != null) next[key] = current[key]
-      }
-      const tickets = form.getValues("tickets")
-      for (const tier of tickets) {
-        const sectorKey =
-          tier.seatingSectorId && next[tier.seatingSectorId] != null
-            ? tier.seatingSectorId
-            : Object.keys(empty).find((id) => {
-                const sector = listPricableSectors(selectedVenue).find(
-                  (item) => item.id === id,
-                )
-                return (
-                  sector?.name.trim().toLocaleLowerCase("es") ===
-                  tier.name.trim().toLocaleLowerCase("es")
-                )
-              })
-        if (!sectorKey) continue
-        const existing = next[sectorKey]
-        const existingPrice =
-          typeof existing === "number" ? existing : existing?.price
-        if ((existingPrice ?? 0) === 0 && (tier.price ?? 0) > 0) {
-          next[sectorKey] = tier.price
-        }
-      }
-      return next
-    })
-  }, [form, selectedVenue])
-
-  function syncTicketPricesFromVenue(pricing: VenuePricingMap) {
-    const tickets = form.getValues("tickets")
-    tickets.forEach((tier, index) => {
-      if (!tier.seatingSectorId) return
-      const entry = pricing[tier.seatingSectorId]
-      if (entry == null) return
-      const price = typeof entry === "number" ? entry : entry.price
-      if (Number.isFinite(price) && price !== tier.price) {
-        form.setValue(`tickets.${index}.price`, Math.max(0, price), {
-          shouldDirty: true,
-        })
-      }
-    })
-  }
-
-  function handleVenuePricingChange(next: VenuePricingMap) {
-    setVenuePricingMap(next)
-    syncTicketPricesFromVenue(next)
   }
 
   function handleApplySavedVenue(venue: OrganizerVenue) {
-    const pricing = buildEmptyPricingMap(venue)
-    const currentTickets = form.getValues("tickets")
-    for (const tier of currentTickets) {
-      if (tier.seatingSectorId && pricing[tier.seatingSectorId] == null) continue
-      if (tier.seatingSectorId && Number.isFinite(tier.price)) {
-        pricing[tier.seatingSectorId] = tier.price
-      }
-    }
-    setVenuePricingMap(pricing)
-
-    const pricable = listPricableSectors(venue)
-    const isSingleBlank =
-      currentTickets.length === 1 &&
-      !currentTickets[0]?.name?.trim() &&
-      (currentTickets[0]?.price == null ||
-        !Number.isFinite(currentTickets[0]?.price)) &&
-      (currentTickets[0]?.capacity == null ||
-        !Number.isFinite(currentTickets[0]?.capacity)) &&
-      !currentTickets[0]?.seatingSectorId &&
-      !(currentTickets[0]?.sold && currentTickets[0].sold > 0)
-
-    if (isSingleBlank && pricable.length > 0) {
-      const hasSeatingLayout = venue.seatingLayout.length > 0
-      form.setValue(
-        "tickets",
-        pricable.map((sector) => {
-          const layoutSector = venue.seatingLayout.find((s) => s.id === sector.id)
-          const layoutType = hasSeatingLayout
-            ? (layoutSector?.layout_type ??
-              (sector.type === "general" ? "general" : "numbered_seat"))
-            : "general"
-          const availableUnits = layoutSector
-            ? getVenueSeatingItems(layoutSector).filter(
-                (item) => item.status !== "blocked",
-              ).length
-            : venue.capacity
-          return {
-            name: sector.name,
-            price: undefined as unknown as number,
-            capacity:
-              sector.type === "general" || !hasSeatingLayout
-                ? Math.max(1, venue.capacity)
-                : Math.max(1, availableUnits || venue.capacity),
-            timeLimit: "",
-            bonusReward: "",
-            dayId: null,
-            visibility: "public" as const,
-            layoutType,
-            seatingSectorId: layoutType === "general" ? null : sector.id,
-            capacityPerUnit: layoutSector?.capacity_per_unit ?? 1,
-            admitCount: 1,
-            tierType: layoutType === "general" ? "general" : "seated",
-            listPrice: null,
-            bundleItems: [],
-            description: "",
-            highlightBadge: null,
-          }
-        }),
-      )
-    }
+    applyMapInventory(
+      seatingLayoutToVenueMap(
+        venue.seatingLayout,
+        parseVenueMap(venue.venueMap),
+      ),
+    )
   }
 
   async function moveToStep(nextStep: number) {
     if (nextStep < 0 || nextStep >= steps.length) return
     flushAutosave()
     setActiveStep(nextStep)
-    setHighestStep(steps.length - 1)
     setWizardStep(nextStep)
   }
 
@@ -644,7 +426,7 @@ export function EventCreationWizard({
           <div className="flex flex-wrap items-center justify-end gap-2">
             <EventAutosaveIndicator />
           </div>
-          <TabsList className="grid w-full grid-cols-1 items-stretch gap-3 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/80 p-2 shadow-lg shadow-zinc-200/70 dark:shadow-black/20 backdrop-blur-md group-data-horizontal/tabs:h-auto sm:grid-cols-2 lg:grid-cols-5">
+          <TabsList className="grid w-full grid-cols-1 items-stretch gap-3 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/80 p-2 shadow-lg shadow-zinc-200/70 dark:shadow-black/20 backdrop-blur-md group-data-horizontal/tabs:h-auto sm:grid-cols-2 lg:grid-cols-4">
             {steps.map(({ title, description }, index) => {
               const completed = index < activeStep
               const available = true
@@ -1042,20 +824,21 @@ export function EventCreationWizard({
             >
               <CardHeader className="border-b border-zinc-200 dark:border-white/8 px-6 py-6 lg:px-8">
                 <CardTitle className="text-xl text-foreground">
-                  Lugar y mapa
+                  Mapa y sectores
                 </CardTitle>
                 <CardDescription className="text-muted-foreground">
-                  Provincia, dirección y pin en el mapa. Las zonas se configuran
-                  en el siguiente paso.
+                  Ubicación del predio e inventario visual. Precio y capacidad
+                  de cada zona se definen en el estudio, al trazar el polígono.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-7 px-6 py-7 lg:px-8">
                 <EventVenueStep
                   form={form}
                   venues={venueCatalog}
-                  onVenuesChange={setVenueCatalog}
+                  onVenuesChange={setLocalVenues}
                   onAppliedVenue={handleApplySavedVenue}
-                  focus="location"
+                  onMapInventoryChange={applyMapInventory}
+                  focus="all"
                 />
               </CardContent>
             </TabsContent>
@@ -1067,20 +850,19 @@ export function EventCreationWizard({
             >
               <CardHeader className="border-b border-zinc-200 dark:border-white/8 px-6 py-6 lg:px-8">
                 <CardTitle className="text-xl text-foreground">
-                  Zonas y sectores
+                  Tickets y combos
                 </CardTitle>
                 <CardDescription className="text-muted-foreground">
-                  Creá sectores (Azul, Naranja, General) y rangos de numeración.
+                  Entradas generales, adicionales y combos. El aforo del
+                  recinto limita el stock. Las preventas van como lotes de
+                  una misma entrada, no como tipos duplicados.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-7 px-6 py-7 lg:px-8">
-                <EventVenueStep
-                  form={form}
-                  venues={venueCatalog}
-                  onVenuesChange={setVenueCatalog}
-                  onAppliedVenue={handleApplySavedVenue}
-                  focus="zones"
-                />
+              <CardContent className="space-y-4 px-6 py-7 lg:px-8">
+                <UnifiedInventoryPanel form={form} />
+                <FormMessage>
+                  {form.formState.errors.tickets?.root?.message}
+                </FormMessage>
               </CardContent>
             </TabsContent>
 
@@ -1091,763 +873,7 @@ export function EventCreationWizard({
             >
               <CardHeader className="border-b border-zinc-200 dark:border-white/8 px-6 py-6 lg:px-8">
                 <CardTitle className="text-xl text-foreground">
-                  Entradas y combos
-                </CardTitle>
-                <CardDescription className="text-muted-foreground">
-                  El inventario unificado también se edita en el paso del lugar.
-                  Acá afinás precios, visibilidad y combos.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4 px-6 py-7 lg:px-8">
-                {venueMode === "existing" && selectedVenue ? (
-                  <VenueSeatPricingPanel
-                    venue={selectedVenue}
-                    pricingMap={venuePricingMap}
-                    onPricingChange={handleVenuePricingChange}
-                    eventTitle={eventTitle}
-                  />
-                ) : null}
-                {selectedVenue || (watchedTickets?.length ?? 0) > 0 ? (
-                  <ZoneTierPricingMatrix
-                    sectors={
-                      selectedVenue
-                        ? listPricableSectors(selectedVenue).map((sector) => ({
-                            id: sector.id,
-                            name: sector.name,
-                          }))
-                        : (form.getValues("venue.zones") ?? []).map(
-                            (zone, index) => ({
-                              id: `zone-${index}-${zone.name}`,
-                              name: zone.name,
-                            }),
-                          )
-                    }
-                    tiers={(watchedTickets ?? []).flatMap((tier, index) => {
-                      const id = tier.id ?? fields[index]?.id
-                      if (!id && !tier.name) return []
-                      return [
-                        {
-                          id: id || `draft-tier-${index}`,
-                          name: tier.name || `Entrada ${index + 1}`,
-                          price: Number(tier.price) || 0,
-                          layoutType: tier.layoutType ?? "general",
-                        },
-                      ]
-                    })}
-                    rows={zoneTierPricing}
-                    onChange={setZoneTierPricing}
-                  />
-                ) : null}
-                {(watchedTickets ?? []).map((tier, index) => {
-                  const tierLayoutType =
-                    watchedTickets?.[index]?.layoutType ?? tier.layoutType
-                  const inventoryType = inferInventoryTierType({
-                    tierType: watchedTickets?.[index]?.tierType,
-                    layoutType: tierLayoutType,
-                    bundleItems: watchedTickets?.[index]?.bundleItems,
-                  })
-                  const typeLabel =
-                    inventoryType === "seated"
-                      ? "Numerada"
-                      : inventoryType === "addon"
-                        ? "Adicional"
-                        : inventoryType === "bundle"
-                          ? "Combo"
-                          : "General"
-                  const compatibleSectors = numberedSectors.filter(
-                    (sector) => sector.layout_type === tierLayoutType,
-                  )
-
-                  return (
-                  <Card
-                    key={tier.id ?? `ticket-${index}`}
-                    className="border-0 bg-background dark:bg-zinc-950 py-0 ring-1 ring-border"
-                  >
-                    <CardHeader className="flex-row items-center justify-between border-b border-zinc-200 dark:border-white/6 px-5 py-4">
-                      <div>
-                        <CardTitle className="text-sm text-foreground">
-                          Entrada {index + 1}
-                          <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                            {typeLabel}
-                          </span>
-                        </CardTitle>
-                        <CardDescription className="text-xs text-zinc-600">
-                          {(tier.sold ?? 0) > 0
-                            ? `${tier.sold} reservadas/vendidas · no se puede eliminar`
-                            : "Nombre, precio y cupo"}
-                        </CardDescription>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        disabled={
-                          (watchedTickets?.length ?? 1) <= 1 ||
-                          (tier.sold ?? 0) > 0
-                        }
-                        onClick={() => {
-                          const next = (form.getValues("tickets") ?? []).filter(
-                            (_, current) => current !== index,
-                          )
-                          form.setValue("tickets", next, { shouldDirty: true })
-                        }}
-                        className="text-zinc-600 hover:bg-red-500/10 hover:text-red-400"
-                        aria-label={`Eliminar entrada ${index + 1}`}
-                      >
-                        <Trash2 />
-                      </Button>
-                    </CardHeader>
-                    <CardContent className="space-y-5 px-5 py-5">
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <FormField
-                          control={form.control}
-                          name={`tickets.${index}.name`}
-                          render={({ field, fieldState }) => (
-                            <FormItem>
-                              <FormLabel htmlFor={`tier-${index}-name`}>
-                                Nombre de la entrada
-                              </FormLabel>
-                              <Input
-                                {...field}
-                                id={`tier-${index}-name`}
-                                placeholder="Ej. General, VIP, Preventa"
-                                className="h-10 border-zinc-200 dark:border-white/10 bg-background dark:bg-zinc-950"
-                              />
-                              <FormMessage>
-                                {fieldState.error?.message}
-                              </FormMessage>
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={form.control}
-                          name={`tickets.${index}.capacity`}
-                          render={({ field, fieldState }) => (
-                            <FormItem>
-                              <FormLabel htmlFor={`tier-${index}-capacity`}>
-                                Capacidad (Aforo máximo)
-                              </FormLabel>
-                              <NumberInput
-                                id={`tier-${index}-capacity`}
-                                min={1}
-                                placeholder="Ej. 200"
-                                value={field.value}
-                                onChange={(value) => field.onChange(value)}
-                                className="h-10 border-zinc-200 dark:border-white/10 bg-background dark:bg-zinc-950"
-                              />
-                              <p className="text-xs text-muted-foreground">
-                                Cantidad máxima de esta entrada. Limitá el cupo
-                                si querés generar urgencia.
-                              </p>
-                              <FormMessage>
-                                {fieldState.error?.message}
-                              </FormMessage>
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-
-                      {form.watch(`tickets.${index}.layoutType`) ===
-                      "general" ? (
-                        <FormField
-                          control={form.control}
-                          name={`tickets.${index}.admitCount`}
-                          render={({ field, fieldState }) => (
-                            <FormItem>
-                              <FormLabel htmlFor={`tier-${index}-admit`}>
-                                Personas por unidad (QRs)
-                              </FormLabel>
-                              <NumberInput
-                                id={`tier-${index}-admit`}
-                                min={1}
-                                max={50}
-                                placeholder="1"
-                                value={field.value}
-                                onChange={(value) => field.onChange(value)}
-                                className="h-10 border-zinc-200 bg-background dark:border-white/10 dark:bg-zinc-950"
-                              />
-                              <p className="text-xs text-muted-foreground">
-                                Ej: Mesa para 4 → 4. Genera QRs independientes
-                                por cada compra.
-                              </p>
-                              <FormMessage>
-                                {fieldState.error?.message}
-                              </FormMessage>
-                            </FormItem>
-                          )}
-                        />
-                      ) : null}
-
-                      <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950/50">
-                        <div className="mb-4 flex items-start gap-3">
-                          <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-indigo-500/20 bg-indigo-500/10 text-indigo-300">
-                            <Armchair className="size-4" aria-hidden="true" />
-                          </span>
-                          <div>
-                            <p className="text-sm font-semibold text-foreground">
-                              Modalidad de acceso
-                            </p>
-                            <p className="mt-0.5 text-xs text-muted-foreground">
-                              Vinculá esta entrada con una zona numerada del
-                              lugar.
-                            </p>
-                          </div>
-                        </div>
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <FormField
-                            control={form.control}
-                            name={`tickets.${index}.layoutType`}
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel
-                                  htmlFor={`tier-${index}-layout-type`}
-                                >
-                                  Tipo de acceso
-                                </FormLabel>
-                                <Select
-                                  value={field.value}
-                                  onValueChange={(value) => {
-                                    const layoutType =
-                                      value === "table_combo" ||
-                                      value === "numbered_seat"
-                                        ? value
-                                        : "general"
-                                    field.onChange(layoutType)
-                                    form.setValue(
-                                      `tickets.${index}.seatingSectorId`,
-                                      null,
-                                    )
-                                    form.setValue(
-                                      `tickets.${index}.capacityPerUnit`,
-                                      1,
-                                    )
-                                  }}
-                                  items={[
-                                    { value: "general", label: "Entrada general" },
-                                    {
-                                      value: "table_combo",
-                                      label: "Mesa / combo cerrado",
-                                    },
-                                    {
-                                      value: "numbered_seat",
-                                      label: "Asiento numerado",
-                                    },
-                                  ]}
-                                >
-                                  <SelectTrigger
-                                    id={`tier-${index}-layout-type`}
-                                    className="h-10 w-full max-w-full overflow-hidden border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
-                                  >
-                                    <SelectValue>
-                                      {field.value === "table_combo"
-                                        ? "Mesa / combo cerrado"
-                                        : field.value === "numbered_seat"
-                                          ? "Asiento numerado"
-                                          : "Entrada general"}
-                                    </SelectValue>
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="general">
-                                      Entrada general
-                                    </SelectItem>
-                                    <SelectItem
-                                      value="table_combo"
-                                      disabled={
-                                        !numberedSectors.some(
-                                          (sector) =>
-                                            sector.layout_type ===
-                                            "table_combo",
-                                        )
-                                      }
-                                    >
-                                      Mesa / combo cerrado
-                                    </SelectItem>
-                                    <SelectItem
-                                      value="numbered_seat"
-                                      disabled={
-                                        !numberedSectors.some(
-                                          (sector) =>
-                                            sector.layout_type ===
-                                            "numbered_seat",
-                                        )
-                                      }
-                                    >
-                                      Asiento numerado
-                                    </SelectItem>
-                                  </SelectContent>
-                                </Select>
-                                <FormDescription>
-                                  {numberedSectors.length === 0
-                                    ? "Este lugar no tiene zonas numeradas configuradas."
-                                    : "La entrada general no necesita selección de asiento."}
-                                </FormDescription>
-                              </FormItem>
-                            )}
-                          />
-
-                          {tierLayoutType !== "general" ? (
-                            <FormField
-                              control={form.control}
-                              name={`tickets.${index}.seatingSectorId`}
-                              render={({ field, fieldState }) => (
-                                <FormItem>
-                                  <FormLabel
-                                    htmlFor={`tier-${index}-seating-sector`}
-                                  >
-                                    Zona del mapa
-                                  </FormLabel>
-                                  <Select
-                                    value={field.value ?? ""}
-                                    onValueChange={(value) => {
-                                      field.onChange(value)
-                                      const sector = compatibleSectors.find(
-                                        (item) => item.id === value,
-                                      )
-                                      if (!sector) return
-                                      form.setValue(
-                                        `tickets.${index}.capacityPerUnit`,
-                                        sector.capacity_per_unit,
-                                      )
-                                      form.setValue(
-                                        `tickets.${index}.capacity`,
-                                        getVenueSeatingItems(sector).filter(
-                                          (item) =>
-                                            item.status === "available",
-                                        ).length,
-                                      )
-                                    }}
-                                    items={compatibleSectors.map((sector) => ({
-                                      value: sector.id,
-                                      label: `${sector.sector_name} · ${
-                                        getVenueSeatingItems(sector).filter(
-                                          (item) => item.status === "available",
-                                        ).length
-                                      } unidades`,
-                                    }))}
-                                  >
-                                    <SelectTrigger
-                                      id={`tier-${index}-seating-sector`}
-                                      className="h-10 w-full max-w-full overflow-hidden border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
-                                    >
-                                      <SelectValue placeholder="Elegí una zona">
-                                        {(() => {
-                                          const sector = compatibleSectors.find(
-                                            (item) => item.id === field.value,
-                                          )
-                                          if (!sector) return null
-                                          return `${sector.sector_name} · ${
-                                            getVenueSeatingItems(sector).filter(
-                                              (item) =>
-                                                item.status === "available",
-                                            ).length
-                                          } unidades`
-                                        })()}
-                                      </SelectValue>
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {compatibleSectors.map((sector) => (
-                                        <SelectItem
-                                          key={sector.id}
-                                          value={sector.id}
-                                        >
-                                          <span className="block max-w-[200px] truncate sm:max-w-[300px]">
-                                            {sector.sector_name}
-                                          </span>
-                                          <span className="shrink-0 text-sm text-muted-foreground">
-                                            {
-                                              getVenueSeatingItems(sector)
-                                                .filter(
-                                                  (item) =>
-                                                    item.status === "available",
-                                                ).length
-                                            }{" "}
-                                            unidades
-                                          </span>
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                  <FormDescription>
-                                    {compatibleSectors.find(
-                                      (sector) => sector.id === field.value,
-                                    )?.capacity_per_unit ?? 1}{" "}
-                                    personas por QR maestro.
-                                  </FormDescription>
-                                  <FormMessage>
-                                    {fieldState.error?.message}
-                                  </FormMessage>
-                                </FormItem>
-                              )}
-                            />
-                          ) : null}
-                        </div>
-                      </div>
-
-                      {isMultiDay ? (
-                        <FormField
-                          control={form.control}
-                          name={`tickets.${index}.dayId`}
-                          render={({ field, fieldState }) => (
-                            <FormItem>
-                              <FormLabel
-                                htmlFor={`tier-${index}-day`}
-                                className="flex items-center gap-1.5"
-                              >
-                                <CalendarDays
-                                  className="size-3.5 text-emerald-700 dark:text-emerald-400"
-                                  aria-hidden="true"
-                                />
-                                ¿Para qué fecha es válida esta entrada?
-                              </FormLabel>
-                              <Select
-                                value={field.value || "all"}
-                                onValueChange={(value) =>
-                                  field.onChange(
-                                    value === "all" ? null : value,
-                                  )
-                                }
-                                items={[
-                                  {
-                                    value: "all",
-                                    label: "Abono completo (todas las noches)",
-                                  },
-                                  ...(scheduleDays ?? []).map((day) => ({
-                                    value: day.id,
-                                    label: day.title || "Jornada sin nombre",
-                                  })),
-                                ]}
-                              >
-                                <SelectTrigger
-                                  id={`tier-${index}-day`}
-                                  className="h-10 w-full max-w-full overflow-hidden border-zinc-200 bg-background dark:border-white/10 dark:bg-zinc-950"
-                                >
-                                  <SelectValue placeholder="Elegí jornada">
-                                    {field.value
-                                      ? (scheduleDays ?? []).find(
-                                          (day) => day.id === field.value,
-                                        )?.title || "Jornada sin nombre"
-                                      : "Abono completo (todas las noches)"}
-                                  </SelectValue>
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="all">
-                                    Abono completo (todas las noches)
-                                  </SelectItem>
-                                  {(scheduleDays ?? []).map((day) => (
-                                    <SelectItem key={day.id} value={day.id}>
-                                      <span className="block max-w-[200px] truncate sm:max-w-[300px]">
-                                        {day.title || "Jornada sin nombre"}
-                                      </span>
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage>
-                                {fieldState.error?.message}
-                              </FormMessage>
-                            </FormItem>
-                          )}
-                        />
-                      ) : null}
-
-                      <FormField
-                        control={form.control}
-                        name={`tickets.${index}.visibility`}
-                        render={({ field }) => (
-                          <FormItem className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/50 px-3 py-2.5">
-                            <div className="flex items-start gap-2">
-                              <EyeOff
-                                className="mt-0.5 size-4 shrink-0 text-muted-foreground"
-                                aria-hidden="true"
-                              />
-                              <div>
-                                <FormLabel className="text-sm text-foreground">
-                                  Oculta al público
-                                </FormLabel>
-                                <FormDescription className="text-xs text-muted-foreground">
-                                  Solo promotores y RRPP / enlace exclusivo
-                                </FormDescription>
-                              </div>
-                            </div>
-                            <Switch
-                              checked={field.value === "private"}
-                              onCheckedChange={(checked) =>
-                                field.onChange(
-                                  checked ? "private" : "public",
-                                )
-                              }
-                              aria-label="Ocultar entrada al público"
-                            />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name={`tickets.${index}.price`}
-                        render={({ field, fieldState }) => {
-                          const breakdown = allInBreakdown(
-                            field.value ?? 0,
-                            organizerServiceRate,
-                            platformFixedFee,
-                          )
-                          return (
-                            <FormItem>
-                              <FormLabel
-                                htmlFor={`tier-${index}-price`}
-                                className="block font-mono text-xs font-semibold uppercase tracking-wider text-foreground"
-                              >
-                                Precio que ve el comprador
-                              </FormLabel>
-                              <div className="relative">
-                                <CircleDollarSign className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-600" />
-                                <PriceInput
-                                  id={`tier-${index}-price`}
-                                  min={0}
-                                  placeholder="Ej. 15000"
-                                  value={field.value}
-                                  onValueChange={(value) =>
-                                    field.onChange(value ?? 0)
-                                  }
-                                  className="h-12 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 pl-9"
-                                />
-                              </div>
-                              <div className="my-3 space-y-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/60 p-3.5 font-mono text-xs text-muted-foreground">
-                                <p>
-                                  Precio que ve el comprador:{" "}
-                                  <span className="text-foreground">
-                                    {formatCurrency(breakdown.publicPrice)}
-                                  </span>
-                                </p>
-                                <p className="text-rose-300/80">
-                                  Comisión Tokepass (
-                                  {Math.round(organizerServiceRate * 100)}%
-                                  {platformFixedFee > 0
-                                    ? ` + ${formatCurrency(platformFixedFee)}`
-                                    : ""}
-                                  ): -{formatCurrency(breakdown.platformFee)}
-                                </p>
-                              </div>
-                              <div className="flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3">
-                                <span className="font-sans text-xs font-bold uppercase text-emerald-700 dark:text-emerald-400">
-                                  Te queda en mano
-                                </span>
-                                <span className="font-mono text-lg font-extrabold text-foreground">
-                                  {formatCurrency(breakdown.basePrice)}
-                                </span>
-                              </div>
-                              <p className="text-xs leading-5 text-muted-foreground">
-                                Hacerme cargo de la comisión (El comprador paga
-                                el precio exacto, la comisión se descuenta de tu
-                                ganancia).
-                              </p>
-                              <FormMessage>
-                                {fieldState.error?.message}
-                              </FormMessage>
-                            </FormItem>
-                          )
-                        }}
-                      />
-
-                      <Accordion>
-                        <AccordionItem
-                          value={`smart-yield-${tier.id ?? index}`}
-                          className="border-0"
-                        >
-                          <AccordionTrigger className="rounded-xl bg-zinc-50 dark:bg-white/[0.025] px-4 text-foreground hover:no-underline">
-                            <span className="flex items-center gap-2">
-                              <Gift className="size-4 text-violet-400" />
-                              Opciones avanzadas
-                            </span>
-                          </AccordionTrigger>
-                          <AccordionContent className="grid gap-4 px-4 pt-4 md:grid-cols-2">
-                            <FormField
-                              control={form.control}
-                              name={`tickets.${index}.timeLimit`}
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel htmlFor={`tier-${index}-time-limit`}>
-                                    Límite de ingreso
-                                  </FormLabel>
-                                  <Select
-                                    value={field.value || "none"}
-                                    onValueChange={(value) =>
-                                      field.onChange(
-                                        value === "none" ? "" : value,
-                                      )
-                                    }
-                                    items={[
-                                      { value: "none", label: "Sin límite" },
-                                      {
-                                        value: "00:00",
-                                        label: "Hasta las 00:00",
-                                      },
-                                      {
-                                        value: "01:00",
-                                        label: "Hasta la 01:00",
-                                      },
-                                      {
-                                        value: "02:00",
-                                        label: "Hasta las 02:00",
-                                      },
-                                    ]}
-                                  >
-                                    <SelectTrigger
-                                      id={`tier-${index}-time-limit`}
-                                      className="h-10 w-full max-w-full overflow-hidden border-zinc-200 bg-background dark:border-white/10 dark:bg-zinc-950"
-                                    >
-                                      <SelectValue placeholder="Sin límite">
-                                        {!field.value
-                                          ? "Sin límite"
-                                          : field.value === "00:00"
-                                            ? "Hasta las 00:00"
-                                            : field.value === "01:00"
-                                              ? "Hasta la 01:00"
-                                              : field.value === "02:00"
-                                                ? "Hasta las 02:00"
-                                                : field.value}
-                                      </SelectValue>
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="none">
-                                        Sin límite
-                                      </SelectItem>
-                                      <SelectItem value="00:00">
-                                        Hasta las 00:00
-                                      </SelectItem>
-                                      <SelectItem value="01:00">
-                                        Hasta la 01:00
-                                      </SelectItem>
-                                      <SelectItem value="02:00">
-                                        Hasta las 02:00
-                                      </SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                  <FormDescription>
-                                    Incentiva el check-in temprano.
-                                  </FormDescription>
-                                </FormItem>
-                              )}
-                            />
-                            <FormField
-                              control={form.control}
-                              name={`tickets.${index}.bonusReward`}
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel htmlFor={`tier-${index}-reward`}>
-                                    Premio por llegar antes
-                                  </FormLabel>
-                                  <Input
-                                    {...field}
-                                    id={`tier-${index}-reward`}
-                                    placeholder="Ej. 1 consumición"
-                                    className="h-10 border-zinc-200 dark:border-white/10 bg-background dark:bg-zinc-950"
-                                  />
-                                </FormItem>
-                              )}
-                            />
-                          </AccordionContent>
-                        </AccordionItem>
-                      </Accordion>
-                    </CardContent>
-                  </Card>
-                  )
-                })}
-
-                <div className="grid gap-2 sm:grid-cols-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() =>
-                      form.setValue(
-                        "tickets",
-                        [
-                          ...(form.getValues("tickets") ?? []),
-                          {
-                            ...createInventoryTicket("general"),
-                            name: "",
-                          },
-                        ],
-                        { shouldDirty: true },
-                      )
-                    }
-                    className="h-11 border-dashed"
-                  >
-                    <Ticket />
-                    Sector general
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() =>
-                      form.setValue(
-                        "tickets",
-                        [
-                          ...(form.getValues("tickets") ?? []),
-                          {
-                            ...createInventoryTicket("addon"),
-                            name: "",
-                          },
-                        ],
-                        { shouldDirty: true },
-                      )
-                    }
-                    className="h-11 border-dashed"
-                  >
-                    <Car />
-                    Adicional
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() =>
-                      form.setValue(
-                        "tickets",
-                        [
-                          ...(form.getValues("tickets") ?? []),
-                          {
-                            ...createInventoryTicket("bundle"),
-                            name: "",
-                          },
-                        ],
-                        { shouldDirty: true },
-                      )
-                    }
-                    className="h-11 border-dashed"
-                  >
-                    <Gift />
-                    Combo / kit
-                  </Button>
-                </div>
-
-                <FormMessage>
-                  {form.formState.errors.tickets?.root?.message}
-                </FormMessage>
-
-                {resultMessage && (
-                  <p
-                    role="status"
-                    className={cn(
-                      "rounded-xl px-4 py-3 text-sm",
-                      resultMessage.type === "success"
-                        ? "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
-                        : "bg-red-500/10 text-red-300",
-                    )}
-                  >
-                    {resultMessage.text}
-                  </p>
-                )}
-              </CardContent>
-            </TabsContent>
-
-            <TabsContent
-              keepMounted
-              value="4"
-              className="animate-in fade-in slide-in-from-right-2 duration-300"
-            >
-              <CardHeader className="border-b border-zinc-200 dark:border-white/8 px-6 py-6 lg:px-8">
-                <CardTitle className="text-xl text-foreground">
-                  Cobros y publicación
+                  Configuración final
                 </CardTitle>
                 <CardDescription className="text-muted-foreground">
                   Medios de pago, privacidad del evento y publicación. El

@@ -5,8 +5,10 @@ import { useId, useRef } from "react"
 import {
   isCloseToFirstVertex,
   polygonSvgPoints,
+  polygonToCanvas,
   zoneCanvasCentroid,
 } from "@/lib/seating/venue-polygon"
+import { cn } from "@/lib/utils"
 import type { VenueMapPoint, VenueMapZone } from "@/types/venue-map"
 
 function canvasSvgPoints(points: VenueMapPoint[]): string {
@@ -56,45 +58,88 @@ export function VenueMapZoneLayer({
       </defs>
 
       {zones.map((zone) => {
+        const canvasPoints = polygonToCanvas(zone.polygon)
+        if (canvasPoints.length < 3) return null
         const points = polygonSvgPoints(zone.polygon)
         const center = zoneCanvasCentroid(zone)
         const selected = zone.id === selectedId
+        const interactive = Boolean(onSelect)
+
+        function eventClientPoint(event: React.SyntheticEvent) {
+          if ("clientX" in event && typeof event.clientX === "number") {
+            return { x: event.clientX, y: Number(event.clientY) }
+          }
+          if ("changedTouches" in event) {
+            const touch = event.changedTouches[0]
+            if (touch) return { x: touch.clientX, y: touch.clientY }
+          }
+          return null
+        }
+
+        function handleZoneClick(
+          event: React.SyntheticEvent,
+          requireTap = false,
+        ) {
+          if (!onSelect) return
+          if (requireTap) {
+            const start = press.current
+            const point = eventClientPoint(event)
+            if (
+              start &&
+              point &&
+              Math.hypot(point.x - start.x, point.y - start.y) > 10
+            ) {
+              return
+            }
+          }
+          event.stopPropagation()
+          onSelect(zone)
+        }
+
         return (
           <g
             key={zone.id}
-            className={onSelect ? "cursor-pointer" : undefined}
+            data-zone-id={zone.id}
+            className={interactive ? "cursor-pointer" : undefined}
+            style={{ pointerEvents: interactive ? "auto" : "none" }}
             onContextMenu={(event) => onContextMenu?.(event, zone)}
             onPointerDown={(event) => {
-              if (!onSelect) return
+              if (!interactive) return
               press.current = { x: event.clientX, y: event.clientY }
               if (selectOnPointerUp) return
-              event.stopPropagation()
               if (event.button !== 0) return
-              onSelect(zone)
+              handleZoneClick(event)
             }}
             onPointerUp={(event) => {
-              if (!onSelect || !selectOnPointerUp) return
-              event.stopPropagation()
+              if (!interactive || !selectOnPointerUp) return
               if (event.button !== 0) return
-              const start = press.current
+              handleZoneClick(event, true)
               press.current = null
-              if (
-                start &&
-                Math.hypot(event.clientX - start.x, event.clientY - start.y) > 10
-              ) {
-                return
-              }
-              onSelect(zone)
+            }}
+            onClick={(event) => {
+              if (!interactive) return
+              handleZoneClick(event, selectOnPointerUp)
+            }}
+            onTouchEnd={(event) => {
+              if (!interactive) return
+              handleZoneClick(event, true)
+              press.current = null
             }}
           >
             <polygon
+              data-zone-id={zone.id}
               points={points}
-              fill={zone.color}
-              fillOpacity={selected ? 0.32 : 0.18}
-              stroke={zone.color}
+              fill={zone.color || "#22d3ee"}
+              stroke={zone.color || "#67e8f9"}
               strokeWidth={selected ? 2.8 : 2}
               strokeLinejoin="round"
+              pointerEvents="auto"
               filter={`url(#zone-neon-${glowId})`}
+              className={cn(
+                selected ? "[fill-opacity:0.4]" : "[fill-opacity:0.28]",
+                interactive &&
+                  "cursor-pointer transition-[fill-opacity] duration-150 hover:[fill-opacity:0.75]",
+              )}
             />
             <text
               x={center.x}

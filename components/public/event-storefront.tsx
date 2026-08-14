@@ -7,6 +7,7 @@ import {
   ShieldCheck,
   Sparkles,
 } from "lucide-react"
+import { useMemo } from "react"
 
 import type { EventDetails } from "@/app/actions/public-events"
 import type { ResaleListingPublic } from "@/app/actions/resale"
@@ -100,6 +101,31 @@ export function EventStorefront({
   const organizerBio =
     event.organizerBio?.trim() || "Productora en Tokepass"
 
+  const ticketTiers = useMemo(
+    () =>
+      event.tiers.map((tier) => ({
+        id: tier.id,
+        name: tier.name,
+        price: tier.price,
+        available: tier.available,
+        bonusReward: tier.bonus_reward,
+        dayId: tier.day_id,
+        layoutType: tier.layout_type,
+        seatingSectorId: tier.seating_sector_id,
+        capacityPerUnit: tier.capacity_per_unit,
+        category: tier.category,
+        listPrice: tier.list_price,
+        comboItems: event.comboItemsByTier[tier.id] ?? [],
+        tierType: tier.tier_type,
+        bundleType: tier.bundle_type,
+        description: tier.description,
+        highlightBadge: tier.highlight_badge,
+        sold: tier.sold,
+        phases: tier.phases ?? [],
+      })),
+    [event.comboItemsByTier, event.tiers],
+  )
+
   const checkout = finished ? (
     <EventSaleStatusNotice state="finished" />
   ) : (
@@ -130,25 +156,7 @@ export function EventStorefront({
         pixels={event.pixels}
         zoneTierPricing={event.zoneTierPricing}
         purchaseLocked={soldOut}
-        tiers={event.tiers.map((tier) => ({
-          id: tier.id,
-          name: tier.name,
-          price: tier.price,
-          available: tier.available,
-          bonusReward: tier.bonus_reward,
-          dayId: tier.day_id,
-          layoutType: tier.layout_type,
-          seatingSectorId: tier.seating_sector_id,
-          capacityPerUnit: tier.capacity_per_unit,
-          category: tier.category,
-          listPrice: tier.list_price,
-          comboItems: event.comboItemsByTier[tier.id] ?? [],
-          tierType: tier.tier_type,
-          bundleType: tier.bundle_type,
-          description: tier.description,
-          highlightBadge: tier.highlight_badge,
-          sold: tier.sold,
-        }))}
+        tiers={ticketTiers}
         defaultTicketTab={event.defaultTicketTab}
       />
     </>

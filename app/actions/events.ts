@@ -42,6 +42,7 @@ import {
 } from "@/lib/validations/event-form"
 import type { Database, Event, EventStatus, Json, Venue } from "@/types/database"
 import { parseVenueMap, serializeVenueMap } from "@/types/venue-map"
+import { composeVenuePlace } from "@/lib/venues/compose-location"
 import { logger } from "@/lib/logger"
 
 export type OrganizerEvent = Pick<
@@ -273,11 +274,13 @@ function mapEventFormToRpcPayload(
       1,
     )
 
-  const location =
-    [data.venue.venueLocation, data.venue.venueCity]
-      .map((part) => part?.trim())
-      .filter(Boolean)
-      .join(", ") || data.venue.venueName
+  const place = composeVenuePlace({
+    street: data.venue.venueLocation,
+    department: data.venue.department,
+    province: data.venue.province,
+    city: data.venue.venueCity,
+  })
+  const location = place.display || data.venue.venueName
 
   const scheduleDays = data.basics.isMultiDay
     ? data.basics.scheduleDays.map((day) => ({
@@ -313,11 +316,11 @@ function mapEventFormToRpcPayload(
       ? data.basics.ageRestriction
       : "atp",
     schedule_days: scheduleDays,
-    venue_id:
-      data.venue.mode === "existing" ? data.venue.existingVenueId ?? null : null,
+    venue_id: data.venue.existingVenueId?.trim() || null,
     venue: {
       name: data.venue.venueName,
-      location,
+      location: place.street || location,
+      city: place.city,
       capacity: venueCapacity,
     },
     zones,
@@ -362,6 +365,7 @@ function mapEventFormToRpcPayload(
           layoutType === "general"
             ? Math.max(1, Math.min(50, tier.admitCount ?? 1))
             : 1,
+        total_capacity: tier.capacity,
       }
     }),
     rrpp_commission: null,
@@ -373,47 +377,99 @@ async function persistEventVenueFields(
   client: SupabaseClient<Database>,
   eventId: string,
   data: EventFormValues,
-) {
+): Promise<string | null> {
   const { data: eventRow } = await client
     .from("events")
-    .select("id, venue_id")
+    .select("id, venue_id, organizer_id")
     .eq("id", eventId)
     .maybeSingle()
 
-  const venueId =
-    (data.venue.mode === "existing" ? data.venue.existingVenueId : null) ??
-    eventRow?.venue_id ??
-    null
-
+  const place = composeVenuePlace({
+    street: data.venue.venueLocation,
+    department: data.venue.department,
+    province: data.venue.province,
+    city: data.venue.venueCity,
+  })
   const province = data.venue.province?.trim() || null
   const department = data.venue.department?.trim() || null
-  const city =
-    [department, province].filter(Boolean).join(", ") ||
-    data.venue.venueCity?.trim() ||
-    null
-  const location =
-    [data.venue.venueLocation, city]
-      .map((part) => part?.trim())
-      .filter(Boolean)
-      .join(", ") || data.venue.venueName
+  const location = place.display || data.venue.venueName
   const venueMap = serializeVenueMap(parseVenueMap(data.venue.venueMap)) as unknown as Json
   const seatingLayout = (data.venue.seatingLayout ?? []) as unknown as Json
   const now = new Date().toISOString()
 
+  let venueId =
+    data.venue.existingVenueId?.trim() || eventRow?.venue_id || null
+
+  const venuePatch = {
+    name: data.venue.venueName.trim() || undefined,
+    location: place.street || location,
+    address: place.street || location,
+    city: place.city,
+    latitude: data.venue.latitude ?? null,
+    longitude: data.venue.longitude ?? null,
+    venue_map: venueMap,
+    seating_layout: seatingLayout,
+    seating_background_url: data.venue.seatingBackgroundUrl ?? null,
+    updated_at: now,
+  }
+
   if (venueId) {
-    const venuePatch = {
-      name: data.venue.venueName.trim() || undefined,
-      location: data.venue.venueLocation?.trim() || location,
-      address: data.venue.venueLocation?.trim() || location,
-      city,
+    const { data: owned } = await client
+      .from("venues")
+      .select("id")
+      .eq("id", venueId)
+      .maybeSingle()
+    if (!owned) venueId = eventRow?.venue_id ?? null
+  }
+
+  if (venueId) {
+    const withMax = {
+      ...venuePatch,
+      capacity: Math.max(1, Number(data.venue.capacity) || 1),
+      max_capacity: Math.max(1, Number(data.venue.capacity) || 1),
+    }
+    const updated = await client
+      .from("venues")
+      .update(withMax as never)
+      .eq("id", venueId)
+    if (
+      updated.error &&
+      /max_capacity|schema cache|PGRST204|42703/i.test(updated.error.message)
+    ) {
+      await client.from("venues").update(venuePatch as never).eq("id", venueId)
+    }
+  } else if (data.venue.venueName.trim() && eventRow?.organizer_id) {
+    const insertPayload = {
+      organizer_id: eventRow.organizer_id,
+      name: data.venue.venueName.trim(),
+      location: place.street || location,
+      address: place.street || location,
+      city: place.city,
       latitude: data.venue.latitude ?? null,
       longitude: data.venue.longitude ?? null,
+      capacity: Math.max(1, Number(data.venue.capacity) || 1),
+      max_capacity: Math.max(1, Number(data.venue.capacity) || 1),
       venue_map: venueMap,
       seating_layout: seatingLayout,
       seating_background_url: data.venue.seatingBackgroundUrl ?? null,
-      updated_at: now,
     }
-    await client.from("venues").update(venuePatch as never).eq("id", venueId)
+    let created = await client
+      .from("venues")
+      .insert(insertPayload as never)
+      .select("id")
+      .maybeSingle()
+    if (
+      created.error &&
+      /max_capacity|schema cache|PGRST204|42703/i.test(created.error.message)
+    ) {
+      const { max_capacity: _max, ...withoutMax } = insertPayload
+      created = await client
+        .from("venues")
+        .insert(withoutMax as never)
+        .select("id")
+        .maybeSingle()
+    }
+    venueId = created.data?.id ?? null
   }
 
   const eventCore = {
@@ -463,6 +519,8 @@ async function persistEventVenueFields(
   ) {
     await client.from("events").update(eventCore as never).eq("id", eventId)
   }
+
+  return venueId
 }
 
 async function materializeEventSeatingUnits(
@@ -560,6 +618,101 @@ async function syncTierAdmitCounts(
   }
 }
 
+function isMissingPhasesTable(message: string) {
+  return /ticket_tier_phases|schema cache|PGRST204|42703/i.test(message)
+}
+
+async function syncTicketTierPhases(
+  eventId: string,
+  tickets: EventFormValues["tickets"],
+) {
+  const admin = createAdminClient()
+  const { data: tiers, error: tiersError } = await admin
+    .from("ticket_tiers")
+    .select("id, name")
+    .eq("event_id", eventId)
+
+  if (tiersError || !tiers?.length) return
+
+  const { data: existing, error: existingError } = await admin
+    .from("ticket_tier_phases")
+    .select("id, tier_id, sold")
+    .in(
+      "tier_id",
+      tiers.map((tier) => tier.id),
+    )
+
+  if (existingError) {
+    if (isMissingPhasesTable(existingError.message)) return
+    return
+  }
+
+  const keepIds = new Set<string>()
+
+  for (const tier of tiers) {
+    const match =
+      tickets.find((item) => item.id && item.id === tier.id) ??
+      tickets.find((item) => item.name.trim() === tier.name.trim())
+    const phases = match?.phases ?? []
+    const parentCapacity = Math.max(1, Number(match?.capacity) || 1)
+
+    for (const [index, phase] of phases.entries()) {
+      const name = phase.name.trim() || `Lote ${index + 1}`
+      const price = Math.max(0, Number(phase.price) || 0)
+      const limit = Math.min(
+        parentCapacity,
+        Math.max(1, Number(phase.capacityLimit) || 1),
+      )
+      const status =
+        index === 0
+          ? ("active" as const)
+          : phase.status === "sold_out"
+            ? ("sold_out" as const)
+            : ("scheduled" as const)
+      const row = {
+        tier_id: tier.id,
+        name,
+        price,
+        capacity_limit: limit,
+        start_time: phase.startTime || null,
+        end_time: phase.endTime || null,
+        status,
+      }
+
+      if (phase.id) {
+        const { error } = await admin
+          .from("ticket_tier_phases")
+          .update(row)
+          .eq("id", phase.id)
+          .eq("tier_id", tier.id)
+        if (!error) keepIds.add(phase.id)
+        continue
+      }
+
+      const { data: created, error } = await admin
+        .from("ticket_tier_phases")
+        .insert(row)
+        .select("id")
+        .maybeSingle()
+      if (!error && created?.id) keepIds.add(created.id)
+    }
+  }
+
+  const stale = (existing ?? []).filter((row) => {
+    if (keepIds.has(row.id)) return false
+    return Number(row.sold) === 0
+  })
+  if (stale.length > 0) {
+    await admin
+      .from("ticket_tier_phases")
+      .delete()
+      .in(
+        "id",
+        stale.map((row) => row.id),
+      )
+  }
+}
+
 function parseAgeRestriction(raw: unknown): AgeRestriction {
   const value = String(raw ?? "").trim()
   if ((AGE_RESTRICTION_VALUES as readonly string[]).includes(value)) {
@@ -630,7 +783,7 @@ async function uploadEventFlyer(
 }
 
 export type CreateCompleteEventResult =
-  | { success: true; eventId: string }
+  | { success: true; eventId: string; venueId: string | null }
   | { success: false; error: string }
 
 export type EditableEventData = {
@@ -782,7 +935,7 @@ export async function getEventForEditing(
         ? supabase
             .from("venues")
             .select(
-              "id, name, location, city, capacity, zone_blueprint, latitude, longitude, seating_background_url, seating_layout, venue_map",
+              "id, name, location, address, city, capacity, zone_blueprint, latitude, longitude, seating_background_url, seating_layout, venue_map",
             )
             .eq("id", event.venue_id)
             .maybeSingle()
@@ -795,7 +948,7 @@ export async function getEventForEditing(
     if (event.venue_id && (venueResult.error || !venue)) {
       const fallback = await supabase
         .from("venues")
-        .select("id, name, location, city, capacity, zone_blueprint, seating_layout, venue_map")
+        .select("id, name, location, address, city, capacity, zone_blueprint, seating_layout, venue_map")
         .eq("id", event.venue_id)
         .maybeSingle()
       venue = fallback.data
@@ -833,7 +986,7 @@ export async function getEventForEditing(
         ? null
         : Number(venue.longitude)
 
-    const ticketValues = tiers.map((tier) => ({
+    const ticketValues: EventFormValues["tickets"] = tiers.map((tier) => ({
       id: tier.id,
       name: String(tier.name ?? "Entrada"),
       price: Number(tier.price) || 0,
@@ -885,7 +1038,41 @@ export async function getEventForEditing(
       bundleType: parseBundleType(
         (tier as { bundle_type?: string | null }).bundle_type,
       ),
+      phases: [],
     }))
+
+    const tierIds = tiers.map((tier) => tier.id)
+    if (tierIds.length > 0) {
+      const phasesQuery = await supabase
+        .from("ticket_tier_phases")
+        .select(
+          "id, tier_id, name, price, capacity_limit, start_time, end_time, status, sold, created_at",
+        )
+        .in("tier_id", tierIds)
+        .order("created_at")
+      if (!phasesQuery.error && phasesQuery.data) {
+        const byTier = new Map<string, EventFormValues["tickets"][number]["phases"]>()
+        for (const row of phasesQuery.data) {
+          const list = byTier.get(row.tier_id) ?? []
+          list.push({
+            id: row.id,
+            name: String(row.name ?? "Lote"),
+            price: Number(row.price) || 0,
+            capacityLimit: Math.max(1, Number(row.capacity_limit) || 1),
+            startTime: row.start_time,
+            endTime: row.end_time,
+            status: row.status,
+            sold: Math.max(0, Number(row.sold) || 0),
+          })
+          byTier.set(row.tier_id, list)
+        }
+        for (const ticket of ticketValues) {
+          if (ticket.id) {
+            ticket.phases = byTier.get(ticket.id) ?? []
+          }
+        }
+      }
+    }
 
     const { data: pricingRows } = await supabase
       .from("zone_tier_pricing")
@@ -936,8 +1123,23 @@ export async function getEventForEditing(
           existingVenueId: event.venue_id,
           zoneType: firstZone?.type ?? "general_admission",
           venueName: venue?.name ?? event.location,
-          venueLocation: venue?.location ?? event.location,
-          venueCity: venue?.city ?? [(event as { department?: string | null }).department, (event as { province?: string | null }).province].filter(Boolean).join(", "),
+          venueLocation: composeVenuePlace({
+            street:
+              (typeof venue?.address === "string" && venue.address.trim()) ||
+              venue?.location ||
+              event.location,
+            city: venue?.city,
+            department: (event as { department?: string | null }).department,
+            province: (event as { province?: string | null }).province,
+          }).street,
+          venueCity:
+            composeVenuePlace({
+              street: venue?.location,
+              city: venue?.city,
+              department: (event as { department?: string | null }).department,
+              province: (event as { province?: string | null }).province,
+            }).city ??
+            [(event as { department?: string | null }).department, (event as { province?: string | null }).province].filter(Boolean).join(", "),
           province:
             (event as { province?: string | null }).province ??
             (typeof venue?.city === "string" && venue.city.includes(",")
@@ -1181,7 +1383,12 @@ export async function createCompleteEvent(
   }
 
   await syncTierAdmitCounts(String(eventId), formValues.tickets)
-  await persistEventVenueFields(rpcClient, String(eventId), formValues)
+  await syncTicketTierPhases(String(eventId), formValues.tickets)
+  const venueId = await persistEventVenueFields(
+    rpcClient,
+    String(eventId),
+    formValues,
+  )
 
   if (!draftMode) {
     const { data: created } = await rpcClient
@@ -1208,7 +1415,7 @@ export async function createCompleteEvent(
     revalidatePath("/superadmin/events")
   }
 
-  return { success: true, eventId }
+  return { success: true, eventId, venueId }
 }
 
 /**
@@ -1359,7 +1566,12 @@ export async function updateCompleteEvent(
   }
 
   await syncTierAdmitCounts(eventId, formValues.tickets)
-  await persistEventVenueFields(mutationClient, eventId, formValues)
+  await syncTicketTierPhases(eventId, formValues.tickets)
+  const venueId = await persistEventVenueFields(
+    mutationClient,
+    eventId,
+    formValues,
+  )
 
   if (!draftMode) {
     const { data: live } = await mutationClient
@@ -1385,7 +1597,11 @@ export async function updateCompleteEvent(
     revalidatePath("/")
   }
 
-  return { success: true, eventId: String(updatedId ?? eventId) }
+  return {
+    success: true,
+    eventId: String(updatedId ?? eventId),
+    venueId,
+  }
 }
 
 export type PublishEventResult =

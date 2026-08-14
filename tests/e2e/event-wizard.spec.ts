@@ -5,7 +5,7 @@ import { e2eOrganizerConfigured, loginOrganizer } from "./helpers/auth"
 const PERSIST_KEY = "tokepass.event-form.v1"
 const DRAFT_TITLE = "Festival QA Persistencia Wizard"
 
-test.describe("Wizard de creación — 5 pasos y localStorage", () => {
+test.describe("Wizard de creación — 4 pasos y localStorage", () => {
   test("el contrato de persistencia sobrevive un reload en origen público", async ({
     page,
   }) => {
@@ -41,10 +41,10 @@ test.describe("Wizard de creación — 5 pasos y localStorage", () => {
               },
               venuePricingMap: {},
               zoneTierPricing: [],
-              wizardStep: 2,
+              wizardStep: 1,
               updatedAt: Date.now(),
             },
-            version: 0,
+            version: 2,
           }),
         )
       },
@@ -58,10 +58,10 @@ test.describe("Wizard de creación — 5 pasos y localStorage", () => {
       state: { values: { basics: { title: string } }; wizardStep: number }
     }
     expect(parsed.state.values.basics.title).toBe(DRAFT_TITLE)
-    expect(parsed.state.wizardStep).toBe(2)
+    expect(parsed.state.wizardStep).toBe(1)
   })
 
-  test("los 5 pasos persisten título y pestaña al recargar /admin/events/create", async ({
+  test("los 4 pasos persisten título y pestaña al recargar /admin/events/create", async ({
     page,
   }) => {
     test.skip(
@@ -73,22 +73,22 @@ test.describe("Wizard de creación — 5 pasos y localStorage", () => {
     await page.goto("/admin/events/create")
 
     await expect(page.getByRole("tab", { name: /Identidad/i })).toBeVisible()
-    await expect(page.getByRole("tab", { name: /Lugar y Mapa/i })).toBeVisible()
+    await expect(page.getByRole("tab", { name: /Mapa y Sectores/i })).toBeVisible()
+    await expect(
+      page.getByRole("tab", { name: /Tickets y Combos/i }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole("tab", { name: /Configuración Final/i }),
+    ).toBeVisible()
     await expect(
       page.getByRole("tab", { name: /Zonas y Sectores/i }),
-    ).toBeVisible()
-    await expect(
-      page.getByRole("tab", { name: /Entradas y Combos/i }),
-    ).toBeVisible()
-    await expect(
-      page.getByRole("tab", { name: /Cobros y Publicación/i }),
-    ).toBeVisible()
+    ).toHaveCount(0)
 
     await page.getByRole("tab", { name: /Identidad/i }).click()
     await page.locator("#event-title").fill(DRAFT_TITLE)
     await expect(page.locator("#event-title")).toHaveValue(DRAFT_TITLE)
 
-    await page.getByRole("tab", { name: /Zonas y Sectores/i }).click()
+    await page.getByRole("tab", { name: /Mapa y Sectores/i }).click()
     await expect
       .poll(async () => page.evaluate((key) => localStorage.getItem(key), PERSIST_KEY))
       .toContain(DRAFT_TITLE)

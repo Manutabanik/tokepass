@@ -1920,6 +1920,19 @@ export function InteractiveVenueMapEditor({
                   }}
                 />
               </Field>
+              <Field label="Capacidad">
+                <Input
+                  type="number"
+                  min={1}
+                  value={
+                    selectedSector.seats.filter(
+                      (seat) => seat.status !== "blocked",
+                    ).length ||
+                    selectedSector.rows * selectedSector.seatsPerRow
+                  }
+                  readOnly
+                />
+              </Field>
               <Field label="Color">
                 <div className="flex items-center gap-2">
                   <Palette className="size-4 text-zinc-500" />

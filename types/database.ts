@@ -58,6 +58,8 @@ export type OrganizerGuaranteeStatus =
   | "PROMISSORY_NOTE_SIGNED"
   | "INSURANCE_BOND_ACTIVE"
 export type EventStaffRole = "door_staff" | "bar_staff" | "cashier"
+export type TicketTierPhaseStatus = "scheduled" | "active" | "sold_out"
+export type TicketReservationStatus = "held" | "confirmed" | "released"
 
 export type EventStaffAssignment = {
   id: string
@@ -269,6 +271,8 @@ export type Venue = {
   latitude: number | null
   longitude: number | null
   capacity: number
+  /** Presupuesto físico del recinto (alineado a capacity). */
+  max_capacity: number
   zone_blueprint: Json
   seating_layout: Json
   venue_map: Json
@@ -288,6 +292,8 @@ export type TicketTier = {
   /** Comisión unitaria Tokepass absorbida en `price`. */
   platform_fee: number
   capacity: number
+  /** Cupo total del SKU; se mantiene alineado a capacity. */
+  total_capacity: number
   sold: number
   time_limit: string | null
   bonus_reward: string | null
@@ -350,8 +356,36 @@ export type Ticket = {
   /** Generada en borrador/preview; inválida en puerta de evento published. */
   is_test: boolean
   ticket_type: "admission" | "parking" | "access_pass"
+  /** Fase / lote que vendió esta entrada. */
+  phase_id: string | null
   created_at: string
   updated_at: string
+}
+
+export type TicketTierPhase = {
+  id: string
+  tier_id: string
+  name: string
+  price: number
+  capacity_limit: number | null
+  sold: number
+  start_time: string | null
+  end_time: string | null
+  status: TicketTierPhaseStatus
+  created_at: string
+}
+
+export type TicketReservation = {
+  id: string
+  event_id: string
+  tier_id: string
+  phase_id: string | null
+  owner_id: string
+  order_id: string | null
+  quantity: number
+  unit_price: number
+  status: TicketReservationStatus
+  created_at: string
 }
 
 export type TicketTransfer = {
@@ -818,6 +852,7 @@ type VenueInsert = Omit<
   | "seating_layout"
   | "venue_map"
   | "seating_background_url"
+  | "max_capacity"
   | "created_at"
   | "updated_at"
 > & {
@@ -825,6 +860,7 @@ type VenueInsert = Omit<
   seating_layout?: Json
   venue_map?: Json
   seating_background_url?: string | null
+  max_capacity?: number
   created_at?: string
   updated_at?: string
 }
@@ -850,11 +886,13 @@ type TicketTierInsert = Omit<
   | "bundle_type"
   | "description"
   | "highlight_badge"
+  | "total_capacity"
   | "created_at"
   | "updated_at"
 > & {
   id?: string
   sold?: number
+  total_capacity?: number
   description?: string | null
   highlight_badge?: TicketTier["highlight_badge"]
   base_price?: number
@@ -901,6 +939,7 @@ type TicketInsert = Omit<
   | "batch_id"
   | "is_test"
   | "ticket_type"
+  | "phase_id"
   | "created_at"
   | "updated_at"
 > & {
@@ -927,6 +966,7 @@ type TicketInsert = Omit<
   batch_id?: string | null
   is_test?: boolean
   ticket_type?: "admission" | "parking" | "access_pass"
+  phase_id?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -1305,6 +1345,40 @@ export type Database = {
         Update: Partial<TicketTierInsert>
         Relationships: []
       }
+      ticket_tier_phases: {
+        Row: TicketTierPhase
+        Insert: Omit<
+          TicketTierPhase,
+          "id" | "sold" | "status" | "created_at"
+        > & {
+          id?: string
+          sold?: number
+          status?: TicketTierPhaseStatus
+          created_at?: string
+        }
+        Update: Partial<
+          Omit<TicketTierPhase, "id" | "tier_id" | "created_at">
+        >
+        Relationships: [
+          {
+            foreignKeyName: "ticket_tier_phases_tier_id_fkey"
+            columns: ["tier_id"]
+            isOneToOne: false
+            referencedRelation: "ticket_tiers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ticket_reservations: {
+        Row: TicketReservation
+        Insert: Omit<TicketReservation, "id" | "status" | "created_at"> & {
+          id?: string
+          status?: TicketReservationStatus
+          created_at?: string
+        }
+        Update: Partial<Omit<TicketReservation, "id" | "created_at">>
+        Relationships: []
+      }
       tickets: {
         Row: Ticket
         Insert: TicketInsert
@@ -1640,6 +1714,39 @@ export type Database = {
           subtotal: number
           service_charge: number
           total_amount: number
+        }[]
+      }
+      reserve_tickets_atomic: {
+        Args: {
+          p_event_id: string
+          p_owner_id: string
+          p_tier_id: string
+          p_quantity: number
+          p_phase_id?: string | null
+        }
+        Returns: {
+          reservation_id: string
+          order_id: string
+          phase_id: string | null
+          ticket_id: string
+          unit_price: number
+          quantity: number
+        }[]
+      }
+      assert_cascade_stock_available: {
+        Args: {
+          p_event_id: string
+          p_tier_id: string
+          p_quantity: number
+          p_phase_id?: string | null
+        }
+        Returns: {
+          venue_id: string | null
+          phase_id: string | null
+          unit_price: number
+          venue_remaining: number | null
+          tier_remaining: number
+          phase_remaining: number
         }[]
       }
       reserve_tickets_tx: {

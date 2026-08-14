@@ -3,8 +3,14 @@
 import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
 
+import type { TicketPhaseDraft } from "@/lib/inventory/capacity-budget"
+import { migrateLegacyWizardStep } from "@/lib/seating/venue-map-pricing"
 import type { EventFormValues } from "@/lib/validations/event-form"
 import type { VenuePricingMap } from "@/lib/seating/venue-adapter"
+
+export type { TicketPhaseDraft }
+
+export const EVENT_WIZARD_STEP_COUNT = 4
 
 export type AutosaveStatus = "idle" | "dirty" | "saving" | "saved" | "error"
 
@@ -117,7 +123,13 @@ export const useEventFormStore = create<EventFormStore>()(
 
       setEventId: (eventId) => set({ eventId, draftKey: `edit:${eventId}` }),
 
-      setWizardStep: (step) => set({ wizardStep: Math.max(0, step) }),
+      setWizardStep: (step) =>
+        set({
+          wizardStep: Math.min(
+            EVENT_WIZARD_STEP_COUNT - 1,
+            Math.max(0, step),
+          ),
+        }),
 
       setAutosaveStatus: (status, error = null) =>
         set({ autosaveStatus: status, autosaveError: error }),
@@ -140,6 +152,15 @@ export const useEventFormStore = create<EventFormStore>()(
     }),
     {
       name: "tokepass.event-form.v1",
+      version: 2,
+      migrate: (persisted, fromVersion) => {
+        const state = persisted as EventFormPersistedState
+        if (fromVersion >= 2) return state
+        return {
+          ...state,
+          wizardStep: migrateLegacyWizardStep(state.wizardStep),
+        }
+      },
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         draftKey: state.draftKey,

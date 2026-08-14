@@ -171,6 +171,21 @@ export function useEventFormAutosave(input: {
         setEventId(result.eventId)
         latestRef.current.eventId = result.eventId
       }
+      if (result.venueId) {
+        const current = latestRef.current.values
+        latestRef.current.values = {
+          ...current,
+          venue: {
+            ...current.venue,
+            existingVenueId: result.venueId,
+          },
+        }
+        form.setValue("venue.existingVenueId", result.venueId, {
+          shouldDirty: false,
+          shouldTouch: false,
+          shouldValidate: false,
+        })
+      }
       setAutosaveStatus("saved")
     } catch (error) {
       setAutosaveStatus(

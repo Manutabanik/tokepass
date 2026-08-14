@@ -72,6 +72,21 @@ export function polygonSvgPoints(points: VenueMapPoint[]): string {
     .join(" ")
 }
 
+export function zoneIdFromEventTarget(target: EventTarget | null): string | null {
+  if (typeof Element === "undefined" || !(target instanceof Element)) {
+    return null
+  }
+  return target.closest("[data-zone-id]")?.getAttribute("data-zone-id") ?? null
+}
+
+export function zoneIdFromClientPoint(
+  clientX: number,
+  clientY: number,
+): string | null {
+  if (typeof document === "undefined") return null
+  return zoneIdFromEventTarget(document.elementFromPoint(clientX, clientY))
+}
+
 export function zoneCanvasCentroid(zone: Pick<VenueMapZone, "polygon">): {
   x: number
   y: number

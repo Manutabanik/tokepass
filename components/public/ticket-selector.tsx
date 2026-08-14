@@ -73,11 +73,19 @@ import {
 } from "@/lib/checkout/validation-scroll"
 import { formatCurrency } from "@/lib/format"
 import {
+  applyPhaseRolloverToPhases,
+  PHASE_ROLLOVER_MESSAGE,
+  type PhaseRolloverInfo,
+} from "@/lib/inventory/active-phase"
+import {
   inferInventoryTierType,
   isQuantityInventoryType,
 } from "@/lib/inventory/unified-inventory"
 import { getStoredReferralCode, persistReferralCode } from "@/lib/referral"
-import { resolveVenueRenderMode } from "@/lib/seating/adaptive-seating"
+import {
+  hasParametricZones,
+  resolveVenueRenderMode,
+} from "@/lib/seating/adaptive-seating"
 import type { UniversalSeatSelection } from "@/lib/seating/universal-seat-types"
 import {
   buildUniversalSeatPayloadForCheckout,
@@ -212,6 +220,17 @@ export function TicketSelector({
   const [quantities, setQuantities] = useState<Record<string, number>>(() =>
     Object.fromEntries(tiers.map((tier) => [tier.id, 0])),
   )
+  const [tierOverrides, setTierOverrides] = useState<
+    Record<string, Partial<TicketSelectorTier>>
+  >({})
+  const displayTiers = useMemo(
+    () =>
+      tiers.map((tier) => ({
+        ...tier,
+        ...tierOverrides[tier.id],
+      })),
+    [tierOverrides, tiers],
+  )
   const [appliedPromo, setAppliedPromo] = useState<ValidatedPromo | null>(null)
   const [selectedProvider, setSelectedProvider] =
     useState<CheckoutPaymentProvider>("mercadopago")
@@ -281,7 +300,9 @@ export function TicketSelector({
       }
       if (!hasCheckoutIdentity(currentUserId, store.mode)) return
       const action = store.consumePendingAction()
-      if (action === "open_map") setShowSeatFlow(true)
+      if (action === "open_map") {
+        queueMicrotask(() => setShowSeatFlow(true))
+      }
     }
 
     if (useCheckoutIntentStore.persist.hasHydrated()) {
@@ -390,6 +411,9 @@ export function TicketSelector({
   const resolvedSeatingLayout = useMemo(() => {
     if (seatingLayout.length > 0) return seatingLayout
     if (!venueMap) return []
+    if (hasParametricZones(venueMap)) {
+      return venueMapToSeatingLayout({ ...venueMap, zones: [] })
+    }
     return venueMapToSeatingLayout(venueMap)
   }, [seatingLayout, venueMap])
 
@@ -410,7 +434,7 @@ export function TicketSelector({
       seatingLayout: resolvedSeatingLayout,
       seatingBackgroundUrl,
       capacity: venueCapacity ?? undefined,
-      tiers: tiers.map((tier) => ({
+      tiers: displayTiers.map((tier) => ({
         id: tier.id,
         name: tier.name,
         price: tier.price,
@@ -429,7 +453,7 @@ export function TicketSelector({
     seatingBackgroundUrl,
     resolvedSeatingLayout,
     seatingSectorSummaries,
-    tiers,
+    displayTiers,
     venueCapacity,
     venueId,
     venueName,
@@ -452,7 +476,7 @@ export function TicketSelector({
 
   const selection = useMemo(
     () =>
-      tiers
+      displayTiers
         .map((tier) => {
           const quantity = quantities[tier.id] ?? 0
           const inventoryType = inferInventoryTierType({
@@ -475,7 +499,7 @@ export function TicketSelector({
           (tier) =>
             tier.quantity > 0 && isQuantityInventoryType(tier.inventoryType),
         ),
-    [quantities, tiers],
+    [displayTiers, quantities],
   )
 
   const seatLineCount = selectedSeat ? 1 : 0
@@ -492,7 +516,9 @@ export function TicketSelector({
     : 0
   const totalAmount = roundMoney(Math.max(0, cartSubtotal - discountAmount))
   const startingPrice =
-    tiers.length > 0 ? Math.min(...tiers.map((tier) => tier.price)) : null
+    displayTiers.length > 0
+      ? Math.min(...displayTiers.map((tier) => tier.price))
+      : null
 
   useEffect(() => {
     if (!intentRestored) return
@@ -560,6 +586,27 @@ export function TicketSelector({
     }))
   }
 
+  function applyPhaseRollover(info: PhaseRolloverInfo) {
+    const current = displayTiers.find((tier) => tier.id === info.tierId)
+    const nextAvailable = Math.max(0, info.available)
+    setTierOverrides((prev) => ({
+      ...prev,
+      [info.tierId]: {
+        price: info.price,
+        available: nextAvailable,
+        phases: applyPhaseRolloverToPhases(
+          current?.phases ?? [],
+          info.phaseId,
+        ),
+      },
+    }))
+    setQuantities((currentQty) => ({
+      ...currentQty,
+      [info.tierId]: Math.min(currentQty[info.tierId] ?? 0, nextAvailable),
+    }))
+    toast.warning(info.message || PHASE_ROLLOVER_MESSAGE)
+  }
+
   function fireCartPixels(input: {
     contentIds: string[]
     value: number
@@ -603,7 +650,7 @@ export function TicketSelector({
   }
 
   function hasPendingAddonUpsell() {
-    return tiers.some((tier) => {
+    return displayTiers.some((tier) => {
       const type = inferInventoryTierType({
         tierType: tier.tierType,
         layoutType: tier.layoutType,
@@ -677,6 +724,11 @@ export function TicketSelector({
           persistCheckoutCart()
           toast.error("Iniciá sesión para pagar. Tu selección está guardada.")
           router.push(loginHref)
+          return
+        }
+        if (result.error === "phase_rollover" && result.phaseRollover) {
+          applyPhaseRollover(result.phaseRollover)
+          router.refresh()
           return
         }
         toastCheckoutError(
@@ -774,7 +826,7 @@ export function TicketSelector({
       const tierId = resolveTierIdForUniversalSector(
         selectionPayload.sectorId,
         selectionPayload.sectorName,
-        tiers.map((tier) => ({
+        displayTiers.map((tier) => ({
           id: tier.id,
           name: tier.name,
           price: tier.price,
@@ -787,7 +839,7 @@ export function TicketSelector({
         toast.error("No encontramos la categoría de esa zona.")
         return
       }
-      const tier = tiers.find((item) => item.id === tierId)
+      const tier = displayTiers.find((item) => item.id === tierId)
       updateQuantity(
         tierId,
         selectionPayload.quantity,
@@ -987,7 +1039,7 @@ export function TicketSelector({
       </div>
 
       <EventCheckoutSelector
-        tiers={tiers}
+        tiers={displayTiers}
         quantities={quantities}
         isPending={controlsLocked}
         hasSeatingFlow={hasSeatingFlow}
@@ -1006,7 +1058,7 @@ export function TicketSelector({
           if (seat) void releaseSeatingUnitCartHold(eventId, seat.seatingUnitId)
         }}
           onAddUpsell={(tierId) => {
-          const addon = tiers.find((tier) => tier.id === tierId)
+          const addon = displayTiers.find((tier) => tier.id === tierId)
           updateQuantity(tierId, 1, addon?.available ?? 1)
           setShowUpsell(false)
           setUpsellSkipped(true)

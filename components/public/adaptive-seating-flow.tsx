@@ -36,6 +36,10 @@ import type {
   UniversalSector,
 } from "@/lib/seating/universal-seat-types"
 import { flattenVenueMapSeats } from "@/lib/seating/venue-map-geometry"
+import {
+  zoneIdFromClientPoint,
+  zoneIdFromEventTarget,
+} from "@/lib/seating/venue-polygon"
 import { occupancyFromSeatingUnits } from "@/lib/seating/venue-map-occupancy"
 import { cn } from "@/lib/utils"
 import { VenueMapBackgroundLayer } from "@/components/venue/venue-map-background-layer"
@@ -160,6 +164,7 @@ function MacroSeatingFlow({
     startZoom: 1,
     moved: false,
     pinching: false,
+    pendingZoneId: null as string | null,
   })
 
   const zones = map.zones ?? []
@@ -294,6 +299,14 @@ function MacroSeatingFlow({
     setInventoryState("loading")
   }
 
+  function handleZoneClick(zoneId: string, event?: React.SyntheticEvent) {
+    event?.stopPropagation()
+    if (gesture.current.moved || pending) return
+    const next = zones.find((item) => item.id === zoneId)
+    if (!next) return
+    handleSelectZone(next)
+  }
+
   function handleCanvasContinue(seats: InteractiveSelectedSeat[]) {
     const seat = seats[0]
     if (!seat || pending) return
@@ -313,6 +326,7 @@ function MacroSeatingFlow({
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
     event.currentTarget.setPointerCapture(event.pointerId)
     gesture.current.moved = false
+    gesture.current.pendingZoneId = zoneIdFromEventTarget(event.target)
     gesture.current.startX = event.clientX
     gesture.current.startY = event.clientY
     gesture.current.startPanX = gesture.current.panX
@@ -355,6 +369,15 @@ function MacroSeatingFlow({
   function onPointerUp(event: React.PointerEvent<SVGSVGElement>) {
     pointers.current.delete(event.pointerId)
     if (pointers.current.size < 2) gesture.current.pinching = false
+    if (pointers.current.size === 0) {
+      const zoneId =
+        gesture.current.pendingZoneId ??
+        zoneIdFromEventTarget(event.target) ??
+        zoneIdFromClientPoint(event.clientX, event.clientY)
+      const wasTap = !gesture.current.moved
+      gesture.current.pendingZoneId = null
+      if (wasTap && zoneId) handleZoneClick(zoneId, event)
+    }
   }
 
   const panelOpen = Boolean(zone)

@@ -28,6 +28,10 @@ import { formatCurrency } from "@/lib/format"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import { flattenVenueMapSeats, type FlattenedVenueSeat } from "@/lib/seating/venue-map-geometry"
 import {
+  zoneIdFromClientPoint,
+  zoneIdFromEventTarget,
+} from "@/lib/seating/venue-polygon"
+import {
   hexToRgba,
   resolveLiveVenueSeatStatus,
 } from "@/lib/seating/venue-map-occupancy"
@@ -105,6 +109,7 @@ export function InteractiveSeatingCanvas({
     startZoom: 1,
     moved: false,
     pinching: false,
+    pendingZoneId: null as string | null,
   })
 
   const [zoom, setZoom] = useState(1)
@@ -151,7 +156,7 @@ export function InteractiveSeatingCanvas({
     if (!node) return
     const sync = () => {
       const next = node.clientWidth || 360
-      setWrapWidth((current) => (current === next ? current : next))
+      setWrapWidth((current) => (Math.abs(current - next) < 4 ? current : next))
     }
     sync()
     const observer = new ResizeObserver(sync)
@@ -216,6 +221,25 @@ export function InteractiveSeatingCanvas({
     return Number.isFinite(priced) ? Number(priced) : fallback
   }
 
+  function handleZoneClick(zoneId: string, event?: React.SyntheticEvent) {
+    event?.stopPropagation()
+    if (gesture.current.moved || pending) return
+    const zone = (map.zones ?? []).find((item) => item.id === zoneId)
+    if (!zone || !onSelectZone) return
+    vibrateTap()
+    markActivity()
+    setSelectedSeats([])
+    onSelectZone(zone)
+  }
+
+  function resolveZoneIdFromPointer(event: React.PointerEvent) {
+    return (
+      gesture.current.pendingZoneId ??
+      zoneIdFromEventTarget(event.target) ??
+      zoneIdFromClientPoint(event.clientX, event.clientY)
+    )
+  }
+
   function toggleSeat(seat: FlattenedVenueSeat) {
     const price = seatPrice(seat.sectorId, seat.price)
     const live = resolveLiveVenueSeatStatus({
@@ -249,6 +273,7 @@ export function InteractiveSeatingCanvas({
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
     event.currentTarget.setPointerCapture(event.pointerId)
     gesture.current.moved = false
+    gesture.current.pendingZoneId = zoneIdFromEventTarget(event.target)
     gesture.current.startX = event.clientX
     gesture.current.startY = event.clientY
     gesture.current.startPanX = gesture.current.panX
@@ -295,7 +320,14 @@ export function InteractiveSeatingCanvas({
     pointers.current.delete(event.pointerId)
     if (pointers.current.size < 2) gesture.current.pinching = false
     if (pointers.current.size === 0) {
+      const zoneId = resolveZoneIdFromPointer(event)
+      const wasTap = !gesture.current.moved
+      gesture.current.pendingZoneId = null
       commitView()
+      if (wasTap && zoneId) {
+        handleZoneClick(zoneId, event)
+        return
+      }
       if (gesture.current.moved) markActivity()
     }
   }
@@ -486,7 +518,7 @@ export function InteractiveSeatingCanvas({
         <svg
           viewBox={`0 0 ${VIEW.width} ${VIEW.height}`}
           className="h-full w-full touch-none select-none"
-          role="img"
+          role="group"
           aria-label="Plano del recinto. Tocá un polígono de zona o una butaca."
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
@@ -501,19 +533,6 @@ export function InteractiveSeatingCanvas({
             style={{ willChange: "transform" }}
           >
             <VenueMapBackgroundLayer map={map} />
-            <VenueMapZoneLayer
-              zones={map.zones ?? []}
-              selectedId={selectedZoneId}
-              selectOnPointerUp
-              onSelect={
-                onSelectZone
-                  ? (zone) => {
-                      setSelectedSeats([])
-                      onSelectZone(zone)
-                    }
-                  : undefined
-              }
-            />
             {map.aisles.map((aisle) => (
               <rect
                 key={aisle.id}
@@ -522,7 +541,7 @@ export function InteractiveSeatingCanvas({
                 width={aisle.width}
                 height={aisle.height}
                 rx={8}
-                className="fill-zinc-900 stroke-white/5"
+                className="pointer-events-none fill-zinc-900 stroke-white/5"
               />
             ))}
             {map.stage ? (
@@ -532,7 +551,7 @@ export function InteractiveSeatingCanvas({
                 width={map.stage.width}
                 height={map.stage.height}
                 rx={12}
-                className="fill-violet-500/20 stroke-violet-400/50"
+                className="pointer-events-none fill-violet-500/20 stroke-violet-400/50"
               />
             ) : null}
             {map.labels.map((label) => (
@@ -552,6 +571,16 @@ export function InteractiveSeatingCanvas({
               showSeats={false}
               zoom={zoom}
               interactive={false}
+            />
+            <VenueMapZoneLayer
+              zones={map.zones ?? []}
+              selectedId={selectedZoneId}
+              selectOnPointerUp
+              onSelect={
+                onSelectZone
+                  ? (zone) => handleZoneClick(zone.id)
+                  : undefined
+              }
             />
             <VenueMapElementLayer
               elements={(map.elements ?? []).filter(

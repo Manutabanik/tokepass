@@ -305,6 +305,15 @@ export function UniversalSeatSelectionFlow({
               fillParent={takeover}
               onBack={onBack}
               onContinue={handleCanvasContinue}
+              onSelectZone={(zone) => {
+                const match =
+                  resolvedSectors.find((item) => item.id === zone.id) ??
+                  resolvedSectors.find(
+                    (item) =>
+                      item.name.toLowerCase() === zone.name.toLowerCase(),
+                  )
+                void handleSelectSector(match?.id ?? zone.id)
+              }}
             />
           )}
         </div>
