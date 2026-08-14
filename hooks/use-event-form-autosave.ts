@@ -11,7 +11,36 @@ import {
 import type { EventFormValues } from "@/lib/validations/event-form"
 import type { VenuePricingMap } from "@/lib/seating/venue-adapter"
 
-const DEBOUNCE_MS = 1800
+const DEBOUNCE_MS = 1500
+
+function sanitizeFormValues(values: EventFormValues): EventFormValues {
+  return {
+    ...values,
+    venue: {
+      ...values.venue,
+      existingVenueId: values.venue.existingVenueId || null,
+      latitude:
+        values.venue.latitude != null && Number.isFinite(values.venue.latitude)
+          ? values.venue.latitude
+          : null,
+      longitude:
+        values.venue.longitude != null && Number.isFinite(values.venue.longitude)
+          ? values.venue.longitude
+          : null,
+    },
+    tickets: (values.tickets ?? []).map((tier) => ({
+      ...tier,
+      price: Number.isFinite(Number(tier.price)) ? Number(tier.price) : 0,
+      capacity: Number.isFinite(Number(tier.capacity))
+        ? Number(tier.capacity)
+        : 1,
+      listPrice:
+        tier.listPrice == null || !Number.isFinite(Number(tier.listPrice))
+          ? null
+          : Number(tier.listPrice),
+    })),
+  }
+}
 
 export function useEventFormAutosave(input: {
   form: UseFormReturn<EventFormValues>
@@ -21,6 +50,7 @@ export function useEventFormAutosave(input: {
   venuePricingMap: VenuePricingMap
   onVenuePricingMapChange: (map: VenuePricingMap) => void
   zoneTierPricing: ZoneTierPriceDraft[]
+  onZoneTierPricingChange?: (rows: ZoneTierPriceDraft[]) => void
   targetOrganizerId?: string | null
   enabled?: boolean
 }) {
@@ -32,6 +62,7 @@ export function useEventFormAutosave(input: {
     venuePricingMap,
     onVenuePricingMapChange,
     zoneTierPricing,
+    onZoneTierPricingChange,
     targetOrganizerId = null,
     enabled = true,
   } = input
@@ -46,14 +77,19 @@ export function useEventFormAutosave(input: {
 
   const hydratedRef = useRef(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const savingRef = useRef(false)
   const latestRef = useRef({
     values: initialValues,
     venuePricingMap,
     zoneTierPricing,
     eventId: eventId ?? storeEventId,
+    enabled,
+    targetOrganizerId,
   })
 
-  // Hydrate once from localStorage (create) or server (edit)
+  latestRef.current.enabled = enabled
+  latestRef.current.targetOrganizerId = targetOrganizerId
+
   useEffect(() => {
     if (hydratedRef.current) return
     hydratedRef.current = true
@@ -65,21 +101,17 @@ export function useEventFormAutosave(input: {
       zoneTierPricing,
     })
     const persisted = useEventFormStore.getState()
-    if (
-      draftKey === "create" &&
-      persisted.values &&
-      persisted.draftKey === "create" &&
-      !eventId
-    ) {
+    if (persisted.values && persisted.draftKey === draftKey) {
       form.reset(persisted.values)
       onVenuePricingMapChange(persisted.venuePricingMap)
+      onZoneTierPricingChange?.(persisted.zoneTierPricing)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only hydrate
   }, [])
 
-  // Keep refs fresh
   useEffect(() => {
     latestRef.current = {
+      ...latestRef.current,
       values: form.getValues(),
       venuePricingMap,
       zoneTierPricing,
@@ -87,7 +119,60 @@ export function useEventFormAutosave(input: {
     }
   }, [form, venuePricingMap, zoneTierPricing, eventId, storeEventId])
 
-  // Mirror RHF → Zustand on every change
+  async function runAutosave() {
+    if (!latestRef.current.enabled) return
+    if (savingRef.current) return
+    const snapshot = latestRef.current
+    const values = sanitizeFormValues(snapshot.values)
+    savingRef.current = true
+    setAutosaveStatus("saving")
+    try {
+      const result = await autosaveEventDraft({
+        eventId: snapshot.eventId,
+        values,
+        zoneTierPricing: snapshot.zoneTierPricing,
+        targetOrganizerId: snapshot.targetOrganizerId,
+      })
+      if (!result.ok) {
+        setAutosaveStatus("error", result.error)
+        return
+      }
+      if (result.mode === "skipped") {
+        setAutosaveStatus("dirty")
+        return
+      }
+      if (result.eventId) {
+        setEventId(result.eventId)
+        latestRef.current.eventId = result.eventId
+      }
+      setAutosaveStatus("saved")
+    } catch (error) {
+      setAutosaveStatus(
+        "error",
+        error instanceof Error ? error.message : "Error de autoguardado",
+      )
+    } finally {
+      savingRef.current = false
+    }
+  }
+
+  function scheduleSave() {
+    if (!latestRef.current.enabled) return
+    setAutosaveStatus("dirty")
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => {
+      void runAutosave()
+    }, DEBOUNCE_MS)
+  }
+
+  function flushAutosave() {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+    void runAutosave()
+  }
+
   useEffect(() => {
     if (!enabled) return
     const subscription = form.watch((values) => {
@@ -113,53 +198,22 @@ export function useEventFormAutosave(input: {
     scheduleSave()
   }, [enabled, zoneTierPricing, setZoneTierPricing])
 
-  function scheduleSave() {
-    if (!enabled) return
-    setAutosaveStatus("dirty")
-    if (timerRef.current) clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(() => {
-      void runAutosave()
-    }, DEBOUNCE_MS)
-  }
-
-  async function runAutosave() {
-    const snapshot = latestRef.current
-    setAutosaveStatus("saving")
-    try {
-      const result = await autosaveEventDraft({
-        eventId: snapshot.eventId,
-        values: snapshot.values,
-        zoneTierPricing: snapshot.zoneTierPricing,
-        targetOrganizerId,
-      })
-      if (!result.ok) {
-        setAutosaveStatus("error", result.error)
-        return
-      }
-      if (result.mode === "skipped") {
-        setAutosaveStatus("dirty")
-        return
-      }
-      if (result.eventId) {
-        setEventId(result.eventId)
-        latestRef.current.eventId = result.eventId
-      }
-      setAutosaveStatus("saved")
-    } catch (error) {
-      setAutosaveStatus(
-        "error",
-        error instanceof Error ? error.message : "Error de autoguardado",
-      )
-    }
-  }
-
   useEffect(() => {
+    function onHide() {
+      flushAutosave()
+    }
+    window.addEventListener("beforeunload", onHide)
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") onHide()
+    })
     return () => {
+      window.removeEventListener("beforeunload", onHide)
       if (timerRef.current) clearTimeout(timerRef.current)
     }
   }, [])
 
   return {
     persistedEventId: storeEventId ?? eventId,
+    flushAutosave,
   }
 }

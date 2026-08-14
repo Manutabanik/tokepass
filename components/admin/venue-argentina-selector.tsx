@@ -37,6 +37,13 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   fetchArgentinaDepartments,
   fetchArgentinaProvinces,
   type GeorefEntity,
@@ -84,12 +91,6 @@ type VenueArgentinaSelectorProps = {
   className?: string
   disabled?: boolean
 }
-
-const selectClassName = cn(
-  "h-11 w-full appearance-none rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 text-sm text-foreground",
-  "outline-none transition focus:border-transparent focus:ring-2 focus:ring-emerald-500",
-  "disabled:cursor-not-allowed disabled:opacity-50",
-)
 
 const inputClassName = cn(
   "h-11 rounded-lg border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 text-sm text-foreground",
@@ -144,6 +145,8 @@ export function VenueArgentinaSelector({
   )
 
   const abortRef = useRef<AbortController | null>(null)
+  const stateRef = useRef(state)
+  stateRef.current = state
 
   const emit = useCallback(
     (next: VenueArgentinaValue) => {
@@ -219,6 +222,34 @@ export function VenueArgentinaSelector({
       cancelled = true
     }
   }, [state.province?.id])
+
+  useEffect(() => {
+    const current = state.province
+    if (provinces.length === 0 || !current) return
+    const match =
+      provinces.find((row) => row.id === current.id) ??
+      provinces.find(
+        (row) =>
+          row.name.toLocaleLowerCase("es") === current.name.toLocaleLowerCase("es"),
+      )
+    if (!match) return
+    if (match.id === current.id && match.name === current.name) return
+    emit({ ...stateRef.current, province: { id: match.id, name: match.name } })
+  }, [emit, provinces, state.province?.id, state.province?.name])
+
+  useEffect(() => {
+    const current = state.department
+    if (departments.length === 0 || !current) return
+    const match =
+      departments.find((row) => row.id === current.id) ??
+      departments.find(
+        (row) =>
+          row.name.toLocaleLowerCase("es") === current.name.toLocaleLowerCase("es"),
+      )
+    if (!match) return
+    if (match.id === current.id && match.name === current.name) return
+    emit({ ...stateRef.current, department: { id: match.id, name: match.name } })
+  }, [departments, emit, state.department?.id, state.department?.name])
 
   // Nominatim con debounce 500ms + cancelación.
   useEffect(() => {
@@ -325,8 +356,14 @@ export function VenueArgentinaSelector({
     lat: VENUE_MAP_DEFAULT.latitude,
     lng: VENUE_MAP_DEFAULT.longitude,
   }
-
   const mapsHref = googleMapsDeepLink(displayCoords.lat, displayCoords.lng)
+
+  const uniqueProvinces = Array.from(
+    new Map(provinces.map((row) => [row.id, row])).values(),
+  )
+  const uniqueDepartments = Array.from(
+    new Map(departments.map((row) => [row.id, row])).values(),
+  )
 
   return (
     <div
@@ -403,26 +440,40 @@ export function VenueArgentinaSelector({
             Provincia
           </Label>
           <div className="relative">
-            <select
-              id="venue-ar-province"
-              disabled={disabled || loadingProvinces}
+            <Select
               value={state.province?.id ?? ""}
-              onChange={(event) => onProvinceChange(event.target.value)}
-              className={selectClassName}
+              onValueChange={(value) => {
+                if (value) onProvinceChange(value)
+              }}
+              disabled={disabled || loadingProvinces}
+              items={uniqueProvinces.map((province) => ({
+                value: province.id,
+                label: province.name,
+              }))}
             >
-              <option value="">
-                {loadingProvinces
-                  ? "Cargando provincias…"
-                  : "Seleccioná provincia"}
-              </option>
-              {provinces.map((province) => (
-                <option key={province.id} value={province.id}>
-                  {province.name}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger
+                id="venue-ar-province"
+                className="h-11 w-full max-w-full overflow-hidden border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900"
+              >
+                <SelectValue
+                  placeholder={
+                    loadingProvinces ? "Cargando provincias…" : "Seleccioná provincia"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent
+                alignItemWithTrigger={false}
+                className="max-h-60 overflow-y-auto w-full z-50 bg-popover border rounded-xl shadow-2xl"
+              >
+                {uniqueProvinces.map((province) => (
+                  <SelectItem key={province.id} value={province.id}>
+                    {province.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {loadingProvinces ? (
-              <LoaderCircle className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+              <LoaderCircle className="pointer-events-none absolute right-9 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
             ) : null}
           </div>
         </div>
@@ -435,28 +486,44 @@ export function VenueArgentinaSelector({
             Departamento / Partido
           </Label>
           <div className="relative">
-            <select
-              id="venue-ar-department"
-              disabled={disabled || !state.province || loadingDepartments}
+            <Select
               value={state.department?.id ?? ""}
-              onChange={(event) => onDepartmentChange(event.target.value)}
-              className={selectClassName}
+              onValueChange={(value) => {
+                if (value) onDepartmentChange(value)
+              }}
+              disabled={disabled || !state.province || loadingDepartments}
+              items={uniqueDepartments.map((department) => ({
+                value: department.id,
+                label: department.name,
+              }))}
             >
-              <option value="">
-                {!state.province
-                  ? "Elegí provincia primero"
-                  : loadingDepartments
-                    ? "Cargando departamentos…"
-                    : "Seleccioná departamento"}
-              </option>
-              {departments.map((department) => (
-                <option key={department.id} value={department.id}>
-                  {department.name}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger
+                id="venue-ar-department"
+                className="h-11 w-full max-w-full overflow-hidden border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900"
+              >
+                <SelectValue
+                  placeholder={
+                    !state.province
+                      ? "Elegí provincia primero"
+                      : loadingDepartments
+                        ? "Cargando departamentos…"
+                        : "Seleccioná departamento"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent
+                alignItemWithTrigger={false}
+                className="max-h-60 overflow-y-auto w-full z-50 bg-popover border rounded-xl shadow-2xl"
+              >
+                {uniqueDepartments.map((department) => (
+                  <SelectItem key={department.id} value={department.id}>
+                    {department.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {loadingDepartments ? (
-              <LoaderCircle className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+              <LoaderCircle className="pointer-events-none absolute right-9 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
             ) : null}
           </div>
         </div>

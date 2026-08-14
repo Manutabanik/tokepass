@@ -36,6 +36,7 @@ import {
   type EventFormValues,
 } from "@/lib/validations/event-form"
 import type { Database, Event, EventStatus, Json, Venue } from "@/types/database"
+import { parseVenueMap, serializeVenueMap } from "@/types/venue-map"
 
 export type OrganizerEvent = Pick<
   Event,
@@ -362,6 +363,68 @@ function mapEventFormToRpcPayload(
   }
 }
 
+async function persistEventVenueFields(
+  client: SupabaseClient<Database>,
+  eventId: string,
+  data: EventFormValues,
+) {
+  const { data: eventRow } = await client
+    .from("events")
+    .select("id, venue_id")
+    .eq("id", eventId)
+    .maybeSingle()
+
+  const venueId =
+    (data.venue.mode === "existing" ? data.venue.existingVenueId : null) ??
+    eventRow?.venue_id ??
+    null
+
+  const province = data.venue.province?.trim() || null
+  const department = data.venue.department?.trim() || null
+  const city =
+    [department, province].filter(Boolean).join(", ") ||
+    data.venue.venueCity?.trim() ||
+    null
+  const location =
+    [data.venue.venueLocation, city]
+      .map((part) => part?.trim())
+      .filter(Boolean)
+      .join(", ") || data.venue.venueName
+  const venueMap = serializeVenueMap(parseVenueMap(data.venue.venueMap)) as unknown as Json
+  const seatingLayout = (data.venue.seatingLayout ?? []) as unknown as Json
+  const now = new Date().toISOString()
+
+  if (venueId) {
+    await client
+      .from("venues")
+      .update({
+        name: data.venue.venueName.trim() || undefined,
+        location: data.venue.venueLocation?.trim() || location,
+        address: data.venue.venueLocation?.trim() || location,
+        city,
+        latitude: data.venue.latitude ?? null,
+        longitude: data.venue.longitude ?? null,
+        venue_map: venueMap,
+        seating_layout: seatingLayout,
+        seating_background_url: data.venue.seatingBackgroundUrl ?? null,
+        updated_at: now,
+      } as never)
+      .eq("id", venueId)
+  }
+
+  await client
+    .from("events")
+    .update({
+      venue_id: venueId,
+      location,
+      province,
+      department,
+      venue_map: venueMap,
+      updated_at: now,
+    } as never)
+    .eq("id", eventId)
+}
+
 async function syncTierAdmitCounts(
   eventId: string,
   tickets: EventFormValues["tickets"],
@@ -573,7 +636,7 @@ export async function getEventForEditing(
     const { data: event, error: eventError } = await supabase
       .from("events")
       .select(
-        "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction",
+        "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, province, department, venue_map",
       )
       .eq("id", eventId)
       .maybeSingle()
@@ -740,7 +803,17 @@ export async function getEventForEditing(
           zoneType: firstZone?.type ?? "general_admission",
           venueName: venue?.name ?? event.location,
           venueLocation: venue?.location ?? event.location,
-          venueCity: venue?.city ?? "",
+          venueCity: venue?.city ?? [event.department, event.province].filter(Boolean).join(", "),
+          province:
+            event.province ??
+            (typeof venue?.city === "string" && venue.city.includes(",")
+              ? venue.city.split(",").slice(1).join(",").trim()
+              : ""),
+          department: event.department ?? (typeof venue?.city === "string"
+            ? venue.city.split(",")[0]?.trim()
+            : ""),
+          provinceId: null,
+          departmentId: null,
           capacity: firstZone?.capacity ?? venueCapacity,
           rows: firstZone?.rows ?? undefined,
           seatsPerRow: firstZone?.seatsPerRow ?? undefined,
@@ -750,7 +823,7 @@ export async function getEventForEditing(
             typeof venue?.seating_background_url === "string"
               ? venue.seating_background_url
               : null,
-          venueMap: venue?.venue_map ?? null,
+          venueMap: event.venue_map ?? venue?.venue_map ?? null,
           seatingLayout: venue?.seating_layout,
           includesSeatingMap: Boolean(
             firstZone?.type === "reserved_seating" ||
@@ -966,6 +1039,7 @@ export async function createCompleteEvent(
   }
 
   await syncTierAdmitCounts(String(eventId), formValues.tickets)
+  await persistEventVenueFields(rpcClient, String(eventId), formValues)
 
   revalidatePath("/admin")
   revalidatePath("/admin/events")
@@ -1127,6 +1201,7 @@ export async function updateCompleteEvent(
   }
 
   await syncTierAdmitCounts(eventId, formValues.tickets)
+  await persistEventVenueFields(mutationClient, eventId, formValues)
 
   revalidatePath("/admin")
   revalidatePath("/admin/events")

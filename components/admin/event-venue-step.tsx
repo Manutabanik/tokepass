@@ -9,7 +9,7 @@ import {
 } from "lucide-react"
 import dynamic from "next/dynamic"
 import Image from "next/image"
-import { useMemo, useState, useTransition, type ReactNode } from "react"
+import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react"
 import type { UseFormReturn } from "react-hook-form"
 import { toast } from "sonner"
 
@@ -66,6 +66,21 @@ import type { EventFormValues } from "@/lib/validations/event-form"
 import { cn } from "@/lib/utils"
 import { emptyVenueMap, parseVenueMap } from "@/types/venue-map"
 
+function uniqueVenues(venues: OrganizerVenue[]) {
+  return Array.from(new Map(venues.map((venue) => [venue.id, venue])).values())
+}
+
+function parsePlaceParts(city: string | null | undefined) {
+  const parts = (city ?? "")
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean)
+  if (parts.length >= 2) {
+    return { department: parts[0]!, province: parts.slice(1).join(", ") }
+  }
+  return { department: parts[0] ?? "", province: "" }
+}
+
 const EventLocationMapInner = dynamic(
   () =>
     import("@/components/public/event-location-map-inner").then(
@@ -104,7 +119,8 @@ export function EventVenueStep({
   const venueMode = form.watch("venue.mode")
   const existingVenueId = form.watch("venue.existingVenueId")
   const includesSeatingMap = Boolean(form.watch("venue.includesSeatingMap"))
-  const selectedVenue = venues.find((venue) => venue.id === existingVenueId)
+  const selectedVenue = uniqueVenues(venues).find((venue) => venue.id === existingVenueId)
+  const venueOptions = uniqueVenues(venues)
   const structured = includesSeatingMap
 
   const [editingSaved, setEditingSaved] = useState(false)
@@ -117,15 +133,37 @@ export function EventVenueStep({
   const [venueMap, setVenueMap] = useState(() =>
     parseVenueMap(form.getValues("venue.venueMap")),
   )
+  const watchedVenueMap = form.watch("venue.venueMap")
+
+  useEffect(() => {
+    const next = parseVenueMap(watchedVenueMap)
+    setVenueMap((current) =>
+      JSON.stringify(current) === JSON.stringify(next) ? current : next,
+    )
+  }, [watchedVenueMap])
   const [studioOpen, setStudioOpen] = useState(false)
   const [pendingSave, startSaveTransition] = useTransition()
   const [pendingUpload, startUploadTransition] = useTransition()
 
-  const geoValue = useMemo<Partial<VenueArgentinaValue>>(
-    () => ({
+  const geoValue = useMemo<Partial<VenueArgentinaValue>>(() => {
+    const watchedCity = form.watch("venue.venueCity")
+    const parsed = parsePlaceParts(watchedCity)
+    const provinceName = form.watch("venue.province") || parsed.province
+    const departmentName = form.watch("venue.department") || parsed.department
+    const provinceId = form.watch("venue.provinceId")
+    const departmentId = form.watch("venue.departmentId")
+    return {
       venueName: form.watch("venue.venueName"),
       address: form.watch("venue.venueLocation") ?? "",
       capacity: form.watch("venue.capacity") ?? 0,
+      province:
+        provinceName
+          ? { id: provinceId || provinceName, name: provinceName }
+          : null,
+      department:
+        departmentName
+          ? { id: departmentId || departmentName, name: departmentName }
+          : null,
       coordinates:
         form.watch("venue.latitude") != null &&
         form.watch("venue.longitude") != null
@@ -134,16 +172,19 @@ export function EventVenueStep({
               lng: form.watch("venue.longitude")!,
             }
           : null,
-    }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional live form sync
-    [
-      form.watch("venue.venueName"),
-      form.watch("venue.venueLocation"),
-      form.watch("venue.capacity"),
-      form.watch("venue.latitude"),
-      form.watch("venue.longitude"),
-    ],
-  )
+    }
+  }, [
+    form.watch("venue.venueName"),
+    form.watch("venue.venueLocation"),
+    form.watch("venue.venueCity"),
+    form.watch("venue.province"),
+    form.watch("venue.department"),
+    form.watch("venue.provinceId"),
+    form.watch("venue.departmentId"),
+    form.watch("venue.capacity"),
+    form.watch("venue.latitude"),
+    form.watch("venue.longitude"),
+  ])
 
   function syncZonesToForm(nextZones: VenueZoneDraft[], nextStructured: boolean) {
     setZoneDrafts(nextZones)
@@ -179,6 +220,9 @@ export function EventVenueStep({
     form.setValue("venue.venueName", venue.name)
     form.setValue("venue.venueLocation", venue.location)
     form.setValue("venue.venueCity", venue.city ?? "")
+    const parsed = parsePlaceParts(venue.city)
+    form.setValue("venue.department", parsed.department)
+    form.setValue("venue.province", parsed.province)
     form.setValue("venue.capacity", venue.capacity)
     form.setValue("venue.latitude", venue.latitude)
     form.setValue("venue.longitude", venue.longitude)
@@ -326,6 +370,16 @@ export function EventVenueStep({
   function onGeoChange(next: VenueArgentinaValue) {
     form.setValue("venue.venueName", next.venueName, { shouldDirty: true })
     form.setValue("venue.venueLocation", next.address, { shouldDirty: true })
+    form.setValue("venue.province", next.province?.name ?? "", { shouldDirty: true })
+    form.setValue("venue.department", next.department?.name ?? "", {
+      shouldDirty: true,
+    })
+    form.setValue("venue.provinceId", next.province?.id ?? null, {
+      shouldDirty: true,
+    })
+    form.setValue("venue.departmentId", next.department?.id ?? null, {
+      shouldDirty: true,
+    })
     form.setValue(
       "venue.venueCity",
       [next.department?.name, next.province?.name].filter(Boolean).join(", "),
@@ -445,33 +499,28 @@ export function EventVenueStep({
                 <Select
                   value={field.value ?? ""}
                   onValueChange={(value) => {
-                    const venue = venues.find((item) => item.id === value)
+                    const venue = venueOptions.find((item) => item.id === value)
                     if (venue) applySavedVenue(venue)
                   }}
-                  items={venues.map((venue) => ({
+                  items={venueOptions.map((venue) => ({
                     value: venue.id,
-                    label: `${venue.name}${venue.city ? ` · ${venue.city}` : ""}`,
+                    label: venue.name,
                   }))}
                 >
                   <SelectTrigger className="h-11 w-full max-w-full overflow-hidden border-zinc-200 bg-zinc-100 dark:border-white/10 dark:bg-black/20">
-                    <SelectValue placeholder="Elegí un lugar">
-                      {(() => {
-                        const venue = venues.find(
-                          (item) => item.id === field.value,
-                        )
-                        if (!venue) return null
-                        return `${venue.name}${venue.city ? ` · ${venue.city}` : ""}`
-                      })()}
-                    </SelectValue>
+                    <SelectValue placeholder="Elegí un lugar" />
                   </SelectTrigger>
-                  <SelectContent>
-                    {venues.map((venue) => (
+                  <SelectContent
+                    alignItemWithTrigger={false}
+                    className="max-h-60 overflow-y-auto w-full z-50 bg-popover border rounded-xl shadow-2xl"
+                  >
+                    {venueOptions.map((venue) => (
                       <SelectItem key={venue.id} value={venue.id}>
-                        <span className="block max-w-[200px] truncate sm:max-w-[300px]">
+                        <span className="block min-w-0 flex-1 truncate">
                           {venue.name}
                         </span>
                         {venue.city ? (
-                          <span className="shrink-0 text-sm text-muted-foreground">
+                          <span className="shrink-0 text-xs text-muted-foreground">
                             {venue.city}
                           </span>
                         ) : null}
@@ -633,6 +682,15 @@ export function EventVenueStep({
                     syncZonesToForm(drafts, true)
                   }
                   setStudioOpen(false)
+                }}
+                onChange={(next) => {
+                  setVenueMap(next)
+                  form.setValue("venue.venueMap", next, { shouldDirty: true })
+                  form.setValue(
+                    "venue.seatingLayout",
+                    venueMapToSeatingLayout(next),
+                    { shouldDirty: true },
+                  )
                 }}
               />
               <div className="space-y-3 rounded-2xl border border-border bg-muted/60 p-4">

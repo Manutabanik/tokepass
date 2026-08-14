@@ -165,6 +165,10 @@ const defaultValues: EventFormValues = {
     venueName: "",
     venueLocation: "",
     venueCity: "",
+    province: "",
+    department: "",
+    provinceId: null,
+    departmentId: null,
     capacity: undefined,
     rows: undefined,
     seatsPerRow: undefined,
@@ -184,21 +188,33 @@ function NumberInput({
   value,
   onChange,
   className,
+  emptyAsZero = false,
   ...props
 }: Omit<React.ComponentProps<typeof Input>, "value" | "onChange"> & {
   value: number | undefined
   onChange: (value: number | undefined) => void
+  emptyAsZero?: boolean
 }) {
   return (
     <Input
       type="text"
-      inputMode="numeric"
-      pattern="[0-9]*"
+      inputMode="decimal"
       autoComplete="off"
-      value={value ?? ""}
+      value={value == null || Number.isNaN(Number(value)) ? "" : String(value)}
       onChange={(event) => {
-        const nextValue = event.target.value.replace(/[^\d.]/g, "")
-        onChange(nextValue === "" ? undefined : Number(nextValue))
+        const rawValue = event.target.value
+        if (rawValue === "") {
+          onChange(undefined)
+          return
+        }
+        if (!/^\d*[.,]?\d{0,2}$/.test(rawValue)) return
+        const numericValue = Number.parseFloat(rawValue.replace(",", "."))
+        if (!Number.isNaN(numericValue)) onChange(numericValue)
+      }}
+      onBlur={() => {
+        if (emptyAsZero && (value == null || Number.isNaN(Number(value)))) {
+          onChange(0)
+        }
       }}
       className={cn("min-h-12 h-12 text-base", className)}
       {...props}
@@ -248,6 +264,7 @@ export function EventCreationWizard({
   const form = useForm<EventFormValues>({
     resolver: zodResolver(draftEventSchema) as Resolver<EventFormValues>,
     mode: "onTouched",
+    shouldUnregister: false,
     defaultValues: initialData?.values ?? defaultValues,
   })
 
@@ -283,7 +300,7 @@ export function EventCreationWizard({
   const eventTitle = useWatch({ control: form.control, name: "basics.title" })
 
   const draftKey = initialData ? `edit:${initialData.id}` : "create"
-  const { persistedEventId } = useEventFormAutosave({
+  const { persistedEventId, flushAutosave } = useEventFormAutosave({
     form,
     draftKey,
     eventId: initialData?.id ?? null,
@@ -291,6 +308,7 @@ export function EventCreationWizard({
     venuePricingMap,
     onVenuePricingMapChange: setVenuePricingMap,
     zoneTierPricing,
+    onZoneTierPricingChange: setZoneTierPricing,
     targetOrganizerId,
   })
 
@@ -435,6 +453,7 @@ export function EventCreationWizard({
 
   async function moveToStep(nextStep: number) {
     if (nextStep < 0 || nextStep >= steps.length) return
+    flushAutosave()
     setActiveStep(nextStep)
     setHighestStep(steps.length - 1)
     setWizardStep(nextStep)
@@ -635,6 +654,7 @@ export function EventCreationWizard({
 
           <Card className="gap-0 rounded-3xl border border-zinc-200 bg-gradient-to-b from-white to-zinc-50 py-0 shadow-2xl shadow-zinc-200/80 ring-0 dark:border-zinc-800 dark:from-zinc-900/90 dark:to-zinc-950/95 dark:shadow-black/30 [&_[data-slot=input]]:rounded-xl [&_[data-slot=input]]:border-zinc-200 [&_[data-slot=input]]:bg-white [&_[data-slot=input]]:text-zinc-900 [&_[data-slot=input]]:shadow-inner [&_[data-slot=input]]:placeholder:text-slate-500 dark:placeholder:text-muted-foreground [&_[data-slot=input]:focus-visible]:border-emerald-500/60 [&_[data-slot=input]:focus-visible]:bg-white [&_[data-slot=input]:focus-visible]:ring-2 [&_[data-slot=input]:focus-visible]:ring-emerald-500/15 dark:[&_[data-slot=input]]:border-zinc-800 dark:[&_[data-slot=input]]:bg-zinc-950 dark:[&_[data-slot=input]]:text-white dark:[&_[data-slot=input]]:placeholder:text-zinc-600 dark:[&_[data-slot=input]:focus-visible]:bg-zinc-900 [&_[data-slot=select-trigger]]:rounded-xl [&_[data-slot=select-trigger]]:border-zinc-200 [&_[data-slot=select-trigger]]:bg-zinc-50 [&_[data-slot=select-trigger]]:text-zinc-900 [&_[data-slot=select-trigger]]:shadow-inner [&_[data-slot=select-trigger]:focus-visible]:border-emerald-500/60 [&_[data-slot=select-trigger]:focus-visible]:ring-2 [&_[data-slot=select-trigger]:focus-visible]:ring-emerald-500/15 dark:[&_[data-slot=select-trigger]]:border-zinc-800 dark:[&_[data-slot=select-trigger]]:bg-zinc-950/80 dark:[&_[data-slot=select-trigger]]:text-white">
             <TabsContent
+              keepMounted
               value="0"
               className="animate-in fade-in slide-in-from-right-2 duration-300"
             >
@@ -984,6 +1004,7 @@ export function EventCreationWizard({
             </TabsContent>
 
             <TabsContent
+              keepMounted
               value="1"
               className="animate-in fade-in slide-in-from-right-2 duration-300"
             >
@@ -1008,6 +1029,7 @@ export function EventCreationWizard({
             </TabsContent>
 
             <TabsContent
+              keepMounted
               value="2"
               className="animate-in fade-in slide-in-from-right-2 duration-300"
             >
@@ -1031,6 +1053,7 @@ export function EventCreationWizard({
             </TabsContent>
 
             <TabsContent
+              keepMounted
               value="3"
               className="animate-in fade-in slide-in-from-right-2 duration-300"
             >
@@ -1551,6 +1574,7 @@ export function EventCreationWizard({
                                   min={0}
                                   step="0.01"
                                   placeholder="Ej. 15000"
+                                  emptyAsZero
                                   value={field.value}
                                   onChange={(value) => field.onChange(value)}
                                   className="h-12 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 pl-9"
@@ -1785,6 +1809,7 @@ export function EventCreationWizard({
             </TabsContent>
 
             <TabsContent
+              keepMounted
               value="4"
               className="animate-in fade-in slide-in-from-right-2 duration-300"
             >

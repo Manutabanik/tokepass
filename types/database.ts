@@ -195,6 +195,8 @@ export type Event = {
   slug: string
   /** Plano visual del recinto (editor SVG). */
   venue_map: Json
+  province: string | null
+  department: string | null
   created_at: string
   updated_at: string
 }
@@ -760,6 +762,8 @@ type EventInsert = Omit<
   | "ends_at"
   | "slug"
   | "venue_map"
+  | "province"
+  | "department"
   | "created_at"
   | "updated_at"
 > & {
@@ -795,6 +799,8 @@ type EventInsert = Omit<
   social_share_image_url?: string | null
   slug?: string
   venue_map?: Json
+  province?: string | null
+  department?: string | null
   created_at?: string
   updated_at?: string
 }

@@ -73,10 +73,7 @@ export const useEventFormStore = create<EventFormStore>()(
         const current = get()
         const sameSession = current.draftKey === draftKey
         const preferLocal =
-          sameSession &&
-          current.values != null &&
-          current.updatedAt > 0 &&
-          !eventId
+          sameSession && current.values != null && current.updatedAt > 0
 
         set({
           draftKey,

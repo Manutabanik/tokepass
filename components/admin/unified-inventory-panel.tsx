@@ -26,6 +26,7 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
+import { PriceInput } from "@/components/ui/price-input"
 import {
   inferBundleType,
   bundleIncludesSeating,
@@ -406,17 +407,9 @@ function InventoryRow({
           render={({ field, fieldState }) => (
             <FormItem>
               <FormLabel>Precio</FormLabel>
-              <Input
-                type="number"
-                min={0}
-                value={field.value ?? ""}
-                onChange={(event) =>
-                  field.onChange(
-                    event.target.value === ""
-                      ? undefined
-                      : Number(event.target.value),
-                  )
-                }
+              <PriceInput
+                value={field.value}
+                onValueChange={(value) => field.onChange(value)}
                 className="h-11"
               />
               <FormMessage>{fieldState.error?.message}</FormMessage>
@@ -445,17 +438,9 @@ function InventoryRow({
                 <Sparkles className="size-3.5" aria-hidden="true" />
                 Precio de lista (para mostrar ahorro)
               </FormLabel>
-              <Input
-                type="number"
-                min={0}
-                value={field.value ?? ""}
-                onChange={(event) =>
-                  field.onChange(
-                    event.target.value === ""
-                      ? null
-                      : Number(event.target.value),
-                  )
-                }
+              <PriceInput
+                value={field.value ?? undefined}
+                onValueChange={(value) => field.onChange(value ?? null)}
                 className="h-11 max-w-xs"
               />
               <FormMessage>{fieldState.error?.message}</FormMessage>

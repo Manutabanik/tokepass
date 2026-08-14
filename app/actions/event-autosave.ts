@@ -22,6 +22,20 @@ function hasMinimumDraftContent(values: EventFormValues): boolean {
   return values.basics.title.trim().length >= 3
 }
 
+function sanitizeAutosaveValues(values: EventFormValues): EventFormValues {
+  return {
+    ...values,
+    venue: {
+      ...values.venue,
+      existingVenueId: values.venue.existingVenueId || null,
+    },
+    tickets: (values.tickets ?? []).map((tier) => ({
+      ...tier,
+      price: Number.isFinite(Number(tier.price)) ? Number(tier.price) : 0,
+    })),
+  }
+}
+
 /**
  * Autoguarda borrador con esquema relajado. No exige descripción, precio
  * ni venue completo. Los fallos de validación se omiten en silencio.
@@ -32,17 +46,18 @@ export async function autosaveEventDraft(input: {
   zoneTierPricing?: ZoneTierPriceDraft[]
   targetOrganizerId?: string | null
 }): Promise<AutosaveEventDraftResult> {
-  if (!hasMinimumDraftContent(input.values)) {
+  const values = sanitizeAutosaveValues(input.values)
+  if (!hasMinimumDraftContent(values)) {
     return { ok: true, eventId: input.eventId ?? "", mode: "skipped" }
   }
 
-  const parsed = draftEventSchema.safeParse(input.values)
+  const parsed = draftEventSchema.safeParse(values)
   if (!parsed.success) {
     return { ok: true, eventId: input.eventId ?? "", mode: "skipped" }
   }
 
   const formData = new FormData()
-  formData.set("payload", JSON.stringify(input.values))
+  formData.set("payload", JSON.stringify(values))
   formData.set("draftMode", "1")
   if (input.targetOrganizerId) {
     formData.set("targetOrganizerId", input.targetOrganizerId)
@@ -71,9 +86,6 @@ export async function autosaveEventDraft(input: {
       rows: input.zoneTierPricing,
     })
   }
-
-  revalidatePath(`/admin/events/${eventId}`)
-  revalidatePath(`/admin/events/${eventId}/edit`)
 
   return {
     ok: true,

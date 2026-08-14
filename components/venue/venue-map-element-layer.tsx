@@ -34,6 +34,7 @@ const VenueElementShape = memo(function VenueElementShape({
   selected,
   occupancyBySeatId,
   onElementPointerDown,
+  onElementContextMenu,
   onSeatPointerDown,
   showSeats,
   showLabels,
@@ -44,6 +45,10 @@ const VenueElementShape = memo(function VenueElementShape({
   occupancyBySeatId: Record<string, "available" | "occupied" | "blocked">
   onElementPointerDown?: (
     event: React.PointerEvent,
+    element: VenueMapElement,
+  ) => void
+  onElementContextMenu?: (
+    event: React.MouseEvent,
     element: VenueMapElement,
   ) => void
   onSeatPointerDown?: (
@@ -72,6 +77,11 @@ const VenueElementShape = memo(function VenueElementShape({
             ? (event) => onElementPointerDown?.(event, element)
             : undefined
         }
+        onContextMenu={
+          interactive
+            ? (event) => onElementContextMenu?.(event, element)
+            : undefined
+        }
       >
         <rect
           x={element.x - element.width / 2}
@@ -81,7 +91,7 @@ const VenueElementShape = memo(function VenueElementShape({
           rx={10}
           className={
             selected
-              ? "fill-zinc-200/90 stroke-emerald-400 dark:fill-zinc-700/90"
+              ? "fill-zinc-200/90 stroke-emerald-400 stroke-2 dark:fill-zinc-700/90"
               : "fill-zinc-300/80 stroke-zinc-500 dark:fill-zinc-800/90 dark:stroke-zinc-500"
           }
           strokeWidth={selected ? 2 : 1.2}
@@ -117,6 +127,7 @@ const VenueElementShape = memo(function VenueElementShape({
         transform={transform}
         opacity={opacity}
         onPointerDown={(event) => onElementPointerDown?.(event, element)}
+        onContextMenu={(event) => onElementContextMenu?.(event, element)}
       >
         <rect
           x={element.x - element.width / 2}
@@ -126,7 +137,8 @@ const VenueElementShape = memo(function VenueElementShape({
           rx={12}
           fill={element.color}
           fillOpacity={0.18}
-          stroke={selected ? "#34d399" : element.color}
+          className={selected ? "stroke-emerald-400" : undefined}
+          stroke={selected ? undefined : element.color}
           strokeWidth={selected ? 2 : 1.4}
         />
         {showLabels ? (
@@ -160,6 +172,7 @@ const VenueElementShape = memo(function VenueElementShape({
       <g
         transform={transform}
         onPointerDown={(event) => onElementPointerDown?.(event, element)}
+        onContextMenu={(event) => onElementContextMenu?.(event, element)}
       >
         {element.type === "round_table" ? (
           <circle
@@ -168,7 +181,8 @@ const VenueElementShape = memo(function VenueElementShape({
             r={20}
             fill={element.color}
             fillOpacity={0.35}
-            stroke={selected ? "#fff" : element.color}
+            className={selected ? "stroke-emerald-400" : undefined}
+            stroke={selected ? undefined : element.color}
             strokeWidth={selected ? 2 : 1.5}
           />
         ) : (
@@ -180,7 +194,8 @@ const VenueElementShape = memo(function VenueElementShape({
             rx={element.type === "vip_box" ? 10 : 4}
             fill={element.color}
             fillOpacity={0.35}
-            stroke={selected ? "#fff" : element.color}
+            className={selected ? "stroke-emerald-400" : undefined}
+            stroke={selected ? undefined : element.color}
             strokeWidth={selected ? 2 : 1.5}
           />
         )}
@@ -226,6 +241,7 @@ export function VenueMapElementLayer({
   selectedIds = [],
   occupancyBySeatId = {},
   onElementPointerDown,
+  onElementContextMenu,
   onSeatPointerDown,
   showSeats = true,
   zoom = 1,
@@ -236,6 +252,10 @@ export function VenueMapElementLayer({
   occupancyBySeatId?: Record<string, "available" | "occupied" | "blocked">
   onElementPointerDown?: (
     event: React.PointerEvent,
+    element: VenueMapElement,
+  ) => void
+  onElementContextMenu?: (
+    event: React.MouseEvent,
     element: VenueMapElement,
   ) => void
   onSeatPointerDown?: (
@@ -262,6 +282,7 @@ export function VenueMapElementLayer({
           selected={selected.has(element.id)}
           occupancyBySeatId={occupancyBySeatId}
           onElementPointerDown={interactive ? onElementPointerDown : undefined}
+          onElementContextMenu={interactive ? onElementContextMenu : undefined}
           onSeatPointerDown={interactive ? onSeatPointerDown : undefined}
           showSeats={renderSeats || selected.has(element.id)}
           showLabels={renderLabels || selected.has(element.id)}

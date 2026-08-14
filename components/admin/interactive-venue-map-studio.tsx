@@ -16,6 +16,7 @@ export function InteractiveVenueMapStudio({
   venueLabel,
   value,
   onSave,
+  onChange,
   onClose,
   saving = false,
 }: {
@@ -25,6 +26,7 @@ export function InteractiveVenueMapStudio({
   venueLabel?: string
   value: InteractiveVenueMap
   onSave: (map: InteractiveVenueMap, layout: VenueSeatingLayout) => void
+  onChange?: (map: InteractiveVenueMap) => void
   onClose: () => void
   saving?: boolean
 }) {
@@ -56,7 +58,10 @@ export function InteractiveVenueMapStudio({
         eventTitle={eventTitle}
         value={draft}
         saving={saving}
-        onChange={(next) => setDraft(next)}
+        onChange={(next) => {
+          setDraft(next)
+          onChange?.(next)
+        }}
         onPreview={() => setPreview(true)}
         onSave={(map) => onSave(map, venueMapToSeatingLayout(map))}
         onClose={onClose}

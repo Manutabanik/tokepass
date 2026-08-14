@@ -42,15 +42,30 @@ function mapEntity(raw: RawEntity): GeorefEntityWithCenter {
   return { id: String(raw.id), name: raw.nombre, center }
 }
 
+function uniqueGeorefEntities<T extends GeorefEntity>(rows: T[]): T[] {
+  const byId = Array.from(new Map(rows.map((row) => [row.id, row])).values())
+  const seenName = new Set<string>()
+  const unique: T[] = []
+  for (const row of byId) {
+    const key = row.name.trim().toLocaleLowerCase("es")
+    if (!key || seenName.has(key)) continue
+    seenName.add(key)
+    unique.push(row)
+  }
+  return unique
+}
+
 /** Provincias AR ordenadas alfabéticamente (API oficial Georef). */
 export async function fetchArgentinaProvinces(): Promise<GeorefEntity[]> {
   const data = await fetchGeorefJson<GeorefListResponse<RawEntity>>(
     `${GEOREF_BASE}/provincias?campos=id,nombre&orden=nombre&max=50`,
   )
-  return (data.provincias ?? []).map((row) => ({
-    id: String(row.id),
-    name: row.nombre,
-  }))
+  return uniqueGeorefEntities(
+    (data.provincias ?? []).map((row) => ({
+      id: String(row.id),
+      name: row.nombre,
+    })),
+  )
 }
 
 /** Departamentos/partidos de una provincia (incluye centroide para sesgar Places). */
@@ -66,5 +81,5 @@ export async function fetchArgentinaDepartments(
   const data = await fetchGeorefJson<GeorefListResponse<RawEntity>>(
     `${GEOREF_BASE}/departamentos?${params.toString()}`,
   )
-  return (data.departamentos ?? []).map(mapEntity)
+  return uniqueGeorefEntities((data.departamentos ?? []).map(mapEntity))
 }

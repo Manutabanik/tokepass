@@ -105,6 +105,10 @@ const eventFormObject = z
         .min(2, "Ingresá el nombre del lugar."),
       venueLocation: z.string().trim().optional(),
       venueCity: z.string().trim().optional(),
+      province: z.string().trim().optional(),
+      department: z.string().trim().optional(),
+      provinceId: z.string().trim().optional().nullable(),
+      departmentId: z.string().trim().optional().nullable(),
       capacity: z.number().int().positive().optional(),
       rows: z.number().int().positive().optional(),
       seatsPerRow: z.number().int().positive().optional(),
@@ -323,7 +327,10 @@ export const draftEventSchema = z.object({
   venue: z
     .object({
       mode: z.enum(["existing", "new"]).optional().default("new"),
-      existingVenueId: z.string().uuid().optional().nullable(),
+      existingVenueId: z
+        .union([z.string().uuid(), z.literal(""), z.null()])
+        .optional()
+        .transform((value) => (value ? value : null)),
       zoneType: z
         .enum(["general_admission", "reserved_seating"])
         .optional()
@@ -331,6 +338,10 @@ export const draftEventSchema = z.object({
       venueName: z.string().optional().default(""),
       venueLocation: z.string().optional(),
       venueCity: z.string().optional(),
+      province: z.string().optional(),
+      department: z.string().optional(),
+      provinceId: z.string().optional().nullable(),
+      departmentId: z.string().optional().nullable(),
       capacity: z.number().int().optional(),
       rows: z.number().int().optional(),
       seatsPerRow: z.number().int().optional(),
@@ -346,6 +357,7 @@ export const draftEventSchema = z.object({
     .optional()
     .default({
       mode: "new",
+      existingVenueId: null,
       zoneType: "general_admission",
       venueName: "",
       includesSeatingMap: false,
@@ -507,6 +519,10 @@ export function coerceDraftEventForm(
       venueName: (venue.venueName ?? "").trim() || "Por definir",
       venueLocation: venue.venueLocation,
       venueCity: venue.venueCity,
+      province: venue.province,
+      department: venue.department,
+      provinceId: venue.provinceId ?? null,
+      departmentId: venue.departmentId ?? null,
       capacity: venue.capacity && venue.capacity > 0 ? venue.capacity : 1,
       rows: reservedIncomplete ? undefined : venue.rows,
       seatsPerRow: reservedIncomplete ? undefined : venue.seatsPerRow,

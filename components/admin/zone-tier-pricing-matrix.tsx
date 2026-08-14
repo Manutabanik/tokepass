@@ -6,6 +6,7 @@ import { useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { PriceInput } from "@/components/ui/price-input"
 import {
   Select,
   SelectContent,
@@ -229,14 +230,11 @@ export function ZoneTierPricingMatrix({
                         <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
                           Precio
                         </Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          step={100}
-                          value={Number.isFinite(row.price) ? row.price : 0}
-                          onChange={(e) =>
+                        <PriceInput
+                          value={row.price}
+                          onValueChange={(value) =>
                             updateRow(sector.id, index, {
-                              price: Math.max(0, Number(e.target.value) || 0),
+                              price: value ?? 0,
                             })
                           }
                           className="h-10"

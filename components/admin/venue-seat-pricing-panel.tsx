@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { PriceInput } from "@/components/ui/price-input"
 import { formatCurrency } from "@/lib/format"
 import {
   listPricableSectors,
@@ -184,14 +185,11 @@ export function VenueSeatPricingPanel({
                   >
                     Precio de la zona
                   </Label>
-                  <Input
+                  <PriceInput
                     id={`sector-price-${sector.id}`}
-                    type="number"
-                    min={0}
-                    step={100}
-                    value={Number.isFinite(entry.price) ? entry.price : 0}
-                    onChange={(event) =>
-                      setSectorPrice(sector.id, Number(event.target.value))
+                    value={entry.price}
+                    onValueChange={(value) =>
+                      setSectorPrice(sector.id, value ?? 0)
                     }
                     className="mt-1 h-10"
                   />
@@ -211,18 +209,11 @@ export function VenueSeatPricingPanel({
                         >
                           {group.name}
                         </Label>
-                        <Input
+                        <PriceInput
                           id={`group-price-${group.id}`}
-                          type="number"
-                          min={0}
-                          step={100}
-                          value={Number.isFinite(groupPrice) ? groupPrice : 0}
-                          onChange={(event) =>
-                            setGroupPrice(
-                              sector.id,
-                              group.id,
-                              Number(event.target.value),
-                            )
+                          value={groupPrice}
+                          onValueChange={(value) =>
+                            setGroupPrice(sector.id, group.id, value ?? 0)
                           }
                           className="h-9 w-28"
                         />

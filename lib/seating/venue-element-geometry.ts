@@ -205,7 +205,7 @@ function defaultSectorName(type: VenueElementType): string {
 
 export function cloneVenueElement(
   element: VenueMapElement,
-  offset = 28,
+  offset = 15,
 ): VenueMapElement {
   const copy: VenueMapElement = {
     ...element,
@@ -223,4 +223,30 @@ export function elementSeatLabel(element: VenueMapElement, number: number): stri
   if (element.type === "long_table") return `${element.label} - Asiento ${number}`
   if (element.type === "vip_box") return `${element.label} - Lugar ${number}`
   return `${element.label}`
+}
+
+export function formatVenuePriceArs(value: number): string {
+  return `$ ${Math.round(value).toLocaleString("es-AR")}`
+}
+
+export function describeVenueElementType(element: VenueMapElement): string {
+  if (element.type === "round_table") {
+    return `Mesa Redonda - ${element.chairCount} Sillas`
+  }
+  if (element.type === "long_table") {
+    const seats = element.sideA + element.sideB
+    return `Tablón - ${seats} Asientos`
+  }
+  if (element.type === "vip_chair") return "Butaca VIP"
+  if (element.type === "vip_box") return `Palco - ${element.chairCount} Lugares`
+  if (element.type === "standing_zone") return `Zona de pie - Cupo ${element.capacity}`
+  if (element.subtype === "bar") return "Barra"
+  if (element.subtype === "restroom") return "Baños"
+  if (element.subtype === "entrance") return "Entrada"
+  if (element.subtype === "exit") return "Salida"
+  if (element.subtype === "parking") return "Estacionamiento"
+  if (element.subtype === "kitchen") return "Cocina"
+  if (element.subtype === "dj_booth") return "Cabina DJ"
+  if (element.subtype === "stage") return "Escenario"
+  return "Infraestructura"
 }
