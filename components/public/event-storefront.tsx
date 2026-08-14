@@ -87,7 +87,7 @@ export function EventStorefront({
   const saleState = deriveEventSaleState({
     date: event.date,
     endsAt: event.endsAt,
-    scheduleDays: event.scheduleDays,
+    scheduleDays: event.scheduleDays ?? [],
     tiers: event.tiers,
   })
   const finished = saleState === "finished"
@@ -192,7 +192,7 @@ export function EventStorefront({
                       {formatEventDay(event.date)}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {event.scheduleDays.length > 1
+                      {event.scheduleDays?.length > 1
                         ? `${event.scheduleDays.length} jornadas · desde ${formatEventTime(event.date)}`
                         : formatEventTime(event.date)}
                     </p>
@@ -296,7 +296,7 @@ export function EventStorefront({
                         referralCode={referralCode}
                         sandboxEligible={sandboxEligible}
                         serviceChargeRate={event.serviceChargeRate}
-                        scheduleDays={event.scheduleDays}
+                        scheduleDays={event.scheduleDays ?? []}
                         seatingUnits={event.seatingUnits}
                         seatingSectorSummaries={event.seatingSectorSummaries}
                         seatingBackgroundUrl={event.venue?.seating_background_url}
@@ -337,13 +337,13 @@ export function EventStorefront({
 
             <EventAboutExpandable description={description} />
 
-            {event.scheduleDays.length > 1 ? (
+            {event.scheduleDays?.length > 1 ? (
               <section className="space-y-3">
                 <h2 className="text-lg font-bold tracking-tight text-foreground">
                   Jornadas
                 </h2>
                 <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                  {event.scheduleDays.map((day) => (
+                  {event.scheduleDays?.map((day) => (
                     <div
                       key={day.id}
                       className="min-w-[148px] rounded-2xl border border-border bg-card px-4 py-3 text-card-foreground shadow-sm"
@@ -473,7 +473,7 @@ export function EventStorefront({
                 referralCode={referralCode}
                 sandboxEligible={sandboxEligible}
                 serviceChargeRate={event.serviceChargeRate}
-                scheduleDays={event.scheduleDays}
+                scheduleDays={event.scheduleDays ?? []}
                 seatingUnits={event.seatingUnits}
                 seatingSectorSummaries={event.seatingSectorSummaries}
                 seatingBackgroundUrl={event.venue?.seating_background_url}

@@ -1,6 +1,5 @@
 "use client"
 
-import { toBlob } from "html-to-image"
 import {
   Camera,
   Download,
@@ -566,6 +565,7 @@ export function StoryFlyerModal({
     if (!node) return null
     await waitForImages(node)
     await new Promise((r) => window.setTimeout(r, 80))
+    const { toBlob } = await import("html-to-image")
     return toBlob(node, {
       cacheBust: true,
       pixelRatio: 1,
@@ -760,7 +760,9 @@ export function StoryFlyerTrigger({
         {icon ?? <Camera className="size-4 shrink-0" aria-hidden />}
         {label}
       </button>
-      <StoryFlyerModal data={data} open={open} onOpenChange={setOpen} />
+      {open ? (
+        <StoryFlyerModal data={data} open={open} onOpenChange={setOpen} />
+      ) : null}
     </>
   )
 }

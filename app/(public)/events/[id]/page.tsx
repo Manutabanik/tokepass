@@ -110,20 +110,17 @@ export default async function EventDetailPage({
     }
   }
 
-  const province = (
-    event.venue?.location ?? event.location
-  )
-    .split(",")[0]
-    ?.trim() ?? ""
+  const locationText = event.venue?.location ?? event.location ?? ""
+  const province = locationText.split(",")[0]?.trim() ?? ""
 
   const [resaleListings, relatedEvents] = await Promise.all([
-    getActiveResaleListingsForEvent(event.id),
+    getActiveResaleListingsForEvent(event.id).catch(() => []),
     getRelatedEvents({
       currentEventId: event.id,
       category: event.categoryId,
       province,
       limit: 4,
-    }),
+    }).catch(() => []),
   ])
 
   return (
