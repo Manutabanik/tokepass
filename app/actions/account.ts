@@ -51,7 +51,16 @@ export async function getMyAccountProfile(): Promise<BuyerAccountProfile> {
     .eq("id", user.id)
     .maybeSingle()
 
-  if (error) throw new Error(error.message)
+  if (error) {
+    return {
+      id: user.id,
+      email: user.email ?? "",
+      fullName: "",
+      dni: "",
+      phone: "",
+      avatarUrl: null,
+    }
+  }
 
   return {
     id: user.id,

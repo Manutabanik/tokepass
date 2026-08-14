@@ -42,7 +42,7 @@ export default async function HomePage({
       getPublishedEvents(q),
       getFeaturedEvents(),
       getActiveEventCategories().catch(() => []),
-      getActivePlatformSponsors(),
+      getActivePlatformSponsors().catch(() => []),
     ])
     events = published
     featured = featuredResult

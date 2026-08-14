@@ -61,7 +61,7 @@ export default async function EventDetailPage({
   const { id } = await params
   const { ref: referralCode } = await searchParams
   const [event, supabase] = await Promise.all([
-    getEventDetails(id),
+    getEventDetails(id).catch(() => null),
     createClient(),
   ])
 

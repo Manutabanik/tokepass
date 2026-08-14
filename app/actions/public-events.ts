@@ -1,6 +1,7 @@
 "use server"
 
 import { listEventSponsors } from "@/app/actions/event-sponsors"
+import { logger } from "@/lib/logger"
 import { createClient } from "@/lib/supabase/server"
 import { parseScheduleDays } from "@/lib/event-schedule"
 import { fisherYatesShuffle, FEATURED_CAROUSEL_LIMIT } from "@/lib/featured-rotation"
@@ -256,7 +257,12 @@ export async function getPublishedEvents(
   const { data, error } = await query
 
   if (error) {
-    throw new Error(`No se pudieron cargar los eventos: ${error.message}`)
+    logger.error({
+      context: "public-events",
+      message: "list_published_failed",
+      error,
+    })
+    return []
   }
 
   const mapped = ((data ?? []) as unknown as EventListRow[]).map(mapEventListRow)
@@ -319,7 +325,12 @@ export async function getFeaturedEvents(options?: {
     .or("is_sponsored_by_tokepass.eq.true,is_featured.eq.true")
 
   if (error) {
-    throw new Error(`No se pudieron cargar los destacados: ${error.message}`)
+    logger.error({
+      context: "public-events",
+      message: "list_featured_failed",
+      error,
+    })
+    return { pool: [], totalSponsored: 0, events: [] }
   }
 
   let mapped = ((data ?? []) as unknown as EventListRow[])
@@ -408,7 +419,13 @@ async function loadEventDetails(
   const { data, error } = await query.maybeSingle()
 
   if (error) {
-    throw new Error(`No se pudo cargar el evento: ${error.message}`)
+    logger.error({
+      context: "public-events",
+      message: "load_event_failed",
+      event_id: eventId,
+      error,
+    })
+    return null
   }
 
   if (!data) return null
@@ -435,10 +452,16 @@ async function loadEventDetails(
     { p_event_id: eventId },
   )
   if (seatingError) {
-    throw new Error(
-      `No se pudo cargar la disponibilidad de ubicaciones: ${seatingError.message}`,
-    )
+    logger.error({
+      context: "public-events",
+      message: "seating_summary_failed",
+      event_id: eventId,
+      error: seatingError,
+    })
   }
+  const sectorSummaries = Array.isArray(sectorSummaryRows)
+    ? sectorSummaryRows
+    : []
 
   const { data: zonePricingRows } = await supabase
     .from("zone_tier_pricing")
@@ -559,7 +582,7 @@ async function loadEventDetails(
         }
       : null,
     seatingUnits: [],
-    seatingSectorSummaries: (sectorSummaryRows ?? []).map((row) => ({
+    seatingSectorSummaries: sectorSummaries.map((row) => ({
       sectorId: row.sector_id,
       sectorName: row.sector_name,
       color: row.color,

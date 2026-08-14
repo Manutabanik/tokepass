@@ -20,7 +20,7 @@ export default async function EventsPage({
 }) {
   const { q, location, category } = await searchParams
   const [events, dbCategories] = await Promise.all([
-    getPublishedEvents(q),
+    getPublishedEvents(q).catch(() => []),
     getActiveEventCategories().catch(() => []),
   ])
   const categories =

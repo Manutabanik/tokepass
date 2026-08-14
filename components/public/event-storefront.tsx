@@ -500,11 +500,11 @@ export function EventStorefront({
         </aside>
       </div>
 
-      {event.sponsors.length > 0 ? (
+      {(event.sponsors?.length ?? 0) > 0 ? (
         <div className="mx-auto max-w-6xl px-4 pb-8 lg:px-6">
           <SponsorGrid
             heading="Auspician este evento:"
-            sponsors={event.sponsors}
+            sponsors={event.sponsors ?? []}
             size="md"
           />
         </div>
