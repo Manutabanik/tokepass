@@ -26,7 +26,8 @@ import {
   VenueArgentinaSelector,
   type VenueArgentinaValue,
 } from "@/components/admin/venue-argentina-selector"
-import { InteractiveVenueMapEditor } from "@/components/admin/interactive-venue-map-editor"
+import { InteractiveVenueMapStudio } from "@/components/admin/interactive-venue-map-studio"
+import { VenueMapStudioSummary } from "@/components/admin/venue-map-studio-summary"
 import {
   createEmptyZone,
   SmartVenueBuilder,
@@ -224,6 +225,7 @@ export function OrganizerVenuesManager({
   const [pending, startTransition] = useTransition()
   const [uploadPending, startUploadTransition] = useTransition()
   const [draft, setDraft] = useState<Draft | null>(null)
+  const [studioOpen, setStudioOpen] = useState(false)
 
   const sectorCapacity =
     draft?.zones.reduce(
@@ -407,30 +409,33 @@ export function OrganizerVenuesManager({
 
               {draft.structured ? (
                 <div className="space-y-3">
-                  <div>
-                    <h3 className="text-sm font-semibold text-foreground">
-                      Plano de asientos
-                    </h3>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Escenario, sectores en abanico, pasillos y etiquetas de nivel.
-                    </p>
-                  </div>
-                  <InteractiveVenueMapEditor
+                  <VenueMapStudioSummary
+                    map={draft.venueMap}
+                    onOpen={() => setStudioOpen(true)}
+                  />
+                  <InteractiveVenueMapStudio
+                    open={studioOpen}
+                    eventTitle={draft.name || "Lugar"}
+                    venueLabel={
+                      [draft.address.trim(), locationLabel(draft)]
+                        .filter(Boolean)
+                        .join(" · ") || undefined
+                    }
                     value={draft.venueMap}
-                    onChange={(next) => {
+                    onClose={() => setStudioOpen(false)}
+                    onSave={(next) => {
                       const numbered = venueMapToZoneDrafts(next)
                       setDraft({
                         ...draft,
                         venueMap: next,
                         zones:
-                          numbered.length > 0
-                            ? numbered
-                            : draft.zones,
+                          numbered.length > 0 ? numbered : draft.zones,
                         capacity:
                           numbered.length > 0
                             ? String(Math.max(1, venueMapCapacity(next)))
                             : draft.capacity,
                       })
+                      setStudioOpen(false)
                     }}
                   />
                 </div>

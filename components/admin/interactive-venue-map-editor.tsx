@@ -1,34 +1,55 @@
 "use client"
 
 import {
+  ArrowLeft,
   CircleDot,
+  Copy,
+  Eye,
+  Info,
   Layers,
-  LayoutGrid,
+  LayoutTemplate,
+  Minus,
+  MousePointer,
   Palette,
+  Redo,
+  RotateCw,
   Save,
+  Square,
   Trash2,
   Type,
+  Undo,
   ZoomIn,
   ZoomOut,
   Armchair,
-  Minus,
-  Square,
-  Eye,
-  X,
-  Copy,
-  RotateCw,
 } from "lucide-react"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState, useTransition } from "react"
+import { toast } from "sonner"
 
 import { AutoNumberingPanel } from "@/components/admin/auto-numbering-panel"
+import { BuyerViewModal } from "@/components/admin/buyer-view-modal"
 import { ConcentricRingGenerator } from "@/components/admin/concentric-ring-generator"
+import { QuickPriceAssigner } from "@/components/admin/quick-price-assigner"
 import { VenueComponentPalette, type PalettePlacement } from "@/components/admin/venue-component-palette"
 import { VenueMapBackgroundPanel } from "@/components/admin/venue-map-background-panel"
+import { VenueTemplateLibrary } from "@/components/admin/venue-template-selector"
+import {
+  deleteOrganizerVenueTemplate,
+  listOrganizerVenueTemplates,
+  saveOrganizerVenueTemplate,
+  type OrganizerVenueTemplate,
+} from "@/app/actions/venue-templates"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { VenueMapBackgroundLayer } from "@/components/venue/venue-map-background-layer"
-import { VenueMapCanvas } from "@/components/venue/venue-map-canvas"
 import { VenueMapElementLayer } from "@/components/venue/venue-map-element-layer"
 import {
   cloneVenueElement,
@@ -36,14 +57,24 @@ import {
   rebuildElementSeats,
 } from "@/lib/seating/venue-element-geometry"
 import {
+  getVenueTemplateMap,
+  isBlankVenueTemplate,
+  type BuiltinVenueTemplateId,
+} from "@/lib/constants/venue-templates"
+import {
+  listVenuePriceGroups,
+} from "@/lib/seating/venue-price-groups"
+import {
   rebuildSectorSeats,
   venueMapCapacity,
+  venueMapHasInventory,
   venueMapToSeatingLayout,
 } from "@/lib/seating/venue-map-geometry"
 import { cn } from "@/lib/utils"
 import {
   emptyVenueMap,
   parseVenueMap,
+  isInfrastructureElement,
   type InteractiveVenueMap,
   type VenueMapElement,
   type VenueMapSector,
@@ -76,12 +107,20 @@ export function InteractiveVenueMapEditor({
   value,
   onChange,
   onSave,
+  onClose,
+  onPreview,
   saving = false,
+  variant = "card",
+  eventTitle = "Mapa del recinto",
 }: {
   value?: InteractiveVenueMap | null
   onChange: (map: InteractiveVenueMap, seatingLayout: VenueSeatingLayout) => void
   onSave?: (map: InteractiveVenueMap) => void
+  onClose?: () => void
+  onPreview?: () => void
   saving?: boolean
+  variant?: "card" | "studio"
+  eventTitle?: string
 }) {
   const svgRef = useRef<SVGSVGElement>(null)
   const [map, setMap] = useState<InteractiveVenueMap>(
@@ -107,6 +146,21 @@ export function InteractiveVenueMapEditor({
   const mapRef = useRef(map)
   mapRef.current = map
   const [pan, setPan] = useState({ x: 0, y: 0 })
+  const undoStack = useRef<InteractiveVenueMap[]>([])
+  const redoStack = useRef<InteractiveVenueMap[]>([])
+  const [historyTick, setHistoryTick] = useState(0)
+  const [libraryOpen, setLibraryOpen] = useState(
+    () => !venueMapHasInventory(parseVenueMap(value ?? emptyVenueMap())),
+  )
+  const [pricePanelOpen, setPricePanelOpen] = useState(false)
+  const [customTemplates, setCustomTemplates] = useState<OrganizerVenueTemplate[]>(
+    [],
+  )
+  const [saveOpen, setSaveOpen] = useState(false)
+  const [templateName, setTemplateName] = useState(eventTitle)
+  const [pendingTemplates, startTemplates] = useTransition()
+  const canvasRef = useRef<HTMLDivElement>(null)
+  const spaceHeld = useRef(false)
   const elementDrag = useRef<{
     kind: "stage" | "label" | "aisle" | "sector" | "element" | "pan"
     id?: string
@@ -114,12 +168,51 @@ export function InteractiveVenueMapEditor({
     startY: number
     origX: number
     origY: number
+    recorded?: boolean
   } | null>(null)
 
   useEffect(() => {
     if (!value) return
-    setMap(parseVenueMap(value))
+    const next = parseVenueMap(value)
+    if (JSON.stringify(next) === JSON.stringify(mapRef.current)) return
+    setMap(next)
+    mapRef.current = next
   }, [value])
+
+  useEffect(() => {
+    if (variant !== "studio") return
+    startTemplates(() => {
+      void listOrganizerVenueTemplates().then((result) => {
+        if (result.success) setCustomTemplates(result.data)
+      })
+    })
+  }, [variant])
+
+  function refreshTemplates() {
+    startTemplates(() => {
+      void listOrganizerVenueTemplates().then((result) => {
+        if (result.success) setCustomTemplates(result.data)
+      })
+    })
+  }
+
+  function loadMap(next: InteractiveVenueMap, showPrices: boolean) {
+    const parsed = parseVenueMap(next)
+    undoStack.current = []
+    redoStack.current = []
+    setHistoryTick((tick) => tick + 1)
+    mapRef.current = parsed
+    setMap(parsed)
+    onChange(parsed, venueMapToSeatingLayout(parsed))
+    setLibraryOpen(false)
+    setPricePanelOpen(
+      showPrices && listVenuePriceGroups(parsed).length > 0,
+    )
+  }
+
+  function pickBuiltin(id: BuiltinVenueTemplateId) {
+    loadMap(getVenueTemplateMap(id), !isBlankVenueTemplate(id))
+  }
 
   const selectedSector =
     selection?.kind === "sector"
@@ -136,10 +229,34 @@ export function InteractiveVenueMapEditor({
         ? [selection.id]
         : []
 
-  function commit(next: InteractiveVenueMap) {
+  function pushHistory() {
+    undoStack.current.push(structuredClone(mapRef.current))
+    if (undoStack.current.length > 40) undoStack.current.shift()
+    redoStack.current = []
+    setHistoryTick((tick) => tick + 1)
+  }
+
+  function commit(next: InteractiveVenueMap, options?: { skipHistory?: boolean }) {
+    if (!options?.skipHistory) pushHistory()
     mapRef.current = next
     setMap(next)
     onChange(next, venueMapToSeatingLayout(next))
+  }
+
+  function undo() {
+    const previous = undoStack.current.pop()
+    if (!previous) return
+    redoStack.current.push(structuredClone(mapRef.current))
+    setHistoryTick((tick) => tick + 1)
+    commit(previous, { skipHistory: true })
+  }
+
+  function redo() {
+    const next = redoStack.current.pop()
+    if (!next) return
+    undoStack.current.push(structuredClone(mapRef.current))
+    setHistoryTick((tick) => tick + 1)
+    commit(next, { skipHistory: true })
   }
 
   function pointerToSvg(event: React.PointerEvent) {
@@ -221,7 +338,7 @@ export function InteractiveVenueMapEditor({
     setTool("select")
   }
 
-  function patchSector(id: string, patch: Partial<VenueMapSector>) {
+  function patchSector(id: string, patch: Partial<VenueMapSector>, skipHistory = false) {
     const current = mapRef.current
     commit({
       ...current,
@@ -240,7 +357,7 @@ export function InteractiveVenueMapEditor({
         }
         return next
       }),
-    })
+    }, { skipHistory })
   }
 
   function ensureElements(current: InteractiveVenueMap): VenueMapElement[] {
@@ -252,6 +369,11 @@ export function InteractiveVenueMapEditor({
     const current = mapRef.current
     if (nextPlacement.kind === "seat_block") {
       addSector()
+      setPlacement(null)
+      return
+    }
+    if (nextPlacement.kind === "rings") {
+      setShowRings(true)
       setPlacement(null)
       return
     }
@@ -272,7 +394,11 @@ export function InteractiveVenueMapEditor({
     setTool("select")
   }
 
-  function patchElement(id: string, patch: Partial<VenueMapElement>) {
+  function patchElement(
+    id: string,
+    patch: Partial<VenueMapElement>,
+    skipHistory = false,
+  ) {
     const current = mapRef.current
     commit({
       ...current,
@@ -280,6 +406,8 @@ export function InteractiveVenueMapEditor({
         if (item.id !== id) return item
         const next = { ...item, ...patch }
         if (
+          !isInfrastructureElement(next) &&
+          (
           patch.x != null ||
           patch.y != null ||
           patch.rotation != null ||
@@ -288,12 +416,13 @@ export function InteractiveVenueMapEditor({
           patch.sideB != null ||
           patch.width != null ||
           patch.height != null
+        )
         ) {
           next.seats = rebuildElementSeats(next)
         }
         return next
       }),
-    })
+    }, { skipHistory })
   }
 
   function duplicateSelection() {
@@ -343,7 +472,9 @@ export function InteractiveVenueMapEditor({
     commit({
       ...current,
       elements: ensureElements(current).map((item) =>
-        ids.has(item.id) ? { ...item, price } : item,
+        ids.has(item.id) && !isInfrastructureElement(item)
+          ? { ...item, price }
+          : item,
       ),
     })
   }
@@ -395,6 +526,59 @@ export function InteractiveVenueMapEditor({
     setSelection(null)
   }
 
+  function nudgeSelection(dx: number, dy: number) {
+    if (!selection) return
+    const current = mapRef.current
+    if (selection.kind === "stage" && current.stage) {
+      commit({
+        ...current,
+        stage: { ...current.stage, x: current.stage.x + dx, y: current.stage.y + dy },
+      })
+      return
+    }
+    if (selection.kind === "label") {
+      commit({
+        ...current,
+        labels: current.labels.map((label) =>
+          label.id === selection.id
+            ? { ...label, x: label.x + dx, y: label.y + dy }
+            : label,
+        ),
+      })
+      return
+    }
+    if (selection.kind === "aisle") {
+      commit({
+        ...current,
+        aisles: current.aisles.map((aisle) =>
+          aisle.id === selection.id
+            ? { ...aisle, x: aisle.x + dx, y: aisle.y + dy }
+            : aisle,
+        ),
+      })
+      return
+    }
+    if (selection.kind === "sector") {
+      commit({
+        ...current,
+        sectors: current.sectors.map((sector) =>
+          sector.id === selection.id
+            ? { ...sector, x: sector.x + dx, y: sector.y + dy }
+            : sector,
+        ),
+      })
+      return
+    }
+    const ids = new Set(selectedElementIds)
+    if (ids.size === 0) return
+    commit({
+      ...current,
+      elements: ensureElements(current).map((item) =>
+        ids.has(item.id) ? { ...item, x: item.x + dx, y: item.y + dy } : item,
+      ),
+    })
+  }
+
   function restoreSelectedSeats() {
     if (selection?.kind !== "seats") return
     const ids = new Set(selection.ids)
@@ -432,11 +616,11 @@ export function InteractiveVenueMapEditor({
   function onPointerDown(event: React.PointerEvent<SVGSVGElement>) {
     if (preview) return
     const point = pointerToSvg(event)
-    if (placement && !event.altKey) {
+    if (placement && !event.altKey && !spaceHeld.current) {
       placeAt(point)
       return
     }
-    if (event.altKey && !placement) {
+    if ((event.altKey || spaceHeld.current) && !placement) {
       elementDrag.current = {
         kind: "pan",
         startX: event.clientX,
@@ -464,31 +648,35 @@ export function InteractiveVenueMapEditor({
     }
     const current = mapRef.current
     if (moving) {
+      if (!moving.recorded) {
+        pushHistory()
+        moving.recorded = true
+      }
       const point = pointerToSvg(event)
       const dx = point.x - moving.startX
       const dy = point.y - moving.startY
       const nx = Math.round(moving.origX + dx)
       const ny = Math.round(moving.origY + dy)
       if (moving.kind === "stage" && current.stage) {
-        commit({ ...current, stage: { ...current.stage, x: nx, y: ny } })
+        commit({ ...current, stage: { ...current.stage, x: nx, y: ny } }, { skipHistory: true })
       } else if (moving.kind === "label" && moving.id) {
         commit({
           ...current,
           labels: current.labels.map((label) =>
             label.id === moving.id ? { ...label, x: nx, y: ny } : label,
           ),
-        })
+        }, { skipHistory: true })
       } else if (moving.kind === "aisle" && moving.id) {
         commit({
           ...current,
           aisles: current.aisles.map((aisle) =>
             aisle.id === moving.id ? { ...aisle, x: nx, y: ny } : aisle,
           ),
-        })
+        }, { skipHistory: true })
       } else if (moving.kind === "sector" && moving.id) {
-        patchSector(moving.id, { x: nx, y: ny })
+        patchSector(moving.id, { x: nx, y: ny }, true)
       } else if (moving.kind === "element" && moving.id) {
-        patchElement(moving.id, { x: nx, y: ny })
+        patchElement(moving.id, { x: nx, y: ny }, true)
       }
       return
     }
@@ -545,61 +733,255 @@ export function InteractiveVenueMapEditor({
 
   const selectedSeatCount = selection?.kind === "seats" ? selection.ids.length : 0
   const capacity = useMemo(() => venueMapCapacity(map), [map])
+  const canUndo = historyTick >= 0 && undoStack.current.length > 0
+  const canRedo = historyTick >= 0 && redoStack.current.length > 0
+  const isStudio = variant === "studio"
 
-  return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50 dark:border-white/10 dark:bg-zinc-950">
-      <div className="flex flex-wrap items-center gap-2 border-b border-zinc-200 bg-white px-3 py-2 dark:border-white/10 dark:bg-zinc-900">
-        <ToolButton active={tool === "select"} onClick={() => setTool("select")} label="Seleccionar">
-          <LayoutGrid className="size-4" />
-        </ToolButton>
-        <ToolButton active={false} onClick={addStage} label="Escenario">
-          <Square className="size-4" />
-        </ToolButton>
-        <ToolButton active={false} onClick={addSector} label="Bloque de asientos">
-          <Armchair className="size-4" />
-        </ToolButton>
+  useEffect(() => {
+    function isTypingTarget(target: EventTarget | null) {
+      if (!(target instanceof HTMLElement)) return false
+      const tag = target.tagName
+      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (preview || isTypingTarget(event.target)) return
+      if (event.code === "Space") {
+        event.preventDefault()
+        spaceHeld.current = true
+        return
+      }
+      if ((event.key === "Delete" || event.key === "Backspace") && selection) {
+        event.preventDefault()
+        deleteSelection()
+        return
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault()
+        nudgeSelection(0, event.shiftKey ? -16 : -8)
+        return
+      }
+      if (event.key === "ArrowDown") {
+        event.preventDefault()
+        nudgeSelection(0, event.shiftKey ? 16 : 8)
+        return
+      }
+      if (event.key === "ArrowLeft") {
+        event.preventDefault()
+        nudgeSelection(event.shiftKey ? -16 : -8, 0)
+        return
+      }
+      if (event.key === "ArrowRight") {
+        event.preventDefault()
+        nudgeSelection(event.shiftKey ? 16 : 8, 0)
+        return
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+        event.preventDefault()
+        if (event.shiftKey) redo()
+        else undo()
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") {
+        event.preventDefault()
+        redo()
+      }
+    }
+
+    function onKeyUp(event: KeyboardEvent) {
+      if (event.code === "Space") spaceHeld.current = false
+    }
+
+    window.addEventListener("keydown", onKeyDown)
+    window.addEventListener("keyup", onKeyUp)
+    return () => {
+      window.removeEventListener("keydown", onKeyDown)
+      window.removeEventListener("keyup", onKeyUp)
+      spaceHeld.current = false
+    }
+  })
+
+  useEffect(() => {
+    const el = canvasRef.current
+    if (!el) return
+    function onWheel(event: WheelEvent) {
+      event.preventDefault()
+      const delta = event.deltaY > 0 ? -0.08 : 0.08
+      setZoom((value) => Math.min(3, Math.max(0.25, Number((value + delta).toFixed(2)))))
+    }
+    el.addEventListener("wheel", onWheel, { passive: false })
+    return () => el.removeEventListener("wheel", onWheel)
+  }, [])
+
+  function openPreview() {
+    if (onPreview) onPreview()
+    else setPreview(true)
+  }
+
+  const toolbar = (
+    <div
+      className={cn(
+        "flex flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-2",
+        isStudio && "h-16 shrink-0 justify-between gap-4 px-6",
+      )}
+    >
+      {isStudio ? (
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            className="shrink-0"
+            aria-label="Salir sin guardar"
+          >
+            <ArrowLeft className="size-4" />
+            Salir
+          </Button>
+          <p className="min-w-0 text-sm font-semibold text-foreground">
+            {eventTitle}
+          </p>
+        </div>
+      ) : null}
+
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-1",
+          isStudio && "justify-center",
+        )}
+      >
         <ToolButton
-          active={showRings}
-          onClick={() => setShowRings((value) => !value)}
-          label="Gradería anular"
+          active={tool === "select"}
+          onClick={() => setTool("select")}
+          label="Select"
+          showLabel
         >
-          <Layers className="size-4" />
-        </ToolButton>
-        <ToolButton active={false} onClick={addAisle} label="Pasillo">
-          <Minus className="size-4" />
-        </ToolButton>
-        <ToolButton active={false} onClick={addLabel} label="Etiqueta de nivel">
-          <Type className="size-4" />
+          <MousePointer className="size-4" />
         </ToolButton>
         <ToolButton
           active={false}
-          onClick={duplicateSelection}
-          label="Duplicar"
+          onClick={() => setZoom((z) => Math.max(0.6, z - 0.1))}
+          label="Zoom -"
+          showLabel={isStudio}
         >
-          <Copy className="size-4" />
+          <ZoomOut className="size-4" />
         </ToolButton>
-        <div className="ml-auto flex items-center gap-1">
-          <Button type="button" size="icon" variant="outline" onClick={() => setZoom((z) => Math.max(0.6, z - 0.1))} aria-label="Alejar">
-            <ZoomOut className="size-4" />
-          </Button>
-          <Button type="button" size="icon" variant="outline" onClick={() => setZoom((z) => Math.min(2, z + 0.1))} aria-label="Acercar">
-            <ZoomIn className="size-4" />
-          </Button>
-          <Button type="button" variant="outline" onClick={() => setPreview(true)}>
-            <Eye className="size-4" />
-            Vista previa del comprador
-          </Button>
-          {onSave ? (
-            <Button type="button" disabled={saving} onClick={() => onSave(map)} className="bg-emerald-500 text-black hover:bg-emerald-400">
-              <Save className="size-4" />
-              Guardar plano
-            </Button>
-          ) : null}
-        </div>
+        <ToolButton
+          active={false}
+          onClick={() => setZoom((z) => Math.min(2.4, z + 0.1))}
+          label="Zoom +"
+          showLabel={isStudio}
+        >
+          <ZoomIn className="size-4" />
+        </ToolButton>
+        <ToolButton
+          active={false}
+          onClick={undo}
+          label="Deshacer"
+          disabled={!canUndo}
+          showLabel={isStudio}
+        >
+          <Undo className="size-4" />
+        </ToolButton>
+        <ToolButton
+          active={false}
+          onClick={redo}
+          label="Rehacer"
+          disabled={!canRedo}
+          showLabel={isStudio}
+        >
+          <Redo className="size-4" />
+        </ToolButton>
+        {!isStudio ? (
+          <>
+            <ToolButton active={false} onClick={addStage} label="Escenario">
+              <Square className="size-4" />
+            </ToolButton>
+            <ToolButton active={false} onClick={addSector} label="Bloque de asientos">
+              <Armchair className="size-4" />
+            </ToolButton>
+            <ToolButton
+              active={showRings}
+              onClick={() => setShowRings((value) => !value)}
+              label="Gradería anular"
+            >
+              <Layers className="size-4" />
+            </ToolButton>
+            <ToolButton active={false} onClick={addAisle} label="Pasillo">
+              <Minus className="size-4" />
+            </ToolButton>
+            <ToolButton active={false} onClick={addLabel} label="Etiqueta de nivel">
+              <Type className="size-4" />
+            </ToolButton>
+            <ToolButton active={false} onClick={duplicateSelection} label="Duplicar">
+              <Copy className="size-4" />
+            </ToolButton>
+          </>
+        ) : null}
       </div>
 
-      <div className="grid lg:grid-cols-[220px_1fr_280px]">
+      <div className={cn("flex flex-wrap items-center justify-end gap-2", isStudio ? "min-w-0 flex-1" : "ml-auto")}>
+        {isStudio ? (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setLibraryOpen(true)}
+            >
+              <LayoutTemplate className="mr-2 h-4 w-4" />
+              Plantillas
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pendingTemplates}
+              onClick={() => {
+                setTemplateName(eventTitle || "Mi recinto")
+                setSaveOpen(true)
+              }}
+            >
+              <Save className="mr-2 h-4 w-4" />
+              Guardar como Mi Plantilla
+            </Button>
+          </>
+        ) : null}
+        <Button type="button" variant="outline" onClick={openPreview}>
+          <Eye className="mr-2 h-4 w-4 text-emerald-500" />
+          Vista Previa del Comprador
+        </Button>
+        {onSave ? (
+          <Button
+            type="button"
+            disabled={saving}
+            onClick={() => onSave(map)}
+            className="bg-emerald-500 font-bold text-black hover:bg-emerald-400"
+          >
+            <Save className="mr-2 h-4 w-4" />
+            Guardar Cambios
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  )
+
+  return (
+    <div
+      className={cn(
+        "relative overflow-hidden bg-background",
+        isStudio
+          ? "flex h-full min-h-0 flex-1 flex-col"
+          : "rounded-2xl border border-border",
+      )}
+    >
+      {toolbar}
+
+      <div
+        className={cn(
+          isStudio
+            ? "flex min-h-0 flex-1"
+            : "grid lg:grid-cols-[220px_1fr_280px]",
+        )}
+      >
         <VenueComponentPalette
+          variant={isStudio ? "studio" : "compact"}
           active={placement}
           onPick={(next) => {
             setPlacement(next)
@@ -607,7 +989,11 @@ export function InteractiveVenueMapEditor({
           }}
         />
         <div
-          className="relative min-h-[420px] overflow-hidden bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.06)_1px,transparent_0)] bg-[size:20px_20px] dark:bg-zinc-950"
+          ref={canvasRef}
+          className={cn(
+            "relative overflow-hidden bg-zinc-950 bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.08)_1px,transparent_0)] bg-[size:20px_20px]",
+            isStudio ? "min-h-0 flex-1" : "min-h-[420px]",
+          )}
           onDragOver={(event) => {
             event.preventDefault()
             event.dataTransfer.dropEffect = "copy"
@@ -638,7 +1024,10 @@ export function InteractiveVenueMapEditor({
           <svg
             ref={svgRef}
             viewBox={`0 0 ${CANVAS.width} ${CANVAS.height}`}
-            className="h-[min(70vh,560px)] w-full touch-none"
+            className={cn(
+              "w-full touch-none",
+              isStudio ? "h-full" : "h-[min(70vh,560px)]",
+            )}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
@@ -782,9 +1171,21 @@ export function InteractiveVenueMapEditor({
               ) : null}
             </g>
           </svg>
+          {pricePanelOpen ? (
+            <QuickPriceAssigner
+              map={map}
+              onChange={(next) => commit(next)}
+              onClose={() => setPricePanelOpen(false)}
+            />
+          ) : null}
         </div>
 
-        <aside className="space-y-4 border-t border-zinc-200 p-4 dark:border-white/10 lg:border-t-0 lg:border-l">
+        <aside
+          className={cn(
+            "space-y-4 overflow-y-auto border-t border-border bg-card/50 p-4 lg:border-t-0 lg:border-l",
+            isStudio ? "h-full w-80 shrink-0" : "lg:max-h-[min(70vh,560px)]",
+          )}
+        >
           {showRings ? (
             <ConcentricRingGenerator onGenerate={applyGeneratedRing} />
           ) : null}
@@ -886,9 +1287,96 @@ export function InteractiveVenueMapEditor({
                 Pasillo central
               </label>
             </div>
+          ) : selectedElement && isInfrastructureElement(selectedElement) ? (
+            <div className="space-y-3">
+              <div className="rounded-xl border border-border bg-muted/60 px-3 py-3">
+                <p className="flex items-start gap-2 text-sm font-semibold leading-snug text-foreground">
+                  <Info className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  Elemento de referencia visiva (no cobrable)
+                </p>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  El comprador lo ve en el mapa para orientarse. No tiene
+                  precio ni se puede comprar.
+                </p>
+              </div>
+              <Field label="Nombre que se ve en el mapa">
+                <Input
+                  value={selectedElement.label}
+                  onChange={(event) =>
+                    patchElement(selectedElement.id, {
+                      label: event.target.value,
+                    })
+                  }
+                  placeholder="Ej. Baños Sector Norte"
+                />
+              </Field>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Ancho">
+                  <Input
+                    type="number"
+                    min={24}
+                    value={selectedElement.width}
+                    onChange={(event) =>
+                      patchElement(selectedElement.id, {
+                        width: Number(event.target.value) || 24,
+                      })
+                    }
+                  />
+                </Field>
+                <Field label="Alto">
+                  <Input
+                    type="number"
+                    min={24}
+                    value={selectedElement.height}
+                    onChange={(event) =>
+                      patchElement(selectedElement.id, {
+                        height: Number(event.target.value) || 24,
+                      })
+                    }
+                  />
+                </Field>
+              </div>
+              <Field label={`Rotación (${Math.round(selectedElement.rotation)}°)`}>
+                <div className="flex items-center gap-2">
+                  <RotateCw className="size-4 shrink-0 text-muted-foreground" />
+                  <input
+                    type="range"
+                    min={0}
+                    max={360}
+                    value={selectedElement.rotation}
+                    onChange={(event) =>
+                      patchElement(selectedElement.id, {
+                        rotation: Number(event.target.value),
+                      })
+                    }
+                    className="w-full accent-emerald-500"
+                  />
+                </div>
+              </Field>
+              <Field
+                label={`Transparencia (${Math.round((selectedElement.opacity ?? 1) * 100)}%)`}
+              >
+                <input
+                  type="range"
+                  min={30}
+                  max={100}
+                  value={Math.round((selectedElement.opacity ?? 1) * 100)}
+                  onChange={(event) =>
+                    patchElement(selectedElement.id, {
+                      opacity: Number(event.target.value) / 100,
+                    })
+                  }
+                  className="w-full accent-emerald-500"
+                />
+              </Field>
+              <Button type="button" variant="outline" onClick={duplicateSelection}>
+                <Copy className="size-4" />
+                Duplicar
+              </Button>
+            </div>
           ) : selectedElement ? (
             <div className="space-y-3">
-              <Field label="Nombre">
+              <Field label="Nombre / etiqueta">
                 <Input
                   value={selectedElement.label}
                   onChange={(event) =>
@@ -896,17 +1384,17 @@ export function InteractiveVenueMapEditor({
                   }
                 />
               </Field>
-              <Field label="Categoría">
+              <Field label="Nombre del sector (para el precio)">
                 <Input
-                  value={selectedElement.category}
+                  value={selectedElement.sectorName}
                   onChange={(event) =>
                     patchElement(selectedElement.id, {
-                      category: event.target.value,
+                      sectorName: event.target.value,
                     })
                   }
                 />
               </Field>
-              <Field label="Precio (ARS)">
+              <Field label="Sector / precio (ARS)">
                 <Input
                   type="number"
                   min={0}
@@ -1109,9 +1597,10 @@ export function InteractiveVenueMapEditor({
               </Button>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">
-              Elegí un componente a la izquierda y hacé clic o arrastralo al plano.
-              Alt + arrastre duplica mesas. Alt sobre el fondo desplaza el lienzo.
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              {isStudio
+                ? "Seleccioná un componente en el lienzo para editar nombre, sector y precio. Rueda: zoom. Espacio o Alt: pan. Alt + arrastre: duplicar. Supr: borrar. Flechas: mover."
+                : "Elegí un componente a la izquierda y hacé clic o arrastralo al plano. Alt + arrastre duplica mesas. Espacio o Alt sobre el fondo desplaza el lienzo. Supr borra. Flechas mueven."}
             </p>
           )}
 
@@ -1129,19 +1618,85 @@ export function InteractiveVenueMapEditor({
         </aside>
       </div>
 
-      {preview ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
-          <div className="relative w-full max-w-4xl overflow-hidden rounded-3xl border border-white/10 bg-zinc-950 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-              <p className="text-sm font-semibold text-white">Vista previa del comprador</p>
-              <Button type="button" size="icon" variant="ghost" onClick={() => setPreview(false)} aria-label="Cerrar">
-                <X className="size-4" />
-              </Button>
-            </div>
-            <VenueMapCanvas map={map} className="h-[min(70vh,520px)] w-full" />
-          </div>
-        </div>
+      {preview && !onPreview ? (
+        <BuyerViewModal
+          open={true}
+          map={map}
+          eventTitle={eventTitle}
+          onClose={() => setPreview(false)}
+        />
       ) : null}
+
+      {isStudio && libraryOpen ? (
+        <VenueTemplateLibrary
+          customTemplates={customTemplates}
+          onSkip={
+            venueMapHasInventory(map) ? () => setLibraryOpen(false) : undefined
+          }
+          onPickBuiltin={pickBuiltin}
+          onPickCustom={(next) => loadMap(next, true)}
+          onDeleteCustom={(id) => {
+            startTemplates(() => {
+              void deleteOrganizerVenueTemplate(id).then((result) => {
+                if (!result.success) {
+                  toast.error(result.error)
+                  return
+                }
+                toast.success("Plantilla eliminada")
+                refreshTemplates()
+              })
+            })
+          }}
+        />
+      ) : null}
+
+      <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
+        <DialogContent className="border-border bg-card text-foreground sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Guardar como Mi Plantilla</DialogTitle>
+            <DialogDescription>
+              Conservá este recinto para reutilizarlo en otros eventos sin
+              volver a dibujarlo.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="venue-template-name">Nombre de la plantilla</Label>
+            <Input
+              id="venue-template-name"
+              value={templateName}
+              onChange={(event) => setTemplateName(event.target.value)}
+              placeholder="Ej. Teatro Colón sala principal"
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setSaveOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={pendingTemplates}
+              onClick={() => {
+                startTemplates(() => {
+                  void saveOrganizerVenueTemplate({
+                    name: templateName,
+                    map,
+                  }).then((result) => {
+                    if (!result.success) {
+                      toast.error(result.error)
+                      return
+                    }
+                    toast.success("Plantilla guardada")
+                    setSaveOpen(false)
+                    refreshTemplates()
+                  })
+                })
+              }}
+            >
+              Guardar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -1151,21 +1706,26 @@ function ToolButton({
   onClick,
   label,
   children,
+  disabled = false,
+  showLabel = false,
 }: {
   active: boolean
   onClick: () => void
   label: string
   children: React.ReactNode
+  disabled?: boolean
+  showLabel?: boolean
 }) {
   return (
     <Button
       type="button"
       variant={active ? "secondary" : "outline"}
       onClick={onClick}
+      disabled={disabled}
       className={cn("h-9 gap-1.5", active && "ring-1 ring-emerald-500/40")}
     >
       {children}
-      <span className="hidden sm:inline">{label}</span>
+      <span className={cn(!showLabel && "hidden sm:inline")}>{label}</span>
     </Button>
   )
 }
@@ -1179,7 +1739,7 @@ function Field({
 }) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs text-zinc-400">{label}</Label>
+      <Label className="text-xs text-muted-foreground">{label}</Label>
       {children}
     </div>
   )

@@ -4,12 +4,19 @@ import { revalidatePath } from "next/cache"
 
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import type { Json } from "@/types/database"
 import { allInBreakdown } from "@/lib/pricing/all-in"
 import {
   defaultEventFeeConfig,
   eventFeeRate,
   eventFixedFee,
 } from "@/lib/pricing/event-fees"
+import {
+  inferBundleType,
+  parseBundleType,
+  type BundleType,
+} from "@/lib/inventory/flexible-bundles"
+import { parseBundleItems } from "@/lib/inventory/unified-inventory"
 import {
   parseTicketTierCategory,
   type TicketTierCategory,
@@ -39,6 +46,9 @@ export type ManagedTicketTier = {
   category: TicketTierCategory
   dayId: string | null
   comboItems: BundleComboLine[]
+  bundleType: BundleType | null
+  bundleItems: Array<{ tierId: string; quantity: number }>
+  tierType: string
 }
 
 async function assertOrganizer(eventId: string) {
@@ -75,7 +85,7 @@ export async function getEventBundleWorkspace(eventId: string): Promise<{
   const [{ data: tiers }, { data: items }] = await Promise.all([
     gate.supabase
       .from("ticket_tiers")
-      .select("id, name, price, list_price, capacity, sold, category, day_id")
+      .select("id, name, price, list_price, capacity, sold, category, day_id, tier_type, bundle_type, bundle_items")
       .eq("event_id", eventId)
       .order("created_at"),
     gate.supabase
@@ -115,18 +125,24 @@ export async function getEventBundleWorkspace(eventId: string): Promise<{
   }
 
   return {
-    tiers: (tiers ?? []).map((tier) => ({
-      id: tier.id,
-      name: tier.name,
-      price: Number(tier.price) || 0,
-      listPrice:
-        tier.list_price == null ? null : Number(tier.list_price) || 0,
-      capacity: Number(tier.capacity) || 0,
-      sold: Number(tier.sold) || 0,
-      category: parseTicketTierCategory(tier.category),
-      dayId: tier.day_id,
-      comboItems: comboByTier.get(tier.id) ?? [],
-    })),
+    tiers: (tiers ?? []).map((tier) => {
+      const bundleItems = parseBundleItems(tier.bundle_items)
+      return {
+        id: tier.id,
+        name: tier.name,
+        price: Number(tier.price) || 0,
+        listPrice:
+          tier.list_price == null ? null : Number(tier.list_price) || 0,
+        capacity: Number(tier.capacity) || 0,
+        sold: Number(tier.sold) || 0,
+        category: parseTicketTierCategory(tier.category),
+        dayId: tier.day_id,
+        comboItems: comboByTier.get(tier.id) ?? [],
+        bundleType: parseBundleType(tier.bundle_type),
+        bundleItems,
+        tierType: String(tier.tier_type ?? "general"),
+      }
+    }),
     storeItems: (items ?? []).map((item) => ({
       id: item.id,
       name: item.name,
@@ -146,6 +162,8 @@ export async function upsertTicketBundle(input: {
   capacity: number
   dayId: string | null
   comboItems: Array<{ eventItemId: string; quantity: number }>
+  bundleType?: BundleType | null
+  bundleItems?: Array<{ tierId: string; quantity: number }>
 }): Promise<{ success: true; tierId: string } | { success: false; error: string }> {
   const gate = await assertOrganizer(input.eventId)
   if (!gate.ok) return { success: false, error: gate.error }
@@ -173,6 +191,18 @@ export async function upsertTicketBundle(input: {
     }),
   )
 
+  const bundleItems = (input.bundleItems ?? []).filter(
+    (item) => item.tierId && item.quantity > 0,
+  )
+  const bundleType =
+    input.category === "bundle"
+      ? inferBundleType({
+          bundleType: input.bundleType,
+          dayId: input.dayId,
+          items: bundleItems,
+        })
+      : null
+
   const payload = {
     event_id: input.eventId,
     name,
@@ -186,6 +216,12 @@ export async function upsertTicketBundle(input: {
     visibility: "public" as const,
     layout_type: "general" as const,
     admit_count: 1,
+    tier_type: input.category === "bundle" ? ("bundle" as const) : ("general" as const),
+    bundle_type: bundleType,
+    bundle_items: bundleItems.map((item) => ({
+      tier_id: item.tierId,
+      quantity: Math.max(1, Math.min(50, Math.floor(item.quantity) || 1)),
+    })) as unknown as Json,
   }
 
   let tierId = input.tierId?.trim() || ""

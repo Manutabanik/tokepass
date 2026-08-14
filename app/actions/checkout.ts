@@ -279,6 +279,53 @@ export async function reserveSeatAtomic(
   return result
 }
 
+export async function createComboReservation(
+  eventId: string,
+  bundleTierId: string,
+  quantity: number,
+  referralCode?: string | null,
+  buyerInfo?: CheckoutBuyerInfo | null,
+  promoCodeId?: string | null,
+  options?: {
+    sandbox?: boolean
+    paymentProvider?: SupportedPaymentProvider
+  },
+): Promise<CheckoutResult> {
+  const qty = Math.max(1, Math.floor(quantity) || 1)
+  const supabase = await createClient()
+  const { data: bundle } = await supabase
+    .from("ticket_tiers")
+    .select("id, event_id, tier_type, category, capacity, sold, bundle_items")
+    .eq("id", bundleTierId)
+    .eq("event_id", eventId)
+    .maybeSingle()
+
+  if (!bundle) {
+    return { success: false, error: "Combo no encontrado." }
+  }
+
+  const isBundle =
+    bundle.tier_type === "bundle" || bundle.category === "bundle"
+  if (!isBundle) {
+    return { success: false, error: "Esa tarifa no es un combo." }
+  }
+
+  const available = Math.max(0, Number(bundle.capacity) - Number(bundle.sold))
+  if (available < qty) {
+    return { success: false, error: "out_of_stock" }
+  }
+
+  return startCheckoutWithPayment(
+    eventId,
+    [{ tierId: bundleTierId, quantity: qty }],
+    referralCode,
+    [],
+    buyerInfo,
+    promoCodeId,
+    options,
+  )
+}
+
 export async function startCheckoutWithPayment(
   eventId: string,
   items: CheckoutCartItem[],
@@ -396,7 +443,7 @@ export async function startCheckoutWithPayment(
   const tierIds = [...new Set(cartItems.map((item) => item.tierId))]
   const { data: tierMeta } = await supabase
     .from("ticket_tiers")
-    .select("id, seating_sector_id")
+    .select("id, seating_sector_id, tier_type, category")
     .eq("event_id", payload.eventId)
     .in("id", tierIds)
 
@@ -410,6 +457,8 @@ export async function startCheckoutWithPayment(
     sector_key: item.sectorKey ?? sectorByTier.get(item.tierId) ?? null,
     table_number: item.tableNumber ?? null,
     zone_id: item.zoneId ?? null,
+    seating_unit_id:
+      item.seatingUnitId ?? item.seatingIds?.[0] ?? null,
   }))
 
   let pendingOrderId: string | null = null
@@ -430,20 +479,34 @@ export async function startCheckoutWithPayment(
       seatingItem?.seatingUnitId ??
       seatingItem?.seatingIds?.[0] ??
       payload.seatingIds?.[0]
-    const reservation = seatingUnitId
-      ? await supabase.rpc("reserve_seating_unit_tx", {
-          p_event_id: payload.eventId,
-          p_owner_id: user.id,
-          p_tier_id: seatingItem?.tierId ?? cartItems[0]?.tierId,
-          p_seating_unit_id: seatingUnitId,
-          p_promoter_id: promoterId,
-        })
-      : await supabase.rpc("reserve_tickets_tx", {
-          p_event_id: payload.eventId,
-          p_owner_id: user.id,
-          p_items: rpcItems,
-          p_promoter_id: promoterId,
-        })
+    const hasExtras = cartItems.some(
+      (item) => !(item.seatingUnitId || (item.seatingIds?.length ?? 0) > 0),
+    )
+    const hasBundle = (tierMeta ?? []).some(
+      (row) => row.tier_type === "bundle" || row.category === "bundle",
+    )
+    const reservation =
+      (seatingUnitId && hasExtras) || hasBundle
+        ? await supabase.rpc("reserve_unified_cart_tx", {
+            p_event_id: payload.eventId,
+            p_owner_id: user.id,
+            p_items: rpcItems,
+            p_promoter_id: promoterId,
+          })
+        : seatingUnitId
+          ? await supabase.rpc("reserve_seating_unit_tx", {
+              p_event_id: payload.eventId,
+              p_owner_id: user.id,
+              p_tier_id: seatingItem?.tierId ?? cartItems[0]?.tierId,
+              p_seating_unit_id: seatingUnitId,
+              p_promoter_id: promoterId,
+            })
+          : await supabase.rpc("reserve_tickets_tx", {
+              p_event_id: payload.eventId,
+              p_owner_id: user.id,
+              p_items: rpcItems,
+              p_promoter_id: promoterId,
+            })
     const { data, error } = reservation
 
     if (error) {

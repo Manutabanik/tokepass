@@ -2,7 +2,6 @@
 
 import {
   Armchair,
-  Building2,
   ImageIcon,
   LoaderCircle,
   Pencil,
@@ -24,10 +23,11 @@ import {
   VenueArgentinaSelector,
   type VenueArgentinaValue,
 } from "@/components/admin/venue-argentina-selector"
-import { InteractiveVenueMapEditor } from "@/components/admin/interactive-venue-map-editor"
+import { InteractiveVenueMapStudio } from "@/components/admin/interactive-venue-map-studio"
+import { VenueMapStudioSummary } from "@/components/admin/venue-map-studio-summary"
+import { UnifiedInventoryPanel } from "@/components/admin/unified-inventory-panel"
 import {
   createEmptyZone,
-  SmartVenueBuilder,
   type VenueZoneDraft,
 } from "@/components/admin/smart-venue-builder"
 import { Button } from "@/components/ui/button"
@@ -48,7 +48,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { formatNumber } from "@/lib/format"
+import { formatDiscoveryDateTime, formatNumber } from "@/lib/format"
 import {
   draftZonesToBlueprint,
   draftZonesToSeatingLayout,
@@ -103,9 +103,9 @@ export function EventVenueStep({
   const showZones = focus !== "location"
   const venueMode = form.watch("venue.mode")
   const existingVenueId = form.watch("venue.existingVenueId")
-  const zoneType = form.watch("venue.zoneType")
+  const includesSeatingMap = Boolean(form.watch("venue.includesSeatingMap"))
   const selectedVenue = venues.find((venue) => venue.id === existingVenueId)
-  const structured = zoneType === "reserved_seating"
+  const structured = includesSeatingMap
 
   const [editingSaved, setEditingSaved] = useState(false)
   const [zoneDrafts, setZoneDrafts] = useState<VenueZoneDraft[]>([
@@ -117,6 +117,7 @@ export function EventVenueStep({
   const [venueMap, setVenueMap] = useState(() =>
     parseVenueMap(form.getValues("venue.venueMap")),
   )
+  const [studioOpen, setStudioOpen] = useState(false)
   const [pendingSave, startSaveTransition] = useTransition()
   const [pendingUpload, startUploadTransition] = useTransition()
 
@@ -186,6 +187,7 @@ export function EventVenueStep({
       "venue.zoneType",
       nextStructured ? "reserved_seating" : "general_admission",
     )
+    form.setValue("venue.includesSeatingMap", nextStructured)
     form.setValue(
       "venue.zones",
       venue.zoneBlueprint.map((zone) => ({
@@ -238,7 +240,9 @@ export function EventVenueStep({
       return
     }
 
-    const nextStructured = values.zoneType === "reserved_seating"
+    const nextStructured =
+      Boolean(values.includesSeatingMap) ||
+      values.zoneType === "reserved_seating"
     const fromMap = nextStructured && venueMapHasInventory(venueMap)
     const mapLayout = fromMap
       ? venueMapToSeatingLayout(venueMap)
@@ -333,7 +337,7 @@ export function EventVenueStep({
     form.setValue("venue.longitude", next.coordinates?.lng ?? null, {
       shouldDirty: true,
     })
-    if (next.capacity > 0 && zoneType === "general_admission") {
+    if (next.capacity > 0 && !structured) {
       form.setValue("venue.capacity", next.capacity, { shouldDirty: true })
     }
   }
@@ -553,68 +557,36 @@ export function EventVenueStep({
           {showZones ? (
           <FormField
             control={form.control}
-            name="venue.zoneType"
+            name="venue.includesSeatingMap"
             render={({ field }) => (
-              <FormItem>
-                <FormLabel>¿Qué tipo de espacio es?</FormLabel>
-                <div className="grid gap-3 md:grid-cols-2">
-                  {(
-                    [
-                      {
-                        value: "general_admission" as const,
-                        title: "Entradas generales",
-                        description:
-                          "Entradas generales (sin asiento numerado).",
-                        icon: Building2,
-                      },
-                      {
-                        value: "reserved_seating" as const,
-                        title: "Asientos o mesas numeradas",
-                        description:
-                          "Asientos o mesas numeradas (a elección).",
-                        icon: Armchair,
-                      },
-                    ] as const
-                  ).map((option) => {
-                    const selected = field.value === option.value
-                    const Icon = option.icon
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => {
-                          field.onChange(option.value)
-                          const nextStructured =
-                            option.value === "reserved_seating"
-                          setZoneDrafts([createEmptyZone(nextStructured)])
-                          form.setValue("venue.zones", undefined)
-                        }}
-                        className={cn(
-                          "flex gap-4 rounded-2xl border p-5 text-left transition duration-200",
-                          selected
-                            ? "border-emerald-500/40 bg-emerald-500/10 ring-1 ring-inset ring-emerald-500/15"
-                            : "border-zinc-200 dark:border-white/8 bg-zinc-50 dark:bg-black/15 hover:border-white/15",
-                        )}
-                      >
-                        <span
-                          className={cn(
-                            "grid size-11 shrink-0 place-items-center rounded-xl bg-white/5 text-muted-foreground",
-                            selected && "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300",
-                          )}
-                        >
-                          <Icon className="size-5" />
-                        </span>
-                        <span>
-                          <span className="block font-semibold text-foreground">
-                            {option.title}
-                          </span>
-                          <span className="mt-1 block text-xs leading-5 text-muted-foreground">
-                            {option.description}
-                          </span>
-                        </span>
-                      </button>
-                    )
-                  })}
+              <FormItem className="rounded-2xl border border-border bg-muted/60 px-4 py-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex gap-3">
+                    <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-800 dark:text-emerald-300">
+                      <Armchair className="size-4" aria-hidden="true" />
+                    </span>
+                    <div>
+                      <FormLabel className="text-sm font-semibold text-foreground">
+                        Incluye mapa de asientos / mesas / tablones
+                      </FormLabel>
+                      <FormDescription className="mt-1 text-xs leading-5">
+                        Opcional. Activalo para diseñar ubicaciones numeradas
+                        sin reemplazar entradas generales ni adicionales.
+                      </FormDescription>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={Boolean(field.value)}
+                    onCheckedChange={(checked) => {
+                      field.onChange(checked)
+                      form.setValue(
+                        "venue.zoneType",
+                        checked ? "reserved_seating" : "general_admission",
+                        { shouldDirty: true },
+                      )
+                    }}
+                    className="mt-1 data-checked:bg-emerald-500"
+                  />
                 </div>
               </FormItem>
             )}
@@ -633,18 +605,24 @@ export function EventVenueStep({
             <>
           {structured ? (
             <div className="space-y-3">
-              <div>
-                <h3 className="text-sm font-semibold text-foreground">
-                  Plano de asientos
-                </h3>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Construí el recinto como en el plano real: escenario, platea,
-                  pullman, pasillos y color por precio.
-                </p>
-              </div>
-              <InteractiveVenueMapEditor
+              <VenueMapStudioSummary
+                map={venueMap}
+                onOpen={() => setStudioOpen(true)}
+              />
+              <InteractiveVenueMapStudio
+                open={studioOpen}
+                eventTitle={form.watch("basics.title") || "Evento"}
+                eventDate={
+                  form.watch("basics.date")
+                    ? formatDiscoveryDateTime(form.watch("basics.date"))
+                    : undefined
+                }
+                venueLabel={
+                  form.watch("venue.venueName") || selectedVenue?.name || undefined
+                }
                 value={venueMap}
-                onChange={(next, layout) => {
+                onClose={() => setStudioOpen(false)}
+                onSave={(next, layout) => {
                   setVenueMap(next)
                   form.setValue("venue.venueMap", next, { shouldDirty: true })
                   form.setValue("venue.seatingLayout", layout, {
@@ -654,79 +632,77 @@ export function EventVenueStep({
                   if (drafts.length > 0) {
                     syncZonesToForm(drafts, true)
                   }
+                  setStudioOpen(false)
                 }}
               />
-            </div>
-          ) : (
-            <SmartVenueBuilder
-              structured={structured}
-              zones={zoneDrafts}
-              onChange={(next) => syncZonesToForm(next, structured)}
-            />
-          )}
-
-          {structured ? (
-            <div className="space-y-3 rounded-2xl border border-border bg-muted/60 p-4">
-              <div className="flex items-center gap-2">
-                <ImageIcon className="size-4 text-emerald-700 dark:text-emerald-400" />
-                <Label className="text-sm text-foreground">
-                  Imagen o mapa del lugar (Opcional)
-                </Label>
-              </div>
-              {backgroundUrl ? (
-                <div className="relative aspect-[16/7] overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
-                  <Image
-                    src={backgroundUrl}
-                    alt="Plano de referencia"
-                    fill
-                    className="object-contain"
-                    sizes="640px"
-                    unoptimized
-                  />
+              <div className="space-y-3 rounded-2xl border border-border bg-muted/60 p-4">
+                <div className="flex items-center gap-2">
+                  <ImageIcon className="size-4 text-emerald-700 dark:text-emerald-400" />
+                  <Label className="text-sm text-foreground">
+                    Imagen o mapa del lugar (Opcional)
+                  </Label>
                 </div>
-              ) : null}
-              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950/60 px-4 py-6 text-sm text-muted-foreground hover:border-emerald-500/40 hover:text-emerald-800 dark:text-emerald-200">
-                {pendingUpload ? (
-                  <LoaderCircle className="size-4 animate-spin" />
-                ) : (
-                  <UploadCloud className="size-4" />
-                )}
-                Subir plano de referencia
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  className="hidden"
-                  onChange={(event) =>
-                    onBackgroundFile(event.target.files?.[0] ?? null)
-                  }
-                />
-              </label>
-            </div>
-          ) : (
-            <FormField
-              control={form.control}
-              name="venue.capacity"
-              render={({ field, fieldState }) => (
-                <FormItem>
-                  <FormLabel>Cantidad de personas</FormLabel>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={field.value ?? ""}
-                      onChange={(event) =>
-                        field.onChange(
-                          event.target.value === ""
-                            ? undefined
-                            : Number(event.target.value),
-                        )
-                      }
-                      className="h-11 border-zinc-200 dark:border-white/10 bg-zinc-100 dark:bg-black/20"
+                {backgroundUrl ? (
+                  <div className="relative aspect-[16/7] overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
+                    <Image
+                      src={backgroundUrl}
+                      alt="Plano de referencia"
+                      fill
+                      className="object-contain"
+                      sizes="640px"
+                      unoptimized
                     />
-                  <FormMessage>{fieldState.error?.message}</FormMessage>
-                </FormItem>
-              )}
-            />
-          )}
+                  </div>
+                ) : null}
+                <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950/60 px-4 py-6 text-sm text-muted-foreground hover:border-emerald-500/40 hover:text-emerald-800 dark:text-emerald-200">
+                  {pendingUpload ? (
+                    <LoaderCircle className="size-4 animate-spin" />
+                  ) : (
+                    <UploadCloud className="size-4" />
+                  )}
+                  Subir plano de referencia
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={(event) =>
+                      onBackgroundFile(event.target.files?.[0] ?? null)
+                    }
+                  />
+                </label>
+              </div>
+            </div>
+          ) : null}
+
+          <UnifiedInventoryPanel form={form} />
+
+          <FormField
+            control={form.control}
+            name="venue.capacity"
+            render={({ field, fieldState }) => (
+              <FormItem>
+                <FormLabel>Capacidad de referencia del lugar</FormLabel>
+                <Input
+                  type="number"
+                  min={1}
+                  value={field.value ?? ""}
+                  onChange={(event) =>
+                    field.onChange(
+                      event.target.value === ""
+                        ? undefined
+                        : Number(event.target.value),
+                    )
+                  }
+                  className="h-11 border-zinc-200 dark:border-white/10 bg-zinc-100 dark:bg-black/20"
+                />
+                <FormDescription>
+                  Orientativa. El stock real sale de asientos del mapa, sectores
+                  generales y adicionales.
+                </FormDescription>
+                <FormMessage>{fieldState.error?.message}</FormMessage>
+              </FormItem>
+            )}
+          />
             </>
           ) : null}
 
@@ -807,7 +783,9 @@ export function buildVenuePersistPayload(input: {
   backgroundUrl: string | null
   venueMap?: ReturnType<typeof parseVenueMap>
 }) {
-  const structured = input.formValues.zoneType === "reserved_seating"
+  const structured =
+    Boolean(input.formValues.includesSeatingMap) ||
+    input.formValues.zoneType === "reserved_seating"
   const map = input.venueMap
   const fromMap = structured && map && venueMapHasInventory(map)
   return {

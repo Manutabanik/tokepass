@@ -11,12 +11,11 @@ import { toast } from "sonner"
 import {
   startCheckoutWithPayment,
   startSandboxCheckout,
-  reserveSeatAtomic,
 } from "@/app/actions/checkout"
 import type { ValidatedPromo } from "@/app/actions/coupons"
 import { validatePromoCode } from "@/app/actions/coupons"
 import { UniversalSeatSelectionFlow } from "@/components/b2c/universal-seat-selection"
-import { TicketTierSelector } from "@/components/public/ticket-tier-selector"
+import { EventCheckoutSelector, type SelectedNumberedSeat } from "@/components/public/event-checkout-selector"
 import { CheckoutBuyerFields } from "@/components/public/checkout-buyer-fields"
 import {
   PaymentMethodSelector,
@@ -43,6 +42,10 @@ import {
   buildUniversalSeatPayloadForCheckout,
   resolveTierIdForUniversalSector,
 } from "@/lib/seating/venue-adapter"
+import {
+  inferInventoryTierType,
+  isQuantityInventoryType,
+} from "@/lib/inventory/unified-inventory"
 import { cn } from "@/lib/utils"
 import type { ScheduleDay } from "@/types/events"
 import { getEventSeatingUnitsForSector } from "@/app/actions/public-events"
@@ -128,6 +131,11 @@ export function TicketSelector({
   const [isPending, startTransition] = useTransition()
   const controlsLocked = isPending || purchaseLocked
   const [showSeatFlow, setShowSeatFlow] = useState(false)
+  const [selectedSeat, setSelectedSeat] = useState<SelectedNumberedSeat | null>(
+    null,
+  )
+  const [showUpsell, setShowUpsell] = useState(false)
+  const [upsellSkipped, setUpsellSkipped] = useState(false)
   const [loadedUnitsBySector, setLoadedUnitsBySector] = useState<
     Record<string, EventSeatingUnit[]>
   >({})
@@ -240,8 +248,14 @@ export function TicketSelector({
       tiers
         .map((tier) => {
           const quantity = quantities[tier.id] ?? 0
+          const inventoryType = inferInventoryTierType({
+            tierType: tier.tierType,
+            layoutType: tier.layoutType,
+            category: tier.category,
+          })
           return {
             ...tier,
+            inventoryType,
             quantity,
             subtotal: quantity * tier.price,
             maxSelectable: Math.min(
@@ -250,13 +264,19 @@ export function TicketSelector({
             ),
           }
         })
-        .filter((tier) => tier.quantity > 0),
+        .filter(
+          (tier) =>
+            tier.quantity > 0 && isQuantityInventoryType(tier.inventoryType),
+        ),
     [quantities, tiers],
   )
 
-  const totalTickets = selection.reduce((sum, tier) => sum + tier.quantity, 0)
+  const seatLineCount = selectedSeat ? 1 : 0
+  const totalTickets =
+    selection.reduce((sum, tier) => sum + tier.quantity, 0) + seatLineCount
   const ticketsSubtotal = roundMoney(
-    selection.reduce((sum, tier) => sum + tier.subtotal, 0),
+    selection.reduce((sum, tier) => sum + tier.subtotal, 0) +
+      (selectedSeat?.price ?? 0),
   )
   // All-In: tier.price already includes Tokepass fee.
   const cartSubtotal = ticketsSubtotal
@@ -317,8 +337,51 @@ export function TicketSelector({
     trackInitiateCheckout(payload)
   }
 
-  function handleReserve() {
-    if (selection.length === 0 || controlsLocked) return
+  function buildCheckoutItems(extraAddonId?: string) {
+    const items = [
+      ...(selectedSeat
+        ? [
+            {
+              tierId: selectedSeat.tierId,
+              quantity: 1,
+              seatingUnitId: selectedSeat.seatingUnitId,
+              sectorKey: selectedSeat.sectorKey,
+              tableNumber: selectedSeat.tableNumber,
+            },
+          ]
+        : []),
+      ...selection.map((tier) => ({
+        tierId: tier.id,
+        quantity: tier.quantity,
+      })),
+    ]
+    if (extraAddonId) {
+      const existing = items.find((item) => item.tierId === extraAddonId)
+      if (existing) existing.quantity += 1
+      else items.push({ tierId: extraAddonId, quantity: 1 })
+    }
+    return items
+  }
+
+  function hasPendingAddonUpsell() {
+    return tiers.some((tier) => {
+      const type = inferInventoryTierType({
+        tierType: tier.tierType,
+        layoutType: tier.layoutType,
+        category: tier.category,
+      })
+      return (
+        type === "addon" &&
+        (quantities[tier.id] ?? 0) === 0 &&
+        tier.available > 0
+      )
+    })
+  }
+
+  function submitCheckout(extraAddonId?: string, sandbox = false) {
+    if (controlsLocked) return
+    const items = buildCheckoutItems(extraAddonId)
+    if (items.length === 0) return
 
     const buyerCheck = validateCheckoutBuyer(buyer)
     if (!buyerCheck.ok) {
@@ -327,75 +390,67 @@ export function TicketSelector({
     }
 
     fireCartPixels({
-      contentIds: selection.map((tier) => tier.id),
+      contentIds: items.map((item) => item.tierId),
       value: totalAmount,
-      numItems: totalTickets,
+      numItems: items.reduce((sum, item) => sum + item.quantity, 0),
     })
 
     startTransition(async () => {
-      const result = await startCheckoutWithPayment(
-        eventId,
-        selection.map((tier) => ({
-          tierId: tier.id,
-          quantity: tier.quantity,
-        })),
-        resolvedRef,
-        [],
-        buyerCheck.buyer,
-        appliedPromo?.promoCodeId ?? null,
-        { paymentProvider: selectedProvider },
-      )
+      const result = sandbox
+        ? await startSandboxCheckout(
+            eventId,
+            items,
+            resolvedRef,
+            [],
+            buyerCheck.buyer,
+            appliedPromo?.promoCodeId ?? null,
+          )
+        : await startCheckoutWithPayment(
+            eventId,
+            items,
+            resolvedRef,
+            [],
+            buyerCheck.buyer,
+            appliedPromo?.promoCodeId ?? null,
+            { paymentProvider: selectedProvider },
+          )
 
       if (!result.success) {
         if (result.error === "auth_required") {
           router.push(`/login?next=/events/${eventId}`)
           return
         }
-
-        toastCheckoutError(result.error, "No se pudo iniciar el pago")
+        toastCheckoutError(
+          result.error,
+          sandbox
+            ? "No se pudo completar la compra de prueba"
+            : "No se pudo iniciar el pago",
+        )
         router.refresh()
         return
       }
 
+      if (sandbox) {
+        toast.success("Compra de prueba OK · Modo Sandbox")
+      }
       enterPaymentHold(result)
     })
   }
 
-  function handleSandboxReserve() {
-    if (!sandboxEligible || selection.length === 0 || controlsLocked) return
-
-    const buyerCheck = validateCheckoutBuyer(buyer)
-    if (!buyerCheck.ok) {
-      toast.error(buyerCheck.error)
+  function handleReserve() {
+    if ((selection.length === 0 && !selectedSeat) || controlsLocked) return
+    if (hasPendingAddonUpsell() && !upsellSkipped) {
+      setShowUpsell(true)
       return
     }
+    submitCheckout()
+  }
 
-    startTransition(async () => {
-      const result = await startSandboxCheckout(
-        eventId,
-        selection.map((tier) => ({
-          tierId: tier.id,
-          quantity: tier.quantity,
-        })),
-        resolvedRef,
-        [],
-        buyerCheck.buyer,
-        appliedPromo?.promoCodeId ?? null,
-      )
-
-      if (!result.success) {
-        if (result.error === "auth_required") {
-          router.push(`/login?next=/events/${eventId}`)
-          return
-        }
-        toastCheckoutError(result.error, "No se pudo completar la compra de prueba")
-        router.refresh()
-        return
-      }
-
-      toast.success("Compra de prueba OK · Modo Sandbox")
-      redirectToCheckoutPaymentOrToast(result.paymentUrl ?? result.initPoint)
-    })
+  function handleSandboxReserve() {
+    if (!sandboxEligible || (selection.length === 0 && !selectedSeat) || controlsLocked) {
+      return
+    }
+    submitCheckout(undefined, true)
   }
 
   function openSeatFlow() {
@@ -496,49 +551,16 @@ export function TicketSelector({
       return
     }
 
-    if (!currentUserId) {
-      router.push(`/login?next=/events/${eventId}`)
-      return
-    }
-
-    fireCartPixels({
-      contentIds: [unit.id],
-      value: selectionPayload.unitPrice,
-      numItems: 1,
+    const tableMatch = String(unit.label ?? "").match(/(\d+)/)
+    setSelectedSeat({
+      tierId: unit.tierId,
+      seatingUnitId: unit.id,
+      sectorKey: unit.sectorId,
+      tableNumber: tableMatch ? Number(tableMatch[1]) : null,
+      label: unit.label || "Ubicación numerada",
+      price: selectionPayload.unitPrice,
     })
-
-    startTransition(async () => {
-      const result = await reserveSeatAtomic(
-        eventId,
-        unit.id,
-        currentUserId,
-        resolvedRef,
-        buyerCheck.buyer,
-        appliedPromo?.promoCodeId ?? null,
-        selectedProvider,
-      )
-
-      if (!result.success) {
-        if (result.error === "auth_required") {
-          router.push(`/login?next=/events/${eventId}`)
-          return
-        }
-        if (
-          result.error.includes("reservada por otra persona")
-        ) {
-          toast.error(
-            "Esta ubicación acaba de ser reservada por otra persona. Por favor elegí otra.",
-          )
-          router.refresh()
-          return
-        }
-        toastCheckoutError(result.error, "No se pudo reservar la ubicación")
-        router.refresh()
-        return
-      }
-
-      enterPaymentHold(result)
-    })
+    setShowSeatFlow(false)
   }
 
   if (showSeatFlow && universalPayload) {
@@ -595,14 +617,28 @@ export function TicketSelector({
         </span>
       </div>
 
-      <TicketTierSelector
+      <EventCheckoutSelector
         tiers={tiers}
         quantities={quantities}
-        scheduleDays={scheduleDays}
         isPending={controlsLocked}
         hasSeatingFlow={hasSeatingFlow}
+        selectedSeat={selectedSeat}
+        showUpsell={showUpsell}
         onQuantityChange={updateQuantity}
         onOpenSeatFlow={openSeatFlow}
+        onClearSeat={() => setSelectedSeat(null)}
+        onAddUpsell={(tierId) => {
+          const addon = tiers.find((tier) => tier.id === tierId)
+          updateQuantity(tierId, 1, addon?.available ?? 1)
+          setShowUpsell(false)
+          setUpsellSkipped(true)
+          submitCheckout(tierId)
+        }}
+        onSkipUpsell={() => {
+          setShowUpsell(false)
+          setUpsellSkipped(true)
+          submitCheckout()
+        }}
       />
 
       <Separator className="my-5 bg-border" />

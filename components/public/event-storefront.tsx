@@ -319,6 +319,8 @@ export function EventStorefront({
                           category: tier.category,
                           listPrice: tier.list_price,
                           comboItems: event.comboItemsByTier[tier.id] ?? [],
+                          tierType: tier.tier_type,
+                          bundleType: tier.bundle_type,
                         }))}
                       />
                     </div>
@@ -504,6 +506,8 @@ export function EventStorefront({
                   category: tier.category,
                   listPrice: tier.list_price,
                   comboItems: event.comboItemsByTier[tier.id] ?? [],
+                  tierType: tier.tier_type,
+                  bundleType: tier.bundle_type,
                 }))}
               />
             </>

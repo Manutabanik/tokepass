@@ -125,7 +125,8 @@ export function createVenueElement(
     type,
     subtype,
     label: defaultLabel(type, index, subtype),
-    category: defaultCategory(type),
+    category: type === "infrastructure" ? "infrastructure" : "commercial",
+    sectorName: defaultSectorName(type),
     x: point.x,
     y: point.y,
     width: 80,
@@ -133,6 +134,7 @@ export function createVenueElement(
     rotation: 0,
     price: 0,
     color,
+    opacity: type === "infrastructure" ? 0.92 : 1,
     chairCount: type === "round_table" ? 8 : 6,
     sideA: 4,
     sideB: 4,
@@ -157,7 +159,17 @@ export function createVenueElement(
   if (type === "infrastructure") {
     base.width = subtype === "stage" || subtype === "dj_booth" ? 280 : 72
     base.height = subtype === "stage" || subtype === "dj_booth" ? 48 : 40
-    base.color = "#e4e4e7"
+    if (subtype === "parking") {
+      base.width = 96
+      base.height = 56
+    }
+    if (subtype === "kitchen") {
+      base.width = 88
+      base.height = 48
+    }
+    base.color = "#a1a1aa"
+    base.seats = []
+    return base
   }
   base.seats = rebuildElementSeats(base)
   return base
@@ -177,15 +189,18 @@ function defaultLabel(
   if (subtype === "bar") return "BARRA"
   if (subtype === "restroom") return "BAÑOS"
   if (subtype === "entrance") return "ENTRADA"
-  if (subtype === "exit") return "SALIDA"
+  if (subtype === "exit") return "SALIDA DE EMERGENCIA"
+  if (subtype === "parking") return "ESTACIONAMIENTO"
+  if (subtype === "kitchen") return "COCINA"
   return "ESCENARIO"
 }
 
-function defaultCategory(type: VenueElementType): string {
+function defaultSectorName(type: VenueElementType): string {
+  if (type === "infrastructure") return ""
   if (type === "vip_chair" || type === "vip_box") return "VIP"
-  if (type === "round_table" || type === "long_table") return "Mesa Premium"
+  if (type === "round_table" || type === "long_table") return "Mesas"
   if (type === "standing_zone") return "General"
-  return "Infraestructura"
+  return "General"
 }
 
 export function cloneVenueElement(

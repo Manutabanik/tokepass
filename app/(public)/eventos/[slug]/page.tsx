@@ -16,15 +16,19 @@ import {
   buildEventMetadata,
   eventSeoFromDetails,
 } from "@/lib/seo/event-metadata"
+import { decodeEventParam } from "@/lib/seo/event-slug"
 import { createClient } from "@/lib/supabase/server"
+
+export const dynamic = "force-dynamic"
+export const dynamicParams = true
 
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ slug: string }>
 }): Promise<Metadata> {
-  const { slug } = await params
-  const event = await getEventDetails(slug)
+  const { slug: rawSlug } = await params
+  const event = await getEventDetails(decodeEventParam(rawSlug))
 
   if (!event) {
     return { title: "Evento no encontrado" }
@@ -40,8 +44,9 @@ export default async function PublicEventPage({
   params: Promise<{ slug: string }>
   searchParams: Promise<{ ref?: string }>
 }) {
-  const { slug } = await params
+  const { slug: rawSlug } = await params
   const { ref: referralCode } = await searchParams
+  const slug = decodeEventParam(rawSlug)
   const [event, supabase] = await Promise.all([
     getEventDetails(slug).catch(() => null),
     createClient(),

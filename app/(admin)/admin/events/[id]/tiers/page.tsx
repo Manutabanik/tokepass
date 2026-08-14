@@ -63,8 +63,8 @@ export default async function EventTiersPage({
           Combos, abonos y kits
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Clasificá entradas individuales, packs con extras y tarifas
-          especiales. El checkout las muestra en pestañas.
+        Clasificá abonos, packs con extras y descuentos por volumen. El
+        checkout reserva el stock de cada componente durante 8 minutos.
         </p>
       </header>
 
@@ -73,7 +73,6 @@ export default async function EventTiersPage({
         eventTitle={event.title}
         scheduleDays={parseScheduleDays(event.schedule_days)}
         initialTiers={workspace.tiers}
-        storeItems={workspace.storeItems}
       />
     </main>
   )

@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { isFullPassDayId } from "@/lib/event-schedule"
 import { formatCurrency, formatEventDay } from "@/lib/format"
 import { MAX_TICKETS_PER_PURCHASE } from "@/lib/checkout-limits"
+import type { InventoryTierType } from "@/lib/inventory/unified-inventory"
 import {
   discountPercent,
   inferTicketTierCategory,
@@ -37,6 +38,8 @@ export type TicketSelectorTier = {
   category?: TicketTierCategory | string | null
   listPrice?: number | null
   comboItems?: Array<{ name: string; quantity: number }>
+  tierType?: InventoryTierType | string | null
+  bundleType?: string | null
 }
 
 type DayFilter = "all" | string

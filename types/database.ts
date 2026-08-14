@@ -246,6 +246,15 @@ export type BoostSubscription = {
   updated_at: string
 }
 
+export type OrganizationVenueTemplate = {
+  id: string
+  organizer_id: string
+  name: string
+  venue_map: Json
+  created_at: string
+  updated_at: string
+}
+
 export type Venue = {
   id: string
   organizer_id: string
@@ -291,6 +300,12 @@ export type TicketTier = {
   category: "standard" | "bundle" | "special"
   /** Valor de referencia para mostrar ahorro (packs). */
   list_price: number | null
+  /** seated | general | addon | bundle */
+  tier_type: "seated" | "general" | "addon" | "bundle"
+  /** Combo: [{ tier_id, quantity }] */
+  bundle_items: Json
+  /** multi_day_pass | cross_sell_pack | volume_discount */
+  bundle_type: "multi_day_pass" | "cross_sell_pack" | "volume_discount" | null
   created_at: string
   updated_at: string
 }
@@ -816,6 +831,9 @@ type TicketTierInsert = Omit<
   | "admit_count"
   | "category"
   | "list_price"
+  | "tier_type"
+  | "bundle_items"
+  | "bundle_type"
   | "created_at"
   | "updated_at"
 > & {
@@ -834,6 +852,9 @@ type TicketTierInsert = Omit<
   admit_count?: number
   category?: TicketTier["category"]
   list_price?: number | null
+  tier_type?: TicketTier["tier_type"]
+  bundle_items?: Json
+  bundle_type?: TicketTier["bundle_type"]
   created_at?: string
   updated_at?: string
 }
@@ -1237,6 +1258,23 @@ export type Database = {
         Update: Partial<BoostSubscription>
         Relationships: []
       }
+      organization_venue_templates: {
+        Row: OrganizationVenueTemplate
+        Insert: {
+          id?: string
+          organizer_id: string
+          name: string
+          venue_map: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<{
+          name: string
+          venue_map: Json
+          updated_at: string
+        }>
+        Relationships: []
+      }
       venues: {
         Row: Venue
         Insert: VenueInsert
@@ -1570,6 +1608,21 @@ export type Database = {
           p_zone_id?: string | null
         }
         Returns: number
+      }
+      reserve_unified_cart_tx: {
+        Args: {
+          p_event_id: string
+          p_owner_id: string
+          p_items: Json
+          p_promoter_id?: string | null
+        }
+        Returns: {
+          order_id: string
+          ticket_id: string
+          subtotal: number
+          service_charge: number
+          total_amount: number
+        }[]
       }
       reserve_tickets_tx: {
         Args: {

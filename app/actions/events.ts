@@ -7,6 +7,17 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { isPlatformOwnerRole } from "@/lib/auth/platform-owner"
 import { parseScheduleDays } from "@/lib/event-schedule"
+import {
+  inferBundleType,
+  parseBundleType,
+} from "@/lib/inventory/flexible-bundles"
+import {
+  inferInventoryTierType,
+  layoutTypeForInventory,
+  parseBundleItems,
+  serializeBundleItems,
+  ticketCategoryForInventory,
+} from "@/lib/inventory/unified-inventory"
 import { allInBreakdown } from "@/lib/pricing/all-in"
 import {
   defaultEventFeeConfig,
@@ -191,15 +202,23 @@ function mapEventFormToRpcPayload(
   flyerUrl: string | null = null,
 ): CreateCompleteEventRpcPayload {
   const blueprintZones = data.venue.zones ?? []
-  const isGeneralAdmission = data.venue.zoneType === "general_admission"
+  const includesMap = Boolean(data.venue.includesSeatingMap)
+  const ticketCapacity = data.tickets.reduce(
+    (sum, tier) => sum + (Number(tier.capacity) || 0),
+    0,
+  )
+  const isGeneralAdmission =
+    !includesMap && data.venue.zoneType === "general_admission"
   const capacity = isGeneralAdmission
-    ? (data.venue.capacity ?? 0)
-    : (data.venue.rows ?? 0) * (data.venue.seatsPerRow ?? 0)
+    ? (data.venue.capacity ?? ticketCapacity)
+    : includesMap
+      ? Math.max(data.venue.capacity ?? 0, ticketCapacity, 1)
+      : (data.venue.rows ?? 0) * (data.venue.seatsPerRow ?? 0)
 
   const zones =
     blueprintZones.length > 0
       ? blueprintZones.map((zone) => {
-          if (zone.type === "reserved_seating") {
+          if (zone.type === "reserved_seating" && !includesMap) {
             const rows = zone.rows ?? null
             const seatsPerRow = zone.seatsPerRow ?? null
             if (
@@ -223,15 +242,15 @@ function mapEventFormToRpcPayload(
             name: zone.name,
             type: zone.type,
             capacity: zone.capacity,
-            rows: null,
-            seats_per_row: null,
+            rows: zone.rows ?? null,
+            seats_per_row: zone.seatsPerRow ?? null,
           }
         })
       : [
           {
             name: isGeneralAdmission ? "General" : "Platea",
-            type: data.venue.zoneType,
-            capacity,
+            type: includesMap ? "reserved_seating" : data.venue.zoneType,
+            capacity: Math.max(capacity, 1),
             rows: isGeneralAdmission ? null : (data.venue.rows ?? null),
             seats_per_row: isGeneralAdmission
               ? null
@@ -240,7 +259,12 @@ function mapEventFormToRpcPayload(
         ]
 
   const venueCapacity =
-    zones.reduce((sum, zone) => sum + zone.capacity, 0) || capacity
+    Math.max(
+      zones.reduce((sum, zone) => sum + zone.capacity, 0),
+      ticketCapacity,
+      capacity,
+      1,
+    )
 
   const location =
     [data.venue.venueLocation, data.venue.venueCity]
@@ -304,6 +328,12 @@ function mapEventFormToRpcPayload(
         dayIdRaw === "all"
           ? null
           : dayIdRaw
+      const tierType = inferInventoryTierType({
+        tierType: tier.tierType,
+        layoutType: tier.layoutType,
+        bundleItems: tier.bundleItems,
+      })
+      const layoutType = layoutTypeForInventory(tierType, tier.layoutType)
       return {
         ...(tier.id ? { id: tier.id } : {}),
         name: tier.name,
@@ -316,13 +346,13 @@ function mapEventFormToRpcPayload(
         zone_index: 0,
         day_id: dayId,
         visibility: tier.visibility ?? "public",
-        layout_type: tier.layoutType,
+        layout_type: layoutType,
         seating_sector_id:
-          tier.layoutType === "general" ? null : tier.seatingSectorId ?? null,
+          layoutType === "general" ? null : tier.seatingSectorId ?? null,
         capacity_per_unit:
-          tier.layoutType === "general" ? 1 : tier.capacityPerUnit,
+          layoutType === "general" ? 1 : tier.capacityPerUnit,
         admit_count:
-          tier.layoutType === "general"
+          layoutType === "general"
             ? Math.max(1, Math.min(50, tier.admitCount ?? 1))
             : 1,
       }
@@ -349,14 +379,45 @@ async function syncTierAdmitCounts(
       tickets.find((t) => t.id && t.id === tier.id) ??
       tickets.find((t) => t.name.trim() === tier.name.trim())
     if (!match) continue
+    const tierType = inferInventoryTierType({
+      tierType: match.tierType,
+      layoutType: match.layoutType,
+      bundleItems: match.bundleItems,
+    })
     const admit =
       match.layoutType === "general"
         ? Math.max(1, Math.min(50, match.admitCount ?? 1))
         : 1
+    const resolvedBundle = (match.bundleItems ?? [])
+      .map((item) => {
+        const target =
+          tickets.find((candidate) => candidate.id === item.tierId) ??
+          tickets.find((candidate) => candidate.name.trim() === item.tierId)
+        return {
+          tierId: target?.id ?? item.tierId,
+          quantity: item.quantity,
+        }
+      })
+      .filter((item) => item.tierId.length > 0)
     await admin
       .from("ticket_tiers")
       .update({
         admit_count: admit,
+        tier_type: tierType,
+        category: ticketCategoryForInventory(tierType),
+        list_price:
+          tierType === "bundle" && match.listPrice != null
+            ? match.listPrice
+            : null,
+        bundle_items: serializeBundleItems(resolvedBundle) as unknown as Json,
+        bundle_type:
+          tierType === "bundle"
+            ? inferBundleType({
+                bundleType: match.bundleType,
+                dayId: match.dayId,
+                items: resolvedBundle,
+              })
+            : null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", tier.id)
@@ -526,7 +587,7 @@ export async function getEventForEditing(
       supabase
         .from("ticket_tiers")
         .select(
-          "id, name, price, base_price, platform_fee, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, admit_count",
+          "id, name, price, base_price, platform_fee, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, admit_count, category, list_price, tier_type, bundle_items, bundle_type",
         )
         .eq("event_id", eventId)
         .order("created_at"),
@@ -609,6 +670,24 @@ export async function getEventForEditing(
         1,
         Number((tier as { admit_count?: number }).admit_count ?? 1) || 1,
       ),
+      tierType: inferInventoryTierType({
+        tierType: (tier as { tier_type?: string }).tier_type,
+        layoutType: tier.layout_type,
+        category: (tier as { category?: string }).category,
+        bundleItems: parseBundleItems(
+          (tier as { bundle_items?: unknown }).bundle_items,
+        ),
+      }),
+      listPrice:
+        (tier as { list_price?: number | null }).list_price == null
+          ? null
+          : Number((tier as { list_price?: number | null }).list_price),
+      bundleItems: parseBundleItems(
+        (tier as { bundle_items?: unknown }).bundle_items,
+      ),
+      bundleType: parseBundleType(
+        (tier as { bundle_type?: string | null }).bundle_type,
+      ),
     }))
 
     const { data: pricingRows } = await supabase
@@ -673,6 +752,18 @@ export async function getEventForEditing(
               : null,
           venueMap: venue?.venue_map ?? null,
           seatingLayout: venue?.seating_layout,
+          includesSeatingMap: Boolean(
+            firstZone?.type === "reserved_seating" ||
+              (Array.isArray(venue?.seating_layout) &&
+                venue.seating_layout.length > 0) ||
+              (venue?.venue_map &&
+                typeof venue.venue_map === "object" &&
+                Array.isArray(
+                  (venue.venue_map as { elements?: unknown[] }).elements,
+                ) &&
+                ((venue.venue_map as { elements?: unknown[] }).elements?.length ??
+                  0) > 0),
+          ),
           saveVenueForReuse: false,
           zones: venueZones,
         },

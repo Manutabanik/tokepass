@@ -178,10 +178,15 @@ export const CheckoutPayloadSchema = z
     const seatingLineItems = items.filter(
       (item) => item.seatingUnitId || (item.seatingIds?.length ?? 0) > 0,
     )
-    if (
-      seatingLineItems.length > 1 ||
-      (seatingLineItems.length === 1 &&
-        (items.length !== 1 || seatingLineItems[0]?.quantity !== 1))
+    if (seatingLineItems.length > 1) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["items"],
+        message: "Comprá una ubicación numerada por operación.",
+      })
+    } else if (
+      seatingLineItems.length === 1 &&
+      seatingLineItems[0]?.quantity !== 1
     ) {
       ctx.addIssue({
         code: "custom",

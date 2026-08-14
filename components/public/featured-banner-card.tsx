@@ -1,8 +1,9 @@
 import Image from "next/image"
 import Link from "next/link"
-import { Calendar, MapPin, Sparkles } from "lucide-react"
+import { Calendar, MapPin, Sparkles, Ticket } from "lucide-react"
 
 import type { CatalogEvent } from "@/app/actions/public-events"
+import { Button } from "@/components/ui/button"
 import { eventCityLabel } from "@/lib/discovery-filters"
 import { formatDiscoveryDateTime } from "@/lib/format"
 import { publicEventPath } from "@/lib/seo/site"
@@ -20,58 +21,67 @@ export function FeaturedBannerCard({
   const coverUrl = event.imageUrl
   const place = event.venueName ?? event.location
   const city = eventCityLabel(event)
+  const href = publicEventPath(event)
+  const locationLabel =
+    city && city !== place ? `${place} · ${city}` : place
 
   return (
-    <Link
-      href={publicEventPath(event)}
+    <article
       className={cn(
-        "group relative block aspect-[16/9] w-full overflow-hidden rounded-3xl border border-border/40 shadow-2xl sm:aspect-[21/9] lg:aspect-[16/6]",
+        "relative mx-auto flex w-full max-w-7xl flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-xl",
+        "md:flex-row md:items-stretch",
       )}
-      aria-label={`Ver ${event.title}`}
     >
-      {coverUrl ? (
-        <Image
-          src={coverUrl}
-          alt={event.title}
-          fill
-          priority={priority}
-          sizes="(max-width: 640px) 92vw, (max-width: 1024px) 86vw, 1120px"
-          className="object-cover transition-transform duration-500 group-hover:scale-105"
-        />
-      ) : (
-        <div
-          className="absolute inset-0 bg-gradient-to-br from-violet-950 via-zinc-900 to-zinc-800 transition-transform duration-500 group-hover:scale-105"
-          aria-hidden
-        />
-      )}
+      <div className="relative order-1 aspect-[4/3] w-full overflow-hidden md:order-2 md:aspect-[4/3] md:w-1/2 lg:w-7/12">
+        {coverUrl ? (
+          <Image
+            src={coverUrl}
+            alt={event.title}
+            fill
+            priority={priority}
+            sizes="(max-width: 768px) 100vw, 58vw"
+            className="object-cover object-center"
+          />
+        ) : (
+          <div
+            className="absolute inset-0 bg-gradient-to-br from-emerald-950 via-card to-zinc-900"
+            aria-hidden
+          />
+        )}
+      </div>
 
-      <span
-        className="absolute top-4 right-4 z-20 inline-flex items-center gap-1.5 rounded-full bg-violet-600/90 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-white shadow-lg backdrop-blur-md"
-      >
-        <Sparkles className="size-3.5" aria-hidden="true" />
-        Destacado
-      </span>
+      <div className="order-2 flex w-full flex-col justify-center space-y-4 bg-card p-5 dark:bg-card md:order-1 md:w-1/2 md:space-y-6 md:p-8 lg:w-5/12 lg:p-10">
+        <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-bold tracking-wider text-emerald-500 uppercase">
+          <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+          Destacado
+        </span>
 
-      <div
-        className="absolute inset-x-0 bottom-0 z-10 flex h-2/5 flex-col justify-end space-y-2 bg-gradient-to-t from-black/95 via-black/60 to-transparent p-6 md:p-8"
-      >
-        <h2 className="text-2xl font-black tracking-tight text-white drop-shadow-md sm:text-4xl">
-          {event.title}
+        <h2 className="text-2xl font-black tracking-tight text-foreground dark:text-white md:text-3xl lg:text-4xl">
+          <Link href={href} className="hover:underline">
+            {event.title}
+          </Link>
         </h2>
-        <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-5 sm:gap-y-1">
-          <p className="flex items-center gap-2 text-xs text-zinc-200 sm:text-sm">
-            <Calendar className="size-3.5 shrink-0 opacity-80" aria-hidden="true" />
+
+        <div className="flex flex-col gap-2">
+          <p className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+            <Calendar className="size-4 shrink-0 text-emerald-500" aria-hidden="true" />
             <span>{formatDiscoveryDateTime(event.date)}</span>
           </p>
-          <p className="flex min-w-0 items-center gap-2 text-xs text-zinc-200 sm:text-sm">
-            <MapPin className="size-3.5 shrink-0 opacity-80" aria-hidden="true" />
-            <span className="truncate">
-              {place}
-              {city && city !== place ? ` · ${city}` : ""}
-            </span>
+          <p className="inline-flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+            <MapPin className="size-4 shrink-0 text-emerald-500" aria-hidden="true" />
+            <span className="truncate">{locationLabel}</span>
           </p>
         </div>
+
+        <Button
+          size="lg"
+          className="h-auto w-full rounded-2xl bg-emerald-500 py-6 font-extrabold text-black shadow-lg hover:bg-emerald-400 md:w-auto"
+          render={<Link href={href} />}
+        >
+          Conseguí tus entradas
+          <Ticket className="ml-2 h-5 w-5" aria-hidden="true" />
+        </Button>
       </div>
-    </Link>
+    </article>
   )
 }

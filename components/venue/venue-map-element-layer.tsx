@@ -1,6 +1,33 @@
-import { memo } from "react"
+"use client"
 
-import type { InteractiveVenueMap, VenueMapElement } from "@/types/venue-map"
+import { memo } from "react"
+import {
+  ChefHat,
+  DoorOpen,
+  GlassWater,
+  LogIn,
+  Music2,
+  ParkingCircle,
+  Sparkles,
+  Toilet as Restroom,
+} from "lucide-react"
+
+import { isInfrastructureElement } from "@/types/venue-map"
+import type { InteractiveVenueMap, VenueMapElement, VenueInfraSubtype } from "@/types/venue-map"
+
+const INFRA_ICONS: Record<
+  VenueInfraSubtype,
+  typeof Sparkles
+> = {
+  stage: Sparkles,
+  dj_booth: Music2,
+  bar: GlassWater,
+  restroom: Restroom,
+  entrance: LogIn,
+  exit: DoorOpen,
+  parking: ParkingCircle,
+  kitchen: ChefHat,
+}
 
 const VenueElementShape = memo(function VenueElementShape({
   element,
@@ -10,6 +37,7 @@ const VenueElementShape = memo(function VenueElementShape({
   onSeatPointerDown,
   showSeats,
   showLabels,
+  interactive,
 }: {
   element: VenueMapElement
   selected: boolean
@@ -25,33 +53,56 @@ const VenueElementShape = memo(function VenueElementShape({
   ) => void
   showSeats: boolean
   showLabels: boolean
+  interactive: boolean
 }) {
   const transform = `rotate(${element.rotation} ${element.x} ${element.y})`
-  if (element.type === "infrastructure") {
+  const opacity = element.opacity ?? 1
+  const infra = isInfrastructureElement(element)
+
+  if (infra) {
+    const Icon = INFRA_ICONS[element.subtype ?? "stage"] ?? Sparkles
+    const iconSize = Math.max(14, Math.min(28, Math.min(element.width, element.height) * 0.42))
     return (
       <g
         transform={transform}
-        onPointerDown={(event) => onElementPointerDown?.(event, element)}
+        opacity={opacity}
+        className={interactive ? undefined : "pointer-events-none"}
+        onPointerDown={
+          interactive
+            ? (event) => onElementPointerDown?.(event, element)
+            : undefined
+        }
       >
         <rect
           x={element.x - element.width / 2}
           y={element.y - element.height / 2}
           width={element.width}
           height={element.height}
-          rx={8}
+          rx={10}
           className={
             selected
-              ? "fill-zinc-100 stroke-emerald-400"
-              : "fill-zinc-200 stroke-zinc-400"
+              ? "fill-zinc-200/90 stroke-emerald-400 dark:fill-zinc-700/90"
+              : "fill-zinc-300/80 stroke-zinc-500 dark:fill-zinc-800/90 dark:stroke-zinc-500"
           }
-          strokeWidth={selected ? 2 : 1}
+          strokeWidth={selected ? 2 : 1.2}
         />
+        <foreignObject
+          x={element.x - iconSize / 2}
+          y={element.y - iconSize / 2 - (showLabels ? 6 : 0)}
+          width={iconSize}
+          height={iconSize}
+          className="pointer-events-none overflow-visible"
+        >
+          <div className="flex h-full w-full items-center justify-center text-zinc-700 dark:text-zinc-200">
+            <Icon style={{ width: iconSize * 0.85, height: iconSize * 0.85 }} />
+          </div>
+        </foreignObject>
         {showLabels ? (
           <text
             x={element.x}
-            y={element.y + 4}
+            y={element.y + iconSize / 2 + 10}
             textAnchor="middle"
-            className="pointer-events-none fill-zinc-900 text-[10px] font-black tracking-[0.16em]"
+            className="pointer-events-none fill-zinc-700 text-[9px] font-bold tracking-wide dark:fill-zinc-200"
           >
             {element.label}
           </text>
@@ -59,10 +110,12 @@ const VenueElementShape = memo(function VenueElementShape({
       </g>
     )
   }
+
   if (element.type === "standing_zone") {
     return (
       <g
         transform={transform}
+        opacity={opacity}
         onPointerDown={(event) => onElementPointerDown?.(event, element)}
       >
         <rect
@@ -103,7 +156,7 @@ const VenueElementShape = memo(function VenueElementShape({
   const tableW = element.type === "round_table" ? 36 : element.width
   const tableH = element.type === "round_table" ? 36 : element.height
   return (
-    <g>
+    <g opacity={opacity}>
       <g
         transform={transform}
         onPointerDown={(event) => onElementPointerDown?.(event, element)}
@@ -176,6 +229,7 @@ export function VenueMapElementLayer({
   onSeatPointerDown,
   showSeats = true,
   zoom = 1,
+  interactive = true,
 }: {
   elements: VenueMapElement[]
   selectedIds?: string[]
@@ -191,6 +245,7 @@ export function VenueMapElementLayer({
   ) => void
   showSeats?: boolean
   zoom?: number
+  interactive?: boolean
 }) {
   const selected = new Set(selectedIds)
   const dense = elements.length >= 220
@@ -206,10 +261,11 @@ export function VenueMapElementLayer({
           element={element}
           selected={selected.has(element.id)}
           occupancyBySeatId={occupancyBySeatId}
-          onElementPointerDown={onElementPointerDown}
-          onSeatPointerDown={onSeatPointerDown}
+          onElementPointerDown={interactive ? onElementPointerDown : undefined}
+          onSeatPointerDown={interactive ? onSeatPointerDown : undefined}
           showSeats={renderSeats || selected.has(element.id)}
           showLabels={renderLabels || selected.has(element.id)}
+          interactive={interactive}
         />
       ))}
     </>

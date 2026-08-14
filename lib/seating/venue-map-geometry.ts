@@ -281,7 +281,7 @@ export function venueMapCapacity(map: InteractiveVenueMap): number {
     0,
   )
   const elementSeats = (map.elements ?? []).reduce((sum, element) => {
-    if (element.type === "infrastructure") return sum
+    if (!isSellableElement(element)) return sum
     if (element.type === "standing_zone") {
       return sum + Math.max(0, Math.floor(element.capacity) || 0)
     }
@@ -390,7 +390,7 @@ export function flattenVenueMapSeats(map: InteractiveVenueMap): FlattenedVenueSe
     })),
   )
   const fromElements = (map.elements ?? []).flatMap((element) => {
-    if (element.type === "infrastructure" || element.type === "standing_zone") {
+    if (!isSellableElement(element) || element.type === "standing_zone") {
       return []
     }
     if (element.sellMode === "group") {
@@ -428,4 +428,34 @@ export function flattenVenueMapSeats(map: InteractiveVenueMap): FlattenedVenueSe
 export function venueMapHasInventory(map: InteractiveVenueMap | null | undefined): boolean {
   if (!map) return false
   return map.sectors.length > 0 || (map.elements?.length ?? 0) > 0
+}
+
+export function venueMapStudioStatus(map: InteractiveVenueMap | null | undefined): string {
+  if (!map || !venueMapHasInventory(map)) return "Sin mapa configurado"
+  const elements = map.elements ?? []
+  const tables = elements.filter(
+    (item) =>
+      item.type === "round_table" ||
+      item.type === "long_table" ||
+      item.type === "vip_box",
+  ).length
+  const groups = new Set(
+    elements.map((item) => item.groupId).filter((id): id is string => Boolean(id)),
+  )
+  const sectorCount = map.sectors.length + groups.size
+  const seats =
+    map.sectors.reduce((sum, sector) => sum + sector.seats.length, 0) +
+    elements.filter((item) => item.type === "vip_chair").length
+  if (tables > 0 && sectorCount > 0) {
+    return `${tables} ${tables === 1 ? "mesa" : "mesas"} en ${sectorCount} ${
+      sectorCount === 1 ? "sector" : "sectores"
+    }`
+  }
+  if (seats > 0 && sectorCount > 0) {
+    return `${seats} ${seats === 1 ? "butaca" : "butacas"} en ${sectorCount} ${
+      sectorCount === 1 ? "sector" : "sectores"
+    }`
+  }
+  const capacity = venueMapCapacity(map)
+  return `${capacity} ${capacity === 1 ? "lugar configurado" : "lugares configurados"}`
 }

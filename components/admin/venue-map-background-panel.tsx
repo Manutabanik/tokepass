@@ -1,7 +1,7 @@
 "use client"
 
 import { Image as ImageIcon } from "lucide-react"
-import { useState } from "react"
+import { useRef, useState } from "react"
 
 import { uploadVenueSeatingBackground } from "@/app/actions/venues"
 import { Button } from "@/components/ui/button"
@@ -18,6 +18,7 @@ export function VenueMapBackgroundPanel({
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   return (
     <div className="space-y-3 rounded-xl border border-zinc-200 bg-white p-3 dark:border-white/10 dark:bg-zinc-900">
@@ -39,12 +40,21 @@ export function VenueMapBackgroundPanel({
           placeholder="https://..."
         />
       </div>
-      <label className="block">
-        <span className="sr-only">Subir imagen de fondo</span>
+      <div className="space-y-2">
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full whitespace-normal"
+          disabled={busy}
+          onClick={() => fileRef.current?.click()}
+        >
+          {busy ? "Subiendo imagen..." : "Cargar mapa aéreo (PNG o WEBP)"}
+        </Button>
         <input
+          ref={fileRef}
           type="file"
           accept="image/png,image/webp"
-          className="text-xs text-muted-foreground file:mr-2 file:rounded-md file:border-0 file:bg-zinc-800 file:px-3 file:py-1.5 file:text-xs file:text-zinc-100"
+          className="sr-only"
           onChange={async (event) => {
             const file = event.target.files?.[0]
             event.target.value = ""
@@ -62,7 +72,7 @@ export function VenueMapBackgroundPanel({
             onChange({ backgroundImage: result.data.url })
           }}
         />
-      </label>
+      </div>
       {busy ? (
         <p className="text-xs text-muted-foreground">Subiendo imagen...</p>
       ) : null}

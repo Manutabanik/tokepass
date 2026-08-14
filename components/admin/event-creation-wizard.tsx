@@ -7,6 +7,7 @@ import {
   ArrowRight,
   Building2,
   CalendarDays,
+  Car,
   Check,
   CircleDollarSign,
   CreditCard,
@@ -17,7 +18,6 @@ import {
   LoaderCircle,
   Lock,
   MapPin,
-  Plus,
   Rocket,
   Save,
   Sparkles,
@@ -46,6 +46,7 @@ import type { OrganizerVenue } from "@/app/actions/venues"
 import { createVenue } from "@/app/actions/venues"
 import { EventSponsorsManager } from "@/components/admin/event-sponsors-manager"
 import { EventVenueStep } from "@/components/admin/event-venue-step"
+import { createInventoryTicket } from "@/components/admin/unified-inventory-panel"
 import { ScheduleDaysBuilder } from "@/components/admin/schedule-days-builder"
 import { VenueSeatPricingPanel } from "@/components/admin/venue-seat-pricing-panel"
 import { ZoneTierPricingMatrix } from "@/components/admin/zone-tier-pricing-matrix"
@@ -105,6 +106,7 @@ import {
   publishEventSchema,
   type EventFormValues,
 } from "@/lib/validations/event-form"
+import { inferInventoryTierType } from "@/lib/inventory/unified-inventory"
 import { cn } from "@/lib/utils"
 import { getVenueSeatingItems } from "@/types/venues"
 
@@ -136,20 +138,12 @@ const steps = [
   },
 ] as const
 
-const blankTicket = (): EventFormValues["tickets"][number] =>
-  ({
-    name: "",
-    price: undefined as unknown as number,
-    capacity: undefined as unknown as number,
-    timeLimit: "",
-    bonusReward: "",
-    dayId: null,
-    visibility: "public",
-    layoutType: "general",
-    seatingSectorId: null,
-    capacityPerUnit: 1,
-    admitCount: 1,
-  })
+const blankTicket = (): EventFormValues["tickets"][number] => ({
+  ...createInventoryTicket("general"),
+  name: "",
+  price: undefined as unknown as number,
+  capacity: undefined as unknown as number,
+})
 
 const defaultValues: EventFormValues = {
   basics: {
@@ -179,6 +173,7 @@ const defaultValues: EventFormValues = {
     seatingBackgroundUrl: null,
     venueMap: null,
     seatingLayout: undefined,
+    includesSeatingMap: false,
     saveVenueForReuse: true,
     zones: undefined,
   },
@@ -256,7 +251,7 @@ export function EventCreationWizard({
     defaultValues: initialData?.values ?? defaultValues,
   })
 
-  const { fields, append, remove } = useFieldArray({
+  const { fields } = useFieldArray({
     control: form.control,
     name: "tickets",
     keyName: "fieldKey",
@@ -429,6 +424,9 @@ export function EventCreationWizard({
             seatingSectorId: layoutType === "general" ? null : sector.id,
             capacityPerUnit: layoutSector?.capacity_per_unit ?? 1,
             admitCount: 1,
+            tierType: layoutType === "general" ? "general" : "seated",
+            listPrice: null,
+            bundleItems: [],
           }
         }),
       )
@@ -1041,8 +1039,8 @@ export function EventCreationWizard({
                   Entradas y combos
                 </CardTitle>
                 <CardDescription className="text-muted-foreground">
-                  Asigná precios a las zonas, tipos de tarifa y combos. Completá
-                  nombre, precio y cupo: no hay valores por defecto.
+                  El inventario unificado también se edita en el paso del lugar.
+                  Acá afinás precios, visibilidad y combos.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 px-6 py-7 lg:px-8">
@@ -1085,22 +1083,38 @@ export function EventCreationWizard({
                     onChange={setZoneTierPricing}
                   />
                 ) : null}
-                {fields.map((tier, index) => {
+                {(watchedTickets ?? []).map((tier, index) => {
                   const tierLayoutType =
                     watchedTickets?.[index]?.layoutType ?? tier.layoutType
+                  const inventoryType = inferInventoryTierType({
+                    tierType: watchedTickets?.[index]?.tierType,
+                    layoutType: tierLayoutType,
+                    bundleItems: watchedTickets?.[index]?.bundleItems,
+                  })
+                  const typeLabel =
+                    inventoryType === "seated"
+                      ? "Numerada"
+                      : inventoryType === "addon"
+                        ? "Adicional"
+                        : inventoryType === "bundle"
+                          ? "Combo"
+                          : "General"
                   const compatibleSectors = numberedSectors.filter(
                     (sector) => sector.layout_type === tierLayoutType,
                   )
 
                   return (
                   <Card
-                    key={tier.fieldKey}
+                    key={tier.id ?? `ticket-${index}`}
                     className="border-0 bg-background dark:bg-zinc-950 py-0 ring-1 ring-border"
                   >
                     <CardHeader className="flex-row items-center justify-between border-b border-zinc-200 dark:border-white/6 px-5 py-4">
                       <div>
                         <CardTitle className="text-sm text-foreground">
                           Entrada {index + 1}
+                          <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            {typeLabel}
+                          </span>
                         </CardTitle>
                         <CardDescription className="text-xs text-zinc-600">
                           {(tier.sold ?? 0) > 0
@@ -1112,8 +1126,16 @@ export function EventCreationWizard({
                         type="button"
                         variant="ghost"
                         size="icon-sm"
-                        disabled={fields.length === 1 || (tier.sold ?? 0) > 0}
-                        onClick={() => remove(index)}
+                        disabled={
+                          (watchedTickets?.length ?? 1) <= 1 ||
+                          (tier.sold ?? 0) > 0
+                        }
+                        onClick={() => {
+                          const next = (form.getValues("tickets") ?? []).filter(
+                            (_, current) => current !== index,
+                          )
+                          form.setValue("tickets", next, { shouldDirty: true })
+                        }}
                         className="text-zinc-600 hover:bg-red-500/10 hover:text-red-400"
                         aria-label={`Eliminar entrada ${index + 1}`}
                       >
@@ -1573,7 +1595,7 @@ export function EventCreationWizard({
 
                       <Accordion>
                         <AccordionItem
-                          value={`smart-yield-${tier.fieldKey}`}
+                          value={`smart-yield-${tier.id ?? index}`}
                           className="border-0"
                         >
                           <AccordionTrigger className="rounded-xl bg-zinc-50 dark:bg-white/[0.025] px-4 text-foreground hover:no-underline">
@@ -1676,15 +1698,71 @@ export function EventCreationWizard({
                   )
                 })}
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => append(blankTicket())}
-                  className="h-11 w-full border-dashed border-zinc-300 dark:border-white/12 bg-transparent text-muted-foreground hover:bg-zinc-100 dark:hover:bg-white/[0.03] hover:text-foreground"
-                >
-                  <Plus />
-                  Agregar otro tipo de entrada
-                </Button>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() =>
+                      form.setValue(
+                        "tickets",
+                        [
+                          ...(form.getValues("tickets") ?? []),
+                          {
+                            ...createInventoryTicket("general"),
+                            name: "",
+                          },
+                        ],
+                        { shouldDirty: true },
+                      )
+                    }
+                    className="h-11 border-dashed"
+                  >
+                    <Ticket />
+                    Sector general
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() =>
+                      form.setValue(
+                        "tickets",
+                        [
+                          ...(form.getValues("tickets") ?? []),
+                          {
+                            ...createInventoryTicket("addon"),
+                            name: "",
+                          },
+                        ],
+                        { shouldDirty: true },
+                      )
+                    }
+                    className="h-11 border-dashed"
+                  >
+                    <Car />
+                    Adicional
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() =>
+                      form.setValue(
+                        "tickets",
+                        [
+                          ...(form.getValues("tickets") ?? []),
+                          {
+                            ...createInventoryTicket("bundle"),
+                            name: "",
+                          },
+                        ],
+                        { shouldDirty: true },
+                      )
+                    }
+                    className="h-11 border-dashed"
+                  >
+                    <Gift />
+                    Combo / kit
+                  </Button>
+                </div>
 
                 <FormMessage>
                   {form.formState.errors.tickets?.root?.message}

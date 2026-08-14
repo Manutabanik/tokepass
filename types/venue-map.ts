@@ -55,6 +55,8 @@ export type VenueElementType =
   | "standing_zone"
   | "infrastructure"
 
+export type VenueMapLayer = "commercial" | "infrastructure"
+
 export type VenueInfraSubtype =
   | "stage"
   | "dj_booth"
@@ -62,6 +64,8 @@ export type VenueInfraSubtype =
   | "restroom"
   | "entrance"
   | "exit"
+  | "parking"
+  | "kitchen"
 
 export type VenueSellMode = "per_seat" | "group"
 
@@ -78,14 +82,19 @@ export type VenueMapElement = {
   type: VenueElementType
   subtype?: VenueInfraSubtype
   label: string
-  category: string
+  /** Capa: comercial (vendible) o referencia visual. */
+  category: VenueMapLayer
+  /** Nombre de sector comercial (VIP, Platea). Vacío en infraestructura. */
+  sectorName: string
   x: number
   y: number
   width: number
   height: number
   rotation: number
+  /** Solo comercial. Infraestructura no se cobra. */
   price: number
   color: string
+  opacity: number
   chairCount: number
   sideA: number
   sideB: number
@@ -151,9 +160,39 @@ function asNumber(value: unknown, fallback: number): number {
   return Number.isFinite(n) ? n : fallback
 }
 
+function resolveLayer(
+  type: VenueElementType,
+  rawCategory: unknown,
+): VenueMapLayer {
+  if (type === "infrastructure") return "infrastructure"
+  if (rawCategory === "infrastructure" || rawCategory === "Infraestructura") {
+    return "infrastructure"
+  }
+  return "commercial"
+}
+
+function resolveSectorName(
+  layer: VenueMapLayer,
+  item: Record<string, unknown>,
+): string {
+  if (layer === "infrastructure") return ""
+  const explicit = textOrUndefined(item.sectorName ?? item.sector_name)
+  if (explicit) return explicit
+  const legacy = textOrUndefined(item.category)
+  if (
+    legacy &&
+    legacy !== "commercial" &&
+    legacy !== "infrastructure" &&
+    legacy !== "Infraestructura"
+  ) {
+    return legacy
+  }
+  return textOrUndefined(item.groupName ?? item.group_name) ?? "General"
+}
+
 function parseElement(raw: unknown): VenueMapElement | null {
   if (!raw || typeof raw !== "object") return null
-  const item = raw as Partial<VenueMapElement>
+  const item = raw as Partial<VenueMapElement> & Record<string, unknown>
   const type = item.type
   if (
     type !== "vip_chair" &&
@@ -165,47 +204,62 @@ function parseElement(raw: unknown): VenueMapElement | null {
   ) {
     return null
   }
-  const seats = Array.isArray(item.seats)
-    ? item.seats.map((seat, index) => ({
-        id: String(seat.id ?? `${item.id}-S${index + 1}`),
-        number: asNumber(seat.number, index + 1),
-        x: asNumber(seat.x, 0),
-        y: asNumber(seat.y, 0),
-        status: (seat.status === "blocked" ? "blocked" : "available") as
-          | "blocked"
-          | "available",
-      }))
-    : []
+  const layer = resolveLayer(type, item.category)
+  const seats =
+    layer === "infrastructure"
+      ? []
+      : Array.isArray(item.seats)
+        ? item.seats.map((seat, index) => ({
+            id: String(seat.id ?? `${item.id}-S${index + 1}`),
+            number: asNumber(seat.number, index + 1),
+            x: asNumber(seat.x, 0),
+            y: asNumber(seat.y, 0),
+            status: (seat.status === "blocked" ? "blocked" : "available") as
+              | "blocked"
+              | "available",
+          }))
+        : []
   return {
     id: String(item.id ?? `el-${Math.random().toString(36).slice(2, 8)}`),
-    type,
+    type: layer === "infrastructure" ? "infrastructure" : type,
     subtype: item.subtype,
     label: String(item.label ?? "Elemento"),
-    category: String(item.category ?? "General"),
+    category: layer,
+    sectorName: resolveSectorName(layer, item),
     x: asNumber(item.x, 200),
     y: asNumber(item.y, 160),
     width: asNumber(item.width, 80),
     height: asNumber(item.height, 80),
     rotation: asNumber(item.rotation, 0),
-    price: Math.max(0, asNumber(item.price, 0)),
-    color: String(item.color ?? "#f97316"),
+    price: layer === "infrastructure" ? 0 : Math.max(0, asNumber(item.price, 0)),
+    color: String(
+      item.color ?? (layer === "infrastructure" ? "#a1a1aa" : "#f97316"),
+    ),
+    opacity: asOpacity(item.opacity, layer === "infrastructure" ? 0.92 : 1),
     chairCount: asNumber(item.chairCount, 8),
     sideA: asNumber(item.sideA, 4),
     sideB: asNumber(item.sideB, 4),
     sellMode:
-      item.sellMode === "group" ||
-      (item as Record<string, unknown>).sell_mode === "group"
-        ? "group"
-        : "per_seat",
-    capacity: Math.max(0, asNumber(item.capacity, 0)),
+      layer === "infrastructure"
+        ? "per_seat"
+        : item.sellMode === "group" || item.sell_mode === "group"
+          ? "group"
+          : "per_seat",
+    capacity:
+      layer === "infrastructure" ? 0 : Math.max(0, asNumber(item.capacity, 0)),
     seats,
-    groupId: textOrUndefined(item.groupId ?? (item as Record<string, unknown>).group_id),
-    groupName: textOrUndefined(
-      item.groupName ?? (item as Record<string, unknown>).group_name,
-    ),
-    ringIndex: parseOptionalInt(
-      item.ringIndex ?? (item as Record<string, unknown>).ring_index,
-    ),
+    groupId:
+      layer === "infrastructure"
+        ? undefined
+        : textOrUndefined(item.groupId ?? item.group_id),
+    groupName:
+      layer === "infrastructure"
+        ? undefined
+        : textOrUndefined(item.groupName ?? item.group_name),
+    ringIndex:
+      layer === "infrastructure"
+        ? undefined
+        : parseOptionalInt(item.ringIndex ?? item.ring_index),
   }
 }
 
@@ -319,10 +373,49 @@ export function parseVenueMap(raw: unknown): InteractiveVenueMap {
   }
 }
 
+export function isInfrastructureElement(element: VenueMapElement): boolean {
+  return (
+    element.category === "infrastructure" || element.type === "infrastructure"
+  )
+}
+
 export function isSellableElement(element: VenueMapElement): boolean {
-  return element.type !== "infrastructure"
+  return !isInfrastructureElement(element)
 }
 
 export function serializeVenueMap(map: InteractiveVenueMap): InteractiveVenueMap {
-  return JSON.parse(JSON.stringify(map)) as InteractiveVenueMap
+  const elements = (map.elements ?? []).map((element) => {
+    if (!isInfrastructureElement(element)) {
+      return {
+        ...element,
+        category: "commercial" as const,
+        sectorName: element.sectorName || element.groupName || "General",
+      }
+    }
+    return {
+      id: element.id,
+      type: "infrastructure" as const,
+      subtype: element.subtype,
+      label: element.label,
+      category: "infrastructure" as const,
+      sectorName: "",
+      x: element.x,
+      y: element.y,
+      width: element.width,
+      height: element.height,
+      rotation: element.rotation,
+      price: 0,
+      color: element.color,
+      opacity: element.opacity,
+      chairCount: 0,
+      sideA: 0,
+      sideB: 0,
+      sellMode: "per_seat" as const,
+      capacity: 0,
+      seats: [] as VenueMapElement["seats"],
+    }
+  })
+  return JSON.parse(
+    JSON.stringify({ ...map, elements }),
+  ) as InteractiveVenueMap
 }

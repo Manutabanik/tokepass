@@ -9,6 +9,8 @@ import type { FeaturedRotationResult } from "@/lib/featured-rotation"
 import { isPastEvent } from "@/lib/event-status"
 import { isHomePriority, sortCatalogForHome } from "@/lib/services/events-service"
 import { isEventUuid } from "@/lib/seo/site"
+import { decodeEventParam, eventSlugSuffix, uuidPrefixFromSlugSuffix } from "@/lib/seo/event-slug"
+import { parseBundleItems, serializeBundleItems } from "@/lib/inventory/unified-inventory"
 import type { Event, TicketTier, Venue } from "@/types/database"
 import type { ScheduleDay } from "@/types/events"
 import type { EventSeatingUnit, SeatingSectorSummary, VenueSeatingLayout } from "@/types/venues"
@@ -107,6 +109,9 @@ export type EventDetails = {
       | "capacity_per_unit"
       | "category"
       | "list_price"
+      | "tier_type"
+      | "bundle_items"
+      | "bundle_type"
     > & { available: number }
   >
   pixels: EventPixelConfig
@@ -420,17 +425,102 @@ async function resolveEventRecordId(
   supabase: Awaited<ReturnType<typeof createClient>>,
   slugOrId: string,
 ): Promise<string | null> {
-  const value = slugOrId.trim()
+  const value = decodeEventParam(slugOrId)
   if (!value) return null
   if (isEventUuid(value)) return value
 
-  const { data } = await supabase
+  const { data: bySlug, error: slugError } = await supabase
     .from("events")
     .select("id")
     .eq("slug", value)
     .maybeSingle()
 
-  return data?.id ?? null
+  if (bySlug?.id) return bySlug.id
+  if (slugError) {
+    logger.error({
+      context: "public-events",
+      message: "resolve_slug_failed",
+      slug: value,
+      error: slugError,
+    })
+  }
+
+  const suffix = eventSlugSuffix(value)
+  if (!suffix) return null
+
+  const { data: bySlugTail } = await supabase
+    .from("events")
+    .select("id, slug")
+    .ilike("slug", `%${suffix}`)
+    .limit(8)
+
+  if (bySlugTail && bySlugTail.length > 0) {
+    const exact = bySlugTail.find((row) => row.slug === value)
+    if (exact?.id) return exact.id
+    if (bySlugTail.length === 1) return bySlugTail[0]!.id
+  }
+
+  const { data: byPrefix } = await supabase
+    .from("events")
+    .select("id, slug")
+    .like("id", uuidPrefixFromSlugSuffix(suffix))
+    .limit(8)
+
+  if (!byPrefix || byPrefix.length === 0) return null
+  const slugMatch = byPrefix.find((row) => row.slug === value)
+  return slugMatch?.id ?? byPrefix[0]?.id ?? null
+}
+
+async function loadVenueMapJson(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  venueId: string | null | undefined,
+  eventId: string,
+): Promise<unknown> {
+  if (venueId) {
+    const { data, error } = await supabase
+      .from("venues")
+      .select("venue_map")
+      .eq("id", venueId)
+      .maybeSingle()
+    if (!error && data && "venue_map" in data) return data.venue_map
+  }
+
+  const { data, error } = await supabase
+    .from("events")
+    .select("venue_map")
+    .eq("id", eventId)
+    .maybeSingle()
+  if (error || !data || !("venue_map" in data)) return null
+  return data.venue_map
+}
+
+async function loadEventCoreRow(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  eventId: string,
+  mode: "public" | "preview",
+) {
+  let query = supabase
+    .from("events")
+    .select(
+      "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, platform_fee_percentage, platform_fixed_fee, promo_video_url, gallery_urls",
+    )
+    .eq("id", eventId)
+
+  if (mode === "public") {
+    query = query.eq("status", "published").neq("visibility", "guest_list_only")
+  }
+
+  const { data, error } = await query.maybeSingle()
+  if (error) {
+    logger.error({
+      context: "public-events",
+      message: "load_event_core_failed",
+      event_id: eventId,
+      error,
+    })
+    return null
+  }
+  return data
 }
 
 async function loadEventDetails(
@@ -444,7 +534,7 @@ async function loadEventDetails(
   let query = supabase
     .from("events")
     .select(
-      "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, venues(id, name, location, address, city, capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category), profiles!events_organizer_id_fkey(full_name)",
+      "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, venues(id, name, location, address, city, capacity, seating_background_url, seating_layout, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, bundle_items, bundle_type), profiles!events_organizer_id_fkey(full_name)",
     )
     .eq("id", resolvedId)
 
@@ -454,17 +544,22 @@ async function loadEventDetails(
 
   const { data, error } = await query.maybeSingle()
 
-  if (error) {
+  let row = data as EventDetailRow | null
+  if (error || !row) {
     logger.error({
       context: "public-events",
       message: "load_event_failed",
       event_id: resolvedId,
       error,
     })
-    return null
+    row = (await loadEventCoreRow(
+      supabase,
+      resolvedId,
+      options.mode,
+    )) as EventDetailRow | null
   }
 
-  if (!data) return null
+  if (!row) return null
 
   if (options.mode === "preview") {
     const {
@@ -478,7 +573,7 @@ async function loadEventDetails(
       .eq("id", user.id)
       .maybeSingle()
 
-    const isOwner = data.organizer_id === user.id
+    const isOwner = row.organizer_id === user.id
     const isSuperAdmin = profile?.role === "super_admin"
     if (!isOwner && !isSuperAdmin) return null
   }
@@ -506,7 +601,7 @@ async function loadEventDetails(
     )
     .eq("event_id", resolvedId)
 
-  const event = data as unknown as EventDetailRow
+  const event = row
   const scheduleDays = parseScheduleDays(event.schedule_days)
   const tiers = [...(event.ticket_tiers ?? [])]
     .filter((tier) => tier.visibility !== "private")
@@ -580,7 +675,10 @@ async function loadEventDetails(
     }
   }
 
-  const sponsors = await listEventSponsors(event.id)
+  const sponsors = await listEventSponsors(event.id).catch(() => [])
+  const venueMap = event.venues
+    ? await loadVenueMapJson(supabase, event.venues.id, event.id)
+    : null
 
   return {
     id: event.id,
@@ -618,7 +716,7 @@ async function loadEventDetails(
           seating_layout: parsePublicSeatingLayout(
             event.venues.seating_layout,
           ),
-          venue_map: parseVenueMap(event.venues.venue_map),
+          venue_map: parseVenueMap(venueMap),
         }
       : null,
     seatingUnits: [],
@@ -657,6 +755,20 @@ async function loadEventDetails(
         })
         map[row.tier_id] = list
       }
+      for (const tier of tiers) {
+        if ((map[tier.id]?.length ?? 0) > 0) continue
+        const bundled = parseBundleItems(
+          (tier as { bundle_items?: unknown }).bundle_items,
+        )
+        if (bundled.length === 0) continue
+        map[tier.id] = bundled.map((item) => {
+          const child = tiers.find((candidate) => candidate.id === item.tierId)
+          return {
+            name: child?.name ?? "Ítem",
+            quantity: item.quantity,
+          }
+        })
+      }
       return map
     })(),
     tiers: tiers.map((tier) => ({
@@ -665,6 +777,22 @@ async function loadEventDetails(
       list_price: tier.list_price == null ? null : Number(tier.list_price),
       price: Number(tier.price),
       available: Math.max(0, tier.capacity - tier.sold),
+      tier_type:
+        (tier as { tier_type?: TicketTier["tier_type"] }).tier_type ??
+        (tier.layout_type === "numbered_seat" ||
+        tier.layout_type === "table_combo"
+          ? "seated"
+          : tier.category === "bundle"
+            ? "bundle"
+            : "general"),
+      bundle_items: serializeBundleItems(
+        parseBundleItems(
+          (tier as { bundle_items?: unknown }).bundle_items,
+        ),
+      ) as TicketTier["bundle_items"],
+      bundle_type:
+        (tier as { bundle_type?: TicketTier["bundle_type"] }).bundle_type ??
+        null,
     })),
     pixels: {
       metaPixelId: event.meta_pixel_id ?? null,

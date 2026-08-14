@@ -34,6 +34,7 @@ import {
 import { VenueMapBackgroundLayer } from "@/components/venue/venue-map-background-layer"
 import { VenueMapElementLayer } from "@/components/venue/venue-map-element-layer"
 import { cn } from "@/lib/utils"
+import { isInfrastructureElement } from "@/types/venue-map"
 import type { InteractiveVenueMap } from "@/types/venue-map"
 
 const VIEW = { width: 800, height: 560 }
@@ -71,6 +72,8 @@ export function InteractiveSeatingCanvas({
   pending = false,
   onContinue,
   onBack,
+  fillParent = false,
+  disableIdlePrompt = false,
 }: {
   map: InteractiveVenueMap
   occupancyBySeatId?: Record<string, SeatStatus>
@@ -78,6 +81,8 @@ export function InteractiveSeatingCanvas({
   pending?: boolean
   onContinue: (seats: InteractiveSelectedSeat[]) => void
   onBack?: () => void
+  fillParent?: boolean
+  disableIdlePrompt?: boolean
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const worldRef = useRef<SVGGElement>(null)
@@ -116,6 +121,15 @@ export function InteractiveSeatingCanvas({
     () => new Set(selectedSeats.map((seat) => seat.id)),
     [selectedSeats],
   )
+  const selectedElementIds = useMemo(() => {
+    const ids = new Set(selectedSeats.map((seat) => seat.sectorId))
+    for (const element of map.elements ?? []) {
+      if (ids.has(element.id) || (element.groupId && ids.has(element.groupId))) {
+        ids.add(element.id)
+      }
+    }
+    return [...ids]
+  }, [map.elements, selectedSeats])
 
   const subtotal = selectedSeats.reduce((sum, seat) => sum + seat.price, 0)
   const stageLabel = map.stage?.label?.trim() || "ESCENARIO"
@@ -133,7 +147,7 @@ export function InteractiveSeatingCanvas({
   }, [expanded])
 
   useEffect(() => {
-    if (selectedSeats.length === 0) {
+    if (disableIdlePrompt || selectedSeats.length === 0) {
       setIdleOpen(false)
       return
     }
@@ -144,7 +158,7 @@ export function InteractiveSeatingCanvas({
       }
     }, 1000)
     return () => window.clearInterval(timer)
-  }, [selectedSeats.length])
+  }, [selectedSeats.length, disableIdlePrompt])
 
   function markActivity() {
     lastActivity.current = Date.now()
@@ -227,7 +241,11 @@ export function InteractiveSeatingCanvas({
     })
     if (live === "blocked" || live === "occupied") return
 
-    if (gesture.current.zoom < SECTOR_ZOOM_THRESHOLD && live !== "selected") {
+    if (
+      !disableIdlePrompt &&
+      gesture.current.zoom < SECTOR_ZOOM_THRESHOLD &&
+      live !== "selected"
+    ) {
       zoomToGroup(seat.sectorId)
       vibrateTap()
       return
@@ -529,10 +547,29 @@ export function InteractiveSeatingCanvas({
               </text>
             ))}
             <VenueMapElementLayer
-              elements={map.elements ?? []}
-              occupancyBySeatId={occupancyBySeatId}
+              elements={(map.elements ?? []).filter(isInfrastructureElement)}
               showSeats={false}
               zoom={zoom}
+              interactive={false}
+            />
+            <VenueMapElementLayer
+              elements={(map.elements ?? []).filter(
+                (element) => !isInfrastructureElement(element),
+              )}
+              occupancyBySeatId={occupancyBySeatId}
+              selectedIds={selectedElementIds}
+              showSeats={false}
+              zoom={zoom}
+              onElementPointerDown={(event, element) => {
+                event.stopPropagation()
+                if (isInfrastructureElement(element)) return
+                const match = plotSeats.find(
+                  (seat) =>
+                    seat.sectorId === element.id ||
+                    seat.sectorId === element.groupId,
+                )
+                if (match) toggleSeat(match)
+              }}
             />
             {plotSeats.map((seat) => {
               const price = seatPrice(seat.sectorId, seat.price)
@@ -644,7 +681,9 @@ export function InteractiveSeatingCanvas({
         "relative flex w-full flex-col overflow-hidden rounded-3xl border border-white/10 bg-zinc-950 shadow-2xl md:flex-row",
         expanded
           ? "fixed inset-3 z-50 h-[calc(100dvh-1.5rem)]"
-          : "h-[600px] md:h-[650px]",
+          : fillParent
+            ? "h-full min-h-0 rounded-none border-0 shadow-none"
+            : "h-[600px] md:h-[650px]",
       )}
     >
       {mapArea}

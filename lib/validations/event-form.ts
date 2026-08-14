@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import { BUNDLE_TYPES } from "@/lib/inventory/flexible-bundles"
+import { INVENTORY_TIER_TYPES } from "@/lib/inventory/unified-inventory"
 import { EVENT_VISIBILITY_VALUES } from "@/types/events"
 import { TICKET_TIER_VISIBILITY_VALUES } from "@/types/tickets"
 
@@ -55,6 +57,18 @@ export const ticketTierSchema = z.object({
   capacityPerUnit: z.number().int().min(1).max(100),
   /** QRs independientes por unidad (mesa). */
   admitCount: z.number().int().min(1).max(50),
+  tierType: z.enum(INVENTORY_TIER_TYPES).optional().default("general"),
+  listPrice: z.number().min(0).nullable().optional(),
+  bundleItems: z
+    .array(
+      z.object({
+        tierId: z.string().min(1),
+        quantity: z.number().int().min(1).max(50),
+      }),
+    )
+    .optional()
+    .default([]),
+  bundleType: z.enum(BUNDLE_TYPES).nullable().optional(),
 })
 
 const eventFormObject = z
@@ -99,6 +113,7 @@ const eventFormObject = z
       seatingBackgroundUrl: z.string().nullable().optional(),
       venueMap: z.unknown().optional().nullable(),
       seatingLayout: z.unknown().optional(),
+      includesSeatingMap: z.boolean().optional().default(false),
       saveVenueForReuse: z.boolean(),
       zones: z
         .array(
@@ -129,7 +144,12 @@ const eventFormObject = z
       }
       tierNames.add(normalizedName)
 
-      if (tier.layoutType !== "general" && !tier.seatingSectorId) {
+      const usesMap = Boolean(data.venue.includesSeatingMap)
+      if (
+        tier.layoutType !== "general" &&
+        !tier.seatingSectorId &&
+        !usesMap
+      ) {
         context.addIssue({
           code: "custom",
           path: ["tickets", index, "seatingSectorId"],
@@ -192,11 +212,17 @@ const eventFormObject = z
     }
 
     const hasBlueprintZones = (data.venue.zones?.length ?? 0) > 0
+    const usesSeatingMap = Boolean(data.venue.includesSeatingMap)
+    const ticketCapacity = data.tickets.reduce(
+      (sum, tier) => sum + (Number(tier.capacity) || 0),
+      0,
+    )
 
-    if (!hasBlueprintZones) {
+    if (!hasBlueprintZones && !usesSeatingMap) {
       if (
         data.venue.zoneType === "general_admission" &&
-        !data.venue.capacity
+        !data.venue.capacity &&
+        ticketCapacity < 1
       ) {
         context.addIssue({
           code: "custom",
@@ -260,6 +286,18 @@ const draftTicketSchema = z.object({
   seatingSectorId: z.string().trim().nullable().optional(),
   capacityPerUnit: z.number().int().min(1).max(100).optional().default(1),
   admitCount: z.number().int().min(1).max(50).optional().default(1),
+  tierType: z.enum(INVENTORY_TIER_TYPES).optional().default("general"),
+  listPrice: z.number().min(0).nullable().optional(),
+  bundleItems: z
+    .array(
+      z.object({
+        tierId: z.string().min(1),
+        quantity: z.number().int().min(1).max(50),
+      }),
+    )
+    .optional()
+    .default([]),
+  bundleType: z.enum(BUNDLE_TYPES).nullable().optional(),
 })
 
 /** Autoguardado de borrador: no exige descripción, precio ni venue completo. */
@@ -301,6 +339,7 @@ export const draftEventSchema = z.object({
       seatingBackgroundUrl: z.string().nullable().optional(),
       venueMap: z.unknown().optional().nullable(),
       seatingLayout: z.unknown().optional(),
+      includesSeatingMap: z.boolean().optional().default(false),
       saveVenueForReuse: z.boolean().optional().default(true),
       zones: z.array(z.any()).optional(),
     })
@@ -309,6 +348,7 @@ export const draftEventSchema = z.object({
       mode: "new",
       zoneType: "general_admission",
       venueName: "",
+      includesSeatingMap: false,
       saveVenueForReuse: true,
     }),
   tickets: z.array(draftTicketSchema).optional().default([]),
@@ -339,6 +379,10 @@ function blankDraftTicket(): EventFormValues["tickets"][number] {
     seatingSectorId: null,
     capacityPerUnit: 1,
     admitCount: 1,
+    tierType: "general",
+    listPrice: null,
+    bundleItems: [],
+    bundleType: null,
   }
 }
 
@@ -389,6 +433,10 @@ export function coerceDraftEventForm(
         tier.seatingSectorId
           ? tier.seatingSectorId
           : null,
+      tierType: tier.tierType ?? "general",
+      listPrice: tier.listPrice ?? null,
+      bundleItems: tier.bundleItems ?? [],
+      bundleType: tier.bundleType ?? null,
     }))
 
   const venue = raw.venue ?? {
@@ -467,6 +515,7 @@ export function coerceDraftEventForm(
       seatingBackgroundUrl: venue.seatingBackgroundUrl ?? null,
       venueMap: venue.venueMap ?? null,
       seatingLayout: venue.seatingLayout,
+      includesSeatingMap: Boolean(venue.includesSeatingMap),
       saveVenueForReuse: venue.saveVenueForReuse ?? true,
       zones: zones as EventFormValues["venue"]["zones"],
     },
