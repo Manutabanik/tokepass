@@ -135,6 +135,17 @@
   background: color-mix(in oklch, oklch(0.541 0.281 293.009) 28%, transparent);
 }
 
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-text-fill-color: var(--foreground);
+  caret-color: var(--foreground);
+  box-shadow: 0 0 0 1000px var(--background) inset;
+  transition: background-color 9999s ease-out 0s;
+}
+
 @keyframes tokepass-marquee {
   from {
     transform: translateX(0);

@@ -22,9 +22,9 @@ export default function Error({
   }, [error])
 
   return (
-    <main className="relative isolate grid min-h-[70vh] place-items-center overflow-hidden bg-[#09090b] px-6 py-16 text-zinc-100">
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,rgba(124,58,237,0.2),transparent_45%)]" />
-      <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-zinc-950/70 p-8 text-center">
+    <main className="relative isolate grid min-h-[70vh] place-items-center overflow-hidden bg-background px-6 py-16 text-foreground">
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,rgba(124,58,237,0.16),transparent_45%)]" />
+      <div className="w-full max-w-lg rounded-3xl border border-border bg-card p-8 text-center shadow-xl">
         <img
           src="/brand/tokepass-mark.png"
           alt="Tokepass"
@@ -32,10 +32,10 @@ export default function Error({
           height={48}
           className="mx-auto size-12 rounded-[0.85rem] object-cover ring-1 ring-white/15"
         />
-        <h1 className="mt-4 text-3xl font-black tracking-tight text-white">
+        <h1 className="mt-4 text-3xl font-black tracking-tight text-foreground">
           No pudimos cargar esta vista
         </h1>
-        <p className="mt-3 text-sm leading-6 text-zinc-400">
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">
           Hubo un error inesperado. Reintentá la operación o volvé a la
           cartelera.
         </p>
@@ -49,7 +49,7 @@ export default function Error({
           </button>
           <Link
             href="/"
-            className="grid h-11 place-items-center rounded-full border border-white/15 px-5 text-sm font-semibold text-zinc-200 hover:bg-white/5"
+            className="grid h-11 place-items-center rounded-full border border-border px-5 text-sm font-semibold text-foreground hover:bg-muted"
           >
             Volver al inicio
           </Link>

@@ -86,9 +86,9 @@ export function GuestListClaimForm({
 
   if (meta.remaining <= 0 && !initialEntryId) {
     return (
-      <div className="rounded-[1.75rem] border border-zinc-800 bg-zinc-950 px-5 py-10 text-center">
-        <p className="text-lg font-bold text-white">Lista completa</p>
-        <p className="mt-2 text-sm text-zinc-500">
+      <div className="rounded-[1.75rem] border border-border bg-card px-5 py-10 text-center">
+        <p className="text-lg font-bold text-foreground">Lista completa</p>
+        <p className="mt-2 text-sm text-muted-foreground">
           No quedan cupos en {meta.name}.
         </p>
       </div>
@@ -97,8 +97,8 @@ export function GuestListClaimForm({
 
   if (initialEntryId && isAuthenticated) {
     return (
-      <div className="space-y-4 rounded-[1.75rem] border border-zinc-800 bg-zinc-950 p-5">
-        <p className="text-sm text-zinc-400">
+      <div className="space-y-4 rounded-[1.75rem] border border-border bg-card p-5">
+        <p className="text-sm text-muted-foreground">
           Tenés una cortesía pendiente en <strong>{meta.name}</strong>.
         </p>
         <Button
@@ -123,8 +123,8 @@ export function GuestListClaimForm({
   if (done) {
     return (
       <div className="rounded-[1.75rem] border border-emerald-500/30 bg-emerald-500/10 px-5 py-10 text-center">
-        <p className="text-lg font-bold text-emerald-200">Registro enviado</p>
-        <p className="mt-2 text-sm text-emerald-100/70">
+        <p className="text-lg font-bold text-emerald-800 dark:text-emerald-200">Registro enviado</p>
+        <p className="mt-2 text-sm text-emerald-800/70 dark:text-emerald-100/70">
           Revisá tu WhatsApp/email o ingresá para ver el QR.
         </p>
       </div>
@@ -134,15 +134,15 @@ export function GuestListClaimForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="space-y-4 rounded-[1.75rem] border border-zinc-800 bg-zinc-950 p-5"
+      className="space-y-4 rounded-[1.75rem] border border-border bg-card p-5"
     >
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 px-4 py-3 text-center">
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-zinc-500">
+      <div className="rounded-2xl border border-border bg-muted/50 px-4 py-3 text-center">
+        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
           Cupos restantes
         </p>
-        <p className="mt-1 text-3xl font-black text-white">
+        <p className="mt-1 text-3xl font-black text-foreground">
           {formatNumber(meta.remaining)}
-          <span className="text-base font-medium text-zinc-500">
+          <span className="text-base font-medium text-muted-foreground">
             {" "}
             / {formatNumber(meta.maxGuests)}
           </span>
@@ -156,7 +156,7 @@ export function GuestListClaimForm({
           value={fullName}
           onChange={(e) => setFullName(e.target.value)}
           required
-          className="h-11 border-zinc-700 bg-black"
+          className="h-11"
         />
       </div>
       <div className="space-y-2">
@@ -167,7 +167,7 @@ export function GuestListClaimForm({
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          className="h-11 border-zinc-700 bg-black"
+          className="h-11"
         />
         <p className="text-xs text-zinc-500">
           El FreePass queda vinculado a este email. Debés ingresar con la misma
@@ -181,14 +181,14 @@ export function GuestListClaimForm({
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           placeholder="+54 9 11 …"
-          className="h-11 border-zinc-700 bg-black"
+          className="h-11"
         />
       </div>
 
       <Button
         type="submit"
         disabled={isPending}
-        className="h-12 w-full rounded-2xl bg-white font-bold text-zinc-950 hover:bg-zinc-200"
+        className="h-12 w-full rounded-2xl bg-violet-600 font-bold text-white hover:bg-violet-500"
       >
         {isPending ? (
           <LoaderCircle className="animate-spin" />
@@ -197,7 +197,7 @@ export function GuestListClaimForm({
         )}
       </Button>
 
-      <p className="text-center text-[11px] text-zinc-600">
+      <p className="text-center text-[11px] text-muted-foreground">
         Evento: {meta.eventTitle} · {formatEventDate(meta.eventDate)}
       </p>
     </form>

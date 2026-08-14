@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 export default function RegisterPage() {
   return (
-    <section className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-md items-center px-4 py-16">
+    <section className="relative mx-auto flex min-h-[calc(100vh-4rem)] max-w-md items-center overflow-hidden bg-background px-4 py-16">
       <AuthForms initialMode="register" />
     </section>
   )

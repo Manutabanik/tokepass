@@ -41,14 +41,14 @@ export default async function GuestListClaimPage({
   return (
     <div className="mx-auto min-h-[calc(100vh-4rem)] w-full max-w-md px-4 py-10">
       <div className="mb-8 text-center">
-        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-emerald-400">
+        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-400">
           Invitación Tokepass
         </p>
-        <h1 className="mt-3 text-3xl font-black tracking-[-0.04em] text-white">
+        <h1 className="mt-3 text-3xl font-black tracking-[-0.04em] text-foreground">
           Te invitaron a {meta.eventTitle}
         </h1>
-        <p className="mt-2 text-base text-zinc-400">{meta.name}</p>
-        <p className="mt-1 text-xs text-zinc-600">
+        <p className="mt-2 text-base text-muted-foreground">{meta.name}</p>
+        <p className="mt-1 text-xs text-muted-foreground">
           Ingreso válido hasta {formatDateTime(meta.validUntil)}
         </p>
       </div>

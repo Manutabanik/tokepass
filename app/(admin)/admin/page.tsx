@@ -43,11 +43,11 @@ const orderStatusPresentation: Record<
   },
   pending: {
     label: "Pendiente",
-    className: "border-amber-400/20 bg-amber-400/10 text-amber-300",
+    className: "border-amber-400/20 bg-amber-400/10 text-amber-800 dark:text-amber-300",
   },
   failed: {
     label: "Fallida",
-    className: "border-red-400/20 bg-red-400/10 text-red-300",
+    className: "border-red-400/20 bg-red-400/10 text-red-800 dark:text-red-300",
   },
 }
 
@@ -106,7 +106,7 @@ export default async function AdminDashboardPage() {
         {kpis.map(({ label, value, helper, icon: Icon }) => (
           <Card
             key={label}
-            className="border-0 bg-white/[0.035] py-0 ring-1 ring-white/8"
+            className="border-0 bg-card py-0 shadow-sm ring-1 ring-border"
           >
             <CardContent className="px-5 py-5">
               <div className="flex items-center justify-between gap-3">
@@ -125,7 +125,7 @@ export default async function AdminDashboardPage() {
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[1.4fr_0.8fr]">
-        <Card className="border-0 bg-white/[0.035] py-0 ring-1 ring-white/8">
+        <Card className="border-0 bg-card py-0 shadow-sm ring-1 ring-border">
           <CardHeader className="border-b border-zinc-200 dark:border-white/8 px-5 py-5 sm:px-6">
             <CardTitle className="text-base text-zinc-900 dark:text-white">
               Últimas compras
@@ -202,7 +202,7 @@ export default async function AdminDashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-0 bg-[radial-gradient(circle_at_top_right,rgba(124,58,237,0.18),transparent_50%),rgba(255,255,255,0.035)] py-0 ring-1 ring-white/8">
+        <Card className="border-0 bg-[radial-gradient(circle_at_top_right,rgba(124,58,237,0.14),transparent_50%)] py-0 shadow-sm ring-1 ring-border">
           <CardHeader className="px-6 pt-6">
             <span className="mb-4 grid size-12 place-items-center rounded-2xl bg-violet-500/15 text-violet-300 ring-1 ring-inset ring-violet-400/15">
               <CalendarPlus className="size-5" aria-hidden="true" />

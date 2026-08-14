@@ -21,6 +21,9 @@ const initialState: AuthActionState = {
   success: null,
 }
 
+const AUTH_INPUT_CLASS =
+  "h-12 min-h-12 rounded-xl border-border bg-background px-4 py-3.5 text-base text-foreground placeholder:text-muted-foreground focus-visible:border-violet-500/80 focus-visible:ring-2 focus-visible:ring-violet-500/20"
+
 function SubmitButton({
   label,
   pendingLabel,
@@ -34,7 +37,7 @@ function SubmitButton({
     <Button
       type="submit"
       disabled={pending}
-      className="h-12 w-full cursor-pointer rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 px-4 py-3.5 text-sm font-bold text-white shadow-[0_0_25px_rgba(147,51,234,0.3)] transition-all hover:from-purple-500 hover:to-indigo-500 hover:shadow-[0_0_30px_rgba(147,51,234,0.5)] disabled:cursor-not-allowed"
+      className="h-12 w-full cursor-pointer rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 px-4 py-3.5 text-sm font-bold text-white shadow-[0_0_25px_rgba(147,51,234,0.18)] transition-all hover:from-purple-500 hover:to-indigo-500 disabled:cursor-not-allowed"
     >
       {pending && <LoaderCircle className="animate-spin" aria-hidden="true" />}
       {pending ? pendingLabel : label}
@@ -49,7 +52,7 @@ function GoogleSubmitButton() {
     <Button
       type="submit"
       disabled={pending}
-      className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm font-medium text-zinc-200 shadow-sm transition-all hover:border-zinc-700 hover:bg-zinc-800 hover:text-white"
+      className="h-12 w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-medium text-foreground shadow-sm transition-all hover:bg-muted"
     >
       {pending ? (
         <LoaderCircle className="animate-spin" aria-hidden="true" />
@@ -87,7 +90,7 @@ function ActionMessage({ state }: { state: AuthActionState }) {
     return (
       <p
         role="alert"
-        className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-sm text-red-300"
+        className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-sm text-red-700 dark:text-red-300"
       >
         {state.error}
       </p>
@@ -98,7 +101,7 @@ function ActionMessage({ state }: { state: AuthActionState }) {
     return (
       <p
         role="status"
-        className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2.5 text-sm text-emerald-300"
+        className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2.5 text-sm text-emerald-800 dark:text-emerald-300"
       >
         {state.success}
       </p>
@@ -137,23 +140,23 @@ export function AuthForms({
     : null
 
   return (
-    <div className="relative z-10 w-full max-w-md rounded-3xl border border-zinc-800/80 bg-zinc-900/80 p-8 shadow-2xl backdrop-blur-xl sm:p-10">
+    <div className="relative z-10 w-full max-w-md rounded-3xl border border-border bg-card/95 p-8 text-card-foreground shadow-2xl shadow-zinc-200/60 backdrop-blur-xl dark:shadow-black/40 sm:p-10">
       <div className="mb-5 flex justify-center">
-        <BrandLogo inverted href="/" size="lg" />
+        <BrandLogo href="/" size="lg" />
       </div>
-      <span className="mb-2 block text-center font-mono text-xs font-bold uppercase tracking-widest text-purple-400">
+      <span className="mb-2 block text-center font-mono text-xs font-bold uppercase tracking-widest text-violet-700 dark:text-purple-400">
         Bienvenido
       </span>
-      <h1 className="mb-1.5 text-center text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
+      <h1 className="mb-1.5 text-center text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
         {isLogin ? "Ingresá a tu cuenta" : "Creá tu cuenta"}
       </h1>
-      <p className="mb-8 text-center text-sm text-zinc-400">
+      <p className="mb-8 text-center text-sm text-muted-foreground">
         {isLogin
           ? "Tus entradas, beneficios y experiencias en un solo lugar."
           : "Registrate para descubrir eventos y guardar tus entradas."}
       </p>
 
-      <div className="mb-6 grid grid-cols-2 rounded-2xl border border-zinc-800/80 bg-zinc-950/80 p-1.5">
+      <div className="mb-6 grid grid-cols-2 rounded-2xl border border-border bg-muted/60 p-1.5">
         {(["login", "register"] as const).map((item) => (
           <button
             key={item}
@@ -162,8 +165,8 @@ export function AuthForms({
             className={cn(
               "cursor-pointer rounded-xl border py-2.5 text-center text-sm transition-all",
               mode === item
-                ? "border-zinc-700/60 bg-zinc-800 font-semibold text-white shadow-md"
-                : "border-transparent font-medium text-zinc-400 hover:text-white",
+                ? "border-border bg-background font-semibold text-foreground shadow-md"
+                : "border-transparent font-medium text-muted-foreground hover:text-foreground",
             )}
           >
             {item === "login" ? "Ingresar" : "Registrarme"}
@@ -176,11 +179,11 @@ export function AuthForms({
       </form>
 
       <div className="my-6 flex items-center gap-3">
-        <Separator className="flex-1 bg-zinc-800" />
-        <span className="shrink-0 px-3 font-mono text-xs uppercase text-zinc-500">
+        <Separator className="flex-1 bg-border" />
+        <span className="shrink-0 px-3 font-mono text-xs uppercase text-muted-foreground">
           O continúa con email
         </span>
-        <Separator className="flex-1 bg-zinc-800" />
+        <Separator className="flex-1 bg-border" />
       </div>
 
       {isLogin ? (
@@ -190,7 +193,7 @@ export function AuthForms({
             <div>
               <label
                 htmlFor="login-email"
-                className="mb-1.5 block font-mono text-xs font-semibold uppercase tracking-wider text-zinc-300"
+                className="mb-1.5 block font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground"
               >
                 Correo electrónico
               </label>
@@ -205,13 +208,13 @@ export function AuthForms({
                 placeholder="Tu Email"
                 autoComplete="email"
                 required
-                className="h-12 min-h-12 rounded-xl border-zinc-800 bg-zinc-950 px-4 py-3.5 text-base text-white placeholder:text-zinc-600 focus-visible:border-purple-500/80 focus-visible:ring-2 focus-visible:ring-purple-500/20"
+                className={AUTH_INPUT_CLASS}
               />
             </div>
             <div>
               <label
                 htmlFor="login-password"
-                className="mb-1.5 block font-mono text-xs font-semibold uppercase tracking-wider text-zinc-300"
+                className="mb-1.5 block font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground"
               >
                 Contraseña
               </label>
@@ -222,7 +225,7 @@ export function AuthForms({
                 placeholder="Ingresá tu contraseña"
                 autoComplete="current-password"
                 required
-                className="h-12 min-h-12 rounded-xl border-zinc-800 bg-zinc-950 px-4 py-3.5 text-base text-white placeholder:text-zinc-600 focus-visible:border-purple-500/80 focus-visible:ring-2 focus-visible:ring-purple-500/20"
+                className={AUTH_INPUT_CLASS}
               />
             </div>
           </div>
@@ -238,7 +241,7 @@ export function AuthForms({
             <div>
               <label
                 htmlFor="register-name"
-                className="mb-1.5 block font-mono text-xs font-semibold uppercase tracking-wider text-zinc-300"
+                className="mb-1.5 block font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground"
               >
                 Nombre completo
               </label>
@@ -248,13 +251,13 @@ export function AuthForms({
                 name="fullName"
                 placeholder="Tu nombre"
                 autoComplete="name"
-                className="h-12 min-h-12 rounded-xl border-zinc-800 bg-zinc-950 px-4 py-3.5 text-base text-white placeholder:text-zinc-600 focus-visible:border-purple-500/80 focus-visible:ring-2 focus-visible:ring-purple-500/20"
+                className={AUTH_INPUT_CLASS}
               />
             </div>
             <div>
               <label
                 htmlFor="register-email"
-                className="mb-1.5 block font-mono text-xs font-semibold uppercase tracking-wider text-zinc-300"
+                className="mb-1.5 block font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground"
               >
                 Correo electrónico
               </label>
@@ -269,13 +272,13 @@ export function AuthForms({
                 placeholder="Tu Email"
                 autoComplete="email"
                 required
-                className="h-12 min-h-12 rounded-xl border-zinc-800 bg-zinc-950 px-4 py-3.5 text-base text-white placeholder:text-zinc-600 focus-visible:border-purple-500/80 focus-visible:ring-2 focus-visible:ring-purple-500/20"
+                className={AUTH_INPUT_CLASS}
               />
             </div>
             <div>
               <label
                 htmlFor="register-password"
-                className="mb-1.5 block font-mono text-xs font-semibold uppercase tracking-wider text-zinc-300"
+                className="mb-1.5 block font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground"
               >
                 Contraseña
               </label>
@@ -287,7 +290,7 @@ export function AuthForms({
                 autoComplete="new-password"
                 minLength={8}
                 required
-                className="h-12 min-h-12 rounded-xl border-zinc-800 bg-zinc-950 px-4 py-3.5 text-base text-white placeholder:text-zinc-600 focus-visible:border-purple-500/80 focus-visible:ring-2 focus-visible:ring-purple-500/20"
+                className={AUTH_INPUT_CLASS}
               />
             </div>
           </div>

@@ -15,7 +15,7 @@ export default async function LoginPage({
   const { error, next } = await searchParams
 
   return (
-    <section className="relative flex min-h-[calc(100vh-80px)] items-center justify-center overflow-hidden bg-zinc-950 p-4">
+    <section className="relative flex min-h-[calc(100vh-80px)] items-center justify-center overflow-hidden bg-background p-4">
       <div
         className="pointer-events-none absolute -left-40 -top-40 size-96 rounded-full bg-purple-600/15 blur-[120px]"
         aria-hidden="true"

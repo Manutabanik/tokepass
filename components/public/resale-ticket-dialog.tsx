@@ -97,7 +97,7 @@ export function ResaleTicketDialog({
   if (listed) {
     return (
       <div className="space-y-2">
-        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-3 text-center text-xs font-semibold uppercase tracking-[0.12em] text-amber-100">
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-3 text-center text-xs font-semibold uppercase tracking-[0.12em] text-amber-800 dark:text-amber-100">
           Publicada para reventa
         </div>
         <Button
@@ -105,7 +105,7 @@ export function ResaleTicketDialog({
           variant="outline"
           disabled={disabled || isPending}
           onClick={cancelListing}
-          className="h-11 w-full rounded-full border-zinc-700 bg-zinc-950 text-zinc-100 hover:bg-zinc-900"
+          className="h-11 w-full rounded-full"
         >
           {isPending ? (
             <Loader2 className="size-4 animate-spin" aria-hidden />
@@ -125,21 +125,21 @@ export function ResaleTicketDialog({
         variant="outline"
         disabled={disabled}
         onClick={() => void openPublishModal()}
-        className="h-11 w-full rounded-full border-zinc-700 bg-zinc-950 text-zinc-100 hover:bg-zinc-900"
+        className="h-11 w-full rounded-full"
       >
         <RefreshCcw className="mr-2 size-4" aria-hidden />
         Vender mi entrada de forma segura
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="border-zinc-800 bg-zinc-950 text-zinc-100 sm:max-w-md">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-white">
+            <DialogTitle>
               Reventa oficial Tokepass
             </DialogTitle>
-            <DialogDescription className="text-zinc-400">
+            <DialogDescription>
               Tu entrada de{" "}
-              <span className="font-medium text-zinc-200">{eventTitle}</span> se
+              <span className="font-medium text-foreground">{eventTitle}</span> se
               publicará en el marketplace oficial al precio actual. Cuando se
               venda, el dinero se acreditará en tu cuenta.
             </DialogDescription>
@@ -151,21 +151,21 @@ export function ResaleTicketDialog({
               Calculando precio oficial…
             </div>
           ) : (
-            <div className="space-y-3 rounded-2xl border border-zinc-800 bg-zinc-900/80 px-4 py-4 text-sm">
+            <div className="space-y-3 rounded-2xl border border-border bg-muted/40 px-4 py-4 text-sm">
               <div className="flex items-center justify-between gap-3">
-                <span className="text-zinc-400">Precio de publicación</span>
-                <span className="font-semibold text-white">
+                <span className="text-muted-foreground">Precio de publicación</span>
+                <span className="font-semibold text-foreground">
                   {formatCurrency(preview.price)}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <span className="text-zinc-400">Fee Tokepass (10%)</span>
-                <span className="text-zinc-300">
+                <span className="text-muted-foreground">Fee Tokepass (10%)</span>
+                <span className="text-foreground">
                   {formatCurrency(preview.fee)}
                 </span>
               </div>
-              <div className="flex items-center justify-between gap-3 border-t border-zinc-800 pt-3">
-                <span className="font-medium text-zinc-200">
+              <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
+                <span className="font-medium text-foreground">
                   Vas a recibir
                 </span>
                 <span className="font-bold text-emerald-400">

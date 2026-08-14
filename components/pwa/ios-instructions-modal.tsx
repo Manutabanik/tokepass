@@ -21,24 +21,24 @@ export function IosInstructionsModal({
 }: IosInstructionsModalProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-zinc-800 bg-zinc-950 text-zinc-100 sm:max-w-md">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="text-lg font-bold tracking-tight">
             Instalá Tokepass en tu iPhone
           </DialogTitle>
-          <DialogDescription className="text-zinc-400">
+          <DialogDescription>
             Safari no muestra el botón nativo. En 2 pasos queda en tu pantalla
             de inicio, sin App Store.
           </DialogDescription>
         </DialogHeader>
 
         <ol className="mt-1 space-y-3">
-          <li className="flex gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/80 p-3.5">
+          <li className="flex gap-3 rounded-2xl border border-border bg-muted/40 p-3.5">
             <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-emerald-500/15 text-sm font-bold text-emerald-300 ring-1 ring-emerald-500/30">
               1
             </span>
             <div className="min-w-0">
-              <p className="flex items-center gap-1.5 text-sm font-semibold text-white">
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
                 <Share className="size-3.5 text-sky-300" aria-hidden="true" />
                 Compartir
               </p>
@@ -48,12 +48,12 @@ export function IosInstructionsModal({
             </div>
           </li>
 
-          <li className="flex gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/80 p-3.5">
+          <li className="flex gap-3 rounded-2xl border border-border bg-muted/40 p-3.5">
             <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-emerald-500/15 text-sm font-bold text-emerald-300 ring-1 ring-emerald-500/30">
               2
             </span>
             <div className="min-w-0">
-              <p className="flex items-center gap-1.5 text-sm font-semibold text-white">
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
                 <Smartphone
                   className="size-3.5 text-emerald-300"
                   aria-hidden="true"
@@ -72,11 +72,11 @@ export function IosInstructionsModal({
         </ol>
 
         <div
-          className="relative mt-1 overflow-hidden rounded-2xl border border-zinc-800 bg-gradient-to-b from-zinc-900 to-black px-4 py-5"
+          className="relative mt-1 overflow-hidden rounded-2xl border border-border bg-muted/50 px-4 py-5"
           aria-hidden="true"
         >
           <div className="mx-auto flex max-w-[220px] flex-col items-center gap-3">
-            <div className="flex w-full items-center justify-center gap-6 rounded-2xl bg-zinc-950/80 px-4 py-3 ring-1 ring-zinc-800">
+            <div className="flex w-full items-center justify-center gap-6 rounded-2xl bg-background px-4 py-3 ring-1 ring-border">
               <div className="flex flex-col items-center gap-1">
                 <span className="grid size-10 place-items-center rounded-xl bg-sky-500/20 text-sky-300 ring-1 ring-sky-500/35">
                   <Share className="size-5" />

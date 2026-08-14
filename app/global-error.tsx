@@ -23,9 +23,9 @@ export default function GlobalError({
 
   return (
     <html lang="es">
-      <body className="min-h-screen bg-[#09090b] text-zinc-100 antialiased">
+      <body className="min-h-screen bg-zinc-50 text-zinc-900 antialiased [@media(prefers-color-scheme:dark)]:bg-zinc-950 [@media(prefers-color-scheme:dark)]:text-zinc-100">
         <main className="grid min-h-screen place-items-center px-6">
-          <div className="w-full max-w-md rounded-3xl border border-white/10 bg-zinc-950/80 p-8 text-center shadow-2xl shadow-black/40">
+          <div className="w-full max-w-md rounded-3xl border border-zinc-200 bg-white p-8 text-center shadow-xl [@media(prefers-color-scheme:dark)]:border-white/10 [@media(prefers-color-scheme:dark)]:bg-zinc-950/80">
             <img
               src="/brand/tokepass-mark.png"
               alt="Tokepass"
@@ -33,10 +33,10 @@ export default function GlobalError({
               height={48}
               className="mx-auto size-12 rounded-[0.85rem] object-cover ring-1 ring-white/15"
             />
-            <h1 className="mt-4 text-2xl font-black tracking-tight text-white">
+            <h1 className="mt-4 text-2xl font-black tracking-tight">
               Algo se rompió
             </h1>
-            <p className="mt-3 text-sm leading-6 text-zinc-400">
+            <p className="mt-3 text-sm leading-6 text-zinc-600 [@media(prefers-color-scheme:dark)]:text-zinc-400">
               Error crítico de la aplicación. Podés reintentar o volver al
               inicio.
             </p>
@@ -50,7 +50,7 @@ export default function GlobalError({
               </button>
               <Link
                 href="/"
-                className="grid h-11 place-items-center rounded-full border border-white/15 px-5 text-sm font-semibold text-zinc-200 hover:bg-white/5"
+                className="grid h-11 place-items-center rounded-full border border-zinc-200 px-5 text-sm font-semibold hover:bg-zinc-100 [@media(prefers-color-scheme:dark)]:border-white/15 [@media(prefers-color-scheme:dark)]:hover:bg-white/5"
               >
                 Ir al inicio
               </Link>

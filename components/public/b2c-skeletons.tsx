@@ -43,7 +43,7 @@ export function HomeDiscoverySkeleton() {
 export function EventDetailSkeleton() {
   return (
     <div
-      className="min-h-screen bg-zinc-950 pb-28"
+      className="min-h-screen bg-background pb-28"
       aria-busy="true"
       aria-label="Cargando evento"
     >
@@ -59,7 +59,7 @@ export function EventDetailSkeleton() {
           ))}
         </div>
       </div>
-      <div className="fixed inset-x-0 bottom-0 border-t border-white/10 bg-zinc-950/90 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] lg:hidden">
+      <div className="fixed inset-x-0 bottom-0 border-t border-border bg-background/90 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] lg:hidden">
         <Skeleton className="h-12 w-full rounded-2xl" />
       </div>
     </div>

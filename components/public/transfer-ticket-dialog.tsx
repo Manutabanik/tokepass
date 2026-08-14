@@ -78,7 +78,7 @@ export function TransferTicketDialog({
         onClick={() => setOpen(true)}
         className={
           triggerClassName ??
-          "h-11 w-full rounded-full border border-emerald-500/35 bg-emerald-500/10 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/20"
+          "h-11 w-full rounded-full border border-emerald-500/35 bg-emerald-500/10 text-sm font-semibold text-emerald-800 hover:bg-emerald-500/20 dark:text-emerald-100"
         }
       >
         <Send className="size-4" aria-hidden="true" />
@@ -86,21 +86,21 @@ export function TransferTicketDialog({
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="border-zinc-800 bg-zinc-950 text-zinc-100 sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-white">Transferir entrada</DialogTitle>
-            <DialogDescription className="text-zinc-400">
+            <DialogTitle>Transferir entrada</DialogTitle>
+            <DialogDescription>
               Vas a regalar tu acceso a{" "}
-              <span className="font-medium text-zinc-200">{eventTitle}</span>.
+              <span className="font-medium text-foreground">{eventTitle}</span>.
             </DialogDescription>
           </DialogHeader>
 
           <div
             role="alert"
-            className="rounded-2xl border border-red-500/30 bg-red-500/10 px-3.5 py-3 text-sm leading-5 text-red-100"
+            className="rounded-2xl border border-red-500/30 bg-red-500/10 px-3.5 py-3 text-sm leading-5 text-red-800 dark:text-red-100"
           >
             Al transferir esta entrada, el código QR de tu teléfono quedará{" "}
-            <strong className="font-semibold text-red-50">
+            <strong className="font-semibold">
               ANULADO de forma permanente
             </strong>{" "}
             y se emitirá uno nuevo para el destinatario. Esta acción no se puede
@@ -110,7 +110,7 @@ export function TransferTicketDialog({
           <div className="space-y-2">
             <Label
               htmlFor={`transfer-email-${ticketId}`}
-              className="text-zinc-300"
+              className="text-foreground"
             >
               Email del destinatario
             </Label>
@@ -122,11 +122,11 @@ export function TransferTicketDialog({
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               disabled={isPending}
-              className="border-zinc-800 bg-zinc-900 text-white"
+              className="border-border bg-background"
             />
           </div>
 
-          <DialogFooter className="border-zinc-800 bg-zinc-950/80 sm:justify-stretch">
+          <DialogFooter className="sm:justify-stretch">
             <Button
               type="button"
               disabled={isPending || !email.trim()}

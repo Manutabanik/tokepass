@@ -70,23 +70,22 @@ export function OrganizerAuthForm({
     : null
 
   return (
-    <Card className="w-full border-0 bg-white/[0.04] py-0 text-white ring-1 ring-white/10 shadow-2xl shadow-black/30">
-      <CardHeader className="border-b border-white/8 px-7 py-7 text-center">
+    <Card className="w-full border border-border bg-card py-0 text-card-foreground shadow-2xl shadow-zinc-200/50 dark:shadow-black/30">
+      <CardHeader className="border-b border-border px-7 py-7 text-center">
         <div className="mb-4 flex justify-center">
           <BrandLogo
-            inverted
             href="/"
             tagline="Organizadores"
             size="lg"
             className="flex-col items-center gap-3"
           />
         </div>
-        <CardTitle className="text-2xl font-bold tracking-tight">
+        <CardTitle className="text-2xl font-bold tracking-tight text-foreground">
           {mode === "login"
             ? "Acceso para organizadores"
             : "Creá tu organización"}
         </CardTitle>
-        <CardDescription className="mx-auto max-w-sm leading-6 text-zinc-500">
+        <CardDescription className="mx-auto max-w-sm leading-6 text-muted-foreground">
           {mode === "login"
             ? "Gestioná eventos, ventas, accesos y equipos desde un solo lugar."
             : "Creá la cuenta y después completá la postulación KYB en Postular productora."}
@@ -104,7 +103,7 @@ export function OrganizerAuthForm({
           {safeNext ? <input type="hidden" name="next" value={safeNext} /> : null}
           {mode === "register" && (
             <div className="grid gap-2">
-              <Label htmlFor="organizer-name" className="text-zinc-300">
+              <Label htmlFor="organizer-name">
                 Nombre completo
               </Label>
               <Input
@@ -113,13 +112,13 @@ export function OrganizerAuthForm({
                 autoComplete="name"
                 placeholder="Tu nombre"
                 required
-                className="h-11 border-white/10 bg-black/20"
+                className="h-11"
               />
             </div>
           )}
 
           <div className="grid gap-2">
-            <Label htmlFor="organizer-email" className="text-zinc-300">
+            <Label htmlFor="organizer-email">
               Email profesional
             </Label>
             <Input
@@ -129,12 +128,12 @@ export function OrganizerAuthForm({
               autoComplete="email"
               placeholder="nombre@empresa.com"
               required
-              className="h-11 border-white/10 bg-black/20"
+              className="h-11"
             />
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="organizer-password" className="text-zinc-300">
+            <Label htmlFor="organizer-password">
               Contraseña
             </Label>
             <Input
@@ -147,22 +146,22 @@ export function OrganizerAuthForm({
               minLength={8}
               placeholder="Mínimo 8 caracteres"
               required
-              className="h-11 border-white/10 bg-black/20"
+              className="h-11"
             />
           </div>
 
           {mode === "register" ? (
             <div className="grid gap-2">
-              <Label htmlFor="organizer-invite" className="text-zinc-300">
+              <Label htmlFor="organizer-invite">
                 Código de invitación{" "}
-                <span className="text-zinc-600">(si aplica)</span>
+                <span className="text-muted-foreground">(si aplica)</span>
               </Label>
               <Input
                 id="organizer-invite"
                 name="inviteCode"
                 autoComplete="off"
                 placeholder="Solo si el registro es invite-only"
-                className="h-11 border-white/10 bg-black/20"
+                className="h-11"
               />
             </div>
           ) : null}
@@ -176,13 +175,13 @@ export function OrganizerAuthForm({
           {state.success && (
             <div
               role="status"
-              className="space-y-2 rounded-xl bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300"
+              className="space-y-2 rounded-xl bg-emerald-500/10 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-300"
             >
               <p>{state.success}</p>
               {mode === "register" ? (
                 <Link
                   href="/postular-productora"
-                  className="inline-flex font-semibold text-emerald-200 underline underline-offset-2 hover:text-white"
+                  className="inline-flex font-semibold text-emerald-700 underline underline-offset-2 hover:text-emerald-900 dark:text-emerald-200 dark:hover:text-white"
                 >
                   Ir a postular productora
                 </Link>
@@ -193,7 +192,7 @@ export function OrganizerAuthForm({
           <SubmitButton mode={mode} />
         </form>
 
-        <div className="mt-5 flex items-center justify-center gap-2 text-sm text-zinc-500">
+        <div className="mt-5 flex items-center justify-center gap-2 text-sm text-muted-foreground">
           {mode === "login" ? "¿Primera vez en Tokepass?" : "¿Ya tenés cuenta?"}
           <Link
             href={
@@ -201,14 +200,14 @@ export function OrganizerAuthForm({
                 ? "/register-organizador"
                 : "/login-organizador"
             }
-            className="font-medium text-violet-400 hover:text-violet-300"
+            className="font-medium text-violet-700 hover:text-violet-600 dark:text-violet-400 dark:hover:text-violet-300"
           >
             {mode === "login" ? "Crear cuenta" : "Ingresar"}
           </Link>
         </div>
 
-        <div className="mt-6 flex items-start gap-3 rounded-xl bg-white/[0.025] p-3 text-xs leading-5 text-zinc-500">
-          <ShieldCheck className="mt-0.5 size-4 shrink-0 text-violet-400" />
+        <div className="mt-6 flex items-start gap-3 rounded-xl bg-muted/60 p-3 text-xs leading-5 text-muted-foreground">
+          <ShieldCheck className="mt-0.5 size-4 shrink-0 text-violet-600 dark:text-violet-400" />
           El acceso al panel se valida en el servidor y requiere un perfil de
           organizador activo.
         </div>

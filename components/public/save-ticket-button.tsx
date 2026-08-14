@@ -73,10 +73,10 @@ export function SaveTicketButton({
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="border-zinc-800 bg-zinc-950 text-zinc-100 sm:max-w-md">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Guardar entrada</DialogTitle>
-            <DialogDescription className="text-zinc-400">
+            <DialogDescription>
               El QR dinámico también queda disponible en Mis entradas, incluso
               sin conexión.
             </DialogDescription>
@@ -96,7 +96,7 @@ export function SaveTicketButton({
             <Button
               type="button"
               variant="outline"
-              className="h-12 justify-start rounded-2xl border-zinc-700 bg-zinc-900 text-white hover:bg-zinc-800"
+              className="h-12 justify-start rounded-2xl"
               nativeButton={false}
               render={<Link href={`/tickets/${ticket.id}/print`} />}
               onClick={persistBeforePrint}
@@ -109,7 +109,7 @@ export function SaveTicketButton({
               <Button
                 type="button"
                 variant="outline"
-                className="h-12 justify-start rounded-2xl border-zinc-700 bg-zinc-900 text-white hover:bg-zinc-800"
+                className="h-12 justify-start rounded-2xl"
                 nativeButton={false}
                 render={
                   <a href={`/api/tickets/${ticket.id}/apple-pass`} />
@@ -124,7 +124,7 @@ export function SaveTicketButton({
               <Button
                 type="button"
                 variant="outline"
-                className="h-12 justify-start rounded-2xl border-zinc-700 bg-zinc-900 text-white hover:bg-zinc-800"
+                className="h-12 justify-start rounded-2xl"
                 nativeButton={false}
                 render={
                   <a href={`/api/tickets/${ticket.id}/google-wallet`} />
