@@ -16,7 +16,7 @@ import {
 import { AnimatePresence, motion } from "motion/react"
 import { useEffect, useState } from "react"
 
-import type { LiveOpsSnapshot } from "@/app/actions/live-ops"
+import type { LiveOpsSnapshot } from "@/lib/live-ops"
 import { LiveOpsFlowChart } from "@/components/admin/live-ops-flow-chart"
 import { useLiveMetrics } from "@/hooks/use-live-metrics"
 import { formatNumber } from "@/lib/format"

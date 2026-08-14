@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
+import { getLiveOpsSnapshot } from "@/app/actions/live-ops"
 import {
-  getLiveOpsSnapshot,
   isLiveOpsCheckedIn,
   liveOpsAccessAt,
   type LiveOpsAccessEntry,
@@ -11,7 +11,7 @@ import {
   type LiveOpsSectorStat,
   type LiveOpsSnapshot,
   type LiveOpsTierStat,
-} from "@/app/actions/live-ops"
+} from "@/lib/live-ops"
 import { createClient } from "@/lib/supabase/client"
 import type { Ticket as TicketRow } from "@/types/database"
 
