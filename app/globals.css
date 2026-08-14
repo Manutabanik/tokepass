@@ -157,6 +157,8 @@
     animation: none;
   }
 }
+
+@keyframes tokepass-neon-shift {
   0%,
   100% {
     background-position: 0% 50%;
@@ -236,7 +238,8 @@
   .tokepass-aurora,
   .tokepass-radar,
   .tokepass-radar-slow,
-  .tokepass-neon-text {
+  .tokepass-neon-text,
+  .tokepass-marquee-track {
     animation: none !important;
   }
 }
