@@ -292,18 +292,23 @@ async function reserveGeneralAdmissionAtomic(
   }
 
   if (input.promoterId) {
-    const { error: promoterError } = await supabase
-      .from("tickets")
-      .update({ promoter_id: input.promoterId })
-      .eq("order_id", reservation.data[0]?.order_id)
-      .eq("owner_id", input.ownerId)
-    if (promoterError) {
-      logger.error({
-        context: "checkout/reservation",
-        message: "atomic_promoter_attach_failed",
-        orderId: reservation.data[0]?.order_id,
-        error: promoterError.message,
-      })
+    const orderId = reservation.data[0]?.order_id
+    if (orderId) {
+      const admin = createAdminClient()
+      const { error: promoterError } = await admin
+        .from("orders")
+        .update({ promoter_id: input.promoterId })
+        .eq("id", orderId)
+        .eq("buyer_id", input.ownerId)
+        .eq("status", "pending")
+      if (promoterError) {
+        logger.error({
+          context: "checkout/reservation",
+          message: "atomic_promoter_attach_failed",
+          orderId,
+          error: promoterError.message,
+        })
+      }
     }
   }
 
