@@ -50,8 +50,6 @@ export type ReservedTicket = {
   ticket_id: string
 }
 
-export type { PhaseRolloverInfo }
-
 export type CheckoutResult =
   | {
       success: true
