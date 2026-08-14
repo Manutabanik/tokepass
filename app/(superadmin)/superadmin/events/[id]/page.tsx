@@ -43,7 +43,7 @@ export default async function SuperAdminEventDetailPage({
     <>
       <Link
         href="/superadmin/events"
-        className="mb-7 inline-flex items-center gap-2 text-sm text-slate-600 dark:text-zinc-400 transition hover:text-white"
+        className="mb-7 inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-foreground"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
         Volver a eventos
@@ -57,42 +57,42 @@ export default async function SuperAdminEventDetailPage({
       />
 
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-        <Card className="border-0 bg-white/[0.035] py-0 ring-1 ring-white/8">
+        <Card className="border border-border bg-card py-0 text-card-foreground">
           <CardContent className="px-5 py-5">
-            <p className="text-xs uppercase tracking-[0.14em] text-zinc-600">
+            <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
               Compras pagadas
             </p>
             <p className="mt-3 flex items-center gap-2 text-3xl font-black text-emerald-800 dark:text-emerald-300">
               <Ticket className="size-6" aria-hidden="true" />
               {formatNumber(preview.paidOrders)}
             </p>
-            <p className="mt-1 text-xs text-zinc-600">
+            <p className="mt-1 text-xs text-muted-foreground">
               Personas que ya pagaron su entrada
             </p>
           </CardContent>
         </Card>
-        <Card className="border-0 bg-white/[0.035] py-0 ring-1 ring-white/8">
+        <Card className="border border-border bg-card py-0 text-card-foreground">
           <CardContent className="px-5 py-5">
-            <p className="text-xs uppercase tracking-[0.14em] text-zinc-600">
+            <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
               Entradas en juego
             </p>
-            <p className="mt-3 text-3xl font-black text-sky-300">
+            <p className="mt-3 text-3xl font-black text-sky-800 dark:text-sky-300">
               {formatNumber(preview.validTickets)}
             </p>
-            <p className="mt-1 text-xs text-zinc-600">
+            <p className="mt-1 text-xs text-muted-foreground">
               Entradas válidas que se verían afectadas por un reembolso
             </p>
           </CardContent>
         </Card>
-        <Card className="border-0 bg-white/[0.035] py-0 ring-1 ring-white/8">
+        <Card className="border border-border bg-card py-0 text-card-foreground">
           <CardContent className="px-5 py-5">
-            <p className="text-xs uppercase tracking-[0.14em] text-zinc-600">
+            <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
               Plata a devolver
             </p>
-            <p className="mt-3 text-3xl font-black text-amber-300">
+            <p className="mt-3 text-3xl font-black text-amber-800 dark:text-amber-300">
               {formatCurrency(preview.refundableAmount)}
             </p>
-            <p className="mt-1 text-xs text-zinc-600">
+            <p className="mt-1 text-xs text-muted-foreground">
               Monto estimado si anulás todas las compras de este evento
             </p>
           </CardContent>
@@ -105,18 +105,18 @@ export default async function SuperAdminEventDetailPage({
         </div>
       ) : null}
 
-      <Card className="mb-6 border-0 bg-white/[0.035] py-0 ring-1 ring-white/8">
-        <CardHeader className="border-b border-white/8 px-6 py-5">
-          <CardTitle className="flex items-center gap-2 text-white">
-            <Building2 className="size-5 text-violet-300" />
+      <Card className="mb-6 border border-border bg-card py-0 text-card-foreground">
+        <CardHeader className="border-b border-border px-6 py-5">
+          <CardTitle className="flex items-center gap-2 text-foreground">
+            <Building2 className="size-5 text-violet-700 dark:text-violet-300" />
             Organizador / Productora
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3 px-6 py-5 text-sm text-slate-600 dark:text-zinc-400">
-          <p className="text-base font-medium text-zinc-200">
+        <CardContent className="space-y-3 px-6 py-5 text-sm text-muted-foreground">
+          <p className="text-base font-medium text-foreground">
             {preview.organizerName}
           </p>
-          <p className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-zinc-400">
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <MapPin className="size-3.5" aria-hidden="true" />
             {preview.eventLocation}
           </p>
@@ -124,7 +124,7 @@ export default async function SuperAdminEventDetailPage({
             className={
               preview.riskTier === "TIER_1_CUSTODY"
                 ? "inline-flex rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-800 dark:text-emerald-300 ring-1 ring-emerald-400/20"
-                : "inline-flex rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-medium text-amber-200 ring-1 ring-amber-400/20"
+                : "inline-flex rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-medium text-amber-800 dark:text-amber-200 ring-1 ring-amber-400/20"
             }
           >
             {preview.riskTier === "TIER_1_CUSTODY"
@@ -133,7 +133,7 @@ export default async function SuperAdminEventDetailPage({
           </p>
           <Link
             href={`/superadmin/organizations/${preview.organizerId}`}
-            className="inline-flex text-sm text-sky-300 hover:text-sky-200"
+            className="inline-flex text-sm text-sky-700 hover:text-sky-800 dark:text-sky-300 dark:hover:text-sky-200"
           >
             Ver finanzas del organizador
           </Link>

@@ -1,11 +1,10 @@
 import type { MetadataRoute } from "next"
 
 import { createClient } from "@/lib/supabase/server"
+import { getSeoOrigin, publicEventPath } from "@/lib/seo/site"
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
-    "https://tokepass.app"
+  const siteUrl = getSeoOrigin()
 
   const staticRoutes: MetadataRoute.Sitemap = [
     {
@@ -15,20 +14,25 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 1,
     },
     {
-      url: `${siteUrl}/events`,
+      url: `${siteUrl}/eventos`,
       lastModified: new Date(),
       changeFrequency: "hourly",
-      priority: 0.9,
+      priority: 0.8,
     },
     {
-      url: `${siteUrl}/login`,
-      changeFrequency: "monthly",
-      priority: 0.3,
+      url: `${siteUrl}/terminos-y-condiciones`,
+      changeFrequency: "yearly",
+      priority: 0.4,
     },
     {
-      url: `${siteUrl}/register`,
-      changeFrequency: "monthly",
-      priority: 0.3,
+      url: `${siteUrl}/politica-de-privacidad`,
+      changeFrequency: "yearly",
+      priority: 0.4,
+    },
+    {
+      url: `${siteUrl}/arrepentimiento`,
+      changeFrequency: "yearly",
+      priority: 0.5,
     },
   ]
 
@@ -36,18 +40,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const supabase = await createClient()
     const { data } = await supabase
       .from("events")
-      .select("id, updated_at, date")
+      .select("id, slug, updated_at, date")
       .eq("status", "published")
       .order("date", { ascending: true })
-      .limit(500)
+      .limit(5000)
 
     const eventRoutes: MetadataRoute.Sitemap = (data ?? []).map((event) => ({
-      url: `${siteUrl}/events/${event.id}`,
+      url: `${siteUrl}${publicEventPath(event)}`,
       lastModified: event.updated_at
         ? new Date(event.updated_at)
         : new Date(event.date),
       changeFrequency: "daily",
-      priority: 0.8,
+      priority: 0.9,
     }))
 
     return [...staticRoutes, ...eventRoutes]

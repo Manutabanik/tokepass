@@ -30,10 +30,10 @@ export default async function AdminListsHubPage() {
     <div className="mx-auto max-w-5xl space-y-8">
       <div>
         <p className="text-sm font-medium text-violet-400">FreePass</p>
-        <h1 className="mt-2 text-3xl font-black tracking-[-0.035em] text-zinc-900 dark:text-white">
+        <h1 className="mt-2 text-3xl font-black tracking-[-0.035em] text-foreground">
           Listas digitales
         </h1>
-        <p className="mt-2 max-w-2xl text-sm text-slate-600 dark:text-zinc-400">
+        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
           Elegí un evento para crear listas de promotores y RRPP, prensa y
           cortesías con QR dinámico.
         </p>
@@ -43,7 +43,7 @@ export default async function AdminListsHubPage() {
         <Card className="border-0 bg-white/[0.035] ring-1 ring-white/8">
           <CardContent className="flex flex-col items-center gap-3 px-6 py-16 text-center">
             <ClipboardList className="size-8 text-zinc-600" />
-            <p className="text-sm text-slate-600 dark:text-zinc-400">
+            <p className="text-sm text-muted-foreground">
               Todavía no tenés eventos. Creá uno para gestionar listas.
             </p>
             <Link
@@ -60,7 +60,7 @@ export default async function AdminListsHubPage() {
             <Link key={event.id} href={`/admin/events/${event.id}/lists`}>
               <Card className="h-full border-0 bg-white/[0.035] transition hover:bg-white/[0.05] hover:ring-violet-500/20 ring-1 ring-white/8">
                 <CardHeader>
-                  <CardTitle className="text-zinc-900 dark:text-white">{event.title}</CardTitle>
+                  <CardTitle className="text-foreground">{event.title}</CardTitle>
                   <CardDescription className="capitalize">
                     {formatEventDate(event.date)}
                   </CardDescription>

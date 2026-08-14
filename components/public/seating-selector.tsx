@@ -12,7 +12,6 @@ import { useMemo, useState, useTransition } from "react"
 import { toast } from "sonner"
 
 import { startCheckoutWithPayment } from "@/app/actions/checkout"
-import { CheckoutCountdown } from "@/components/public/checkout-countdown"
 import {
   Dialog,
   DialogContent,
@@ -21,6 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { formatCurrency } from "@/lib/format"
+import { redirectToCheckoutPaymentOrToast } from "@/lib/checkout-redirect"
 import { cn } from "@/lib/utils"
 import type { EventSeatingUnit } from "@/types/venues"
 
@@ -51,10 +51,6 @@ export function SeatingSelector({
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [selectedId, setSelectedId] = useState("")
-  const [checkout, setCheckout] = useState<{
-    initPoint: string
-    expiresAt: string
-  } | null>(null)
 
   const selected = units.find((unit) => unit.id === selectedId) ?? null
   const rowGroups = useMemo(() => {
@@ -87,7 +83,7 @@ export function SeatingSelector({
   }, [units])
 
   function beginReservation() {
-    if (!selected || pending || checkout) return
+    if (!selected || pending) return
 
     startTransition(async () => {
       const result = await startCheckoutWithPayment(
@@ -114,16 +110,7 @@ export function SeatingSelector({
         return
       }
 
-      if (result.initPoint.startsWith("/")) {
-        window.location.href = result.initPoint
-        return
-      }
-
-      setCheckout({
-        initPoint: result.initPoint,
-        expiresAt: result.expiresAt,
-      })
-      toast.success("Ubicación reservada. Completá el pago a tiempo.")
+      redirectToCheckoutPaymentOrToast(result.paymentUrl ?? result.initPoint)
     })
   }
 
@@ -135,7 +122,7 @@ export function SeatingSelector({
   const viewBoxHeight = Math.max(220, rowGroups.length * 76 + 110)
 
   return (
-    <Dialog open={open} onOpenChange={checkout ? undefined : onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[94dvh] gap-0 overflow-hidden border-zinc-800 bg-zinc-950 p-0 text-zinc-100 shadow-2xl sm:max-w-3xl max-sm:bottom-0 max-sm:left-0 max-sm:top-auto max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-b-none">
         <DialogHeader className="border-b border-zinc-800 bg-zinc-900/80 px-5 py-5 pr-12 sm:px-7">
           <DialogTitle className="flex items-center gap-2 text-xl font-bold text-white">
@@ -147,19 +134,6 @@ export function SeatingSelector({
             plano. Ambas opciones están sincronizadas.
           </DialogDescription>
         </DialogHeader>
-
-        {checkout ? (
-          <div className="border-b border-zinc-800 px-5 py-3 sm:px-7">
-            <CheckoutCountdown
-              expiresAt={checkout.expiresAt}
-              redirectTo={`/events/${eventId}`}
-              onExpired={() => {
-                setCheckout(null)
-                setSelectedId("")
-              }}
-            />
-          </div>
-        ) : null}
 
         <div className="overflow-y-auto px-5 py-5 sm:px-7">
           <section className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4">
@@ -178,7 +152,7 @@ export function SeatingSelector({
                 <select
                   id={`seating-list-${tier.id}`}
                   value={selectedId}
-                  disabled={Boolean(checkout)}
+                  disabled={pending}
                   onChange={(event) => setSelectedId(event.target.value)}
                   className="mt-3 h-14 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 text-base font-semibold text-white outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
                 >
@@ -269,19 +243,18 @@ export function SeatingSelector({
                           <g
                             key={unit.id}
                       role="button"
-                      tabIndex={available && !checkout ? 0 : -1}
+                      tabIndex={available ? 0 : -1}
                       aria-label={`${unit.label}, ${
                         available ? "disponible" : "ocupada"
                       }`}
                       aria-pressed={active}
-                      aria-disabled={!available || Boolean(checkout)}
+                      aria-disabled={!available}
                       onClick={() => {
-                        if (available && !checkout) setSelectedId(unit.id)
+                        if (available) setSelectedId(unit.id)
                       }}
                       onKeyDown={(event) => {
                         if (
                           available &&
-                          !checkout &&
                           (event.key === "Enter" || event.key === " ")
                         ) {
                           event.preventDefault()
@@ -290,7 +263,7 @@ export function SeatingSelector({
                       }}
                       className={cn(
                         "outline-none transition",
-                        available && !checkout
+                        available
                           ? "cursor-pointer"
                           : "cursor-not-allowed",
                       )}
@@ -378,16 +351,7 @@ export function SeatingSelector({
             </p>
           )}
 
-          {checkout ? (
-            <a
-              href={checkout.initPoint}
-              className="inline-flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-[#009EE3] px-5 text-sm font-black text-white transition hover:bg-[#08A8EE] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
-            >
-              Ir a pagar con Mercado Pago
-              <MoveRight className="size-5" aria-hidden="true" />
-            </a>
-          ) : (
-            <button
+          <button
               type="button"
               disabled={!selected || pending}
               onClick={beginReservation}
@@ -396,7 +360,6 @@ export function SeatingSelector({
               {pending ? "Reservando ubicación…" : "Reservar y continuar"}
               <MoveRight className="size-5" aria-hidden="true" />
             </button>
-          )}
         </div>
       </DialogContent>
     </Dialog>

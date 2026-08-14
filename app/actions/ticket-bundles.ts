@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 
+import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { allInBreakdown } from "@/lib/pricing/all-in"
 import {
@@ -188,16 +189,17 @@ export async function upsertTicketBundle(input: {
   }
 
   let tierId = input.tierId?.trim() || ""
+  const admin = createAdminClient()
 
   if (tierId) {
-    const { error } = await gate.supabase
+    const { error } = await admin
       .from("ticket_tiers")
       .update(payload)
       .eq("id", tierId)
       .eq("event_id", input.eventId)
     if (error) return { success: false, error: error.message }
   } else {
-    const { data, error } = await gate.supabase
+    const { data, error } = await admin
       .from("ticket_tiers")
       .insert(payload)
       .select("id")
@@ -253,7 +255,7 @@ export async function deleteTicketBundle(input: {
     }
   }
 
-  const { error } = await gate.supabase
+  const { error } = await createAdminClient()
     .from("ticket_tiers")
     .delete()
     .eq("id", input.tierId)

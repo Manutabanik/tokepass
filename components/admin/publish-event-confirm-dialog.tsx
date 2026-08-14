@@ -71,11 +71,11 @@ export function PublishEventConfirmDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-zinc-900 dark:text-white">
+          <DialogTitle className="flex items-center gap-2 text-foreground">
             <Rocket className="size-4 text-emerald-800 dark:text-emerald-300" aria-hidden="true" />
             Publicar evento
           </DialogTitle>
-          <DialogDescription className="text-zinc-600 dark:text-zinc-400">
+          <DialogDescription className="text-muted-foreground">
             Al publicar, el evento queda visible en el catálogo. Las entradas de
             prueba del borrador no sirven en puerta en vivo.
           </DialogDescription>
@@ -124,7 +124,7 @@ export function PublishEventConfirmDialog({
             type="button"
             variant="ghost"
             disabled={pending}
-            className="h-10 w-full text-zinc-600 dark:text-zinc-400"
+            className="h-10 w-full text-muted-foreground"
             onClick={() => onOpenChange(false)}
           >
             Cancelar

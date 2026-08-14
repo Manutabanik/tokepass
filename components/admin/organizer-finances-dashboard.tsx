@@ -47,13 +47,13 @@ function StatCard({
     <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/70 p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-600 dark:text-zinc-400">
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
             {label}
           </p>
-          <p className="mt-3 text-2xl font-black tracking-tight text-zinc-900 dark:text-white">
+          <p className="mt-3 text-2xl font-black tracking-tight text-foreground">
             {value}
           </p>
-          <p className="mt-2 text-sm text-slate-600 dark:text-zinc-400">{hint}</p>
+          <p className="mt-2 text-sm text-muted-foreground">{hint}</p>
         </div>
         <span className="grid size-10 place-items-center rounded-xl bg-violet-500/10 text-violet-300 ring-1 ring-violet-500/20">
           <Icon className="size-5" aria-hidden="true" />
@@ -151,10 +151,10 @@ export function OrganizerFinancesDashboard({
           <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-violet-300/80">
             Mi billetera
           </p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-zinc-900 dark:text-white">
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-foreground">
             Recaudación y Retiros
           </h1>
-          <p className="mt-2 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
             Acá ves cuánto recaudaste, qué se queda Tokepass y cuánto podés
             pedir que te transfieran. El saldo retenido se libera cuando termina
             el evento.
@@ -204,17 +204,17 @@ export function OrganizerFinancesDashboard({
 
       <section className="space-y-4">
         <div>
-          <h2 className="text-lg font-bold text-zinc-900 dark:text-white">
+          <h2 className="text-lg font-bold text-foreground">
             Historial de retiros
           </h2>
-          <p className="text-sm text-slate-600 dark:text-zinc-400">
+          <p className="text-sm text-muted-foreground">
             Pedís el retiro acá; Tokepass lo marca como transferido cuando te
             manda la plata.
           </p>
         </div>
 
         {history.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 px-6 py-12 text-center text-sm text-slate-600 dark:text-zinc-400">
+          <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 px-6 py-12 text-center text-sm text-muted-foreground">
             Todavía no pediste retiros. Cuando tengas saldo disponible, usá
             Solicitar Retiro.
           </div>
@@ -226,12 +226,12 @@ export function OrganizerFinancesDashboard({
                 className="flex flex-col gap-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div>
-                  <p className="font-medium text-zinc-900 dark:text-white">
+                  <p className="font-medium text-foreground">
                     {row.kind === "payout"
                       ? "Solicitud de retiro"
                       : (row as { label: string }).label}
                   </p>
-                  <p className="mt-1 text-sm text-slate-600 dark:text-zinc-400">
+                  <p className="mt-1 text-sm text-muted-foreground">
                     {formatCurrency(row.amount)}
                     {row.kind === "payout" && row.cbuDestination !== "—"
                       ? ` · CBU/CVU ${row.cbuDestination}`
@@ -310,7 +310,7 @@ export function OrganizerFinancesDashboard({
                 placeholder="Confirmá la cuenta de destino"
                 className="min-h-12 h-12 text-base"
               />
-              <p className="text-xs text-slate-600 dark:text-zinc-400">
+              <p className="text-xs text-muted-foreground">
                 Tokepass te transfiere acá cuando apruebe el retiro.
               </p>
             </div>

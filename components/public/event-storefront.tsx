@@ -103,7 +103,7 @@ export function EventStorefront({
     event.organizerBio?.trim() || "Productora en Tokepass"
 
   return (
-    <div className="relative isolate min-h-screen overflow-x-hidden bg-background pb-28 text-foreground lg:pb-12">
+    <div className="relative isolate min-h-screen overflow-x-clip bg-background pb-28 text-foreground lg:overflow-x-visible lg:pb-12">
       <AnalyticsTracker
         config={event.pixels}
         trackPageView
@@ -198,19 +198,11 @@ export function EventStorefront({
                     </p>
                   </div>
                 </div>
-
-                <AddToCalendarButton
-                  title={event.title}
-                  date={event.date}
-                  location={address}
-                  details={event.description}
-                />
               </div>
 
-              <div className="mt-4 mb-6 flex flex-wrap items-center gap-3">
-                {finished ? null : (
+              {finished ? null : (
                 <Button
-                  className="min-h-12 h-12 rounded-2xl bg-emerald-500 px-5 text-base font-bold text-black hover:bg-emerald-600 disabled:opacity-50"
+                  className="mt-2 min-h-12 h-12 rounded-2xl bg-emerald-500 px-5 text-base font-bold text-black hover:bg-emerald-600 disabled:opacity-50 lg:hidden"
                   nativeButton={false}
                   disabled={soldOut}
                   render={<a href="#tickets" aria-disabled={soldOut || undefined} />}
@@ -218,8 +210,17 @@ export function EventStorefront({
                   <Ticket className="size-4" aria-hidden="true" />
                   {soldOut ? "Agotado" : "Comprar Entradas"}
                 </Button>
-                )}
+              )}
+
+              <div className="mt-6 flex flex-wrap items-center gap-3">
+                <AddToCalendarButton
+                  title={event.title}
+                  date={event.date}
+                  location={address}
+                  details={event.description}
+                />
                 <StoryFlyerVisitorButton
+                  className="h-9 min-h-9 rounded-full border-border bg-card px-4 text-sm font-semibold"
                   data={{
                     eventTitle: event.title,
                     eventDate: event.date,
@@ -230,7 +231,10 @@ export function EventStorefront({
                     organizerAvatarUrl: event.organizerAvatarUrl,
                   }}
                 />
-                <EventPromoSpotButton promoVideoUrl={event.promoVideoUrl} />
+                <EventPromoSpotButton
+                  className="h-9 min-h-9 rounded-full border-border bg-card px-4 text-sm font-semibold"
+                  promoVideoUrl={event.promoVideoUrl}
+                />
               </div>
 
               {event.promoVideoUrl ? (
@@ -248,13 +252,6 @@ export function EventStorefront({
                 </section>
               ) : null}
             </header>
-
-            <EventLocationPanel
-              venueName={venueName}
-              address={address}
-              latitude={event.venue?.latitude ?? null}
-              longitude={event.venue?.longitude ?? null}
-            />
 
             <section id="tickets" className="scroll-mt-24 space-y-4">
               <div className="flex items-end justify-between gap-3">
@@ -334,9 +331,14 @@ export function EventStorefront({
               currentUserId={currentUserId}
             />
 
-            <EventExperienceGallery urls={event.galleryUrls} />
-
             <EventAboutExpandable description={description} />
+
+            <EventLocationPanel
+              venueName={venueName}
+              address={address}
+              latitude={event.venue?.latitude ?? null}
+              longitude={event.venue?.longitude ?? null}
+            />
 
             {event.scheduleDays?.length > 1 ? (
               <section className="space-y-3">
@@ -363,6 +365,8 @@ export function EventStorefront({
                 </div>
               </section>
             ) : null}
+
+            <EventExperienceGallery urls={event.galleryUrls} />
 
             <section className="space-y-3">
               <h2 className="text-lg font-bold tracking-tight text-foreground">
@@ -455,7 +459,7 @@ export function EventStorefront({
 
         <aside
           id="checkout"
-          className="hidden px-4 pb-8 lg:sticky lg:top-24 lg:block lg:px-0 lg:pb-0"
+          className="scrollbar-none hidden px-4 pb-8 lg:sticky lg:top-24 lg:block lg:h-fit lg:max-h-[calc(100vh-6rem)] lg:self-start lg:overflow-y-auto lg:px-0 lg:pb-0"
         >
           {finished ? (
             <EventSaleStatusNotice state="finished" />

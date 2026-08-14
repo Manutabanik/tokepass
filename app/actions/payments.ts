@@ -22,7 +22,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
 export type CreatePreferenceResult =
-  | { success: true; initPoint: string; preferenceId: string }
+  | { success: true; initPoint: string; paymentUrl: string; preferenceId: string }
   | { success: false; error: string }
 
 type OrderTicketRow = {
@@ -336,7 +336,11 @@ export async function createPaymentPreference(
     const admin = createAdminClient()
     const { data: updatedOrder, error: updateError } = await admin
       .from("orders")
-      .update({ mp_preference_id: preferenceId })
+      .update({
+        mp_preference_id: preferenceId,
+        payment_provider: "mercadopago",
+        provider_preference_id: preferenceId,
+      })
       .eq("id", orderId)
       .eq("status", "pending")
       .select("id")
@@ -360,6 +364,7 @@ export async function createPaymentPreference(
     return {
       success: true,
       initPoint,
+      paymentUrl: initPoint,
       preferenceId,
     }
   } catch (error) {

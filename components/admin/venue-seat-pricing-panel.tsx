@@ -95,7 +95,7 @@ export function VenueSeatPricingPanel({
           <p className="text-sm font-semibold text-emerald-950 dark:text-emerald-200">
             Precios por zona del lugar
           </p>
-          <p className="mt-1 text-xs leading-5 text-slate-600 dark:text-zinc-400">
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
             Asigná el precio que verá el comprador en cada zona. En
             numerados podés definir precio por fila.
           </p>
@@ -128,7 +128,7 @@ export function VenueSeatPricingPanel({
           </div>
         </div>
       ) : (
-        <p className="rounded-xl border border-dashed border-border bg-muted px-3 py-3 text-xs text-slate-600 dark:text-zinc-400">
+        <p className="rounded-xl border border-dashed border-border bg-muted px-3 py-3 text-xs text-muted-foreground">
           Este lugar no tiene imagen o mapa cargado.
         </p>
       )}
@@ -180,7 +180,7 @@ export function VenueSeatPricingPanel({
                 <div className="w-full sm:w-40">
                   <Label
                     htmlFor={`sector-price-${sector.id}`}
-                    className="text-xs text-slate-600 dark:text-zinc-400"
+                    className="text-xs text-muted-foreground"
                   >
                     Precio de la zona
                   </Label>
@@ -207,7 +207,7 @@ export function VenueSeatPricingPanel({
                       <div key={group.id} className="flex items-center gap-2">
                         <Label
                           htmlFor={`group-price-${group.id}`}
-                          className="min-w-0 flex-1 truncate text-xs text-slate-600 dark:text-zinc-400"
+                          className="min-w-0 flex-1 truncate text-xs text-muted-foreground"
                         >
                           {group.name}
                         </Label>
@@ -236,7 +236,7 @@ export function VenueSeatPricingPanel({
         })}
       </ul>
 
-      <p className="text-xs text-slate-600 dark:text-zinc-400">
+      <p className="text-xs text-muted-foreground">
         Vista previa con precios actuales · total de sectores:{" "}
         {sectors.length}
         {sectors.some((s) => asEntry(pricingMap[s.id]).price > 0)
@@ -254,7 +254,7 @@ export function VenueSeatPricingPanel({
             <DialogTitle className="text-base text-foreground">
               Vista previa · selección de entradas
             </DialogTitle>
-            <DialogDescription className="text-slate-600 dark:text-zinc-400">
+            <DialogDescription className="text-muted-foreground">
               Experiencia del comprador con {venue.name} y los precios
               cargados ahora.
             </DialogDescription>
@@ -294,7 +294,7 @@ export function SavedVenuePickerDialog({
       <DialogContent className="max-h-[85dvh] border-border bg-card text-card-foreground sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Lugares guardados</DialogTitle>
-          <DialogDescription className="text-slate-600 dark:text-zinc-400">
+          <DialogDescription className="text-muted-foreground">
             Elegí un lugar para importar mapa, zonas y capacidad de gente.
           </DialogDescription>
         </DialogHeader>
@@ -323,7 +323,7 @@ export function SavedVenuePickerDialog({
                   <span className="block font-medium text-foreground">
                     {venue.name}
                   </span>
-                  <span className="mt-1 block text-xs text-slate-600 dark:text-zinc-400">
+                  <span className="mt-1 block text-xs text-muted-foreground">
                     {[venue.city, venue.location].filter(Boolean).join(" · ") ||
                       "Sin ubicación"}
                     {" · "}

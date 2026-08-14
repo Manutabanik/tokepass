@@ -119,26 +119,26 @@ export function CategoriesAdminPanel({
     <div className="space-y-6">
       <form
         onSubmit={handleSubmit}
-        className="rounded-2xl border border-white/8 bg-white/[0.03] p-5 sm:p-6"
+        className="rounded-2xl border border-border bg-card p-5 sm:p-6"
       >
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-base font-semibold text-white">
+            <h2 className="text-base font-semibold text-foreground">
               {editingId ? "Editar categoría" : "Nueva categoría"}
             </h2>
-            <p className="mt-1 text-xs text-slate-600 dark:text-zinc-400">
+            <p className="mt-1 text-xs text-muted-foreground">
               Poné un nombre claro, un identificador corto (sin espacios) y el
               nombre del ícono (por ejemplo mic2, trophy o theater).
             </p>
           </div>
-          <span className="grid size-10 place-items-center rounded-xl border border-white/10 bg-black/30 text-zinc-200">
+          <span className="grid size-10 place-items-center rounded-xl border border-border bg-muted text-foreground">
             <PreviewIcon className="size-5" aria-hidden />
           </span>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-3">
           <label className="space-y-1.5 sm:col-span-1">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-zinc-400">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               Nombre
             </span>
             <Input
@@ -146,29 +146,29 @@ export function CategoriesAdminPanel({
               onChange={(e) => setName(e.target.value)}
               placeholder="Teatro & Cultura"
               required
-              className="h-10 border-white/10 bg-muted dark:bg-black/20 text-zinc-100"
+              className="h-10 border-border bg-background text-foreground"
             />
           </label>
           <label className="space-y-1.5 sm:col-span-1">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-zinc-400">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               Identificador corto
             </span>
             <Input
               value={slug}
               onChange={(e) => setSlug(e.target.value)}
               placeholder="teatro-y-cultura"
-              className="h-10 border-white/10 bg-muted dark:bg-black/20 font-mono text-sm text-zinc-100"
+              className="h-10 border-border bg-background font-mono text-sm text-foreground"
             />
           </label>
           <label className="space-y-1.5 sm:col-span-1">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-zinc-400">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               Nombre del ícono
             </span>
             <Input
               value={iconName}
               onChange={(e) => setIconName(e.target.value)}
               placeholder="clapperboard"
-              className="h-10 border-white/10 bg-muted dark:bg-black/20 font-mono text-sm text-zinc-100"
+              className="h-10 border-border bg-background font-mono text-sm text-foreground"
             />
           </label>
         </div>
@@ -193,7 +193,7 @@ export function CategoriesAdminPanel({
               type="button"
               variant="ghost"
               onClick={resetForm}
-              className="text-slate-600 dark:text-zinc-400 hover:text-white"
+              className="text-muted-foreground hover:text-foreground"
             >
               Cancelar
             </Button>
@@ -211,15 +211,15 @@ export function CategoriesAdminPanel({
         </div>
       </form>
 
-      <div className="overflow-hidden rounded-2xl border border-white/8 bg-white/[0.03]">
+      <div className="overflow-hidden rounded-2xl border border-border bg-card">
         <Table>
           <TableHeader>
-            <TableRow className="border-white/8 hover:bg-transparent">
-              <TableHead className="pl-5 text-zinc-600">Categoría</TableHead>
-              <TableHead className="text-zinc-600">Slug</TableHead>
-              <TableHead className="text-zinc-600">Icono</TableHead>
-              <TableHead className="text-zinc-600">Estado</TableHead>
-              <TableHead className="pr-5 text-right text-zinc-600">
+            <TableRow className="border-border hover:bg-transparent">
+              <TableHead className="pl-5 text-muted-foreground">Categoría</TableHead>
+              <TableHead className="text-muted-foreground">Slug</TableHead>
+              <TableHead className="text-muted-foreground">Icono</TableHead>
+              <TableHead className="text-muted-foreground">Estado</TableHead>
+              <TableHead className="pr-5 text-right text-muted-foreground">
                 Acciones
               </TableHead>
             </TableRow>
@@ -230,22 +230,22 @@ export function CategoriesAdminPanel({
               return (
                 <TableRow
                   key={row.id}
-                  className="border-white/8 hover:bg-white/[0.025]"
+                  className="border-border hover:bg-muted/50"
                 >
                   <TableCell className="py-3.5 pl-5">
                     <div className="flex items-center gap-3">
-                      <span className="grid size-9 place-items-center rounded-lg bg-white/5 text-zinc-200">
+                      <span className="grid size-9 place-items-center rounded-lg bg-white/5 text-foreground">
                         <Icon className="size-4" aria-hidden />
                       </span>
-                      <span className="font-medium text-zinc-100">
+                      <span className="font-medium text-foreground">
                         {row.name}
                       </span>
                     </div>
                   </TableCell>
-                  <TableCell className="font-mono text-xs text-slate-600 dark:text-zinc-400">
+                  <TableCell className="font-mono text-xs text-muted-foreground">
                     {row.slug}
                   </TableCell>
-                  <TableCell className="font-mono text-xs text-slate-600 dark:text-zinc-400">
+                  <TableCell className="font-mono text-xs text-muted-foreground">
                     {row.icon_name ?? "—"}
                   </TableCell>
                   <TableCell>
@@ -254,7 +254,7 @@ export function CategoriesAdminPanel({
                         "inline-flex rounded-full px-2.5 py-1 text-[11px] font-medium",
                         row.is_active
                           ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300"
-                          : "bg-zinc-500/15 text-slate-600 dark:text-zinc-400",
+                          : "bg-zinc-500/15 text-muted-foreground",
                       )}
                     >
                       {row.is_active ? "Activa" : "Inactiva"}
@@ -266,7 +266,7 @@ export function CategoriesAdminPanel({
                         type="button"
                         size="sm"
                         variant="ghost"
-                        className="text-zinc-300 hover:text-white"
+                        className="text-foreground hover:text-primary"
                         onClick={() => startEdit(row)}
                       >
                         Editar
@@ -276,7 +276,7 @@ export function CategoriesAdminPanel({
                         size="sm"
                         variant="ghost"
                         disabled={isPending}
-                        className="gap-1.5 text-slate-600 dark:text-zinc-400 hover:text-white"
+                        className="gap-1.5 text-muted-foreground hover:text-foreground"
                         onClick={() => toggleActive(row)}
                         aria-label={
                           row.is_active ? "Desactivar" : "Activar"
@@ -293,7 +293,7 @@ export function CategoriesAdminPanel({
           </TableBody>
         </Table>
         {categories.length === 0 ? (
-          <p className="px-5 py-10 text-center text-sm text-slate-600 dark:text-zinc-400">
+          <p className="px-5 py-10 text-center text-sm text-muted-foreground">
             Todavía no hay categorías. Creá la primera arriba.
           </p>
         ) : null}

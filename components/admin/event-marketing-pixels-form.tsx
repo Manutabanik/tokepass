@@ -67,10 +67,10 @@ export function EventMarketingPixelsForm({
           <Megaphone className="size-5" aria-hidden="true" />
         </span>
         <div>
-          <h2 className="text-lg font-bold text-zinc-900 dark:text-white">
+          <h2 className="text-lg font-bold text-foreground">
             Píxeles de marketing
           </h2>
-          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+          <p className="mt-1 text-sm text-muted-foreground">
             Medí ViewContent, AddToCart, InitiateCheckout y Purchase en Meta,
             TikTok y Google Analytics 4. Solo se inyectan si el interruptor está
             activo y el ID es válido.
@@ -160,8 +160,8 @@ function PixelField({
     <div className="space-y-3 rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <p className="font-semibold text-zinc-900 dark:text-white">{title}</p>
-          <p className="mt-0.5 text-xs text-slate-600 dark:text-zinc-400">{description}</p>
+          <p className="font-semibold text-foreground">{title}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
         </div>
         <Switch
           checked={enabled}

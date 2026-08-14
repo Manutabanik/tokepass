@@ -82,7 +82,7 @@ export function CheckoutBuyerFields({
           onChange={(event) =>
             onChange({
               ...value,
-              buyerDni: event.target.value.replace(/\D/g, "").slice(0, 10),
+              buyerDni: event.target.value.replace(/\D/g, "").slice(0, 9),
             })
           }
           placeholder="Solo números"

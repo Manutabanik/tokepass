@@ -6,15 +6,39 @@ import {
   buildReferralCookieOptions,
   normalizeReferralCode,
 } from "@/lib/referral"
+import {
+  buildContentSecurityPolicy,
+  createCspNonce,
+} from "@/lib/security/csp"
 import { isStaffOpsPath, staffHomeForRoles } from "@/types/auth"
 import type { EventStaffRole } from "@/types/auth"
 import type { Database } from "@/types/database"
 
+function applyCsp(response: NextResponse, nonce: string) {
+  response.headers.set(
+    "Content-Security-Policy",
+    buildContentSecurityPolicy(nonce),
+  )
+  return response
+}
+
+function createPassthroughResponse(request: NextRequest, nonce: string) {
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set("x-nonce", nonce)
+  return applyCsp(
+    NextResponse.next({
+      request: { headers: requestHeaders },
+    }),
+    nonce,
+  )
+}
+
 function redirectWithRefreshedCookies(
   url: URL,
   responseWithCookies: NextResponse,
+  nonce: string,
 ) {
-  const redirectResponse = NextResponse.redirect(url)
+  const redirectResponse = applyCsp(NextResponse.redirect(url), nonce)
 
   responseWithCookies.cookies.getAll().forEach((cookie) => {
     redirectResponse.cookies.set(cookie.name, cookie.value, cookie)
@@ -40,7 +64,8 @@ function captureReferralFromRequest(
 }
 
 export async function updateSession(request: NextRequest) {
-  let response = NextResponse.next({ request })
+  const nonce = createCspNonce()
+  let response = createPassthroughResponse(request, nonce)
   response = captureReferralFromRequest(request, response)
 
   const { pathname } = request.nextUrl
@@ -56,7 +81,7 @@ export async function updateSession(request: NextRequest) {
   if (legacyExact) {
     const url = request.nextUrl.clone()
     url.pathname = legacyExact
-    return NextResponse.redirect(url, 308)
+    return applyCsp(NextResponse.redirect(url, 308), nonce)
   }
   if (
     pathname.startsWith("/my-tickets/") ||
@@ -64,12 +89,12 @@ export async function updateSession(request: NextRequest) {
   ) {
     const url = request.nextUrl.clone()
     url.pathname = "/cuenta/entradas"
-    return NextResponse.redirect(url, 308)
+    return applyCsp(NextResponse.redirect(url, 308), nonce)
   }
   if (pathname.startsWith("/my-orders/")) {
     const url = request.nextUrl.clone()
     url.pathname = "/cuenta/compras"
-    return NextResponse.redirect(url, 308)
+    return applyCsp(NextResponse.redirect(url, 308), nonce)
   }
 
   const supabase = createServerClient<Database>(
@@ -83,7 +108,7 @@ export async function updateSession(request: NextRequest) {
             request.cookies.set(name, value)
           })
 
-          response = NextResponse.next({ request })
+          response = createPassthroughResponse(request, nonce)
           response = captureReferralFromRequest(request, response)
 
           cookiesToSet.forEach(({ name, value, options }) => {
@@ -110,7 +135,7 @@ export async function updateSession(request: NextRequest) {
     loginUrl.pathname = isPromoterRoute ? "/login" : "/login-organizador"
     loginUrl.searchParams.set("next", `${pathname}${request.nextUrl.search}`)
 
-    return redirectWithRefreshedCookies(loginUrl, response)
+    return redirectWithRefreshedCookies(loginUrl, response, nonce)
   }
 
   if (user && isProtectedRoute) {
@@ -127,7 +152,7 @@ export async function updateSession(request: NextRequest) {
       const fallbackUrl = request.nextUrl.clone()
       fallbackUrl.pathname = role === "admin" ? "/admin" : "/"
       fallbackUrl.search = ""
-      return redirectWithRefreshedCookies(fallbackUrl, response)
+      return redirectWithRefreshedCookies(fallbackUrl, response, nonce)
     }
 
     if (isAdminRoute && role !== "admin" && role !== "super_admin") {
@@ -148,7 +173,7 @@ export async function updateSession(request: NextRequest) {
         const homeUrl = request.nextUrl.clone()
         homeUrl.pathname = "/"
         homeUrl.search = ""
-        return redirectWithRefreshedCookies(homeUrl, response)
+        return redirectWithRefreshedCookies(homeUrl, response, nonce)
       }
 
       // Delegated staff: only scanner / bar / POS — never finances or event edit.
@@ -156,7 +181,7 @@ export async function updateSession(request: NextRequest) {
         const staffHome = request.nextUrl.clone()
         staffHome.pathname = staffHomeForRoles(staffRoles)
         staffHome.search = ""
-        return redirectWithRefreshedCookies(staffHome, response)
+        return redirectWithRefreshedCookies(staffHome, response, nonce)
       }
     }
   }

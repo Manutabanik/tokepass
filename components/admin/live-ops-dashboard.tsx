@@ -14,12 +14,27 @@ import {
   WifiOff,
 } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
+import dynamic from "next/dynamic"
 import { useEffect, useState } from "react"
 
 import type { LiveOpsSnapshot } from "@/lib/live-ops"
-import { LiveOpsFlowChart } from "@/components/admin/live-ops-flow-chart"
 import { useLiveMetrics } from "@/hooks/use-live-metrics"
 import { formatNumber } from "@/lib/format"
+
+const LiveOpsFlowChart = dynamic(
+  () =>
+    import("@/components/admin/live-ops-flow-chart").then(
+      (mod) => mod.LiveOpsFlowChart,
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-72 items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 text-sm text-muted-foreground">
+        Cargando gráfico…
+      </div>
+    ),
+  },
+)
 
 type Props = {
   eventId: string
@@ -152,9 +167,10 @@ function KpiCard({
 
 export function LiveOpsDashboard({ eventId, initial }: Props) {
   const metrics = useLiveMetrics(eventId, initial)
-  const [nowMs, setNowMs] = useState(() => Date.now())
+  const [nowMs, setNowMs] = useState<number | null>(null)
 
   useEffect(() => {
+    setNowMs(Date.now())
     const id = window.setInterval(() => setNowMs(Date.now()), 1000)
     return () => window.clearInterval(id)
   }, [])
@@ -384,7 +400,10 @@ export function LiveOpsDashboard({ eventId, initial }: Props) {
                         <span className="font-normal text-muted-foreground">ingresó</span>
                       </p>
                       <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                        {entry.tierName} · {formatRelativeEs(entry.at, nowMs)}
+                        {entry.tierName} ·{" "}
+                        {nowMs == null
+                          ? "…"
+                          : formatRelativeEs(entry.at, nowMs)}
                       </p>
                     </div>
                   </motion.li>

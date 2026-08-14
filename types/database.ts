@@ -13,11 +13,23 @@ export type EventStatus =
   | "completed"
   | "archived"
 export type QrType = "dynamic" | "static"
+export type PaymentProvider =
+  | "mercadopago"
+  | "payway"
+  | "naranjax"
+  | "modo"
+  | "nave"
+  | "stripe"
+  | "bank_transfer"
+  | "pos_cash"
+  | "pos_card"
+  | "sandbox"
+  | "free"
 export type PaymentMethod =
   | "mercadopago"
   | "cash_pos"
-  | "transfer_pos"
   | "card_pos"
+  | "transfer_pos"
   | "test_sandbox"
 export type TicketStatus =
   | "pending_payment"
@@ -179,6 +191,8 @@ export type Event = {
   age_restriction: "atp" | "16" | "18"
   /** Cierre de jornada única; multijornada usa schedule_days. */
   ends_at: string | null
+  /** URL pública /eventos/{slug}. Estable una vez asignado. */
+  slug: string
   created_at: string
   updated_at: string
 }
@@ -383,6 +397,15 @@ export type MpWebhookEvent = {
   raw_summary: Json | null
 }
 
+export type PaymentWebhookEvent = {
+  id: string
+  provider: PaymentProvider
+  external_event_id: string
+  event_type: string
+  payload: Json
+  processed_at: string
+}
+
 export type EventZone = {
   id: string
   event_id: string
@@ -516,6 +539,11 @@ export type Order = {
   discount_amount: number
   mp_preference_id: string | null
   mp_payment_id: string | null
+  payment_provider: PaymentProvider
+  provider_preference_id: string | null
+  provider_transaction_id: string | null
+  installment_plan: string | null
+  provider_metadata: Json
   payment_method: PaymentMethod
   customer_phone: string | null
   cashier_shift_id: string | null
@@ -712,6 +740,7 @@ type EventInsert = Omit<
   | "category_id"
   | "age_restriction"
   | "ends_at"
+  | "slug"
   | "created_at"
   | "updated_at"
 > & {
@@ -745,6 +774,7 @@ type EventInsert = Omit<
   promo_video_url?: string | null
   gallery_urls?: string[] | null
   social_share_image_url?: string | null
+  slug?: string
   created_at?: string
   updated_at?: string
 }
@@ -915,6 +945,11 @@ type OrderInsert = Omit<
   | "discount_amount"
   | "mp_preference_id"
   | "mp_payment_id"
+  | "payment_provider"
+  | "provider_preference_id"
+  | "provider_transaction_id"
+  | "installment_plan"
+  | "provider_metadata"
   | "payment_method"
   | "customer_phone"
   | "cashier_shift_id"
@@ -930,6 +965,11 @@ type OrderInsert = Omit<
   discount_amount?: number
   mp_preference_id?: string | null
   mp_payment_id?: string | null
+  payment_provider?: PaymentProvider
+  provider_preference_id?: string | null
+  provider_transaction_id?: string | null
+  installment_plan?: string | null
+  provider_metadata?: Json
   payment_method?: PaymentMethod
   customer_phone?: string | null
   cashier_shift_id?: string | null
@@ -1469,6 +1509,19 @@ export type Database = {
         Update: Partial<MpWebhookEvent>
         Relationships: []
       }
+      payment_webhook_events: {
+        Row: PaymentWebhookEvent
+        Insert: {
+          id?: string
+          provider: PaymentProvider
+          external_event_id: string
+          event_type: string
+          payload: Json
+          processed_at?: string
+        }
+        Update: Partial<PaymentWebhookEvent>
+        Relationships: []
+      }
     }
     Views: Record<string, never>
     Functions: {
@@ -1818,7 +1871,10 @@ export type Database = {
       finalize_paid_order: {
         Args: {
           p_order_id: string
-          p_mp_payment_id: string
+          p_mp_payment_id?: string
+          p_provider?: string
+          p_transaction_id?: string
+          p_metadata?: Json
         }
         Returns: Json
       }

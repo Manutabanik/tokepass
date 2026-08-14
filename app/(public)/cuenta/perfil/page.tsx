@@ -22,7 +22,7 @@ export default async function CuentaPerfilPage() {
   }
 
   return (
-    <section className="space-y-6 py-8">
+    <section className="space-y-6">
       <header>
         <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300/90">
           Perfil

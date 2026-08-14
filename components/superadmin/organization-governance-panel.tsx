@@ -43,12 +43,12 @@ const statusPresentation: Record<
   none: {
     label: "Sin configurar",
     description: "La cuenta todavía no inició el proceso de aprobación.",
-    className: "border-zinc-500/30 bg-zinc-500/10 text-zinc-300",
+    className: "border-border bg-muted text-muted-foreground",
   },
   pending: {
     label: "Pendiente",
     description: "La productora espera revisión del equipo de plataforma.",
-    className: "border-amber-400/35 bg-amber-400/10 text-amber-200",
+    className: "border-amber-500/35 bg-amber-500/10 text-amber-800 dark:text-amber-200",
   },
   approved: {
     label: "Aprobada",
@@ -60,13 +60,13 @@ const statusPresentation: Record<
     label: "Rechazada",
     description: "No puede operar hasta recibir una nueva aprobación.",
     className:
-      "border-red-400/40 bg-red-400/10 text-red-200 shadow-[0_0_24px_rgba(248,113,113,0.1)]",
+      "border-red-400/40 bg-red-400/10 text-red-700 dark:text-red-200 shadow-[0_0_24px_rgba(248,113,113,0.1)]",
   },
   suspended: {
     label: "Suspendida",
     description: "Creación de eventos y emisión de entradas bloqueadas.",
     className:
-      "border-red-500/50 bg-red-500/15 text-red-100 shadow-[0_0_28px_rgba(239,68,68,0.16)]",
+      "border-red-500/50 bg-red-500/15 text-red-800 dark:text-red-100 shadow-[0_0_28px_rgba(239,68,68,0.16)]",
   },
 }
 
@@ -136,14 +136,14 @@ export function OrganizationGovernancePanel({
       value: formatNumber(organization.metrics.totalEvents),
       helper: `${formatNumber(organization.metrics.publishedEvents)} publicados`,
       icon: CalendarDays,
-      accent: "text-violet-300",
+      accent: "text-violet-700 dark:text-violet-300",
     },
     {
       label: "Entradas vendidas",
       value: formatNumber(organization.metrics.ticketsSold),
       helper: "Entradas confirmadas",
       icon: TicketCheck,
-      accent: "text-sky-300",
+      accent: "text-sky-700 dark:text-sky-300",
     },
     {
       label: "Ventas históricas",
@@ -160,20 +160,20 @@ export function OrganizationGovernancePanel({
         {metrics.map(({ label, value, helper, icon: Icon, accent }) => (
           <Card
             key={label}
-            className="border-0 bg-white/[0.035] py-0 ring-1 ring-white/8"
+            className="border border-border bg-card py-0 text-card-foreground"
           >
             <CardContent className="px-5 py-5">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.14em] text-zinc-600">
+                  <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
                     {label}
                   </p>
                   <p className={cn("mt-3 text-3xl font-black", accent)}>
                     {value}
                   </p>
-                  <p className="mt-1 text-xs text-zinc-600">{helper}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{helper}</p>
                 </div>
-                <span className="grid size-10 place-items-center rounded-xl bg-white/5 ring-1 ring-white/8">
+                <span className="grid size-10 place-items-center rounded-xl bg-white/5 ring-1 ring-border">
                   <Icon className={cn("size-5", accent)} aria-hidden="true" />
                 </span>
               </div>
@@ -183,15 +183,15 @@ export function OrganizationGovernancePanel({
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-        <Card className="border-0 bg-white/[0.035] py-0 ring-1 ring-white/8">
-          <CardHeader className="border-b border-white/8 px-6 py-6">
+        <Card className="border border-border bg-card py-0 text-card-foreground">
+          <CardHeader className="border-b border-border px-6 py-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <CardTitle className="flex items-center gap-2 text-white">
+                <CardTitle className="flex items-center gap-2 text-foreground">
                   <ShieldAlert className="size-5 text-sky-400" />
                   Estado y ciclo de vida
                 </CardTitle>
-                <CardDescription className="mt-1 text-slate-600 dark:text-zinc-400">
+                <CardDescription className="mt-1 text-muted-foreground">
                   Los cambios se aplican al toque: podés pausar o reactivar a
                   esta productora cuando haga falta.
                 </CardDescription>
@@ -205,7 +205,7 @@ export function OrganizationGovernancePanel({
             </div>
           </CardHeader>
           <CardContent className="space-y-5 px-6 py-6">
-            <p className="rounded-xl border border-white/8 bg-muted dark:bg-black/20 px-4 py-3 text-sm text-slate-600 dark:text-zinc-400">
+            <p className="rounded-xl border border-border bg-muted dark:bg-black/20 px-4 py-3 text-sm text-muted-foreground">
               {status.description}
             </p>
             <div className="grid gap-2 sm:grid-cols-3">
@@ -226,7 +226,7 @@ export function OrganizationGovernancePanel({
                   isPending || organization.profile.status === "rejected"
                 }
                 onClick={() => handleStatusChange("rejected")}
-                className="h-11 bg-amber-500/15 text-amber-100 ring-1 ring-amber-400/30 hover:bg-amber-500/25"
+                className="h-11 bg-amber-500/15 text-amber-800 ring-1 ring-amber-400/30 hover:bg-amber-500/25 dark:text-amber-100"
               >
                 <XCircle />
                 Rechazar
@@ -237,7 +237,7 @@ export function OrganizationGovernancePanel({
                   isPending || organization.profile.status === "suspended"
                 }
                 onClick={() => handleStatusChange("suspended")}
-                className="h-11 bg-red-500/15 text-red-100 ring-1 ring-red-400/35 hover:bg-red-500/25"
+                className="h-11 bg-red-500/15 text-red-800 ring-1 ring-red-400/35 hover:bg-red-500/25 dark:text-red-100"
               >
                 <Ban />
                 Suspender
@@ -246,12 +246,12 @@ export function OrganizationGovernancePanel({
           </CardContent>
         </Card>
 
-        <Card className="border-0 bg-gradient-to-br from-sky-500/10 via-white/[0.04] to-white/[0.02] py-0 ring-1 ring-sky-400/20">
-          <CardHeader className="border-b border-white/8 px-6 py-6">
-            <CardTitle className="text-white">
+        <Card className="border border-sky-500/20 bg-gradient-to-br from-sky-500/10 via-card to-card py-0">
+          <CardHeader className="border-b border-border px-6 py-6">
+            <CardTitle className="text-foreground">
               Comisión de la ticketera
             </CardTitle>
-            <CardDescription className="text-slate-600 dark:text-zinc-400">
+            <CardDescription className="text-muted-foreground">
               Definí qué porcentaje se queda Tokepass sobre el precio que ve el
               comprador. Se aplica a los eventos nuevos de esta productora.
             </CardDescription>
@@ -259,7 +259,7 @@ export function OrganizationGovernancePanel({
           <CardContent className="space-y-5 px-6 py-6">
             <label
               htmlFor="organizer-fee-rate"
-              className="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-600 dark:text-zinc-400"
+              className="block text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground"
             >
               Porcentaje de comisión
             </label>
@@ -273,9 +273,9 @@ export function OrganizationGovernancePanel({
                 value={feePercent}
                 onChange={(event) => setFeePercent(Number(event.target.value))}
                 disabled={isPending}
-                className="h-14 border-sky-400/20 bg-black/30 pr-12 font-mono text-2xl font-black text-white focus-visible:border-sky-400"
+                className="h-14 border-sky-400/20 bg-background pr-12 font-mono text-2xl font-black text-foreground focus-visible:border-sky-400"
               />
-              <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-lg text-sky-300">
+              <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-lg text-sky-700 dark:text-sky-300">
                 %
               </span>
             </div>
@@ -288,7 +288,7 @@ export function OrganizationGovernancePanel({
                   variant="outline"
                   disabled={isPending}
                   onClick={() => setFeePercent(preset)}
-                  className="rounded-full border-white/10 bg-muted dark:bg-black/20 text-zinc-300 hover:bg-white/5 hover:text-white"
+                  className="rounded-full border-border bg-muted text-foreground hover:bg-muted hover:text-foreground"
                 >
                   {preset}%
                 </Button>

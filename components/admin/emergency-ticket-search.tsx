@@ -77,14 +77,14 @@ export function EmergencyTicketSearch({
       <DialogContent className="max-h-[85dvh] overflow-hidden border-zinc-200 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Ingreso por DNI</DialogTitle>
-          <DialogDescription className="text-zinc-600 dark:text-zinc-400">
+          <DialogDescription className="text-muted-foreground">
             Buscá por nombre o DNI. Si es una mesa, podés validar un acceso o
             todos juntos.
           </DialogDescription>
         </DialogHeader>
 
         <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-600 dark:text-zinc-400" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
             onChange={(event) => handleQuery(event.target.value)}
@@ -96,14 +96,14 @@ export function EmergencyTicketSearch({
 
         <div className="max-h-[50dvh] space-y-2 overflow-y-auto pr-1">
           {isPending ? (
-            <p className="flex items-center gap-2 py-6 text-sm text-zinc-600 dark:text-zinc-400">
+            <p className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
               <LoaderCircle className="size-4 animate-spin" />
               Buscando…
             </p>
           ) : null}
 
           {emptyHint ? (
-            <p className="py-6 text-center text-sm text-slate-600 dark:text-zinc-400">{emptyHint}</p>
+            <p className="py-6 text-center text-sm text-muted-foreground">{emptyHint}</p>
           ) : null}
 
           {results.map((ticket) => (
@@ -125,10 +125,10 @@ export function EmergencyTicketSearch({
                   )}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-semibold text-zinc-900 dark:text-white">
+                  <span className="block truncate font-semibold text-foreground">
                     {ticket.owner_name}
                   </span>
-                  <span className="mt-0.5 block truncate text-xs text-zinc-600 dark:text-zinc-400">
+                  <span className="mt-0.5 block truncate text-xs text-muted-foreground">
                     {ticket.ticket_tier}
                     {ticket.group_slot
                       ? ` · Acceso ${ticket.group_slot}`

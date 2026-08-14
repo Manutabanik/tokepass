@@ -60,11 +60,11 @@ export function AddPromoterDialog() {
         Agregar promotor
       </Button>
 
-      <DialogContent className="border-zinc-200 dark:border-white/10 bg-[#121216] text-zinc-900 dark:text-zinc-100 sm:max-w-md">
+      <DialogContent className="border-border bg-card text-card-foreground sm:max-w-md">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Agregar promotor</DialogTitle>
-            <DialogDescription className="text-zinc-600 dark:text-zinc-400">
+            <DialogDescription className="text-muted-foreground">
               Generamos un código de referido único para su link de ventas.
             </DialogDescription>
           </DialogHeader>
@@ -94,7 +94,7 @@ export function AddPromoterDialog() {
                 required
                 className="border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-950"
               />
-              <p className="text-xs text-slate-600 dark:text-zinc-400">
+              <p className="text-xs text-muted-foreground">
                 Ej: 10 = 10% sobre el total de órdenes pagadas.
               </p>
             </div>

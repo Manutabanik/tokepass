@@ -1,33 +1,25 @@
 import type { MetadataRoute } from "next"
 
+import { getSeoOrigin } from "@/lib/seo/site"
+
 export default function robots(): MetadataRoute.Robots {
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
-    "https://tokepass.app"
+  const siteUrl = getSeoOrigin()
 
   return {
     rules: [
       {
         userAgent: "*",
-        allow: ["/", "/events", "/events/", "/login", "/register"],
+        allow: ["/", "/eventos", "/eventos/", "/events", "/events/"],
         disallow: [
-          "/admin",
           "/admin/",
-          "/organizer",
-          "/organizer/",
-          "/superadmin",
-          "/superadmin/",
-          "/super-admin",
-          "/api",
-          "/api/",
-          "/my-tickets",
-          "/mis-tickets",
-          "/my-orders",
-          "/profile",
-          "/cuenta",
           "/cuenta/",
-          "/checkout",
-          "/promoter",
+          "/api/",
+          "/organizer/",
+          "/superadmin/",
+          "/super-admin/",
+          "/promoter/",
+          "/checkout/",
+          "/events/preview/",
         ],
       },
     ],

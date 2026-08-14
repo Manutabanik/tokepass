@@ -7,6 +7,7 @@ import {
   type DiscoveryMoodId,
 } from "@/lib/discovery-categories"
 import { isPastEvent } from "@/lib/event-status"
+import { publicEventPath } from "@/lib/seo/site"
 
 export type { DiscoveryMoodId, DiscoveryCategory }
 export {
@@ -193,7 +194,7 @@ export function buildSearchSuggestions(
     out.push({
       id: event.id,
       label: event.title,
-      href: `/events/${event.id}`,
+      href: publicEventPath(event),
       meta: [formatSuggestionMeta(event)].filter(Boolean).join(" · "),
     })
     if (out.length >= limit) break

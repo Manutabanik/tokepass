@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { notFound } from "next/navigation"
 
 import SeatSelectionDemoClient from "./page-client"
 
@@ -8,5 +9,9 @@ export const metadata: Metadata = {
 }
 
 export default function SeatSelectionDemoPage() {
+  if (process.env.NODE_ENV === "production") {
+    notFound()
+  }
+
   return <SeatSelectionDemoClient />
 }

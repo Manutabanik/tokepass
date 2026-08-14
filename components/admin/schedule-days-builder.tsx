@@ -34,11 +34,11 @@ export function ScheduleDaysBuilder({
     <section className="space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="flex items-center gap-2 font-bold text-zinc-900 dark:text-white">
+          <h3 className="flex items-center gap-2 font-bold text-foreground">
             <CalendarRange className="size-4 text-emerald-700 dark:text-emerald-400" aria-hidden="true" />
             Jornadas del festival
           </h3>
-          <p className="mt-1 text-xs text-slate-600 dark:text-zinc-400">
+          <p className="mt-1 text-xs text-muted-foreground">
             Cada noche o día opera como una ventana de acceso independiente.
           </p>
         </div>
@@ -51,7 +51,7 @@ export function ScheduleDaysBuilder({
             className="mb-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/60 p-4"
           >
             <div className="mb-3 flex items-center justify-between gap-2">
-              <p className="font-mono text-[10px] uppercase tracking-wider text-slate-600 dark:text-zinc-400">
+              <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                 Jornada {index + 1}
               </p>
               <Button
@@ -60,7 +60,7 @@ export function ScheduleDaysBuilder({
                 size="icon-sm"
                 disabled={fields.length <= 2}
                 onClick={() => remove(index)}
-                className="text-slate-600 dark:text-zinc-400 hover:bg-red-500/10 hover:text-red-400"
+                className="text-muted-foreground hover:bg-red-500/10 hover:text-red-400"
                 aria-label={`Eliminar jornada ${index + 1}`}
               >
                 <Trash2 className="size-4" />
@@ -75,7 +75,7 @@ export function ScheduleDaysBuilder({
                   <FormItem>
                     <FormLabel
                       htmlFor={`schedule-day-${index}-title`}
-                      className="font-mono text-[10px] uppercase tracking-wider text-slate-600 dark:text-zinc-400"
+                      className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
                     >
                       Nombre de la jornada
                     </FormLabel>
@@ -102,7 +102,7 @@ export function ScheduleDaysBuilder({
                     <FormItem>
                       <FormLabel
                         htmlFor={`schedule-day-${index}-start`}
-                        className="font-mono text-[10px] uppercase tracking-wider text-slate-600 dark:text-zinc-400"
+                        className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
                       >
                         Inicio
                       </FormLabel>
@@ -123,7 +123,7 @@ export function ScheduleDaysBuilder({
                     <FormItem>
                       <FormLabel
                         htmlFor={`schedule-day-${index}-end`}
-                        className="font-mono text-[10px] uppercase tracking-wider text-slate-600 dark:text-zinc-400"
+                        className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
                       >
                         Cierre
                       </FormLabel>

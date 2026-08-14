@@ -51,7 +51,7 @@ export function AdminSidebar({
         <button
           type="button"
           onClick={() => setCollapsed((current) => !current)}
-          className="grid size-9 place-items-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/5 dark:hover:text-white"
+          className="grid size-9 place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
           aria-label={collapsed ? "Expandir menú" : "Cerrar menú"}
           title={collapsed ? "Expandir" : "Cerrar"}
         >

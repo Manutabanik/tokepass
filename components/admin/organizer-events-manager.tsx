@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   LoaderCircle,
   MapPin,
+  MoreVertical,
   Pencil,
   Plus,
   Rocket,
@@ -40,6 +41,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLinkItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { isBoostActive } from "@/lib/services/events-service"
 import { formatEventDay } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -52,7 +61,7 @@ function PublishEventButton({ eventId }: { eventId: string }) {
     <>
       <Button
         type="button"
-        className="h-10 rounded-full bg-emerald-600 text-white hover:bg-emerald-500"
+        className="h-10 shrink-0 rounded-xl bg-emerald-600 px-4 text-white hover:bg-emerald-500"
         onClick={() => setOpen(true)}
       >
         <Rocket className="size-4" aria-hidden="true" />
@@ -155,6 +164,20 @@ export function OrganizerEventsManager({
               </p>
             </div>
           </div>
+          <Button
+            type="button"
+            variant="default"
+            className="min-h-11 shrink-0 rounded-xl"
+            disabled={events.length === 0}
+            onClick={() => {
+              const target =
+                events.find((event) => event.status === "published") ??
+                events[0]
+              if (target) setBoostEvent(target)
+            }}
+          >
+            Destacar un evento
+          </Button>
         </div>
       </div>
 
@@ -179,124 +202,133 @@ export function OrganizerEventsManager({
             return (
               <article
                 key={event.id}
-                className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-4 sm:flex-row sm:items-center"
+                className="flex flex-col rounded-2xl border border-border bg-card p-4 md:flex-row md:items-center md:justify-between md:gap-6"
               >
-                <div className="relative size-20 shrink-0 overflow-hidden rounded-xl bg-muted">
-                  {event.image_url ? (
-                    <Image
-                      src={event.image_url}
-                      alt=""
-                      fill
-                      className="object-cover"
-                      sizes="80px"
-                    />
-                  ) : (
-                    <div className="grid h-full place-items-center text-muted-foreground">
-                      <ImageIcon className="size-6" />
-                    </div>
-                  )}
-                </div>
-
-                <div className="min-w-0 flex-1 space-y-1.5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="truncate text-base font-bold text-foreground">
-                      {event.title}
-                    </h2>
-                    <EventStatusBadge status={event.status} />
-                    {active ? (
-                      <Badge className="rounded-full border-0 bg-cyan-400/15 text-cyan-700 dark:text-cyan-200">
-                        <Crown className="size-3" aria-hidden="true" />
-                        Boost {event.featured_tier}
-                      </Badge>
-                    ) : null}
+                <div className="flex min-w-0 flex-1 gap-4">
+                  <div className="relative size-20 shrink-0 overflow-hidden rounded-xl bg-muted">
+                    {event.image_url ? (
+                      <Image
+                        src={event.image_url}
+                        alt=""
+                        fill
+                        className="object-cover"
+                        sizes="80px"
+                      />
+                    ) : (
+                      <div className="grid h-full place-items-center text-muted-foreground">
+                        <ImageIcon className="size-6" />
+                      </div>
+                    )}
                   </div>
-                  <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                    <CalendarDays className="size-3.5" aria-hidden="true" />
-                    {formatEventDay(event.date)}
-                  </p>
-                  <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                    <MapPin className="size-3.5" aria-hidden="true" />
-                    {event.venues?.name ?? event.location}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {event.ticketsSold > 0
-                      ? `${event.ticketsSold} entrada${event.ticketsSold === 1 ? "" : "s"} vendida${event.ticketsSold === 1 ? "" : "s"} / comprometidas`
-                      : "Sin ventas todavía"}
-                  </p>
+
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="truncate text-base font-bold text-foreground">
+                        {event.title}
+                      </h2>
+                      <EventStatusBadge status={event.status} />
+                      {active ? (
+                        <Badge className="rounded-full border-0 bg-cyan-400/15 text-cyan-700 dark:text-cyan-200">
+                          <Crown className="size-3" aria-hidden="true" />
+                          Boost {event.featured_tier}
+                        </Badge>
+                      ) : null}
+                    </div>
+                    <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                      <CalendarDays className="size-3.5" aria-hidden="true" />
+                      {formatEventDay(event.date)}
+                    </p>
+                    <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                      <MapPin className="size-3.5" aria-hidden="true" />
+                      {event.venues?.name ?? event.location}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {event.ticketsSold > 0
+                        ? `${event.ticketsSold} entrada${event.ticketsSold === 1 ? "" : "s"} vendida${event.ticketsSold === 1 ? "" : "s"} / comprometidas`
+                        : "Sin ventas todavía"}
+                    </p>
+                  </div>
                 </div>
 
-                <div className="mt-4 flex shrink-0 flex-wrap gap-2 sm:mt-0 sm:max-w-[420px] sm:justify-end">
-                  <Button
-                    className="h-10 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 text-sm font-medium text-amber-600 dark:text-amber-200 hover:bg-amber-500/20"
-                    nativeButton={false}
-                    render={
-                      <Link href={`/events/preview/${event.id}`} />
-                    }
-                  >
-                    <Eye className="size-4" aria-hidden="true" />
-                    Previsualizar
-                  </Button>
+                <div className="mt-4 flex w-full items-center justify-between gap-2 border-t border-border pt-4 md:mt-0 md:w-auto md:shrink-0 md:justify-end md:border-t-0 md:pt-0">
                   {event.status === "draft" ? (
                     <PublishEventButton eventId={event.id} />
                   ) : null}
                   <Button
-                    className="h-10 rounded-xl border border-border bg-muted px-4 text-sm font-medium text-foreground shadow-sm transition-all hover:bg-muted"
+                    variant="default"
+                    className="h-10 flex-1 rounded-xl px-4 md:flex-none"
                     nativeButton={false}
                     render={<Link href={`/admin/events/${event.id}`} />}
                   >
                     <LayoutDashboard className="size-4" aria-hidden="true" />
                     Gestionar
                   </Button>
-                  <Button
-                    className="h-10 rounded-xl border border-border bg-muted px-4 text-sm font-medium text-foreground transition-all hover:border-border hover:bg-muted hover:text-foreground"
-                    nativeButton={false}
-                    render={<Link href={`/admin/events/${event.id}/edit`} />}
-                  >
-                    <Pencil className="size-4" aria-hidden="true" />
-                    Editar
-                  </Button>
-                  {event.status === "published" || event.status === "draft" ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={pendingArchive}
-                      className="h-10 rounded-xl border-border bg-transparent px-4 text-foreground hover:bg-muted"
-                      onClick={() => {
-                        startArchive(async () => {
-                          const result = await archiveEvent(event.id)
-                          if (!result.success) {
-                            toast.error(result.error)
-                            return
-                          }
-                          toast.success("Evento archivado")
-                          router.refresh()
-                        })
-                      }}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      aria-label={`Más acciones para ${event.title}`}
+                      render={
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="size-10 shrink-0 rounded-xl"
+                        />
+                      }
                     >
-                      <Archive className="size-4" aria-hidden="true" />
-                      Archivar
-                    </Button>
-                  ) : null}
-                  {event.status !== "cancelled" ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-10 rounded-xl border-red-500/30 bg-red-500/10 px-4 text-rose-600 dark:text-rose-200 hover:bg-red-500/20"
-                      onClick={() => setDeleteTarget(event)}
-                    >
-                      <Trash2 className="size-4" aria-hidden="true" />
-                      Eliminar
-                    </Button>
-                  ) : null}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-10 rounded-xl border-cyan-400/30 bg-cyan-400/10 px-4 text-cyan-700 dark:text-cyan-100 shadow-[0_0_18px_rgba(34,211,238,0.08)] hover:bg-cyan-400/20"
-                    onClick={() => setBoostEvent(event)}
-                  >
-                    <Sparkles className="size-4" aria-hidden="true" />
-                    {active ? "Renovar Boost" : "Destacar"}
-                  </Button>
+                      <MoreVertical className="size-4" aria-hidden="true" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-56">
+                      <DropdownMenuLinkItem
+                        href={`/events/preview/${event.id}`}
+                        render={<Link href={`/events/preview/${event.id}`} />}
+                      >
+                        <Eye className="size-4 text-muted-foreground" aria-hidden="true" />
+                        Previsualizar
+                      </DropdownMenuLinkItem>
+                      <DropdownMenuLinkItem
+                        href={`/admin/events/${event.id}/edit`}
+                        render={<Link href={`/admin/events/${event.id}/edit`} />}
+                      >
+                        <Pencil className="size-4 text-muted-foreground" aria-hidden="true" />
+                        Editar Evento
+                      </DropdownMenuLinkItem>
+                      <DropdownMenuItem onClick={() => setBoostEvent(event)}>
+                        <Sparkles className="size-4 text-muted-foreground" aria-hidden="true" />
+                        {active ? "Renovar Boost" : "Destacar"}
+                      </DropdownMenuItem>
+                      {event.status === "published" || event.status === "draft" ? (
+                        <DropdownMenuItem
+                          disabled={pendingArchive}
+                          onClick={() => {
+                            startArchive(async () => {
+                              const result = await archiveEvent(event.id)
+                              if (!result.success) {
+                                toast.error(result.error)
+                                return
+                              }
+                              toast.success("Evento archivado")
+                              router.refresh()
+                            })
+                          }}
+                        >
+                          <Archive className="size-4 text-muted-foreground" aria-hidden="true" />
+                          Archivar
+                        </DropdownMenuItem>
+                      ) : null}
+                      {event.status !== "cancelled" ? (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-destructive data-highlighted:bg-destructive/10 data-highlighted:text-destructive"
+                            onClick={() => setDeleteTarget(event)}
+                          >
+                            <Trash2 className="size-4" aria-hidden="true" />
+                            Eliminar
+                          </DropdownMenuItem>
+                        </>
+                      ) : null}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </article>
             )

@@ -8,6 +8,7 @@ import { fisherYatesShuffle, FEATURED_CAROUSEL_LIMIT } from "@/lib/featured-rota
 import type { FeaturedRotationResult } from "@/lib/featured-rotation"
 import { isPastEvent } from "@/lib/event-status"
 import { isHomePriority, sortCatalogForHome } from "@/lib/services/events-service"
+import { isEventUuid } from "@/lib/seo/site"
 import type { Event, TicketTier, Venue } from "@/types/database"
 import type { ScheduleDay } from "@/types/events"
 import type { EventSeatingUnit, SeatingSectorSummary, VenueSeatingLayout } from "@/types/venues"
@@ -16,6 +17,7 @@ import type { PublicSponsor } from "@/lib/sponsors"
 
 export type CatalogEvent = {
   id: string
+  slug: string
   title: string
   description: string | null
   date: string
@@ -41,6 +43,7 @@ export type CatalogEvent = {
 
 export type EventDetails = {
   id: string
+  slug: string
   title: string
   description: string | null
   date: string
@@ -65,6 +68,8 @@ export type EventDetails = {
         | "id"
         | "name"
         | "location"
+        | "address"
+        | "city"
         | "capacity"
         | "seating_background_url"
         | "latitude"
@@ -109,10 +114,12 @@ export type EventDetails = {
   galleryUrls: string[]
   sponsors: PublicSponsor[]
   categoryId: string | null
+  createdAt: string | null
 }
 
 type EventListRow = {
   id: string
+  slug: string | null
   title: string
   description: string | null
   date: string
@@ -140,6 +147,7 @@ type EventListRow = {
 
 type EventDetailRow = {
   id: string
+  slug?: string | null
   title: string
   description: string | null
   date: string
@@ -164,12 +172,15 @@ type EventDetailRow = {
   promo_video_url?: string | null
   gallery_urls?: string[] | null
   category_id?: string | null
+  created_at?: string | null
   venues:
     | (Pick<
         Venue,
         | "id"
         | "name"
         | "location"
+        | "address"
+        | "city"
         | "capacity"
         | "seating_background_url"
         | "latitude"
@@ -241,7 +252,7 @@ export async function getPublishedEvents(
   let query = supabase
     .from("events")
     .select(
-      "id, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location), ticket_tiers(price, capacity, sold, visibility), profiles!events_organizer_id_fkey(full_name)",
+      "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location), ticket_tiers(price, capacity, sold, visibility), profiles!events_organizer_id_fkey(full_name)",
     )
     .eq("status", "published")
     .eq("visibility", "public")
@@ -281,6 +292,7 @@ function mapEventListRow(event: EventListRow): CatalogEvent {
 
   return {
     id: event.id,
+    slug: event.slug?.trim() || event.id,
     title: event.title,
     description: event.description,
     date: event.date,
@@ -317,7 +329,7 @@ export async function getFeaturedEvents(options?: {
   const { data, error } = await supabase
     .from("events")
     .select(
-      "id, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location), ticket_tiers(price, capacity, sold, visibility), profiles!events_organizer_id_fkey(full_name)",
+      "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location), ticket_tiers(price, capacity, sold, visibility), profiles!events_organizer_id_fkey(full_name)",
     )
     .eq("status", "published")
     .eq("visibility", "public")
@@ -376,8 +388,10 @@ export async function getEventAccessGate(
 ): Promise<EventAccessGate | null> {
   if (!eventId) return null
   const supabase = await createClient()
+  const resolvedId = await resolveEventRecordId(supabase, eventId)
+  if (!resolvedId) return null
   const { data, error } = await supabase.rpc("get_event_public_access_gate", {
-    p_event_id: eventId,
+    p_event_id: resolvedId,
   })
   if (error || !data) return null
   const row = Array.isArray(data) ? data[0] : data
@@ -399,18 +413,37 @@ export async function getPreviewEventDetails(
   return loadEventDetails(eventId, { mode: "preview" })
 }
 
+async function resolveEventRecordId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  slugOrId: string,
+): Promise<string | null> {
+  const value = slugOrId.trim()
+  if (!value) return null
+  if (isEventUuid(value)) return value
+
+  const { data } = await supabase
+    .from("events")
+    .select("id")
+    .eq("slug", value)
+    .maybeSingle()
+
+  return data?.id ?? null
+}
+
 async function loadEventDetails(
   eventId: string,
   options: { mode: "public" | "preview" },
 ): Promise<EventDetails | null> {
   const supabase = await createClient()
+  const resolvedId = await resolveEventRecordId(supabase, eventId)
+  if (!resolvedId) return null
 
   let query = supabase
     .from("events")
     .select(
-      "id, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, venues(id, name, location, capacity, seating_background_url, seating_layout, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category), profiles!events_organizer_id_fkey(full_name)",
+      "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, venues(id, name, location, address, city, capacity, seating_background_url, seating_layout, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category), profiles!events_organizer_id_fkey(full_name)",
     )
-    .eq("id", eventId)
+    .eq("id", resolvedId)
 
   if (options.mode === "public") {
     query = query.eq("status", "published").neq("visibility", "guest_list_only")
@@ -422,7 +455,7 @@ async function loadEventDetails(
     logger.error({
       context: "public-events",
       message: "load_event_failed",
-      event_id: eventId,
+      event_id: resolvedId,
       error,
     })
     return null
@@ -449,13 +482,13 @@ async function loadEventDetails(
 
   const { data: sectorSummaryRows, error: seatingError } = await supabase.rpc(
     "get_event_seating_sector_summary",
-    { p_event_id: eventId },
+    { p_event_id: resolvedId },
   )
   if (seatingError) {
     logger.error({
       context: "public-events",
       message: "seating_summary_failed",
-      event_id: eventId,
+      event_id: resolvedId,
       error: seatingError,
     })
   }
@@ -468,7 +501,7 @@ async function loadEventDetails(
     .select(
       "sector_key, ticket_tier_id, price, table_number_start, table_number_end",
     )
-    .eq("event_id", eventId)
+    .eq("event_id", resolvedId)
 
   const event = data as unknown as EventDetailRow
   const scheduleDays = parseScheduleDays(event.schedule_days)
@@ -493,7 +526,7 @@ async function loadEventDetails(
 
   let serviceChargeRate = 0.08
   const { data: rate } = await supabase.rpc("get_event_service_charge_rate", {
-    p_event_id: eventId,
+    p_event_id: resolvedId,
   })
   if (typeof rate === "number" && Number.isFinite(rate)) {
     serviceChargeRate = rate
@@ -504,7 +537,7 @@ async function loadEventDetails(
   let platformFixedFee = Number(event.platform_fixed_fee ?? 0)
   const { data: fixedFeeRpc } = await supabase.rpc(
     "get_event_platform_fixed_fee",
-    { p_event_id: eventId },
+    { p_event_id: resolvedId },
   )
   if (typeof fixedFeeRpc === "number" && Number.isFinite(fixedFeeRpc)) {
     platformFixedFee = fixedFeeRpc
@@ -548,6 +581,7 @@ async function loadEventDetails(
 
   return {
     id: event.id,
+    slug: event.slug?.trim() || event.id,
     title: event.title,
     description: event.description,
     date: event.date,
@@ -572,6 +606,8 @@ async function loadEventDetails(
           id: event.venues.id,
           name: event.venues.name,
           location: event.venues.location,
+          address: event.venues.address ?? null,
+          city: event.venues.city ?? null,
           capacity: event.venues.capacity,
           seating_background_url: event.venues.seating_background_url,
           latitude: event.venues.latitude,
@@ -643,6 +679,7 @@ async function loadEventDetails(
       : [],
     sponsors,
     categoryId: event.category_id ?? null,
+    createdAt: event.created_at ?? null,
   }
 }
 
@@ -756,7 +793,7 @@ export async function getRelatedEvents(input: {
   const { data, error } = await supabase
     .from("events")
     .select(
-      "id, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location), ticket_tiers(price, capacity, sold, visibility), profiles!events_organizer_id_fkey(full_name)",
+      "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location), ticket_tiers(price, capacity, sold, visibility), profiles!events_organizer_id_fkey(full_name)",
     )
     .eq("status", "published")
     .eq("visibility", "public")

@@ -26,9 +26,9 @@ export default async function SuperAdminOrganizersPage() {
         description="Organizadores con KYB aprobado. Desde acá entrás al gobierno financiero de cada una."
       />
 
-      <Card className="border-0 bg-white/[0.035] py-0 ring-1 ring-white/8">
-        <CardHeader className="border-b border-white/8 px-5 py-5">
-          <CardTitle className="flex items-center gap-2 text-base text-white">
+      <Card className="border border-border bg-card py-0 text-card-foreground">
+        <CardHeader className="border-b border-border px-5 py-5">
+          <CardTitle className="flex items-center gap-2 text-base font-medium text-muted-foreground">
             <Building2 className="size-4 text-violet-300" />
             {organizers.length}{" "}
             {organizers.length === 1 ? "productora" : "productoras"}

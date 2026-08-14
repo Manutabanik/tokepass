@@ -160,10 +160,10 @@ export function EventMultimediaForm({
             <Video className="size-5" aria-hidden />
           </span>
           <div>
-            <h2 className="text-lg font-bold text-zinc-900 dark:text-white">
+            <h2 className="text-lg font-bold text-foreground">
               Spot promocional
             </h2>
-            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+            <p className="mt-1 text-sm text-muted-foreground">
               Pegá un link de YouTube, Shorts, Vimeo o un MP4/WebM directo
               (Cloudinary / Storage). Se reproduce en la página del evento.
             </p>
@@ -208,10 +208,10 @@ export function EventMultimediaForm({
             <Share2 className="size-5" aria-hidden />
           </span>
           <div>
-            <h2 className="text-lg font-bold text-zinc-900 dark:text-white">
+            <h2 className="text-lg font-bold text-foreground">
               Flyer para Historias (Post-Compra)
             </h2>
-            <p className="mt-1 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
               Subí un diseño en formato vertical (1080 x 1920 px - ratio 9:16).
               Esta es la imagen que tus clientes compartirán en Instagram cuando
               compren su entrada. Si no subís nada, armaremos una automáticamente
@@ -264,7 +264,7 @@ export function EventMultimediaForm({
           </div>
 
           <div className="flex flex-1 flex-col justify-center gap-3">
-            <p className="text-xs text-slate-600 dark:text-zinc-400">
+            <p className="text-xs text-muted-foreground">
               Máx. 3 MB · PNG, JPG o WEBP · recomendado 1080×1920.
             </p>
             <Button
@@ -303,10 +303,10 @@ export function EventMultimediaForm({
             <ImagePlus className="size-5" aria-hidden />
           </span>
           <div>
-            <h2 className="text-lg font-bold text-zinc-900 dark:text-white">
+            <h2 className="text-lg font-bold text-foreground">
               Galería · La Experiencia
             </h2>
-            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+            <p className="mt-1 text-sm text-muted-foreground">
               Hasta {MAX_GALLERY} fotos · máx. 2 MB c/u (PNG, JPG o WEBP).
             </p>
           </div>

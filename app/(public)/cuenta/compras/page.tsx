@@ -64,7 +64,7 @@ export default async function CuentaComprasPage() {
   }
 
   return (
-    <section className="space-y-6 py-8">
+    <section className="space-y-6">
       <header>
         <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-sky-700 dark:text-sky-300/90">
           Compras
@@ -186,6 +186,15 @@ export default async function CuentaComprasPage() {
                 </p>
 
                 <div className="mt-4 flex flex-wrap gap-2">
+                  {order.status === "pending" ? (
+                    <Button
+                      className="min-h-12 flex-1 rounded-xl bg-[#009EE3] font-semibold text-white hover:bg-[#08A8EE]"
+                      nativeButton={false}
+                      render={<Link href={`/cuenta/compras/${order.id}`} />}
+                    >
+                      Continuar pago
+                    </Button>
+                  ) : null}
                   {order.firstTicketId ? (
                     <Button
                       variant="outline"

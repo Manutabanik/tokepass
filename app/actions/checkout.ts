@@ -2,39 +2,43 @@
 
 import { revalidatePath } from "next/cache"
 
-import { createPaymentPreference } from "@/app/actions/payments"
 import { resolveCheckoutExpiresAt } from "@/lib/checkout-hold"
-import { MAX_TICKETS_PER_PURCHASE } from "@/lib/checkout-limits"
 import {
-  validateCheckoutBuyer,
   type CheckoutBuyerInfo,
   type NormalizedCheckoutBuyer,
 } from "@/lib/checkout-buyer"
 import { isPastEvent, isSoldOut } from "@/lib/event-status"
 import { logger } from "@/lib/logger"
+import { captureCriticalException } from "@/lib/sentry/capture"
+import { getSiteUrl } from "@/lib/mercadopago"
+import {
+  PaymentProviderNotSupportedError,
+  PaymentProviderUnavailableError,
+} from "@/lib/payments/core/errors"
+import { PaymentGatewayFactory } from "@/lib/payments/core/factory"
+import type { SupportedPaymentProvider } from "@/lib/payments/core/interfaces"
+import { buildCheckoutBackUrls } from "@/lib/payments/mercadopago"
+import { consumeRateLimit } from "@/lib/rate-limit"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import type { PaymentProvider } from "@/types/database"
+import {
+  CheckoutPayloadSchema,
+  buyerToHolderFields,
+  formatCheckoutPayloadError,
+  type CheckoutAddonItem,
+  type CheckoutCartItem,
+} from "@/lib/validations/checkout"
 
 const EVENT_FINISHED_ERROR = "El evento ya ha finalizado"
 const EVENT_SOLD_OUT_ERROR = "El evento o sector se encuentra agotado"
+const GENERIC_CHECKOUT_ERROR =
+  "Ocurrió un error al procesar tu solicitud"
+
+export type { CheckoutCartItem, CheckoutAddonItem }
 
 export type ReservedTicket = {
   ticket_id: string
-}
-
-export type CheckoutCartItem = {
-  tierId: string
-  quantity: number
-  seatingUnitId?: string
-  /** sector_key del mapa / seating_layout; la RPC cruza zone_tier_pricing. */
-  sectorKey?: string | null
-  tableNumber?: number | null
-  zoneId?: string | null
-}
-
-export type CheckoutAddonItem = {
-  itemId: string
-  quantity: number
 }
 
 export type CheckoutResult =
@@ -43,6 +47,7 @@ export type CheckoutResult =
       tickets: ReservedTicket[]
       orderId: string
       initPoint: string
+      paymentUrl: string
       /** ISO fin del hold (8m). Fuente de verdad UX del countdown. */
       expiresAt: string
       reservedUntil?: string
@@ -113,6 +118,7 @@ async function cleanupPendingOrder(orderId: string): Promise<void> {
       })
     }
   } catch (error) {
+    captureCriticalException(error, "checkout/cleanup", { orderId })
     logger.error({
       context: "checkout/cleanup",
       message: "pending_order_cleanup_failed",
@@ -164,8 +170,25 @@ export async function processCheckout(
   tierId: string,
   quantity: number,
   eventId: string,
+  buyerInfo?: CheckoutBuyerInfo | null,
 ): Promise<CheckoutResult> {
-  return startCheckoutWithPayment(eventId, [{ tierId, quantity }])
+  const parsed = CheckoutPayloadSchema.safeParse({
+    eventId,
+    items: [{ tierId, quantity }],
+    buyer: buyerInfo,
+  })
+  if (!parsed.success) {
+    return { success: false, error: formatCheckoutPayloadError(parsed.error) }
+  }
+
+  return startCheckoutWithPayment(
+    parsed.data.eventId,
+    parsed.data.items ?? [{ tierId, quantity }],
+    parsed.data.referralCode,
+    parsed.data.addons,
+    buyerToHolderFields(parsed.data.buyer),
+    parsed.data.promoCodeId,
+  )
 }
 
 const SEATING_COLLISION_MESSAGE =
@@ -183,12 +206,25 @@ export async function reserveSeatAtomic(
   referralCode?: string | null,
   buyer?: CheckoutBuyerInfo | null,
   promoCodeId?: string | null,
+  paymentProvider?: SupportedPaymentProvider,
 ): Promise<CheckoutResult> {
-  const cleanEventId = eventId.trim()
-  const cleanSeatId = seatId.trim()
+  const parsed = CheckoutPayloadSchema.safeParse({
+    eventId,
+    seatingIds: [seatId],
+    buyer,
+    referralCode,
+    promoCodeId,
+    paymentProvider,
+  })
+  if (!parsed.success) {
+    return { success: false, error: formatCheckoutPayloadError(parsed.error) }
+  }
+
+  const cleanEventId = parsed.data.eventId
+  const cleanSeatId = parsed.data.seatingIds?.[0] ?? seatId.trim()
   const cleanUserId = userId.trim()
 
-  if (!cleanEventId || !cleanSeatId || !cleanUserId) {
+  if (!/^[0-9a-f-]{36}$/i.test(cleanUserId)) {
     return { success: false, error: "Datos de ubicación incompletos." }
   }
 
@@ -231,10 +267,11 @@ export async function reserveSeatAtomic(
         tableNumber: tableMatch ? Number(tableMatch[1]) : null,
       },
     ],
-    referralCode,
+    parsed.data.referralCode,
     [],
-    buyer,
-    promoCodeId,
+    buyerToHolderFields(parsed.data.buyer),
+    parsed.data.promoCodeId,
+    { paymentProvider: parsed.data.paymentProvider },
   )
 
   if (!result.success && result.error === "out_of_stock") {
@@ -251,62 +288,36 @@ export async function startCheckoutWithPayment(
   addons: CheckoutAddonItem[] = [],
   buyerInfo?: CheckoutBuyerInfo | null,
   promoCodeId?: string | null,
-  options?: { sandbox?: boolean },
+  options?: {
+    sandbox?: boolean
+    paymentProvider?: SupportedPaymentProvider
+  },
 ): Promise<CheckoutResult> {
-  if (!eventId || items.length === 0) {
-    return { success: false, error: "Datos de compra incompletos." }
+  const parsed = CheckoutPayloadSchema.safeParse({
+    eventId,
+    items,
+    seatingIds: items.flatMap((item) => {
+      const ids = [...(item.seatingIds ?? [])]
+      if (item.seatingUnitId) ids.push(item.seatingUnitId)
+      return ids
+    }),
+    addons,
+    buyer: buyerInfo,
+    referralCode,
+    promoCodeId,
+    sandbox: options?.sandbox,
+    paymentProvider: options?.paymentProvider,
+  })
+  if (!parsed.success) {
+    return { success: false, error: formatCheckoutPayloadError(parsed.error) }
   }
 
-  const buyerValidation = validateCheckoutBuyer(buyerInfo)
-  if (!buyerValidation.ok) {
-    return { success: false, error: buyerValidation.error }
-  }
-  const buyer = buyerValidation.buyer
-
-  const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0)
-
-  if (
-    !Number.isInteger(totalQuantity) ||
-    totalQuantity < 1 ||
-    totalQuantity > MAX_TICKETS_PER_PURCHASE
-  ) {
-    return {
-      success: false,
-      error: `Podés reservar entre 1 y ${MAX_TICKETS_PER_PURCHASE} entradas por compra.`,
-    }
-  }
-
-  for (const item of items) {
-    if (
-      !item.tierId ||
-      !Number.isInteger(item.quantity) ||
-      item.quantity < 1
-    ) {
-      return { success: false, error: "Selección de entradas inválida." }
-    }
-  }
-
-  const seatingItems = items.filter((item) => item.seatingUnitId)
-  if (
-    seatingItems.length > 1 ||
-    (seatingItems.length === 1 &&
-      (items.length !== 1 || seatingItems[0]?.quantity !== 1))
-  ) {
-    return {
-      success: false,
-      error: "Comprá una ubicación numerada por operación.",
-    }
-  }
-
-  for (const addon of addons) {
-    if (
-      !addon.itemId ||
-      !Number.isInteger(addon.quantity) ||
-      addon.quantity < 1
-    ) {
-      return { success: false, error: "Selección de consumiciones inválida." }
-    }
-  }
+  const payload = parsed.data
+  const cartItems = payload.items ?? items
+  const buyer = buyerToHolderFields(payload.buyer) satisfies NormalizedCheckoutBuyer
+  const seatingItems = cartItems.filter(
+    (item) => item.seatingUnitId || (item.seatingIds?.length ?? 0) > 0,
+  )
 
   const supabase = await createClient()
   const {
@@ -318,16 +329,30 @@ export async function startCheckoutWithPayment(
     return { success: false, error: "auth_required" }
   }
 
+  const checkoutAllowed = await consumeRateLimit({
+    bucketKey: `checkout:user:${user.id}`,
+    limit: 8,
+    windowSeconds: 10 * 60,
+    useAdmin: true,
+  })
+  if (!checkoutAllowed) {
+    return {
+      success: false,
+      error:
+        "Has superado el límite de intentos de compra. Por favor, espera unos minutos.",
+    }
+  }
+
   const [{ data: eventRow }, { data: eventTiers }] = await Promise.all([
     supabase
       .from("events")
-      .select("date, ends_at, schedule_days")
-      .eq("id", eventId)
+      .select("date, ends_at, schedule_days, title")
+      .eq("id", payload.eventId)
       .maybeSingle(),
     supabase
       .from("ticket_tiers")
       .select("capacity, sold, visibility")
-      .eq("event_id", eventId),
+      .eq("event_id", payload.eventId),
   ])
 
   if (
@@ -358,30 +383,30 @@ export async function startCheckoutWithPayment(
 
   // Nunca confiar en promoter_id del cliente: solo resolver ?ref=CODE en servidor.
   let promoterId: string | null = null
-  const cleanRef = referralCode?.trim()
+  const cleanRef = payload.referralCode
   if (cleanRef) {
     const { data: resolved } = await supabase.rpc(
       "resolve_promoter_for_checkout",
       {
         p_referral_code: cleanRef,
-        p_event_id: eventId,
+        p_event_id: payload.eventId,
       },
     )
     promoterId = resolved ?? null
   }
 
-  const tierIds = [...new Set(items.map((item) => item.tierId))]
+  const tierIds = [...new Set(cartItems.map((item) => item.tierId))]
   const { data: tierMeta } = await supabase
     .from("ticket_tiers")
     .select("id, seating_sector_id")
-    .eq("event_id", eventId)
+    .eq("event_id", payload.eventId)
     .in("id", tierIds)
 
   const sectorByTier = new Map(
     (tierMeta ?? []).map((row) => [row.id, row.seating_sector_id]),
   )
 
-  const rpcItems = items.map((item) => ({
+  const rpcItems = cartItems.map((item) => ({
     tier_id: item.tierId,
     quantity: item.quantity,
     sector_key: item.sectorKey ?? sectorByTier.get(item.tierId) ?? null,
@@ -396,23 +421,27 @@ export async function startCheckoutWithPayment(
     try {
       await supabase.rpc("expire_buyer_pending_event_orders", {
         p_owner_id: user.id,
-        p_event_id: eventId,
+        p_event_id: payload.eventId,
       })
     } catch {
       // RPC ausente en entornos sin P22 todavía — reserve_tickets_tx cubre el caso.
     }
 
     const seatingItem = seatingItems[0]
-    const reservation = seatingItem?.seatingUnitId
+    const seatingUnitId =
+      seatingItem?.seatingUnitId ??
+      seatingItem?.seatingIds?.[0] ??
+      payload.seatingIds?.[0]
+    const reservation = seatingUnitId
       ? await supabase.rpc("reserve_seating_unit_tx", {
-          p_event_id: eventId,
+          p_event_id: payload.eventId,
           p_owner_id: user.id,
-          p_tier_id: seatingItem.tierId,
-          p_seating_unit_id: seatingItem.seatingUnitId,
+          p_tier_id: seatingItem?.tierId ?? cartItems[0]?.tierId,
+          p_seating_unit_id: seatingUnitId,
           p_promoter_id: promoterId,
         })
       : await supabase.rpc("reserve_tickets_tx", {
-          p_event_id: eventId,
+          p_event_id: payload.eventId,
           p_owner_id: user.id,
           p_items: rpcItems,
           p_promoter_id: promoterId,
@@ -426,7 +455,7 @@ export async function startCheckoutWithPayment(
       logger.error({
         context: "checkout/reservation",
         message: "reservation_rpc_failed",
-        eventId,
+        eventId: payload.eventId,
         userId: user.id,
         error: error.message,
       })
@@ -456,13 +485,13 @@ export async function startCheckoutWithPayment(
       return { success: false, error: holderApplied.error }
     }
 
-    if (addons.length > 0) {
+    if (payload.addons.length > 0) {
       const { error: addonsError } = await supabase.rpc(
         "attach_event_items_to_order",
         {
           p_order_id: orderId,
           p_owner_id: user.id,
-          p_items: addons.map((addon) => ({
+          p_items: payload.addons.map((addon) => ({
             item_id: addon.itemId,
             quantity: addon.quantity,
           })),
@@ -478,12 +507,12 @@ export async function startCheckoutWithPayment(
 
         return {
           success: false,
-          error: addonsError.message || "No se pudieron reservar las consumiciones.",
+          error: "No se pudieron reservar las consumiciones.",
         }
       }
     }
 
-    const cleanPromoId = promoCodeId?.trim() || null
+    const cleanPromoId = payload.promoCodeId
     if (cleanPromoId) {
       const { data: promoRows, error: promoError } = await supabase.rpc(
         "apply_promo_code_to_order",
@@ -497,12 +526,15 @@ export async function startCheckoutWithPayment(
       const promoResult = Array.isArray(promoRows) ? promoRows[0] : promoRows
       if (promoError || !promoResult?.ok) {
         await cleanupPendingOrder(orderId)
+        logger.error({
+          context: "checkout/promo",
+          message: "promo_apply_failed",
+          orderId,
+          error: promoError?.message ?? promoResult?.message,
+        })
         return {
           success: false,
-          error:
-            promoResult?.message ||
-            promoError?.message ||
-            "No se pudo aplicar el cupón.",
+          error: "No se pudo aplicar el cupón.",
         }
       }
     }
@@ -529,10 +561,10 @@ export async function startCheckoutWithPayment(
     }
 
     let initPoint: string
-    const useSandbox = Boolean(options?.sandbox)
+    const useSandbox = Boolean(payload.sandbox)
 
     if (useSandbox) {
-      const allowed = await assertSandboxCheckoutAllowed(eventId, user.id)
+      const allowed = await assertSandboxCheckoutAllowed(payload.eventId, user.id)
       if (!allowed.ok) {
         await cleanupPendingOrder(orderId)
         return { success: false, error: allowed.error }
@@ -604,23 +636,123 @@ export async function startCheckoutWithPayment(
 
       initPoint = `/checkout/success?order_id=${orderId}&free=1`
     } else {
-      const preference = await createPaymentPreference(orderId)
-
-      if (!preference.success) {
+      const provider = payload.paymentProvider
+      let adapter
+      try {
+        adapter = PaymentGatewayFactory.getAdapter(provider)
+      } catch (error) {
         await cleanupPendingOrder(orderId)
+        captureCriticalException(error, "checkout/payment", {
+          orderId,
+          provider,
+        })
+        const message =
+          error instanceof PaymentProviderNotSupportedError
+            ? error.message
+            : GENERIC_CHECKOUT_ERROR
+        logger.error({
+          context: "checkout/payment",
+          message: "adapter_unavailable",
+          orderId,
+          provider,
+          error,
+        })
+        return { success: false, error: message }
+      }
+
+      const siteUrl = getSiteUrl()
+      const urls = buildCheckoutBackUrls(siteUrl, orderId)
+      const webhookUrl =
+        provider === "mercadopago"
+          ? urls.notificationUrl
+          : `${siteUrl.replace(/\/$/, "")}/api/webhooks/${provider}`
+
+      try {
+        const session = await adapter.createCheckoutSession({
+          orderId,
+          amount: finalTotal,
+          currency: "ARS",
+          description: `${eventRow?.title ?? "Tokepass"} — entradas`.slice(
+            0,
+            256,
+          ),
+          buyer: {
+            name: buyer.buyerName,
+            email: buyer.buyerEmail,
+            dni: buyer.buyerDni,
+          },
+          items: [
+            {
+              title: `${eventRow?.title ?? "Tokepass"} — entradas`,
+              quantity: 1,
+              unitPrice: finalTotal,
+            },
+          ],
+          redirectUrls: {
+            success: urls.success,
+            failure: urls.failure,
+            pending: urls.pending,
+          },
+          webhookUrl,
+        })
+
+        const admin = createAdminClient()
+        const providerRow: PaymentProvider = session.provider
+        const { data: updatedOrder, error: persistError } = await admin
+          .from("orders")
+          .update({
+            payment_provider: providerRow,
+            provider_preference_id: session.preferenceId,
+            ...(session.provider === "mercadopago"
+              ? { mp_preference_id: session.preferenceId }
+              : {}),
+          })
+          .eq("id", orderId)
+          .eq("status", "pending")
+          .select("id")
+          .maybeSingle()
+
+        if (persistError || !updatedOrder) {
+          await cleanupPendingOrder(orderId)
+          logger.error({
+            context: "checkout/payment",
+            message: "provider_preference_persist_failed",
+            orderId,
+            provider: session.provider,
+            error: persistError?.message ?? "order_not_pending",
+          })
+          return {
+            success: false,
+            error: GENERIC_CHECKOUT_ERROR,
+          }
+        }
+
+        initPoint = session.checkoutUrl
+      } catch (error) {
+        await cleanupPendingOrder(orderId)
+        captureCriticalException(error, "checkout/payment", {
+          orderId,
+          provider,
+        })
+        logger.error({
+          context: "checkout/payment",
+          message: "checkout_session_failed",
+          orderId,
+          provider,
+          error,
+        })
         return {
           success: false,
           error:
-            preference.error ||
-            "Mercado Pago no respondió. Intentá de nuevo en unos minutos.",
+            error instanceof PaymentProviderUnavailableError
+              ? error.message
+              : GENERIC_CHECKOUT_ERROR,
         }
       }
-
-      initPoint = preference.initPoint
     }
 
     pendingOrderId = null
-    revalidatePath(`/events/${eventId}`)
+    revalidatePath(`/events/${payload.eventId}`)
     revalidatePath("/events")
     revalidatePath("/cuenta/entradas")
     revalidatePath("/admin")
@@ -637,6 +769,7 @@ export async function startCheckoutWithPayment(
       tickets: reservedTickets,
       orderId,
       initPoint,
+      paymentUrl: initPoint,
       expiresAt,
       ...(reservedUntil ? { reservedUntil } : {}),
     }
@@ -645,17 +778,22 @@ export async function startCheckoutWithPayment(
       await cleanupPendingOrder(pendingOrderId)
     }
 
+    captureCriticalException(error, "checkout/start", {
+      eventId: payload.eventId,
+      userId: user.id,
+      orderId: pendingOrderId ?? undefined,
+    })
     logger.error({
       context: "checkout/start",
       message: "unexpected_checkout_error",
-      eventId,
+      eventId: payload.eventId,
       userId: user.id,
       orderId: pendingOrderId,
       error,
     })
     return {
       success: false,
-      error: "Error inesperado durante el checkout. Intentá nuevamente.",
+      error: GENERIC_CHECKOUT_ERROR,
     }
   }
 }
@@ -728,13 +866,26 @@ export async function startSandboxCheckout(
   buyerInfo?: CheckoutBuyerInfo | null,
   promoCodeId?: string | null,
 ): Promise<CheckoutResult> {
-  return startCheckoutWithPayment(
+  const parsed = CheckoutPayloadSchema.safeParse({
     eventId,
     items,
-    referralCode,
     addons,
-    buyerInfo,
+    buyer: buyerInfo,
+    referralCode,
     promoCodeId,
+    sandbox: true,
+  })
+  if (!parsed.success) {
+    return { success: false, error: formatCheckoutPayloadError(parsed.error) }
+  }
+
+  return startCheckoutWithPayment(
+    parsed.data.eventId,
+    parsed.data.items ?? items,
+    parsed.data.referralCode,
+    parsed.data.addons,
+    buyerToHolderFields(parsed.data.buyer),
+    parsed.data.promoCodeId,
     { sandbox: true },
   )
 }
@@ -753,30 +904,34 @@ export type CreateCheckoutPreferenceInput = {
 
 /**
  * Facade pedida por Checkout Preference API.
- * Internamente: reserva atómica → `createPaymentPreference(orderId)` → initPoint.
+ * Internamente: reserva atómica → PaymentGatewayFactory → checkoutUrl.
+ * El cliente debe hacer `window.location.assign(paymentUrl)` de inmediato.
  * No confía en `unitPrice` del cliente.
  */
 export async function createCheckoutPreference(
   input: CreateCheckoutPreferenceInput,
 ): Promise<CheckoutResult> {
-  const eventId = input.eventId?.trim()
-  const ticketTypeId = input.ticketTypeId?.trim()
-  const quantity = input.quantity
-
-  if (!eventId || !ticketTypeId) {
-    return { success: false, error: "Datos de compra incompletos." }
-  }
-
-  return startCheckoutWithPayment(
-    eventId,
-    [{ tierId: ticketTypeId, quantity }],
-    input.referralCode,
-    [],
-    {
+  const parsed = CheckoutPayloadSchema.safeParse({
+    eventId: input.eventId,
+    items: [{ tierId: input.ticketTypeId, quantity: input.quantity }],
+    buyer: {
       buyerName: input.buyerName ?? "",
       buyerDni: input.buyerDni ?? "",
       buyerEmail: input.buyerEmail ?? "",
       buyerPhone: "",
     },
+    referralCode: input.referralCode,
+  })
+  if (!parsed.success) {
+    return { success: false, error: formatCheckoutPayloadError(parsed.error) }
+  }
+
+  return startCheckoutWithPayment(
+    parsed.data.eventId,
+    parsed.data.items ?? [],
+    parsed.data.referralCode,
+    parsed.data.addons,
+    buyerToHolderFields(parsed.data.buyer),
+    parsed.data.promoCodeId,
   )
 }

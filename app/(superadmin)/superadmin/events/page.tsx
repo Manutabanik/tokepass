@@ -36,9 +36,9 @@ export default async function SuperAdminEventsPage() {
         description="Acá ves todos los eventos de la plataforma, sin importar qué productora los creó."
       />
 
-      <Card className="border-0 bg-white/[0.035] py-0 ring-1 ring-white/8">
-        <CardHeader className="border-b border-white/8 px-5 py-5 sm:px-6">
-          <CardTitle className="text-base text-white">
+      <Card className="border border-border bg-card py-0 text-card-foreground">
+        <CardHeader className="border-b border-border px-5 py-5 sm:px-6">
+          <CardTitle className="text-base font-medium text-muted-foreground">
             {events.length} {events.length === 1 ? "evento" : "eventos"}
           </CardTitle>
         </CardHeader>
@@ -47,11 +47,11 @@ export default async function SuperAdminEventsPage() {
           {events.length > 0 ? (
             <Table>
               <TableHeader>
-                <TableRow className="border-white/8 hover:bg-transparent">
-                  <TableHead className="pl-6 text-zinc-600">Evento</TableHead>
-                  <TableHead className="text-zinc-600">Organizador</TableHead>
-                  <TableHead className="text-zinc-600">Fecha</TableHead>
-                  <TableHead className="pr-6 text-right text-zinc-600">
+                <TableRow className="border-border hover:bg-transparent">
+                  <TableHead className="pl-6 text-muted-foreground">Evento</TableHead>
+                  <TableHead className="text-muted-foreground">Organizador</TableHead>
+                  <TableHead className="text-muted-foreground">Fecha</TableHead>
+                  <TableHead className="pr-6 text-right text-muted-foreground">
                     Estado
                   </TableHead>
                 </TableRow>
@@ -60,35 +60,35 @@ export default async function SuperAdminEventsPage() {
                 {events.map((event) => (
                   <TableRow
                     key={event.id}
-                    className="border-white/8 hover:bg-white/[0.025]"
+                    className="border-border hover:bg-muted/50"
                   >
                     <TableCell className="max-w-72 py-4 pl-6">
                       <Link
                         href={`/superadmin/events/${event.id}`}
                         className="group block"
                       >
-                        <p className="flex items-center gap-1 truncate font-medium text-zinc-200 group-hover:text-white">
+                        <p className="flex items-center gap-1 truncate font-medium text-foreground group-hover:text-primary">
                           {event.title}
                           <ChevronRight
-                            className="size-3.5 shrink-0 text-zinc-600 group-hover:text-sky-300"
+                            className="size-3.5 shrink-0 text-muted-foreground group-hover:text-sky-700 dark:group-hover:text-sky-300"
                             aria-hidden="true"
                           />
                         </p>
-                        <p className="mt-1 flex items-center gap-1 truncate text-xs text-zinc-600">
+                        <p className="mt-1 flex items-center gap-1 truncate text-xs text-muted-foreground">
                           <MapPin className="size-3" aria-hidden="true" />
                           {event.location}
                         </p>
                       </Link>
                     </TableCell>
                     <TableCell>
-                      <p className="truncate text-sm text-zinc-300">
+                      <p className="truncate text-sm text-foreground">
                         {event.organizerName}
                       </p>
-                      <p className="truncate text-xs text-zinc-600">
+                      <p className="truncate text-xs text-muted-foreground">
                         {event.organizerEmail}
                       </p>
                     </TableCell>
-                    <TableCell className="text-slate-600 dark:text-zinc-400">
+                    <TableCell className="text-muted-foreground">
                       {formatDateTime(event.date)}
                     </TableCell>
                     <TableCell className="pr-6 text-right">
@@ -101,10 +101,10 @@ export default async function SuperAdminEventsPage() {
           ) : (
             <div className="grid min-h-72 place-items-center px-6 py-12 text-center">
               <div>
-                <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-white/5 text-slate-600 dark:text-zinc-400">
+                <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-muted text-muted-foreground">
                   <CalendarDays className="size-5" aria-hidden="true" />
                 </span>
-                <p className="mt-4 text-sm text-slate-600 dark:text-zinc-400">
+                <p className="mt-4 text-sm text-muted-foreground">
                   Aún no se han creado eventos en la plataforma.
                 </p>
               </div>

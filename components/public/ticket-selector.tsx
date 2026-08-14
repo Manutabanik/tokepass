@@ -18,7 +18,10 @@ import { validatePromoCode } from "@/app/actions/coupons"
 import { UniversalSeatSelectionFlow } from "@/components/b2c/universal-seat-selection"
 import { TicketTierSelector } from "@/components/public/ticket-tier-selector"
 import { CheckoutBuyerFields } from "@/components/public/checkout-buyer-fields"
-import { CheckoutCountdown } from "@/components/public/checkout-countdown"
+import {
+  PaymentMethodSelector,
+  type CheckoutPaymentProvider,
+} from "@/components/public/payment-method-selector"
 import { PromoCodeInput } from "@/components/public/promo-code-input"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -26,6 +29,7 @@ import {
   validateCheckoutBuyer,
   type CheckoutBuyerInfo,
 } from "@/lib/checkout-buyer"
+import { redirectToCheckoutPaymentOrToast } from "@/lib/checkout-redirect"
 import { MAX_TICKETS_PER_PURCHASE } from "@/lib/checkout-limits"
 import { formatCurrency } from "@/lib/format"
 import {
@@ -134,10 +138,8 @@ export function TicketSelector({
     Object.fromEntries(tiers.map((tier) => [tier.id, 0])),
   )
   const [appliedPromo, setAppliedPromo] = useState<ValidatedPromo | null>(null)
-  const [paymentHold, setPaymentHold] = useState<{
-    initPoint: string
-    expiresAt: string
-  } | null>(null)
+  const [selectedProvider, setSelectedProvider] =
+    useState<CheckoutPaymentProvider>("mercadopago")
   const [storedRef] = useState<string | null>(() => {
     if (typeof window === "undefined") return null
     return getStoredReferralCode()
@@ -159,19 +161,10 @@ export function TicketSelector({
   }, [])
 
   function enterPaymentHold(result: {
-    initPoint: string
-    expiresAt: string
+    initPoint?: string
+    paymentUrl?: string
   }) {
-    if (result.initPoint.startsWith("/")) {
-      window.location.assign(result.initPoint)
-      return
-    }
-    setShowSeatFlow(false)
-    setPaymentHold({
-      initPoint: result.initPoint,
-      expiresAt: result.expiresAt,
-    })
-    toast.success("Entrada reservada. Completá el pago a tiempo.")
+    redirectToCheckoutPaymentOrToast(result.paymentUrl ?? result.initPoint)
   }
 
   const resolvedRef = referralCode?.trim() || storedRef
@@ -347,6 +340,7 @@ export function TicketSelector({
         [],
         buyerCheck.buyer,
         appliedPromo?.promoCodeId ?? null,
+        { paymentProvider: selectedProvider },
       )
 
       if (!result.success) {
@@ -397,7 +391,7 @@ export function TicketSelector({
       }
 
       toast.success("Compra de prueba OK · Modo Sandbox")
-      router.push(result.initPoint)
+      redirectToCheckoutPaymentOrToast(result.paymentUrl ?? result.initPoint)
     })
   }
 
@@ -455,6 +449,7 @@ export function TicketSelector({
           [],
           buyerCheck.buyer,
           appliedPromo?.promoCodeId ?? null,
+          { paymentProvider: selectedProvider },
         )
 
         if (!result.success) {
@@ -517,6 +512,7 @@ export function TicketSelector({
         resolvedRef,
         buyerCheck.buyer,
         appliedPromo?.promoCodeId ?? null,
+        selectedProvider,
       )
 
       if (!result.success) {
@@ -540,54 +536,6 @@ export function TicketSelector({
 
       enterPaymentHold(result)
     })
-  }
-
-  if (paymentHold) {
-    return (
-      <div className="rounded-3xl border border-border bg-card p-5 text-card-foreground shadow-2xl shadow-black/40 sm:p-6">
-        <CheckoutCountdown
-          expiresAt={paymentHold.expiresAt}
-          redirectTo={`/events/${eventId}`}
-          onExpired={() => setPaymentHold(null)}
-        />
-        <p className="mt-4 text-base text-muted-foreground">
-          Tu cupo está bloqueado. Pagá antes de que venza el reloj.
-        </p>
-        <div className="hidden sm:block">
-          <a
-            href={paymentHold.initPoint}
-            className="mt-5 inline-flex min-h-12 h-14 w-full items-center justify-center gap-2 rounded-xl bg-[#009EE3] px-5 text-base font-black text-white transition hover:bg-[#08A8EE] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
-          >
-            Pagar
-          </a>
-          <Button
-            type="button"
-            variant="ghost"
-            className="mt-3 min-h-12 w-full text-muted-foreground hover:text-foreground"
-            onClick={() => {
-              setPaymentHold(null)
-              router.refresh()
-            }}
-          >
-            Cancelar y elegir de nuevo
-          </Button>
-        </div>
-        <div
-          className={cn(
-            "fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background/95 px-4 pt-3",
-            "pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-xl sm:hidden",
-          )}
-        >
-          <a
-            href={paymentHold.initPoint}
-            className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl bg-[#009EE3] text-base font-black text-white"
-          >
-            Pagar
-          </a>
-        </div>
-        <div className="h-24 sm:hidden" aria-hidden="true" />
-      </div>
-    )
   }
 
   if (showSeatFlow && universalPayload) {
@@ -674,6 +622,14 @@ export function TicketSelector({
 
       <Separator className="my-5 bg-border" />
 
+      <PaymentMethodSelector
+        selectedProvider={selectedProvider}
+        onSelectProvider={setSelectedProvider}
+        disabled={controlsLocked}
+      />
+
+      <Separator className="my-5 bg-border" />
+
       <div className="rounded-2xl border border-border bg-muted/30 p-4">
         <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
           Resumen
@@ -744,8 +700,8 @@ export function TicketSelector({
       ) : null}
       <p className="mt-3 hidden text-center text-sm text-muted-foreground sm:block">
         {sandboxEligible
-          ? "Modo Sandbox disponible para el organizador · sin Mercado Pago."
-          : "Vas a ser redirigido a Mercado Pago."}
+          ? "Modo Sandbox disponible para el organizador · sin pasarela."
+          : "Vas a ser redirigido a la pasarela de pago."}
       </p>
 
       {/* Mobile sticky conversion bar */}

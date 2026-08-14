@@ -70,7 +70,7 @@ export default async function EventStorePage({
       <div>
         <Link
           href={`/admin/events/${eventId}`}
-          className="mb-5 inline-flex items-center gap-2 text-sm text-slate-600 dark:text-zinc-400 transition hover:text-zinc-900 dark:hover:text-white"
+          className="mb-5 inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-foreground"
         >
           <ArrowLeft className="size-4" />
           Volver al centro de mando
@@ -84,10 +84,10 @@ export default async function EventStorePage({
             <p className="text-sm font-medium text-violet-400">
               Tienda de Extras
             </p>
-            <h1 className="mt-1 text-3xl font-black tracking-[-0.035em] text-zinc-900 dark:text-white">
+            <h1 className="mt-1 text-3xl font-black tracking-[-0.035em] text-foreground">
               {event.title}
             </h1>
-            <p className="mt-2 text-sm text-slate-600 dark:text-zinc-400">
+            <p className="mt-2 text-sm text-muted-foreground">
               Vendé merch, comida, bebidas o servicios. Cada unidad genera un QR
               de canje independiente. Canjealos en el{" "}
               <Link
@@ -125,7 +125,7 @@ export default async function EventStorePage({
         </CardHeader>
         <CardContent className="space-y-3">
           {(items ?? []).length === 0 ? (
-            <p className="text-sm text-slate-600 dark:text-zinc-400">
+            <p className="text-sm text-muted-foreground">
               Todavía no hay productos en la tienda de este evento.
             </p>
           ) : (
@@ -147,16 +147,16 @@ export default async function EventStorePage({
                           className="size-full object-cover"
                         />
                       ) : (
-                        <span className="grid size-full place-items-center text-slate-600 dark:text-zinc-400">
+                        <span className="grid size-full place-items-center text-muted-foreground">
                           <Icon className="size-4" aria-hidden="true" />
                         </span>
                       )}
                     </div>
                     <div className="min-w-0">
-                      <p className="font-semibold text-zinc-900 dark:text-white">
+                      <p className="font-semibold text-foreground">
                         {item.name}
                       </p>
-                      <p className="mt-0.5 text-xs text-slate-600 dark:text-zinc-400">
+                      <p className="mt-0.5 text-xs text-muted-foreground">
                         {EVENT_ITEM_CATEGORY_LABELS[category]}
                         {item.description ? ` · ${item.description}` : null}
                       </p>
@@ -166,7 +166,7 @@ export default async function EventStorePage({
                       </p>
                     </div>
                   </div>
-                  <p className="shrink-0 font-bold tabular-nums text-zinc-900 dark:text-white">
+                  <p className="shrink-0 font-bold tabular-nums text-foreground">
                     {formatCurrency(Number(item.price))}
                   </p>
                 </div>

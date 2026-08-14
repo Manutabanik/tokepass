@@ -145,8 +145,8 @@ export function GuestListDetailPanel({
     <div className="space-y-5 rounded-[1.5rem] border border-zinc-200 dark:border-white/8 bg-white/[0.03] p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h3 className="text-lg font-bold text-zinc-900 dark:text-white">{list.name}</h3>
-          <p className="mt-1 text-sm text-slate-600 dark:text-zinc-400">
+          <h3 className="text-lg font-bold text-foreground">{list.name}</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
             {list.usedGuests}/{list.maxGuests} cupos · límite{" "}
             {formatDateTime(list.validUntil)}
           </p>
@@ -200,16 +200,16 @@ export function GuestListDetailPanel({
       </form>
 
       {entries.length === 0 ? (
-        <p className="py-8 text-center text-sm text-slate-600 dark:text-zinc-400">
+        <p className="py-8 text-center text-sm text-muted-foreground">
           Todavía no hay invitados en esta lista.
         </p>
       ) : (
         <Table>
           <TableHeader>
             <TableRow className="border-zinc-200 dark:border-white/8 hover:bg-transparent">
-              <TableHead className="text-slate-600 dark:text-zinc-400">Invitado</TableHead>
-              <TableHead className="text-slate-600 dark:text-zinc-400">Contacto</TableHead>
-              <TableHead className="text-slate-600 dark:text-zinc-400">Estado</TableHead>
+              <TableHead className="text-muted-foreground">Invitado</TableHead>
+              <TableHead className="text-muted-foreground">Contacto</TableHead>
+              <TableHead className="text-muted-foreground">Estado</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -220,10 +220,10 @@ export function GuestListDetailPanel({
                   key={entry.id}
                   className="border-zinc-200 dark:border-white/8 hover:bg-white/[0.02]"
                 >
-                  <TableCell className="font-medium text-zinc-800 dark:text-zinc-200">
+                  <TableCell className="font-medium text-foreground">
                     {entry.fullName}
                   </TableCell>
-                  <TableCell className="text-slate-600 dark:text-zinc-400">
+                  <TableCell className="text-muted-foreground">
                     {entry.phone || entry.email || "—"}
                   </TableCell>
                   <TableCell>
@@ -242,13 +242,13 @@ export function GuestListDetailPanel({
       )}
 
       <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
-        <DialogContent className="border-zinc-200 dark:border-white/10 bg-[#121216] text-zinc-900 dark:text-zinc-100 sm:max-w-lg">
+        <DialogContent className="border-border bg-card text-card-foreground sm:max-w-lg">
           <form onSubmit={handleBulkSubmit}>
             <DialogHeader>
               <DialogTitle>Carga masiva</DialogTitle>
-              <DialogDescription className="text-zinc-600 dark:text-zinc-400">
+              <DialogDescription className="text-muted-foreground">
                 Una persona por línea. Formato:{" "}
-                <code className="text-zinc-700 dark:text-zinc-300">Nombre, teléfono, email</code>
+                <code className="text-foreground">Nombre, teléfono, email</code>
               </DialogDescription>
             </DialogHeader>
             <div className="mt-4 space-y-2">

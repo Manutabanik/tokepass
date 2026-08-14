@@ -1,6 +1,6 @@
 "use client"
 
-import { Scanner, type IDetectedBarcode } from "@yudiel/react-qr-scanner"
+import type { IDetectedBarcode } from "@yudiel/react-qr-scanner"
 import {
   CameraOff,
   CheckCircle2,
@@ -9,11 +9,20 @@ import {
   ShoppingBag,
   XCircle,
 } from "lucide-react"
+import dynamic from "next/dynamic"
 import { useCallback, useEffect, useRef, useState, useTransition } from "react"
 
 import { redeemItemRPC, type RedeemItemResult } from "@/app/actions/addons"
-import { configureZxingWasm } from "@/lib/scanner/configure-zxing"
 import { cn } from "@/lib/utils"
+
+const Scanner = dynamic(() => import("@/components/admin/qr-camera-scanner"), {
+  ssr: false,
+  loading: () => (
+    <div className="grid h-full min-h-[55dvh] place-items-center px-6 text-center">
+      <p className="text-sm text-zinc-400">Cargando cámara…</p>
+    </div>
+  ),
+})
 
 type VisualState = "idle" | "success" | "error"
 
@@ -63,8 +72,6 @@ function formatRedeemedTime(iso: string | null): string {
 }
 
 export function StoreScanner() {
-  configureZxingWasm()
-
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [visual, setVisual] = useState<VisualState>("idle")
   const [title, setTitle] = useState("")
@@ -211,7 +218,7 @@ export function StoreScanner() {
           <div className="grid h-full min-h-[55dvh] place-items-center px-6 text-center">
             <div>
               <CameraOff className="mx-auto size-10 text-zinc-500" />
-              <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
+              <p className="mt-4 text-sm text-muted-foreground">
                 {cameraError}
               </p>
             </div>

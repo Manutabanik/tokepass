@@ -83,7 +83,7 @@ export function EventCommandHeader({
   const previewHref =
     isDraft || isPaused
       ? `/events/preview/${eventId}`
-      : `/events/${eventId}`
+      : `/eventos/${eventId}`
 
   function changeStatus(next: "published" | "paused" | "draft") {
     startTransition(async () => {
@@ -117,10 +117,10 @@ export function EventCommandHeader({
                 </Badge>
               ) : null}
             </div>
-            <h1 className="text-3xl font-black tracking-tight text-zinc-900 dark:text-white sm:text-4xl">
+            <h1 className="text-3xl font-black tracking-tight text-foreground sm:text-4xl">
               {title}
             </h1>
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">{subtitle}</p>
+            <p className="text-sm text-muted-foreground">{subtitle}</p>
           </div>
 
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">

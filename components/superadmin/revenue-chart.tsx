@@ -10,12 +10,12 @@ export function RevenueChart({ data }: { data: RevenuePoint[] }) {
     <div>
       <div className="flex items-end justify-between">
         <div>
-          <p className="text-sm text-slate-600 dark:text-zinc-400">Ingresos · últimos 14 días</p>
-          <p className="mt-1 text-2xl font-bold tracking-tight text-white">
+          <p className="text-sm text-muted-foreground">Ingresos · últimos 14 días</p>
+          <p className="mt-1 text-2xl font-bold tracking-tight text-foreground">
             {formatCurrency(total)}
           </p>
         </div>
-        <span className="rounded-full bg-white/5 px-2.5 py-1 text-xs text-slate-600 dark:text-zinc-400">
+        <span className="rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
           Ventas brutas
         </span>
       </div>
@@ -31,14 +31,14 @@ export function RevenueChart({ data }: { data: RevenuePoint[] }) {
               key={point.date}
               className="group relative flex flex-1 flex-col items-center justify-end"
             >
-              <div className="pointer-events-none absolute -top-9 z-10 hidden whitespace-nowrap rounded-lg bg-muted dark:bg-zinc-800 px-2 py-1 text-[11px] text-white shadow-lg group-hover:block">
+              <div className="pointer-events-none absolute -top-9 z-10 hidden whitespace-nowrap rounded-lg bg-foreground px-2 py-1 text-[11px] text-background shadow-lg group-hover:block">
                 {formatCompactCurrency(point.revenue)}
               </div>
               <div
                 className="w-full rounded-t-md bg-gradient-to-t from-sky-600/40 to-sky-400/80 transition-all group-hover:from-sky-500/60 group-hover:to-sky-300"
                 style={{ height: `${height}%` }}
               />
-              <span className="mt-2 text-[10px] text-zinc-600">
+              <span className="mt-2 text-[10px] text-muted-foreground">
                 {point.label}
               </span>
             </div>
@@ -47,7 +47,7 @@ export function RevenueChart({ data }: { data: RevenuePoint[] }) {
       </div>
 
       {!hasRevenue && (
-        <p className="mt-4 text-center text-xs text-zinc-600">
+        <p className="mt-4 text-center text-xs text-muted-foreground">
           Aún no hay ventas registradas en el período.
         </p>
       )}

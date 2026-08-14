@@ -1,0 +1,210 @@
+import "server-only"
+
+import { render } from "@react-email/render"
+import { Resend } from "resend"
+import type { SupabaseClient } from "@supabase/supabase-js"
+
+import { TicketReceiptEmail } from "@/components/emails/TicketReceiptEmail"
+import { formatCurrency, formatEventDate } from "@/lib/format"
+import { logger } from "@/lib/logger"
+import { getSiteUrl } from "@/lib/mercadopago"
+
+export type TicketOrderDetails = {
+  orderId: string
+  ticketCount: number
+  totalPaid: number
+}
+
+export type TicketEventDetails = {
+  title: string
+  date: string
+  location: string
+}
+
+let resendClient: Resend | null | undefined
+
+function getResendClient(): Resend | null {
+  if (resendClient !== undefined) return resendClient
+  const apiKey = process.env.RESEND_API_KEY?.trim()
+  resendClient = apiKey ? new Resend(apiKey) : null
+  return resendClient
+}
+
+export function getEmailAppUrl(): string {
+  try {
+    return getSiteUrl()
+  } catch {
+    return (
+      process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
+      process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
+      process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, "") ||
+      "https://www.tokepass.com.ar"
+    )
+  }
+}
+
+export async function sendTicketConfirmationEmail({
+  to,
+  orderDetails,
+  eventDetails,
+  buyerName,
+}: {
+  to: string
+  orderDetails: TicketOrderDetails
+  eventDetails: TicketEventDetails
+  buyerName?: string
+}): Promise<void> {
+  const email = to.trim().toLowerCase()
+  if (!email || !email.includes("@")) {
+    logger.warn({
+      context: "email/resend",
+      message: "skip_invalid_recipient",
+      order_id: orderDetails.orderId,
+    })
+    return
+  }
+
+  const client = getResendClient()
+  if (!client) {
+    logger.warn({
+      context: "email/resend",
+      message: "resend_api_key_missing",
+      order_id: orderDetails.orderId,
+    })
+    return
+  }
+
+  const appUrl = getEmailAppUrl()
+  const walletUrl = `${appUrl}/cuenta/entradas`
+  const logoUrl = `${appUrl}/brand/tokepass-mark.png`
+  const ticketCount = Math.max(1, orderDetails.ticketCount)
+  const eventDateLabel = formatEventDate(eventDetails.date)
+  const totalPaidLabel = formatCurrency(orderDetails.totalPaid)
+  const from =
+    process.env.RESEND_FROM_EMAIL?.trim() || "Tokepass <onboarding@resend.dev>"
+
+  const html = await render(
+    TicketReceiptEmail({
+      buyerName,
+      eventTitle: eventDetails.title,
+      eventDateLabel,
+      eventLocation: eventDetails.location,
+      ticketCount,
+      totalPaidLabel,
+      walletUrl,
+      logoUrl,
+    }),
+  )
+
+  const text = [
+    `Confirmado. Ya tenés tus entradas para ${eventDetails.title}.`,
+    buyerName ? `Hola ${buyerName},` : "Hola,",
+    `Evento: ${eventDetails.title}`,
+    `Fecha: ${eventDateLabel}`,
+    `Lugar: ${eventDetails.location}`,
+    `Entradas: ${ticketCount}`,
+    `Total pagado: ${totalPaidLabel}`,
+    `Billetera: ${walletUrl}`,
+    "Por motivos de seguridad y para evitar fraudes, tus códigos QR son dinámicos y solo pueden visualizarse desde la plataforma. No se adjuntan PDFs.",
+  ].join("\n")
+
+  const { error } = await client.emails.send({
+    from,
+    to: [email],
+    subject: `Confirmado: tus entradas para ${eventDetails.title}`,
+    html,
+    text,
+  })
+
+  if (error) {
+    throw new Error(error.message || "Resend rejected the email")
+  }
+}
+
+/**
+ * Carga orden + evento y envía el recibo. Pensado para el webhook de MP.
+ */
+export async function sendPaidOrderReceiptEmail(
+  admin: SupabaseClient,
+  orderId: string,
+): Promise<void> {
+  const { data: order, error: orderError } = await admin
+    .from("orders")
+    .select("id, total_amount, buyer_id")
+    .eq("id", orderId)
+    .maybeSingle()
+
+  if (orderError || !order) {
+    logger.warn({
+      context: "email/resend",
+      message: "order_not_found",
+      order_id: orderId,
+      error: orderError?.message,
+    })
+    return
+  }
+
+  const [{ data: tickets }, { data: profile }] = await Promise.all([
+    admin
+      .from("tickets")
+      .select("id, event_id, holder_email, holder_name")
+      .eq("order_id", orderId),
+    admin
+      .from("profiles")
+      .select("full_name, email")
+      .eq("id", order.buyer_id)
+      .maybeSingle(),
+  ])
+
+  const ticketRows = tickets ?? []
+  const eventId = ticketRows[0]?.event_id
+  if (!eventId) {
+    logger.warn({
+      context: "email/resend",
+      message: "no_tickets_for_receipt",
+      order_id: orderId,
+    })
+    return
+  }
+
+  const { data: event } = await admin
+    .from("events")
+    .select("title, date, location, venues(name, location)")
+    .eq("id", eventId)
+    .maybeSingle()
+
+  const venue = event?.venues as
+    | { name?: string | null; location?: string | null }
+    | { name?: string | null; location?: string | null }[]
+    | null
+  const venueRow = Array.isArray(venue) ? venue[0] : venue
+  const location =
+    venueRow?.name?.trim() ||
+    venueRow?.location?.trim() ||
+    event?.location?.trim() ||
+    "A confirmar"
+
+  const holderEmail = ticketRows
+    .map((row) => row.holder_email?.trim().toLowerCase())
+    .find((value) => value && value.includes("@"))
+  const to = holderEmail || profile?.email?.trim().toLowerCase() || ""
+  const buyerName =
+    ticketRows.find((row) => row.holder_name?.trim())?.holder_name?.trim() ||
+    profile?.full_name?.trim() ||
+    undefined
+
+  await sendTicketConfirmationEmail({
+    to,
+    buyerName,
+    orderDetails: {
+      orderId: order.id,
+      ticketCount: ticketRows.length || 1,
+      totalPaid: Number(order.total_amount) || 0,
+    },
+    eventDetails: {
+      title: event?.title?.trim() || "Evento Tokepass",
+      date: event?.date || new Date().toISOString(),
+      location,
+    },
+  })
+}

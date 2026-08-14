@@ -342,7 +342,7 @@ export function TicketBundleManager({
             Valor acumulado {formatCurrency(accumulated)}
             {pct > 0 ? ` · Ahorro ${pct}%` : ""}
           </p>
-          <p className="mt-1 text-xs text-slate-600 dark:text-zinc-400">
+          <p className="mt-1 text-xs text-muted-foreground">
             Suma extras + referencia de entrada individual
             {category === "bundle" && scheduleDays.length > 1
               ? ` × ${dayCount} jornada${dayCount === 1 ? "" : "s"}`

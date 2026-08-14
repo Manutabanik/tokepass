@@ -32,7 +32,7 @@ export function OrganizersDirectory({
 }) {
   if (organizers.length === 0) {
     return (
-      <div className="grid min-h-48 place-items-center text-sm text-slate-600 dark:text-zinc-400">
+      <div className="grid min-h-48 place-items-center text-sm text-muted-foreground">
         Todavía no hay productoras aprobadas.
       </div>
     )
@@ -45,20 +45,20 @@ export function OrganizersDirectory({
         {organizers.map((org) => (
           <article
             key={org.id}
-            className="rounded-2xl border border-white/10 bg-black/30 p-4"
+            className="rounded-2xl border border-border bg-card p-4 text-card-foreground"
           >
             <div className="flex items-start gap-3">
-              <span className="grid size-11 shrink-0 place-items-center rounded-full bg-violet-500/15 text-sm font-bold text-violet-300">
+              <span className="grid size-11 shrink-0 place-items-center rounded-full bg-violet-500/15 text-sm font-bold text-violet-700 dark:text-violet-300">
                 {getInitials(org.name, org.email)}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-lg font-bold leading-tight text-white">
+                <p className="text-lg font-bold leading-tight text-foreground">
                   {org.companyName ?? org.name}
                 </p>
-                <p className="mt-1 truncate text-sm text-slate-600 dark:text-zinc-400">
+                <p className="mt-1 truncate text-sm text-muted-foreground">
                   {org.email}
                 </p>
-                <p className="mt-0.5 font-mono text-xs text-zinc-600">
+                <p className="mt-0.5 font-mono text-xs text-muted-foreground">
                   {org.cuitCuil ?? "Sin CUIT"}
                 </p>
               </div>
@@ -71,7 +71,7 @@ export function OrganizersDirectory({
                 >
                   Aprobada
                 </Badge>
-                <span className="text-xs text-slate-600 dark:text-zinc-400">
+                <span className="text-xs text-muted-foreground">
                   {formatNumber(org.totalEvents)} eventos ·{" "}
                   {formatDate(org.joinedAt)}
                 </span>
@@ -96,12 +96,12 @@ export function OrganizersDirectory({
       <div className="hidden md:block">
         <Table>
           <TableHeader>
-            <TableRow className="border-white/8 hover:bg-transparent">
-              <TableHead className="pl-6 text-zinc-600">Productora</TableHead>
-              <TableHead className="text-zinc-600">CUIT</TableHead>
-              <TableHead className="text-zinc-600">Eventos</TableHead>
-              <TableHead className="text-zinc-600">Alta</TableHead>
-              <TableHead className="pr-6 text-right text-zinc-600">
+            <TableRow className="border-border hover:bg-transparent">
+              <TableHead className="pl-6 text-muted-foreground">Productora</TableHead>
+              <TableHead className="text-muted-foreground">CUIT</TableHead>
+              <TableHead className="text-muted-foreground">Eventos</TableHead>
+              <TableHead className="text-muted-foreground">Alta</TableHead>
+              <TableHead className="pr-6 text-right text-muted-foreground">
                 Detalle
               </TableHead>
             </TableRow>
@@ -110,35 +110,35 @@ export function OrganizersDirectory({
             {organizers.map((org) => (
               <TableRow
                 key={org.id}
-                className="border-white/8 hover:bg-white/[0.025]"
+                className="border-border hover:bg-muted/50"
               >
                 <TableCell className="py-4 pl-6">
                   <div className="flex items-center gap-3">
-                    <span className="grid size-9 place-items-center rounded-full bg-violet-500/10 text-xs font-medium text-violet-300">
+                    <span className="grid size-9 place-items-center rounded-full bg-violet-500/10 text-xs font-medium text-violet-700 dark:text-violet-300">
                       {getInitials(org.name, org.email)}
                     </span>
                     <div>
-                      <p className="font-medium text-zinc-100">
+                      <p className="font-medium text-foreground">
                         {org.companyName ?? org.name}
                       </p>
-                      <p className="text-xs text-zinc-600">{org.email}</p>
+                      <p className="text-xs text-muted-foreground">{org.email}</p>
                     </div>
                   </div>
                 </TableCell>
-                <TableCell className="font-mono text-xs text-slate-600 dark:text-zinc-400">
+                <TableCell className="font-mono text-xs text-muted-foreground">
                   {org.cuitCuil ?? "—"}
                 </TableCell>
-                <TableCell className="text-zinc-300">
+                <TableCell className="text-foreground">
                   {formatNumber(org.totalEvents)}
                 </TableCell>
-                <TableCell className="text-slate-600 dark:text-zinc-400">
+                <TableCell className="text-muted-foreground">
                   {formatDate(org.joinedAt)}
                 </TableCell>
                 <TableCell className="pr-6 text-right">
                   <Button
                     size="sm"
                     variant="outline"
-                    className="min-h-11 border-white/15 bg-transparent"
+                    className="min-h-11 border-border bg-transparent"
                     nativeButton={false}
                     render={
                       <Link href={`/superadmin/organizations/${org.id}`} />

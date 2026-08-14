@@ -601,7 +601,13 @@ export async function createEventItem(input: {
 }
 
 export type StoreCheckoutResult =
-  | { success: true; initPoint: string; orderId: string; expiresAt: string }
+  | {
+      success: true
+      initPoint: string
+      paymentUrl: string
+      orderId: string
+      expiresAt: string
+    }
   | { success: false; error: string }
 
 /**
@@ -700,6 +706,7 @@ export async function startStoreCheckout(
   return {
     success: true,
     initPoint: preference.initPoint,
+    paymentUrl: preference.initPoint,
     orderId: String(orderId),
     expiresAt: resolveCheckoutExpiresAt().toISOString(),
   }

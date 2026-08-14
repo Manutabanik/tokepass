@@ -41,10 +41,11 @@ export function buildCheckoutBackUrls(
   orderId: string,
 ): CheckoutPreferenceUrls {
   const base = siteUrl.replace(/\/$/, "")
+  const orderFallback = `${base}/cuenta/compras/${orderId}`
   return {
     success: `${base}/checkout/success?order_id=${orderId}`,
-    failure: `${base}/checkout/failure?order_id=${orderId}`,
-    pending: `${base}/checkout/pending?order_id=${orderId}`,
+    failure: orderFallback,
+    pending: orderFallback,
     notificationUrl: `${base}/api/webhooks/mercadopago`,
   }
 }

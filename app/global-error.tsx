@@ -2,8 +2,10 @@
 
 import { useEffect } from "react"
 import Link from "next/link"
+import * as Sentry from "@sentry/nextjs"
+import { TriangleAlert } from "lucide-react"
 
-import { logger } from "@/lib/logger"
+import "./globals.css"
 
 export default function GlobalError({
   error,
@@ -13,11 +15,11 @@ export default function GlobalError({
   reset: () => void
 }) {
   useEffect(() => {
-    logger.error({
-      context: "app/global-error",
-      message: "global_error_boundary",
-      digest: error.digest,
-      error,
+    Sentry.captureException(error, {
+      tags: {
+        context: "app/global-error",
+        ...(error.digest ? { digest: error.digest } : {}),
+      },
     })
   }, [error])
 
@@ -26,13 +28,9 @@ export default function GlobalError({
       <body className="min-h-screen bg-zinc-50 text-zinc-900 antialiased [@media(prefers-color-scheme:dark)]:bg-zinc-950 [@media(prefers-color-scheme:dark)]:text-zinc-100">
         <main className="grid min-h-screen place-items-center px-6">
           <div className="w-full max-w-md rounded-3xl border border-zinc-200 bg-white p-8 text-center shadow-xl [@media(prefers-color-scheme:dark)]:border-white/10 [@media(prefers-color-scheme:dark)]:bg-zinc-950/80">
-            <img
-              src="/brand/tokepass-mark.png"
-              alt="Tokepass"
-              width={48}
-              height={48}
-              className="mx-auto size-12 rounded-[0.85rem] object-cover ring-1 ring-white/15"
-            />
+            <div className="mx-auto grid size-12 place-items-center rounded-[0.85rem] bg-violet-600/10 text-violet-600 ring-1 ring-violet-500/20 [@media(prefers-color-scheme:dark)]:bg-violet-400/10 [@media(prefers-color-scheme:dark)]:text-violet-300">
+              <TriangleAlert className="size-6" aria-hidden="true" />
+            </div>
             <h1 className="mt-4 text-2xl font-black tracking-tight">
               Algo se rompió
             </h1>

@@ -49,10 +49,10 @@ export function EventSponsorsManager({
   if (!eventId) {
     return (
       <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-5 dark:border-zinc-800 dark:bg-zinc-950/40">
-        <p className="text-sm font-semibold text-zinc-900 dark:text-white">
+        <p className="text-sm font-semibold text-foreground">
           Sponsors del evento
         </p>
-        <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+        <p className="mt-1 text-xs text-muted-foreground">
           Guardá el borrador una vez para poder subir logos de auspiciantes.
         </p>
       </div>
@@ -84,11 +84,11 @@ export function EventSponsorsManager({
 
   return (
     <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-800 dark:bg-zinc-950/40">
-      <p className="flex items-center gap-2 font-mono text-xs font-semibold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
+      <p className="flex items-center gap-2 font-mono text-xs font-semibold uppercase tracking-wider text-foreground">
         <Handshake className="size-3.5" aria-hidden />
         Sponsors del evento
       </p>
-      <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+      <p className="mt-1 text-xs text-muted-foreground">
         PNG o SVG transparente. Aparecen en la ficha pública y en la entrada
         digital. Máximo {MAX_EVENT_SPONSORS}.
       </p>
@@ -108,7 +108,7 @@ export function EventSponsorsManager({
                   className="max-h-6 w-auto object-contain"
                 />
               </span>
-              <span className="max-w-[8rem] truncate text-xs font-medium text-zinc-800 dark:text-zinc-200">
+              <span className="max-w-[8rem] truncate text-xs font-medium text-foreground">
                 {sponsor.name}
               </span>
               <Button

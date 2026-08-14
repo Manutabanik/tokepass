@@ -108,7 +108,7 @@ export default async function EventGuestListsPage({
       <div>
         <Link
           href="/admin/lists"
-          className="mb-5 inline-flex items-center gap-2 text-sm text-slate-600 dark:text-zinc-400 transition hover:text-zinc-900 dark:hover:text-white"
+          className="mb-5 inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-foreground"
         >
           <ArrowLeft className="size-4" />
           Volver a Listas
@@ -117,10 +117,10 @@ export default async function EventGuestListsPage({
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-sm font-medium text-violet-400">FreePass</p>
-            <h1 className="mt-1 text-3xl font-black tracking-[-0.035em] text-zinc-900 dark:text-white">
+            <h1 className="mt-1 text-3xl font-black tracking-[-0.035em] text-foreground">
               Listas · {event.title}
             </h1>
-            <p className="mt-2 max-w-2xl text-sm text-slate-600 dark:text-zinc-400">
+            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
               Cortesías $0 con QR Living Ticket, cupos y hora límite de ingreso.
             </p>
           </div>
@@ -136,10 +136,10 @@ export default async function EventGuestListsPage({
           >
             <CardHeader className="flex flex-row items-center justify-between px-5 pb-2 pt-5">
               <CardDescription>{label}</CardDescription>
-              <Icon className="size-4 text-slate-600 dark:text-zinc-400" />
+              <Icon className="size-4 text-muted-foreground" />
             </CardHeader>
             <CardContent className="px-5 pb-5">
-              <CardTitle className="text-3xl text-zinc-900 dark:text-white">{value}</CardTitle>
+              <CardTitle className="text-3xl text-foreground">{value}</CardTitle>
             </CardContent>
           </Card>
         ))}

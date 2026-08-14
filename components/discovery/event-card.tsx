@@ -20,6 +20,7 @@ import {
 } from "@/lib/favorite-ids-cache"
 import { formatCurrency, formatDiscoveryDateTime } from "@/lib/format"
 import { isBoostActive } from "@/lib/services/events-service"
+import { publicEventPath } from "@/lib/seo/site"
 import { cn } from "@/lib/utils"
 
 const fallbackGradients = [
@@ -96,7 +97,7 @@ export function EventCard({
         )}
       </div>
       <Link
-        href={`/events/${event.id}`}
+        href={publicEventPath(event)}
         className={cn(
           "group flex h-full flex-col overflow-hidden rounded-2xl border transition-all duration-300",
           "border-zinc-200 bg-white hover:scale-[1.02] hover:border-zinc-300 hover:shadow-lg",

@@ -61,10 +61,10 @@ export function EventCommercialSettingsForm({
           <Shield className="size-5" aria-hidden="true" />
         </span>
         <div>
-          <h2 className="text-lg font-bold text-zinc-900 dark:text-white">
+          <h2 className="text-lg font-bold text-foreground">
             Reglas Comerciales
           </h2>
-          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+          <p className="mt-1 text-sm text-muted-foreground">
             Acá configurás cuánto le cobramos al comprador por usar Tokepass y si
             le hacemos algún descuento al organizador. Solo vos, como dueño de la
             plataforma, podés cambiar estos valores.
@@ -110,7 +110,7 @@ export function EventCommercialSettingsForm({
             disabled={pending || sponsored}
             className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
           />
-          <p className="text-xs text-slate-600 dark:text-zinc-400">
+          <p className="text-xs text-muted-foreground">
             Porcentaje que se suma al precio de la entrada al momento del pago.
             Ejemplo: 8 significa un 8%.
           </p>
@@ -127,7 +127,7 @@ export function EventCommercialSettingsForm({
             disabled={pending || sponsored}
             className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
           />
-          <p className="text-xs text-slate-600 dark:text-zinc-400">
+          <p className="text-xs text-muted-foreground">
             Monto fijo en pesos que se suma a cada entrada paga, además del
             porcentaje.
           </p>
@@ -146,7 +146,7 @@ export function EventCommercialSettingsForm({
             disabled={pending}
             className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
           />
-          <p className="text-xs text-slate-600 dark:text-zinc-400">
+          <p className="text-xs text-muted-foreground">
             Cantidad máxima de entradas a $0 que puede crear el organizador para
             este evento. No incluye invitaciones de lista de invitados.
           </p>

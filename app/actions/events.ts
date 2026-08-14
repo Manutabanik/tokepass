@@ -333,11 +333,11 @@ function mapEventFormToRpcPayload(
 }
 
 async function syncTierAdmitCounts(
-  client: SupabaseClient<Database>,
   eventId: string,
   tickets: EventFormValues["tickets"],
 ) {
-  const { data: tiers } = await client
+  const admin = createAdminClient()
+  const { data: tiers } = await admin
     .from("ticket_tiers")
     .select("id, name")
     .eq("event_id", eventId)
@@ -353,7 +353,7 @@ async function syncTierAdmitCounts(
       match.layoutType === "general"
         ? Math.max(1, Math.min(50, match.admitCount ?? 1))
         : 1
-    await client
+    await admin
       .from("ticket_tiers")
       .update({
         admit_count: admit,
@@ -872,11 +872,7 @@ export async function createCompleteEvent(
     }
   }
 
-  await syncTierAdmitCounts(
-    rpcClient,
-    String(eventId),
-    formValues.tickets,
-  )
+  await syncTierAdmitCounts(String(eventId), formValues.tickets)
 
   revalidatePath("/admin")
   revalidatePath("/admin/events")
@@ -1037,7 +1033,7 @@ export async function updateCompleteEvent(
     }
   }
 
-  await syncTierAdmitCounts(mutationClient, eventId, formValues.tickets)
+  await syncTierAdmitCounts(eventId, formValues.tickets)
 
   revalidatePath("/admin")
   revalidatePath("/admin/events")

@@ -59,7 +59,7 @@ function emit(level: LogLevel, fields: LogFields) {
       message: String(payload.message ?? "error"),
       context,
       stack: payload.stack,
-      extra: rest,
+      extra: rest as Record<string, unknown>,
     })
   } else if (level === "warn") {
     console.warn(line)
@@ -69,7 +69,7 @@ function emit(level: LogLevel, fields: LogFields) {
 }
 
 /**
- * Structured JSON logger for production observability (Sentry-ready via SENTRY_DSN).
+ * Structured JSON logger for production observability (Sentry via NEXT_PUBLIC_SENTRY_DSN).
  * Emits one JSON object per line — no business-logic coupling.
  */
 export const logger = {

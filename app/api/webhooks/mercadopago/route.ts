@@ -10,9 +10,13 @@ import { NextResponse, type NextRequest } from "next/server"
 import { getBoostPlan, parseBoostExternalRef } from "@/lib/boost-plans"
 import { parsePaymentExternalReference } from "@/lib/checkout-buyer"
 import { logger } from "@/lib/logger"
+import { captureCriticalException } from "@/lib/sentry/capture"
 import { getMercadoPagoClient, getMercadoPagoWebhookSecret } from "@/lib/mercadopago"
+import { processPaidOrderNotification } from "@/lib/payments/core/confirm-order"
+import { PaymentGatewayFactory } from "@/lib/payments/core/factory"
 import { parseResaleExternalRef } from "@/lib/resale"
 import { notifyGobiOrderPaid } from "@/lib/services/notify-gobi-order-paid"
+import { sendPaidOrderReceiptEmail } from "@/lib/email/resend"
 import type { Database, Json } from "@/types/database"
 
 export const runtime = "nodejs"
@@ -472,9 +476,69 @@ async function refundExpiredPayment(mpPaymentId: string) {
 }
 
 export async function POST(request: NextRequest) {
+  const secret = getMercadoPagoWebhookSecret()
+  if (!secret) {
+    console.error("[WEBHOOK ERROR] webhook secret missing — fail closed")
+    logger.error({
+      context: "webhooks/mercadopago",
+      message: "webhook_secret_missing",
+    })
+    return Response.json(
+      { error: "Webhook secret not configured" },
+      { status: 500 },
+    )
+  }
+
   try {
-    return await processMercadoPagoWebhook(request)
+    const verified = await PaymentGatewayFactory.getAdapter(
+      "mercadopago",
+    ).verifyWebhook(request.clone())
+
+    const isOrderUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        verified.orderId,
+      )
+    const isBoost = Boolean(parseBoostExternalRef(verified.orderId))
+    const isResale = Boolean(parseResaleExternalRef(verified.orderId))
+
+    if (
+      verified.isValid &&
+      verified.status === "approved" &&
+      isOrderUuid &&
+      !isBoost &&
+      !isResale
+    ) {
+      const result = await processPaidOrderNotification({
+        provider: "mercadopago",
+        transactionId: verified.transactionId,
+        orderId: verified.orderId,
+        amount: verified.amount,
+        rawPayload: verified.rawPayload,
+      })
+
+      if (result.needsRefund && verified.transactionId) {
+        try {
+          await refundExpiredPayment(verified.transactionId)
+        } catch (refundError) {
+          logger.error({
+            context: "webhooks/mercadopago",
+            message: "shared_confirm_refund_failed",
+            order_id: verified.orderId,
+            payment_id: verified.transactionId,
+            error: refundError,
+          })
+        }
+      }
+
+      return webhookOk({
+        provider: "mercadopago",
+        ...result,
+      })
+    }
+
+    return await processMercadoPagoWebhook(request, secret)
   } catch (error) {
+    captureCriticalException(error, "webhooks/mercadopago")
     console.error("[WEBHOOK ERROR]", error)
     logger.error({
       context: "webhooks/mercadopago",
@@ -485,7 +549,10 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function processMercadoPagoWebhook(request: NextRequest) {
+async function processMercadoPagoWebhook(
+  request: NextRequest,
+  secret: string,
+) {
   try {
     const paymentId = await extractPaymentId(request)
     const url = new URL(request.url)
@@ -502,36 +569,27 @@ async function processMercadoPagoWebhook(request: NextRequest) {
       return webhookOk({ ignored: true, reason: "missing_payment_id" })
     }
 
-    const secret = getMercadoPagoWebhookSecret()
-    if (!secret) {
-      console.error("[WEBHOOK ERROR] webhook secret missing — continuing")
+    try {
+      WebhookSignatureValidator.validate({
+        xSignature: request.headers.get("x-signature"),
+        xRequestId: request.headers.get("x-request-id"),
+        dataId: paymentId,
+        secret,
+        toleranceSeconds: 300,
+      })
+    } catch (error) {
+      console.error("[WEBHOOK ERROR] signature validation:", error)
       logger.error({
         context: "webhooks/mercadopago",
-        message: "webhook_secret_missing",
+        message: "invalid_signature",
+        payment_id: paymentId,
+        reason:
+          error instanceof InvalidWebhookSignatureError
+            ? error.reason
+            : "signature_error",
       })
-    } else {
-      try {
-        WebhookSignatureValidator.validate({
-          xSignature: request.headers.get("x-signature"),
-          xRequestId: request.headers.get("x-request-id"),
-          dataId: paymentId,
-          secret,
-          toleranceSeconds: 300,
-        })
-      } catch (error) {
-        console.error("[WEBHOOK ERROR] signature validation:", error)
-        logger.error({
-          context: "webhooks/mercadopago",
-          message: "invalid_signature",
-          payment_id: paymentId,
-          reason:
-            error instanceof InvalidWebhookSignatureError
-              ? error.reason
-              : "signature_error",
-        })
-        // ACK anyway — never 401/502 to Mercado Pago.
-        return webhookOk({ ignored: true, reason: "invalid_signature" })
-      }
+      // ACK anyway — never 401/502 to Mercado Pago.
+      return webhookOk({ ignored: true, reason: "invalid_signature" })
     }
 
     let payment
@@ -540,6 +598,9 @@ async function processMercadoPagoWebhook(request: NextRequest) {
       const paymentClient = new Payment(client)
       payment = await paymentClient.get({ id: paymentId })
     } catch (error) {
+      captureCriticalException(error, "webhooks/mercadopago", {
+        payment_id: paymentId,
+      })
       console.error("[WEBHOOK ERROR] payment.get failed:", error)
       logger.error({
         context: "webhooks/mercadopago",
@@ -563,6 +624,7 @@ async function processMercadoPagoWebhook(request: NextRequest) {
     try {
       admin = createWebhookAdminClient()
     } catch (error) {
+      captureCriticalException(error, "webhooks/mercadopago")
       console.error("[WEBHOOK ERROR] admin client unavailable:", error)
       logger.error({
         context: "webhooks/mercadopago",
@@ -919,6 +981,19 @@ async function processMercadoPagoWebhook(request: NextRequest) {
             error: gobiErr,
           })
         }
+
+        try {
+          await sendPaidOrderReceiptEmail(admin, orderId)
+        } catch (emailErr) {
+          console.error("[WEBHOOK ERROR] ticket receipt email failed:", emailErr)
+          logger.error({
+            context: "webhooks/mercadopago",
+            message: "ticket_receipt_email_failed",
+            order_id: orderId,
+            payment_id: mpPaymentId,
+            error: emailErr,
+          })
+        }
       }
 
       return webhookOk({
@@ -1026,6 +1101,7 @@ async function processMercadoPagoWebhook(request: NextRequest) {
 
     return webhookOk({ status: status ?? null })
   } catch (error) {
+    captureCriticalException(error, "webhooks/mercadopago")
     console.error("[WEBHOOK ERROR]", error)
     logger.error({
       context: "webhooks/mercadopago",

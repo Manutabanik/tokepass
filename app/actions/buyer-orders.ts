@@ -29,6 +29,7 @@ export type BuyerOrderRow = {
   extrasTotal: number
   extrasCount: number
   firstTicketId: string | null
+  reservedUntil: string | null
 }
 
 export async function getMyOrders(): Promise<BuyerOrderRow[]> {
@@ -55,7 +56,9 @@ export async function getMyOrders(): Promise<BuyerOrderRow[]> {
   const [{ data: tickets }, { data: redemptions }] = await Promise.all([
     supabase
       .from("tickets")
-      .select("id, order_id, event_id, events(id, title, date)")
+      .select(
+        "id, order_id, event_id, events(id, title, date), seating_unit:event_seating_units(reserved_until)",
+      )
       .in("order_id", orderIds)
       .eq("owner_id", user.id),
     supabase
@@ -70,6 +73,7 @@ export async function getMyOrders(): Promise<BuyerOrderRow[]> {
     order_id: string | null
     event_id: string
     events: { id: string; title: string; date: string } | null
+    seating_unit: { reserved_until: string | null } | null
   }
 
   const ticketsByOrder = new Map<string, TicketJoin[]>()
@@ -94,6 +98,11 @@ export async function getMyOrders(): Promise<BuyerOrderRow[]> {
     const orderTickets = ticketsByOrder.get(order.id) ?? []
     const firstEvent = orderTickets[0]?.events ?? null
     const extras = extrasByOrder.get(order.id) ?? { count: 0, total: 0 }
+    const reservedUntil =
+      orderTickets
+        .map((ticket) => ticket.seating_unit?.reserved_until)
+        .filter((value): value is string => Boolean(value))
+        .sort()[0] ?? null
 
     return {
       id: order.id,
@@ -112,6 +121,15 @@ export async function getMyOrders(): Promise<BuyerOrderRow[]> {
       extrasTotal: extras.total,
       extrasCount: extras.count,
       firstTicketId: orderTickets[0]?.id ?? null,
+      reservedUntil,
     }
   })
+}
+
+export async function getMyOrderById(
+  orderId: string,
+): Promise<BuyerOrderRow | null> {
+  if (!orderId) return null
+  const orders = await getMyOrders()
+  return orders.find((order) => order.id === orderId) ?? null
 }

@@ -14,6 +14,6 @@ export function buyerPaymentMethodLabel(method: PaymentMethod): string {
     case "test_sandbox":
       return "Compra de prueba"
     default:
-      return method
+      return "Otro medio de pago"
   }
 }

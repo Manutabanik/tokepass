@@ -7,6 +7,7 @@ import {
   MapPin,
   Sparkles,
   Star,
+  Ticket,
 } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
@@ -15,6 +16,7 @@ import { useMemo, useRef, useState } from "react"
 import type { CatalogEvent } from "@/app/actions/public-events"
 import { EventCard } from "@/components/discovery/event-card"
 import { eventCityLabel } from "@/lib/discovery-filters"
+import { publicEventPath } from "@/lib/seo/site"
 import {
   FEATURED_CAROUSEL_LIMIT,
   matchesFeaturedProvince,
@@ -26,7 +28,7 @@ function DestacadoBadge({ className }: { className?: string }) {
   return (
     <span
       className={cn(
-        "inline-flex w-fit items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium text-white backdrop-blur-md",
+        "inline-flex w-fit items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-bold uppercase tracking-widest text-white backdrop-blur-md",
         className,
       )}
     >
@@ -34,6 +36,22 @@ function DestacadoBadge({ className }: { className?: string }) {
       Destacado
     </span>
   )
+}
+
+function featuredMicrocopy(event: CatalogEvent): string {
+  if (event.ticketsLeft != null && event.ticketsLeft > 0 && event.ticketsLeft <= 15) {
+    return `Últimas ${event.ticketsLeft} entradas disponibles`
+  }
+  if (event.soldRatio != null && event.soldRatio >= 0.65) {
+    return "Alta demanda · conseguí la tuya ahora"
+  }
+  if (event.startingPrice === 0) {
+    return "Entrada gratuita · cupos limitados"
+  }
+  if (event.startingPrice != null) {
+    return `Desde ${formatCurrency(event.startingPrice)}`
+  }
+  return "Entrada digital lista en minutos"
 }
 
 function FeaturedSlide({
@@ -50,104 +68,62 @@ function FeaturedSlide({
     <article
       data-featured-card
       className={cn(
-        "relative shrink-0 snap-center overflow-hidden rounded-3xl",
-        "h-[450px] w-[85vw]",
-        "md:h-[420px] md:w-[min(100%,56rem)] md:snap-start lg:h-[460px] lg:w-[min(100%,64rem)]",
+        "group relative shrink-0 snap-center overflow-hidden rounded-3xl",
+        "h-[min(72vh,450px)] min-h-[450px] w-[85vw]",
+        "md:h-[500px] md:min-h-[500px] md:w-[min(100%,56rem)] md:snap-start",
+        "lg:w-[min(100%,64rem)]",
       )}
     >
-      {/* Mobile: immersive flyer + gradient */}
-      <div className="absolute inset-0 md:hidden">
-        {event.imageUrl ? (
-          <Image
-            src={event.imageUrl}
-            alt={event.title}
-            fill
-            priority={priority}
-            sizes="85vw"
-            className="object-cover"
-          />
-        ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-950" />
-        )}
+      {event.imageUrl ? (
+        <Image
+          src={event.imageUrl}
+          alt=""
+          fill
+          priority={priority}
+          sizes="(max-width: 768px) 85vw, 64rem"
+          className="object-cover transition-transform duration-700 ease-in-out group-hover:scale-105"
+        />
+      ) : (
         <div
-          className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/60 to-transparent"
+          className="absolute inset-0 bg-gradient-to-br from-emerald-950 via-zinc-950 to-violet-950 transition-transform duration-700 ease-in-out group-hover:scale-105"
           aria-hidden
         />
-        <div className="absolute left-4 top-4 z-10">
-          <DestacadoBadge />
-        </div>
-        <div className="absolute bottom-0 left-0 flex w-full flex-col justify-end p-6">
-          <p className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-zinc-300">
-            <Calendar className="size-3.5 shrink-0" aria-hidden />
-            {formatDiscoveryDateTime(event.date)}
-          </p>
-          <h3 className="text-balance text-3xl font-extrabold text-white">
-            {event.title}
-          </h3>
-          <p className="mt-2 flex items-center gap-2 text-sm text-zinc-200">
-            <MapPin className="size-4 shrink-0 text-zinc-400" aria-hidden />
-            <span className="min-w-0 truncate">
-              {place}
-              {city && city !== place ? ` · ${city}` : ""}
-            </span>
-          </p>
-          <Link
-            href={`/events/${event.id}`}
-            className="mt-5 inline-flex w-fit items-center justify-center rounded-full bg-white px-6 py-3 text-sm font-bold text-zinc-900 transition-transform active:scale-95"
-          >
-            Comprar entradas
-          </Link>
-        </div>
-      </div>
+      )}
 
-      {/* Desktop: cinematic split — info solid vs flyer */}
-      <div className="hidden h-full md:grid md:grid-cols-2">
-        <div className="flex h-full flex-col justify-center bg-zinc-950 p-10 text-white lg:p-16">
-          <DestacadoBadge className="mb-5" />
-          <p className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em] text-zinc-400">
-            <Calendar className="size-3.5 shrink-0" aria-hidden />
-            {formatDiscoveryDateTime(event.date)}
-          </p>
-          <h3 className="text-balance text-3xl font-extrabold tracking-tight lg:text-4xl xl:text-5xl">
-            {event.title}
-          </h3>
-          <p className="mt-4 flex items-center gap-2 text-base text-zinc-300">
-            <MapPin className="size-4 shrink-0 text-purple-400" aria-hidden />
-            <span className="min-w-0 truncate">
-              {place}
-              {city && city !== place ? ` · ${city}` : ""}
-            </span>
-          </p>
-          {event.startingPrice != null ? (
-            <p className="mt-3 text-sm text-zinc-400">
-              Desde{" "}
-              <span className="font-semibold text-white">
-                {formatCurrency(event.startingPrice)}
-              </span>
-            </p>
-          ) : null}
-          <Link
-            href={`/events/${event.id}`}
-            className="mt-8 inline-flex w-fit items-center justify-center rounded-full bg-white px-6 py-3 text-sm font-bold text-zinc-900 transition hover:bg-zinc-100 active:scale-95"
-          >
-            Comprar entradas
-          </Link>
-        </div>
+      <div
+        className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/80 to-transparent/20 md:bg-gradient-to-r md:from-black/95 md:via-black/70 md:to-transparent"
+        aria-hidden
+      />
 
-        <div className="relative h-full min-h-[420px] lg:min-h-[460px]">
-          {event.imageUrl ? (
-            <Image
-              src={event.imageUrl}
-              alt={event.title}
-              fill
-              priority={priority}
-              sizes="(max-width: 1280px) 50vw, 640px"
-              className="object-cover"
-            />
-          ) : (
-            <div className="absolute inset-0 bg-gradient-to-br from-zinc-700 to-zinc-900" />
-          )}
-        </div>
+      <div className="relative z-10 flex h-full w-full flex-col justify-end p-6 md:w-2/3 md:justify-center md:p-12">
+        <DestacadoBadge className="mb-4" />
+        <p className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em] text-zinc-300 drop-shadow">
+          <Calendar className="size-3.5 shrink-0 opacity-80" aria-hidden />
+          {formatDiscoveryDateTime(event.date)}
+        </p>
+        <h3 className="text-balance text-4xl font-black tracking-tight text-white drop-shadow-lg md:text-5xl lg:text-6xl">
+          {event.title}
+        </h3>
+        <p className="mt-4 flex items-center gap-2 text-sm text-zinc-300 md:text-base">
+          <MapPin className="size-4 shrink-0 opacity-80" aria-hidden />
+          <span className="min-w-0 truncate">
+            {place}
+            {city && city !== place ? ` · ${city}` : ""}
+          </span>
+        </p>
+
+        <Link
+          href={publicEventPath(event)}
+          className="mt-8 inline-flex w-fit flex-col items-center"
+        >
+          <span className="inline-flex items-center justify-center gap-2 rounded-full bg-emerald-500 px-8 py-3.5 text-lg font-bold text-black shadow-[0_0_20px_rgba(16,185,129,0.45)] transition-all duration-300 hover:scale-105 hover:bg-emerald-400 hover:shadow-[0_0_30px_rgba(16,185,129,0.65)] active:scale-[0.98]">
+            <Ticket className="size-5" aria-hidden />
+            Conseguí tus entradas
+          </span>
+          <span className="mt-2 text-[11px] font-medium tracking-wide text-white/55">
+            {featuredMicrocopy(event)}
+          </span>
+        </Link>
       </div>
     </article>
   )

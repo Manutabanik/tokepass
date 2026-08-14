@@ -46,10 +46,18 @@ export function validateCheckoutBuyer(
     }
   }
 
-  if (buyer.buyerDni.length < 7 || buyer.buyerDni.length > 10) {
+  if (buyer.buyerDni.length < 7 || buyer.buyerDni.length > 9) {
     return {
       ok: false,
-      error: "El DNI debe tener entre 7 y 10 dígitos.",
+      error: "El DNI debe tener entre 7 y 9 dígitos.",
+    }
+  }
+
+  const nameParts = buyer.buyerName.split(" ").filter(Boolean)
+  if (nameParts.length < 2) {
+    return {
+      ok: false,
+      error: "Ingresá el nombre y apellido del asistente.",
     }
   }
 

@@ -57,7 +57,7 @@ const VenueLeafletMap = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="grid h-full place-items-center bg-white dark:bg-zinc-950 text-sm text-slate-600 dark:text-zinc-400">
+      <div className="grid h-full place-items-center bg-white dark:bg-zinc-950 text-sm text-muted-foreground">
         <span className="inline-flex items-center gap-2">
           <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
           Cargando mapa…
@@ -86,13 +86,13 @@ type VenueArgentinaSelectorProps = {
 }
 
 const selectClassName = cn(
-  "h-11 w-full appearance-none rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 text-sm text-zinc-900 dark:text-white",
+  "h-11 w-full appearance-none rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 text-sm text-foreground",
   "outline-none transition focus:border-transparent focus:ring-2 focus:ring-emerald-500",
   "disabled:cursor-not-allowed disabled:opacity-50",
 )
 
 const inputClassName = cn(
-  "h-11 rounded-lg border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 text-sm text-zinc-900 dark:text-white",
+  "h-11 rounded-lg border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 text-sm text-foreground",
   "focus-visible:border-transparent focus-visible:ring-2 focus-visible:ring-emerald-500",
 )
 
@@ -340,8 +340,8 @@ export function VenueArgentinaSelector({
           <MapPinned className="size-5" aria-hidden="true" />
         </span>
         <div>
-          <h3 className="font-bold text-zinc-900 dark:text-white">Ubicación en Argentina</h3>
-          <p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-zinc-400">
+          <h3 className="font-bold text-foreground">Ubicación en Argentina</h3>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
             Georef (provincias/departamentos) + Nominatim (dirección) + Leaflet
             (mapa). Sin API keys de pago.
           </p>
@@ -353,7 +353,7 @@ export function VenueArgentinaSelector({
           <div className="space-y-2 sm:col-span-2">
             <Label
               htmlFor="venue-ar-name"
-              className="font-mono text-[10px] uppercase tracking-wider text-zinc-600 dark:text-zinc-400"
+              className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
             >
               Nombre del lugar
             </Label>
@@ -371,7 +371,7 @@ export function VenueArgentinaSelector({
           <div className="space-y-2 sm:col-span-2">
             <Label
               htmlFor="venue-ar-capacity"
-              className="font-mono text-[10px] uppercase tracking-wider text-zinc-600 dark:text-zinc-400"
+              className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
             >
               Cantidad de personas
             </Label>
@@ -398,7 +398,7 @@ export function VenueArgentinaSelector({
         <div className="space-y-2">
           <Label
             htmlFor="venue-ar-province"
-            className="font-mono text-[10px] uppercase tracking-wider text-zinc-600 dark:text-zinc-400"
+            className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
           >
             Provincia
           </Label>
@@ -422,7 +422,7 @@ export function VenueArgentinaSelector({
               ))}
             </select>
             {loadingProvinces ? (
-              <LoaderCircle className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-slate-600 dark:text-zinc-400" />
+              <LoaderCircle className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
             ) : null}
           </div>
         </div>
@@ -430,7 +430,7 @@ export function VenueArgentinaSelector({
         <div className="space-y-2">
           <Label
             htmlFor="venue-ar-department"
-            className="font-mono text-[10px] uppercase tracking-wider text-zinc-600 dark:text-zinc-400"
+            className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
           >
             Departamento / Partido
           </Label>
@@ -456,7 +456,7 @@ export function VenueArgentinaSelector({
               ))}
             </select>
             {loadingDepartments ? (
-              <LoaderCircle className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-slate-600 dark:text-zinc-400" />
+              <LoaderCircle className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
             ) : null}
           </div>
         </div>
@@ -469,13 +469,13 @@ export function VenueArgentinaSelector({
       <div className="relative z-50 space-y-2">
         <Label
           htmlFor="venue-ar-address"
-          className="font-mono text-[10px] uppercase tracking-wider text-zinc-600 dark:text-zinc-400"
+          className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
         >
           Dirección exacta
         </Label>
         <div className="relative">
           <Search
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-600 dark:text-zinc-400"
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
             aria-hidden="true"
           />
           <Input
@@ -508,7 +508,7 @@ export function VenueArgentinaSelector({
             autoComplete="off"
           />
           {searching ? (
-            <LoaderCircle className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-slate-600 dark:text-zinc-400" />
+            <LoaderCircle className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
           ) : null}
         </div>
 
@@ -522,7 +522,7 @@ export function VenueArgentinaSelector({
               <li key={result.placeId} role="option">
                 <button
                   type="button"
-                  className="block w-full px-3 py-2.5 text-left text-xs leading-relaxed text-zinc-800 dark:text-zinc-200 transition hover:bg-slate-300 dark:hover:bg-zinc-700 hover:text-zinc-900 dark:hover:text-white"
+                  className="block w-full px-3 py-2.5 text-left text-xs leading-relaxed text-foreground transition hover:bg-slate-300 dark:hover:bg-zinc-700 hover:text-foreground"
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => chooseResult(result)}
                 >
@@ -558,7 +558,7 @@ export function VenueArgentinaSelector({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="text-sm text-muted-foreground">
           {state.coordinates
             ? `Coordenadas: ${state.coordinates.lat.toFixed(6)}, ${state.coordinates.lng.toFixed(6)} · arrastrá el pin para afinar`
             : `Mapa centrado en Obelisco (${VENUE_MAP_DEFAULT.latitude}, ${VENUE_MAP_DEFAULT.longitude}) · elegí una dirección`}

@@ -64,11 +64,11 @@ export function CreateGuestListDialog({ eventId }: { eventId: string }) {
         Nueva Lista
       </Button>
 
-      <DialogContent className="border-zinc-200 dark:border-white/10 bg-[#121216] text-zinc-900 dark:text-zinc-100 sm:max-w-md">
+      <DialogContent className="border-border bg-card text-card-foreground sm:max-w-md">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Nueva lista digital</DialogTitle>
-            <DialogDescription className="text-zinc-600 dark:text-zinc-400">
+            <DialogDescription className="text-muted-foreground">
               Definí cupos y la hora límite de ingreso (Smart Yield).
             </DialogDescription>
           </DialogHeader>

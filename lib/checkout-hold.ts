@@ -26,6 +26,26 @@ export function resolveCheckoutExpiresAt(
   return new Date(nowMs + GA_CHECKOUT_HOLD_MS)
 }
 
+/** Fin del hold para una orden ya creada (fallback / cuenta), anclado a `created_at`. */
+export function resolveOrderHoldExpiresAt(
+  createdAt: string,
+  reservedUntil?: string | null,
+): Date {
+  const createdMs = new Date(createdAt).getTime()
+  const fromCreated = Number.isFinite(createdMs)
+    ? createdMs + GA_CHECKOUT_HOLD_MS
+    : Date.now() + GA_CHECKOUT_HOLD_MS
+
+  if (reservedUntil) {
+    const seatingMs = new Date(reservedUntil).getTime()
+    if (Number.isFinite(seatingMs)) {
+      return new Date(Math.min(seatingMs, fromCreated))
+    }
+  }
+
+  return new Date(fromCreated)
+}
+
 export function formatHoldCountdown(totalSeconds: number): string {
   const safe = Math.max(0, Math.floor(totalSeconds))
   const minutes = Math.floor(safe / 60)

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 
+import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import type { ZoneTierPriceDraft } from "@/lib/stores/event-form-store"
 import {
@@ -187,6 +188,8 @@ export async function syncZoneTierPricing(input: {
     return { success: false, error: "Sin permiso." }
   }
 
+  const admin = createAdminClient()
+
   const { data: zones } = await supabase
     .from("event_zones")
     .select("id, name")
@@ -266,7 +269,7 @@ export async function syncZoneTierPricing(input: {
     const tier = (tiers ?? []).find((t) => t.id === row.ticket_tier_id)
     if (!tier?.seating_sector_id) continue
     if (tier.seating_sector_id !== row.sector_key) continue
-    await supabase
+    await admin
       .from("ticket_tiers")
       .update({ price: row.price })
       .eq("id", row.ticket_tier_id)

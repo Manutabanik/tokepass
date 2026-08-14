@@ -51,7 +51,7 @@ export default async function EventCouponsPage({
     <main className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8 sm:px-6">
       <Link
         href={`/admin/events/${id}`}
-        className="inline-flex items-center gap-2 text-sm text-slate-600 dark:text-zinc-400 transition hover:text-zinc-900 dark:hover:text-white"
+        className="inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-foreground"
       >
         <ArrowLeft className="size-4" aria-hidden />
         Volver a operación del evento
@@ -62,10 +62,10 @@ export default async function EventCouponsPage({
           <TicketPercent className="size-3.5" aria-hidden />
           Promociones
         </p>
-        <h1 className="text-3xl font-black tracking-tight text-zinc-900 dark:text-white">
+        <h1 className="text-3xl font-black tracking-tight text-foreground">
           Cupones y descuentos
         </h1>
-        <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="mt-2 text-sm text-muted-foreground">
           Códigos % o monto fijo. El total se recalcula de forma segura en el
           checkout.
         </p>

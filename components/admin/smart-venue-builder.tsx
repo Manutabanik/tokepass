@@ -173,8 +173,8 @@ export function SmartVenueBuilder({
     <section className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="font-bold text-zinc-900 dark:text-white">Zonas o sectores del lugar</h3>
-          <p className="mt-1 text-xs text-slate-600 dark:text-zinc-400">
+          <h3 className="font-bold text-foreground">Zonas o sectores del lugar</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
             {structured
               ? "Cada zona puede tener filas con distinta cantidad de asientos."
               : "Solo necesitás nombre y cantidad de personas para vender entradas generales."}
@@ -203,7 +203,7 @@ export function SmartVenueBuilder({
                 <div className={structured ? "sm:col-span-5" : "sm:col-span-8"}>
                   <Label
                     htmlFor={`zone-${zone.key}-name`}
-                    className="text-[10px] uppercase tracking-wider text-slate-600 dark:text-zinc-400"
+                    className="text-[10px] uppercase tracking-wider text-muted-foreground"
                   >
                     Nombre de la zona (Ej: VIP, Campo, Platea)
                   </Label>
@@ -227,7 +227,7 @@ export function SmartVenueBuilder({
                   <div className="sm:col-span-4">
                     <Label
                       htmlFor={`zone-${zone.key}-type`}
-                      className="text-[10px] uppercase tracking-wider text-slate-600 dark:text-zinc-400"
+                      className="text-[10px] uppercase tracking-wider text-muted-foreground"
                     >
                       Tipo de ubicación
                     </Label>
@@ -289,7 +289,7 @@ export function SmartVenueBuilder({
                 <div className={structured ? "sm:col-span-2" : "sm:col-span-3"}>
                   <Label
                     htmlFor={`zone-${zone.key}-capacity`}
-                    className="text-[10px] uppercase tracking-wider text-slate-600 dark:text-zinc-400"
+                    className="text-[10px] uppercase tracking-wider text-muted-foreground"
                   >
                     Capacidad (Aforo máximo)
                   </Label>
@@ -315,7 +315,7 @@ export function SmartVenueBuilder({
                     onClick={() =>
                       onChange(zones.filter((item) => item.key !== zone.key))
                     }
-                    className="text-slate-600 dark:text-zinc-400 hover:bg-red-500/10 hover:text-red-400"
+                    className="text-muted-foreground hover:bg-red-500/10 hover:text-red-400"
                     aria-label={`Eliminar zona ${zone.name || zoneIndex + 1}`}
                   >
                     <Trash2 className="size-4" />
@@ -329,16 +329,16 @@ export function SmartVenueBuilder({
                     <div className="flex items-center gap-2">
                       <Rows3 className="size-4 text-indigo-300" aria-hidden="true" />
                       <div>
-                        <h4 className="text-sm font-semibold text-zinc-900 dark:text-white">
+                        <h4 className="text-sm font-semibold text-foreground">
                           Filas con distinta cantidad de asientos
                         </h4>
-                        <p className="text-[11px] text-slate-600 dark:text-zinc-400">
+                        <p className="text-[11px] text-muted-foreground">
                           Cada fila define su propia cantidad de asientos.
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <label className="flex items-center gap-1.5 text-[10px] text-slate-600 dark:text-zinc-400">
+                      <label className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
                         Color
                         <input
                           type="color"
@@ -382,7 +382,7 @@ export function SmartVenueBuilder({
                           <div className="sm:col-span-4">
                             <Label
                               htmlFor={`row-${row.key}-label`}
-                              className="text-[10px] uppercase tracking-wider text-slate-600 dark:text-zinc-400"
+                              className="text-[10px] uppercase tracking-wider text-muted-foreground"
                             >
                               Nombre de la fila
                             </Label>
@@ -402,7 +402,7 @@ export function SmartVenueBuilder({
                           <div className="sm:col-span-2">
                             <Label
                               htmlFor={`row-${row.key}-count`}
-                              className="text-[10px] uppercase tracking-wider text-slate-600 dark:text-zinc-400"
+                              className="text-[10px] uppercase tracking-wider text-muted-foreground"
                             >
                               Ubicaciones
                             </Label>
@@ -423,7 +423,7 @@ export function SmartVenueBuilder({
                           <div className="sm:col-span-2">
                             <Label
                               htmlFor={`row-${row.key}-prefix`}
-                              className="text-[10px] uppercase tracking-wider text-slate-600 dark:text-zinc-400"
+                              className="text-[10px] uppercase tracking-wider text-muted-foreground"
                             >
                               Prefijo
                             </Label>
@@ -441,7 +441,7 @@ export function SmartVenueBuilder({
                           <div className="sm:col-span-2">
                             <Label
                               htmlFor={`row-${row.key}-capacity`}
-                              className="text-[10px] uppercase tracking-wider text-slate-600 dark:text-zinc-400"
+                              className="text-[10px] uppercase tracking-wider text-muted-foreground"
                             >
                               Personas / unidad
                             </Label>
@@ -492,7 +492,7 @@ export function SmartVenueBuilder({
                         {row.items.length > 0 ? (
                           <div className="mt-3 border-t border-zinc-200 dark:border-zinc-800/70 pt-3">
                             <div className="mb-2 flex items-center justify-between gap-2">
-                              <p className="text-[11px] text-slate-600 dark:text-zinc-400">
+                              <p className="text-[11px] text-muted-foreground">
                                 {row.items.length} ubicaciones ·{" "}
                                 {
                                   row.items.filter(
@@ -505,7 +505,7 @@ export function SmartVenueBuilder({
                                 type="button"
                                 size="sm"
                                 onClick={() => addManualItem(zone, row)}
-                                className="h-7 rounded-lg bg-muted dark:bg-zinc-800 px-2 text-[10px] text-zinc-700 dark:text-zinc-300 hover:bg-slate-300 dark:hover:bg-zinc-700"
+                                className="h-7 rounded-lg bg-muted dark:bg-zinc-800 px-2 text-[10px] text-foreground hover:bg-slate-300 dark:hover:bg-zinc-700"
                               >
                                 <Plus className="size-3" aria-hidden="true" />
                                 Añadir ubicación

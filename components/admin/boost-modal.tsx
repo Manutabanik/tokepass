@@ -71,9 +71,9 @@ export function BoostModal({
           <DialogTitle className="text-xl font-black tracking-tight">
             Tokepass Boost
           </DialogTitle>
-          <DialogDescription className="text-zinc-600 dark:text-zinc-400">
+          <DialogDescription className="text-muted-foreground">
             Multiplicá las ventas de{" "}
-            <span className="font-medium text-zinc-800 dark:text-zinc-200">{eventTitle}</span>{" "}
+            <span className="font-medium text-foreground">{eventTitle}</span>{" "}
             destacando el evento en la portada para compradores.
           </DialogDescription>
         </DialogHeader>
@@ -95,7 +95,7 @@ export function BoostModal({
                 )}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="inline-flex items-center gap-1.5 text-sm font-bold text-zinc-900 dark:text-white">
+                  <span className="inline-flex items-center gap-1.5 text-sm font-bold text-foreground">
                     <Icon className="size-4 text-cyan-300" aria-hidden="true" />
                     {plan.name}
                   </span>
@@ -103,17 +103,17 @@ export function BoostModal({
                     {plan.multiplierLabel}
                   </span>
                 </div>
-                <p className="mt-3 text-2xl font-black text-zinc-900 dark:text-white">
+                <p className="mt-3 text-2xl font-black text-foreground">
                   {formatCurrency(plan.priceArs)}
                 </p>
-                <p className="mt-1 text-xs text-slate-600 dark:text-zinc-400">
+                <p className="mt-1 text-xs text-muted-foreground">
                   {plan.durationDays} días de destaque
                 </p>
                 <ul className="mt-3 space-y-1.5">
                   {plan.benefits.map((benefit) => (
                     <li
                       key={benefit}
-                      className="flex items-start gap-1.5 text-[11px] leading-4 text-zinc-600 dark:text-zinc-400"
+                      className="flex items-start gap-1.5 text-[11px] leading-4 text-muted-foreground"
                     >
                       <Check
                         className="mt-0.5 size-3 shrink-0 text-emerald-700 dark:text-emerald-400"

@@ -3,22 +3,17 @@
 import {
   Armchair,
   Ban,
-  CalendarDays,
   ChevronRight,
-  Clock3,
   FlaskConical,
   Gift,
-  IdCard,
-  MapPin,
+  MoreHorizontal,
   ShieldCheck,
   Sparkles,
-  UserRound,
-  Users,
   Wifi,
   WifiOff,
 } from "lucide-react"
-import Image from "next/image"
 import Link from "next/link"
+import { useState } from "react"
 import { QRCodeSVG } from "qrcode.react"
 
 import type { MyTicket } from "@/app/actions/tickets"
@@ -28,7 +23,14 @@ import { SaveTicketButton } from "@/components/public/save-ticket-button"
 import { StoryFlyerWalletButton } from "@/components/public/story-flyer-modal"
 import { TransferTicketDialog } from "@/components/public/transfer-ticket-dialog"
 import { Badge } from "@/components/ui/badge"
-import { formatEventDay, formatEventTime } from "@/lib/format"
+import { Button } from "@/components/ui/button"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
 
 function isVipTier(tierName: string): boolean {
@@ -57,6 +59,155 @@ function formatPrimaryLocation(ticket: MyTicket): string {
   return label
 }
 
+function TicketManageSheet({
+  ticket,
+  userId,
+  offline,
+  appleWalletEnabled,
+  googleWalletEnabled,
+  canTransfer,
+  canResale,
+  open,
+  onOpenChange,
+}: {
+  ticket: MyTicket
+  userId: string
+  offline: boolean
+  appleWalletEnabled: boolean
+  googleWalletEnabled: boolean
+  canTransfer: boolean
+  canResale: boolean
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const isStatic = ticket.qrType === "static"
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="bottom"
+        className="gap-0 overflow-y-auto pb-[max(1.25rem,env(safe-area-inset-bottom))] md:inset-x-auto md:left-1/2 md:max-w-md md:-translate-x-1/2 md:rounded-3xl"
+      >
+        <SheetHeader className="border-0 pb-2 pt-5">
+          <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-muted-foreground/25 md:hidden" />
+          <SheetTitle>Gestionar entrada</SheetTitle>
+          <SheetDescription>
+            {ticket.tierName}
+            {ticket.holderName ? ` · ${ticket.holderName}` : ""}
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="flex flex-col gap-3 px-4 pb-4">
+          {ticket.status === "valid" ? (
+            <SaveTicketButton
+              ticket={ticket}
+              userId={userId}
+              disabled={offline}
+              appleWalletEnabled={appleWalletEnabled}
+              googleWalletEnabled={googleWalletEnabled}
+            />
+          ) : null}
+
+          {ticket.status === "valid" ? (
+            <StoryFlyerWalletButton
+              data={{
+                eventTitle: ticket.eventTitle,
+                eventDate: ticket.eventDate,
+                eventLocation: ticket.venueName ?? ticket.eventLocation,
+                imageUrl: ticket.flyerUrl,
+                customStoryUrl: ticket.socialShareImageUrl,
+                mode: "buyer",
+                organizerName: ticket.organizerName,
+                organizerAvatarUrl: ticket.organizerAvatarUrl,
+              }}
+            />
+          ) : null}
+
+          {canTransfer ? (
+            <TransferTicketDialog
+              ticketId={ticket.id}
+              eventTitle={ticket.eventTitle}
+            />
+          ) : null}
+
+          {canResale || ticket.activeResaleListingId ? (
+            <ResaleTicketDialog
+              ticketId={ticket.id}
+              eventTitle={ticket.eventTitle}
+              tierPrice={ticket.tierPrice}
+              activeListingId={ticket.activeResaleListingId}
+              disabled={offline}
+            />
+          ) : null}
+
+          <Button
+            variant="outline"
+            className="h-11 w-full rounded-2xl"
+            nativeButton={false}
+            render={<Link href={`/cuenta/entradas/${ticket.id}`} />}
+          >
+            Ver detalle de la entrada
+            <ChevronRight className="size-4 opacity-70" aria-hidden="true" />
+          </Button>
+
+          {ticket.status === "valid" && offline ? (
+            <p className="text-center text-[11px] text-muted-foreground">
+              Transferencias y reventa disponibles cuando vuelvas a tener
+              conexión.
+            </p>
+          ) : null}
+
+          {ticket.bonusReward ? (
+            <div className="flex items-start gap-2.5 rounded-2xl border border-emerald-500/20 bg-emerald-500/8 px-3.5 py-3">
+              <Gift
+                className="mt-0.5 size-4 shrink-0 text-emerald-700 dark:text-emerald-300"
+                aria-hidden="true"
+              />
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-800 dark:text-emerald-300/90">
+                  Beneficio incluido
+                </p>
+                <p className="mt-0.5 text-sm font-semibold text-foreground">
+                  {ticket.bonusReward}
+                </p>
+              </div>
+            </div>
+          ) : null}
+
+          {ticket.status === "valid" ? (
+            <p className="flex items-start gap-2 text-[12px] leading-5 text-muted-foreground">
+              <ShieldCheck
+                className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400"
+                aria-hidden="true"
+              />
+              <span>
+                {isStatic
+                  ? "Podés presentar este código desde la app, la billetera del teléfono o el PDF emitido."
+                  : "Abrí esta entrada al llegar. El código cambia cada 15 segundos y las capturas vencen automáticamente."}
+              </span>
+            </p>
+          ) : null}
+
+          {ticket.isSponsoredByTokepass ? (
+            <p className="flex items-center justify-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-800 dark:text-amber-200">
+              <Sparkles className="size-3.5" aria-hidden="true" />
+              Comisión Tokepass bonificada
+            </p>
+          ) : null}
+
+          <p className="text-center font-mono text-[10px] tracking-wider text-muted-foreground">
+            #{ticket.id.slice(0, 8).toUpperCase()}
+          </p>
+          <p className="border-t border-border pt-3 text-center text-[10px] leading-4 text-muted-foreground">
+            Entrada emitida bajo responsabilidad exclusiva del Organizador. La
+            reventa solo es válida a través del marketplace oficial de Tokepass.
+          </p>
+        </div>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
 export function LivingTicketCard({
   ticket,
   userId,
@@ -72,6 +223,7 @@ export function LivingTicketCard({
   appleWalletEnabled?: boolean
   googleWalletEnabled?: boolean
 }) {
+  const [manageOpen, setManageOpen] = useState(false)
   const vip = isVipTier(ticket.tierName)
   const isFree = Number(ticket.tierPrice) === 0
   const canShowLiveQr = showQr && ticket.status === "valid"
@@ -90,15 +242,29 @@ export function LivingTicketCard({
     ticket.transferCount < ticket.maxTransfersAllowed &&
     !offline
 
+  const seatingLine = ticket.seatingLabel
+    ? [
+        formatPrimaryLocation(ticket),
+        ticket.seatingSectorName
+          ? normalizeLocationLabel(ticket.seatingSectorName)
+          : null,
+        ticket.seatingRowLabel
+          ? normalizeLocationLabel(ticket.seatingRowLabel)
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : null
+
   return (
     <article
       className={cn(
-        "relative overflow-hidden rounded-[1.75rem] border bg-card text-card-foreground",
+        "relative flex h-full flex-col overflow-hidden rounded-[1.65rem] border bg-card px-5 pb-4 pt-5 text-card-foreground shadow-sm",
         vip
-          ? "border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.3)]"
-          : "border-border",
+          ? "border-amber-400/50 shadow-[0_0_18px_rgba(245,158,11,0.18)]"
+          : "border-border/80",
         ticket.isTest && "border-amber-400/60",
-        isFree && !ticket.isTest && "border-rose-500/50",
+        isFree && !ticket.isTest && "border-rose-500/40",
       )}
     >
       {ticket.isTest ? (
@@ -122,228 +288,64 @@ export function LivingTicketCard({
       ) : null}
 
       {isFree && !ticket.isTest ? (
-        <>
-          <div
-            className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
-            aria-hidden="true"
-          >
-            <span className="-rotate-12 rounded-xl border-2 border-rose-400/90 bg-rose-600/30 px-4 py-2 text-center text-[11px] font-black uppercase tracking-[0.14em] text-rose-50 shadow-[0_0_28px_rgba(225,29,72,0.4)] backdrop-blur-[2px]">
-              Entrada gratuita
-              <span className="mt-0.5 block text-[10px] font-bold tracking-[0.1em] text-rose-50/95">
-                Prohibida su venta en puerta
-              </span>
-            </span>
-          </div>
-          <Badge className="absolute right-3 top-3 z-30 rounded-full border-0 bg-rose-500 text-[10px] font-bold uppercase tracking-wide text-white">
-            <Ban className="size-3" aria-hidden="true" />
-            $0
-          </Badge>
-        </>
+        <Badge className="absolute right-3 top-3 z-30 rounded-full border-0 bg-rose-500 text-[10px] font-bold uppercase tracking-wide text-white">
+          <Ban className="size-3" aria-hidden="true" />
+          $0
+        </Badge>
       ) : null}
 
-      {vip && (
-        <div
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(245,158,11,0.14),transparent_42%)]"
-          aria-hidden="true"
-        />
-      )}
-
-      <div className="relative aspect-[16/9] overflow-hidden bg-muted">
-        {ticket.flyerUrl ? (
-          <Image
-            src={ticket.flyerUrl}
-            alt={ticket.eventTitle}
-            fill
-            sizes="(max-width: 640px) 100vw, 420px"
-            className="object-cover"
-            priority={canShowLiveQr}
-          />
-        ) : (
-          <div className="relative flex h-full w-full items-end bg-gradient-to-br from-background via-muted to-violet-950 p-4">
-            <span className="absolute left-4 top-4 size-9 overflow-hidden rounded-xl bg-background ring-1 ring-border">
-              <Image
-                src="/brand/tokepass-mark.png"
-                alt=""
-                width={36}
-                height={36}
-                className="size-full object-cover"
-              />
-            </span>
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-muted-foreground">
-                Tokepass
-              </p>
-              <p className="mt-1 line-clamp-2 text-base font-bold leading-snug text-foreground">
-                {ticket.eventTitle}
-              </p>
-            </div>
-          </div>
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-      </div>
-
-      <div className="relative space-y-4 px-4 pb-5 pt-4 sm:px-5">
-        <header className="space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge
-              variant="outline"
-              className={cn(
-                "rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.12em]",
-                offline
-                  ? "border-amber-400/40 bg-amber-500/15 text-amber-800 dark:text-amber-200"
-                  : "border-emerald-400/35 bg-emerald-500/15 text-emerald-800 dark:text-emerald-200",
-              )}
-            >
-              {offline ? (
-                <WifiOff className="size-3" aria-hidden="true" />
-              ) : (
-                <Wifi className="size-3" aria-hidden="true" />
-              )}
-              {offline
-                ? "Modo offline · acceso válido para ingreso"
-                : "Conectado · entrada verificada"}
-            </Badge>
-            <Badge
-              variant="outline"
-              className={cn(
-                "rounded-full border-0 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide",
-                vip
-                  ? "bg-amber-500/15 text-amber-800 ring-1 ring-amber-500/40 dark:text-amber-300"
-                  : "bg-muted text-muted-foreground ring-1 ring-border",
-              )}
-            >
-              {ticket.tierName}
-            </Badge>
-            {isStatic ? (
-              <Badge
-                variant="outline"
-                className="rounded-full border-sky-500/30 bg-sky-500/15 text-sky-800 dark:text-sky-300"
-              >
-                QR estático
-              </Badge>
-            ) : null}
-            {vip && (
-              <Badge className="rounded-full border-0 bg-amber-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-black hover:bg-amber-500">
-                VIP
-              </Badge>
-            )}
-            {isUsedStatus(ticket.status) && (
-              <Badge
-                variant="outline"
-                className="rounded-full border-sky-500/30 bg-sky-500/15 text-sky-800 dark:text-sky-300"
-              >
-                Usada
-              </Badge>
-            )}
-            {ticket.status === "transferred" && (
-              <Badge
-                variant="outline"
-                className="rounded-full border-rose-500/30 bg-rose-500/15 text-rose-800 dark:text-rose-300"
-              >
-                Transferida
-              </Badge>
-            )}
-          </div>
-
-          <h2 className="text-xl font-black leading-tight tracking-[-0.03em] text-foreground sm:text-2xl">
-            {ticket.eventTitle}
-          </h2>
-
-          {ticket.dayValidityLabel ? (
-            <p className="mt-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-400">
-              {ticket.dayValidityLabel}
-            </p>
-          ) : null}
-
-          {ticket.seatingLabel ? (
-            <div className="mt-3 rounded-xl border border-emerald-400/45 bg-emerald-500/10 px-3 py-3 shadow-[inset_0_0_18px_rgba(52,211,153,0.05)]">
-              <p className="flex items-center gap-2 font-mono text-sm font-black tracking-[0.08em] text-emerald-900 dark:text-emerald-100">
-                <Armchair className="size-4" aria-hidden="true" />
-                {formatPrimaryLocation(ticket)}
-                {ticket.seatingSectorName
-                  ? ` · ${normalizeLocationLabel(ticket.seatingSectorName)}`
-                  : null}
-                {ticket.seatingRowLabel
-                  ? ` · ${normalizeLocationLabel(ticket.seatingRowLabel)}`
-                  : null}
-              </p>
-              <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Users className="size-3.5" aria-hidden="true" />
-                QR maestro para {ticket.maxAdmissions}{" "}
-                {ticket.maxAdmissions === 1 ? "persona" : "personas"} · (
-                {ticket.admissionsUsed}/{ticket.maxAdmissions} ingresados)
-              </p>
-            </div>
-          ) : (
-            <div className="mt-3 rounded-xl border border-border bg-muted/60 px-3 py-2.5">
-              <p className="flex items-center gap-2 font-mono text-xs font-black uppercase tracking-[0.08em] text-foreground">
-                <Users
-                  className="size-4 text-emerald-700 dark:text-emerald-300"
-                  aria-hidden="true"
-                />
-                Entrada General / Pista
-              </p>
-            </div>
+      <header className="space-y-1.5 text-center">
+        <p
+          className={cn(
+            "text-[11px] font-bold uppercase tracking-[0.18em]",
+            vip
+              ? "text-amber-700 dark:text-amber-300"
+              : "text-muted-foreground",
           )}
+        >
+          {ticket.tierName}
+          {vip ? " · VIP" : null}
+        </p>
+        {ticket.dayValidityLabel ? (
+          <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-400">
+            {ticket.dayValidityLabel}
+          </p>
+        ) : null}
+        {seatingLine ? (
+          <p className="flex items-center justify-center gap-1.5 font-mono text-[11px] font-semibold tracking-wide text-foreground">
+            <Armchair className="size-3.5 shrink-0 text-muted-foreground" />
+            {seatingLine}
+          </p>
+        ) : null}
+        <p className="pt-1 text-sm font-semibold leading-snug text-foreground">
+          {ticket.holderName}
+        </p>
+        {ticket.holderDni ? (
+          <p className="text-xs tabular-nums text-muted-foreground">
+            DNI {ticket.holderDni}
+          </p>
+        ) : null}
+        {isUsedStatus(ticket.status) || ticket.status === "transferred" ? (
+          <Badge
+            variant="outline"
+            className="mx-auto mt-1 rounded-full text-[10px] font-semibold uppercase tracking-wide"
+          >
+            {ticket.status === "transferred" ? "Transferida" : "Usada"}
+          </Badge>
+        ) : null}
+      </header>
 
-          <div className="space-y-1.5 text-sm text-muted-foreground">
-            <p className="flex items-center gap-2 capitalize">
-              <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
-              {formatEventDay(ticket.eventDate)}
-            </p>
-            <p className="flex items-center gap-2">
-              <Clock3 className="size-4 shrink-0 text-muted-foreground" />
-              {formatEventTime(ticket.eventDate)}
-            </p>
-            <p className="flex items-start gap-2">
-              <MapPin className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-              <span className="line-clamp-2">
-                {ticket.venueName ?? ticket.eventLocation}
-              </span>
-            </p>
-            <p className="flex items-center gap-2">
-              <UserRound className="size-4 shrink-0 text-muted-foreground" />
-              <span className="truncate">{ticket.holderName}</span>
-            </p>
-            {ticket.holderDni ? (
-              <p className="flex items-center gap-2">
-                <IdCard className="size-4 shrink-0 text-muted-foreground" />
-                DNI {ticket.holderDni}
-              </p>
-            ) : null}
-          </div>
-        </header>
-
-        {ticket.bonusReward && (
-          <div className="flex items-start gap-2.5 rounded-2xl border border-emerald-500/25 bg-gradient-to-r from-emerald-500/15 to-cyan-500/10 px-3.5 py-3">
-            <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-xl bg-emerald-500/15 text-emerald-700 ring-1 ring-emerald-400/30 dark:text-emerald-300">
-              <Gift className="size-4" aria-hidden="true" />
-            </span>
-            <div className="min-w-0">
-              <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-800 dark:text-emerald-300/90">
-                <Sparkles className="size-3" aria-hidden="true" />
-                Beneficio incluido
-              </p>
-              <p className="mt-0.5 text-sm font-semibold text-emerald-950 dark:text-emerald-50">
-                {ticket.bonusReward}
-              </p>
-            </div>
-          </div>
-        )}
-
+      <div className="flex flex-1 flex-col items-center justify-center py-4">
         {canShowLiveQr ? (
           <div
-            className="rounded-[1.5rem] border border-border bg-muted/40 px-3 py-5 sm:px-4"
+            className="w-full"
             onContextMenu={(event) => event.preventDefault()}
           >
-            <p className="mb-4 text-center text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
-              {isStatic ? "QR fijo · imprimible" : "QR dinámico · ingreso"}
-            </p>
             {isStatic ? (
-              <div className="pointer-events-none mx-auto w-fit select-none rounded-[1.35rem] bg-white p-3.5">
+              <div className="pointer-events-none mx-auto w-fit select-none rounded-[1.35rem] bg-white p-3.5 shadow-sm">
                 <QRCodeSVG
                   value={ticket.totpSecret}
-                  size={208}
+                  size={220}
                   level="H"
                   bgColor="#ffffff"
                   fgColor="#09090b"
@@ -353,124 +355,58 @@ export function LivingTicketCard({
               <LivingTicketQR
                 ticketId={ticket.id}
                 totpSecret={ticket.totpSecret}
+                size={220}
               />
             )}
+            <div className="mt-3 flex justify-center">
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                  offline
+                    ? "bg-amber-500/10 text-amber-800 dark:text-amber-200"
+                    : "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300",
+                )}
+              >
+                {offline ? (
+                  <WifiOff className="size-3" aria-hidden="true" />
+                ) : (
+                  <Wifi className="size-3" aria-hidden="true" />
+                )}
+                {isStatic ? "QR fijo" : "Living QR"}
+                {offline ? " · offline" : ""}
+              </span>
+            </div>
           </div>
         ) : (
-          <div className="rounded-2xl border border-dashed border-border bg-muted/40 px-4 py-8 text-center text-sm text-muted-foreground">
+          <p className="px-2 text-center text-sm text-muted-foreground">
             {ticket.status === "transferred"
               ? "Esta entrada fue transferida. El QR quedó anulado."
               : "Esta entrada ya no muestra QR vivo en puerta."}
-          </div>
-        )}
-
-        {canShowLiveQr ? (
-          <div className="rounded-2xl border border-sky-500/25 bg-sky-500/10 px-3.5 py-3">
-            <p className="flex items-start gap-2 text-[12px] leading-5 text-sky-950 dark:text-sky-100/95">
-              <ShieldCheck
-                className="mt-0.5 size-4 shrink-0 text-sky-700 dark:text-sky-300"
-                aria-hidden="true"
-              />
-              <span>
-                {isStatic ? (
-                  <>
-                    <span className="font-bold uppercase tracking-wide text-sky-800 dark:text-sky-200">
-                      Ingreso:{" "}
-                    </span>
-                    Podés presentar este código desde la aplicación, la billetera
-                    del teléfono o el PDF emitido.
-                  </>
-                ) : (
-                  <>
-                    <span className="font-bold uppercase tracking-wide text-sky-800 dark:text-sky-200">
-                      Seguridad:{" "}
-                    </span>
-                    Abrí esta entrada al llegar. El código cambia cada 15
-                    segundos y las capturas vencen automáticamente.
-                  </>
-                )}
-              </span>
-            </p>
-          </div>
-        ) : null}
-
-        {ticket.status === "valid" ? (
-          <SaveTicketButton
-            ticket={ticket}
-            userId={userId}
-            disabled={offline}
-            appleWalletEnabled={appleWalletEnabled}
-            googleWalletEnabled={googleWalletEnabled}
-          />
-        ) : null}
-
-        {ticket.status === "valid" ? (
-          <StoryFlyerWalletButton
-            data={{
-              eventTitle: ticket.eventTitle,
-              eventDate: ticket.eventDate,
-              eventLocation: ticket.venueName ?? ticket.eventLocation,
-              imageUrl: ticket.flyerUrl,
-              customStoryUrl: ticket.socialShareImageUrl,
-              mode: "buyer",
-              organizerName: ticket.organizerName,
-              organizerAvatarUrl: ticket.organizerAvatarUrl,
-            }}
-          />
-        ) : null}
-
-        {canTransfer ? (
-          <TransferTicketDialog
-            ticketId={ticket.id}
-            eventTitle={ticket.eventTitle}
-          />
-        ) : null}
-
-        {canResale || ticket.activeResaleListingId ? (
-          <ResaleTicketDialog
-            ticketId={ticket.id}
-            eventTitle={ticket.eventTitle}
-            tierPrice={ticket.tierPrice}
-            activeListingId={ticket.activeResaleListingId}
-            disabled={offline}
-          />
-        ) : null}
-
-        {ticket.status === "valid" && offline ? (
-          <p className="text-center text-[11px] text-muted-foreground">
-            Transferencias y reventa disponibles cuando vuelvas a tener conexión.
           </p>
-        ) : null}
-
-        <Link
-          href={`/cuenta/entradas/${ticket.id}`}
-          className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-border bg-background text-sm font-semibold text-foreground transition hover:bg-muted"
-        >
-          Ver detalle de la entrada
-          <ChevronRight className="size-4 opacity-70" aria-hidden="true" />
-        </Link>
-
-        <p className="text-center font-mono text-[10px] tracking-wider text-muted-foreground">
-          #{ticket.id.slice(0, 8).toUpperCase()}
-        </p>
-
-        {ticket.isSponsoredByTokepass ? (
-          <div className="flex items-center justify-center gap-2 rounded-xl border border-amber-400/30 bg-gradient-to-r from-amber-500/10 via-violet-500/10 to-amber-500/10 px-3 py-2 text-center">
-            <Sparkles
-              className="size-3.5 text-amber-700 dark:text-amber-300"
-              aria-hidden="true"
-            />
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-900 dark:text-amber-100/90">
-              Comisión Tokepass bonificada
-            </p>
-          </div>
-        ) : null}
-
-        <p className="border-t border-border pt-3 text-center text-[10px] leading-4 text-muted-foreground">
-          Entrada emitida bajo responsabilidad exclusiva del Organizador.
-          La reventa solo es válida a través del marketplace oficial de Tokepass.
-        </p>
+        )}
       </div>
+
+      <Button
+        type="button"
+        variant="ghost"
+        className="h-10 w-full rounded-xl text-sm font-semibold text-muted-foreground hover:text-foreground"
+        onClick={() => setManageOpen(true)}
+      >
+        <MoreHorizontal className="size-4" aria-hidden="true" />
+        Gestionar entrada
+      </Button>
+
+      <TicketManageSheet
+        ticket={ticket}
+        userId={userId}
+        offline={offline}
+        appleWalletEnabled={appleWalletEnabled}
+        googleWalletEnabled={googleWalletEnabled}
+        canTransfer={canTransfer}
+        canResale={canResale}
+        open={manageOpen}
+        onOpenChange={setManageOpen}
+      />
     </article>
   )
 }

@@ -39,7 +39,7 @@ export function UserRoleManager({
 
   if (isSelf) {
     return (
-      <span className="text-xs text-zinc-600">Tu cuenta</span>
+      <span className="text-xs text-muted-foreground">Tu cuenta</span>
     )
   }
 
@@ -83,7 +83,7 @@ export function UserRoleManager({
       >
         <SelectTrigger
           size="sm"
-          className="h-8 w-36 max-w-full overflow-hidden border-white/10 bg-muted dark:bg-black/20"
+          className="h-8 w-36 max-w-full overflow-hidden border-border bg-background"
         >
           <SelectValue>
             {roleOptions.find((option) => option.value === role)?.label ?? null}

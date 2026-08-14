@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 
+import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
 export type ComplimentaryTierOption = {
@@ -176,7 +177,7 @@ export async function updateTierAdmitCount(input: {
 
   const admit = Math.max(1, Math.min(50, Math.floor(input.admitCount) || 1))
 
-  const { error } = await gate.supabase
+  const { error } = await createAdminClient()
     .from("ticket_tiers")
     .update({ admit_count: admit, updated_at: new Date().toISOString() })
     .eq("id", input.tierId)

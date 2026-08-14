@@ -1,6 +1,6 @@
 "use client"
 
-import { Scanner, type IDetectedBarcode } from "@yudiel/react-qr-scanner"
+import type { IDetectedBarcode } from "@yudiel/react-qr-scanner"
 import {
   CameraOff,
   CheckCircle2,
@@ -17,6 +17,7 @@ import {
   WifiOff,
   XCircle,
 } from "lucide-react"
+import dynamic from "next/dynamic"
 import {
   useCallback,
   useEffect,
@@ -50,7 +51,6 @@ import {
   writeScannerAccessMode,
   type ScannerAccessMode,
 } from "@/lib/scanner/access-mode"
-import { configureZxingWasm } from "@/lib/scanner/configure-zxing"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -79,6 +79,15 @@ import {
 } from "@/lib/scan-payload"
 import { cn } from "@/lib/utils"
 
+const Scanner = dynamic(() => import("@/components/admin/qr-camera-scanner"), {
+  ssr: false,
+  loading: () => (
+    <div className="grid h-full min-h-[240px] place-items-center px-6 text-center">
+      <p className="text-sm text-white/70">Cargando cámara…</p>
+    </div>
+  ),
+})
+
 type VisualState = "idle" | "success" | "success_free" | "error" | "warn"
 
 type Feedback = {
@@ -94,6 +103,7 @@ function formatScanTime(isoOrMs: string | number | null | undefined): string {
     const date =
       typeof isoOrMs === "number" ? new Date(isoOrMs) : new Date(isoOrMs)
     return date.toLocaleString("es-AR", {
+      timeZone: "America/Argentina/Buenos_Aires",
       day: "2-digit",
       month: "2-digit",
       hour: "2-digit",
@@ -190,11 +200,6 @@ export function DoorScanner() {
   useEffect(() => {
     setAccessMode(readScannerAccessMode())
   }, [])
-
-  useEffect(() => {
-    if (isTotemMode) return
-    configureZxingWasm()
-  }, [isTotemMode])
 
   const setAccessModeAndPersist = useCallback((mode: ScannerAccessMode) => {
     setAccessMode(mode)

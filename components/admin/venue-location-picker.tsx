@@ -17,7 +17,7 @@ const VenueLeafletMap = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="grid h-full place-items-center bg-white dark:bg-zinc-950 text-sm text-slate-600 dark:text-zinc-400">
+      <div className="grid h-full place-items-center bg-white dark:bg-zinc-950 text-sm text-muted-foreground">
         <LoaderCircle className="mr-2 inline size-4 animate-spin" />
         Cargando mapa…
       </div>
@@ -121,8 +121,8 @@ export function VenueLocationPicker({
           <MapPin className="size-5" aria-hidden="true" />
         </span>
         <div>
-          <h3 className="font-bold text-zinc-900 dark:text-white">Ubicación exacta</h3>
-          <p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-zinc-400">
+          <h3 className="font-bold text-foreground">Ubicación exacta</h3>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
             Buscá la dirección y arrastrá el pin para ajustar el acceso.
           </p>
         </div>
@@ -145,14 +145,14 @@ export function VenueLocationPicker({
             }}
             placeholder="Av. Corrientes 1660, CABA"
             aria-label="Buscar dirección"
-            className="h-12 rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 pl-9 text-sm text-zinc-900 dark:text-white"
+            className="h-12 rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 pl-9 text-sm text-foreground"
           />
         </div>
         <Button
           type="button"
           onClick={() => void searchAddress()}
           disabled={searching}
-          className="h-12 rounded-xl bg-muted dark:bg-zinc-800 px-4 text-zinc-900 dark:text-white hover:bg-slate-300 dark:hover:bg-zinc-700"
+          className="h-12 rounded-xl bg-muted dark:bg-zinc-800 px-4 text-foreground hover:bg-slate-300 dark:hover:bg-zinc-700"
           aria-label="Buscar en el mapa"
         >
           {searching ? (
@@ -170,7 +170,7 @@ export function VenueLocationPicker({
               key={result.place_id}
               type="button"
               onClick={() => chooseResult(result)}
-              className="block w-full border-b border-zinc-200 dark:border-zinc-800/70 px-3 py-2.5 text-left text-xs leading-relaxed text-zinc-700 dark:text-zinc-300 transition last:border-0 hover:bg-zinc-100 dark:hover:bg-zinc-100 dark:hover:bg-zinc-900 hover:text-zinc-900 dark:hover:text-white"
+              className="block w-full border-b border-zinc-200 dark:border-zinc-800/70 px-3 py-2.5 text-left text-xs leading-relaxed text-foreground transition last:border-0 hover:bg-zinc-100 dark:hover:bg-zinc-100 dark:hover:bg-zinc-900 hover:text-foreground"
             >
               {result.display_name}
             </button>
@@ -179,7 +179,7 @@ export function VenueLocationPicker({
       ) : null}
 
       {message ? (
-        <p className="mt-2 text-xs text-slate-600 dark:text-zinc-400">{message}</p>
+        <p className="mt-2 text-xs text-muted-foreground">{message}</p>
       ) : null}
 
       <div className="relative mt-4 h-[340px] w-full overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-inner">
@@ -193,7 +193,7 @@ export function VenueLocationPicker({
         <div>
           <Label
             htmlFor="venue-latitude"
-            className="font-mono text-[10px] uppercase tracking-wider text-slate-600 dark:text-zinc-400"
+            className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
           >
             Latitud
           </Label>
@@ -202,13 +202,13 @@ export function VenueLocationPicker({
             value={coordinates?.latitude.toFixed(6) ?? ""}
             readOnly
             placeholder="—"
-            className="mt-1 h-9 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 font-mono text-xs text-zinc-600 dark:text-zinc-400"
+            className="mt-1 h-9 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 font-mono text-xs text-muted-foreground"
           />
         </div>
         <div>
           <Label
             htmlFor="venue-longitude"
-            className="font-mono text-[10px] uppercase tracking-wider text-slate-600 dark:text-zinc-400"
+            className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
           >
             Longitud
           </Label>
@@ -217,7 +217,7 @@ export function VenueLocationPicker({
             value={coordinates?.longitude.toFixed(6) ?? ""}
             readOnly
             placeholder="—"
-            className="mt-1 h-9 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 font-mono text-xs text-zinc-600 dark:text-zinc-400"
+            className="mt-1 h-9 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 font-mono text-xs text-muted-foreground"
           />
         </div>
       </div>

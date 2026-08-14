@@ -127,8 +127,8 @@ export function EventCouponsManager({
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">{eventTitle}</p>
-          <p className="mt-1 text-sm text-slate-600 dark:text-zinc-400">
+          <p className="text-sm text-muted-foreground">{eventTitle}</p>
+          <p className="mt-1 text-sm text-muted-foreground">
             {activeCount} activo{activeCount === 1 ? "" : "s"} · {coupons.length}{" "}
             total
           </p>
@@ -160,7 +160,7 @@ export function EventCouponsManager({
               <TableRow>
                 <TableCell
                   colSpan={6}
-                  className="py-10 text-center text-sm text-slate-600 dark:text-zinc-400"
+                  className="py-10 text-center text-sm text-muted-foreground"
                 >
                   Todavía no hay cupones. Creá el primero para campañas B2C.
                 </TableCell>
@@ -185,7 +185,7 @@ export function EventCouponsManager({
                       {row.current_uses}
                       {row.max_uses != null ? ` / ${row.max_uses}` : " · ilimitado"}
                     </TableCell>
-                    <TableCell className="text-sm text-slate-600 dark:text-zinc-400">
+                    <TableCell className="text-sm text-muted-foreground">
                       {row.valid_until
                         ? formatDateTime(row.valid_until)
                         : "Sin vencimiento"}
@@ -196,7 +196,7 @@ export function EventCouponsManager({
                         className={cn(
                           "rounded-full",
                           !row.is_active
-                            ? "border-zinc-300 text-slate-600 dark:text-zinc-400"
+                            ? "border-zinc-300 text-muted-foreground"
                             : exhausted || expired
                               ? "border-amber-400/40 text-amber-700 dark:text-amber-300"
                               : "border-emerald-400/40 text-emerald-700 dark:text-emerald-300",

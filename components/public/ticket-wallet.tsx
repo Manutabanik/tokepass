@@ -171,7 +171,7 @@ function EventGroupHeader({
   countLabel: string
 }) {
   return (
-    <div className="mb-3 flex flex-wrap items-center gap-3 border-b border-border pb-3">
+    <div className="mb-5 flex flex-wrap items-center gap-3">
       <div className="relative size-14 shrink-0 overflow-hidden rounded-xl bg-muted ring-1 ring-border">
         {flyerUrl ? (
           <Image
@@ -361,17 +361,21 @@ export function TicketWallet({
                       : `${group.tickets.length} entradas activas`
                   }
                 />
-                <div className="grid gap-4 md:grid-cols-2 md:items-start lg:grid-cols-3">
+                <div className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:mx-0 lg:grid lg:grid-cols-2 lg:overflow-visible lg:px-0 xl:grid-cols-3">
                   {group.tickets.map((ticket) => (
-                    <LivingTicketCard
+                    <div
                       key={ticket.id}
-                      ticket={ticket}
-                      userId={userId}
-                      showQr
-                      offline={offline}
-                      appleWalletEnabled={appleWalletEnabled}
-                      googleWalletEnabled={googleWalletEnabled}
-                    />
+                      className="w-[min(85vw,22rem)] shrink-0 snap-center lg:w-auto"
+                    >
+                      <LivingTicketCard
+                        ticket={ticket}
+                        userId={userId}
+                        showQr
+                        offline={offline}
+                        appleWalletEnabled={appleWalletEnabled}
+                        googleWalletEnabled={googleWalletEnabled}
+                      />
+                    </div>
                   ))}
                 </div>
               </section>
@@ -508,14 +512,18 @@ export function TicketWallet({
                       : `${group.tickets.length} entradas`
                   }
                 />
-                <div className="grid gap-4 md:grid-cols-2 md:items-start lg:grid-cols-3">
+                <div className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:mx-0 lg:grid lg:grid-cols-2 lg:overflow-visible lg:px-0 xl:grid-cols-3">
                   {group.tickets.map((ticket) => (
-                    <LivingTicketCard
+                    <div
                       key={ticket.id}
-                      ticket={ticket}
-                      userId={userId}
-                      showQr={false}
-                    />
+                      className="w-[min(85vw,22rem)] shrink-0 snap-center lg:w-auto"
+                    >
+                      <LivingTicketCard
+                        ticket={ticket}
+                        userId={userId}
+                        showQr={false}
+                      />
+                    </div>
                   ))}
                 </div>
               </section>

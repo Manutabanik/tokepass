@@ -84,10 +84,10 @@ export function OrganizerProfileForm({
         <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-400/90">
           Tu Panel
         </p>
-        <h1 className="text-3xl font-black tracking-tight text-zinc-900 dark:text-white">
+        <h1 className="text-3xl font-black tracking-tight text-foreground">
           Mi perfil de organizador
         </h1>
-        <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+        <p className="text-sm leading-6 text-muted-foreground">
           Así te van a ver los compradores en la ficha de tus eventos: logo,
           nombre público y una bajada corta.
         </p>
@@ -118,7 +118,7 @@ export function OrganizerProfileForm({
               onClick={() => fileRef.current?.click()}
               className={cn(
                 "absolute -bottom-1 -right-1 grid size-9 place-items-center rounded-full",
-                "border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 shadow-lg hover:bg-muted dark:hover:bg-zinc-800",
+                "border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900 text-foreground shadow-lg hover:bg-muted dark:hover:bg-zinc-800",
                 avatarPending && "opacity-60",
               )}
               aria-label="Cambiar foto de perfil"
@@ -141,14 +141,14 @@ export function OrganizerProfileForm({
           </div>
 
           <div className="min-w-0 flex-1 text-center sm:text-left">
-            <p className="flex items-center justify-center gap-2 text-sm font-semibold text-zinc-900 dark:text-white sm:justify-start">
-              <UserRound className="size-4 text-slate-600 dark:text-zinc-400" aria-hidden="true" />
+            <p className="flex items-center justify-center gap-2 text-sm font-semibold text-foreground sm:justify-start">
+              <UserRound className="size-4 text-muted-foreground" aria-hidden="true" />
               Vista previa
             </p>
-            <p className="mt-1 truncate text-lg font-bold text-zinc-900 dark:text-white">
+            <p className="mt-1 truncate text-lg font-bold text-foreground">
               {displayName}
             </p>
-            <p className="mt-0.5 text-sm text-slate-600 dark:text-zinc-400">
+            <p className="mt-0.5 text-sm text-muted-foreground">
               {publicBio.trim() || "Productora en Tokepass"}
             </p>
             <p className="mt-2 text-xs text-zinc-600">{initial.email}</p>

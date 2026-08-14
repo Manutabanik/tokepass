@@ -57,10 +57,10 @@ export default async function AdminPromotersPage() {
           <p className="text-sm font-semibold uppercase tracking-[0.16em] text-violet-600 dark:text-violet-300">
             Difusión
           </p>
-          <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] text-zinc-900 dark:text-white">
+          <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] text-foreground">
             Promotores y RRPP
           </h1>
-          <p className="mt-2 max-w-xl text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+          <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
             Invitá a tu equipo, compartí links con{" "}
             <code className="rounded bg-zinc-100 px-1.5 py-0.5 text-violet-700 dark:bg-white/5 dark:text-violet-200">
               ?ref=CODIGO
@@ -75,7 +75,7 @@ export default async function AdminPromotersPage() {
         <Card className="border-zinc-200 bg-white dark:border-white/8 dark:bg-white/[0.03]">
           <CardHeader className="pb-2">
             <CardDescription>Promotores activos</CardDescription>
-            <CardTitle className="text-3xl text-zinc-900 dark:text-white">
+            <CardTitle className="text-3xl text-foreground">
               {formatNumber(promoters.length)}
             </CardTitle>
           </CardHeader>
@@ -83,7 +83,7 @@ export default async function AdminPromotersPage() {
         <Card className="border-zinc-200 bg-white dark:border-white/8 dark:bg-white/[0.03]">
           <CardHeader className="pb-2">
             <CardDescription>Clics / visitas</CardDescription>
-            <CardTitle className="text-3xl text-zinc-900 dark:text-white">
+            <CardTitle className="text-3xl text-foreground">
               {formatNumber(totalClicks)}
             </CardTitle>
           </CardHeader>
@@ -91,7 +91,7 @@ export default async function AdminPromotersPage() {
         <Card className="border-zinc-200 bg-white dark:border-white/8 dark:bg-white/[0.03]">
           <CardHeader className="pb-2">
             <CardDescription>Entradas vía promotores</CardDescription>
-            <CardTitle className="text-3xl text-zinc-900 dark:text-white">
+            <CardTitle className="text-3xl text-foreground">
               {formatNumber(totalTickets)}
             </CardTitle>
           </CardHeader>
@@ -108,7 +108,7 @@ export default async function AdminPromotersPage() {
 
       <Card className="border-zinc-200 bg-white dark:border-white/8 dark:bg-white/[0.03]">
         <CardHeader>
-          <CardTitle className="text-zinc-900 dark:text-white">
+          <CardTitle className="text-foreground">
             Equipo comercial
           </CardTitle>
           <CardDescription>
@@ -127,11 +127,11 @@ export default async function AdminPromotersPage() {
             </p>
           ) : promoters.length === 0 ? (
             <div className="grid place-items-center rounded-2xl border border-dashed border-zinc-200 px-4 py-14 text-center dark:border-white/10">
-              <Users className="size-8 text-slate-600 dark:text-zinc-400" aria-hidden="true" />
-              <p className="mt-4 text-base font-semibold text-zinc-900 dark:text-white">
+              <Users className="size-8 text-muted-foreground" aria-hidden="true" />
+              <p className="mt-4 text-base font-semibold text-foreground">
                 Todavía no tenés promotores
               </p>
-              <p className="mt-2 max-w-sm text-sm text-slate-600 dark:text-zinc-400">
+              <p className="mt-2 max-w-sm text-sm text-muted-foreground">
                 Agregá el primero y compartí su link en Instagram / WhatsApp.
               </p>
             </div>
@@ -139,19 +139,19 @@ export default async function AdminPromotersPage() {
             <Table>
               <TableHeader>
                 <TableRow className="border-zinc-200 hover:bg-transparent dark:border-white/8">
-                  <TableHead className="text-slate-600 dark:text-zinc-400">Nombre</TableHead>
-                  <TableHead className="text-slate-600 dark:text-zinc-400">Código</TableHead>
-                  <TableHead className="text-slate-600 dark:text-zinc-400">Comisión %</TableHead>
-                  <TableHead className="text-right text-slate-600 dark:text-zinc-400">
+                  <TableHead className="text-muted-foreground">Nombre</TableHead>
+                  <TableHead className="text-muted-foreground">Código</TableHead>
+                  <TableHead className="text-muted-foreground">Comisión %</TableHead>
+                  <TableHead className="text-right text-muted-foreground">
                     Clics
                   </TableHead>
-                  <TableHead className="text-right text-slate-600 dark:text-zinc-400">
+                  <TableHead className="text-right text-muted-foreground">
                     Entradas
                   </TableHead>
-                  <TableHead className="text-right text-slate-600 dark:text-zinc-400">
+                  <TableHead className="text-right text-muted-foreground">
                     Recaudación
                   </TableHead>
-                  <TableHead className="text-right text-slate-600 dark:text-zinc-400">
+                  <TableHead className="text-right text-muted-foreground">
                     A pagar
                   </TableHead>
                 </TableRow>
@@ -162,7 +162,7 @@ export default async function AdminPromotersPage() {
                     key={promoter.id}
                     className="border-zinc-200 hover:bg-zinc-50 dark:border-white/8 dark:hover:bg-white/[0.02]"
                   >
-                    <TableCell className="font-medium text-zinc-900 dark:text-white">
+                    <TableCell className="font-medium text-foreground">
                       {promoter.name}
                       {!promoter.userId && (
                         <Badge
@@ -178,16 +178,16 @@ export default async function AdminPromotersPage() {
                         {promoter.referralCode}
                       </code>
                     </TableCell>
-                    <TableCell className="text-zinc-700 dark:text-zinc-300">
+                    <TableCell className="text-foreground">
                       {formatPercent(promoter.commissionRate * 100, 0)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums text-zinc-800 dark:text-zinc-200">
+                    <TableCell className="text-right tabular-nums text-foreground">
                       {formatNumber(promoter.clickCount)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums text-zinc-800 dark:text-zinc-200">
+                    <TableCell className="text-right tabular-nums text-foreground">
                       {formatNumber(promoter.ticketsSold)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums text-zinc-800 dark:text-zinc-200">
+                    <TableCell className="text-right tabular-nums text-foreground">
                       {formatCurrency(promoter.revenueGenerated)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums font-semibold text-emerald-600 dark:text-emerald-300">

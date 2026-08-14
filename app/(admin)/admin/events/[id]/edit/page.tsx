@@ -83,7 +83,7 @@ export default async function EditEventPage({
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
       <Link
         href="/admin/events"
-        className="inline-flex w-fit items-center gap-2 text-sm text-slate-600 dark:text-zinc-400 transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+        className="inline-flex w-fit items-center gap-2 text-sm text-muted-foreground transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-foreground"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
         Volver a Mis Eventos
@@ -94,10 +94,10 @@ export default async function EditEventPage({
           <Pencil className="size-3.5" aria-hidden="true" />
           Datos del Evento
         </p>
-        <h1 className="text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-white sm:text-4xl">
+        <h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
           Editá: {initialData.title}
         </h1>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-600 dark:text-zinc-400 sm:text-base">
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
           Actualizá el título, el lugar y los tipos de entradas. Los cambios no
           afectan las compras que ya se hicieron.
         </p>

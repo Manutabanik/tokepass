@@ -48,10 +48,10 @@ export function EventStaffManager({
         <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-violet-300/80">
           Equipo
         </p>
-        <h1 className="mt-2 text-3xl font-black tracking-tight text-zinc-900 dark:text-white">
+        <h1 className="mt-2 text-3xl font-black tracking-tight text-foreground">
           Staff por evento
         </h1>
-        <p className="mt-2 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
           Delegá puerta, barra o caja sin compartir tu cuenta de organizador.
           El staff solo ve las herramientas de su rol.
         </p>
@@ -79,7 +79,7 @@ export function EventStaffManager({
             id="staff-event"
             value={eventId}
             onChange={(e) => setEventId(e.target.value)}
-            className="flex h-10 w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900 px-3 text-sm text-zinc-900 dark:text-white"
+            className="flex h-10 w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900 px-3 text-sm text-foreground"
             required
           >
             {events.map((event) => (
@@ -107,7 +107,7 @@ export function EventStaffManager({
             id="staff-role"
             value={role}
             onChange={(e) => setRole(e.target.value as EventStaffRole)}
-            className="flex h-10 w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900 px-3 text-sm text-zinc-900 dark:text-white"
+            className="flex h-10 w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900 px-3 text-sm text-foreground"
           >
             {EVENT_STAFF_ROLES.map((value) => (
               <option key={value} value={value}>
@@ -128,7 +128,7 @@ export function EventStaffManager({
       </form>
 
       {sorted.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 px-6 py-12 text-center text-sm text-slate-600 dark:text-zinc-400">
+        <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 px-6 py-12 text-center text-sm text-muted-foreground">
           Todavía no hay staff delegado.
         </div>
       ) : (
@@ -139,17 +139,17 @@ export function EventStaffManager({
               className="flex flex-col gap-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
             >
               <div>
-                <p className="font-medium text-zinc-900 dark:text-white">
+                <p className="font-medium text-foreground">
                   {row.userName ?? row.userEmail}
                 </p>
-                <p className="text-sm text-slate-600 dark:text-zinc-400">
+                <p className="text-sm text-muted-foreground">
                   {row.userEmail} · {row.eventTitle} · {ROLE_LABEL[row.role]}
                 </p>
               </div>
               <Button
                 type="button"
                 variant="ghost"
-                className="text-zinc-600 dark:text-zinc-400"
+                className="text-muted-foreground"
                 disabled={pending}
                 onClick={() => {
                   startTransition(async () => {

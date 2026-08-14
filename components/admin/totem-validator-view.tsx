@@ -92,17 +92,17 @@ export function TotemValidatorView({
         Tokepass · modo tótem · USB HID
       </p>
 
-      <h2 className="mt-4 max-w-3xl text-3xl font-black tracking-tight text-zinc-900 dark:text-white sm:text-5xl">
+      <h2 className="mt-4 max-w-3xl text-3xl font-black tracking-tight text-foreground sm:text-5xl">
         Apoyá tu código QR o ticket físico aquí
       </h2>
 
-      <p className="mt-4 max-w-xl text-base leading-7 text-zinc-600 dark:text-zinc-400 sm:text-lg">
+      <p className="mt-4 max-w-xl text-base leading-7 text-muted-foreground sm:text-lg">
         Sin cámara. El lector hardware valida al instante. No toques la
         pantalla.
       </p>
 
       {eventTitle ? (
-        <p className="mt-8 rounded-full border border-zinc-200 dark:border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
+        <p className="mt-8 rounded-full border border-zinc-200 dark:border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-foreground">
           {eventTitle}
         </p>
       ) : null}

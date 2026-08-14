@@ -68,7 +68,7 @@ export function PlatformSettlementsPanel({
                     type="button"
                     size="sm"
                     disabled={pending}
-                    className="min-h-12 rounded-xl bg-sky-600 px-4 font-semibold text-white hover:bg-sky-500 lg:min-h-9 lg:rounded-full"
+                    className="min-h-12 rounded-xl bg-sky-600 px-4 font-semibold text-foreground hover:bg-sky-500 lg:min-h-9 lg:rounded-full"
                     onClick={() => {
                       startTransition(async () => {
                         const result = await completeSettlement(row.id)

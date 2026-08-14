@@ -14,9 +14,9 @@ import {
   startStoreCheckout,
   type EventItem,
 } from "@/app/actions/addons"
-import { CheckoutCountdown } from "@/components/public/checkout-countdown"
 import { Button } from "@/components/ui/button"
 import { formatCurrency } from "@/lib/format"
+import { redirectToCheckoutPaymentOrToast } from "@/lib/checkout-redirect"
 import {
   EVENT_ITEM_CATEGORY_ICONS,
   EVENT_ITEM_CATEGORY_LABELS,
@@ -41,10 +41,6 @@ export function EventStoreUpsell({
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
-  const [paymentHold, setPaymentHold] = useState<{
-    initPoint: string
-    expiresAt: string
-  } | null>(null)
   const [qty, setQty] = useState<Record<string, number>>(() =>
     Object.fromEntries(items.map((item) => [item.id, 0])),
   )
@@ -114,35 +110,8 @@ export function EventStoreUpsell({
         return
       }
 
-      toast.success("Pedido reservado. Completá el pago a tiempo.")
-      setPaymentHold({
-        initPoint: result.initPoint,
-        expiresAt: result.expiresAt,
-      })
+      redirectToCheckoutPaymentOrToast(result.paymentUrl ?? result.initPoint)
     })
-  }
-
-  if (paymentHold) {
-    return (
-      <section
-        className={cn(
-          "rounded-3xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950/70",
-          compact ? "p-4" : "p-5 sm:p-6",
-        )}
-      >
-        <CheckoutCountdown
-          expiresAt={paymentHold.expiresAt}
-          redirectTo="/cuenta/entradas"
-          onExpired={() => setPaymentHold(null)}
-        />
-        <a
-          href={paymentHold.initPoint}
-          className="mt-5 inline-flex h-12 w-full items-center justify-center rounded-xl bg-[#009EE3] text-sm font-black text-white hover:bg-[#08A8EE]"
-        >
-          Ir a pagar con Mercado Pago
-        </a>
-      </section>
-    )
   }
 
   return (
