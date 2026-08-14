@@ -51,27 +51,17 @@ type Props = {
   onOpenSeatFlow: () => void
 }
 
-function categoryOf(tier: TicketSelectorTier, isMultiDay: boolean): TicketTierCategory {
-  return inferTicketTierCategory({
-    category: tier.category,
-    name: tier.name,
-    dayId: tier.dayId,
-    layoutType: tier.layoutType,
-    hasComboItems: (tier.comboItems?.length ?? 0) > 0,
-    isMultiDay,
-  })
-}
-
 export function TicketTierSelector({
   tiers,
   quantities,
-  scheduleDays,
+  scheduleDays = [],
   isPending,
   hasSeatingFlow,
   onQuantityChange,
   onOpenSeatFlow,
 }: Props) {
-  const isMultiDay = scheduleDays.length > 1
+  const days = scheduleDays ?? []
+  const multiDayEvent = days.length > 1
   const grouped = useMemo(() => {
     const buckets: Record<TicketTierCategory, TicketSelectorTier[]> = {
       standard: [],
@@ -79,10 +69,18 @@ export function TicketTierSelector({
       special: [],
     }
     for (const tier of tiers) {
-      buckets[categoryOf(tier, isMultiDay)].push(tier)
+      const category = inferTicketTierCategory({
+        category: tier.category,
+        name: tier.name,
+        dayId: tier.dayId,
+        layoutType: tier.layoutType,
+        hasComboItems: (tier.comboItems?.length ?? 0) > 0,
+        isMultiDay: multiDayEvent,
+      })
+      buckets[category].push(tier)
     }
     return buckets
-  }, [isMultiDay, tiers])
+  }, [multiDayEvent, tiers])
 
   const availableTabs = (
     [
@@ -144,14 +142,14 @@ export function TicketTierSelector({
       </TabsList>
 
       <TabsContent value="standard" className="space-y-3">
-        {isMultiDay ? (
+        {multiDayEvent ? (
           <div className="flex flex-wrap gap-1 rounded-xl border border-border bg-muted/30 p-1">
             <DayChip
               active={dayFilter === "all"}
               label="Todas"
               onClick={() => setDayFilter("all")}
             />
-            {scheduleDays.map((day) => (
+            {days.map((day) => (
               <DayChip
                 key={day.id}
                 active={dayFilter === day.id}
@@ -163,11 +161,11 @@ export function TicketTierSelector({
         ) : null}
         <TierList
           tiers={grouped.standard.filter((tier) => {
-            if (!isMultiDay || dayFilter === "all") return true
+            if (!multiDayEvent || dayFilter === "all") return true
             return tier.dayId === dayFilter
           })}
           quantities={quantities}
-          scheduleDays={scheduleDays}
+          scheduleDays={days}
           isPending={isPending}
           hasSeatingFlow={hasSeatingFlow}
           variant="standard"
@@ -180,7 +178,7 @@ export function TicketTierSelector({
         <TierList
           tiers={grouped.bundle}
           quantities={quantities}
-          scheduleDays={scheduleDays}
+          scheduleDays={days}
           isPending={isPending}
           hasSeatingFlow={hasSeatingFlow}
           variant="bundle"
@@ -197,7 +195,7 @@ export function TicketTierSelector({
         <TierList
           tiers={grouped.special}
           quantities={quantities}
-          scheduleDays={scheduleDays}
+          scheduleDays={days}
           isPending={isPending}
           hasSeatingFlow={hasSeatingFlow}
           variant="special"
