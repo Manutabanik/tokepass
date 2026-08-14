@@ -1,5 +1,10 @@
 import { z } from "zod"
 
+import {
+  DEFAULT_TICKET_TABS,
+  TICKET_DESCRIPTION_MAX,
+  TICKET_HIGHLIGHT_BADGES,
+} from "@/lib/checkout/ticket-picker"
 import { BUNDLE_TYPES } from "@/lib/inventory/flexible-bundles"
 import { INVENTORY_TIER_TYPES } from "@/lib/inventory/unified-inventory"
 import { EVENT_VISIBILITY_VALUES } from "@/types/events"
@@ -49,6 +54,20 @@ export const ticketTierSchema = z.object({
   sold: z.number().int().min(0).optional(),
   timeLimit: z.string().optional(),
   bonusReward: z.string().trim().optional(),
+  description: z
+    .string()
+    .trim()
+    .max(
+      TICKET_DESCRIPTION_MAX,
+      `La descripción no puede superar ${TICKET_DESCRIPTION_MAX} caracteres.`,
+    )
+    .optional()
+    .default(""),
+  highlightBadge: z
+    .enum(TICKET_HIGHLIGHT_BADGES)
+    .nullable()
+    .optional()
+    .default(null),
   /** null / "all" / "" = abono completo */
   dayId: z.string().nullable().optional(),
   visibility: z.enum(TICKET_TIER_VISIBILITY_VALUES),
@@ -134,6 +153,7 @@ const eventFormObject = z
     tickets: z
       .array(ticketTierSchema)
       .min(1, "Creá al menos un tipo de entrada."),
+    ticketsDefaultTab: z.enum(DEFAULT_TICKET_TABS).optional().default("auto"),
   })
   .superRefine((data, context) => {
     const tierNames = new Set<string>()
@@ -281,6 +301,12 @@ const draftTicketSchema = z.object({
   sold: z.number().int().min(0).optional(),
   timeLimit: z.string().optional(),
   bonusReward: z.string().trim().optional(),
+  description: z.string().optional().default(""),
+  highlightBadge: z
+    .enum(TICKET_HIGHLIGHT_BADGES)
+    .nullable()
+    .optional()
+    .default(null),
   dayId: z.string().nullable().optional(),
   visibility: z.enum(TICKET_TIER_VISIBILITY_VALUES).optional().default("public"),
   layoutType: z
@@ -364,6 +390,7 @@ export const draftEventSchema = z.object({
       saveVenueForReuse: true,
     }),
   tickets: z.array(draftTicketSchema).optional().default([]),
+  ticketsDefaultTab: z.enum(DEFAULT_TICKET_TABS).optional().default("auto"),
 })
 
 export type EventFormValues = z.infer<typeof publishEventSchema>
@@ -385,6 +412,8 @@ function blankDraftTicket(): EventFormValues["tickets"][number] {
     capacity: 1,
     timeLimit: "",
     bonusReward: "",
+    description: "",
+    highlightBadge: null,
     dayId: null,
     visibility: "public",
     layoutType: "general",
@@ -449,6 +478,8 @@ export function coerceDraftEventForm(
       listPrice: tier.listPrice ?? null,
       bundleItems: tier.bundleItems ?? [],
       bundleType: tier.bundleType ?? null,
+      description: (tier.description ?? "").trim().slice(0, TICKET_DESCRIPTION_MAX),
+      highlightBadge: tier.highlightBadge === "bestseller" ? "bestseller" : null,
     }))
 
   const venue = raw.venue ?? {
@@ -537,5 +568,12 @@ export function coerceDraftEventForm(
     },
     tickets:
       tickets.length > 0 ? tickets : [blankDraftTicket()],
+    ticketsDefaultTab:
+      raw.ticketsDefaultTab === "seated" ||
+      raw.ticketsDefaultTab === "general" ||
+      raw.ticketsDefaultTab === "bundle" ||
+      raw.ticketsDefaultTab === "addon"
+        ? raw.ticketsDefaultTab
+        : "auto",
   } as EventFormValues
 }

@@ -1,3 +1,10 @@
+import { z } from "zod"
+
+import {
+  firstCheckoutBuyerErrorField,
+  type CheckoutBuyerField,
+} from "@/lib/checkout/validation-scroll"
+
 export type CheckoutBuyerInfo = {
   buyerName: string
   buyerDni: string
@@ -12,7 +19,44 @@ export type NormalizedCheckoutBuyer = {
   buyerPhone: string
 }
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+export const checkoutBuyerFormSchema = z.object({
+  buyerName: z
+    .string()
+    .trim()
+    .transform((value) => value.replace(/\s+/g, " "))
+    .pipe(
+      z
+        .string()
+        .min(3, "Ingresá el nombre y apellido del asistente.")
+        .refine(
+          (value) => value.split(" ").filter(Boolean).length >= 2,
+          "Ingresá el nombre y apellido del asistente.",
+        ),
+    ),
+  buyerDni: z
+    .string()
+    .transform((value) => value.replace(/\D/g, ""))
+    .pipe(
+      z
+        .string()
+        .regex(/^\d{7,9}$/, "El DNI debe tener entre 7 y 9 dígitos."),
+    ),
+  buyerPhone: z
+    .string()
+    .transform((value) => value.replace(/\D/g, ""))
+    .pipe(
+      z
+        .string()
+        .regex(/^\d{8,15}$/, "Ingresá un teléfono / WhatsApp válido."),
+    ),
+  buyerEmail: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .email("Ingresá un email válido para la confirmación."),
+})
+
+export type CheckoutBuyerFormValues = z.infer<typeof checkoutBuyerFormSchema>
 
 export function normalizeCheckoutBuyer(
   input: Partial<CheckoutBuyerInfo> | null | undefined,
@@ -28,50 +72,49 @@ export function normalizeCheckoutBuyer(
   return { buyerName, buyerDni, buyerEmail, buyerPhone }
 }
 
+export function getCheckoutBuyerFieldErrors(
+  input: Partial<CheckoutBuyerInfo> | null | undefined,
+): Partial<Record<CheckoutBuyerField, string>> {
+  const parsed = checkoutBuyerFormSchema.safeParse({
+    buyerName: input?.buyerName ?? "",
+    buyerDni: input?.buyerDni ?? "",
+    buyerPhone: input?.buyerPhone ?? "",
+    buyerEmail: input?.buyerEmail ?? "",
+  })
+  if (parsed.success) return {}
+
+  const errors: Partial<Record<CheckoutBuyerField, string>> = {}
+  for (const issue of parsed.error.issues) {
+    const key = issue.path[0]
+    if (
+      key === "buyerName" ||
+      key === "buyerDni" ||
+      key === "buyerPhone" ||
+      key === "buyerEmail"
+    ) {
+      errors[key] ??= issue.message
+    }
+  }
+  if (Object.keys(errors).length === 0) {
+    errors.buyerName = "Completá nombre, DNI, teléfono y email del asistente."
+  }
+  return errors
+}
+
 export function validateCheckoutBuyer(
   input: Partial<CheckoutBuyerInfo> | null | undefined,
 ): { ok: true; buyer: NormalizedCheckoutBuyer } | { ok: false; error: string } {
+  const errors = getCheckoutBuyerFieldErrors(input)
+  const firstField = firstCheckoutBuyerErrorField(errors)
+  if (firstField && errors[firstField]) {
+    return { ok: false, error: errors[firstField] }
+  }
+
   const buyer = normalizeCheckoutBuyer(input)
   if (!buyer) {
     return {
       ok: false,
       error: "Completá nombre, DNI, teléfono y email del asistente.",
-    }
-  }
-
-  if (buyer.buyerName.length < 3) {
-    return {
-      ok: false,
-      error: "Ingresá el nombre y apellido del asistente.",
-    }
-  }
-
-  if (buyer.buyerDni.length < 7 || buyer.buyerDni.length > 9) {
-    return {
-      ok: false,
-      error: "El DNI debe tener entre 7 y 9 dígitos.",
-    }
-  }
-
-  const nameParts = buyer.buyerName.split(" ").filter(Boolean)
-  if (nameParts.length < 2) {
-    return {
-      ok: false,
-      error: "Ingresá el nombre y apellido del asistente.",
-    }
-  }
-
-  if (buyer.buyerPhone.length < 8 || buyer.buyerPhone.length > 15) {
-    return {
-      ok: false,
-      error: "Ingresá un teléfono / WhatsApp válido.",
-    }
-  }
-
-  if (!EMAIL_RE.test(buyer.buyerEmail)) {
-    return {
-      ok: false,
-      error: "Ingresá un email válido para la confirmación.",
     }
   }
 

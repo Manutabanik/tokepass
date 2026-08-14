@@ -1,6 +1,7 @@
 import {
   createVenueElement,
   rebuildElementSeats,
+  VENUE_SHAPE,
 } from "@/lib/seating/venue-element-geometry"
 import type { VenueMapElement, VenueElementType } from "@/types/venue-map"
 
@@ -25,10 +26,24 @@ export type ConcentricRingConfig = {
   price: number
 }
 
-const SPACING: Record<RingElementKind, number> = {
-  round_table: 38,
-  long_table: 52,
+/** Chord distance (px) between element centers along an arc. Inner rings get fewer seats. */
+export const MIN_ARC_DISTANCE: Record<RingElementKind, number> = {
+  round_table: 40,
+  long_table: VENUE_SHAPE.longTableWidth + 8,
   vip_chair: 16,
+}
+
+const RADIAL_FOOTPRINT: Record<RingElementKind, number> = {
+  round_table: VENUE_SHAPE.roundTableChairOrbit + VENUE_SHAPE.chairRadius,
+  long_table: VENUE_SHAPE.longTableHeight / 2 + VENUE_SHAPE.chairRadius + 4,
+  vip_chair: VENUE_SHAPE.vipChairRadius + 3,
+}
+
+const RADIAL_GAP = 8
+
+export function dynamicAngleStepDeg(radius: number, kind: RingElementKind): number {
+  const minDistance = MIN_ARC_DISTANCE[kind]
+  return (minDistance / Math.max(1, radius)) * (180 / Math.PI)
 }
 
 export function polarFromUp(
@@ -88,9 +103,32 @@ export function autoCountForRing(
   kind: RingElementKind,
   segments: Array<{ start: number; end: number }>,
 ): number {
-  const spacing = SPACING[kind]
-  const length = usableArcLength(radius, segments)
-  return Math.min(240, Math.max(1, Math.floor(length / spacing)))
+  const stepDeg = dynamicAngleStepDeg(radius, kind)
+  const spanDeg = segments.reduce(
+    (sum, segment) => sum + Math.max(0, segment.end - segment.start),
+    0,
+  )
+  return Math.min(240, Math.max(0, Math.floor(spanDeg / Math.max(0.5, stepDeg))))
+}
+
+function fitRingRadii(
+  innerRadius: number,
+  outerRadius: number,
+  kinds: RingElementKind[],
+): number[] {
+  if (kinds.length === 0) return []
+  const radii: number[] = [innerRadius]
+  for (let index = 1; index < kinds.length; index += 1) {
+    const prev = kinds[index - 1]!
+    const kind = kinds[index]!
+    const minNext =
+      radii[index - 1]! + RADIAL_FOOTPRINT[prev] + RADIAL_FOOTPRINT[kind] + RADIAL_GAP
+    const even = ringRadius(innerRadius, outerRadius, kinds.length, index)
+    const next = Math.max(minNext, even)
+    if (next > outerRadius + RADIAL_FOOTPRINT[kind]) break
+    radii.push(next)
+  }
+  return radii
 }
 
 export function anglesAlongSegments(
@@ -169,18 +207,23 @@ export function generateConcentricRing(
     config.aisleWidthDeg,
   )
   const elements: VenueMapElement[] = []
+  const kinds: RingElementKind[] = Array.from({ length: rows }, (_, rowIndex) =>
+    config.rowTypes[rowIndex] ??
+    config.rowTypes[config.rowTypes.length - 1] ??
+    "round_table",
+  )
+  const radii = fitRingRadii(inner, outer, kinds)
 
-  for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
-    const kind =
-      config.rowTypes[rowIndex] ??
-      config.rowTypes[config.rowTypes.length - 1] ??
-      "round_table"
-    const radius = ringRadius(inner, outer, rows, rowIndex)
+  for (let rowIndex = 0; rowIndex < radii.length; rowIndex += 1) {
+    const kind = kinds[rowIndex]!
+    const radius = radii[rowIndex]!
     const requested = config.countPerRow[rowIndex] ?? "auto"
+    const maxFit = autoCountForRing(radius, kind, segments)
+    if (maxFit <= 0) continue
     const count =
       requested === "auto"
-        ? autoCountForRing(radius, kind, segments)
-        : Math.min(240, Math.max(1, Math.floor(requested) || 1))
+        ? maxFit
+        : Math.min(maxFit, Math.max(1, Math.floor(requested) || 1))
     const angles = anglesAlongSegments(segments, count)
     angles.forEach((angle, index) => {
       const point = polarFromUp(config.centerX, config.centerY, radius, angle)

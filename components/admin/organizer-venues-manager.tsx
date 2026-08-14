@@ -477,7 +477,7 @@ export function OrganizerVenuesManager({
                         {uploadPending ? "Subiendo…" : "Subir imagen"}
                         <input
                           type="file"
-                          accept="image/png,image/webp"
+                          accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png"
                           className="sr-only"
                           disabled={uploadPending}
                           onChange={(event) => {

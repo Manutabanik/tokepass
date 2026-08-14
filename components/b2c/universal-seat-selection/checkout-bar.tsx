@@ -31,7 +31,7 @@ export function UniversalCheckoutBar({
       className={cn(
         "z-40 border-t border-zinc-200 bg-white/90 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl dark:border-white/10 dark:bg-zinc-950/90",
         sticky
-          ? "sticky bottom-0 mt-6 rounded-b-3xl"
+          ? "shrink-0"
           : "fixed inset-x-0 bottom-0",
       )}
     >
@@ -50,7 +50,7 @@ export function UniversalCheckoutBar({
           onClick={onContinue}
           className="h-12 shrink-0 rounded-2xl bg-emerald-500 px-4 text-sm font-bold text-zinc-950 shadow-[0_10px_30px_rgba(16,185,129,0.35)] hover:bg-emerald-400 disabled:opacity-50"
         >
-          {pending ? "Reservando…" : "Continuar al pago"}
+          {pending ? "Reservando…" : "Continuar"}
           <ArrowRight className="size-4" aria-hidden="true" />
         </Button>
       </div>

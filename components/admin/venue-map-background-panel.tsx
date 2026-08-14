@@ -1,6 +1,6 @@
 "use client"
 
-import { Image as ImageIcon } from "lucide-react"
+import { Image as ImageIcon, SlidersHorizontal } from "lucide-react"
 import { useRef, useState } from "react"
 
 import { uploadVenueSeatingBackground } from "@/app/actions/venues"
@@ -21,17 +21,17 @@ export function VenueMapBackgroundPanel({
   const fileRef = useRef<HTMLInputElement>(null)
 
   return (
-    <div className="space-y-3 rounded-xl border border-zinc-200 bg-white p-3 dark:border-white/10 dark:bg-zinc-900">
+    <div className="space-y-3 rounded-xl border border-border bg-background p-3">
       <div className="flex items-center gap-2">
-        <ImageIcon className="size-4 text-emerald-400" />
-        <p className="text-sm font-semibold text-foreground">Mapa aéreo de fondo</p>
+        <ImageIcon className="size-4 text-emerald-400" aria-hidden="true" />
+        <p className="text-sm font-semibold text-foreground">Foto aérea de fondo</p>
       </div>
-      <p className="text-xs leading-relaxed text-muted-foreground">
-        PNG o WEBP hasta 3 MB, o una URL. Ajusta opacidad, escala y posicion para
-        calzar las graderías sobre el predio real.
+      <p className="text-sm leading-relaxed text-muted-foreground">
+        Cargá cualquier JPG o PNG del predio. Después trazás las zonas encima
+        con el lápiz.
       </p>
       <div className="space-y-1">
-        <Label className="text-[11px] text-zinc-500">URL de la imagen</Label>
+        <Label className="text-[11px] text-muted-foreground">URL de la imagen</Label>
         <Input
           value={map.backgroundImage ?? ""}
           onChange={(event) =>
@@ -48,12 +48,12 @@ export function VenueMapBackgroundPanel({
           disabled={busy}
           onClick={() => fileRef.current?.click()}
         >
-          {busy ? "Subiendo imagen..." : "Cargar mapa aéreo (PNG o WEBP)"}
+          {busy ? "Subiendo imagen..." : "Cargar foto (JPG o PNG)"}
         </Button>
         <input
           ref={fileRef}
           type="file"
-          accept="image/png,image/webp"
+          accept="image/jpeg,image/jpg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
           className="sr-only"
           onChange={async (event) => {
             const file = event.target.files?.[0]
@@ -69,16 +69,23 @@ export function VenueMapBackgroundPanel({
               setError(result.error)
               return
             }
-            onChange({ backgroundImage: result.data.url })
+            onChange({
+              backgroundImage: result.data.url,
+              backgroundOpacity: map.backgroundImage
+                ? map.backgroundOpacity
+                : 0.72,
+              backgroundScale: map.backgroundScale || 1,
+            })
           }}
         />
       </div>
-      {busy ? (
-        <p className="text-xs text-muted-foreground">Subiendo imagen...</p>
-      ) : null}
       {error ? <p className="text-xs text-rose-400">{error}</p> : null}
+      <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
+        <SlidersHorizontal className="size-3.5" aria-hidden="true" />
+        Encaje sobre el predio
+      </div>
       <div className="space-y-1">
-        <Label className="text-[11px] text-zinc-500">
+        <Label className="text-[11px] text-muted-foreground">
           Opacidad ({Math.round((map.backgroundOpacity ?? 0.4) * 100)}%)
         </Label>
         <input
@@ -93,7 +100,7 @@ export function VenueMapBackgroundPanel({
         />
       </div>
       <div className="space-y-1">
-        <Label className="text-[11px] text-zinc-500">
+        <Label className="text-[11px] text-muted-foreground">
           Escala ({Math.round((map.backgroundScale ?? 1) * 100)}%)
         </Label>
         <input
@@ -109,7 +116,7 @@ export function VenueMapBackgroundPanel({
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1">
-          <Label className="text-[11px] text-zinc-500">Posición X</Label>
+          <Label className="text-[11px] text-muted-foreground">Posición X</Label>
           <Input
             type="number"
             value={map.backgroundX ?? 0}
@@ -119,7 +126,7 @@ export function VenueMapBackgroundPanel({
           />
         </div>
         <div className="space-y-1">
-          <Label className="text-[11px] text-zinc-500">Posición Y</Label>
+          <Label className="text-[11px] text-muted-foreground">Posición Y</Label>
           <Input
             type="number"
             value={map.backgroundY ?? 0}

@@ -27,10 +27,19 @@ const markerIcon = divIcon({
 function MapSizeFix() {
   const map = useMap()
   useEffect(() => {
-    const run = () => map.invalidateSize({ pan: false })
+    const run = () => {
+      const size = map.getSize()
+      if (size.x < 2 || size.y < 2) return
+      map.invalidateSize({ pan: false, animate: false })
+    }
     run()
+    const observer = new ResizeObserver(run)
+    observer.observe(map.getContainer())
     const t = window.setTimeout(run, 120)
-    return () => window.clearTimeout(t)
+    return () => {
+      observer.disconnect()
+      window.clearTimeout(t)
+    }
   }, [map])
   return null
 }
@@ -42,6 +51,14 @@ export function EventLocationMapInner({
   latitude: number
   longitude: number
 }) {
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-muted text-xs text-muted-foreground">
+        Mapa no disponible
+      </div>
+    )
+  }
+
   return (
     <MapContainer
       center={[latitude, longitude]}

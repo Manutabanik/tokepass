@@ -28,6 +28,7 @@ function baseVenue(
       aisles: [],
       sectors: [],
       elements: [],
+      zones: [],
       backgroundImage: null,
       backgroundOpacity: 0.4,
       backgroundScale: 1,

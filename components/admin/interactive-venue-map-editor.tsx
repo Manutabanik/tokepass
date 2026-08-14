@@ -21,6 +21,8 @@ import {
   ZoomIn,
   ZoomOut,
   Armchair,
+  PenTool,
+  Send,
 } from "lucide-react"
 import { useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { toast } from "sonner"
@@ -32,8 +34,12 @@ import { QuickPriceAssigner } from "@/components/admin/quick-price-assigner"
 import { VenueCanvasContextMenu } from "@/components/admin/venue-canvas-context-menu"
 import { VenueComponentPalette, type PalettePlacement } from "@/components/admin/venue-component-palette"
 import { VenueMapBackgroundPanel } from "@/components/admin/venue-map-background-panel"
+import { VenueParametricRulesPanel } from "@/components/admin/venue-parametric-rules-panel"
 import { VenueQuickInspector } from "@/components/admin/venue-quick-inspector"
 import { VenueSetupGuide } from "@/components/admin/venue-setup-guide"
+import { SvgTransformBox } from "@/components/admin/svg-transform-box"
+import { InspectorShapeSelector } from "@/components/admin/inspector-shape-selector"
+import { TheatreSeatSymbol } from "@/components/admin/venue-svg-symbols"
 import { VenueTemplateLibrary } from "@/components/admin/venue-template-selector"
 import {
   deleteOrganizerVenueTemplate,
@@ -55,6 +61,7 @@ import { PriceInput } from "@/components/ui/price-input"
 import { Label } from "@/components/ui/label"
 import { VenueMapBackgroundLayer } from "@/components/venue/venue-map-background-layer"
 import { VenueMapElementLayer } from "@/components/venue/venue-map-element-layer"
+import { VenueMapZoneLayer } from "@/components/venue/venue-map-zone-layer"
 import {
   cloneVenueElement,
   createVenueElement,
@@ -69,6 +76,29 @@ import {
   listVenuePriceGroups,
 } from "@/lib/seating/venue-price-groups"
 import {
+  aabbIntersects,
+  angleAt,
+  bakeLiveTransform,
+  clampScale,
+  elementAabb,
+  liveTransformToSvg,
+  resizeOrigin,
+  selectionBounds,
+  translateElements,
+  type BoundsRect,
+  type LiveTransform,
+  type ResizeHandle,
+} from "@/lib/seating/venue-transform"
+import {
+  createVenueZone,
+} from "@/lib/seating/adaptive-seating"
+import {
+  canvasPointToPercent,
+  isCloseToFirstVertex,
+  translatePercentPolygon,
+  VENUE_MAP_CANVAS,
+} from "@/lib/seating/venue-polygon"
+import {
   rebuildSectorSeats,
   venueMapCapacity,
   venueMapHasInventory,
@@ -81,11 +111,13 @@ import {
   isInfrastructureElement,
   type InteractiveVenueMap,
   type VenueMapElement,
+  type VenueMapPoint,
   type VenueMapSector,
+  type VenueMapZone,
 } from "@/types/venue-map"
 import type { VenueSeatingLayout } from "@/types/venues"
 
-type Tool = "select" | "stage" | "sector" | "aisle" | "label"
+type Tool = "select" | "stage" | "sector" | "aisle" | "label" | "polygon"
 type Selection =
   | { kind: "stage" }
   | { kind: "sector"; id: string }
@@ -94,6 +126,7 @@ type Selection =
   | { kind: "element"; id: string }
   | { kind: "elements"; ids: string[] }
   | { kind: "seats"; ids: string[] }
+  | { kind: "zone"; id: string }
   | null
 
 type ContextTarget =
@@ -102,8 +135,9 @@ type ContextTarget =
   | { kind: "label"; id: string }
   | { kind: "aisle"; id: string }
   | { kind: "element"; id: string }
+  | { kind: "zone"; id: string }
 
-const CANVAS = { width: 800, height: 560 }
+const CANVAS = VENUE_MAP_CANVAS
 const ZONE_COLORS = ["#f97316", "#ec4899", "#f59e0b", "#10b981", "#6366f1", "#06b6d4"]
 
 function newId(prefix: string) {
@@ -140,6 +174,9 @@ export function InteractiveVenueMapEditor({
   const [tool, setTool] = useState<Tool>("select")
   const [placement, setPlacement] = useState<PalettePlacement | null>(null)
   const [selection, setSelection] = useState<Selection>(null)
+  const [polygonDraft, setPolygonDraft] = useState<VenueMapPoint[]>([])
+  const [polygonCursor, setPolygonCursor] = useState<VenueMapPoint | null>(null)
+  const [rulesFocusId, setRulesFocusId] = useState<string | null>(null)
   const [zoom, setZoom] = useState(1)
   const [preview, setPreview] = useState(false)
   const [showRings, setShowRings] = useState(false)
@@ -187,6 +224,28 @@ export function InteractiveVenueMapEditor({
     origY: number
     recorded?: boolean
   } | null>(null)
+  const transformDrag = useRef<
+    | { mode: "move"; ids: string[]; startX: number; startY: number }
+    | {
+        mode: "scale"
+        ids: string[]
+        ox: number
+        oy: number
+        startDist: number
+        handle: ResizeHandle
+      }
+    | {
+        mode: "rotate"
+        ids: string[]
+        cx: number
+        cy: number
+        startAngle: number
+      }
+    | null
+  >(null)
+  const [liveTransform, setLiveTransform] = useState<LiveTransform | null>(null)
+  const liveTransformRef = useRef<LiveTransform | null>(null)
+  const [scaleHandle, setScaleHandle] = useState<ResizeHandle | null>(null)
 
   useEffect(() => {
     if (!value) return
@@ -235,6 +294,10 @@ export function InteractiveVenueMapEditor({
     selection?.kind === "sector"
       ? map.sectors.find((sector) => sector.id === selection.id) ?? null
       : null
+  const selectedZone =
+    selection?.kind === "zone"
+      ? (map.zones ?? []).find((zone) => zone.id === selection.id) ?? null
+      : null
   const selectedElement =
     selection?.kind === "element"
       ? (map.elements ?? []).find((item) => item.id === selection.id) ?? null
@@ -245,6 +308,151 @@ export function InteractiveVenueMapEditor({
       : selection?.kind === "element"
         ? [selection.id]
         : []
+  const selectedElements = (map.elements ?? []).filter((item) =>
+    selectedElementIds.includes(item.id),
+  )
+  const selectedIdSet = new Set(selectedElementIds)
+  const unselectedElements = (map.elements ?? []).filter(
+    (item) => !selectedIdSet.has(item.id),
+  )
+  const transformBounds =
+    !preview && tool === "select" && !placement
+      ? selectionBounds(selectedElements)
+      : null
+
+  function setLive(next: LiveTransform | null) {
+    liveTransformRef.current = next
+    setLiveTransform(next)
+  }
+
+  function capturePointer(event: React.PointerEvent) {
+    svgRef.current?.setPointerCapture(event.pointerId)
+  }
+
+  function isIdentityLive(live: LiveTransform) {
+    if (live.type === "move") {
+      return Math.abs(live.dx) < 0.05 && Math.abs(live.dy) < 0.05
+    }
+    if (live.type === "scale") return Math.abs(live.scale - 1) < 0.001
+    return Math.abs(live.deg) < 0.05
+  }
+
+  function commitLiveTransform() {
+    const live = liveTransformRef.current
+    const drag = transformDrag.current
+    if (!live || !drag || isIdentityLive(live)) {
+      setLive(null)
+      transformDrag.current = null
+      setScaleHandle(null)
+      return
+    }
+    const current = mapRef.current
+    const selected = new Set(drag.ids)
+    const baked = bakeLiveTransform(
+      ensureElements(current).filter((item) => selected.has(item.id)),
+      live,
+    )
+    const byId = new Map(baked.map((item) => [item.id, item]))
+    commit({
+      ...current,
+      elements: ensureElements(current).map((item) => byId.get(item.id) ?? item),
+    })
+    setLive(null)
+    transformDrag.current = null
+    setScaleHandle(null)
+  }
+
+  function cancelLiveTransform() {
+    setLive(null)
+    transformDrag.current = null
+    setScaleHandle(null)
+  }
+
+  function beginGroupMove(ids: string[], event: React.PointerEvent) {
+    const point = pointerToSvg(event)
+    capturePointer(event)
+    transformDrag.current = {
+      mode: "move",
+      ids,
+      startX: point.x,
+      startY: point.y,
+    }
+    setLive({ type: "move", dx: 0, dy: 0 })
+  }
+
+  function beginScale(
+    handle: ResizeHandle,
+    bounds: BoundsRect,
+    event: React.PointerEvent,
+  ) {
+    const point = pointerToSvg(event)
+    const origin = resizeOrigin(bounds, handle)
+    const startDist = Math.hypot(point.x - origin.x, point.y - origin.y)
+    capturePointer(event)
+    transformDrag.current = {
+      mode: "scale",
+      ids: selectedElementIds,
+      ox: origin.x,
+      oy: origin.y,
+      startDist: Math.max(startDist, 4),
+      handle,
+    }
+    setLive({ type: "scale", ox: origin.x, oy: origin.y, scale: 1 })
+    setScaleHandle(handle)
+  }
+
+  function beginRotate(bounds: BoundsRect, event: React.PointerEvent) {
+    const point = pointerToSvg(event)
+    const cx = bounds.x + bounds.width / 2
+    const cy = bounds.y + bounds.height / 2
+    capturePointer(event)
+    transformDrag.current = {
+      mode: "rotate",
+      ids: selectedElementIds,
+      cx,
+      cy,
+      startAngle: angleAt({ x: cx, y: cy }, point),
+    }
+    setLive({ type: "rotate", cx, cy, deg: 0 })
+  }
+
+  function toggleElementSelection(id: string) {
+    const next = selectedElementIds.includes(id)
+      ? selectedElementIds.filter((item) => item !== id)
+      : [...selectedElementIds, id]
+    if (next.length === 0) setSelection(null)
+    else if (next.length === 1) setSelection({ kind: "element", id: next[0]! })
+    else setSelection({ kind: "elements", ids: next })
+  }
+
+  function onMapElementPointerDown(
+    event: React.PointerEvent,
+    element: VenueMapElement,
+  ) {
+    event.stopPropagation()
+    if (event.button !== 0) return
+    let target = element
+    if (event.altKey) {
+      const clone = cloneVenueElement(element)
+      const current = mapRef.current
+      commit({
+        ...current,
+        elements: [...ensureElements(current), clone],
+      })
+      target = clone
+    }
+    if (event.shiftKey) {
+      toggleElementSelection(target.id)
+      return
+    }
+    const groupIds = selectedIdSet.has(target.id)
+      ? selectedElementIds
+      : [target.id]
+    if (!selectedIdSet.has(target.id)) {
+      setSelection({ kind: "element", id: target.id })
+    }
+    beginGroupMove(groupIds, event)
+  }
 
   function pushHistory() {
     undoStack.current.push(structuredClone(mapRef.current))
@@ -377,12 +585,76 @@ export function InteractiveVenueMapEditor({
     }, { skipHistory })
   }
 
+  function ensureZones(current: InteractiveVenueMap): VenueMapZone[] {
+    return current.zones ?? []
+  }
+
+  function patchZone(id: string, patch: Partial<VenueMapZone>, skipHistory = false) {
+    const current = mapRef.current
+    commit({
+      ...current,
+      zones: ensureZones(current).map((zone) => {
+        if (zone.id !== id) return zone
+        const next = { ...zone, ...patch }
+        if (next.layoutType === "general") return next
+        const rows = Math.min(80, Math.max(1, Math.floor(next.rows) || 1))
+        const itemsPerRow = Math.min(80, Math.max(1, Math.floor(next.itemsPerRow) || 1))
+        const perUnit =
+          next.layoutType === "numbered_seat"
+            ? 1
+            : Math.min(100, Math.max(1, Math.floor(next.capacityPerUnit) || 1))
+        return {
+          ...next,
+          rows,
+          itemsPerRow,
+          capacityPerUnit: perUnit,
+          capacity:
+            next.layoutType === "numbered_seat" ? rows * itemsPerRow : rows * itemsPerRow * perUnit,
+        }
+      }),
+    }, { skipHistory })
+  }
+
+  function closePolygonDraft() {
+    if (polygonDraft.length < 3) {
+      toast.error("Trazá al menos 3 puntos para cerrar la zona.")
+      return
+    }
+    const current = mapRef.current
+    const created = createVenueZone(
+      ensureZones(current).length,
+      polygonDraft.map(canvasPointToPercent),
+    )
+    commit({ ...current, zones: [...ensureZones(current), created] })
+    setPolygonDraft([])
+    setPolygonCursor(null)
+    setSelection({ kind: "zone", id: created.id })
+    setRulesFocusId(created.id)
+    setTool("select")
+    setPlacement(null)
+    window.setTimeout(() => {
+      propertiesRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" })
+    }, 40)
+  }
+
+  function cancelPolygonDraft() {
+    setPolygonDraft([])
+    setPolygonCursor(null)
+    setTool("select")
+    setPlacement(null)
+  }
+
   function ensureElements(current: InteractiveVenueMap): VenueMapElement[] {
     return current.elements ?? []
   }
 
   function placeAt(point: { x: number; y: number }, nextPlacement = placement) {
     if (!nextPlacement) return
+    if (nextPlacement.kind === "zone_polygon") {
+      setTool("polygon")
+      setPlacement(nextPlacement)
+      return
+    }
     const current = mapRef.current
     if (nextPlacement.kind === "seat_block") {
       addSector()
@@ -432,7 +704,8 @@ export function InteractiveVenueMapEditor({
           patch.sideA != null ||
           patch.sideB != null ||
           patch.width != null ||
-          patch.height != null
+          patch.height != null ||
+          patch.type != null
         )
         ) {
           next.seats = rebuildElementSeats(next)
@@ -515,6 +788,19 @@ export function InteractiveVenueMapEditor({
       const copy = { ...aisle, id: newId("aisle"), x: aisle.x + 15, y: aisle.y + 15 }
       commit({ ...current, aisles: [...current.aisles, copy] })
       setSelection({ kind: "aisle", id: copy.id })
+      return
+    }
+    if (target.kind === "zone") {
+      const zone = ensureZones(current).find((item) => item.id === target.id)
+      if (!zone) return
+      const copy: VenueMapZone = {
+        ...zone,
+        id: newId("zone"),
+        name: `${zone.name} copia`,
+        polygon: translatePercentPolygon(zone.polygon, 12, 12),
+      }
+      commit({ ...current, zones: [...ensureZones(current), copy] })
+      setSelection({ kind: "zone", id: copy.id })
     }
   }
 
@@ -569,6 +855,23 @@ export function InteractiveVenueMapEditor({
     })
   }
 
+  function batchPatchElements(
+    patch: Partial<VenueMapElement>,
+    commercialOnly = false,
+  ) {
+    const ids = new Set(selectedElementIds)
+    if (ids.size === 0) return
+    const current = mapRef.current
+    commit({
+      ...current,
+      elements: ensureElements(current).map((item) => {
+        if (!ids.has(item.id)) return item
+        if (commercialOnly && isInfrastructureElement(item)) return item
+        return { ...item, ...patch }
+      }),
+    })
+  }
+
   function deleteSelection() {
     if (!selection) return
     if (selection.kind === "stage") {
@@ -611,6 +914,11 @@ export function InteractiveVenueMapEditor({
               : seat,
           ),
         })),
+      })
+    } else if (selection.kind === "zone") {
+      commit({
+        ...map,
+        zones: ensureZones(map).filter((zone) => zone.id !== selection.id),
       })
     }
     setSelection(null)
@@ -670,13 +978,28 @@ export function InteractiveVenueMapEditor({
       })
       return
     }
+    if (selection.kind === "zone") {
+      commit({
+        ...current,
+        zones: ensureZones(current).map((zone) =>
+          zone.id === selection.id
+            ? {
+                ...zone,
+                polygon: translatePercentPolygon(zone.polygon, dx, dy),
+              }
+            : zone,
+        ),
+      })
+      return
+    }
     const ids = new Set(selectedElementIds)
     if (ids.size === 0) return
+    const selected = ensureElements(current).filter((item) => ids.has(item.id))
+    const moved = translateElements(selected, dx, dy)
+    const byId = new Map(moved.map((item) => [item.id, item]))
     commit({
       ...current,
-      elements: ensureElements(current).map((item) =>
-        ids.has(item.id) ? { ...item, x: item.x + dx, y: item.y + dy } : item,
-      ),
+      elements: ensureElements(current).map((item) => byId.get(item.id) ?? item),
     })
   }
 
@@ -704,6 +1027,7 @@ export function InteractiveVenueMapEditor({
     id?: string,
   ) {
     if (event.button !== 0) return
+    capturePointer(event)
     const point = pointerToSvg(event)
     elementDrag.current = {
       kind,
@@ -719,11 +1043,29 @@ export function InteractiveVenueMapEditor({
     if (preview) return
     if (event.button !== 0) return
     const point = pointerToSvg(event)
+    if (tool === "polygon") {
+      event.preventDefault()
+      const next = {
+        x: Math.round(point.x * 10) / 10,
+        y: Math.round(point.y * 10) / 10,
+      }
+      if (isCloseToFirstVertex(polygonDraft, next)) {
+        closePolygonDraft()
+        return
+      }
+      if (event.detail >= 2) {
+        if (polygonDraft.length >= 3) closePolygonDraft()
+        return
+      }
+      setPolygonDraft((current) => [...current, next])
+      return
+    }
     if (placement && !event.altKey && !spaceHeld.current) {
       placeAt(point)
       return
     }
     if ((event.altKey || spaceHeld.current) && !placement) {
+      capturePointer(event)
       elementDrag.current = {
         kind: "pan",
         startX: event.clientX,
@@ -734,6 +1076,7 @@ export function InteractiveVenueMapEditor({
       return
     }
     if (tool !== "select") return
+    capturePointer(event)
     drag.current = { x: point.x, y: point.y }
     setMarquee({ x: point.x, y: point.y, w: 0, h: 0 })
     setSelection(null)
@@ -741,6 +1084,42 @@ export function InteractiveVenueMapEditor({
 
   function onPointerMove(event: React.PointerEvent<SVGSVGElement>) {
     if (preview) return
+    if (tool === "polygon") {
+      const point = pointerToSvg(event)
+      setPolygonCursor({
+        x: Math.round(point.x * 10) / 10,
+        y: Math.round(point.y * 10) / 10,
+      })
+    }
+    const transforming = transformDrag.current
+    if (transforming) {
+      const point = pointerToSvg(event)
+      if (transforming.mode === "move") {
+        setLive({
+          type: "move",
+          dx: point.x - transforming.startX,
+          dy: point.y - transforming.startY,
+        })
+        return
+      }
+      if (transforming.mode === "scale") {
+        const dist = Math.hypot(point.x - transforming.ox, point.y - transforming.oy)
+        setLive({
+          type: "scale",
+          ox: transforming.ox,
+          oy: transforming.oy,
+          scale: clampScale(dist / transforming.startDist),
+        })
+        return
+      }
+      setLive({
+        type: "rotate",
+        cx: transforming.cx,
+        cy: transforming.cy,
+        deg: angleAt({ x: transforming.cx, y: transforming.cy }, point) - transforming.startAngle,
+      })
+      return
+    }
     const moving = elementDrag.current
     if (moving?.kind === "pan") {
       setPan({
@@ -778,8 +1157,6 @@ export function InteractiveVenueMapEditor({
         }, { skipHistory: true })
       } else if (moving.kind === "sector" && moving.id) {
         patchSector(moving.id, { x: nx, y: ny }, true)
-      } else if (moving.kind === "element" && moving.id) {
-        patchElement(moving.id, { x: nx, y: ny }, true)
       }
       return
     }
@@ -796,42 +1173,53 @@ export function InteractiveVenueMapEditor({
   }
 
   function onPointerUp() {
+    if (transformDrag.current) {
+      commitLiveTransform()
+      drag.current = null
+      elementDrag.current = null
+      setMarquee(null)
+      return
+    }
     if (marquee && marquee.w > 8 && marquee.h > 8) {
-      const ids: string[] = []
-      for (const sector of mapRef.current.sectors) {
-        for (const seat of sector.seats) {
-          if (
-            seat.x >= marquee.x &&
-            seat.x <= marquee.x + marquee.w &&
-            seat.y >= marquee.y &&
-            seat.y <= marquee.y + marquee.h
-          ) {
-            ids.push(seatKey(sector.id, seat.id))
+      const box = {
+        minX: marquee.x,
+        minY: marquee.y,
+        maxX: marquee.x + marquee.w,
+        maxY: marquee.y + marquee.h,
+      }
+      const elementIds = ensureElements(mapRef.current)
+        .filter((item) => aabbIntersects(elementAabb(item), box))
+        .map((item) => item.id)
+      if (elementIds.length === 1) {
+        setSelection({ kind: "element", id: elementIds[0]! })
+      } else if (elementIds.length > 1) {
+        setSelection({ kind: "elements", ids: elementIds })
+      } else {
+        const ids: string[] = []
+        for (const sector of mapRef.current.sectors) {
+          for (const seat of sector.seats) {
+            if (
+              seat.x >= marquee.x &&
+              seat.x <= marquee.x + marquee.w &&
+              seat.y >= marquee.y &&
+              seat.y <= marquee.y + marquee.h
+            ) {
+              ids.push(seatKey(sector.id, seat.id))
+            }
           }
         }
-      }
-      if (ids.length > 0) {
-        setSelection({ kind: "seats", ids })
-      } else {
-        const elementIds = ensureElements(mapRef.current)
-          .filter(
-            (item) =>
-              item.x >= marquee.x &&
-              item.x <= marquee.x + marquee.w &&
-              item.y >= marquee.y &&
-              item.y <= marquee.y + marquee.h,
-          )
-          .map((item) => item.id)
-        if (elementIds.length === 1) {
-          setSelection({ kind: "element", id: elementIds[0]! })
-        } else if (elementIds.length > 1) {
-          setSelection({ kind: "elements", ids: elementIds })
-        }
+        if (ids.length > 0) setSelection({ kind: "seats", ids })
       }
     }
     drag.current = null
     elementDrag.current = null
     setMarquee(null)
+  }
+
+  function onPointerLeave() {
+    if (tool === "polygon") setPolygonCursor(null)
+    if (transformDrag.current || elementDrag.current) return
+    onPointerUp()
   }
 
   const selectedSeatCount = selection?.kind === "seats" ? selection.ids.length : 0
@@ -852,6 +1240,23 @@ export function InteractiveVenueMapEditor({
       if (event.code === "Space") {
         event.preventDefault()
         spaceHeld.current = true
+        return
+      }
+      if (event.key === "Escape") {
+        if (tool === "polygon" || polygonDraft.length > 0) {
+          event.preventDefault()
+          cancelPolygonDraft()
+          return
+        }
+        if (liveTransformRef.current || transformDrag.current) {
+          event.preventDefault()
+          cancelLiveTransform()
+          return
+        }
+      }
+      if (event.key === "Enter" && tool === "polygon") {
+        event.preventDefault()
+        closePolygonDraft()
         return
       }
       if ((event.key === "Delete" || event.key === "Backspace") && selection) {
@@ -923,12 +1328,14 @@ export function InteractiveVenueMapEditor({
   const toolbar = (
     <div
       className={cn(
-        "flex flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-2",
-        isStudio && "h-16 shrink-0 justify-between gap-4 px-6",
+        "z-20 flex w-full items-center gap-2 border-b border-border bg-card",
+        isStudio
+          ? "justify-between gap-4 overflow-x-auto px-6 py-3"
+          : "flex-wrap px-3 py-2",
       )}
     >
       {isStudio ? (
-        <div className="flex min-w-0 flex-1 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <Button
             type="button"
             variant="ghost"
@@ -939,25 +1346,40 @@ export function InteractiveVenueMapEditor({
             <ArrowLeft className="size-4" />
             Salir
           </Button>
-          <p className="min-w-0 text-sm font-semibold text-foreground">
+          <p className="max-w-[220px] truncate text-sm font-semibold text-foreground">
             {eventTitle}
           </p>
         </div>
       ) : null}
 
       <div
+        data-slot="button-group"
         className={cn(
-          "flex flex-wrap items-center gap-1",
-          isStudio && "justify-center",
+          "inline-flex shrink-0 items-center rounded-lg border border-border bg-muted/40 p-0.5",
+          !isStudio && "flex-wrap gap-1 border-0 bg-transparent p-0",
         )}
       >
         <ToolButton
           active={tool === "select"}
-          onClick={() => setTool("select")}
+          onClick={() => {
+            setTool("select")
+            setPlacement(null)
+          }}
           label="Select"
           showLabel
         >
           <MousePointer className="size-4" />
+        </ToolButton>
+        <ToolButton
+          active={tool === "polygon"}
+          onClick={() => {
+            setTool("polygon")
+            setPlacement({ kind: "zone_polygon" })
+          }}
+          label="Trazar zona"
+          showLabel
+        >
+          <PenTool className="size-4" />
         </ToolButton>
         <ToolButton
           active={false}
@@ -1021,21 +1443,28 @@ export function InteractiveVenueMapEditor({
         ) : null}
       </div>
 
-      <div className={cn("flex flex-wrap items-center justify-end gap-2", isStudio ? "min-w-0 flex-1" : "ml-auto")}>
+      <div
+        className={cn(
+          "flex shrink-0 items-center gap-2",
+          isStudio ? "justify-end" : "ml-auto flex-wrap",
+        )}
+      >
         {isStudio ? (
           <>
             <Button
               type="button"
               variant="outline"
+              className="shrink-0 whitespace-nowrap"
               onClick={() => setLibraryOpen(true)}
             >
               <LayoutTemplate className="mr-2 h-4 w-4" />
               Plantillas
             </Button>
-            <VenueSetupGuide />
+            <VenueSetupGuide compact />
             <Button
               type="button"
               variant="outline"
+              className="shrink-0 whitespace-nowrap"
               disabled={pendingTemplates}
               onClick={() => {
                 setTemplateName(eventTitle || "Mi recinto")
@@ -1043,11 +1472,16 @@ export function InteractiveVenueMapEditor({
               }}
             >
               <Save className="mr-2 h-4 w-4" />
-              Guardar como Mi Plantilla
+              Mi plantilla
             </Button>
           </>
         ) : null}
-        <Button type="button" variant="outline" onClick={openPreview}>
+        <Button
+          type="button"
+          variant="outline"
+          className="shrink-0 whitespace-nowrap"
+          onClick={openPreview}
+        >
           <Eye className="mr-2 h-4 w-4 text-emerald-500" />
           Vista Previa del Comprador
         </Button>
@@ -1056,7 +1490,7 @@ export function InteractiveVenueMapEditor({
             type="button"
             disabled={saving}
             onClick={() => onSave(map)}
-            className="bg-emerald-500 font-bold text-black hover:bg-emerald-400"
+            className="shrink-0 whitespace-nowrap bg-emerald-500 font-bold text-black hover:bg-emerald-400"
           >
             <Save className="mr-2 h-4 w-4" />
             Guardar Cambios
@@ -1088,6 +1522,12 @@ export function InteractiveVenueMapEditor({
           variant={isStudio ? "studio" : "compact"}
           active={placement}
           onPick={(next) => {
+            if (next.kind === "zone_polygon") {
+              setPlacement(next)
+              setTool("polygon")
+              setPolygonDraft([])
+              return
+            }
             setPlacement(next)
             setTool("select")
           }}
@@ -1131,16 +1571,37 @@ export function InteractiveVenueMapEditor({
             className={cn(
               "w-full touch-none",
               isStudio ? "h-full" : "h-[min(70vh,560px)]",
+              tool === "polygon" && "cursor-crosshair",
+              liveTransform?.type === "move" && "cursor-grabbing",
+              liveTransform?.type === "rotate" && "cursor-grabbing",
+              liveTransform?.type === "scale" &&
+                (scaleHandle === "ne" || scaleHandle === "sw"
+                  ? "cursor-nesw-resize"
+                  : "cursor-nwse-resize"),
             )}
             onContextMenu={(event) => event.preventDefault()}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
-            onPointerLeave={onPointerUp}
+            onPointerLeave={onPointerLeave}
           >
             <g transform={`translate(${pan.x} ${pan.y}) scale(${zoom})`}>
               <rect width={CANVAS.width} height={CANVAS.height} fill="transparent" />
               <VenueMapBackgroundLayer map={map} />
+              <VenueMapZoneLayer
+                zones={map.zones ?? []}
+                selectedId={selection?.kind === "zone" ? selection.id : null}
+                draft={polygonDraft}
+                cursor={tool === "polygon" ? polygonCursor : null}
+                onSelect={
+                  tool === "polygon"
+                    ? undefined
+                    : (zone) => setSelection({ kind: "zone", id: zone.id })
+                }
+                onContextMenu={(event, zone) =>
+                  openObjectMenu(event, { kind: "zone", id: zone.id })
+                }
+              />
               {map.aisles.map((aisle) => (
                 <rect
                   key={aisle.id}
@@ -1205,15 +1666,8 @@ export function InteractiveVenueMapEditor({
                       (selection?.kind === "sector" && selection.id === sector.id) ||
                       (selection?.kind === "seats" && selection.ids.includes(key))
                     return (
-                      <circle
+                      <g
                         key={seat.id}
-                        cx={seat.x}
-                        cy={seat.y}
-                        r={6}
-                        fill={seat.status === "blocked" ? "#3f3f46" : sector.color}
-                        opacity={seat.status === "blocked" ? 0.35 : 1}
-                        stroke={active ? "#34d399" : "rgba(0,0,0,0.35)"}
-                        strokeWidth={active ? 2 : 0.6}
                         onContextMenu={(event) =>
                           openObjectMenu(event, { kind: "sector", id: sector.id })
                         }
@@ -1233,36 +1687,72 @@ export function InteractiveVenueMapEditor({
                             sector.id,
                           )
                         }}
-                      />
+                      >
+                        <TheatreSeatSymbol
+                          cx={seat.x}
+                          cy={seat.y}
+                          width={12}
+                          height={12}
+                          color={seat.status === "blocked" ? "#3f3f46" : sector.color}
+                          selected={active}
+                          occupied={seat.status === "blocked"}
+                          label={zoom >= 1.2 ? String(seat.number) : undefined}
+                          showLabel={zoom >= 1.2}
+                        />
+                      </g>
                     )
                   })}
                 </g>
               ))}
               <VenueMapElementLayer
-                elements={map.elements ?? []}
-                selectedIds={selectedElementIds}
+                elements={unselectedElements}
+                selectedIds={[]}
                 showSeats={(map.elements?.length ?? 0) < 220}
                 zoom={zoom}
-                onElementPointerDown={(event, element) => {
-                  event.stopPropagation()
-                  if (event.button !== 0) return
-                  let target = element
-                  if (event.altKey) {
-                    const clone = cloneVenueElement(element)
-                    const current = mapRef.current
-                    commit({
-                      ...current,
-                      elements: [...ensureElements(current), clone],
-                    })
-                    target = clone
-                  }
-                  setSelection({ kind: "element", id: target.id })
-                  beginElementDrag("element", event, target.x, target.y, target.id)
-                }}
+                onElementPointerDown={onMapElementPointerDown}
                 onElementContextMenu={(event, element) =>
                   openObjectMenu(event, { kind: "element", id: element.id })
                 }
               />
+              {transformBounds ? (
+                <g transform={liveTransformToSvg(liveTransform)}>
+                  <SvgTransformBox
+                    bounds={transformBounds}
+                    zoom={zoom}
+                    grabbing={liveTransform?.type === "move"}
+                    onMoveStart={(event) => {
+                      if (selectedElementIds.length === 0) return
+                      beginGroupMove(selectedElementIds, event)
+                    }}
+                    onResizeStart={(handle, event) =>
+                      beginScale(handle, transformBounds, event)
+                    }
+                    onRotateStart={(event) => beginRotate(transformBounds, event)}
+                  >
+                    <VenueMapElementLayer
+                      elements={selectedElements}
+                      selectedIds={selectedElementIds}
+                      showSeats={(map.elements?.length ?? 0) < 220}
+                      zoom={zoom}
+                      onElementPointerDown={onMapElementPointerDown}
+                      onElementContextMenu={(event, element) =>
+                        openObjectMenu(event, { kind: "element", id: element.id })
+                      }
+                    />
+                  </SvgTransformBox>
+                </g>
+              ) : (
+                <VenueMapElementLayer
+                  elements={selectedElements}
+                  selectedIds={selectedElementIds}
+                  showSeats={(map.elements?.length ?? 0) < 220}
+                  zoom={zoom}
+                  onElementPointerDown={onMapElementPointerDown}
+                  onElementContextMenu={(event, element) =>
+                    openObjectMenu(event, { kind: "element", id: element.id })
+                  }
+                />
+              )}
               {map.labels.map((label) => (
                 <text
                   key={label.id}
@@ -1288,12 +1778,17 @@ export function InteractiveVenueMapEditor({
                   y={marquee.y}
                   width={marquee.w}
                   height={marquee.h}
-                  className="fill-emerald-400/10 stroke-emerald-400"
+                  className="fill-primary/10 stroke-primary"
                   strokeDasharray="4 3"
                 />
               ) : null}
             </g>
           </svg>
+          {tool === "polygon" ? (
+            <div className="pointer-events-none absolute bottom-3 left-1/2 z-20 w-[min(100%-1.5rem,28rem)] -translate-x-1/2 rounded-full border border-cyan-400/30 bg-zinc-950/90 px-4 py-2 text-center text-xs text-cyan-100">
+              Clic: vértice. Clic en el primero, Enter o doble clic: cerrar. Escape: cancelar.
+            </div>
+          ) : null}
           {pricePanelOpen ? (
             <QuickPriceAssigner
               map={map}
@@ -1313,7 +1808,9 @@ export function InteractiveVenueMapEditor({
                     ? "Etiqueta"
                     : selection.kind === "aisle"
                       ? "Pasillo"
-                      : undefined
+                      : selection.kind === "zone"
+                        ? "Zona paramétrica"
+                        : undefined
               }
               subtitle={
                 selection.kind === "stage"
@@ -1322,10 +1819,14 @@ export function InteractiveVenueMapEditor({
                     ? map.labels.find((item) => item.id === selection.id)?.text
                     : selection.kind === "aisle"
                       ? "Circulación"
-                      : undefined
+                      : selection.kind === "zone"
+                        ? selectedZone?.name
+                        : undefined
               }
+              price={selectedZone?.price}
               canPrice={
                 Boolean(selectedSector) ||
+                Boolean(selectedZone) ||
                 Boolean(selectedElement && !isInfrastructureElement(selectedElement))
               }
               canRotate={Boolean(selectedElement)}
@@ -1335,6 +1836,8 @@ export function InteractiveVenueMapEditor({
                   patchElement(selectedElement.id, { price })
                 } else if (selectedSector) {
                   patchSector(selectedSector.id, { price })
+                } else if (selectedZone) {
+                  patchZone(selectedZone.id, { price })
                 }
               }}
               onEdit={focusProperties}
@@ -1362,11 +1865,43 @@ export function InteractiveVenueMapEditor({
               Propiedades
             </p>
             <p className="mt-1 text-xs text-zinc-500">
-              {capacity} butacas activas
+              {capacity} {capacity === 1 ? "lugar configurado" : "lugares configurados"}
             </p>
           </div>
 
-          {selectedSector ? (
+          {tool === "polygon" ? (
+            <div className="rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-3 py-3">
+              <p className="flex items-start gap-2 text-sm font-semibold leading-snug">
+                <PenTool className="mt-0.5 size-4 shrink-0 text-cyan-400" />
+                Trazado de zona
+              </p>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                Clic para cada vértice sobre la foto. Clic cerca del primero,
+                Enter o doble clic cierra el polígono (mínimo 3 puntos). Escape
+                cancela. Después configurás filas y mesas a la derecha, sin
+                dibujar cada una.
+              </p>
+              {polygonDraft.length >= 3 ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="mt-3"
+                  onClick={closePolygonDraft}
+                >
+                  <Send className="size-4" />
+                  Cerrar zona ({polygonDraft.length} puntos)
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+
+          {selectedZone ? (
+            <VenueParametricRulesPanel
+              zone={selectedZone}
+              autoFocusName={rulesFocusId === selectedZone.id}
+              onChange={(patch) => patchZone(selectedZone.id, patch)}
+            />
+          ) : selectedSector ? (
             <div className="space-y-3">
               <Field label="Zona">
                 <Input
@@ -1379,11 +1914,10 @@ export function InteractiveVenueMapEditor({
               <Field label="Precio (ARS)">
                 <PriceInput
                   value={selectedSector.price}
-                  onValueChange={(value) =>
-                    patchSector(selectedSector.id, {
-                      price: value ?? 0,
-                    })
-                  }
+                  onValueChange={(value) => {
+                    if (value == null) return
+                    patchSector(selectedSector.id, { price: value })
+                  }}
                 />
               </Field>
               <Field label="Color">
@@ -1476,6 +2010,10 @@ export function InteractiveVenueMapEditor({
                   placeholder="Ej. Baños Sector Norte"
                 />
               </Field>
+              <InspectorShapeSelector
+                element={selectedElement}
+                onChange={(patch) => patchElement(selectedElement.id, patch)}
+              />
               <div className="grid grid-cols-2 gap-2">
                 <Field label="Ancho">
                   <Input
@@ -1563,11 +2101,10 @@ export function InteractiveVenueMapEditor({
               <Field label="Sector / precio (ARS)">
                 <PriceInput
                   value={selectedElement.price}
-                  onValueChange={(value) =>
-                    patchElement(selectedElement.id, {
-                      price: value ?? 0,
-                    })
-                  }
+                  onValueChange={(value) => {
+                    if (value == null) return
+                    patchElement(selectedElement.id, { price: value })
+                  }}
                 />
               </Field>
               <Field label="Color">
@@ -1585,6 +2122,10 @@ export function InteractiveVenueMapEditor({
                   />
                 </div>
               </Field>
+              <InspectorShapeSelector
+                element={selectedElement}
+                onChange={(patch) => patchElement(selectedElement.id, patch)}
+              />
               <Field label={`Rotación (${Math.round(selectedElement.rotation)}°)`}>
                 <div className="flex items-center gap-2">
                   <RotateCw className="size-4 text-zinc-500" />
@@ -1701,14 +2242,51 @@ export function InteractiveVenueMapEditor({
           ) : selection?.kind === "elements" ? (
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                {selection.ids.length} componentes seleccionados. El precio se
-                aplica a todos.
+                {selection.ids.length} componentes seleccionados. Los cambios se
+                aplican a todo el grupo.
               </p>
               <Field label="Precio en lote (ARS)">
                 <PriceInput
                   value={undefined}
-                  onValueChange={(value) => batchPrice(value ?? 0)}
+                  onValueChange={(value) => {
+                    if (value == null) return
+                    batchPrice(value)
+                  }}
                 />
+              </Field>
+              <Field label="Sector del grupo">
+                <Input
+                  value={
+                    selectedElements.every(
+                      (item) => item.sectorName === selectedElements[0]?.sectorName,
+                    )
+                      ? (selectedElements[0]?.sectorName ?? "")
+                      : ""
+                  }
+                  placeholder="Nombre de sector"
+                  onChange={(event) =>
+                    batchPatchElements({ sectorName: event.target.value }, true)
+                  }
+                />
+              </Field>
+              <Field label="Color del grupo">
+                <div className="flex items-center gap-2">
+                  <Palette className="size-4 text-zinc-500" />
+                  <input
+                    type="color"
+                    value={
+                      selectedElements.every(
+                        (item) => item.color === selectedElements[0]?.color,
+                      )
+                        ? (selectedElements[0]?.color ?? "#888888")
+                        : "#888888"
+                    }
+                    onChange={(event) =>
+                      batchPatchElements({ color: event.target.value })
+                    }
+                    className="h-8 w-full cursor-pointer rounded border border-zinc-700 bg-transparent"
+                  />
+                </div>
               </Field>
               <AutoNumberingPanel
                 elements={ensureElements(map)}
@@ -1768,7 +2346,11 @@ export function InteractiveVenueMapEditor({
           {selection ? (
             <Button type="button" variant="destructive" onClick={deleteSelection}>
               <Trash2 className="size-4" />
-              {selection.kind === "seats" ? "Desactivar seleccionadas" : "Eliminar"}
+              {selection.kind === "seats"
+                ? "Desactivar seleccionadas"
+                : selection.kind === "elements"
+                  ? "Eliminar seleccionados"
+                  : "Eliminar"}
             </Button>
           ) : null}
 
@@ -1926,7 +2508,7 @@ function ToolButton({
       variant={active ? "secondary" : "outline"}
       onClick={onClick}
       disabled={disabled}
-      className={cn("h-9 gap-1.5", active && "ring-1 ring-emerald-500/40")}
+      className={cn("h-9 shrink-0 gap-1.5", active && "ring-1 ring-emerald-500/40")}
     >
       {children}
       <span className={cn(!showLabel && "hidden sm:inline")}>{label}</span>

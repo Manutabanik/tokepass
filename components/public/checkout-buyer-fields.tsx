@@ -1,10 +1,12 @@
 "use client"
 
-import { IdCard, Mail, Phone, UserRound } from "lucide-react"
+import { AlertTriangle, IdCard, Mail, Phone, UserRound } from "lucide-react"
+import type { FieldErrors } from "react-hook-form"
 
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import type { CheckoutBuyerInfo } from "@/lib/checkout-buyer"
+import { CHECKOUT_BUYER_FIELD_IDS } from "@/lib/checkout/validation-scroll"
 import { cn } from "@/lib/utils"
 
 type CheckoutBuyerFieldsProps = {
@@ -12,17 +14,36 @@ type CheckoutBuyerFieldsProps = {
   onChange: (next: CheckoutBuyerInfo) => void
   disabled?: boolean
   className?: string
+  errors?: FieldErrors<CheckoutBuyerInfo> | Partial<Record<keyof CheckoutBuyerInfo, string>>
 }
 
 const fieldInputClass =
   "min-h-12 h-12 rounded-xl border-input bg-background text-base text-foreground placeholder:text-muted-foreground/70 md:text-base"
+
+function fieldMessage(
+  errors: CheckoutBuyerFieldsProps["errors"],
+  name: keyof CheckoutBuyerInfo,
+): string | undefined {
+  if (!errors) return undefined
+  const value = errors[name]
+  if (!value) return undefined
+  if (typeof value === "string") return value
+  if ("message" in value && typeof value.message === "string") return value.message
+  return undefined
+}
 
 export function CheckoutBuyerFields({
   value,
   onChange,
   disabled = false,
   className,
+  errors,
 }: CheckoutBuyerFieldsProps) {
+  const nameError = fieldMessage(errors, "buyerName")
+  const dniError = fieldMessage(errors, "buyerDni")
+  const phoneError = fieldMessage(errors, "buyerPhone")
+  const emailError = fieldMessage(errors, "buyerEmail")
+
   return (
     <div
       className={cn(
@@ -35,43 +56,47 @@ export function CheckoutBuyerFields({
           Tus datos
         </p>
         <p className="mt-1 text-sm leading-5 text-muted-foreground">
-          Los usamos para tu entrada y para encontrarte en la puerta.
+          Solo al pagar: los usamos para emitir tu entrada y encontrarte en
+          puerta.
         </p>
       </div>
 
       <div className="space-y-1.5">
         <Label
-          htmlFor="buyer-name"
+          htmlFor={CHECKOUT_BUYER_FIELD_IDS.buyerName}
           className="inline-flex min-h-11 items-center gap-1.5 text-foreground"
         >
           <UserRound className="size-3.5" aria-hidden="true" />
           Nombre y apellido
         </Label>
         <Input
-          id="buyer-name"
+          id={CHECKOUT_BUYER_FIELD_IDS.buyerName}
           name="buyerName"
           autoComplete="name"
           autoCapitalize="words"
           disabled={disabled}
           value={value.buyerName}
+          aria-invalid={Boolean(nameError)}
+          aria-describedby={nameError ? "buyer-name-error" : undefined}
           onChange={(event) =>
             onChange({ ...value, buyerName: event.target.value })
           }
           placeholder="Ej. Ana Pérez"
           className={fieldInputClass}
         />
+        <FieldError id="buyer-name-error" message={nameError} />
       </div>
 
       <div className="space-y-1.5">
         <Label
-          htmlFor="buyer-dni"
+          htmlFor={CHECKOUT_BUYER_FIELD_IDS.buyerDni}
           className="inline-flex min-h-11 items-center gap-1.5 text-foreground"
         >
           <IdCard className="size-3.5" aria-hidden="true" />
           DNI
         </Label>
         <Input
-          id="buyer-dni"
+          id={CHECKOUT_BUYER_FIELD_IDS.buyerDni}
           name="buyerDni"
           type="tel"
           inputMode="numeric"
@@ -79,6 +104,8 @@ export function CheckoutBuyerFields({
           autoComplete="off"
           disabled={disabled}
           value={value.buyerDni}
+          aria-invalid={Boolean(dniError)}
+          aria-describedby={dniError ? "buyer-dni-error" : undefined}
           onChange={(event) =>
             onChange({
               ...value,
@@ -88,18 +115,19 @@ export function CheckoutBuyerFields({
           placeholder="Solo números"
           className={fieldInputClass}
         />
+        <FieldError id="buyer-dni-error" message={dniError} />
       </div>
 
       <div className="space-y-1.5">
         <Label
-          htmlFor="buyer-phone"
+          htmlFor={CHECKOUT_BUYER_FIELD_IDS.buyerPhone}
           className="inline-flex min-h-11 items-center gap-1.5 text-foreground"
         >
           <Phone className="size-3.5" aria-hidden="true" />
           Teléfono / WhatsApp
         </Label>
         <Input
-          id="buyer-phone"
+          id={CHECKOUT_BUYER_FIELD_IDS.buyerPhone}
           name="buyerPhone"
           type="tel"
           inputMode="numeric"
@@ -107,6 +135,8 @@ export function CheckoutBuyerFields({
           autoComplete="tel"
           disabled={disabled}
           value={value.buyerPhone}
+          aria-invalid={Boolean(phoneError)}
+          aria-describedby={phoneError ? "buyer-phone-error" : undefined}
           onChange={(event) =>
             onChange({
               ...value,
@@ -116,18 +146,19 @@ export function CheckoutBuyerFields({
           placeholder="Ej. 1123456789"
           className={fieldInputClass}
         />
+        <FieldError id="buyer-phone-error" message={phoneError} />
       </div>
 
       <div className="space-y-1.5">
         <Label
-          htmlFor="buyer-email"
+          htmlFor={CHECKOUT_BUYER_FIELD_IDS.buyerEmail}
           className="inline-flex min-h-11 items-center gap-1.5 text-foreground"
         >
           <Mail className="size-3.5" aria-hidden="true" />
           Tu Email
         </Label>
         <Input
-          id="buyer-email"
+          id={CHECKOUT_BUYER_FIELD_IDS.buyerEmail}
           name="buyerEmail"
           type="email"
           inputMode="email"
@@ -137,13 +168,30 @@ export function CheckoutBuyerFields({
           autoComplete="email"
           disabled={disabled}
           value={value.buyerEmail}
+          aria-invalid={Boolean(emailError)}
+          aria-describedby={emailError ? "buyer-email-error" : undefined}
           onChange={(event) =>
             onChange({ ...value, buyerEmail: event.target.value })
           }
           placeholder="tunombre@email.com"
           className={fieldInputClass}
         />
+        <FieldError id="buyer-email-error" message={emailError} />
       </div>
     </div>
+  )
+}
+
+function FieldError({ id, message }: { id: string; message?: string }) {
+  if (!message) return null
+  return (
+    <p
+      id={id}
+      role="alert"
+      className="flex items-start gap-1.5 text-xs font-medium text-red-600 dark:text-red-400"
+    >
+      <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+      {message}
+    </p>
   )
 }

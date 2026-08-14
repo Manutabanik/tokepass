@@ -643,8 +643,19 @@ export async function uploadVenueSeatingBackground(
     if (!(file instanceof File) || file.size === 0) {
       return { success: false, error: "Seleccioná una imagen o mapa del lugar." }
     }
-    if (!["image/png", "image/webp"].includes(file.type)) {
-      return { success: false, error: "La imagen debe ser PNG o WEBP." }
+    const type =
+      file.type === "image/jpg"
+        ? "image/jpeg"
+        : file.type ||
+          (file.name.toLowerCase().endsWith(".png")
+            ? "image/png"
+            : file.name.toLowerCase().endsWith(".webp")
+              ? "image/webp"
+              : /\.jpe?g$/i.test(file.name)
+                ? "image/jpeg"
+                : "")
+    if (!["image/png", "image/webp", "image/jpeg"].includes(type)) {
+      return { success: false, error: "La imagen debe ser JPG o PNG." }
     }
     if (file.size > 3 * 1024 * 1024) {
       return { success: false, error: "La imagen no puede superar los 3 MB." }
@@ -661,7 +672,7 @@ export async function uploadVenueSeatingBackground(
       .from("event-flyers")
       .upload(path, file, {
         cacheControl: "3600",
-        contentType: file.type,
+        contentType: type,
         upsert: false,
       })
 

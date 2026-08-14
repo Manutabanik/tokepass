@@ -69,6 +69,18 @@ export type VenueInfraSubtype =
 
 export type VenueSellMode = "per_seat" | "group"
 
+export type VenueShapeType =
+  | "theatre_seat"
+  | "round_table"
+  | "long_table"
+  | "vip_box"
+  | "standing_zone"
+  | "infra_stage"
+  | "infra_bar"
+  | "infra_restroom"
+  | "infra_door"
+  | "infra_generic"
+
 export type VenueMapElementSeat = {
   id: string
   number: number
@@ -91,6 +103,10 @@ export type VenueMapElement = {
   width: number
   height: number
   rotation: number
+  /** Silueta vectorial independiente del tipo comercial. */
+  shapeType?: VenueShapeType
+  /** Radio de curvatura de esquinas (tablón, box, infraestructura). */
+  roundedCorner?: number
   /** Solo comercial. Infraestructura no se cobra. */
   price: number
   color: string
@@ -106,6 +122,26 @@ export type VenueMapElement = {
   ringIndex?: number
 }
 
+export type VenueMapPoint = { x: number; y: number }
+
+export type VenueZoneLayoutType = "general" | "table_combo" | "numbered_seat"
+
+/** Polígono paramétrico para festivales (generación masiva de inventario). */
+export type VenueMapZone = {
+  id: string
+  name: string
+  color: string
+  price: number
+  polygon: VenueMapPoint[]
+  layoutType: VenueZoneLayoutType
+  sellMode: VenueSellMode
+  rows: number
+  itemsPerRow: number
+  capacityPerUnit: number
+  capacity: number
+  labelPrefix: string
+}
+
 export type InteractiveVenueMap = {
   version: 1
   stage: VenueMapStage | null
@@ -113,6 +149,7 @@ export type InteractiveVenueMap = {
   aisles: VenueMapAisle[]
   sectors: VenueMapSector[]
   elements: VenueMapElement[]
+  zones: VenueMapZone[]
   backgroundImage: string | null
   backgroundOpacity: number
   backgroundScale: number
@@ -134,6 +171,7 @@ export function emptyVenueMap(): InteractiveVenueMap {
     aisles: [],
     sectors: [],
     elements: [],
+    zones: [],
     backgroundImage: null,
     backgroundOpacity: 0.4,
     backgroundScale: 1,
@@ -150,6 +188,7 @@ export function isInteractiveVenueMap(
   return (
     Array.isArray(raw.sectors) ||
     Array.isArray(raw.elements) ||
+    Array.isArray(raw.zones) ||
     typeof raw.backgroundImage === "string" ||
     typeof raw.background_image === "string"
   )
@@ -158,6 +197,47 @@ export function isInteractiveVenueMap(
 function asNumber(value: unknown, fallback: number): number {
   const n = Number(value)
   return Number.isFinite(n) ? n : fallback
+}
+
+const MAP_CANVAS = { width: 800, height: 560 }
+
+function polygonToPercent(points: VenueMapPoint[]): VenueMapPoint[] {
+  if (!points.some((point) => point.x > 100.0001 || point.y > 100.0001)) {
+    return points
+  }
+  return points.map((point) => ({
+    x: Math.round((point.x / MAP_CANVAS.width) * 100000) / 1000,
+    y: Math.round((point.y / MAP_CANVAS.height) * 100000) / 1000,
+  }))
+}
+
+const VENUE_SHAPE_TYPES: VenueShapeType[] = [
+  "theatre_seat",
+  "round_table",
+  "long_table",
+  "vip_box",
+  "standing_zone",
+  "infra_stage",
+  "infra_bar",
+  "infra_restroom",
+  "infra_door",
+  "infra_generic",
+]
+
+function parseShapeType(value: unknown): VenueShapeType | undefined {
+  if (typeof value !== "string") return undefined
+  return VENUE_SHAPE_TYPES.includes(value as VenueShapeType)
+    ? (value as VenueShapeType)
+    : undefined
+}
+
+function defaultElementSize(type: VenueElementType): { width: number; height: number } {
+  if (type === "vip_chair") return { width: 12, height: 12 }
+  if (type === "round_table") return { width: 28, height: 28 }
+  if (type === "long_table") return { width: 60, height: 20 }
+  if (type === "vip_box") return { width: 88, height: 56 }
+  if (type === "standing_zone") return { width: 160, height: 100 }
+  return { width: 80, height: 48 }
 }
 
 function resolveLayer(
@@ -228,9 +308,14 @@ function parseElement(raw: unknown): VenueMapElement | null {
     sectorName: resolveSectorName(layer, item),
     x: asNumber(item.x, 200),
     y: asNumber(item.y, 160),
-    width: asNumber(item.width, 80),
-    height: asNumber(item.height, 80),
+    width: asNumber(item.width, defaultElementSize(type).width),
+    height: asNumber(item.height, defaultElementSize(type).height),
     rotation: asNumber(item.rotation, 0),
+    shapeType: parseShapeType(item.shapeType ?? item.shape_type),
+    roundedCorner:
+      item.roundedCorner != null || item.rounded_corner != null
+        ? Math.max(0, Math.min(24, asNumber(item.roundedCorner ?? item.rounded_corner, 4)))
+        : undefined,
     price: layer === "infrastructure" ? 0 : Math.max(0, asNumber(item.price, 0)),
     color: String(
       item.color ?? (layer === "infrastructure" ? "#a1a1aa" : "#f97316"),
@@ -272,6 +357,45 @@ function textOrUndefined(value: unknown, max = 80): string | undefined {
 function parseOptionalInt(value: unknown): number | undefined {
   if (typeof value !== "number" || !Number.isFinite(value)) return undefined
   return Math.round(value)
+}
+
+function parseMapPoint(raw: unknown): VenueMapPoint | null {
+  if (!raw || typeof raw !== "object") return null
+  const item = raw as Record<string, unknown>
+  const x = Number(item.x)
+  const y = Number(item.y)
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null
+  return { x: Math.round(x * 1000) / 1000, y: Math.round(y * 1000) / 1000 }
+}
+
+function parseVenueZone(raw: unknown): VenueMapZone | null {
+  if (!raw || typeof raw !== "object") return null
+  const item = raw as Record<string, unknown>
+  const polygon = Array.isArray(item.polygon)
+    ? item.polygon.map(parseMapPoint).filter((point): point is VenueMapPoint => Boolean(point))
+    : []
+  if (polygon.length < 3) return null
+  const layoutRaw = String(item.layoutType ?? item.layout_type ?? "table_combo")
+  const layoutType: VenueZoneLayoutType =
+    layoutRaw === "general" || layoutRaw === "numbered_seat"
+      ? layoutRaw
+      : "table_combo"
+  const rows = Math.min(80, Math.max(1, asNumber(item.rows, 4)))
+  const itemsPerRow = Math.min(80, Math.max(1, asNumber(item.itemsPerRow ?? item.items_per_row, 10)))
+  return {
+    id: String(item.id ?? `zone-${Math.random().toString(36).slice(2, 8)}`),
+    name: String(item.name ?? "Zona").slice(0, 80),
+    color: String(item.color ?? "#22d3ee"),
+    price: Math.max(0, asNumber(item.price, 0)),
+    polygon: polygonToPercent(polygon),
+    layoutType,
+    sellMode: item.sellMode === "per_seat" || item.sell_mode === "per_seat" ? "per_seat" : "group",
+    rows,
+    itemsPerRow,
+    capacityPerUnit: Math.min(100, Math.max(1, asNumber(item.capacityPerUnit ?? item.capacity_per_unit, 1))),
+    capacity: Math.max(0, asNumber(item.capacity, rows * itemsPerRow)),
+    labelPrefix: String(item.labelPrefix ?? item.label_prefix ?? (layoutType === "numbered_seat" ? "Butaca " : "Mesa ")).slice(0, 24),
+  }
 }
 
 function parsePolygonSector(raw: unknown): VenueMapSector | null {
@@ -319,6 +443,7 @@ export function parseVenueMap(raw: unknown): InteractiveVenueMap {
   if (
     !Array.isArray(record.sectors) &&
     !Array.isArray(record.elements) &&
+    !Array.isArray(record.zones) &&
     typeof record.backgroundImage !== "string" &&
     typeof record.background_image !== "string"
   ) {
@@ -358,6 +483,11 @@ export function parseVenueMap(raw: unknown): InteractiveVenueMap {
           .filter((sector): sector is VenueMapSector => Boolean(sector))
       : [],
     elements,
+    zones: Array.isArray(record.zones)
+      ? record.zones
+          .map((zone) => parseVenueZone(zone))
+          .filter((zone): zone is VenueMapZone => Boolean(zone))
+      : [],
     backgroundImage:
       textOrUndefined(record.backgroundImage ?? record.background_image, 2000) ??
       null,
@@ -404,6 +534,8 @@ export function serializeVenueMap(map: InteractiveVenueMap): InteractiveVenueMap
       width: element.width,
       height: element.height,
       rotation: element.rotation,
+      shapeType: element.shapeType,
+      roundedCorner: element.roundedCorner,
       price: 0,
       color: element.color,
       opacity: element.opacity,

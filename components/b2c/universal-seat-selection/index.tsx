@@ -20,12 +20,13 @@ import {
   type UniversalSeatSelection,
   type UniversalSector,
 } from "@/lib/seating/universal-seat-types"
+import { listMicroOccupancySectorIds } from "@/lib/seating/adaptive-seating"
 import { hydrateNumberedSectorFromUnits } from "@/lib/seating/venue-adapter"
 import {
-  elementInventorySectorId,
+  flattenVenueMapSeats,
   venueMapHasInventory,
 } from "@/lib/seating/venue-map-geometry"
-import { isSellableElement } from "@/types/venue-map"
+import { occupancyFromSeatingUnits } from "@/lib/seating/venue-map-occupancy"
 import type { InteractiveVenueMap } from "@/types/venue-map"
 import type { EventSeatingUnit } from "@/types/venues"
 import { cn } from "@/lib/utils"
@@ -37,9 +38,11 @@ type UniversalSeatSelectionFlowProps = {
   eventTitle?: string
   pending?: boolean
   embedded?: boolean
+  takeover?: boolean
   onBack?: () => void
   onContinue?: (selection: UniversalSeatSelection) => void
   onLoadSectorUnits?: (sectorId: string) => Promise<EventSeatingUnit[]>
+  onLoadAllUnits?: () => Promise<EventSeatingUnit[]>
 }
 
 export function UniversalSeatSelectionFlow({
@@ -49,9 +52,11 @@ export function UniversalSeatSelectionFlow({
   eventTitle = "Selección de entradas",
   pending = false,
   embedded = false,
+  takeover = false,
   onBack,
   onContinue,
   onLoadSectorUnits,
+  onLoadAllUnits,
 }: UniversalSeatSelectionFlowProps) {
   const [sectorId, setSectorId] = useState<string | null>(null)
   const [quantity, setQuantity] = useState(1)
@@ -120,41 +125,35 @@ export function UniversalSeatSelectionFlow({
   }, [groupId, quantity, sector, selectedSeatIds])
 
   useEffect(() => {
-    if (!hasInteractiveMap || !venueMap || !onLoadSectorUnits || mapHydrated.current) {
+    if (!hasInteractiveMap || !venueMap || mapHydrated.current) {
+      return
+    }
+    if (!onLoadAllUnits && !onLoadSectorUnits) {
       return
     }
     mapHydrated.current = true
     let cancelled = false
     setMapHydrating(true)
     void (async () => {
-      const occupancy: Record<string, SeatStatus> = {}
       try {
-        const ids = [
-          ...venueMap.sectors.map((item) => item.id),
-          ...(venueMap.elements ?? [])
-            .filter(isSellableElement)
-            .map((item) => elementInventorySectorId(item)),
-        ]
-        const packs = await Promise.all(
-          [...new Set(ids)].map(async (id) => ({
-            id,
-            units: await onLoadSectorUnits(id),
-          })),
-        )
+        const ids = listMicroOccupancySectorIds(venueMap)
+        const useBatch = Boolean(onLoadAllUnits) && ids.length > 6
+        const units = useBatch
+          ? await onLoadAllUnits!()
+          : (
+              await Promise.all(
+                ids.map(async (id) =>
+                  onLoadSectorUnits ? onLoadSectorUnits(id) : [],
+                ),
+              )
+            ).flat()
         if (cancelled) return
-        for (const pack of packs) {
-          for (const unit of pack.units) {
-            occupancy[unit.layoutItemId] =
-              unit.status === "available"
-                ? "available"
-                : unit.status === "blocked"
-                  ? "blocked"
-                  : "occupied"
-          }
-        }
-        setMapOccupancy(occupancy)
+        const knownIds = flattenVenueMapSeats(venueMap).map((seat) => seat.id)
+        setMapOccupancy(occupancyFromSeatingUnits(units, knownIds))
       } catch {
         if (!cancelled) {
+          const knownIds = flattenVenueMapSeats(venueMap).map((seat) => seat.id)
+          setMapOccupancy(occupancyFromSeatingUnits([], knownIds))
           setLoadError("No se pudieron cargar las ubicaciones del plano.")
         }
       } finally {
@@ -164,7 +163,7 @@ export function UniversalSeatSelectionFlow({
     return () => {
       cancelled = true
     }
-  }, [hasInteractiveMap, onLoadSectorUnits, venueMap])
+  }, [hasInteractiveMap, onLoadAllUnits, onLoadSectorUnits, venueMap])
 
   function handleCanvasContinue(seats: InteractiveSelectedSeat[]) {
     const seat = seats[0]
@@ -240,38 +239,57 @@ export function UniversalSeatSelectionFlow({
       <div
         className={cn(
           "relative text-zinc-100",
-          embedded ? "space-y-6" : "min-h-screen bg-zinc-950 pb-8",
+          takeover
+            ? "flex h-full min-h-0 flex-col overflow-hidden bg-zinc-950"
+            : embedded
+              ? "space-y-6"
+              : "min-h-screen bg-zinc-950 pb-8",
         )}
       >
-        <div className="mx-auto max-w-6xl space-y-4 px-4 py-4 sm:px-6">
-          <header className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold tracking-[0.18em] text-zinc-500 uppercase">
-                Elegí tu lugar
-              </p>
-              <h1 className="text-2xl font-black tracking-tight text-white">
-                {eventTitle}
-              </h1>
-              <p className="text-sm text-zinc-500">
-                Tocá la butaca en el plano. Sin pasos intermedios.
-              </p>
-            </div>
-            {onBack ? (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={pending}
-                onClick={onBack}
-                className="shrink-0 rounded-full border-white/10 bg-zinc-950 text-zinc-300 hover:bg-zinc-800"
-              >
-                <ArrowLeft aria-hidden="true" />
-                Volver
-              </Button>
-            ) : null}
-          </header>
+        {takeover ? null : (
+          <div className="mx-auto max-w-6xl space-y-4 px-4 py-4 sm:px-6">
+            <header className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-bold tracking-[0.18em] text-zinc-500 uppercase">
+                  Elegí tu lugar
+                </p>
+                <h1 className="text-2xl font-black tracking-tight text-white">
+                  {eventTitle}
+                </h1>
+                <p className="text-sm text-zinc-500">
+                  Tocá la butaca en el plano. Sin pasos intermedios.
+                </p>
+              </div>
+              {onBack ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={pending}
+                  onClick={onBack}
+                  className="shrink-0 rounded-full border-white/10 bg-zinc-950 text-zinc-300 hover:bg-zinc-800"
+                >
+                  <ArrowLeft aria-hidden="true" />
+                  Volver
+                </Button>
+              ) : null}
+            </header>
+          </div>
+        )}
 
+        <div
+          className={cn(
+            takeover
+              ? "flex h-full min-h-0 flex-1 flex-col"
+              : "mx-auto max-w-6xl px-4 pb-4 sm:px-6",
+          )}
+        >
           {mapHydrating ? (
-            <div className="flex h-[600px] items-center justify-center rounded-3xl border border-white/10 bg-zinc-950 md:h-[650px]">
+            <div
+              className={cn(
+                "flex items-center justify-center border border-white/10 bg-zinc-950",
+                takeover ? "h-full min-h-0 flex-1" : "h-[600px] rounded-3xl md:h-[650px]",
+              )}
+            >
               <LoaderCircle className="size-6 animate-spin text-emerald-400" />
             </div>
           ) : (
@@ -280,40 +298,42 @@ export function UniversalSeatSelectionFlow({
               occupancyBySeatId={mapOccupancy}
               priceBySectorId={priceBySectorId}
               pending={pending}
+              fillParent={takeover}
+              onBack={onBack}
               onContinue={handleCanvasContinue}
             />
           )}
-
-          {loadError ? (
-            <p className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
-              {loadError}
-            </p>
-          ) : null}
-
-          {generalSectors.length > 0 ? (
-            <div className="space-y-4 pb-24">
-              <UniversalSectorCards
-                sectors={generalSectors}
-                selectedId={sectorId}
-                onSelect={handleSelectSector}
-              />
-              {sector?.type === "general" ? (
-                <UniversalGeneralQuantity
-                  quantity={quantity}
-                  maxPerUser={sector.maxPerUser}
-                  accentColor={sector.color}
-                  onChange={setQuantity}
-                />
-              ) : null}
-            </div>
-          ) : null}
         </div>
+
+        {loadError ? (
+          <p className="shrink-0 px-4 text-sm text-rose-300">
+            {loadError}
+          </p>
+        ) : null}
+
+        {generalSectors.length > 0 ? (
+          <div className={cn("space-y-4", takeover ? "shrink-0 px-4 pb-4" : "pb-24")}>
+            <UniversalSectorCards
+              sectors={generalSectors}
+              selectedId={sectorId}
+              onSelect={handleSelectSector}
+            />
+            {sector?.type === "general" ? (
+              <UniversalGeneralQuantity
+                quantity={quantity}
+                maxPerUser={sector.maxPerUser}
+                accentColor={sector.color}
+                onChange={setQuantity}
+              />
+            ) : null}
+          </div>
+        ) : null}
 
         {sector?.type === "general" ? (
           <UniversalCheckoutBar
             selection={selection}
             pending={pending}
-            sticky={embedded}
+            sticky={embedded || takeover}
             onContinue={() => {
               if (!selection || pending) return
               onContinue?.(selection)

@@ -6,6 +6,7 @@ import { useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { PriceInput } from "@/components/ui/price-input"
 import {
   generateConcentricRing,
   type ConcentricRingConfig,
@@ -94,8 +95,8 @@ export function ConcentricRingGenerator({
         <p className="text-sm font-semibold text-foreground">Gradería anular</p>
       </div>
       <p className="text-xs leading-relaxed text-muted-foreground">
-        Herradura, anfiteatro o abanico. Las mesas y tablones se venden por
-        grupo; las butacas, por asiento.
+        Herradura, anfiteatro o abanico. Los anillos internos alojan menos
+        piezas que los externos para que mesas y tablones no se pisen.
       </p>
       <Field label="Nombre de la grada">
         <Input value={groupName} onChange={(event) => setGroupName(event.target.value)} />
@@ -149,11 +150,13 @@ export function ConcentricRingGenerator({
           />
         </Field>
         <Field label="Precio (ARS)">
-          <Input
-            type="number"
+          <PriceInput
             min={0}
             value={price}
-            onChange={(event) => setPrice(Number(event.target.value) || 0)}
+            onValueChange={(value) => {
+              if (value == null) return
+              setPrice(value)
+            }}
           />
         </Field>
       </div>
@@ -228,7 +231,8 @@ export function ConcentricRingGenerator({
         </Field>
       </div>
       <p className="text-xs text-muted-foreground">
-        Vista previa: {preview.length} elementos, sin duplicados de id.
+        Vista previa: {preview.length} elementos. La cantidad por anillo se
+        recorta si no hay espacio.
       </p>
       <Button
         type="button"

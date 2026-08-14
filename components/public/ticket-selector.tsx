@@ -3,56 +3,89 @@
 import {
   LoaderCircle,
   Ticket,
+  UserRound,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { useEffect, useMemo, useState, useTransition } from "react"
+import { useEffect, useMemo, useRef, useState, useTransition } from "react"
+import { createPortal } from "react-dom"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
 
 import {
   startCheckoutWithPayment,
   startSandboxCheckout,
+  getSeatingUnitCartHold,
+  holdSeatingUnitForCart,
+  holdSeatingUnitForCartByLayoutItem,
+  releaseSeatingUnitCartHold,
 } from "@/app/actions/checkout"
 import type { ValidatedPromo } from "@/app/actions/coupons"
 import { validatePromoCode } from "@/app/actions/coupons"
-import { UniversalSeatSelectionFlow } from "@/components/b2c/universal-seat-selection"
-import { EventCheckoutSelector, type SelectedNumberedSeat } from "@/components/public/event-checkout-selector"
+import {
+  getEventSeatingAvailability,
+  getEventSeatingUnitsForSector,
+} from "@/app/actions/public-events"
+import { AdaptiveSeatingFlow } from "@/components/public/adaptive-seating-flow"
 import { CheckoutBuyerFields } from "@/components/public/checkout-buyer-fields"
+import { CheckoutCountdown } from "@/components/public/checkout-countdown"
+import { CheckoutFloatingBar } from "@/components/public/checkout-floating-bar"
+import { CheckoutIdentityDialog } from "@/components/public/checkout-identity-dialog"
+import {
+  EventCheckoutSelector,
+  type SelectedNumberedSeat,
+} from "@/components/public/event-checkout-selector"
 import {
   PaymentMethodSelector,
   type CheckoutPaymentProvider,
 } from "@/components/public/payment-method-selector"
 import { PromoCodeInput } from "@/components/public/promo-code-input"
+import type { TicketSelectorTier } from "@/components/public/ticket-tier-selector"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import {
-  validateCheckoutBuyer,
-  type CheckoutBuyerInfo,
-} from "@/lib/checkout-buyer"
-import { redirectToCheckoutPaymentOrToast } from "@/lib/checkout-redirect"
-import { MAX_TICKETS_PER_PURCHASE } from "@/lib/checkout-limits"
-import { formatCurrency } from "@/lib/format"
+import { useLockBodyScroll } from "@/hooks/use-lock-body-scroll"
 import {
   trackAddToCart,
   trackInitiateCheckout,
   type EventPixelConfig,
 } from "@/lib/analytics/pixels"
+import {
+  checkoutBuyerFormSchema,
+  validateCheckoutBuyer,
+  type CheckoutBuyerInfo,
+} from "@/lib/checkout-buyer"
+import { MAX_TICKETS_PER_PURCHASE } from "@/lib/checkout-limits"
+import { GA_CHECKOUT_HOLD_MS } from "@/lib/checkout-hold"
+import { redirectToCheckoutPaymentOrToast } from "@/lib/checkout-redirect"
+import { ensureGuestCheckoutSession } from "@/lib/checkout/guest-session"
+import { hasCheckoutIdentity, isCheckoutGuest } from "@/lib/checkout/identity"
+import type { DefaultTicketTab } from "@/lib/checkout/ticket-picker"
+import {
+  firstCheckoutBuyerErrorField,
+  onValidationError,
+} from "@/lib/checkout/validation-scroll"
+import { formatCurrency } from "@/lib/format"
+import {
+  inferInventoryTierType,
+  isQuantityInventoryType,
+} from "@/lib/inventory/unified-inventory"
 import { getStoredReferralCode, persistReferralCode } from "@/lib/referral"
+import { resolveVenueRenderMode } from "@/lib/seating/adaptive-seating"
 import type { UniversalSeatSelection } from "@/lib/seating/universal-seat-types"
 import {
   buildUniversalSeatPayloadForCheckout,
   resolveTierIdForUniversalSector,
 } from "@/lib/seating/venue-adapter"
-import {
-  inferInventoryTierType,
-  isQuantityInventoryType,
-} from "@/lib/inventory/unified-inventory"
-import { cn } from "@/lib/utils"
+import { venueMapToSeatingLayout } from "@/lib/seating/venue-map-geometry"
+import { publicEventLoginPath } from "@/lib/seo/site"
+import { useCheckoutIntentStore } from "@/lib/stores/checkout-intent-store"
 import type { ScheduleDay } from "@/types/events"
-import { getEventSeatingUnitsForSector } from "@/app/actions/public-events"
 import type { InteractiveVenueMap } from "@/types/venue-map"
-import type { EventSeatingUnit, SeatingSectorSummary, VenueSeatingLayout } from "@/types/venues"
-
-import type { TicketSelectorTier } from "@/components/public/ticket-tier-selector"
+import type {
+  EventSeatingUnit,
+  SeatingSectorSummary,
+  VenueSeatingLayout,
+} from "@/types/venues"
 
 export type { TicketSelectorTier }
 
@@ -75,6 +108,7 @@ type TicketSelectorProps = {
   venueId?: string | null
   venueName?: string | null
   venueCapacity?: number | null
+  eventSlug?: string | null
   pixels?: EventPixelConfig
   sandboxEligible?: boolean
   zoneTierPricing?: Array<{
@@ -86,6 +120,8 @@ type TicketSelectorProps = {
   }>
   /** Sold out: deshabilita cantidad y pago. */
   purchaseLocked?: boolean
+  /** Tab inicial configurado por el organizador. */
+  defaultTicketTab?: DefaultTicketTab | null
 }
 
 function roundMoney(value: number): number {
@@ -123,14 +159,20 @@ export function TicketSelector({
   venueId = null,
   venueName = null,
   venueCapacity = null,
+  eventSlug = null,
   sandboxEligible = false,
   zoneTierPricing = [],
   purchaseLocked = false,
+  defaultTicketTab = "auto",
 }: TicketSelectorProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const controlsLocked = isPending || purchaseLocked
   const [showSeatFlow, setShowSeatFlow] = useState(false)
+  const [portalReady, setPortalReady] = useState(false)
+  const [identityOpen, setIdentityOpen] = useState(false)
+  const checkoutMode = useCheckoutIntentStore((state) => state.mode)
+  const checkoutIsGuest = useCheckoutIntentStore((state) => state.isGuest)
   const [selectedSeat, setSelectedSeat] = useState<SelectedNumberedSeat | null>(
     null,
   )
@@ -145,6 +187,19 @@ export function TicketSelector({
     buyerEmail: initialBuyer?.buyerEmail ?? "",
     buyerPhone: initialBuyer?.buyerPhone ?? "",
   })
+  const buyerForm = useForm<CheckoutBuyerInfo>({
+    defaultValues: {
+      buyerName: initialBuyer?.buyerName ?? "",
+      buyerDni: initialBuyer?.buyerDni ?? "",
+      buyerEmail: initialBuyer?.buyerEmail ?? "",
+      buyerPhone: initialBuyer?.buyerPhone ?? "",
+    },
+    resolver: zodResolver(checkoutBuyerFormSchema),
+    mode: "onSubmit",
+  })
+  const holdExpiresAt = useCheckoutIntentStore((state) =>
+    state.eventId === eventId ? state.holdExpiresAt : null,
+  )
   const [quantities, setQuantities] = useState<Record<string, number>>(() =>
     Object.fromEntries(tiers.map((tier) => [tier.id, 0])),
   )
@@ -155,21 +210,77 @@ export function TicketSelector({
     if (typeof window === "undefined") return null
     return getStoredReferralCode()
   })
-  const [ticketsInView, setTicketsInView] = useState(false)
+
+  const restoredIntent = useRef(false)
+  const [intentRestored, setIntentRestored] = useState(false)
 
   useEffect(() => {
-    const target = document.getElementById("tickets")
-    if (!target) return
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        setTicketsInView(Boolean(entry?.isIntersecting))
-      },
-      { root: null, threshold: 0.12, rootMargin: "0px 0px -20% 0px" },
-    )
-    observer.observe(target)
-    return () => observer.disconnect()
+    setPortalReady(true)
   }, [])
+
+  useEffect(() => {
+    function restoreIntent() {
+      if (restoredIntent.current) return
+      restoredIntent.current = true
+      const store = useCheckoutIntentStore.getState()
+      store.resetIfOtherEvent(eventId)
+      if (currentUserId) store.markAuthenticated()
+      if (store.eventId !== eventId) {
+        setIntentRestored(true)
+        return
+      }
+
+      const allowed = new Set(tiers.map((tier) => tier.id))
+      const restored = Object.fromEntries(
+        Object.entries(store.quantities).filter(([tierId]) => allowed.has(tierId)),
+      )
+      if (Object.values(restored).some((qty) => qty > 0)) {
+        setQuantities((current) => ({ ...current, ...restored }))
+      }
+      if (store.selectedSeat) setSelectedSeat(store.selectedSeat)
+      if (
+        store.buyer.buyerName ||
+        store.buyer.buyerDni ||
+        store.buyer.buyerEmail ||
+        store.buyer.buyerPhone
+      ) {
+        setBuyer((current) => ({
+          buyerName: store.buyer.buyerName || current.buyerName,
+          buyerDni: store.buyer.buyerDni || current.buyerDni,
+          buyerEmail: store.buyer.buyerEmail || current.buyerEmail,
+          buyerPhone: store.buyer.buyerPhone || current.buyerPhone,
+        }))
+        buyerForm.reset({
+          buyerName: store.buyer.buyerName || initialBuyer?.buyerName || "",
+          buyerDni: store.buyer.buyerDni || initialBuyer?.buyerDni || "",
+          buyerEmail: store.buyer.buyerEmail || initialBuyer?.buyerEmail || "",
+          buyerPhone: store.buyer.buyerPhone || initialBuyer?.buyerPhone || "",
+        })
+      }
+
+      setIntentRestored(true)
+      if (store.selectedSeat) {
+        void getSeatingUnitCartHold(eventId, store.selectedSeat.seatingUnitId).then(
+          (hold) => {
+            if (hold.success) {
+              useCheckoutIntentStore.getState().setHoldExpiresAt(hold.reservedUntil)
+            }
+          },
+        )
+      } else if (store.holdExpiresAt) {
+        useCheckoutIntentStore.getState().setHoldExpiresAt(store.holdExpiresAt)
+      }
+      if (!hasCheckoutIdentity(currentUserId, store.mode)) return
+      const action = store.consumePendingAction()
+      if (action === "open_map") setShowSeatFlow(true)
+    }
+
+    if (useCheckoutIntentStore.persist.hasHydrated()) {
+      restoreIntent()
+      return
+    }
+    return useCheckoutIntentStore.persist.onFinishHydration(restoreIntent)
+  }, [currentUserId, eventId, tiers])
 
   function enterPaymentHold(result: {
     initPoint?: string
@@ -179,12 +290,99 @@ export function TicketSelector({
   }
 
   const resolvedRef = referralCode?.trim() || storedRef
+  const loginHref = publicEventLoginPath({ id: eventId, slug: eventSlug })
+  const identityReady = hasCheckoutIdentity(currentUserId, checkoutMode)
+  const guestCheckout = isCheckoutGuest(
+    checkoutMode,
+    currentUserId,
+    checkoutIsGuest,
+  )
+  useLockBodyScroll(showSeatFlow)
+
+  function persistCheckoutCart() {
+    useCheckoutIntentStore.getState().rememberCart({
+      eventId,
+      eventSlug,
+      quantities,
+      selectedSeat,
+      buyer,
+      subtotal: cartSubtotal,
+      holdExpiresAt: useCheckoutIntentStore.getState().holdExpiresAt,
+    })
+  }
+
+  function requestIdentity(action: "open_map" | "pay") {
+    persistCheckoutCart()
+    useCheckoutIntentStore.getState().setPendingAction(action)
+    setIdentityOpen(true)
+  }
+
+  async function ensureGuestAuthForHold(): Promise<boolean> {
+    const mode = useCheckoutIntentStore.getState().mode
+    if (!hasCheckoutIdentity(currentUserId, mode)) {
+      requestIdentity("open_map")
+      toast.error(
+        "Elegí iniciar sesión o continuar como invitado para reservar.",
+      )
+      return false
+    }
+    if (currentUserId) return true
+    return ensureGuestCheckoutSession()
+  }
+
+  function goToLogin() {
+    useCheckoutIntentStore.getState().chooseAccount(eventId, eventSlug)
+    persistCheckoutCart()
+    router.push(loginHref)
+  }
+
+  function scrollToTickets() {
+    document
+      .getElementById("tickets")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }
+
+  function returnToCheckout() {
+    setShowSeatFlow(false)
+    window.setTimeout(() => {
+      document
+        .getElementById("checkout-complete")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" })
+    }, 80)
+  }
+
+  function continueAsGuest() {
+    useCheckoutIntentStore.getState().chooseGuest(eventId, eventSlug)
+    persistCheckoutCart()
+    const action = useCheckoutIntentStore.getState().consumePendingAction()
+    setIdentityOpen(false)
+    if (action === "open_map") {
+      setShowSeatFlow(true)
+    } else if (action === "pay") {
+      window.setTimeout(() => {
+        document
+          .getElementById("checkout-complete")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" })
+      }, 80)
+    }
+    void ensureGuestCheckoutSession()
+  }
 
   const hasSeatingFlow =
     seatingSectorSummaries.length > 0 ||
     seatingUnits.length > 0 ||
     seatingLayout.length > 0 ||
+    (venueMap?.zones?.length ?? 0) > 0 ||
+    (venueMap?.elements?.length ?? 0) > 0 ||
+    (venueMap?.sectors.length ?? 0) > 0 ||
     tiers.some((tier) => tier.layoutType !== "general")
+
+  const seatingRenderMode = resolveVenueRenderMode(venueMap)
+  const resolvedSeatingLayout = useMemo(() => {
+    if (seatingLayout.length > 0) return seatingLayout
+    if (!venueMap) return []
+    return venueMapToSeatingLayout(venueMap)
+  }, [seatingLayout, venueMap])
 
   const mergedSeatingUnits = useMemo(() => {
     const byId = new Map<string, EventSeatingUnit>()
@@ -200,7 +398,7 @@ export function TicketSelector({
     return buildUniversalSeatPayloadForCheckout({
       venueId: venueId ?? `event-${eventId}`,
       venueName: venueName ?? eventTitle,
-      seatingLayout,
+      seatingLayout: resolvedSeatingLayout,
       seatingBackgroundUrl,
       capacity: venueCapacity ?? undefined,
       tiers: tiers.map((tier) => ({
@@ -220,7 +418,7 @@ export function TicketSelector({
     eventTitle,
     hasSeatingFlow,
     seatingBackgroundUrl,
-    seatingLayout,
+    resolvedSeatingLayout,
     seatingSectorSummaries,
     tiers,
     venueCapacity,
@@ -284,6 +482,38 @@ export function TicketSelector({
     ? Math.min(appliedPromo.discountAmount, cartSubtotal)
     : 0
   const totalAmount = roundMoney(Math.max(0, cartSubtotal - discountAmount))
+  const startingPrice =
+    tiers.length > 0 ? Math.min(...tiers.map((tier) => tier.price)) : null
+
+  useEffect(() => {
+    if (!intentRestored) return
+    if (totalTickets <= 0) {
+      if (holdExpiresAt) useCheckoutIntentStore.getState().setHoldExpiresAt(null)
+      return
+    }
+    if (!holdExpiresAt) ensureCartHoldClock()
+  }, [holdExpiresAt, intentRestored, totalTickets])
+
+  useEffect(() => {
+    if (!portalReady) return
+    useCheckoutIntentStore.getState().rememberCart({
+      eventId,
+      eventSlug,
+      quantities,
+      selectedSeat,
+      buyer,
+      subtotal: cartSubtotal,
+      holdExpiresAt: useCheckoutIntentStore.getState().holdExpiresAt,
+    })
+  }, [
+    buyer,
+    cartSubtotal,
+    eventId,
+    eventSlug,
+    portalReady,
+    quantities,
+    selectedSeat,
+  ])
 
   useEffect(() => {
     if (!appliedPromo) return
@@ -378,16 +608,25 @@ export function TicketSelector({
     })
   }
 
-  function submitCheckout(extraAddonId?: string, sandbox = false) {
+  function submitCheckout(
+    extraAddonId?: string,
+    sandbox = false,
+    buyerOverride?: CheckoutBuyerInfo,
+  ) {
     if (controlsLocked) return
     const items = buildCheckoutItems(extraAddonId)
     if (items.length === 0) return
 
-    const buyerCheck = validateCheckoutBuyer(buyer)
+    const source = buyerOverride ?? buyerForm.getValues()
+    const buyerCheck = validateCheckoutBuyer(source)
     if (!buyerCheck.ok) {
-      toast.error(buyerCheck.error)
+      const field = firstCheckoutBuyerErrorField(
+        buyerForm.formState.errors,
+      )
+      onValidationError(field)
       return
     }
+    setBuyer(buyerCheck.buyer)
 
     fireCartPixels({
       contentIds: items.map((item) => item.tierId),
@@ -396,6 +635,15 @@ export function TicketSelector({
     })
 
     startTransition(async () => {
+      if (!currentUserId) {
+        const authed = await ensureGuestCheckoutSession()
+        if (!authed) {
+          requestIdentity("pay")
+          toast.error("Elegí iniciar sesión o continuar como invitado para pagar.")
+          return
+        }
+      }
+
       const result = sandbox
         ? await startSandboxCheckout(
             eventId,
@@ -417,7 +665,9 @@ export function TicketSelector({
 
       if (!result.success) {
         if (result.error === "auth_required") {
-          router.push(`/login?next=/events/${eventId}`)
+          persistCheckoutCart()
+          toast.error("Iniciá sesión para pagar. Tu selección está guardada.")
+          router.push(loginHref)
           return
         }
         toastCheckoutError(
@@ -439,41 +689,77 @@ export function TicketSelector({
 
   function handleReserve() {
     if ((selection.length === 0 && !selectedSeat) || controlsLocked) return
+    if (!identityReady) {
+      requestIdentity("pay")
+      return
+    }
     if (hasPendingAddonUpsell() && !upsellSkipped) {
       setShowUpsell(true)
       return
     }
-    submitCheckout()
+    void buyerForm.handleSubmit(
+      (values) => {
+        submitCheckout(undefined, false, values)
+      },
+      (formErrors) => {
+        onValidationError(firstCheckoutBuyerErrorField(formErrors))
+      },
+    )()
   }
 
   function handleSandboxReserve() {
     if (!sandboxEligible || (selection.length === 0 && !selectedSeat) || controlsLocked) {
       return
     }
-    submitCheckout(undefined, true)
+    if (!identityReady) {
+      requestIdentity("pay")
+      return
+    }
+    void buyerForm.handleSubmit(
+      (values) => {
+        submitCheckout(undefined, true, values)
+      },
+      (formErrors) => {
+        onValidationError(firstCheckoutBuyerErrorField(formErrors))
+      },
+    )()
   }
 
   function openSeatFlow() {
     if (purchaseLocked) return
-    const buyerCheck = validateCheckoutBuyer(buyer)
-    if (!buyerCheck.ok) {
-      toast.error(buyerCheck.error)
-      return
-    }
-    if (!universalPayload || universalPayload.sectors.length === 0) {
+    const canOpen =
+      (universalPayload?.sectors.length ?? 0) > 0 ||
+      (venueMap?.zones?.length ?? 0) > 0 ||
+      resolvedSeatingLayout.length > 0
+    if (!canOpen) {
       toast.error("No hay ubicaciones configuradas para este evento.")
       return
     }
+    persistCheckoutCart()
     setShowSeatFlow(true)
+    if (!identityReady) {
+      requestIdentity("open_map")
+    }
+  }
+
+  function ensureCartHoldClock() {
+    if (useCheckoutIntentStore.getState().holdExpiresAt) return
+    useCheckoutIntentStore
+      .getState()
+      .setHoldExpiresAt(new Date(Date.now() + GA_CHECKOUT_HOLD_MS).toISOString())
+  }
+
+  function handleHoldExpired() {
+    const seat = selectedSeat
+    setSelectedSeat(null)
+    setQuantities(Object.fromEntries(tiers.map((tier) => [tier.id, 0])))
+    useCheckoutIntentStore.getState().setHoldExpiresAt(null)
+    if (seat) void releaseSeatingUnitCartHold(eventId, seat.seatingUnitId)
+    router.refresh()
   }
 
   function handleUniversalContinue(selectionPayload: UniversalSeatSelection) {
     if (purchaseLocked) return
-    const buyerCheck = validateCheckoutBuyer(buyer)
-    if (!buyerCheck.ok) {
-      toast.error(buyerCheck.error)
-      return
-    }
 
     if (selectionPayload.kind === "general") {
       const tierId = resolveTierIdForUniversalSector(
@@ -492,36 +778,14 @@ export function TicketSelector({
         toast.error("No encontramos la categoría de esa zona.")
         return
       }
-
-      fireCartPixels({
-        contentIds: [tierId],
-        value: selectionPayload.unitPrice * selectionPayload.quantity,
-        numItems: selectionPayload.quantity,
-      })
-
-      startTransition(async () => {
-        const result = await startCheckoutWithPayment(
-          eventId,
-          [{ tierId, quantity: selectionPayload.quantity }],
-          resolvedRef,
-          [],
-          buyerCheck.buyer,
-          appliedPromo?.promoCodeId ?? null,
-          { paymentProvider: selectedProvider },
-        )
-
-        if (!result.success) {
-          if (result.error === "auth_required") {
-            router.push(`/login?next=/events/${eventId}`)
-            return
-          }
-          toastCheckoutError(result.error, "No se pudo iniciar el pago")
-          router.refresh()
-          return
-        }
-
-        enterPaymentHold(result)
-      })
+      const tier = tiers.find((item) => item.id === tierId)
+      updateQuantity(
+        tierId,
+        selectionPayload.quantity,
+        Math.min(MAX_TICKETS_PER_PURCHASE, Math.max(0, tier?.available ?? 0)),
+      )
+      ensureCartHoldClock()
+      returnToCheckout()
       return
     }
 
@@ -535,60 +799,142 @@ export function TicketSelector({
       return
     }
 
-    const unit = seatIdByLayoutItem.get(seat.id)
-    if (!unit) {
-      toast.error("Esa ubicación ya no está disponible.", {
-        description: "Actualizá la página e intentá de nuevo.",
+    async function applyNumbered(unit: EventSeatingUnit) {
+      if (!(await ensureGuestAuthForHold())) return
+      if (unit.status !== "available" && unit.status !== "reserved") {
+        toast.error(
+          "Esta ubicación acaba de ser reservada por otra persona. Por favor elegí otra.",
+        )
+        router.refresh()
+        return
+      }
+      const hold = await holdSeatingUnitForCart(eventId, unit.id)
+      if (!hold.success) {
+        toast.error(
+          hold.error === "not_materialized"
+            ? "El inventario de esta zona todavía no está publicado."
+            : hold.error === "out_of_stock" || hold.error === "auth_required"
+              ? "Esta ubicación acaba de ser reservada por otra persona. Por favor elegí otra."
+              : hold.error,
+        )
+        if (hold.error === "auth_required") requestIdentity("open_map")
+        else router.refresh()
+        return
+      }
+      if (selectedSeat && selectedSeat.seatingUnitId !== unit.id) {
+        void releaseSeatingUnitCartHold(eventId, selectedSeat.seatingUnitId)
+      }
+      const tableMatch = String(unit.label ?? "").match(/(\d+)/)
+      setSelectedSeat({
+        tierId: unit.tierId,
+        seatingUnitId: unit.id,
+        sectorKey: unit.sectorId,
+        tableNumber: tableMatch ? Number(tableMatch[1]) : null,
+        label: unit.label || "Ubicación numerada",
+        price: selectionPayload.unitPrice,
       })
-      router.refresh()
+      useCheckoutIntentStore.getState().setHoldExpiresAt(hold.reservedUntil)
+      returnToCheckout()
+    }
+
+    const cached =
+      (seat.seatingUnitId
+        ? mergedSeatingUnits.find((unit) => unit.id === seat.seatingUnitId)
+        : null) ?? seatIdByLayoutItem.get(seat.id)
+    if (cached) {
+      void applyNumbered(cached)
       return
     }
-    if (unit.status !== "available") {
-      toast.error(
-        "Esta ubicación acaba de ser reservada por otra persona. Por favor elegí otra.",
+
+    startTransition(async () => {
+      if (!(await ensureGuestAuthForHold())) return
+      const hold = await holdSeatingUnitForCartByLayoutItem(
+        eventId,
+        selectionPayload.sectorId,
+        seat.id,
       )
-      router.refresh()
-      return
-    }
-
-    const tableMatch = String(unit.label ?? "").match(/(\d+)/)
-    setSelectedSeat({
-      tierId: unit.tierId,
-      seatingUnitId: unit.id,
-      sectorKey: unit.sectorId,
-      tableNumber: tableMatch ? Number(tableMatch[1]) : null,
-      label: unit.label || "Ubicación numerada",
-      price: selectionPayload.unitPrice,
+      if (!hold.success) {
+        toast.error(
+          hold.error === "not_materialized"
+            ? "El inventario de esta zona todavía no está publicado."
+            : hold.error === "out_of_stock" || hold.error === "auth_required"
+              ? "Esta ubicación acaba de ser reservada por otra persona. Por favor elegí otra."
+              : hold.error,
+          hold.error === "not_materialized"
+            ? {
+                description:
+                  "No se puede comprar un tablón hasta que el stock esté materializado.",
+              }
+            : undefined,
+        )
+        if (hold.error === "auth_required") requestIdentity("open_map")
+        else router.refresh()
+        return
+      }
+      const units = await getEventSeatingUnitsForSector(
+        eventId,
+        selectionPayload.sectorId,
+      )
+      setLoadedUnitsBySector((current) => ({
+        ...current,
+        [selectionPayload.sectorId]: units,
+      }))
+      const unit =
+        units.find((item) => item.id === hold.seatingUnitId) ??
+        units.find((item) => item.layoutItemId === seat.id)
+      if (!unit) {
+        toast.error("El inventario de esta zona todavía no está publicado.", {
+          description:
+            "No se puede comprar un tablón hasta que el stock esté materializado.",
+        })
+        router.refresh()
+        return
+      }
+      await applyNumbered(unit)
     })
-    setShowSeatFlow(false)
   }
 
-  if (showSeatFlow && universalPayload) {
-    return (
-      <UniversalSeatSelectionFlow
-        embedded
-        pending={controlsLocked}
-        eventTitle={eventTitle}
-        mapImageUrl={
-          universalPayload.mapImageUrl ?? seatingBackgroundUrl ?? null
-        }
-        venueMap={venueMap}
-        sectors={universalPayload.sectors}
-        onBack={() => setShowSeatFlow(false)}
-        onContinue={handleUniversalContinue}
-        onLoadSectorUnits={async (sectorId) => {
-          const cached = loadedUnitsBySector[sectorId]
-          if (cached) return cached
-          const units = await getEventSeatingUnitsForSector(eventId, sectorId)
-          setLoadedUnitsBySector((current) => ({
-            ...current,
-            [sectorId]: units,
-          }))
-          return units
-        }}
-      />
-    )
+  async function loadSectorUnits(sectorId: string) {
+    const cached = loadedUnitsBySector[sectorId]
+    if (cached) return cached
+    const units = await getEventSeatingUnitsForSector(eventId, sectorId)
+    setLoadedUnitsBySector((current) => ({
+      ...current,
+      [sectorId]: units,
+    }))
+    return units
   }
+
+  async function loadAllUnits() {
+    const units = await getEventSeatingAvailability(eventId)
+    const bySector: Record<string, EventSeatingUnit[]> = {}
+    for (const unit of units) {
+      const key = unit.sectorId || "_sector"
+      ;(bySector[key] ??= []).push(unit)
+    }
+    setLoadedUnitsBySector((current) => ({ ...current, ...bySector }))
+    return units
+  }
+
+  const seatFlowOverlay =
+    showSeatFlow ? (
+      <div className="fixed inset-0 z-[80] flex h-dvh w-screen flex-col overflow-hidden overscroll-none bg-zinc-950">
+        <AdaptiveSeatingFlow
+          takeover
+          pending={controlsLocked}
+          eventTitle={eventTitle}
+          mapImageUrl={
+            universalPayload?.mapImageUrl ?? seatingBackgroundUrl ?? null
+          }
+          venueMap={venueMap}
+          sectors={universalPayload?.sectors ?? []}
+          onBack={() => setShowSeatFlow(false)}
+          onContinue={handleUniversalContinue}
+          onLoadSectorUnits={loadSectorUnits}
+          onLoadAllUnits={loadAllUnits}
+        />
+      </div>
+    ) : null
 
   if (tiers.length === 0) {
     return (
@@ -602,7 +948,20 @@ export function TicketSelector({
   }
 
   return (
-    <div className="rounded-3xl border border-border bg-card p-5 text-card-foreground shadow-2xl shadow-black/40 sm:p-6">
+    <>
+      {portalReady && seatFlowOverlay
+        ? createPortal(seatFlowOverlay, document.body)
+        : seatFlowOverlay}
+      <CheckoutIdentityDialog
+        open={identityOpen}
+        onOpenChange={(open) => {
+          setIdentityOpen(open)
+          if (!open) useCheckoutIntentStore.getState().setPendingAction(null)
+        }}
+        onLogin={goToLogin}
+        onGuest={continueAsGuest}
+      />
+      <div className="rounded-3xl border border-border bg-card p-5 text-card-foreground shadow-2xl shadow-black/40 sm:p-6">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-400/90">
@@ -622,170 +981,198 @@ export function TicketSelector({
         quantities={quantities}
         isPending={controlsLocked}
         hasSeatingFlow={hasSeatingFlow}
+        seatingRenderMode={seatingRenderMode}
         selectedSeat={selectedSeat}
         showUpsell={showUpsell}
+        defaultTicketTab={defaultTicketTab}
         onQuantityChange={updateQuantity}
         onOpenSeatFlow={openSeatFlow}
-        onClearSeat={() => setSelectedSeat(null)}
-        onAddUpsell={(tierId) => {
+        onPurchaseIntent={() => {
+          if (!identityReady) requestIdentity("pay")
+        }}
+        onClearSeat={() => {
+          const seat = selectedSeat
+          setSelectedSeat(null)
+          if (seat) void releaseSeatingUnitCartHold(eventId, seat.seatingUnitId)
+        }}
+          onAddUpsell={(tierId) => {
           const addon = tiers.find((tier) => tier.id === tierId)
           updateQuantity(tierId, 1, addon?.available ?? 1)
           setShowUpsell(false)
           setUpsellSkipped(true)
-          submitCheckout(tierId)
+          void buyerForm.handleSubmit(
+            (values) => submitCheckout(tierId, false, values),
+            (formErrors) => {
+              onValidationError(firstCheckoutBuyerErrorField(formErrors))
+            },
+          )()
         }}
         onSkipUpsell={() => {
           setShowUpsell(false)
           setUpsellSkipped(true)
-          submitCheckout()
+          void buyerForm.handleSubmit(
+            (values) => submitCheckout(undefined, false, values),
+            (formErrors) => {
+              onValidationError(firstCheckoutBuyerErrorField(formErrors))
+            },
+          )()
         }}
       />
 
-      <Separator className="my-5 bg-border" />
-
-      <CheckoutBuyerFields
-        value={buyer}
-        onChange={setBuyer}
-        disabled={controlsLocked}
-      />
-
-      <Separator className="my-5 bg-border" />
-
-      <PromoCodeInput
-        eventId={eventId}
-        cartSubtotal={cartSubtotal}
-        applied={appliedPromo}
-        onApplied={setAppliedPromo}
-        onCleared={() => setAppliedPromo(null)}
-        disabled={controlsLocked || cartSubtotal <= 0}
-      />
-
-      <Separator className="my-5 bg-border" />
-
-      <PaymentMethodSelector
-        selectedProvider={selectedProvider}
-        onSelectProvider={setSelectedProvider}
-        disabled={controlsLocked}
-      />
-
-      <Separator className="my-5 bg-border" />
-
-      <div className="rounded-2xl border border-border bg-muted/30 p-4">
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
-          Resumen
-        </p>
-        <div className="mt-3 space-y-2 text-base">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span>
-              Entradas
-              {totalTickets > 0
-                ? ` · ${totalTickets}`
-                : null}
-            </span>
-            <span className="tabular-nums text-foreground">
-              {formatCurrency(ticketsSubtotal)}
-            </span>
-          </div>
-          {appliedPromo && discountAmount > 0 ? (
-            <div className="flex items-center justify-between text-emerald-400">
-              <span>Descuento ({appliedPromo.code})</span>
-              <span className="tabular-nums">
-                −{formatCurrency(discountAmount)}
-              </span>
-            </div>
+      {totalTickets > 0 ? (
+        <div id="checkout-complete">
+          {holdExpiresAt ? (
+            <CheckoutCountdown
+              variant="cart"
+              expiresAt={holdExpiresAt}
+              onExpired={handleHoldExpired}
+              className="mt-5"
+            />
           ) : null}
-          <div className="border-t border-border pt-2">
-            <div className="flex items-center justify-between">
-              <span className="font-medium text-foreground">Total</span>
-              <span className="text-2xl font-black tracking-tight text-foreground tabular-nums">
-                {formatCurrency(totalAmount)}
-              </span>
+
+          <Separator className="my-5 bg-border" />
+
+          <PromoCodeInput
+            eventId={eventId}
+            cartSubtotal={cartSubtotal}
+            applied={appliedPromo}
+            onApplied={setAppliedPromo}
+            onCleared={() => setAppliedPromo(null)}
+            disabled={controlsLocked || cartSubtotal <= 0}
+          />
+
+          <Separator className="my-5 bg-border" />
+
+          <div className="space-y-5 rounded-2xl border border-border bg-muted/20 p-4">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                Confirmá tu compra
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Medio de pago y tus datos. Último paso antes de la orden
+                pendiente.
+              </p>
+            </div>
+
+            {guestCheckout ? (
+              <p className="flex items-start gap-2 rounded-xl border border-border bg-background/70 px-3 py-2.5 text-sm text-muted-foreground">
+                <UserRound
+                  className="mt-0.5 size-4 shrink-0 text-emerald-500"
+                  aria-hidden="true"
+                />
+                Comprás como invitado. Completá nombre, DNI y teléfono para
+                emitir la entrada.
+              </p>
+            ) : null}
+
+            <PaymentMethodSelector
+              selectedProvider={selectedProvider}
+              onSelectProvider={setSelectedProvider}
+              disabled={controlsLocked}
+            />
+
+            <div id="checkout-buyer">
+              <CheckoutBuyerFields
+                value={buyer}
+                errors={buyerForm.formState.errors}
+                onChange={(next) => {
+                  setBuyer(next)
+                  buyerForm.reset(next)
+                }}
+                disabled={controlsLocked}
+              />
             </div>
           </div>
-        </div>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Precio final. Sin cargos ocultos.
-        </p>
-      </div>
 
-      {/* Desktop CTA */}
-      <Button
-        type="button"
-        size="lg"
-        disabled={totalTickets === 0 || controlsLocked}
-        onClick={handleReserve}
-        className="mt-5 hidden min-h-12 h-12 w-full rounded-full bg-emerald-500 text-base font-bold text-black shadow-lg shadow-emerald-500/20 hover:bg-emerald-600 disabled:opacity-50 sm:inline-flex"
-      >
-        {isPending ? (
-          <>
-            <LoaderCircle className="animate-spin" aria-hidden="true" />
-            Preparando pago...
-          </>
-        ) : totalAmount > 0 ? (
-          `Pagar ${formatCurrency(totalAmount)}`
-        ) : (
-          "Continuar al Pago"
-        )}
-      </Button>
-      {sandboxEligible ? (
-        <Button
-          type="button"
-          variant="outline"
-          disabled={totalTickets === 0 || controlsLocked}
-          onClick={handleSandboxReserve}
-          className="mt-2 w-full border-dashed text-muted-foreground hover:text-foreground"
-        >
-          Compra de prueba (modo test)
-        </Button>
-      ) : null}
-      <p className="mt-3 hidden text-center text-sm text-muted-foreground sm:block">
-        {sandboxEligible
-          ? "Modo Sandbox disponible para el organizador · sin pasarela."
-          : "Vas a ser redirigido a la pasarela de pago."}
-      </p>
+          <Separator className="my-5 bg-border" />
 
-      {/* Mobile sticky conversion bar */}
-        <div
-          className={cn(
-            "fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background/95 px-4 pt-3",
-            "pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md sm:hidden",
-            "shadow-[0_-10px_30px_rgba(0,0,0,0.1)] transition-transform duration-200",
-            ticketsInView && totalTickets > 0
-              ? "translate-y-0"
-              : "pointer-events-none translate-y-full",
-          )}
-          aria-hidden={!(ticketsInView && totalTickets > 0)}
-        >
-          <div className="mx-auto flex max-w-lg items-center justify-between gap-4">
-          <div className="min-w-0 shrink-0">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-              Total
+          <div className="rounded-2xl border border-border bg-muted/30 p-4">
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+              Resumen
             </p>
-            <p className="text-xl font-black tabular-nums text-foreground">
-              {formatCurrency(totalAmount)}
+            <div className="mt-3 space-y-2 text-base">
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>Entradas · {totalTickets}</span>
+                <span className="tabular-nums text-foreground">
+                  {formatCurrency(ticketsSubtotal)}
+                </span>
+              </div>
+              {appliedPromo && discountAmount > 0 ? (
+                <div className="flex items-center justify-between text-emerald-400">
+                  <span>Descuento ({appliedPromo.code})</span>
+                  <span className="tabular-nums">
+                    −{formatCurrency(discountAmount)}
+                  </span>
+                </div>
+              ) : null}
+              <div className="border-t border-border pt-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-foreground">Total</span>
+                  <span className="text-2xl font-black tracking-tight text-foreground tabular-nums">
+                    {formatCurrency(totalAmount)}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Precio final. Sin cargos ocultos.
             </p>
           </div>
+
           <Button
             type="button"
-            disabled={totalTickets === 0 || controlsLocked}
+            size="lg"
+            disabled={controlsLocked}
             onClick={handleReserve}
-            className="min-h-12 min-w-[48px] flex-1 rounded-2xl bg-emerald-500 text-base font-black text-zinc-950 hover:bg-emerald-400 disabled:opacity-50"
+            className="mt-5 hidden min-h-12 h-12 w-full rounded-full bg-emerald-500 text-base font-bold text-black shadow-lg shadow-emerald-500/20 hover:bg-emerald-600 disabled:opacity-50 sm:inline-flex"
           >
             {isPending ? (
-              <LoaderCircle className="animate-spin" aria-hidden="true" />
-            ) : totalAmount > 0 ? (
-              `Pagar ${formatCurrency(totalAmount)}`
+              <>
+                <LoaderCircle className="animate-spin" aria-hidden="true" />
+                Preparando pago...
+              </>
             ) : (
-              "Continuar al Pago"
+              `Pagar ${formatCurrency(totalAmount)}`
             )}
           </Button>
+          {sandboxEligible ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={controlsLocked}
+              onClick={handleSandboxReserve}
+              className="mt-2 w-full border-dashed text-muted-foreground hover:text-foreground"
+            >
+              Compra de prueba (modo test)
+            </Button>
+          ) : null}
+          <p className="mt-3 hidden text-center text-sm text-muted-foreground sm:block">
+            {sandboxEligible
+              ? "Modo Sandbox disponible para el organizador · sin pasarela."
+              : "Vas a ser redirigido a la pasarela de pago."}
+          </p>
         </div>
-      </div>
-      <div
-        className="h-24 sm:hidden"
-        aria-hidden="true"
-        hidden={!(ticketsInView && totalTickets > 0)}
-      />
+      ) : null}
+
+      {portalReady
+        ? createPortal(
+            <CheckoutFloatingBar
+              eventId={eventId}
+              preferLive={intentRestored}
+              startingPrice={startingPrice}
+              itemCount={totalTickets}
+              subtotal={totalAmount}
+              pending={isPending}
+              locked={purchaseLocked}
+              hidden={showSeatFlow}
+              onChooseTickets={scrollToTickets}
+              onPay={handleReserve}
+            />,
+            document.body,
+          )
+        : null}
+      <div className="h-24 lg:hidden" aria-hidden="true" />
     </div>
+    </>
   )
 }

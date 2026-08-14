@@ -197,6 +197,8 @@ export type Event = {
   venue_map: Json
   province: string | null
   department: string | null
+  /** Tab inicial del picker B2C. auto = el de más stock restante. */
+  default_ticket_tab: "auto" | "seated" | "general" | "bundle" | "addon"
   created_at: string
   updated_at: string
 }
@@ -308,6 +310,10 @@ export type TicketTier = {
   bundle_items: Json
   /** multi_day_pass | cross_sell_pack | volume_discount */
   bundle_type: "multi_day_pass" | "cross_sell_pack" | "volume_discount" | null
+  /** Copia corta para el picker B2C. */
+  description: string | null
+  /** Badge opcional. bestseller = Más vendida. */
+  highlight_badge: "bestseller" | null
   created_at: string
   updated_at: string
 }
@@ -764,10 +770,12 @@ type EventInsert = Omit<
   | "venue_map"
   | "province"
   | "department"
+  | "default_ticket_tab"
   | "created_at"
   | "updated_at"
 > & {
   id?: string
+  default_ticket_tab?: Event["default_ticket_tab"]
   description?: string | null
   image_url?: string | null
   flyer_url?: string | null
@@ -840,11 +848,15 @@ type TicketTierInsert = Omit<
   | "tier_type"
   | "bundle_items"
   | "bundle_type"
+  | "description"
+  | "highlight_badge"
   | "created_at"
   | "updated_at"
 > & {
   id?: string
   sold?: number
+  description?: string | null
+  highlight_badge?: TicketTier["highlight_badge"]
   base_price?: number
   platform_fee?: number
   time_limit?: string | null
@@ -1662,6 +1674,67 @@ export type Database = {
           service_charge: number
           total_amount: number
         }[]
+      }
+      materialize_event_seating_units: {
+        Args: {
+          p_event_id: string
+        }
+        Returns: number
+      }
+      seating_unit_is_owner_cart_hold: {
+        Args: {
+          p_status: string
+          p_reserved_by: string
+          p_reserved_until: string
+          p_reserved_order_id: string | null
+          p_owner_id: string
+        }
+        Returns: boolean
+      }
+      hold_seating_unit_for_cart: {
+        Args: {
+          p_event_id: string
+          p_owner_id: string
+          p_seating_unit_id: string
+        }
+        Returns: {
+          seating_unit_id: string
+          reserved_until: string
+        }[]
+      }
+      release_seating_unit_cart_hold: {
+        Args: {
+          p_event_id: string
+          p_owner_id: string
+          p_seating_unit_id: string
+        }
+        Returns: boolean
+      }
+      get_seating_unit_cart_hold: {
+        Args: {
+          p_event_id: string
+          p_owner_id: string
+          p_seating_unit_id: string
+        }
+        Returns: {
+          seating_unit_id: string
+          reserved_until: string
+        }[]
+      }
+      claim_seating_unit_for_checkout: {
+        Args: {
+          p_unit_id: string
+          p_event_id: string
+          p_tier_id: string
+          p_owner_id: string
+          p_order_id: string
+          p_hold_until: string
+        }
+        Returns: string
+      }
+      expire_seating_cart_holds: {
+        Args: Record<string, never>
+        Returns: number
       }
       get_event_seating_availability: {
         Args: {

@@ -4,6 +4,7 @@ import {
   Armchair,
   Car,
   Gift,
+  LayoutGrid,
   Plus,
   Sparkles,
   Ticket,
@@ -20,6 +21,7 @@ import {
 
 import { Button } from "@/components/ui/button"
 import {
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -27,6 +29,20 @@ import {
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { PriceInput } from "@/components/ui/price-input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
+import {
+  DEFAULT_TICKET_TABS,
+  TICKET_DESCRIPTION_MAX,
+  generalAdmissionTabLabel,
+  ticketPickerTabLabel,
+} from "@/lib/checkout/ticket-picker"
 import {
   inferBundleType,
   bundleIncludesSeating,
@@ -63,6 +79,8 @@ export function createInventoryTicket(
     listPrice: tierType === "bundle" ? 0 : null,
     bundleItems: [],
     bundleType: tierType === "bundle" ? "cross_sell_pack" : null,
+    description: "",
+    highlightBadge: null,
   }
 }
 
@@ -134,6 +152,30 @@ export function UnifiedInventoryPanel({ form }: Props) {
     }))
     .filter((item) => item.tierType !== "bundle")
 
+  const generalNames = tickets
+    .filter(
+      (tier) =>
+        inferInventoryTierType({
+          tierType: tier.tierType,
+          layoutType: tier.layoutType,
+          bundleItems: tier.bundleItems,
+        }) === "general",
+    )
+    .map((tier) => ({ name: tier.name }))
+
+  const defaultTabItems = DEFAULT_TICKET_TABS.map((value) => {
+    if (value === "auto") {
+      return {
+        value,
+        label: "Automático (la de más stock)",
+      }
+    }
+    if (value === "general") {
+      return { value, label: generalAdmissionTabLabel(generalNames) }
+    }
+    return { value, label: ticketPickerTabLabel(value, []) }
+  })
+
   return (
     <div className="space-y-5">
       <div>
@@ -145,6 +187,42 @@ export function UnifiedInventoryPanel({ form }: Props) {
           mismo evento. El stock se reserva junto en el checkout.
         </p>
       </div>
+
+      <FormField
+        control={form.control}
+        name="ticketsDefaultTab"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel className="flex items-center gap-1.5">
+              <LayoutGrid className="size-3.5" aria-hidden="true" />
+              Tab inicial en la compra
+            </FormLabel>
+            <Select
+              value={field.value ?? "auto"}
+              onValueChange={field.onChange}
+              items={defaultTabItems}
+            >
+              <SelectTrigger className="h-11 w-full max-w-md overflow-hidden">
+                <SelectValue placeholder="Automático">
+                  {defaultTabItems.find(
+                    (item) => item.value === (field.value ?? "auto"),
+                  )?.label}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {defaultTabItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <FormDescription>
+              Si el 80% vende Campo, abrí Campo aunque haya mapa de ubicaciones.
+            </FormDescription>
+          </FormItem>
+        )}
+      />
 
       <InventoryBlock
         title="Entradas generales y capacidad de campo"
@@ -409,7 +487,7 @@ function InventoryRow({
               <FormLabel>Precio</FormLabel>
               <PriceInput
                 value={field.value}
-                onValueChange={(value) => field.onChange(value)}
+                onValueChange={(value) => field.onChange(value ?? 0)}
                 className="h-11"
               />
               <FormMessage>{fieldState.error?.message}</FormMessage>
@@ -428,6 +506,46 @@ function InventoryRow({
           </Button>
         </div>
       </div>
+      <FormField
+        control={form.control}
+        name={`tickets.${index}.description`}
+        render={({ field, fieldState }) => (
+          <FormItem>
+            <FormLabel>Qué incluye (opcional)</FormLabel>
+            <Input
+              {...field}
+              value={field.value ?? ""}
+              maxLength={TICKET_DESCRIPTION_MAX}
+              className="h-11"
+              placeholder="Incluye acceso al patio gastronómico"
+            />
+            <FormDescription>
+              Texto corto debajo del nombre en la compra. Máx.{" "}
+              {TICKET_DESCRIPTION_MAX} caracteres.
+            </FormDescription>
+            <FormMessage>{fieldState.error?.message}</FormMessage>
+          </FormItem>
+        )}
+      />
+      <FormField
+        control={form.control}
+        name={`tickets.${index}.highlightBadge`}
+        render={({ field }) => (
+          <FormItem className="flex flex-row items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
+            <FormLabel className="flex items-center gap-1.5">
+              <Sparkles className="size-3.5" aria-hidden="true" />
+              Destacar como más vendida
+            </FormLabel>
+            <Switch
+              checked={field.value === "bestseller"}
+              onCheckedChange={(checked) =>
+                field.onChange(checked ? "bestseller" : null)
+              }
+              aria-label="Destacar como más vendida"
+            />
+          </FormItem>
+        )}
+      />
       {showListPrice ? (
         <FormField
           control={form.control}

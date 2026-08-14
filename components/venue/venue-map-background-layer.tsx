@@ -1,6 +1,5 @@
 import type { InteractiveVenueMap } from "@/types/venue-map"
-
-const CANVAS = { width: 800, height: 560 }
+import { VENUE_MAP_CANVAS } from "@/lib/seating/venue-polygon"
 
 export function VenueMapBackgroundLayer({
   map,
@@ -9,8 +8,8 @@ export function VenueMapBackgroundLayer({
 }) {
   if (!map.backgroundImage) return null
   const scale = map.backgroundScale || 1
-  const width = CANVAS.width * scale
-  const height = CANVAS.height * scale
+  const width = VENUE_MAP_CANVAS.width * scale
+  const height = VENUE_MAP_CANVAS.height * scale
   return (
     <image
       href={map.backgroundImage}

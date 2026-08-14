@@ -1,12 +1,12 @@
 "use client"
 
 import {
+  ArrowRight,
   CheckCircle2,
   Circle,
-  Clock,
-  Maximize,
+  Maximize2,
+  Minimize2,
   RotateCcw,
-  Search,
   Trash2,
   X,
   XCircle,
@@ -33,9 +33,11 @@ import {
 } from "@/lib/seating/venue-map-occupancy"
 import { VenueMapBackgroundLayer } from "@/components/venue/venue-map-background-layer"
 import { VenueMapElementLayer } from "@/components/venue/venue-map-element-layer"
+import { VenueMapZoneLayer } from "@/components/venue/venue-map-zone-layer"
+import { TheatreSeatSymbol } from "@/components/admin/venue-svg-symbols"
 import { cn } from "@/lib/utils"
 import { isInfrastructureElement } from "@/types/venue-map"
-import type { InteractiveVenueMap } from "@/types/venue-map"
+import type { InteractiveVenueMap, VenueMapZone } from "@/types/venue-map"
 
 const VIEW = { width: 800, height: 560 }
 const MIN_ZOOM = 0.7
@@ -43,7 +45,6 @@ const MAX_ZOOM = 3.2
 const HOLD_MINUTES = 8
 const INACTIVITY_MS = 5 * 60 * 1000
 const MIN_HIT_PX = 44
-const SECTOR_ZOOM_THRESHOLD = 1.35
 
 export type InteractiveSelectedSeat = {
   id: string
@@ -74,6 +75,8 @@ export function InteractiveSeatingCanvas({
   onBack,
   fillParent = false,
   disableIdlePrompt = false,
+  selectedZoneId = null,
+  onSelectZone,
 }: {
   map: InteractiveVenueMap
   occupancyBySeatId?: Record<string, SeatStatus>
@@ -83,6 +86,8 @@ export function InteractiveSeatingCanvas({
   onBack?: () => void
   fillParent?: boolean
   disableIdlePrompt?: boolean
+  selectedZoneId?: string | null
+  onSelectZone?: (zone: VenueMapZone) => void
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const worldRef = useRef<SVGGElement>(null)
@@ -116,7 +121,12 @@ export function InteractiveSeatingCanvas({
     text: string
   } | null>(null)
 
-  const plotSeats = useMemo(() => flattenVenueMapSeats(map), [map])
+  const plotSeats = useMemo(() => {
+    const zoneIds = new Set((map.zones ?? []).map((zone) => zone.id))
+    return flattenVenueMapSeats(map).filter(
+      (seat) => !zoneIds.has(seat.sectorId),
+    )
+  }, [map])
   const selectedIds = useMemo(
     () => new Set(selectedSeats.map((seat) => seat.id)),
     [selectedSeats],
@@ -198,35 +208,6 @@ export function InteractiveSeatingCanvas({
     markActivity()
   }
 
-  function zoomToGroup(sectorId: string) {
-    const seats = plotSeats.filter((seat) => seat.sectorId === sectorId)
-    if (seats.length === 0) return
-    const xs = seats.map((seat) => seat.x)
-    const ys = seats.map((seat) => seat.y)
-    const pad = 36
-    const minX = Math.min(...xs) - pad
-    const maxX = Math.max(...xs) + pad
-    const minY = Math.min(...ys) - pad
-    const maxY = Math.max(...ys) + pad
-    const width = Math.max(80, maxX - minX)
-    const height = Math.max(80, maxY - minY)
-    const nextZoom = Math.min(
-      MAX_ZOOM,
-      Math.max(
-        1.6,
-        Math.min(VIEW.width / width, VIEW.height / height) * 0.9,
-      ),
-    )
-    const nextPan = {
-      x: VIEW.width / 2 - ((minX + maxX) / 2) * nextZoom,
-      y: VIEW.height / 2 - ((minY + maxY) / 2) * nextZoom,
-    }
-    applyWorld(nextPan.x, nextPan.y, nextZoom)
-    setZoom(nextZoom)
-    setPan(nextPan)
-    markActivity()
-  }
-
   function seatPrice(sectorId: string, fallback: number) {
     const priced = priceBySectorId[sectorId]
     return Number.isFinite(priced) ? Number(priced) : fallback
@@ -240,16 +221,6 @@ export function InteractiveSeatingCanvas({
       selected: selectedIds.has(seat.id),
     })
     if (live === "blocked" || live === "occupied") return
-
-    if (
-      !disableIdlePrompt &&
-      gesture.current.zoom < SECTOR_ZOOM_THRESHOLD &&
-      live !== "selected"
-    ) {
-      zoomToGroup(seat.sectorId)
-      vibrateTap()
-      return
-    }
 
     vibrateTap()
     markActivity()
@@ -326,15 +297,15 @@ export function InteractiveSeatingCanvas({
     }
   }
 
-  const continueLabel = pending ? "Reservando…" : "Continuar y Pagar"
+  const continueLabel = pending ? "Reservando…" : "Continuar"
   const canContinue = selectedSeats.length === 1 && !pending
 
   const panel = (
     <aside className="hidden h-full w-[30%] shrink-0 flex-col border-l border-white/10 bg-zinc-950/80 p-5 md:flex">
       <p className="text-sm font-bold text-white">Resumen de tu lugar</p>
       <p className="mt-1 text-sm leading-relaxed text-zinc-400">
-        Al continuar, esa butaca queda reservada {HOLD_MINUTES} minutos para que
-        pagues.
+        Al continuar, la butaca queda reservada {HOLD_MINUTES} minutos para que
+        completes el pago.
       </p>
       <ul className="mt-5 space-y-3">
         {map.sectors.map((sector) => (
@@ -418,6 +389,7 @@ export function InteractiveSeatingCanvas({
           className="h-12 w-full rounded-2xl bg-emerald-500 py-6 text-base font-black text-black shadow-[0_0_25px_rgba(16,185,129,0.4)] hover:bg-emerald-400"
         >
           {continueLabel}
+          <ArrowRight className="size-4" aria-hidden="true" />
         </Button>
         {onBack ? (
           <Button
@@ -434,22 +406,29 @@ export function InteractiveSeatingCanvas({
   )
 
   const mapArea = (
-    <div className="relative min-h-0 min-w-0 flex-1 pb-[11.5rem] md:w-[70%] md:pb-14">
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 space-y-2 px-3 pt-3 md:px-6">
-        <div className="mx-auto w-2/3 rounded-b-2xl border-b border-violet-500/50 bg-gradient-to-r from-violet-600/30 via-violet-500/50 to-violet-600/30 py-2 text-center text-xs font-bold tracking-widest text-violet-200 uppercase">
+      <div
+        className={cn(
+          "relative min-h-0 min-w-0 flex-1 md:w-[70%]",
+        fillParent
+          ? selectedZoneId
+            ? "pb-2 md:pb-14"
+            : "pb-[4.75rem] md:pb-14"
+          : "pb-[11.5rem] md:pb-14",
+        )}
+      >
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 px-3 pt-3 md:px-6">
+        <div className="mx-auto w-2/3 rounded-b-2xl border-b border-violet-500/50 bg-gradient-to-r from-violet-600/30 via-violet-500/50 to-violet-600/30 py-1.5 text-center text-[10px] font-bold tracking-widest text-violet-200 uppercase md:py-2 md:text-xs">
           {stageLabel}
         </div>
-        <div className="rounded-2xl border border-white/10 bg-black/70 px-3 py-2.5 backdrop-blur-md md:hidden">
-          <p className="flex items-center gap-2 text-sm font-semibold text-white">
-            <Clock className="size-4 text-emerald-400" aria-hidden="true" />
-            Reserva de {HOLD_MINUTES} minutos al continuar
-          </p>
-          <p className="mt-1 flex items-start gap-2 text-sm leading-snug text-zinc-200">
-            <Search className="mt-0.5 w-4 h-4 shrink-0 text-emerald-400" aria-hidden="true" />
-            Tocá un sector para acercar y elegir tu butaca
-          </p>
-        </div>
       </div>
+
+      {onBack && fillParent ? (
+        <div className="absolute top-3 left-3 z-20">
+          <IconBtn label="Cerrar el plano" onClick={onBack}>
+            <X className="size-5" />
+          </IconBtn>
+        </div>
+      ) : null}
 
       <div className="absolute top-3 right-3 z-20 hidden flex-col gap-2 md:flex">
         <ZoomTextButton
@@ -473,16 +452,22 @@ export function InteractiveSeatingCanvas({
         >
           <RotateCcw className="size-4" />
         </ZoomTextButton>
-        <ZoomTextButton
-          label={expanded ? "Cerrar" : "Ampliar"}
-          hint="Pantalla completa"
-          onClick={() => setExpanded((value) => !value)}
-        >
-          {expanded ? <X className="size-4" /> : <Maximize className="size-4" />}
-        </ZoomTextButton>
+        {fillParent ? null : (
+          <ZoomTextButton
+            label={expanded ? "Cerrar" : "Ampliar"}
+            hint="Pantalla completa"
+            onClick={() => setExpanded((value) => !value)}
+          >
+            {expanded ? (
+              <Minimize2 className="size-4" />
+            ) : (
+              <Maximize2 className="size-4" />
+            )}
+          </ZoomTextButton>
+        )}
       </div>
 
-      <div className="absolute top-[7.5rem] right-3 z-20 flex flex-col gap-1.5 md:hidden">
+      <div className="absolute top-3 right-3 z-20 flex flex-col gap-1.5 md:hidden">
         <IconBtn label="Acercar el plano" onClick={() => setView(zoom + 0.25)}>
           <ZoomIn className="size-5" />
         </IconBtn>
@@ -499,7 +484,7 @@ export function InteractiveSeatingCanvas({
           viewBox={`0 0 ${VIEW.width} ${VIEW.height}`}
           className="h-full w-full touch-none select-none"
           role="img"
-          aria-label="Plano de asientos. Tocá un sector para acercar y después elegí tu butaca."
+          aria-label="Plano del recinto. Tocá un polígono de zona o una butaca."
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
@@ -513,6 +498,19 @@ export function InteractiveSeatingCanvas({
             style={{ willChange: "transform" }}
           >
             <VenueMapBackgroundLayer map={map} />
+            <VenueMapZoneLayer
+              zones={map.zones ?? []}
+              selectedId={selectedZoneId}
+              selectOnPointerUp
+              onSelect={
+                onSelectZone
+                  ? (zone) => {
+                      setSelectedSeats([])
+                      onSelectZone(zone)
+                    }
+                  : undefined
+              }
+            />
             {map.aisles.map((aisle) => (
               <rect
                 key={aisle.id}
@@ -558,7 +556,8 @@ export function InteractiveSeatingCanvas({
               )}
               occupancyBySeatId={occupancyBySeatId}
               selectedIds={selectedElementIds}
-              showSeats={false}
+              selectedSeatIds={[...selectedIds]}
+              showSeats
               zoom={zoom}
               onElementPointerDown={(event, element) => {
                 event.stopPropagation()
@@ -578,18 +577,6 @@ export function InteractiveSeatingCanvas({
                 occupancy: occupancyBySeatId[seat.id],
                 selected: selectedIds.has(seat.id),
               })
-              const fill =
-                live === "selected"
-                  ? "#34d399"
-                  : live === "occupied" || live === "blocked"
-                    ? "#27272a"
-                    : hexToRgba(seat.color, 0.22)
-              const stroke =
-                live === "selected"
-                  ? "#6ee7b7"
-                  : live === "occupied" || live === "blocked"
-                    ? "#3f3f46"
-                    : seat.color
               const label = `Fila ${seat.row} — Asiento ${seat.number} — ${formatCurrency(price)}`
               return (
                 <g key={seat.id}>
@@ -626,20 +613,29 @@ export function InteractiveSeatingCanvas({
                     }}
                     onPointerLeave={() => setHover(null)}
                   />
-                  <circle
-                    cx={seat.x}
-                    cy={seat.y}
-                    r={live === "selected" ? 7.5 : 6.5}
-                    fill={fill}
-                    stroke={stroke}
-                    strokeWidth={live === "selected" ? 2 : 1.2}
-                    className={cn(
-                      "pointer-events-none",
-                      (live === "occupied" || live === "blocked") && "opacity-40",
-                      live === "selected" &&
-                        "animate-pulse drop-shadow-[0_0_10px_rgba(52,211,153,0.9)]",
-                    )}
-                  />
+                  {seat.source === "sector" ? (
+                    <TheatreSeatSymbol
+                      cx={seat.x}
+                      cy={seat.y}
+                      width={12}
+                      height={12}
+                      color={seat.color}
+                      selected={live === "selected"}
+                      occupied={live === "occupied" || live === "blocked"}
+                      label={String(seat.number)}
+                      showLabel={zoom >= 1.35}
+                    />
+                  ) : live === "selected" ? (
+                    <circle
+                      cx={seat.x}
+                      cy={seat.y}
+                      r={4.2}
+                      fill="none"
+                      stroke="#6ee7b7"
+                      strokeWidth={1.6}
+                      className="pointer-events-none"
+                    />
+                  ) : null}
                 </g>
               )
             })}
@@ -656,7 +652,12 @@ export function InteractiveSeatingCanvas({
         </div>
       ) : null}
 
-      <div className="absolute inset-x-0 bottom-[7.25rem] z-20 px-3 md:bottom-3">
+      <div
+        className={cn(
+          "absolute inset-x-0 z-20 hidden px-3 md:bottom-3 md:block",
+          fillParent ? "md:bottom-3" : "bottom-[7.25rem] md:bottom-3",
+        )}
+      >
         <div className="flex flex-wrap items-center justify-center gap-4 rounded-2xl border border-white/10 bg-black/80 px-4 py-3 text-sm text-zinc-100 backdrop-blur-xl md:text-base">
           <span className="inline-flex items-center gap-2">
             <Circle className="h-4 w-4 fill-emerald-500/30 stroke-emerald-500 text-emerald-500" />
@@ -678,44 +679,53 @@ export function InteractiveSeatingCanvas({
   const shell = (
     <div
       className={cn(
-        "relative flex w-full flex-col overflow-hidden rounded-3xl border border-white/10 bg-zinc-950 shadow-2xl md:flex-row",
-        expanded
-          ? "fixed inset-3 z-50 h-[calc(100dvh-1.5rem)]"
-          : fillParent
-            ? "h-full min-h-0 rounded-none border-0 shadow-none"
-            : "h-[600px] md:h-[650px]",
+        "relative flex w-full flex-col overflow-hidden bg-zinc-950 md:flex-row",
+        fillParent
+          ? "h-full min-h-0 rounded-none border-0 shadow-none"
+          : expanded
+            ? "fixed inset-0 z-[80] h-dvh rounded-none border-0"
+            : "h-[600px] rounded-3xl border border-white/10 shadow-2xl md:h-[650px]",
       )}
     >
       {mapArea}
       {panel}
 
-      <div className="absolute inset-x-0 bottom-0 z-30 border-t border-white/10 bg-black/90 p-4 backdrop-blur-xl md:hidden pb-[max(1rem,env(safe-area-inset-bottom))]">
-        <p className="text-lg font-extrabold text-white">
-          {selectedSeats.length === 0
-            ? "Ningún asiento elegido"
-            : `${selectedSeats.length} ${selectedSeats.length === 1 ? "asiento elegido" : "asientos elegidos"} · ${formatCurrency(subtotal)}`}
-        </p>
-        <p className="mt-1 text-sm text-zinc-300">
-          {selectedSeats[0]
-            ? `Fila ${selectedSeats[0].row} — Asiento ${selectedSeats[0].number} — ${formatCurrency(selectedSeats[0].price)}`
-            : `Al pagar, la reservamos ${HOLD_MINUTES} minutos`}
-        </p>
-        <Button
-          type="button"
-          size="lg"
-          disabled={!canContinue}
-          onClick={() => onContinue(selectedSeats)}
-          className="mt-3 w-full rounded-2xl bg-emerald-500 py-6 text-base font-black text-black shadow-[0_0_25px_rgba(16,185,129,0.4)] hover:bg-emerald-400"
-        >
-          {continueLabel}
-        </Button>
+      <div
+        className={cn(
+          "absolute inset-x-0 bottom-0 z-30 border-t border-white/10 bg-black/90 px-3 py-2.5 backdrop-blur-xl md:hidden pb-[max(0.65rem,env(safe-area-inset-bottom))]",
+          selectedZoneId && "hidden",
+        )}
+      >
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-extrabold text-white">
+              {selectedSeats.length === 0
+                ? "Elegí tu butaca"
+                : formatCurrency(subtotal)}
+            </p>
+            <p className="truncate text-xs text-zinc-400">
+              {selectedSeats[0]
+                ? `Fila ${selectedSeats[0].row} · Asiento ${selectedSeats[0].number}`
+                : "Zoom libre · un toque elige"}
+            </p>
+          </div>
+          <Button
+            type="button"
+            size="lg"
+            disabled={!canContinue}
+            onClick={() => onContinue(selectedSeats)}
+            className="h-11 shrink-0 rounded-2xl bg-emerald-500 px-4 text-sm font-black text-black hover:bg-emerald-400"
+          >
+            <ArrowRight className="size-4" aria-hidden="true" />
+            {continueLabel}
+          </Button>
+        </div>
       </div>
     </div>
   )
 
   return (
     <>
-      {expanded ? <div className="fixed inset-0 z-40 bg-black/80" /> : null}
       {shell}
       <Dialog
         open={idleOpen}
@@ -730,9 +740,9 @@ export function InteractiveSeatingCanvas({
               Tu butaca sigue elegida
             </DialogTitle>
             <DialogDescription className="text-base leading-relaxed text-zinc-300">
-              Pasaron 5 minutos sin movimiento. Todavía no está reservada: la
-              reserva de {HOLD_MINUTES} minutos empieza cuando tocás Continuar y
-              Pagar. Si esperás más, otra persona podría tomarla.
+              Pasaron 5 minutos sin movimiento. Si continuás ahora, la butaca
+              queda reservada {HOLD_MINUTES} minutos. Si esperás más, otra
+              persona podría tomarla.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="border-white/10 bg-transparent">
@@ -757,7 +767,7 @@ export function InteractiveSeatingCanvas({
                 onContinue(selectedSeats)
               }}
             >
-              Continuar y Pagar
+              Continuar
             </Button>
           </DialogFooter>
         </DialogContent>

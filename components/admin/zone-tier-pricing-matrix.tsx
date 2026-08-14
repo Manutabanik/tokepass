@@ -232,11 +232,10 @@ export function ZoneTierPricingMatrix({
                         </Label>
                         <PriceInput
                           value={row.price}
-                          onValueChange={(value) =>
-                            updateRow(sector.id, index, {
-                              price: value ?? 0,
-                            })
-                          }
+                          onValueChange={(value) => {
+                            if (value == null) return
+                            updateRow(sector.id, index, { price: value })
+                          }}
                           className="h-10"
                         />
                       </div>

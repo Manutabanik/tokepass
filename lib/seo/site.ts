@@ -40,6 +40,13 @@ export function publicEventUrl(event: {
   return `${getSeoOrigin()}${publicEventPath(event)}`
 }
 
+export function publicEventLoginPath(event: {
+  slug?: string | null
+  id: string
+}): string {
+  return `/login?next=${encodeURIComponent(publicEventPath(event))}`
+}
+
 export function toArgentinaIso8601(value: string | Date): string {
   const date = value instanceof Date ? value : new Date(value)
   if (Number.isNaN(date.getTime())) {

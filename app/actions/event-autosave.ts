@@ -84,6 +84,7 @@ export async function autosaveEventDraft(input: {
     await syncZoneTierPricing({
       eventId,
       rows: input.zoneTierPricing,
+      revalidate: false,
     })
   }
 
@@ -172,6 +173,7 @@ export async function getZoneTierPricing(
 export async function syncZoneTierPricing(input: {
   eventId: string
   rows: ZoneTierPriceDraft[]
+  revalidate?: boolean
 }): Promise<{ success: true } | { success: false; error: string }> {
   const supabase = await createClient()
   const {
@@ -288,7 +290,9 @@ export async function syncZoneTierPricing(input: {
       .eq("event_id", input.eventId)
   }
 
-  revalidatePath(`/admin/events/${input.eventId}`)
-  revalidatePath(`/e/${input.eventId}`)
+  if (input.revalidate !== false) {
+    revalidatePath(`/admin/events/${input.eventId}`)
+    revalidatePath(`/e/${input.eventId}`)
+  }
   return { success: true }
 }

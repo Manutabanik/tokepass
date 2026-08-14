@@ -79,6 +79,10 @@ function mapReserveRpcError(message: string): CheckoutResult | null {
     }
   }
 
+  if (normalized.includes("seating_unit_not_materialized")) {
+    return { success: false, error: "not_materialized" }
+  }
+
   if (normalized.includes("seating_unit_unavailable")) {
     return { success: false, error: "out_of_stock" }
   }
@@ -124,6 +128,200 @@ async function cleanupPendingOrder(orderId: string): Promise<void> {
       error,
     })
   }
+}
+
+export type CartSeatingHoldResult =
+  | { success: true; reservedUntil: string }
+  | { success: false; error: "auth_required" | "out_of_stock" | "not_materialized" | string }
+
+export async function holdSeatingUnitForCart(
+  eventId: string,
+  seatingUnitId: string,
+): Promise<CartSeatingHoldResult> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    return { success: false, error: "auth_required" }
+  }
+
+  const allowed = await consumeRateLimit({
+    bucketKey: `cart-hold:user:${user.id}`,
+    limit: 20,
+    windowSeconds: 60,
+  })
+  if (!allowed) {
+    return {
+      success: false,
+      error: "Demasiados intentos. Esperá un momento y volvé a elegir.",
+    }
+  }
+
+  const { data, error } = await supabase.rpc("hold_seating_unit_for_cart", {
+    p_event_id: eventId,
+    p_owner_id: user.id,
+    p_seating_unit_id: seatingUnitId,
+  })
+
+  if (error) {
+    const mapped = mapReserveRpcError(error.message)
+    if (mapped) {
+      return mapped.success
+        ? { success: false, error: "out_of_stock" }
+        : { success: false, error: mapped.error }
+    }
+    logger.error({
+      context: "checkout/cart-hold",
+      message: "hold_seating_unit_for_cart_failed",
+      eventId,
+      seatingUnitId,
+      error: error.message,
+    })
+    return {
+      success: false,
+      error: "No se pudo reservar esa ubicación. Elegí otra.",
+    }
+  }
+
+  const row = Array.isArray(data) ? data[0] : data
+  const reservedUntil = row?.reserved_until
+  if (!reservedUntil) {
+    return { success: false, error: "out_of_stock" }
+  }
+
+  return { success: true, reservedUntil }
+}
+
+export async function holdSeatingUnitForCartByLayoutItem(
+  eventId: string,
+  sectorId: string,
+  layoutItemId: string,
+): Promise<CartSeatingHoldResult & { seatingUnitId?: string }> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    return { success: false, error: "auth_required" }
+  }
+
+  const allowed = await consumeRateLimit({
+    bucketKey: `cart-hold:user:${user.id}`,
+    limit: 20,
+    windowSeconds: 60,
+  })
+  if (!allowed) {
+    return {
+      success: false,
+      error: "Demasiados intentos. Esperá un momento y volvé a elegir.",
+    }
+  }
+
+  const { data, error } = await supabase.rpc(
+    "hold_seating_unit_for_cart_by_layout" as never,
+    {
+      p_event_id: eventId,
+      p_owner_id: user.id,
+      p_sector_id: sectorId,
+      p_layout_item_id: layoutItemId,
+    } as never,
+  )
+
+  if (error) {
+    const mapped = mapReserveRpcError(error.message)
+    if (mapped) {
+      return mapped.success
+        ? { success: false, error: "out_of_stock" }
+        : { success: false, error: mapped.error }
+    }
+    logger.error({
+      context: "checkout/cart-hold",
+      message: "hold_seating_unit_for_cart_by_layout_failed",
+      eventId,
+      sectorId,
+      layoutItemId,
+      error: error.message,
+    })
+    return {
+      success: false,
+      error: "No se pudo reservar esa ubicación. Elegí otra.",
+    }
+  }
+
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | { reserved_until?: string; seating_unit_id?: string }
+    | null
+  const reservedUntil = row?.reserved_until
+  const seatingUnitId = row?.seating_unit_id
+  if (!reservedUntil || !seatingUnitId) {
+    return { success: false, error: "not_materialized" }
+  }
+
+  return { success: true, reservedUntil, seatingUnitId }
+}
+
+export async function releaseSeatingUnitCartHold(
+  eventId: string,
+  seatingUnitId: string,
+): Promise<{ success: true } | { success: false; error: string }> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+  if (authError || !user) {
+    return { success: false, error: "auth_required" }
+  }
+
+  const { error } = await supabase.rpc("release_seating_unit_cart_hold", {
+    p_event_id: eventId,
+    p_owner_id: user.id,
+    p_seating_unit_id: seatingUnitId,
+  })
+  if (error) {
+    logger.error({
+      context: "checkout/cart-hold",
+      message: "release_seating_unit_cart_hold_failed",
+      eventId,
+      seatingUnitId,
+      error: error.message,
+    })
+    return { success: false, error: error.message }
+  }
+  return { success: true }
+}
+
+export async function getSeatingUnitCartHold(
+  eventId: string,
+  seatingUnitId: string,
+): Promise<CartSeatingHoldResult> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+  if (authError || !user) {
+    return { success: false, error: "auth_required" }
+  }
+
+  const { data, error } = await supabase.rpc("get_seating_unit_cart_hold", {
+    p_event_id: eventId,
+    p_owner_id: user.id,
+    p_seating_unit_id: seatingUnitId,
+  })
+  if (error) {
+    return { success: false, error: error.message }
+  }
+  const row = Array.isArray(data) ? data[0] : data
+  if (!row?.reserved_until) {
+    return { success: false, error: "out_of_stock" }
+  }
+  return { success: true, reservedUntil: row.reserved_until }
 }
 
 async function applyHolderIdentityToOrder(input: {

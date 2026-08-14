@@ -11,6 +11,18 @@ export const VENUE_MAP_DEFAULT: VenueCoordinates = {
   longitude: -58.3816,
 }
 
+export function isFiniteVenueCoordinates(
+  value: VenueCoordinates | null | undefined,
+): value is VenueCoordinates {
+  return (
+    value != null &&
+    Number.isFinite(value.latitude) &&
+    Number.isFinite(value.longitude) &&
+    Math.abs(value.latitude) <= 90 &&
+    Math.abs(value.longitude) <= 180
+  )
+}
+
 /**
  * Deep link a Google Maps / apps nativas.
  *   googleMapsDeepLink(lat, lng) → ubicación exacta

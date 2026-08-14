@@ -12,6 +12,7 @@ import {
   Maximize2,
   Music2,
   ParkingCircle,
+  PenTool,
   Sparkles,
   Square,
   Toilet as Restroom,
@@ -25,6 +26,7 @@ import type { VenueElementType, VenueInfraSubtype } from "@/types/venue-map"
 export type PalettePlacement =
   | { kind: "seat_block" }
   | { kind: "rings" }
+  | { kind: "zone_polygon" }
   | { kind: "element"; type: VenueElementType; subtype?: VenueInfraSubtype }
 
 const COMMERCIAL_GROUPS: Array<{
@@ -82,6 +84,18 @@ const COMMERCIAL_GROUPS: Array<{
         label: "Graderías en curva",
         hint: "Arcos de mesas o butacas alrededor del escenario.",
         icon: Layers,
+      },
+    ],
+  },
+  {
+    id: "festival",
+    title: "Festivales y recintos masivos",
+    items: [
+      {
+        placement: { kind: "zone_polygon" },
+        label: "Trazar zona paramétrica",
+        hint: "Dibujá un polígono sobre la foto. El inventario se genera por filas y mesas, sin dibujar cada una.",
+        icon: PenTool,
       },
     ],
   },
@@ -250,9 +264,9 @@ function PaletteButton({
   return (
     <button
       type="button"
-      draggable={item.placement.kind !== "rings"}
+      draggable={item.placement.kind !== "rings" && item.placement.kind !== "zone_polygon"}
       onDragStart={(event) => {
-        if (item.placement.kind === "rings") return
+        if (item.placement.kind === "rings" || item.placement.kind === "zone_polygon") return
         event.dataTransfer.setData(
           "application/x-tokepass-venue",
           JSON.stringify(item.placement),
@@ -284,5 +298,6 @@ function placementKey(placement: PalettePlacement | null): string {
   if (!placement) return ""
   if (placement.kind === "seat_block") return "seat_block"
   if (placement.kind === "rings") return "rings"
+  if (placement.kind === "zone_polygon") return "zone_polygon"
   return `${placement.type}:${placement.subtype ?? ""}`
 }

@@ -2,9 +2,11 @@
 
 import { ArrowLeft, Calendar, MapPin } from "lucide-react"
 
+import { AdaptiveSeatingFlow } from "@/components/public/adaptive-seating-flow"
 import { InteractiveSeatingCanvas } from "@/components/public/interactive-seating-canvas"
 import { Button } from "@/components/ui/button"
 import { formatCurrency } from "@/lib/format"
+import { hasParametricZones } from "@/lib/seating/adaptive-seating"
 import { flattenVenueMapSeats } from "@/lib/seating/venue-map-geometry"
 import type { InteractiveVenueMap } from "@/types/venue-map"
 
@@ -78,14 +80,24 @@ export function BuyerViewModal({
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1">
-        <InteractiveSeatingCanvas
-          map={map}
-          fillParent
-          disableIdlePrompt
-          onContinue={() => undefined}
-          onBack={onClose}
-        />
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {hasParametricZones(map) ? (
+          <AdaptiveSeatingFlow
+            embedded
+            preview
+            eventTitle={eventTitle}
+            venueMap={map}
+            onBack={onClose}
+          />
+        ) : (
+          <InteractiveSeatingCanvas
+            map={map}
+            fillParent
+            disableIdlePrompt
+            onContinue={() => undefined}
+            onBack={onClose}
+          />
+        )}
       </div>
     </div>
   )
@@ -103,6 +115,16 @@ function uniqueLegend(map: InteractiveVenueMap) {
       name: sector.name,
       color: sector.color,
       price: sector.price,
+    })
+  }
+  for (const zone of map.zones ?? []) {
+    if (seen.has(zone.id)) continue
+    seen.add(zone.id)
+    items.push({
+      id: zone.id,
+      name: zone.name,
+      color: zone.color,
+      price: zone.price,
     })
   }
   for (const seat of flattenVenueMapSeats(map)) {

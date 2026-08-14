@@ -1,8 +1,8 @@
 import { VenueMapBackgroundLayer } from "@/components/venue/venue-map-background-layer"
 import { VenueMapElementLayer } from "@/components/venue/venue-map-element-layer"
+import { VenueMapZoneLayer } from "@/components/venue/venue-map-zone-layer"
+import { VENUE_MAP_CANVAS } from "@/lib/seating/venue-polygon"
 import type { InteractiveVenueMap } from "@/types/venue-map"
-
-const CANVAS = { width: 800, height: 560 }
 
 export function VenueMapCanvas({
   map,
@@ -14,12 +14,13 @@ export function VenueMapCanvas({
   const elementCount = map.elements?.length ?? 0
   return (
     <svg
-      viewBox={`0 0 ${CANVAS.width} ${CANVAS.height}`}
+      viewBox={`0 0 ${VENUE_MAP_CANVAS.width} ${VENUE_MAP_CANVAS.height}`}
       className={className}
       role="img"
       aria-label="Plano de asientos"
     >
       <VenueMapBackgroundLayer map={map} />
+      <VenueMapZoneLayer zones={map.zones ?? []} />
       {map.aisles.map((aisle) => (
         <rect
           key={aisle.id}

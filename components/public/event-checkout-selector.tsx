@@ -2,24 +2,32 @@
 
 import {
   Armchair,
-  Car,
-  Gift,
+  LayoutGrid,
   Minus,
   Plus,
   Sparkles,
+  Tag,
   Ticket,
 } from "lucide-react"
 
 import { BundleCardSelector } from "@/components/public/bundle-card-selector"
 import type { TicketSelectorTier } from "@/components/public/ticket-tier-selector"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  resolveDefaultTicketPickerTab,
+  resolveTicketHighlightBadge,
+  ticketPickerTabLabel,
+  type DefaultTicketTab,
+} from "@/lib/checkout/ticket-picker"
 import { formatCurrency } from "@/lib/format"
 import {
   inferInventoryTierType,
   isQuantityInventoryType,
   type InventoryTierType,
 } from "@/lib/inventory/unified-inventory"
+import { seatingRenderModeCopy, type VenueRenderMode } from "@/lib/seating/adaptive-seating"
 import { cn } from "@/lib/utils"
 
 export type SelectedNumberedSeat = {
@@ -36,13 +44,16 @@ type Props = {
   quantities: Record<string, number>
   isPending: boolean
   hasSeatingFlow: boolean
+  seatingRenderMode?: VenueRenderMode
   selectedSeat: SelectedNumberedSeat | null
   showUpsell: boolean
   onQuantityChange: (tierId: string, quantity: number, max: number) => void
   onOpenSeatFlow: () => void
+  onPurchaseIntent?: () => void
   onClearSeat: () => void
   onAddUpsell: (tierId: string) => void
   onSkipUpsell: () => void
+  defaultTicketTab?: DefaultTicketTab | null
 }
 
 export function EventCheckoutSelector({
@@ -50,15 +61,19 @@ export function EventCheckoutSelector({
   quantities,
   isPending,
   hasSeatingFlow,
+  seatingRenderMode = "micro",
   selectedSeat,
   showUpsell,
   onQuantityChange,
   onOpenSeatFlow,
+  onPurchaseIntent,
   onClearSeat,
   onAddUpsell,
   onSkipUpsell,
+  defaultTicketTab = "auto",
 }: Props) {
   const grouped = groupTiers(tiers)
+  const mapCopy = seatingRenderModeCopy(seatingRenderMode)
   const tabs = (
     [
       hasSeatingFlow || grouped.seated.length > 0 ? "seated" : null,
@@ -68,7 +83,11 @@ export function EventCheckoutSelector({
     ] as Array<InventoryTierType | null>
   ).filter((tab): tab is InventoryTierType => Boolean(tab))
 
-  const defaultTab = tabs[0] ?? "general"
+  const defaultTab = resolveDefaultTicketPickerTab({
+    tabs,
+    grouped,
+    configured: defaultTicketTab,
+  })
   const upsellTier = grouped.addon.find(
     (tier) => (quantities[tier.id] ?? 0) === 0 && tier.available > 0,
   )
@@ -83,30 +102,30 @@ export function EventCheckoutSelector({
 
   return (
     <div className="mt-5 space-y-4">
-      <Tabs defaultValue={defaultTab} className="gap-3">
+      <Tabs key={defaultTab} defaultValue={defaultTab} className="gap-3">
         <TabsList className="flex h-auto w-full flex-wrap rounded-lg bg-muted p-1">
           {tabs.includes("seated") ? (
             <TabsTrigger value="seated" className="min-h-10 flex-1 gap-1.5">
-              <Armchair className="size-3.5" />
-              Numeradas
+              <LayoutGrid className="size-3.5" />
+              {ticketPickerTabLabel("seated", grouped.seated)}
             </TabsTrigger>
           ) : null}
           {tabs.includes("general") ? (
             <TabsTrigger value="general" className="min-h-10 flex-1 gap-1.5">
               <Ticket className="size-3.5" />
-              Generales
+              {ticketPickerTabLabel("general", grouped.general)}
             </TabsTrigger>
           ) : null}
           {tabs.includes("bundle") ? (
             <TabsTrigger value="bundle" className="min-h-10 flex-1 gap-1.5">
-              <Gift className="size-3.5" />
-              Combos
+              <Sparkles className="size-3.5" />
+              {ticketPickerTabLabel("bundle", grouped.bundle)}
             </TabsTrigger>
           ) : null}
           {tabs.includes("addon") ? (
             <TabsTrigger value="addon" className="min-h-10 flex-1 gap-1.5">
-              <Car className="size-3.5" />
-              Extras
+              <Tag className="size-3.5" />
+              {ticketPickerTabLabel("addon", grouped.addon)}
             </TabsTrigger>
           ) : null}
         </TabsList>
@@ -120,8 +139,8 @@ export function EventCheckoutSelector({
                     {selectedSeat.label}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {formatCurrency(selectedSeat.price)} · 8 min de reserva al
-                    pagar
+                    {formatCurrency(selectedSeat.price)} · reservada al
+                    continuar. El reloj de 8 minutos corre en el checkout.
                   </p>
                 </div>
                 <Button
@@ -136,8 +155,10 @@ export function EventCheckoutSelector({
               </div>
             ) : (
               <div className="rounded-2xl border border-dashed border-border p-4">
-                <p className="text-sm text-foreground">
-                  Elegí mesa, tablón o butaca en el mapa.
+                <p className="text-sm text-foreground">{mapCopy.hint}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Al continuar, la ubicación queda reservada 8 minutos. Nombre,
+                  DNI y teléfono se piden al pagar.
                 </p>
                 <Button
                   type="button"
@@ -145,8 +166,12 @@ export function EventCheckoutSelector({
                   disabled={isPending || !hasSeatingFlow}
                   onClick={onOpenSeatFlow}
                 >
-                  <Armchair className="size-4" />
-                  Abrir mapa de ubicaciones
+                  {seatingRenderMode === "micro" ? (
+                    <Armchair className="size-4" />
+                  ) : (
+                    <LayoutGrid className="size-4" />
+                  )}
+                  {mapCopy.cta}
                 </Button>
               </div>
             )}
@@ -154,7 +179,13 @@ export function EventCheckoutSelector({
         ) : null}
 
         {tabs.includes("general") ? (
-          <TabsContent value="general">
+          <TabsContent value="general" className="space-y-3">
+            {hasSeatingFlow ? (
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <LayoutGrid className="size-3.5 shrink-0" aria-hidden="true" />
+                Estas entradas coinciden con las zonas de acceso del recinto.
+              </p>
+            ) : null}
             <QuantityList
               tiers={grouped.general}
               quantities={quantities}
@@ -173,6 +204,7 @@ export function EventCheckoutSelector({
               onBuy={(tierId) => {
                 const bundle = grouped.bundle.find((row) => row.id === tierId)
                 onQuantityChange(tierId, 1, Math.max(0, bundle?.available ?? 1))
+                onPurchaseIntent?.()
               }}
             />
           </TabsContent>
@@ -263,16 +295,37 @@ function QuantityList({
       {tiers.map((tier) => {
         const max = Math.max(0, tier.available)
         const quantity = quantities[tier.id] ?? 0
+        const description = tier.description?.trim() || ""
+        const highlight = resolveTicketHighlightBadge(tier, tiers)
         return (
           <li
             key={tier.id}
-            className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-muted/30 px-3 py-3"
+            className={cn(
+              "flex items-center justify-between gap-3 rounded-2xl border bg-muted/30 px-3 py-3",
+              highlight === "bestseller"
+                ? "border-amber-500/40 bg-amber-500/5"
+                : "border-border",
+            )}
           >
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-foreground">
-                {tier.name}
-              </p>
-              <p className="text-xs text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-medium text-foreground">{tier.name}</p>
+                {highlight === "bestseller" ? (
+                  <Badge
+                    variant="secondary"
+                    className="h-5 gap-1 bg-amber-500/15 text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200"
+                  >
+                    <Sparkles className="size-3" aria-hidden="true" />
+                    Más vendida
+                  </Badge>
+                ) : null}
+              </div>
+              {description ? (
+                <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
+                  {description}
+                </p>
+              ) : null}
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 {formatCurrency(tier.price)}
                 {max === 0 ? " · agotado" : ` · ${max} disponibles`}
               </p>

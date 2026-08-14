@@ -20,9 +20,14 @@ import { reserveSeatAtomic } from "@/app/actions/checkout"
 import { CheckoutBuyerFields } from "@/components/public/checkout-buyer-fields"
 import { Button } from "@/components/ui/button"
 import {
+  getCheckoutBuyerFieldErrors,
   validateCheckoutBuyer,
   type CheckoutBuyerInfo,
 } from "@/lib/checkout-buyer"
+import {
+  firstCheckoutBuyerErrorField,
+  onValidationError,
+} from "@/lib/checkout/validation-scroll"
 import { formatCurrency } from "@/lib/format"
 import { redirectToCheckoutPaymentOrToast } from "@/lib/checkout-redirect"
 import { cn } from "@/lib/utils"
@@ -101,6 +106,7 @@ export function DualSeatingSelector({
     buyerEmail: initialBuyer?.buyerEmail ?? "",
     buyerPhone: initialBuyer?.buyerPhone ?? "",
   })
+  const [showBuyerErrors, setShowBuyerErrors] = useState(false)
   const mapNodes = useRef(new Map<string, SVGGElement>())
   const listNodes = useRef(new Map<string, HTMLButtonElement>())
 
@@ -208,7 +214,11 @@ export function DualSeatingSelector({
 
     const buyerCheck = validateCheckoutBuyer(buyer)
     if (!buyerCheck.ok) {
-      toast.error(buyerCheck.error)
+      setShowBuyerErrors(true)
+      const field = firstCheckoutBuyerErrorField(
+        getCheckoutBuyerFieldErrors(buyer),
+      )
+      onValidationError(field)
       return
     }
 
@@ -575,11 +585,16 @@ export function DualSeatingSelector({
       {selected ? (
         <div className="fixed inset-x-0 bottom-0 z-50 border-t border-zinc-800 bg-zinc-950/95 p-4 shadow-[0_-20px_50px_rgba(0,0,0,0.55)] backdrop-blur-xl">
           <div className="mx-auto flex max-w-7xl flex-col gap-4">
+          <div id="checkout-buyer">
             <CheckoutBuyerFields
               value={buyer}
+              errors={
+                showBuyerErrors ? getCheckoutBuyerFieldErrors(buyer) : undefined
+              }
               onChange={setBuyer}
               disabled={isPending}
             />
+          </div>
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-start gap-3">
               <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-purple-500/15 text-purple-200 ring-1 ring-purple-400/30">

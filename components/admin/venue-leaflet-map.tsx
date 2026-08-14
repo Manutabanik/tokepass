@@ -1,7 +1,11 @@
 "use client"
 
-import { divIcon, type Marker as LeafletMarker } from "leaflet"
-import { useEffect } from "react"
+import {
+  divIcon,
+  type Map as LeafletMap,
+  type Marker as LeafletMarker,
+} from "leaflet"
+import { useEffect, useRef } from "react"
 import {
   MapContainer,
   Marker,
@@ -15,6 +19,7 @@ import {
   TOKEPASS_BASEMAP_URL,
 } from "@/lib/maps/basemap"
 import {
+  isFiniteVenueCoordinates,
   VENUE_MAP_DEFAULT,
   type VenueCoordinates,
 } from "@/lib/seating/venue-geo"
@@ -37,19 +42,39 @@ const markerIcon = divIcon({
   iconAnchor: [18, 36],
 })
 
+function mapHasUsableSize(map: LeafletMap) {
+  const size = map.getSize()
+  return size.x >= 2 && size.y >= 2
+}
+
+function mapCenterIsFinite(map: LeafletMap) {
+  try {
+    const center = map.getCenter()
+    return Number.isFinite(center.lat) && Number.isFinite(center.lng)
+  } catch {
+    return false
+  }
+}
+
 /** Recompute tile layout after dynamic mount / tab reveal. */
 function MapSizeFix() {
   const map = useMap()
 
   useEffect(() => {
-    const run = () => map.invalidateSize({ pan: false })
+    const run = () => {
+      if (!mapHasUsableSize(map)) {
+        map.stop()
+        return
+      }
+      map.invalidateSize({ pan: false, animate: false })
+    }
     run()
-    const t1 = window.setTimeout(run, 80)
-    const t2 = window.setTimeout(run, 300)
+    const container = map.getContainer()
+    const observer = new ResizeObserver(run)
+    observer.observe(container)
     window.addEventListener("resize", run)
     return () => {
-      window.clearTimeout(t1)
-      window.clearTimeout(t2)
+      observer.disconnect()
       window.removeEventListener("resize", run)
     }
   }, [map])
@@ -65,13 +90,62 @@ function FlyToCoordinates({
   zoom: number
 }) {
   const map = useMap()
+  const hasSettledRef = useRef(false)
 
   useEffect(() => {
-    map.invalidateSize({ pan: false })
-    map.flyTo([coordinates.latitude, coordinates.longitude], zoom, {
-      animate: true,
-      duration: 0.85,
+    if (!isFiniteVenueCoordinates(coordinates) || !Number.isFinite(zoom)) {
+      return
+    }
+
+    const apply = () => {
+      if (!mapHasUsableSize(map)) return false
+      map.invalidateSize({ pan: false, animate: false })
+      if (!mapHasUsableSize(map)) return false
+
+      const latlng: [number, number] = [
+        coordinates.latitude,
+        coordinates.longitude,
+      ]
+      if (mapCenterIsFinite(map)) {
+        const current = map.getCenter()
+        if (
+          Math.abs(current.lat - coordinates.latitude) < 1e-7 &&
+          Math.abs(current.lng - coordinates.longitude) < 1e-7 &&
+          map.getZoom() === zoom
+        ) {
+          hasSettledRef.current = true
+          return true
+        }
+      }
+      map.stop()
+
+      const canAnimate = hasSettledRef.current && mapCenterIsFinite(map)
+      try {
+        if (canAnimate) {
+          map.flyTo(latlng, zoom, { animate: true, duration: 0.85 })
+        } else {
+          map.setView(latlng, zoom, { animate: false })
+        }
+        hasSettledRef.current = true
+        return true
+      } catch {
+        try {
+          map.setView(latlng, zoom, { animate: false })
+          hasSettledRef.current = true
+          return true
+        } catch {
+          return false
+        }
+      }
+    }
+
+    if (apply()) return
+
+    const observer = new ResizeObserver(() => {
+      if (apply()) observer.disconnect()
     })
+    observer.observe(map.getContainer())
+    return () => observer.disconnect()
   }, [coordinates.latitude, coordinates.longitude, map, zoom])
 
   return null
@@ -102,8 +176,9 @@ export function VenueLeafletMap({
   onChange: (coordinates: VenueCoordinates) => void
   zoom?: number
 }) {
-  const center = coordinates ?? VENUE_MAP_DEFAULT
-  const mapZoom = coordinates ? Math.max(zoom, 15) : 12
+  const pinned = isFiniteVenueCoordinates(coordinates) ? coordinates : null
+  const center = pinned ?? VENUE_MAP_DEFAULT
+  const mapZoom = pinned ? Math.max(Number.isFinite(zoom) ? zoom : 15, 15) : 12
 
   return (
     <MapContainer
@@ -123,9 +198,9 @@ export function VenueLeafletMap({
       />
       <FlyToCoordinates coordinates={center} zoom={mapZoom} />
       <MapClickHandler onChange={onChange} />
-      {coordinates ? (
+      {pinned ? (
         <Marker
-          position={[coordinates.latitude, coordinates.longitude]}
+          position={[pinned.latitude, pinned.longitude]}
           icon={markerIcon}
           draggable
           eventHandlers={{

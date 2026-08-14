@@ -76,6 +76,7 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
+import { PriceInput } from "@/components/ui/price-input"
 import {
   Select,
   SelectContent,
@@ -182,6 +183,7 @@ const defaultValues: EventFormValues = {
     zones: undefined,
   },
   tickets: [blankTicket()],
+  ticketsDefaultTab: "auto",
 }
 
 function NumberInput({
@@ -195,26 +197,54 @@ function NumberInput({
   onChange: (value: number | undefined) => void
   emptyAsZero?: boolean
 }) {
+  const [focused, setFocused] = useState(false)
+  const [draft, setDraft] = useState("")
+
+  useEffect(() => {
+    if (focused) return
+    setDraft(
+      value == null || Number.isNaN(Number(value)) ? "" : String(value),
+    )
+  }, [focused, value])
+
   return (
     <Input
       type="text"
       inputMode="decimal"
       autoComplete="off"
-      value={value == null || Number.isNaN(Number(value)) ? "" : String(value)}
+      value={
+        focused
+          ? draft
+          : value == null || Number.isNaN(Number(value))
+            ? ""
+            : String(value)
+      }
+      onFocus={() => {
+        setFocused(true)
+        setDraft(
+          value == null || Number.isNaN(Number(value)) ? "" : String(value),
+        )
+      }}
       onChange={(event) => {
         const rawValue = event.target.value
         if (rawValue === "") {
-          onChange(undefined)
+          setDraft("")
           return
         }
         if (!/^\d*[.,]?\d{0,2}$/.test(rawValue)) return
         const numericValue = Number.parseFloat(rawValue.replace(",", "."))
-        if (!Number.isNaN(numericValue)) onChange(numericValue)
+        if (Number.isNaN(numericValue)) return
+        setDraft(rawValue.replace(",", "."))
+        onChange(numericValue)
       }}
       onBlur={() => {
-        if (emptyAsZero && (value == null || Number.isNaN(Number(value)))) {
-          onChange(0)
+        setFocused(false)
+        if (draft === "") {
+          onChange(emptyAsZero ? 0 : undefined)
+          return
         }
+        const numericValue = Number.parseFloat(draft.replace(",", "."))
+        if (!Number.isNaN(numericValue)) onChange(numericValue)
       }}
       className={cn("min-h-12 h-12 text-base", className)}
       {...props}
@@ -445,6 +475,8 @@ export function EventCreationWizard({
             tierType: layoutType === "general" ? "general" : "seated",
             listPrice: null,
             bundleItems: [],
+            description: "",
+            highlightBadge: null,
           }
         }),
       )
@@ -1569,14 +1601,14 @@ export function EventCreationWizard({
                               </FormLabel>
                               <div className="relative">
                                 <CircleDollarSign className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-600" />
-                                <NumberInput
+                                <PriceInput
                                   id={`tier-${index}-price`}
                                   min={0}
-                                  step="0.01"
                                   placeholder="Ej. 15000"
-                                  emptyAsZero
                                   value={field.value}
-                                  onChange={(value) => field.onChange(value)}
+                                  onValueChange={(value) =>
+                                    field.onChange(value ?? 0)
+                                  }
                                   className="h-12 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 pl-9"
                                 />
                               </div>

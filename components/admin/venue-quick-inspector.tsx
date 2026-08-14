@@ -1,7 +1,6 @@
 "use client"
 
 import { Copy, Edit3, RotateCw, Trash2 } from "lucide-react"
-import { useEffect, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { PriceInput } from "@/components/ui/price-input"
@@ -70,11 +69,6 @@ export function VenueQuickInspector({
       ? sector.price
       : price
   const showPrice = canPrice !== false && assignedPrice != null
-  const [draft, setDraft] = useState(String(assignedPrice ?? 0))
-
-  useEffect(() => {
-    setDraft(String(assignedPrice ?? 0))
-  }, [assignedPrice, element?.id, sector?.id])
 
   return (
     <div
@@ -95,19 +89,12 @@ export function VenueQuickInspector({
           </p>
           <div className="flex items-center gap-2">
             <PriceInput
-              value={assignedPrice ?? 0}
+              value={assignedPrice}
               onValueChange={(value) => {
-                setDraft(value == null ? "" : String(value))
-                if (value != null) onPriceChange?.(value)
+                if (value == null) return
+                onPriceChange?.(value)
               }}
             />
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => onPriceChange?.(Number(draft) || 0)}
-            >
-              Aplicar
-            </Button>
           </div>
         </div>
       ) : (

@@ -7,6 +7,10 @@ import type {
 } from "@/types/venue-map"
 import { emptyVenueMap, isSellableElement } from "@/types/venue-map"
 import type { VenueLayoutType, VenueSeatingLayout } from "@/types/venues"
+import {
+  expandParametricZone,
+  parametricZoneCapacity,
+} from "@/lib/seating/adaptive-seating"
 import { elementSeatLabel } from "@/lib/seating/venue-element-geometry"
 
 const SEAT_GAP = 18
@@ -271,7 +275,9 @@ export function venueMapToSeatingLayout(
     ),
   ]
 
-  return [...fromSectors, ...fromElements]
+  const fromZones = (map.zones ?? []).map((zone) => expandParametricZone(zone))
+
+  return [...fromSectors, ...fromElements, ...fromZones]
 }
 
 export function venueMapCapacity(map: InteractiveVenueMap): number {
@@ -298,14 +304,23 @@ export function venueMapCapacity(map: InteractiveVenueMap): number {
       sum + element.seats.filter((seat) => seat.status !== "blocked").length
     )
   }, 0)
-  return sectorSeats + elementSeats
+  const zoneSeats = (map.zones ?? []).reduce(
+    (sum, zone) => sum + parametricZoneCapacity(zone),
+    0,
+  )
+  return sectorSeats + elementSeats + zoneSeats
 }
 
 export function seatingLayoutToVenueMap(
   layout: VenueSeatingLayout,
   existing?: InteractiveVenueMap | null,
 ): InteractiveVenueMap {
-  if (existing && (existing.sectors.length > 0 || (existing.elements?.length ?? 0) > 0)) {
+  if (
+    existing &&
+    (existing.sectors.length > 0 ||
+      (existing.elements?.length ?? 0) > 0 ||
+      (existing.zones?.length ?? 0) > 0)
+  ) {
     return existing
   }
   const map = emptyVenueMap()
@@ -353,6 +368,7 @@ export function seatingLayoutToVenueMap(
       return draft
     })
   map.elements = existing?.elements ?? []
+  map.zones = existing?.zones ?? []
   map.backgroundImage = existing?.backgroundImage ?? map.backgroundImage
   map.backgroundOpacity = existing?.backgroundOpacity ?? map.backgroundOpacity
   map.backgroundScale = existing?.backgroundScale ?? map.backgroundScale
@@ -372,11 +388,14 @@ export type FlattenedVenueSeat = {
   color: string
   price: number
   mapStatus: VenueMapSeatStatus
+  source: "sector" | "element"
 }
 
 export function flattenVenueMapSeats(map: InteractiveVenueMap): FlattenedVenueSeat[] {
-  const fromSectors = map.sectors.flatMap((sector) =>
-    sector.seats.map((seat) => ({
+  const zoneIds = new Set((map.zones ?? []).map((zone) => zone.id))
+  const fromSectors = map.sectors.flatMap((sector) => {
+    if (zoneIds.has(sector.id)) return []
+    return sector.seats.map((seat) => ({
       id: seat.id,
       row: seat.row,
       number: seat.number,
@@ -387,9 +406,13 @@ export function flattenVenueMapSeats(map: InteractiveVenueMap): FlattenedVenueSe
       color: sector.color,
       price: sector.price,
       mapStatus: seat.status,
-    })),
-  )
+      source: "sector" as const,
+    }))
+  })
   const fromElements = (map.elements ?? []).flatMap((element) => {
+    if (zoneIds.has(element.id) || (element.groupId && zoneIds.has(element.groupId))) {
+      return []
+    }
     if (!isSellableElement(element) || element.type === "standing_zone") {
       return []
     }
@@ -406,6 +429,7 @@ export function flattenVenueMapSeats(map: InteractiveVenueMap): FlattenedVenueSe
           color: element.color,
           price: element.price,
           mapStatus: "available" as const,
+          source: "element" as const,
         },
       ]
     }
@@ -420,6 +444,7 @@ export function flattenVenueMapSeats(map: InteractiveVenueMap): FlattenedVenueSe
       color: element.color,
       price: element.price,
       mapStatus: seat.status,
+      source: "element" as const,
     }))
   })
   return [...fromSectors, ...fromElements]
@@ -427,7 +452,12 @@ export function flattenVenueMapSeats(map: InteractiveVenueMap): FlattenedVenueSe
 
 export function venueMapHasInventory(map: InteractiveVenueMap | null | undefined): boolean {
   if (!map) return false
-  return map.sectors.length > 0 || (map.elements?.length ?? 0) > 0
+  const sellable = (map.elements ?? []).some((element) => isSellableElement(element))
+  return (
+    map.sectors.length > 0 ||
+    sellable ||
+    (map.zones?.length ?? 0) > 0
+  )
 }
 
 export function venueMapStudioStatus(map: InteractiveVenueMap | null | undefined): string {
@@ -442,10 +472,14 @@ export function venueMapStudioStatus(map: InteractiveVenueMap | null | undefined
   const groups = new Set(
     elements.map((item) => item.groupId).filter((id): id is string => Boolean(id)),
   )
-  const sectorCount = map.sectors.length + groups.size
+  const zoneCount = map.zones?.length ?? 0
+  const sectorCount = map.sectors.length + groups.size + zoneCount
   const seats =
     map.sectors.reduce((sum, sector) => sum + sector.seats.length, 0) +
     elements.filter((item) => item.type === "vip_chair").length
+  if (zoneCount > 0 && tables === 0 && seats === 0) {
+    return `${zoneCount} ${zoneCount === 1 ? "zona paramétrica" : "zonas paramétricas"}`
+  }
   if (tables > 0 && sectorCount > 0) {
     return `${tables} ${tables === 1 ? "mesa" : "mesas"} en ${sectorCount} ${
       sectorCount === 1 ? "sector" : "sectores"

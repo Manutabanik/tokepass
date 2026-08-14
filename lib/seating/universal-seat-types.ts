@@ -55,7 +55,7 @@ export type UniversalSeatSelection =
       unitPrice: number
       groupId: string
       groupName: string
-      seats: Array<{ id: string; label: string }>
+      seats: Array<{ id: string; label: string; seatingUnitId?: string | null }>
     }
 
 /** Mock flexible: general + numerado en el mismo evento. */

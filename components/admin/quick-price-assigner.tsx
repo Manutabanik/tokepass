@@ -3,8 +3,8 @@
 import { X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { PriceInput } from "@/components/ui/price-input"
 import { formatCurrency } from "@/lib/format"
 import {
   applyVenuePriceGroup,
@@ -57,21 +57,14 @@ export function QuickPriceAssigner({
                 {group.name} · {group.count} {group.unit}
               </span>
             </Label>
-            <Input
-              type="number"
+            <PriceInput
               min={0}
-              step={100}
-              value={group.price || ""}
+              value={group.price}
               placeholder="0"
-              onChange={(event) =>
-                onChange(
-                  applyVenuePriceGroup(
-                    map,
-                    group,
-                    Number(event.target.value) || 0,
-                  ),
-                )
-              }
+              onValueChange={(value) => {
+                if (value == null) return
+                onChange(applyVenuePriceGroup(map, group, value))
+              }}
             />
             {group.price > 0 ? (
               <p className="text-[11px] text-muted-foreground">

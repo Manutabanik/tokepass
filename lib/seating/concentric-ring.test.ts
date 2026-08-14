@@ -74,7 +74,7 @@ describe("concentric-ring", () => {
       ...base,
       rows: 1,
       rowTypes: ["round_table"],
-      countPerRow: [12],
+      countPerRow: ["auto"],
       aisle: true,
       aisleWidthDeg: 24,
     })
@@ -82,15 +82,48 @@ describe("concentric-ring", () => {
       ...base,
       rows: 1,
       rowTypes: ["round_table"],
-      countPerRow: [12],
+      countPerRow: ["auto"],
       aisle: false,
     })
-    const minAbs = Math.min(
-      ...withAisle.map((element) => Math.abs(element.rotation)),
+    const half = 12
+    assert.equal(withAisle.length > 0, true)
+    assert.equal(
+      withAisle.every((element) => Math.abs(element.rotation) >= half - 0.6),
+      true,
     )
-    const minAbsClosed = Math.min(
-      ...without.map((element) => Math.abs(element.rotation)),
-    )
-    assert.equal(minAbs > minAbsClosed, true)
+    assert.equal(without.length >= withAisle.length, true)
+  })
+
+  it("caps greedy counts so inner tables stay at least 40px apart", () => {
+    const elements = generateConcentricRing({
+      ...base,
+      rows: 3,
+      rowTypes: ["round_table", "round_table", "round_table"],
+      countPerRow: [40, 40, 40],
+      aisle: false,
+      innerRadius: 80,
+      outerRadius: 220,
+    })
+    const byRow = new Map<number, typeof elements>()
+    for (const element of elements) {
+      const row = element.ringIndex ?? 0
+      const list = byRow.get(row) ?? []
+      list.push(element)
+      byRow.set(row, list)
+    }
+    const rows = [...byRow.keys()].sort((a, b) => a - b)
+    assert.equal(rows.length >= 2, true)
+    const inner = byRow.get(rows[0]!) ?? []
+    const outer = byRow.get(rows[rows.length - 1]!) ?? []
+    assert.equal(inner.length < outer.length, true)
+    for (const row of rows) {
+      const list = (byRow.get(row) ?? []).slice().sort((a, b) => a.rotation - b.rotation)
+      for (let index = 1; index < list.length; index += 1) {
+        const prev = list[index - 1]!
+        const next = list[index]!
+        const dist = Math.hypot(next.x - prev.x, next.y - prev.y)
+        assert.equal(dist + 1e-6 >= 39, true, `row ${row} packed at ${dist.toFixed(1)}px`)
+      }
+    }
   })
 })

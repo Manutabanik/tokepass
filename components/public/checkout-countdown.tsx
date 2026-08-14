@@ -1,6 +1,6 @@
 "use client"
 
-import { Timer } from "lucide-react"
+import { Clock, Timer } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
@@ -18,6 +18,8 @@ type CheckoutCountdownProps = {
   redirectTo?: string
   onExpired?: () => void
   className?: string
+  /** `cart` = picker B2C; `order` = orden pending ya creada. */
+  variant?: "order" | "cart"
 }
 
 /**
@@ -29,6 +31,7 @@ export function CheckoutCountdown({
   redirectTo,
   onExpired,
   className,
+  variant = "order",
 }: CheckoutCountdownProps) {
   const router = useRouter()
   const expiredRef = useRef(false)
@@ -57,6 +60,7 @@ export function CheckoutCountdown({
           "Tu cupo se liberó. Volvé a elegir entradas si querés comprar.",
       })
       onExpired?.()
+      if (variant === "cart") return
       if (redirectTo) {
         router.push(redirectTo)
         router.refresh()
@@ -68,10 +72,11 @@ export function CheckoutCountdown({
     tick()
     const id = window.setInterval(tick, 1000)
     return () => window.clearInterval(id)
-  }, [expiresAt, onExpired, redirectTo, router])
+  }, [expiresAt, onExpired, redirectTo, router, variant])
 
   const urgent = remainingSeconds <= 60
   const label = formatHoldCountdown(remainingSeconds)
+  const Icon = variant === "cart" ? Clock : Timer
 
   return (
     <div
@@ -81,31 +86,50 @@ export function CheckoutCountdown({
       className={cn(
         "flex items-center gap-3 rounded-2xl border px-4 py-3",
         urgent
-          ? "border-red-500/35 bg-red-500/15 text-red-100"
-          : "border-amber-500/30 bg-amber-500/10 text-amber-100",
+          ? "border-red-500/35 bg-red-500/15 text-red-950 dark:text-red-100"
+          : "border-amber-500/30 bg-amber-500/10 text-amber-950 dark:text-amber-100",
         className,
       )}
     >
       <span
         className={cn(
           "grid size-10 shrink-0 place-items-center rounded-full",
-          urgent ? "bg-red-500/20 text-red-300" : "bg-amber-500/20 text-amber-300",
+          urgent
+            ? "bg-red-500/20 text-red-700 dark:text-red-300"
+            : "bg-amber-500/20 text-amber-700 dark:text-amber-300",
         )}
       >
-        <Timer className="size-5" aria-hidden="true" />
+        <Icon className="size-5" aria-hidden="true" />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold leading-snug">
-          Tu entrada está reservada. Tenés{" "}
-          <span className="font-mono text-base font-black tabular-nums">
-            {label}
-          </span>{" "}
-          minutos para completar el pago
-        </p>
-        <p className="mt-0.5 text-xs opacity-80">
-          Ventana de {GA_CHECKOUT_HOLD_MINUTES} minutos. Si vence, el stock
-          vuelve a estar disponible.
-        </p>
+        {variant === "cart" ? (
+          <>
+            <p className="text-sm font-semibold leading-snug">
+              Tus entradas están reservadas por {GA_CHECKOUT_HOLD_MINUTES}{" "}
+              minutos
+            </p>
+            <p className="mt-0.5 font-mono text-lg font-black tabular-nums">
+              {label}
+            </p>
+            <p className="mt-0.5 text-xs opacity-80">
+              Si el tiempo llega a cero, la ubicación vuelve a estar disponible.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm font-semibold leading-snug">
+              Tu entrada está reservada. Tenés{" "}
+              <span className="font-mono text-base font-black tabular-nums">
+                {label}
+              </span>{" "}
+              minutos para completar el pago
+            </p>
+            <p className="mt-0.5 text-xs opacity-80">
+              Ventana de {GA_CHECKOUT_HOLD_MINUTES} minutos. Si vence, el stock
+              vuelve a estar disponible.
+            </p>
+          </>
+        )}
       </div>
     </div>
   )

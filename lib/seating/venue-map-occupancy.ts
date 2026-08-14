@@ -16,6 +16,26 @@ export function resolveLiveVenueSeatStatus(input: {
   return "available"
 }
 
+/** After a live occupancy fetch, unknown ids are occupied — never optimistic-available. */
+export function occupancyFromSeatingUnits(
+  units: Array<{ layoutItemId: string; status: string }>,
+  knownLayoutItemIds: Iterable<string> = [],
+): Record<string, SeatStatus> {
+  const occupancy: Record<string, SeatStatus> = {}
+  for (const id of knownLayoutItemIds) {
+    occupancy[id] = "occupied"
+  }
+  for (const unit of units) {
+    occupancy[unit.layoutItemId] =
+      unit.status === "available"
+        ? "available"
+        : unit.status === "blocked"
+          ? "blocked"
+          : "occupied"
+  }
+  return occupancy
+}
+
 export function hexToRgba(hex: string, alpha: number): string {
   const raw = hex.trim().replace("#", "")
   const normalized =

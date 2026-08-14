@@ -3,9 +3,46 @@ import type {
   VenueMapElementSeat,
   VenueElementType,
   VenueInfraSubtype,
+  VenueShapeType,
 } from "@/types/venue-map"
 
 const ZONE_COLORS = ["#f97316", "#ec4899", "#f59e0b", "#10b981", "#6366f1", "#06b6d4"]
+
+export const VENUE_SHAPE = {
+  roundTableRadius: 14,
+  longTableWidth: 60,
+  longTableHeight: 20,
+  chairRadius: 3,
+  vipChairRadius: 6,
+  theatreSeat: 12,
+  roundTableChairOrbit: 19,
+} as const
+
+export function defaultVenueShapeType(
+  element: Pick<VenueMapElement, "type" | "subtype">,
+): VenueShapeType {
+  if (element.type === "vip_chair") return "theatre_seat"
+  if (element.type === "round_table") return "round_table"
+  if (element.type === "long_table") return "long_table"
+  if (element.type === "vip_box") return "vip_box"
+  if (element.type === "standing_zone") return "standing_zone"
+  if (element.subtype === "bar" || element.subtype === "kitchen") return "infra_bar"
+  if (element.subtype === "restroom") return "infra_restroom"
+  if (element.subtype === "entrance" || element.subtype === "exit") return "infra_door"
+  if (element.subtype === "stage" || element.subtype === "dj_booth") return "infra_stage"
+  return "infra_generic"
+}
+
+export function resolveVenueShapeType(element: VenueMapElement): VenueShapeType {
+  return element.shapeType ?? defaultVenueShapeType(element)
+}
+
+export function compactVenueElementLabel(label: string, zoom: number): string {
+  if (zoom >= 1.2) return label
+  const match = /(\d+)\s*$/.exec(label)
+  if (!match) return label
+  return String(Number(match[1]))
+}
 
 export function rotatePoint(
   x: number,
@@ -42,7 +79,11 @@ export function rebuildElementSeats(element: VenueMapElement): VenueMapElementSe
   }
   if (element.type === "round_table") {
     const count = Math.min(12, Math.max(2, Math.floor(element.chairCount) || 8))
-    const radius = 26 + count * 1.2
+    const tableRadius = Math.max(
+      8,
+      Math.min(element.width || 28, element.height || 28) / 2,
+    )
+    const radius = tableRadius + VENUE_SHAPE.chairRadius + 2
     const seats: VenueMapElementSeat[] = []
     for (let index = 0; index < count; index += 1) {
       const angle = (index / count) * Math.PI * 2 + (element.rotation * Math.PI) / 180
@@ -60,16 +101,17 @@ export function rebuildElementSeats(element: VenueMapElement): VenueMapElementSe
   if (element.type === "long_table") {
     const sideA = Math.min(12, Math.max(1, Math.floor(element.sideA) || 4))
     const sideB = Math.min(12, Math.max(0, Math.floor(element.sideB) || 4))
-    const gap = 16
-    const width = Math.max(element.width, Math.max(sideA, sideB) * gap + 24)
-    const height = Math.max(element.height, 28)
+    const width = Math.max(8, element.width || VENUE_SHAPE.longTableWidth)
+    const height = Math.max(8, element.height || VENUE_SHAPE.longTableHeight)
+    const inset = 8
+    const chairOffset = height / 2 + VENUE_SHAPE.chairRadius + 2
     const seats: VenueMapElementSeat[] = []
     let number = 1
     for (let index = 0; index < sideA; index += 1) {
       const t = sideA === 1 ? 0.5 : index / (sideA - 1)
       const local = rotatePoint(
-        element.x - width / 2 + 12 + t * (width - 24),
-        element.y - height / 2 - 14,
+        element.x - width / 2 + inset + t * (width - inset * 2),
+        element.y - chairOffset,
         element.x,
         element.y,
         element.rotation,
@@ -80,8 +122,8 @@ export function rebuildElementSeats(element: VenueMapElement): VenueMapElementSe
     for (let index = 0; index < sideB; index += 1) {
       const t = sideB === 1 ? 0.5 : index / (sideB - 1)
       const local = rotatePoint(
-        element.x - width / 2 + 12 + t * (width - 24),
-        element.y + height / 2 + 14,
+        element.x - width / 2 + inset + t * (width - inset * 2),
+        element.y + chairOffset,
         element.x,
         element.y,
         element.rotation,
@@ -129,9 +171,11 @@ export function createVenueElement(
     sectorName: defaultSectorName(type),
     x: point.x,
     y: point.y,
-    width: 80,
-    height: 48,
+    width: type === "round_table" ? VENUE_SHAPE.roundTableRadius * 2 : 80,
+    height: type === "round_table" ? VENUE_SHAPE.roundTableRadius * 2 : 48,
     rotation: 0,
+    shapeType: defaultVenueShapeType({ type, subtype }),
+    roundedCorner: type === "vip_box" ? 6 : 4,
     price: 0,
     color,
     opacity: type === "infrastructure" ? 0.92 : 1,
@@ -147,9 +191,14 @@ export function createVenueElement(
     base.height = 100
     base.color = "#10b981"
   }
+  if (type === "vip_chair") {
+    base.width = VENUE_SHAPE.theatreSeat
+    base.height = VENUE_SHAPE.theatreSeat
+    base.roundedCorner = 2
+  }
   if (type === "long_table") {
-    base.width = 96
-    base.height = 28
+    base.width = VENUE_SHAPE.longTableWidth
+    base.height = VENUE_SHAPE.longTableHeight
   }
   if (type === "vip_box") {
     base.width = 88
@@ -249,4 +298,39 @@ export function describeVenueElementType(element: VenueMapElement): string {
   if (element.subtype === "dj_booth") return "Cabina DJ"
   if (element.subtype === "stage") return "Escenario"
   return "Infraestructura"
+}
+
+const SHAPE_TO_TYPE: Partial<Record<VenueShapeType, VenueElementType>> = {
+  theatre_seat: "vip_chair",
+  round_table: "round_table",
+  long_table: "long_table",
+  vip_box: "vip_box",
+  standing_zone: "standing_zone",
+}
+
+export function applyVenueShape(
+  element: VenueMapElement,
+  shapeType: VenueShapeType,
+): VenueMapElement {
+  const next: VenueMapElement = { ...element, shapeType }
+  const mapped = SHAPE_TO_TYPE[shapeType]
+  if (
+    mapped &&
+    mapped !== element.type &&
+    element.category === "commercial" &&
+    element.type !== "infrastructure"
+  ) {
+    const fresh = createVenueElement(mapped, 0, { x: element.x, y: element.y })
+    next.type = mapped
+    next.width = fresh.width
+    next.height = fresh.height
+    next.chairCount = fresh.chairCount
+    next.sideA = fresh.sideA
+    next.sideB = fresh.sideB
+    next.sellMode = fresh.sellMode
+    next.capacity = fresh.capacity
+    next.roundedCorner = fresh.roundedCorner
+    next.seats = rebuildElementSeats(next)
+  }
+  return next
 }

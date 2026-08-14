@@ -4,6 +4,10 @@ import { listEventSponsors } from "@/app/actions/event-sponsors"
 import { logger } from "@/lib/logger"
 import { createClient } from "@/lib/supabase/server"
 import { parseScheduleDays } from "@/lib/event-schedule"
+import {
+  parseDefaultTicketTab,
+  parseTicketHighlightBadge,
+} from "@/lib/checkout/ticket-picker"
 import { fisherYatesShuffle, FEATURED_CAROUSEL_LIMIT } from "@/lib/featured-rotation"
 import type { FeaturedRotationResult } from "@/lib/featured-rotation"
 import { isPastEvent } from "@/lib/event-status"
@@ -112,8 +116,12 @@ export type EventDetails = {
       | "tier_type"
       | "bundle_items"
       | "bundle_type"
+      | "description"
+      | "highlight_badge"
     > & { available: number }
   >
+  /** Tab inicial del picker. auto = el de más stock restante. */
+  defaultTicketTab: "auto" | "seated" | "general" | "bundle" | "addon"
   pixels: EventPixelConfig
   /** Spot YouTube/Vimeo (URL). */
   promoVideoUrl: string | null
@@ -180,6 +188,7 @@ type EventDetailRow = {
   gallery_urls?: string[] | null
   category_id?: string | null
   created_at?: string | null
+  default_ticket_tab?: string | null
   venues:
     | (Pick<
         Venue,
@@ -214,6 +223,8 @@ type EventDetailRow = {
       | "capacity_per_unit"
       | "category"
       | "list_price"
+      | "description"
+      | "highlight_badge"
     >
   > | null
   profiles?: { full_name: string | null } | null
@@ -531,18 +542,41 @@ async function loadEventDetails(
   const resolvedId = await resolveEventRecordId(supabase, eventId)
   if (!resolvedId) return null
 
+  const eventSelectWithPicker =
+    "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, default_ticket_tab, venues(id, name, location, address, city, capacity, seating_background_url, seating_layout, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, bundle_items, bundle_type, description, highlight_badge), profiles!events_organizer_id_fkey(full_name)"
+  const eventSelectCore =
+    "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, venues(id, name, location, address, city, capacity, seating_background_url, seating_layout, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, bundle_items, bundle_type), profiles!events_organizer_id_fkey(full_name)"
+
   let query = supabase
     .from("events")
-    .select(
-      "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, venues(id, name, location, address, city, capacity, seating_background_url, seating_layout, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, bundle_items, bundle_type), profiles!events_organizer_id_fkey(full_name)",
-    )
+    .select(eventSelectWithPicker)
     .eq("id", resolvedId)
 
   if (options.mode === "public") {
     query = query.eq("status", "published").neq("visibility", "guest_list_only")
   }
 
-  const { data, error } = await query.maybeSingle()
+  let { data, error } = await query.maybeSingle()
+
+  if (
+    error &&
+    /default_ticket_tab|highlight_badge|ticket_tiers.*description|schema cache|PGRST204|42703/i.test(
+      error.message,
+    )
+  ) {
+    let fallback = supabase
+      .from("events")
+      .select(eventSelectCore)
+      .eq("id", resolvedId)
+    if (options.mode === "public") {
+      fallback = fallback
+        .eq("status", "published")
+        .neq("visibility", "guest_list_only")
+    }
+    const retry = await fallback.maybeSingle()
+    data = retry.data as typeof data
+    error = retry.error
+  }
 
   let row = data as EventDetailRow | null
   if (error || !row) {
@@ -793,7 +827,18 @@ async function loadEventDetails(
       bundle_type:
         (tier as { bundle_type?: TicketTier["bundle_type"] }).bundle_type ??
         null,
+      description:
+        typeof (tier as { description?: string | null }).description === "string"
+          ? String((tier as { description?: string | null }).description).trim() ||
+            null
+          : null,
+      highlight_badge: parseTicketHighlightBadge(
+        (tier as { highlight_badge?: string | null }).highlight_badge,
+      ),
     })),
+    defaultTicketTab: parseDefaultTicketTab(
+      (event as { default_ticket_tab?: string | null }).default_ticket_tab,
+    ),
     pixels: {
       metaPixelId: event.meta_pixel_id ?? null,
       metaPixelEnabled: Boolean(event.meta_pixel_enabled),
@@ -886,6 +931,22 @@ export async function getEventSeatingUnitsForSector(
       p_sector_id: cleanSector,
     },
   )
+
+  if (error || !data) return []
+  return data.map(mapAvailabilityUnit)
+}
+
+/** Ocupación de todo el evento (teatros). Evitar en festivales de miles de unidades. */
+export async function getEventSeatingAvailability(
+  eventId: string,
+): Promise<EventSeatingUnit[]> {
+  const cleanEvent = eventId.trim()
+  if (!cleanEvent) return []
+
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc("get_event_seating_availability", {
+    p_event_id: cleanEvent,
+  })
 
   if (error || !data) return []
   return data.map(mapAvailabilityUnit)

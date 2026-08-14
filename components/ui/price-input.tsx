@@ -52,8 +52,14 @@ export function PriceInput({
       inputMode="decimal"
       autoComplete="off"
       disabled={disabled}
-      placeholder={placeholder}
-      value={focused ? draft : value == null || Number.isNaN(Number(value)) ? "" : String(value)}
+      placeholder={placeholder ?? "0"}
+      value={
+        focused
+          ? draft
+          : value == null || Number.isNaN(Number(value))
+            ? ""
+            : String(value)
+      }
       onFocus={() => {
         setFocused(true)
         setDraft(
@@ -64,7 +70,6 @@ export function PriceInput({
         const rawValue = event.target.value
         if (rawValue === "") {
           setDraft("")
-          onValueChange(undefined)
           return
         }
         if (!/^\d*[.,]?\d{0,2}$/.test(rawValue)) return

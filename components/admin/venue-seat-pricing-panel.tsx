@@ -188,9 +188,10 @@ export function VenueSeatPricingPanel({
                   <PriceInput
                     id={`sector-price-${sector.id}`}
                     value={entry.price}
-                    onValueChange={(value) =>
-                      setSectorPrice(sector.id, value ?? 0)
-                    }
+                    onValueChange={(value) => {
+                      if (value == null) return
+                      setSectorPrice(sector.id, value)
+                    }}
                     className="mt-1 h-10"
                   />
                 </div>
@@ -212,9 +213,10 @@ export function VenueSeatPricingPanel({
                         <PriceInput
                           id={`group-price-${group.id}`}
                           value={groupPrice}
-                          onValueChange={(value) =>
-                            setGroupPrice(sector.id, group.id, value ?? 0)
-                          }
+                          onValueChange={(value) => {
+                            if (value == null) return
+                            setGroupPrice(sector.id, group.id, value)
+                          }}
                           className="h-9 w-28"
                         />
                       </div>

@@ -166,7 +166,9 @@ export function EventVenueStep({
           : null,
       coordinates:
         form.watch("venue.latitude") != null &&
-        form.watch("venue.longitude") != null
+        form.watch("venue.longitude") != null &&
+        Number.isFinite(form.watch("venue.latitude")) &&
+        Number.isFinite(form.watch("venue.longitude"))
           ? {
               lat: form.watch("venue.latitude")!,
               lng: form.watch("venue.longitude")!,
@@ -535,7 +537,9 @@ export function EventVenueStep({
 
           {showLocation &&
           selectedVenue.latitude != null &&
-          selectedVenue.longitude != null ? (
+          selectedVenue.longitude != null &&
+          Number.isFinite(selectedVenue.latitude) &&
+          Number.isFinite(selectedVenue.longitude) ? (
             <div className="h-48 overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 sm:h-56">
               <EventLocationMapInner
                 latitude={selectedVenue.latitude}

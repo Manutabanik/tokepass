@@ -6,7 +6,6 @@ import {
   Music2,
   ShieldCheck,
   Sparkles,
-  Ticket,
 } from "lucide-react"
 
 import type { EventDetails } from "@/app/actions/public-events"
@@ -26,7 +25,6 @@ import { StoryFlyerVisitorButton } from "@/components/public/story-flyer-modal"
 import { EventResaleListings } from "@/components/public/event-resale-listings"
 import { EventSaleStatusNotice } from "@/components/public/event-sale-status-notice"
 import { SponsorGrid } from "@/components/public/sponsor-grid"
-import { EventStickyBuyBar } from "@/components/public/event-sticky-buy-bar"
 import { OrganizerAvatar } from "@/components/public/organizer-avatar"
 import { TicketSelector } from "@/components/public/ticket-selector"
 import {
@@ -37,7 +35,7 @@ import {
 } from "@/components/ui/accordion"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { formatCurrency, formatEventDay, formatEventTime } from "@/lib/format"
+import { formatEventDay, formatEventTime } from "@/lib/format"
 import { deriveEventSaleState } from "@/lib/event-status"
 import { cn } from "@/lib/utils"
 
@@ -101,6 +99,60 @@ export function EventStorefront({
   const organizerName = event.organizerName?.trim() || "Organizador Tokepass"
   const organizerBio =
     event.organizerBio?.trim() || "Productora en Tokepass"
+
+  const checkout = finished ? (
+    <EventSaleStatusNotice state="finished" />
+  ) : (
+    <>
+      {soldOut ? (
+        <div className="mb-4">
+          <EventSaleStatusNotice state="sold_out" />
+        </div>
+      ) : null}
+      <TicketSelector
+        eventId={event.id}
+        eventSlug={event.slug}
+        eventTitle={event.title}
+        currentUserId={currentUserId}
+        initialBuyer={initialBuyer}
+        referralCode={referralCode}
+        sandboxEligible={sandboxEligible}
+        serviceChargeRate={event.serviceChargeRate}
+        scheduleDays={event.scheduleDays ?? []}
+        seatingUnits={event.seatingUnits}
+        seatingSectorSummaries={event.seatingSectorSummaries}
+        seatingBackgroundUrl={event.venue?.seating_background_url}
+        venueMap={event.venue?.venue_map ?? null}
+        seatingLayout={event.venue?.seating_layout ?? []}
+        venueId={event.venue?.id}
+        venueName={event.venue?.name}
+        venueCapacity={event.venue?.capacity}
+        pixels={event.pixels}
+        zoneTierPricing={event.zoneTierPricing}
+        purchaseLocked={soldOut}
+        tiers={event.tiers.map((tier) => ({
+          id: tier.id,
+          name: tier.name,
+          price: tier.price,
+          available: tier.available,
+          bonusReward: tier.bonus_reward,
+          dayId: tier.day_id,
+          layoutType: tier.layout_type,
+          seatingSectorId: tier.seating_sector_id,
+          capacityPerUnit: tier.capacity_per_unit,
+          category: tier.category,
+          listPrice: tier.list_price,
+          comboItems: event.comboItemsByTier[tier.id] ?? [],
+          tierType: tier.tier_type,
+          bundleType: tier.bundle_type,
+          description: tier.description,
+          highlightBadge: tier.highlight_badge,
+          sold: tier.sold,
+        }))}
+        defaultTicketTab={event.defaultTicketTab}
+      />
+    </>
+  )
 
   return (
     <div className="relative isolate min-h-screen overflow-x-clip bg-background pb-28 text-foreground lg:overflow-x-visible lg:pb-12">
@@ -199,135 +251,57 @@ export function EventStorefront({
                   </div>
                 </div>
               </div>
-
-              {finished ? null : (
-                <Button
-                  className="mt-2 min-h-12 h-12 rounded-2xl bg-emerald-500 px-5 text-base font-bold text-black hover:bg-emerald-600 disabled:opacity-50 lg:hidden"
-                  nativeButton={false}
-                  disabled={soldOut}
-                  render={<a href="#tickets" aria-disabled={soldOut || undefined} />}
-                >
-                  <Ticket className="size-4" aria-hidden="true" />
-                  {soldOut ? "Agotado" : "Comprar Entradas"}
-                </Button>
-              )}
-
-              <div className="mt-6 flex flex-wrap items-center gap-3">
-                <AddToCalendarButton
-                  title={event.title}
-                  date={event.date}
-                  location={address}
-                  details={event.description}
-                />
-                <StoryFlyerVisitorButton
-                  className="h-9 min-h-9 rounded-full border-border bg-card px-4 text-sm font-semibold"
-                  data={{
-                    eventTitle: event.title,
-                    eventDate: event.date,
-                    eventLocation: address,
-                    imageUrl: event.imageUrl,
-                    mode: "visitor",
-                    organizerName: event.organizerName,
-                    organizerAvatarUrl: event.organizerAvatarUrl,
-                  }}
-                />
-                <EventPromoSpotButton
-                  className="h-9 min-h-9 rounded-full border-border bg-card px-4 text-sm font-semibold"
-                  promoVideoUrl={event.promoVideoUrl}
-                />
-              </div>
-
-              {event.promoVideoUrl ? (
-                <section
-                  aria-label="Spot promocional"
-                  className="w-full overflow-hidden rounded-2xl bg-muted shadow-lg"
-                >
-                  <PromoVideoPlayer
-                    url={event.promoVideoUrl}
-                    fallbackImageUrl={event.imageUrl}
-                    title={`Spot · ${event.title}`}
-                    showFallbackWhenEmpty
-                    className="aspect-video w-full rounded-2xl"
-                  />
-                </section>
-              ) : null}
             </header>
+            </div>
+          </div>
 
-            <section id="tickets" className="scroll-mt-24 space-y-4">
-              <div className="flex items-end justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-bold tracking-tight text-foreground">
-                    Entradas
-                  </h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {finished
-                      ? "Este show ya cerró. El recuento queda como registro."
-                      : soldOut
-                        ? "No hay cupo público disponible."
-                        : "Elegí tu tipo de acceso y completá la compra segura."}
-                  </p>
-                </div>
-                {startingPrice != null ? (
-                  <p className="shrink-0 text-sm font-semibold text-emerald-600 dark:text-emerald-300">
-                    Desde{" "}
-                    {startingPrice === 0
-                      ? "gratis"
-                      : formatCurrency(startingPrice)}
-                  </p>
-                ) : null}
-              </div>
+        <aside
+          id="tickets"
+          className="scroll-mt-24 px-4 pb-8 lg:sticky lg:top-24 lg:row-span-2 lg:h-fit lg:max-h-[calc(100vh-6rem)] lg:self-start lg:overflow-y-auto lg:px-0 lg:pb-0"
+        >
+          {checkout}
+        </aside>
 
-              <div className="lg:hidden">
-                {finished ? (
-                  <EventSaleStatusNotice state="finished" />
-                ) : (
-                  <>
-                    {soldOut ? (
-                      <EventSaleStatusNotice state="sold_out" />
-                    ) : null}
-                    <div className={soldOut ? "mt-4" : undefined}>
-                      <TicketSelector
-                        eventId={event.id}
-                        eventTitle={event.title}
-                        currentUserId={currentUserId}
-                        initialBuyer={initialBuyer}
-                        referralCode={referralCode}
-                        sandboxEligible={sandboxEligible}
-                        serviceChargeRate={event.serviceChargeRate}
-                        scheduleDays={event.scheduleDays ?? []}
-                        seatingUnits={event.seatingUnits}
-                        seatingSectorSummaries={event.seatingSectorSummaries}
-                        seatingBackgroundUrl={event.venue?.seating_background_url}
-                        venueMap={event.venue?.venue_map ?? null}
-                        seatingLayout={event.venue?.seating_layout ?? []}
-                        venueId={event.venue?.id}
-                        venueName={event.venue?.name}
-                        venueCapacity={event.venue?.capacity}
-                        pixels={event.pixels}
-                        zoneTierPricing={event.zoneTierPricing}
-                        purchaseLocked={soldOut}
-                        tiers={event.tiers.map((tier) => ({
-                          id: tier.id,
-                          name: tier.name,
-                          price: tier.price,
-                          available: tier.available,
-                          bonusReward: tier.bonus_reward,
-                          dayId: tier.day_id,
-                          layoutType: tier.layout_type,
-                          seatingSectorId: tier.seating_sector_id,
-                          capacityPerUnit: tier.capacity_per_unit,
-                          category: tier.category,
-                          listPrice: tier.list_price,
-                          comboItems: event.comboItemsByTier[tier.id] ?? [],
-                          tierType: tier.tier_type,
-                          bundleType: tier.bundle_type,
-                        }))}
-                      />
-                    </div>
-                  </>
-                )}
-              </div>
-            </section>
+        <div className="min-w-0 space-y-8 px-4 pb-6 pt-2 sm:px-6 lg:px-0 lg:pt-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <AddToCalendarButton
+                title={event.title}
+                date={event.date}
+                location={address}
+                details={event.description}
+              />
+              <StoryFlyerVisitorButton
+                className="h-9 min-h-9 rounded-full border-border bg-card px-4 text-sm font-semibold"
+                data={{
+                  eventTitle: event.title,
+                  eventDate: event.date,
+                  eventLocation: address,
+                  imageUrl: event.imageUrl,
+                  mode: "visitor",
+                  organizerName: event.organizerName,
+                  organizerAvatarUrl: event.organizerAvatarUrl,
+                }}
+              />
+              <EventPromoSpotButton
+                className="h-9 min-h-9 rounded-full border-border bg-card px-4 text-sm font-semibold"
+                promoVideoUrl={event.promoVideoUrl}
+              />
+            </div>
+
+            {event.promoVideoUrl ? (
+              <section
+                aria-label="Spot promocional"
+                className="w-full overflow-hidden rounded-2xl bg-muted shadow-lg"
+              >
+                <PromoVideoPlayer
+                  url={event.promoVideoUrl}
+                  fallbackImageUrl={event.imageUrl}
+                  title={`Spot · ${event.title}`}
+                  showFallbackWhenEmpty
+                  className="aspect-video w-full rounded-2xl"
+                />
+              </section>
+            ) : null}
 
             <EventResaleListings
               listings={resaleListings}
@@ -457,62 +431,7 @@ export function EventStorefront({
                 Presentalas en puerta con Living QR dinámico.
               </p>
             </div>
-          </div>
         </div>
-
-        <aside
-          id="checkout"
-          className="scrollbar-none hidden px-4 pb-8 lg:sticky lg:top-24 lg:block lg:h-fit lg:max-h-[calc(100vh-6rem)] lg:self-start lg:overflow-y-auto lg:px-0 lg:pb-0"
-        >
-          {finished ? (
-            <EventSaleStatusNotice state="finished" />
-          ) : (
-            <>
-              {soldOut ? (
-                <div className="mb-4">
-                  <EventSaleStatusNotice state="sold_out" />
-                </div>
-              ) : null}
-              <TicketSelector
-                eventId={event.id}
-                eventTitle={event.title}
-                currentUserId={currentUserId}
-                initialBuyer={initialBuyer}
-                referralCode={referralCode}
-                sandboxEligible={sandboxEligible}
-                serviceChargeRate={event.serviceChargeRate}
-                scheduleDays={event.scheduleDays ?? []}
-                seatingUnits={event.seatingUnits}
-                seatingSectorSummaries={event.seatingSectorSummaries}
-                seatingBackgroundUrl={event.venue?.seating_background_url}
-                venueMap={event.venue?.venue_map ?? null}
-                seatingLayout={event.venue?.seating_layout ?? []}
-                venueId={event.venue?.id}
-                venueName={event.venue?.name}
-                venueCapacity={event.venue?.capacity}
-                pixels={event.pixels}
-                zoneTierPricing={event.zoneTierPricing}
-                purchaseLocked={soldOut}
-                tiers={event.tiers.map((tier) => ({
-                  id: tier.id,
-                  name: tier.name,
-                  price: tier.price,
-                  available: tier.available,
-                  bonusReward: tier.bonus_reward,
-                  dayId: tier.day_id,
-                  layoutType: tier.layout_type,
-                  seatingSectorId: tier.seating_sector_id,
-                  capacityPerUnit: tier.capacity_per_unit,
-                  category: tier.category,
-                  listPrice: tier.list_price,
-                  comboItems: event.comboItemsByTier[tier.id] ?? [],
-                  tierType: tier.tier_type,
-                  bundleType: tier.bundle_type,
-                }))}
-              />
-            </>
-          )}
-        </aside>
       </div>
 
       {(event.sponsors?.length ?? 0) > 0 ? (
@@ -524,10 +443,6 @@ export function EventStorefront({
           />
         </div>
       ) : null}
-
-      {finished ? null : (
-        <EventStickyBuyBar startingPrice={startingPrice} soldOut={soldOut} />
-      )}
     </div>
   )
 }

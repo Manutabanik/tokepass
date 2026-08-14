@@ -1,5 +1,6 @@
 import type { InteractiveVenueMap, VenueMapElement } from "@/types/venue-map"
 import { isSellableElement } from "@/types/venue-map"
+import { parametricZoneCapacity } from "@/lib/seating/adaptive-seating"
 
 export type VenuePriceGroup = {
   key: string
@@ -12,6 +13,7 @@ export type VenuePriceGroup = {
     | { kind: "sector"; id: string }
     | { kind: "group"; groupId: string }
     | { kind: "ids"; ids: string[] }
+    | { kind: "zone"; id: string }
 }
 
 function furnitureUnit(elements: VenueMapElement[]): { count: number; unit: string } {
@@ -68,6 +70,30 @@ export function listVenuePriceGroups(
     })
   }
 
+  for (const zone of map.zones ?? []) {
+    const count = parametricZoneCapacity(zone)
+    groups.push({
+      key: `zone:${zone.id}`,
+      name: zone.name,
+      color: zone.color,
+      count,
+      unit:
+        zone.layoutType === "numbered_seat"
+          ? count === 1
+            ? "butaca"
+            : "butacas"
+          : zone.layoutType === "table_combo"
+            ? count === 1
+              ? "lugar"
+              : "lugares"
+            : count === 1
+              ? "lugar"
+              : "lugares",
+      price: zone.price,
+      match: { kind: "zone", id: zone.id },
+    })
+  }
+
   const buckets = new Map<string, VenueMapElement[]>()
   for (const element of map.elements ?? []) {
     if (!isSellableElement(element)) continue
@@ -114,6 +140,16 @@ export function applyVenuePriceGroup(
       ...map,
       sectors: map.sectors.map((sector) =>
         sector.id === sectorId ? { ...sector, price: nextPrice } : sector,
+      ),
+    }
+  }
+
+  if (group.match.kind === "zone") {
+    const zoneId = group.match.id
+    return {
+      ...map,
+      zones: (map.zones ?? []).map((zone) =>
+        zone.id === zoneId ? { ...zone, price: nextPrice } : zone,
       ),
     }
   }
