@@ -9,7 +9,7 @@ export type TicketPhaseDraft = {
   capacityLimit: number
   startTime?: string | null
   endTime?: string | null
-  status?: "scheduled" | "active" | "sold_out"
+  status: "scheduled" | "active" | "sold_out"
   sold?: number
 }
 

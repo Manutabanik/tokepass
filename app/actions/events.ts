@@ -671,8 +671,7 @@ async function syncTicketTierPhases(
           : phase.status === "sold_out"
             ? ("sold_out" as const)
             : ("scheduled" as const)
-      const row = {
-        tier_id: tier.id,
+      const patch = {
         name,
         price,
         capacity_limit: limit,
@@ -684,7 +683,7 @@ async function syncTicketTierPhases(
       if (phase.id) {
         const { error } = await admin
           .from("ticket_tier_phases")
-          .update(row)
+          .update(patch)
           .eq("id", phase.id)
           .eq("tier_id", tier.id)
         if (!error) keepIds.add(phase.id)
@@ -693,7 +692,7 @@ async function syncTicketTierPhases(
 
       const { data: created, error } = await admin
         .from("ticket_tier_phases")
-        .insert(row)
+        .insert({ ...patch, tier_id: tier.id })
         .select("id")
         .maybeSingle()
       if (!error && created?.id) keepIds.add(created.id)

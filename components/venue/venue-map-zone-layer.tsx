@@ -65,19 +65,20 @@ export function VenueMapZoneLayer({
         const selected = zone.id === selectedId
         const interactive = Boolean(onSelect)
 
-        function eventClientPoint(event: React.SyntheticEvent) {
-          if ("clientX" in event && typeof event.clientX === "number") {
-            return { x: event.clientX, y: Number(event.clientY) }
-          }
+        function eventClientPoint(
+          event: React.PointerEvent | React.MouseEvent | React.TouchEvent,
+        ) {
           if ("changedTouches" in event) {
             const touch = event.changedTouches[0]
-            if (touch) return { x: touch.clientX, y: touch.clientY }
+            return touch
+              ? { x: touch.clientX, y: touch.clientY }
+              : null
           }
-          return null
+          return { x: event.clientX, y: event.clientY }
         }
 
         function handleZoneClick(
-          event: React.SyntheticEvent,
+          event: React.PointerEvent | React.MouseEvent | React.TouchEvent,
           requireTap = false,
         ) {
           if (!onSelect) return
