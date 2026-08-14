@@ -440,7 +440,7 @@ export function InfrastructureSymbols({
   const rx = Math.max(2, Math.min(roundedCorner, 12))
   const iconSize = Math.max(12, Math.min(26, Math.min(w, h) * 0.42))
   const icon =
-    shapeType === "infra_bar" || subtype === "bar" || subtype === "kitchen"
+    shapeType === "infra_bar" || subtype === "bar"
       ? Utensils
       : shapeType === "infra_restroom" || subtype === "restroom"
         ? Restroom
