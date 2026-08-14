@@ -141,6 +141,7 @@ export type CreateCompleteEventRpcPayload = {
   venue: {
     name: string
     location: string
+    city?: string | null
     capacity: number
   }
   zones: Array<{
@@ -166,6 +167,7 @@ export type CreateCompleteEventRpcPayload = {
     seating_sector_id: string | null
     capacity_per_unit: number
     admit_count?: number
+    total_capacity?: number
   }>
   rrpp_commission: number | null
   addons_enabled: boolean
