@@ -411,8 +411,10 @@ export function LivingTicketCard({
               eventDate: ticket.eventDate,
               eventLocation: ticket.venueName ?? ticket.eventLocation,
               imageUrl: ticket.flyerUrl,
+              customStoryUrl: ticket.socialShareImageUrl,
               mode: "buyer",
-              buyerName: ticket.holderName,
+              organizerName: ticket.organizerName,
+              organizerAvatarUrl: ticket.organizerAvatarUrl,
             }}
           />
         ) : null}

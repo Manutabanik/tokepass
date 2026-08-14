@@ -1,8 +1,9 @@
 "use client"
 
-import { toPng } from "html-to-image"
+import { toBlob } from "html-to-image"
 import {
   Camera,
+  Download,
   ImagePlus,
   Loader2,
   PartyPopper,
@@ -11,7 +12,6 @@ import {
 } from "lucide-react"
 import {
   useCallback,
-  useEffect,
   useId,
   useRef,
   useState,
@@ -30,7 +30,11 @@ import {
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { Button } from "@/components/ui/button"
 import { formatEventDay, formatEventTime } from "@/lib/format"
-import { shareOrDownloadFlyer, shareRemoteImage } from "@/lib/story-flyer-share"
+import { storyImageSrc } from "@/lib/story-image"
+import {
+  downloadBlob,
+  shareOrDownloadFlyer,
+} from "@/lib/story-flyer-share"
 import { cn } from "@/lib/utils"
 
 export type StoryFlyerMode = "visitor" | "buyer"
@@ -44,9 +48,60 @@ export type StoryFlyerData = {
   /** Flyer 9:16 subido por el organizador (se comparte directo). */
   customStoryUrl?: string | null
   mode: StoryFlyerMode
-  /** Nombre del comprador (modo buyer). */
-  buyerName?: string | null
+  organizerName?: string | null
+  organizerAvatarUrl?: string | null
 }
+
+function publicLabel(value: string | null | undefined, fallback: string) {
+  const trimmed = value?.trim() || ""
+  if (!trimmed || trimmed.includes("@")) return fallback
+  return trimmed
+}
+
+function organizerInitials(name: string) {
+  return (
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("") || "TP"
+  )
+}
+
+function FlyerIcon({
+  path,
+  size = 28,
+}: {
+  path: string
+  size?: number
+}) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d={path}
+        stroke="#6ee7b7"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+const ICON_CALENDAR =
+  "M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"
+const ICON_CLOCK = "M12 6v6l4 2M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0z"
+const ICON_PIN =
+  "M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0zM12 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"
+const ICON_TICKET =
+  "M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2z"
 
 type StoryFlyerModalProps = {
   data: StoryFlyerData
@@ -63,15 +118,14 @@ function StoryFlyerCanvas({
   canvasRef,
 }: {
   data: StoryFlyerData
-  canvasRef: RefObject<HTMLDivElement | null>
+  canvasRef?: RefObject<HTMLDivElement | null>
 }) {
+  const gradientId = `hype-${useId().replace(/:/g, "")}`
   const isBuyer = data.mode === "buyer"
-  const buyerLabel =
-    data.buyerName?.trim() || "Un comprador de Tokepass"
-  const headline = isBuyer ? "Ya tengo mi entrada" : "Nos vemos ahí"
-  const subline = isBuyer
-    ? `${buyerLabel} va a asistir`
-    : "Voy a asistir"
+  const organizerName = publicLabel(data.organizerName, "la productora")
+  const organizerAvatar = storyImageSrc(data.organizerAvatarUrl)
+  const eventImage = storyImageSrc(data.imageUrl)
+  const hype = isBuyer ? "¡YO YA TENGO MI ENTRADA!" : "¡NOS VEMOS EN..."
 
   return (
     <div
@@ -82,17 +136,16 @@ function StoryFlyerCanvas({
         height: FLYER_H,
         position: "relative",
         overflow: "hidden",
-        backgroundColor: "#09090b",
+        backgroundColor: "#050507",
         color: "#fafafa",
         fontFamily:
           "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
       }}
     >
-      {/* Fondo blur del banner */}
-      {data.imageUrl ? (
+      {eventImage ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={data.imageUrl}
+          src={eventImage}
           alt=""
           crossOrigin="anonymous"
           style={{
@@ -101,9 +154,9 @@ function StoryFlyerCanvas({
             width: "100%",
             height: "100%",
             objectFit: "cover",
-            filter: "blur(36px) saturate(1.15)",
-            transform: "scale(1.18)",
-            opacity: 0.55,
+            objectPosition: "center",
+            filter: "blur(48px) saturate(1.25)",
+            transform: "scale(1.22)",
           }}
         />
       ) : null}
@@ -112,7 +165,7 @@ function StoryFlyerCanvas({
           position: "absolute",
           inset: 0,
           background:
-            "linear-gradient(180deg, rgba(9,9,11,0.55) 0%, rgba(9,9,11,0.35) 35%, rgba(9,9,11,0.92) 100%)",
+            "linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.42) 38%, rgba(0,0,0,0.78) 100%)",
         }}
       />
       <div
@@ -120,7 +173,7 @@ function StoryFlyerCanvas({
           position: "absolute",
           inset: 0,
           background:
-            "radial-gradient(ellipse at 50% 18%, rgba(16,185,129,0.22), transparent 55%)",
+            "radial-gradient(ellipse at 50% 12%, rgba(16,185,129,0.28), transparent 52%)",
         }}
       />
 
@@ -131,186 +184,330 @@ function StoryFlyerCanvas({
           height: "100%",
           display: "flex",
           flexDirection: "column",
-          padding: "96px 72px 80px",
+          padding: "96px 64px 64px",
           boxSizing: "border-box",
         }}
       >
+        <svg
+          width="100%"
+          height={isBuyer ? 200 : 140}
+          viewBox={isBuyer ? "0 0 952 200" : "0 0 952 140"}
+          role="img"
+          aria-label={hype}
+        >
+          <defs>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="#34d399" />
+              <stop offset="55%" stopColor="#22d3ee" />
+              <stop offset="100%" stopColor="#a78bfa" />
+            </linearGradient>
+          </defs>
+          {isBuyer ? (
+            <>
+              <text
+                x="476"
+                y="82"
+                textAnchor="middle"
+                fill={`url(#${gradientId})`}
+                fontSize="72"
+                fontWeight={900}
+                fontFamily="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
+              >
+                ¡YO YA TENGO
+              </text>
+              <text
+                x="476"
+                y="168"
+                textAnchor="middle"
+                fill={`url(#${gradientId})`}
+                fontSize="72"
+                fontWeight={900}
+                fontFamily="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
+              >
+                MI ENTRADA!
+              </text>
+            </>
+          ) : (
+            <text
+              x="476"
+              y="96"
+              textAnchor="middle"
+              fill={`url(#${gradientId})`}
+              fontSize="68"
+              fontWeight={900}
+              fontFamily="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
+            >
+              ¡NOS VEMOS EN...
+            </text>
+          )}
+        </svg>
+
         <div
           style={{
+            flex: 1,
             display: "flex",
             alignItems: "center",
-            gap: 14,
-            opacity: 0.9,
           }}
         >
           <div
             style={{
-              width: 48,
-              height: 48,
-              borderRadius: 14,
-              background: "rgba(16,185,129,0.18)",
-              border: "1px solid rgba(16,185,129,0.4)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 22,
-              fontWeight: 900,
-              color: "#6ee7b7",
+              width: "100%",
+              borderRadius: 44,
+              padding: 36,
+              background: "rgba(255,255,255,0.12)",
+              border: "1px solid rgba(255,255,255,0.22)",
+              boxShadow: "0 0 80px rgba(0,0,0,0.5)",
+              boxSizing: "border-box",
             }}
           >
-            T
-          </div>
-          <span
-            style={{
-              fontSize: 28,
-              fontWeight: 800,
-              letterSpacing: "0.18em",
-              textTransform: "uppercase",
-              color: "#a1a1aa",
-            }}
-          >
-            Tokepass
-          </span>
-        </div>
-
-        {/* Banner oficial */}
-        <div
-          style={{
-            marginTop: 56,
-            borderRadius: 36,
-            overflow: "hidden",
-            border: "1px solid rgba(255,255,255,0.14)",
-            boxShadow: "0 40px 80px rgba(0,0,0,0.45)",
-            background: "#18181b",
-            aspectRatio: "16 / 9",
-            width: "100%",
-            flexShrink: 0,
-          }}
-        >
-          {data.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={data.imageUrl}
-              alt=""
-              crossOrigin="anonymous"
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-                display: "block",
-              }}
-            />
-          ) : (
             <div
               style={{
+                borderRadius: 28,
+                overflow: "hidden",
                 width: "100%",
-                height: "100%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                background:
-                  "linear-gradient(135deg, #18181b 0%, #27272a 50%, #0f172a 100%)",
-                fontSize: 42,
-                fontWeight: 800,
-                color: "#71717a",
+                height: 420,
+                background: "#18181b",
               }}
             >
-              Evento
+              {eventImage ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={eventImage}
+                  alt=""
+                  crossOrigin="anonymous"
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    objectPosition: "center",
+                    display: "block",
+                  }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "#71717a",
+                    fontSize: 36,
+                    fontWeight: 800,
+                  }}
+                >
+                  Evento
+                </div>
+              )}
             </div>
-          )}
-        </div>
 
-        <h1
-          style={{
-            marginTop: 56,
-            marginBottom: 0,
-            fontSize: 64,
-            lineHeight: 1.08,
-            fontWeight: 900,
-            letterSpacing: "-0.03em",
-            color: "#fff",
-          }}
-        >
-          {data.eventTitle}
-        </h1>
+            <h1
+              style={{
+                margin: "32px 0 0",
+                fontSize: 56,
+                lineHeight: 1.08,
+                fontWeight: 800,
+                letterSpacing: "-0.03em",
+                color: "#fff",
+                overflow: "hidden",
+                display: "-webkit-box",
+                WebkitLineClamp: 3,
+                WebkitBoxOrient: "vertical",
+              }}
+            >
+              {data.eventTitle}
+            </h1>
+
+            <div
+              style={{
+                marginTop: 18,
+                display: "flex",
+                alignItems: "center",
+                gap: 16,
+              }}
+            >
+              <div
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 999,
+                  overflow: "hidden",
+                  flexShrink: 0,
+                  background: "rgba(139,92,246,0.35)",
+                  border: "1px solid rgba(255,255,255,0.2)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 18,
+                  fontWeight: 900,
+                  color: "#ede9fe",
+                }}
+              >
+                {organizerAvatar ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={organizerAvatar}
+                    alt=""
+                    crossOrigin="anonymous"
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                      display: "block",
+                    }}
+                  />
+                ) : (
+                  <span>{organizerInitials(organizerName)}</span>
+                )}
+              </div>
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 26,
+                  fontWeight: 500,
+                  color: "#d4d4d8",
+                  lineHeight: 1.3,
+                }}
+              >
+                Presentado por:{" "}
+                <span style={{ color: "#fff", fontWeight: 800 }}>
+                  {organizerName}
+                </span>
+              </p>
+            </div>
+
+            <div
+              style={{
+                marginTop: 28,
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 14,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  borderRadius: 999,
+                  padding: "14px 22px",
+                  background: "rgba(255,255,255,0.1)",
+                  border: "1px solid rgba(255,255,255,0.18)",
+                  fontSize: 24,
+                  fontWeight: 700,
+                  color: "#fff",
+                  textTransform: "capitalize",
+                }}
+              >
+                <FlyerIcon path={ICON_CALENDAR} />
+                {formatEventDay(data.eventDate)}
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  borderRadius: 999,
+                  padding: "14px 22px",
+                  background: "rgba(255,255,255,0.1)",
+                  border: "1px solid rgba(255,255,255,0.18)",
+                  fontSize: 24,
+                  fontWeight: 700,
+                  color: "#fff",
+                }}
+              >
+                <FlyerIcon path={ICON_CLOCK} />
+                {formatEventTime(data.eventDate)}
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  borderRadius: 999,
+                  padding: "14px 22px",
+                  background: "rgba(255,255,255,0.1)",
+                  border: "1px solid rgba(255,255,255,0.18)",
+                  fontSize: 24,
+                  fontWeight: 700,
+                  color: "#fff",
+                  maxWidth: "100%",
+                }}
+              >
+                <FlyerIcon path={ICON_PIN} />
+                <span
+                  style={{
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    maxWidth: 620,
+                  }}
+                >
+                  {data.eventLocation}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <div
           style={{
             marginTop: 36,
+            borderRadius: 28,
+            padding: "28px 32px",
             display: "flex",
-            flexDirection: "column",
-            gap: 18,
-            fontSize: 30,
-            color: "#d4d4d8",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            <span style={{ color: "#34d399", fontWeight: 700 }}>Fecha</span>
-            <span style={{ textTransform: "capitalize" }}>
-              {formatEventDay(data.eventDate)}
-            </span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            <span style={{ color: "#34d399", fontWeight: 700 }}>Hora</span>
-            <span>{formatEventTime(data.eventDate)}</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "flex-start", gap: 16 }}>
-            <span style={{ color: "#34d399", fontWeight: 700 }}>Lugar</span>
-            <span style={{ lineHeight: 1.35 }}>{data.eventLocation}</span>
-          </div>
-        </div>
-
-        <div style={{ flex: 1 }} />
-
-        <div
-          style={{
-            borderRadius: 32,
-            padding: "36px 40px",
+            alignItems: "center",
+            gap: 22,
             background:
-              isBuyer
-                ? "linear-gradient(135deg, rgba(16,185,129,0.22), rgba(52,211,153,0.08))"
-                : "linear-gradient(135deg, rgba(139,92,246,0.25), rgba(236,72,153,0.12))",
-            border: isBuyer
-              ? "1px solid rgba(52,211,153,0.35)"
-              : "1px solid rgba(167,139,250,0.35)",
-            textAlign: "center",
+              "linear-gradient(90deg, rgba(16,185,129,0.28), rgba(8,145,178,0.22))",
+            border: "1px solid rgba(110,231,183,0.35)",
           }}
         >
-          <p
+          <div
             style={{
-              margin: 0,
-              fontSize: 40,
+              width: 64,
+              height: 64,
+              borderRadius: 18,
+              background: "#022c22",
+              border: "1px solid rgba(110,231,183,0.45)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 28,
               fontWeight: 900,
-              letterSpacing: "-0.02em",
-              color: "#fff",
+              color: "#6ee7b7",
+              flexShrink: 0,
             }}
           >
-            {headline}
-          </p>
-          <p
-            style={{
-              margin: "14px 0 0",
-              fontSize: 32,
-              fontWeight: 600,
-              color: isBuyer ? "#a7f3d0" : "#e9d5ff",
-            }}
-          >
-            {subline}
-          </p>
+            T
+          </div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <FlyerIcon path={ICON_TICKET} size={32} />
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 28,
+                  fontWeight: 800,
+                  color: "#fff",
+                  letterSpacing: "-0.02em",
+                }}
+              >
+                ¡Conseguí la tuya en tokepass.com.ar!
+              </p>
+            </div>
+            <p
+              style={{
+                margin: "6px 0 0",
+                fontSize: 22,
+                fontWeight: 600,
+                color: "#a7f3d0",
+              }}
+            >
+              Tokepass
+            </p>
+          </div>
         </div>
-
-        <p
-          style={{
-            marginTop: 48,
-            textAlign: "center",
-            fontSize: 26,
-            fontWeight: 600,
-            letterSpacing: "0.02em",
-            color: "#71717a",
-          }}
-        >
-          Conseguí la tuya en Tokepass.com.ar
-        </p>
       </div>
     </div>
   )
@@ -364,53 +561,42 @@ export function StoryFlyerModal({
     )
   }, [])
 
-  async function generateAndShare() {
+  async function captureFlyerBlob() {
+    const node = canvasRef.current
+    if (!node) return null
+    await waitForImages(node)
+    await new Promise((r) => window.setTimeout(r, 80))
+    return toBlob(node, {
+      cacheBust: true,
+      pixelRatio: 1,
+      width: FLYER_W,
+      height: FLYER_H,
+      skipAutoScale: true,
+      skipFonts: true,
+      style: {
+        transform: "none",
+        left: "0",
+        top: "0",
+      },
+    })
+  }
+
+  async function generateAndShare(intent: "share" | "download") {
     if (busy) return
     setBusy(true)
 
     try {
-      // Flyer custom del organizador: share directo sin regenerar.
-      if (data.customStoryUrl?.trim()) {
-        const result = await shareRemoteImage({
-          url: data.customStoryUrl.trim(),
-          title: data.eventTitle,
-          text:
-            data.mode === "buyer"
-              ? `Ya tengo mi entrada para ${data.eventTitle} en Tokepass`
-              : `Voy a ${data.eventTitle} · Tokepass`,
-        })
-        if (result.ok && result.method === "download") {
-          toast.success("Flyer guardado en tu galería. Subilo a tus historias.")
-        } else if (!result.ok && !result.cancelled) {
-          toast.error(result.error)
-        }
+      const blob = await captureFlyerBlob()
+      if (!blob) {
+        toast.error("No se pudo generar el flyer.")
         return
       }
 
-      const node = canvasRef.current
-      if (!node) {
-        toast.error("No se pudo preparar el flyer.")
+      if (intent === "download") {
+        downloadBlob(blob, "flyer-tokepass.png")
+        toast.success("Flyer guardado. Subilo a tus historias.")
         return
       }
-
-      await waitForImages(node)
-      // Pequeña pausa para que el blur/layout asienten.
-      await new Promise((r) => window.setTimeout(r, 80))
-
-      const dataUrl = await toPng(node, {
-        cacheBust: true,
-        pixelRatio: 1,
-        width: FLYER_W,
-        height: FLYER_H,
-        style: {
-          transform: "none",
-          left: "0",
-          top: "0",
-        },
-      })
-
-      const response = await fetch(dataUrl)
-      const blob = await response.blob()
 
       const result = await shareOrDownloadFlyer({
         blob,
@@ -418,12 +604,12 @@ export function StoryFlyerModal({
         title: data.eventTitle,
         text:
           data.mode === "buyer"
-            ? `Ya tengo mi entrada para ${data.eventTitle} en Tokepass`
-            : `Voy a ${data.eventTitle} · Tokepass`,
+            ? `¡Yo ya tengo mi entrada para ${data.eventTitle}! Conseguí la tuya en tokepass.com.ar`
+            : `¡Nos vemos en ${data.eventTitle}! Conseguí la tuya en tokepass.com.ar`,
       })
 
       if (result.ok && result.method === "download") {
-        toast.success("Flyer guardado en tu galería. Subilo a tus historias.")
+        toast.success("Flyer guardado. Subilo a tus historias de Instagram.")
       } else if (!result.ok && !result.cancelled) {
         toast.error(result.error)
       }
@@ -438,12 +624,13 @@ export function StoryFlyerModal({
     }
   }
 
-  useEffect(() => {
-    if (!open) setBusy(false)
-  }, [open])
+  function handleOpenChange(next: boolean) {
+    if (!next) setBusy(false)
+    onOpenChange(next)
+  }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogPortal>
         <DialogOverlay className="bg-black/90 supports-backdrop-filter:backdrop-blur-sm" />
         <DialogPrimitive.Popup className="fixed inset-0 z-50 flex h-dvh w-screen flex-col outline-none">
@@ -463,6 +650,21 @@ export function StoryFlyerModal({
           </div>
 
           <div className="flex flex-1 flex-col items-center justify-center gap-5 overflow-auto px-4 pb-8">
+            {open ? (
+              <div
+                aria-hidden
+                className="pointer-events-none fixed"
+                style={{
+                  left: -12000,
+                  top: 0,
+                  width: FLYER_W,
+                  height: FLYER_H,
+                  overflow: "hidden",
+                }}
+              >
+                <StoryFlyerCanvas data={data} canvasRef={canvasRef} />
+              </div>
+            ) : null}
             <div
               className="relative overflow-hidden rounded-2xl shadow-2xl ring-1 ring-white/10"
               style={{
@@ -476,7 +678,7 @@ export function StoryFlyerModal({
                   transformOrigin: "top left",
                 }}
               >
-                <StoryFlyerCanvas data={data} canvasRef={canvasRef} />
+                <StoryFlyerCanvas data={data} />
               </div>
             </div>
 
@@ -484,7 +686,7 @@ export function StoryFlyerModal({
               <Button
                 type="button"
                 disabled={busy}
-                onClick={() => void generateAndShare()}
+                onClick={() => void generateAndShare("share")}
                 className="min-h-12 w-full rounded-full bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-500 text-base font-bold text-white hover:from-violet-500 hover:via-fuchsia-500 hover:to-pink-400"
               >
                 {busy ? (
@@ -495,12 +697,22 @@ export function StoryFlyerModal({
                 ) : (
                   <>
                     <Share2 className="size-5" aria-hidden />
-                    Compartir o guardar
+                    Compartir en Instagram
                   </>
                 )}
               </Button>
+              <Button
+                type="button"
+                disabled={busy}
+                variant="outline"
+                onClick={() => void generateAndShare("download")}
+                className="min-h-12 w-full rounded-full border-white/20 bg-white/5 text-white hover:bg-white/10"
+              >
+                <Download className="size-5" aria-hidden />
+                Descargar flyer
+              </Button>
               <p className="text-center text-xs text-zinc-500">
-                Formato 9:16 listo para Instagram, WhatsApp y Stories.
+                9:16 para Historias. Sin tus datos personales.
               </p>
             </div>
           </div>
@@ -566,11 +778,11 @@ export function StoryFlyerSuccessCard({ data }: { data: StoryFlyerData }) {
             Contalo en Historias
           </p>
           <h2 className="mt-1 text-lg font-black tracking-tight text-white">
-            Subí tu entrada a Historias
+            Presumí que vas al evento
           </h2>
           <p className="mt-1.5 text-sm leading-6 text-zinc-400">
-            Generamos un flyer 9:16 con tu nombre y el evento. Ideal para
-            Instagram o WhatsApp.
+            Flyer 9:16 para Historias: tu hype, el evento y la productora. Sin
+            mail, DNI ni QR.
           </p>
           <StoryFlyerTrigger
             data={data}

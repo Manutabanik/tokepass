@@ -15,7 +15,6 @@ type Props = {
   customStoryUrl?: string | null
   eventDate?: string
   eventLocation?: string
-  buyerName?: string | null
   className?: string
 }
 
@@ -25,7 +24,6 @@ export function SocialShareButton({
   customStoryUrl,
   eventDate,
   eventLocation,
-  buyerName,
   className,
 }: Props) {
   return (
@@ -37,7 +35,8 @@ export function SocialShareButton({
         imageUrl: eventImageUrl,
         customStoryUrl,
         mode: "buyer",
-        buyerName,
+        organizerName: undefined,
+        organizerAvatarUrl: undefined,
       }}
       label="Subir mi entrada a Historias"
       icon={<ImagePlus className="size-4 shrink-0" aria-hidden />}

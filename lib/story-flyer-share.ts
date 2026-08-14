@@ -1,5 +1,7 @@
 /** Web Share API + descarga de flyers PNG para Historias. */
 
+import { storyImageSrc } from "@/lib/story-image"
+
 export function canShareFiles(file: File): boolean {
   try {
     if (
@@ -79,7 +81,8 @@ export async function shareRemoteImage(input: {
   text: string
 }): Promise<ShareFlyerResult> {
   try {
-    const response = await fetch(input.url, { cache: "no-store" })
+    const src = storyImageSrc(input.url) ?? input.url
+    const response = await fetch(src, { cache: "no-store" })
     if (!response.ok) {
       return { ok: false, error: "No se pudo cargar la imagen." }
     }

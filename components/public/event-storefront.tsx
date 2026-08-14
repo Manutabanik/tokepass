@@ -226,6 +226,8 @@ export function EventStorefront({
                     eventLocation: address,
                     imageUrl: event.imageUrl,
                     mode: "visitor",
+                    organizerName: event.organizerName,
+                    organizerAvatarUrl: event.organizerAvatarUrl,
                   }}
                 />
                 <EventPromoSpotButton promoVideoUrl={event.promoVideoUrl} />

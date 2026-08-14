@@ -6,6 +6,7 @@ import {
   emptyPixelConfig,
   type EventPixelConfig,
 } from "@/lib/analytics/pixels"
+import { fetchPublicOrganizerCard } from "@/lib/public-organizer"
 import { createClient } from "@/lib/supabase/server"
 
 type ActionResult<T = undefined> =
@@ -162,7 +163,8 @@ export type PurchaseAnalyticsPayload = {
   eventTitle: string
   eventDate: string | null
   eventLocation: string | null
-  buyerName: string | null
+  organizerName: string | null
+  organizerAvatarUrl: string | null
   /** Flyer público del evento (share hype / OG). */
   eventImageUrl: string | null
   /** Flyer vertical custom del organizador (Stories full-bleed). */
@@ -224,7 +226,8 @@ export async function getPurchaseAnalyticsForOrder(
       eventTitle: "Evento Tokepass",
       eventDate: null,
       eventLocation: null,
-      buyerName: null,
+      organizerName: null,
+      organizerAvatarUrl: null,
       eventImageUrl: null,
       socialShareImageUrl: null,
       orderId: clean,
@@ -234,20 +237,18 @@ export async function getPurchaseAnalyticsForOrder(
     }
   }
 
-  const [{ data: event }, { data: profile }] = await Promise.all([
-    supabase
-      .from("events")
-      .select(
-        "id, title, date, location, flyer_url, image_url, social_share_image_url, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, venues(name, location)",
-      )
-      .eq("id", eventId)
-      .maybeSingle(),
-    supabase
-      .from("profiles")
-      .select("full_name")
-      .eq("id", user.id)
-      .maybeSingle(),
-  ])
+  const { data: event } = await supabase
+    .from("events")
+    .select(
+      "id, title, date, location, flyer_url, image_url, social_share_image_url, organizer_id, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, venues(name, location)",
+    )
+    .eq("id", eventId)
+    .maybeSingle()
+
+  const organizer = await fetchPublicOrganizerCard(
+    supabase,
+    event?.organizer_id,
+  )
 
   const pixels: EventPixelConfig = {
     metaPixelId: event?.meta_pixel_id ?? null,
@@ -275,7 +276,8 @@ export async function getPurchaseAnalyticsForOrder(
     eventTitle: event?.title ?? "Evento Tokepass",
     eventDate: event?.date ?? null,
     eventLocation,
-    buyerName: profile?.full_name?.trim() || null,
+    organizerName: organizer?.name ?? null,
+    organizerAvatarUrl: organizer?.avatarUrl ?? null,
     eventImageUrl: event?.flyer_url ?? event?.image_url ?? null,
     socialShareImageUrl: event?.social_share_image_url?.trim() || null,
     orderId: clean,

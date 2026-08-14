@@ -5,6 +5,7 @@ import {
   formatDayValidityLabel,
   parseScheduleDays,
 } from "@/lib/event-schedule"
+import { fetchPublicOrganizerCards } from "@/lib/public-organizer"
 import type { QrType, TicketStatus } from "@/types/database"
 
 export type MyTicket = {
@@ -30,6 +31,9 @@ export type MyTicket = {
   eventDate: string
   eventLocation: string
   flyerUrl: string | null
+  socialShareImageUrl: string | null
+  organizerName: string | null
+  organizerAvatarUrl: string | null
   venueName: string | null
   qrType: QrType
   holderName: string
@@ -77,6 +81,8 @@ type TicketRow = {
     qr_type: QrType | null
     schedule_days: unknown
     is_sponsored_by_tokepass?: boolean | null
+    organizer_id?: string | null
+    social_share_image_url?: string | null
     venues: { name: string } | null
   } | null
 }
@@ -98,18 +104,17 @@ export async function getMyTickets(): Promise<MyTicket[]> {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, email, dni")
+    .select("full_name, dni")
     .eq("id", user.id)
     .maybeSingle()
 
-  const holderName =
-    profile?.full_name?.trim() || profile?.email || "Titular Tokepass"
+  const holderName = profile?.full_name?.trim() || "Titular"
   const holderDni = profile?.dni ?? null
 
   const { data, error } = await supabase
     .from("tickets")
     .select(
-      "id, status, order_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ticket_tiers(name, bonus_reward, day_id, price), events(id, title, date, location, flyer_url, image_url, qr_type, schedule_days, is_sponsored_by_tokepass, venues(name)), orders(status)",
+      "id, status, order_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ticket_tiers(name, bonus_reward, day_id, price), events(id, title, date, location, flyer_url, image_url, qr_type, schedule_days, is_sponsored_by_tokepass, organizer_id, social_share_image_url, venues(name)), orders(status)",
     )
     .eq("owner_id", user.id)
     .in("status", ["valid", "used", "scanned", "transferred"])
@@ -124,7 +129,15 @@ export async function getMyTickets(): Promise<MyTicket[]> {
     orders: { status: string } | null
   }
 
-  const tickets = ((data ?? []) as unknown as WalletRow[])
+  const walletRows = (data ?? []) as unknown as WalletRow[]
+  const organizers = await fetchPublicOrganizerCards(
+    supabase,
+    walletRows
+      .map((ticket) => ticket.events?.organizer_id)
+      .filter((id): id is string => Boolean(id)),
+  )
+
+  const tickets = walletRows
     .flatMap((ticket) => {
       if (!ticket.events) return []
 
@@ -145,6 +158,10 @@ export async function getMyTickets(): Promise<MyTicket[]> {
 
       const scheduleDays = parseScheduleDays(ticket.events.schedule_days)
       const dayId = ticket.ticket_tiers?.day_id ?? null
+
+      const organizer = ticket.events.organizer_id
+        ? organizers.get(ticket.events.organizer_id)
+        : undefined
 
       const mapped: MyTicket = {
         id: ticket.id,
@@ -175,6 +192,10 @@ export async function getMyTickets(): Promise<MyTicket[]> {
         eventDate: ticket.events.date,
         eventLocation: ticket.events.location,
         flyerUrl: ticket.events.flyer_url ?? ticket.events.image_url,
+        socialShareImageUrl:
+          ticket.events.social_share_image_url?.trim() || null,
+        organizerName: organizer?.name ?? null,
+        organizerAvatarUrl: organizer?.avatarUrl ?? null,
         venueName: ticket.events.venues?.name ?? null,
         qrType,
         holderName,

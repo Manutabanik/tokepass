@@ -20,6 +20,9 @@ export type OfflineEventData = {
   eventDate: string
   eventLocation: string
   flyerUrl: string | null
+  socialShareImageUrl?: string | null
+  organizerName?: string | null
+  organizerAvatarUrl?: string | null
   venueName: string | null
   tierName: string
   bonusReward: string | null
@@ -252,6 +255,9 @@ export function ticketToOfflineRecord(
       eventDate: ticket.eventDate,
       eventLocation: ticket.eventLocation,
       flyerUrl: ticket.flyerUrl,
+      socialShareImageUrl: ticket.socialShareImageUrl,
+      organizerName: ticket.organizerName,
+      organizerAvatarUrl: ticket.organizerAvatarUrl,
       venueName: ticket.venueName,
       tierName: ticket.tierName,
       bonusReward: ticket.bonusReward,
@@ -304,6 +310,9 @@ export function offlineRecordToTicket(record: OfflineTicketRecord): MyTicket {
     eventDate: record.event_data.eventDate,
     eventLocation: record.event_data.eventLocation,
     flyerUrl: record.event_data.flyerUrl,
+    socialShareImageUrl: record.event_data.socialShareImageUrl ?? null,
+    organizerName: record.event_data.organizerName ?? null,
+    organizerAvatarUrl: record.event_data.organizerAvatarUrl ?? null,
     venueName: record.event_data.venueName,
     qrType: record.event_data.qrType ?? "dynamic",
     holderName: record.event_data.holderName ?? "Titular",
