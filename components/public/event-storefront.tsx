@@ -207,7 +207,7 @@ export function EventStorefront({
                 />
               </div>
 
-              <div className="flex flex-wrap gap-3">
+              <div className="mt-4 mb-6 flex flex-wrap items-center gap-3">
                 {finished ? null : (
                 <Button
                   className="min-h-12 h-12 rounded-2xl bg-emerald-500 px-5 text-base font-bold text-black hover:bg-emerald-600 disabled:opacity-50"
@@ -236,13 +236,14 @@ export function EventStorefront({
               {event.promoVideoUrl ? (
                 <section
                   aria-label="Spot promocional"
-                  className="overflow-hidden"
+                  className="w-full overflow-hidden rounded-2xl bg-muted shadow-lg"
                 >
                   <PromoVideoPlayer
                     url={event.promoVideoUrl}
                     fallbackImageUrl={event.imageUrl}
                     title={`Spot · ${event.title}`}
                     showFallbackWhenEmpty
+                    className="aspect-video w-full rounded-2xl"
                   />
                 </section>
               ) : null}

@@ -62,7 +62,7 @@ export function EventPromoSpotButton({
             </div>
 
             <div className="flex flex-1 items-center justify-center px-3 pb-6 sm:px-8">
-              <div className="relative aspect-video w-full max-w-5xl overflow-hidden rounded-xl bg-black shadow-2xl ring-1 ring-white/10">
+              <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-black shadow-lg">
                 {open ? (
                   parsed.provider === "file" ? (
                     <video

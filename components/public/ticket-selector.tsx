@@ -29,7 +29,6 @@ import {
 import { MAX_TICKETS_PER_PURCHASE } from "@/lib/checkout-limits"
 import { formatCurrency } from "@/lib/format"
 import {
-  emptyPixelConfig,
   trackAddToCart,
   trackInitiateCheckout,
   type EventPixelConfig,
@@ -38,7 +37,6 @@ import { getStoredReferralCode, persistReferralCode } from "@/lib/referral"
 import type { UniversalSeatSelection } from "@/lib/seating/universal-seat-types"
 import {
   buildUniversalSeatPayloadForCheckout,
-  hydrateNumberedSectorFromUnits,
   resolveTierIdForUniversalSector,
 } from "@/lib/seating/venue-adapter"
 import { cn } from "@/lib/utils"
@@ -115,7 +113,6 @@ export function TicketSelector({
   venueId = null,
   venueName = null,
   venueCapacity = null,
-  pixels: _pixels = emptyPixelConfig(),
   sandboxEligible = false,
   zoneTierPricing = [],
   purchaseLocked = false,
@@ -145,13 +142,28 @@ export function TicketSelector({
     if (typeof window === "undefined") return null
     return getStoredReferralCode()
   })
+  const [ticketsInView, setTicketsInView] = useState(false)
+
+  useEffect(() => {
+    const target = document.getElementById("tickets")
+    if (!target) return
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setTicketsInView(Boolean(entry?.isIntersecting))
+      },
+      { root: null, threshold: 0.12, rootMargin: "0px 0px -20% 0px" },
+    )
+    observer.observe(target)
+    return () => observer.disconnect()
+  }, [])
 
   function enterPaymentHold(result: {
     initPoint: string
     expiresAt: string
   }) {
     if (result.initPoint.startsWith("/")) {
-      window.location.href = result.initPoint
+      window.location.assign(result.initPoint)
       return
     }
     setShowSeatFlow(false)
@@ -725,7 +737,7 @@ export function TicketSelector({
           variant="outline"
           disabled={totalTickets === 0 || controlsLocked}
           onClick={handleSandboxReserve}
-          className="mt-3 hidden min-h-12 w-full rounded-full border-amber-500/50 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20 sm:inline-flex"
+          className="mt-2 w-full border-dashed text-muted-foreground hover:text-foreground"
         >
           Compra de prueba (modo test)
         </Button>
@@ -737,13 +749,18 @@ export function TicketSelector({
       </p>
 
       {/* Mobile sticky conversion bar */}
-      <div
-        className={cn(
-          "fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background/95 px-4 pt-3",
-          "pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-xl sm:hidden",
-        )}
-      >
-        <div className="mx-auto flex max-w-lg items-center gap-3">
+        <div
+          className={cn(
+            "fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background/95 px-4 pt-3",
+            "pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md sm:hidden",
+            "shadow-[0_-10px_30px_rgba(0,0,0,0.1)] transition-transform duration-200",
+            ticketsInView && totalTickets > 0
+              ? "translate-y-0"
+              : "pointer-events-none translate-y-full",
+          )}
+          aria-hidden={!(ticketsInView && totalTickets > 0)}
+        >
+          <div className="mx-auto flex max-w-lg items-center justify-between gap-4">
           <div className="min-w-0 shrink-0">
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
               Total
@@ -760,8 +777,6 @@ export function TicketSelector({
           >
             {isPending ? (
               <LoaderCircle className="animate-spin" aria-hidden="true" />
-            ) : totalTickets === 0 ? (
-              "Elegí entradas"
             ) : totalAmount > 0 ? (
               `Pagar ${formatCurrency(totalAmount)}`
             ) : (
@@ -769,19 +784,12 @@ export function TicketSelector({
             )}
           </Button>
         </div>
-        {sandboxEligible ? (
-          <Button
-            type="button"
-            variant="outline"
-            disabled={totalTickets === 0 || controlsLocked}
-            onClick={handleSandboxReserve}
-            className="mt-2 min-h-12 w-full rounded-2xl border-amber-500/50 bg-amber-500/10 text-sm font-semibold text-amber-100"
-          >
-            Compra de prueba (modo test)
-          </Button>
-        ) : null}
       </div>
-      <div className={cn("sm:hidden", sandboxEligible ? "h-36" : "h-24")} aria-hidden="true" />
+      <div
+        className="h-24 sm:hidden"
+        aria-hidden="true"
+        hidden={!(ticketsInView && totalTickets > 0)}
+      />
     </div>
   )
 }

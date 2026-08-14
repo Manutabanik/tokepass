@@ -38,13 +38,13 @@ export function EventStickyBuyBar({
     <div
       className={cn(
         "fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background/95",
-        "px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-xl",
-        "transition-transform duration-200 lg:hidden",
+        "px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md",
+        "shadow-[0_-10px_30px_rgba(0,0,0,0.1)] transition-transform duration-200 lg:hidden",
         show ? "translate-y-0" : "pointer-events-none translate-y-full",
       )}
       aria-hidden={!show}
     >
-      <div className="mx-auto flex max-w-lg items-center gap-3">
+      <div className="mx-auto flex max-w-lg items-center justify-between gap-4">
         <div className="min-w-0 shrink-0">
           <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
             Desde

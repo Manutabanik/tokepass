@@ -104,104 +104,129 @@ export function TicketTierSelector({
   }
 
   const activeTab = availableTabs.includes(tab) ? tab : availableTabs[0]!
+  const showCategoryTabs = availableTabs.length > 1
+
+  const standardList = (
+    <>
+      {multiDayEvent ? (
+        <div className="flex flex-wrap gap-1 rounded-xl border border-border bg-muted/30 p-1">
+          <DayChip
+            active={dayFilter === "all"}
+            label="Todas"
+            onClick={() => setDayFilter("all")}
+          />
+          {days.map((day) => (
+            <DayChip
+              key={day.id}
+              active={dayFilter === day.id}
+              label={day.title || formatEventDay(day.start_time)}
+              onClick={() => setDayFilter(day.id)}
+            />
+          ))}
+        </div>
+      ) : null}
+      <TierList
+        tiers={grouped.standard.filter((tier) => {
+          if (!multiDayEvent || dayFilter === "all") return true
+          return tier.dayId === dayFilter
+        })}
+        quantities={quantities}
+        scheduleDays={days}
+        isPending={isPending}
+        hasSeatingFlow={hasSeatingFlow}
+        variant="standard"
+        onQuantityChange={onQuantityChange}
+        onOpenSeatFlow={onOpenSeatFlow}
+      />
+    </>
+  )
+
+  const bundleList = (
+    <TierList
+      tiers={grouped.bundle}
+      quantities={quantities}
+      scheduleDays={days}
+      isPending={isPending}
+      hasSeatingFlow={hasSeatingFlow}
+      variant="bundle"
+      onQuantityChange={onQuantityChange}
+      onOpenSeatFlow={onOpenSeatFlow}
+    />
+  )
+
+  const specialList = (
+    <>
+      <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+        En puerta hay que presentar carnet, CUD u otro comprobante válido.
+        Tokepass no valida el beneficio online.
+      </p>
+      <TierList
+        tiers={grouped.special}
+        quantities={quantities}
+        scheduleDays={days}
+        isPending={isPending}
+        hasSeatingFlow={hasSeatingFlow}
+        variant="special"
+        onQuantityChange={onQuantityChange}
+        onOpenSeatFlow={onOpenSeatFlow}
+      />
+    </>
+  )
+
+  if (!showCategoryTabs) {
+    return (
+      <div className="mt-5 space-y-3">
+        {activeTab === "standard" ? standardList : null}
+        {activeTab === "bundle" ? bundleList : null}
+        {activeTab === "special" ? specialList : null}
+      </div>
+    )
+  }
 
   return (
     <Tabs
       value={activeTab}
       onValueChange={(value) => setTab(value as TicketTierCategory)}
-      className="mt-5 gap-4"
+      className="mt-5 gap-3"
     >
-      <TabsList className="grid h-auto w-full grid-cols-1 gap-1 rounded-2xl border border-border bg-muted/40 p-1 sm:grid-cols-3">
+      <TabsList className="flex h-auto w-full rounded-lg bg-muted p-1">
         {availableTabs.includes("standard") ? (
           <TabsTrigger
             value="standard"
-            className="min-h-11 gap-1.5 rounded-xl data-active:bg-card data-active:text-foreground"
+            className="min-h-10 flex-1 gap-1.5 rounded-md data-active:bg-background data-active:text-foreground"
           >
             <Ticket className="size-3.5" aria-hidden />
-            Entradas individuales
+            Individuales
           </TabsTrigger>
         ) : null}
         {availableTabs.includes("bundle") ? (
           <TabsTrigger
             value="bundle"
-            className="min-h-11 gap-1.5 rounded-xl data-active:bg-card data-active:text-foreground"
+            className="min-h-10 flex-1 gap-1.5 rounded-md data-active:bg-background data-active:text-foreground"
           >
             <Flame className="size-3.5" aria-hidden />
-            Packs y combos
+            Combos
           </TabsTrigger>
         ) : null}
         {availableTabs.includes("special") ? (
           <TabsTrigger
             value="special"
-            className="min-h-11 gap-1.5 rounded-xl data-active:bg-card data-active:text-foreground"
+            className="min-h-10 flex-1 gap-1.5 rounded-md data-active:bg-background data-active:text-foreground"
           >
             <Accessibility className="size-3.5" aria-hidden />
-            Tarifas especiales
+            Especiales
           </TabsTrigger>
         ) : null}
       </TabsList>
 
       <TabsContent value="standard" className="space-y-3">
-        {multiDayEvent ? (
-          <div className="flex flex-wrap gap-1 rounded-xl border border-border bg-muted/30 p-1">
-            <DayChip
-              active={dayFilter === "all"}
-              label="Todas"
-              onClick={() => setDayFilter("all")}
-            />
-            {days.map((day) => (
-              <DayChip
-                key={day.id}
-                active={dayFilter === day.id}
-                label={day.title || formatEventDay(day.start_time)}
-                onClick={() => setDayFilter(day.id)}
-              />
-            ))}
-          </div>
-        ) : null}
-        <TierList
-          tiers={grouped.standard.filter((tier) => {
-            if (!multiDayEvent || dayFilter === "all") return true
-            return tier.dayId === dayFilter
-          })}
-          quantities={quantities}
-          scheduleDays={days}
-          isPending={isPending}
-          hasSeatingFlow={hasSeatingFlow}
-          variant="standard"
-          onQuantityChange={onQuantityChange}
-          onOpenSeatFlow={onOpenSeatFlow}
-        />
+        {standardList}
       </TabsContent>
-
       <TabsContent value="bundle" className="space-y-3">
-        <TierList
-          tiers={grouped.bundle}
-          quantities={quantities}
-          scheduleDays={days}
-          isPending={isPending}
-          hasSeatingFlow={hasSeatingFlow}
-          variant="bundle"
-          onQuantityChange={onQuantityChange}
-          onOpenSeatFlow={onOpenSeatFlow}
-        />
+        {bundleList}
       </TabsContent>
-
       <TabsContent value="special" className="space-y-3">
-        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-          En puerta hay que presentar carnet, CUD u otro comprobante válido.
-          Tokepass no valida el beneficio online.
-        </p>
-        <TierList
-          tiers={grouped.special}
-          quantities={quantities}
-          scheduleDays={days}
-          isPending={isPending}
-          hasSeatingFlow={hasSeatingFlow}
-          variant="special"
-          onQuantityChange={onQuantityChange}
-          onOpenSeatFlow={onOpenSeatFlow}
-        />
+        {specialList}
       </TabsContent>
     </Tabs>
   )

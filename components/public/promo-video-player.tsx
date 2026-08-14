@@ -31,7 +31,7 @@ function FallbackBanner({
   return (
     <div
       className={cn(
-        "relative aspect-video w-full overflow-hidden rounded-xl bg-zinc-900",
+        "relative aspect-video w-full overflow-hidden rounded-2xl bg-muted shadow-lg",
         className,
       )}
     >
@@ -80,7 +80,7 @@ export function PromoVideoPlayer({
     return (
       <div
         className={cn(
-          "aspect-video w-full rounded-xl bg-zinc-900 ring-1 ring-white/10",
+          "aspect-video w-full rounded-2xl bg-muted shadow-lg",
           className,
         )}
         aria-hidden
@@ -92,7 +92,7 @@ export function PromoVideoPlayer({
     return (
       <div
         className={cn(
-          "relative aspect-video w-full overflow-hidden rounded-xl bg-black ring-1 ring-white/10",
+          "relative aspect-video w-full overflow-hidden rounded-2xl bg-black shadow-lg",
           className,
         )}
       >
@@ -117,7 +117,7 @@ export function PromoVideoPlayer({
   return (
     <div
       className={cn(
-        "relative aspect-video w-full overflow-hidden rounded-xl bg-black ring-1 ring-white/10",
+          "relative aspect-video w-full overflow-hidden rounded-2xl bg-black shadow-lg",
         className,
       )}
     >
