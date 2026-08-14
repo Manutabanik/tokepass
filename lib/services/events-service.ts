@@ -1,5 +1,6 @@
 import type { CatalogEvent } from "@/app/actions/public-events"
 import { BOOST_TIER_RANK, type BoostTier } from "@/lib/boost-plans"
+import { isPastEvent } from "@/lib/event-status"
 
 /** Destacado activo solo si flag + fecha futura (expiración automática en consulta). */
 export function isBoostActive(event: {
@@ -21,6 +22,12 @@ export function isHomePriority(event: {
 }
 
 export function compareFeaturedThenDate(a: CatalogEvent, b: CatalogEvent): number {
+  const aPast = isPastEvent(a)
+  const bPast = isPastEvent(b)
+  if (aPast !== bPast) {
+    return aPast ? 1 : -1
+  }
+
   const aSponsored = Boolean(a.isSponsoredByTokepass)
   const bSponsored = Boolean(b.isSponsoredByTokepass)
   if (aSponsored !== bSponsored) {

@@ -14,11 +14,14 @@ import { useEffect, useState } from "react"
 import type { MyTicket } from "@/app/actions/tickets"
 import { LivingTicketQR } from "@/components/public/living-ticket-qr"
 import { SaveTicketButton } from "@/components/public/save-ticket-button"
+import { SponsorGrid } from "@/components/public/sponsor-grid"
+import { StoryFlyerWalletButton } from "@/components/public/story-flyer-modal"
 import { TransferTicketDialog } from "@/components/public/transfer-ticket-dialog"
 import { useOnlineStatus } from "@/components/pwa/use-online-status"
 import { Button } from "@/components/ui/button"
 import { formatEventDay, formatEventTime } from "@/lib/format"
 import { getTicketsOffline } from "@/lib/offline-store"
+import type { PublicSponsor } from "@/lib/sponsors"
 import { QRCodeSVG } from "qrcode.react"
 
 export function TicketDetailView({
@@ -26,11 +29,13 @@ export function TicketDetailView({
   userId,
   appleWalletEnabled = false,
   googleWalletEnabled = false,
+  sponsors = [],
 }: {
   ticket: MyTicket
   userId: string
   appleWalletEnabled?: boolean
   googleWalletEnabled?: boolean
+  sponsors?: PublicSponsor[]
 }) {
   const online = useOnlineStatus()
   const [ticket, setTicket] = useState(initialTicket)
@@ -70,17 +75,17 @@ export function TicketDetailView({
     .join(" · ")
 
   return (
-    <div className="mx-auto w-full max-w-lg space-y-6 px-4 py-6 sm:px-6">
+    <div className="mx-auto w-full max-w-lg space-y-6 py-6">
       <Link
         href="/cuenta/entradas"
-        className="inline-flex min-h-12 items-center gap-2 text-sm font-medium text-zinc-400 transition hover:text-white"
+        className="inline-flex min-h-12 items-center gap-2 text-sm font-medium text-muted-foreground transition hover:text-foreground"
       >
         <ArrowLeft className="size-4" />
         Volver a mis entradas
       </Link>
 
-      <header className="overflow-hidden rounded-3xl border border-white/10 bg-zinc-950">
-        <div className="relative aspect-[16/9] w-full bg-zinc-900">
+      <header className="overflow-hidden rounded-3xl border border-border bg-card">
+        <div className="relative aspect-[16/9] w-full bg-muted">
           {ticket.flyerUrl ? (
             <Image
               src={ticket.flyerUrl}
@@ -91,7 +96,7 @@ export function TicketDetailView({
               className="object-cover"
             />
           ) : null}
-          <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
           <div className="absolute inset-x-0 bottom-0 space-y-1 p-4">
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-300/90">
               Detalle de la entrada
@@ -101,23 +106,23 @@ export function TicketDetailView({
             </h1>
           </div>
         </div>
-        <div className="space-y-2 border-t border-white/8 px-4 py-4 text-sm text-zinc-300">
+        <div className="space-y-2 border-t border-border px-4 py-4 text-sm text-foreground">
           <p className="flex items-center gap-2">
-            <CalendarDays className="size-4 text-zinc-500" />
+            <CalendarDays className="size-4 text-muted-foreground" />
             {formatEventDay(ticket.eventDate)} · {formatEventTime(ticket.eventDate)}
           </p>
           <p className="flex items-start gap-2">
-            <MapPin className="mt-0.5 size-4 shrink-0 text-zinc-500" />
+            <MapPin className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
             <span>
               {ticket.venueName ?? ticket.eventLocation}
               {ticket.venueName ? (
-                <span className="mt-0.5 block text-xs text-zinc-500">
+                <span className="mt-0.5 block text-xs text-muted-foreground">
                   {ticket.eventLocation}
                 </span>
               ) : null}
             </span>
           </p>
-          <p className="rounded-xl bg-white/5 px-3 py-2 font-semibold text-white">
+          <p className="rounded-xl bg-muted px-3 py-2 font-semibold text-foreground">
             {ticket.tierName}
             {seatingLabel ? ` · ${seatingLabel}` : ""}
           </p>
@@ -125,8 +130,8 @@ export function TicketDetailView({
       </header>
 
       {canShowQr ? (
-        <div className="rounded-3xl border border-white/10 bg-white p-5 text-center text-zinc-950 shadow-2xl shadow-black/40">
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-zinc-500">
+        <div className="rounded-3xl border border-border bg-card p-5 text-center text-card-foreground shadow-2xl shadow-black/20">
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
             {isStatic ? "QR de ingreso" : "Living QR"}
           </p>
           <div className="mx-auto mt-4 inline-block rounded-2xl bg-white p-2">
@@ -147,23 +152,32 @@ export function TicketDetailView({
               />
             )}
           </div>
-          <p className="mt-3 font-mono text-xs tracking-wider text-zinc-500">
+          <p className="mt-3 font-mono text-xs tracking-wider text-muted-foreground">
             #{ticket.id.slice(0, 8).toUpperCase()}
           </p>
-          <p className="mt-3 flex items-start justify-center gap-2 text-left text-xs leading-5 text-zinc-600">
-            <ShieldCheck className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+          <p className="mt-3 flex items-start justify-center gap-2 text-left text-xs leading-5 text-muted-foreground">
+            <ShieldCheck className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
             {isStatic
               ? "Presentá este código en puerta. También sirve el PDF impreso."
               : "Abrí esta pantalla al llegar. El código cambia cada 15 segundos."}
           </p>
           {!online ? (
-            <p className="mt-2 text-xs font-medium text-amber-700">
+            <p className="mt-2 text-xs font-medium text-amber-800 dark:text-amber-300">
               Modo offline · QR válido para ingreso
             </p>
           ) : null}
+          {sponsors.length > 0 ? (
+            <div className="mt-4 border-t border-border pt-3">
+              <SponsorGrid
+                heading="Auspician este evento:"
+                sponsors={sponsors}
+                size="sm"
+              />
+            </div>
+          ) : null}
         </div>
       ) : (
-        <div className="rounded-3xl border border-dashed border-zinc-700 bg-zinc-900/50 px-5 py-10 text-center text-sm text-zinc-400">
+        <div className="rounded-3xl border border-dashed border-border bg-muted/40 px-5 py-10 text-center text-sm text-muted-foreground">
           Esta entrada ya no muestra QR vivo
           {ticket.status === "transferred" ? " (fue transferida)" : ""}.
         </div>
@@ -188,8 +202,18 @@ export function TicketDetailView({
               appleWalletEnabled={appleWalletEnabled}
               googleWalletEnabled={googleWalletEnabled}
             />
+            <StoryFlyerWalletButton
+              data={{
+                eventTitle: ticket.eventTitle,
+                eventDate: ticket.eventDate,
+                eventLocation: ticket.venueName ?? ticket.eventLocation,
+                imageUrl: ticket.flyerUrl,
+                mode: "buyer",
+                buyerName: ticket.holderName,
+              }}
+            />
             <Button
-              className="min-h-12 w-full rounded-2xl border border-white/15 bg-white/5 text-white hover:bg-white/10"
+              className="min-h-12 w-full rounded-2xl border-border bg-background text-foreground hover:bg-muted"
               variant="outline"
               nativeButton={false}
               render={
@@ -224,8 +248,8 @@ export function TicketDetailView({
         </Button>
       </div>
 
-      <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-zinc-400">
-        <h2 className="text-sm font-semibold text-white">Términos de acceso</h2>
+      <section className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
+        <h2 className="text-sm font-semibold text-foreground">Términos de acceso</h2>
         <ul className="mt-2 list-disc space-y-1.5 pl-4 leading-relaxed">
           <li>El primer escaneo válido en puerta otorga el ingreso.</li>
           <li>

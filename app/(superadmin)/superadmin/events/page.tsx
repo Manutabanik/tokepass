@@ -88,7 +88,7 @@ export default async function SuperAdminEventsPage() {
                         {event.organizerEmail}
                       </p>
                     </TableCell>
-                    <TableCell className="text-zinc-400">
+                    <TableCell className="text-slate-600 dark:text-zinc-400">
                       {formatDateTime(event.date)}
                     </TableCell>
                     <TableCell className="pr-6 text-right">
@@ -101,10 +101,10 @@ export default async function SuperAdminEventsPage() {
           ) : (
             <div className="grid min-h-72 place-items-center px-6 py-12 text-center">
               <div>
-                <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-white/5 text-zinc-500">
+                <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-white/5 text-slate-600 dark:text-zinc-400">
                   <CalendarDays className="size-5" aria-hidden="true" />
                 </span>
-                <p className="mt-4 text-sm text-zinc-500">
+                <p className="mt-4 text-sm text-slate-600 dark:text-zinc-400">
                   Aún no se han creado eventos en la plataforma.
                 </p>
               </div>

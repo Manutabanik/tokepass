@@ -47,13 +47,13 @@ function StatCard({
     <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/70 p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-zinc-500">
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-600 dark:text-zinc-400">
             {label}
           </p>
           <p className="mt-3 text-2xl font-black tracking-tight text-zinc-900 dark:text-white">
             {value}
           </p>
-          <p className="mt-2 text-sm text-zinc-500">{hint}</p>
+          <p className="mt-2 text-sm text-slate-600 dark:text-zinc-400">{hint}</p>
         </div>
         <span className="grid size-10 place-items-center rounded-xl bg-violet-500/10 text-violet-300 ring-1 ring-violet-500/20">
           <Icon className="size-5" aria-hidden="true" />
@@ -207,14 +207,14 @@ export function OrganizerFinancesDashboard({
           <h2 className="text-lg font-bold text-zinc-900 dark:text-white">
             Historial de retiros
           </h2>
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-slate-600 dark:text-zinc-400">
             Pedís el retiro acá; Tokepass lo marca como transferido cuando te
             manda la plata.
           </p>
         </div>
 
         {history.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 px-6 py-12 text-center text-sm text-zinc-500">
+          <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 px-6 py-12 text-center text-sm text-slate-600 dark:text-zinc-400">
             Todavía no pediste retiros. Cuando tengas saldo disponible, usá
             Solicitar Retiro.
           </div>
@@ -231,7 +231,7 @@ export function OrganizerFinancesDashboard({
                       ? "Solicitud de retiro"
                       : (row as { label: string }).label}
                   </p>
-                  <p className="mt-1 text-sm text-zinc-500">
+                  <p className="mt-1 text-sm text-slate-600 dark:text-zinc-400">
                     {formatCurrency(row.amount)}
                     {row.kind === "payout" && row.cbuDestination !== "—"
                       ? ` · CBU/CVU ${row.cbuDestination}`
@@ -310,7 +310,7 @@ export function OrganizerFinancesDashboard({
                 placeholder="Confirmá la cuenta de destino"
                 className="min-h-12 h-12 text-base"
               />
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-slate-600 dark:text-zinc-400">
                 Tokepass te transfiere acá cuando apruebe el retiro.
               </p>
             </div>

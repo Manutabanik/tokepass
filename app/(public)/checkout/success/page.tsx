@@ -6,7 +6,7 @@ import { getEventItems, userHasEventTicket } from "@/app/actions/addons"
 import { getPurchaseAnalyticsForOrder } from "@/app/actions/event-marketing"
 import { EventStoreUpsell } from "@/components/public/event-store-upsell"
 import { PurchaseAnalyticsTracker } from "@/components/public/purchase-analytics-tracker"
-import { SocialShareButton } from "@/components/public/social-share-button"
+import { StoryFlyerSuccessCard } from "@/components/public/story-flyer-modal"
 import { CheckoutWalletPrecache } from "@/components/pwa/checkout-wallet-precache"
 import { Button } from "@/components/ui/button"
 import { hasActivePixels } from "@/lib/analytics/pixels"
@@ -24,10 +24,12 @@ export default async function CheckoutSuccessPage({
     payment_id?: string
     status?: string
     free?: string
+    sandbox?: string
   }>
 }) {
-  const { order_id, free } = await searchParams
+  const { order_id, free, sandbox } = await searchParams
   const isFree = free === "1"
+  const isSandbox = sandbox === "1"
 
   const purchaseAnalytics = order_id
     ? await getPurchaseAnalyticsForOrder(order_id)
@@ -40,6 +42,22 @@ export default async function CheckoutSuccessPage({
         userHasEventTicket(eventId).catch(() => false),
       ])
     : [[], false]
+
+  const eyebrow = isSandbox
+    ? "Modo Sandbox"
+    : isFree
+      ? "Entrada gratuita"
+      : "Mercado Pago"
+  const headline = isSandbox
+    ? "¡Compra de prueba lista!"
+    : isFree
+      ? "¡Entrada emitida!"
+      : "¡Pago recibido!"
+  const body = isSandbox
+    ? "Las entradas de prueba ya están en tu billetera. Podés escanear el Living QR en puerta (marcadas TEST)"
+    : isFree
+      ? "Tu entrada ya está disponible en tu billetera"
+      : "Estamos confirmando la transacción con el webhook de Mercado Pago. En segundos tus entradas quedarán disponibles en tu billetera"
 
   return (
     <section className="relative isolate overflow-hidden">
@@ -64,15 +82,13 @@ export default async function CheckoutSuccessPage({
         </div>
 
         <p className="mt-10 text-sm font-semibold uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400">
-          {isFree ? "Entrada gratuita" : "Mercado Pago"}
+          {eyebrow}
         </p>
         <h1 className="mt-3 text-3xl font-black tracking-[-0.04em] text-zinc-950 dark:text-white sm:text-4xl">
-          {isFree ? "¡Entrada emitida!" : "¡Pago recibido!"}
+          {headline}
         </h1>
         <p className="mt-4 text-base leading-7 text-zinc-600 dark:text-zinc-400">
-          {isFree
-            ? "Tu entrada ya está disponible en tu billetera"
-            : "Estamos confirmando la transacción con el webhook de Mercado Pago. En segundos tus entradas quedarán disponibles en tu billetera"}
+          {body}
           {order_id ? (
             <>
               {" "}
@@ -83,15 +99,26 @@ export default async function CheckoutSuccessPage({
           .
         </p>
 
-        <div className="mt-10 flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center">
-          {purchaseAnalytics ? (
-            <SocialShareButton
-              eventTitle={purchaseAnalytics.eventTitle}
-              eventImageUrl={purchaseAnalytics.eventImageUrl}
-              customStoryUrl={purchaseAnalytics.socialShareImageUrl}
-              className="sm:min-w-[240px]"
+        {purchaseAnalytics ? (
+          <div className="mt-8 w-full">
+            <StoryFlyerSuccessCard
+              data={{
+                eventTitle: purchaseAnalytics.eventTitle,
+                eventDate:
+                  purchaseAnalytics.eventDate || new Date().toISOString(),
+                eventLocation:
+                  purchaseAnalytics.eventLocation ||
+                  "Ver ubicación en Tokepass",
+                imageUrl: purchaseAnalytics.eventImageUrl,
+                customStoryUrl: purchaseAnalytics.socialShareImageUrl,
+                mode: "buyer",
+                buyerName: purchaseAnalytics.buyerName,
+              }}
             />
-          ) : null}
+          </div>
+        ) : null}
+
+        <div className="mt-6 flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center">
           <Button
             size="lg"
             className="h-12 rounded-full bg-violet-600 px-6 text-white hover:bg-violet-700"
@@ -119,7 +146,9 @@ export default async function CheckoutSuccessPage({
               eventId={eventId}
               eventTitle={purchaseAnalytics?.eventTitle ?? "tu evento"}
               items={storeItems}
-              canPurchase={canPurchase || Boolean(purchaseAnalytics?.ticketIds.length)}
+              canPurchase={
+                canPurchase || Boolean(purchaseAnalytics?.ticketIds.length)
+              }
             />
           </div>
         ) : null}

@@ -32,6 +32,8 @@ export type IssuedTicketRow = {
   checkedInAt: string | null
   purchasedAt: string
   ticketUrl: string
+  /** Compra de prueba (Modo Sandbox). */
+  isTest: boolean
   /** Comprador original de la cadena (nunca cambia). */
   originalBuyer: CustodyParty
   /** Si este QR fue invalidado por transferencia, apunta al nuevo titular. */

@@ -62,3 +62,18 @@ export type EventSeatingUnit = {
   status: EventSeatingUnitStatus
   reservedUntil: string | null
 }
+
+/** Totales de inventario por sector (carga inicial, sin unidades). */
+export type SeatingSectorSummary = {
+  sectorId: string
+  sectorName: string
+  color: string
+  layoutType: VenueLayoutType
+  capacityPerUnit: number
+  tierId: string | null
+  available: number
+  reserved: number
+  sold: number
+  blocked: number
+  total: number
+}

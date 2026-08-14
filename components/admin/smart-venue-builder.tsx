@@ -174,7 +174,7 @@ export function SmartVenueBuilder({
       <div className="flex items-center justify-between gap-3">
         <div>
           <h3 className="font-bold text-zinc-900 dark:text-white">Zonas o sectores del lugar</h3>
-          <p className="mt-1 text-xs text-zinc-500">
+          <p className="mt-1 text-xs text-slate-600 dark:text-zinc-400">
             {structured
               ? "Cada zona puede tener filas con distinta cantidad de asientos."
               : "Solo necesitás nombre y cantidad de personas para vender entradas generales."}
@@ -184,7 +184,7 @@ export function SmartVenueBuilder({
           type="button"
           size="sm"
           onClick={() => onChange([...zones, createEmptyZone(structured)])}
-          className="rounded-lg bg-zinc-800 px-3 text-xs font-semibold text-emerald-400 hover:bg-zinc-700"
+          className="rounded-lg border border-border bg-muted px-3 text-xs font-semibold text-emerald-800 hover:bg-slate-200 dark:bg-zinc-800 dark:text-emerald-400 dark:hover:bg-zinc-700"
         >
           <Plus className="size-3.5" aria-hidden="true" />
           Agregar zona
@@ -197,13 +197,13 @@ export function SmartVenueBuilder({
           return (
             <article
               key={zone.key}
-              className="rounded-2xl border border-zinc-200 dark:border-zinc-800/80 bg-white dark:bg-zinc-950/60 p-4"
+              className="rounded-2xl border border-border bg-card p-4 shadow-sm"
             >
               <div className="grid gap-3 sm:grid-cols-12">
                 <div className={structured ? "sm:col-span-5" : "sm:col-span-8"}>
                   <Label
                     htmlFor={`zone-${zone.key}-name`}
-                    className="text-[10px] uppercase tracking-wider text-zinc-500"
+                    className="text-[10px] uppercase tracking-wider text-slate-600 dark:text-zinc-400"
                   >
                     Nombre de la zona (Ej: VIP, Campo, Platea)
                   </Label>
@@ -227,7 +227,7 @@ export function SmartVenueBuilder({
                   <div className="sm:col-span-4">
                     <Label
                       htmlFor={`zone-${zone.key}-type`}
-                      className="text-[10px] uppercase tracking-wider text-zinc-500"
+                      className="text-[10px] uppercase tracking-wider text-slate-600 dark:text-zinc-400"
                     >
                       Tipo de ubicación
                     </Label>
@@ -253,12 +253,26 @@ export function SmartVenueBuilder({
                           })),
                         })
                       }}
+                      items={[
+                        {
+                          value: "table_combo",
+                          label: "Mesa / Combo Cerrado",
+                        },
+                        {
+                          value: "numbered_seat",
+                          label: "Asiento Numerado",
+                        },
+                      ]}
                     >
                       <SelectTrigger
                         id={`zone-${zone.key}-type`}
-                        className="mt-1.5 h-10 w-full border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950"
+                        className="mt-1.5 h-10 w-full max-w-full overflow-hidden border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
                       >
-                        <SelectValue />
+                        <SelectValue>
+                          {zone.layoutType === "numbered_seat"
+                            ? "Asiento Numerado"
+                            : "Mesa / Combo Cerrado"}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="table_combo">
@@ -275,7 +289,7 @@ export function SmartVenueBuilder({
                 <div className={structured ? "sm:col-span-2" : "sm:col-span-3"}>
                   <Label
                     htmlFor={`zone-${zone.key}-capacity`}
-                    className="text-[10px] uppercase tracking-wider text-zinc-500"
+                    className="text-[10px] uppercase tracking-wider text-slate-600 dark:text-zinc-400"
                   >
                     Capacidad (Aforo máximo)
                   </Label>
@@ -301,7 +315,7 @@ export function SmartVenueBuilder({
                     onClick={() =>
                       onChange(zones.filter((item) => item.key !== zone.key))
                     }
-                    className="text-zinc-500 hover:bg-red-500/10 hover:text-red-400"
+                    className="text-slate-600 dark:text-zinc-400 hover:bg-red-500/10 hover:text-red-400"
                     aria-label={`Eliminar zona ${zone.name || zoneIndex + 1}`}
                   >
                     <Trash2 className="size-4" />
@@ -318,13 +332,13 @@ export function SmartVenueBuilder({
                         <h4 className="text-sm font-semibold text-zinc-900 dark:text-white">
                           Filas con distinta cantidad de asientos
                         </h4>
-                        <p className="text-[11px] text-zinc-500">
+                        <p className="text-[11px] text-slate-600 dark:text-zinc-400">
                           Cada fila define su propia cantidad de asientos.
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <label className="flex items-center gap-1.5 text-[10px] text-zinc-500">
+                      <label className="flex items-center gap-1.5 text-[10px] text-slate-600 dark:text-zinc-400">
                         Color
                         <input
                           type="color"
@@ -368,7 +382,7 @@ export function SmartVenueBuilder({
                           <div className="sm:col-span-4">
                             <Label
                               htmlFor={`row-${row.key}-label`}
-                              className="text-[10px] uppercase tracking-wider text-zinc-500"
+                              className="text-[10px] uppercase tracking-wider text-slate-600 dark:text-zinc-400"
                             >
                               Nombre de la fila
                             </Label>
@@ -388,7 +402,7 @@ export function SmartVenueBuilder({
                           <div className="sm:col-span-2">
                             <Label
                               htmlFor={`row-${row.key}-count`}
-                              className="text-[10px] uppercase tracking-wider text-zinc-500"
+                              className="text-[10px] uppercase tracking-wider text-slate-600 dark:text-zinc-400"
                             >
                               Ubicaciones
                             </Label>
@@ -409,7 +423,7 @@ export function SmartVenueBuilder({
                           <div className="sm:col-span-2">
                             <Label
                               htmlFor={`row-${row.key}-prefix`}
-                              className="text-[10px] uppercase tracking-wider text-zinc-500"
+                              className="text-[10px] uppercase tracking-wider text-slate-600 dark:text-zinc-400"
                             >
                               Prefijo
                             </Label>
@@ -427,7 +441,7 @@ export function SmartVenueBuilder({
                           <div className="sm:col-span-2">
                             <Label
                               htmlFor={`row-${row.key}-capacity`}
-                              className="text-[10px] uppercase tracking-wider text-zinc-500"
+                              className="text-[10px] uppercase tracking-wider text-slate-600 dark:text-zinc-400"
                             >
                               Personas / unidad
                             </Label>
@@ -450,7 +464,7 @@ export function SmartVenueBuilder({
                             <Button
                               type="button"
                               onClick={() => generateRow(zone, row)}
-                              className="h-10 flex-1 rounded-lg bg-emerald-500/10 px-2 text-[11px] font-semibold text-emerald-400 hover:bg-emerald-500/20"
+                              className="h-10 flex-1 rounded-lg bg-emerald-500/10 px-2 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/20"
                             >
                               <WandSparkles className="size-3.5" aria-hidden="true" />
                               Generar fila
@@ -478,7 +492,7 @@ export function SmartVenueBuilder({
                         {row.items.length > 0 ? (
                           <div className="mt-3 border-t border-zinc-200 dark:border-zinc-800/70 pt-3">
                             <div className="mb-2 flex items-center justify-between gap-2">
-                              <p className="text-[11px] text-zinc-500">
+                              <p className="text-[11px] text-slate-600 dark:text-zinc-400">
                                 {row.items.length} ubicaciones ·{" "}
                                 {
                                   row.items.filter(
@@ -491,7 +505,7 @@ export function SmartVenueBuilder({
                                 type="button"
                                 size="sm"
                                 onClick={() => addManualItem(zone, row)}
-                                className="h-7 rounded-lg bg-zinc-800 px-2 text-[10px] text-zinc-700 dark:text-zinc-300 hover:bg-zinc-700"
+                                className="h-7 rounded-lg bg-muted dark:bg-zinc-800 px-2 text-[10px] text-zinc-700 dark:text-zinc-300 hover:bg-slate-300 dark:hover:bg-zinc-700"
                               >
                                 <Plus className="size-3" aria-hidden="true" />
                                 Añadir ubicación
@@ -522,7 +536,7 @@ export function SmartVenueBuilder({
                                         "h-10 min-w-0 flex-1 truncate rounded-lg border px-2 pr-6 font-mono text-[10px] font-bold",
                                         blocked
                                           ? "border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 text-zinc-600"
-                                          : "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
+                                          : "border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300",
                                       )}
                                       title={
                                         blocked

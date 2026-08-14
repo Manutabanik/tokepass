@@ -127,11 +127,11 @@ export default async function AdminPromotersPage() {
             </p>
           ) : promoters.length === 0 ? (
             <div className="grid place-items-center rounded-2xl border border-dashed border-zinc-200 px-4 py-14 text-center dark:border-white/10">
-              <Users className="size-8 text-zinc-500" aria-hidden="true" />
+              <Users className="size-8 text-slate-600 dark:text-zinc-400" aria-hidden="true" />
               <p className="mt-4 text-base font-semibold text-zinc-900 dark:text-white">
                 Todavía no tenés promotores
               </p>
-              <p className="mt-2 max-w-sm text-sm text-zinc-500">
+              <p className="mt-2 max-w-sm text-sm text-slate-600 dark:text-zinc-400">
                 Agregá el primero y compartí su link en Instagram / WhatsApp.
               </p>
             </div>
@@ -139,19 +139,19 @@ export default async function AdminPromotersPage() {
             <Table>
               <TableHeader>
                 <TableRow className="border-zinc-200 hover:bg-transparent dark:border-white/8">
-                  <TableHead className="text-zinc-500">Nombre</TableHead>
-                  <TableHead className="text-zinc-500">Código</TableHead>
-                  <TableHead className="text-zinc-500">Comisión %</TableHead>
-                  <TableHead className="text-right text-zinc-500">
+                  <TableHead className="text-slate-600 dark:text-zinc-400">Nombre</TableHead>
+                  <TableHead className="text-slate-600 dark:text-zinc-400">Código</TableHead>
+                  <TableHead className="text-slate-600 dark:text-zinc-400">Comisión %</TableHead>
+                  <TableHead className="text-right text-slate-600 dark:text-zinc-400">
                     Clics
                   </TableHead>
-                  <TableHead className="text-right text-zinc-500">
+                  <TableHead className="text-right text-slate-600 dark:text-zinc-400">
                     Entradas
                   </TableHead>
-                  <TableHead className="text-right text-zinc-500">
+                  <TableHead className="text-right text-slate-600 dark:text-zinc-400">
                     Recaudación
                   </TableHead>
-                  <TableHead className="text-right text-zinc-500">
+                  <TableHead className="text-right text-slate-600 dark:text-zinc-400">
                     A pagar
                   </TableHead>
                 </TableRow>

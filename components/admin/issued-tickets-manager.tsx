@@ -86,42 +86,49 @@ const TAB_LABELS: { value: StatusTab; label: string }[] = [
   { value: "cancelled", label: "Anuladas" },
 ]
 
+function TestBadge() {
+  return (
+    <span className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-200">
+      TEST
+    </span>
+  )
+}
+
 function StatusBadge({ ticket }: { ticket: IssuedTicketRow }) {
-  if (ticket.status === "cancelled") {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-red-500/35 bg-red-500/15 px-2.5 py-1 text-[11px] font-semibold text-red-200">
+  const statusNode =
+    ticket.status === "cancelled" ? (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-red-500/35 bg-red-500/15 px-2.5 py-1 text-[11px] font-semibold text-rose-600 dark:text-rose-200">
         <span className="size-1.5 rounded-full bg-red-400" aria-hidden />
         Anulado
       </span>
-    )
-  }
-  if (ticket.status === "transferred") {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/15 px-2.5 py-1 text-[11px] font-semibold text-amber-100">
+    ) : ticket.status === "transferred" ? (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/15 px-2.5 py-1 text-[11px] font-semibold text-amber-600 dark:text-amber-200">
         <RefreshCw className="size-3" aria-hidden />
         Transferido / Reasignado
       </span>
-    )
-  }
-  if (ticket.status === "checked_in") {
-    return (
-      <span className="inline-flex flex-col items-start gap-0.5 rounded-full border border-sky-500/35 bg-sky-500/15 px-2.5 py-1 text-[11px] font-semibold text-sky-100">
+    ) : ticket.status === "checked_in" ? (
+      <span className="inline-flex flex-col items-start gap-0.5 rounded-full border border-sky-500/35 bg-sky-500/15 px-2.5 py-1 text-[11px] font-semibold text-sky-600 dark:text-sky-200">
         <span className="inline-flex items-center gap-1.5">
           <span className="size-1.5 rounded-full bg-sky-400" aria-hidden />
           Ingresado
         </span>
         {ticket.checkedInAt ? (
-          <span className="pl-3 text-[10px] font-medium text-sky-200/80">
+          <span className="pl-3 text-[10px] font-medium text-sky-600 dark:text-sky-200">
             {formatCheckInLabel(ticket.checkedInAt)}
           </span>
         ) : null}
       </span>
+    ) : (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-200">
+        <span className="size-1.5 rounded-full bg-emerald-400" aria-hidden />
+        Válido
+      </span>
     )
-  }
+
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-100">
-      <span className="size-1.5 rounded-full bg-emerald-400" aria-hidden />
-      Válido
+    <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
+      {ticket.isTest ? <TestBadge /> : null}
+      {statusNode}
     </span>
   )
 }
@@ -138,7 +145,7 @@ function TransferLinkChip({
       <button
         type="button"
         onClick={onOpenCustody}
-        className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-left text-[11px] font-medium text-amber-100 transition hover:bg-amber-500/20"
+        className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-left text-[11px] font-medium text-amber-600 dark:text-amber-200 transition hover:bg-amber-500/20"
       >
         <RefreshCw className="size-3 shrink-0" aria-hidden />
         <span className="truncate">
@@ -154,7 +161,7 @@ function TransferLinkChip({
       <button
         type="button"
         onClick={onOpenCustody}
-        className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-lg border border-violet-500/30 bg-violet-500/10 px-2 py-1 text-left text-[11px] font-medium text-violet-100 transition hover:bg-violet-500/20"
+        className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-lg border border-violet-500/30 bg-violet-500/10 px-2 py-1 text-left text-[11px] font-medium text-violet-600 dark:text-violet-200 transition hover:bg-violet-500/20"
       >
         <ArrowRightLeft className="size-3 shrink-0" aria-hidden />
         <span className="truncate">
@@ -169,7 +176,7 @@ function TransferLinkChip({
       <button
         type="button"
         onClick={onOpenCustody}
-        className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900 px-2 py-1 text-[11px] font-medium text-zinc-700 dark:text-zinc-300 transition hover:bg-zinc-800"
+        className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted px-2 py-1 text-[11px] font-medium text-foreground transition hover:bg-muted"
       >
         <History className="size-3" aria-hidden />
         Ver cadena de custodia
@@ -261,7 +268,7 @@ function RowActionsMenu({
         type="button"
         variant="ghost"
         size="icon"
-        className="size-9 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-white"
+        className="size-9 text-muted-foreground hover:bg-muted/50 hover:text-foreground"
         aria-label={`Acciones de ${ticket.code}`}
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
@@ -271,7 +278,7 @@ function RowActionsMenu({
       {open ? (
         <div
           role="menu"
-          className="absolute right-0 top-10 z-30 w-72 overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 py-1 shadow-2xl shadow-black/50"
+          className="absolute right-0 top-10 z-30 w-72 overflow-hidden rounded-xl border border-border bg-card py-1 shadow-2xl shadow-black/50"
         >
           {items.map((item) => (
             <button
@@ -286,8 +293,8 @@ function RowActionsMenu({
               className={cn(
                 "flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm transition disabled:cursor-not-allowed disabled:opacity-40",
                 item.danger
-                  ? "text-red-300 hover:bg-red-500/10"
-                  : "text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-white/5",
+                  ? "text-rose-600 hover:bg-red-500/10 dark:text-rose-300"
+                  : "text-foreground hover:bg-muted/50",
               )}
             >
               {item.icon}
@@ -327,21 +334,21 @@ function CustodyTimeline({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900/60 p-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
+      <div className="rounded-2xl border border-border bg-muted p-4">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
           Comprador original
         </p>
-        <p className="mt-2 font-semibold text-zinc-900 dark:text-white">{original.name}</p>
-        <p className="text-xs text-zinc-600 dark:text-zinc-400">
+        <p className="mt-2 font-semibold text-foreground">{original.name}</p>
+        <p className="text-xs text-muted-foreground">
           {original.email} · DNI {original.dni}
         </p>
-        <p className="mt-1 text-xs text-zinc-500">
+        <p className="mt-1 text-xs text-muted-foreground">
           Compra: {formatDateTime(ticket.purchasedAt)}
         </p>
       </div>
 
       {events.length === 0 ? (
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-muted-foreground">
           Esta entrada no tiene transferencias registradas.
         </p>
       ) : (
@@ -351,15 +358,15 @@ function CustodyTimeline({
               key={`${event.fromTicketId}-${event.toTicketId}-${event.at}`}
               className="rounded-2xl border border-amber-500/25 bg-amber-500/[0.07] p-4"
             >
-              <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-200">
+              <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-600 dark:text-amber-200">
                 <RefreshCw className="size-3" aria-hidden />
                 Acción
               </p>
-              <p className="mt-2 text-sm text-amber-50">
+              <p className="mt-2 text-sm text-amber-700 dark:text-amber-100">
                 {custodyChannelLabel(event.channel)} el{" "}
                 {formatDateTime(event.at)}
               </p>
-              <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">
+              <p className="mt-2 text-xs text-muted-foreground">
                 De {event.from.name} (#{event.fromTicketCode}) → {event.to.name}{" "}
                 (#{event.toTicketCode})
               </p>
@@ -369,14 +376,14 @@ function CustodyTimeline({
       )}
 
       <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.07] p-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-300/90">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-600 dark:text-emerald-200">
           Titular actual
         </p>
-        <p className="mt-2 font-semibold text-zinc-900 dark:text-white">{current.name}</p>
-        <p className="text-xs text-zinc-600 dark:text-zinc-400">
+        <p className="mt-2 font-semibold text-foreground">{current.name}</p>
+        <p className="text-xs text-muted-foreground">
           {current.email} · DNI {current.dni}
         </p>
-        <p className="mt-1 font-mono text-xs text-emerald-200/90">
+        <p className="mt-1 font-mono text-xs text-emerald-600 dark:text-emerald-200">
           QR vigente: #{current.code}
         </p>
       </div>
@@ -699,10 +706,10 @@ export function IssuedTicketsManager({
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <header className="min-w-0">
-          <h1 className="text-3xl font-black tracking-tight text-zinc-900 dark:text-white sm:text-4xl">
+          <h1 className="text-3xl font-black tracking-tight text-foreground sm:text-4xl">
             Lista de Compradores
           </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-600 dark:text-zinc-400 sm:text-base">
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
             Buscá compradores, reenviá entradas, cambiá el titular o resolvé
             reclamos. Descargá la lista cuando la necesites.
           </p>
@@ -713,7 +720,7 @@ export function IssuedTicketsManager({
             variant="outline"
             disabled={exportPending || loading}
             onClick={downloadAudienceCsv}
-            className="h-11 rounded-xl border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900"
+            className="h-11 rounded-xl border-border bg-card text-foreground hover:bg-muted"
           >
             <Download className="mr-2 h-4 w-4" aria-hidden />
             {exportPending ? "Exportando…" : "Descargar lista (CSV)"}
@@ -722,7 +729,7 @@ export function IssuedTicketsManager({
             type="button"
             variant="outline"
             onClick={() => openModal("courtesy")}
-            className="h-11 rounded-xl border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900"
+            className="h-11 rounded-xl border-border bg-card text-foreground hover:bg-muted"
           >
             <Plus className="size-4" aria-hidden />
             Emitir entrada manual / Cortesía
@@ -732,39 +739,39 @@ export function IssuedTicketsManager({
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
-          icon={<Ticket className="size-4 text-emerald-400" />}
+          icon={<Ticket className="size-4 text-emerald-600 dark:text-emerald-200" />}
           label="Total emitidas"
           value={loading ? "…" : formatNumber(metrics.totalIssued)}
           hint={`${formatNumber(filtered.length)} en vista actual`}
         />
         <MetricCard
-          icon={<Users className="size-4 text-sky-400" />}
+          icon={<Users className="size-4 text-sky-600 dark:text-sky-300" />}
           label="Ya ingresaron"
           value={loading ? "…" : formatNumber(metrics.checkedIn)}
           hint={`${checkedInPct}% del total`}
         />
         <MetricCard
-          icon={<Search className="size-4 text-amber-300" />}
+          icon={<Search className="size-4 text-amber-600 dark:text-amber-200" />}
           label="Pendientes de ingreso"
           value={loading ? "…" : formatNumber(metrics.pending)}
           hint="Entradas válidas sin check-in"
         />
         <MetricCard
-          icon={<RefreshCw className="size-4 text-orange-300" />}
+          icon={<RefreshCw className="size-4 text-orange-600 dark:text-orange-300" />}
           label="Transferidos"
           value={loading ? "…" : formatNumber(metrics.transferred)}
           hint="QR originales invalidados"
         />
       </section>
 
-      <section className="space-y-4 rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/70 p-4 sm:p-5">
+      <section className="space-y-4 rounded-3xl border border-border bg-card p-4 sm:p-5">
         <div className="relative">
-          <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-zinc-500" />
+          <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Buscá por nombre, DNI, email, código o historial de transferencia…"
-            className="h-14 rounded-2xl border-zinc-200 dark:border-zinc-800 bg-black pl-12 text-base text-zinc-900 dark:text-white placeholder:text-zinc-600"
+            className="h-14 rounded-2xl border-border bg-background pl-12 text-base text-foreground placeholder:text-muted-foreground"
             aria-label="Buscar entradas emitidas"
           />
         </div>
@@ -774,12 +781,12 @@ export function IssuedTicketsManager({
           onValueChange={(value) => setTab(value as StatusTab)}
           className="gap-4"
         >
-          <TabsList className="h-auto w-full flex-wrap justify-start gap-1 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/80 p-1.5 group-data-horizontal/tabs:h-auto">
+          <TabsList className="h-auto w-full flex-wrap justify-start gap-1 rounded-2xl border border-border bg-muted/80 p-1.5 group-data-horizontal/tabs:h-auto">
             {TAB_LABELS.map((item) => (
               <TabsTrigger
                 key={item.value}
                 value={item.value}
-                className="rounded-xl px-3 py-2 text-xs data-active:bg-zinc-800 data-active:text-zinc-900 dark:text-white sm:text-sm"
+                className="rounded-xl px-3 py-2 text-xs data-active:bg-background data-active:text-foreground sm:text-sm"
               >
                 {item.label}
               </TabsTrigger>
@@ -787,32 +794,32 @@ export function IssuedTicketsManager({
           </TabsList>
         </Tabs>
 
-        <div className="overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 max-md:border-0 max-md:bg-transparent">
+        <div className="overflow-hidden rounded-2xl border border-border max-md:border-0 max-md:bg-transparent">
           {/* Mobile: tarjetas apiladas */}
           <div className="grid gap-3 md:hidden">
             {loading ? (
-              <p className="rounded-2xl border border-zinc-200 px-4 py-12 text-center text-sm text-zinc-500 dark:border-zinc-800">
+              <p className="rounded-2xl border border-border px-4 py-12 text-center text-sm text-muted-foreground">
                 Cargando entradas…
               </p>
             ) : filtered.length === 0 ? (
-              <p className="rounded-2xl border border-dashed border-zinc-200 px-4 py-12 text-center text-sm text-zinc-500 dark:border-zinc-800">
+              <p className="rounded-2xl border border-dashed border-border px-4 py-12 text-center text-sm text-muted-foreground">
                 No hay entradas que coincidan.
               </p>
             ) : (
               filtered.map((ticket) => (
                 <article
                   key={ticket.id}
-                  className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950/70"
+                  className="rounded-2xl border border-border bg-card p-4"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate text-base font-bold text-zinc-900 dark:text-white">
+                      <p className="truncate text-base font-bold text-foreground">
                         {ticket.holderName}
                       </p>
-                      <p className="mt-0.5 truncate text-sm text-zinc-500">
+                      <p className="mt-0.5 truncate text-sm text-muted-foreground">
                         {ticket.holderEmail}
                       </p>
-                      <p className="text-sm text-zinc-500">
+                      <p className="text-sm text-muted-foreground">
                         DNI {ticket.holderDni}
                       </p>
                     </div>
@@ -820,10 +827,10 @@ export function IssuedTicketsManager({
                   </div>
                   <div className="mt-3 flex items-end justify-between gap-3">
                     <div>
-                      <p className="font-mono text-lg font-black text-zinc-900 dark:text-white">
+                      <p className="font-mono text-lg font-black text-foreground">
                         #{ticket.code}
                       </p>
-                      <p className="mt-1 text-sm text-zinc-500">
+                      <p className="mt-1 text-sm text-muted-foreground">
                         {ticket.sectorLabel}
                       </p>
                     </div>
@@ -849,33 +856,33 @@ export function IssuedTicketsManager({
           <div className="hidden md:block">
           <Table>
             <TableHeader>
-              <TableRow className="border-zinc-200 dark:border-zinc-800 hover:bg-transparent">
-                <TableHead className="px-4 text-zinc-500">Comprador</TableHead>
-                <TableHead className="px-4 text-zinc-500">
+              <TableRow className="border-b border-border hover:bg-transparent">
+                <TableHead className="px-4 bg-muted/50 text-muted-foreground">Comprador</TableHead>
+                <TableHead className="px-4 bg-muted/50 text-muted-foreground">
                   Ubicación / Entrada
                 </TableHead>
-                <TableHead className="px-4 text-zinc-500">Código</TableHead>
-                <TableHead className="px-4 text-zinc-500">Estado</TableHead>
-                <TableHead className="px-4 text-right text-zinc-500">
+                <TableHead className="px-4 bg-muted/50 text-muted-foreground">Código</TableHead>
+                <TableHead className="px-4 bg-muted/50 text-muted-foreground">Estado</TableHead>
+                <TableHead className="px-4 text-right bg-muted/50 text-muted-foreground">
                   Acciones
                 </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow className="border-zinc-200 dark:border-zinc-800 hover:bg-transparent">
+                <TableRow className="border-b border-border hover:bg-transparent">
                   <TableCell
                     colSpan={5}
-                    className="px-4 py-12 text-center text-sm text-zinc-500"
+                    className="px-4 py-12 text-center text-sm text-muted-foreground"
                   >
                     Cargando entradas emitidas…
                   </TableCell>
                 </TableRow>
               ) : filtered.length === 0 ? (
-                <TableRow className="border-zinc-200 dark:border-zinc-800 hover:bg-transparent">
+                <TableRow className="border-b border-border hover:bg-transparent">
                   <TableCell
                     colSpan={5}
-                    className="px-4 py-12 text-center text-sm text-zinc-500"
+                    className="px-4 py-12 text-center text-sm text-muted-foreground"
                   >
                     No hay entradas que coincidan con la búsqueda o el filtro.
                   </TableCell>
@@ -884,16 +891,16 @@ export function IssuedTicketsManager({
                 filtered.map((ticket) => (
                   <TableRow
                     key={ticket.id}
-                    className="border-zinc-200 dark:border-zinc-800 hover:bg-white/[0.03]"
+                    className="border-b border-border hover:bg-muted/50"
                   >
                     <TableCell className="px-4 py-3 align-top">
-                      <p className="font-semibold text-zinc-900 dark:text-white">
+                      <p className="font-semibold text-foreground">
                         {ticket.holderName}
                       </p>
-                      <p className="mt-0.5 text-xs text-zinc-500">
+                      <p className="mt-0.5 text-xs text-muted-foreground">
                         {ticket.holderEmail}
                       </p>
-                      <p className="text-xs text-zinc-500">
+                      <p className="text-xs text-muted-foreground">
                         DNI {ticket.holderDni}
                       </p>
                       <TransferLinkChip
@@ -901,10 +908,10 @@ export function IssuedTicketsManager({
                         onOpenCustody={() => openModal("custody", ticket)}
                       />
                     </TableCell>
-                    <TableCell className="max-w-[240px] truncate px-4 py-3 text-sm text-zinc-700 dark:text-zinc-300">
+                    <TableCell className="max-w-[240px] truncate px-4 py-3 text-sm text-foreground">
                       {ticket.sectorLabel}
                     </TableCell>
-                    <TableCell className="px-4 py-3 font-mono text-sm text-zinc-800 dark:text-zinc-200">
+                    <TableCell className="px-4 py-3 font-mono text-sm text-foreground">
                       #{ticket.code}
                     </TableCell>
                     <TableCell className="px-4 py-3">
@@ -928,9 +935,9 @@ export function IssuedTicketsManager({
           </div>
         </div>
 
-        <p className="text-xs text-zinc-600">
+        <p className="text-xs text-muted-foreground">
           Evento{" "}
-          <span className="font-medium text-zinc-700 dark:text-zinc-300">
+          <span className="font-medium text-foreground">
             {eventTitle}
           </span>
           . Mostrando {formatNumber(filtered.length)} de{" "}
@@ -942,10 +949,10 @@ export function IssuedTicketsManager({
         open={modal === "resend"}
         onOpenChange={(open) => !open && closeModal()}
       >
-        <DialogContent className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white sm:max-w-md">
+        <DialogContent className="border-border bg-card text-foreground sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Reenviar entrada</DialogTitle>
-            <DialogDescription className="text-zinc-600 dark:text-zinc-400">
+            <DialogDescription className="text-muted-foreground">
               {activeTicket
                 ? `#${activeTicket.code} · ${activeTicket.holderName}`
                 : "Seleccioná una entrada."}
@@ -964,7 +971,7 @@ export function IssuedTicketsManager({
             <Button
               type="button"
               variant="outline"
-              className="h-11 justify-start rounded-xl border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
+              className="h-11 justify-start rounded-xl border-border bg-muted text-foreground"
               onClick={() => confirmResend("whatsapp")}
             >
               <MessageCircle className="size-4" />
@@ -978,10 +985,10 @@ export function IssuedTicketsManager({
         open={modal === "holder"}
         onOpenChange={(open) => !open && closeModal()}
       >
-        <DialogContent className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white sm:max-w-md">
+        <DialogContent className="border-border bg-card text-foreground sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Cambiar titular / Email</DialogTitle>
-            <DialogDescription className="text-zinc-600 dark:text-zinc-400">
+            <DialogDescription className="text-muted-foreground">
               Corrección de datos del mismo titular. Para ceder la entrada usá
               Transferir / Reasignar.
             </DialogDescription>
@@ -993,7 +1000,7 @@ export function IssuedTicketsManager({
                 id="holder-name"
                 value={holderName}
                 onChange={(e) => setHolderName(e.target.value)}
-                className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
+                className="border-border bg-muted"
               />
             </div>
             <div className="space-y-1.5">
@@ -1003,7 +1010,7 @@ export function IssuedTicketsManager({
                 type="email"
                 value={holderEmail}
                 onChange={(e) => setHolderEmail(e.target.value)}
-                className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
+                className="border-border bg-muted"
               />
             </div>
             <div className="space-y-1.5">
@@ -1012,7 +1019,7 @@ export function IssuedTicketsManager({
                 id="holder-dni"
                 value={holderDni}
                 onChange={(e) => setHolderDni(e.target.value)}
-                className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
+                className="border-border bg-muted"
               />
             </div>
           </div>
@@ -1021,7 +1028,7 @@ export function IssuedTicketsManager({
               type="button"
               variant="ghost"
               onClick={closeModal}
-              className="text-zinc-600 dark:text-zinc-400"
+              className="text-muted-foreground"
             >
               Cancelar
             </Button>
@@ -1041,17 +1048,17 @@ export function IssuedTicketsManager({
         open={modal === "transfer"}
         onOpenChange={(open) => !open && closeModal()}
       >
-        <DialogContent className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white sm:max-w-md">
+        <DialogContent className="border-border bg-card text-foreground sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Transferir / Reasignar</DialogTitle>
-            <DialogDescription className="text-zinc-600 dark:text-zinc-400">
+            <DialogDescription className="text-muted-foreground">
               {activeTicket
                 ? `Se invalida #${activeTicket.code} y se emite un QR nuevo al destinatario.`
                 : "Seleccioná una entrada."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
-            <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100/90">
+            <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-200">
               El QR actual dejará de pasar en puerta. Queda registro en la
               cadena de custodia.
             </div>
@@ -1061,7 +1068,7 @@ export function IssuedTicketsManager({
                 id="transfer-name"
                 value={transferName}
                 onChange={(e) => setTransferName(e.target.value)}
-                className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
+                className="border-border bg-muted"
               />
             </div>
             <div className="space-y-1.5">
@@ -1071,7 +1078,7 @@ export function IssuedTicketsManager({
                 type="email"
                 value={transferEmail}
                 onChange={(e) => setTransferEmail(e.target.value)}
-                className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
+                className="border-border bg-muted"
               />
             </div>
             <div className="space-y-1.5">
@@ -1080,7 +1087,7 @@ export function IssuedTicketsManager({
                 id="transfer-dni"
                 value={transferDni}
                 onChange={(e) => setTransferDni(e.target.value)}
-                className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
+                className="border-border bg-muted"
               />
             </div>
           </div>
@@ -1089,7 +1096,7 @@ export function IssuedTicketsManager({
               type="button"
               variant="ghost"
               onClick={closeModal}
-              className="text-zinc-600 dark:text-zinc-400"
+              className="text-muted-foreground"
             >
               Cancelar
             </Button>
@@ -1110,10 +1117,10 @@ export function IssuedTicketsManager({
         open={modal === "custody"}
         onOpenChange={(open) => !open && closeModal()}
       >
-        <DialogContent className="max-h-[85dvh] overflow-y-auto border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white sm:max-w-lg">
+        <DialogContent className="max-h-[85dvh] overflow-y-auto border-border bg-card text-foreground sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Cadena de custodia</DialogTitle>
-            <DialogDescription className="text-zinc-600 dark:text-zinc-400">
+            <DialogDescription className="text-muted-foreground">
               {activeTicket
                 ? `Historial de #${activeTicket.code} · ${activeTicket.sectorLabel}`
                 : "Seleccioná una entrada."}
@@ -1132,10 +1139,10 @@ export function IssuedTicketsManager({
         open={modal === "cancel"}
         onOpenChange={(open) => !open && closeModal()}
       >
-        <DialogContent className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white sm:max-w-md">
+        <DialogContent className="border-border bg-card text-foreground sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Inhabilitar ticket</DialogTitle>
-            <DialogDescription className="text-zinc-600 dark:text-zinc-400">
+            <DialogDescription className="text-muted-foreground">
               {activeTicket
                 ? `Vas a anular #${activeTicket.code} de ${activeTicket.holderName}. El QR dejará de pasar en puerta.`
                 : "Seleccioná una entrada."}
@@ -1149,7 +1156,7 @@ export function IssuedTicketsManager({
                 value={cancelReason}
                 onChange={(e) => setCancelReason(e.target.value)}
                 placeholder="Ej. duplicado, reclamo, fraude…"
-                className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
+                className="border-border bg-muted"
               />
             </div>
           </div>
@@ -1159,7 +1166,7 @@ export function IssuedTicketsManager({
               variant="ghost"
               onClick={closeModal}
               disabled={actionPending}
-              className="text-zinc-600 dark:text-zinc-400"
+              className="text-muted-foreground"
             >
               Volver
             </Button>
@@ -1180,10 +1187,10 @@ export function IssuedTicketsManager({
         open={modal === "courtesy"}
         onOpenChange={(open) => !open && closeModal()}
       >
-        <DialogContent className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white sm:max-w-md">
+        <DialogContent className="border-border bg-card text-foreground sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Emitir entrada manual / Cortesía</DialogTitle>
-            <DialogDescription className="text-zinc-600 dark:text-zinc-400">
+            <DialogDescription className="text-muted-foreground">
               Ideal para pago en efectivo en oficina o invitados especiales.
             </DialogDescription>
           </DialogHeader>
@@ -1194,7 +1201,7 @@ export function IssuedTicketsManager({
                 id="courtesy-name"
                 value={courtesyName}
                 onChange={(e) => setCourtesyName(e.target.value)}
-                className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
+                className="border-border bg-muted"
               />
             </div>
             <div className="space-y-1.5">
@@ -1204,7 +1211,7 @@ export function IssuedTicketsManager({
                 type="email"
                 value={courtesyEmail}
                 onChange={(e) => setCourtesyEmail(e.target.value)}
-                className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
+                className="border-border bg-muted"
               />
             </div>
             <div className="space-y-1.5">
@@ -1213,7 +1220,7 @@ export function IssuedTicketsManager({
                 id="courtesy-dni"
                 value={courtesyDni}
                 onChange={(e) => setCourtesyDni(e.target.value)}
-                className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
+                className="border-border bg-muted"
               />
             </div>
             <div className="space-y-1.5">
@@ -1222,7 +1229,7 @@ export function IssuedTicketsManager({
                 id="courtesy-sector"
                 value={courtesySector}
                 onChange={(e) => setCourtesySector(e.target.value)}
-                className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
+                className="border-border bg-muted"
               />
             </div>
           </div>
@@ -1231,7 +1238,7 @@ export function IssuedTicketsManager({
               type="button"
               variant="ghost"
               onClick={closeModal}
-              className="text-zinc-600 dark:text-zinc-400"
+              className="text-muted-foreground"
             >
               Cancelar
             </Button>
@@ -1262,15 +1269,15 @@ function MetricCard({
   hint: string
 }) {
   return (
-    <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/70 p-4">
-      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">
+    <div className="rounded-2xl border border-border bg-card p-4">
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
         {icon}
         {label}
       </div>
-      <p className="mt-3 text-3xl font-black tracking-tight text-zinc-900 dark:text-white">
+      <p className="mt-3 text-3xl font-black tracking-tight text-foreground">
         {value}
       </p>
-      <p className="mt-1 text-xs text-zinc-500">{hint}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
     </div>
   )
 }

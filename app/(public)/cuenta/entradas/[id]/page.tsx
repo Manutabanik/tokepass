@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { notFound, redirect } from "next/navigation"
 
 import { getMyTicketById } from "@/app/actions/buyer-orders"
+import { listEventSponsors } from "@/app/actions/event-sponsors"
 import { TicketDetailView } from "@/components/account/ticket-detail-view"
 import { createClient } from "@/lib/supabase/server"
 import { getWalletUiFlags } from "@/lib/wallet-cache"
@@ -39,6 +40,7 @@ export default async function CuentaEntradaDetallePage({
   if (!ticket) notFound()
 
   const walletFlags = getWalletUiFlags()
+  const sponsors = await listEventSponsors(ticket.eventId)
 
   return (
     <TicketDetailView
@@ -46,6 +48,7 @@ export default async function CuentaEntradaDetallePage({
       userId={user.id}
       appleWalletEnabled={walletFlags.appleWalletEnabled}
       googleWalletEnabled={walletFlags.googleWalletEnabled}
+      sponsors={sponsors}
     />
   )
 }

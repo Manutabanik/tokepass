@@ -75,6 +75,9 @@ export function UniversalSectorCards({
                   </span>
                   <span className="mt-2 inline-flex rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-600 ring-1 ring-zinc-200 dark:bg-zinc-950 dark:text-zinc-500 dark:ring-zinc-800">
                     {sector.type === "general" ? "Sin numerar" : "Numerado"}
+                    {typeof sector.availableCount === "number"
+                      ? ` · ${sector.availableCount.toLocaleString("es-AR")} libres`
+                      : ""}
                   </span>
                 </span>
               </span>

@@ -13,6 +13,7 @@ import {
   eventSecondaryBadge,
   urgencyLabel,
 } from "@/lib/discovery-filters"
+import { deriveEventSaleState } from "@/lib/event-status"
 import {
   getFavoriteIdsCache,
   setFavoriteIdsCache,
@@ -58,6 +59,9 @@ export function EventCard({
   const place = event.venueName ?? event.location
   const boosted = isBoostActive(event)
   const sponsored = Boolean(event.isSponsoredByTokepass)
+  const saleState = deriveEventSaleState(event)
+  const finished = saleState === "finished"
+  const soldOut = saleState === "sold_out"
   const [favorited, setFavorited] = useState(false)
   const [favReady, setFavReady] = useState(false)
 
@@ -108,18 +112,33 @@ export function EventCard({
               fill
               priority={priority}
               sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, 30vw"
-              className="object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+              className={cn(
+                "object-cover transition-transform duration-500 group-hover:scale-[1.04]",
+                finished && "grayscale-[50%]",
+              )}
             />
           ) : (
             <div
               className={cn(
                 "absolute inset-0 bg-gradient-to-br",
                 gradientForId(event.id),
+                finished && "grayscale-[50%]",
               )}
             />
           )}
 
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent" />
+
+          {soldOut ? (
+            <span className="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full bg-red-600 px-4 py-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-white shadow-lg">
+              AGOTADO
+            </span>
+          ) : null}
+          {finished ? (
+            <span className="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full bg-zinc-800/80 px-4 py-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-white backdrop-blur-md">
+              FINALIZADO
+            </span>
+          ) : null}
 
           <div className="absolute left-3 top-3 flex max-w-[calc(100%-3.5rem)] flex-wrap gap-1.5">
             {sponsored || boosted ? (
@@ -173,7 +192,11 @@ export function EventCard({
             </div>
 
             <span className="inline-flex shrink-0 items-center rounded-full bg-zinc-950 px-3.5 py-2 text-sm font-semibold text-white transition group-hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:group-hover:bg-zinc-100">
-              Comprar entradas
+              {finished
+                ? "Ver evento"
+                : soldOut
+                  ? "Agotado"
+                  : "Comprar entradas"}
             </span>
           </div>
         </div>

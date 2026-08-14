@@ -12,6 +12,7 @@ import {
   ShoppingBag,
   Ticket,
   TicketPercent,
+  Package,
   Users,
   Wallet,
 } from "lucide-react"
@@ -29,10 +30,10 @@ export const metadata: Metadata = {
 }
 
 const actionClass =
-  "group rounded-2xl border border-zinc-200 bg-white p-5 transition hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950/70 dark:hover:border-zinc-700 dark:hover:bg-zinc-900"
+  "group rounded-2xl border border-border bg-card p-5 transition hover:border-border hover:bg-muted/50"
 
 const dressCardClass =
-  "group flex h-full flex-col rounded-2xl border border-zinc-200 bg-gradient-to-b from-white to-zinc-50 p-5 transition hover:border-emerald-500/40 hover:shadow-[0_12px_40px_rgba(16,185,129,0.08)] dark:border-zinc-800 dark:from-zinc-950/80 dark:to-zinc-950 dark:hover:border-emerald-500/35"
+  "group flex h-full flex-col rounded-2xl border border-border bg-gradient-to-b from-card to-muted/40 p-5 transition hover:border-emerald-500/40 hover:shadow-[0_12px_40px_rgba(16,185,129,0.08)] dark:hover:border-emerald-500/35"
 
 export default async function ManageEventPage({
   params,
@@ -97,7 +98,7 @@ export default async function ManageEventPage({
       description:
         "Vendé merch, comida, bebidas o servicios. Cada unidad tiene QR de canje propio.",
       icon: ShoppingBag,
-      accent: "text-emerald-600 dark:text-emerald-300",
+      accent: "text-emerald-600 dark:text-emerald-200",
       iconWrap: "bg-emerald-500/10",
     },
     {
@@ -137,6 +138,12 @@ export default async function ManageEventPage({
       icon: Gift,
     },
     {
+      href: `/admin/events/${id}/tiers`,
+      label: "Combos y tarifas",
+      description: "Packs, abonos, kits y tarifas especiales.",
+      icon: Package,
+    },
+    {
       href: `/admin/events/${id}/marketing`,
       label: "Marketing y anuncios",
       description: "Conectá Meta, TikTok y Google para medir ventas.",
@@ -170,7 +177,7 @@ export default async function ManageEventPage({
     <main className="mx-auto w-full max-w-5xl space-y-8 px-4 py-8 sm:px-6">
       <Link
         href="/admin/events"
-        className="inline-flex items-center gap-2 text-sm text-zinc-500 transition hover:text-zinc-900 dark:hover:text-white"
+        className="inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-foreground"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
         Volver a Mis Eventos
@@ -185,26 +192,26 @@ export default async function ManageEventPage({
       />
 
       <section className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950/70">
-          <Ticket className="size-5 text-emerald-500 dark:text-emerald-400" aria-hidden="true" />
-          <p className="mt-4 text-3xl font-black text-zinc-900 dark:text-white">
+        <div className="rounded-2xl border border-border bg-card p-5">
+          <Ticket className="size-5 text-emerald-600 dark:text-emerald-200" aria-hidden="true" />
+          <p className="mt-4 text-3xl font-black text-foreground">
             {formatNumber(sold)}
           </p>
-          <p className="mt-1 text-sm text-zinc-500">Entradas Vendidas</p>
+          <p className="mt-1 text-sm text-muted-foreground">Entradas Vendidas</p>
         </div>
-        <div className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950/70">
+        <div className="rounded-2xl border border-border bg-card p-5">
           <Wallet className="size-5 text-sky-500 dark:text-sky-300" aria-hidden="true" />
-          <p className="mt-4 text-3xl font-black text-zinc-900 dark:text-white">
+          <p className="mt-4 text-3xl font-black text-foreground">
             {formatCurrency(recaudacion)}
           </p>
-          <p className="mt-1 text-sm text-zinc-500">Recaudación</p>
+          <p className="mt-1 text-sm text-muted-foreground">Recaudación</p>
         </div>
-        <div className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950/70">
+        <div className="rounded-2xl border border-border bg-card p-5">
           <Users className="size-5 text-violet-500 dark:text-violet-300" aria-hidden="true" />
-          <p className="mt-4 text-3xl font-black text-zinc-900 dark:text-white">
+          <p className="mt-4 text-3xl font-black text-foreground">
             {formatNumber(Math.max(0, capacity - sold))}
           </p>
-          <p className="mt-1 text-sm text-zinc-500">
+          <p className="mt-1 text-sm text-muted-foreground">
             Disponibles de {formatNumber(capacity)}
           </p>
         </div>
@@ -219,10 +226,10 @@ export default async function ManageEventPage({
 
       <section className="space-y-3">
         <div>
-          <h2 className="text-lg font-bold text-zinc-900 dark:text-white">
+          <h2 className="text-lg font-bold text-foreground">
             Vestí tu evento
           </h2>
-          <p className="mt-1 text-sm text-zinc-500">
+          <p className="mt-1 text-sm text-muted-foreground">
             Completá multimedia, barra y el flyer de historias antes de
             publicar.
           </p>
@@ -236,13 +243,13 @@ export default async function ManageEventPage({
                 >
                   <Icon className="size-5" aria-hidden="true" />
                 </span>
-                <h3 className="mt-4 font-bold text-zinc-900 dark:text-white">
+                <h3 className="mt-4 font-bold text-foreground">
                   {title}
                 </h3>
-                <p className="mt-2 flex-1 text-sm leading-6 text-zinc-500">
+                <p className="mt-2 flex-1 text-sm leading-6 text-muted-foreground">
                   {description}
                 </p>
-                <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-700 transition group-hover:gap-2 dark:text-emerald-300">
+                <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-600 transition group-hover:gap-2 dark:text-emerald-200">
                   Configurar
                   <ArrowRight className="size-3.5" aria-hidden="true" />
                 </span>
@@ -253,23 +260,23 @@ export default async function ManageEventPage({
       </section>
 
       <section>
-        <h2 className="text-lg font-bold text-zinc-900 dark:text-white">
+        <h2 className="text-lg font-bold text-foreground">
           Operación del evento
         </h2>
-        <p className="mt-1 text-sm text-zinc-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           Accesos a compradores, puerta, cupones y el resto del día a día.
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           {actions.map(({ href, label, description, icon: Icon }) => (
             <Link key={href} href={href} className={actionClass}>
               <Icon
-                className="size-5 text-zinc-500 transition group-hover:text-emerald-500 dark:text-zinc-400 dark:group-hover:text-emerald-400"
+                className="size-5 text-muted-foreground transition group-hover:text-emerald-600 dark:group-hover:text-emerald-800 dark:text-emerald-200"
                 aria-hidden="true"
               />
-              <h3 className="mt-4 font-bold text-zinc-900 dark:text-white">
+              <h3 className="mt-4 font-bold text-foreground">
                 {label}
               </h3>
-              <p className="mt-1 text-sm text-zinc-500">{description}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{description}</p>
             </Link>
           ))}
         </div>

@@ -128,7 +128,7 @@ export function AddToCalendarButton({
     <Button
       variant="outline"
       size="sm"
-      className="h-9 rounded-full border-zinc-700 bg-zinc-900/80 text-zinc-200 hover:bg-zinc-800"
+      className="h-9 rounded-full border-border bg-card text-foreground hover:bg-muted"
       nativeButton={false}
       render={
         <a href={href} target="_blank" rel="noreferrer" />

@@ -70,123 +70,139 @@ export function PublicNavbarClient({
         "dark:border-white/8 dark:bg-[#030712]/80",
       )}
     >
-      <div className="mx-auto flex h-16 max-w-7xl items-center gap-2 px-3 sm:h-[4.25rem] sm:gap-4 sm:px-4 lg:px-8">
-        {/* Mobile: menú solo fuera del portal (ahí manda el bottom nav) */}
-        {!inAccount || !isAuthenticated ? (
-          <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-            <SheetTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-12 shrink-0 text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-white/5 md:hidden"
-                  aria-label="Abrir menú"
-                />
-              }
-            >
-              <Menu className="size-5" />
-            </SheetTrigger>
-            <SheetContent
-              side="left"
-              className="border-zinc-200 bg-white p-0 text-zinc-900 dark:border-white/8 dark:bg-[#09090b] dark:text-zinc-100"
-            >
-              <SheetHeader className="border-b border-zinc-200 dark:border-white/8">
-                <BrandLogo size="header" />
-                <SheetTitle className="sr-only">Menú</SheetTitle>
-                <SheetDescription className="sr-only">
-                  Navegación principal de Tokepass
-                </SheetDescription>
-              </SheetHeader>
-
-              <nav
-                className="flex-1 space-y-1 overflow-y-auto p-3"
-                aria-label="Menú móvil"
+      <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-2 px-4 sm:h-[4.25rem] sm:gap-3 lg:px-8">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          {/* Mobile: menú solo fuera del portal (ahí manda el bottom nav) */}
+          {!inAccount || !isAuthenticated ? (
+            <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+              <SheetTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-11 shrink-0 text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-white/5 md:hidden"
+                    aria-label="Abrir menú"
+                  />
+                }
               >
-                <Link
-                  href={exploreHref}
-                  onClick={closeMenu}
-                  className={mobileNavLinkClass}
+                <Menu className="size-5" />
+              </SheetTrigger>
+              <SheetContent
+                side="left"
+                className="border-zinc-200 bg-white p-0 text-zinc-900 dark:border-white/8 dark:bg-[#09090b] dark:text-zinc-100"
+              >
+                <SheetHeader className="border-b border-zinc-200 dark:border-white/8">
+                  <BrandLogo size="header" />
+                  <SheetTitle className="sr-only">Menú</SheetTitle>
+                  <SheetDescription className="sr-only">
+                    Navegación principal de Tokepass
+                  </SheetDescription>
+                </SheetHeader>
+
+                <nav
+                  className="flex-1 space-y-1 overflow-y-auto p-3"
+                  aria-label="Menú móvil"
                 >
-                  <Compass className="size-5 shrink-0" aria-hidden="true" />
-                  Explorar
-                </Link>
-                <Link
-                  href="/events"
-                  onClick={closeMenu}
-                  className={mobileNavLinkClass}
-                >
-                  <CalendarDays className="size-5 shrink-0" aria-hidden="true" />
-                  Eventos
-                </Link>
-                {isAuthenticated ? (
-                  <>
+                  <Link
+                    href={exploreHref}
+                    onClick={closeMenu}
+                    className={mobileNavLinkClass}
+                  >
+                    <Compass className="size-5 shrink-0" aria-hidden="true" />
+                    Explorar
+                  </Link>
+                  <Link
+                    href="/events"
+                    onClick={closeMenu}
+                    className={mobileNavLinkClass}
+                  >
+                    <Search className="size-5 shrink-0" aria-hidden="true" />
+                    Buscar eventos
+                  </Link>
+                  <Link
+                    href="/events"
+                    onClick={closeMenu}
+                    className={mobileNavLinkClass}
+                  >
+                    <CalendarDays
+                      className="size-5 shrink-0"
+                      aria-hidden="true"
+                    />
+                    Eventos
+                  </Link>
+                  {isAuthenticated ? (
+                    <>
+                      <Link
+                        href="/cuenta/entradas"
+                        onClick={closeMenu}
+                        className={mobileNavLinkClass}
+                      >
+                        <Ticket
+                          className="size-5 shrink-0"
+                          aria-hidden="true"
+                        />
+                        Mis Entradas
+                      </Link>
+                      <Link
+                        href="/cuenta"
+                        onClick={closeMenu}
+                        className={mobileNavLinkClass}
+                      >
+                        <UserRound
+                          className="size-5 shrink-0"
+                          aria-hidden="true"
+                        />
+                        Mi cuenta
+                      </Link>
+                    </>
+                  ) : (
                     <Link
-                      href="/cuenta/entradas"
+                      href="/login?next=/cuenta/entradas"
                       onClick={closeMenu}
                       className={mobileNavLinkClass}
                     >
                       <Ticket className="size-5 shrink-0" aria-hidden="true" />
                       Mis Entradas
                     </Link>
-                    <Link
-                      href="/cuenta"
-                      onClick={closeMenu}
-                      className={mobileNavLinkClass}
-                    >
-                      <UserRound
-                        className="size-5 shrink-0"
-                        aria-hidden="true"
-                      />
-                      Mi cuenta
-                    </Link>
-                  </>
-                ) : (
-                  <Link
-                    href="/login?next=/cuenta/entradas"
-                    onClick={closeMenu}
-                    className={mobileNavLinkClass}
-                  >
-                    <Ticket className="size-5 shrink-0" aria-hidden="true" />
-                    Mis Entradas
-                  </Link>
-                )}
-                <Link
-                  href="/login-organizador"
-                  onClick={closeMenu}
-                  className={cn(
-                    mobileNavLinkClass,
-                    "border border-violet-300/70 text-violet-700 dark:border-violet-400/40 dark:text-violet-200",
                   )}
-                >
-                  <UserRound className="size-5 shrink-0" aria-hidden="true" />
-                  Organizar Eventos
-                </Link>
-              </nav>
-
-              <div className="space-y-3 border-t border-zinc-200 p-3 dark:border-white/8">
-                <div className="flex min-h-12 items-center justify-between gap-3 px-1">
-                  <span className="text-sm text-zinc-500">Tema</span>
-                  <ThemeToggle />
-                </div>
-                {isAuthenticated ? (
-                  <SignOutButton className="h-12 w-full justify-center rounded-xl border border-zinc-200 text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white" />
-                ) : (
                   <Link
-                    href="/login"
+                    href="/login-organizador"
                     onClick={closeMenu}
-                    className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-sm font-semibold text-white"
+                    className={cn(
+                      mobileNavLinkClass,
+                      "border border-violet-300/70 text-violet-700 dark:border-violet-400/40 dark:text-violet-200",
+                    )}
                   >
-                    <UserRound className="size-4" aria-hidden="true" />
-                    Ingresar
+                    <UserRound className="size-5 shrink-0" aria-hidden="true" />
+                    Organizar Eventos
                   </Link>
-                )}
-              </div>
-            </SheetContent>
-          </Sheet>
-        ) : null}
+                </nav>
 
-        <BrandLogo size="header" className="min-w-0 shrink" />
+                <div className="space-y-3 border-t border-zinc-200 p-3 dark:border-white/8">
+                  <div className="flex min-h-12 items-center justify-between gap-3 px-1">
+                    <span className="text-sm text-zinc-500">Tema</span>
+                    <ThemeToggle />
+                  </div>
+                  {isAuthenticated ? (
+                    <SignOutButton className="h-12 w-full justify-center rounded-xl border border-zinc-200 text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white" />
+                  ) : (
+                    <Link
+                      href="/login"
+                      onClick={closeMenu}
+                      className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-sm font-semibold text-white"
+                    >
+                      <UserRound className="size-4" aria-hidden="true" />
+                      Ingresar
+                    </Link>
+                  )}
+                </div>
+              </SheetContent>
+            </Sheet>
+          ) : null}
+
+          <BrandLogo size="header" className="min-w-0 truncate" />
+        </div>
 
         <nav
           className="hidden min-w-0 flex-1 items-center justify-center gap-1 md:flex lg:gap-2"
@@ -217,25 +233,23 @@ export function PublicNavbarClient({
           </Link>
         </nav>
 
-        <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
-          {!inAccount ? (
-            <Link
-              href="/events"
-              className={cn(
-                "grid size-11 place-items-center rounded-full border border-zinc-200 text-zinc-600 transition",
-                "hover:bg-zinc-100 hover:text-zinc-900",
-                "dark:border-white/10 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white",
-                "md:hidden",
-              )}
-              aria-label="Buscar eventos"
-            >
-              <Search className="size-4" aria-hidden="true" />
-            </Link>
-          ) : null}
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+          {/* Búsqueda y tema: solo desktop; en mobile viven en el drawer */}
+          <Link
+            href="/events"
+            className={cn(
+              "hidden size-11 place-items-center rounded-full border border-zinc-200 text-zinc-600 transition md:grid",
+              "hover:bg-zinc-100 hover:text-zinc-900",
+              "dark:border-white/10 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white",
+            )}
+            aria-label="Buscar eventos"
+          >
+            <Search className="size-4" aria-hidden="true" />
+          </Link>
 
           <ThemeToggle
             className={cn(
-              "grid size-11 place-items-center rounded-full border border-zinc-200 text-zinc-600",
+              "hidden size-11 place-items-center rounded-full border border-zinc-200 text-zinc-600 md:grid",
               "hover:bg-zinc-100 hover:text-zinc-900",
               "dark:border-white/10 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white",
             )}
@@ -244,7 +258,6 @@ export function PublicNavbarClient({
 
           {isAuthenticated ? (
             <>
-              {/* Mobile: acceso rápido al hub (bottom nav en /cuenta) */}
               <MobileAccountAvatarLink
                 initials={userInitials}
                 avatarUrl={avatarUrl}
@@ -260,13 +273,13 @@ export function PublicNavbarClient({
             <Link
               href="/login"
               className={cn(
-                "inline-flex h-11 items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold text-white sm:h-10 sm:px-4",
+                "inline-flex h-11 shrink-0 items-center gap-1.5 truncate rounded-full px-3.5 text-sm font-semibold text-white sm:h-10 sm:px-4",
                 "bg-gradient-to-r from-violet-600 to-fuchsia-600",
                 "shadow-sm transition hover:from-violet-500 hover:to-fuchsia-500",
               )}
             >
-              <UserRound className="size-3.5" aria-hidden="true" />
-              <span>Ingresar</span>
+              <UserRound className="size-3.5 shrink-0" aria-hidden="true" />
+              <span className="truncate">Ingresar</span>
             </Link>
           )}
         </div>

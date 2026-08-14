@@ -33,7 +33,7 @@ export default async function AdminListsHubPage() {
         <h1 className="mt-2 text-3xl font-black tracking-[-0.035em] text-zinc-900 dark:text-white">
           Listas digitales
         </h1>
-        <p className="mt-2 max-w-2xl text-sm text-zinc-500">
+        <p className="mt-2 max-w-2xl text-sm text-slate-600 dark:text-zinc-400">
           Elegí un evento para crear listas de promotores y RRPP, prensa y
           cortesías con QR dinámico.
         </p>
@@ -43,7 +43,7 @@ export default async function AdminListsHubPage() {
         <Card className="border-0 bg-white/[0.035] ring-1 ring-white/8">
           <CardContent className="flex flex-col items-center gap-3 px-6 py-16 text-center">
             <ClipboardList className="size-8 text-zinc-600" />
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-slate-600 dark:text-zinc-400">
               Todavía no tenés eventos. Creá uno para gestionar listas.
             </p>
             <Link

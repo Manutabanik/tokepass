@@ -8,22 +8,22 @@ export function EventExperienceGallery({ urls }: { urls: string[] }) {
   return (
     <section className="space-y-4" aria-labelledby="experience-gallery-title">
       <div className="flex items-center gap-2">
-        <Images className="size-5 text-violet-400" aria-hidden="true" />
+        <Images className="size-5 text-muted-foreground" aria-hidden="true" />
         <h2
           id="experience-gallery-title"
-          className="text-lg font-bold tracking-tight text-white"
+          className="text-lg font-bold tracking-tight text-foreground"
         >
           La Experiencia
         </h2>
       </div>
-      <p className="text-sm text-zinc-500">
+      <p className="text-sm text-muted-foreground">
         Miradas del evento · sin frenar tu compra.
       </p>
       <div className="grid grid-cols-2 gap-3">
         {photos.map((url, index) => (
           <div
             key={url}
-            className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900"
+            className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-border bg-muted"
           >
             <Image
               src={url}

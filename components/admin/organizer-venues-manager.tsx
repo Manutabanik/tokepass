@@ -224,7 +224,7 @@ export function OrganizerVenuesManager({
     <div className="space-y-8">
       <header className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="mb-2 inline-block rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 font-mono text-xs text-emerald-400">
+          <p className="mb-2 inline-block rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 font-mono text-xs text-emerald-700 dark:text-emerald-400">
             LUGARES
           </p>
           <h1 className="text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-white sm:text-4xl">
@@ -320,7 +320,7 @@ export function OrganizerVenuesManager({
               <section>
                 <div className="mb-4 flex items-center gap-2">
                   <Building2
-                    className="size-4 text-emerald-400"
+                    className="size-4 text-emerald-700 dark:text-emerald-400"
                     aria-hidden="true"
                   />
                   <h3 className="font-bold text-zinc-900 dark:text-white">Datos generales</h3>
@@ -368,7 +368,7 @@ export function OrganizerVenuesManager({
                 </div>
               </section>
 
-              <div className="h-px bg-zinc-800" />
+              <div className="h-px bg-muted dark:bg-zinc-800" />
 
               <section className="flex items-center justify-between gap-4 rounded-2xl border border-indigo-500/20 bg-indigo-500/5 p-4">
                 <div>
@@ -376,7 +376,7 @@ export function OrganizerVenuesManager({
                     ¿Este lugar tiene asientos numerados, filas o mesas
                     asignadas?
                   </h3>
-                  <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+                  <p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-zinc-400">
                     Apagado mantiene una configuración simple. Activado habilita
                     zonas y filas con distinta cantidad de asientos.
                   </p>
@@ -406,7 +406,7 @@ export function OrganizerVenuesManager({
                     <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">
                       Imagen o mapa del lugar (Opcional)
                     </h3>
-                    <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+                    <p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-zinc-400">
                       Subí un PNG o WEBP de hasta 3 MB para usarlo como fondo
                       visual del selector.
                     </p>
@@ -421,7 +421,7 @@ export function OrganizerVenuesManager({
                       />
                     ) : null}
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl bg-zinc-800 px-4 text-xs font-semibold text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-700">
+                      <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl bg-muted dark:bg-zinc-800 px-4 text-xs font-semibold text-zinc-800 dark:text-zinc-200 transition hover:bg-slate-300 dark:hover:bg-zinc-700">
                         <UploadCloud className="size-4" aria-hidden="true" />
                         {uploadPending ? "Subiendo…" : "Subir imagen"}
                         <input
@@ -463,7 +463,7 @@ export function OrganizerVenuesManager({
                               seatingBackgroundUrl: null,
                             })
                           }
-                          className="h-10 rounded-xl text-xs text-zinc-500 hover:text-red-400"
+                          className="h-10 rounded-xl text-xs text-slate-600 dark:text-zinc-400 hover:text-red-400"
                         >
                           Quitar imagen
                         </Button>
@@ -475,12 +475,12 @@ export function OrganizerVenuesManager({
               ) : null}
 
               <div className="flex items-center justify-between rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/60 px-4 py-3 text-xs">
-                <span className="text-zinc-500">Personas por zona</span>
+                <span className="text-slate-600 dark:text-zinc-400">Personas por zona</span>
                 <span
                   className={
                     sectorCapacity > Number(draft.capacity || 0)
                       ? "font-mono font-bold text-red-400"
-                      : "font-mono font-bold text-emerald-400"
+                      : "font-mono font-bold text-emerald-700 dark:text-emerald-400"
                   }
                 >
                   {formatNumber(sectorCapacity)} /{" "}
@@ -530,7 +530,7 @@ export function OrganizerVenuesManager({
               type="button"
               disabled={pending}
               onClick={() => setDraft(null)}
-              className="h-12 rounded-xl bg-zinc-100 dark:bg-zinc-900 px-6 font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-800"
+              className="h-12 rounded-xl bg-zinc-100 dark:bg-zinc-900 px-6 font-medium text-zinc-700 dark:text-zinc-300 hover:bg-muted dark:hover:bg-zinc-800"
             >
               Cancelar
             </Button>
@@ -542,7 +542,7 @@ export function OrganizerVenuesManager({
         <div className="rounded-3xl border border-dashed border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/40 px-6 py-16 text-center">
           <Building2 className="mx-auto size-9 text-zinc-700" />
           <h2 className="mt-4 font-bold text-zinc-900 dark:text-white">Todavía no hay lugares</h2>
-          <p className="mt-2 text-sm text-zinc-500">
+          <p className="mt-2 text-sm text-slate-600 dark:text-zinc-400">
             Creá el primero para reutilizarlo en todos tus eventos.
           </p>
         </div>
@@ -554,7 +554,7 @@ export function OrganizerVenuesManager({
               className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/70 p-5 transition hover:border-zinc-300 dark:hover:border-zinc-300 dark:hover:border-zinc-700"
             >
               <div className="flex items-start justify-between gap-4">
-                <span className="grid size-11 shrink-0 place-items-center rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-400">
+                <span className="grid size-11 shrink-0 place-items-center rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">
                   <Building2 className="size-5" aria-hidden="true" />
                 </span>
                 <div className="flex gap-2">
@@ -585,7 +585,7 @@ export function OrganizerVenuesManager({
                         seatingBackgroundUrl: venue.seatingBackgroundUrl,
                       })
                     }
-                    className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white"
+                    className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-muted dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white"
                   >
                     <Pencil className="size-3.5" aria-hidden="true" />
                     Editar
@@ -613,7 +613,7 @@ export function OrganizerVenuesManager({
                         router.refresh()
                       })
                     }}
-                    className="rounded-lg text-zinc-500 hover:bg-red-500/10 hover:text-red-400"
+                    className="rounded-lg text-slate-600 dark:text-zinc-400 hover:bg-red-500/10 hover:text-red-400"
                   >
                     <Trash2 className="size-3.5" aria-hidden="true" />
                     Eliminar
@@ -622,7 +622,7 @@ export function OrganizerVenuesManager({
               </div>
 
               <h2 className="mt-4 text-lg font-bold text-zinc-900 dark:text-white">{venue.name}</h2>
-              <p className="mt-2 flex items-start gap-2 text-sm leading-relaxed text-zinc-500">
+              <p className="mt-2 flex items-start gap-2 text-sm leading-relaxed text-slate-600 dark:text-zinc-400">
                 <MapPin className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
                 {[venue.city, venue.address].filter(Boolean).join(" · ")}
               </p>
@@ -636,7 +636,7 @@ export function OrganizerVenuesManager({
                   {venue.zoneBlueprint.length === 1 ? "zona" : "zonas"}
                 </span>
                 {venue.latitude != null ? (
-                  <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-emerald-400">
+                  <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-emerald-700 dark:text-emerald-400">
                     Ubicación verificada
                   </span>
                 ) : null}

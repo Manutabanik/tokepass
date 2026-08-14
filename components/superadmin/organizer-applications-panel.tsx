@@ -71,10 +71,10 @@ export function OrganizerApplicationsPanel({
 
   if (applications.length === 0) {
     return (
-      <div className="grid min-h-56 place-items-center rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-6 text-center">
+      <div className="grid min-h-56 place-items-center rounded-2xl border border-dashed border-border bg-muted/30 px-6 text-center">
         <div>
-          <ShieldCheck className="mx-auto size-8 text-zinc-600" />
-          <p className="mt-3 text-sm text-zinc-500">
+          <ShieldCheck className="mx-auto size-8 text-muted-foreground" />
+          <p className="mt-3 text-sm text-muted-foreground">
             No hay solicitudes pendientes.
           </p>
         </div>
@@ -89,24 +89,24 @@ export function OrganizerApplicationsPanel({
         {applications.map((row) => (
           <article
             key={row.id}
-            className="rounded-2xl border border-white/10 bg-black/30 p-4"
+            className="rounded-2xl border border-border bg-card p-4 text-card-foreground"
           >
-            <p className="text-lg font-bold text-white">{row.company_name}</p>
-            <p className="mt-1 text-sm text-zinc-500">
+            <p className="text-lg font-bold text-foreground">{row.company_name}</p>
+            <p className="mt-1 text-sm text-muted-foreground">
               {row.applicantName ?? "Sin nombre"} · {row.applicantEmail}
             </p>
-            <p className="mt-1 font-mono text-xs text-zinc-600">
+            <p className="mt-1 font-mono text-xs text-muted-foreground">
               CUIT {row.cuit_cuil}
             </p>
             <div className="mt-4 flex items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge
                   variant="outline"
-                  className="rounded-full border-amber-500/40 text-[10px] uppercase text-amber-100"
+                  className="rounded-full border-amber-500/40 bg-amber-500/15 text-[10px] uppercase text-amber-800 dark:text-amber-100"
                 >
                   Pendiente
                 </Badge>
-                <span className="text-xs text-zinc-500">
+                <span className="text-xs text-muted-foreground">
                   {formatDate(row.created_at)}
                 </span>
               </div>
@@ -123,9 +123,9 @@ export function OrganizerApplicationsPanel({
       </div>
 
       {/* Desktop table */}
-      <div className="hidden overflow-hidden rounded-2xl border border-white/8 bg-white/[0.03] md:block">
+      <div className="hidden overflow-hidden rounded-2xl border border-border bg-card md:block">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-white/8 text-xs uppercase tracking-wide text-zinc-600">
+          <thead className="border-b border-border bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="px-5 py-3 font-medium">Productora</th>
               <th className="px-5 py-3 font-medium">Solicitante</th>
@@ -138,19 +138,21 @@ export function OrganizerApplicationsPanel({
             {applications.map((row) => (
               <tr
                 key={row.id}
-                className="border-b border-white/6 hover:bg-white/[0.025]"
+                className="border-b border-border hover:bg-muted/50"
               >
-                <td className="px-5 py-4 font-medium text-zinc-100">
+                <td className="px-5 py-4 font-medium text-foreground">
                   {row.company_name}
                 </td>
-                <td className="px-5 py-4 text-zinc-400">
+                <td className="px-5 py-4 text-muted-foreground">
                   <p>{row.applicantName ?? "Sin nombre"}</p>
-                  <p className="text-xs text-zinc-600">{row.applicantEmail}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {row.applicantEmail}
+                  </p>
                 </td>
-                <td className="px-5 py-4 font-mono text-xs text-zinc-400">
+                <td className="px-5 py-4 font-mono text-xs text-muted-foreground">
                   {row.cuit_cuil}
                 </td>
-                <td className="px-5 py-4 text-zinc-500">
+                <td className="px-5 py-4 text-muted-foreground">
                   {formatDate(row.created_at)}
                 </td>
                 <td className="px-5 py-4 text-right">
@@ -158,7 +160,7 @@ export function OrganizerApplicationsPanel({
                     type="button"
                     size="sm"
                     variant="outline"
-                    className="min-h-11 border-white/15 bg-transparent text-zinc-200"
+                    className="min-h-11 border-border bg-transparent text-foreground"
                     onClick={() => setSelected(row)}
                   >
                     Revisar
@@ -178,14 +180,14 @@ export function OrganizerApplicationsPanel({
       >
         <SheetContent
           side="bottom"
-          className="max-h-[92dvh] gap-0 overflow-y-auto border-white/10 bg-zinc-950 p-0 text-zinc-100 sm:inset-y-0 sm:left-auto sm:right-0 sm:h-full sm:max-h-none sm:w-full sm:max-w-md sm:rounded-none sm:border-l sm:border-t-0"
+          className="max-h-[92dvh] gap-0 overflow-y-auto border-border bg-card p-0 text-card-foreground sm:inset-y-0 sm:left-auto sm:right-0 sm:h-full sm:max-h-none sm:w-full sm:max-w-md sm:rounded-none sm:border-l sm:border-t-0"
         >
-          <SheetHeader className="border-b border-white/8 px-5 py-4 text-left">
-            <SheetTitle className="flex items-center gap-2 text-white">
-              <Building2 className="size-5 text-violet-300" />
+          <SheetHeader className="border-b border-border px-5 py-4 text-left">
+            <SheetTitle className="flex items-center gap-2 text-foreground">
+              <Building2 className="size-5 text-violet-600 dark:text-violet-300" />
               {selected?.company_name}
             </SheetTitle>
-            <SheetDescription className="text-zinc-500">
+            <SheetDescription className="text-muted-foreground">
               Revisá los datos KYB antes de aprobar o rechazar.
             </SheetDescription>
           </SheetHeader>
@@ -212,8 +214,8 @@ export function OrganizerApplicationsPanel({
                 label="CBU / Alias"
                 value={selected.cbu_alias}
               />
-              <div className="rounded-xl border border-white/8 bg-black/30 px-4 py-3">
-                <p className="text-[11px] uppercase tracking-wide text-zinc-600">
+              <div className="rounded-xl border border-border bg-muted/50 px-4 py-3">
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
                   Redes / web
                 </p>
                 <a
@@ -226,19 +228,19 @@ export function OrganizerApplicationsPanel({
                   }
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-1 inline-flex min-h-12 items-center gap-1.5 text-sky-300 hover:text-sky-200"
+                  className="mt-1 inline-flex min-h-12 items-center gap-1.5 text-sky-700 hover:text-sky-800 dark:text-sky-300 dark:hover:text-sky-200"
                 >
                   {selected.social_media_url}
                   <ExternalLink className="size-3.5" />
                 </a>
               </div>
-              <p className="text-xs text-zinc-600">
+              <p className="text-xs text-muted-foreground">
                 Enviada {formatDate(selected.created_at)}
               </p>
             </div>
           ) : null}
 
-          <SheetFooter className="gap-2 border-t border-white/8 px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:flex-col">
+          <SheetFooter className="gap-2 border-t border-border px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:flex-col">
             <Button
               type="button"
               disabled={pending}
@@ -257,7 +259,7 @@ export function OrganizerApplicationsPanel({
               disabled={pending}
               variant="outline"
               onClick={runReject}
-              className="min-h-12 w-full border-red-500/40 bg-red-500/10 font-semibold text-red-200 hover:bg-red-500/20"
+              className="min-h-12 w-full border-rose-500/40 bg-rose-500/15 font-semibold text-rose-700 hover:bg-rose-500/20 dark:text-rose-200"
             >
               <XCircle />
               Rechazar
@@ -279,12 +281,12 @@ function Info({
   value: string
 }) {
   return (
-    <div className="rounded-xl border border-white/8 bg-black/30 px-4 py-3">
-      <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-zinc-600">
+    <div className="rounded-xl border border-border bg-muted/50 px-4 py-3">
+      <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
         {icon}
         {label}
       </p>
-      <p className="mt-1 font-medium text-zinc-200">{value}</p>
+      <p className="mt-1 font-medium text-foreground">{value}</p>
     </div>
   )
 }

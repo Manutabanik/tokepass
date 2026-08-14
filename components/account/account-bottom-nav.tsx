@@ -59,7 +59,7 @@ export function AccountBottomNav() {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#09090b]/95 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl md:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl md:hidden"
       aria-label="Portal de cuenta"
     >
       <ul className="mx-auto flex max-w-lg items-stretch justify-around px-1">
@@ -72,15 +72,15 @@ export function AccountBottomNav() {
                 className={cn(
                   "relative flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[11px] font-medium transition",
                   active
-                    ? "text-emerald-300"
-                    : "text-zinc-500 hover:text-zinc-200",
+                    ? "text-emerald-700 dark:text-emerald-300"
+                    : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 <span className="relative">
                   <Icon className="size-5" aria-hidden="true" />
                   <NotificationDot
                     show={showDot(badge)}
-                    className="-right-1 -top-0.5 size-2 ring-1 ring-[#09090b]"
+                    className="-right-1 -top-0.5 size-2 ring-1 ring-background"
                   />
                 </span>
                 {label}

@@ -39,7 +39,7 @@ const orderStatusPresentation: Record<
 > = {
   paid: {
     label: "Pagada",
-    className: "border-emerald-400/20 bg-emerald-400/10 text-emerald-300",
+    className: "border-emerald-400/20 bg-emerald-400/10 text-emerald-800 dark:text-emerald-300",
   },
   pending: {
     label: "Pendiente",
@@ -95,7 +95,7 @@ export default async function AdminDashboardPage() {
           <h1 className="text-3xl font-bold tracking-[-0.03em] text-zinc-900 dark:text-white sm:text-4xl">
             Buen día.
           </h1>
-          <p className="mt-2 max-w-xl text-sm leading-6 text-zinc-500">
+          <p className="mt-2 max-w-xl text-sm leading-6 text-slate-600 dark:text-zinc-400">
             Acá ves cuánta plata entró, cuántas entradas vendiste y las últimas
             compras.
           </p>
@@ -110,7 +110,7 @@ export default async function AdminDashboardPage() {
           >
             <CardContent className="px-5 py-5">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-sm text-zinc-500">{label}</p>
+                <p className="text-sm text-slate-600 dark:text-zinc-400">{label}</p>
                 <span className="grid size-10 place-items-center rounded-xl bg-violet-500/10 text-violet-400 ring-1 ring-inset ring-violet-500/10">
                   <Icon className="size-[18px]" aria-hidden="true" />
                 </span>
@@ -130,7 +130,7 @@ export default async function AdminDashboardPage() {
             <CardTitle className="text-base text-zinc-900 dark:text-white">
               Últimas compras
             </CardTitle>
-            <CardDescription className="text-zinc-500">
+            <CardDescription className="text-slate-600 dark:text-zinc-400">
               Las ventas más recientes de tus eventos.
             </CardDescription>
           </CardHeader>
@@ -192,7 +192,7 @@ export default async function AdminDashboardPage() {
                   <h3 className="mt-5 text-base font-semibold text-zinc-900 dark:text-white">
                     Tus ventas van a aparecer acá
                   </h3>
-                  <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-zinc-500">
+                  <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-slate-600 dark:text-zinc-400">
                     Cuando alguien compre una entrada, vas a ver el detalle de
                     cada compra en esta tabla.
                   </p>
@@ -210,7 +210,7 @@ export default async function AdminDashboardPage() {
             <CardTitle className="text-lg text-zinc-900 dark:text-white">
               Empezá por acá
             </CardTitle>
-            <CardDescription className="leading-6 text-zinc-500">
+            <CardDescription className="leading-6 text-slate-600 dark:text-zinc-400">
               Creá tu evento, armá los tipos de entrada y publicá cuando esté
               listo.
             </CardDescription>

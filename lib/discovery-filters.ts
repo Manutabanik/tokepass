@@ -6,6 +6,7 @@ import {
   type DiscoveryCategory,
   type DiscoveryMoodId,
 } from "@/lib/discovery-categories"
+import { isPastEvent } from "@/lib/event-status"
 
 export type { DiscoveryMoodId, DiscoveryCategory }
 export {
@@ -138,6 +139,9 @@ export function eventCityLabel(event: CatalogEvent): string {
 export type EventBadgeKind = "urgency" | "live" | "featured" | "sponsored"
 
 export function urgencyLabel(event: CatalogEvent): string | null {
+  if (isPastEvent(event)) return null
+  if (event.ticketsLeft != null && event.ticketsLeft <= 0) return null
+  if (event.soldRatio != null && event.soldRatio >= 1) return null
   if (event.soldRatio != null && event.soldRatio >= 0.85) {
     return "Últimas entradas"
   }

@@ -83,42 +83,48 @@ export function UniversalNumberedSeatPicker({
             </span>
           </div>
 
-          <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
-            {group.seats.map((seat) => {
-              const selected = selectedSeatIds.includes(seat.id)
-              const locked =
-                seat.status === "occupied" || seat.status === "blocked"
-              return (
-                <button
-                  key={seat.id}
-                  type="button"
-                  disabled={locked}
-                  aria-pressed={selected}
-                  aria-label={`Asiento ${seat.label}${locked ? " no disponible" : ""}`}
-                  onClick={() => onToggleSeat(seat)}
-                  className={cn(
-                    "relative flex h-12 w-full items-center justify-center rounded-xl text-sm font-bold transition",
-                    locked &&
-                      "cursor-not-allowed bg-zinc-200 text-zinc-400 line-through opacity-70 dark:bg-zinc-800 dark:text-zinc-600",
-                    !locked &&
-                      !selected &&
-                      "border border-zinc-300 bg-zinc-100 text-zinc-950 hover:bg-white dark:border-zinc-600 dark:bg-zinc-100",
-                    selected && "text-zinc-950 shadow-lg",
-                  )}
-                  style={
-                    selected
-                      ? {
-                          backgroundColor: sector.color,
-                          boxShadow: `0 8px 24px ${sector.color}55`,
-                        }
-                      : undefined
-                  }
-                >
-                  {seat.label}
-                </button>
-              )
-            })}
-          </div>
+          {group && group.seats.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-zinc-300 px-3 py-6 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+              No hay ubicaciones cargadas en este bloque.
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {group.seats.map((seat) => {
+                const selected = selectedSeatIds.includes(seat.id)
+                const locked =
+                  seat.status === "occupied" || seat.status === "blocked"
+                return (
+                  <button
+                    key={seat.id}
+                    type="button"
+                    disabled={locked}
+                    aria-pressed={selected}
+                    aria-label={`Asiento ${seat.label}${locked ? " no disponible" : ""}`}
+                    onClick={() => onToggleSeat(seat)}
+                    className={cn(
+                      "relative flex h-12 w-full items-center justify-center rounded-xl text-sm font-bold transition",
+                      locked &&
+                        "cursor-not-allowed bg-zinc-200 text-zinc-400 line-through opacity-70 dark:bg-zinc-800 dark:text-zinc-600",
+                      !locked &&
+                        !selected &&
+                        "border border-zinc-300 bg-zinc-100 text-zinc-950 hover:bg-white dark:border-zinc-600 dark:bg-zinc-100",
+                      selected && "text-zinc-950 shadow-lg",
+                    )}
+                    style={
+                      selected
+                        ? {
+                            backgroundColor: sector.color,
+                            boxShadow: `0 8px 24px ${sector.color}55`,
+                          }
+                        : undefined
+                    }
+                  >
+                    {seat.label}
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
       ) : null}
     </section>

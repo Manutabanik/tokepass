@@ -116,19 +116,19 @@ export default async function AdminLayout({
   const mode = isOrganizer ? ("organizer" as const) : ("staff" as const)
 
   return (
-    <div className="min-h-screen bg-slate-50 text-zinc-900 dark:bg-[#0c0c0f] dark:text-zinc-100">
+    <div className="min-h-screen bg-background text-foreground">
       <div className="flex min-h-screen">
         <AdminSidebar mode={mode} staffRoles={staffRoles} />
         <div className="min-w-0 flex-1">
-          <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-zinc-200 bg-white/85 px-4 backdrop-blur-xl dark:border-white/8 dark:bg-[#0c0c0f]/85 sm:h-16 sm:px-8">
+          <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border bg-background/85 px-4 backdrop-blur-xl sm:h-16 sm:px-8">
             <div className="flex min-w-0 items-center gap-2 lg:hidden">
               <BrandLogo />
             </div>
             <div className="hidden lg:block">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-600">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 {isOrganizer ? "Tu panel" : "Acceso staff"}
               </p>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              <p className="text-sm text-muted-foreground">
                 {isOrganizer
                   ? "Gestioná tus ventas y eventos"
                   : "Acceso limitado a puerta / barra / caja"}
@@ -138,16 +138,16 @@ export default async function AdminLayout({
               <ThemeToggle />
               <Link
                 href="/admin/scanner"
-                className="hidden min-h-11 items-center gap-2 rounded-full border border-zinc-200 px-3 py-2 text-xs text-zinc-600 dark:border-white/10 dark:text-zinc-400 sm:inline-flex"
+                className="hidden min-h-11 items-center gap-2 rounded-full border border-border px-3 py-2 text-xs text-muted-foreground sm:inline-flex"
               >
                 <ShieldCheck className="size-4" aria-hidden="true" />
                 Escáner
               </Link>
               <div className="hidden text-right sm:block">
-                <p className="max-w-48 truncate text-sm font-medium text-zinc-900 dark:text-white">
+                <p className="max-w-48 truncate text-sm font-medium text-foreground">
                   {userLabel}
                 </p>
-                <p className="max-w-48 truncate text-xs text-zinc-500">
+                <p className="max-w-48 truncate text-xs text-muted-foreground">
                   {resolvedProfile.email}
                 </p>
               </div>
@@ -164,7 +164,7 @@ export default async function AdminLayout({
               </Avatar>
               <SignOutButton
                 showLabel={false}
-                className="hidden size-11 place-items-center rounded-xl border border-zinc-200 text-zinc-500 transition hover:border-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:border-white/8 dark:hover:border-white/15 dark:hover:bg-white/5 dark:hover:text-white sm:grid"
+                className="hidden size-11 place-items-center rounded-xl border border-border text-muted-foreground transition hover:bg-muted hover:text-foreground sm:grid"
               />
             </div>
           </header>

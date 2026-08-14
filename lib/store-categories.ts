@@ -1,7 +1,9 @@
 import {
   Beer,
+  Car,
   Shirt,
   Sparkles,
+  Ticket,
   UtensilsCrossed,
   Wrench,
   type LucideIcon,
@@ -13,6 +15,8 @@ export const EVENT_ITEM_CATEGORIES = [
   "merch",
   "services",
   "upgrades",
+  "parking",
+  "access_pass",
 ] as const
 
 export type EventItemCategory = (typeof EVENT_ITEM_CATEGORIES)[number]
@@ -23,6 +27,8 @@ export const EVENT_ITEM_CATEGORY_LABELS: Record<EventItemCategory, string> = {
   merch: "Merch",
   services: "Servicios",
   upgrades: "Upgrades",
+  parking: "Estacionamiento",
+  access_pass: "Pase de acceso",
 }
 
 export const EVENT_ITEM_CATEGORY_ICONS: Record<EventItemCategory, LucideIcon> = {
@@ -31,6 +37,8 @@ export const EVENT_ITEM_CATEGORY_ICONS: Record<EventItemCategory, LucideIcon> = 
   merch: Shirt,
   services: Wrench,
   upgrades: Sparkles,
+  parking: Car,
+  access_pass: Ticket,
 }
 
 export function parseEventItemCategory(raw: unknown): EventItemCategory {

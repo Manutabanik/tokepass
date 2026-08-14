@@ -11,12 +11,18 @@ import { Button } from "@/components/ui/button"
 export function EventPreviewBanner({
   eventId,
   canPublish,
+  status = "draft",
 }: {
   eventId: string
   canPublish: boolean
+  status?: string
 }) {
   const router = useRouter()
   const [publishOpen, setPublishOpen] = useState(false)
+  const statusHint =
+    status === "paused"
+      ? "El evento está pausado (oculto del catálogo)."
+      : "Este evento no es público."
 
   return (
     <>
@@ -32,9 +38,8 @@ export function EventPreviewBanner({
                 Modo previsualización
               </p>
               <p className="mt-1 text-sm leading-5 text-amber-50/90">
-                Este evento no es público. Podés hacer compras de prueba
-                (sandbox) para validar los QR en el escáner. Esas entradas
-                quedan marcadas como test y no sirven en puerta en vivo.
+                {statusHint} Usá la compra de prueba (Modo Sandbox) para
+                validar QR y puerta sin Mercado Pago. Quedan marcadas TEST.
               </p>
             </div>
           </div>

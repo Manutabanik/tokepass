@@ -59,21 +59,21 @@ export default async function EventComplimentaryPage({
     <main className="mx-auto w-full max-w-lg space-y-6 px-4 py-8 sm:px-6">
       <Link
         href={`/admin/events/${eventId}`}
-        className="inline-flex items-center gap-2 text-sm text-zinc-500 transition hover:text-zinc-900 dark:hover:text-white"
+        className="inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-foreground"
       >
         <ArrowLeft className="size-4" />
         Volver al centro de mando
       </Link>
 
       <header>
-        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-amber-500">
+        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-500">
           Cortesías
         </p>
-        <h1 className="mt-1 flex items-center gap-2 text-3xl font-black tracking-tight text-zinc-900 dark:text-white">
-          <Gift className="size-8 text-amber-500" />
+        <h1 className="mt-1 flex items-center gap-2 text-3xl font-black tracking-tight text-foreground">
+          <Gift className="size-8 text-amber-600 dark:text-amber-500" />
           Emitir cortesías
         </h1>
-        <p className="mt-2 text-sm text-zinc-500">
+        <p className="mt-2 text-sm text-muted-foreground">
           {event.title} · CSV nominado o lote para imprimir. Hasta 3.000 QRs por
           tanda.
         </p>

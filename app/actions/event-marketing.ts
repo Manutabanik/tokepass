@@ -160,6 +160,9 @@ export type PurchaseAnalyticsPayload = {
   pixels: EventPixelConfig
   eventId: string
   eventTitle: string
+  eventDate: string | null
+  eventLocation: string | null
+  buyerName: string | null
   /** Flyer público del evento (share hype / OG). */
   eventImageUrl: string | null
   /** Flyer vertical custom del organizador (Stories full-bleed). */
@@ -219,6 +222,9 @@ export async function getPurchaseAnalyticsForOrder(
       pixels: emptyPixelConfig(),
       eventId: "",
       eventTitle: "Evento Tokepass",
+      eventDate: null,
+      eventLocation: null,
+      buyerName: null,
       eventImageUrl: null,
       socialShareImageUrl: null,
       orderId: clean,
@@ -228,13 +234,20 @@ export async function getPurchaseAnalyticsForOrder(
     }
   }
 
-  const { data: event } = await supabase
-    .from("events")
-    .select(
-      "id, title, flyer_url, image_url, social_share_image_url, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled",
-    )
-    .eq("id", eventId)
-    .maybeSingle()
+  const [{ data: event }, { data: profile }] = await Promise.all([
+    supabase
+      .from("events")
+      .select(
+        "id, title, date, location, flyer_url, image_url, social_share_image_url, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, venues(name, location)",
+      )
+      .eq("id", eventId)
+      .maybeSingle(),
+    supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("id", user.id)
+      .maybeSingle(),
+  ])
 
   const pixels: EventPixelConfig = {
     metaPixelId: event?.meta_pixel_id ?? null,
@@ -245,10 +258,24 @@ export async function getPurchaseAnalyticsForOrder(
     ga4Enabled: Boolean(event?.ga4_enabled),
   }
 
+  const venue = event?.venues as
+    | { name: string | null; location: string | null }
+    | { name: string | null; location: string | null }[]
+    | null
+  const venueOne = Array.isArray(venue) ? venue[0] : venue
+  const eventLocation =
+    venueOne?.name?.trim() ||
+    venueOne?.location?.trim() ||
+    event?.location?.trim() ||
+    null
+
   return {
     pixels: hasAnyConfigured(pixels) ? pixels : emptyPixelConfig(),
     eventId,
     eventTitle: event?.title ?? "Evento Tokepass",
+    eventDate: event?.date ?? null,
+    eventLocation,
+    buyerName: profile?.full_name?.trim() || null,
     eventImageUrl: event?.flyer_url ?? event?.image_url ?? null,
     socialShareImageUrl: event?.social_share_image_url?.trim() || null,
     orderId: clean,

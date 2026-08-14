@@ -50,9 +50,11 @@ export default async function SuperAdminSettlementsPage() {
 
   if (errorMessage) {
     return (
-      <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-8 text-amber-50">
+      <div className="rounded-2xl border border-amber-500/30 bg-amber-500/15 px-5 py-8 text-amber-950 dark:text-amber-50">
         <h1 className="text-xl font-bold">Liquidaciones no disponibles</h1>
-        <p className="mt-2 text-sm text-amber-100/80">{errorMessage}</p>
+        <p className="mt-2 text-sm text-amber-900/80 dark:text-amber-100/80">
+          {errorMessage}
+        </p>
       </div>
     )
   }
@@ -68,70 +70,70 @@ export default async function SuperAdminSettlementsPage() {
 
       {ledgerTotals ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <Card className="border-0 bg-white/[0.035] py-0 ring-1 ring-white/8">
+          <Card className="border-border bg-card py-0 text-card-foreground">
             <CardContent className="px-5 py-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.14em] text-zinc-600">
+                  <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
                     Total cobrado (pagado)
                   </p>
-                  <p className="mt-3 break-words text-3xl font-black text-white sm:text-4xl">
+                  <p className="mt-3 break-words text-3xl font-black text-foreground sm:text-4xl">
                     {formatCurrency(ledgerTotals.gross)}
                   </p>
-                  <p className="mt-1 text-xs text-zinc-600">
+                  <p className="mt-1 text-xs text-muted-foreground">
                     {ledgerTotals.paidCount} compras pagadas
                   </p>
                 </div>
-                <span className="grid size-10 place-items-center rounded-xl bg-white/5 ring-1 ring-white/10">
-                  <CircleDollarSign className="size-5 text-white" />
+                <span className="grid size-10 place-items-center rounded-xl bg-muted ring-1 ring-border">
+                  <CircleDollarSign className="size-5 text-foreground" />
                 </span>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="border-0 bg-gradient-to-br from-emerald-500/15 via-white/[0.04] to-white/[0.02] py-0 ring-1 ring-emerald-400/30">
+          <Card className="border-border bg-gradient-to-br from-emerald-500/15 via-card to-card py-0 ring-1 ring-emerald-500/30">
             <CardContent className="px-5 py-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.14em] text-zinc-600">
+                  <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
                     Comisión de la ticketera
                   </p>
-                  <p className="mt-3 break-words text-3xl font-black text-emerald-300 sm:text-4xl">
+                  <p className="mt-3 break-words text-3xl font-black text-emerald-700 dark:text-emerald-300 sm:text-4xl">
                     {formatCurrency(ledgerTotals.platformFee)}
                   </p>
-                  <p className="mt-1 text-xs text-zinc-600">
+                  <p className="mt-1 text-xs text-muted-foreground">
                     Lo que se queda Tokepass de esas compras
                   </p>
                 </div>
-                <span className="grid size-10 place-items-center rounded-xl bg-emerald-500/10 ring-1 ring-emerald-400/25">
-                  <Sparkles className="size-5 text-emerald-300" />
+                <span className="grid size-10 place-items-center rounded-xl bg-emerald-500/15 ring-1 ring-emerald-500/25">
+                  <Sparkles className="size-5 text-emerald-700 dark:text-emerald-300" />
                 </span>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="border-0 bg-white/[0.035] py-0 ring-1 ring-white/8">
+          <Card className="border-border bg-card py-0 text-card-foreground">
             <CardContent className="px-5 py-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.14em] text-zinc-600">
+                  <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
                     A pagar a productoras
                   </p>
-                  <p className="mt-3 break-words text-3xl font-black text-zinc-300 sm:text-4xl">
+                  <p className="mt-3 break-words text-3xl font-black text-muted-foreground sm:text-4xl">
                     {formatCurrency(ledgerTotals.organizerNet)}
                   </p>
-                  <p className="mt-1 text-xs text-zinc-600">
+                  <p className="mt-1 text-xs text-muted-foreground">
                     Retiros pendientes:{" "}
                     {formatCurrency(pendingPayoutNet + pendingSettlementNet)}
                   </p>
                 </div>
-                <span className="grid size-10 place-items-center rounded-xl bg-zinc-500/10 ring-1 ring-zinc-400/20">
-                  <Wallet className="size-5 text-zinc-300" />
+                <span className="grid size-10 place-items-center rounded-xl bg-muted ring-1 ring-border">
+                  <Wallet className="size-5 text-muted-foreground" />
                 </span>
               </div>
               <Link
                 href="/superadmin/orders?status=paid"
-                className="mt-4 inline-flex text-xs font-medium text-sky-400 transition hover:text-sky-300"
+                className="mt-4 inline-flex text-xs font-medium text-sky-700 transition hover:text-sky-800 dark:text-sky-400 dark:hover:text-sky-300"
               >
                 Ver compras pagadas
               </Link>
@@ -142,22 +144,22 @@ export default async function SuperAdminSettlementsPage() {
 
       <section className="space-y-4">
         <div>
-          <h2 className="text-lg font-bold text-white">
+          <h2 className="text-lg font-bold text-foreground">
             Solicitudes de retiro pendientes
           </h2>
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-muted-foreground">
             {payoutRows.length} en cola · {formatCurrency(pendingPayoutNet)}
           </p>
         </div>
         <PlatformPayoutsPanel initialRows={payoutRows} />
       </section>
 
-      <section className="space-y-4 border-t border-white/8 pt-8">
+      <section className="space-y-4 border-t border-border pt-8">
         <div>
-          <h2 className="text-lg font-bold text-white">
+          <h2 className="text-lg font-bold text-foreground">
             Liquidaciones legacy
           </h2>
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-muted-foreground">
             Solicitudes anteriores vía organizer_settlements (compatibilidad).
           </p>
         </div>

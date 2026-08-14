@@ -43,7 +43,7 @@ export default async function SuperAdminEventDetailPage({
     <>
       <Link
         href="/superadmin/events"
-        className="mb-7 inline-flex items-center gap-2 text-sm text-zinc-500 transition hover:text-white"
+        className="mb-7 inline-flex items-center gap-2 text-sm text-slate-600 dark:text-zinc-400 transition hover:text-white"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
         Volver a eventos
@@ -62,7 +62,7 @@ export default async function SuperAdminEventDetailPage({
             <p className="text-xs uppercase tracking-[0.14em] text-zinc-600">
               Compras pagadas
             </p>
-            <p className="mt-3 flex items-center gap-2 text-3xl font-black text-emerald-300">
+            <p className="mt-3 flex items-center gap-2 text-3xl font-black text-emerald-800 dark:text-emerald-300">
               <Ticket className="size-6" aria-hidden="true" />
               {formatNumber(preview.paidOrders)}
             </p>
@@ -112,18 +112,18 @@ export default async function SuperAdminEventDetailPage({
             Organizador / Productora
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3 px-6 py-5 text-sm text-zinc-400">
+        <CardContent className="space-y-3 px-6 py-5 text-sm text-slate-600 dark:text-zinc-400">
           <p className="text-base font-medium text-zinc-200">
             {preview.organizerName}
           </p>
-          <p className="flex items-center gap-1.5 text-xs text-zinc-500">
+          <p className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-zinc-400">
             <MapPin className="size-3.5" aria-hidden="true" />
             {preview.eventLocation}
           </p>
           <p
             className={
               preview.riskTier === "TIER_1_CUSTODY"
-                ? "inline-flex rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-300 ring-1 ring-emerald-400/20"
+                ? "inline-flex rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-800 dark:text-emerald-300 ring-1 ring-emerald-400/20"
                 : "inline-flex rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-medium text-amber-200 ring-1 ring-amber-400/20"
             }
           >

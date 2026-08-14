@@ -26,30 +26,30 @@ export default async function CuentaFavoritosPage() {
   }
 
   return (
-    <section className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8 sm:px-6">
+    <section className="space-y-6 py-8">
       <header>
-        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-rose-300/90">
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-rose-700 dark:text-rose-300/90">
           Favoritos
         </p>
-        <h1 className="text-3xl font-extrabold tracking-tight text-white">
+        <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
           Favoritos
         </h1>
-        <p className="mt-2 text-sm text-zinc-400">
+        <p className="mt-2 text-sm text-muted-foreground">
           Eventos que guardaste para comprar después.
         </p>
       </header>
 
       {favorites.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-zinc-700 bg-zinc-900/40 px-6 py-14 text-center">
-          <Heart className="mx-auto size-8 text-zinc-600" />
-          <h2 className="mt-4 text-lg font-bold text-white">
+        <div className="rounded-3xl border border-dashed border-border bg-muted/40 px-6 py-14 text-center">
+          <Heart className="mx-auto size-8 text-muted-foreground" />
+          <h2 className="mt-4 text-lg font-bold text-foreground">
             Todavía no tenés favoritos
           </h2>
-          <p className="mt-2 text-sm text-zinc-500">
+          <p className="mt-2 text-sm text-muted-foreground">
             Tocá el corazón en un evento para guardarlo acá.
           </p>
           <Button
-            className="mt-6 min-h-12 rounded-xl"
+            className="mt-6 min-h-12 rounded-xl bg-emerald-500 font-semibold text-black hover:bg-emerald-400"
             nativeButton={false}
             render={<Link href="/events" />}
           >
@@ -57,14 +57,14 @@ export default async function CuentaFavoritosPage() {
           </Button>
         </div>
       ) : (
-        <ul className="grid gap-4 sm:grid-cols-2">
+        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {favorites.map((event) => (
             <li
               key={event.eventId}
-              className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03]"
+              className="overflow-hidden rounded-3xl border border-border bg-card"
             >
               <Link href={`/events/${event.eventId}`} className="block">
-                <div className="relative aspect-[16/10] bg-zinc-900">
+                <div className="relative aspect-[16/10] bg-muted">
                   {event.flyerUrl ? (
                     <Image
                       src={event.flyerUrl}
@@ -74,21 +74,21 @@ export default async function CuentaFavoritosPage() {
                       className="object-cover"
                     />
                   ) : null}
-                  <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/90 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
                 </div>
                 <div className="space-y-1 p-4">
-                  <p className="text-xs uppercase tracking-wide text-zinc-500">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
                     {formatEventDay(event.date)} · {formatEventTime(event.date)}
                   </p>
-                  <h2 className="line-clamp-2 text-lg font-bold text-white">
+                  <h2 className="line-clamp-2 text-lg font-bold text-foreground">
                     {event.title}
                   </h2>
-                  <p className="truncate text-sm text-zinc-500">
+                  <p className="truncate text-sm text-muted-foreground">
                     {event.location}
                   </p>
                 </div>
               </Link>
-              <div className="border-t border-white/8 px-4 py-3">
+              <div className="border-t border-border px-4 py-3">
                 <FavoriteToggleButton
                   eventId={event.eventId}
                   initiallyFavorited

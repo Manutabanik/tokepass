@@ -164,8 +164,8 @@ export function EventMultimediaForm({
               Spot promocional
             </h2>
             <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-              Pegá un link de YouTube o Vimeo. No subimos video a Storage: cero
-              costo de hosting multimedia.
+              Pegá un link de YouTube, Shorts, Vimeo o un MP4/WebM directo
+              (Cloudinary / Storage). Se reproduce en la página del evento.
             </p>
           </div>
         </div>
@@ -177,7 +177,7 @@ export function EventMultimediaForm({
             type="url"
             value={promoVideoUrl}
             onChange={(event) => setPromoVideoUrl(event.target.value)}
-            placeholder="https://www.youtube.com/watch?v=… o https://vimeo.com/…"
+            placeholder="https://youtube.com/… · vimeo.com/… · .mp4"
             className="h-11"
           />
         </div>
@@ -264,7 +264,7 @@ export function EventMultimediaForm({
           </div>
 
           <div className="flex flex-1 flex-col justify-center gap-3">
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-slate-600 dark:text-zinc-400">
               Máx. 3 MB · PNG, JPG o WEBP · recomendado 1080×1920.
             </p>
             <Button

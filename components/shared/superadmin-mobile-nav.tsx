@@ -4,6 +4,7 @@ import {
   Building2,
   CalendarDays,
   ClipboardList,
+  Handshake,
   LayoutDashboard,
   Menu,
   Receipt,
@@ -45,6 +46,7 @@ export const SUPERADMIN_NAV = [
   { label: "Compradores", href: "/superadmin/buyers", icon: Users },
   { label: "Eventos", href: "/superadmin/events", icon: CalendarDays },
   { label: "Categorías", href: "/superadmin/categories", icon: Tags },
+  { label: "Partners", href: "/superadmin/settings/sponsors", icon: Handshake },
   { label: "Compras", href: "/superadmin/orders", icon: Receipt },
   { label: "Liquidaciones", href: "/superadmin/settlements", icon: Wallet },
   { label: "Ajustes", href: "/superadmin/settings", icon: Settings },
@@ -68,7 +70,7 @@ export function SuperAdminMobileNav({
             type="button"
             variant="ghost"
             size="icon"
-            className="size-12 min-h-12 min-w-12 text-zinc-200 hover:bg-white/5 hover:text-white md:hidden"
+            className="size-12 min-h-12 min-w-12 text-foreground hover:bg-muted hover:text-foreground md:hidden"
             aria-label="Abrir menú"
           />
         }
@@ -77,17 +79,17 @@ export function SuperAdminMobileNav({
       </SheetTrigger>
       <SheetContent side="left" className="p-0 md:hidden">
         <SheetHeader>
-          <BrandLogo inverted href="/superadmin" />
+          <BrandLogo href="/superadmin" />
           <SheetTitle className="sr-only">Navegación</SheetTitle>
           <SheetDescription>Panel de control</SheetDescription>
-          <div className="rounded-xl border border-white/8 bg-white/5 px-3 py-2 text-left">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+          <div className="rounded-xl border border-border bg-muted/50 px-3 py-2 text-left">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
               Dueño de la Plataforma
             </p>
-            <p className="mt-1 truncate text-sm font-medium text-white">
+            <p className="mt-1 truncate text-sm font-medium text-foreground">
               {userLabel}
             </p>
-            <p className="truncate text-xs text-zinc-500">{userEmail}</p>
+            <p className="truncate text-xs text-muted-foreground">{userEmail}</p>
           </div>
         </SheetHeader>
 
@@ -108,8 +110,8 @@ export function SuperAdminMobileNav({
                 className={cn(
                   "flex min-h-14 items-center gap-3 rounded-xl px-3 py-4 text-base font-medium transition",
                   active
-                    ? "bg-sky-500/12 text-sky-300 ring-1 ring-inset ring-sky-500/15"
-                    : "text-zinc-400 hover:bg-white/5 hover:text-white",
+                    ? "bg-sky-500/12 text-sky-700 ring-1 ring-inset ring-sky-500/20 dark:text-sky-300 dark:ring-sky-500/15"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 )}
               >
                 <Icon className="size-6 shrink-0" aria-hidden="true" />
@@ -121,10 +123,12 @@ export function SuperAdminMobileNav({
 
         <SheetFooter className="gap-3">
           <div className="text-left">
-            <p className="truncate text-sm font-medium text-white">{userLabel}</p>
-            <p className="truncate text-xs text-zinc-500">{userEmail}</p>
+            <p className="truncate text-sm font-medium text-foreground">
+              {userLabel}
+            </p>
+            <p className="truncate text-xs text-muted-foreground">{userEmail}</p>
           </div>
-          <SignOutButton className="min-h-12 h-12 w-full justify-center rounded-xl border border-white/10 text-zinc-300 hover:bg-white/5 hover:text-white" />
+          <SignOutButton className="min-h-12 h-12 w-full justify-center rounded-xl border border-border text-muted-foreground hover:bg-muted hover:text-foreground" />
         </SheetFooter>
       </SheetContent>
     </Sheet>

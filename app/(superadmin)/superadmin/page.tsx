@@ -62,8 +62,8 @@ export default async function SuperAdminDashboardPage() {
       value: formatCurrency(metrics.platform_revenue),
       helper: "Lo que nos queda de comisión en las compras pagadas",
       icon: Sparkles,
-      accent: "text-emerald-400",
-      iconWrap: "bg-emerald-500/15 text-emerald-300 ring-emerald-400/25",
+      accent: "text-emerald-700 dark:text-emerald-400",
+      iconWrap: "bg-emerald-500/15 text-emerald-700 ring-emerald-500/25 dark:text-emerald-300",
       featured: true,
     },
     {
@@ -71,8 +71,8 @@ export default async function SuperAdminDashboardPage() {
       value: formatCurrency(metrics.totalGmv),
       helper: "Total que pagaron los compradores (entradas + comisión)",
       icon: CircleDollarSign,
-      accent: "text-amber-300",
-      iconWrap: "bg-amber-500/10 text-amber-300 ring-amber-500/15",
+      accent: "text-amber-800 dark:text-amber-300",
+      iconWrap: "bg-amber-500/15 text-amber-800 ring-amber-500/15 dark:text-amber-300",
       featured: false,
     },
     {
@@ -80,8 +80,8 @@ export default async function SuperAdminDashboardPage() {
       value: formatNumber(metrics.total_tickets),
       helper: "Entradas válidas y las que ya se escanearon en puerta",
       icon: TicketCheck,
-      accent: "text-white",
-      iconWrap: "bg-sky-500/10 text-sky-400 ring-sky-500/15",
+      accent: "text-foreground",
+      iconWrap: "bg-sky-500/15 text-sky-700 ring-sky-500/15 dark:text-sky-400",
       featured: false,
     },
     {
@@ -89,8 +89,8 @@ export default async function SuperAdminDashboardPage() {
       value: formatNumber(metrics.active_organizers),
       helper: "Cuentas con permiso de organizador",
       icon: Building2,
-      accent: "text-white",
-      iconWrap: "bg-violet-500/10 text-violet-300 ring-violet-500/15",
+      accent: "text-foreground",
+      iconWrap: "bg-violet-500/15 text-violet-700 ring-violet-500/15 dark:text-violet-300",
       featured: false,
     },
   ] as const
@@ -110,13 +110,13 @@ export default async function SuperAdminDashboardPage() {
               key={label}
               className={
                 featured
-                  ? "border-0 bg-gradient-to-br from-emerald-500/15 via-white/[0.04] to-white/[0.02] py-0 ring-1 ring-emerald-400/30 sm:col-span-2 xl:col-span-1"
-                  : "border-0 bg-white/[0.035] py-0 ring-1 ring-white/8"
+                  ? "border-border bg-gradient-to-br from-emerald-500/15 via-card to-card py-0 ring-1 ring-emerald-500/30 sm:col-span-2 xl:col-span-1"
+                  : "border-border bg-card py-0 text-card-foreground"
               }
             >
               <CardContent className="px-5 py-5">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm text-zinc-500">{label}</p>
+                  <p className="text-sm text-muted-foreground">{label}</p>
                   <span
                     className={`grid size-10 place-items-center rounded-xl ring-1 ring-inset ${iconWrap}`}
                   >
@@ -128,24 +128,24 @@ export default async function SuperAdminDashboardPage() {
                 >
                   {value}
                 </p>
-                <p className="mt-1 text-xs text-zinc-600">{helper}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{helper}</p>
               </CardContent>
             </Card>
           ),
         )}
       </div>
 
-      <Card className="mt-6 border-0 bg-white/[0.035] py-0 ring-1 ring-white/8">
-        <CardHeader className="border-b border-white/8 px-5 py-5 sm:px-6">
-          <CardTitle className="text-base text-white">Productoras</CardTitle>
-          <CardDescription className="text-zinc-500">
+      <Card className="mt-6 border-border bg-card py-0 text-card-foreground">
+        <CardHeader className="border-b border-border px-5 py-5 sm:px-6">
+          <CardTitle className="text-base text-foreground">Productoras</CardTitle>
+          <CardDescription className="text-muted-foreground">
             Ventas confirmadas de cada productora. Con “Crear evento” podés
             armar un evento a nombre de ellas.
           </CardDescription>
         </CardHeader>
         <CardContent className="px-0 pb-0">
           {organizers.length === 0 ? (
-            <p className="px-6 py-12 text-center text-sm text-zinc-500">
+            <p className="px-6 py-12 text-center text-sm text-muted-foreground">
               Todavía no hay productoras registradas.
             </p>
           ) : (
@@ -154,32 +154,32 @@ export default async function SuperAdminDashboardPage() {
                 {organizers.map((organizer) => (
                   <article
                     key={organizer.id}
-                    className="rounded-2xl border border-white/10 bg-black/30 p-4"
+                    className="rounded-2xl border border-border bg-muted/40 p-4"
                   >
                     <div className="flex items-start gap-3">
-                      <span className="grid size-11 shrink-0 place-items-center rounded-full bg-sky-500/10 text-sm font-medium text-sky-300">
+                      <span className="grid size-11 shrink-0 place-items-center rounded-full bg-sky-500/15 text-sm font-medium text-sky-700 dark:text-sky-300">
                         {getInitials(organizer.name, organizer.email)}
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="text-lg font-bold text-white">
+                        <p className="text-lg font-bold text-foreground">
                           {organizer.name}
                         </p>
-                        <p className="mt-1 truncate text-sm text-zinc-500">
+                        <p className="mt-1 truncate text-sm text-muted-foreground">
                           {organizer.email}
                         </p>
                       </div>
                     </div>
                     <div className="mt-4 flex items-end justify-between gap-3">
                       <div>
-                        <p className="text-2xl font-black tabular-nums text-emerald-300">
+                        <p className="text-2xl font-black tabular-nums text-emerald-700 dark:text-emerald-300">
                           {formatCurrency(organizer.billedVolume)}
                         </p>
-                        <p className="text-[10px] uppercase tracking-wide text-zinc-600">
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
                           {formatNumber(organizer.activeEvents)} eventos activos
                         </p>
                       </div>
                       <Button
-                        className="min-h-12 shrink-0 rounded-xl border-white/15 bg-transparent px-4 font-semibold text-zinc-200 hover:bg-white/5 hover:text-white"
+                        className="min-h-12 shrink-0 rounded-xl border-border bg-transparent px-4 font-semibold text-foreground hover:bg-muted"
                         variant="outline"
                         nativeButton={false}
                         render={
@@ -198,16 +198,20 @@ export default async function SuperAdminDashboardPage() {
               <div className="hidden md:block">
                 <Table>
                   <TableHeader>
-                    <TableRow className="border-white/8 hover:bg-transparent">
-                      <TableHead className="pl-6 text-zinc-600">Nombre</TableHead>
-                      <TableHead className="text-zinc-600">Email</TableHead>
-                      <TableHead className="text-right text-zinc-600">
+                    <TableRow className="border-border hover:bg-transparent">
+                      <TableHead className="bg-muted/50 pl-6 text-muted-foreground">
+                        Nombre
+                      </TableHead>
+                      <TableHead className="bg-muted/50 text-muted-foreground">
+                        Email
+                      </TableHead>
+                      <TableHead className="bg-muted/50 text-right text-muted-foreground">
                         Eventos activos
                       </TableHead>
-                      <TableHead className="text-right text-zinc-600">
+                      <TableHead className="bg-muted/50 text-right text-muted-foreground">
                         Volumen facturado
                       </TableHead>
-                      <TableHead className="pr-6 text-right text-zinc-600">
+                      <TableHead className="bg-muted/50 pr-6 text-right text-muted-foreground">
                         Acciones
                       </TableHead>
                     </TableRow>
@@ -216,32 +220,32 @@ export default async function SuperAdminDashboardPage() {
                     {organizers.map((organizer) => (
                       <TableRow
                         key={organizer.id}
-                        className="border-white/8 hover:bg-white/[0.025]"
+                        className="border-border hover:bg-muted/50"
                       >
                         <TableCell className="py-4 pl-6">
                           <div className="flex items-center gap-3">
-                            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-sky-500/10 text-xs font-medium text-sky-300">
+                            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-sky-500/15 text-xs font-medium text-sky-700 dark:text-sky-300">
                               {getInitials(organizer.name, organizer.email)}
                             </span>
-                            <span className="font-medium text-zinc-200">
+                            <span className="font-medium text-foreground">
                               {organizer.name}
                             </span>
                           </div>
                         </TableCell>
-                        <TableCell className="text-zinc-400">
+                        <TableCell className="text-muted-foreground">
                           {organizer.email}
                         </TableCell>
-                        <TableCell className="text-right tabular-nums text-zinc-300">
+                        <TableCell className="text-right tabular-nums text-foreground">
                           {formatNumber(organizer.activeEvents)}
                         </TableCell>
-                        <TableCell className="text-right tabular-nums text-emerald-400">
+                        <TableCell className="text-right tabular-nums text-emerald-700 dark:text-emerald-400">
                           {formatCurrency(organizer.billedVolume)}
                         </TableCell>
                         <TableCell className="pr-6 text-right">
                           <Button
                             variant="outline"
                             size="sm"
-                            className="min-h-11 rounded-full border-white/15 bg-transparent text-zinc-200 hover:bg-white/5 hover:text-white"
+                            className="min-h-11 rounded-full border-border bg-transparent text-foreground hover:bg-muted"
                             nativeButton={false}
                             render={
                               <Link

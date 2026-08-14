@@ -128,7 +128,7 @@ export function EventCouponsManager({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-sm text-zinc-600 dark:text-zinc-400">{eventTitle}</p>
-          <p className="mt-1 text-sm text-zinc-500">
+          <p className="mt-1 text-sm text-slate-600 dark:text-zinc-400">
             {activeCount} activo{activeCount === 1 ? "" : "s"} · {coupons.length}{" "}
             total
           </p>
@@ -160,7 +160,7 @@ export function EventCouponsManager({
               <TableRow>
                 <TableCell
                   colSpan={6}
-                  className="py-10 text-center text-sm text-zinc-500"
+                  className="py-10 text-center text-sm text-slate-600 dark:text-zinc-400"
                 >
                   Todavía no hay cupones. Creá el primero para campañas B2C.
                 </TableCell>
@@ -185,7 +185,7 @@ export function EventCouponsManager({
                       {row.current_uses}
                       {row.max_uses != null ? ` / ${row.max_uses}` : " · ilimitado"}
                     </TableCell>
-                    <TableCell className="text-sm text-zinc-500">
+                    <TableCell className="text-sm text-slate-600 dark:text-zinc-400">
                       {row.valid_until
                         ? formatDateTime(row.valid_until)
                         : "Sin vencimiento"}
@@ -196,7 +196,7 @@ export function EventCouponsManager({
                         className={cn(
                           "rounded-full",
                           !row.is_active
-                            ? "border-zinc-300 text-zinc-500"
+                            ? "border-zinc-300 text-slate-600 dark:text-zinc-400"
                             : exhausted || expired
                               ? "border-amber-400/40 text-amber-700 dark:text-amber-300"
                               : "border-emerald-400/40 text-emerald-700 dark:text-emerald-300",
@@ -262,9 +262,17 @@ export function EventCouponsManager({
                   onValueChange={(value) =>
                     value && setDiscountType(value as PromoDiscountType)
                   }
+                  items={[
+                    { value: "percentage", label: "Porcentaje %" },
+                    { value: "fixed_amount", label: "Monto fijo $" },
+                  ]}
                 >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
+                  <SelectTrigger className="w-full max-w-full overflow-hidden">
+                    <SelectValue>
+                      {discountType === "fixed_amount"
+                        ? "Monto fijo $"
+                        : "Porcentaje %"}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="percentage">Porcentaje %</SelectItem>

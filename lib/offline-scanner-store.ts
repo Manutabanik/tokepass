@@ -25,13 +25,17 @@ export type ScannerManifestTicket = {
   seating_label: string | null
   seating_sector_name: string | null
   seating_row_label: string | null
+  seating_sector_id?: string | null
   is_test: boolean
+  /** Compra sandbox (test_sandbox): válida en puerta para E2E. */
+  is_sandbox?: boolean
   /** Precio público del tier; 0 = gratuita. */
   tier_price: number
   /** Agrupa QRs de una misma mesa. */
   group_id: string | null
   group_slot: number | null
   batch_id: string | null
+  ticket_type?: string | null
 }
 
 export type ScannerManifestMeta = {
@@ -176,6 +180,7 @@ export async function saveEventManifest(input: {
     ticketStore.put({
       ...ticket,
       is_test: Boolean(ticket.is_test),
+      is_sandbox: Boolean(ticket.is_sandbox),
     })
   }
 
@@ -385,6 +390,7 @@ export async function downloadEventManifest(
       return {
         ...ticket,
         is_test: Boolean(ticket.is_test),
+        is_sandbox: Boolean(ticket.is_sandbox),
         tier_price: Number(ticket.tier_price ?? 0),
         status: "used" as const,
       }
@@ -392,6 +398,7 @@ export async function downloadEventManifest(
     return {
       ...ticket,
       is_test: Boolean(ticket.is_test),
+      is_sandbox: Boolean(ticket.is_sandbox),
       tier_price: Number(ticket.tier_price ?? 0),
     }
   })

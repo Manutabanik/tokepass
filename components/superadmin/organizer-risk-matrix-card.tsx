@@ -47,7 +47,7 @@ const tiers: Array<{
       "Estado financiero seguro: la plata de las ventas queda retenida hasta 48 hs hábiles después del evento. Ideal para productoras nuevas o sin historial.",
     icon: Shield,
     accent:
-      "border-emerald-400/35 bg-emerald-500/10 text-emerald-100 ring-emerald-400/20",
+      "border-emerald-500/35 bg-emerald-500/15 text-emerald-800 ring-emerald-500/20 dark:text-emerald-100",
   },
   {
     id: "TIER_2_INSTANT_SPLIT",
@@ -56,7 +56,7 @@ const tiers: Array<{
       "Al cobrarse la entrada, se reparte al toque: neto al organizador y comisión a Tokepass. Hace falta tener Mercado Pago vinculado.",
     icon: Zap,
     accent:
-      "border-sky-400/35 bg-sky-500/10 text-sky-100 ring-sky-400/20",
+      "border-sky-500/35 bg-sky-500/15 text-sky-800 ring-sky-500/20 dark:text-sky-100",
   },
   {
     id: "TIER_3_ENTERPRISE",
@@ -65,7 +65,7 @@ const tiers: Array<{
       "Cobro al instante, comisión preferencial a medida y garantía legal verificada.",
     icon: Crown,
     accent:
-      "border-violet-400/35 bg-violet-500/10 text-violet-100 ring-violet-400/20",
+      "border-violet-500/35 bg-violet-500/15 text-violet-800 ring-violet-500/20 dark:text-violet-100",
   },
 ]
 
@@ -139,22 +139,22 @@ export function OrganizerRiskMatrixCard({
   }
 
   return (
-    <Card className="border border-zinc-800 bg-zinc-900/90 py-0 backdrop-blur-xl">
-      <CardHeader className="border-b border-zinc-800 px-6 py-6">
+    <Card className="border border-border bg-card py-0 text-card-foreground backdrop-blur-xl">
+      <CardHeader className="border-b border-border px-6 py-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <CardTitle className="flex items-center gap-2 text-white">
-              <ShieldCheck className="size-5 text-emerald-400" />
+            <CardTitle className="flex items-center gap-2 text-foreground">
+              <ShieldCheck className="size-5 text-emerald-600 dark:text-emerald-400" />
               Matriz de riesgo y finanzas
             </CardTitle>
-            <CardDescription className="mt-1 text-zinc-500">
+            <CardDescription className="mt-1 text-muted-foreground">
               Acá configurás cómo se maneja la plata: retención, cobro al
               instante, comisión y garantías.
             </CardDescription>
           </div>
           <Badge
             variant="outline"
-            className="border-zinc-700 bg-black/30 text-[10px] font-medium tracking-wide text-zinc-300"
+            className="border-border bg-muted text-[10px] font-medium tracking-wide text-muted-foreground"
           >
             {riskTier === "TIER_1_CUSTODY"
               ? "Estado Financiero Seguro"
@@ -180,11 +180,11 @@ export function OrganizerRiskMatrixCard({
                   "rounded-2xl border px-4 py-4 text-left transition ring-1",
                   selected
                     ? tier.accent
-                    : "border-zinc-800 bg-black/20 text-zinc-400 ring-transparent hover:border-zinc-700 hover:text-zinc-200",
+                    : "border-border bg-muted/40 text-muted-foreground ring-transparent hover:border-border hover:bg-muted hover:text-foreground",
                 )}
               >
                 <div className="flex items-start gap-3">
-                  <span className="mt-0.5 grid size-9 place-items-center rounded-xl bg-black/30 ring-1 ring-white/10">
+                  <span className="mt-0.5 grid size-9 place-items-center rounded-xl bg-background ring-1 ring-border">
                     <Icon className="size-4" aria-hidden="true" />
                   </span>
                   <div className="min-w-0">
@@ -203,7 +203,7 @@ export function OrganizerRiskMatrixCard({
           <div className="space-y-3">
             <label
               htmlFor="risk-commission-rate"
-              className="block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500"
+              className="block text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground"
             >
               Tasa de comisión dinámica
             </label>
@@ -217,13 +217,13 @@ export function OrganizerRiskMatrixCard({
                 value={feePercent}
                 onChange={(event) => setFeePercent(Number(event.target.value))}
                 disabled={isPending}
-                className="h-12 border-zinc-700 bg-black/40 pr-12 font-mono text-xl font-bold text-white"
+                className="h-12 border-border bg-background pr-12 font-mono text-xl font-bold text-foreground"
               />
-              <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-sky-300">
+              <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-sky-700 dark:text-sky-300">
                 %
               </span>
             </div>
-            <p className="text-[11px] text-zinc-600">
+            <p className="text-[11px] text-muted-foreground">
               Persistido en `service_charge_rate` (custom_commission_rate
               canónica del motor All-In).
             </p>
@@ -232,7 +232,7 @@ export function OrganizerRiskMatrixCard({
           <div className="space-y-3">
             <label
               htmlFor="mp-user-id"
-              className="block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500"
+              className="block text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground"
             >
               Mercado Pago Connect
             </label>
@@ -242,7 +242,7 @@ export function OrganizerRiskMatrixCard({
               onChange={(event) => setMpUserId(event.target.value)}
               disabled={isPending}
               placeholder="mp_user_id"
-              className="h-11 border-zinc-700 bg-black/40 font-mono text-sm text-white"
+              className="h-11 border-border bg-background font-mono text-sm text-foreground"
             />
             <Input
               type="password"
@@ -254,9 +254,9 @@ export function OrganizerRiskMatrixCard({
                   ? "Access token (dejar vacío para conservar)"
                   : "mp_access_token"
               }
-              className="h-11 border-zinc-700 bg-black/40 font-mono text-sm text-white"
+              className="h-11 border-border bg-background font-mono text-sm text-foreground"
             />
-            <label className="flex items-center gap-2 text-xs text-zinc-400">
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
               <input
                 type="checkbox"
                 checked={clearMpAccessToken}
@@ -264,13 +264,13 @@ export function OrganizerRiskMatrixCard({
                   setClearMpAccessToken(event.target.checked)
                 }
                 disabled={isPending}
-                className="size-4 rounded border-zinc-600 bg-zinc-900"
+                className="size-4 rounded border-border bg-background"
               />
               Revocar access token guardado
               {organization.profile.hasMpAccessToken ? (
                 <Badge
                   variant="outline"
-                  className="border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+                  className="border-emerald-500/30 bg-emerald-500/15 text-emerald-700 dark:text-emerald-200"
                 >
                   Token activo
                 </Badge>
@@ -280,8 +280,8 @@ export function OrganizerRiskMatrixCard({
         </div>
 
         {riskTier === "TIER_3_ENTERPRISE" ? (
-          <div className="rounded-2xl border border-violet-500/25 bg-violet-500/10 px-4 py-4">
-            <label className="flex items-start gap-3 text-sm text-violet-100">
+          <div className="rounded-2xl border border-violet-500/25 bg-violet-500/15 px-4 py-4">
+            <label className="flex items-start gap-3 text-sm text-violet-900 dark:text-violet-100">
               <input
                 type="checkbox"
                 checked={legalGuarantee}
@@ -294,13 +294,13 @@ export function OrganizerRiskMatrixCard({
                   }
                 }}
                 disabled={isPending}
-                className="mt-1 size-4 rounded border-violet-400/40 bg-zinc-950"
+                className="mt-1 size-4 rounded border-violet-400/40 bg-background"
               />
               <span>
                 <span className="font-semibold">
                   Garantía legal / pagaré verificado
                 </span>
-                <span className="mt-1 block text-xs text-violet-200/80">
+                <span className="mt-1 block text-xs text-violet-800/80 dark:text-violet-200/80">
                   Habilita respaldo contractual ante cancelaciones Enterprise.
                 </span>
               </span>
@@ -321,8 +321,8 @@ export function OrganizerRiskMatrixCard({
                     className={cn(
                       "rounded-xl border px-3 py-2 text-left text-xs font-medium",
                       guaranteeStatus === value
-                        ? "border-violet-300/40 bg-violet-400/15 text-violet-50"
-                        : "border-white/10 bg-black/20 text-violet-200/70",
+                        ? "border-violet-500/40 bg-violet-500/15 text-violet-900 dark:text-violet-50"
+                        : "border-border bg-background text-violet-800/70 dark:text-violet-200/70",
                     )}
                   >
                     {label}
@@ -332,7 +332,7 @@ export function OrganizerRiskMatrixCard({
             ) : null}
           </div>
         ) : (
-          <div className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-black/20 px-3 py-2 text-xs text-zinc-500">
+          <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
             <Building2 className="size-3.5" aria-hidden="true" />
             Garantía legal disponible en Tier 3 Enterprise.
           </div>

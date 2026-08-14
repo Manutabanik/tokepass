@@ -22,7 +22,7 @@ export default async function AdminVenuesPage({
 
   return (
     <div className="mx-auto max-w-lg space-y-5 px-5 py-16 text-center sm:px-8">
-      <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-emerald-400/90">
+      <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-400/90">
         Lugares
       </p>
       <h1 className="text-3xl font-black tracking-tight text-zinc-900 dark:text-white">

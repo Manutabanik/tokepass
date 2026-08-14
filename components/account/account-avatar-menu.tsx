@@ -49,8 +49,7 @@ export function AccountAvatarMenu({
       <Menu.Trigger
         className={cn(
           "relative inline-flex size-11 items-center justify-center rounded-full outline-none",
-          "ring-1 ring-zinc-200 transition hover:bg-zinc-100",
-          "dark:ring-white/15 dark:hover:bg-white/10",
+          "ring-1 ring-border transition hover:bg-muted",
           "focus-visible:ring-2 focus-visible:ring-emerald-400",
           "hidden md:inline-flex",
         )}
@@ -76,15 +75,14 @@ export function AccountAvatarMenu({
           <Menu.Popup
             className={cn(
               "min-w-64 origin-[var(--transform-origin)] rounded-2xl border p-1.5 shadow-xl outline-none",
-              "border-zinc-200 bg-white text-zinc-900",
-              "dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-100",
+              "border-border bg-popover text-popover-foreground",
               "data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95",
               "data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
             )}
           >
-            <div className="border-b border-zinc-100 px-3 py-2.5 dark:border-white/8">
+            <div className="border-b border-border px-3 py-2.5">
               <p className="truncate text-sm font-semibold">{label}</p>
-              <p className="truncate text-[11px] text-zinc-500">
+              <p className="truncate text-[11px] text-muted-foreground">
                 {email || "Tu cuenta Tokepass"}
               </p>
             </div>
@@ -150,15 +148,15 @@ export function AccountAvatarMenu({
               Mi Perfil y Datos
             </Menu.LinkItem>
 
-            <div className="my-1 h-px bg-zinc-100 dark:bg-white/8" />
+            <div className="my-1 h-px bg-border" />
 
             <Menu.Item
               disabled={pending}
               onClick={handleSignOut}
               className={cn(
                 "flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold outline-none",
-                "text-red-600 data-highlighted:bg-red-50",
-                "dark:text-red-300 dark:data-highlighted:bg-red-500/10",
+                "text-rose-700 data-highlighted:bg-rose-500/10",
+                "dark:text-rose-300",
               )}
             >
               <LogOut className="size-4 shrink-0" aria-hidden="true" />
@@ -173,6 +171,5 @@ export function AccountAvatarMenu({
 
 const menuItemClass = cn(
   "flex cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium outline-none no-underline",
-  "text-zinc-700 data-highlighted:bg-zinc-100",
-  "dark:text-zinc-200 dark:data-highlighted:bg-white/5",
+  "text-foreground data-highlighted:bg-muted",
 )

@@ -75,53 +75,53 @@ export function EventMassRefundDangerZone({
   }
 
   return (
-    <section className="rounded-3xl border border-red-500/30 bg-gradient-to-br from-red-950/70 via-zinc-950 to-zinc-950 p-6 shadow-[0_0_40px_rgba(239,68,68,0.08)]">
+    <section className="rounded-3xl border border-rose-500/40 bg-gradient-to-br from-rose-500/15 via-card to-card p-6 text-card-foreground shadow-[0_0_40px_rgba(239,68,68,0.08)]">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-red-300">
+          <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-rose-700 dark:text-rose-300">
             <OctagonAlert className="size-3.5" aria-hidden="true" />
             Zona de Peligro
           </p>
-          <h2 className="mt-2 text-xl font-black text-white">
+          <h2 className="mt-2 text-xl font-black text-foreground">
             Cancelar evento y devolver la plata
           </h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-red-100/70">
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-rose-900/70 dark:text-rose-100/70">
             Usá esto solo en caso de fuerza mayor. Anula todas las entradas y
             dispara la devolución del dinero a los compradores.
           </p>
         </div>
-        <div className="rounded-2xl border border-red-500/20 bg-black/30 px-4 py-3 text-right">
-          <p className="font-mono text-2xl font-black text-red-200 sm:text-3xl">
+        <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-right">
+          <p className="font-mono text-2xl font-black text-rose-700 dark:text-rose-200 sm:text-3xl">
             {formatNumber(preview.validTickets)}
           </p>
-          <p className="text-[11px] uppercase tracking-wide text-red-300/70">
+          <p className="text-[11px] uppercase tracking-wide text-rose-700/70 dark:text-rose-300/70">
             entradas en riesgo
           </p>
         </div>
       </div>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border border-white/8 bg-black/25 px-3 py-3">
-          <p className="text-[10px] uppercase tracking-wide text-zinc-500">
+        <div className="rounded-xl border border-border bg-background/80 px-3 py-3">
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
             Compras pagadas
           </p>
-          <p className="mt-1 font-mono text-lg font-bold text-white">
+          <p className="mt-1 font-mono text-lg font-bold text-foreground">
             {formatNumber(preview.paidOrders)}
           </p>
         </div>
-        <div className="rounded-xl border border-white/8 bg-black/25 px-3 py-3">
-          <p className="text-[10px] uppercase tracking-wide text-zinc-500">
+        <div className="rounded-xl border border-border bg-background/80 px-3 py-3">
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
             Plata a devolver
           </p>
-          <p className="mt-1 font-mono text-lg font-bold text-white">
+          <p className="mt-1 font-mono text-lg font-bold text-foreground">
             {formatCurrency(preview.refundableAmount)}
           </p>
         </div>
-        <div className="rounded-xl border border-white/8 bg-black/25 px-3 py-3">
-          <p className="text-[10px] uppercase tracking-wide text-zinc-500">
+        <div className="rounded-xl border border-border bg-background/80 px-3 py-3">
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
             Estado financiero
           </p>
-          <p className="mt-1 text-sm font-bold text-amber-200">
+          <p className="mt-1 text-sm font-bold text-amber-800 dark:text-amber-200">
             {riskLabel(preview.riskTier)}
           </p>
         </div>
@@ -133,8 +133,8 @@ export function EventMassRefundDangerZone({
           disabled={preview.eventStatus === "cancelled" || isPending}
           onClick={() => setArmed(true)}
           className={cn(
-            "mt-6 min-h-12 h-12 w-full rounded-2xl border border-red-500/40 bg-red-950/40 text-sm font-bold uppercase tracking-wide text-red-100",
-            "hover:bg-red-900/50",
+            "mt-6 min-h-12 h-12 w-full rounded-2xl border border-rose-500/40 bg-rose-500/15 text-sm font-bold uppercase tracking-wide text-rose-800",
+            "hover:bg-rose-500/25 dark:text-rose-100",
           )}
         >
           <AlertTriangle className="size-4" aria-hidden="true" />
@@ -142,7 +142,7 @@ export function EventMassRefundDangerZone({
         </Button>
       ) : (
         <div className="mt-6 space-y-3">
-          <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-3 text-center text-xs leading-5 text-amber-100">
+          <p className="rounded-xl border border-amber-500/30 bg-amber-500/15 px-3 py-3 text-center text-xs leading-5 text-amber-900 dark:text-amber-100">
             Acción armada. Tocá de nuevo solo si querés abrir la confirmación
             final. Podés desarmar si fue un toque accidental.
           </p>
@@ -152,7 +152,7 @@ export function EventMassRefundDangerZone({
               variant="outline"
               disabled={isPending}
               onClick={() => setArmed(false)}
-              className="min-h-12 border-zinc-700 bg-transparent text-zinc-300"
+              className="min-h-12 border-border bg-transparent text-muted-foreground hover:text-foreground"
             >
               Desarmar
             </Button>
@@ -176,7 +176,7 @@ export function EventMassRefundDangerZone({
       )}
 
       {preview.eventStatus === "cancelled" ? (
-        <p className="mt-3 text-center text-xs text-red-200/70">
+        <p className="mt-3 text-center text-xs text-rose-700/80 dark:text-rose-200/70">
           Este evento ya figura como cancelado.
         </p>
       ) : null}
@@ -188,16 +188,16 @@ export function EventMassRefundDangerZone({
           if (!next) resetConfirm()
         }}
       >
-        <DialogContent className="border-red-500/30 bg-zinc-950 text-zinc-100 sm:max-w-lg">
+        <DialogContent className="border-rose-500/30 bg-card text-card-foreground sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-200">
+            <DialogTitle className="flex items-center gap-2 text-rose-700 dark:text-rose-200">
               <ShieldAlert className="size-5" aria-hidden="true" />
               Confirmá la cancelación
             </DialogTitle>
-            <DialogDescription className="text-zinc-400">
+            <DialogDescription className="text-muted-foreground">
               Tené cuidado: vas a anular {formatNumber(preview.validTickets)}{" "}
               entradas y devolver la plata de{" "}
-              <span className="font-semibold text-zinc-200">
+              <span className="font-semibold text-foreground">
                 {preview.eventTitle}
               </span>
               .
@@ -208,7 +208,7 @@ export function EventMassRefundDangerZone({
             <div>
               <label
                 htmlFor="mass-refund-confirm"
-                className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500"
+                className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground"
               >
                 Escribí exactamente: {CONFIRM_PHRASE}
               </label>
@@ -217,7 +217,7 @@ export function EventMassRefundDangerZone({
                 value={confirmText}
                 onChange={(event) => setConfirmText(event.target.value)}
                 disabled={isPending}
-                className="min-h-12 border-red-500/30 bg-black/40 font-mono text-base"
+                className="min-h-12 border-rose-500/30 bg-background font-mono text-base"
                 autoComplete="off"
                 autoCorrect="off"
                 spellCheck={false}
@@ -226,7 +226,7 @@ export function EventMassRefundDangerZone({
             <div>
               <label
                 htmlFor="mass-refund-reason"
-                className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500"
+                className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground"
               >
                 Motivo de la cancelación
               </label>
@@ -236,7 +236,7 @@ export function EventMassRefundDangerZone({
                 onChange={(event) => setReason(event.target.value)}
                 disabled={isPending}
                 placeholder="Ej: Suspendido por tormenta / disposición municipal"
-                className="min-h-12 border-zinc-700 bg-black/40 text-base"
+                className="min-h-12 border-border bg-background text-base"
               />
             </div>
           </div>
@@ -247,7 +247,7 @@ export function EventMassRefundDangerZone({
               variant="outline"
               disabled={isPending}
               onClick={() => setOpen(false)}
-              className="min-h-12 border-zinc-700 bg-transparent text-zinc-300"
+              className="min-h-12 border-border bg-transparent text-muted-foreground"
             >
               Volver
             </Button>

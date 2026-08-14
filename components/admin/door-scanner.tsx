@@ -31,11 +31,19 @@ import { TotemValidatorView } from "@/components/admin/totem-validator-view"
 import {
   fetchEventTicketManifest,
   getScannerEvents,
+  getScannerGates,
   scanAndValidateTicket,
   syncOfflineScansBatch,
   type ScannerEventOption,
   type ScanTicketResult,
 } from "@/app/actions/scanner"
+import {
+  GENERAL_SCANNER_GATE_ID,
+  PARKING_SCANNER_GATE_ID,
+  resolveTicketSectorKey,
+  ticketMatchesScannerGate,
+  type ScannerGate,
+} from "@/lib/scanner/gate"
 import { logger } from "@/lib/logger"
 import {
   readScannerAccessMode,
@@ -113,6 +121,7 @@ const ERROR_TITLES: Record<string, string> = {
   update_failed: "ERROR",
   unpaid: "SIN PAGO",
   test_ticket_live: "ENTRADA DE PRUEBA",
+  wrong_sector: "ACCESO DENEGADO",
 }
 
 function playTone(kind: "success" | "error" | "warn") {
@@ -159,6 +168,8 @@ export function DoorScanner() {
   const isTotemMode = accessMode === "totem"
   const [events, setEvents] = useState<ScannerEventOption[]>([])
   const [eventId, setEventId] = useState<string>("")
+  const [gateId, setGateId] = useState<string>("")
+  const [gates, setGates] = useState<ScannerGate[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [visual, setVisual] = useState<VisualState>("idle")
@@ -310,6 +321,64 @@ export function DoorScanner() {
   }, [eventId, refreshManifestMeta, refreshQueueCount])
 
   useEffect(() => {
+    if (!eventId) {
+      setGates([])
+      setGateId("")
+      return
+    }
+    let cancelled = false
+    const stored =
+      typeof window !== "undefined"
+        ? window.sessionStorage.getItem(`tokepass.scanner.gate.${eventId}`)
+        : null
+    void getScannerGates(eventId)
+      .then((data) => {
+        if (cancelled) return
+        setGates(data)
+        const validStored = data.some((gate) => gate.id === stored)
+        const next = validStored
+          ? stored!
+          : data.length === 1
+            ? data[0]!.id
+            : ""
+        setGateId(next)
+      })
+      .catch(() => {
+        if (cancelled) return
+                        setGates([
+                          {
+                            id: GENERAL_SCANNER_GATE_ID,
+                            label: "Acceso General",
+                            color: "#10b981",
+                            kind: "general",
+                          },
+                          {
+                            id: PARKING_SCANNER_GATE_ID,
+                            label: "Barrera de Estacionamiento",
+                            color: "#f59e0b",
+                            kind: "parking",
+                          },
+                        ])
+        setGateId(GENERAL_SCANNER_GATE_ID)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [eventId])
+
+  useEffect(() => {
+    if (!eventId || !gateId) return
+    try {
+      window.sessionStorage.setItem(
+        `tokepass.scanner.gate.${eventId}`,
+        gateId,
+      )
+    } catch {
+      // sessionStorage opcional
+    }
+  }, [eventId, gateId])
+
+  useEffect(() => {
     function onOnline() {
       void syncQueueToServer()
     }
@@ -346,10 +415,22 @@ export function DoorScanner() {
         Number(ticket.tier_price) === 0 ||
         /freepass|cortes/i.test(ticket.ticket_tier)
       setVisual(isFree ? "success_free" : "success")
-      if (ticket.is_test) {
+      if (ticket.is_test && !ticket.is_sandbox) {
         setFeedback({
           title: "LECTURA DE PRUEBA OK",
           subtitle: "EVENTO EN BORRADOR · No válido en puerta en vivo",
+          bonus: null,
+          isFreePass: false,
+        })
+        returnToIdle(isTotemModeRef.current ? 1500 : 2200)
+        return
+      }
+      if (ticket.is_sandbox) {
+        setFeedback({
+          title: isTotemModeRef.current
+            ? `BIENVENIDO/A ${ticket.owner_name}`
+            : "ENTRADA VÁLIDA · TEST",
+          subtitle: "Compra de prueba (Modo Sandbox)",
           bonus: null,
           isFreePass: false,
         })
@@ -430,14 +511,18 @@ export function DoorScanner() {
         const owner = result.ticket.ownerLabel?.trim()
         setFeedback({
           title: result.isTestScan
-            ? "LECTURA DE PRUEBA OK"
+            ? result.message.includes("SANDBOX")
+              ? "ENTRADA VÁLIDA · TEST"
+              : "LECTURA DE PRUEBA OK"
             : isFree
               ? "ENTRADA GRATUITA ($0)"
               : isTotemModeRef.current && owner
                 ? `BIENVENIDO/A ${owner}`
                 : "ENTRADA VÁLIDA",
           subtitle: result.isTestScan
-            ? "EVENTO EN BORRADOR · No válido en puerta en vivo"
+            ? result.message.includes("SANDBOX")
+              ? "Compra de prueba (Modo Sandbox)"
+              : "EVENTO EN BORRADOR · No válido en puerta en vivo"
             : isFree
               ? "NO COBRAR EN PUERTA"
               : `${result.ticket.seatingLabel ? `${result.ticket.seatingLabel}${result.ticket.seatingRowLabel ? ` · ${result.ticket.seatingRowLabel}` : ""} · ` : ""}${result.ticket.tierName}${
@@ -454,6 +539,19 @@ export function DoorScanner() {
 
       if (result.status === "already_used") {
         showAlreadyUsed(result.scannedAt ?? null)
+        return
+      }
+
+      if (result.status === "wrong_sector") {
+        playTone("error")
+        vibrate("error")
+        void sendSignal("LED_RED")
+        setVisual("error")
+        setFeedback({
+          title: "ACCESO DENEGADO",
+          subtitle: `ENTRADA PARA OTRO SECTOR (Dirigirse a: ${result.redirectSector ?? "otra gatera"})`,
+        })
+        returnToIdle(isTotemModeRef.current ? 4000 : 5500)
         return
       }
 
@@ -496,7 +594,7 @@ export function DoorScanner() {
     async (ticket: ScannerManifestTicket) => {
       const eventStatus =
         selectedEvent?.status ?? manifestMeta?.eventStatus ?? null
-      if (ticket.is_test && eventStatus !== "draft") {
+      if (ticket.is_test && !ticket.is_sandbox && eventStatus !== "draft") {
         playTone("error")
         vibrate("error")
         void sendSignal("LED_RED")
@@ -540,6 +638,30 @@ export function DoorScanner() {
         return
       }
 
+      const ticketGate = resolveTicketSectorKey({
+        seatingSectorId: ticket.seating_sector_id,
+        seatingSectorName: ticket.seating_sector_name,
+      })
+      const gateMatch = ticketMatchesScannerGate(
+        gateId || GENERAL_SCANNER_GATE_ID,
+        {
+          ...ticketGate,
+          ticketType: ticket.ticket_type,
+        },
+      )
+      if (!gateMatch.ok) {
+        playTone("error")
+        vibrate("error")
+        void sendSignal("LED_RED")
+        setVisual("error")
+        setFeedback({
+          title: "ACCESO DENEGADO",
+          subtitle: `ENTRADA PARA OTRO SECTOR (Dirigirse a: ${gateMatch.correctSector})`,
+        })
+        returnToIdle(isTotemModeRef.current ? 4000 : 5500)
+        return
+      }
+
       if (ticket.status !== "valid") {
         showAlreadyUsed(ticket.scanned_at_local ?? ticket.scanned_at)
         return
@@ -563,12 +685,13 @@ export function DoorScanner() {
       showAlreadyUsed,
       showLocalSuccess,
       syncQueueToServer,
+      gateId,
     ],
   )
 
   const validateTicketToken = useCallback(
     (rawCode: string) => {
-      if (!eventId || cooldownRef.current || visual !== "idle") {
+      if (!eventId || !gateId || cooldownRef.current || visual !== "idle") {
         return
       }
 
@@ -642,7 +765,7 @@ export function DoorScanner() {
             // Manifiesto stale: con red, validar en servidor.
             if (navigator.onLine) {
               startTransition(async () => {
-                const result = await scanAndValidateTicket(raw, eventId)
+                const result = await scanAndValidateTicket(raw, eventId, gateId)
                 applyServerResult(result)
               })
               return
@@ -666,7 +789,7 @@ export function DoorScanner() {
           }
 
           startTransition(async () => {
-            const result = await scanAndValidateTicket(raw, eventId)
+            const result = await scanAndValidateTicket(raw, eventId, gateId)
             applyServerResult(result)
           })
         } catch (error) {
@@ -682,6 +805,7 @@ export function DoorScanner() {
     [
       applyServerResult,
       eventId,
+      gateId,
       manifestMeta,
       returnToIdle,
       selectedEvent?.qrType,
@@ -713,7 +837,7 @@ export function DoorScanner() {
   return (
     <div
       className={cn(
-        "fixed inset-0 z-[80] flex flex-col text-zinc-900 dark:text-white transition-colors duration-200",
+        "fixed inset-0 z-[80] flex flex-col text-white transition-colors duration-200",
         visual === "success" && "bg-emerald-500",
         visual === "success_free" && "bg-cyan-500",
         visual === "error" && "bg-red-700",
@@ -743,10 +867,10 @@ export function DoorScanner() {
                   <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-violet-300">
                     {isTotemMode ? "Modo tótem" : "Control de Puerta"}
                   </p>
-                  <h1 className="mt-1 text-2xl font-black tracking-tight">
+                  <h1 className="mt-1 text-2xl font-black tracking-tight text-white">
                     Control de Puerta (Escáner)
                   </h1>
-                  <p className="mt-1 max-w-md text-xs leading-5 text-zinc-400">
+                  <p className="mt-1 max-w-md text-xs leading-5 text-white/60">
                     Escaneá los códigos QR desde tu celular o buscá al comprador
                     por nombre si se quedó sin batería.
                   </p>
@@ -756,7 +880,7 @@ export function DoorScanner() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="shrink-0 border-white/20 bg-white/5 text-zinc-900 dark:text-white hover:bg-white/10"
+                  className="shrink-0 border-white/20 bg-white/5 text-white hover:bg-white/10"
                   nativeButton={false}
                   render={<a href="/admin" />}
                 >
@@ -766,7 +890,7 @@ export function DoorScanner() {
             </div>
 
             <div
-              className="grid grid-cols-2 gap-2 rounded-2xl border border-zinc-200 dark:border-white/10 bg-white/5 p-1"
+              className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-white/5 p-1"
               role="group"
               aria-label="Modo de acceso"
             >
@@ -777,7 +901,7 @@ export function DoorScanner() {
                   "inline-flex h-11 items-center justify-center gap-2 rounded-xl text-xs font-bold transition-colors",
                   !isTotemMode
                     ? "bg-violet-600 text-white"
-                    : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white",
+                    : "text-white/55 hover:text-white",
                 )}
               >
                 <Smartphone className="size-4" aria-hidden="true" />
@@ -790,7 +914,7 @@ export function DoorScanner() {
                   "inline-flex h-11 items-center justify-center gap-2 rounded-xl text-xs font-bold transition-colors",
                   isTotemMode
                     ? "bg-emerald-600 text-white"
-                    : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white",
+                    : "text-white/55 hover:text-white",
                 )}
               >
                 <Monitor className="size-4" aria-hidden="true" />
@@ -803,16 +927,61 @@ export function DoorScanner() {
               onValueChange={(value) => {
                 setEventId(value ?? "")
               }}
+              items={events.map((event) => ({
+                value: event.id,
+                label: `${event.title}${event.qrType === "static" ? " · QR fijo" : ""}${event.status === "draft" ? " (borrador)" : ""}`,
+              }))}
             >
-              <SelectTrigger className="h-12 w-full border-white/15 bg-white/10 text-left text-base text-zinc-900 dark:text-white">
-                <SelectValue placeholder="Elegí el evento activo" />
+              <SelectTrigger className="h-12 w-full max-w-full overflow-hidden border-white/15 bg-white/10 text-left text-base text-white">
+                <SelectValue placeholder="Elegí el evento activo">
+                  {selectedEvent
+                    ? `${selectedEvent.title}${selectedEvent.qrType === "static" ? " · QR fijo" : ""}${selectedEvent.status === "draft" ? " (borrador)" : ""}`
+                    : null}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {events.map((event) => (
                   <SelectItem key={event.id} value={event.id}>
-                    {event.title}
-                    {event.qrType === "static" ? " · QR fijo" : ""}
-                    {event.status === "draft" ? " (borrador)" : ""}
+                    <span className="block max-w-[200px] truncate sm:max-w-[300px]">
+                      {event.title}
+                    </span>
+                    <span className="shrink-0 text-sm text-muted-foreground">
+                      {event.qrType === "static" ? "QR fijo" : ""}
+                      {event.status === "draft" ? " (borrador)" : ""}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select
+              value={gateId}
+              onValueChange={(value) => {
+                setGateId(value ?? "")
+              }}
+              items={gates.map((gate) => ({
+                value: gate.id,
+                label: gate.label,
+              }))}
+            >
+              <SelectTrigger className="h-12 w-full max-w-full overflow-hidden border-white/15 bg-white/10 text-left text-base text-white">
+                <SelectValue placeholder="Gatera / sector que controlás">
+                  {gates.find((gate) => gate.id === gateId)?.label ?? null}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {gates.map((gate) => (
+                  <SelectItem key={gate.id} value={gate.id}>
+                    <span className="flex items-center gap-2">
+                      <span
+                        className="size-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: gate.color }}
+                        aria-hidden
+                      />
+                      <span className="block max-w-[220px] truncate">
+                        {gate.label}
+                      </span>
+                    </span>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -889,7 +1058,7 @@ export function DoorScanner() {
                   type="button"
                   disabled={!eventId || !hasLocalManifest}
                   onClick={() => setSearchOpen(true)}
-                  className="h-12 rounded-2xl bg-zinc-800 text-xs font-bold text-zinc-900 dark:text-white hover:bg-zinc-700"
+                  className="h-12 rounded-2xl bg-zinc-800 text-xs font-bold text-white hover:bg-zinc-700"
                 >
                   <Search className="size-4" />
                   Buscar por nombre
@@ -906,10 +1075,19 @@ export function DoorScanner() {
             ) : !eventId ? (
               <div className="grid h-full place-items-center px-6 text-center">
                 <div>
-                  <ScanLine className="mx-auto size-12 text-zinc-500" />
-                  <p className="mt-4 text-lg text-zinc-700 dark:text-zinc-300">
+                  <ScanLine className="mx-auto size-12 text-white/50" />
+                  <p className="mt-4 text-lg text-white/85">
                     Seleccioná un evento para activar{" "}
                     {isTotemMode ? "el lector HID" : "la cámara"}
+                  </p>
+                </div>
+              </div>
+            ) : !gateId ? (
+              <div className="grid h-full place-items-center px-6 text-center">
+                <div>
+                  <ScanLine className="mx-auto size-12 text-white/50" />
+                  <p className="mt-4 text-lg text-white/85">
+                    Seleccioná la gatera o sector que estás controlando
                   </p>
                 </div>
               </div>
@@ -925,7 +1103,7 @@ export function DoorScanner() {
                 <div>
                   <CameraOff className="mx-auto size-12 text-amber-400" />
                   <p className="mt-4 text-xl font-bold">Cámara bloqueada</p>
-                  <p className="mt-2 max-w-sm text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+                  <p className="mt-2 max-w-sm text-sm leading-6 text-white/65">
                     {cameraError}
                   </p>
                 </div>
@@ -956,10 +1134,10 @@ export function DoorScanner() {
                   }}
                 />
                 <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/60 to-transparent px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-16 text-center">
-                  <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  <p className="text-sm font-medium text-white/85">
                     {selectedEvent?.title}
                   </p>
-                  <p className="mt-1 text-xs text-zinc-500">
+                  <p className="mt-1 text-xs text-white/55">
                     {hasLocalManifest
                       ? "Validación local Instantánea · sync cuando haya red"
                       : "Descargá la lista de entradas antes de operar sin señal"}
@@ -1022,10 +1200,10 @@ export function DoorScanner() {
           {(visual === "success" || visual === "success_free") &&
           feedback?.isFreePass ? (
             <div className="mt-8 rounded-2xl bg-black/25 px-6 py-5 ring-2 ring-white/30">
-              <p className="text-xs font-bold uppercase tracking-[0.22em] text-zinc-900 dark:text-white/70">
+              <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/70">
                 Anti-fraude puerta
               </p>
-              <p className="mt-2 text-3xl font-black tracking-tight">
+              <p className="mt-2 text-3xl font-black tracking-tight text-white">
                 ENTRADA GRATUITA ($0) · NO COBRAR
               </p>
             </div>
@@ -1034,13 +1212,13 @@ export function DoorScanner() {
           {(visual === "success" || visual === "success_free") &&
           feedback?.bonus &&
           !feedback.isFreePass ? (
-            <div className="mt-8 flex items-center gap-3 rounded-2xl bg-zinc-100 dark:bg-black/20 px-5 py-4 text-left ring-1 ring-white/20">
-              <Gift className="size-10 shrink-0" />
+            <div className="mt-8 flex items-center gap-3 rounded-2xl bg-black/20 px-5 py-4 text-left ring-1 ring-white/20">
+              <Gift className="size-10 shrink-0 text-white" />
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-900 dark:text-white/70">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/70">
                   Smart Yield · Entregar
                 </p>
-                <p className="text-2xl font-black">{feedback.bonus}</p>
+                <p className="text-2xl font-black text-white">{feedback.bonus}</p>
               </div>
             </div>
           ) : null}

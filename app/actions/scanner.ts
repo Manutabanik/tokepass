@@ -16,10 +16,17 @@ import {
 } from "@/lib/event-schedule"
 import { logger } from "@/lib/logger"
 import { createClient } from "@/lib/supabase/server"
+import {
+  GENERAL_SCANNER_GATE_ID,
+  PARKING_SCANNER_GATE_ID,
+  resolveTicketSectorKey,
+  ticketMatchesScannerGate,
+  type ScannerGate,
+} from "@/lib/scanner/gate"
 import type { QrType, TicketStatus } from "@/types/database"
 
 const TICKET_SCAN_SELECT =
-  "id, status, event_id, order_id, totp_secret, scanned_at, max_admissions, admissions_used, is_test, is_dynamic_qr, event_seating_units(label, sector_name, row_label), ticket_tiers(name, price, time_limit, bonus_reward, day_id), events(id, title, organizer_id, qr_type, date, schedule_days, status)"
+  "id, status, event_id, order_id, totp_secret, scanned_at, max_admissions, admissions_used, is_test, is_dynamic_qr, ticket_type, event_seating_units(label, sector_id, sector_name, row_label), ticket_tiers(name, price, time_limit, bonus_reward, day_id, seating_sector_id), events(id, title, organizer_id, qr_type, date, schedule_days, status), orders!tickets_order_id_fkey(payment_method)"
 
 export type ScannerEventOption = {
   id: string
@@ -66,8 +73,10 @@ export type ScanTicketResult =
         | "update_failed"
         | "unpaid"
         | "test_ticket_live"
+        | "wrong_sector"
       message: string
       scannedAt?: string | null
+      redirectSector?: string
     }
 
 type TicketScanRow = {
@@ -81,8 +90,10 @@ type TicketScanRow = {
   admissions_used: number
   is_test?: boolean | null
   is_dynamic_qr?: boolean | null
+  ticket_type?: string | null
   event_seating_units: {
     label: string
+    sector_id?: string | null
     sector_name: string
     row_label: string | null
   } | null
@@ -92,6 +103,7 @@ type TicketScanRow = {
     time_limit: string | null
     bonus_reward: string | null
     day_id: string | null
+    seating_sector_id?: string | null
   } | null
   events: {
     id: string
@@ -102,6 +114,17 @@ type TicketScanRow = {
     schedule_days: unknown
     status?: string | null
   } | null
+  orders?:
+    | { payment_method?: string | null }
+    | Array<{ payment_method?: string | null }>
+    | null
+}
+
+function ticketOrderPaymentMethod(row: TicketScanRow): string | null {
+  const orders = row.orders
+  if (!orders) return null
+  const one = Array.isArray(orders) ? orders[0] : orders
+  return one?.payment_method ?? null
 }
 
 function isFreePassTier(
@@ -148,9 +171,56 @@ export async function getScannerEvents(): Promise<ScannerEventOption[]> {
   }))
 }
 
+export async function getScannerGates(
+  eventId: string,
+): Promise<ScannerGate[]> {
+  if (!eventId) return []
+  const access = await assertEventOpsAccess(eventId, ["door_staff"])
+  if (!access.ok) return []
+
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc("get_event_scanner_gates", {
+    p_event_id: eventId,
+  })
+  if (error || !data) {
+    return [
+      {
+        id: GENERAL_SCANNER_GATE_ID,
+        label: "Acceso General",
+        color: "#10b981",
+        kind: "general",
+      },
+      {
+        id: PARKING_SCANNER_GATE_ID,
+        label: "Barrera de Estacionamiento",
+        color: "#f59e0b",
+        kind: "parking",
+      },
+    ]
+  }
+
+  return (data as Array<{
+    gate_id: string
+    label: string
+    color: string
+    kind: string | null
+  }>).map((row) => ({
+    id: row.gate_id,
+    label: row.label,
+    color: row.color,
+    kind:
+      row.kind === "sector"
+        ? "sector"
+        : row.kind === "parking"
+          ? "parking"
+          : "general",
+  }))
+}
+
 export async function scanAndValidateTicket(
   base64Payload: string,
   eventId: string,
+  gateId?: string | null,
 ): Promise<ScanTicketResult> {
   if (!base64Payload?.trim() || !eventId) {
     return {
@@ -287,6 +357,33 @@ export async function scanAndValidateTicket(
     }
   }
 
+  const selectedGate = gateId?.trim()
+  if (!selectedGate) {
+    return {
+      success: false,
+      status: "invalid_payload",
+      message: "Seleccioná la gatera / sector que estás controlando",
+    }
+  }
+
+  const ticketGate = resolveTicketSectorKey({
+    seatingSectorId: row.event_seating_units?.sector_id,
+    seatingSectorName: row.event_seating_units?.sector_name,
+    tierSeatingSectorId: row.ticket_tiers?.seating_sector_id,
+  })
+  const gateMatch = ticketMatchesScannerGate(selectedGate, {
+    ...ticketGate,
+    ticketType: row.ticket_type,
+  })
+  if (!gateMatch.ok) {
+    return {
+      success: false,
+      status: "wrong_sector",
+      message: `ACCESO DENEGADO - ENTRADA PARA OTRO SECTOR (Dirigirse a: ${gateMatch.correctSector})`,
+      redirectSector: gateMatch.correctSector,
+    }
+  }
+
   const scheduleDays = parseScheduleDays(row.events?.schedule_days)
   const dayGate = isTicketValidForNow({
     scheduleDays,
@@ -366,8 +463,9 @@ export async function scanAndValidateTicket(
 
   const eventStatus = row.events?.status ?? null
   const isTestTicket = Boolean(row.is_test)
+  const isSandbox = ticketOrderPaymentMethod(row) === "test_sandbox"
 
-  if (isTestTicket && eventStatus !== "draft") {
+  if (isTestTicket && eventStatus !== "draft" && !isSandbox) {
     return {
       success: false,
       status: "test_ticket_live",
@@ -459,9 +557,13 @@ export async function scanAndValidateTicket(
   return {
     success: true,
     status: "granted",
-    isTestScan: Boolean(admission.is_test_scan) || (isTestTicket && eventStatus === "draft"),
-    message:
-      isTestTicket && eventStatus === "draft"
+    isTestScan:
+      Boolean(admission.is_test_scan) ||
+      (isTestTicket && eventStatus === "draft") ||
+      isSandbox,
+    message: isSandbox
+      ? "ACCESO PERMITIDO · COMPRA DE PRUEBA (SANDBOX)"
+      : isTestTicket && eventStatus === "draft"
         ? "LECTURA DE PRUEBA OK (EVENTO EN BORRADOR)"
         : (admission.remaining ?? 0) > 0
           ? `ACCESO PERMITIDO · QUEDAN ${admission.remaining} INGRESOS`
@@ -514,11 +616,15 @@ export type EventTicketManifestPayload = {
     seating_label: string | null
     seating_sector_name: string | null
     seating_row_label: string | null
+    seating_sector_id: string | null
     is_test: boolean
+    /** Compra sandbox (test_sandbox): válida en puerta para E2E. */
+    is_sandbox: boolean
     tier_price: number
     group_id: string | null
     group_slot: number | null
     batch_id: string | null
+    ticket_type: string | null
   }>
 }
 
@@ -565,7 +671,7 @@ export async function fetchEventTicketManifest(
   const withHolder = await supabase
     .from("tickets")
     .select(
-      "id, event_id, totp_secret, status, scanned_at, owner_id, max_admissions, admissions_used, is_test, holder_name, holder_dni, holder_email, group_id, group_slot, batch_id, event_seating_units(label, sector_name, row_label), ticket_tiers(name, price)",
+      "id, event_id, totp_secret, status, scanned_at, owner_id, max_admissions, admissions_used, is_test, ticket_type, holder_name, holder_dni, holder_email, group_id, group_slot, batch_id, event_seating_units(label, sector_id, sector_name, row_label), ticket_tiers(name, price, seating_sector_id), orders!tickets_order_id_fkey(payment_method)",
     )
     .eq("event_id", eventId)
     .in("status", ["valid", "used", "scanned"])
@@ -574,7 +680,7 @@ export async function fetchEventTicketManifest(
     const fallback = await supabase
       .from("tickets")
       .select(
-        "id, event_id, totp_secret, status, scanned_at, owner_id, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label), ticket_tiers(name, price)",
+        "id, event_id, totp_secret, status, scanned_at, owner_id, max_admissions, admissions_used, is_test, ticket_type, event_seating_units(label, sector_id, sector_name, row_label), ticket_tiers(name, price, seating_sector_id), orders!tickets_order_id_fkey(payment_method)",
       )
       .eq("event_id", eventId)
       .in("status", ["valid", "used", "scanned"])
@@ -601,14 +707,31 @@ export async function fetchEventTicketManifest(
     group_slot?: number | null
     batch_id?: string | null
     is_test?: boolean | null
-    ticket_tiers: { name: string; price?: number | null } | null
+    ticket_type?: string | null
+    orders?:
+      | { payment_method?: string | null }
+      | Array<{ payment_method?: string | null }>
+      | null
+    ticket_tiers: {
+      name: string
+      price?: number | null
+      seating_sector_id?: string | null
+    } | null
     max_admissions: number
     admissions_used: number
     event_seating_units: {
       label: string
+      sector_id?: string | null
       sector_name: string
       row_label: string | null
     } | null
+  }
+
+  function orderPaymentMethod(row: Row): string | null {
+    const orders = row.orders
+    if (!orders) return null
+    const one = Array.isArray(orders) ? orders[0] : orders
+    return one?.payment_method ?? null
   }
 
   const rows = (data ?? []) as unknown as Row[]
@@ -657,12 +780,20 @@ export async function fetchEventTicketManifest(
 
   const tickets = rows
     .filter((row) => {
-      // Defense in depth: never put draft/test tickets on a live-door manifest.
-      if (event.status === "published" && Boolean(row.is_test)) return false
+      const isSandbox = orderPaymentMethod(row) === "test_sandbox"
+      // Borradores de prueba fuera de sandbox no van a puerta en vivo.
+      if (
+        event.status === "published" &&
+        Boolean(row.is_test) &&
+        !isSandbox
+      ) {
+        return false
+      }
       return true
     })
     .map((row) => {
     const owner = row.owner_id ? ownerMap.get(row.owner_id) : null
+    const isSandbox = orderPaymentMethod(row) === "test_sandbox"
     return {
       id: row.id,
       event_id: row.event_id,
@@ -685,17 +816,26 @@ export async function fetchEventTicketManifest(
       seating_sector_name:
         row.event_seating_units?.sector_name ?? null,
       seating_row_label: row.event_seating_units?.row_label ?? null,
+      seating_sector_id:
+        row.event_seating_units?.sector_id ??
+        row.ticket_tiers?.seating_sector_id ??
+        null,
       is_test: Boolean(row.is_test),
+      is_sandbox: isSandbox,
       tier_price: Number(row.ticket_tiers?.price ?? 0),
       group_id: row.group_id ?? null,
       group_slot:
         row.group_slot == null ? null : Number(row.group_slot),
       batch_id: row.batch_id ?? null,
+      ticket_type: row.ticket_type ?? "admission",
     }
   })
 
   const hashSource = tickets
-    .map((t) => `${t.id}:${t.status}:${t.totp_secret}:${t.is_test ? 1 : 0}`)
+    .map(
+      (t) =>
+        `${t.id}:${t.status}:${t.totp_secret}:${t.is_test ? 1 : 0}:${t.is_sandbox ? 1 : 0}`,
+    )
     .sort()
     .join("|")
 

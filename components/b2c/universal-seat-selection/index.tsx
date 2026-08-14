@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, LoaderCircle } from "lucide-react"
 import { useMemo, useState } from "react"
 
 import { Button } from "@/components/ui/button"
@@ -15,6 +15,8 @@ import {
   type UniversalSeatSelection,
   type UniversalSector,
 } from "@/lib/seating/universal-seat-types"
+import { hydrateNumberedSectorFromUnits } from "@/lib/seating/venue-adapter"
+import type { EventSeatingUnit } from "@/types/venues"
 import { cn } from "@/lib/utils"
 
 type UniversalSeatSelectionFlowProps = {
@@ -25,6 +27,7 @@ type UniversalSeatSelectionFlowProps = {
   embedded?: boolean
   onBack?: () => void
   onContinue?: (selection: UniversalSeatSelection) => void
+  onLoadSectorUnits?: (sectorId: string) => Promise<EventSeatingUnit[]>
 }
 
 export function UniversalSeatSelectionFlow({
@@ -35,15 +38,27 @@ export function UniversalSeatSelectionFlow({
   embedded = false,
   onBack,
   onContinue,
+  onLoadSectorUnits,
 }: UniversalSeatSelectionFlowProps) {
   const [sectorId, setSectorId] = useState<string | null>(null)
   const [quantity, setQuantity] = useState(1)
   const [groupId, setGroupId] = useState<string | null>(null)
   const [selectedSeatIds, setSelectedSeatIds] = useState<string[]>([])
+  const [hydratedSectors, setHydratedSectors] = useState<
+    Record<string, UniversalSector>
+  >({})
+  const [loadingSectorId, setLoadingSectorId] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  const resolvedSectors = useMemo(
+    () =>
+      sectors.map((sector) => hydratedSectors[sector.id] ?? sector),
+    [hydratedSectors, sectors],
+  )
 
   const sector = useMemo(
-    () => sectors.find((item) => item.id === sectorId) ?? null,
-    [sectorId, sectors],
+    () => resolvedSectors.find((item) => item.id === sectorId) ?? null,
+    [sectorId, resolvedSectors],
   )
 
   const selection = useMemo<UniversalSeatSelection | null>(() => {
@@ -84,13 +99,30 @@ export function UniversalSeatSelectionFlow({
     }
   }, [groupId, quantity, sector, selectedSeatIds])
 
-  function handleSelectSector(nextId: string) {
+  async function handleSelectSector(nextId: string) {
     setSectorId(nextId)
     setQuantity(1)
     setSelectedSeatIds([])
-    const next = sectors.find((item) => item.id === nextId)
+    setLoadError(null)
+    const next = resolvedSectors.find((item) => item.id === nextId)
     if (next?.type === "numbered") {
       setGroupId(next.groups[0]?.id ?? null)
+      const needsUnits =
+        next.groups.every((group) => group.seats.length === 0) &&
+        Boolean(onLoadSectorUnits)
+      if (needsUnits && onLoadSectorUnits) {
+        setLoadingSectorId(nextId)
+        try {
+          const units = await onLoadSectorUnits(nextId)
+          const hydrated = hydrateNumberedSectorFromUnits(next, units)
+          setHydratedSectors((current) => ({ ...current, [nextId]: hydrated }))
+          setGroupId(hydrated.groups[0]?.id ?? null)
+        } catch {
+          setLoadError("No se pudieron cargar las ubicaciones de esta zona.")
+        } finally {
+          setLoadingSectorId(null)
+        }
+      }
     } else {
       setGroupId(null)
     }
@@ -153,10 +185,23 @@ export function UniversalSeatSelectionFlow({
         />
 
         <UniversalSectorCards
-          sectors={sectors}
+          sectors={resolvedSectors}
           selectedId={sectorId}
           onSelect={handleSelectSector}
         />
+
+        {loadingSectorId === sectorId ? (
+          <div className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-card px-4 py-8 text-sm text-muted-foreground">
+            <LoaderCircle className="size-4 animate-spin" aria-hidden />
+            Cargando ubicaciones de esta zona…
+          </div>
+        ) : null}
+
+        {loadError ? (
+          <p className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-700 dark:text-rose-300">
+            {loadError}
+          </p>
+        ) : null}
 
         {sector?.type === "general" ? (
           <UniversalGeneralQuantity
@@ -167,7 +212,7 @@ export function UniversalSeatSelectionFlow({
           />
         ) : null}
 
-        {sector?.type === "numbered" ? (
+        {sector?.type === "numbered" && loadingSectorId !== sector.id ? (
           <UniversalNumberedSeatPicker
             sector={sector}
             groupId={groupId}

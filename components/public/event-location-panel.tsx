@@ -14,7 +14,7 @@ const EventLocationMapInner = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex h-full w-full items-center justify-center bg-zinc-900 text-xs text-zinc-500">
+      <div className="flex h-full w-full items-center justify-center bg-muted text-xs text-muted-foreground">
         Cargando mapa…
       </div>
     ),
@@ -62,9 +62,11 @@ export function EventLocationPanel({
 
   return (
     <section className="space-y-4">
-      <h2 className="text-lg font-bold tracking-tight text-white">Ubicación</h2>
+      <h2 className="text-lg font-bold tracking-tight text-foreground">
+        Ubicación
+      </h2>
 
-      <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 shadow-[0_12px_40px_rgba(0,0,0,0.35)]">
+      <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-[0_12px_40px_rgba(0,0,0,0.12)]">
         <a
           href={mapsUrl}
           target="_blank"
@@ -80,13 +82,13 @@ export function EventLocationPanel({
               />
             </div>
           ) : (
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_#1f2937_0%,_#09090b_70%)]">
+            <div className="absolute inset-0 bg-muted">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_40%,rgba(16,185,129,0.18),transparent_45%)]" />
               <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-[60%] flex-col items-center">
                 <span className="grid size-12 place-items-center rounded-full bg-emerald-500 text-zinc-950 shadow-[0_0_0_10px_rgba(16,185,129,0.18)]">
                   <MapPinned className="size-6" aria-hidden="true" />
                 </span>
-                <span className="mt-3 rounded-full bg-black/55 px-3 py-1 text-[11px] font-semibold text-zinc-100 backdrop-blur-sm">
+                <span className="mt-3 rounded-full bg-black/55 px-3 py-1 text-[11px] font-semibold text-white backdrop-blur-sm">
                   Ver en Maps
                 </span>
               </div>
@@ -97,15 +99,17 @@ export function EventLocationPanel({
         <div className="space-y-4 p-4 sm:p-5">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-base font-bold text-white">{venueName}</p>
-              <p className="mt-1 text-sm leading-6 text-zinc-400">{address}</p>
+              <p className="text-base font-bold text-foreground">{venueName}</p>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                {address}
+              </p>
             </div>
             <Button
               type="button"
               variant="ghost"
               size="icon"
               aria-label="Copiar dirección"
-              className="size-10 shrink-0 rounded-full text-zinc-300 hover:bg-zinc-800 hover:text-white"
+              className="size-10 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
               onClick={() => void copyAddress()}
             >
               <Copy className="size-4" aria-hidden="true" />
@@ -114,7 +118,7 @@ export function EventLocationPanel({
 
           <div className="grid grid-cols-2 gap-2">
             <Button
-              className="h-11 rounded-xl bg-emerald-500 text-zinc-950 hover:bg-emerald-400"
+              className="h-11 rounded-xl bg-emerald-500 font-bold text-zinc-950 hover:bg-emerald-600"
               nativeButton={false}
               render={<a href={mapsUrl} target="_blank" rel="noreferrer" />}
             >
@@ -123,7 +127,7 @@ export function EventLocationPanel({
             </Button>
             <Button
               variant="outline"
-              className="h-11 rounded-xl border-zinc-700 bg-zinc-950 text-zinc-100 hover:bg-zinc-900"
+              className="h-11 rounded-xl border-border bg-background text-foreground hover:bg-muted"
               nativeButton={false}
               render={<a href={uberUrl} target="_blank" rel="noreferrer" />}
             >
@@ -132,7 +136,7 @@ export function EventLocationPanel({
             </Button>
           </div>
 
-          <p className="text-xs leading-5 text-zinc-500">
+          <p className="text-xs leading-5 text-muted-foreground">
             Consultá accesibilidad y estacionamiento con el lugar. Llegá con
             margen: el ingreso puede demorar en horarios pico.
           </p>

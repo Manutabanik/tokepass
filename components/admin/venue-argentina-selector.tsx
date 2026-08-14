@@ -57,7 +57,7 @@ const VenueLeafletMap = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="grid h-full place-items-center bg-white dark:bg-zinc-950 text-sm text-zinc-500">
+      <div className="grid h-full place-items-center bg-white dark:bg-zinc-950 text-sm text-slate-600 dark:text-zinc-400">
         <span className="inline-flex items-center gap-2">
           <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
           Cargando mapa…
@@ -336,12 +336,12 @@ export function VenueArgentinaSelector({
       )}
     >
       <div className="flex items-start gap-3">
-        <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-400">
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">
           <MapPinned className="size-5" aria-hidden="true" />
         </span>
         <div>
           <h3 className="font-bold text-zinc-900 dark:text-white">Ubicación en Argentina</h3>
-          <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+          <p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-zinc-400">
             Georef (provincias/departamentos) + Nominatim (dirección) + Leaflet
             (mapa). Sin API keys de pago.
           </p>
@@ -422,7 +422,7 @@ export function VenueArgentinaSelector({
               ))}
             </select>
             {loadingProvinces ? (
-              <LoaderCircle className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-zinc-500" />
+              <LoaderCircle className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-slate-600 dark:text-zinc-400" />
             ) : null}
           </div>
         </div>
@@ -456,7 +456,7 @@ export function VenueArgentinaSelector({
               ))}
             </select>
             {loadingDepartments ? (
-              <LoaderCircle className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-zinc-500" />
+              <LoaderCircle className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-slate-600 dark:text-zinc-400" />
             ) : null}
           </div>
         </div>
@@ -475,7 +475,7 @@ export function VenueArgentinaSelector({
         </Label>
         <div className="relative">
           <Search
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-500"
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-600 dark:text-zinc-400"
             aria-hidden="true"
           />
           <Input
@@ -508,7 +508,7 @@ export function VenueArgentinaSelector({
             autoComplete="off"
           />
           {searching ? (
-            <LoaderCircle className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-zinc-500" />
+            <LoaderCircle className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-slate-600 dark:text-zinc-400" />
           ) : null}
         </div>
 
@@ -522,7 +522,7 @@ export function VenueArgentinaSelector({
               <li key={result.placeId} role="option">
                 <button
                   type="button"
-                  className="block w-full px-3 py-2.5 text-left text-xs leading-relaxed text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-700 hover:text-zinc-900 dark:hover:text-white"
+                  className="block w-full px-3 py-2.5 text-left text-xs leading-relaxed text-zinc-800 dark:text-zinc-200 transition hover:bg-slate-300 dark:hover:bg-zinc-700 hover:text-zinc-900 dark:hover:text-white"
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => chooseResult(result)}
                 >
@@ -568,7 +568,7 @@ export function VenueArgentinaSelector({
             href={mapsHref}
             target="_blank"
             rel="noreferrer"
-            className="text-xs font-medium text-emerald-400 hover:text-emerald-300"
+            className="text-xs font-medium text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:text-emerald-300"
           >
             Abrir en Google Maps
           </a>

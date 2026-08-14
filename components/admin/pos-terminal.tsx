@@ -352,9 +352,9 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
 
   if (events.length === 0) {
     return (
-      <div className="rounded-3xl border border-dashed border-zinc-200 bg-white px-5 py-12 text-center dark:border-zinc-800 dark:bg-zinc-950/60">
-        <Ticket className="mx-auto size-8 text-zinc-600" />
-        <p className="mt-3 text-sm text-zinc-500">
+      <div className="rounded-3xl border border-dashed border-border bg-card px-5 py-12 text-center">
+        <Ticket className="mx-auto size-8 text-muted-foreground" />
+        <p className="mt-3 text-sm text-muted-foreground">
           No hay eventos disponibles para cobrar en puerta.
         </p>
       </div>
@@ -370,11 +370,11 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
         <div className="space-y-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-emerald-300">
+              <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-200">
                 <Unlock className="size-3.5" />
                 Caja abierta
               </p>
-              <p className="mt-0.5 text-sm text-zinc-600 dark:text-zinc-400">
+              <p className="mt-0.5 text-sm text-muted-foreground">
                 Fondo {formatCurrency(shift.startAmount)} · Cash{" "}
                 {formatCurrency(shift.cashSalesTotal)} · Esperado{" "}
                 {formatCurrency(cashExpected)}
@@ -404,7 +404,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
             <Button
               type="button"
               variant="outline"
-              className="min-h-11 flex-1 rounded-xl border-red-500/40 text-red-200"
+              className="min-h-11 flex-1 rounded-xl border-red-500/40 text-rose-600 dark:text-rose-200"
               disabled={isPending}
               onClick={openVoidList}
             >
@@ -427,7 +427,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
           </div>
         </div>
       ) : (
-        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-600 dark:text-amber-200">
           {shiftLoading
             ? "Revisando turno…"
             : "Abrí la caja para empezar a cobrar."}
@@ -435,15 +435,26 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
       )}
 
       <div className="space-y-2">
-        <Label className="text-zinc-600 dark:text-zinc-400">Evento</Label>
-        <Select value={eventId} onValueChange={(v) => v && onEventChange(v)}>
-          <SelectTrigger className="h-14 rounded-2xl border-zinc-200 bg-white text-base text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white">
-            <SelectValue placeholder="Elegí evento" />
+        <Label className="text-muted-foreground">Evento</Label>
+        <Select
+          value={eventId}
+          onValueChange={(v) => v && onEventChange(v)}
+          items={events.map((event) => ({
+            value: event.id,
+            label: event.title,
+          }))}
+        >
+          <SelectTrigger className="h-14 w-full max-w-full overflow-hidden rounded-2xl border-border bg-card text-base text-foreground">
+            <SelectValue placeholder="Elegí evento">
+              {selectedEvent?.title ?? null}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {events.map((event) => (
               <SelectItem key={event.id} value={event.id}>
-                {event.title}
+                <span className="block max-w-[200px] truncate sm:max-w-[300px]">
+                  {event.title}
+                </span>
               </SelectItem>
             ))}
           </SelectContent>
@@ -455,30 +466,54 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
         className="space-y-4 disabled:opacity-50"
       >
         <div className="space-y-2">
-          <Label className="text-zinc-600 dark:text-zinc-400">
+          <Label className="text-muted-foreground">
             Tipo de entrada
           </Label>
           <Select
             value={selectedTierId}
             onValueChange={(v) => v && setTierId(v)}
+            items={selectedTier.map((tier) => ({
+              value: tier.id,
+              label: `${tier.name}${
+                tier.admitCount > 1 ? ` · Mesa x${tier.admitCount}` : ""
+              }${
+                tier.requiresSupervisorPin
+                  ? " · Cortesía (PIN)"
+                  : ` · ${formatCurrency(tier.price)}`
+              }`,
+            }))}
           >
-            <SelectTrigger className="h-14 rounded-2xl border-zinc-200 bg-white text-base text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white">
-              <SelectValue placeholder="Elegí tipo" />
+            <SelectTrigger className="h-14 w-full max-w-full overflow-hidden rounded-2xl border-border bg-card text-base text-foreground">
+              <SelectValue placeholder="Seleccioná un tipo de entrada">
+                {selectedTierItem
+                  ? `${selectedTierItem.name} (${
+                      selectedTierItem.requiresSupervisorPin
+                        ? "Cortesía"
+                        : selectedTierItem.price === 0
+                          ? "Gratis"
+                          : formatCurrency(selectedTierItem.price)
+                    })`
+                  : null}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {selectedTier.map((tier) => (
                 <SelectItem key={tier.id} value={tier.id}>
-                  {tier.name}
-                  {tier.admitCount > 1 ? ` · Mesa x${tier.admitCount}` : ""}
-                  {tier.requiresSupervisorPin
-                    ? " · Cortesía (PIN)"
-                    : ` · ${formatCurrency(tier.price)}`}
+                  <span className="block max-w-[200px] truncate sm:max-w-[300px]">
+                    {tier.name}
+                  </span>
+                  <span className="shrink-0 text-sm text-muted-foreground">
+                    {tier.admitCount > 1 ? `Mesa x${tier.admitCount} · ` : ""}
+                    {tier.requiresSupervisorPin
+                      ? "Cortesía (PIN)"
+                      : formatCurrency(tier.price)}
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
           {selectedTierItem ? (
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-muted-foreground">
               {selectedTierItem.available} disponibles
               {selectedTierItem.requiresSupervisorPin
                 ? " · Requiere PIN de Autorización"
@@ -487,8 +522,8 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
           ) : null}
         </div>
 
-        <div className="flex items-center justify-between rounded-2xl border border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-950">
-          <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+        <div className="flex items-center justify-between rounded-2xl border border-border bg-card px-4 py-3">
+          <span className="text-sm font-medium text-muted-foreground">
             Cantidad
           </span>
           <div className="flex items-center gap-3">
@@ -496,20 +531,20 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
               type="button"
               size="icon"
               variant="outline"
-              className="size-12 rounded-full border-zinc-300 dark:border-zinc-700"
+              className="size-12 rounded-full border-border"
               disabled={quantity <= 1}
               onClick={() => setQuantity((q) => Math.max(1, q - 1))}
             >
               <Minus />
             </Button>
-            <span className="w-8 text-center text-2xl font-black tabular-nums text-zinc-900 dark:text-white">
+            <span className="w-8 text-center text-2xl font-black tabular-nums text-foreground">
               {quantity}
             </span>
             <Button
               type="button"
               size="icon"
               variant="outline"
-              className="size-12 rounded-full border-zinc-300 dark:border-zinc-700"
+              className="size-12 rounded-full border-border"
               disabled={
                 !selectedTierItem ||
                 quantity >= Math.min(10, selectedTierItem.available)
@@ -526,8 +561,8 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="pos-dni" className="text-zinc-600 dark:text-zinc-400">
-            DNI del comprador <span className="text-red-400">*</span>
+          <Label htmlFor="pos-dni" className="text-muted-foreground">
+            DNI del comprador <span className="text-rose-600 dark:text-rose-400">*</span>
           </Label>
           <Input
             id="pos-dni"
@@ -538,13 +573,13 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
             onChange={(e) =>
               setDni(e.target.value.replace(/\D/g, "").slice(0, 11))
             }
-            className="h-14 rounded-2xl border-zinc-200 bg-white text-base text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+            className="h-14 rounded-2xl border-border bg-card text-base text-foreground"
             required
           />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="pos-name" className="text-zinc-600 dark:text-zinc-400">
+          <Label htmlFor="pos-name" className="text-muted-foreground">
             Nombre (opcional)
           </Label>
           <Input
@@ -553,14 +588,14 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
             placeholder="Ej. Juan Pérez"
             value={buyerName}
             onChange={(e) => setBuyerName(e.target.value)}
-            className="h-14 rounded-2xl border-zinc-200 bg-white text-base text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+            className="h-14 rounded-2xl border-border bg-card text-base text-foreground"
           />
         </div>
 
         <div className="space-y-2">
           <Label
             htmlFor="pos-phone"
-            className="text-zinc-600 dark:text-zinc-400"
+            className="text-muted-foreground"
           >
             Teléfono / WhatsApp (opcional)
           </Label>
@@ -570,14 +605,14 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
             placeholder="+54 9 11 ..."
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            className="h-14 rounded-2xl border-zinc-200 bg-white text-base text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+            className="h-14 rounded-2xl border-border bg-card text-base text-foreground"
           />
         </div>
 
-        <div className="rounded-2xl border border-zinc-200 bg-white px-4 py-4 dark:border-zinc-800 dark:bg-zinc-950">
+        <div className="rounded-2xl border border-border bg-card px-4 py-4">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-zinc-500">Total</span>
-            <span className="text-3xl font-black tabular-nums text-zinc-900 dark:text-white">
+            <span className="text-sm text-muted-foreground">Total</span>
+            <span className="text-3xl font-black tabular-nums text-foreground">
               {formatCurrency(total)}
             </span>
           </div>
@@ -589,7 +624,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
               type="button"
               disabled={!selectedTierItem}
               onClick={() => requestSell("cash_pos")}
-              className="h-16 rounded-2xl border border-amber-500/40 bg-amber-500/15 text-lg font-bold text-amber-100 hover:bg-amber-500/25"
+              className="h-16 rounded-2xl border border-amber-500/40 bg-amber-500/15 text-lg font-bold text-amber-600 dark:text-amber-200 hover:bg-amber-500/25"
             >
               {isPending ? (
                 <LoaderCircle className="animate-spin" />
@@ -617,7 +652,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
                 type="button"
                 disabled={!selectedTierItem || total <= 0}
                 onClick={() => requestSell("card_pos")}
-                className="h-16 rounded-2xl border border-violet-500/40 bg-violet-500/15 text-lg font-bold text-violet-100 hover:bg-violet-500/25"
+                className="h-16 rounded-2xl border border-violet-500/40 bg-violet-500/15 text-lg font-bold text-violet-700 dark:text-violet-200 hover:bg-violet-500/25"
               >
                 {isPending ? (
                   <LoaderCircle className="animate-spin" />
@@ -630,7 +665,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
                 type="button"
                 disabled={!selectedTierItem || total <= 0}
                 onClick={() => requestSell("transfer_pos")}
-                className="h-16 rounded-2xl border border-sky-500/40 bg-sky-500/15 text-lg font-bold text-sky-100 hover:bg-sky-500/25"
+                className="h-16 rounded-2xl border border-sky-500/40 bg-sky-500/15 text-lg font-bold text-sky-700 dark:text-sky-200 hover:bg-sky-500/25"
               >
                 {isPending ? (
                   <LoaderCircle className="animate-spin" />
@@ -651,10 +686,10 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
           setOpenModal(open)
         }}
       >
-        <DialogContent className="border-zinc-200 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white sm:max-w-md">
+        <DialogContent className="border-border bg-card text-foreground sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Abrir caja</DialogTitle>
-            <DialogDescription className="text-zinc-500">
+            <DialogDescription className="text-muted-foreground">
               Ingresá el fondo inicial antes de cobrar en{" "}
               {selectedEvent?.title ?? "este evento"}.
             </DialogDescription>
@@ -688,15 +723,15 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
       </Dialog>
 
       <Dialog open={closeModal} onOpenChange={setCloseModal}>
-        <DialogContent className="border-zinc-200 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white sm:max-w-md">
+        <DialogContent className="border-border bg-card text-foreground sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Cerrar Turno (Ticket Z)</DialogTitle>
-            <DialogDescription className="text-zinc-500">
+            <DialogDescription className="text-muted-foreground">
               Se imprime el resumen 80mm al confirmar.
             </DialogDescription>
           </DialogHeader>
           {shift ? (
-            <div className="space-y-3 rounded-2xl border border-zinc-200 p-4 text-sm dark:border-zinc-800">
+            <div className="space-y-3 rounded-2xl border border-border p-4 text-sm">
               <Row label="Fondo inicial" value={formatCurrency(shift.startAmount)} />
               <Row
                 label="Ventas efectivo"
@@ -711,7 +746,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
                 value={formatCurrency(shift.transferSalesTotal)}
               />
               <Row label="Entradas emitidas" value={String(shift.ticketsSold)} />
-              <div className="border-t border-zinc-200 pt-3 dark:border-zinc-800">
+              <div className="border-t border-border pt-3">
                 <Row
                   label="Efectivo a entregar"
                   value={formatCurrency(cashExpected)}
@@ -763,7 +798,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
           if (!open) setPinModal(null)
         }}
       >
-        <DialogContent className="border-zinc-200 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white sm:max-w-md">
+        <DialogContent className="border-border bg-card text-foreground sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
               {pinModal?.mode === "config"
@@ -772,7 +807,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
                   ? "Anular Venta"
                   : "Requiere PIN de Supervisor"}
             </DialogTitle>
-            <DialogDescription className="text-zinc-500">
+            <DialogDescription className="text-muted-foreground">
               {pinModal?.mode === "config"
                 ? "Solo organizador/admin. 4 a 12 caracteres."
                 : "Pedile el PIN al supervisor para continuar."}
@@ -794,7 +829,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
               className="min-h-12 text-base tracking-widest"
             />
             {!selectedEvent?.hasSupervisorPin && pinModal?.mode !== "config" ? (
-              <p className="text-xs text-amber-600 dark:text-amber-300">
+              <p className="text-xs text-amber-600 dark:text-amber-200">
                 Este evento todavía no tiene PIN. Configuralo con el botón PIN
                 (organizador) o usá el código ORG si sos el organizador.
               </p>
@@ -819,27 +854,27 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
       </Dialog>
 
       <Dialog open={voidModal} onOpenChange={setVoidModal}>
-        <DialogContent className="max-h-[90dvh] overflow-y-auto border-zinc-200 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white sm:max-w-md">
+        <DialogContent className="max-h-[90dvh] overflow-y-auto border-border bg-card text-foreground sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Anular Venta</DialogTitle>
-            <DialogDescription className="text-zinc-500">
+            <DialogDescription className="text-muted-foreground">
               Solo ventas del turno abierto. Pedirá PIN de Autorización.
             </DialogDescription>
           </DialogHeader>
           {voidOrders.length === 0 ? (
-            <p className="text-sm text-zinc-500">No hay ventas para anular.</p>
+            <p className="text-sm text-muted-foreground">No hay ventas para anular.</p>
           ) : (
             <ul className="space-y-2">
               {voidOrders.map((order) => (
                 <li
                   key={order.orderId}
-                  className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200 px-3 py-3 dark:border-zinc-800"
+                  className="flex items-center justify-between gap-3 rounded-xl border border-border px-3 py-3"
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold">
                       {order.tierName ?? "Entrada"} · {order.ticketCount} QR
                     </p>
-                    <p className="truncate text-xs text-zinc-500">
+                    <p className="truncate text-xs text-muted-foreground">
                       {order.holderName ?? "—"}
                       {order.holderDni ? ` · DNI ${order.holderDni}` : ""} ·{" "}
                       {formatCurrency(order.totalAmount)}
@@ -848,7 +883,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
                   <Button
                     type="button"
                     variant="outline"
-                    className="min-h-11 shrink-0 rounded-xl border-red-500/40 text-red-600"
+                    className="min-h-11 shrink-0 rounded-xl border-red-500/40 text-rose-600 dark:text-rose-200"
                     onClick={() => confirmVoid(order.orderId)}
                   >
                     Anular
@@ -866,34 +901,34 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
           if (!open) setResult(null)
         }}
       >
-        <DialogContent className="max-h-[90dvh] overflow-y-auto border-zinc-200 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white sm:max-w-md">
+        <DialogContent className="max-h-[90dvh] overflow-y-auto border-border bg-card text-foreground sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Venta registrada</DialogTitle>
-            <DialogDescription className="text-zinc-600 dark:text-zinc-400">
+            <DialogDescription className="text-muted-foreground">
               Impresión térmica enviada automáticamente.
             </DialogDescription>
           </DialogHeader>
 
           {result ? (
             <div className="space-y-4">
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              <p className="text-sm text-muted-foreground">
                 Total:{" "}
-                <span className="font-semibold text-zinc-900 dark:text-white">
+                <span className="font-semibold text-foreground">
                   {formatCurrency(result.totalAmount)}
                 </span>
               </p>
               {result.tickets.map((ticket, index) => (
                 <div
                   key={ticket.id}
-                  className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-4 text-center dark:border-zinc-800 dark:bg-black/40"
+                  className="rounded-2xl border border-border bg-muted/50 px-4 py-4 text-center"
                 >
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Entrada {index + 1}
                   </p>
-                  <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                  <p className="text-sm font-medium text-foreground">
                     {ticket.holderName} · DNI {ticket.holderDni}
                   </p>
-                  <div className="mx-auto mt-3 inline-block rounded-xl bg-white p-3">
+                  <div className="mx-auto mt-3 inline-block rounded-xl bg-card p-3">
                     <QRCodeSVG
                       value={ticket.totpSecret}
                       size={220}
@@ -932,7 +967,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
           if (!open) setZReport(null)
         }}
       >
-        <DialogContent className="border-zinc-200 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white sm:max-w-md">
+        <DialogContent className="border-border bg-card text-foreground sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Ticket Z listo</DialogTitle>
             <DialogDescription>
@@ -970,13 +1005,13 @@ function Row({
 }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <span className="text-zinc-500">{label}</span>
+      <span className="text-muted-foreground">{label}</span>
       <span
         className={cn(
           "tabular-nums",
           strong
-            ? "text-base font-black text-emerald-600 dark:text-emerald-300"
-            : "font-semibold text-zinc-900 dark:text-white",
+            ? "text-base font-black text-emerald-600 dark:text-emerald-200"
+            : "font-semibold text-foreground",
         )}
       >
         {value}

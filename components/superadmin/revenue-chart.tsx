@@ -10,12 +10,12 @@ export function RevenueChart({ data }: { data: RevenuePoint[] }) {
     <div>
       <div className="flex items-end justify-between">
         <div>
-          <p className="text-sm text-zinc-500">Ingresos · últimos 14 días</p>
+          <p className="text-sm text-slate-600 dark:text-zinc-400">Ingresos · últimos 14 días</p>
           <p className="mt-1 text-2xl font-bold tracking-tight text-white">
             {formatCurrency(total)}
           </p>
         </div>
-        <span className="rounded-full bg-white/5 px-2.5 py-1 text-xs text-zinc-400">
+        <span className="rounded-full bg-white/5 px-2.5 py-1 text-xs text-slate-600 dark:text-zinc-400">
           Ventas brutas
         </span>
       </div>
@@ -31,7 +31,7 @@ export function RevenueChart({ data }: { data: RevenuePoint[] }) {
               key={point.date}
               className="group relative flex flex-1 flex-col items-center justify-end"
             >
-              <div className="pointer-events-none absolute -top-9 z-10 hidden whitespace-nowrap rounded-lg bg-zinc-800 px-2 py-1 text-[11px] text-white shadow-lg group-hover:block">
+              <div className="pointer-events-none absolute -top-9 z-10 hidden whitespace-nowrap rounded-lg bg-muted dark:bg-zinc-800 px-2 py-1 text-[11px] text-white shadow-lg group-hover:block">
                 {formatCompactCurrency(point.revenue)}
               </div>
               <div

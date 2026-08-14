@@ -150,6 +150,29 @@ export function ComplimentaryIssuer({
     [tiers, tierId],
   )
 
+  const selectedStoreItem = useMemo(
+    () => storeItems.find((item) => item.id === comboItemId) ?? null,
+    [storeItems, comboItemId],
+  )
+
+  const tierSelectItems = useMemo(
+    () =>
+      tiers.map((tier) => ({
+        value: tier.id,
+        label: `${tier.name} (${tier.price === 0 ? "Gratis" : formatCurrency(tier.price)})`,
+      })),
+    [tiers],
+  )
+
+  const storeSelectItems = useMemo(
+    () =>
+      storeItems.map((item) => ({
+        value: item.id,
+        label: `${item.name} · ${formatCurrency(item.price)}`,
+      })),
+    [storeItems],
+  )
+
   useEffect(() => {
     if (!tierId) return
     startTransition(async () => {
@@ -285,7 +308,7 @@ export function ComplimentaryIssuer({
 
   if (tiers.length === 0) {
     return (
-      <p className="rounded-2xl border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-500 dark:border-zinc-700">
+      <p className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
         Creá al menos un tipo de entrada para emitir cortesías.
       </p>
     )
@@ -299,29 +322,42 @@ export function ComplimentaryIssuer({
     <div className="space-y-6">
       <div className="space-y-2">
         <Label>Tipo de entrada</Label>
-        <Select value={tierId} onValueChange={(v) => v && onTierChange(v)}>
-          <SelectTrigger className="min-h-12">
-            <SelectValue placeholder="Elegí tipo" />
+        <Select
+          value={tierId}
+          onValueChange={(v) => v && onTierChange(v)}
+          items={tierSelectItems}
+        >
+          <SelectTrigger className="min-h-12 w-full max-w-full overflow-hidden">
+            <SelectValue placeholder="Seleccioná un tipo de entrada">
+              {selected
+                ? `${selected.name} (${selected.price === 0 ? "Gratis" : formatCurrency(selected.price)})`
+                : null}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {tiers.map((tier) => (
               <SelectItem key={tier.id} value={tier.id}>
-                {tier.name} · {formatCurrency(tier.price)} ·{" "}
-                {tier.admitCount > 1
-                  ? `Mesa x${tier.admitCount}`
-                  : "1 QR"}{" "}
-                · {tier.available} disp.
+                <span className="block max-w-[200px] truncate sm:max-w-[300px]">
+                  {tier.name}
+                </span>
+                <span className="shrink-0 text-sm text-muted-foreground">
+                  ({tier.price === 0 ? "Gratis" : formatCurrency(tier.price)})
+                  {tier.admitCount > 1
+                    ? ` · Mesa x${tier.admitCount}`
+                    : " · 1 QR"}{" "}
+                  · {tier.available} disp.
+                </span>
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
 
-      <div className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950/60">
-        <p className="text-sm font-semibold text-zinc-900 dark:text-white">
+      <div className="rounded-2xl border border-border bg-card p-4">
+        <p className="text-sm font-semibold text-foreground">
           Mesa / agrupación (QRs por unidad)
         </p>
-        <p className="mt-1 text-xs text-zinc-500">
+        <p className="mt-1 text-xs text-muted-foreground">
           Ej: “Mesa para 4” → 4. Cada QR se valida por separado en puerta.
         </p>
         <div className="mt-3 flex flex-wrap items-end gap-2">
@@ -349,11 +385,11 @@ export function ComplimentaryIssuer({
         </div>
       </div>
 
-      <div className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950/60">
-        <p className="text-sm font-semibold text-zinc-900 dark:text-white">
+      <div className="rounded-2xl border border-border bg-card p-4">
+        <p className="text-sm font-semibold text-foreground">
           Combo (extras incluidos)
         </p>
-        <p className="mt-1 text-xs text-zinc-500">
+        <p className="mt-1 text-xs text-muted-foreground">
           Al emitir este tipo, se generan canjes de gastronomía/merch en la
           billetera.
         </p>
@@ -362,14 +398,14 @@ export function ComplimentaryIssuer({
             {comboRows.map((row) => (
               <li
                 key={row.id}
-                className="flex items-center justify-between gap-2 rounded-xl border border-zinc-100 px-3 py-2 text-sm dark:border-zinc-800"
+                className="flex items-center justify-between gap-2 rounded-xl border border-border px-3 py-2 text-sm"
               >
                 <span>
                   {row.quantity}× {row.itemName}
                 </span>
                 <button
                   type="button"
-                  className="text-zinc-400 hover:text-red-500"
+                  className="text-muted-foreground hover:text-red-500"
                   onClick={() => removeCombo(row.id)}
                   aria-label="Quitar"
                 >
@@ -379,23 +415,33 @@ export function ComplimentaryIssuer({
             ))}
           </ul>
         ) : (
-          <p className="mt-3 text-xs text-zinc-500">Sin extras todavía.</p>
+          <p className="mt-3 text-xs text-muted-foreground">Sin extras todavía.</p>
         )}
         {storeItems.length > 0 ? (
           <div className="mt-3 flex flex-wrap items-end gap-2">
-            <div className="min-w-[10rem] flex-1 space-y-1">
+            <div className="min-w-0 flex-1 basis-[10rem] space-y-1">
               <Label>Producto</Label>
               <Select
                 value={comboItemId}
                 onValueChange={(v) => v && setComboItemId(v)}
+                items={storeSelectItems}
               >
-                <SelectTrigger className="min-h-11">
-                  <SelectValue placeholder="Extra" />
+                <SelectTrigger className="min-h-11 w-full max-w-full overflow-hidden">
+                  <SelectValue placeholder="Seleccioná un producto">
+                    {selectedStoreItem
+                      ? `${selectedStoreItem.name} · ${formatCurrency(selectedStoreItem.price)}`
+                      : null}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {storeItems.map((item) => (
                     <SelectItem key={item.id} value={item.id}>
-                      {item.name}
+                      <span className="block max-w-[200px] truncate sm:max-w-[300px]">
+                        {item.name}
+                      </span>
+                      <span className="shrink-0 text-sm text-muted-foreground">
+                        {formatCurrency(item.price)}
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -423,7 +469,7 @@ export function ComplimentaryIssuer({
             </Button>
           </div>
         ) : (
-          <p className="mt-3 text-xs text-amber-600 dark:text-amber-300">
+          <p className="mt-3 text-xs text-amber-600 dark:text-amber-200">
             Creá productos en la Tienda de Extras para armar combos.
           </p>
         )}
@@ -436,7 +482,7 @@ export function ComplimentaryIssuer({
         </TabsList>
 
         <TabsContent value="csv" className="space-y-4 pt-4">
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-muted-foreground">
             Columnas: nombre, apellido, dni, email, telefono. El DNI es
             obligatorio para el ingreso por DNI en puerta.
           </p>
@@ -447,13 +493,13 @@ export function ComplimentaryIssuer({
             className="min-h-12 cursor-pointer"
           />
           {csvRows.length > 0 ? (
-            <p className="text-sm text-emerald-600 dark:text-emerald-300">
+            <p className="text-sm text-emerald-600 dark:text-emerald-200">
               {csvRows.length} invitados · ~{csvRows.length * (selected?.admitCount ?? 1)} QRs
             </p>
           ) : null}
-          <details className="text-xs text-zinc-500">
+          <details className="text-xs text-muted-foreground">
             <summary className="cursor-pointer">Vista previa CSV</summary>
-            <pre className="mt-2 max-h-40 overflow-auto rounded-xl bg-zinc-100 p-3 dark:bg-zinc-900">
+            <pre className="mt-2 max-h-40 overflow-auto rounded-xl bg-muted p-3">
               {csvText.slice(0, 2000) || "—"}
             </pre>
           </details>
@@ -473,7 +519,7 @@ export function ComplimentaryIssuer({
         </TabsContent>
 
         <TabsContent value="unnamed" className="space-y-4 pt-4">
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-muted-foreground">
             Generá N unidades (sin nombre) con un batch_id para imprimir en
             boletería.
           </p>
@@ -488,7 +534,7 @@ export function ComplimentaryIssuer({
               }
               className="min-h-12"
             />
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-muted-foreground">
               Estimado: {(Number(unnamedCount) || 0) * (selected?.admitCount ?? 1)}{" "}
               QRs (máx. 3.000)
             </p>
@@ -513,10 +559,10 @@ export function ComplimentaryIssuer({
         <div className="space-y-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">
+              <p className="text-sm font-bold text-emerald-600 dark:text-emerald-200">
                 Lote emitido
               </p>
-              <p className="font-mono text-xs text-zinc-500">
+              <p className="font-mono text-xs text-muted-foreground">
                 batch {lastBatchId}
               </p>
             </div>
@@ -552,7 +598,7 @@ export function ComplimentaryIssuer({
             {batchTickets.slice(0, 40).map((t) => (
               <li
                 key={t.id}
-                className="flex items-center justify-between gap-2 rounded-xl bg-white/80 px-3 py-2 text-sm dark:bg-zinc-950/60"
+                className="flex items-center justify-between gap-2 rounded-xl bg-muted/50 px-3 py-2 text-sm"
               >
                 <span className="min-w-0 truncate">
                   {t.holderName}
@@ -563,7 +609,7 @@ export function ComplimentaryIssuer({
                   href={t.printPath}
                   target="_blank"
                   className={cn(
-                    "inline-flex shrink-0 items-center gap-1 rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white",
+                    "inline-flex shrink-0 items-center gap-1 rounded-full bg-foreground px-3 py-1.5 text-xs font-semibold text-background",
                   )}
                 >
                   <Printer className="size-3.5" />
@@ -573,7 +619,7 @@ export function ComplimentaryIssuer({
             ))}
           </ul>
           {batchTickets.length > 40 ? (
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-muted-foreground">
               Mostrando 40 de {batchTickets.length}. Usá el CSV para el resto.
             </p>
           ) : null}

@@ -15,7 +15,7 @@ type CheckoutBuyerFieldsProps = {
 }
 
 const fieldInputClass =
-  "min-h-12 h-12 rounded-xl border-zinc-700 bg-zinc-900 text-base text-white placeholder:text-zinc-600 md:text-base"
+  "min-h-12 h-12 rounded-xl border-input bg-background text-base text-foreground placeholder:text-muted-foreground/70 md:text-base"
 
 export function CheckoutBuyerFields({
   value,
@@ -26,15 +26,15 @@ export function CheckoutBuyerFields({
   return (
     <div
       className={cn(
-        "space-y-3 rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4",
+        "space-y-3 rounded-2xl border border-border bg-card p-4",
         className,
       )}
     >
       <div>
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-zinc-500">
+        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
           Tus datos
         </p>
-        <p className="mt-1 text-sm leading-5 text-zinc-500">
+        <p className="mt-1 text-sm leading-5 text-muted-foreground">
           Los usamos para tu entrada y para encontrarte en la puerta.
         </p>
       </div>
@@ -42,7 +42,7 @@ export function CheckoutBuyerFields({
       <div className="space-y-1.5">
         <Label
           htmlFor="buyer-name"
-          className="inline-flex min-h-11 items-center gap-1.5 text-zinc-300"
+          className="inline-flex min-h-11 items-center gap-1.5 text-foreground"
         >
           <UserRound className="size-3.5" aria-hidden="true" />
           Nombre y apellido
@@ -65,7 +65,7 @@ export function CheckoutBuyerFields({
       <div className="space-y-1.5">
         <Label
           htmlFor="buyer-dni"
-          className="inline-flex min-h-11 items-center gap-1.5 text-zinc-300"
+          className="inline-flex min-h-11 items-center gap-1.5 text-foreground"
         >
           <IdCard className="size-3.5" aria-hidden="true" />
           DNI
@@ -93,7 +93,7 @@ export function CheckoutBuyerFields({
       <div className="space-y-1.5">
         <Label
           htmlFor="buyer-phone"
-          className="inline-flex min-h-11 items-center gap-1.5 text-zinc-300"
+          className="inline-flex min-h-11 items-center gap-1.5 text-foreground"
         >
           <Phone className="size-3.5" aria-hidden="true" />
           Teléfono / WhatsApp
@@ -121,7 +121,7 @@ export function CheckoutBuyerFields({
       <div className="space-y-1.5">
         <Label
           htmlFor="buyer-email"
-          className="inline-flex min-h-11 items-center gap-1.5 text-zinc-300"
+          className="inline-flex min-h-11 items-center gap-1.5 text-foreground"
         >
           <Mail className="size-3.5" aria-hidden="true" />
           Tu Email

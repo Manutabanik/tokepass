@@ -86,7 +86,7 @@ export function TransferTicketDialog({
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="border-zinc-800 bg-zinc-950 text-zinc-100 sm:max-w-md">
+        <DialogContent className="border-zinc-800 bg-zinc-950 text-zinc-100 sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-white">Transferir entrada</DialogTitle>
             <DialogDescription className="text-zinc-400">

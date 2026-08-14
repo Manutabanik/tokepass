@@ -1,5 +1,6 @@
-import { CheckCircle2, ShieldAlert, ShieldCheck } from "lucide-react"
+import { CheckCircle2, Handshake, ShieldAlert, ShieldCheck } from "lucide-react"
 import type { Metadata } from "next"
+import Link from "next/link"
 
 import { PageHeading } from "@/components/superadmin/page-heading"
 import {
@@ -53,7 +54,7 @@ export default function SuperAdminSettingsPage() {
               <ShieldCheck className="size-4 text-sky-400" />
               Conexiones
             </CardTitle>
-            <CardDescription className="text-zinc-500">
+            <CardDescription className="text-slate-600 dark:text-zinc-400">
               Datos que la plataforma necesita para funcionar. Si falta alguno,
               pedile a quien maneja el servidor que lo configure.
             </CardDescription>
@@ -62,7 +63,7 @@ export default function SuperAdminSettingsPage() {
             {checks.map((check) => (
               <div
                 key={check.hint}
-                className="flex items-center justify-between rounded-xl bg-black/20 px-4 py-3"
+                className="flex items-center justify-between rounded-xl bg-muted dark:bg-black/20 px-4 py-3"
               >
                 <div>
                   <p className="text-sm text-zinc-200">{check.label}</p>
@@ -71,7 +72,7 @@ export default function SuperAdminSettingsPage() {
                   </p>
                 </div>
                 {check.ok ? (
-                  <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-400">
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
                     <CheckCircle2 className="size-4" />
                     Lista
                   </span>
@@ -91,7 +92,7 @@ export default function SuperAdminSettingsPage() {
             <CardTitle className="text-base text-white">
               Dar acceso de dueño de la plataforma
             </CardTitle>
-            <CardDescription className="text-zinc-500">
+            <CardDescription className="text-slate-600 dark:text-zinc-400">
               Por seguridad, este permiso solo se asigna a mano desde la base
               de datos.
             </CardDescription>
@@ -102,10 +103,30 @@ export default function SuperAdminSettingsPage() {
 set role = 'super_admin'::public.user_role
 where email = 'tu@email.com';`}</code>
             </pre>
-            <p className="mt-4 text-xs leading-5 text-zinc-500">
+            <p className="mt-4 text-xs leading-5 text-slate-600 dark:text-zinc-400">
               Ejecutá esta consulta en el editor SQL de Supabase. La persona
               tiene que existir antes en el listado de usuarios.
             </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-0 bg-white/[0.035] py-0 ring-1 ring-white/8 lg:col-span-2">
+          <CardHeader className="px-6 pt-6">
+            <CardTitle className="flex items-center gap-2 text-base text-white">
+              <Handshake className="size-4 text-sky-400" />
+              Partners globales
+            </CardTitle>
+            <CardDescription className="text-slate-600 dark:text-zinc-400">
+              Empresas que confían en Tokepass. Los logos salen en la landing.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="px-6 pb-6 pt-2">
+            <Link
+              href="/superadmin/settings/sponsors"
+              className="inline-flex min-h-11 items-center rounded-xl bg-sky-500/15 px-4 text-sm font-semibold text-sky-200 ring-1 ring-sky-500/20 transition hover:bg-sky-500/25"
+            >
+              Gestionar logos
+            </Link>
           </CardContent>
         </Card>
       </div>

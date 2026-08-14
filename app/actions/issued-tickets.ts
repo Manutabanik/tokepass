@@ -295,6 +295,7 @@ function buildIssuedRows(input: {
             : null,
         purchasedAt: root.created_at,
         ticketUrl: `${siteBaseUrl()}/tickets/${row.id}`,
+        isTest: Boolean(row.is_test),
         originalBuyer,
         transferredTo:
           status === "transferred" && child
@@ -353,7 +354,6 @@ export async function getIssuedTicketsForEvent(
             "id, status, qr_code, holder_name, holder_email, holder_dni, scanned_at, validated_at, admissions_used, created_at, transferred_from_id, owner_id, order_id, tier_id, seat_id, seating_unit_id, max_admissions, is_dynamic_qr, max_transfers_allowed, transfer_count, is_test, event_seating_units(label, sector_name, row_label), ticket_tiers(name)",
           )
           .eq("event_id", eventId)
-          .eq("is_test", false)
           .neq("status", "pending_payment")
           .order("created_at", { ascending: false }),
       ])
@@ -438,7 +438,6 @@ export async function exportEventTicketsCSV(
             "id, status, qr_code, holder_name, holder_email, holder_dni, scanned_at, validated_at, admissions_used, created_at, transferred_from_id, owner_id, order_id, tier_id, seat_id, seating_unit_id, max_admissions, is_dynamic_qr, max_transfers_allowed, transfer_count, is_test, event_seating_units(label, sector_name, row_label), ticket_tiers(name)",
           )
           .eq("event_id", eventId)
-          .eq("is_test", false)
           .neq("status", "pending_payment")
           .order("created_at", { ascending: false }),
       ])

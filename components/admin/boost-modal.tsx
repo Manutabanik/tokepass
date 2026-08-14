@@ -106,7 +106,7 @@ export function BoostModal({
                 <p className="mt-3 text-2xl font-black text-zinc-900 dark:text-white">
                   {formatCurrency(plan.priceArs)}
                 </p>
-                <p className="mt-1 text-xs text-zinc-500">
+                <p className="mt-1 text-xs text-slate-600 dark:text-zinc-400">
                   {plan.durationDays} días de destaque
                 </p>
                 <ul className="mt-3 space-y-1.5">
@@ -116,7 +116,7 @@ export function BoostModal({
                       className="flex items-start gap-1.5 text-[11px] leading-4 text-zinc-600 dark:text-zinc-400"
                     >
                       <Check
-                        className="mt-0.5 size-3 shrink-0 text-emerald-400"
+                        className="mt-0.5 size-3 shrink-0 text-emerald-700 dark:text-emerald-400"
                         aria-hidden="true"
                       />
                       {benefit}

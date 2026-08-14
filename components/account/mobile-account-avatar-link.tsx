@@ -19,8 +19,7 @@ export function MobileAccountAvatarLink({
     <Link
       href="/cuenta/notificaciones"
       className={cn(
-        "relative inline-flex size-11 items-center justify-center overflow-hidden rounded-full border border-zinc-200 bg-zinc-100 text-sm font-bold text-zinc-800",
-        "dark:border-white/10 dark:bg-white/5 dark:text-white",
+        "relative inline-flex size-11 items-center justify-center overflow-hidden rounded-full border border-border bg-muted text-sm font-bold text-foreground",
         "md:hidden",
       )}
       aria-label={

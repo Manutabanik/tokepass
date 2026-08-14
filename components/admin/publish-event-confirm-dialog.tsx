@@ -72,7 +72,7 @@ export function PublishEventConfirmDialog({
       <DialogContent className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-zinc-900 dark:text-white">
-            <Rocket className="size-4 text-emerald-300" aria-hidden="true" />
+            <Rocket className="size-4 text-emerald-800 dark:text-emerald-300" aria-hidden="true" />
             Publicar evento
           </DialogTitle>
           <DialogDescription className="text-zinc-600 dark:text-zinc-400">

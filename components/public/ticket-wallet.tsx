@@ -48,7 +48,7 @@ function EmptyState({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, ease: "easeOut" }}
-      className="relative isolate min-h-[360px] overflow-hidden rounded-3xl border border-zinc-800/80 bg-gradient-to-b from-zinc-900/80 to-zinc-950/90 px-6 py-12 text-center shadow-2xl shadow-black/25 sm:min-h-[420px] sm:px-14 sm:py-16"
+      className="relative isolate min-h-[360px] overflow-hidden rounded-3xl border border-border bg-card px-6 py-12 text-center shadow-2xl shadow-black/10 sm:min-h-[420px] sm:px-14 sm:py-16"
     >
       <div
         className={[
@@ -61,7 +61,7 @@ function EmptyState({
       <div className="flex min-h-[264px] flex-col items-center justify-center sm:min-h-[292px]">
         <span
           className={[
-            "mb-6 grid size-16 place-items-center rounded-2xl border border-zinc-700 bg-zinc-800/80 text-zinc-300 shadow-inner sm:size-20",
+            "mb-6 grid size-16 place-items-center rounded-2xl border border-border bg-muted text-muted-foreground shadow-inner sm:size-20",
             isBar
               ? "shadow-[0_0_25px_rgba(245,158,11,0.15)]"
               : "shadow-[0_0_25px_rgba(16,185,129,0.15)]",
@@ -69,15 +69,15 @@ function EmptyState({
         >
           <Icon className="size-7 sm:size-8" aria-hidden="true" />
         </span>
-        <h2 className="mb-2 text-lg font-bold text-white sm:text-xl">
+        <h2 className="mb-2 text-lg font-bold text-foreground sm:text-xl">
           {title}
         </h2>
-        <p className="mx-auto mb-8 max-w-md text-sm leading-relaxed text-zinc-400 sm:text-base">
+        <p className="mx-auto mb-8 max-w-md text-sm leading-relaxed text-muted-foreground sm:text-base">
           {description}
         </p>
         {ctaHref && ctaLabel ? (
           <Button
-            className="h-12 rounded-xl bg-white px-6 text-sm font-semibold text-zinc-950 shadow-[0_0_20px_rgba(255,255,255,0.15)] transition-all hover:scale-[1.02] hover:bg-zinc-100 active:scale-[0.98] sm:text-base"
+            className="h-12 rounded-xl bg-emerald-500 px-6 text-sm font-semibold text-black transition-all hover:scale-[1.02] hover:bg-emerald-600 active:scale-[0.98] sm:text-base"
             nativeButton={false}
             render={<Link href={ctaHref} />}
           >
@@ -171,8 +171,8 @@ function EventGroupHeader({
   countLabel: string
 }) {
   return (
-    <div className="mb-3 flex flex-wrap items-center gap-3 border-b border-zinc-800/80 pb-3">
-      <div className="relative size-14 shrink-0 overflow-hidden rounded-xl bg-zinc-800 ring-1 ring-zinc-700/60">
+    <div className="mb-3 flex flex-wrap items-center gap-3 border-b border-border pb-3">
+      <div className="relative size-14 shrink-0 overflow-hidden rounded-xl bg-muted ring-1 ring-border">
         {flyerUrl ? (
           <Image
             src={flyerUrl}
@@ -182,27 +182,27 @@ function EventGroupHeader({
             className="object-cover"
           />
         ) : (
-          <span className="grid size-full place-items-center text-zinc-600">
+          <span className="grid size-full place-items-center text-muted-foreground">
             <Ticket className="size-5" aria-hidden="true" />
           </span>
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <h3 className="truncate text-lg font-bold tracking-tight text-white">
+        <h3 className="truncate text-lg font-bold tracking-tight text-foreground">
           {title}
         </h3>
-        <p className="mt-0.5 text-sm text-zinc-500">
+        <p className="mt-0.5 text-sm text-muted-foreground">
           {formatEventDay(date)} · {formatEventTime(date)}
           {location ? ` · ${location}` : null}
         </p>
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1.5 sm:flex-row sm:items-center">
-        <span className="rounded-full bg-zinc-800 px-2.5 py-1 font-mono text-[11px] font-semibold text-zinc-300 ring-1 ring-inset ring-zinc-700/60">
+        <span className="rounded-full bg-muted px-2.5 py-1 font-mono text-[11px] font-semibold text-muted-foreground ring-1 ring-inset ring-border">
           {countLabel}
         </span>
         <Link
           href={`/events/${eventId}`}
-          className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-400 hover:text-emerald-300"
+          className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-600 dark:text-emerald-400 dark:hover:text-emerald-300"
         >
           Ver evento
           <ArrowUpRight className="size-3.5" aria-hidden="true" />
@@ -223,7 +223,7 @@ function ExtrasUpsellCard({
 }) {
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-dashed border-amber-500/30 bg-amber-500/5 p-4 sm:flex-row sm:items-center">
-      <div className="relative size-12 shrink-0 overflow-hidden rounded-xl bg-zinc-800">
+      <div className="relative size-12 shrink-0 overflow-hidden rounded-xl bg-muted">
         {flyerUrl ? (
           <Image
             src={flyerUrl}
@@ -233,19 +233,19 @@ function ExtrasUpsellCard({
             className="object-cover"
           />
         ) : (
-          <span className="grid size-full place-items-center text-amber-300/80">
+          <span className="grid size-full place-items-center text-amber-700 dark:text-amber-300/80">
             <ShoppingBag className="size-5" aria-hidden="true" />
           </span>
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-white">{title}</p>
-        <p className="mt-0.5 text-sm text-zinc-400">
+        <p className="text-sm font-semibold text-foreground">{title}</p>
+        <p className="mt-0.5 text-sm text-muted-foreground">
           ¿Querés sumar tragos o servicios para este evento?
         </p>
       </div>
       <Button
-        className="h-11 shrink-0 rounded-xl bg-amber-500 font-semibold text-zinc-950 hover:bg-amber-400"
+        className="h-11 shrink-0 rounded-xl bg-amber-500 font-semibold text-black hover:bg-amber-400"
         nativeButton={false}
         render={<Link href={storeHref} />}
       >
@@ -254,6 +254,12 @@ function ExtrasUpsellCard({
     </div>
   )
 }
+
+const tabTriggerClass =
+  "h-10 min-w-[7.5rem] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-xs font-medium text-muted-foreground transition-all hover:bg-muted/80 hover:text-foreground data-active:border-border data-active:bg-background data-active:text-foreground data-active:shadow-sm sm:min-w-0 sm:px-4 sm:text-sm"
+
+const tabCountClass =
+  "rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums text-foreground ring-1 ring-inset ring-border"
 
 export function TicketWallet({
   upcoming,
@@ -312,43 +318,28 @@ export function TicketWallet({
 
   return (
     <Tabs key={defaultTab} defaultValue={defaultTab} className="w-full gap-6">
-      <div className="-mx-1 overflow-x-auto whitespace-nowrap px-1 pb-1 scrollbar-none">
+      <div className="-mx-1 overflow-x-auto whitespace-nowrap px-1 pb-1 scrollbar-none md:mx-0 md:overflow-visible md:whitespace-normal">
         <TabsList
           aria-label="Secciones de la billetera"
-          className="inline-flex w-max min-w-full flex-nowrap items-stretch justify-start gap-1 whitespace-nowrap rounded-2xl border border-zinc-800 bg-zinc-900/60 p-1.5 shadow-lg shadow-black/20 backdrop-blur-md group-data-horizontal/tabs:h-auto sm:w-fit sm:min-w-0 sm:self-start"
+          className="inline-flex w-max min-w-full flex-nowrap items-stretch justify-start gap-1 whitespace-nowrap rounded-2xl border border-border bg-muted/40 p-1.5 shadow-lg shadow-black/10 backdrop-blur-md group-data-horizontal/tabs:h-auto sm:w-fit sm:min-w-0 sm:self-start md:flex-wrap md:justify-start lg:justify-start"
         >
-          <TabsTrigger
-            value="upcoming"
-            className="h-10 min-w-[7.5rem] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-xs font-medium text-zinc-400 transition-all hover:bg-zinc-800/40 hover:text-white data-active:border-zinc-700/60 data-active:bg-zinc-800 data-active:text-white data-active:shadow-sm sm:min-w-0 sm:px-4 sm:text-sm"
-          >
+          <TabsTrigger value="upcoming" className={tabTriggerClass}>
             <Ticket className="hidden size-3.5 sm:block" aria-hidden="true" />
             <span>Entradas</span>
-            <span className="rounded-md bg-zinc-800 px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums text-zinc-200 ring-1 ring-inset ring-zinc-700/60">
-              {upcoming.length}
-            </span>
+            <span className={tabCountClass}>{upcoming.length}</span>
           </TabsTrigger>
-          <TabsTrigger
-            value="bar"
-            className="h-10 min-w-[7.5rem] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-xs font-medium text-zinc-400 transition-all hover:bg-zinc-800/40 hover:text-white data-active:border-zinc-700/60 data-active:bg-zinc-800 data-active:text-white data-active:shadow-sm sm:min-w-0 sm:px-4 sm:text-sm"
-          >
+          <TabsTrigger value="bar" className={tabTriggerClass}>
             <ShoppingBag
               className="hidden size-3.5 sm:block"
               aria-hidden="true"
             />
             <span>Mis Extras</span>
-            <span className="rounded-md bg-zinc-800 px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums text-zinc-200 ring-1 ring-inset ring-zinc-700/60">
-              {validBar.length}
-            </span>
+            <span className={tabCountClass}>{validBar.length}</span>
           </TabsTrigger>
-          <TabsTrigger
-            value="past"
-            className="h-10 min-w-[7.5rem] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-xs font-medium text-zinc-400 transition-all hover:bg-zinc-800/40 hover:text-white data-active:border-zinc-700/60 data-active:bg-zinc-800 data-active:text-white data-active:shadow-sm sm:min-w-0 sm:px-4 sm:text-sm"
-          >
+          <TabsTrigger value="past" className={tabTriggerClass}>
             <History className="hidden size-3.5 sm:block" aria-hidden="true" />
             <span>Pasados</span>
-            <span className="rounded-md bg-zinc-800 px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums text-zinc-200 ring-1 ring-inset ring-zinc-700/60">
-              {past.length}
-            </span>
+            <span className={tabCountClass}>{past.length}</span>
           </TabsTrigger>
         </TabsList>
       </div>
@@ -370,7 +361,7 @@ export function TicketWallet({
                       : `${group.tickets.length} entradas activas`
                   }
                 />
-                <div className="grid gap-4 md:grid-cols-2 md:items-start">
+                <div className="grid gap-4 md:grid-cols-2 md:items-start lg:grid-cols-3">
                   {group.tickets.map((ticket) => (
                     <LivingTicketCard
                       key={ticket.id}
@@ -400,10 +391,10 @@ export function TicketWallet({
         {extraGroups.length > 0 ? (
           <div className="space-y-8">
             <div>
-              <h2 className="text-base font-bold text-white">
+              <h2 className="text-base font-bold text-foreground">
                 Tus consumiciones
               </h2>
-              <p className="mt-1 text-sm text-zinc-500">
+              <p className="mt-1 text-sm text-muted-foreground">
                 Canjealas en barra o tienda con el QR de cada extra.
               </p>
             </div>
@@ -419,7 +410,7 @@ export function TicketWallet({
                       : `${group.redemptions.length} extras`
                   }
                 />
-                <div className="grid gap-4 md:grid-cols-2 md:items-start">
+                <div className="grid gap-4 md:grid-cols-2 md:items-start lg:grid-cols-3">
                   {group.redemptions.map((item) => (
                     <LivingStoreCard key={item.id} redemption={item} />
                   ))}
@@ -433,16 +424,16 @@ export function TicketWallet({
           <div className="space-y-3">
             {extraGroups.length === 0 ? (
               <div>
-                <h2 className="text-base font-bold text-white">
+                <h2 className="text-base font-bold text-foreground">
                   Tus consumiciones
                 </h2>
-                <p className="mt-1 text-sm text-zinc-500">
+                <p className="mt-1 text-sm text-muted-foreground">
                   Todavía no compraste extras. Sumá tragos o servicios para tus
                   eventos.
                 </p>
               </div>
             ) : (
-              <h3 className="text-sm font-semibold text-zinc-300">
+              <h3 className="text-sm font-semibold text-foreground">
                 Sumá extras a tus eventos
               </h3>
             )}
@@ -474,13 +465,20 @@ export function TicketWallet({
         {hasOffers ? (
           <div id="extras-tienda" className="scroll-mt-24 space-y-4">
             <div className="flex items-center gap-2">
-              <ShoppingBag className="size-4 text-amber-300" aria-hidden="true" />
-              <h3 className="text-base font-bold text-white">
+              <ShoppingBag
+                className="size-4 text-amber-700 dark:text-amber-300"
+                aria-hidden="true"
+              />
+              <h3 className="text-base font-bold text-foreground">
                 Tienda de extras
               </h3>
             </div>
             {storeOffers.map((block) => (
-              <div key={block.eventId} id={`extras-${block.eventId}`} className="scroll-mt-28">
+              <div
+                key={block.eventId}
+                id={`extras-${block.eventId}`}
+                className="scroll-mt-28"
+              >
                 <EventStoreUpsell
                   eventId={block.eventId}
                   eventTitle={block.title}
@@ -510,7 +508,7 @@ export function TicketWallet({
                       : `${group.tickets.length} entradas`
                   }
                 />
-                <div className="grid gap-4 md:grid-cols-2 md:items-start">
+                <div className="grid gap-4 md:grid-cols-2 md:items-start lg:grid-cols-3">
                   {group.tickets.map((ticket) => (
                     <LivingTicketCard
                       key={ticket.id}

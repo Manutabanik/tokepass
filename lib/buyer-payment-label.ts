@@ -11,6 +11,8 @@ export function buyerPaymentMethodLabel(method: PaymentMethod): string {
       return "Posnet / tarjeta"
     case "transfer_pos":
       return "Transferencia (POS)"
+    case "test_sandbox":
+      return "Compra de prueba"
     default:
       return method
   }

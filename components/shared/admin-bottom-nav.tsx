@@ -144,8 +144,8 @@ export function AdminBottomNav({
       <nav
         aria-label="Navegación rápida"
         className={cn(
-          "fixed inset-x-0 bottom-0 z-50 border-t border-zinc-200 bg-white/95 backdrop-blur-xl",
-          "pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1 dark:border-white/10 dark:bg-[#0c0c0f]/95",
+          "fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background/95 backdrop-blur-xl",
+          "pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1",
           "lg:hidden",
         )}
       >
@@ -161,7 +161,7 @@ export function AdminBottomNav({
               "flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[10px] font-semibold transition",
               active
                 ? "text-violet-600 dark:text-violet-300"
-                : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white",
+                : "text-muted-foreground hover:text-foreground",
             )
 
             if (tab.openMenu) {
@@ -200,14 +200,14 @@ export function AdminBottomNav({
             <SheetDescription>
               {mode === "organizer" ? "Tu Panel" : "Acceso staff"}
             </SheetDescription>
-            <div className="rounded-xl border border-white/8 bg-white/5 px-3 py-2 text-left">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+            <div className="rounded-xl border border-border bg-muted/50 px-3 py-2 text-left">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                 Organización
               </p>
-              <p className="mt-1 truncate text-sm font-medium text-white">
+              <p className="mt-1 truncate text-sm font-medium text-foreground">
                 {orgLabel}
               </p>
-              <p className="truncate text-xs text-zinc-500">{userEmail}</p>
+              <p className="truncate text-xs text-muted-foreground">{userEmail}</p>
             </div>
           </SheetHeader>
 
@@ -228,8 +228,8 @@ export function AdminBottomNav({
                   className={cn(
                     "flex min-h-12 items-center gap-3 rounded-xl px-3 text-sm font-medium transition",
                     active
-                      ? "bg-violet-500/12 text-violet-300 ring-1 ring-inset ring-violet-500/15"
-                      : "text-zinc-400 hover:bg-white/5 hover:text-white",
+                      ? "bg-violet-500/12 text-violet-700 dark:text-violet-300 ring-1 ring-inset ring-violet-500/15"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
                   )}
                 >
                   <Icon className="size-5 shrink-0" aria-hidden="true" />
@@ -241,12 +241,12 @@ export function AdminBottomNav({
 
           <SheetFooter className="gap-3">
             <div className="text-left">
-              <p className="truncate text-sm font-medium text-white">
+              <p className="truncate text-sm font-medium text-foreground">
                 {userLabel}
               </p>
-              <p className="truncate text-xs text-zinc-500">{userEmail}</p>
+              <p className="truncate text-xs text-muted-foreground">{userEmail}</p>
             </div>
-            <SignOutButton className="min-h-12 h-12 w-full justify-center rounded-xl border border-white/10 text-zinc-300 hover:bg-white/5 hover:text-white" />
+            <SignOutButton className="min-h-12 h-12 w-full justify-center rounded-xl border border-border text-muted-foreground hover:bg-muted/50 hover:text-foreground" />
           </SheetFooter>
         </SheetContent>
       </Sheet>

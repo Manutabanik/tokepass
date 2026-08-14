@@ -22,20 +22,20 @@ export default async function CuentaPerfilPage() {
   }
 
   return (
-    <section className="mx-auto w-full max-w-lg space-y-6 px-4 py-8 sm:px-6">
+    <section className="space-y-6 py-8">
       <header>
-        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-violet-300/90">
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300/90">
           Perfil
         </p>
-        <h1 className="text-3xl font-extrabold tracking-tight text-white">
+        <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
           Mis Datos
         </h1>
-        <p className="mt-2 text-sm leading-relaxed text-zinc-400">
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           Foto, DNI y contacto para checkout rápido y respaldo en puerta.
         </p>
       </header>
 
-      <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 sm:p-6">
+      <div className="rounded-3xl border border-border bg-card p-5 sm:p-6 md:max-w-2xl">
         <AccountProfileForm
           initial={{
             email: profile.email,

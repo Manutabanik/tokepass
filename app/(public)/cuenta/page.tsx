@@ -34,9 +34,9 @@ export default async function CuentaHomePage() {
   const hasDni = profile.dni.replace(/\D/g, "").length >= 7
 
   return (
-    <section className="mx-auto w-full max-w-lg space-y-6 px-4 py-8 sm:px-6">
+    <section className="space-y-6 py-8">
       <header className="flex items-center gap-4">
-        <span className="grid size-14 place-items-center overflow-hidden rounded-2xl bg-emerald-500/15 text-lg font-bold text-emerald-300 ring-1 ring-emerald-400/25">
+        <span className="grid size-14 place-items-center overflow-hidden rounded-2xl bg-emerald-500/15 text-lg font-bold text-emerald-700 ring-1 ring-emerald-400/25 dark:text-emerald-300">
           {profile.avatarUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -49,19 +49,19 @@ export default async function CuentaHomePage() {
           )}
         </span>
         <div className="min-w-0">
-          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-400/90">
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-400/90">
             Mi cuenta
           </p>
-          <h1 className="truncate text-2xl font-extrabold tracking-tight text-white">
+          <h1 className="truncate text-2xl font-extrabold tracking-tight text-foreground">
             Hola, {displayName}
           </h1>
-          <p className="truncate text-sm text-zinc-500">{profile.email}</p>
+          <p className="truncate text-sm text-muted-foreground">{profile.email}</p>
         </div>
       </header>
 
       <OnboardingBanner hasDni={hasDni} />
 
-      <div className="grid gap-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-6 lg:grid-cols-3">
         <PortalCard
           href="/cuenta/entradas"
           title="Mis entradas"
@@ -72,6 +72,7 @@ export default async function CuentaHomePage() {
           }
           icon={Ticket}
           accent="emerald"
+          className="md:col-span-2"
         />
         <PortalCard
           href="/cuenta/compras"
@@ -110,7 +111,7 @@ export default async function CuentaHomePage() {
         />
       </div>
 
-      <SignOutButton className="mt-2 h-12 w-full justify-center rounded-2xl border border-white/10 text-zinc-300 hover:bg-white/5 hover:text-white" />
+      <SignOutButton className="mt-2 h-12 w-full justify-center rounded-2xl border border-border text-muted-foreground hover:bg-muted hover:text-foreground md:w-auto md:min-w-48 md:px-8" />
     </section>
   )
 }
@@ -121,23 +122,27 @@ function PortalCard({
   description,
   icon: Icon,
   accent,
+  className,
 }: {
   href: string
   title: string
   description: string
   icon: typeof Ticket
   accent: "emerald" | "violet" | "sky"
+  className?: string
 }) {
   const accents = {
-    emerald: "bg-emerald-500/15 text-emerald-300 ring-emerald-400/20",
-    violet: "bg-violet-500/15 text-violet-300 ring-violet-400/20",
-    sky: "bg-sky-500/15 text-sky-300 ring-sky-400/20",
+    emerald:
+      "bg-emerald-500/15 text-emerald-700 ring-emerald-400/20 dark:text-emerald-300",
+    violet:
+      "bg-violet-500/15 text-violet-700 ring-violet-400/20 dark:text-violet-300",
+    sky: "bg-sky-500/15 text-sky-700 ring-sky-400/20 dark:text-sky-300",
   }
 
   return (
     <Link
       href={href}
-      className="flex min-h-[4.5rem] items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 transition hover:bg-white/[0.06]"
+      className={`flex min-h-[4.5rem] items-center gap-4 rounded-2xl border border-border bg-card p-4 transition hover:bg-muted/60 ${className ?? ""}`}
     >
       <span
         className={`grid size-12 shrink-0 place-items-center rounded-xl ring-1 ring-inset ${accents[accent]}`}
@@ -145,10 +150,17 @@ function PortalCard({
         <Icon className="size-5" aria-hidden="true" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-base font-semibold text-white">{title}</span>
-        <span className="mt-0.5 block text-sm text-zinc-500">{description}</span>
+        <span className="block text-base font-semibold text-foreground">
+          {title}
+        </span>
+        <span className="mt-0.5 block text-sm text-muted-foreground">
+          {description}
+        </span>
       </span>
-      <ChevronRight className="size-5 shrink-0 text-zinc-600" aria-hidden="true" />
+      <ChevronRight
+        className="size-5 shrink-0 text-muted-foreground"
+        aria-hidden="true"
+      />
     </Link>
   )
 }

@@ -25,6 +25,7 @@ import type { MyTicket } from "@/app/actions/tickets"
 import { LivingTicketQR } from "@/components/public/living-ticket-qr"
 import { ResaleTicketDialog } from "@/components/public/resale-ticket-dialog"
 import { SaveTicketButton } from "@/components/public/save-ticket-button"
+import { StoryFlyerWalletButton } from "@/components/public/story-flyer-modal"
 import { TransferTicketDialog } from "@/components/public/transfer-ticket-dialog"
 import { Badge } from "@/components/ui/badge"
 import { formatEventDay, formatEventTime } from "@/lib/format"
@@ -92,10 +93,10 @@ export function LivingTicketCard({
   return (
     <article
       className={cn(
-        "relative overflow-hidden rounded-[1.75rem] bg-zinc-950 text-zinc-100",
+        "relative overflow-hidden rounded-[1.75rem] border bg-card text-card-foreground",
         vip
-          ? "border border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.3)]"
-          : "border border-zinc-800",
+          ? "border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.3)]"
+          : "border-border",
         ticket.isTest && "border-amber-400/60",
         isFree && !ticket.isTest && "border-rose-500/50",
       )}
@@ -106,14 +107,14 @@ export function LivingTicketCard({
             className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
             aria-hidden="true"
           >
-            <span className="-rotate-12 rounded-xl border-2 border-amber-300/80 bg-amber-500/25 px-4 py-2 text-center text-[11px] font-black uppercase tracking-[0.16em] text-amber-100 shadow-[0_0_24px_rgba(245,158,11,0.35)] backdrop-blur-[2px]">
+            <span className="-rotate-12 rounded-xl border-2 border-amber-300/80 bg-amber-500/25 px-4 py-2 text-center text-[11px] font-black uppercase tracking-[0.16em] text-amber-950 shadow-[0_0_24px_rgba(245,158,11,0.35)] backdrop-blur-[2px] dark:text-amber-100">
               Test / Borrador
-              <span className="mt-0.5 block text-[10px] font-bold tracking-[0.12em] text-amber-50/90">
+              <span className="mt-0.5 block text-[10px] font-bold tracking-[0.12em] text-amber-900/90 dark:text-amber-50/90">
                 No válido en puerta
               </span>
             </span>
           </div>
-          <Badge className="absolute left-3 top-3 z-30 rounded-full border-0 bg-amber-500 text-[10px] font-bold uppercase tracking-wide text-zinc-950">
+          <Badge className="absolute left-3 top-3 z-30 rounded-full border-0 bg-amber-500 text-[10px] font-bold uppercase tracking-wide text-black">
             <FlaskConical className="size-3" aria-hidden="true" />
             Sandbox
           </Badge>
@@ -147,7 +148,7 @@ export function LivingTicketCard({
         />
       )}
 
-      <div className="relative aspect-[16/9] overflow-hidden bg-zinc-900">
+      <div className="relative aspect-[16/9] overflow-hidden bg-muted">
         {ticket.flyerUrl ? (
           <Image
             src={ticket.flyerUrl}
@@ -158,8 +159,8 @@ export function LivingTicketCard({
             priority={canShowLiveQr}
           />
         ) : (
-          <div className="relative flex h-full w-full items-end bg-gradient-to-br from-zinc-950 via-zinc-900 to-violet-950 p-4">
-            <span className="absolute left-4 top-4 size-9 overflow-hidden rounded-xl bg-black ring-1 ring-white/20">
+          <div className="relative flex h-full w-full items-end bg-gradient-to-br from-background via-muted to-violet-950 p-4">
+            <span className="absolute left-4 top-4 size-9 overflow-hidden rounded-xl bg-background ring-1 ring-border">
               <Image
                 src="/brand/tokepass-mark.png"
                 alt=""
@@ -169,16 +170,16 @@ export function LivingTicketCard({
               />
             </span>
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/55">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-muted-foreground">
                 Tokepass
               </p>
-              <p className="mt-1 line-clamp-2 text-base font-bold leading-snug">
+              <p className="mt-1 line-clamp-2 text-base font-bold leading-snug text-foreground">
                 {ticket.eventTitle}
               </p>
             </div>
           </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/20 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
       </div>
 
       <div className="relative space-y-4 px-4 pb-5 pt-4 sm:px-5">
@@ -189,8 +190,8 @@ export function LivingTicketCard({
               className={cn(
                 "rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.12em]",
                 offline
-                  ? "border-amber-400/40 bg-amber-400/10 text-amber-200"
-                  : "border-emerald-400/35 bg-emerald-400/10 text-emerald-200",
+                  ? "border-amber-400/40 bg-amber-500/15 text-amber-800 dark:text-amber-200"
+                  : "border-emerald-400/35 bg-emerald-500/15 text-emerald-800 dark:text-emerald-200",
               )}
             >
               {offline ? (
@@ -207,8 +208,8 @@ export function LivingTicketCard({
               className={cn(
                 "rounded-full border-0 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide",
                 vip
-                  ? "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/40"
-                  : "bg-zinc-800 text-zinc-300 ring-1 ring-zinc-700",
+                  ? "bg-amber-500/15 text-amber-800 ring-1 ring-amber-500/40 dark:text-amber-300"
+                  : "bg-muted text-muted-foreground ring-1 ring-border",
               )}
             >
               {ticket.tierName}
@@ -216,20 +217,20 @@ export function LivingTicketCard({
             {isStatic ? (
               <Badge
                 variant="outline"
-                className="rounded-full border-sky-500/30 bg-sky-500/10 text-sky-300"
+                className="rounded-full border-sky-500/30 bg-sky-500/15 text-sky-800 dark:text-sky-300"
               >
                 QR estático
               </Badge>
             ) : null}
             {vip && (
-              <Badge className="rounded-full border-0 bg-amber-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-zinc-950 hover:bg-amber-500">
+              <Badge className="rounded-full border-0 bg-amber-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-black hover:bg-amber-500">
                 VIP
               </Badge>
             )}
             {isUsedStatus(ticket.status) && (
               <Badge
                 variant="outline"
-                className="rounded-full border-sky-500/30 bg-sky-500/10 text-sky-300"
+                className="rounded-full border-sky-500/30 bg-sky-500/15 text-sky-800 dark:text-sky-300"
               >
                 Usada
               </Badge>
@@ -237,26 +238,26 @@ export function LivingTicketCard({
             {ticket.status === "transferred" && (
               <Badge
                 variant="outline"
-                className="rounded-full border-red-500/30 bg-red-500/10 text-red-300"
+                className="rounded-full border-rose-500/30 bg-rose-500/15 text-rose-800 dark:text-rose-300"
               >
                 Transferida
               </Badge>
             )}
           </div>
 
-          <h2 className="text-xl font-black leading-tight tracking-[-0.03em] text-white sm:text-2xl">
+          <h2 className="text-xl font-black leading-tight tracking-[-0.03em] text-foreground sm:text-2xl">
             {ticket.eventTitle}
           </h2>
 
           {ticket.dayValidityLabel ? (
-            <p className="mt-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-400">
+            <p className="mt-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-400">
               {ticket.dayValidityLabel}
             </p>
           ) : null}
 
           {ticket.seatingLabel ? (
-            <div className="mt-3 rounded-xl border border-emerald-400/45 bg-emerald-400/10 px-3 py-3 shadow-[inset_0_0_18px_rgba(52,211,153,0.05)]">
-              <p className="flex items-center gap-2 font-mono text-sm font-black tracking-[0.08em] text-emerald-100">
+            <div className="mt-3 rounded-xl border border-emerald-400/45 bg-emerald-500/10 px-3 py-3 shadow-[inset_0_0_18px_rgba(52,211,153,0.05)]">
+              <p className="flex items-center gap-2 font-mono text-sm font-black tracking-[0.08em] text-emerald-900 dark:text-emerald-100">
                 <Armchair className="size-4" aria-hidden="true" />
                 {formatPrimaryLocation(ticket)}
                 {ticket.seatingSectorName
@@ -266,7 +267,7 @@ export function LivingTicketCard({
                   ? ` · ${normalizeLocationLabel(ticket.seatingRowLabel)}`
                   : null}
               </p>
-              <p className="mt-1 flex items-center gap-1.5 text-xs text-zinc-400">
+              <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Users className="size-3.5" aria-hidden="true" />
                 QR maestro para {ticket.maxAdmissions}{" "}
                 {ticket.maxAdmissions === 1 ? "persona" : "personas"} · (
@@ -274,36 +275,39 @@ export function LivingTicketCard({
               </p>
             </div>
           ) : (
-            <div className="mt-3 rounded-xl border border-zinc-700/80 bg-zinc-900/80 px-3 py-2.5">
-              <p className="flex items-center gap-2 font-mono text-xs font-black uppercase tracking-[0.08em] text-zinc-200">
-                <Users className="size-4 text-emerald-300" aria-hidden="true" />
+            <div className="mt-3 rounded-xl border border-border bg-muted/60 px-3 py-2.5">
+              <p className="flex items-center gap-2 font-mono text-xs font-black uppercase tracking-[0.08em] text-foreground">
+                <Users
+                  className="size-4 text-emerald-700 dark:text-emerald-300"
+                  aria-hidden="true"
+                />
                 Entrada General / Pista
               </p>
             </div>
           )}
 
-          <div className="space-y-1.5 text-sm text-zinc-400">
+          <div className="space-y-1.5 text-sm text-muted-foreground">
             <p className="flex items-center gap-2 capitalize">
-              <CalendarDays className="size-4 shrink-0 text-zinc-500" />
+              <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
               {formatEventDay(ticket.eventDate)}
             </p>
             <p className="flex items-center gap-2">
-              <Clock3 className="size-4 shrink-0 text-zinc-500" />
+              <Clock3 className="size-4 shrink-0 text-muted-foreground" />
               {formatEventTime(ticket.eventDate)}
             </p>
             <p className="flex items-start gap-2">
-              <MapPin className="mt-0.5 size-4 shrink-0 text-zinc-500" />
+              <MapPin className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
               <span className="line-clamp-2">
                 {ticket.venueName ?? ticket.eventLocation}
               </span>
             </p>
             <p className="flex items-center gap-2">
-              <UserRound className="size-4 shrink-0 text-zinc-500" />
+              <UserRound className="size-4 shrink-0 text-muted-foreground" />
               <span className="truncate">{ticket.holderName}</span>
             </p>
             {ticket.holderDni ? (
               <p className="flex items-center gap-2">
-                <IdCard className="size-4 shrink-0 text-zinc-500" />
+                <IdCard className="size-4 shrink-0 text-muted-foreground" />
                 DNI {ticket.holderDni}
               </p>
             ) : null}
@@ -312,15 +316,15 @@ export function LivingTicketCard({
 
         {ticket.bonusReward && (
           <div className="flex items-start gap-2.5 rounded-2xl border border-emerald-500/25 bg-gradient-to-r from-emerald-500/15 to-cyan-500/10 px-3.5 py-3">
-            <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-xl bg-emerald-400/15 text-emerald-300 ring-1 ring-emerald-400/30">
+            <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-xl bg-emerald-500/15 text-emerald-700 ring-1 ring-emerald-400/30 dark:text-emerald-300">
               <Gift className="size-4" aria-hidden="true" />
             </span>
             <div className="min-w-0">
-              <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300/90">
+              <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-800 dark:text-emerald-300/90">
                 <Sparkles className="size-3" aria-hidden="true" />
                 Beneficio incluido
               </p>
-              <p className="mt-0.5 text-sm font-semibold text-emerald-50">
+              <p className="mt-0.5 text-sm font-semibold text-emerald-950 dark:text-emerald-50">
                 {ticket.bonusReward}
               </p>
             </div>
@@ -329,10 +333,10 @@ export function LivingTicketCard({
 
         {canShowLiveQr ? (
           <div
-            className="rounded-[1.5rem] border border-zinc-800/80 bg-black/40 px-3 py-5 sm:px-4"
+            className="rounded-[1.5rem] border border-border bg-muted/40 px-3 py-5 sm:px-4"
             onContextMenu={(event) => event.preventDefault()}
           >
-            <p className="mb-4 text-center text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-500">
+            <p className="mb-4 text-center text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
               {isStatic ? "QR fijo · imprimible" : "QR dinámico · ingreso"}
             </p>
             {isStatic ? (
@@ -353,7 +357,7 @@ export function LivingTicketCard({
             )}
           </div>
         ) : (
-          <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/50 px-4 py-8 text-center text-sm text-zinc-500">
+          <div className="rounded-2xl border border-dashed border-border bg-muted/40 px-4 py-8 text-center text-sm text-muted-foreground">
             {ticket.status === "transferred"
               ? "Esta entrada fue transferida. El QR quedó anulado."
               : "Esta entrada ya no muestra QR vivo en puerta."}
@@ -362,15 +366,15 @@ export function LivingTicketCard({
 
         {canShowLiveQr ? (
           <div className="rounded-2xl border border-sky-500/25 bg-sky-500/10 px-3.5 py-3">
-            <p className="flex items-start gap-2 text-[12px] leading-5 text-sky-100/95">
+            <p className="flex items-start gap-2 text-[12px] leading-5 text-sky-950 dark:text-sky-100/95">
               <ShieldCheck
-                className="mt-0.5 size-4 shrink-0 text-sky-300"
+                className="mt-0.5 size-4 shrink-0 text-sky-700 dark:text-sky-300"
                 aria-hidden="true"
               />
               <span>
                 {isStatic ? (
                   <>
-                    <span className="font-bold uppercase tracking-wide text-sky-200">
+                    <span className="font-bold uppercase tracking-wide text-sky-800 dark:text-sky-200">
                       Ingreso:{" "}
                     </span>
                     Podés presentar este código desde la aplicación, la billetera
@@ -378,7 +382,7 @@ export function LivingTicketCard({
                   </>
                 ) : (
                   <>
-                    <span className="font-bold uppercase tracking-wide text-sky-200">
+                    <span className="font-bold uppercase tracking-wide text-sky-800 dark:text-sky-200">
                       Seguridad:{" "}
                     </span>
                     Abrí esta entrada al llegar. El código cambia cada 15
@@ -400,6 +404,19 @@ export function LivingTicketCard({
           />
         ) : null}
 
+        {ticket.status === "valid" ? (
+          <StoryFlyerWalletButton
+            data={{
+              eventTitle: ticket.eventTitle,
+              eventDate: ticket.eventDate,
+              eventLocation: ticket.venueName ?? ticket.eventLocation,
+              imageUrl: ticket.flyerUrl,
+              mode: "buyer",
+              buyerName: ticket.holderName,
+            }}
+          />
+        ) : null}
+
         {canTransfer ? (
           <TransferTicketDialog
             ticketId={ticket.id}
@@ -418,33 +435,36 @@ export function LivingTicketCard({
         ) : null}
 
         {ticket.status === "valid" && offline ? (
-          <p className="text-center text-[11px] text-zinc-600">
+          <p className="text-center text-[11px] text-muted-foreground">
             Transferencias y reventa disponibles cuando vuelvas a tener conexión.
           </p>
         ) : null}
 
         <Link
           href={`/cuenta/entradas/${ticket.id}`}
-          className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-zinc-700 bg-zinc-900/80 text-sm font-semibold text-zinc-100 transition hover:border-zinc-500 hover:bg-zinc-800"
+          className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-border bg-background text-sm font-semibold text-foreground transition hover:bg-muted"
         >
           Ver detalle de la entrada
           <ChevronRight className="size-4 opacity-70" aria-hidden="true" />
         </Link>
 
-        <p className="text-center font-mono text-[10px] tracking-wider text-zinc-600">
+        <p className="text-center font-mono text-[10px] tracking-wider text-muted-foreground">
           #{ticket.id.slice(0, 8).toUpperCase()}
         </p>
 
         {ticket.isSponsoredByTokepass ? (
           <div className="flex items-center justify-center gap-2 rounded-xl border border-amber-400/30 bg-gradient-to-r from-amber-500/10 via-violet-500/10 to-amber-500/10 px-3 py-2 text-center">
-            <Sparkles className="size-3.5 text-amber-300" aria-hidden="true" />
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-100/90">
+            <Sparkles
+              className="size-3.5 text-amber-700 dark:text-amber-300"
+              aria-hidden="true"
+            />
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-900 dark:text-amber-100/90">
               Comisión Tokepass bonificada
             </p>
           </div>
         ) : null}
 
-        <p className="border-t border-zinc-800/80 pt-3 text-center text-[10px] leading-4 text-zinc-500">
+        <p className="border-t border-border pt-3 text-center text-[10px] leading-4 text-muted-foreground">
           Entrada emitida bajo responsabilidad exclusiva del Organizador.
           La reventa solo es válida a través del marketplace oficial de Tokepass.
         </p>

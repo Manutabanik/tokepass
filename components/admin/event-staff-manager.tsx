@@ -128,7 +128,7 @@ export function EventStaffManager({
       </form>
 
       {sorted.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 px-6 py-12 text-center text-sm text-zinc-500">
+        <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 px-6 py-12 text-center text-sm text-slate-600 dark:text-zinc-400">
           Todavía no hay staff delegado.
         </div>
       ) : (
@@ -142,7 +142,7 @@ export function EventStaffManager({
                 <p className="font-medium text-zinc-900 dark:text-white">
                   {row.userName ?? row.userEmail}
                 </p>
-                <p className="text-sm text-zinc-500">
+                <p className="text-sm text-slate-600 dark:text-zinc-400">
                   {row.userEmail} · {row.eventTitle} · {ROLE_LABEL[row.role]}
                 </p>
               </div>

@@ -65,7 +65,7 @@ const EventLocationMapInner = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="grid h-full place-items-center bg-white dark:bg-zinc-950 text-xs text-zinc-500">
+      <div className="grid h-full place-items-center bg-white dark:bg-zinc-950 text-xs text-slate-600 dark:text-zinc-400">
         Cargando mapa…
       </div>
     ),
@@ -78,6 +78,8 @@ type EventVenueStepProps = {
   onVenuesChange?: (venues: OrganizerVenue[]) => void
   onAppliedVenue?: (venue: OrganizerVenue) => void
   pricingSlot?: ReactNode
+  /** Parte del wizard: ubicación vs. zonas, o todo junto. */
+  focus?: "location" | "zones" | "all"
 }
 
 export function EventVenueStep({
@@ -86,7 +88,10 @@ export function EventVenueStep({
   onVenuesChange,
   onAppliedVenue,
   pricingSlot,
+  focus = "all",
 }: EventVenueStepProps) {
+  const showLocation = focus !== "zones"
+  const showZones = focus !== "location"
   const venueMode = form.watch("venue.mode")
   const existingVenueId = form.watch("venue.existingVenueId")
   const zoneType = form.watch("venue.zoneType")
@@ -320,6 +325,7 @@ export function EventVenueStep({
 
   return (
     <div className="space-y-7">
+      {showLocation ? (
       <div className="grid gap-2 sm:grid-cols-2">
         <button
           type="button"
@@ -332,8 +338,8 @@ export function EventVenueStep({
           className={cn(
             "rounded-2xl border px-4 py-3 text-left text-sm transition disabled:opacity-40",
             venueMode === "existing" && !editingSaved
-              ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-100"
-              : "border-zinc-200 dark:border-white/8 bg-zinc-50 dark:bg-black/15 text-zinc-600 dark:text-zinc-400",
+              ? "border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
+              : "border-border bg-muted text-slate-600 dark:text-zinc-400",
           )}
         >
           Elegir un lugar guardado
@@ -347,16 +353,17 @@ export function EventVenueStep({
           className={cn(
             "rounded-2xl border px-4 py-3 text-left text-sm transition",
             showCreateForm && (venueMode === "new" || editingSaved)
-              ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-100"
-              : "border-zinc-200 dark:border-white/8 bg-zinc-50 dark:bg-black/15 text-zinc-600 dark:text-zinc-400",
+              ? "border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
+              : "border-border bg-muted text-slate-600 dark:text-zinc-400",
           )}
         >
           Crear un lugar nuevo
         </button>
       </div>
+      ) : null}
 
       {venueMode === "existing" && !editingSaved && selectedVenue ? (
-        <div className="space-y-4 rounded-2xl border border-zinc-200 dark:border-white/8 bg-zinc-100 dark:bg-black/20 p-4 sm:p-5">
+        <div className="space-y-4 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-base font-semibold text-zinc-900 dark:text-white">
@@ -367,7 +374,7 @@ export function EventVenueStep({
                   .filter(Boolean)
                   .join(" · ")}
               </p>
-              <p className="mt-1 text-xs text-zinc-500">
+              <p className="mt-1 text-xs text-slate-600 dark:text-zinc-400">
                 {formatNumber(selectedVenue.capacity)} personas ·{" "}
                 {selectedVenue.seatingLayout.length ||
                   selectedVenue.zoneBlueprint.length}{" "}
@@ -402,15 +409,33 @@ export function EventVenueStep({
                     const venue = venues.find((item) => item.id === value)
                     if (venue) applySavedVenue(venue)
                   }}
+                  items={venues.map((venue) => ({
+                    value: venue.id,
+                    label: `${venue.name}${venue.city ? ` · ${venue.city}` : ""}`,
+                  }))}
                 >
-                  <SelectTrigger className="h-11 border-zinc-200 dark:border-white/10 bg-zinc-100 dark:bg-black/20">
-                    <SelectValue placeholder="Elegí un lugar" />
+                  <SelectTrigger className="h-11 w-full max-w-full overflow-hidden border-zinc-200 bg-zinc-100 dark:border-white/10 dark:bg-black/20">
+                    <SelectValue placeholder="Elegí un lugar">
+                      {(() => {
+                        const venue = venues.find(
+                          (item) => item.id === field.value,
+                        )
+                        if (!venue) return null
+                        return `${venue.name}${venue.city ? ` · ${venue.city}` : ""}`
+                      })()}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {venues.map((venue) => (
                       <SelectItem key={venue.id} value={venue.id}>
-                        {venue.name}
-                        {venue.city ? ` · ${venue.city}` : ""}
+                        <span className="block max-w-[200px] truncate sm:max-w-[300px]">
+                          {venue.name}
+                        </span>
+                        {venue.city ? (
+                          <span className="shrink-0 text-sm text-muted-foreground">
+                            {venue.city}
+                          </span>
+                        ) : null}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -420,7 +445,8 @@ export function EventVenueStep({
             )}
           />
 
-          {selectedVenue.latitude != null &&
+          {showLocation &&
+          selectedVenue.latitude != null &&
           selectedVenue.longitude != null ? (
             <div className="h-48 overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 sm:h-56">
               <EventLocationMapInner
@@ -428,12 +454,13 @@ export function EventVenueStep({
                 longitude={selectedVenue.longitude}
               />
             </div>
-          ) : (
-            <p className="rounded-xl border border-dashed border-zinc-200 dark:border-white/10 px-3 py-3 text-xs text-zinc-500">
+          ) : showLocation ? (
+            <p className="rounded-xl border border-dashed border-zinc-200 dark:border-white/10 px-3 py-3 text-xs text-slate-600 dark:text-zinc-400">
               Este lugar todavía no tiene coordenadas en el mapa.
             </p>
-          )}
+          ) : null}
 
+          {showZones ? (
           <ul className="grid gap-2 sm:grid-cols-2">
             {(selectedVenue.seatingLayout.length > 0
               ? selectedVenue.seatingLayout.map((sector) => ({
@@ -459,7 +486,7 @@ export function EventVenueStep({
             ).map((item) => (
               <li
                 key={item.id}
-                className="flex items-center gap-2 rounded-xl border border-zinc-200 dark:border-white/8 bg-black/25 px-3 py-2.5 text-sm"
+                className="flex items-center gap-2 rounded-xl border border-zinc-200 dark:border-white/8 bg-muted dark:bg-black/25 px-3 py-2.5 text-sm"
               >
                 <span
                   className="size-2.5 rounded-full"
@@ -469,24 +496,26 @@ export function EventVenueStep({
                 <span className="min-w-0 flex-1 truncate text-zinc-800 dark:text-zinc-200">
                   {item.name}
                 </span>
-                <span className="text-[11px] text-zinc-500">{item.detail}</span>
+                <span className="text-[11px] text-slate-600 dark:text-zinc-400">{item.detail}</span>
               </li>
             ))}
           </ul>
+          ) : null}
 
-          {pricingSlot}
+          {focus === "all" ? pricingSlot : null}
         </div>
       ) : null}
 
       {showCreateForm ? (
-        <div className="space-y-6 rounded-2xl border border-zinc-200 dark:border-white/8 bg-zinc-50 dark:bg-black/15 p-4 sm:p-5">
+        <div className="space-y-6 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
           {editingSaved ? (
-            <p className="text-sm text-emerald-300/90">
+            <p className="text-sm text-emerald-800 dark:text-emerald-300/90">
               Estás editando un lugar guardado. Los cambios se aplican a futuros
               eventos que lo usen.
             </p>
           ) : null}
 
+          {showZones ? (
           <FormField
             control={form.control}
             name="venue.zoneType"
@@ -534,8 +563,8 @@ export function EventVenueStep({
                       >
                         <span
                           className={cn(
-                            "grid size-11 shrink-0 place-items-center rounded-xl bg-white/5 text-zinc-500",
-                            selected && "bg-emerald-500/15 text-emerald-300",
+                            "grid size-11 shrink-0 place-items-center rounded-xl bg-white/5 text-slate-600 dark:text-zinc-400",
+                            selected && "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300",
                           )}
                         >
                           <Icon className="size-5" />
@@ -544,7 +573,7 @@ export function EventVenueStep({
                           <span className="block font-semibold text-zinc-800 dark:text-zinc-200">
                             {option.title}
                           </span>
-                          <span className="mt-1 block text-xs leading-5 text-zinc-500">
+                          <span className="mt-1 block text-xs leading-5 text-slate-600 dark:text-zinc-400">
                             {option.description}
                           </span>
                         </span>
@@ -555,13 +584,18 @@ export function EventVenueStep({
               </FormItem>
             )}
           />
+          ) : null}
 
+          {showLocation ? (
           <VenueArgentinaSelector
             value={geoValue}
             onChange={onGeoChange}
             showIdentityFields
           />
+          ) : null}
 
+          {showZones ? (
+            <>
           <SmartVenueBuilder
             structured={structured}
             zones={zoneDrafts}
@@ -569,9 +603,9 @@ export function EventVenueStep({
           />
 
           {structured ? (
-            <div className="space-y-3 rounded-2xl border border-zinc-200 dark:border-white/8 bg-zinc-100 dark:bg-black/20 p-4">
+            <div className="space-y-3 rounded-2xl border border-border bg-muted/60 p-4">
               <div className="flex items-center gap-2">
-                <ImageIcon className="size-4 text-emerald-400" />
+                <ImageIcon className="size-4 text-emerald-700 dark:text-emerald-400" />
                 <Label className="text-sm text-zinc-800 dark:text-zinc-200">
                   Imagen o mapa del lugar (Opcional)
                 </Label>
@@ -588,7 +622,7 @@ export function EventVenueStep({
                   />
                 </div>
               ) : null}
-              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950/60 px-4 py-6 text-sm text-zinc-600 dark:text-zinc-400 hover:border-emerald-500/40 hover:text-emerald-200">
+              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950/60 px-4 py-6 text-sm text-zinc-600 dark:text-zinc-400 hover:border-emerald-500/40 hover:text-emerald-800 dark:text-emerald-200">
                 {pendingUpload ? (
                   <LoaderCircle className="size-4 animate-spin" />
                 ) : (
@@ -630,17 +664,21 @@ export function EventVenueStep({
               )}
             />
           )}
+            </>
+          ) : null}
 
+          {showLocation ? (
+            <>
           <FormField
             control={form.control}
             name="venue.saveVenueForReuse"
             render={({ field }) => (
-              <FormItem className="flex flex-row items-start justify-between gap-3 rounded-2xl border border-zinc-200 dark:border-white/8 bg-zinc-100 dark:bg-black/20 px-4 py-3">
+              <FormItem className="flex flex-row items-start justify-between gap-3 rounded-2xl border border-border bg-muted/60 px-4 py-3">
                 <div className="space-y-1">
                   <FormLabel className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                     Guardar este lugar para futuros eventos
                   </FormLabel>
-                  <FormDescription className="text-xs text-zinc-500">
+                  <FormDescription className="text-xs text-slate-600 dark:text-zinc-400">
                     Si está activo, al guardar el evento queda disponible en
                     “Elegir un lugar guardado”.
                   </FormDescription>
@@ -661,7 +699,7 @@ export function EventVenueStep({
                 variant="outline"
                 disabled={pendingSave}
                 onClick={persistVenueNow}
-                className="border-emerald-500/30 bg-emerald-500/10 text-emerald-100"
+                className="border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
               >
                 {pendingSave ? (
                   <LoaderCircle className="size-4 animate-spin" />
@@ -687,8 +725,12 @@ export function EventVenueStep({
               ) : null}
             </div>
           )}
+            </>
+          ) : null}
 
-          {pricingSlot && venueMode === "existing" ? pricingSlot : null}
+          {focus === "all" && pricingSlot && venueMode === "existing"
+            ? pricingSlot
+            : null}
         </div>
       ) : null}
     </div>

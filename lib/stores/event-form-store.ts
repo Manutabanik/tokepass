@@ -1,0 +1,158 @@
+"use client"
+
+import { create } from "zustand"
+import { persist, createJSONStorage } from "zustand/middleware"
+
+import type { EventFormValues } from "@/lib/validations/event-form"
+import type { VenuePricingMap } from "@/lib/seating/venue-adapter"
+
+export type AutosaveStatus = "idle" | "dirty" | "saving" | "saved" | "error"
+
+export type ZoneTierPriceDraft = {
+  id?: string
+  sectorKey: string
+  sectorName: string
+  ticketTierId: string
+  ticketTierName: string
+  price: number
+  tableNumberStart: number | null
+  tableNumberEnd: number | null
+}
+
+export type EventFormPersistedState = {
+  draftKey: string
+  eventId: string | null
+  values: EventFormValues | null
+  venuePricingMap: VenuePricingMap
+  zoneTierPricing: ZoneTierPriceDraft[]
+  wizardStep: number
+  updatedAt: number
+}
+
+type EventFormStore = EventFormPersistedState & {
+  autosaveStatus: AutosaveStatus
+  autosaveError: string | null
+  hydrateSession: (input: {
+    draftKey: string
+    eventId: string | null
+    values: EventFormValues
+    venuePricingMap?: VenuePricingMap
+    zoneTierPricing?: ZoneTierPriceDraft[]
+  }) => void
+  setFormValues: (values: EventFormValues) => void
+  setVenuePricingMap: (map: VenuePricingMap) => void
+  setZoneTierPricing: (rows: ZoneTierPriceDraft[]) => void
+  setEventId: (eventId: string) => void
+  setWizardStep: (step: number) => void
+  setAutosaveStatus: (status: AutosaveStatus, error?: string | null) => void
+  clearDraft: (draftKey?: string) => void
+}
+
+const EMPTY_PRICING: VenuePricingMap = {}
+
+export const useEventFormStore = create<EventFormStore>()(
+  persist(
+    (set, get) => ({
+      draftKey: "create",
+      eventId: null,
+      values: null,
+      venuePricingMap: EMPTY_PRICING,
+      zoneTierPricing: [],
+      wizardStep: 0,
+      updatedAt: 0,
+      autosaveStatus: "idle",
+      autosaveError: null,
+
+      hydrateSession: ({
+        draftKey,
+        eventId,
+        values,
+        venuePricingMap,
+        zoneTierPricing,
+      }) => {
+        const current = get()
+        const sameSession = current.draftKey === draftKey
+        const preferLocal =
+          sameSession &&
+          current.values != null &&
+          current.updatedAt > 0 &&
+          !eventId
+
+        set({
+          draftKey,
+          eventId: eventId ?? (preferLocal ? current.eventId : eventId),
+          values: preferLocal && current.values ? current.values : values,
+          venuePricingMap:
+            preferLocal && Object.keys(current.venuePricingMap).length > 0
+              ? current.venuePricingMap
+              : (venuePricingMap ?? EMPTY_PRICING),
+          zoneTierPricing:
+            preferLocal && current.zoneTierPricing.length > 0
+              ? current.zoneTierPricing
+              : (zoneTierPricing ?? []),
+          updatedAt: preferLocal ? current.updatedAt : Date.now(),
+          autosaveStatus: preferLocal ? "saved" : "idle",
+          autosaveError: null,
+        })
+      },
+
+      setFormValues: (values) =>
+        set({
+          values,
+          updatedAt: Date.now(),
+          autosaveStatus: "dirty",
+          autosaveError: null,
+        }),
+
+      setVenuePricingMap: (map) =>
+        set({
+          venuePricingMap: map,
+          updatedAt: Date.now(),
+          autosaveStatus: "dirty",
+        }),
+
+      setZoneTierPricing: (rows) =>
+        set({
+          zoneTierPricing: rows,
+          updatedAt: Date.now(),
+          autosaveStatus: "dirty",
+        }),
+
+      setEventId: (eventId) => set({ eventId, draftKey: `edit:${eventId}` }),
+
+      setWizardStep: (step) => set({ wizardStep: Math.max(0, step) }),
+
+      setAutosaveStatus: (status, error = null) =>
+        set({ autosaveStatus: status, autosaveError: error }),
+
+      clearDraft: (draftKey) => {
+        const key = draftKey ?? get().draftKey
+        if (get().draftKey !== key) return
+        set({
+          eventId: null,
+          values: null,
+          venuePricingMap: EMPTY_PRICING,
+          zoneTierPricing: [],
+          wizardStep: 0,
+          updatedAt: 0,
+          autosaveStatus: "idle",
+          autosaveError: null,
+          draftKey: "create",
+        })
+      },
+    }),
+    {
+      name: "tokepass.event-form.v1",
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        draftKey: state.draftKey,
+        eventId: state.eventId,
+        values: state.values,
+        venuePricingMap: state.venuePricingMap,
+        zoneTierPricing: state.zoneTierPricing,
+        wizardStep: state.wizardStep,
+        updatedAt: state.updatedAt,
+      }),
+    },
+  ),
+)

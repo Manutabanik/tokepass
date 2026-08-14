@@ -83,14 +83,14 @@ export default async function EditEventPage({
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
       <Link
         href="/admin/events"
-        className="inline-flex w-fit items-center gap-2 text-sm text-zinc-500 transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+        className="inline-flex w-fit items-center gap-2 text-sm text-slate-600 dark:text-zinc-400 transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
         Volver a Mis Eventos
       </Link>
 
       <header>
-        <p className="mb-3 inline-flex items-center gap-2 font-mono text-xs uppercase tracking-[0.18em] text-emerald-400">
+        <p className="mb-3 inline-flex items-center gap-2 font-mono text-xs uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-400">
           <Pencil className="size-3.5" aria-hidden="true" />
           Datos del Evento
         </p>

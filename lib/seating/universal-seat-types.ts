@@ -22,6 +22,8 @@ export type UniversalSectorBase = {
   name: string
   color: string
   price: number
+  /** Unidades libres (resumen de servidor; no implica asientos hidratados). */
+  availableCount?: number
 }
 
 export type UniversalGeneralSector = UniversalSectorBase & {
@@ -105,6 +107,25 @@ export const UNIVERSAL_SEAT_MOCK: UniversalSector[] = [
           { id: "m10-b", label: "B", status: "available" },
           { id: "m10-c", label: "C", status: "occupied" },
           { id: "m10-d", label: "D", status: "available" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "s-azul",
+    name: "Sillas Numeradas (Sector Azul)",
+    color: "#2563eb",
+    /** Precio All-In de referencia para E2E / zone_tier_pricing. */
+    price: 25000,
+    type: "numbered",
+    groups: [
+      {
+        id: "azul-fila-1",
+        name: "Fila 1",
+        seats: [
+          { id: "az-1-1", label: "1", status: "available" },
+          { id: "az-1-2", label: "2", status: "available" },
+          { id: "az-1-3", label: "3", status: "occupied" },
         ],
       },
     ],

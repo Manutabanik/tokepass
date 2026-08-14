@@ -15,10 +15,12 @@ export function EventAboutExpandable({
 
   return (
     <section className="space-y-3">
-      <h2 className="text-lg font-bold tracking-tight text-white">Acerca de</h2>
+      <h2 className="text-lg font-bold tracking-tight text-foreground">
+        Acerca de
+      </h2>
       <p
         className={cn(
-          "whitespace-pre-wrap text-[15px] leading-7 text-zinc-400",
+          "whitespace-pre-wrap text-[15px] leading-7 text-muted-foreground",
           !expanded && needsTruncate && "line-clamp-3",
         )}
       >
@@ -28,7 +30,7 @@ export function EventAboutExpandable({
         <Button
           type="button"
           variant="link"
-          className="h-auto px-0 text-sm font-semibold text-emerald-400"
+          className="h-auto px-0 text-sm font-semibold text-emerald-600 dark:text-emerald-400"
           onClick={() => setExpanded((value) => !value)}
         >
           {expanded ? "Ver menos" : "Leer más…"}

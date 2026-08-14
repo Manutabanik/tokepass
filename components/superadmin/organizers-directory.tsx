@@ -32,7 +32,7 @@ export function OrganizersDirectory({
 }) {
   if (organizers.length === 0) {
     return (
-      <div className="grid min-h-48 place-items-center text-sm text-zinc-500">
+      <div className="grid min-h-48 place-items-center text-sm text-slate-600 dark:text-zinc-400">
         Todavía no hay productoras aprobadas.
       </div>
     )
@@ -55,7 +55,7 @@ export function OrganizersDirectory({
                 <p className="text-lg font-bold leading-tight text-white">
                   {org.companyName ?? org.name}
                 </p>
-                <p className="mt-1 truncate text-sm text-zinc-500">
+                <p className="mt-1 truncate text-sm text-slate-600 dark:text-zinc-400">
                   {org.email}
                 </p>
                 <p className="mt-0.5 font-mono text-xs text-zinc-600">
@@ -67,11 +67,11 @@ export function OrganizersDirectory({
               <div className="flex flex-wrap items-center gap-2">
                 <Badge
                   variant="outline"
-                  className="rounded-full border-emerald-500/35 text-[10px] uppercase text-emerald-200"
+                  className="rounded-full border-emerald-500/35 text-[10px] uppercase text-emerald-800 dark:text-emerald-200"
                 >
                   Aprobada
                 </Badge>
-                <span className="text-xs text-zinc-500">
+                <span className="text-xs text-slate-600 dark:text-zinc-400">
                   {formatNumber(org.totalEvents)} eventos ·{" "}
                   {formatDate(org.joinedAt)}
                 </span>
@@ -125,13 +125,13 @@ export function OrganizersDirectory({
                     </div>
                   </div>
                 </TableCell>
-                <TableCell className="font-mono text-xs text-zinc-400">
+                <TableCell className="font-mono text-xs text-slate-600 dark:text-zinc-400">
                   {org.cuitCuil ?? "—"}
                 </TableCell>
                 <TableCell className="text-zinc-300">
                   {formatNumber(org.totalEvents)}
                 </TableCell>
-                <TableCell className="text-zinc-500">
+                <TableCell className="text-slate-600 dark:text-zinc-400">
                   {formatDate(org.joinedAt)}
                 </TableCell>
                 <TableCell className="pr-6 text-right">

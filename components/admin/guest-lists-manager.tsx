@@ -25,7 +25,7 @@ export function GuestListsManager({
 
   if (lists.length === 0) {
     return (
-      <div className="rounded-[1.5rem] border border-dashed border-zinc-200 dark:border-white/10 px-6 py-16 text-center text-sm text-zinc-500">
+      <div className="rounded-[1.5rem] border border-dashed border-zinc-200 dark:border-white/10 px-6 py-16 text-center text-sm text-slate-600 dark:text-zinc-400">
         Creá tu primera lista para empezar a emitir FreePass.
       </div>
     )

@@ -5,10 +5,12 @@ import type {
   UniversalSector,
   UniversalSeat,
   UniversalSeatGroup,
+  UniversalNumberedSector,
 } from "@/lib/seating/universal-seat-types"
 import {
   getVenueSeatingItems,
   type EventSeatingUnit,
+  type SeatingSectorSummary,
   type VenueSeatingItem,
   type VenueSeatingLayout,
   type VenueSeatingRow,
@@ -38,6 +40,7 @@ export type MapVenueToUniversalOptions = {
   /** Estado de ocupación runtime (checkout / preview). */
   occupancyBySeatId?: Record<string, SeatStatus>
   maxPerUser?: number
+  availableBySectorId?: Record<string, number>
 }
 
 function resolvePrice(
@@ -97,6 +100,7 @@ function sectorFromLayout(
       price: basePrice,
       type: "general",
       maxPerUser,
+      availableCount: options?.availableBySectorId?.[sector.id],
     }
   }
 
@@ -132,6 +136,7 @@ function sectorFromLayout(
     price: Number.isFinite(fromPrice) ? fromPrice : basePrice,
     type: "numbered",
     groups,
+    availableCount: options?.availableBySectorId?.[sector.id],
   }
 }
 
@@ -283,8 +288,17 @@ export function buildUniversalSeatPayloadForCheckout(input: {
   seatingBackgroundUrl: string | null
   capacity?: number
   tiers: CheckoutUniversalTier[]
-  seatingUnits: EventSeatingUnit[]
+  seatingUnits?: EventSeatingUnit[]
+  seatingSectorSummaries?: SeatingSectorSummary[]
   maxPerUser?: number
+  /** Precios de matriz Zona × Tier (prioridad sobre tier.price). */
+  zoneTierPricing?: Array<{
+    sectorKey: string
+    ticketTierId: string
+    price: number
+    tableNumberStart?: number | null
+    tableNumberEnd?: number | null
+  }>
 }): VenueUniversalSeatPayload {
   const pricingMap: VenuePricingMap = {}
   for (const tier of input.tiers) {
@@ -294,8 +308,30 @@ export function buildUniversalSeatPayloadForCheckout(input: {
     pricingMap[tier.name] = pricingMap[tier.name] ?? tier.price
   }
 
+  // Matriz: sobrescribe precio del sector cuando hay tarifa para el tier ligado
+  for (const row of input.zoneTierPricing ?? []) {
+    const tier = input.tiers.find((t) => t.id === row.ticketTierId)
+    if (!tier) continue
+    const entry =
+      typeof pricingMap[row.sectorKey] === "object" &&
+      pricingMap[row.sectorKey] != null
+        ? { ...(pricingMap[row.sectorKey] as VenueSectorPriceEntry) }
+        : {
+            price:
+              typeof pricingMap[row.sectorKey] === "number"
+                ? (pricingMap[row.sectorKey] as number)
+                : tier.price,
+          }
+    entry.price = row.price
+    pricingMap[row.sectorKey] = entry
+    if (tier.seatingSectorId === row.sectorKey || !tier.seatingSectorId) {
+      pricingMap[tier.name] = row.price
+    }
+  }
+
+  const seatingUnits = input.seatingUnits ?? []
   const occupancyBySeatId: Record<string, SeatStatus> = {}
-  for (const unit of input.seatingUnits) {
+  for (const unit of seatingUnits) {
     occupancyBySeatId[unit.layoutItemId] =
       unit.status === "available"
         ? "available"
@@ -304,10 +340,18 @@ export function buildUniversalSeatPayloadForCheckout(input: {
           : "occupied"
   }
 
+  const availableBySectorId: Record<string, number> = {}
+  for (const summary of input.seatingSectorSummaries ?? []) {
+    availableBySectorId[summary.sectorId] = summary.available
+  }
+
+  const strippedLayout = stripSeatingLayoutItems(input.seatingLayout)
   const layout =
-    input.seatingLayout.length > 0
-      ? input.seatingLayout
-      : synthesizeLayoutFromEventUnits(input.seatingUnits)
+    strippedLayout.length > 0
+      ? strippedLayout
+      : (input.seatingSectorSummaries ?? []).length > 0
+        ? layoutShellsFromSummaries(input.seatingSectorSummaries ?? [])
+        : synthesizeLayoutFromEventUnits(seatingUnits)
 
   const payload = mapVenueToUniversalSeatData(
     {
@@ -322,6 +366,7 @@ export function buildUniversalSeatPayloadForCheckout(input: {
     {
       occupancyBySeatId,
       maxPerUser: input.maxPerUser ?? MAX_TICKETS_PER_PURCHASE,
+      availableBySectorId,
     },
   )
 
@@ -354,6 +399,55 @@ export function buildUniversalSeatPayloadForCheckout(input: {
   }
 
   return payload
+}
+
+export function stripSeatingLayoutItems(
+  layout: VenueSeatingLayout,
+): VenueSeatingLayout {
+  return layout.map((sector) => ({
+    id: sector.id,
+    sector_name: sector.sector_name,
+    color: sector.color,
+    pricing_tier_id: sector.pricing_tier_id,
+    layout_type: sector.layout_type,
+    capacity_per_unit: sector.capacity_per_unit,
+    items: [],
+    rows: [],
+  }))
+}
+
+function layoutShellsFromSummaries(
+  summaries: SeatingSectorSummary[],
+): VenueSeatingLayout {
+  return summaries.map((summary) => ({
+    id: summary.sectorId,
+    sector_name: summary.sectorName,
+    color: summary.color || "#f97316",
+    pricing_tier_id: summary.tierId,
+    layout_type: summary.layoutType,
+    capacity_per_unit: summary.capacityPerUnit,
+    items: [],
+    rows: [],
+  }))
+}
+
+/** Hidrata asientos de un sector numerado a partir de unidades lazy. */
+export function hydrateNumberedSectorFromUnits(
+  sector: UniversalNumberedSector,
+  units: EventSeatingUnit[],
+): UniversalNumberedSector {
+  const layout = synthesizeLayoutFromEventUnits(units)
+  const match =
+    layout.find((item) => item.id === sector.id) ?? layout[0] ?? null
+  if (!match) {
+    return { ...sector, groups: [] }
+  }
+  const mapped = sectorFromLayout(match, { [sector.id]: sector.price })
+  if (mapped.type !== "numbered") return sector
+  return {
+    ...sector,
+    groups: mapped.groups,
+  }
 }
 
 function synthesizeLayoutFromEventUnits(

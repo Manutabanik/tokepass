@@ -20,8 +20,6 @@ export function EventResaleListings({
   currentUserId: string | null
 }) {
   const router = useRouter()
-  const [pendingId, setPendingId] = useTransition()
-  // useTransition doesn't give pending id — use local state via startTransition wrapper
   const [isPending, startTransition] = useTransition()
 
   if (listings.length === 0) return null
@@ -46,13 +44,13 @@ export function EventResaleListings({
   return (
     <section
       id="resale"
-      className="scroll-mt-24 space-y-4 rounded-2xl border border-zinc-800 bg-zinc-950/60 p-5 sm:p-6"
+      className="scroll-mt-24 space-y-4 rounded-2xl border border-border bg-card p-5 sm:p-6"
     >
       <div>
-        <h2 className="text-lg font-bold tracking-tight text-white">
+        <h2 className="text-lg font-bold tracking-tight text-foreground">
           Reventa Oficial de Fans
         </h2>
-        <p className="mt-1 text-sm text-zinc-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           Entradas verificadas al precio oficial. El QR anterior se invalida al
           confirmar el pago.
         </p>
@@ -62,11 +60,11 @@ export function EventResaleListings({
         {listings.map((listing) => (
           <li
             key={listing.id}
-            className="flex flex-col gap-3 rounded-xl border border-zinc-800 bg-zinc-900/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+            className="flex flex-col gap-3 rounded-xl border border-border bg-muted/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
           >
             <div>
-              <p className="font-semibold text-zinc-100">{listing.tierName}</p>
-              <p className="mt-0.5 text-sm text-zinc-400">
+              <p className="font-semibold text-foreground">{listing.tierName}</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">
                 {formatCurrency(listing.price)}
               </p>
             </div>
@@ -74,7 +72,7 @@ export function EventResaleListings({
               type="button"
               disabled={isPending}
               onClick={() => buy(listing.id)}
-              className="h-11 rounded-full bg-emerald-600 text-white hover:bg-emerald-500"
+              className="h-11 rounded-full bg-emerald-500 font-bold text-zinc-950 hover:bg-emerald-600"
             >
               {isPending ? (
                 <Loader2 className="size-4 animate-spin" aria-hidden />

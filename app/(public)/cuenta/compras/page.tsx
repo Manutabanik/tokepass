@@ -21,28 +21,33 @@ function statusLabel(status: OrderStatus): { text: string; className: string } {
     case "paid":
       return {
         text: "Pagada",
-        className: "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30",
+        className:
+          "bg-emerald-500/15 text-emerald-800 ring-emerald-500/30 dark:text-emerald-300",
       }
     case "refunded":
       return {
         text: "Reembolsada",
-        className: "bg-amber-500/15 text-amber-200 ring-amber-500/30",
+        className:
+          "bg-amber-500/15 text-amber-800 ring-amber-500/30 dark:text-amber-200",
       }
     case "failed":
     case "expired":
       return {
         text: status === "failed" ? "Fallida" : "Expirada",
-        className: "bg-red-500/15 text-red-300 ring-red-500/30",
+        className:
+          "bg-rose-500/15 text-rose-800 ring-rose-500/30 dark:text-rose-300",
       }
     case "pending":
       return {
         text: "Pendiente",
-        className: "bg-zinc-500/20 text-zinc-300 ring-zinc-500/30",
+        className:
+          "bg-muted text-muted-foreground ring-border",
       }
     default:
       return {
         text: status,
-        className: "bg-zinc-500/20 text-zinc-300 ring-zinc-500/30",
+        className:
+          "bg-muted text-muted-foreground ring-border",
       }
   }
 }
@@ -59,30 +64,30 @@ export default async function CuentaComprasPage() {
   }
 
   return (
-    <section className="mx-auto w-full max-w-2xl space-y-6 px-4 py-8 sm:px-6">
+    <section className="space-y-6 py-8">
       <header>
-        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-sky-300/90">
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-sky-700 dark:text-sky-300/90">
           Compras
         </p>
-        <h1 className="text-3xl font-extrabold tracking-tight text-white">
+        <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
           Mis compras
         </h1>
-        <p className="mt-2 text-sm text-zinc-400">
+        <p className="mt-2 text-sm text-muted-foreground">
           Historial de órdenes, medios de pago y comprobantes.
         </p>
       </header>
 
       {orders.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-zinc-700 bg-zinc-900/40 px-6 py-14 text-center">
-          <Receipt className="mx-auto size-8 text-zinc-600" />
-          <h2 className="mt-4 text-lg font-bold text-white">
+        <div className="rounded-3xl border border-dashed border-border bg-muted/40 px-6 py-14 text-center">
+          <Receipt className="mx-auto size-8 text-muted-foreground" />
+          <h2 className="mt-4 text-lg font-bold text-foreground">
             Todavía no hay compras
           </h2>
-          <p className="mt-2 text-sm text-zinc-500">
+          <p className="mt-2 text-sm text-muted-foreground">
             Cuando compres entradas o extras, aparecen acá.
           </p>
           <Button
-            className="mt-6 min-h-12 rounded-xl"
+            className="mt-6 min-h-12 rounded-xl bg-emerald-500 font-semibold text-black hover:bg-emerald-600"
             nativeButton={false}
             render={<Link href="/events" />}
           >
@@ -90,7 +95,7 @@ export default async function CuentaComprasPage() {
           </Button>
         </div>
       ) : (
-        <ul className="space-y-4">
+        <ul className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {orders.map((order) => {
             const status = statusLabel(order.status)
             const ticketsSubtotal = Math.max(
@@ -100,68 +105,75 @@ export default async function CuentaComprasPage() {
             return (
               <li
                 key={order.id}
-                className="rounded-3xl border border-white/10 bg-white/[0.03] p-4 sm:p-5"
+                className="rounded-3xl border border-border bg-card p-4 sm:p-5"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="font-mono text-[11px] text-zinc-500">
+                    <p className="font-mono text-[11px] text-muted-foreground">
                       Orden {order.id.slice(0, 8).toUpperCase()}
                       {order.mpPaymentId
                         ? ` · MP ${order.mpPaymentId}`
                         : ""}
                     </p>
-                    <h2 className="mt-1 truncate text-lg font-bold text-white">
+                    <h2 className="mt-1 truncate text-lg font-bold text-foreground">
                       {order.eventTitle ?? "Compra Tokepass"}
                     </h2>
-                    <p className="mt-1 text-sm text-zinc-500">
+                    <p className="mt-1 text-sm text-muted-foreground">
                       {formatEventDay(order.createdAt)} ·{" "}
                       {formatEventTime(order.createdAt)}
                     </p>
                   </div>
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset ${status.className}`}
-                  >
-                    {status.text}
-                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {order.paymentMethod === "test_sandbox" ? (
+                      <span className="rounded-full border border-amber-500/40 bg-amber-500/15 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-100">
+                        TEST
+                      </span>
+                    ) : null}
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset ${status.className}`}
+                    >
+                      {status.text}
+                    </span>
+                  </div>
                 </div>
 
                 <dl className="mt-4 space-y-1.5 text-sm">
-                  <div className="flex justify-between gap-3 text-zinc-400">
+                  <div className="flex justify-between gap-3 text-muted-foreground">
                     <dt>
                       Entradas
                       {order.ticketCount
                         ? ` (${order.ticketCount})`
                         : ""}
                     </dt>
-                    <dd className="tabular-nums text-zinc-200">
+                    <dd className="tabular-nums text-foreground">
                       {formatCurrency(ticketsSubtotal)}
                     </dd>
                   </div>
                   {order.extrasCount > 0 ? (
-                    <div className="flex justify-between gap-3 text-zinc-400">
+                    <div className="flex justify-between gap-3 text-muted-foreground">
                       <dt>Extras ({order.extrasCount})</dt>
-                      <dd className="tabular-nums text-zinc-200">
+                      <dd className="tabular-nums text-foreground">
                         {formatCurrency(order.extrasTotal)}
                       </dd>
                     </div>
                   ) : null}
                   {order.serviceCharge > 0 ? (
-                    <div className="flex justify-between gap-3 text-zinc-400">
+                    <div className="flex justify-between gap-3 text-muted-foreground">
                       <dt>Fee de servicio</dt>
-                      <dd className="tabular-nums text-zinc-200">
+                      <dd className="tabular-nums text-foreground">
                         {formatCurrency(order.serviceCharge)}
                       </dd>
                     </div>
                   ) : null}
                   {order.discountAmount > 0 ? (
-                    <div className="flex justify-between gap-3 text-zinc-400">
+                    <div className="flex justify-between gap-3 text-muted-foreground">
                       <dt>Descuento</dt>
-                      <dd className="tabular-nums text-emerald-300">
+                      <dd className="tabular-nums text-emerald-700 dark:text-emerald-300">
                         −{formatCurrency(order.discountAmount)}
                       </dd>
                     </div>
                   ) : null}
-                  <div className="flex justify-between gap-3 border-t border-white/8 pt-2 font-semibold text-white">
+                  <div className="flex justify-between gap-3 border-t border-border pt-2 font-semibold text-foreground">
                     <dt>Total pagado</dt>
                     <dd className="tabular-nums">
                       {formatCurrency(order.totalAmount)}
@@ -169,7 +181,7 @@ export default async function CuentaComprasPage() {
                   </div>
                 </dl>
 
-                <p className="mt-3 text-xs text-zinc-500">
+                <p className="mt-3 text-xs text-muted-foreground">
                   Medio de pago: {buyerPaymentMethodLabel(order.paymentMethod)}
                 </p>
 
@@ -177,7 +189,7 @@ export default async function CuentaComprasPage() {
                   {order.firstTicketId ? (
                     <Button
                       variant="outline"
-                      className="min-h-12 flex-1 rounded-xl border-white/15"
+                      className="min-h-12 flex-1 rounded-xl border-border"
                       nativeButton={false}
                       render={
                         <Link
@@ -190,7 +202,7 @@ export default async function CuentaComprasPage() {
                     </Button>
                   ) : null}
                   <Button
-                    className="min-h-12 flex-1 rounded-xl"
+                    className="min-h-12 flex-1 rounded-xl bg-emerald-500 font-semibold text-black hover:bg-emerald-600"
                     nativeButton={false}
                     render={
                       <Link
@@ -207,7 +219,7 @@ export default async function CuentaComprasPage() {
                   {order.eventId ? (
                     <Button
                       variant="outline"
-                      className="min-h-12 rounded-xl border-white/15"
+                      className="min-h-12 rounded-xl border-border"
                       nativeButton={false}
                       render={<Link href={`/events/${order.eventId}`} />}
                     >

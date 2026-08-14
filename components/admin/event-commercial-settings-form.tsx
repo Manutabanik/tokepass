@@ -110,7 +110,7 @@ export function EventCommercialSettingsForm({
             disabled={pending || sponsored}
             className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
           />
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-slate-600 dark:text-zinc-400">
             Porcentaje que se suma al precio de la entrada al momento del pago.
             Ejemplo: 8 significa un 8%.
           </p>
@@ -127,7 +127,7 @@ export function EventCommercialSettingsForm({
             disabled={pending || sponsored}
             className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
           />
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-slate-600 dark:text-zinc-400">
             Monto fijo en pesos que se suma a cada entrada paga, además del
             porcentaje.
           </p>
@@ -146,7 +146,7 @@ export function EventCommercialSettingsForm({
             disabled={pending}
             className="border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900"
           />
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-slate-600 dark:text-zinc-400">
             Cantidad máxima de entradas a $0 que puede crear el organizador para
             este evento. No incluye invitaciones de lista de invitados.
           </p>

@@ -70,7 +70,7 @@ export default async function EventStorePage({
       <div>
         <Link
           href={`/admin/events/${eventId}`}
-          className="mb-5 inline-flex items-center gap-2 text-sm text-zinc-500 transition hover:text-zinc-900 dark:hover:text-white"
+          className="mb-5 inline-flex items-center gap-2 text-sm text-slate-600 dark:text-zinc-400 transition hover:text-zinc-900 dark:hover:text-white"
         >
           <ArrowLeft className="size-4" />
           Volver al centro de mando
@@ -87,7 +87,7 @@ export default async function EventStorePage({
             <h1 className="mt-1 text-3xl font-black tracking-[-0.035em] text-zinc-900 dark:text-white">
               {event.title}
             </h1>
-            <p className="mt-2 text-sm text-zinc-500">
+            <p className="mt-2 text-sm text-slate-600 dark:text-zinc-400">
               Vendé merch, comida, bebidas o servicios. Cada unidad genera un QR
               de canje independiente. Canjealos en el{" "}
               <Link
@@ -125,7 +125,7 @@ export default async function EventStorePage({
         </CardHeader>
         <CardContent className="space-y-3">
           {(items ?? []).length === 0 ? (
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-slate-600 dark:text-zinc-400">
               Todavía no hay productos en la tienda de este evento.
             </p>
           ) : (
@@ -147,7 +147,7 @@ export default async function EventStorePage({
                           className="size-full object-cover"
                         />
                       ) : (
-                        <span className="grid size-full place-items-center text-zinc-400">
+                        <span className="grid size-full place-items-center text-slate-600 dark:text-zinc-400">
                           <Icon className="size-4" aria-hidden="true" />
                         </span>
                       )}
@@ -156,7 +156,7 @@ export default async function EventStorePage({
                       <p className="font-semibold text-zinc-900 dark:text-white">
                         {item.name}
                       </p>
-                      <p className="mt-0.5 text-xs text-zinc-500">
+                      <p className="mt-0.5 text-xs text-slate-600 dark:text-zinc-400">
                         {EVENT_ITEM_CATEGORY_LABELS[category]}
                         {item.description ? ` · ${item.description}` : null}
                       </p>

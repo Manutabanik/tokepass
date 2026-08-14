@@ -86,7 +86,7 @@ export function PosTicketZView({ report }: { report: TicketZReport }) {
         </div>
       ) : null}
 
-      <p className="mt-4 text-center font-mono text-[9px] text-zinc-500">
+      <p className="mt-4 text-center font-mono text-[9px] text-slate-600 dark:text-zinc-400">
         Turno #{report.shiftId.slice(0, 8).toUpperCase()}
       </p>
     </div>

@@ -16,7 +16,7 @@ export function SuperAdminSidebar() {
   return (
     <aside
       className={cn(
-        "hidden h-screen shrink-0 border-r border-white/8 bg-[#08080b] p-4 text-zinc-300 transition-[width] duration-300 md:sticky md:top-0 md:flex md:flex-col",
+        "hidden h-screen shrink-0 border-r border-border bg-card p-4 text-card-foreground transition-[width] duration-300 md:sticky md:top-0 md:flex md:flex-col",
         collapsed ? "w-20" : "w-72",
       )}
     >
@@ -28,14 +28,12 @@ export function SuperAdminSidebar() {
       >
         {collapsed ? (
           <BrandLogo
-            inverted
             markOnly
             href="/superadmin"
             className="justify-center"
           />
         ) : (
           <BrandLogo
-            inverted
             href="/superadmin"
             tagline="Dueño de la Plataforma"
             className="px-0.5"
@@ -46,7 +44,7 @@ export function SuperAdminSidebar() {
           type="button"
           onClick={() => setCollapsed((current) => !current)}
           className={cn(
-            "grid size-9 place-items-center rounded-lg text-zinc-500 transition hover:bg-white/5 hover:text-white",
+            "grid size-9 place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground",
             collapsed && "hidden",
           )}
           aria-label="Colapsar sidebar"
@@ -60,7 +58,7 @@ export function SuperAdminSidebar() {
         <button
           type="button"
           onClick={() => setCollapsed(false)}
-          className="mt-3 grid h-9 w-full place-items-center rounded-lg text-zinc-500 transition hover:bg-white/5 hover:text-white"
+          className="mt-3 grid h-9 w-full place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
           aria-label="Expandir sidebar"
           title="Expandir"
         >
@@ -69,7 +67,7 @@ export function SuperAdminSidebar() {
       )}
 
       <div className={cn("mt-8 px-2", collapsed && "sr-only")}>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-600">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
           Menú principal
         </p>
       </div>
@@ -89,8 +87,8 @@ export function SuperAdminSidebar() {
               className={cn(
                 "flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition",
                 active
-                  ? "bg-sky-500/12 text-sky-300 ring-1 ring-inset ring-sky-500/15"
-                  : "text-zinc-500 hover:bg-white/5 hover:text-white",
+                  ? "bg-sky-500/12 text-sky-700 ring-1 ring-inset ring-sky-500/20 dark:text-sky-300 dark:ring-sky-500/15"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 collapsed && "justify-center px-0",
               )}
             >
@@ -104,7 +102,7 @@ export function SuperAdminSidebar() {
       <div className="mt-auto px-2 pt-4">
         <p
           className={cn(
-            "text-[11px] text-zinc-600",
+            "text-[11px] text-muted-foreground",
             collapsed && "sr-only",
           )}
         >

@@ -104,6 +104,7 @@ export async function getPlatformOverview(): Promise<PlatformOverview> {
   const eventsByStatus: Record<EventStatus, number> = {
     draft: 0,
     published: 0,
+    paused: 0,
     cancelled: 0,
     completed: 0,
     archived: 0,

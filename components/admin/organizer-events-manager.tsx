@@ -84,19 +84,19 @@ export function OrganizerEventsManager({
   const hint = useMemo(() => {
     if (boostHint === "success") {
       return {
-        className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-100",
+        className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-200",
         text: "Pago de Boost recibido. El destaque se activa al confirmar el webhook de Mercado Pago.",
       }
     }
     if (boostHint === "pending") {
       return {
-        className: "border-amber-500/30 bg-amber-500/10 text-amber-100",
+        className: "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-200",
         text: "Pago de Boost pendiente. Te avisamos cuando Mercado Pago lo confirme.",
       }
     }
     if (boostHint === "failure") {
       return {
-        className: "border-red-500/30 bg-red-500/10 text-red-100",
+        className: "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-200",
         text: "No se completó el pago del Boost. Podés reintentarlo desde el evento.",
       }
     }
@@ -107,13 +107,13 @@ export function OrganizerEventsManager({
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-violet-300/80">
+          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-violet-600 dark:text-violet-300">
             Cartelera
           </p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-zinc-900 dark:text-white">
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-foreground">
             Mis Eventos
           </h1>
-          <p className="mt-2 max-w-xl text-sm text-zinc-600 dark:text-zinc-400">
+          <p className="mt-2 max-w-xl text-sm text-muted-foreground">
             Creá borradores, previsualizá compras de prueba y publicá cuando
             esté listo.
           </p>
@@ -142,14 +142,14 @@ export function OrganizerEventsManager({
       <div className="rounded-2xl border border-cyan-400/20 bg-gradient-to-r from-cyan-500/10 via-fuchsia-500/5 to-transparent px-4 py-4 sm:px-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
-            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-cyan-400/15 text-cyan-300 ring-1 ring-cyan-400/30">
+            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-cyan-400/15 text-cyan-700 dark:text-cyan-300 ring-1 ring-cyan-400/30">
               <Rocket className="size-5" aria-hidden="true" />
             </span>
             <div>
-              <p className="font-bold text-zinc-900 dark:text-white">
+              <p className="font-bold text-foreground">
                 Multiplicá tus ventas hasta x3
               </p>
-              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+              <p className="mt-1 text-sm text-muted-foreground">
                 Destacá este evento en la portada con Tokepass Boost (Silver,
                 Gold o Platinum).
               </p>
@@ -159,11 +159,11 @@ export function OrganizerEventsManager({
       </div>
 
       {events.length === 0 ? (
-        <div className="grid min-h-64 place-items-center rounded-[1.75rem] border border-dashed border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/50 px-6 py-12 text-center">
+        <div className="grid min-h-64 place-items-center rounded-[1.75rem] border border-dashed border-border bg-muted/50 px-6 py-12 text-center">
           <div>
-            <CalendarDays className="mx-auto size-8 text-zinc-600" />
-            <p className="mt-4 text-lg font-bold text-zinc-900 dark:text-white">Sin eventos aún</p>
-            <p className="mt-2 text-sm text-zinc-500">
+            <CalendarDays className="mx-auto size-8 text-muted-foreground" />
+            <p className="mt-4 text-lg font-bold text-foreground">Sin eventos aún</p>
+            <p className="mt-2 text-sm text-muted-foreground">
               Creá tu primera noche como borrador y previsualizala antes de
               publicar.
             </p>
@@ -179,9 +179,9 @@ export function OrganizerEventsManager({
             return (
               <article
                 key={event.id}
-                className="flex flex-col gap-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/70 p-4 sm:flex-row sm:items-center"
+                className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-4 sm:flex-row sm:items-center"
               >
-                <div className="relative size-20 shrink-0 overflow-hidden rounded-xl bg-zinc-100 dark:bg-zinc-900">
+                <div className="relative size-20 shrink-0 overflow-hidden rounded-xl bg-muted">
                   {event.image_url ? (
                     <Image
                       src={event.image_url}
@@ -191,7 +191,7 @@ export function OrganizerEventsManager({
                       sizes="80px"
                     />
                   ) : (
-                    <div className="grid h-full place-items-center text-zinc-600">
+                    <div className="grid h-full place-items-center text-muted-foreground">
                       <ImageIcon className="size-6" />
                     </div>
                   )}
@@ -199,26 +199,26 @@ export function OrganizerEventsManager({
 
                 <div className="min-w-0 flex-1 space-y-1.5">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="truncate text-base font-bold text-zinc-900 dark:text-white">
+                    <h2 className="truncate text-base font-bold text-foreground">
                       {event.title}
                     </h2>
                     <EventStatusBadge status={event.status} />
                     {active ? (
-                      <Badge className="rounded-full border-0 bg-cyan-400/15 text-cyan-200">
+                      <Badge className="rounded-full border-0 bg-cyan-400/15 text-cyan-700 dark:text-cyan-200">
                         <Crown className="size-3" aria-hidden="true" />
                         Boost {event.featured_tier}
                       </Badge>
                     ) : null}
                   </div>
-                  <p className="flex items-center gap-1.5 text-sm text-zinc-500">
+                  <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
                     <CalendarDays className="size-3.5" aria-hidden="true" />
                     {formatEventDay(event.date)}
                   </p>
-                  <p className="flex items-center gap-1.5 text-sm text-zinc-500">
+                  <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
                     <MapPin className="size-3.5" aria-hidden="true" />
                     {event.venues?.name ?? event.location}
                   </p>
-                  <p className="text-xs text-zinc-600">
+                  <p className="text-xs text-muted-foreground">
                     {event.ticketsSold > 0
                       ? `${event.ticketsSold} entrada${event.ticketsSold === 1 ? "" : "s"} vendida${event.ticketsSold === 1 ? "" : "s"} / comprometidas`
                       : "Sin ventas todavía"}
@@ -227,7 +227,7 @@ export function OrganizerEventsManager({
 
                 <div className="mt-4 flex shrink-0 flex-wrap gap-2 sm:mt-0 sm:max-w-[420px] sm:justify-end">
                   <Button
-                    className="h-10 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 text-sm font-medium text-amber-100 hover:bg-amber-500/20"
+                    className="h-10 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 text-sm font-medium text-amber-600 dark:text-amber-200 hover:bg-amber-500/20"
                     nativeButton={false}
                     render={
                       <Link href={`/events/preview/${event.id}`} />
@@ -240,7 +240,7 @@ export function OrganizerEventsManager({
                     <PublishEventButton eventId={event.id} />
                   ) : null}
                   <Button
-                    className="h-10 rounded-xl border border-zinc-300 dark:border-zinc-700/80 bg-zinc-100 dark:bg-zinc-800 px-4 text-sm font-medium text-zinc-900 dark:text-white shadow-sm transition-all hover:bg-zinc-700"
+                    className="h-10 rounded-xl border border-border bg-muted px-4 text-sm font-medium text-foreground shadow-sm transition-all hover:bg-muted"
                     nativeButton={false}
                     render={<Link href={`/admin/events/${event.id}`} />}
                   >
@@ -248,7 +248,7 @@ export function OrganizerEventsManager({
                     Gestionar
                   </Button>
                   <Button
-                    className="h-10 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 text-sm font-medium text-zinc-700 dark:text-zinc-300 transition-all hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white"
+                    className="h-10 rounded-xl border border-border bg-muted px-4 text-sm font-medium text-foreground transition-all hover:border-border hover:bg-muted hover:text-foreground"
                     nativeButton={false}
                     render={<Link href={`/admin/events/${event.id}/edit`} />}
                   >
@@ -260,7 +260,7 @@ export function OrganizerEventsManager({
                       type="button"
                       variant="outline"
                       disabled={pendingArchive}
-                      className="h-10 rounded-xl border-zinc-300 dark:border-zinc-700 bg-transparent px-4 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                      className="h-10 rounded-xl border-border bg-transparent px-4 text-foreground hover:bg-muted"
                       onClick={() => {
                         startArchive(async () => {
                           const result = await archiveEvent(event.id)
@@ -281,7 +281,7 @@ export function OrganizerEventsManager({
                     <Button
                       type="button"
                       variant="outline"
-                      className="h-10 rounded-xl border-red-500/30 bg-red-500/10 px-4 text-red-200 hover:bg-red-500/20"
+                      className="h-10 rounded-xl border-red-500/30 bg-red-500/10 px-4 text-rose-600 dark:text-rose-200 hover:bg-red-500/20"
                       onClick={() => setDeleteTarget(event)}
                     >
                       <Trash2 className="size-4" aria-hidden="true" />
@@ -291,7 +291,7 @@ export function OrganizerEventsManager({
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-10 rounded-xl border-cyan-400/30 bg-cyan-400/10 px-4 text-cyan-100 shadow-[0_0_18px_rgba(34,211,238,0.08)] hover:bg-cyan-400/20"
+                    className="h-10 rounded-xl border-cyan-400/30 bg-cyan-400/10 px-4 text-cyan-700 dark:text-cyan-100 shadow-[0_0_18px_rgba(34,211,238,0.08)] hover:bg-cyan-400/20"
                     onClick={() => setBoostEvent(event)}
                   >
                     <Sparkles className="size-4" aria-hidden="true" />
@@ -321,13 +321,13 @@ export function OrganizerEventsManager({
           if (!open) setDeleteTarget(null)
         }}
       >
-        <DialogContent className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 sm:max-w-md">
+        <DialogContent className="border-border bg-card text-foreground sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-zinc-900 dark:text-white">
-              <TriangleAlert className="size-4 text-red-300" aria-hidden="true" />
+            <DialogTitle className="flex items-center gap-2 text-foreground">
+              <TriangleAlert className="size-4 text-rose-600 dark:text-rose-300" aria-hidden="true" />
               Confirmar eliminación
             </DialogTitle>
-            <DialogDescription className="text-zinc-600 dark:text-zinc-400">
+            <DialogDescription className="text-muted-foreground">
               {deleteTarget && deleteTarget.ticketsSold > 0
                 ? `“${deleteTarget.title}” tiene ${deleteTarget.ticketsSold} entrada(s) vendidas o en compra. Se marcará como cancelado para preservar la auditoría financiera.`
                 : `“${deleteTarget?.title ?? "Este evento"}” no tiene ventas. Se eliminará de forma permanente.`}
@@ -337,7 +337,7 @@ export function OrganizerEventsManager({
             <Button
               type="button"
               variant="outline"
-              className="border-zinc-300 dark:border-zinc-700"
+              className="border-border"
               onClick={() => setDeleteTarget(null)}
             >
               Abortar

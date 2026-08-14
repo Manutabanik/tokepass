@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { notFound, redirect } from "next/navigation"
 
+import { canUserSandboxCheckout } from "@/app/actions/checkout"
 import { getPreviewEventDetails } from "@/app/actions/public-events"
 import { EventPreviewBanner } from "@/components/public/event-preview-banner"
 import { EventStorefront } from "@/components/public/event-storefront"
@@ -42,17 +43,21 @@ export default async function EventPreviewPage({
     notFound()
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("full_name, dni, email, phone")
-    .eq("id", user.id)
-    .maybeSingle()
+  const [{ data: profile }, sandboxEligible] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("full_name, dni, email, phone")
+      .eq("id", user.id)
+      .maybeSingle(),
+    canUserSandboxCheckout(id),
+  ])
 
   return (
     <div>
       <EventPreviewBanner
         eventId={event.id}
         canPublish={event.status === "draft"}
+        status={event.status}
       />
       <EventStorefront
         event={event}
@@ -64,6 +69,7 @@ export default async function EventPreviewPage({
           buyerEmail: profile?.email ?? user.email ?? "",
           buyerPhone: profile?.phone ?? "",
         }}
+        sandboxEligible={sandboxEligible}
       />
     </div>
   )

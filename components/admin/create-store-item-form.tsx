@@ -88,9 +88,15 @@ export function CreateStoreItemForm({ eventId }: { eventId: string }) {
           onValueChange={(value) =>
             setCategory((value as EventItemCategory) || "drinks")
           }
+          items={EVENT_ITEM_CATEGORIES.map((value) => ({
+            value,
+            label: EVENT_ITEM_CATEGORY_LABELS[value],
+          }))}
         >
-          <SelectTrigger id="store-category" className="h-10 w-full">
-            <SelectValue placeholder="Elegí una categoría" />
+          <SelectTrigger id="store-category" className="h-10 w-full max-w-full overflow-hidden">
+            <SelectValue placeholder="Elegí una categoría">
+              {EVENT_ITEM_CATEGORY_LABELS[category]}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {EVENT_ITEM_CATEGORIES.map((value) => (

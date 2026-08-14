@@ -44,7 +44,7 @@ export function AccountDesktopNav() {
 
   return (
     <nav
-      className="mb-6 hidden flex-wrap gap-2 md:flex"
+      className="mb-6 hidden flex-wrap gap-2 md:flex md:justify-center lg:justify-start"
       aria-label="Secciones de Mi cuenta"
     >
       {LINKS.map(({ href, label, icon: Icon, exact }) => {
@@ -58,15 +58,15 @@ export function AccountDesktopNav() {
             className={cn(
               "relative inline-flex min-h-11 items-center gap-2 rounded-full border px-4 text-sm font-medium transition",
               active
-                ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-200"
-                : "border-white/10 text-zinc-400 hover:border-white/20 hover:text-white",
+                ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-800 dark:text-emerald-200"
+                : "border-border text-muted-foreground hover:border-border hover:bg-muted/60 hover:text-foreground",
             )}
           >
             <Icon className="size-4" aria-hidden="true" />
             {label}
             <NotificationDot
               show={showDot(href)}
-              className="right-1.5 top-1.5 size-2 ring-1 ring-[#09090b]"
+              className="right-1.5 top-1.5 size-2 ring-1 ring-background"
             />
           </Link>
         )

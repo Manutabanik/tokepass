@@ -32,13 +32,13 @@ export default async function SuperAdminBuyersPage({
               defaultValue={q ?? ""}
               placeholder="Buscar nombre, email, DNI…"
               aria-label="Buscar compradores"
-              className="min-h-12 w-full border-white/10 bg-black/20 text-base"
+              className="min-h-12 w-full border-white/10 bg-muted dark:bg-black/20 text-base"
             />
           </form>
         }
       />
 
-      <div className="mb-4 inline-flex items-center gap-2 text-xs text-zinc-500">
+      <div className="mb-4 inline-flex items-center gap-2 text-xs text-slate-600 dark:text-zinc-400">
         <Users className="size-3.5" />
         {buyers.length} compradores en esta vista
       </div>

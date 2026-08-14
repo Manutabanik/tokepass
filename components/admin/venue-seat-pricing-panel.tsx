@@ -86,16 +86,16 @@ export function VenueSeatPricingPanel({
   return (
     <div
       className={cn(
-        "space-y-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.04] p-4",
+        "space-y-4 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 shadow-sm dark:border-emerald-800 dark:bg-emerald-950/30",
         className,
       )}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-emerald-100">
+          <p className="text-sm font-semibold text-emerald-950 dark:text-emerald-200">
             Precios por zona del lugar
           </p>
-          <p className="mt-1 text-xs leading-5 text-zinc-500">
+          <p className="mt-1 text-xs leading-5 text-slate-600 dark:text-zinc-400">
             Asigná el precio que verá el comprador en cada zona. En
             numerados podés definir precio por fila.
           </p>
@@ -105,7 +105,7 @@ export function VenueSeatPricingPanel({
           variant="outline"
           size="sm"
           onClick={() => setPreviewOpen(true)}
-          className="border-emerald-500/30 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/15 hover:text-zinc-900 dark:hover:text-white"
+          className="border-emerald-200 bg-emerald-50 text-emerald-950 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-950/60"
         >
           <Eye className="size-4" />
           Ver vista previa de selección de entradas
@@ -113,7 +113,7 @@ export function VenueSeatPricingPanel({
       </div>
 
       {venue.seatingBackgroundUrl ? (
-        <div className="relative aspect-[16/7] overflow-hidden rounded-xl border border-zinc-200 dark:border-white/10 bg-black/40">
+        <div className="relative aspect-[16/7] overflow-hidden rounded-xl border border-border bg-muted">
           <Image
             src={venue.seatingBackgroundUrl}
             alt={`Mapa de ${venue.name}`}
@@ -122,13 +122,13 @@ export function VenueSeatPricingPanel({
             sizes="(max-width: 768px) 100vw, 640px"
             unoptimized
           />
-          <div className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-lg bg-black/70 px-2.5 py-1 text-[11px] text-zinc-800 dark:text-zinc-200">
-            <MapPinned className="size-3.5 text-emerald-400" />
+          <div className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-lg border border-border bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground shadow-sm">
+            <MapPinned className="size-3.5 text-emerald-700 dark:text-emerald-400" />
             Imagen o mapa del lugar
           </div>
         </div>
       ) : (
-        <p className="rounded-xl border border-dashed border-zinc-200 dark:border-white/10 bg-zinc-100 dark:bg-black/20 px-3 py-3 text-xs text-zinc-500">
+        <p className="rounded-xl border border-dashed border-border bg-muted px-3 py-3 text-xs text-slate-600 dark:text-zinc-400">
           Este lugar no tiene imagen o mapa cargado.
         </p>
       )}
@@ -146,7 +146,7 @@ export function VenueSeatPricingPanel({
           return (
             <li
               key={sector.id}
-              className="rounded-xl border border-zinc-200 dark:border-white/8 bg-black/25 px-3 py-3"
+              className="rounded-xl border border-border bg-card px-3 py-3 shadow-sm"
             >
               <div className="flex flex-wrap items-end gap-3">
                 <div className="min-w-0 flex-1">
@@ -156,10 +156,10 @@ export function VenueSeatPricingPanel({
                       style={{ backgroundColor: sector.color }}
                       aria-hidden
                     />
-                    <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                    <p className="truncate text-sm font-medium text-foreground">
                       {sector.name}
                     </p>
-                    <span className="rounded-md bg-white/5 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-zinc-500">
+                    <span className="rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
                       {sector.type === "general" ? "General" : "Numerado"}
                     </span>
                   </div>
@@ -169,7 +169,7 @@ export function VenueSeatPricingPanel({
                       onClick={() =>
                         setExpandedSectorId(expanded ? null : sector.id)
                       }
-                      className="mt-1 text-xs text-emerald-400/90 hover:text-emerald-300"
+                      className="mt-1 text-xs font-medium text-emerald-800 hover:text-emerald-950 dark:text-emerald-400 dark:hover:text-emerald-300"
                     >
                       {expanded
                         ? "Ocultar precios por fila"
@@ -180,7 +180,7 @@ export function VenueSeatPricingPanel({
                 <div className="w-full sm:w-40">
                   <Label
                     htmlFor={`sector-price-${sector.id}`}
-                    className="text-xs text-zinc-500"
+                    className="text-xs text-slate-600 dark:text-zinc-400"
                   >
                     Precio de la zona
                   </Label>
@@ -193,13 +193,13 @@ export function VenueSeatPricingPanel({
                     onChange={(event) =>
                       setSectorPrice(sector.id, Number(event.target.value))
                     }
-                    className="mt-1 h-10 border-zinc-200 dark:border-white/10 bg-black/30"
+                    className="mt-1 h-10"
                   />
                 </div>
               </div>
 
               {expanded && groups.length > 0 ? (
-                <div className="mt-3 grid gap-2 border-t border-white/6 pt-3 sm:grid-cols-2">
+                <div className="mt-3 grid gap-2 border-t border-border pt-3 sm:grid-cols-2">
                   {groups.map((group) => {
                     const groupPrice =
                       entry.groupPrices?.[group.id] ?? entry.price
@@ -207,7 +207,7 @@ export function VenueSeatPricingPanel({
                       <div key={group.id} className="flex items-center gap-2">
                         <Label
                           htmlFor={`group-price-${group.id}`}
-                          className="min-w-0 flex-1 truncate text-xs text-zinc-600 dark:text-zinc-400"
+                          className="min-w-0 flex-1 truncate text-xs text-slate-600 dark:text-zinc-400"
                         >
                           {group.name}
                         </Label>
@@ -224,7 +224,7 @@ export function VenueSeatPricingPanel({
                               Number(event.target.value),
                             )
                           }
-                          className="h-9 w-28 border-zinc-200 dark:border-white/10 bg-black/30"
+                          className="h-9 w-28"
                         />
                       </div>
                     )
@@ -236,7 +236,7 @@ export function VenueSeatPricingPanel({
         })}
       </ul>
 
-      <p className="text-xs text-zinc-500">
+      <p className="text-xs text-slate-600 dark:text-zinc-400">
         Vista previa con precios actuales · total de sectores:{" "}
         {sectors.length}
         {sectors.some((s) => asEntry(pricingMap[s.id]).price > 0)
@@ -249,12 +249,12 @@ export function VenueSeatPricingPanel({
       </p>
 
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-h-[92dvh] gap-0 overflow-hidden border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-0 text-zinc-900 dark:text-zinc-100 sm:max-w-3xl">
-          <DialogHeader className="border-b border-zinc-200 dark:border-white/8 px-5 py-4">
-            <DialogTitle className="text-base text-zinc-900 dark:text-white">
+        <DialogContent className="max-h-[92dvh] gap-0 overflow-hidden border-border bg-card p-0 text-card-foreground sm:max-w-3xl">
+          <DialogHeader className="border-b border-border px-5 py-4">
+            <DialogTitle className="text-base text-foreground">
               Vista previa · selección de entradas
             </DialogTitle>
-            <DialogDescription className="text-zinc-500">
+            <DialogDescription className="text-slate-600 dark:text-zinc-400">
               Experiencia del comprador con {venue.name} y los precios
               cargados ahora.
             </DialogDescription>
@@ -291,10 +291,10 @@ export function SavedVenuePickerDialog({
 }: SavedVenuePickerDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85dvh] border-zinc-200 dark:border-white/10 bg-[#121216] text-zinc-900 dark:text-zinc-100 sm:max-w-lg">
+      <DialogContent className="max-h-[85dvh] border-border bg-card text-card-foreground sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Lugares guardados</DialogTitle>
-          <DialogDescription className="text-zinc-500">
+          <DialogDescription className="text-slate-600 dark:text-zinc-400">
             Elegí un lugar para importar mapa, zonas y capacidad de gente.
           </DialogDescription>
         </DialogHeader>
@@ -316,14 +316,14 @@ export function SavedVenuePickerDialog({
                   className={cn(
                     "w-full rounded-2xl border px-4 py-3 text-left transition",
                     selected
-                      ? "border-emerald-500/40 bg-emerald-500/10"
-                      : "border-zinc-200 dark:border-white/8 bg-zinc-100 dark:bg-black/20 hover:border-white/15 hover:bg-black/30",
+                      ? "border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/40"
+                      : "border-border bg-muted/60 hover:bg-muted",
                   )}
                 >
-                  <span className="block font-medium text-zinc-900 dark:text-zinc-100">
+                  <span className="block font-medium text-foreground">
                     {venue.name}
                   </span>
-                  <span className="mt-1 block text-xs text-zinc-500">
+                  <span className="mt-1 block text-xs text-slate-600 dark:text-zinc-400">
                     {[venue.city, venue.location].filter(Boolean).join(" · ") ||
                       "Sin ubicación"}
                     {" · "}

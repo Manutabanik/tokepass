@@ -84,7 +84,7 @@ export function EmergencyTicketSearch({
         </DialogHeader>
 
         <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-500" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-600 dark:text-zinc-400" />
           <Input
             value={query}
             onChange={(event) => handleQuery(event.target.value)}
@@ -103,7 +103,7 @@ export function EmergencyTicketSearch({
           ) : null}
 
           {emptyHint ? (
-            <p className="py-6 text-center text-sm text-zinc-500">{emptyHint}</p>
+            <p className="py-6 text-center text-sm text-slate-600 dark:text-zinc-400">{emptyHint}</p>
           ) : null}
 
           {results.map((ticket) => (
@@ -117,7 +117,7 @@ export function EmergencyTicketSearch({
               )}
             >
               <div className="flex items-start gap-3">
-                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-black/40 text-emerald-300">
+                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-black/40 text-emerald-800 dark:text-emerald-300">
                   {ticket.group_id ? (
                     <Users className="size-5" />
                   ) : (

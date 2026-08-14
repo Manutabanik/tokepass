@@ -45,7 +45,7 @@ export default async function SuperAdminOrganizationDetailPage({
       <>
         <Link
           href="/superadmin/organizations"
-          className="mb-7 inline-flex items-center gap-2 text-sm text-zinc-500 transition hover:text-white"
+          className="mb-7 inline-flex items-center gap-2 text-sm text-slate-600 dark:text-zinc-400 transition hover:text-white"
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
           Volver a productoras
@@ -72,7 +72,7 @@ export default async function SuperAdminOrganizationDetailPage({
                   ? "Resumen en construcción"
                   : "Productora no encontrada"}
               </p>
-              <p className="mx-auto mt-2 max-w-md text-sm text-zinc-500">
+              <p className="mx-auto mt-2 max-w-md text-sm text-slate-600 dark:text-zinc-400">
                 {loadError
                   ? `Hubo un problema al armar el detalle: ${loadError}`
                   : profile
@@ -96,7 +96,7 @@ export default async function SuperAdminOrganizationDetailPage({
     <>
       <Link
         href="/superadmin/organizations"
-        className="mb-7 inline-flex items-center gap-2 text-sm text-zinc-500 transition hover:text-white"
+        className="mb-7 inline-flex items-center gap-2 text-sm text-slate-600 dark:text-zinc-400 transition hover:text-white"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
         Volver a productoras
@@ -130,7 +130,7 @@ export default async function SuperAdminOrganizationDetailPage({
         <CardHeader className="flex-row items-center justify-between gap-4 border-b border-white/8 px-6 py-5">
           <div>
             <CardTitle className="flex items-center gap-2 text-white">
-              <WalletCards className="size-5 text-emerald-400" />
+              <WalletCards className="size-5 text-emerald-700 dark:text-emerald-400" />
               Liquidaciones pendientes
             </CardTitle>
             <p className="mt-1 text-xs text-zinc-600">
@@ -151,7 +151,7 @@ export default async function SuperAdminOrganizationDetailPage({
               {organization.pendingSettlements.map((settlement) => (
                 <article
                   key={settlement.id}
-                  className="flex flex-col gap-3 rounded-xl border border-white/8 bg-black/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                  className="flex flex-col gap-3 rounded-xl border border-white/8 bg-muted dark:bg-black/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div>
                     <p className="font-medium text-zinc-200">
@@ -162,7 +162,7 @@ export default async function SuperAdminOrganizationDetailPage({
                     </p>
                   </div>
                   <div className="text-left sm:text-right">
-                    <p className="font-mono font-bold text-emerald-300">
+                    <p className="font-mono font-bold text-emerald-800 dark:text-emerald-300">
                       Neto {formatCurrency(settlement.netAmount)}
                     </p>
                     <p className="mt-1 text-xs text-zinc-600">
@@ -177,7 +177,7 @@ export default async function SuperAdminOrganizationDetailPage({
             <div className="grid min-h-40 place-items-center text-center">
               <div>
                 <Building2 className="mx-auto size-6 text-zinc-700" />
-                <p className="mt-3 text-sm text-zinc-500">
+                <p className="mt-3 text-sm text-slate-600 dark:text-zinc-400">
                   No hay liquidaciones pendientes.
                 </p>
               </div>

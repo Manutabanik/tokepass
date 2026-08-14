@@ -134,6 +134,7 @@ export async function transferTicketAction(
     const { data, error } = await supabase.rpc("execute_safe_transfer", {
       p_ticket_id: ticketId,
       p_receiver_email: receiverEmail,
+      p_acting_seller_id: null,
     })
 
     if (error) {

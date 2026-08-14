@@ -44,7 +44,7 @@ export default async function EventIssuedTicketsPage({
     <main className="mx-auto w-full max-w-6xl space-y-6 px-4 py-8 sm:px-6">
       <Link
         href={`/admin/events/${id}`}
-        className="inline-flex items-center gap-2 text-sm text-zinc-500 transition hover:text-zinc-900 dark:hover:text-white"
+        className="inline-flex items-center gap-2 text-sm text-slate-600 dark:text-zinc-400 transition hover:text-zinc-900 dark:hover:text-white"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
         Volver a operación del evento

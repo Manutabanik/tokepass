@@ -1,10 +1,12 @@
 "use client"
 
-import { Eye, Rocket } from "lucide-react"
+import { Eye, LoaderCircle, Pause, Rocket, FilePenLine } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useState, useTransition } from "react"
+import { toast } from "sonner"
 
+import { updateEventSalesStatus } from "@/app/actions/events"
 import { PublishEventConfirmDialog } from "@/components/admin/publish-event-confirm-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -27,6 +29,13 @@ function statusPresentation(status: string): {
       label: "Publicado (En venta)",
       className:
         "border-emerald-500/45 bg-emerald-500/15 px-3 py-1.5 text-sm font-bold uppercase tracking-wide text-emerald-700 dark:text-emerald-200",
+    }
+  }
+  if (status === "paused") {
+    return {
+      label: "Pausado (Oculto)",
+      className:
+        "border-orange-500/45 bg-orange-500/15 px-3 py-1.5 text-sm font-bold uppercase tracking-wide text-orange-800 dark:text-orange-100",
     }
   }
   if (status === "draft") {
@@ -66,8 +75,32 @@ export function EventCommandHeader({
 }: EventCommandHeaderProps) {
   const router = useRouter()
   const [publishOpen, setPublishOpen] = useState(false)
+  const [isPending, startTransition] = useTransition()
   const statusUi = statusPresentation(status)
   const isDraft = status === "draft"
+  const isPublished = status === "published"
+  const isPaused = status === "paused"
+  const previewHref =
+    isDraft || isPaused
+      ? `/events/preview/${eventId}`
+      : `/events/${eventId}`
+
+  function changeStatus(next: "published" | "paused" | "draft") {
+    startTransition(async () => {
+      const result = await updateEventSalesStatus(eventId, next)
+      if (!result.success) {
+        toast.error(result.error)
+        return
+      }
+      const messages = {
+        published: "Evento publicado · ya está en venta",
+        paused: "Evento pausado · oculto del catálogo",
+        draft: "Evento en borrador",
+      } as const
+      toast.success(messages[next])
+      router.refresh()
+    })
+  }
 
   return (
     <>
@@ -90,14 +123,14 @@ export function EventCommandHeader({
             <p className="text-sm text-zinc-600 dark:text-zinc-400">{subtitle}</p>
           </div>
 
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
             <Button
               variant="outline"
               className="h-12 rounded-xl border-zinc-300 bg-white px-5 text-zinc-800 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900"
               nativeButton={false}
               render={
                 <Link
-                  href={`/events/${eventId}`}
+                  href={previewHref}
                   target="_blank"
                   rel="noopener noreferrer"
                 />
@@ -112,9 +145,56 @@ export function EventCommandHeader({
                 type="button"
                 className="h-12 rounded-xl bg-emerald-600 px-6 text-base font-bold text-white hover:bg-emerald-500 sm:min-w-[220px]"
                 onClick={() => setPublishOpen(true)}
+                disabled={isPending}
               >
                 <Rocket className="size-4" aria-hidden="true" />
                 Publicar Evento
+              </Button>
+            ) : null}
+
+            {isPaused ? (
+              <Button
+                type="button"
+                className="h-12 rounded-xl bg-emerald-600 px-6 text-base font-bold text-white hover:bg-emerald-500"
+                onClick={() => changeStatus("published")}
+                disabled={isPending}
+              >
+                {isPending ? (
+                  <LoaderCircle className="size-4 animate-spin" aria-hidden />
+                ) : (
+                  <Rocket className="size-4" aria-hidden="true" />
+                )}
+                Reanudar venta
+              </Button>
+            ) : null}
+
+            {isPublished ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-12 rounded-xl border-orange-500/40 bg-orange-500/10 px-5 text-orange-800 hover:bg-orange-500/20 dark:text-orange-100"
+                onClick={() => changeStatus("paused")}
+                disabled={isPending}
+              >
+                {isPending ? (
+                  <LoaderCircle className="size-4 animate-spin" aria-hidden />
+                ) : (
+                  <Pause className="size-4" aria-hidden="true" />
+                )}
+                Pausar evento
+              </Button>
+            ) : null}
+
+            {isPublished || isPaused ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-12 rounded-xl border-zinc-300 bg-white px-5 text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-900"
+                onClick={() => changeStatus("draft")}
+                disabled={isPending}
+              >
+                <FilePenLine className="size-4" aria-hidden="true" />
+                Poner en borrador
               </Button>
             ) : null}
           </div>

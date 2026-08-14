@@ -126,7 +126,7 @@ export function CategoriesAdminPanel({
             <h2 className="text-base font-semibold text-white">
               {editingId ? "Editar categoría" : "Nueva categoría"}
             </h2>
-            <p className="mt-1 text-xs text-zinc-500">
+            <p className="mt-1 text-xs text-slate-600 dark:text-zinc-400">
               Poné un nombre claro, un identificador corto (sin espacios) y el
               nombre del ícono (por ejemplo mic2, trophy o theater).
             </p>
@@ -138,7 +138,7 @@ export function CategoriesAdminPanel({
 
         <div className="grid gap-3 sm:grid-cols-3">
           <label className="space-y-1.5 sm:col-span-1">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-zinc-400">
               Nombre
             </span>
             <Input
@@ -146,29 +146,29 @@ export function CategoriesAdminPanel({
               onChange={(e) => setName(e.target.value)}
               placeholder="Teatro & Cultura"
               required
-              className="h-10 border-white/10 bg-black/20 text-zinc-100"
+              className="h-10 border-white/10 bg-muted dark:bg-black/20 text-zinc-100"
             />
           </label>
           <label className="space-y-1.5 sm:col-span-1">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-zinc-400">
               Identificador corto
             </span>
             <Input
               value={slug}
               onChange={(e) => setSlug(e.target.value)}
               placeholder="teatro-y-cultura"
-              className="h-10 border-white/10 bg-black/20 font-mono text-sm text-zinc-100"
+              className="h-10 border-white/10 bg-muted dark:bg-black/20 font-mono text-sm text-zinc-100"
             />
           </label>
           <label className="space-y-1.5 sm:col-span-1">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-zinc-400">
               Nombre del ícono
             </span>
             <Input
               value={iconName}
               onChange={(e) => setIconName(e.target.value)}
               placeholder="clapperboard"
-              className="h-10 border-white/10 bg-black/20 font-mono text-sm text-zinc-100"
+              className="h-10 border-white/10 bg-muted dark:bg-black/20 font-mono text-sm text-zinc-100"
             />
           </label>
         </div>
@@ -193,7 +193,7 @@ export function CategoriesAdminPanel({
               type="button"
               variant="ghost"
               onClick={resetForm}
-              className="text-zinc-400 hover:text-white"
+              className="text-slate-600 dark:text-zinc-400 hover:text-white"
             >
               Cancelar
             </Button>
@@ -202,7 +202,7 @@ export function CategoriesAdminPanel({
             <span
               className={cn(
                 "text-xs",
-                feedback.type === "ok" ? "text-emerald-400" : "text-red-400",
+                feedback.type === "ok" ? "text-emerald-700 dark:text-emerald-400" : "text-red-400",
               )}
             >
               {feedback.text}
@@ -242,10 +242,10 @@ export function CategoriesAdminPanel({
                       </span>
                     </div>
                   </TableCell>
-                  <TableCell className="font-mono text-xs text-zinc-400">
+                  <TableCell className="font-mono text-xs text-slate-600 dark:text-zinc-400">
                     {row.slug}
                   </TableCell>
-                  <TableCell className="font-mono text-xs text-zinc-500">
+                  <TableCell className="font-mono text-xs text-slate-600 dark:text-zinc-400">
                     {row.icon_name ?? "—"}
                   </TableCell>
                   <TableCell>
@@ -253,8 +253,8 @@ export function CategoriesAdminPanel({
                       className={cn(
                         "inline-flex rounded-full px-2.5 py-1 text-[11px] font-medium",
                         row.is_active
-                          ? "bg-emerald-500/15 text-emerald-300"
-                          : "bg-zinc-500/15 text-zinc-400",
+                          ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300"
+                          : "bg-zinc-500/15 text-slate-600 dark:text-zinc-400",
                       )}
                     >
                       {row.is_active ? "Activa" : "Inactiva"}
@@ -276,7 +276,7 @@ export function CategoriesAdminPanel({
                         size="sm"
                         variant="ghost"
                         disabled={isPending}
-                        className="gap-1.5 text-zinc-400 hover:text-white"
+                        className="gap-1.5 text-slate-600 dark:text-zinc-400 hover:text-white"
                         onClick={() => toggleActive(row)}
                         aria-label={
                           row.is_active ? "Desactivar" : "Activar"
@@ -293,7 +293,7 @@ export function CategoriesAdminPanel({
           </TableBody>
         </Table>
         {categories.length === 0 ? (
-          <p className="px-5 py-10 text-center text-sm text-zinc-500">
+          <p className="px-5 py-10 text-center text-sm text-slate-600 dark:text-zinc-400">
             Todavía no hay categorías. Creá la primera arriba.
           </p>
         ) : null}

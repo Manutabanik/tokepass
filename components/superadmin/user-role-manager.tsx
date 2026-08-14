@@ -64,7 +64,7 @@ export function UserRoleManager({
         <span
           className={cn(
             "text-xs",
-            isError ? "text-red-400" : "text-emerald-400",
+            isError ? "text-red-400" : "text-emerald-700 dark:text-emerald-400",
           )}
         >
           {feedback}
@@ -76,12 +76,18 @@ export function UserRoleManager({
           setRole(value as UserRole)
           setFeedback(null)
         }}
+        items={roleOptions.map((option) => ({
+          value: option.value,
+          label: option.label,
+        }))}
       >
         <SelectTrigger
           size="sm"
-          className="h-8 w-36 border-white/10 bg-black/20"
+          className="h-8 w-36 max-w-full overflow-hidden border-white/10 bg-muted dark:bg-black/20"
         >
-          <SelectValue />
+          <SelectValue>
+            {roleOptions.find((option) => option.value === role)?.label ?? null}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
           {roleOptions.map((option) => (

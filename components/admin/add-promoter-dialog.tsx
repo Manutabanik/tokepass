@@ -94,7 +94,7 @@ export function AddPromoterDialog() {
                 required
                 className="border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-950"
               />
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-slate-600 dark:text-zinc-400">
                 Ej: 10 = 10% sobre el total de órdenes pagadas.
               </p>
             </div>

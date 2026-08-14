@@ -161,7 +161,7 @@ function PixelField({
       <div className="flex items-center justify-between gap-4">
         <div>
           <p className="font-semibold text-zinc-900 dark:text-white">{title}</p>
-          <p className="mt-0.5 text-xs text-zinc-500">{description}</p>
+          <p className="mt-0.5 text-xs text-slate-600 dark:text-zinc-400">{description}</p>
         </div>
         <Switch
           checked={enabled}

@@ -54,7 +54,7 @@ const statusPresentation: Record<
     label: "Aprobada",
     description: "Puede crear eventos y emitir nuevas entradas.",
     className:
-      "border-emerald-400/40 bg-emerald-400/10 text-emerald-200 shadow-[0_0_24px_rgba(52,211,153,0.12)]",
+      "border-emerald-400/40 bg-emerald-400/10 text-emerald-800 dark:text-emerald-200 shadow-[0_0_24px_rgba(52,211,153,0.12)]",
   },
   rejected: {
     label: "Rechazada",
@@ -150,7 +150,7 @@ export function OrganizationGovernancePanel({
       value: formatCurrency(organization.metrics.historicalGmv),
       helper: "Compras ya pagadas",
       icon: CircleDollarSign,
-      accent: "text-emerald-300",
+      accent: "text-emerald-800 dark:text-emerald-300",
     },
   ] as const
 
@@ -191,7 +191,7 @@ export function OrganizationGovernancePanel({
                   <ShieldAlert className="size-5 text-sky-400" />
                   Estado y ciclo de vida
                 </CardTitle>
-                <CardDescription className="mt-1 text-zinc-500">
+                <CardDescription className="mt-1 text-slate-600 dark:text-zinc-400">
                   Los cambios se aplican al toque: podés pausar o reactivar a
                   esta productora cuando haga falta.
                 </CardDescription>
@@ -205,7 +205,7 @@ export function OrganizationGovernancePanel({
             </div>
           </CardHeader>
           <CardContent className="space-y-5 px-6 py-6">
-            <p className="rounded-xl border border-white/8 bg-black/20 px-4 py-3 text-sm text-zinc-400">
+            <p className="rounded-xl border border-white/8 bg-muted dark:bg-black/20 px-4 py-3 text-sm text-slate-600 dark:text-zinc-400">
               {status.description}
             </p>
             <div className="grid gap-2 sm:grid-cols-3">
@@ -215,7 +215,7 @@ export function OrganizationGovernancePanel({
                   isPending || organization.profile.status === "approved"
                 }
                 onClick={() => handleStatusChange("approved")}
-                className="h-11 bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-400/30 hover:bg-emerald-500/25"
+                className="h-11 bg-emerald-500/15 text-emerald-800 dark:text-emerald-200 ring-1 ring-emerald-400/30 hover:bg-emerald-500/25"
               >
                 <CheckCircle2 />
                 Aprobar
@@ -251,7 +251,7 @@ export function OrganizationGovernancePanel({
             <CardTitle className="text-white">
               Comisión de la ticketera
             </CardTitle>
-            <CardDescription className="text-zinc-500">
+            <CardDescription className="text-slate-600 dark:text-zinc-400">
               Definí qué porcentaje se queda Tokepass sobre el precio que ve el
               comprador. Se aplica a los eventos nuevos de esta productora.
             </CardDescription>
@@ -259,7 +259,7 @@ export function OrganizationGovernancePanel({
           <CardContent className="space-y-5 px-6 py-6">
             <label
               htmlFor="organizer-fee-rate"
-              className="block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500"
+              className="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-600 dark:text-zinc-400"
             >
               Porcentaje de comisión
             </label>
@@ -288,7 +288,7 @@ export function OrganizationGovernancePanel({
                   variant="outline"
                   disabled={isPending}
                   onClick={() => setFeePercent(preset)}
-                  className="rounded-full border-white/10 bg-black/20 text-zinc-300 hover:bg-white/5 hover:text-white"
+                  className="rounded-full border-white/10 bg-muted dark:bg-black/20 text-zinc-300 hover:bg-white/5 hover:text-white"
                 >
                   {preset}%
                 </Button>

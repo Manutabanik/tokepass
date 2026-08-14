@@ -1,9 +1,16 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 
-import { getEventDetails } from "@/app/actions/public-events"
+import {
+  getEventAccessGate,
+  getEventDetails,
+  getRelatedEvents,
+} from "@/app/actions/public-events"
 import { getActiveResaleListingsForEvent } from "@/app/actions/resale"
+import { canUserSandboxCheckout } from "@/app/actions/checkout"
 import { EventStorefront } from "@/components/public/event-storefront"
+import { EventUnavailableNotice } from "@/components/public/event-unavailable-notice"
+import { RelatedEventsSection } from "@/components/public/related-events-section"
 import { createClient } from "@/lib/supabase/server"
 
 export async function generateMetadata({
@@ -59,12 +66,27 @@ export default async function EventDetailPage({
   ])
 
   if (!event) {
+    const gate = await getEventAccessGate(id)
+    if (
+      gate &&
+      (gate.status === "paused" ||
+        gate.status === "draft" ||
+        gate.status === "cancelled")
+    ) {
+      return (
+        <EventUnavailableNotice title={gate.title} status={gate.status} />
+      )
+    }
     notFound()
   }
 
   const {
     data: { user },
   } = await supabase.auth.getUser()
+
+  const sandboxEligible = user
+    ? await canUserSandboxCheckout(id)
+    : false
 
   let initialBuyer: {
     buyerName?: string
@@ -88,15 +110,33 @@ export default async function EventDetailPage({
     }
   }
 
-  const resaleListings = await getActiveResaleListingsForEvent(event.id)
+  const province = (
+    event.venue?.location ?? event.location
+  )
+    .split(",")[0]
+    ?.trim() ?? ""
+
+  const [resaleListings, relatedEvents] = await Promise.all([
+    getActiveResaleListingsForEvent(event.id),
+    getRelatedEvents({
+      currentEventId: event.id,
+      category: event.categoryId,
+      province,
+      limit: 4,
+    }),
+  ])
 
   return (
-    <EventStorefront
-      event={event}
-      currentUserId={user?.id ?? null}
-      referralCode={referralCode ?? null}
-      initialBuyer={initialBuyer}
-      resaleListings={resaleListings}
-    />
+    <div className="overflow-x-hidden">
+      <EventStorefront
+        event={event}
+        currentUserId={user?.id ?? null}
+        referralCode={referralCode ?? null}
+        initialBuyer={initialBuyer}
+        resaleListings={resaleListings}
+        sandboxEligible={sandboxEligible}
+      />
+      <RelatedEventsSection events={relatedEvents} />
+    </div>
   )
 }

@@ -26,8 +26,7 @@ export function AdminSidebar({
     <aside
       className={cn(
         "hidden h-screen shrink-0 border-r p-4 transition-[width] duration-300 lg:sticky lg:top-0 lg:flex lg:flex-col",
-        "border-zinc-200 bg-white text-zinc-700",
-        "dark:border-white/8 dark:bg-[#09090b] dark:text-zinc-300",
+        "border-border bg-card text-card-foreground",
         collapsed ? "w-20" : "w-72",
       )}
     >
@@ -65,7 +64,7 @@ export function AdminSidebar({
       </div>
 
       <div className={cn("mt-8 px-2", collapsed && "sr-only")}>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-600">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
           {mode === "organizer" ? "Tu panel" : "Acceso staff"}
         </p>
       </div>
@@ -86,7 +85,7 @@ export function AdminSidebar({
                 "flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition",
                 active
                   ? "bg-violet-500/12 text-violet-700 ring-1 ring-inset ring-violet-500/20 dark:text-violet-300 dark:ring-violet-500/15"
-                  : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/5 dark:hover:text-white",
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 collapsed && "justify-center px-0",
               )}
             >
@@ -98,9 +97,9 @@ export function AdminSidebar({
       </nav>
 
       <div className="mt-auto">
-        <Separator className="mb-4 bg-zinc-200 dark:bg-white/8" />
+        <Separator className="mb-4 bg-border" />
         <div className={cn("px-2", collapsed && "text-center")}>
-          <p className="text-xs font-medium text-zinc-500 dark:text-zinc-600">
+          <p className="text-xs font-medium text-muted-foreground">
             {collapsed
               ? "TP"
               : mode === "organizer"

@@ -59,15 +59,15 @@ function SheetContent({
         className={cn(
           "fixed z-50 flex flex-col outline-none duration-200 data-open:animate-in data-closed:animate-out",
           isEdge &&
-            "h-dvh w-[min(100%,20rem)] bg-[#09090b] text-zinc-100 shadow-none",
+            "h-dvh w-[min(100%,20rem)] bg-background text-foreground shadow-none",
           side === "left" &&
-            "inset-y-0 left-0 border-r border-white/8 data-open:slide-in-from-left data-closed:slide-out-to-left",
+            "inset-y-0 left-0 border-r border-border data-open:slide-in-from-left data-closed:slide-out-to-left",
           side === "right" &&
-            "inset-y-0 right-0 border-l border-white/8 data-open:slide-in-from-right data-closed:slide-out-to-right",
+            "inset-y-0 right-0 border-l border-border data-open:slide-in-from-right data-closed:slide-out-to-right",
           side === "bottom" &&
-            "inset-x-0 bottom-0 max-h-[min(92dvh,100%)] w-full rounded-t-3xl border border-zinc-200/80 bg-white text-zinc-900 shadow-2xl data-open:slide-in-from-bottom data-closed:slide-out-to-bottom dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-100",
+            "inset-x-0 bottom-0 max-h-[min(92dvh,100%)] w-full rounded-t-3xl border border-border bg-card text-foreground shadow-2xl data-open:slide-in-from-bottom data-closed:slide-out-to-bottom",
           side === "top" &&
-            "inset-x-0 top-0 max-h-[min(92dvh,100%)] w-full rounded-b-3xl border border-zinc-200/80 bg-white text-zinc-900 shadow-2xl data-open:slide-in-from-top data-closed:slide-out-to-top dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-100",
+            "inset-x-0 top-0 max-h-[min(92dvh,100%)] w-full rounded-b-3xl border border-border bg-card text-foreground shadow-2xl data-open:slide-in-from-top data-closed:slide-out-to-top",
           className,
         )}
         {...props}
@@ -80,12 +80,7 @@ function SheetContent({
               <Button
                 variant="ghost"
                 size="icon-sm"
-                className={cn(
-                  "absolute top-3 right-3",
-                  isEdge
-                    ? "text-zinc-400 hover:text-white"
-                    : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white",
-                )}
+                className="absolute top-3 right-3 text-muted-foreground hover:text-foreground"
               />
             }
           >
@@ -103,7 +98,7 @@ function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="sheet-header"
       className={cn(
-        "flex flex-col gap-1.5 border-b border-zinc-200/80 p-4 dark:border-white/8",
+        "flex flex-col gap-1.5 border-b border-border p-4",
         className,
       )}
       {...props}
@@ -116,7 +111,7 @@ function SheetFooter({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="sheet-footer"
       className={cn(
-        "mt-auto border-t border-zinc-200/80 p-4 dark:border-white/8",
+        "mt-auto border-t border-border p-4",
         className,
       )}
       {...props}
@@ -129,7 +124,7 @@ function SheetTitle({ className, ...props }: DialogPrimitive.Title.Props) {
     <DialogPrimitive.Title
       data-slot="sheet-title"
       className={cn(
-        "text-base font-semibold text-zinc-900 dark:text-white",
+        "text-base font-semibold text-foreground",
         className,
       )}
       {...props}
@@ -144,7 +139,7 @@ function SheetDescription({
   return (
     <DialogPrimitive.Description
       data-slot="sheet-description"
-      className={cn("text-sm text-zinc-500", className)}
+      className={cn("text-sm text-muted-foreground", className)}
       {...props}
     />
   )

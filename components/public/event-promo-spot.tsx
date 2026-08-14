@@ -35,9 +35,9 @@ export function EventPromoSpotButton({
         type="button"
         onClick={() => setOpen(true)}
         className={cn(
-          "inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-zinc-600 bg-transparent px-5 text-sm font-bold text-white transition",
-          "hover:border-zinc-400 hover:bg-white/5",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/50",
+          "inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-border bg-card px-5 text-sm font-bold text-foreground transition",
+          "hover:bg-muted",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
           className,
         )}
       >
@@ -48,9 +48,7 @@ export function EventPromoSpotButton({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogPortal>
           <DialogOverlay className="bg-black/90 supports-backdrop-filter:backdrop-blur-sm" />
-          <DialogPrimitive.Popup
-            className="fixed inset-0 z-50 flex h-dvh w-screen flex-col outline-none"
-          >
+          <DialogPrimitive.Popup className="fixed inset-0 z-50 flex h-dvh w-screen flex-col outline-none">
             <div className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
               <DialogTitle className="text-sm font-semibold text-white">
                 Spot del evento
@@ -66,15 +64,28 @@ export function EventPromoSpotButton({
             <div className="flex flex-1 items-center justify-center px-3 pb-6 sm:px-8">
               <div className="relative aspect-video w-full max-w-5xl overflow-hidden rounded-xl bg-black shadow-2xl ring-1 ring-white/10">
                 {open ? (
-                  <iframe
-                    key={parsed.embedUrl}
-                    src={parsed.embedUrl}
-                    title="Spot promocional"
-                    loading="lazy"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    allowFullScreen
-                    className="absolute inset-0 h-full w-full border-0"
-                  />
+                  parsed.provider === "file" ? (
+                    <video
+                      key={parsed.embedUrl}
+                      src={parsed.embedUrl}
+                      autoPlay
+                      muted
+                      playsInline
+                      loop
+                      controls
+                      className="absolute inset-0 h-full w-full object-cover"
+                    />
+                  ) : (
+                    <iframe
+                      key={parsed.embedUrl}
+                      src={parsed.embedUrl}
+                      title="Spot promocional"
+                      loading="eager"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                      className="absolute inset-0 h-full w-full border-0"
+                    />
+                  )
                 ) : null}
               </div>
             </div>

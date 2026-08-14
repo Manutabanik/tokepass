@@ -18,11 +18,13 @@ import {
 import {
   AGE_RESTRICTION_VALUES,
   MAX_EVENT_FLYER_BYTES,
-  eventFormSchema,
+  coerceDraftEventForm,
+  draftEventSchema,
+  publishEventSchema,
   type AgeRestriction,
   type EventFormValues,
 } from "@/lib/validations/event-form"
-import type { Database, Event, Json, Venue } from "@/types/database"
+import type { Database, Event, EventStatus, Json, Venue } from "@/types/database"
 
 export type OrganizerEvent = Pick<
   Event,
@@ -275,8 +277,10 @@ function mapEventFormToRpcPayload(
     image_url: flyerUrl,
     flyer_url: flyerUrl,
     visibility: data.basics.visibility,
-    category_id: data.basics.categoryId,
-    age_restriction: data.basics.ageRestriction,
+    category_id: data.basics.categoryId?.trim() || "",
+    age_restriction: AGE_RESTRICTION_VALUES.includes(data.basics.ageRestriction)
+      ? data.basics.ageRestriction
+      : "atp",
     schedule_days: scheduleDays,
     venue_id:
       data.venue.mode === "existing" ? data.venue.existingVenueId ?? null : null,
@@ -438,6 +442,16 @@ export type EditableEventData = {
   title: string
   flyerUrl: string | null
   values: EventFormValues
+  zoneTierPricing: Array<{
+    id: string
+    sectorKey: string
+    sectorName: string
+    ticketTierId: string
+    ticketTierName: string
+    price: number
+    tableNumberStart: number | null
+    tableNumberEnd: number | null
+  }>
 }
 
 function toLocalDateTimeInput(value: string): string {
@@ -520,7 +534,7 @@ export async function getEventForEditing(
         ? supabase
             .from("venues")
             .select(
-              "id, name, location, city, capacity, zone_blueprint, latitude, longitude, seating_background_url",
+              "id, name, location, city, capacity, zone_blueprint, latitude, longitude, seating_background_url, seating_layout",
             )
             .eq("id", event.venue_id)
             .maybeSingle()
@@ -533,7 +547,7 @@ export async function getEventForEditing(
     if (event.venue_id && (venueResult.error || !venue)) {
       const fallback = await supabase
         .from("venues")
-        .select("id, name, location, city, capacity, zone_blueprint")
+        .select("id, name, location, city, capacity, zone_blueprint, seating_layout")
         .eq("id", event.venue_id)
         .maybeSingle()
       venue = fallback.data
@@ -542,6 +556,7 @@ export async function getEventForEditing(
             latitude: null,
             longitude: null,
             seating_background_url: null,
+            seating_layout: fallback.data.seating_layout ?? null,
           }
         : null
     }
@@ -570,6 +585,58 @@ export async function getEventForEditing(
         ? null
         : Number(venue.longitude)
 
+    const ticketValues = tiers.map((tier) => ({
+      id: tier.id,
+      name: String(tier.name ?? "Entrada"),
+      price: Number(tier.price) || 0,
+      capacity: Math.max(1, Number(tier.capacity) || 1),
+      sold: Math.max(0, Number(tier.sold) || 0),
+      timeLimit: tier.time_limit ?? "",
+      bonusReward: tier.bonus_reward ?? "",
+      dayId: tier.day_id ?? null,
+      visibility:
+        tier.visibility === "private"
+          ? ("private" as const)
+          : ("public" as const),
+      layoutType:
+        tier.layout_type === "table_combo" ||
+        tier.layout_type === "numbered_seat"
+          ? tier.layout_type
+          : ("general" as const),
+      seatingSectorId: tier.seating_sector_id ?? null,
+      capacityPerUnit: Math.max(1, Number(tier.capacity_per_unit ?? 1) || 1),
+      admitCount: Math.max(
+        1,
+        Number((tier as { admit_count?: number }).admit_count ?? 1) || 1,
+      ),
+    }))
+
+    const { data: pricingRows } = await supabase
+      .from("zone_tier_pricing")
+      .select(
+        "id, sector_key, ticket_tier_id, price, table_number_start, table_number_end",
+      )
+      .eq("event_id", eventId)
+
+    const tierNameById = new Map(
+      tiers.map((tier) => [tier.id, String(tier.name ?? "Entrada")]),
+    )
+    const sectorNameById = new Map<string, string>()
+    for (const tier of ticketValues) {
+      if (tier.seatingSectorId) {
+        sectorNameById.set(tier.seatingSectorId, tier.name)
+      }
+    }
+    if (venue?.seating_layout && Array.isArray(venue.seating_layout)) {
+      for (const sector of venue.seating_layout as Array<
+        Record<string, unknown>
+      >) {
+        const id = String(sector.id ?? "")
+        const name = String(sector.sector_name ?? sector.name ?? "")
+        if (id && name) sectorNameById.set(id, name)
+      }
+    }
+
     return {
       id: event.id,
       organizerId: event.organizer_id,
@@ -579,9 +646,7 @@ export async function getEventForEditing(
         basics: {
           title: event.title,
           date: toLocalDateTimeInput(event.date),
-          endDate: event.ends_at
-            ? toLocalDateTimeInput(event.ends_at)
-            : "",
+          endDate: event.ends_at ? toLocalDateTimeInput(event.ends_at) : "",
           description: event.description ?? "",
           flyerName: event.flyer_url || event.image_url ? "Flyer actual" : null,
           visibility,
@@ -609,29 +674,18 @@ export async function getEventForEditing(
           saveVenueForReuse: false,
           zones: venueZones,
         },
-        tickets: tiers.map((tier) => ({
-          id: tier.id,
-          name: String(tier.name ?? "Entrada"),
-          price: Number(tier.price) || 0,
-          capacity: Math.max(1, Number(tier.capacity) || 1),
-          sold: Math.max(0, Number(tier.sold) || 0),
-          timeLimit: tier.time_limit ?? "",
-          bonusReward: tier.bonus_reward ?? "",
-          dayId: tier.day_id ?? null,
-          visibility:
-            tier.visibility === "private"
-              ? ("private" as const)
-              : ("public" as const),
-          layoutType:
-            tier.layout_type === "table_combo" ||
-            tier.layout_type === "numbered_seat"
-              ? tier.layout_type
-              : ("general" as const),
-          seatingSectorId: tier.seating_sector_id ?? null,
-          capacityPerUnit: Math.max(1, Number(tier.capacity_per_unit ?? 1) || 1),
-          admitCount: Math.max(1, Number((tier as { admit_count?: number }).admit_count ?? 1) || 1),
-        })),
+        tickets: ticketValues,
       },
+      zoneTierPricing: (pricingRows ?? []).map((row) => ({
+        id: row.id,
+        sectorKey: row.sector_key,
+        sectorName: sectorNameById.get(row.sector_key) ?? row.sector_key,
+        ticketTierId: row.ticket_tier_id,
+        ticketTierName: tierNameById.get(row.ticket_tier_id) ?? "Entrada",
+        price: Number(row.price) || 0,
+        tableNumberStart: row.table_number_start,
+        tableNumberEnd: row.table_number_end,
+      })),
     }
   } catch (error) {
     console.error("[getEventForEditing]", eventId, error)
@@ -665,7 +719,10 @@ export async function createCompleteEvent(
     }
   }
 
-  const parsed = eventFormSchema.safeParse(parsedJson)
+  const draftMode = formData.get("draftMode") === "1"
+  const parsed = draftMode
+    ? draftEventSchema.safeParse(parsedJson)
+    : publishEventSchema.safeParse(parsedJson)
 
   if (!parsed.success) {
     return {
@@ -675,6 +732,8 @@ export async function createCompleteEvent(
         "La configuración del evento no es válida.",
     }
   }
+
+  const formValues = coerceDraftEventForm(parsed.data)
 
   let supabase: Awaited<ReturnType<typeof createClient>>
   let userId: string
@@ -760,15 +819,17 @@ export async function createCompleteEvent(
   let rpcPayload: CreateCompleteEventRpcPayload
   try {
     const feeConfig = defaultEventFeeConfig()
-    const freeCapError = assertFreeTicketCapacityAllowed(
-      parsed.data.tickets,
-      feeConfig.maxFreeTickets,
-      actorRole === "super_admin",
-    )
-    if (freeCapError) {
-      return { success: false, error: freeCapError }
+    if (!draftMode) {
+      const freeCapError = assertFreeTicketCapacityAllowed(
+        formValues.tickets,
+        feeConfig.maxFreeTickets,
+        actorRole === "super_admin",
+      )
+      if (freeCapError) {
+        return { success: false, error: freeCapError }
+      }
     }
-    rpcPayload = mapEventFormToRpcPayload(parsed.data, feeConfig, flyerUrl)
+    rpcPayload = mapEventFormToRpcPayload(formValues, feeConfig, flyerUrl)
   } catch (error) {
     return {
       success: false,
@@ -814,7 +875,7 @@ export async function createCompleteEvent(
   await syncTierAdmitCounts(
     rpcClient,
     String(eventId),
-    parsed.data.tickets,
+    formValues.tickets,
   )
 
   revalidatePath("/admin")
@@ -853,7 +914,10 @@ export async function updateCompleteEvent(
     }
   }
 
-  const parsed = eventFormSchema.safeParse(parsedJson)
+  const draftMode = formData.get("draftMode") === "1"
+  const parsed = draftMode
+    ? draftEventSchema.safeParse(parsedJson)
+    : publishEventSchema.safeParse(parsedJson)
   if (!parsed.success) {
     return {
       success: false,
@@ -862,6 +926,8 @@ export async function updateCompleteEvent(
         "La configuración del evento no es válida.",
     }
   }
+
+  const formValues = coerceDraftEventForm(parsed.data)
 
   let supabase: Awaited<ReturnType<typeof createClient>>
   let userId: string
@@ -922,16 +988,18 @@ export async function updateCompleteEvent(
   let rpcPayload: CreateCompleteEventRpcPayload
   try {
     const feeConfig = await loadEventFeeConfig(supabase, eventId)
-    const freeCapError = assertFreeTicketCapacityAllowed(
-      parsed.data.tickets,
-      feeConfig.maxFreeTickets,
-      isSuperAdmin,
-    )
-    if (freeCapError) {
-      return { success: false, error: freeCapError }
+    if (!draftMode) {
+      const freeCapError = assertFreeTicketCapacityAllowed(
+        formValues.tickets,
+        feeConfig.maxFreeTickets,
+        isSuperAdmin,
+      )
+      if (freeCapError) {
+        return { success: false, error: freeCapError }
+      }
     }
     rpcPayload = mapEventFormToRpcPayload(
-      parsed.data,
+      formValues,
       feeConfig,
       uploadedFlyerUrl ?? event.flyer_url ?? event.image_url,
     )
@@ -969,7 +1037,7 @@ export async function updateCompleteEvent(
     }
   }
 
-  await syncTierAdmitCounts(mutationClient, eventId, parsed.data.tickets)
+  await syncTierAdmitCounts(mutationClient, eventId, formValues.tickets)
 
   revalidatePath("/admin")
   revalidatePath("/admin/events")
@@ -1128,6 +1196,109 @@ export async function publishEvent(
   revalidatePath("/cuenta/entradas")
 
   return { success: true, purgedTestTickets }
+}
+
+export type UpdateEventSalesStatusResult =
+  | { success: true; status: EventStatus }
+  | { success: false; error: string }
+
+/**
+ * Control de venta del organizador: publicar / pausar / volver a borrador.
+ * No toca cancelled/archived/completed.
+ */
+export async function updateEventSalesStatus(
+  eventId: string,
+  nextStatus: "published" | "paused" | "draft",
+): Promise<UpdateEventSalesStatusResult> {
+  if (!eventId?.trim()) {
+    return { success: false, error: "Evento inválido." }
+  }
+
+  const { supabase, user } = await requireAuthenticatedUser()
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, organizer_approval_status")
+    .eq("id", user.id)
+    .maybeSingle()
+
+  const { data: event, error: eventError } = await supabase
+    .from("events")
+    .select("id, organizer_id, status")
+    .eq("id", eventId)
+    .maybeSingle()
+
+  if (eventError) return { success: false, error: eventError.message }
+  if (!event) return { success: false, error: "Evento no encontrado." }
+
+  const isOwner = event.organizer_id === user.id
+  const isSuper = profile?.role === "super_admin"
+  if (!isOwner && !isSuper) {
+    return { success: false, error: "No tenés permiso para cambiar el estado." }
+  }
+
+  const current = event.status as EventStatus
+
+  if (nextStatus === "published") {
+    if (current === "published") {
+      return { success: true, status: "published" }
+    }
+    if (current === "paused") {
+      const { error } = await supabase
+        .from("events")
+        .update({ status: "published", updated_at: new Date().toISOString() })
+        .eq("id", eventId)
+      if (error) return { success: false, error: error.message }
+      revalidateEventSalesPaths(eventId)
+      return { success: true, status: "published" }
+    }
+    // draft → published: reutilizar validaciones de publishEvent
+    const published = await publishEvent(eventId, { purgeTestTickets: true })
+    if (!published.success) return published
+    return { success: true, status: "published" }
+  }
+
+  if (nextStatus === "paused") {
+    if (current !== "published" && current !== "paused") {
+      return {
+        success: false,
+        error: "Solo podés pausar un evento publicado.",
+      }
+    }
+    const { error } = await supabase
+      .from("events")
+      .update({ status: "paused", updated_at: new Date().toISOString() })
+      .eq("id", eventId)
+    if (error) return { success: false, error: error.message }
+    revalidateEventSalesPaths(eventId)
+    return { success: true, status: "paused" }
+  }
+
+  // draft
+  if (current !== "paused" && current !== "draft" && current !== "published") {
+    return {
+      success: false,
+      error: "No se puede pasar este evento a borrador.",
+    }
+  }
+  const { error } = await supabase
+    .from("events")
+    .update({ status: "draft", updated_at: new Date().toISOString() })
+    .eq("id", eventId)
+  if (error) return { success: false, error: error.message }
+  revalidateEventSalesPaths(eventId)
+  return { success: true, status: "draft" }
+}
+
+function revalidateEventSalesPaths(eventId: string) {
+  revalidatePath("/admin")
+  revalidatePath("/admin/events")
+  revalidatePath(`/admin/events/${eventId}`)
+  revalidatePath("/events")
+  revalidatePath(`/events/${eventId}`)
+  revalidatePath(`/events/preview/${eventId}`)
+  revalidatePath("/")
+  revalidatePath("/superadmin/events")
 }
 
 export async function countEventTestTickets(

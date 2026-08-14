@@ -116,7 +116,7 @@ export function BrandLogo({
           {tagline ? (
             <span
               className={cn(
-                "mt-1 font-semibold uppercase tracking-[0.18em]",
+                "mt-1 hidden font-semibold uppercase tracking-[0.18em] md:inline",
                 isHeader ? "text-[11px]" : "text-[10px]",
                 inverted
                   ? "text-violet-600 dark:text-violet-300"
@@ -127,7 +127,7 @@ export function BrandLogo({
             </span>
           ) : (
             isHeader && (
-              <span className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-violet-600/90 dark:text-violet-300/90 sm:text-[11px]">
+              <span className="mt-1.5 hidden text-[10px] font-semibold uppercase tracking-[0.2em] text-violet-600/90 dark:text-violet-300/90 md:inline sm:text-[11px]">
                 Boletería digital
               </span>
             )

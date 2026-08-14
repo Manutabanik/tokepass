@@ -38,7 +38,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .from("events")
       .select("id, updated_at, date")
       .eq("status", "published")
-      .gte("date", new Date().toISOString())
       .order("date", { ascending: true })
       .limit(500)
 

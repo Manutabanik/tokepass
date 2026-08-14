@@ -34,26 +34,26 @@ export default async function EventLiveOpsPage({
   }
 
   return (
-    <main className="min-h-[calc(100vh-4rem)] bg-zinc-950 text-zinc-100">
-      <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-8 sm:px-6">
+    <main className="min-h-[calc(100vh-4rem)] bg-background text-foreground">
+      <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-8 sm:px-6">
         <Link
           href={`/admin/events/${id}`}
-          className="inline-flex items-center gap-2 text-sm text-zinc-500 transition hover:text-zinc-200"
+          className="inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-foreground"
         >
           <ArrowLeft className="size-4" aria-hidden />
           Volver a operación del evento
         </Link>
 
         <header>
-          <p className="mb-2 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-400">
+          <p className="mb-2 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-600 dark:text-emerald-400">
             <Activity className="size-3.5" aria-hidden />
             Command Center
           </p>
-          <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl">
-            Monitor en vivo
+          <h1 className="text-3xl font-black tracking-tight text-foreground sm:text-4xl">
+            Monitor en Vivo
           </h1>
-          <p className="mt-2 text-sm text-zinc-400">
-            {snapshot.data.eventTitle} · Ingresos y aforo sin recargar
+          <p className="mt-2 text-sm text-muted-foreground">
+            {snapshot.data.eventTitle} · Aforo, ritmo de acceso y picos de puerta en tiempo real
           </p>
         </header>
 

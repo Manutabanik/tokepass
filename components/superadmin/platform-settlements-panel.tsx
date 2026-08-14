@@ -24,7 +24,7 @@ export function PlatformSettlementsPanel({
   return (
     <div className="space-y-4">
       {initialRows.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-zinc-800 px-6 py-12 text-center text-sm text-zinc-500">
+        <div className="rounded-2xl border border-dashed border-border px-6 py-12 text-center text-sm text-muted-foreground">
           No hay liquidaciones legacy.
         </div>
       ) : (
@@ -32,20 +32,20 @@ export function PlatformSettlementsPanel({
           {initialRows.map((row) => (
             <article
               key={row.id}
-              className="flex flex-col gap-3 rounded-xl border border-zinc-800 bg-zinc-950/60 px-4 py-3 lg:flex-row lg:items-center lg:justify-between"
+              className="flex flex-col gap-3 rounded-xl border border-border bg-card px-4 py-3 text-card-foreground lg:flex-row lg:items-center lg:justify-between"
             >
               <div>
-                <p className="font-medium text-white">
+                <p className="font-medium text-foreground">
                   {row.organizerName}
-                  <span className="ml-2 text-sm font-normal text-zinc-500">
+                  <span className="ml-2 text-sm font-normal text-muted-foreground">
                     {row.organizerEmail}
                   </span>
                 </p>
-                <p className="mt-1 text-sm text-zinc-400">
+                <p className="mt-1 text-sm text-muted-foreground">
                   {row.periodLabel ?? "Liquidación"} · Neto{" "}
                   {formatCurrency(row.netAmount)}
                 </p>
-                <p className="text-xs text-zinc-600">
+                <p className="text-xs text-muted-foreground">
                   Bruto {formatCurrency(row.grossAmount)} · Comisión{" "}
                   {formatCurrency(row.platformFee)} ·{" "}
                   {new Date(row.createdAt).toLocaleString("es-AR")}
@@ -57,8 +57,8 @@ export function PlatformSettlementsPanel({
                   className={cn(
                     "rounded-full text-[10px] uppercase",
                     row.status === "completed"
-                      ? "border-emerald-500/40 text-emerald-200"
-                      : "border-amber-500/40 text-amber-100",
+                      ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-200"
+                      : "border-amber-500/40 bg-amber-500/15 text-amber-800 dark:text-amber-100",
                   )}
                 >
                   {row.status === "completed" ? "Transferida" : "Pendiente"}

@@ -57,7 +57,7 @@ export const ticketTierSchema = z.object({
   admitCount: z.number().int().min(1).max(50),
 })
 
-export const eventFormSchema = z
+const eventFormObject = z
   .object({
     basics: z.object({
       title: z
@@ -237,5 +237,234 @@ export const eventFormSchema = z
     }
   })
 
-export type EventFormValues = z.infer<typeof eventFormSchema>
+/** Validación estricta: solo al publicar. */
+export const publishEventSchema = eventFormObject
+export const eventFormSchema = publishEventSchema
+
+const draftTicketSchema = z.object({
+  id: z.string().uuid().optional(),
+  name: z.string().optional().default(""),
+  price: z.number().optional(),
+  capacity: z.number().int().optional(),
+  sold: z.number().int().min(0).optional(),
+  timeLimit: z.string().optional(),
+  bonusReward: z.string().trim().optional(),
+  dayId: z.string().nullable().optional(),
+  visibility: z.enum(TICKET_TIER_VISIBILITY_VALUES).optional().default("public"),
+  layoutType: z
+    .enum(["general", "table_combo", "numbered_seat"])
+    .optional()
+    .default("general"),
+  seatingSectorId: z.string().trim().nullable().optional(),
+  capacityPerUnit: z.number().int().min(1).max(100).optional().default(1),
+  admitCount: z.number().int().min(1).max(50).optional().default(1),
+})
+
+/** Autoguardado de borrador: no exige descripción, precio ni venue completo. */
+export const draftEventSchema = z.object({
+  basics: z.object({
+    title: z
+      .string()
+      .trim()
+      .min(3, "El título debe tener al menos 3 caracteres."),
+    date: z.string().optional().default(""),
+    endDate: z.string().optional().default(""),
+    description: z.string().optional().default(""),
+    flyerName: z.string().nullable().optional().default(null),
+    visibility: z.enum(EVENT_VISIBILITY_VALUES).optional().default("public"),
+    isMultiDay: z.boolean().optional().default(false),
+    scheduleDays: z.array(z.any()).optional().default([]),
+    categoryId: z.string().optional().default(""),
+    ageRestriction: z
+      .union([z.enum(AGE_RESTRICTION_VALUES), z.literal("")])
+      .optional()
+      .default(""),
+  }),
+  venue: z
+    .object({
+      mode: z.enum(["existing", "new"]).optional().default("new"),
+      existingVenueId: z.string().uuid().optional().nullable(),
+      zoneType: z
+        .enum(["general_admission", "reserved_seating"])
+        .optional()
+        .default("general_admission"),
+      venueName: z.string().optional().default(""),
+      venueLocation: z.string().optional(),
+      venueCity: z.string().optional(),
+      capacity: z.number().int().optional(),
+      rows: z.number().int().optional(),
+      seatsPerRow: z.number().int().optional(),
+      latitude: z.number().nullable().optional(),
+      longitude: z.number().nullable().optional(),
+      seatingBackgroundUrl: z.string().nullable().optional(),
+      saveVenueForReuse: z.boolean().optional().default(true),
+      zones: z.array(z.any()).optional(),
+    })
+    .optional()
+    .default({
+      mode: "new",
+      zoneType: "general_admission",
+      venueName: "",
+      saveVenueForReuse: true,
+    }),
+  tickets: z.array(draftTicketSchema).optional().default([]),
+})
+
+export type EventFormValues = z.infer<typeof publishEventSchema>
 export type ScheduleDayFormValue = z.infer<typeof scheduleDaySchema>
+export type DraftEventFormValues = z.infer<typeof draftEventSchema>
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function toDatetimeLocal(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, "0")
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+function blankDraftTicket(): EventFormValues["tickets"][number] {
+  return {
+    name: "Borrador",
+    price: 0,
+    capacity: 1,
+    timeLimit: "",
+    bonusReward: "",
+    dayId: null,
+    visibility: "public",
+    layoutType: "general",
+    seatingSectorId: null,
+    capacityPerUnit: 1,
+    admitCount: 1,
+  }
+}
+
+/** Completa huecos para persistir un draft en el RPC sin perder el trabajo. */
+export function coerceDraftEventForm(
+  raw: EventFormValues | DraftEventFormValues,
+): EventFormValues {
+  const startRaw = new Date(raw.basics.date ?? "")
+  const startOk = !Number.isNaN(startRaw.getTime())
+  const startDate = startOk
+    ? startRaw
+    : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+  const endRaw = new Date(raw.basics.endDate ?? "")
+  const endOk =
+    !Number.isNaN(endRaw.getTime()) && endRaw.getTime() > startDate.getTime()
+  const endDate = endOk
+    ? endRaw
+    : new Date(startDate.getTime() + 4 * 60 * 60 * 1000)
+
+  const age = AGE_RESTRICTION_VALUES.includes(
+    raw.basics.ageRestriction as AgeRestriction,
+  )
+    ? (raw.basics.ageRestriction as AgeRestriction)
+    : "atp"
+
+  const incomingTickets = (raw.tickets ?? []) as EventFormValues["tickets"]
+  const tickets = incomingTickets
+    .filter((tier) => (tier.name ?? "").trim().length >= 2)
+    .map((tier) => ({
+      ...blankDraftTicket(),
+      ...tier,
+      name: tier.name.trim(),
+      price: Number.isFinite(tier.price) ? Number(tier.price) : 0,
+      capacity:
+        Number.isFinite(tier.capacity) && Number(tier.capacity) >= 1
+          ? Number(tier.capacity)
+          : 1,
+      layoutType:
+        tier.layoutType === "table_combo" || tier.layoutType === "numbered_seat"
+          ? tier.layoutType
+          : "general",
+      visibility: tier.visibility ?? "public",
+      capacityPerUnit: tier.capacityPerUnit ?? 1,
+      admitCount: tier.admitCount ?? 1,
+      seatingSectorId:
+        (tier.layoutType === "table_combo" ||
+          tier.layoutType === "numbered_seat") &&
+        tier.seatingSectorId
+          ? tier.seatingSectorId
+          : null,
+    }))
+
+  const venue = raw.venue ?? {
+    mode: "new" as const,
+    zoneType: "general_admission" as const,
+    venueName: "",
+    saveVenueForReuse: true,
+  }
+
+  const reservedIncomplete =
+    venue.zoneType === "reserved_seating" &&
+    !(venue.zones && venue.zones.length > 0) &&
+    (!venue.rows || !venue.seatsPerRow)
+
+  const scheduleDays = (
+    (raw.basics.scheduleDays ?? []) as EventFormValues["basics"]["scheduleDays"]
+  ).filter((day) => {
+    if (!day?.id || !day.startTime || !day.endTime) return false
+    const start = new Date(day.startTime).getTime()
+    const end = new Date(day.endTime).getTime()
+    return !Number.isNaN(start) && !Number.isNaN(end) && end > start
+  })
+  const isMultiDay = Boolean(raw.basics.isMultiDay) && scheduleDays.length >= 2
+
+  const zones = Array.isArray(venue.zones)
+    ? venue.zones.map((zone) => {
+        const item = zone as NonNullable<
+          EventFormValues["venue"]["zones"]
+        >[number]
+        if (
+          item.type === "reserved_seating" &&
+          (!item.rows || !item.seatsPerRow)
+        ) {
+          return {
+            name: item.name || "General",
+            type: "general_admission" as const,
+            capacity: item.capacity > 0 ? item.capacity : 1,
+          }
+        }
+        return item
+      })
+    : venue.zones
+
+  return {
+    basics: {
+      title: raw.basics.title.trim() || "Evento sin título",
+      date: toDatetimeLocal(startDate),
+      endDate: toDatetimeLocal(endDate),
+      description: raw.basics.description ?? "",
+      flyerName: raw.basics.flyerName ?? null,
+      visibility: raw.basics.visibility ?? "public",
+      isMultiDay,
+      scheduleDays,
+      categoryId: UUID_RE.test(raw.basics.categoryId ?? "")
+        ? raw.basics.categoryId
+        : "",
+      ageRestriction: age,
+    },
+    venue: {
+      mode:
+        venue.mode === "existing" && venue.existingVenueId
+          ? "existing"
+          : "new",
+      existingVenueId: venue.existingVenueId ?? null,
+      zoneType: reservedIncomplete
+        ? "general_admission"
+        : (venue.zoneType ?? "general_admission"),
+      venueName: (venue.venueName ?? "").trim() || "Por definir",
+      venueLocation: venue.venueLocation,
+      venueCity: venue.venueCity,
+      capacity: venue.capacity && venue.capacity > 0 ? venue.capacity : 1,
+      rows: reservedIncomplete ? undefined : venue.rows,
+      seatsPerRow: reservedIncomplete ? undefined : venue.seatsPerRow,
+      latitude: venue.latitude ?? null,
+      longitude: venue.longitude ?? null,
+      seatingBackgroundUrl: venue.seatingBackgroundUrl ?? null,
+      saveVenueForReuse: venue.saveVenueForReuse ?? true,
+      zones: zones as EventFormValues["venue"]["zones"],
+    },
+    tickets:
+      tickets.length > 0 ? tickets : [blankDraftTicket()],
+  } as EventFormValues
+}

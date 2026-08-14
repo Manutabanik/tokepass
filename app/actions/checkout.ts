@@ -10,9 +10,13 @@ import {
   type CheckoutBuyerInfo,
   type NormalizedCheckoutBuyer,
 } from "@/lib/checkout-buyer"
+import { isPastEvent, isSoldOut } from "@/lib/event-status"
 import { logger } from "@/lib/logger"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+
+const EVENT_FINISHED_ERROR = "El evento ya ha finalizado"
+const EVENT_SOLD_OUT_ERROR = "El evento o sector se encuentra agotado"
 
 export type ReservedTicket = {
   ticket_id: string
@@ -22,6 +26,10 @@ export type CheckoutCartItem = {
   tierId: string
   quantity: number
   seatingUnitId?: string
+  /** sector_key del mapa / seating_layout; la RPC cruza zone_tier_pricing. */
+  sectorKey?: string | null
+  tableNumber?: number | null
+  zoneId?: string | null
 }
 
 export type CheckoutAddonItem = {
@@ -53,18 +61,40 @@ type ReserveTxRow = {
   reserved_until?: string
 }
 
-function isStockError(message: string): boolean {
+function mapReserveRpcError(message: string): CheckoutResult | null {
   const normalized = message.toLowerCase()
-  return (
+
+  if (normalized.includes("finalizado")) {
+    return { success: false, error: EVENT_FINISHED_ERROR }
+  }
+
+  if (normalized.includes("max_tickets_per_user")) {
+    return {
+      success: false,
+      error:
+        "Alcanzaste el máximo de entradas por persona para este evento.",
+    }
+  }
+
+  if (normalized.includes("seating_unit_unavailable")) {
+    return { success: false, error: "out_of_stock" }
+  }
+
+  if (normalized.includes("agotad")) {
+    return { success: false, error: EVENT_SOLD_OUT_ERROR }
+  }
+
+  if (
     normalized.includes("sold out") ||
     normalized.includes("stock") ||
-    normalized.includes("agotad") ||
     normalized.includes("capacity") ||
     normalized.includes("not published") ||
-    normalized.includes("not found") ||
-    normalized.includes("max_tickets_per_user")
-    || normalized.includes("seating_unit_unavailable")
-  )
+    normalized.includes("not found")
+  ) {
+    return { success: false, error: "out_of_stock" }
+  }
+
+  return null
 }
 
 async function cleanupPendingOrder(orderId: string): Promise<void> {
@@ -176,21 +206,31 @@ export async function reserveSeatAtomic(
     return { success: false, error: "No tenés permiso para esta reserva." }
   }
 
-  const { data: availableUnits, error: unitError } = await supabase.rpc(
-    "get_event_seating_availability",
-    { p_event_id: cleanEventId },
+  const { data: unitRows, error: unitError } = await supabase.rpc(
+    "get_event_seating_unit",
+    {
+      p_event_id: cleanEventId,
+      p_unit_id: cleanSeatId,
+    },
   )
-  const unit = availableUnits?.find(
-    (candidate) => candidate.id === cleanSeatId,
-  )
+  const unit = Array.isArray(unitRows) ? unitRows[0] : unitRows
 
   if (unitError || !unit || unit.status !== "available") {
     return { success: false, error: SEATING_COLLISION_MESSAGE }
   }
 
+  const tableMatch = String(unit.label ?? "").match(/(\d+)/)
   const result = await startCheckoutWithPayment(
     cleanEventId,
-    [{ tierId: unit.tier_id, quantity: 1, seatingUnitId: unit.id }],
+    [
+      {
+        tierId: unit.tier_id,
+        quantity: 1,
+        seatingUnitId: unit.id,
+        sectorKey: unit.sector_id,
+        tableNumber: tableMatch ? Number(tableMatch[1]) : null,
+      },
+    ],
     referralCode,
     [],
     buyer,
@@ -211,6 +251,7 @@ export async function startCheckoutWithPayment(
   addons: CheckoutAddonItem[] = [],
   buyerInfo?: CheckoutBuyerInfo | null,
   promoCodeId?: string | null,
+  options?: { sandbox?: boolean },
 ): Promise<CheckoutResult> {
   if (!eventId || items.length === 0) {
     return { success: false, error: "Datos de compra incompletos." }
@@ -277,6 +318,33 @@ export async function startCheckoutWithPayment(
     return { success: false, error: "auth_required" }
   }
 
+  const [{ data: eventRow }, { data: eventTiers }] = await Promise.all([
+    supabase
+      .from("events")
+      .select("date, ends_at, schedule_days")
+      .eq("id", eventId)
+      .maybeSingle(),
+    supabase
+      .from("ticket_tiers")
+      .select("capacity, sold, visibility")
+      .eq("event_id", eventId),
+  ])
+
+  if (
+    eventRow &&
+    isPastEvent({
+      date: eventRow.date,
+      endsAt: eventRow.ends_at,
+      scheduleDays: eventRow.schedule_days,
+    })
+  ) {
+    return { success: false, error: EVENT_FINISHED_ERROR }
+  }
+
+  if (isSoldOut({ tiers: eventTiers })) {
+    return { success: false, error: EVENT_SOLD_OUT_ERROR }
+  }
+
   // Progressive profiling: DNI + teléfono permanentes en el perfil.
   // email no está en column grant → no lo tocamos acá.
   await supabase
@@ -302,9 +370,23 @@ export async function startCheckoutWithPayment(
     promoterId = resolved ?? null
   }
 
+  const tierIds = [...new Set(items.map((item) => item.tierId))]
+  const { data: tierMeta } = await supabase
+    .from("ticket_tiers")
+    .select("id, seating_sector_id")
+    .eq("event_id", eventId)
+    .in("id", tierIds)
+
+  const sectorByTier = new Map(
+    (tierMeta ?? []).map((row) => [row.id, row.seating_sector_id]),
+  )
+
   const rpcItems = items.map((item) => ({
     tier_id: item.tierId,
     quantity: item.quantity,
+    sector_key: item.sectorKey ?? sectorByTier.get(item.tierId) ?? null,
+    table_number: item.tableNumber ?? null,
+    zone_id: item.zoneId ?? null,
   }))
 
   let pendingOrderId: string | null = null
@@ -338,18 +420,8 @@ export async function startCheckoutWithPayment(
     const { data, error } = reservation
 
     if (error) {
-      if (isStockError(error.message)) {
-        if (
-          error.message.toUpperCase().includes("MAX_TICKETS_PER_USER_EXCEEDED")
-        ) {
-          return {
-            success: false,
-            error:
-              "Alcanzaste el máximo de entradas por persona para este evento.",
-          }
-        }
-        return { success: false, error: "out_of_stock" }
-      }
+      const mapped = mapReserveRpcError(error.message)
+      if (mapped) return mapped
 
       logger.error({
         context: "checkout/reservation",
@@ -400,7 +472,7 @@ export async function startCheckoutWithPayment(
       if (addonsError) {
         await cleanupPendingOrder(orderId)
 
-        if (isStockError(addonsError.message)) {
+        if (mapReserveRpcError(addonsError.message)) {
           return { success: false, error: "out_of_stock" }
         }
 
@@ -457,7 +529,54 @@ export async function startCheckoutWithPayment(
     }
 
     let initPoint: string
-    if (finalTotal === 0) {
+    const useSandbox = Boolean(options?.sandbox)
+
+    if (useSandbox) {
+      const allowed = await assertSandboxCheckoutAllowed(eventId, user.id)
+      if (!allowed.ok) {
+        await cleanupPendingOrder(orderId)
+        return { success: false, error: allowed.error }
+      }
+
+      const admin = createAdminClient()
+      const { data: finalized, error: finalizeError } = await admin.rpc(
+        "finalize_paid_order",
+        {
+          p_order_id: orderId,
+          p_mp_payment_id: `sandbox:${orderId}`,
+        },
+      )
+      const result = (finalized ?? {}) as { ok?: boolean; code?: string }
+
+      if (finalizeError || !result.ok) {
+        await cleanupPendingOrder(orderId)
+        logger.error({
+          context: "checkout/sandbox",
+          message: "sandbox_finalize_failed",
+          orderId,
+          userId: user.id,
+          error: finalizeError?.message ?? result.code ?? "unknown",
+        })
+        return {
+          success: false,
+          error: "No se pudo completar la compra de prueba.",
+        }
+      }
+
+      const { error: markError } = await admin.rpc("mark_order_test_sandbox", {
+        p_order_id: orderId,
+      })
+      if (markError) {
+        logger.error({
+          context: "checkout/sandbox",
+          message: "sandbox_mark_failed",
+          orderId,
+          error: markError.message,
+        })
+      }
+
+      initPoint = `/checkout/success?order_id=${orderId}&sandbox=1`
+    } else if (finalTotal === 0) {
       const admin = createAdminClient()
       const { data: finalized, error: finalizeError } = await admin.rpc(
         "finalize_paid_order",
@@ -539,6 +658,85 @@ export async function startCheckoutWithPayment(
       error: "Error inesperado durante el checkout. Intentá nuevamente.",
     }
   }
+}
+
+async function assertSandboxCheckoutAllowed(
+  eventId: string,
+  userId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient()
+  const [{ data: event }, { data: profile }] = await Promise.all([
+    supabase
+      .from("events")
+      .select("id, organizer_id, status")
+      .eq("id", eventId)
+      .maybeSingle(),
+    supabase.from("profiles").select("role").eq("id", userId).maybeSingle(),
+  ])
+
+  if (!event) {
+    return { ok: false, error: "Evento no encontrado." }
+  }
+
+  const role = profile?.role
+  const isStaff =
+    event.organizer_id === userId || role === "super_admin"
+
+  if (!isStaff) {
+    return {
+      ok: false,
+      error: "La compra de prueba solo está disponible para el organizador.",
+    }
+  }
+
+  if (
+    event.status !== "published" &&
+    event.status !== "draft" &&
+    event.status !== "paused"
+  ) {
+    return {
+      ok: false,
+      error: "Este evento no admite compras de prueba en su estado actual.",
+    }
+  }
+
+  return { ok: true }
+}
+
+/** ¿El usuario autenticado puede ver el botón Sandbox en este evento? */
+export async function canUserSandboxCheckout(
+  eventId: string,
+): Promise<boolean> {
+  if (!eventId) return false
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return false
+  const allowed = await assertSandboxCheckoutAllowed(eventId, user.id)
+  return allowed.ok
+}
+
+/**
+ * Compra de prueba (Modo Sandbox): misma reserva atómica, sin Mercado Pago.
+ */
+export async function startSandboxCheckout(
+  eventId: string,
+  items: CheckoutCartItem[],
+  referralCode?: string | null,
+  addons: CheckoutAddonItem[] = [],
+  buyerInfo?: CheckoutBuyerInfo | null,
+  promoCodeId?: string | null,
+): Promise<CheckoutResult> {
+  return startCheckoutWithPayment(
+    eventId,
+    items,
+    referralCode,
+    addons,
+    buyerInfo,
+    promoCodeId,
+    { sandbox: true },
+  )
 }
 
 export type CreateCheckoutPreferenceInput = {

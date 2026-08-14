@@ -5,8 +5,10 @@ import {
   getFeaturedEvents,
   getPublishedEvents,
 } from "@/app/actions/public-events"
+import { getActivePlatformSponsors } from "@/app/actions/platform-sponsors"
 import { AnimatedBackground } from "@/components/discovery/animated-background"
 import { DiscoveryHub } from "@/components/discovery/discovery-hub"
+import { SponsorMarquee } from "@/components/public/sponsor-grid"
 import { mapDbCategoriesToDiscovery } from "@/lib/category-icons"
 import { DEFAULT_DISCOVERY_CATEGORIES } from "@/lib/discovery-categories"
 import type { FeaturedRotationResult } from "@/lib/featured-rotation"
@@ -32,16 +34,19 @@ export default async function HomePage({
     totalSponsored: 0,
   }
   let categories = DEFAULT_DISCOVERY_CATEGORIES
+  let platformSponsors: Awaited<ReturnType<typeof getActivePlatformSponsors>> = []
   let loadError: string | null = null
 
   try {
-    const [published, featuredResult, dbCategories] = await Promise.all([
+    const [published, featuredResult, dbCategories, sponsors] = await Promise.all([
       getPublishedEvents(q),
       getFeaturedEvents(),
       getActiveEventCategories().catch(() => []),
+      getActivePlatformSponsors(),
     ])
     events = published
     featured = featuredResult
+    platformSponsors = sponsors
     if (dbCategories.length > 0) {
       categories = mapDbCategoriesToDiscovery(dbCategories)
     }
@@ -71,6 +76,7 @@ export default async function HomePage({
             categories={categories}
           />
         )}
+        {!loadError ? <SponsorMarquee sponsors={platformSponsors} /> : null}
       </div>
     </div>
   )

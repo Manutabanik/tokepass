@@ -17,7 +17,7 @@ const VenueLeafletMap = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="grid h-full place-items-center bg-white dark:bg-zinc-950 text-sm text-zinc-500">
+      <div className="grid h-full place-items-center bg-white dark:bg-zinc-950 text-sm text-slate-600 dark:text-zinc-400">
         <LoaderCircle className="mr-2 inline size-4 animate-spin" />
         Cargando mapa…
       </div>
@@ -117,12 +117,12 @@ export function VenueLocationPicker({
   return (
     <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800/80 bg-zinc-50 dark:bg-zinc-950/50 p-5">
       <div className="flex items-start gap-3">
-        <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-400">
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">
           <MapPin className="size-5" aria-hidden="true" />
         </span>
         <div>
           <h3 className="font-bold text-zinc-900 dark:text-white">Ubicación exacta</h3>
-          <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+          <p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-zinc-400">
             Buscá la dirección y arrastrá el pin para ajustar el acceso.
           </p>
         </div>
@@ -152,7 +152,7 @@ export function VenueLocationPicker({
           type="button"
           onClick={() => void searchAddress()}
           disabled={searching}
-          className="h-12 rounded-xl bg-zinc-800 px-4 text-zinc-900 dark:text-white hover:bg-zinc-700"
+          className="h-12 rounded-xl bg-muted dark:bg-zinc-800 px-4 text-zinc-900 dark:text-white hover:bg-slate-300 dark:hover:bg-zinc-700"
           aria-label="Buscar en el mapa"
         >
           {searching ? (
@@ -179,7 +179,7 @@ export function VenueLocationPicker({
       ) : null}
 
       {message ? (
-        <p className="mt-2 text-xs text-zinc-500">{message}</p>
+        <p className="mt-2 text-xs text-slate-600 dark:text-zinc-400">{message}</p>
       ) : null}
 
       <div className="relative mt-4 h-[340px] w-full overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-inner">
@@ -193,7 +193,7 @@ export function VenueLocationPicker({
         <div>
           <Label
             htmlFor="venue-latitude"
-            className="font-mono text-[10px] uppercase tracking-wider text-zinc-500"
+            className="font-mono text-[10px] uppercase tracking-wider text-slate-600 dark:text-zinc-400"
           >
             Latitud
           </Label>
@@ -208,7 +208,7 @@ export function VenueLocationPicker({
         <div>
           <Label
             htmlFor="venue-longitude"
-            className="font-mono text-[10px] uppercase tracking-wider text-zinc-500"
+            className="font-mono text-[10px] uppercase tracking-wider text-slate-600 dark:text-zinc-400"
           >
             Longitud
           </Label>

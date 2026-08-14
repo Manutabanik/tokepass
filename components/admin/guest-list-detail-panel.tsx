@@ -48,7 +48,7 @@ const statusCopy: Record<
   },
   checked_in: {
     label: "Ingresó",
-    className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+    className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300",
   },
 }
 
@@ -146,7 +146,7 @@ export function GuestListDetailPanel({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="text-lg font-bold text-zinc-900 dark:text-white">{list.name}</h3>
-          <p className="mt-1 text-sm text-zinc-500">
+          <p className="mt-1 text-sm text-slate-600 dark:text-zinc-400">
             {list.usedGuests}/{list.maxGuests} cupos · límite{" "}
             {formatDateTime(list.validUntil)}
           </p>
@@ -200,16 +200,16 @@ export function GuestListDetailPanel({
       </form>
 
       {entries.length === 0 ? (
-        <p className="py-8 text-center text-sm text-zinc-500">
+        <p className="py-8 text-center text-sm text-slate-600 dark:text-zinc-400">
           Todavía no hay invitados en esta lista.
         </p>
       ) : (
         <Table>
           <TableHeader>
             <TableRow className="border-zinc-200 dark:border-white/8 hover:bg-transparent">
-              <TableHead className="text-zinc-500">Invitado</TableHead>
-              <TableHead className="text-zinc-500">Contacto</TableHead>
-              <TableHead className="text-zinc-500">Estado</TableHead>
+              <TableHead className="text-slate-600 dark:text-zinc-400">Invitado</TableHead>
+              <TableHead className="text-slate-600 dark:text-zinc-400">Contacto</TableHead>
+              <TableHead className="text-slate-600 dark:text-zinc-400">Estado</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -223,7 +223,7 @@ export function GuestListDetailPanel({
                   <TableCell className="font-medium text-zinc-800 dark:text-zinc-200">
                     {entry.fullName}
                   </TableCell>
-                  <TableCell className="text-zinc-500">
+                  <TableCell className="text-slate-600 dark:text-zinc-400">
                     {entry.phone || entry.email || "—"}
                   </TableCell>
                   <TableCell>

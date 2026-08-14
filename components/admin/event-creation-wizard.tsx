@@ -9,12 +9,14 @@ import {
   CalendarDays,
   Check,
   CircleDollarSign,
+  CreditCard,
   EyeOff,
   Gift,
   Globe2,
   IdCard,
   LoaderCircle,
   Lock,
+  MapPin,
   Plus,
   Rocket,
   Save,
@@ -29,7 +31,7 @@ import {
   useFieldArray,
   useForm,
   useWatch,
-  type FieldPath,
+  type Resolver,
 } from "react-hook-form"
 import { toast } from "sonner"
 
@@ -38,12 +40,18 @@ import {
   updateCompleteEvent,
   type EditableEventData,
 } from "@/app/actions/events"
+import { EventAutosaveIndicator } from "@/components/admin/event-autosave-indicator"
 import { PublishEventConfirmDialog } from "@/components/admin/publish-event-confirm-dialog"
 import type { OrganizerVenue } from "@/app/actions/venues"
 import { createVenue } from "@/app/actions/venues"
+import { EventSponsorsManager } from "@/components/admin/event-sponsors-manager"
 import { EventVenueStep } from "@/components/admin/event-venue-step"
 import { ScheduleDaysBuilder } from "@/components/admin/schedule-days-builder"
 import { VenueSeatPricingPanel } from "@/components/admin/venue-seat-pricing-panel"
+import { ZoneTierPricingMatrix } from "@/components/admin/zone-tier-pricing-matrix"
+import { useEventFormAutosave } from "@/hooks/use-event-form-autosave"
+import type { ZoneTierPriceDraft } from "@/lib/stores/event-form-store"
+import { useEventFormStore } from "@/lib/stores/event-form-store"
 import {
   Accordion,
   AccordionContent,
@@ -93,7 +101,8 @@ import {
   AGE_RESTRICTION_LABELS,
   AGE_RESTRICTION_VALUES,
   MAX_EVENT_FLYER_BYTES,
-  eventFormSchema,
+  draftEventSchema,
+  publishEventSchema,
   type EventFormValues,
 } from "@/lib/validations/event-form"
 import { cn } from "@/lib/utils"
@@ -102,46 +111,30 @@ import { getVenueSeatingItems } from "@/types/venues"
 const steps = [
   {
     title: "Identidad",
-    description: "Info, fechas, categoría y flyer",
+    description: "Nombre, fechas y banner",
     icon: Sparkles,
   },
   {
-    title: "Lugar de la Fiesta",
-    description: "Dónde y cuánta gente entra",
+    title: "Lugar y Mapa",
+    description: "Provincia, dirección y mapa",
+    icon: MapPin,
+  },
+  {
+    title: "Zonas y Sectores",
+    description: "Sectores y numeración",
     icon: Building2,
   },
   {
-    title: "Tipos de Entrada",
-    description: "Precios y cupos",
+    title: "Entradas y Combos",
+    description: "Precios, tarifas y combos",
     icon: Ticket,
   },
+  {
+    title: "Cobros y Publicación",
+    description: "Pagos, privacidad y publicar",
+    icon: CreditCard,
+  },
 ] as const
-
-const fieldsByStep: FieldPath<EventFormValues>[][] = [
-  [
-    "basics.title",
-    "basics.date",
-    "basics.endDate",
-    "basics.description",
-    "basics.flyerName",
-    "basics.visibility",
-    "basics.categoryId",
-    "basics.ageRestriction",
-    "basics.isMultiDay",
-    "basics.scheduleDays",
-  ],
-  [
-    "venue.mode",
-    "venue.existingVenueId",
-    "venue.zoneType",
-    "venue.venueName",
-    "venue.venueLocation",
-    "venue.capacity",
-    "venue.rows",
-    "venue.seatsPerRow",
-  ],
-  ["tickets"],
-]
 
 const blankTicket = (): EventFormValues["tickets"][number] =>
   ({
@@ -246,6 +239,9 @@ export function EventCreationWizard({
     eventId: string
   }>({ open: false, eventId: "" })
   const [venuePricingMap, setVenuePricingMap] = useState<VenuePricingMap>({})
+  const [zoneTierPricing, setZoneTierPricing] = useState<ZoneTierPriceDraft[]>(
+    () => initialData?.zoneTierPricing ?? [],
+  )
   const [venueCatalog, setVenueCatalog] = useState<OrganizerVenue[]>(venues)
 
   useEffect(() => {
@@ -253,7 +249,7 @@ export function EventCreationWizard({
   }, [venues])
 
   const form = useForm<EventFormValues>({
-    resolver: zodResolver(eventFormSchema),
+    resolver: zodResolver(draftEventSchema) as Resolver<EventFormValues>,
     mode: "onTouched",
     defaultValues: initialData?.values ?? defaultValues,
   })
@@ -288,6 +284,39 @@ export function EventCreationWizard({
       (sector) => sector.layout_type !== "general",
     ) ?? []
   const eventTitle = useWatch({ control: form.control, name: "basics.title" })
+
+  const draftKey = initialData ? `edit:${initialData.id}` : "create"
+  const { persistedEventId } = useEventFormAutosave({
+    form,
+    draftKey,
+    eventId: initialData?.id ?? null,
+    initialValues: initialData?.values ?? defaultValues,
+    venuePricingMap,
+    onVenuePricingMapChange: setVenuePricingMap,
+    zoneTierPricing,
+    targetOrganizerId,
+  })
+
+  const clearDraft = useEventFormStore((s) => s.clearDraft)
+  const setWizardStep = useEventFormStore((s) => s.setWizardStep)
+
+  useEffect(() => {
+    const apply = () => {
+      const persisted = useEventFormStore.getState().wizardStep
+      if (
+        typeof persisted === "number" &&
+        persisted >= 0 &&
+        persisted < steps.length
+      ) {
+        setActiveStep(persisted)
+        setHighestStep(steps.length - 1)
+      }
+    }
+    apply()
+    const persistApi = useEventFormStore.persist
+    if (persistApi.hasHydrated()) return
+    return persistApi.onFinishHydration(apply)
+  }, [])
 
   useEffect(() => {
     if (!selectedVenue) {
@@ -405,21 +434,10 @@ export function EventCreationWizard({
   }
 
   async function moveToStep(nextStep: number) {
-    if (nextStep < activeStep) {
-      setActiveStep(nextStep)
-      return
-    }
-
-    if (nextStep > activeStep + 1) return
-
-    const valid = await form.trigger(fieldsByStep[activeStep], {
-      shouldFocus: true,
-    })
-
-    if (valid) {
-      setActiveStep(nextStep)
-      setHighestStep((current) => Math.max(current, nextStep))
-    }
+    if (nextStep < 0 || nextStep >= steps.length) return
+    setActiveStep(nextStep)
+    setHighestStep(steps.length - 1)
+    setWizardStep(nextStep)
   }
 
   async function onSubmit(
@@ -427,6 +445,19 @@ export function EventCreationWizard({
     intent: "draft" | "publish" = "draft",
   ) {
     setResultMessage(null)
+
+    if (intent === "publish") {
+      const strict = publishEventSchema.safeParse(data)
+      if (!strict.success) {
+        const message =
+          strict.error.issues[0]?.message ??
+          "Completá los datos obligatorios para publicar."
+        toast.error("Todavía no se puede publicar", { description: message })
+        setResultMessage({ type: "error", text: message })
+        void form.trigger()
+        return
+      }
+    }
 
     if (flyerFile && flyerFile.size > MAX_EVENT_FLYER_BYTES) {
       const message =
@@ -438,11 +469,12 @@ export function EventCreationWizard({
     }
 
     let payloadData = data
-    if (
+    const canPersistVenue =
       data.venue.mode === "new" &&
       data.venue.saveVenueForReuse &&
-      !data.venue.existingVenueId
-    ) {
+      !data.venue.existingVenueId &&
+      data.venue.venueName.trim().length >= 2
+    if (canPersistVenue) {
       const persist = await createVenue({
         name: data.venue.venueName.trim(),
         location:
@@ -477,6 +509,9 @@ export function EventCreationWizard({
 
     const formData = new FormData()
     formData.set("payload", JSON.stringify(payloadData))
+    if (intent === "draft") {
+      formData.set("draftMode", "1")
+    }
     if (flyerFile) {
       formData.set("flyer", flyerFile)
     }
@@ -484,18 +519,19 @@ export function EventCreationWizard({
       formData.set("targetOrganizerId", targetOrganizerId)
     }
 
-    if (initialData) {
-      formData.set("eventId", initialData.id)
+    if (initialData?.id || persistedEventId) {
+      formData.set("eventId", initialData?.id ?? persistedEventId!)
     }
 
-    const result = initialData
+    const editingId = initialData?.id ?? persistedEventId
+    const result = editingId
       ? await updateCompleteEvent(formData)
       : await createCompleteEvent(formData)
 
     if (!result.success) {
       setResultMessage({ type: "error", text: result.error })
       toast.error(
-        isEditing
+        isEditing || editingId
           ? "No se pudieron guardar los cambios"
           : "No se pudo crear el evento",
         {
@@ -504,6 +540,17 @@ export function EventCreationWizard({
       )
       return
     }
+
+    // Persiste matriz Zona × Tier
+    if (zoneTierPricing.length > 0) {
+      const { syncZoneTierPricing } = await import("@/app/actions/event-autosave")
+      await syncZoneTierPricing({
+        eventId: result.eventId,
+        rows: zoneTierPricing,
+      })
+    }
+
+    clearDraft(draftKey)
 
     if (intent === "publish") {
       toast.success(
@@ -537,10 +584,13 @@ export function EventCreationWizard({
           onValueChange={(value) => void moveToStep(Number(value))}
           className="flex flex-col gap-8"
         >
-          <TabsList className="grid w-full grid-cols-1 items-stretch gap-3 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/80 p-2 shadow-lg shadow-zinc-200/70 dark:shadow-black/20 backdrop-blur-md group-data-horizontal/tabs:h-auto sm:grid-cols-3">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <EventAutosaveIndicator />
+          </div>
+          <TabsList className="grid w-full grid-cols-1 items-stretch gap-3 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/80 p-2 shadow-lg shadow-zinc-200/70 dark:shadow-black/20 backdrop-blur-md group-data-horizontal/tabs:h-auto sm:grid-cols-2 lg:grid-cols-5">
             {steps.map(({ title, description }, index) => {
               const completed = index < activeStep
-              const available = index <= highestStep + 1
+              const available = true
 
               return (
                 <TabsTrigger
@@ -553,9 +603,9 @@ export function EventCreationWizard({
                     className={cn(
                       "flex size-8 shrink-0 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800 font-mono text-sm font-bold text-zinc-600 dark:text-zinc-400",
                       completed &&
-                        "border border-emerald-500/20 bg-emerald-500/10 text-emerald-400",
+                        "border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
                       activeStep === index &&
-                        "border border-emerald-500/30 bg-emerald-500/20 text-emerald-400",
+                        "border border-emerald-500/30 bg-emerald-500/20 text-emerald-700 dark:text-emerald-400",
                     )}
                   >
                     {completed ? (
@@ -577,7 +627,7 @@ export function EventCreationWizard({
             })}
           </TabsList>
 
-          <Card className="gap-0 rounded-3xl border border-zinc-200 bg-gradient-to-b from-white to-zinc-50 py-0 shadow-2xl shadow-zinc-200/80 ring-0 dark:border-zinc-800 dark:from-zinc-900/90 dark:to-zinc-950/95 dark:shadow-black/30 [&_[data-slot=input]]:rounded-xl [&_[data-slot=input]]:border-zinc-200 [&_[data-slot=input]]:bg-white [&_[data-slot=input]]:text-zinc-900 [&_[data-slot=input]]:shadow-inner [&_[data-slot=input]]:placeholder:text-zinc-400 [&_[data-slot=input]:focus-visible]:border-emerald-500/60 [&_[data-slot=input]:focus-visible]:bg-white [&_[data-slot=input]:focus-visible]:ring-2 [&_[data-slot=input]:focus-visible]:ring-emerald-500/15 dark:[&_[data-slot=input]]:border-zinc-800 dark:[&_[data-slot=input]]:bg-zinc-950 dark:[&_[data-slot=input]]:text-white dark:[&_[data-slot=input]]:placeholder:text-zinc-600 dark:[&_[data-slot=input]:focus-visible]:bg-zinc-900 [&_[data-slot=select-trigger]]:rounded-xl [&_[data-slot=select-trigger]]:border-zinc-200 [&_[data-slot=select-trigger]]:bg-zinc-50 [&_[data-slot=select-trigger]]:text-zinc-900 [&_[data-slot=select-trigger]]:shadow-inner [&_[data-slot=select-trigger]:focus-visible]:border-emerald-500/60 [&_[data-slot=select-trigger]:focus-visible]:ring-2 [&_[data-slot=select-trigger]:focus-visible]:ring-emerald-500/15 dark:[&_[data-slot=select-trigger]]:border-zinc-800 dark:[&_[data-slot=select-trigger]]:bg-zinc-950/80 dark:[&_[data-slot=select-trigger]]:text-white">
+          <Card className="gap-0 rounded-3xl border border-zinc-200 bg-gradient-to-b from-white to-zinc-50 py-0 shadow-2xl shadow-zinc-200/80 ring-0 dark:border-zinc-800 dark:from-zinc-900/90 dark:to-zinc-950/95 dark:shadow-black/30 [&_[data-slot=input]]:rounded-xl [&_[data-slot=input]]:border-zinc-200 [&_[data-slot=input]]:bg-white [&_[data-slot=input]]:text-zinc-900 [&_[data-slot=input]]:shadow-inner [&_[data-slot=input]]:placeholder:text-slate-500 dark:placeholder:text-slate-600 dark:text-zinc-400 [&_[data-slot=input]:focus-visible]:border-emerald-500/60 [&_[data-slot=input]:focus-visible]:bg-white [&_[data-slot=input]:focus-visible]:ring-2 [&_[data-slot=input]:focus-visible]:ring-emerald-500/15 dark:[&_[data-slot=input]]:border-zinc-800 dark:[&_[data-slot=input]]:bg-zinc-950 dark:[&_[data-slot=input]]:text-white dark:[&_[data-slot=input]]:placeholder:text-zinc-600 dark:[&_[data-slot=input]:focus-visible]:bg-zinc-900 [&_[data-slot=select-trigger]]:rounded-xl [&_[data-slot=select-trigger]]:border-zinc-200 [&_[data-slot=select-trigger]]:bg-zinc-50 [&_[data-slot=select-trigger]]:text-zinc-900 [&_[data-slot=select-trigger]]:shadow-inner [&_[data-slot=select-trigger]:focus-visible]:border-emerald-500/60 [&_[data-slot=select-trigger]:focus-visible]:ring-2 [&_[data-slot=select-trigger]:focus-visible]:ring-emerald-500/15 dark:[&_[data-slot=select-trigger]]:border-zinc-800 dark:[&_[data-slot=select-trigger]]:bg-zinc-950/80 dark:[&_[data-slot=select-trigger]]:text-white">
             <TabsContent
               value="0"
               className="animate-in fade-in slide-in-from-right-2 duration-300"
@@ -587,8 +637,8 @@ export function EventCreationWizard({
                   Identidad del evento
                 </CardTitle>
                 <CardDescription className="border-b border-zinc-200 dark:border-zinc-800 pb-6 text-sm text-zinc-600 dark:text-zinc-400">
-                  Nombre, fechas, categoría, edad y flyer. Lo esencial para
-                  publicar.
+                  Nombre, descripción, fechas y flyer. La categoría y la edad
+                  también viven acá.
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid grid-cols-1 items-start gap-8 px-6 py-8 sm:px-10 lg:grid-cols-12">
@@ -608,7 +658,7 @@ export function EventCreationWizard({
                           {...field}
                           id="event-title"
                           placeholder="Ej. Fiesta de Año Nuevo en el Complejo X"
-                          className="h-12 w-full rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 py-3 text-sm text-zinc-900 dark:text-white shadow-inner transition-all placeholder:text-zinc-400 dark:placeholder:text-zinc-600 focus:border-emerald-500/60 focus:bg-zinc-100 dark:focus:bg-zinc-900 focus:ring-2 focus:ring-emerald-500/15 focus:outline-none"
+                          className="h-12 w-full rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 py-3 text-sm text-zinc-900 dark:text-white shadow-inner transition-all placeholder:text-slate-500 dark:placeholder:text-slate-600 dark:text-zinc-400 dark:placeholder:text-zinc-600 focus:border-emerald-500/60 focus:bg-zinc-100 dark:focus:bg-zinc-900 focus:ring-2 focus:ring-emerald-500/15 focus:outline-none"
                         />
                         <FormMessage>{fieldState.error?.message}</FormMessage>
                       </FormItem>
@@ -626,9 +676,25 @@ export function EventCreationWizard({
                         <Select
                           value={field.value || undefined}
                           onValueChange={(value) => field.onChange(value ?? "")}
+                          items={[
+                            ...(categories.length === 0
+                              ? [
+                                  {
+                                    value: "__empty",
+                                    label: "No hay categorías activas",
+                                  },
+                                ]
+                              : categories.map((category) => ({
+                                  value: category.id,
+                                  label: category.name,
+                                }))),
+                          ]}
                         >
-                          <SelectTrigger className="h-12 w-full rounded-xl">
-                            <SelectValue placeholder="Elegí una categoría" />
+                          <SelectTrigger className="h-12 w-full max-w-full overflow-hidden rounded-xl">
+                            <SelectValue placeholder="Elegí una categoría">
+                              {categories.find((c) => c.id === field.value)
+                                ?.name ?? null}
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             {categories.length === 0 ? (
@@ -638,13 +704,15 @@ export function EventCreationWizard({
                             ) : (
                               categories.map((category) => (
                                 <SelectItem key={category.id} value={category.id}>
-                                  {category.name}
+                                  <span className="block max-w-[200px] truncate sm:max-w-[300px]">
+                                    {category.name}
+                                  </span>
                                 </SelectItem>
                               ))
                             )}
                           </SelectContent>
                         </Select>
-                        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                        <p className="text-xs text-slate-600 dark:text-zinc-400">
                           Lista definida por Tokepass. No se pueden crear etiquetas libres.
                         </p>
                         <FormMessage>{fieldState.error?.message}</FormMessage>
@@ -668,9 +736,17 @@ export function EventCreationWizard({
                               value as EventFormValues["basics"]["ageRestriction"],
                             )
                           }
+                          items={AGE_RESTRICTION_VALUES.map((value) => ({
+                            value,
+                            label: AGE_RESTRICTION_LABELS[value],
+                          }))}
                         >
-                          <SelectTrigger className="h-12 w-full rounded-xl">
-                            <SelectValue placeholder="Elegí ATP, +16 o +18" />
+                          <SelectTrigger className="h-12 w-full max-w-full overflow-hidden rounded-xl">
+                            <SelectValue placeholder="Elegí ATP, +16 o +18">
+                              {field.value
+                                ? AGE_RESTRICTION_LABELS[field.value]
+                                : null}
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             {AGE_RESTRICTION_VALUES.map((value) => (
@@ -680,75 +756,11 @@ export function EventCreationWizard({
                             ))}
                           </SelectContent>
                         </Select>
-                        <FormDescription className="text-xs text-zinc-500">
+                        <FormDescription className="text-xs text-slate-600 dark:text-zinc-400">
                           Se muestra en la ficha pública. El control de DNI es
                           responsabilidad de la puerta.
                         </FormDescription>
                         <FormMessage>{fieldState.error?.message}</FormMessage>
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="basics.visibility"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="block font-mono text-xs font-semibold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
-                          Visibilidad del evento
-                        </FormLabel>
-                        <div className="inline-flex w-full flex-col gap-1 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/60 p-1.5 sm:w-auto sm:flex-row">
-                          {(
-                            [
-                              {
-                                value: "public" as const,
-                                label: "Evento público",
-                                hint: "Visible en portada Tokepass",
-                                icon: Globe2,
-                              },
-                              {
-                                value: "private" as const,
-                                label: "Evento privado",
-                                hint: "Solo con el enlace directo",
-                                icon: Lock,
-                              },
-                            ] as const
-                          ).map((option) => {
-                            const selected = field.value === option.value
-                            const Icon = option.icon
-                            return (
-                              <button
-                                key={option.value}
-                                type="button"
-                                onClick={() => field.onChange(option.value)}
-                                className={cn(
-                                  "flex flex-1 items-center gap-2 rounded-xl px-4 py-2.5 text-left text-sm transition-all",
-                                  selected
-                                    ? "border border-zinc-300 dark:border-zinc-700/60 bg-zinc-100 dark:bg-zinc-800 font-medium text-zinc-900 dark:text-white shadow-sm"
-                                    : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800/40 hover:text-zinc-900 dark:hover:text-white",
-                                )}
-                              >
-                                <Icon
-                                  className={cn(
-                                    "size-4 shrink-0",
-                                    selected
-                                      ? "text-emerald-400"
-                                      : "text-zinc-500",
-                                  )}
-                                  aria-hidden="true"
-                                />
-                                <span>
-                                  <span className="block font-medium">
-                                    {option.label}
-                                  </span>
-                                  <span className="block text-[11px] text-zinc-500">
-                                    {option.hint}
-                                  </span>
-                                </span>
-                              </button>
-                            )
-                          })}
-                        </div>
                       </FormItem>
                     )}
                   />
@@ -762,7 +774,7 @@ export function EventCreationWizard({
                           <FormLabel className="text-sm font-medium text-zinc-900 dark:text-white">
                             ¿Varias jornadas / noches?
                           </FormLabel>
-                          <FormDescription className="text-xs text-zinc-500">
+                          <FormDescription className="text-xs text-slate-600 dark:text-zinc-400">
                             Activá esto para festivales de múltiples fechas.
                           </FormDescription>
                         </div>
@@ -842,7 +854,7 @@ export function EventCreationWizard({
                               type="datetime-local"
                               className="scheme-light dark:scheme-dark h-12 w-full rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 py-3 text-sm text-zinc-900 dark:text-white shadow-inner transition-all focus:border-emerald-500/60 focus:bg-zinc-100 dark:focus:bg-zinc-900 focus:ring-2 focus:ring-emerald-500/15 focus:outline-none"
                             />
-                            <FormDescription className="text-xs text-zinc-500">
+                            <FormDescription className="text-xs text-slate-600 dark:text-zinc-400">
                               Debe ser posterior al inicio (útil si cruza medianoche).
                             </FormDescription>
                             <FormMessage>{fieldState.error?.message}</FormMessage>
@@ -867,9 +879,9 @@ export function EventCreationWizard({
                           {...field}
                           id="event-description"
                           placeholder="Cuenta qué hace única a esta experiencia..."
-                          className="min-h-[160px] w-full resize-y rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 py-3 text-sm text-zinc-900 dark:text-white shadow-inner transition-all placeholder:text-zinc-400 dark:placeholder:text-zinc-600 focus:border-emerald-500/60 focus:bg-zinc-100 dark:focus:bg-zinc-900 focus:ring-2 focus:ring-emerald-500/15 focus:outline-none"
+                          className="min-h-[160px] w-full resize-y rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 py-3 text-sm text-zinc-900 dark:text-white shadow-inner transition-all placeholder:text-slate-500 dark:placeholder:text-slate-600 dark:text-zinc-400 dark:placeholder:text-zinc-600 focus:border-emerald-500/60 focus:bg-zinc-100 dark:focus:bg-zinc-900 focus:ring-2 focus:ring-emerald-500/15 focus:outline-none"
                         />
-                        <FormDescription className="text-zinc-500">
+                        <FormDescription className="text-slate-600 dark:text-zinc-400">
                           Este texto será visible en la página de venta.
                         </FormDescription>
                         <FormMessage>{fieldState.error?.message}</FormMessage>
@@ -901,16 +913,16 @@ export function EventCreationWizard({
                       </>
                     ) : null}
                     <span className="relative z-10">
-                      <span className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800/80 text-zinc-700 dark:text-zinc-300 shadow-sm transition-all group-hover:border-emerald-500/30 group-hover:bg-emerald-500/15 group-hover:text-emerald-400">
+                      <span className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800/80 text-zinc-700 dark:text-zinc-300 shadow-sm transition-all group-hover:border-emerald-500/30 group-hover:bg-emerald-500/15 group-hover:text-emerald-700 dark:text-emerald-400">
                         <UploadCloud className="size-5" aria-hidden="true" />
                       </span>
-                      <span className="mb-1.5 block text-sm font-semibold text-zinc-900 dark:text-white transition-colors group-hover:text-emerald-300">
+                      <span className="mb-1.5 block text-sm font-semibold text-zinc-900 transition-colors group-hover:text-emerald-800 dark:text-white dark:group-hover:text-emerald-300">
                         {flyerName ||
                           (isEditing
                             ? "Reemplazar flyer actual"
                             : "Subí el arte del evento")}
                       </span>
-                      <span className="mx-auto block max-w-[240px] text-xs leading-relaxed text-zinc-500">
+                      <span className="mx-auto block max-w-[240px] text-xs leading-relaxed text-slate-600 dark:text-zinc-400">
                         Tamaño máximo 5MB. Recomendamos formato horizontal
                         1600x900px (PNG, JPG o WEBP).
                       </span>
@@ -957,6 +969,11 @@ export function EventCreationWizard({
                     </p>
                   )}
                 </FormItem>
+                <div className="lg:col-span-12">
+                  <EventSponsorsManager
+                    eventId={initialData?.id ?? persistedEventId}
+                  />
+                </div>
               </CardContent>
             </TabsContent>
 
@@ -966,11 +983,11 @@ export function EventCreationWizard({
             >
               <CardHeader className="border-b border-zinc-200 dark:border-white/8 px-6 py-6 lg:px-8">
                 <CardTitle className="text-xl text-zinc-900 dark:text-white">
-                  Lugar de la Fiesta
+                  Lugar y mapa
                 </CardTitle>
-                <CardDescription className="text-zinc-500">
-                  Elegí un lugar guardado o creá uno nuevo acá mismo, con mapa y
-                  zonas.
+                <CardDescription className="text-slate-600 dark:text-zinc-400">
+                  Provincia, dirección y pin en el mapa. Las zonas se configuran
+                  en el siguiente paso.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-7 px-6 py-7 lg:px-8">
@@ -979,16 +996,7 @@ export function EventCreationWizard({
                   venues={venueCatalog}
                   onVenuesChange={setVenueCatalog}
                   onAppliedVenue={handleApplySavedVenue}
-                  pricingSlot={
-                    selectedVenue ? (
-                      <VenueSeatPricingPanel
-                        venue={selectedVenue}
-                        pricingMap={venuePricingMap}
-                        onPricingChange={handleVenuePricingChange}
-                        eventTitle={eventTitle}
-                      />
-                    ) : null
-                  }
+                  focus="location"
                 />
               </CardContent>
             </TabsContent>
@@ -999,11 +1007,34 @@ export function EventCreationWizard({
             >
               <CardHeader className="border-b border-zinc-200 dark:border-white/8 px-6 py-6 lg:px-8">
                 <CardTitle className="text-xl text-zinc-900 dark:text-white">
-                  Tipos de Entrada
+                  Zonas y sectores
                 </CardTitle>
-                <CardDescription className="text-zinc-500">
-                  Completá vos el nombre, el precio y la capacidad. No hay
-                  valores por defecto: evitamos publicar gratis por accidente.
+                <CardDescription className="text-slate-600 dark:text-zinc-400">
+                  Creá sectores (Azul, Naranja, General) y rangos de numeración.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-7 px-6 py-7 lg:px-8">
+                <EventVenueStep
+                  form={form}
+                  venues={venueCatalog}
+                  onVenuesChange={setVenueCatalog}
+                  onAppliedVenue={handleApplySavedVenue}
+                  focus="zones"
+                />
+              </CardContent>
+            </TabsContent>
+
+            <TabsContent
+              value="3"
+              className="animate-in fade-in slide-in-from-right-2 duration-300"
+            >
+              <CardHeader className="border-b border-zinc-200 dark:border-white/8 px-6 py-6 lg:px-8">
+                <CardTitle className="text-xl text-zinc-900 dark:text-white">
+                  Entradas y combos
+                </CardTitle>
+                <CardDescription className="text-slate-600 dark:text-zinc-400">
+                  Asigná precios a las zonas, tipos de tarifa y combos. Completá
+                  nombre, precio y cupo: no hay valores por defecto.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 px-6 py-7 lg:px-8">
@@ -1013,6 +1044,37 @@ export function EventCreationWizard({
                     pricingMap={venuePricingMap}
                     onPricingChange={handleVenuePricingChange}
                     eventTitle={eventTitle}
+                  />
+                ) : null}
+                {selectedVenue || (watchedTickets?.length ?? 0) > 0 ? (
+                  <ZoneTierPricingMatrix
+                    sectors={
+                      selectedVenue
+                        ? listPricableSectors(selectedVenue).map((sector) => ({
+                            id: sector.id,
+                            name: sector.name,
+                          }))
+                        : (form.getValues("venue.zones") ?? []).map(
+                            (zone, index) => ({
+                              id: `zone-${index}-${zone.name}`,
+                              name: zone.name,
+                            }),
+                          )
+                    }
+                    tiers={(watchedTickets ?? []).flatMap((tier, index) => {
+                      const id = tier.id ?? fields[index]?.id
+                      if (!id && !tier.name) return []
+                      return [
+                        {
+                          id: id || `draft-tier-${index}`,
+                          name: tier.name || `Entrada ${index + 1}`,
+                          price: Number(tier.price) || 0,
+                          layoutType: tier.layoutType ?? "general",
+                        },
+                      ]
+                    })}
+                    rows={zoneTierPricing}
+                    onChange={setZoneTierPricing}
                   />
                 ) : null}
                 {fields.map((tier, index) => {
@@ -1025,7 +1087,7 @@ export function EventCreationWizard({
                   return (
                   <Card
                     key={tier.fieldKey}
-                    className="border-0 bg-zinc-100 dark:bg-black/20 py-0 ring-1 ring-white/8"
+                    className="border-0 bg-background dark:bg-zinc-950 py-0 ring-1 ring-border"
                   >
                     <CardHeader className="flex-row items-center justify-between border-b border-zinc-200 dark:border-white/6 px-5 py-4">
                       <div>
@@ -1064,7 +1126,7 @@ export function EventCreationWizard({
                                 {...field}
                                 id={`tier-${index}-name`}
                                 placeholder="Ej. General, VIP, Preventa"
-                                className="h-10 border-zinc-200 dark:border-white/10 bg-zinc-100 dark:bg-black/20"
+                                className="h-10 border-zinc-200 dark:border-white/10 bg-background dark:bg-zinc-950"
                               />
                               <FormMessage>
                                 {fieldState.error?.message}
@@ -1086,9 +1148,9 @@ export function EventCreationWizard({
                                 placeholder="Ej. 200"
                                 value={field.value}
                                 onChange={(value) => field.onChange(value)}
-                                className="h-10 border-zinc-200 dark:border-white/10 bg-zinc-100 dark:bg-black/20"
+                                className="h-10 border-zinc-200 dark:border-white/10 bg-background dark:bg-zinc-950"
                               />
-                              <p className="text-xs text-zinc-500">
+                              <p className="text-xs text-slate-600 dark:text-zinc-400">
                                 Cantidad máxima de esta entrada. Limitá el cupo
                                 si querés generar urgencia.
                               </p>
@@ -1117,9 +1179,9 @@ export function EventCreationWizard({
                                 placeholder="1"
                                 value={field.value}
                                 onChange={(value) => field.onChange(value)}
-                                className="h-10 border-zinc-200 bg-zinc-100 dark:border-white/10 dark:bg-black/20"
+                                className="h-10 border-zinc-200 bg-background dark:border-white/10 dark:bg-zinc-950"
                               />
-                              <p className="text-xs text-zinc-500">
+                              <p className="text-xs text-slate-600 dark:text-zinc-400">
                                 Ej: Mesa para 4 → 4. Genera QRs independientes
                                 por cada compra.
                               </p>
@@ -1140,7 +1202,7 @@ export function EventCreationWizard({
                             <p className="text-sm font-semibold text-zinc-900 dark:text-white">
                               Modalidad de acceso
                             </p>
-                            <p className="mt-0.5 text-xs text-zinc-500">
+                            <p className="mt-0.5 text-xs text-slate-600 dark:text-zinc-400">
                               Vinculá esta entrada con una zona numerada del
                               lugar.
                             </p>
@@ -1175,12 +1237,29 @@ export function EventCreationWizard({
                                       1,
                                     )
                                   }}
+                                  items={[
+                                    { value: "general", label: "Entrada general" },
+                                    {
+                                      value: "table_combo",
+                                      label: "Mesa / combo cerrado",
+                                    },
+                                    {
+                                      value: "numbered_seat",
+                                      label: "Asiento numerado",
+                                    },
+                                  ]}
                                 >
                                   <SelectTrigger
                                     id={`tier-${index}-layout-type`}
-                                    className="h-10 w-full border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950"
+                                    className="h-10 w-full max-w-full overflow-hidden border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
                                   >
-                                    <SelectValue />
+                                    <SelectValue>
+                                      {field.value === "table_combo"
+                                        ? "Mesa / combo cerrado"
+                                        : field.value === "numbered_seat"
+                                          ? "Asiento numerado"
+                                          : "Entrada general"}
+                                    </SelectValue>
                                   </SelectTrigger>
                                   <SelectContent>
                                     <SelectItem value="general">
@@ -1252,12 +1331,33 @@ export function EventCreationWizard({
                                         ).length,
                                       )
                                     }}
+                                    items={compatibleSectors.map((sector) => ({
+                                      value: sector.id,
+                                      label: `${sector.sector_name} · ${
+                                        getVenueSeatingItems(sector).filter(
+                                          (item) => item.status === "available",
+                                        ).length
+                                      } unidades`,
+                                    }))}
                                   >
                                     <SelectTrigger
                                       id={`tier-${index}-seating-sector`}
-                                      className="h-10 w-full border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950"
+                                      className="h-10 w-full max-w-full overflow-hidden border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
                                     >
-                                      <SelectValue placeholder="Elegí una zona" />
+                                      <SelectValue placeholder="Elegí una zona">
+                                        {(() => {
+                                          const sector = compatibleSectors.find(
+                                            (item) => item.id === field.value,
+                                          )
+                                          if (!sector) return null
+                                          return `${sector.sector_name} · ${
+                                            getVenueSeatingItems(sector).filter(
+                                              (item) =>
+                                                item.status === "available",
+                                            ).length
+                                          } unidades`
+                                        })()}
+                                      </SelectValue>
                                     </SelectTrigger>
                                     <SelectContent>
                                       {compatibleSectors.map((sector) => (
@@ -1265,14 +1365,19 @@ export function EventCreationWizard({
                                           key={sector.id}
                                           value={sector.id}
                                         >
-                                          {sector.sector_name} ·{" "}
-                                          {
-                                            getVenueSeatingItems(sector).filter(
-                                              (item) =>
-                                                item.status === "available",
-                                            ).length
-                                          }{" "}
-                                          unidades
+                                          <span className="block max-w-[200px] truncate sm:max-w-[300px]">
+                                            {sector.sector_name}
+                                          </span>
+                                          <span className="shrink-0 text-sm text-muted-foreground">
+                                            {
+                                              getVenueSeatingItems(sector)
+                                                .filter(
+                                                  (item) =>
+                                                    item.status === "available",
+                                                ).length
+                                            }{" "}
+                                            unidades
+                                          </span>
                                         </SelectItem>
                                       ))}
                                     </SelectContent>
@@ -1304,7 +1409,7 @@ export function EventCreationWizard({
                                 className="flex items-center gap-1.5"
                               >
                                 <CalendarDays
-                                  className="size-3.5 text-emerald-400"
+                                  className="size-3.5 text-emerald-700 dark:text-emerald-400"
                                   aria-hidden="true"
                                 />
                                 ¿Para qué fecha es válida esta entrada?
@@ -1316,12 +1421,28 @@ export function EventCreationWizard({
                                     value === "all" ? null : value,
                                   )
                                 }
+                                items={[
+                                  {
+                                    value: "all",
+                                    label: "Abono completo (todas las noches)",
+                                  },
+                                  ...(scheduleDays ?? []).map((day) => ({
+                                    value: day.id,
+                                    label: day.title || "Jornada sin nombre",
+                                  })),
+                                ]}
                               >
                                 <SelectTrigger
                                   id={`tier-${index}-day`}
-                                  className="h-10 w-full border-zinc-200 dark:border-white/10 bg-zinc-100 dark:bg-black/20"
+                                  className="h-10 w-full max-w-full overflow-hidden border-zinc-200 bg-background dark:border-white/10 dark:bg-zinc-950"
                                 >
-                                  <SelectValue placeholder="Elegí jornada" />
+                                  <SelectValue placeholder="Elegí jornada">
+                                    {field.value
+                                      ? (scheduleDays ?? []).find(
+                                          (day) => day.id === field.value,
+                                        )?.title || "Jornada sin nombre"
+                                      : "Abono completo (todas las noches)"}
+                                  </SelectValue>
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="all">
@@ -1329,7 +1450,9 @@ export function EventCreationWizard({
                                   </SelectItem>
                                   {(scheduleDays ?? []).map((day) => (
                                     <SelectItem key={day.id} value={day.id}>
-                                      {day.title || "Jornada sin nombre"}
+                                      <span className="block max-w-[200px] truncate sm:max-w-[300px]">
+                                        {day.title || "Jornada sin nombre"}
+                                      </span>
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
@@ -1349,14 +1472,14 @@ export function EventCreationWizard({
                           <FormItem className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/50 px-3 py-2.5">
                             <div className="flex items-start gap-2">
                               <EyeOff
-                                className="mt-0.5 size-4 shrink-0 text-zinc-500"
+                                className="mt-0.5 size-4 shrink-0 text-slate-600 dark:text-zinc-400"
                                 aria-hidden="true"
                               />
                               <div>
                                 <FormLabel className="text-sm text-zinc-800 dark:text-zinc-200">
                                   Oculta al público
                                 </FormLabel>
-                                <FormDescription className="text-xs text-zinc-500">
+                                <FormDescription className="text-xs text-slate-600 dark:text-zinc-400">
                                   Solo promotores y RRPP / enlace exclusivo
                                 </FormDescription>
                               </div>
@@ -1420,14 +1543,14 @@ export function EventCreationWizard({
                                 </p>
                               </div>
                               <div className="flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3">
-                                <span className="font-sans text-xs font-bold uppercase text-emerald-400">
+                                <span className="font-sans text-xs font-bold uppercase text-emerald-700 dark:text-emerald-400">
                                   Te queda en mano
                                 </span>
                                 <span className="font-mono text-lg font-extrabold text-zinc-900 dark:text-white">
                                   {formatCurrency(breakdown.basePrice)}
                                 </span>
                               </div>
-                              <p className="text-xs leading-5 text-zinc-500">
+                              <p className="text-xs leading-5 text-slate-600 dark:text-zinc-400">
                                 Hacerme cargo de la comisión (El comprador paga
                                 el precio exacto, la comisión se descuenta de tu
                                 ganancia).
@@ -1467,12 +1590,37 @@ export function EventCreationWizard({
                                         value === "none" ? "" : value,
                                       )
                                     }
+                                    items={[
+                                      { value: "none", label: "Sin límite" },
+                                      {
+                                        value: "00:00",
+                                        label: "Hasta las 00:00",
+                                      },
+                                      {
+                                        value: "01:00",
+                                        label: "Hasta la 01:00",
+                                      },
+                                      {
+                                        value: "02:00",
+                                        label: "Hasta las 02:00",
+                                      },
+                                    ]}
                                   >
                                     <SelectTrigger
                                       id={`tier-${index}-time-limit`}
-                                      className="h-10 w-full border-zinc-200 dark:border-white/10 bg-zinc-100 dark:bg-black/20"
+                                      className="h-10 w-full max-w-full overflow-hidden border-zinc-200 bg-background dark:border-white/10 dark:bg-zinc-950"
                                     >
-                                      <SelectValue placeholder="Sin límite" />
+                                      <SelectValue placeholder="Sin límite">
+                                        {!field.value
+                                          ? "Sin límite"
+                                          : field.value === "00:00"
+                                            ? "Hasta las 00:00"
+                                            : field.value === "01:00"
+                                              ? "Hasta la 01:00"
+                                              : field.value === "02:00"
+                                                ? "Hasta las 02:00"
+                                                : field.value}
+                                      </SelectValue>
                                     </SelectTrigger>
                                     <SelectContent>
                                       <SelectItem value="none">
@@ -1507,7 +1655,7 @@ export function EventCreationWizard({
                                     {...field}
                                     id={`tier-${index}-reward`}
                                     placeholder="Ej. 1 consumición"
-                                    className="h-10 border-zinc-200 dark:border-white/10 bg-zinc-100 dark:bg-black/20"
+                                    className="h-10 border-zinc-200 dark:border-white/10 bg-background dark:bg-zinc-950"
                                   />
                                 </FormItem>
                               )}
@@ -1540,13 +1688,130 @@ export function EventCreationWizard({
                     className={cn(
                       "rounded-xl px-4 py-3 text-sm",
                       resultMessage.type === "success"
-                        ? "bg-emerald-500/10 text-emerald-300"
+                        ? "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
                         : "bg-red-500/10 text-red-300",
                     )}
                   >
                     {resultMessage.text}
                   </p>
                 )}
+              </CardContent>
+            </TabsContent>
+
+            <TabsContent
+              value="4"
+              className="animate-in fade-in slide-in-from-right-2 duration-300"
+            >
+              <CardHeader className="border-b border-zinc-200 dark:border-white/8 px-6 py-6 lg:px-8">
+                <CardTitle className="text-xl text-zinc-900 dark:text-white">
+                  Cobros y publicación
+                </CardTitle>
+                <CardDescription className="text-slate-600 dark:text-zinc-400">
+                  Medios de pago, privacidad del evento y publicación. El
+                  autoguardado ya dejó el borrador en la nube.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6 px-6 py-7 lg:px-8">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950/50">
+                    <p className="flex items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-white">
+                      <CreditCard className="size-4 text-emerald-700 dark:text-emerald-400" />
+                      Mercado Pago
+                    </p>
+                    <p className="mt-2 text-xs leading-5 text-slate-600 dark:text-zinc-400">
+                      Checkout online con tarjeta, débito y dinero en cuenta.
+                      La comisión All-In se calcula sobre el precio público.
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950/50">
+                    <p className="flex items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-white">
+                      <Building2 className="size-4 text-emerald-700 dark:text-emerald-400" />
+                      Transferencia / POS
+                    </p>
+                    <p className="mt-2 text-xs leading-5 text-slate-600 dark:text-zinc-400">
+                      En boletería física podés cobrar en efectivo, tarjeta o
+                      transferencia. El evento publicado habilita el POS.
+                    </p>
+                  </div>
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="basics.visibility"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="block font-mono text-xs font-semibold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
+                        Visibilidad del evento
+                      </FormLabel>
+                      <div className="inline-flex w-full flex-col gap-1 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/60 p-1.5 sm:w-auto sm:flex-row">
+                        {(
+                          [
+                            {
+                              value: "public" as const,
+                              label: "Evento público",
+                              hint: "Visible en portada Tokepass",
+                              icon: Globe2,
+                            },
+                            {
+                              value: "private" as const,
+                              label: "Evento privado",
+                              hint: "Solo con el enlace directo",
+                              icon: Lock,
+                            },
+                          ] as const
+                        ).map((option) => {
+                          const selected = field.value === option.value
+                          const Icon = option.icon
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => field.onChange(option.value)}
+                              className={cn(
+                                "flex flex-1 items-center gap-2 rounded-xl px-4 py-2.5 text-left text-sm transition-all",
+                                selected
+                                  ? "border border-zinc-300 dark:border-zinc-700/60 bg-zinc-100 dark:bg-zinc-800 font-medium text-zinc-900 dark:text-white shadow-sm"
+                                  : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800/40 hover:text-zinc-900 dark:hover:text-white",
+                              )}
+                            >
+                              <Icon
+                                className={cn(
+                                  "size-4 shrink-0",
+                                  selected
+                                    ? "text-emerald-700 dark:text-emerald-400"
+                                    : "text-slate-600 dark:text-zinc-400",
+                                )}
+                                aria-hidden="true"
+                              />
+                              <span>
+                                <span className="block font-medium">
+                                  {option.label}
+                                </span>
+                                <span className="block text-[11px] text-slate-600 dark:text-zinc-400">
+                                  {option.hint}
+                                </span>
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </FormItem>
+                  )}
+                />
+
+                {resultMessage ? (
+                  <p
+                    role="status"
+                    className={cn(
+                      "rounded-xl px-4 py-3 text-sm",
+                      resultMessage.type === "success"
+                        ? "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
+                        : "bg-red-500/10 text-red-300",
+                    )}
+                  >
+                    {resultMessage.text}
+                  </p>
+                ) : null}
               </CardContent>
             </TabsContent>
 
@@ -1561,7 +1826,7 @@ export function EventCreationWizard({
                 type="button"
                 variant="ghost"
                 disabled={activeStep === 0 || form.formState.isSubmitting}
-                onClick={() => setActiveStep((current) => current - 1)}
+                onClick={() => void moveToStep(activeStep - 1)}
                 className="min-h-12 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-white"
               >
                 <ArrowLeft />
@@ -1569,15 +1834,31 @@ export function EventCreationWizard({
               </Button>
 
               {activeStep < steps.length - 1 ? (
-                <Button
-                  key="next"
-                  type="button"
-                  onClick={() => void moveToStep(activeStep + 1)}
-                  className="min-h-12 bg-violet-600 text-base text-white hover:bg-violet-500"
-                >
-                  Siguiente
-                  <ArrowRight />
-                </Button>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <Button
+                    key="draft-mid"
+                    type="submit"
+                    disabled={form.formState.isSubmitting}
+                    variant="outline"
+                    className="min-h-12 border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900 text-base text-zinc-900 dark:text-zinc-100 hover:bg-zinc-200 dark:hover:bg-zinc-800"
+                  >
+                    {form.formState.isSubmitting ? (
+                      <LoaderCircle className="animate-spin" />
+                    ) : (
+                      <Save />
+                    )}
+                    Guardar
+                  </Button>
+                  <Button
+                    key="next"
+                    type="button"
+                    onClick={() => void moveToStep(activeStep + 1)}
+                    className="min-h-12 bg-violet-600 text-base text-white hover:bg-violet-500"
+                  >
+                    Siguiente
+                    <ArrowRight />
+                  </Button>
+                </div>
               ) : (
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   <Button
@@ -1601,11 +1882,7 @@ export function EventCreationWizard({
                     type="button"
                     disabled={form.formState.isSubmitting}
                     className="min-h-12 bg-emerald-600 text-base text-white hover:bg-emerald-500"
-                    onClick={() =>
-                      void form.handleSubmit((data) =>
-                        onSubmit(data, "publish"),
-                      )()
-                    }
+                    onClick={() => void onSubmit(form.getValues(), "publish")}
                   >
                     {form.formState.isSubmitting ? (
                       <LoaderCircle className="animate-spin" />

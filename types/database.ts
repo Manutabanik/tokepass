@@ -8,6 +8,7 @@ export type OrganizerApprovalStatus =
 export type EventStatus =
   | "draft"
   | "published"
+  | "paused"
   | "cancelled"
   | "completed"
   | "archived"
@@ -17,6 +18,7 @@ export type PaymentMethod =
   | "cash_pos"
   | "transfer_pos"
   | "card_pos"
+  | "test_sandbox"
 export type TicketStatus =
   | "pending_payment"
   | "valid"
@@ -192,6 +194,29 @@ export type EventCategory = {
   updated_at: string
 }
 
+export type PlatformSponsor = {
+  id: string
+  name: string
+  logo_url: string
+  website_url: string | null
+  is_active: boolean
+  display_order: number
+  created_at: string
+  updated_at: string
+}
+
+export type EventSponsor = {
+  id: string
+  event_id: string
+  name: string
+  logo_url: string
+  website_url: string | null
+  tier: "main" | "regular"
+  display_order: number
+  created_at: string
+  updated_at: string
+}
+
 export type BoostSubscription = {
   id: string
   event_id: string
@@ -245,6 +270,10 @@ export type TicketTier = {
   capacity_per_unit: number
   /** QRs independientes por unidad vendida (mesa/agrupación). */
   admit_count: number
+  /** standard | bundle | special */
+  category: "standard" | "bundle" | "special"
+  /** Valor de referencia para mostrar ahorro (packs). */
+  list_price: number | null
   created_at: string
   updated_at: string
 }
@@ -280,6 +309,7 @@ export type Ticket = {
   batch_id: string | null
   /** Generada en borrador/preview; inválida en puerta de evento published. */
   is_test: boolean
+  ticket_type: "admission" | "parking" | "access_pass"
   created_at: string
   updated_at: string
 }
@@ -361,6 +391,32 @@ export type EventZone = {
   capacity: number
   created_at: string
   updated_at: string
+}
+
+export type ZoneTierPricing = {
+  id: string
+  event_id: string
+  zone_id: string | null
+  sector_key: string
+  ticket_tier_id: string
+  price: number
+  table_number_start: number | null
+  table_number_end: number | null
+  created_at: string
+  updated_at: string
+}
+
+export type ZoneTierPricingInsert = {
+  id?: string
+  event_id: string
+  zone_id?: string | null
+  sector_key: string
+  ticket_tier_id: string
+  price?: number
+  table_number_start?: number | null
+  table_number_end?: number | null
+  created_at?: string
+  updated_at?: string
 }
 
 export type Seat = {
@@ -562,6 +618,8 @@ export type EventItemCategory =
   | "merch"
   | "services"
   | "upgrades"
+  | "parking"
+  | "access_pass"
 
 export type EventItem = {
   id: string
@@ -715,6 +773,8 @@ type TicketTierInsert = Omit<
   | "seating_sector_id"
   | "capacity_per_unit"
   | "admit_count"
+  | "category"
+  | "list_price"
   | "created_at"
   | "updated_at"
 > & {
@@ -731,6 +791,8 @@ type TicketTierInsert = Omit<
   seating_sector_id?: string | null
   capacity_per_unit?: number
   admit_count?: number
+  category?: TicketTier["category"]
+  list_price?: number | null
   created_at?: string
   updated_at?: string
 }
@@ -758,6 +820,7 @@ type TicketInsert = Omit<
   | "group_slot"
   | "batch_id"
   | "is_test"
+  | "ticket_type"
   | "created_at"
   | "updated_at"
 > & {
@@ -783,6 +846,7 @@ type TicketInsert = Omit<
   group_slot?: number | null
   batch_id?: string | null
   is_test?: boolean
+  ticket_type?: "admission" | "parking" | "access_pass"
   created_at?: string
   updated_at?: string
 }
@@ -1052,6 +1116,59 @@ export type Database = {
         }>
         Relationships: []
       }
+      platform_sponsors: {
+        Row: PlatformSponsor
+        Insert: {
+          id?: string
+          name: string
+          logo_url: string
+          website_url?: string | null
+          is_active?: boolean
+          display_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<{
+          name: string
+          logo_url: string
+          website_url: string | null
+          is_active: boolean
+          display_order: number
+          updated_at: string
+        }>
+        Relationships: []
+      }
+      event_sponsors: {
+        Row: EventSponsor
+        Insert: {
+          id?: string
+          event_id: string
+          name: string
+          logo_url: string
+          website_url?: string | null
+          tier?: EventSponsor["tier"]
+          display_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<{
+          name: string
+          logo_url: string
+          website_url: string | null
+          tier: EventSponsor["tier"]
+          display_order: number
+          updated_at: string
+        }>
+        Relationships: [
+          {
+            foreignKeyName: "event_sponsors_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       boost_subscriptions: {
         Row: BoostSubscription
         Insert: {
@@ -1106,6 +1223,12 @@ export type Database = {
         Row: EventZone
         Insert: EventZoneInsert
         Update: Partial<EventZoneInsert>
+        Relationships: []
+      }
+      zone_tier_pricing: {
+        Row: ZoneTierPricing
+        Insert: ZoneTierPricingInsert
+        Update: Partial<ZoneTierPricingInsert>
         Relationships: []
       }
       seats: {
@@ -1374,6 +1497,16 @@ export type Database = {
         }
         Returns: number
       }
+      resolve_zone_tier_unit_price: {
+        Args: {
+          p_event_id: string
+          p_ticket_tier_id: string
+          p_sector_key?: string | null
+          p_table_number?: number | null
+          p_zone_id?: string | null
+        }
+        Returns: number
+      }
       reserve_tickets_tx: {
         Args: {
           p_event_id: string
@@ -1427,6 +1560,79 @@ export type Database = {
           status: "available" | "reserved" | "sold" | "blocked"
           reserved_until: string | null
         }[]
+      }
+      get_event_seating_sector_summary: {
+        Args: {
+          p_event_id: string
+        }
+        Returns: {
+          sector_id: string
+          sector_name: string
+          color: string
+          layout_type: string
+          capacity_per_unit: number
+          tier_id: string
+          available: number
+          reserved: number
+          sold: number
+          blocked: number
+          total: number
+        }[]
+      }
+      get_event_seating_units_by_sector: {
+        Args: {
+          p_event_id: string
+          p_sector_id: string
+        }
+        Returns: {
+          id: string
+          tier_id: string
+          sector_id: string
+          sector_name: string
+          layout_item_id: string
+          label: string
+          row_id: string | null
+          row_number: number | null
+          row_label: string | null
+          color: string
+          layout_type: string
+          capacity_per_unit: number
+          status: string
+          reserved_until: string | null
+        }[]
+      }
+      get_event_seating_unit: {
+        Args: {
+          p_event_id: string
+          p_unit_id: string
+        }
+        Returns: {
+          id: string
+          tier_id: string
+          sector_id: string
+          sector_name: string
+          layout_item_id: string
+          label: string
+          status: string
+          reserved_until: string | null
+        }[]
+      }
+      get_event_scanner_gates: {
+        Args: {
+          p_event_id: string
+        }
+        Returns: {
+          gate_id: string
+          label: string
+          color: string
+          kind: string
+        }[]
+      }
+      get_live_dashboard_stats: {
+        Args: {
+          p_event_id: string
+        }
+        Returns: Json
       }
       scan_ticket_admission: {
         Args: {
@@ -1615,6 +1821,18 @@ export type Database = {
           p_mp_payment_id: string
         }
         Returns: Json
+      }
+      mark_order_test_sandbox: {
+        Args: { p_order_id: string }
+        Returns: boolean
+      }
+      get_event_public_access_gate: {
+        Args: { p_event_id: string }
+        Returns: {
+          event_id: string
+          title: string
+          status: EventStatus
+        }[]
       }
       cancel_paid_order_tickets: {
         Args: {
