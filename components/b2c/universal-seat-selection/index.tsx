@@ -72,6 +72,10 @@ export function UniversalSeatSelectionFlow({
   )
   const [mapHydrating, setMapHydrating] = useState(false)
   const mapHydrated = useRef(false)
+  const loadSectorUnitsRef = useRef(onLoadSectorUnits)
+  const loadAllUnitsRef = useRef(onLoadAllUnits)
+  loadSectorUnitsRef.current = onLoadSectorUnits
+  loadAllUnitsRef.current = onLoadAllUnits
 
   const hasInteractiveMap = venueMapHasInventory(venueMap)
 
@@ -128,7 +132,7 @@ export function UniversalSeatSelectionFlow({
     if (!hasInteractiveMap || !venueMap || mapHydrated.current) {
       return
     }
-    if (!onLoadAllUnits && !onLoadSectorUnits) {
+    if (!loadAllUnitsRef.current && !loadSectorUnitsRef.current) {
       return
     }
     mapHydrated.current = true
@@ -137,14 +141,14 @@ export function UniversalSeatSelectionFlow({
     void (async () => {
       try {
         const ids = listMicroOccupancySectorIds(venueMap)
-        const useBatch = Boolean(onLoadAllUnits) && ids.length > 6
+        const loadAll = loadAllUnitsRef.current
+        const loadSector = loadSectorUnitsRef.current
+        const useBatch = Boolean(loadAll) && ids.length > 6
         const units = useBatch
-          ? await onLoadAllUnits!()
+          ? await loadAll!()
           : (
               await Promise.all(
-                ids.map(async (id) =>
-                  onLoadSectorUnits ? onLoadSectorUnits(id) : [],
-                ),
+                ids.map(async (id) => (loadSector ? loadSector(id) : [])),
               )
             ).flat()
         if (cancelled) return
@@ -163,7 +167,7 @@ export function UniversalSeatSelectionFlow({
     return () => {
       cancelled = true
     }
-  }, [hasInteractiveMap, onLoadAllUnits, onLoadSectorUnits, venueMap])
+  }, [hasInteractiveMap, venueMap])
 
   function handleCanvasContinue(seats: InteractiveSelectedSeat[]) {
     const seat = seats[0]

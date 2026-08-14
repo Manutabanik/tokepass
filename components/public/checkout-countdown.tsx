@@ -35,6 +35,8 @@ export function CheckoutCountdown({
 }: CheckoutCountdownProps) {
   const router = useRouter()
   const expiredRef = useRef(false)
+  const onExpiredRef = useRef(onExpired)
+  onExpiredRef.current = onExpired
   const [remainingSeconds, setRemainingSeconds] = useState(() =>
     Math.max(
       0,
@@ -59,7 +61,7 @@ export function CheckoutCountdown({
         description:
           "Tu cupo se liberó. Volvé a elegir entradas si querés comprar.",
       })
-      onExpired?.()
+      onExpiredRef.current?.()
       if (variant === "cart") return
       if (redirectTo) {
         router.push(redirectTo)
@@ -72,7 +74,7 @@ export function CheckoutCountdown({
     tick()
     const id = window.setInterval(tick, 1000)
     return () => window.clearInterval(id)
-  }, [expiresAt, onExpired, redirectTo, router, variant])
+  }, [expiresAt, redirectTo, router, variant])
 
   const urgent = remainingSeconds <= 60
   const label = formatHoldCountdown(remainingSeconds)

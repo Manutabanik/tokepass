@@ -1,7 +1,6 @@
 "use client"
 
 import { ChevronLeft, Rows3, Table2 } from "lucide-react"
-import { Virtuoso } from "react-virtuoso"
 
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import { cn } from "@/lib/utils"
@@ -169,20 +168,16 @@ function HorizontalChipList<T>({
   }
 
   return (
-    <Virtuoso
-      horizontalDirection
-      data={data}
-      increaseViewportBy={160}
-      computeItemKey={(_index, item) => computeKey(item)}
-      className="h-14 w-full overflow-hidden"
-      itemContent={(_index, item) => (
+    <div className="flex h-14 w-full gap-2 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {data.map((item) => (
         <div
-          className="h-14 shrink-0 pr-2"
+          key={computeKey(item)}
+          className="h-14 shrink-0"
           style={{ width: itemWidth }}
         >
           {render(item)}
         </div>
-      )}
-    />
+      ))}
+    </div>
   )
 }

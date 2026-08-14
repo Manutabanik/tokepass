@@ -167,13 +167,19 @@ function MacroSeatingFlow({
   const sector = sectors.find((item) => item.id === zoneId) ?? null
   const unitPrice = sector?.price ?? zone?.price ?? 0
   const showMicro = hasMicroInventory(map)
+  const zoneLayoutType = zone?.layoutType ?? null
+  const loadSectorUnitsRef = useRef(onLoadSectorUnits)
+  const zoneRef = useRef(zone)
+  loadSectorUnitsRef.current = onLoadSectorUnits
+  zoneRef.current = zone
 
   useEffect(() => {
-    if (!showMicro || preview || !onLoadSectorUnits) return
+    const load = loadSectorUnitsRef.current
+    if (!showMicro || preview || !load) return
     let cancelled = false
     setMapHydrating(true)
     const ids = listMicroOccupancySectorIds(map)
-    void Promise.all(ids.map((id) => onLoadSectorUnits(id)))
+    void Promise.all(ids.map((id) => load(id)))
       .then((groups) => {
         if (cancelled) return
         const units = groups.flat()
@@ -191,31 +197,40 @@ function MacroSeatingFlow({
     return () => {
       cancelled = true
     }
-  }, [map, onLoadSectorUnits, preview, showMicro])
+  }, [map, preview, showMicro])
 
   useEffect(() => {
-    if (!zone) {
-      setInventoryState("ready")
+    if (!zoneId) {
+      setInventoryState((current) => (current === "ready" ? current : "ready"))
       return
     }
-    if (zone.layoutType === "general" || preview) {
-      setInventoryState("ready")
-      setOccupancy({})
+    if (zoneLayoutType === "general" || preview) {
+      setInventoryState((current) => (current === "ready" ? current : "ready"))
+      setOccupancy((current) =>
+        Object.keys(current).length === 0 ? current : {},
+      )
       return
     }
-    if (!onLoadSectorUnits) {
-      setInventoryState("unmaterialized")
-      setOccupancy({})
+    const load = loadSectorUnitsRef.current
+    if (!load) {
+      setInventoryState((current) =>
+        current === "unmaterialized" ? current : "unmaterialized",
+      )
+      setOccupancy((current) =>
+        Object.keys(current).length === 0 ? current : {},
+      )
       return
     }
     let cancelled = false
     setInventoryState("loading")
     setOccupancy({})
     setSelectedItem(null)
-    void onLoadSectorUnits(zone.id)
+    void load(zoneId)
       .then((units) => {
         if (cancelled) return
-        const merged = mergeParametricOccupancy({ zone, units })
+        const currentZone = zoneRef.current
+        if (!currentZone) return
+        const merged = mergeParametricOccupancy({ zone: currentZone, units })
         setOccupancy(merged.byLayoutItemId)
         setInventoryState(merged.state)
       })
@@ -225,7 +240,7 @@ function MacroSeatingFlow({
     return () => {
       cancelled = true
     }
-  }, [onLoadSectorUnits, preview, zone])
+  }, [preview, zoneId, zoneLayoutType])
 
   const selection = useMemo<UniversalSeatSelection | null>(() => {
     if (!zone) return null

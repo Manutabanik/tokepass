@@ -149,7 +149,10 @@ export function InteractiveSeatingCanvas({
   useEffect(() => {
     const node = wrapRef.current
     if (!node) return
-    const sync = () => setWrapWidth(node.clientWidth || 360)
+    const sync = () => {
+      const next = node.clientWidth || 360
+      setWrapWidth((current) => (current === next ? current : next))
+    }
     sync()
     const observer = new ResizeObserver(sync)
     observer.observe(node)

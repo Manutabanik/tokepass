@@ -27,19 +27,21 @@ const markerIcon = divIcon({
 function MapSizeFix() {
   const map = useMap()
   useEffect(() => {
+    const container = map.getContainer()
+    let lastW = 0
+    let lastH = 0
     const run = () => {
-      const size = map.getSize()
-      if (size.x < 2 || size.y < 2) return
+      const w = container.clientWidth
+      const h = container.clientHeight
+      if (w < 2 || h < 2) return
+      if (w === lastW && h === lastH) return
+      lastW = w
+      lastH = h
       map.invalidateSize({ pan: false, animate: false })
     }
     run()
-    const observer = new ResizeObserver(run)
-    observer.observe(map.getContainer())
     const t = window.setTimeout(run, 120)
-    return () => {
-      observer.disconnect()
-      window.clearTimeout(t)
-    }
+    return () => window.clearTimeout(t)
   }, [map])
   return null
 }

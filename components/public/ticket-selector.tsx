@@ -6,7 +6,14 @@ import {
   UserRound,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { useEffect, useMemo, useRef, useState, useTransition } from "react"
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react"
 import { createPortal } from "react-dom"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -181,6 +188,8 @@ export function TicketSelector({
   const [loadedUnitsBySector, setLoadedUnitsBySector] = useState<
     Record<string, EventSeatingUnit[]>
   >({})
+  const loadedUnitsRef = useRef(loadedUnitsBySector)
+  loadedUnitsRef.current = loadedUnitsBySector
   const [buyer, setBuyer] = useState<CheckoutBuyerInfo>({
     buyerName: initialBuyer?.buyerName ?? "",
     buyerDni: initialBuyer?.buyerDni ?? "",
@@ -894,27 +903,28 @@ export function TicketSelector({
     })
   }
 
-  async function loadSectorUnits(sectorId: string) {
-    const cached = loadedUnitsBySector[sectorId]
+  const loadSectorUnits = useCallback(async (sectorId: string) => {
+    const cached = loadedUnitsRef.current[sectorId]
     if (cached) return cached
     const units = await getEventSeatingUnitsForSector(eventId, sectorId)
-    setLoadedUnitsBySector((current) => ({
-      ...current,
-      [sectorId]: units,
-    }))
+    loadedUnitsRef.current = { ...loadedUnitsRef.current, [sectorId]: units }
+    setLoadedUnitsBySector((current) =>
+      current[sectorId] ? current : { ...current, [sectorId]: units },
+    )
     return units
-  }
+  }, [eventId])
 
-  async function loadAllUnits() {
+  const loadAllUnits = useCallback(async () => {
     const units = await getEventSeatingAvailability(eventId)
     const bySector: Record<string, EventSeatingUnit[]> = {}
     for (const unit of units) {
       const key = unit.sectorId || "_sector"
       ;(bySector[key] ??= []).push(unit)
     }
+    loadedUnitsRef.current = { ...loadedUnitsRef.current, ...bySector }
     setLoadedUnitsBySector((current) => ({ ...current, ...bySector }))
     return units
-  }
+  }, [eventId])
 
   const seatFlowOverlay =
     showSeatFlow ? (
