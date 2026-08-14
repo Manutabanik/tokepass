@@ -170,7 +170,7 @@ function HorizontalChipList<T>({
 
   return (
     <Virtuoso
-      horizontal
+      horizontalDirection
       data={data}
       increaseViewportBy={160}
       computeItemKey={(_index, item) => computeKey(item)}
