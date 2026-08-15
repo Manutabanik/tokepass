@@ -1,16 +1,5 @@
 /** Web Share API + descarga de flyers PNG para Historias. */
 
-export function includeStoryCaptureNode(node: unknown): boolean {
-  if (!node || typeof node !== "object") return true
-  const candidate = node as { closest?: unknown }
-  if (typeof candidate.closest !== "function") return true
-  try {
-    return !(candidate as Element).closest("[data-story-actions]")
-  } catch {
-    return true
-  }
-}
-
 import { storyImageSrc } from "@/lib/story-image"
 
 export function canShareFiles(file: File): boolean {
@@ -39,6 +28,16 @@ export function isNativeFileShareAvailable(): boolean {
   } catch {
     return false
   }
+}
+
+export function downloadDataUrl(dataUrl: string, filename: string) {
+  const link = document.createElement("a")
+  link.download = filename
+  link.href = dataUrl
+  link.rel = "noopener"
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
 }
 
 export function downloadImageBlob(

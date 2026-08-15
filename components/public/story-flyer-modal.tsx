@@ -45,8 +45,8 @@ import {
 } from "@/lib/story-canvas"
 import {
   downloadAndOpenInstagram,
+  downloadDataUrl,
   downloadImageBlob,
-  includeStoryCaptureNode,
   isNativeFileShareAvailable,
 } from "@/lib/story-flyer-share"
 import { hydrateStoryFlyerImages } from "@/lib/story-image"
@@ -68,7 +68,7 @@ export function StoryFlyerModal({
   open,
   onOpenChange,
 }: StoryFlyerModalProps) {
-  const captureRef = useRef<HTMLDivElement>(null)
+  const storyCardRef = useRef<HTMLDivElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
   const [busy, setBusy] = useState(false)
   const [hydrating, setHydrating] = useState(true)
@@ -172,19 +172,19 @@ export function StoryFlyerModal({
     )
   }, [])
 
-  async function captureFlyerBlob() {
-    const node = captureRef.current
+  async function captureStoryPng() {
+    const node = storyCardRef.current
     if (!node) return null
     await waitForImages(node)
-    const { toBlob } = await import("html-to-image")
+    const { toPng } = await import("html-to-image")
     const options = {
-      cacheBust: true,
+      quality: 0.95,
       pixelRatio: 1,
+      cacheBust: true,
       width: STORY_CANVAS_WIDTH,
       height: STORY_CANVAS_HEIGHT,
       skipAutoScale: true,
       includeQueryParams: true,
-      filter: includeStoryCaptureNode,
       style: {
         transform: "none",
         left: "0",
@@ -192,14 +192,15 @@ export function StoryFlyerModal({
       },
     }
     try {
-      return await toBlob(node, {
-        ...options,
-        skipFonts: false,
-        preferredFontFormat: "woff2",
-      })
+      return await toPng(node, { ...options, skipFonts: false })
     } catch {
-      return toBlob(node, { ...options, skipFonts: true })
+      return toPng(node, { ...options, skipFonts: true })
     }
+  }
+
+  async function dataUrlToBlob(dataUrl: string) {
+    const response = await fetch(dataUrl)
+    return response.blob()
   }
 
   async function handleInstagramShare() {
@@ -207,11 +208,9 @@ export function StoryFlyerModal({
     setBusy(true)
 
     try {
-      const pngBlob = await captureFlyerBlob()
-      if (!pngBlob) {
-        return
-      }
-
+      const dataUrl = await captureStoryPng()
+      if (!dataUrl) return
+      const pngBlob = await dataUrlToBlob(dataUrl)
       const file = new File([pngBlob], "tokepass-story.png", {
         type: "image/png",
       })
@@ -231,24 +230,34 @@ export function StoryFlyerModal({
       }
 
       downloadAndOpenInstagram(pngBlob)
-    } catch {
-      // Download / deep-link already ran, or capture failed silently.
+    } catch (error) {
+      console.error("Error al descargar la imagen:", error)
     } finally {
       setBusy(false)
     }
   }
 
-  async function handleDownloadImage() {
+  async function handleDownloadStory() {
     if (busy) return
     setBusy(true)
 
     try {
-      const blob = await captureFlyerBlob()
-      if (!blob) return
-      downloadImageBlob(blob, "tokepass-historia.png")
-      toast.success(SAVED_TOAST)
-    } catch {
-      // Silent fallback: the tap already tried to generate the PNG.
+      if (!storyCardRef.current) return
+
+      const dataUrl = await captureStoryPng()
+      if (!dataUrl) return
+
+      const filename = `tokepass-entrada-${Date.now()}.png`
+      downloadDataUrl(dataUrl, filename)
+
+      if (/iP(ad|hone|od)/.test(navigator.userAgent)) {
+        const blob = await dataUrlToBlob(dataUrl)
+        downloadImageBlob(blob, filename)
+      } else {
+        toast.success(SAVED_TOAST)
+      }
+    } catch (error) {
+      console.error("Error al descargar la imagen:", error)
     } finally {
       setBusy(false)
     }
@@ -298,7 +307,7 @@ export function StoryFlyerModal({
                 data={resolved}
                 themeId={themeId}
                 headlineId={headlineId}
-                canvasRef={captureRef}
+                canvasRef={storyCardRef}
                 live={false}
                 pauseMotion={busy}
               />
@@ -343,10 +352,7 @@ export function StoryFlyerModal({
           </div>
           </div>
 
-          <div
-            data-story-actions
-            className="mx-auto flex w-full max-w-sm shrink-0 flex-col gap-3 px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]"
-          >
+          <div className="mx-auto flex w-full max-w-sm shrink-0 flex-col gap-3 px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
             <div>
               <p className="mb-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-white/50">
                 Tema
@@ -424,7 +430,7 @@ export function StoryFlyerModal({
               type="button"
               disabled={busy}
               variant="outline"
-              onClick={() => void handleDownloadImage()}
+              onClick={() => void handleDownloadStory()}
               className="min-h-12 w-full rounded-full border-white/20 bg-white/5 text-white hover:bg-white/10"
             >
               <Download className="size-5" aria-hidden />
