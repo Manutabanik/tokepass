@@ -107,14 +107,14 @@ export function EventCheckoutSelector({
 
   if (tabs.length === 0) {
     return (
-      <p className="mt-5 text-sm text-muted-foreground">
+      <p className="text-sm text-muted-foreground">
         No hay inventario disponible para este evento.
       </p>
     )
   }
 
   return (
-    <div className="mt-5 space-y-4">
+    <div className="space-y-5">
       {mapEmbedded ? null : hasInteractiveMap ? (
         <Button
           type="button"
@@ -133,8 +133,8 @@ export function EventCheckoutSelector({
         />
       ) : null}
 
-      <Tabs key={defaultTab} defaultValue={defaultTab} className="gap-3">
-        <TabsList className="flex h-auto w-full flex-wrap rounded-lg bg-muted p-1">
+      <Tabs key={defaultTab} defaultValue={defaultTab} className="gap-5">
+        <TabsList className="flex h-auto w-full flex-wrap rounded-xl bg-muted p-1">
           {tabs.includes("seated") ? (
             <TabsTrigger value="seated" className="min-h-10 flex-1 gap-1.5">
               <LayoutGrid className="size-3.5" />
@@ -189,7 +189,7 @@ export function EventCheckoutSelector({
                 <p className="text-sm text-foreground">{mapCopy.hint}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Al continuar, la ubicación queda reservada 8 minutos. Nombre,
-                  DNI y teléfono se piden al pagar.
+                  DNI y teléfono se piden en el siguiente paso.
                 </p>
                 <Button
                   type="button"
@@ -325,7 +325,7 @@ function QuantityList({
   onQuantityChange: (tierId: string, quantity: number, max: number) => void
 }) {
   return (
-    <ul className="space-y-2">
+    <ul className="space-y-3">
       {tiers.map((tier) => {
         const sale = resolveSalePhases(tier.phases)
         const current = sale.current
@@ -340,12 +340,12 @@ function QuantityList({
           <li
             key={tier.id}
             className={cn(
-              "rounded-2xl border bg-muted/30 px-3 py-3 transition-all duration-300 ease-in-out",
+              "rounded-2xl border px-4 py-4 transition-all duration-300 ease-in-out",
               focusedTierId === tier.id
                 ? "border-primary/50 bg-primary/8 ring-1 ring-primary/30"
                 : highlight === "bestseller"
-                  ? "border-amber-500/40 bg-amber-500/5"
-                  : "border-border",
+                  ? "border-amber-400/35 bg-amber-400/8"
+                  : "border-border bg-muted/20",
             )}
           >
             <div className="flex items-center justify-between gap-3">
@@ -355,7 +355,7 @@ function QuantityList({
                   {highlight === "bestseller" ? (
                     <Badge
                       variant="secondary"
-                      className="h-5 gap-1 bg-amber-500/15 text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200"
+                      className="h-5 gap-1 border border-amber-400/30 bg-amber-400/15 text-[10px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-200"
                     >
                       <Sparkles className="size-3" aria-hidden="true" />
                       Más vendida
@@ -430,7 +430,7 @@ function StockHint({
   }
   if (scarcity.kind === "available") {
     return (
-      <p className="mt-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+      <p className="mt-0.5 text-xs font-semibold text-emerald-500">
         Disponible
       </p>
     )

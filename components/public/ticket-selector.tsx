@@ -4,7 +4,6 @@ import {
   ChevronLeft,
   LoaderCircle,
   Ticket,
-  UserRound,
 } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
 import dynamic from "next/dynamic"
@@ -40,6 +39,10 @@ import {
 import { CheckoutBuyerFields } from "@/components/public/checkout-buyer-fields"
 import { CheckoutCountdown } from "@/components/public/checkout-countdown"
 import { CheckoutFloatingBar } from "@/components/public/checkout-floating-bar"
+import {
+  CheckoutStepper,
+  type CheckoutFlowStep,
+} from "@/components/public/checkout-stepper"
 import { ImmersiveCheckoutShell } from "@/components/public/immersive-checkout-shell"
 import { CheckoutIdentityDialog } from "@/components/public/checkout-identity-dialog"
 import {
@@ -68,7 +71,7 @@ import { MAX_TICKETS_PER_PURCHASE } from "@/lib/checkout-limits"
 import { GA_CHECKOUT_HOLD_MS } from "@/lib/checkout-hold"
 import { redirectToCheckoutPaymentOrToast } from "@/lib/checkout-redirect"
 import { ensureGuestCheckoutSession } from "@/lib/checkout/guest-session"
-import { hasCheckoutIdentity, isCheckoutGuest } from "@/lib/checkout/identity"
+import { hasCheckoutIdentity } from "@/lib/checkout/identity"
 import type { DefaultTicketTab } from "@/lib/checkout/ticket-picker"
 import {
   firstCheckoutBuyerErrorField,
@@ -97,6 +100,7 @@ import {
   hasInteractiveVenueMap,
   venueMapToSeatingLayout,
 } from "@/lib/seating/venue-map-geometry"
+import { formatCurrency } from "@/lib/format"
 import { publicEventLoginPath } from "@/lib/seo/site"
 import { useCheckoutIntentStore } from "@/lib/stores/checkout-intent-store"
 import type { ScheduleDay } from "@/types/events"
@@ -218,13 +222,12 @@ export function TicketSelector({
   const portalReady = typeof document !== "undefined"
   const [identityOpen, setIdentityOpen] = useState(false)
   const checkoutMode = useCheckoutIntentStore((state) => state.mode)
-  const checkoutIsGuest = useCheckoutIntentStore((state) => state.isGuest)
   const [selectedSeat, setSelectedSeat] = useState<SelectedNumberedSeat | null>(
     null,
   )
   const [showUpsell, setShowUpsell] = useState(false)
   const [upsellSkipped, setUpsellSkipped] = useState(false)
-  const [checkoutStep, setCheckoutStep] = useState<"select" | "pay">("select")
+  const [checkoutStep, setCheckoutStep] = useState<CheckoutFlowStep>("tickets")
   const [focusedZoneId, setFocusedZoneId] = useState<string | null>(null)
   const [focusedTierId, setFocusedTierId] = useState<string | null>(null)
   const [fieldShake, setFieldShake] = useState(0)
@@ -373,11 +376,6 @@ export function TicketSelector({
   const resolvedRef = referralCode?.trim() || storedRef
   const loginHref = publicEventLoginPath({ id: eventId, slug: eventSlug })
   const identityReady = hasCheckoutIdentity(currentUserId, checkoutMode)
-  const guestCheckout = isCheckoutGuest(
-    checkoutMode,
-    currentUserId,
-    checkoutIsGuest,
-  )
   useLockBodyScroll(showSeatFlow)
 
   function persistCheckoutCart() {
@@ -434,12 +432,7 @@ export function TicketSelector({
     if (action === "open_map") {
       setShowSeatFlow(true)
     } else if (action === "pay") {
-      setCheckoutStep("pay")
-      window.setTimeout(() => {
-        document
-          .getElementById("checkout-complete")
-          ?.scrollIntoView({ behavior: "smooth", block: "start" })
-      }, 80)
+      setCheckoutStep("details")
     }
     void ensureGuestCheckoutSession()
   }
@@ -590,7 +583,8 @@ export function TicketSelector({
     ? Math.min(appliedPromo.discountAmount, cartSubtotal)
     : 0
   const totalAmount = roundMoney(Math.max(0, cartSubtotal - discountAmount))
-  const visibleStep = totalTickets > 0 ? checkoutStep : "select"
+  const visibleStep: CheckoutFlowStep =
+    totalTickets > 0 ? checkoutStep : "tickets"
   useEffect(() => {
     if (!intentRestored) return
     if (totalTickets <= 0) {
@@ -819,7 +813,7 @@ export function TicketSelector({
     })
   }
 
-  function goToPaymentStep() {
+  function goToDetailsStep() {
     if ((selection.length === 0 && !selectedSeat) || controlsLocked) return
     if (hasPendingAddonUpsell() && !upsellSkipped) {
       setShowUpsell(true)
@@ -829,7 +823,22 @@ export function TicketSelector({
       useCheckoutIntentStore.getState().chooseGuest(eventId, eventSlug)
       void ensureGuestCheckoutSession()
     }
-    setCheckoutStep("pay")
+    setCheckoutStep("details")
+  }
+
+  function goToPaymentMethods() {
+    if ((selection.length === 0 && !selectedSeat) || controlsLocked) return
+    void buyerForm.handleSubmit(
+      (values) => {
+        setBuyer(values)
+        buyerForm.reset(values)
+        setCheckoutStep("payment")
+      },
+      (formErrors) => {
+        setFieldShake((current) => current + 1)
+        onValidationError(firstCheckoutBuyerErrorField(formErrors))
+      },
+    )()
   }
 
   function handleImmersiveZoneSelect(zone: VenueMapZone) {
@@ -861,12 +870,20 @@ export function TicketSelector({
     }
   }
 
-  function handleReserve() {
-    if ((selection.length === 0 && !selectedSeat) || controlsLocked) return
-    if (visibleStep !== "pay") {
-      goToPaymentStep()
+  function handlePrimaryCta() {
+    if (visibleStep === "tickets") {
+      goToDetailsStep()
       return
     }
+    if (visibleStep === "details") {
+      goToPaymentMethods()
+      return
+    }
+    handleConfirmPay()
+  }
+
+  function handleConfirmPay() {
+    if ((selection.length === 0 && !selectedSeat) || controlsLocked) return
     if (!identityReady) {
       requestIdentity("pay")
       return
@@ -882,6 +899,7 @@ export function TicketSelector({
       (formErrors) => {
         setFieldShake((current) => current + 1)
         onValidationError(firstCheckoutBuyerErrorField(formErrors))
+        setCheckoutStep("details")
       },
     )()
   }
@@ -1140,39 +1158,56 @@ export function TicketSelector({
     )
   }
 
+  const stepTitle =
+    visibleStep === "tickets"
+      ? "Elegí tu experiencia"
+      : visibleStep === "details"
+        ? "Tus datos"
+        : "Confirmá el pago"
+  const stepCta =
+    visibleStep === "tickets"
+      ? "Continuar"
+      : visibleStep === "details"
+        ? "Ir a Medios de Pago"
+        : `Confirmar y Pagar ${formatCurrency(totalAmount)}`
+
   const checkoutPanel = (
-    <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
-      <div className="flex shrink-0 items-start justify-between gap-3 px-4 pt-4 sm:px-5">
-        <div className="min-w-0">
-          {visibleStep === "pay" ? (
-            <button
-              type="button"
-              onClick={() => setCheckoutStep("select")}
-              className="mb-2 inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              aria-label="Volver a la selección"
-            >
-              <ChevronLeft className="size-4" aria-hidden="true" />
-            </button>
+    <div className="flex h-full min-h-0 w-full flex-col rounded-2xl border border-border bg-card text-card-foreground shadow-xl">
+      <div className="space-y-5 px-6 pt-6">
+        <CheckoutStepper step={visibleStep} />
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            {visibleStep !== "tickets" ? (
+              <button
+                type="button"
+                onClick={() =>
+                  setCheckoutStep(
+                    visibleStep === "payment" ? "details" : "tickets",
+                  )
+                }
+                className="mb-2 inline-flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <ChevronLeft className="size-3.5" aria-hidden="true" />
+                Volver
+              </button>
+            ) : null}
+            <h2 className="text-lg font-bold tracking-tight text-foreground">
+              {stepTitle}
+            </h2>
+          </div>
+          {visibleStep === "tickets" ? (
+            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground ring-1 ring-border">
+              Máx. {MAX_TICKETS_PER_PURCHASE}
+            </span>
           ) : null}
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            {visibleStep === "pay" ? "Pago" : "Entradas"}
-          </p>
-          <h2 className="mt-1 text-lg font-bold tracking-tight text-foreground">
-            {visibleStep === "pay" ? "Tus datos" : "Elegí tu experiencia"}
-          </h2>
         </div>
-        {visibleStep === "select" ? (
-          <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground ring-1 ring-border">
-            Máx. {MAX_TICKETS_PER_PURCHASE}
-          </span>
-        ) : null}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 sm:px-5">
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-2 pt-5">
         <AnimatePresence mode="wait" initial={false}>
-          {visibleStep === "select" ? (
+          {visibleStep === "tickets" ? (
             <motion.div
-              key="select"
+              key="tickets"
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -12 }}
@@ -1199,7 +1234,7 @@ export function TicketSelector({
                 defaultTicketTab={defaultTicketTab}
                 onQuantityChange={updateQuantity}
                 onOpenSeatFlow={openSeatFlow}
-                onPurchaseIntent={goToPaymentStep}
+                onPurchaseIntent={goToDetailsStep}
                 onClearSeat={() => {
                   const seat = selectedSeat
                   setSelectedSeat(null)
@@ -1212,24 +1247,24 @@ export function TicketSelector({
                   updateQuantity(tierId, 1, addon?.available ?? 1)
                   setShowUpsell(false)
                   setUpsellSkipped(true)
-                  goToPaymentStep()
+                  goToDetailsStep()
                 }}
                 onSkipUpsell={() => {
                   setShowUpsell(false)
                   setUpsellSkipped(true)
-                  goToPaymentStep()
+                  goToDetailsStep()
                 }}
               />
             </motion.div>
-          ) : (
+          ) : visibleStep === "details" ? (
             <motion.div
-              key="pay"
-              id="checkout-complete"
+              key="details"
+              id="checkout-buyer"
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -12 }}
               transition={{ duration: 0.28, ease: "easeInOut" }}
-              className="space-y-4 pt-2"
+              className="space-y-5"
             >
               {holdExpiresAt ? (
                 <CheckoutCountdown
@@ -1238,6 +1273,63 @@ export function TicketSelector({
                   onExpired={handleHoldExpired}
                 />
               ) : null}
+              <p className="text-sm text-muted-foreground">
+                Los usamos para emitir tu entrada y encontrarte en puerta.
+              </p>
+              <CheckoutBuyerFields
+                value={buyer}
+                errors={buyerForm.formState.errors}
+                shakeSignal={fieldShake}
+                onChange={(next) => {
+                  setBuyer(next)
+                  buyerForm.reset(next)
+                }}
+                disabled={controlsLocked}
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="payment"
+              id="checkout-complete"
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.28, ease: "easeInOut" }}
+              className="space-y-5"
+            >
+              {holdExpiresAt ? (
+                <CheckoutCountdown
+                  variant="cart"
+                  expiresAt={holdExpiresAt}
+                  onExpired={handleHoldExpired}
+                />
+              ) : null}
+
+              <div className="space-y-3 rounded-2xl border border-border bg-muted/20 p-4">
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                  Resumen
+                </p>
+                <div className="flex items-center justify-between text-sm text-muted-foreground">
+                  <span>Entradas · {totalTickets}</span>
+                  <span className="tabular-nums text-foreground">
+                    {formatCurrency(ticketsSubtotal)}
+                  </span>
+                </div>
+                {appliedPromo && discountAmount > 0 ? (
+                  <div className="flex items-center justify-between text-sm text-emerald-500">
+                    <span>Descuento ({appliedPromo.code})</span>
+                    <span className="tabular-nums">
+                      −{formatCurrency(discountAmount)}
+                    </span>
+                  </div>
+                ) : null}
+                <div className="flex items-center justify-between border-t border-border pt-3">
+                  <span className="font-medium text-foreground">Total</span>
+                  <span className="text-xl font-black tabular-nums text-foreground">
+                    {formatCurrency(totalAmount)}
+                  </span>
+                </div>
+              </div>
 
               <PromoCodeInput
                 eventId={eventId}
@@ -1248,34 +1340,11 @@ export function TicketSelector({
                 disabled={controlsLocked || cartSubtotal <= 0}
               />
 
-              {guestCheckout ? (
-                <p className="flex items-start gap-2 text-sm text-muted-foreground">
-                  <UserRound
-                    className="mt-0.5 size-4 shrink-0"
-                    aria-hidden="true"
-                  />
-                  Completá nombre, DNI, teléfono y email para emitir la entrada.
-                </p>
-              ) : null}
-
               <PaymentMethodSelector
                 selectedProvider={selectedProvider}
                 onSelectProvider={setSelectedProvider}
                 disabled={controlsLocked}
               />
-
-              <div id="checkout-buyer">
-                <CheckoutBuyerFields
-                  value={buyer}
-                  errors={buyerForm.formState.errors}
-                  shakeSignal={fieldShake}
-                  onChange={(next) => {
-                    setBuyer(next)
-                    buyerForm.reset(next)
-                  }}
-                  disabled={controlsLocked}
-                />
-              </div>
 
               {sandboxEligible ? (
                 <Button
@@ -1295,11 +1364,12 @@ export function TicketSelector({
 
       <CheckoutFloatingBar
         variant="panel"
-        itemCount={totalTickets}
-        subtotal={totalAmount}
-        pending={isPending}
+        actionLabel={stepCta}
+        showArrow={visibleStep !== "payment"}
+        disabled={visibleStep === "tickets" && totalTickets <= 0}
+        pending={isPending && visibleStep === "payment"}
         locked={purchaseLocked}
-        onPay={handleReserve}
+        onPay={handlePrimaryCta}
       />
     </div>
   )
@@ -1320,8 +1390,10 @@ export function TicketSelector({
       />
       {immersiveMap ? (
         <ImmersiveCheckoutShell
-          paying={visibleStep === "pay"}
-          onDismissPay={() => setCheckoutStep("select")}
+          paying={visibleStep === "payment"}
+          onDismissPay={() =>
+            setCheckoutStep(visibleStep === "payment" ? "details" : "tickets")
+          }
           map={
             liveMap ? (
               <AdaptiveSeatingFlow
@@ -1358,9 +1430,7 @@ export function TicketSelector({
           panel={checkoutPanel}
         />
       ) : (
-        <div className="overflow-hidden rounded-3xl border border-border bg-card text-card-foreground shadow-2xl shadow-black/40">
-          {checkoutPanel}
-        </div>
+        <div className="overflow-hidden">{checkoutPanel}</div>
       )}
     </>
   )
