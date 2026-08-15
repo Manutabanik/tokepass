@@ -6,9 +6,10 @@ import {
   ImagePlus,
   Loader2,
   PartyPopper,
-  Share2,
+  Play,
   X,
 } from "lucide-react"
+import { motion } from "motion/react"
 import {
   useCallback,
   useEffect,
@@ -23,7 +24,7 @@ import { getPublicStoryHeadliner } from "@/app/actions/public-story"
 import { StoryCanvas } from "@/components/public/story-canvas"
 import { Button } from "@/components/ui/button"
 import { useLockBodyScroll } from "@/hooks/use-lock-body-scroll"
-import { useStoryTilt } from "@/hooks/use-story-tilt"
+import { use3DTilt } from "@/hooks/use-3d-tilt"
 import {
   Dialog,
   DialogClose,
@@ -44,12 +45,12 @@ import {
   type StoryThemeId,
 } from "@/lib/story-canvas"
 import {
-  downloadAndOpenInstagram,
   downloadDataUrl,
   downloadImageBlob,
   isNativeFileShareAvailable,
 } from "@/lib/story-flyer-share"
 import { hydrateStoryFlyerImages } from "@/lib/story-image"
+import { exportStoryVideo } from "@/lib/story-video-export"
 import { cn } from "@/lib/utils"
 
 export type { StoryFlyerData, StoryFlyerMode }
@@ -91,7 +92,7 @@ export function StoryFlyerModal({
     typeof navigator === "undefined" ? false : isNativeFileShareAvailable(),
   )
   const titleId = useId()
-  const tilt = useStoryTilt(open && !busy)
+  const tilt = use3DTilt(open && !busy)
 
   useLockBodyScroll(open)
 
@@ -203,16 +204,17 @@ export function StoryFlyerModal({
     return response.blob()
   }
 
-  async function handleInstagramShare() {
+  async function handleExport3DVideo() {
     if (busy) return
     setBusy(true)
 
     try {
       const dataUrl = await captureStoryPng()
       if (!dataUrl) return
-      const pngBlob = await dataUrlToBlob(dataUrl)
-      const file = new File([pngBlob], "tokepass-story.png", {
-        type: "image/png",
+      const { blob, extension } = await exportStoryVideo(dataUrl)
+      const filename = `tokepass-historia-3d.${extension}`
+      const file = new File([blob], filename, {
+        type: blob.type || (extension === "mp4" ? "video/mp4" : "video/webm"),
       })
 
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -229,9 +231,9 @@ export function StoryFlyerModal({
         }
       }
 
-      downloadAndOpenInstagram(pngBlob)
+      downloadImageBlob(blob, filename)
     } catch (error) {
-      console.error("Error al descargar la imagen:", error)
+      console.error("Error al exportar el video:", error)
     } finally {
       setBusy(false)
     }
@@ -323,6 +325,7 @@ export function StoryFlyerModal({
               willChange: "transform",
               transform: "translateZ(0)",
               touchAction: "none",
+              ...tilt.perspectiveStyle,
             }}
             onPointerMove={tilt.onPointerMove}
             onPointerLeave={tilt.onPointerLeave}
@@ -349,6 +352,11 @@ export function StoryFlyerModal({
                 rotateY={tilt.rotateY}
               />
             </div>
+            <motion.div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 rounded-2xl mix-blend-screen"
+              style={{ background: tilt.holoBackground }}
+            />
           </div>
           </div>
 
@@ -411,18 +419,18 @@ export function StoryFlyerModal({
             <Button
               type="button"
               disabled={busy}
-              onClick={() => void handleInstagramShare()}
+              onClick={() => void handleExport3DVideo()}
               className="min-h-14 w-full rounded-full bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-500 text-base font-bold text-white hover:from-violet-500 hover:via-fuchsia-500 hover:to-pink-400"
             >
               {busy ? (
                 <>
                   <Loader2 className="size-5 animate-spin" aria-hidden />
-                  Generando historia…
+                  Generando video 3D…
                 </>
               ) : (
                 <>
-                  <Share2 className="size-5" aria-hidden />
-                  Compartir en Instagram
+                  <Play className="size-5 fill-white" aria-hidden />
+                  Descargar Video 3D Animado (MP4)
                 </>
               )}
             </Button>
@@ -434,11 +442,11 @@ export function StoryFlyerModal({
               className="min-h-12 w-full rounded-full border-white/20 bg-white/5 text-white hover:bg-white/10"
             >
               <Download className="size-5" aria-hidden />
-              Descargar Imagen 9:16
+              Descargar Imagen Estatica (PNG)
             </Button>
             <p className="text-center text-xs text-zinc-500">
               {nativeShare
-                ? "1080 x 1920. Sin tus datos personales."
+                ? "Video 4s en loop 1080 x 1920, o PNG estatico."
                 : "1080 x 1920. Se guarda en Descargas si el telefono no comparte archivos."}
             </p>
           </div>
