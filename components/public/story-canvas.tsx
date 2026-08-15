@@ -207,63 +207,91 @@ export function StoryCanvas({
               rotateY: reduceMotion ? 0 : rotateY,
               transformPerspective: 1000,
               transformStyle: "preserve-3d",
-              willChange: "transform",
+              willChange: live ? "transform" : "auto",
               position: "relative",
               overflow: "hidden",
               borderRadius: 32,
               padding: 16,
-              background: "rgba(255,255,255,0.1)",
+              background: live
+                ? "rgba(255,255,255,0.1)"
+                : "rgba(24,16,36,0.94)",
               border: "1px solid rgba(255,255,255,0.2)",
               boxShadow: `${theme.ticketShadow}, 0 24px 80px rgba(168,85,247,0.2)`,
-              backdropFilter: "blur(18px)",
-              WebkitBackdropFilter: "blur(18px)",
+              ...(live
+                ? {
+                    backdropFilter: "blur(18px)",
+                    WebkitBackdropFilter: "blur(18px)",
+                  }
+                : {}),
             }}
           >
-            <motion.div
-              aria-hidden="true"
-              style={{
-                position: "absolute",
-                inset: 0,
-                borderRadius: 32,
-                pointerEvents: "none",
-                mixBlendMode: "screen",
-                opacity: 0.85,
-                background: glare,
-              }}
-            />
+            {live ? (
+              <motion.div
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  borderRadius: 32,
+                  pointerEvents: "none",
+                  mixBlendMode: "screen",
+                  opacity: 0.85,
+                  background: glare,
+                }}
+              />
+            ) : null}
             <div
               style={{
                 position: "relative",
                 borderRadius: 24,
                 overflow: "hidden",
                 height: "100%",
-                background: "#09090b",
+                background: theme.background,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
               }}
             >
               {eventImage ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={eventImage}
-                  alt=""
-                  data-story-image="hero"
-                  onLoad={onPainted}
-                  onError={onPainted}
-                  ref={(node) => {
-                    if (!onPainted || !node) return
-                    if (node.complete && node.naturalWidth > 0) {
-                      queueMicrotask(onPainted)
-                    }
-                  }}
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "contain",
-                    display: "block",
-                  }}
-                />
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={eventImage}
+                    alt=""
+                    aria-hidden="true"
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                      transform: "scale(1.12)",
+                      filter: live ? "blur(28px) saturate(1.25)" : "none",
+                      opacity: 0.42,
+                    }}
+                  />
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={eventImage}
+                    alt=""
+                    data-story-image="hero"
+                    onLoad={onPainted}
+                    onError={onPainted}
+                    ref={(node) => {
+                      if (!onPainted || !node) return
+                      if (node.complete && node.naturalWidth > 0) {
+                        queueMicrotask(onPainted)
+                      }
+                    }}
+                    style={{
+                      position: "relative",
+                      zIndex: 1,
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "contain",
+                      display: "block",
+                    }}
+                  />
+                </>
               ) : (
                 <div
                   style={{

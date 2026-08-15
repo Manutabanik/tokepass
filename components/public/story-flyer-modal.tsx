@@ -6,7 +6,7 @@ import {
   ImagePlus,
   Loader2,
   PartyPopper,
-  Play,
+  Share2,
   X,
 } from "lucide-react"
 import { motion } from "motion/react"
@@ -39,18 +39,22 @@ import {
   STORY_HEADLINES,
   STORY_THEMES,
   defaultStoryHeadlineId,
+  findStoryTheme,
   type StoryFlyerData,
   type StoryFlyerMode,
   type StoryHeadlineId,
   type StoryThemeId,
 } from "@/lib/story-canvas"
 import {
-  downloadDataUrl,
   downloadImageBlob,
   isNativeFileShareAvailable,
+  shareOrDownloadFlyer,
 } from "@/lib/story-flyer-share"
-import { exportStoryVideo, isUsableStoryVideo } from "@/lib/story-video-export"
 import { cn } from "@/lib/utils"
+
+function isStoryDataImage(url?: string | null): boolean {
+  return Boolean(url?.trim().startsWith("data:image/"))
+}
 
 export type { StoryFlyerData, StoryFlyerMode }
 
@@ -62,8 +66,6 @@ type StoryFlyerModalProps = {
 
 const SAVED_TOAST =
   "Imagen guardada. Abri Instagram para subirla a tus Historias"
-const VIDEO_SAVED_TOAST =
-  "Video guardado en tu galeria. Abri la app para publicarlo"
 
 export function StoryFlyerModal({
   data,
@@ -73,8 +75,10 @@ export function StoryFlyerModal({
   const storyCardRef = useRef<HTMLDivElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
   const [busy, setBusy] = useState(false)
-  const [hydrating, setHydrating] = useState(true)
-  const [imagesReady, setImagesReady] = useState(false)
+  const [hydrating, setHydrating] = useState(
+    () => Boolean(data.imageUrl?.trim()) && !isStoryDataImage(data.imageUrl),
+  )
+  const [imagesReady, setImagesReady] = useState(() => !data.imageUrl?.trim())
   const [themeId, setThemeId] = useState<StoryThemeId>("neon-purple")
   const [headlineId, setHeadlineId] = useState<StoryHeadlineId>(() =>
     defaultStoryHeadlineId(data.mode),
@@ -88,8 +92,10 @@ export function StoryFlyerModal({
     setDataKey(nextDataKey)
     setResolved(data)
     setHeadlineId(defaultStoryHeadlineId(data.mode))
-    setHydrating(true)
-    setImagesReady(false)
+    setHydrating(
+      Boolean(data.imageUrl?.trim()) && !isStoryDataImage(data.imageUrl),
+    )
+    setImagesReady(!data.imageUrl?.trim())
   }
   const exportReady = !hydrating && imagesReady && !busy
   const [previewScale, setPreviewScale] = useState(0.22)
@@ -103,16 +109,20 @@ export function StoryFlyerModal({
 
   useEffect(() => {
     if (!open) return
-    let cancelled = false
+    void import("html-to-image")
 
+    if (isStoryDataImage(data.imageUrl) || !data.imageUrl?.trim()) {
+      return
+    }
+
+    let cancelled = false
     async function hydrate() {
       try {
         const card = await getStoryCardData(data)
         if (cancelled) return
         setResolved(card)
         setHydrating(false)
-        const hasFlyer = card.imageUrl?.startsWith("data:image/")
-        if (!hasFlyer) setImagesReady(true)
+        if (!isStoryDataImage(card.imageUrl)) setImagesReady(true)
       } catch {
         if (cancelled) return
         setResolved(data)
@@ -154,19 +164,18 @@ export function StoryFlyerModal({
     )
   }, [])
 
-  async function captureStoryPng() {
+  async function captureStoryBlob() {
     const node = storyCardRef.current
     if (!node) return null
     await waitForImages(node)
-    const { toPng } = await import("html-to-image")
+    const { toBlob } = await import("html-to-image")
     const options = {
-      quality: 0.95,
       pixelRatio: 1,
-      cacheBust: true,
+      cacheBust: false,
       width: STORY_CANVAS_WIDTH,
       height: STORY_CANVAS_HEIGHT,
       skipAutoScale: true,
-      includeQueryParams: true,
+      backgroundColor: findStoryTheme(themeId).background,
       style: {
         transform: "none",
         left: "0",
@@ -174,94 +183,44 @@ export function StoryFlyerModal({
       },
     }
     try {
-      return await toPng(node, { ...options, skipFonts: false })
+      return await toBlob(node, { ...options, skipFonts: false })
     } catch {
-      return toPng(node, { ...options, skipFonts: true })
+      return toBlob(node, { ...options, skipFonts: true })
     }
   }
 
-  async function dataUrlToBlob(dataUrl: string) {
-    const response = await fetch(dataUrl)
-    return response.blob()
-  }
-
-  async function shareOrDownloadFile(file: File, fallbackBlob: Blob) {
-    try {
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: "Mi Entrada Tokepass",
-        })
-        return "shared"
-      }
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
-        return "cancelled"
-      }
-    }
-    downloadImageBlob(fallbackBlob, file.name)
-    return "downloaded"
-  }
-
-  async function handleExport3DVideo() {
-    if (busy) return
+  async function handleShareStory() {
+    if (!exportReady) return
     setBusy(true)
-
     try {
-      const dataUrl = await captureStoryPng()
-      if (!dataUrl) return
-
-      const recorded = await exportStoryVideo(dataUrl)
-      if (recorded.ok && isUsableStoryVideo(recorded.blob)) {
-        const filename = `tokepass-historia-3d.${recorded.extension}`
-        const file = new File([recorded.blob], filename, {
-          type:
-            recorded.blob.type ||
-            (recorded.extension === "mp4" ? "video/mp4" : "video/webm"),
-        })
-        const result = await shareOrDownloadFile(file, recorded.blob)
-        if (result === "downloaded") {
-          toast.success(VIDEO_SAVED_TOAST)
-        }
-        return
-      }
-
-      const pngBlob = await dataUrlToBlob(dataUrl)
-      const pngFile = new File([pngBlob], "tokepass-historia.png", {
-        type: "image/png",
+      const blob = await captureStoryBlob()
+      if (!blob) return
+      const result = await shareOrDownloadFlyer({
+        blob,
+        filename: "tokepass-historia.png",
+        title: "Mi Entrada Tokepass",
+        text: resolved.eventTitle,
       })
-      const result = await shareOrDownloadFile(pngFile, pngBlob)
-      if (result === "downloaded") {
+      if (result.ok && result.method === "download") {
         toast.success(SAVED_TOAST)
       }
     } catch {
-      // PNG fallback already attempted; never surface iOS "unavailable" alerts.
+      // Native share cancel or silent download fallback. No error banners.
     } finally {
       setBusy(false)
     }
   }
 
   async function handleDownloadStory() {
-    if (busy) return
+    if (!exportReady) return
     setBusy(true)
-
     try {
-      if (!storyCardRef.current) return
-
-      const dataUrl = await captureStoryPng()
-      if (!dataUrl) return
-
-      const filename = `tokepass-entrada-${Date.now()}.png`
-      downloadDataUrl(dataUrl, filename)
-
-      if (/iP(ad|hone|od)/.test(navigator.userAgent)) {
-        const blob = await dataUrlToBlob(dataUrl)
-        downloadImageBlob(blob, filename)
-      } else {
-        toast.success(SAVED_TOAST)
-      }
-    } catch (error) {
-      console.error("Error al descargar la imagen:", error)
+      const blob = await captureStoryBlob()
+      if (!blob) return
+      downloadImageBlob(blob, `tokepass-entrada-${Date.now()}.png`)
+      toast.success(SAVED_TOAST)
+    } catch {
+      // Silent fallback: never surface export errors on mobile.
     } finally {
       setBusy(false)
     }
@@ -422,13 +381,13 @@ export function StoryFlyerModal({
             <Button
               type="button"
               disabled={!exportReady}
-              onClick={() => void handleExport3DVideo()}
+              onClick={() => void handleShareStory()}
               className="min-h-14 w-full rounded-full bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-500 text-base font-bold text-white hover:from-violet-500 hover:via-fuchsia-500 hover:to-pink-400"
             >
               {busy ? (
                 <>
                   <Loader2 className="size-5 animate-spin" aria-hidden />
-                  Generando video 3D…
+                  Generando imagen…
                 </>
               ) : hydrating || !imagesReady ? (
                 <>
@@ -437,8 +396,8 @@ export function StoryFlyerModal({
                 </>
               ) : (
                 <>
-                  <Play className="size-5 fill-white" aria-hidden />
-                  Descargar Video 3D Animado (MP4)
+                  <Share2 className="size-5" aria-hidden />
+                  Compartir en Instagram
                 </>
               )}
             </Button>
@@ -450,12 +409,12 @@ export function StoryFlyerModal({
               className="min-h-12 w-full rounded-full border-white/20 bg-white/5 text-white hover:bg-white/10"
             >
               <Download className="size-5" aria-hidden />
-              Descargar Imagen Estatica (PNG)
+              Descargar Imagen
             </Button>
             <p className="text-center text-xs text-zinc-500">
               {nativeShare
-                ? "Video 4s en loop 1080 x 1920, o PNG estatico."
-                : "1080 x 1920. Se guarda en Descargas si el telefono no comparte archivos."}
+                ? "PNG 1080 x 1920 listo para Instagram o WhatsApp."
+                : "PNG 1080 x 1920. Se guarda en el telefono si no puede compartir."}
             </p>
           </div>
         </DialogPrimitive.Popup>
@@ -480,12 +439,32 @@ export function StoryFlyerTrigger({
   variant = "primary",
 }: StoryFlyerTriggerProps) {
   const [open, setOpen] = useState(false)
+  const [card, setCard] = useState<StoryFlyerData | null>(null)
+  const [preparing, setPreparing] = useState(false)
+
+  async function handleOpen() {
+    if (preparing) return
+    setPreparing(true)
+    try {
+      const hydrated = isStoryDataImage(data.imageUrl)
+        ? data
+        : await getStoryCardData(data)
+      setCard(hydrated)
+      setOpen(true)
+    } catch {
+      setCard(data)
+      setOpen(true)
+    } finally {
+      setPreparing(false)
+    }
+  }
 
   return (
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        disabled={preparing}
+        onClick={() => void handleOpen()}
         className={cn(
           "inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl px-5 text-sm font-bold transition",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400/60",
@@ -501,11 +480,15 @@ export function StoryFlyerTrigger({
           className,
         )}
       >
-        {icon ?? <Camera className="size-4 shrink-0" aria-hidden />}
-        {label}
+        {preparing ? (
+          <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+        ) : (
+          (icon ?? <Camera className="size-4 shrink-0" aria-hidden />)
+        )}
+        {preparing ? "Preparando historia…" : label}
       </button>
-      {open ? (
-        <StoryFlyerModal data={data} open={open} onOpenChange={setOpen} />
+      {open && card ? (
+        <StoryFlyerModal data={card} open={open} onOpenChange={setOpen} />
       ) : null}
     </>
   )
