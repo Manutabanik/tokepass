@@ -91,6 +91,7 @@ export function EventStorefront({
   })
   const finished = saleState === "finished"
   const soldOut = saleState === "sold_out"
+  const hasInteractiveMap = Boolean(event.hasInteractiveMap) && !finished
   const demand = finished || soldOut ? null : demandLabel(event.tiers)
   const venueName = event.venue?.name ?? event.location
   const address = event.venue?.location ?? event.location
@@ -108,6 +109,7 @@ export function EventStorefront({
         name: tier.name,
         price: tier.price,
         available: tier.available,
+        capacity: tier.capacity,
         bonusReward: tier.bonus_reward,
         dayId: tier.day_id,
         layoutType: tier.layout_type,
@@ -149,6 +151,7 @@ export function EventStorefront({
         seatingSectorSummaries={event.seatingSectorSummaries}
         seatingBackgroundUrl={event.venue?.seating_background_url}
         venueMap={event.venue?.venue_map ?? null}
+        hasInteractiveMap={event.hasInteractiveMap}
         seatingLayout={event.venue?.seating_layout ?? []}
         venueId={event.venue?.id}
         venueName={event.venue?.name}
@@ -163,7 +166,12 @@ export function EventStorefront({
   )
 
   return (
-    <div className="relative isolate min-h-screen overflow-x-clip bg-background pb-28 text-foreground lg:overflow-x-visible lg:pb-12">
+    <div
+      className={cn(
+        "relative isolate min-h-screen overflow-x-clip bg-background text-foreground",
+        hasInteractiveMap ? "pb-8 lg:pb-12" : "pb-28 lg:overflow-x-visible lg:pb-12",
+      )}
+    >
       <AnalyticsTracker
         config={event.pixels}
         trackPageView
@@ -184,7 +192,14 @@ export function EventStorefront({
       ) : null}
 
       {/* Mobile-first immersive column; desktop widens with side checkout */}
-      <div className="mx-auto grid max-w-6xl gap-0 lg:grid-cols-[minmax(0,1.05fr)_minmax(340px,0.95fr)] lg:items-start lg:gap-10 lg:px-6 lg:py-8">
+      <div
+        className={cn(
+          "mx-auto grid gap-0 lg:items-start lg:px-6 lg:py-8",
+          hasInteractiveMap
+            ? "max-w-[1400px] lg:grid-cols-1 lg:gap-8"
+            : "max-w-6xl lg:grid-cols-[minmax(0,1.05fr)_minmax(340px,0.95fr)] lg:gap-10",
+        )}
+      >
         <div className="min-w-0">
           <section className="relative">
             <div className="relative h-[32vh] min-h-[220px] max-h-[360px] overflow-hidden sm:h-[38vh] lg:min-h-[320px] lg:rounded-3xl lg:border lg:border-border">
@@ -263,12 +278,18 @@ export function EventStorefront({
             </div>
           </div>
 
-        <aside
-          id="tickets"
-          className="scroll-mt-24 px-4 pb-8 lg:sticky lg:top-24 lg:row-span-2 lg:h-fit lg:max-h-[calc(100vh-6rem)] lg:self-start lg:overflow-y-auto lg:px-0 lg:pb-0"
-        >
-          {checkout}
-        </aside>
+        {hasInteractiveMap ? (
+          <section id="tickets" className="scroll-mt-24 min-w-0 px-0 pb-6 lg:pb-2">
+            {checkout}
+          </section>
+        ) : (
+          <aside
+            id="tickets"
+            className="scroll-mt-24 px-4 pb-8 lg:sticky lg:top-24 lg:row-span-2 lg:h-fit lg:max-h-[calc(100vh-6rem)] lg:self-start lg:overflow-y-auto lg:px-0 lg:pb-0"
+          >
+            {checkout}
+          </aside>
+        )}
 
         <div className="min-w-0 space-y-8 px-4 pb-6 pt-2 sm:px-6 lg:px-0 lg:pt-0">
             <div className="flex flex-wrap items-center gap-3">

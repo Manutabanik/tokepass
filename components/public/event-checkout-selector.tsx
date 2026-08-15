@@ -1,9 +1,11 @@
 "use client"
 
 import {
+  AlertCircle,
   Armchair,
   Clock,
   LayoutGrid,
+  Map,
   Minus,
   Plus,
   Sparkles,
@@ -22,6 +24,7 @@ import {
   ticketPickerTabLabel,
   type DefaultTicketTab,
 } from "@/lib/checkout/ticket-picker"
+import { resolveStockScarcity } from "@/lib/checkout/stock-scarcity"
 import { formatCurrency } from "@/lib/format"
 import { resolveSalePhases } from "@/lib/inventory/active-phase"
 import {
@@ -46,6 +49,10 @@ type Props = {
   quantities: Record<string, number>
   isPending: boolean
   hasSeatingFlow: boolean
+  hasInteractiveMap?: boolean
+  mapEmbedded?: boolean
+  mapLoading?: boolean
+  focusedTierId?: string | null
   seatingRenderMode?: VenueRenderMode
   selectedSeat: SelectedNumberedSeat | null
   showUpsell: boolean
@@ -63,6 +70,10 @@ export function EventCheckoutSelector({
   quantities,
   isPending,
   hasSeatingFlow,
+  hasInteractiveMap = false,
+  mapEmbedded = false,
+  mapLoading = false,
+  focusedTierId = null,
   seatingRenderMode = "micro",
   selectedSeat,
   showUpsell,
@@ -104,6 +115,24 @@ export function EventCheckoutSelector({
 
   return (
     <div className="mt-5 space-y-4">
+      {mapEmbedded ? null : hasInteractiveMap ? (
+        <Button
+          type="button"
+          size="lg"
+          disabled={isPending || mapLoading}
+          onClick={onOpenSeatFlow}
+          className="h-12 w-full rounded-2xl bg-primary text-base font-bold text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90"
+        >
+          <Map className="size-5" aria-hidden="true" />
+          Elegir ubicación en el mapa
+        </Button>
+      ) : mapLoading ? (
+        <div
+          className="h-12 w-full animate-pulse rounded-2xl bg-muted"
+          aria-hidden="true"
+        />
+      ) : null}
+
       <Tabs key={defaultTab} defaultValue={defaultTab} className="gap-3">
         <TabsList className="flex h-auto w-full flex-wrap rounded-lg bg-muted p-1">
           {tabs.includes("seated") ? (
@@ -182,7 +211,7 @@ export function EventCheckoutSelector({
 
         {tabs.includes("general") ? (
           <TabsContent value="general" className="space-y-3">
-            {hasSeatingFlow ? (
+            {hasSeatingFlow || hasInteractiveMap ? (
               <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <LayoutGrid className="size-3.5 shrink-0" aria-hidden="true" />
                 Estas entradas coinciden con las zonas de acceso del recinto.
@@ -192,6 +221,7 @@ export function EventCheckoutSelector({
               tiers={grouped.general}
               quantities={quantities}
               isPending={isPending}
+              focusedTierId={focusedTierId}
               onQuantityChange={onQuantityChange}
             />
           </TabsContent>
@@ -285,11 +315,13 @@ function QuantityList({
   tiers,
   quantities,
   isPending,
+  focusedTierId = null,
   onQuantityChange,
 }: {
   tiers: TicketSelectorTier[]
   quantities: Record<string, number>
   isPending: boolean
+  focusedTierId?: string | null
   onQuantityChange: (tierId: string, quantity: number, max: number) => void
 }) {
   return (
@@ -308,10 +340,12 @@ function QuantityList({
           <li
             key={tier.id}
             className={cn(
-              "rounded-2xl border bg-muted/30 px-3 py-3",
-              highlight === "bestseller"
-                ? "border-amber-500/40 bg-amber-500/5"
-                : "border-border",
+              "rounded-2xl border bg-muted/30 px-3 py-3 transition-all duration-300 ease-in-out",
+              focusedTierId === tier.id
+                ? "border-primary/50 bg-primary/8 ring-1 ring-primary/30"
+                : highlight === "bestseller"
+                  ? "border-amber-500/40 bg-amber-500/5"
+                  : "border-border",
             )}
           >
             <div className="flex items-center justify-between gap-3">
@@ -335,8 +369,12 @@ function QuantityList({
                 ) : null}
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   {priceLabel}
-                  {max === 0 ? " · agotado" : ` · ${max} disponibles`}
                 </p>
+                <StockHint
+                  available={max}
+                  capacity={tier.capacity}
+                  sold={tier.sold}
+                />
               </div>
               <Stepper
                 value={quantity}
@@ -369,6 +407,39 @@ function QuantityList({
         )
       })}
     </ul>
+  )
+}
+
+function StockHint({
+  available,
+  capacity,
+  sold,
+}: {
+  available: number
+  capacity?: number
+  sold?: number
+}) {
+  const scarcity = resolveStockScarcity(available, capacity, sold)
+  if (scarcity.kind === "sold_out") {
+    return (
+      <p className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-muted-foreground">
+        <AlertCircle className="size-3.5" aria-hidden="true" />
+        Agotado
+      </p>
+    )
+  }
+  if (scarcity.kind === "available") {
+    return (
+      <p className="mt-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+        Disponible
+      </p>
+    )
+  }
+  return (
+    <p className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-orange-500">
+      <AlertCircle className="size-3.5" aria-hidden="true" />
+      Últimos {scarcity.remaining} lugares
+    </p>
   )
 }
 

@@ -1,7 +1,11 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
-import { rebuildSectorSeats, venueMapToSeatingLayout } from "./venue-map-geometry"
+import {
+  hasInteractiveVenueMap,
+  rebuildSectorSeats,
+  venueMapToSeatingLayout,
+} from "./venue-map-geometry"
 import { parseVenueMap } from "@/types/venue-map"
 import type { VenueMapSector } from "@/types/venue-map"
 
@@ -174,5 +178,35 @@ describe("venue-map-geometry", () => {
     assert.equal(map.sectors.length, 0)
     assert.equal(map.elements[0]?.id, "M-01")
     assert.equal(map.elements[0]?.groupId, "grada-naranja")
+  })
+
+  it("detects an interactive public map from zones or background", () => {
+    assert.equal(hasInteractiveVenueMap(parseVenueMap({})), false)
+    assert.equal(
+      hasInteractiveVenueMap(
+        parseVenueMap({
+          zones: [
+            {
+              id: "campo",
+              name: "Campo",
+              color: "#22d3ee",
+              price: 10000,
+              polygon: [
+                { x: 10, y: 10 },
+                { x: 40, y: 10 },
+                { x: 40, y: 40 },
+              ],
+            },
+          ],
+        }),
+      ),
+      true,
+    )
+    assert.equal(
+      hasInteractiveVenueMap(
+        parseVenueMap({ backgroundImage: "https://cdn.example.com/mapa.jpg" }),
+      ),
+      true,
+    )
   })
 })

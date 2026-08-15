@@ -1,6 +1,6 @@
 "use client"
 
-import { AlertTriangle, IdCard, Mail, Phone, UserRound } from "lucide-react"
+import { IdCard, Mail, Phone, UserRound } from "lucide-react"
 import type { FieldErrors } from "react-hook-form"
 
 import { Input } from "@/components/ui/input"
@@ -15,6 +15,7 @@ type CheckoutBuyerFieldsProps = {
   disabled?: boolean
   className?: string
   errors?: FieldErrors<CheckoutBuyerInfo> | Partial<Record<keyof CheckoutBuyerInfo, string>>
+  shakeSignal?: number
 }
 
 const fieldInputClass =
@@ -38,11 +39,32 @@ export function CheckoutBuyerFields({
   disabled = false,
   className,
   errors,
+  shakeSignal = 0,
 }: CheckoutBuyerFieldsProps) {
   const nameError = fieldMessage(errors, "buyerName")
   const dniError = fieldMessage(errors, "buyerDni")
   const phoneError = fieldMessage(errors, "buyerPhone")
   const emailError = fieldMessage(errors, "buyerEmail")
+  const shakeClass =
+    shakeSignal > 0
+      ? shakeSignal % 2 === 0
+        ? "animate-checkout-shake-a"
+        : "animate-checkout-shake-b"
+      : null
+
+  function inputClass(invalid: boolean, field: keyof CheckoutBuyerInfo) {
+    const firstInvalid =
+      (nameError && field === "buyerName") ||
+      (!nameError && dniError && field === "buyerDni") ||
+      (!nameError && !dniError && phoneError && field === "buyerPhone") ||
+      (!nameError && !dniError && !phoneError && emailError && field === "buyerEmail")
+    return cn(
+      fieldInputClass,
+      invalid &&
+        "border-amber-500/60 bg-amber-500/5 text-foreground focus-visible:ring-amber-400/40",
+      invalid && firstInvalid && shakeClass,
+    )
+  }
 
   return (
     <div
@@ -82,9 +104,9 @@ export function CheckoutBuyerFields({
             onChange({ ...value, buyerName: event.target.value })
           }
           placeholder="Ej. Ana Pérez"
-          className={fieldInputClass}
+          className={inputClass(Boolean(nameError), "buyerName")}
         />
-        <FieldError id="buyer-name-error" message={nameError} />
+        <FieldHint id="buyer-name-error" message={nameError} />
       </div>
 
       <div className="space-y-1.5">
@@ -113,9 +135,9 @@ export function CheckoutBuyerFields({
             })
           }
           placeholder="Solo números"
-          className={fieldInputClass}
+          className={inputClass(Boolean(dniError), "buyerDni")}
         />
-        <FieldError id="buyer-dni-error" message={dniError} />
+        <FieldHint id="buyer-dni-error" message={dniError} />
       </div>
 
       <div className="space-y-1.5">
@@ -144,9 +166,9 @@ export function CheckoutBuyerFields({
             })
           }
           placeholder="Ej. 1123456789"
-          className={fieldInputClass}
+          className={inputClass(Boolean(phoneError), "buyerPhone")}
         />
-        <FieldError id="buyer-phone-error" message={phoneError} />
+        <FieldHint id="buyer-phone-error" message={phoneError} />
       </div>
 
       <div className="space-y-1.5">
@@ -174,23 +196,18 @@ export function CheckoutBuyerFields({
             onChange({ ...value, buyerEmail: event.target.value })
           }
           placeholder="tunombre@email.com"
-          className={fieldInputClass}
+          className={inputClass(Boolean(emailError), "buyerEmail")}
         />
-        <FieldError id="buyer-email-error" message={emailError} />
+        <FieldHint id="buyer-email-error" message={emailError} />
       </div>
     </div>
   )
 }
 
-function FieldError({ id, message }: { id: string; message?: string }) {
+function FieldHint({ id, message }: { id: string; message?: string }) {
   if (!message) return null
   return (
-    <p
-      id={id}
-      role="alert"
-      className="flex items-start gap-1.5 text-xs font-medium text-red-600 dark:text-red-400"
-    >
-      <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+    <p id={id} role="status" className="text-xs text-muted-foreground">
       {message}
     </p>
   )

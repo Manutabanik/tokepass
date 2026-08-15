@@ -28,6 +28,7 @@ import { formatCurrency } from "@/lib/format"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import { flattenVenueMapSeats, type FlattenedVenueSeat } from "@/lib/seating/venue-map-geometry"
 import {
+  zoneCanvasCentroid,
   zoneIdFromClientPoint,
   zoneIdFromEventTarget,
 } from "@/lib/seating/venue-polygon"
@@ -81,6 +82,9 @@ export function InteractiveSeatingCanvas({
   disableIdlePrompt = false,
   selectedZoneId = null,
   onSelectZone,
+  unavailableZoneIds = [],
+  silentHover = false,
+  hideChrome = false,
 }: {
   map: InteractiveVenueMap
   occupancyBySeatId?: Record<string, SeatStatus>
@@ -92,10 +96,13 @@ export function InteractiveSeatingCanvas({
   disableIdlePrompt?: boolean
   selectedZoneId?: string | null
   onSelectZone?: (zone: VenueMapZone) => void
+  unavailableZoneIds?: string[]
+  silentHover?: boolean
+  hideChrome?: boolean
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const worldRef = useRef<SVGGElement>(null)
-  const lastActivity = useRef(Date.now())
+  const lastActivity = useRef(0)
   const pointers = useRef(new Map<number, { x: number; y: number }>())
   const gesture = useRef({
     panX: 0,
@@ -166,7 +173,6 @@ export function InteractiveSeatingCanvas({
 
   useEffect(() => {
     if (disableIdlePrompt || selectedSeats.length === 0) {
-      setIdleOpen(false)
       return
     }
     lastActivity.current = Date.now()
@@ -229,6 +235,15 @@ export function InteractiveSeatingCanvas({
     vibrateTap()
     markActivity()
     setSelectedSeats([])
+    const center = zoneCanvasCentroid(zone)
+    const nextZoom = 1.5
+    const nextPan = {
+      x: VIEW.width / 2 - center.x * nextZoom,
+      y: VIEW.height / 2 - center.y * nextZoom,
+    }
+    applyWorld(nextPan.x, nextPan.y, nextZoom)
+    setZoom(nextZoom)
+    setPan(nextPan)
     onSelectZone(zone)
   }
 
@@ -443,9 +458,10 @@ export function InteractiveSeatingCanvas({
   const mapArea = (
       <div
         className={cn(
-          "relative min-h-0 min-w-0 flex-1 md:w-[70%]",
+          "relative min-h-0 min-w-0 flex-1",
+          hideChrome ? "md:w-full" : "md:w-[70%]",
         fillParent
-          ? selectedZoneId
+          ? selectedZoneId || hideChrome
             ? "pb-2 md:pb-14"
             : "pb-[4.75rem] md:pb-14"
           : "pb-[11.5rem] md:pb-14",
@@ -575,6 +591,7 @@ export function InteractiveSeatingCanvas({
             <VenueMapZoneLayer
               zones={map.zones ?? []}
               selectedId={selectedZoneId}
+              unavailableIds={unavailableZoneIds}
               selectOnPointerUp
               onSelect={
                 onSelectZone
@@ -635,6 +652,7 @@ export function InteractiveSeatingCanvas({
                       toggleSeat(seat)
                     }}
                     onPointerEnter={(event) => {
+                      if (silentHover) return
                       const box = wrapRef.current?.getBoundingClientRect()
                       if (!box) return
                       setHover({
@@ -643,7 +661,9 @@ export function InteractiveSeatingCanvas({
                         text: label,
                       })
                     }}
-                    onPointerLeave={() => setHover(null)}
+                    onPointerLeave={() => {
+                      if (!silentHover) setHover(null)
+                    }}
                   />
                   {seat.source === "sector" ? (
                     <TheatreSeatSymbol
@@ -675,7 +695,7 @@ export function InteractiveSeatingCanvas({
         </svg>
       </div>
 
-      {hover ? (
+      {hover && !silentHover ? (
         <div
           className="pointer-events-none absolute z-30 max-w-[min(90%,18rem)] rounded-2xl border border-white/15 bg-zinc-900/95 px-4 py-3 text-base font-semibold leading-snug text-white shadow-2xl"
           style={{ left: Math.min(hover.x + 12, wrapWidth - 12), top: hover.y + 16 }}
@@ -684,6 +704,7 @@ export function InteractiveSeatingCanvas({
         </div>
       ) : null}
 
+      {hideChrome ? null : (
       <div
         className={cn(
           "absolute inset-x-0 z-20 hidden px-3 md:bottom-3 md:block",
@@ -705,6 +726,7 @@ export function InteractiveSeatingCanvas({
           </span>
         </div>
       </div>
+      )}
     </div>
   )
 
@@ -720,8 +742,9 @@ export function InteractiveSeatingCanvas({
       )}
     >
       {mapArea}
-      {panel}
+      {hideChrome ? null : panel}
 
+      {hideChrome ? null : (
       <div
         className={cn(
           "absolute inset-x-0 bottom-0 z-30 border-t border-white/10 bg-black/90 px-3 py-2.5 backdrop-blur-xl md:hidden pb-[max(0.65rem,env(safe-area-inset-bottom))]",
@@ -753,6 +776,7 @@ export function InteractiveSeatingCanvas({
           </Button>
         </div>
       </div>
+      )}
     </div>
   )
 
@@ -760,7 +784,7 @@ export function InteractiveSeatingCanvas({
     <>
       {shell}
       <Dialog
-        open={idleOpen}
+        open={idleOpen && selectedSeats.length > 0 && !disableIdlePrompt}
         onOpenChange={(open) => {
           setIdleOpen(open)
           if (!open) markActivity()

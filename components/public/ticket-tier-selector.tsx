@@ -32,6 +32,7 @@ export type TicketSelectorTier = {
   name: string
   price: number
   available: number
+  capacity?: number
   bonusReward?: string | null
   dayId?: string | null
   layoutType: "general" | "table_combo" | "numbered_seat"

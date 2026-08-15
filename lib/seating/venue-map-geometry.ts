@@ -460,6 +460,18 @@ export function venueMapHasInventory(map: InteractiveVenueMap | null | undefined
   )
 }
 
+/** Plano público: zonas, butacas, mesas o imagen de fondo del studio. */
+export function hasInteractiveVenueMap(
+  map: InteractiveVenueMap | null | undefined,
+): boolean {
+  if (!map) return false
+  if (venueMapHasInventory(map)) return true
+  if (typeof map.backgroundImage === "string" && map.backgroundImage.trim()) {
+    return true
+  }
+  return (map.elements?.length ?? 0) > 0
+}
+
 export function venueMapStudioStatus(map: InteractiveVenueMap | null | undefined): string {
   if (!map || !venueMapHasInventory(map)) return "Sin mapa configurado"
   const elements = map.elements ?? []

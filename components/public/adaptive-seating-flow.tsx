@@ -58,6 +58,10 @@ type AdaptiveSeatingFlowProps = {
   embedded?: boolean
   preview?: boolean
   takeover?: boolean
+  immersive?: boolean
+  selectedZoneId?: string | null
+  unavailableZoneIds?: string[]
+  onSelectZone?: (zone: VenueMapZone) => void
   onBack?: () => void
   onContinue?: (selection: UniversalSeatSelection) => void
   onLoadSectorUnits?: (sectorId: string) => Promise<EventSeatingUnit[]>
@@ -73,11 +77,44 @@ export function AdaptiveSeatingFlow({
   embedded = false,
   preview = false,
   takeover = false,
+  immersive = false,
+  selectedZoneId = null,
+  unavailableZoneIds = [],
+  onSelectZone,
   onBack,
   onContinue,
   onLoadSectorUnits,
   onLoadAllUnits,
 }: AdaptiveSeatingFlowProps) {
+  if (immersive && venueMap) {
+    return (
+      <InteractiveSeatingCanvas
+        map={venueMap}
+        fillParent
+        disableIdlePrompt
+        silentHover
+        hideChrome
+        selectedZoneId={selectedZoneId}
+        unavailableZoneIds={unavailableZoneIds}
+        onSelectZone={(zone) => onSelectZone?.(zone)}
+        onContinue={(seats) => {
+          const seat = seats[0]
+          if (!seat) return
+          onContinue?.({
+            kind: "numbered",
+            sectorId: seat.sectorId,
+            sectorName: seat.sectorName,
+            color: seat.color,
+            unitPrice: seat.price,
+            groupId: `${seat.sectorId}-row-${seat.row}`,
+            groupName: `Fila ${seat.row}`,
+            seats: [{ id: seat.id, label: `${seat.row}-${seat.number}` }],
+          })
+        }}
+      />
+    )
+  }
+
   if (!hasParametricZones(venueMap) || !venueMap) {
     return (
       <UniversalSeatSelectionFlow
@@ -175,8 +212,11 @@ function MacroSeatingFlow({
   const zoneLayoutType = zone?.layoutType ?? null
   const loadSectorUnitsRef = useRef(onLoadSectorUnits)
   const zoneRef = useRef(zone)
-  loadSectorUnitsRef.current = onLoadSectorUnits
-  zoneRef.current = zone
+
+  useEffect(() => {
+    loadSectorUnitsRef.current = onLoadSectorUnits
+    zoneRef.current = zone
+  }, [onLoadSectorUnits, zone])
 
   useEffect(() => {
     const load = loadSectorUnitsRef.current
@@ -205,15 +245,7 @@ function MacroSeatingFlow({
   }, [map, preview, showMicro])
 
   useEffect(() => {
-    if (!zoneId) {
-      setInventoryState((current) => (current === "ready" ? current : "ready"))
-      return
-    }
-    if (zoneLayoutType === "general" || preview) {
-      setInventoryState((current) => (current === "ready" ? current : "ready"))
-      setOccupancy((current) =>
-        Object.keys(current).length === 0 ? current : {},
-      )
+    if (!zoneId || zoneLayoutType === "general" || preview) {
       return
     }
     const load = loadSectorUnitsRef.current
@@ -247,6 +279,11 @@ function MacroSeatingFlow({
     }
   }, [preview, zoneId, zoneLayoutType])
 
+  const resolvedInventoryState =
+    !zoneId || zoneLayoutType === "general" || preview
+      ? "ready"
+      : inventoryState
+
   const selection = useMemo<UniversalSeatSelection | null>(() => {
     if (!zone) return null
     if (zone.layoutType === "general") {
@@ -263,7 +300,7 @@ function MacroSeatingFlow({
       !selectedItem ||
       selectedItem.status !== "available" ||
       !selectedItem.seatingUnitId ||
-      inventoryState !== "ready"
+      resolvedInventoryState !== "ready"
     ) {
       return null
     }
@@ -283,13 +320,13 @@ function MacroSeatingFlow({
         },
       ],
     }
-  }, [inventoryState, quantity, selectedItem, unitPrice, zone])
+  }, [resolvedInventoryState, quantity, selectedItem, unitPrice, zone])
 
   const canContinue =
     Boolean(selection) &&
-    inventoryState !== "loading" &&
-    inventoryState !== "unmaterialized" &&
-    inventoryState !== "error"
+    resolvedInventoryState !== "loading" &&
+    resolvedInventoryState !== "unmaterialized" &&
+    resolvedInventoryState !== "error"
 
   function handleSelectZone(next: VenueMapZone) {
     setZoneId(next.id)
@@ -591,7 +628,7 @@ function MacroSeatingFlow({
                 ) : (
                   <ParametricZonePanel
                     zone={zone}
-                    inventoryState={preview ? "ready" : inventoryState}
+                    inventoryState={preview ? "ready" : resolvedInventoryState}
                     occupancy={occupancy}
                     selectedId={selectedItem?.id ?? null}
                     pending={pending}

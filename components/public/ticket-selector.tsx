@@ -1,10 +1,13 @@
 "use client"
 
 import {
+  ChevronLeft,
   LoaderCircle,
   Ticket,
   UserRound,
 } from "lucide-react"
+import { AnimatePresence, motion } from "motion/react"
+import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import {
   useCallback,
@@ -32,11 +35,12 @@ import { validatePromoCode } from "@/app/actions/coupons"
 import {
   getEventSeatingAvailability,
   getEventSeatingUnitsForSector,
+  getPublicEventVenueMap,
 } from "@/app/actions/public-events"
-import { AdaptiveSeatingFlow } from "@/components/public/adaptive-seating-flow"
 import { CheckoutBuyerFields } from "@/components/public/checkout-buyer-fields"
 import { CheckoutCountdown } from "@/components/public/checkout-countdown"
 import { CheckoutFloatingBar } from "@/components/public/checkout-floating-bar"
+import { ImmersiveCheckoutShell } from "@/components/public/immersive-checkout-shell"
 import { CheckoutIdentityDialog } from "@/components/public/checkout-identity-dialog"
 import {
   EventCheckoutSelector,
@@ -49,7 +53,6 @@ import {
 import { PromoCodeInput } from "@/components/public/promo-code-input"
 import type { TicketSelectorTier } from "@/components/public/ticket-tier-selector"
 import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
 import { useLockBodyScroll } from "@/hooks/use-lock-body-scroll"
 import {
   trackAddToCart,
@@ -71,7 +74,6 @@ import {
   firstCheckoutBuyerErrorField,
   onValidationError,
 } from "@/lib/checkout/validation-scroll"
-import { formatCurrency } from "@/lib/format"
 import {
   applyPhaseRolloverToPhases,
   PHASE_ROLLOVER_MESSAGE,
@@ -91,11 +93,14 @@ import {
   buildUniversalSeatPayloadForCheckout,
   resolveTierIdForUniversalSector,
 } from "@/lib/seating/venue-adapter"
-import { venueMapToSeatingLayout } from "@/lib/seating/venue-map-geometry"
+import {
+  hasInteractiveVenueMap,
+  venueMapToSeatingLayout,
+} from "@/lib/seating/venue-map-geometry"
 import { publicEventLoginPath } from "@/lib/seo/site"
 import { useCheckoutIntentStore } from "@/lib/stores/checkout-intent-store"
 import type { ScheduleDay } from "@/types/events"
-import type { InteractiveVenueMap } from "@/types/venue-map"
+import type { InteractiveVenueMap, VenueMapZone } from "@/types/venue-map"
 import type {
   EventSeatingUnit,
   SeatingSectorSummary,
@@ -103,6 +108,31 @@ import type {
 } from "@/types/venues"
 
 export type { TicketSelectorTier }
+
+const AdaptiveSeatingFlow = dynamic(
+  () =>
+    import("@/components/public/adaptive-seating-flow").then(
+      (mod) => mod.AdaptiveSeatingFlow,
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-dvh w-screen flex-col bg-zinc-950">
+        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+          <div className="h-4 w-32 animate-pulse rounded bg-white/10" />
+          <div className="h-8 w-8 animate-pulse rounded-full bg-white/10" />
+        </div>
+        <div className="flex flex-1 items-center justify-center">
+          <LoaderCircle
+            className="size-8 animate-spin text-white/40"
+            aria-hidden="true"
+          />
+          <span className="sr-only">Cargando mapa del recinto</span>
+        </div>
+      </div>
+    ),
+  },
+)
 
 type TicketSelectorProps = {
   eventId: string
@@ -119,6 +149,7 @@ type TicketSelectorProps = {
   seatingSectorSummaries?: SeatingSectorSummary[]
   seatingBackgroundUrl?: string | null
   venueMap?: InteractiveVenueMap | null
+  hasInteractiveMap?: boolean
   seatingLayout?: VenueSeatingLayout
   venueId?: string | null
   venueName?: string | null
@@ -164,12 +195,12 @@ export function TicketSelector({
   currentUserId = null,
   initialBuyer = null,
   tiers,
-  scheduleDays = [],
   referralCode = null,
   seatingUnits = [],
   seatingSectorSummaries = [],
   seatingBackgroundUrl = null,
   venueMap = null,
+  hasInteractiveMap: hasInteractiveMapProp = false,
   seatingLayout = [],
   venueId = null,
   venueName = null,
@@ -184,7 +215,7 @@ export function TicketSelector({
   const [isPending, startTransition] = useTransition()
   const controlsLocked = isPending || purchaseLocked
   const [showSeatFlow, setShowSeatFlow] = useState(false)
-  const [portalReady, setPortalReady] = useState(false)
+  const portalReady = typeof document !== "undefined"
   const [identityOpen, setIdentityOpen] = useState(false)
   const checkoutMode = useCheckoutIntentStore((state) => state.mode)
   const checkoutIsGuest = useCheckoutIntentStore((state) => state.isGuest)
@@ -193,6 +224,16 @@ export function TicketSelector({
   )
   const [showUpsell, setShowUpsell] = useState(false)
   const [upsellSkipped, setUpsellSkipped] = useState(false)
+  const [checkoutStep, setCheckoutStep] = useState<"select" | "pay">("select")
+  const [focusedZoneId, setFocusedZoneId] = useState<string | null>(null)
+  const [focusedTierId, setFocusedTierId] = useState<string | null>(null)
+  const [fieldShake, setFieldShake] = useState(0)
+  const [fetchedMap, setFetchedMap] = useState<InteractiveVenueMap | null>(null)
+  const [mapFetchDone, setMapFetchDone] = useState(
+    hasInteractiveVenueMap(venueMap),
+  )
+  const liveMap = hasInteractiveVenueMap(venueMap) ? venueMap : fetchedMap
+  const mapLoading = !hasInteractiveVenueMap(liveMap) && !mapFetchDone
   const [loadedUnitsBySector, setLoadedUnitsBySector] = useState<
     Record<string, EventSeatingUnit[]>
   >({})
@@ -243,8 +284,17 @@ export function TicketSelector({
   const [intentRestored, setIntentRestored] = useState(false)
 
   useEffect(() => {
-    setPortalReady(true)
-  }, [])
+    if (hasInteractiveVenueMap(venueMap)) return
+    let cancelled = false
+    void getPublicEventVenueMap(eventId).then((map) => {
+      if (cancelled) return
+      if (map) setFetchedMap(map)
+      setMapFetchDone(true)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [eventId, venueMap])
 
   useEffect(() => {
     function restoreIntent() {
@@ -310,6 +360,7 @@ export function TicketSelector({
       return
     }
     return useCheckoutIntentStore.persist.onFinishHydration(restoreIntent)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot cart restore
   }, [currentUserId, eventId, tiers])
 
   function enterPaymentHold(result: {
@@ -366,12 +417,6 @@ export function TicketSelector({
     router.push(loginHref)
   }
 
-  function scrollToTickets() {
-    document
-      .getElementById("tickets")
-      ?.scrollIntoView({ behavior: "smooth", block: "start" })
-  }
-
   function returnToCheckout() {
     setShowSeatFlow(false)
     window.setTimeout(() => {
@@ -389,6 +434,7 @@ export function TicketSelector({
     if (action === "open_map") {
       setShowSeatFlow(true)
     } else if (action === "pay") {
+      setCheckoutStep("pay")
       window.setTimeout(() => {
         document
           .getElementById("checkout-complete")
@@ -398,24 +444,53 @@ export function TicketSelector({
     void ensureGuestCheckoutSession()
   }
 
+  const hasInteractiveMap =
+    hasInteractiveMapProp || hasInteractiveVenueMap(liveMap)
+  const immersiveMap = hasInteractiveMap
+
+  const soldOutZoneIds = useMemo(() => {
+    const zones = liveMap?.zones ?? []
+    if (zones.length === 0) return []
+    const tierRefs = displayTiers.map((tier) => ({
+      id: tier.id,
+      name: tier.name,
+      price: tier.price,
+      available: tier.available,
+      seatingSectorId: tier.seatingSectorId,
+      layoutType: tier.layoutType,
+    }))
+    return zones
+      .filter((zone) => {
+        const tierId = resolveTierIdForUniversalSector(
+          zone.id,
+          zone.name,
+          tierRefs,
+        )
+        const tier = displayTiers.find((item) => item.id === tierId)
+        const summary = seatingSectorSummaries.find(
+          (row) => row.sectorId === zone.id || row.sectorName === zone.name,
+        )
+        const available = tier?.available ?? summary?.available
+        return available != null && available <= 0
+      })
+      .map((zone) => zone.id)
+  }, [displayTiers, liveMap?.zones, seatingSectorSummaries])
+
   const hasSeatingFlow =
     seatingSectorSummaries.length > 0 ||
     seatingUnits.length > 0 ||
     seatingLayout.length > 0 ||
-    (venueMap?.zones?.length ?? 0) > 0 ||
-    (venueMap?.elements?.length ?? 0) > 0 ||
-    (venueMap?.sectors.length ?? 0) > 0 ||
     tiers.some((tier) => tier.layoutType !== "general")
 
-  const seatingRenderMode = resolveVenueRenderMode(venueMap)
+  const seatingRenderMode = resolveVenueRenderMode(liveMap)
   const resolvedSeatingLayout = useMemo(() => {
     if (seatingLayout.length > 0) return seatingLayout
-    if (!venueMap) return []
-    if (hasParametricZones(venueMap)) {
-      return venueMapToSeatingLayout({ ...venueMap, zones: [] })
+    if (!liveMap) return []
+    if (hasParametricZones(liveMap)) {
+      return venueMapToSeatingLayout({ ...liveMap, zones: [] })
     }
-    return venueMapToSeatingLayout(venueMap)
-  }, [seatingLayout, venueMap])
+    return venueMapToSeatingLayout(liveMap)
+  }, [seatingLayout, liveMap])
 
   const mergedSeatingUnits = useMemo(() => {
     const byId = new Map<string, EventSeatingUnit>()
@@ -515,11 +590,7 @@ export function TicketSelector({
     ? Math.min(appliedPromo.discountAmount, cartSubtotal)
     : 0
   const totalAmount = roundMoney(Math.max(0, cartSubtotal - discountAmount))
-  const startingPrice =
-    displayTiers.length > 0
-      ? Math.min(...displayTiers.map((tier) => tier.price))
-      : null
-
+  const visibleStep = totalTickets > 0 ? checkoutStep : "select"
   useEffect(() => {
     if (!intentRestored) return
     if (totalTickets <= 0) {
@@ -748,8 +819,54 @@ export function TicketSelector({
     })
   }
 
+  function goToPaymentStep() {
+    if ((selection.length === 0 && !selectedSeat) || controlsLocked) return
+    if (hasPendingAddonUpsell() && !upsellSkipped) {
+      setShowUpsell(true)
+      return
+    }
+    if (!identityReady) {
+      useCheckoutIntentStore.getState().chooseGuest(eventId, eventSlug)
+      void ensureGuestCheckoutSession()
+    }
+    setCheckoutStep("pay")
+  }
+
+  function handleImmersiveZoneSelect(zone: VenueMapZone) {
+    if (purchaseLocked || soldOutZoneIds.includes(zone.id)) return
+    setFocusedZoneId(zone.id)
+    const tierId = resolveTierIdForUniversalSector(
+      zone.id,
+      zone.name,
+      displayTiers.map((tier) => ({
+        id: tier.id,
+        name: tier.name,
+        price: tier.price,
+        available: tier.available,
+        seatingSectorId: tier.seatingSectorId,
+        layoutType: tier.layoutType,
+      })),
+    )
+    if (!tierId) return
+    const tier = displayTiers.find((item) => item.id === tierId)
+    if (!tier || tier.available <= 0) return
+    setFocusedTierId(tierId)
+    if ((quantities[tierId] ?? 0) === 0) {
+      updateQuantity(
+        tierId,
+        1,
+        Math.min(MAX_TICKETS_PER_PURCHASE, Math.max(0, tier.available)),
+      )
+      ensureCartHoldClock()
+    }
+  }
+
   function handleReserve() {
     if ((selection.length === 0 && !selectedSeat) || controlsLocked) return
+    if (visibleStep !== "pay") {
+      goToPaymentStep()
+      return
+    }
     if (!identityReady) {
       requestIdentity("pay")
       return
@@ -763,6 +880,7 @@ export function TicketSelector({
         submitCheckout(undefined, false, values)
       },
       (formErrors) => {
+        setFieldShake((current) => current + 1)
         onValidationError(firstCheckoutBuyerErrorField(formErrors))
       },
     )()
@@ -781,6 +899,7 @@ export function TicketSelector({
         submitCheckout(undefined, true, values)
       },
       (formErrors) => {
+        setFieldShake((current) => current + 1)
         onValidationError(firstCheckoutBuyerErrorField(formErrors))
       },
     )()
@@ -789,11 +908,16 @@ export function TicketSelector({
   function openSeatFlow() {
     if (purchaseLocked) return
     const canOpen =
+      hasInteractiveVenueMap(liveMap) ||
+      Boolean(seatingBackgroundUrl?.trim()) ||
       (universalPayload?.sectors.length ?? 0) > 0 ||
-      (venueMap?.zones?.length ?? 0) > 0 ||
       resolvedSeatingLayout.length > 0
     if (!canOpen) {
-      toast.error("No hay ubicaciones configuradas para este evento.")
+      toast.error(
+        mapLoading
+          ? "El mapa se está cargando. Probá de nuevo en un instante."
+          : "No hay ubicaciones configuradas para este evento.",
+      )
       return
     }
     persistCheckoutCart()
@@ -819,7 +943,10 @@ export function TicketSelector({
     router.refresh()
   }
 
-  function handleUniversalContinue(selectionPayload: UniversalSeatSelection) {
+  function handleUniversalContinue(
+    selectionPayload: UniversalSeatSelection,
+    options?: { keepOpen?: boolean },
+  ) {
     if (purchaseLocked) return
 
     if (selectionPayload.kind === "general") {
@@ -846,7 +973,9 @@ export function TicketSelector({
         Math.min(MAX_TICKETS_PER_PURCHASE, Math.max(0, tier?.available ?? 0)),
       )
       ensureCartHoldClock()
-      returnToCheckout()
+      setFocusedZoneId(selectionPayload.sectorId)
+      setFocusedTierId(tierId)
+      if (!options?.keepOpen && !immersiveMap) returnToCheckout()
       return
     }
 
@@ -895,7 +1024,9 @@ export function TicketSelector({
         price: selectionPayload.unitPrice,
       })
       useCheckoutIntentStore.getState().setHoldExpiresAt(hold.reservedUntil)
-      returnToCheckout()
+      setFocusedZoneId(selectionPayload.sectorId)
+      setFocusedTierId(unit.tierId)
+      if (!options?.keepOpen && !immersiveMap) returnToCheckout()
     }
 
     const cached =
@@ -979,7 +1110,7 @@ export function TicketSelector({
   }, [eventId])
 
   const seatFlowOverlay =
-    showSeatFlow ? (
+    showSeatFlow && !immersiveMap ? (
       <div className="fixed inset-0 z-[80] flex h-dvh w-screen flex-col overflow-hidden overscroll-none bg-zinc-950">
         <AdaptiveSeatingFlow
           takeover
@@ -988,7 +1119,7 @@ export function TicketSelector({
           mapImageUrl={
             universalPayload?.mapImageUrl ?? seatingBackgroundUrl ?? null
           }
-          venueMap={venueMap}
+          venueMap={liveMap}
           sectors={universalPayload?.sectors ?? []}
           onBack={() => setShowSeatFlow(false)}
           onContinue={handleUniversalContinue}
@@ -1009,6 +1140,170 @@ export function TicketSelector({
     )
   }
 
+  const checkoutPanel = (
+    <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
+      <div className="flex shrink-0 items-start justify-between gap-3 px-4 pt-4 sm:px-5">
+        <div className="min-w-0">
+          {visibleStep === "pay" ? (
+            <button
+              type="button"
+              onClick={() => setCheckoutStep("select")}
+              className="mb-2 inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="Volver a la selección"
+            >
+              <ChevronLeft className="size-4" aria-hidden="true" />
+            </button>
+          ) : null}
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            {visibleStep === "pay" ? "Pago" : "Entradas"}
+          </p>
+          <h2 className="mt-1 text-lg font-bold tracking-tight text-foreground">
+            {visibleStep === "pay" ? "Tus datos" : "Elegí tu experiencia"}
+          </h2>
+        </div>
+        {visibleStep === "select" ? (
+          <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground ring-1 ring-border">
+            Máx. {MAX_TICKETS_PER_PURCHASE}
+          </span>
+        ) : null}
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 sm:px-5">
+        <AnimatePresence mode="wait" initial={false}>
+          {visibleStep === "select" ? (
+            <motion.div
+              key="select"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.28, ease: "easeInOut" }}
+            >
+              <EventCheckoutSelector
+                tiers={displayTiers}
+                quantities={quantities}
+                isPending={controlsLocked}
+                hasSeatingFlow={hasSeatingFlow}
+                hasInteractiveMap={hasInteractiveMap}
+                mapEmbedded={immersiveMap}
+                focusedTierId={focusedTierId}
+                mapLoading={
+                  mapLoading &&
+                  !hasInteractiveVenueMap(liveMap) &&
+                  !seatingBackgroundUrl?.trim() &&
+                  resolvedSeatingLayout.length === 0 &&
+                  (universalPayload?.sectors.length ?? 0) === 0
+                }
+                seatingRenderMode={seatingRenderMode}
+                selectedSeat={selectedSeat}
+                showUpsell={showUpsell}
+                defaultTicketTab={defaultTicketTab}
+                onQuantityChange={updateQuantity}
+                onOpenSeatFlow={openSeatFlow}
+                onPurchaseIntent={goToPaymentStep}
+                onClearSeat={() => {
+                  const seat = selectedSeat
+                  setSelectedSeat(null)
+                  if (seat) {
+                    void releaseSeatingUnitCartHold(eventId, seat.seatingUnitId)
+                  }
+                }}
+                onAddUpsell={(tierId) => {
+                  const addon = displayTiers.find((tier) => tier.id === tierId)
+                  updateQuantity(tierId, 1, addon?.available ?? 1)
+                  setShowUpsell(false)
+                  setUpsellSkipped(true)
+                  goToPaymentStep()
+                }}
+                onSkipUpsell={() => {
+                  setShowUpsell(false)
+                  setUpsellSkipped(true)
+                  goToPaymentStep()
+                }}
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="pay"
+              id="checkout-complete"
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.28, ease: "easeInOut" }}
+              className="space-y-4 pt-2"
+            >
+              {holdExpiresAt ? (
+                <CheckoutCountdown
+                  variant="cart"
+                  expiresAt={holdExpiresAt}
+                  onExpired={handleHoldExpired}
+                />
+              ) : null}
+
+              <PromoCodeInput
+                eventId={eventId}
+                cartSubtotal={cartSubtotal}
+                applied={appliedPromo}
+                onApplied={setAppliedPromo}
+                onCleared={() => setAppliedPromo(null)}
+                disabled={controlsLocked || cartSubtotal <= 0}
+              />
+
+              {guestCheckout ? (
+                <p className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <UserRound
+                    className="mt-0.5 size-4 shrink-0"
+                    aria-hidden="true"
+                  />
+                  Completá nombre, DNI, teléfono y email para emitir la entrada.
+                </p>
+              ) : null}
+
+              <PaymentMethodSelector
+                selectedProvider={selectedProvider}
+                onSelectProvider={setSelectedProvider}
+                disabled={controlsLocked}
+              />
+
+              <div id="checkout-buyer">
+                <CheckoutBuyerFields
+                  value={buyer}
+                  errors={buyerForm.formState.errors}
+                  shakeSignal={fieldShake}
+                  onChange={(next) => {
+                    setBuyer(next)
+                    buyerForm.reset(next)
+                  }}
+                  disabled={controlsLocked}
+                />
+              </div>
+
+              {sandboxEligible ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={controlsLocked}
+                  onClick={handleSandboxReserve}
+                  className="w-full border-dashed text-muted-foreground hover:text-foreground"
+                >
+                  Compra de prueba (modo test)
+                </Button>
+              ) : null}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      <CheckoutFloatingBar
+        variant="panel"
+        itemCount={totalTickets}
+        subtotal={totalAmount}
+        pending={isPending}
+        locked={purchaseLocked}
+        onPay={handleReserve}
+      />
+    </div>
+  )
+
   return (
     <>
       {portalReady && seatFlowOverlay
@@ -1023,218 +1318,50 @@ export function TicketSelector({
         onLogin={goToLogin}
         onGuest={continueAsGuest}
       />
-      <div className="rounded-3xl border border-border bg-card p-5 text-card-foreground shadow-2xl shadow-black/40 sm:p-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-400/90">
-            Entradas
-          </p>
-          <h2 className="mt-1 text-xl font-bold tracking-tight text-foreground">
-            Elegí tu experiencia
-          </h2>
-        </div>
-        <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground ring-1 ring-border">
-          Máx. {MAX_TICKETS_PER_PURCHASE} por compra
-        </span>
-      </div>
-
-      <EventCheckoutSelector
-        tiers={displayTiers}
-        quantities={quantities}
-        isPending={controlsLocked}
-        hasSeatingFlow={hasSeatingFlow}
-        seatingRenderMode={seatingRenderMode}
-        selectedSeat={selectedSeat}
-        showUpsell={showUpsell}
-        defaultTicketTab={defaultTicketTab}
-        onQuantityChange={updateQuantity}
-        onOpenSeatFlow={openSeatFlow}
-        onPurchaseIntent={() => {
-          if (!identityReady) requestIdentity("pay")
-        }}
-        onClearSeat={() => {
-          const seat = selectedSeat
-          setSelectedSeat(null)
-          if (seat) void releaseSeatingUnitCartHold(eventId, seat.seatingUnitId)
-        }}
-          onAddUpsell={(tierId) => {
-          const addon = displayTiers.find((tier) => tier.id === tierId)
-          updateQuantity(tierId, 1, addon?.available ?? 1)
-          setShowUpsell(false)
-          setUpsellSkipped(true)
-          void buyerForm.handleSubmit(
-            (values) => submitCheckout(tierId, false, values),
-            (formErrors) => {
-              onValidationError(firstCheckoutBuyerErrorField(formErrors))
-            },
-          )()
-        }}
-        onSkipUpsell={() => {
-          setShowUpsell(false)
-          setUpsellSkipped(true)
-          void buyerForm.handleSubmit(
-            (values) => submitCheckout(undefined, false, values),
-            (formErrors) => {
-              onValidationError(firstCheckoutBuyerErrorField(formErrors))
-            },
-          )()
-        }}
-      />
-
-      {totalTickets > 0 ? (
-        <div id="checkout-complete">
-          {holdExpiresAt ? (
-            <CheckoutCountdown
-              variant="cart"
-              expiresAt={holdExpiresAt}
-              onExpired={handleHoldExpired}
-              className="mt-5"
-            />
-          ) : null}
-
-          <Separator className="my-5 bg-border" />
-
-          <PromoCodeInput
-            eventId={eventId}
-            cartSubtotal={cartSubtotal}
-            applied={appliedPromo}
-            onApplied={setAppliedPromo}
-            onCleared={() => setAppliedPromo(null)}
-            disabled={controlsLocked || cartSubtotal <= 0}
-          />
-
-          <Separator className="my-5 bg-border" />
-
-          <div className="space-y-5 rounded-2xl border border-border bg-muted/20 p-4">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
-                Confirmá tu compra
-              </p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Medio de pago y tus datos. Último paso antes de la orden
-                pendiente.
-              </p>
-            </div>
-
-            {guestCheckout ? (
-              <p className="flex items-start gap-2 rounded-xl border border-border bg-background/70 px-3 py-2.5 text-sm text-muted-foreground">
-                <UserRound
-                  className="mt-0.5 size-4 shrink-0 text-emerald-500"
-                  aria-hidden="true"
-                />
-                Comprás como invitado. Completá nombre, DNI y teléfono para
-                emitir la entrada.
-              </p>
-            ) : null}
-
-            <PaymentMethodSelector
-              selectedProvider={selectedProvider}
-              onSelectProvider={setSelectedProvider}
-              disabled={controlsLocked}
-            />
-
-            <div id="checkout-buyer">
-              <CheckoutBuyerFields
-                value={buyer}
-                errors={buyerForm.formState.errors}
-                onChange={(next) => {
-                  setBuyer(next)
-                  buyerForm.reset(next)
-                }}
-                disabled={controlsLocked}
+      {immersiveMap ? (
+        <ImmersiveCheckoutShell
+          paying={visibleStep === "pay"}
+          onDismissPay={() => setCheckoutStep("select")}
+          map={
+            liveMap ? (
+              <AdaptiveSeatingFlow
+                immersive
+                pending={controlsLocked}
+                eventTitle={eventTitle}
+                venueMap={liveMap}
+                selectedZoneId={focusedZoneId}
+                unavailableZoneIds={soldOutZoneIds}
+                sectors={universalPayload?.sectors ?? []}
+                onSelectZone={handleImmersiveZoneSelect}
+                onContinue={(payload) =>
+                  handleUniversalContinue(payload, { keepOpen: true })
+                }
+                onLoadSectorUnits={loadSectorUnits}
+                onLoadAllUnits={loadAllUnits}
               />
-            </div>
-          </div>
-
-          <Separator className="my-5 bg-border" />
-
-          <div className="rounded-2xl border border-border bg-muted/30 p-4">
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
-              Resumen
-            </p>
-            <div className="mt-3 space-y-2 text-base">
-              <div className="flex items-center justify-between text-muted-foreground">
-                <span>Entradas · {totalTickets}</span>
-                <span className="tabular-nums text-foreground">
-                  {formatCurrency(ticketsSubtotal)}
-                </span>
-              </div>
-              {appliedPromo && discountAmount > 0 ? (
-                <div className="flex items-center justify-between text-emerald-400">
-                  <span>Descuento ({appliedPromo.code})</span>
-                  <span className="tabular-nums">
-                    −{formatCurrency(discountAmount)}
-                  </span>
-                </div>
-              ) : null}
-              <div className="border-t border-border pt-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-foreground">Total</span>
-                  <span className="text-2xl font-black tracking-tight text-foreground tabular-nums">
-                    {formatCurrency(totalAmount)}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Precio final. Sin cargos ocultos.
-            </p>
-          </div>
-
-          <Button
-            type="button"
-            size="lg"
-            disabled={controlsLocked}
-            onClick={handleReserve}
-            className="mt-5 hidden min-h-12 h-12 w-full rounded-full bg-emerald-500 text-base font-bold text-black shadow-lg shadow-emerald-500/20 hover:bg-emerald-600 disabled:opacity-50 sm:inline-flex"
-          >
-            {isPending ? (
-              <>
-                <LoaderCircle className="animate-spin" aria-hidden="true" />
-                Preparando pago...
-              </>
             ) : (
-              `Pagar ${formatCurrency(totalAmount)}`
-            )}
-          </Button>
-          {sandboxEligible ? (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={controlsLocked}
-              onClick={handleSandboxReserve}
-              className="mt-2 w-full border-dashed text-muted-foreground hover:text-foreground"
-            >
-              Compra de prueba (modo test)
-            </Button>
-          ) : null}
-          <p className="mt-3 hidden text-center text-sm text-muted-foreground sm:block">
-            {sandboxEligible
-              ? "Modo Sandbox disponible para el organizador · sin pasarela."
-              : "Vas a ser redirigido a la pasarela de pago."}
-          </p>
+              <div className="flex h-full items-center justify-center bg-zinc-950 text-sm text-zinc-500">
+                {mapLoading ? (
+                  <>
+                    <LoaderCircle
+                      className="size-8 animate-spin text-white/40"
+                      aria-hidden="true"
+                    />
+                    <span className="sr-only">Cargando mapa del recinto</span>
+                  </>
+                ) : (
+                  "El plano no está disponible."
+                )}
+              </div>
+            )
+          }
+          panel={checkoutPanel}
+        />
+      ) : (
+        <div className="overflow-hidden rounded-3xl border border-border bg-card text-card-foreground shadow-2xl shadow-black/40">
+          {checkoutPanel}
         </div>
-      ) : null}
-
-      {portalReady
-        ? createPortal(
-            <CheckoutFloatingBar
-              eventId={eventId}
-              preferLive={intentRestored}
-              startingPrice={startingPrice}
-              itemCount={totalTickets}
-              subtotal={totalAmount}
-              pending={isPending}
-              locked={purchaseLocked}
-              hidden={showSeatFlow}
-              onChooseTickets={scrollToTickets}
-              onPay={handleReserve}
-            />,
-            document.body,
-          )
-        : null}
-      <div className="h-24 lg:hidden" aria-hidden="true" />
-    </div>
+      )}
     </>
   )
 }

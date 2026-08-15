@@ -23,6 +23,7 @@ export function VenueMapZoneLayer({
   onSelect,
   onContextMenu,
   selectOnPointerUp = false,
+  unavailableIds = [],
 }: {
   zones: VenueMapZone[]
   selectedId?: string | null
@@ -31,6 +32,7 @@ export function VenueMapZoneLayer({
   onSelect?: (zone: VenueMapZone) => void
   onContextMenu?: (event: React.MouseEvent, zone: VenueMapZone) => void
   selectOnPointerUp?: boolean
+  unavailableIds?: string[]
 }) {
   const glowId = useId().replace(/:/g, "")
   const press = useRef<{ x: number; y: number } | null>(null)
@@ -63,7 +65,8 @@ export function VenueMapZoneLayer({
         const points = polygonSvgPoints(zone.polygon)
         const center = zoneCanvasCentroid(zone)
         const selected = zone.id === selectedId
-        const interactive = Boolean(onSelect)
+        const soldOut = unavailableIds.includes(zone.id)
+        const interactive = Boolean(onSelect) && !soldOut
 
         function eventClientPoint(
           event: React.PointerEvent | React.MouseEvent | React.TouchEvent,
@@ -101,7 +104,10 @@ export function VenueMapZoneLayer({
           <g
             key={zone.id}
             data-zone-id={zone.id}
-            className={interactive ? "cursor-pointer" : undefined}
+            className={cn(
+              interactive ? "cursor-pointer" : undefined,
+              soldOut && "pointer-events-none opacity-50",
+            )}
             style={{ pointerEvents: interactive ? "auto" : "none" }}
             onContextMenu={(event) => onContextMenu?.(event, zone)}
             onPointerDown={(event) => {
@@ -130,16 +136,21 @@ export function VenueMapZoneLayer({
             <polygon
               data-zone-id={zone.id}
               points={points}
-              fill={zone.color || "#22d3ee"}
-              stroke={zone.color || "#67e8f9"}
+              fill={soldOut ? "#9ca3af" : zone.color || "#22d3ee"}
+              stroke={soldOut ? "#9ca3af" : zone.color || "#67e8f9"}
               strokeWidth={selected ? 2.8 : 2}
               strokeLinejoin="round"
-              pointerEvents="auto"
-              filter={`url(#zone-neon-${glowId})`}
+              pointerEvents={soldOut ? "none" : "auto"}
+              filter={soldOut ? undefined : `url(#zone-neon-${glowId})`}
               className={cn(
-                selected ? "[fill-opacity:0.4]" : "[fill-opacity:0.28]",
+                "transition-[fill-opacity,opacity] duration-200 ease-in-out",
+                soldOut
+                  ? "[fill-opacity:0.45]"
+                  : selected
+                    ? "[fill-opacity:0.42]"
+                    : "[fill-opacity:0.28]",
                 interactive &&
-                  "cursor-pointer transition-[fill-opacity] duration-150 hover:[fill-opacity:0.75]",
+                  "cursor-pointer hover:[fill-opacity:0.72]",
               )}
             />
             <text
