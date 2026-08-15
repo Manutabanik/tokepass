@@ -1,18 +1,12 @@
 "use client"
 
 import { motion, useMotionValue, useReducedMotion, useTransform, type MotionValue } from "motion/react"
-import {
-  useId,
-  type CSSProperties,
-  type ImgHTMLAttributes,
-  type RefObject,
-} from "react"
+import { useId, type CSSProperties, type RefObject } from "react"
 import { QRCodeSVG } from "qrcode.react"
 
 import { StoryLiquidBackdrop } from "@/components/public/story-liquid-backdrop"
 import { StoryParticles } from "@/components/public/story-particles"
 import { formatEventDay, formatEventTime } from "@/lib/format"
-import { storyImageSrc } from "@/lib/story-image"
 import {
   STORY_CANVAS_HEIGHT,
   STORY_CANVAS_WIDTH,
@@ -27,15 +21,14 @@ import {
 } from "@/lib/story-canvas"
 import { specularFromTilt } from "@/lib/story-tilt"
 
+function storyDataImage(url: string | null | undefined): string | null {
+  const trimmed = url?.trim()
+  if (!trimmed?.startsWith("data:image/")) return null
+  return trimmed
+}
+
 const FONT =
   "var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
-
-function storyImgCors(
-  src: string,
-): Pick<ImgHTMLAttributes<HTMLImageElement>, "crossOrigin"> {
-  if (src.startsWith("data:") || src.startsWith("blob:")) return {}
-  return { crossOrigin: "anonymous" }
-}
 
 function WhiteTokepassMark({ size = 72 }: { size?: number }) {
   return (
@@ -62,6 +55,7 @@ export function StoryCanvas({
   pauseMotion = false,
   rotateX: rotateXProp,
   rotateY: rotateYProp,
+  onPainted,
 }: {
   data: StoryFlyerData
   themeId: StoryThemeId
@@ -71,6 +65,7 @@ export function StoryCanvas({
   pauseMotion?: boolean
   rotateX?: MotionValue<number>
   rotateY?: MotionValue<number>
+  onPainted?: () => void
 }) {
   const gradientId = `story-chrome-${useId().replace(/:/g, "")}`
   const reduceMotion = useReducedMotion()
@@ -87,11 +82,11 @@ export function StoryCanvas({
   })
   const theme = findStoryTheme(themeId)
   const headline = findStoryHeadline(headlineId)
-  const eventImage = storyImageSrc(data.imageUrl)
+  const eventImage = storyDataImage(data.imageUrl)
   const artistName = publicStoryName(data.artistName, "")
-  const artistImage = storyImageSrc(data.artistImageUrl)
+  const artistImage = storyDataImage(data.artistImageUrl)
   const organizerName = publicStoryName(data.organizerName, "Tokepass")
-  const organizerAvatar = storyImageSrc(data.organizerAvatarUrl)
+  const organizerAvatar = storyDataImage(data.organizerAvatarUrl)
   const stampName = artistName || organizerName
   const stampImage = artistName ? artistImage : organizerAvatar
   const stampLabel = artistName
@@ -119,7 +114,6 @@ export function StoryCanvas({
         <img
           src={eventImage}
           alt=""
-          {...storyImgCors(eventImage)}
           style={{
             position: "absolute",
             inset: "-8%",
@@ -151,7 +145,7 @@ export function StoryCanvas({
           zIndex: 1,
           height: "100%",
           boxSizing: "border-box",
-          padding: "88px 72px 64px",
+          padding: "72px 56px 52px",
           display: "flex",
           flexDirection: "column",
         }}
@@ -207,7 +201,8 @@ export function StoryCanvas({
         >
           <motion.div
             style={{
-              width: 760,
+              width: "100%",
+              height: "100%",
               rotateX: reduceMotion ? 0 : rotateX,
               rotateY: reduceMotion ? 0 : rotateY,
               transformPerspective: 1000,
@@ -215,11 +210,11 @@ export function StoryCanvas({
               willChange: "transform",
               position: "relative",
               overflow: "hidden",
-              borderRadius: 36,
-              padding: 18,
-              background: "rgba(255,255,255,0.12)",
-              border: "1px solid rgba(255,255,255,0.22)",
-              boxShadow: theme.ticketShadow,
+              borderRadius: 32,
+              padding: 16,
+              background: "rgba(255,255,255,0.1)",
+              border: "1px solid rgba(255,255,255,0.2)",
+              boxShadow: `${theme.ticketShadow}, 0 24px 80px rgba(168,85,247,0.2)`,
               backdropFilter: "blur(18px)",
               WebkitBackdropFilter: "blur(18px)",
             }}
@@ -229,7 +224,7 @@ export function StoryCanvas({
               style={{
                 position: "absolute",
                 inset: 0,
-                borderRadius: 36,
+                borderRadius: 32,
                 pointerEvents: "none",
                 mixBlendMode: "screen",
                 opacity: 0.85,
@@ -239,10 +234,13 @@ export function StoryCanvas({
             <div
               style={{
                 position: "relative",
-                borderRadius: 28,
+                borderRadius: 24,
                 overflow: "hidden",
-                height: 780,
-                background: "#111113",
+                height: "100%",
+                background: "#09090b",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
               }}
             >
               {eventImage ? (
@@ -250,11 +248,19 @@ export function StoryCanvas({
                 <img
                   src={eventImage}
                   alt=""
-                  {...storyImgCors(eventImage)}
+                  data-story-image="hero"
+                  onLoad={onPainted}
+                  onError={onPainted}
+                  ref={(node) => {
+                    if (!onPainted || !node) return
+                    if (node.complete && node.naturalWidth > 0) {
+                      queueMicrotask(onPainted)
+                    }
+                  }}
                   style={{
                     width: "100%",
                     height: "100%",
-                    objectFit: "cover",
+                    objectFit: "contain",
                     display: "block",
                   }}
                 />
@@ -268,47 +274,42 @@ export function StoryCanvas({
                     color: "#a1a1aa",
                     fontSize: 40,
                     fontWeight: 800,
+                    textAlign: "center",
+                    padding: 32,
                   }}
                 >
                   {data.eventTitle}
                 </div>
               )}
-              <div
-                style={{
-                  position: "absolute",
-                  inset: "auto 0 0",
-                  padding: "72px 28px 28px",
-                  background:
-                    "linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.82) 70%)",
-                }}
-              >
-                <p
-                  style={{
-                    margin: 0,
-                    fontSize: 42,
-                    lineHeight: 1.08,
-                    fontWeight: 900,
-                    letterSpacing: "-0.04em",
-                  }}
-                >
-                  {data.eventTitle}
-                </p>
-                <p
-                  style={{
-                    margin: "10px 0 0",
-                    fontSize: 22,
-                    fontWeight: 700,
-                    color: "rgba(255,255,255,0.82)",
-                    textTransform: "capitalize",
-                  }}
-                >
-                  {formatEventDay(data.eventDate)}
-                  {" · "}
-                  {formatEventTime(data.eventDate)}
-                </p>
-              </div>
             </div>
           </motion.div>
+        </div>
+
+        <div style={{ marginTop: 28 }}>
+          <p
+            style={{
+              margin: 0,
+              fontSize: 40,
+              lineHeight: 1.08,
+              fontWeight: 900,
+              letterSpacing: "-0.04em",
+            }}
+          >
+            {data.eventTitle}
+          </p>
+          <p
+            style={{
+              margin: "10px 0 0",
+              fontSize: 24,
+              fontWeight: 700,
+              color: "rgba(255,255,255,0.86)",
+              textTransform: "capitalize",
+            }}
+          >
+            {formatEventDay(data.eventDate)}
+            {" · "}
+            {formatEventTime(data.eventDate)}
+          </p>
         </div>
 
         <div
@@ -316,126 +317,110 @@ export function StoryCanvas({
             marginTop: 28,
             display: "flex",
             alignItems: "center",
-            gap: 22,
+            justifyContent: "space-between",
+            gap: 20,
           }}
         >
           <div
             style={{
-              width: 128,
-              height: 128,
-              borderRadius: 999,
-              overflow: "hidden",
-              flexShrink: 0,
-              border: `3px solid ${theme.accent}`,
-              boxShadow: `0 0 0 8px rgba(255,255,255,0.08), 0 18px 40px rgba(0,0,0,0.35)`,
-              background: "rgba(255,255,255,0.12)",
-              display: "grid",
-              placeItems: "center",
-              fontSize: 36,
-              fontWeight: 900,
+              display: "flex",
+              alignItems: "center",
+              gap: 18,
+              minWidth: 0,
+              flex: 1,
             }}
           >
-            {stampImage ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={stampImage}
-                alt=""
-                {...storyImgCors(stampImage)}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                  display: "block",
-                }}
-              />
-            ) : (
-              <span>{storyInitials(stampName)}</span>
-            )}
-          </div>
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <p
+            <div
               style={{
-                margin: 0,
-                fontSize: 28,
-                fontWeight: 800,
-                lineHeight: 1.2,
-                letterSpacing: "-0.03em",
-              }}
-            >
-              {stampLabel}
-            </p>
-            <span
-              style={{
-                display: "inline-block",
-                marginTop: 12,
+                width: 112,
+                height: 112,
                 borderRadius: 999,
-                padding: "10px 18px",
-                background: theme.accent,
-                color: "#09090b",
-                fontSize: 18,
+                overflow: "hidden",
+                flexShrink: 0,
+                border: `3px solid ${theme.accent}`,
+                boxShadow: `0 0 0 8px rgba(255,255,255,0.08), 0 0 28px ${theme.accent}`,
+                background: "rgba(255,255,255,0.12)",
+                display: "grid",
+                placeItems: "center",
+                fontSize: 32,
                 fontWeight: 900,
-                letterSpacing: "0.12em",
               }}
             >
-              {category}
-            </span>
-          </div>
-        </div>
-
-        <div
-          style={{
-            marginTop: 36,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 24,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            <WhiteTokepassMark size={68} />
-            <div>
+              {stampImage ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={stampImage}
+                  alt=""
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    display: "block",
+                  }}
+                />
+              ) : (
+                <span>{storyInitials(stampName)}</span>
+              )}
+            </div>
+            <div style={{ minWidth: 0 }}>
               <p
                 style={{
                   margin: 0,
-                  fontSize: 28,
-                  fontWeight: 900,
-                  letterSpacing: "-0.04em",
+                  fontSize: 24,
+                  fontWeight: 800,
+                  lineHeight: 1.2,
+                  letterSpacing: "-0.03em",
                 }}
               >
-                Tokepass
+                {stampLabel}
               </p>
-              <p
+              <span
                 style={{
-                  margin: "4px 0 0",
-                  fontSize: 20,
-                  fontWeight: 600,
-                  color: "rgba(255,255,255,0.72)",
+                  display: "inline-block",
+                  marginTop: 10,
+                  borderRadius: 999,
+                  padding: "8px 16px",
+                  background: theme.accent,
+                  color: "#09090b",
+                  fontSize: 16,
+                  fontWeight: 900,
+                  letterSpacing: "0.12em",
                 }}
               >
-                Conseguí tu entrada en tokepass.com.ar
-              </p>
+                {category}
+              </span>
             </div>
           </div>
           <div
             style={{
-              width: 132,
-              height: 132,
-              borderRadius: 18,
-              overflow: "hidden",
-              background: "#fff",
-              padding: 8,
-              boxSizing: "border-box",
-              opacity: 0.92,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 10,
+              flexShrink: 0,
             }}
           >
-            <QRCodeSVG
-              value={cta}
-              size={116}
-              level="M"
-              includeMargin={false}
-              bgColor="#ffffff"
-              fgColor="#09090b"
-            />
+            <div
+              style={{
+                width: 132,
+                height: 132,
+                borderRadius: 18,
+                overflow: "hidden",
+                background: "#fff",
+                padding: 8,
+                boxSizing: "border-box",
+              }}
+            >
+              <QRCodeSVG
+                value={cta}
+                size={116}
+                level="M"
+                includeMargin={false}
+                bgColor="#ffffff"
+                fgColor="#09090b"
+              />
+            </div>
+            <WhiteTokepassMark size={44} />
           </div>
         </div>
       </div>

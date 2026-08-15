@@ -20,7 +20,7 @@ import {
 } from "react"
 import { toast } from "sonner"
 
-import { getPublicStoryHeadliner } from "@/app/actions/public-story"
+import { getStoryCardData } from "@/app/actions/public-story"
 import { StoryCanvas } from "@/components/public/story-canvas"
 import { Button } from "@/components/ui/button"
 import { useLockBodyScroll } from "@/hooks/use-lock-body-scroll"
@@ -49,7 +49,6 @@ import {
   downloadImageBlob,
   isNativeFileShareAvailable,
 } from "@/lib/story-flyer-share"
-import { hydrateStoryFlyerImages } from "@/lib/story-image"
 import { exportStoryVideo, isUsableStoryVideo } from "@/lib/story-video-export"
 import { cn } from "@/lib/utils"
 
@@ -75,6 +74,7 @@ export function StoryFlyerModal({
   const previewRef = useRef<HTMLDivElement>(null)
   const [busy, setBusy] = useState(false)
   const [hydrating, setHydrating] = useState(true)
+  const [imagesReady, setImagesReady] = useState(false)
   const [themeId, setThemeId] = useState<StoryThemeId>("neon-purple")
   const [headlineId, setHeadlineId] = useState<StoryHeadlineId>(() =>
     defaultStoryHeadlineId(data.mode),
@@ -88,7 +88,10 @@ export function StoryFlyerModal({
     setDataKey(nextDataKey)
     setResolved(data)
     setHeadlineId(defaultStoryHeadlineId(data.mode))
+    setHydrating(true)
+    setImagesReady(false)
   }
+  const exportReady = !hydrating && imagesReady && !busy
   const [previewScale, setPreviewScale] = useState(0.22)
   const [nativeShare] = useState(() =>
     typeof navigator === "undefined" ? false : isNativeFileShareAvailable(),
@@ -103,21 +106,19 @@ export function StoryFlyerModal({
     let cancelled = false
 
     async function hydrate() {
-      let next = data
-      if (!data.artistName?.trim() && data.eventId?.trim()) {
-        const artist = await getPublicStoryHeadliner(data.eventId.trim())
-        if (artist) {
-          next = {
-            ...next,
-            artistName: next.artistName || artist.name,
-            artistImageUrl: next.artistImageUrl || artist.imageUrl,
-          }
-        }
+      try {
+        const card = await getStoryCardData(data)
+        if (cancelled) return
+        setResolved(card)
+        setHydrating(false)
+        const hasFlyer = card.imageUrl?.startsWith("data:image/")
+        if (!hasFlyer) setImagesReady(true)
+      } catch {
+        if (cancelled) return
+        setResolved(data)
+        setHydrating(false)
+        setImagesReady(true)
       }
-      const hydrated = await hydrateStoryFlyerImages(next)
-      if (cancelled) return
-      setResolved(hydrated)
-      setHydrating(false)
     }
 
     void hydrate()
@@ -139,39 +140,17 @@ export function StoryFlyerModal({
   const waitForImages = useCallback(async (node: HTMLElement) => {
     const images = Array.from(node.querySelectorAll("img"))
     await Promise.all(
-      images.map(async (img) => {
-        const src = img.getAttribute("src")
-        if (!src || src.startsWith("data:")) {
-          if (img.complete) return
-          await new Promise<void>((resolve) => {
-            img.onload = () => resolve()
-            img.onerror = () => resolve()
-          })
-          return
-        }
-        try {
-          const response = await fetch(src, { mode: "cors", cache: "no-store" })
-          if (!response.ok) return
-          const blob = await response.blob()
-          const dataUrl = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader()
-            reader.onload = () => resolve(String(reader.result))
-            reader.onerror = () => reject(reader.error)
-            reader.readAsDataURL(blob)
-          })
-          img.src = dataUrl
-          await new Promise<void>((resolve) => {
-            if (img.complete) {
+      images.map(
+        (img) =>
+          new Promise<void>((resolve) => {
+            if (img.complete && img.naturalWidth > 0) {
               resolve()
               return
             }
             img.onload = () => resolve()
             img.onerror = () => resolve()
-          })
-        } catch {
-          // Same-origin proxy already applied; capture anyway.
-        }
-      }),
+          }),
+      ),
     )
   }, [])
 
@@ -335,6 +314,7 @@ export function StoryFlyerModal({
                 canvasRef={storyCardRef}
                 live={false}
                 pauseMotion={busy}
+                onPainted={() => setImagesReady(true)}
               />
             </div>
           ) : null}
@@ -441,7 +421,7 @@ export function StoryFlyerModal({
 
             <Button
               type="button"
-              disabled={busy}
+              disabled={!exportReady}
               onClick={() => void handleExport3DVideo()}
               className="min-h-14 w-full rounded-full bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-500 text-base font-bold text-white hover:from-violet-500 hover:via-fuchsia-500 hover:to-pink-400"
             >
@@ -449,6 +429,11 @@ export function StoryFlyerModal({
                 <>
                   <Loader2 className="size-5 animate-spin" aria-hidden />
                   Generando video 3D…
+                </>
+              ) : hydrating || !imagesReady ? (
+                <>
+                  <Loader2 className="size-5 animate-spin" aria-hidden />
+                  Preparando imagen…
                 </>
               ) : (
                 <>
@@ -459,7 +444,7 @@ export function StoryFlyerModal({
             </Button>
             <Button
               type="button"
-              disabled={busy}
+              disabled={!exportReady}
               variant="outline"
               onClick={() => void handleDownloadStory()}
               className="min-h-12 w-full rounded-full border-white/20 bg-white/5 text-white hover:bg-white/10"

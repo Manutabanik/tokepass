@@ -2,6 +2,8 @@
 
 import { eventArtistsToLineup, visibleLineupArtists } from "@/lib/event-lineup"
 import { isEventUuid } from "@/lib/seo/site"
+import type { StoryFlyerData } from "@/lib/story-canvas"
+import { fetchImageAsDataUrl } from "@/lib/story-image-proxy"
 import { createClient } from "@/lib/supabase/server"
 
 export type StoryHeadliner = {
@@ -41,5 +43,34 @@ export async function getPublicStoryHeadliner(
   return {
     name: featured.name,
     imageUrl: featured.imageUrl,
+  }
+}
+
+export async function getStoryCardData(
+  input: StoryFlyerData,
+): Promise<StoryFlyerData> {
+  let next = { ...input }
+  if (!next.artistName?.trim() && next.eventId?.trim()) {
+    const artist = await getPublicStoryHeadliner(next.eventId.trim())
+    if (artist) {
+      next = {
+        ...next,
+        artistName: next.artistName || artist.name,
+        artistImageUrl: next.artistImageUrl || artist.imageUrl,
+      }
+    }
+  }
+
+  const [imageUrl, artistImageUrl, organizerAvatarUrl] = await Promise.all([
+    fetchImageAsDataUrl(next.imageUrl),
+    fetchImageAsDataUrl(next.artistImageUrl),
+    fetchImageAsDataUrl(next.organizerAvatarUrl),
+  ])
+
+  return {
+    ...next,
+    imageUrl,
+    artistImageUrl,
+    organizerAvatarUrl,
   }
 }
