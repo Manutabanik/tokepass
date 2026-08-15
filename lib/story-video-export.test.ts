@@ -2,6 +2,9 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import {
+  isAppleWebKit,
+  isUsableStoryVideo,
+  MIN_STORY_VIDEO_BYTES,
   pickVideoMimeType,
   storyVideoPose,
   videoExtensionForMime,
@@ -28,5 +31,28 @@ describe("story video export", () => {
     const mime = pickVideoMimeType((type) => type.includes("webm"))
     assert.equal(mime?.includes("webm"), true)
     assert.equal(videoExtensionForMime(mime ?? ""), "webm")
+  })
+
+  it("rejects tiny WebKit leftovers as unusable", () => {
+    assert.equal(isUsableStoryVideo(new Blob([new Uint8Array(7_000)])), false)
+    assert.equal(
+      isUsableStoryVideo(new Blob([new Uint8Array(MIN_STORY_VIDEO_BYTES + 1)])),
+      true,
+    )
+  })
+
+  it("detects iPhone and iPadOS", () => {
+    assert.equal(
+      isAppleWebKit("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0)"),
+      true,
+    )
+    assert.equal(
+      isAppleWebKit("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15)", 5),
+      true,
+    )
+    assert.equal(
+      isAppleWebKit("Mozilla/5.0 (Windows NT 10.0; Win64; x64)"),
+      false,
+    )
   })
 })

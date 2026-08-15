@@ -4,14 +4,19 @@ import {
 } from "@/lib/story-canvas"
 import { specularFromTilt } from "@/lib/story-tilt"
 
-export const STORY_VIDEO_DURATION_MS = 4000
+export const STORY_VIDEO_DURATION_MS = 2000
 export const STORY_VIDEO_FPS = 30
+export const MIN_STORY_VIDEO_BYTES = 100_000
 
 export type StoryVideoPose = {
   rotateX: number
   rotateY: number
   pulse: number
 }
+
+export type StoryVideoExport =
+  | { ok: true; blob: Blob; extension: "mp4" | "webm" }
+  | { ok: false; reason: "unsupported" | "too_small" | "failed" }
 
 export function storyVideoPose(progress: number): StoryVideoPose {
   const t = Math.min(1, Math.max(0, progress)) * Math.PI * 2
@@ -31,7 +36,6 @@ export function pickVideoMimeType(
     "video/mp4;codecs=avc1.42E01E",
     "video/mp4",
     "video/webm;codecs=vp9",
-    "video/webm;codecs=vp8",
     "video/webm",
   ]
   return types.find((type) => isTypeSupported(type)) ?? null
@@ -39,6 +43,20 @@ export function pickVideoMimeType(
 
 export function videoExtensionForMime(mime: string): "mp4" | "webm" {
   return mime.includes("mp4") ? "mp4" : "webm"
+}
+
+export function isUsableStoryVideo(blob: Blob | null | undefined): boolean {
+  return Boolean(blob && blob.size > MIN_STORY_VIDEO_BYTES)
+}
+
+export function isAppleWebKit(
+  userAgent = typeof navigator === "undefined" ? "" : navigator.userAgent,
+  maxTouchPoints = typeof navigator === "undefined"
+    ? 0
+    : navigator.maxTouchPoints,
+): boolean {
+  if (/iP(ad|hone|od)/i.test(userAgent)) return true
+  return /Macintosh/i.test(userAgent) && maxTouchPoints > 1
 }
 
 export function drawStoryVideoFrame(
@@ -101,11 +119,6 @@ export function drawStoryVideoFrame(
   ctx.globalCompositeOperation = "source-over"
 }
 
-type RecorderResult = {
-  blob: Blob
-  extension: "mp4" | "webm"
-}
-
 function loadPoster(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image()
@@ -122,127 +135,100 @@ function waitForRecorder(recorder: MediaRecorder, chunks: BlobPart[]) {
     }
     recorder.onerror = () => reject(new Error("story_recorder_failed"))
     recorder.onstop = () => {
-      resolve(new Blob(chunks, { type: recorder.mimeType || "video/webm" }))
+      resolve(new Blob(chunks, { type: recorder.mimeType || "video/mp4" }))
     }
   })
 }
 
-async function recordWithTrackGenerator(
+function mountCaptureCanvas(canvas: HTMLCanvasElement) {
+  canvas.setAttribute("aria-hidden", "true")
+  canvas.style.cssText =
+    "position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.02;pointer-events:none;z-index:-1;"
+  document.body.appendChild(canvas)
+}
+
+function unmountCaptureCanvas(canvas: HTMLCanvasElement) {
+  canvas.remove()
+}
+
+async function waitAnimationFrame() {
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve())
+  })
+}
+
+async function recordWithLiveStream(
   canvas: HTMLCanvasElement,
   ctx: CanvasRenderingContext2D,
   poster: CanvasImageSource,
   mime: string,
 ): Promise<Blob> {
-  const Generator = (
-    globalThis as unknown as {
-      MediaStreamTrackGenerator?: new (init: { kind: "video" }) => MediaStreamTrack & {
-        writable: WritableStream<VideoFrame>
-      }
-    }
-  ).MediaStreamTrackGenerator
-  if (!Generator || typeof VideoFrame === "undefined") {
-    throw new Error("track_generator_unavailable")
-  }
+  drawStoryVideoFrame(ctx, poster, 0)
+  await waitAnimationFrame()
 
-  const frameCount = STORY_VIDEO_FPS * (STORY_VIDEO_DURATION_MS / 1000)
-  const frameDurationUs = Math.round(1_000_000 / STORY_VIDEO_FPS)
-  const generator = new Generator({ kind: "video" })
-  const writer = generator.writable.getWriter()
-  const stream = new MediaStream([generator])
+  const stream = canvas.captureStream(STORY_VIDEO_FPS)
   const recorder = new MediaRecorder(stream, {
     mimeType: mime,
-    videoBitsPerSecond: 6_000_000,
+    videoBitsPerSecond: 8_000_000,
   })
   const chunks: BlobPart[] = []
   const done = waitForRecorder(recorder, chunks)
-  recorder.start()
 
-  for (let index = 0; index < frameCount; index += 1) {
-    drawStoryVideoFrame(ctx, poster, index / Math.max(1, frameCount - 1))
-    const frame = new VideoFrame(canvas, {
-      timestamp: index * frameDurationUs,
-      duration: frameDurationUs,
-    })
-    await writer.write(frame)
-    frame.close()
-  }
+  drawStoryVideoFrame(ctx, poster, 0)
+  await waitAnimationFrame()
+  recorder.start(200)
 
-  await writer.close()
-  recorder.stop()
-  return done
-}
-
-async function recordWithCaptureStream(
-  canvas: HTMLCanvasElement,
-  ctx: CanvasRenderingContext2D,
-  poster: CanvasImageSource,
-  mime: string,
-): Promise<Blob> {
-  const stream = canvas.captureStream(0)
-  const track = stream.getVideoTracks()[0] as MediaStreamTrack & {
-    requestFrame?: () => void
-  }
-  const recorder = new MediaRecorder(stream, {
-    mimeType: mime,
-    videoBitsPerSecond: 6_000_000,
-  })
-  const chunks: BlobPart[] = []
-  const done = waitForRecorder(recorder, chunks)
-  const frameCount = STORY_VIDEO_FPS * (STORY_VIDEO_DURATION_MS / 1000)
-  recorder.start()
-
-  if (typeof track.requestFrame === "function") {
-    for (let index = 0; index < frameCount; index += 1) {
-      drawStoryVideoFrame(ctx, poster, index / Math.max(1, frameCount - 1))
-      track.requestFrame()
-    }
-  } else {
-    await new Promise<void>((resolve) => {
-      const started = performance.now()
-      const tick = () => {
-        const progress = Math.min(
-          1,
-          (performance.now() - started) / STORY_VIDEO_DURATION_MS,
-        )
-        drawStoryVideoFrame(ctx, poster, progress)
-        if (progress < 1) {
-          requestAnimationFrame(tick)
-          return
-        }
-        resolve()
+  await new Promise<void>((resolve) => {
+    const started = performance.now()
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - started) / STORY_VIDEO_DURATION_MS)
+      drawStoryVideoFrame(ctx, poster, progress)
+      if (progress < 1) {
+        requestAnimationFrame(tick)
+        return
       }
-      requestAnimationFrame(tick)
-    })
-  }
+      resolve()
+    }
+    requestAnimationFrame(tick)
+  })
 
-  await new Promise((resolve) => window.setTimeout(resolve, 32))
+  if (typeof recorder.requestData === "function") {
+    recorder.requestData()
+  }
+  await waitAnimationFrame()
   recorder.stop()
-  stream.getTracks().forEach((item) => item.stop())
-  return done
+  const blob = await done
+  stream.getTracks().forEach((track) => track.stop())
+  return blob
 }
 
 export async function exportStoryVideo(
   posterSrc: string,
-): Promise<RecorderResult> {
+): Promise<StoryVideoExport> {
   const mime = pickVideoMimeType()
-  if (!mime) throw new Error("video_unsupported")
+  if (!mime) return { ok: false, reason: "unsupported" }
 
   const poster = await loadPoster(posterSrc)
   const canvas = document.createElement("canvas")
   canvas.width = STORY_CANVAS_WIDTH
   canvas.height = STORY_CANVAS_HEIGHT
-  const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true })
-  if (!ctx) throw new Error("canvas_2d_unavailable")
+  const ctx = canvas.getContext("2d", { alpha: false })
+  if (!ctx) return { ok: false, reason: "failed" }
 
-  let blob: Blob
+  mountCaptureCanvas(canvas)
   try {
-    blob = await recordWithTrackGenerator(canvas, ctx, poster, mime)
+    const blob = await recordWithLiveStream(canvas, ctx, poster, mime)
+    if (!isUsableStoryVideo(blob)) {
+      return { ok: false, reason: "too_small" }
+    }
+    return {
+      ok: true,
+      blob,
+      extension: videoExtensionForMime(blob.type || mime),
+    }
   } catch {
-    blob = await recordWithCaptureStream(canvas, ctx, poster, mime)
-  }
-
-  return {
-    blob,
-    extension: videoExtensionForMime(blob.type || mime),
+    return { ok: false, reason: "failed" }
+  } finally {
+    unmountCaptureCanvas(canvas)
   }
 }

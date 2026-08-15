@@ -50,7 +50,7 @@ import {
   isNativeFileShareAvailable,
 } from "@/lib/story-flyer-share"
 import { hydrateStoryFlyerImages } from "@/lib/story-image"
-import { exportStoryVideo } from "@/lib/story-video-export"
+import { exportStoryVideo, isUsableStoryVideo } from "@/lib/story-video-export"
 import { cn } from "@/lib/utils"
 
 export type { StoryFlyerData, StoryFlyerMode }
@@ -63,6 +63,8 @@ type StoryFlyerModalProps = {
 
 const SAVED_TOAST =
   "Imagen guardada. Abri Instagram para subirla a tus Historias"
+const VIDEO_SAVED_TOAST =
+  "Video guardado en tu galeria. Abri la app para publicarlo"
 
 export function StoryFlyerModal({
   data,
@@ -204,6 +206,24 @@ export function StoryFlyerModal({
     return response.blob()
   }
 
+  async function shareOrDownloadFile(file: File, fallbackBlob: Blob) {
+    try {
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: "Mi Entrada Tokepass",
+        })
+        return "shared"
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return "cancelled"
+      }
+    }
+    downloadImageBlob(fallbackBlob, file.name)
+    return "downloaded"
+  }
+
   async function handleExport3DVideo() {
     if (busy) return
     setBusy(true)
@@ -211,29 +231,32 @@ export function StoryFlyerModal({
     try {
       const dataUrl = await captureStoryPng()
       if (!dataUrl) return
-      const { blob, extension } = await exportStoryVideo(dataUrl)
-      const filename = `tokepass-historia-3d.${extension}`
-      const file = new File([blob], filename, {
-        type: blob.type || (extension === "mp4" ? "video/mp4" : "video/webm"),
-      })
 
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({
-            files: [file],
-            title: "Mi Entrada Tokepass",
-          })
-          return
-        } catch (error) {
-          if (error instanceof DOMException && error.name === "AbortError") {
-            return
-          }
+      const recorded = await exportStoryVideo(dataUrl)
+      if (recorded.ok && isUsableStoryVideo(recorded.blob)) {
+        const filename = `tokepass-historia-3d.${recorded.extension}`
+        const file = new File([recorded.blob], filename, {
+          type:
+            recorded.blob.type ||
+            (recorded.extension === "mp4" ? "video/mp4" : "video/webm"),
+        })
+        const result = await shareOrDownloadFile(file, recorded.blob)
+        if (result === "downloaded") {
+          toast.success(VIDEO_SAVED_TOAST)
         }
+        return
       }
 
-      downloadImageBlob(blob, filename)
-    } catch (error) {
-      console.error("Error al exportar el video:", error)
+      const pngBlob = await dataUrlToBlob(dataUrl)
+      const pngFile = new File([pngBlob], "tokepass-historia.png", {
+        type: "image/png",
+      })
+      const result = await shareOrDownloadFile(pngFile, pngBlob)
+      if (result === "downloaded") {
+        toast.success(SAVED_TOAST)
+      }
+    } catch {
+      // PNG fallback already attempted; never surface iOS "unavailable" alerts.
     } finally {
       setBusy(false)
     }
