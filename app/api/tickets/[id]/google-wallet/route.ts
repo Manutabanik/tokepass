@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 
 import { getMyTicketById } from "@/app/actions/buyer-orders"
-import { isGoogleWalletConfigured } from "@/lib/wallet-cache"
+import { HAS_GOOGLE_WALLET_KEYS } from "@/lib/wallet-cache"
 import { buildGoogleWalletSaveUrl } from "@/lib/wallet/google-wallet"
 
 export const runtime = "nodejs"
@@ -23,13 +23,8 @@ export async function GET(
 ) {
   const { id } = await context.params
 
-  if (!isGoogleWalletConfigured()) {
-    return jsonError(
-      501,
-      "google_wallet_not_configured",
-      "Google Wallet no está configurado. Usá la billetera PWA o el PDF imprimible.",
-      id,
-    )
+  if (!HAS_GOOGLE_WALLET_KEYS()) {
+    return NextResponse.redirect(new URL(`/tickets/${id}/print`, request.url), 302)
   }
 
   try {

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 
 import { getMyTicketById } from "@/app/actions/buyer-orders"
-import { isAppleWalletConfigured } from "@/lib/wallet-cache"
+import { HAS_APPLE_WALLET_KEYS } from "@/lib/wallet-cache"
 import { buildApplePkpass } from "@/lib/wallet/apple-pkpass"
 
 export const runtime = "nodejs"
@@ -18,18 +18,13 @@ function jsonError(status: number, error: string, message: string, id: string) {
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
   const { id } = await context.params
 
-  if (!isAppleWalletConfigured()) {
-    return jsonError(
-      501,
-      "apple_wallet_not_configured",
-      "Apple Wallet no está configurado. Usá la billetera PWA o el PDF imprimible.",
-      id,
-    )
+  if (!HAS_APPLE_WALLET_KEYS()) {
+    return NextResponse.redirect(new URL(`/tickets/${id}/print`, request.url), 302)
   }
 
   try {

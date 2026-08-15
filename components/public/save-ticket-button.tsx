@@ -22,6 +22,8 @@ export function SaveTicketButton({
   ticket,
   userId,
   disabled = false,
+  appleWalletEnabled = false,
+  googleWalletEnabled = false,
 }: {
   ticket: MyTicket
   userId: string
@@ -107,6 +109,8 @@ export function SaveTicketButton({
             <WalletPassButtons
               ticketId={ticket.id}
               flyerUrl={ticket.flyerUrl}
+              appleWalletEnabled={appleWalletEnabled}
+              googleWalletEnabled={googleWalletEnabled}
             />
           </div>
         </DialogContent>

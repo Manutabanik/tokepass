@@ -468,7 +468,7 @@ type StoryFlyerTriggerProps = {
   label: string
   icon?: ReactNode
   className?: string
-  variant?: "primary" | "outline" | "card"
+  variant?: "primary" | "outline" | "card" | "hero"
 }
 
 export function StoryFlyerTrigger({
@@ -495,6 +495,8 @@ export function StoryFlyerTrigger({
             "border border-border bg-card text-foreground hover:bg-muted",
           variant === "card" &&
             "w-full border border-fuchsia-500/30 bg-gradient-to-br from-violet-600/20 via-fuchsia-600/15 to-pink-500/10 text-foreground hover:border-fuchsia-400/50",
+          variant === "hero" &&
+            "h-14 w-full rounded-2xl bg-gradient-to-r from-purple-600 via-pink-500 to-amber-500 text-base font-bold text-white shadow-lg shadow-pink-500/20",
           className,
         )}
       >

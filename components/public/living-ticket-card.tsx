@@ -3,7 +3,7 @@
 import {
   Armchair,
   Ban,
-  ChevronRight,
+  Camera,
   FlaskConical,
   Gift,
   MoreHorizontal,
@@ -20,8 +20,7 @@ import type { MyTicket } from "@/app/actions/tickets"
 import { LivingTicketQR } from "@/components/public/living-ticket-qr"
 import { QrEnlargeTrigger, QrScanLightbox } from "@/components/public/qr-scan-lightbox"
 import { ResaleTicketDialog } from "@/components/public/resale-ticket-dialog"
-import { SaveTicketButton } from "@/components/public/save-ticket-button"
-import { StoryFlyerWalletButton } from "@/components/public/story-flyer-modal"
+import { StoryFlyerTrigger } from "@/components/public/story-flyer-modal"
 import { TransferTicketDialog } from "@/components/public/transfer-ticket-dialog"
 import { WalletPassButtons } from "@/components/account/wallet-pass-buttons"
 import { Badge } from "@/components/ui/badge"
@@ -64,7 +63,6 @@ function formatPrimaryLocation(ticket: MyTicket): string {
 
 function TicketManageSheet({
   ticket,
-  userId,
   offline,
   appleWalletEnabled,
   googleWalletEnabled,
@@ -74,7 +72,6 @@ function TicketManageSheet({
   onOpenChange,
 }: {
   ticket: MyTicket
-  userId: string
   offline: boolean
   appleWalletEnabled: boolean
   googleWalletEnabled: boolean
@@ -89,9 +86,9 @@ function TicketManageSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="bottom"
-        className="gap-0 overflow-y-auto pb-[max(1.25rem,env(safe-area-inset-bottom))] md:inset-x-auto md:left-1/2 md:max-w-md md:-translate-x-1/2 md:rounded-3xl"
+        className="max-h-[90vh] gap-0 overflow-y-auto rounded-t-3xl border border-border bg-background p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] md:inset-x-auto md:left-1/2 md:max-w-md md:-translate-x-1/2 md:rounded-3xl"
       >
-        <SheetHeader className="border-0 pb-2 pt-5">
+        <SheetHeader className="border-0 p-0 pb-4">
           <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-muted-foreground/25 md:hidden" />
           <SheetTitle>Gestionar entrada</SheetTitle>
           <SheetDescription>
@@ -100,81 +97,100 @@ function TicketManageSheet({
           </SheetDescription>
         </SheetHeader>
 
-        <div className="flex flex-col gap-3 px-4 pb-4">
+        <div className="flex flex-col">
           {ticket.status === "valid" ? (
-            <>
+            <div className="space-y-3">
+              <StoryFlyerTrigger
+                data={{
+                  eventTitle: ticket.eventTitle,
+                  eventDate: ticket.eventDate,
+                  eventLocation: ticket.venueName ?? ticket.eventLocation,
+                  imageUrl: ticket.flyerUrl,
+                  customStoryUrl: ticket.socialShareImageUrl,
+                  mode: "buyer",
+                  organizerName: ticket.organizerName,
+                  organizerAvatarUrl: ticket.organizerAvatarUrl,
+                  eventId: ticket.eventId,
+                  categoryLabel: storyCategoryLabel({
+                    tierName: ticket.tierName,
+                    seatingLabel: ticket.seatingLabel,
+                    seatingSectorName: ticket.seatingSectorName,
+                  }),
+                }}
+                label="Compartir en Historias"
+                icon={<Camera className="size-5 shrink-0" aria-hidden />}
+                variant="hero"
+              />
+
               <WalletPassButtons
                 ticketId={ticket.id}
                 flyerUrl={ticket.flyerUrl}
                 disabled={offline}
-              />
-              <SaveTicketButton
-                ticket={ticket}
-                userId={userId}
-                disabled={offline}
                 appleWalletEnabled={appleWalletEnabled}
                 googleWalletEnabled={googleWalletEnabled}
               />
-            </>
+            </div>
           ) : null}
 
-          {ticket.status === "valid" ? (
-            <StoryFlyerWalletButton
-              data={{
-                eventTitle: ticket.eventTitle,
-                eventDate: ticket.eventDate,
-                eventLocation: ticket.venueName ?? ticket.eventLocation,
-                imageUrl: ticket.flyerUrl,
-                customStoryUrl: ticket.socialShareImageUrl,
-                mode: "buyer",
-                organizerName: ticket.organizerName,
-                organizerAvatarUrl: ticket.organizerAvatarUrl,
-                eventId: ticket.eventId,
-                categoryLabel: storyCategoryLabel({
-                  tierName: ticket.tierName,
-                  seatingLabel: ticket.seatingLabel,
-                  seatingSectorName: ticket.seatingSectorName,
-                }),
-              }}
-            />
+          {canTransfer || (canResale && !ticket.activeResaleListingId) ? (
+            <div
+              className={cn(
+                "mt-4 grid gap-3",
+                canTransfer && canResale && !ticket.activeResaleListingId
+                  ? "grid-cols-2"
+                  : "grid-cols-1",
+              )}
+            >
+              {canTransfer ? (
+                <TransferTicketDialog
+                  ticketId={ticket.id}
+                  eventTitle={ticket.eventTitle}
+                  triggerLabel="Enviar / Regalar"
+                  triggerClassName="h-auto min-h-[5.75rem] w-full flex-col gap-2 whitespace-normal rounded-2xl border border-border bg-muted/30 px-3 py-4 text-center text-sm font-semibold leading-5 text-foreground hover:bg-muted/55"
+                />
+              ) : null}
+              {canResale && !ticket.activeResaleListingId ? (
+                <ResaleTicketDialog
+                  ticketId={ticket.id}
+                  eventTitle={ticket.eventTitle}
+                  tierPrice={ticket.tierPrice}
+                  activeListingId={ticket.activeResaleListingId}
+                  disabled={offline}
+                  triggerLabel="Vender Entrada"
+                  triggerClassName="h-auto min-h-[5.75rem] w-full flex-col gap-2 whitespace-normal rounded-2xl border border-border bg-muted/30 px-3 py-4 text-center text-sm font-semibold leading-5 text-foreground hover:bg-muted/55"
+                />
+              ) : null}
+            </div>
           ) : null}
 
-          {canTransfer ? (
-            <TransferTicketDialog
-              ticketId={ticket.id}
-              eventTitle={ticket.eventTitle}
-            />
+          {ticket.activeResaleListingId ? (
+            <div className="mt-4">
+              <ResaleTicketDialog
+                ticketId={ticket.id}
+                eventTitle={ticket.eventTitle}
+                tierPrice={ticket.tierPrice}
+                activeListingId={ticket.activeResaleListingId}
+                disabled={offline}
+              />
+            </div>
           ) : null}
 
-          {canResale || ticket.activeResaleListingId ? (
-            <ResaleTicketDialog
-              ticketId={ticket.id}
-              eventTitle={ticket.eventTitle}
-              tierPrice={ticket.tierPrice}
-              activeListingId={ticket.activeResaleListingId}
-              disabled={offline}
-            />
-          ) : null}
-
-          <Button
-            variant="outline"
-            className="h-11 w-full rounded-2xl"
-            nativeButton={false}
-            render={<Link href={`/cuenta/entradas/${ticket.id}`} />}
+          <Link
+            href={`/cuenta/entradas/${ticket.id}`}
+            className="mt-4 inline-flex min-h-10 items-center justify-center text-sm font-medium text-muted-foreground underline-offset-4 transition hover:text-foreground hover:underline"
           >
             Ver detalle de la entrada
-            <ChevronRight className="size-4 opacity-70" aria-hidden="true" />
-          </Button>
+          </Link>
 
           {ticket.status === "valid" && offline ? (
-            <p className="text-center text-[11px] text-muted-foreground">
+            <p className="mt-4 text-center text-[11px] text-muted-foreground">
               Transferencias y reventa disponibles cuando vuelvas a tener
               conexión.
             </p>
           ) : null}
 
           {ticket.bonusReward ? (
-            <div className="flex items-start gap-2.5 rounded-2xl border border-emerald-500/20 bg-emerald-500/8 px-3.5 py-3">
+            <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-emerald-500/20 bg-emerald-500/8 px-3.5 py-3">
               <Gift
                 className="mt-0.5 size-4 shrink-0 text-emerald-700 dark:text-emerald-300"
                 aria-hidden="true"
@@ -191,7 +207,7 @@ function TicketManageSheet({
           ) : null}
 
           {ticket.status === "valid" ? (
-            <p className="flex items-start gap-2 text-[12px] leading-5 text-muted-foreground">
+            <p className="mt-4 flex items-start gap-2 text-[12px] leading-5 text-muted-foreground">
               <ShieldCheck
                 className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400"
                 aria-hidden="true"
@@ -205,16 +221,16 @@ function TicketManageSheet({
           ) : null}
 
           {ticket.isSponsoredByTokepass ? (
-            <p className="flex items-center justify-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-800 dark:text-amber-200">
+            <p className="mt-3 flex items-center justify-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-800 dark:text-amber-200">
               <Sparkles className="size-3.5" aria-hidden="true" />
               Comisión Tokepass bonificada
             </p>
           ) : null}
 
-          <p className="text-center font-mono text-[10px] tracking-wider text-muted-foreground">
+          <p className="mt-4 text-center font-mono text-[10px] tracking-wider text-muted-foreground">
             #{ticket.id.slice(0, 8).toUpperCase()}
           </p>
-          <p className="border-t border-border pt-3 text-center text-[10px] leading-4 text-muted-foreground">
+          <p className="mt-3 border-t border-border pt-3 text-center text-[10px] leading-4 text-muted-foreground">
             Entrada emitida bajo responsabilidad exclusiva del Organizador. La
             reventa solo es válida a través del marketplace oficial de Tokepass.
           </p>
@@ -427,7 +443,6 @@ export function LivingTicketCard({
 
       <TicketManageSheet
         ticket={ticket}
-        userId={userId}
         offline={offline}
         appleWalletEnabled={appleWalletEnabled}
         googleWalletEnabled={googleWalletEnabled}

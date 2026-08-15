@@ -1,10 +1,10 @@
 "use client"
 
-import { Loader2 } from "lucide-react"
-import { useState } from "react"
-import { toast } from "sonner"
+import { Download, Loader2 } from "lucide-react"
+import { useMemo, useState } from "react"
 
 import { requestTicketAssetCache } from "@/lib/wallet-cache"
+import { resolveWalletSaveTarget, type WalletSaveTarget } from "@/lib/wallet-os"
 import { cn } from "@/lib/utils"
 
 function AppleMark({ className }: { className?: string }) {
@@ -31,31 +31,39 @@ function GoogleWalletMark({ className }: { className?: string }) {
   )
 }
 
-async function readErrorMessage(response: Response, fallback: string) {
-  try {
-    const body = (await response.json()) as { message?: string }
-    return body.message?.trim() || fallback
-  } catch {
-    return fallback
-  }
+function openTicketPdf(ticketId: string) {
+  window.location.assign(`/tickets/${ticketId}/print`)
 }
 
 export function WalletPassButtons({
   ticketId,
   flyerUrl,
   disabled = false,
+  appleWalletEnabled = false,
+  googleWalletEnabled = false,
   className,
 }: {
   ticketId: string
   flyerUrl?: string | null
   disabled?: boolean
+  appleWalletEnabled?: boolean
+  googleWalletEnabled?: boolean
   className?: string
 }) {
-  const [busy, setBusy] = useState<"apple" | "google" | null>(null)
+  const [busy, setBusy] = useState(false)
+  const target = useMemo<WalletSaveTarget>(
+    () =>
+      resolveWalletSaveTarget({
+        appleWalletEnabled,
+        googleWalletEnabled,
+      }),
+    [appleWalletEnabled, googleWalletEnabled],
+  )
 
   function precache() {
     requestTicketAssetCache([
       flyerUrl,
+      `/tickets/${ticketId}/print`,
       "/offline/billetera",
       "/cuenta/entradas",
       `/cuenta/entradas/${ticketId}`,
@@ -64,109 +72,116 @@ export function WalletPassButtons({
 
   async function addToAppleWallet() {
     if (disabled || busy) return
-    setBusy("apple")
+    setBusy(true)
     precache()
     try {
       const response = await fetch(`/api/tickets/${ticketId}/apple-pass`, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/vnd.apple.pkpass,application/json" },
+        redirect: "follow",
       })
       const contentType = response.headers.get("content-type") ?? ""
       if (!response.ok || contentType.includes("application/json")) {
-        toast.error(
-          await readErrorMessage(
-            response,
-            "No se pudo generar el pase de Apple Wallet.",
-          ),
-        )
+        openTicketPdf(ticketId)
+        return
+      }
+      if (contentType.includes("text/html")) {
+        openTicketPdf(ticketId)
         return
       }
 
-      const appleOs = /iPhone|iPad|iPod|Macintosh/i.test(navigator.userAgent)
-      if (appleOs) {
-        window.location.assign(`/api/tickets/${ticketId}/apple-pass`)
-        return
-      }
-
-      const blob = await response.blob()
-      const objectUrl = URL.createObjectURL(blob)
-      const anchor = document.createElement("a")
-      anchor.href = objectUrl
-      anchor.download = `tokepass-${ticketId.slice(0, 8)}.pkpass`
-      document.body.append(anchor)
-      anchor.click()
-      anchor.remove()
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 4_000)
+      window.location.assign(`/api/tickets/${ticketId}/apple-pass`)
     } catch {
-      toast.error("No se pudo generar el pase de Apple Wallet.")
+      openTicketPdf(ticketId)
     } finally {
-      setBusy(null)
+      setBusy(false)
     }
   }
 
   async function saveToGoogleWallet() {
     if (disabled || busy) return
-    setBusy("google")
+    setBusy(true)
     precache()
     try {
       const response = await fetch(`/api/tickets/${ticketId}/google-wallet`, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" },
+        redirect: "follow",
       })
-      if (!response.ok) {
-        toast.error(
-          await readErrorMessage(
-            response,
-            "No se pudo generar el pase de Google Wallet.",
-          ),
-        )
+      const contentType = response.headers.get("content-type") ?? ""
+      if (!response.ok || !contentType.includes("application/json")) {
+        openTicketPdf(ticketId)
         return
       }
       const body = (await response.json()) as { url?: string }
       if (!body.url) {
-        toast.error("No se pudo generar el pase de Google Wallet.")
+        openTicketPdf(ticketId)
         return
       }
       window.location.assign(body.url)
     } catch {
-      toast.error("No se pudo generar el pase de Google Wallet.")
+      openTicketPdf(ticketId)
     } finally {
-      setBusy(null)
+      setBusy(false)
     }
+  }
+
+  function downloadPdf() {
+    if (disabled || busy) return
+    precache()
+    openTicketPdf(ticketId)
   }
 
   return (
     <div className={cn("grid gap-2", className)}>
-      <button
-        type="button"
-        disabled={disabled || Boolean(busy)}
-        onClick={() => void addToAppleWallet()}
-        aria-label="Agregar a Apple Wallet"
-        className="flex h-12 w-full items-center justify-center gap-2 rounded-[10px] bg-black px-4 text-[15px] font-semibold tracking-tight text-white shadow-[0_0_24px_rgba(232,121,249,0.18)] ring-1 ring-white/10 transition hover:bg-zinc-950 disabled:opacity-60"
-      >
-        {busy === "apple" ? (
-          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-        ) : (
-          <AppleMark className="size-5" />
-        )}
-        Agregar a Apple Wallet
-      </button>
-      <button
-        type="button"
-        disabled={disabled || Boolean(busy)}
-        onClick={() => void saveToGoogleWallet()}
-        aria-label="Guardar en Google Wallet"
-        className="flex h-12 w-full items-center justify-center gap-2.5 rounded-[10px] bg-[#1f1f1f] px-4 text-[15px] font-semibold tracking-tight text-white ring-1 ring-white/10 transition hover:bg-[#2b2b2b] disabled:opacity-60"
-      >
-        {busy === "google" ? (
-          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-        ) : (
-          <GoogleWalletMark className="size-6" />
-        )}
-        Guardar en Google Wallet
-      </button>
+      {target === "apple" ? (
+        <button
+          type="button"
+          disabled={disabled || busy}
+          onClick={() => void addToAppleWallet()}
+          aria-label="Agregar a Apple Wallet"
+          className="flex h-12 w-full items-center justify-center gap-2 rounded-[10px] bg-black px-4 text-[15px] font-semibold tracking-tight text-white ring-1 ring-white/10 transition hover:bg-zinc-950 disabled:opacity-60"
+        >
+          {busy ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <AppleMark className="size-5" />
+          )}
+          Agregar a Apple Wallet
+        </button>
+      ) : null}
+
+      {target === "google" ? (
+        <button
+          type="button"
+          disabled={disabled || busy}
+          onClick={() => void saveToGoogleWallet()}
+          aria-label="Guardar en Google Wallet"
+          className="flex h-12 w-full items-center justify-center gap-2.5 rounded-[10px] bg-[#1f1f1f] px-4 text-[15px] font-semibold tracking-tight text-white ring-1 ring-white/10 transition hover:bg-[#2b2b2b] disabled:opacity-60"
+        >
+          {busy ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <GoogleWalletMark className="size-6" />
+          )}
+          Guardar en Google Wallet
+        </button>
+      ) : null}
+
+      {target === "pdf" ? (
+        <button
+          type="button"
+          disabled={disabled || busy}
+          onClick={downloadPdf}
+          aria-label="Descargar Entrada en PDF"
+          className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-border bg-muted/40 px-4 text-[15px] font-semibold text-foreground transition hover:bg-muted disabled:opacity-60"
+        >
+          <Download className="size-4" aria-hidden="true" />
+          Descargar Entrada en PDF
+        </button>
+      ) : null}
     </div>
   )
 }

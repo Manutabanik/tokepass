@@ -234,6 +234,8 @@ export function TicketDetailView({
               ticketId={ticket.id}
               flyerUrl={ticket.flyerUrl}
               disabled={!online}
+              appleWalletEnabled={appleWalletEnabled}
+              googleWalletEnabled={googleWalletEnabled}
             />
             <SaveTicketButton
               ticket={ticket}

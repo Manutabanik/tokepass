@@ -44,10 +44,13 @@ export function isGoogleWalletConfigured(): boolean {
   return issuer && (json || split)
 }
 
+export const HAS_APPLE_WALLET_KEYS = isAppleWalletConfigured
+export const HAS_GOOGLE_WALLET_KEYS = isGoogleWalletConfigured
+
 /** True when the server can actually sign a native wallet pass. */
 export function getWalletUiFlags() {
   return {
-    appleWalletEnabled: isAppleWalletConfigured(),
-    googleWalletEnabled: isGoogleWalletConfigured(),
+    appleWalletEnabled: HAS_APPLE_WALLET_KEYS(),
+    googleWalletEnabled: HAS_GOOGLE_WALLET_KEYS(),
   }
 }

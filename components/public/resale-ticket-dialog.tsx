@@ -27,12 +27,16 @@ export function ResaleTicketDialog({
   tierPrice,
   activeListingId,
   disabled = false,
+  triggerLabel = "Vender mi entrada de forma segura",
+  triggerClassName,
 }: {
   ticketId: string
   eventTitle: string
   tierPrice: number
   activeListingId: string | null
   disabled?: boolean
+  triggerLabel?: string
+  triggerClassName?: string
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -125,10 +129,10 @@ export function ResaleTicketDialog({
         variant="outline"
         disabled={disabled}
         onClick={() => void openPublishModal()}
-        className="h-11 w-full rounded-full"
+        className={triggerClassName ?? "h-11 w-full rounded-full"}
       >
-        <RefreshCcw className="mr-2 size-4" aria-hidden />
-        Vender mi entrada de forma segura
+        <RefreshCcw className="size-4" aria-hidden />
+        {triggerLabel}
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
