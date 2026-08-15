@@ -20,6 +20,7 @@ import {
   removeArtistFromLineup,
   searchArtists,
   searchSpotifyArtists,
+  syncArtistAudioPreviews,
   updateArtistAudioPreview,
 } from "@/app/actions/artists"
 import { Button } from "@/components/ui/button"
@@ -65,6 +66,7 @@ export function LineupBuilder({
   const [pending, startTransition] = useTransition()
   const persistRef = useRef<number | null>(null)
   const rootRef = useRef<HTMLElement | null>(null)
+  const previewSyncKeyRef = useRef("")
 
   const takenKeys = useMemo(() => {
     const names = new Set(value.map((item) => item.name.trim().toLowerCase()))
@@ -169,6 +171,38 @@ export function LineupBuilder({
       })
     }, 400)
   }
+
+  useEffect(() => {
+    const missing = value.filter(
+      (item) =>
+        item.artistId &&
+        item.spotifyId &&
+        !item.topTrackPreviewUrl?.trim(),
+    )
+    const key = missing.map((item) => item.artistId).join(",")
+    if (!key || previewSyncKeyRef.current === key) return
+    previewSyncKeyRef.current = key
+    const ids = missing
+      .map((item) => item.artistId)
+      .filter((id): id is string => Boolean(id))
+    startTransition(() => {
+      void syncArtistAudioPreviews({ artistIds: ids }).then((result) => {
+        if (!result.success || result.data.updated === 0) return
+        const previews = result.data.previews
+        commit(
+          value.map((item) => {
+            const hit = item.artistId ? previews[item.artistId] : null
+            if (!hit?.previewUrl) return item
+            return {
+              ...item,
+              topTrackPreviewUrl: hit.previewUrl,
+              topTrackName: hit.trackName,
+            }
+          }),
+        )
+      })
+    })
+  }, [value])
 
   async function ensureArtist(item: SuggestItem): Promise<ArtistSearchHit | null> {
     if (item.artistId) {

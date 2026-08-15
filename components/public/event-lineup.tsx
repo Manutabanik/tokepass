@@ -1,9 +1,9 @@
 "use client"
 
-import { Pause, Play } from "lucide-react"
 import { useEffect, useState } from "react"
 
 import { ArtistAvatar } from "@/components/shared/artist-avatar"
+import { SpotifyMiniPlayer } from "@/components/public/spotify-mini-player"
 import {
   Sheet,
   SheetContent,
@@ -12,10 +12,12 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import {
-  stopArtistPreview,
-  useArtistPreview,
-} from "@/hooks/use-artist-preview"
+  closeSpotifyMiniPlayer,
+  toggleSpotifyMiniPlayer,
+  useIsSpotifyMiniPlayerActive,
+} from "@/hooks/use-spotify-mini-player"
 import {
+  hasArtistSpotifyPlayer,
   hasEventLineup,
   visibleLineupArtists,
   type EventLineupArtist,
@@ -38,7 +40,7 @@ function moreArtistsLabel(count: number): string {
   return count === 1 ? "+ 1 artista más" : `+ ${count} artistas más`
 }
 
-function ArtistPreviewAvatar({
+function ArtistGridAvatar({
   artist,
   size,
 }: {
@@ -46,54 +48,38 @@ function ArtistPreviewAvatar({
   size: "xs" | "hero"
 }) {
   const name = artist.name?.trim() || "Artista"
-  const previewUrl = artist.topTrackPreviewUrl?.trim() || ""
-  const trackName = artist.topTrackName?.trim() || ""
-  const { playing, toggle } = useArtistPreview(artist.id)
+  const canPlay = hasArtistSpotifyPlayer(artist)
+  const active = useIsSpotifyMiniPlayerActive(artist.spotifyId)
 
-  if (!previewUrl) {
-    return <ArtistAvatar name={name} imageUrl={artist.imageUrl} size={size} />
-  }
+  const avatar = (
+    <ArtistAvatar
+      name={name}
+      imageUrl={artist.imageUrl}
+      size={size}
+      className={
+        active
+          ? "ring-2 ring-primary ring-offset-2 ring-offset-background animate-pulse"
+          : undefined
+      }
+    />
+  )
 
-  const label = playing
-    ? `Pausar muestra de ${name}`
-    : `Reproducir muestra de ${name}`
+  if (!canPlay || !artist.spotifyId) return avatar
+
+  const label = active
+    ? `Cerrar reproductor de ${name}`
+    : `Escuchar a ${name}`
 
   return (
-    <div className="relative">
-      {playing && trackName ? (
-        <span
-          className="text-[10px] font-bold bg-background/90 text-foreground px-2 py-0.5 rounded-full border border-border animate-fade-in absolute bottom-full left-1/2 z-10 mb-1 max-w-[7.5rem] -translate-x-1/2 truncate"
-          title={trackName}
-        >
-          {trackName}
-        </span>
-      ) : null}
-      <button
-        type="button"
-        onClick={() => toggle(previewUrl)}
-        className={cn(tapFeedbackClass, "relative block rounded-full")}
-        aria-pressed={playing}
-        aria-label={label}
-      >
-        <ArtistAvatar
-          name={name}
-          imageUrl={artist.imageUrl}
-          size={size}
-          className={
-            playing
-              ? "border-2 border-primary animate-pulse shadow-lg shadow-primary/40"
-              : undefined
-          }
-        />
-        <span className="bg-primary text-white rounded-full p-1 shadow-md w-6 h-6 flex items-center justify-center absolute right-0 bottom-0">
-          {playing ? (
-            <Pause className="size-3 fill-current" aria-hidden="true" />
-          ) : (
-            <Play className="size-3 fill-current" aria-hidden="true" />
-          )}
-        </span>
-      </button>
-    </div>
+    <button
+      type="button"
+      onClick={() => toggleSpotifyMiniPlayer(artist.spotifyId!, name)}
+      className={cn(tapFeedbackClass, "relative block rounded-full")}
+      aria-pressed={active}
+      aria-label={label}
+    >
+      {avatar}
+    </button>
   )
 }
 
@@ -102,7 +88,7 @@ function ArtistChip({ artist }: { artist: EventLineupArtist }) {
   const time = formatSlotTime(artist.performanceTime)
   return (
     <li className="flex items-center gap-2 rounded-full border border-border bg-secondary/40 py-1 pr-3 pl-1">
-      <ArtistPreviewAvatar artist={artist} size="xs" />
+      <ArtistGridAvatar artist={artist} size="xs" />
       <span className="max-w-[10rem] truncate text-sm font-semibold text-foreground">
         {name}
       </span>
@@ -131,7 +117,7 @@ function VisualLineup({ artists }: { artists: EventLineupArtist[] }) {
               key={artist.id}
               className="flex min-w-[90px] max-w-[110px] shrink-0 snap-start flex-col items-center gap-2"
             >
-              <ArtistPreviewAvatar artist={artist} size="hero" />
+              <ArtistGridAvatar artist={artist} size="hero" />
               <p className="w-full truncate text-center text-xs font-bold leading-tight text-foreground">
                 {name}
               </p>
@@ -223,7 +209,7 @@ export function EventLineup({
 }) {
   useEffect(() => {
     return () => {
-      stopArtistPreview()
+      closeSpotifyMiniPlayer()
     }
   }, [])
 
@@ -248,6 +234,7 @@ export function EventLineup({
           <SmartTimeline slots={data.slots} />
         </div>
       ) : null}
+      {hasArtists ? <SpotifyMiniPlayer /> : null}
     </section>
   )
 }

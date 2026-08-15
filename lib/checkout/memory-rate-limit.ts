@@ -26,6 +26,7 @@ export class MemoryRateLimiter {
 
 const globalHits = globalThis as {
   __tokepassCheckoutIpLimiter?: MemoryRateLimiter
+  __tokepassArtistPreviewIpLimiter?: MemoryRateLimiter
 }
 
 export function getCheckoutIpLimiter(): MemoryRateLimiter {
@@ -33,4 +34,11 @@ export function getCheckoutIpLimiter(): MemoryRateLimiter {
     globalHits.__tokepassCheckoutIpLimiter = new MemoryRateLimiter(8, 60_000)
   }
   return globalHits.__tokepassCheckoutIpLimiter
+}
+
+export function getArtistPreviewIpLimiter(): MemoryRateLimiter {
+  if (!globalHits.__tokepassArtistPreviewIpLimiter) {
+    globalHits.__tokepassArtistPreviewIpLimiter = new MemoryRateLimiter(12, 60_000)
+  }
+  return globalHits.__tokepassArtistPreviewIpLimiter
 }

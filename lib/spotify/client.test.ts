@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
-import { mapSpotifyArtist, mapSpotifyTopTrack, pickSpotifyArtistImage, isSuccessfulSpotifyStatus } from "@/lib/spotify/map"
+import { mapSpotifyArtist, mapSpotifyTopTrack, parseSpotifyEmbedPreview, pickSpotifyArtistImage, isSuccessfulSpotifyStatus } from "@/lib/spotify/map"
 
 describe("spotify artist mapping", () => {
   it("prefers the 300px image and falls back to null", () => {
@@ -44,6 +44,8 @@ describe("spotify artist mapping", () => {
   it("picks the first top track that has a preview url", () => {
     const mapped = mapSpotifyTopTrack([
       { name: "Sin preview", preview_url: null },
+      { name: "Vacio", preview_url: undefined },
+      { name: "Nulo", preview_url: "null" },
       { name: "Bzrp Music Sessions", preview_url: "https://p.scdn.co/mp3-preview/demo" },
     ])
     assert.deepEqual(mapped, {
@@ -54,5 +56,27 @@ describe("spotify artist mapping", () => {
       previewUrl: null,
       trackName: null,
     })
+  })
+
+  it("walks the top 10 tracks until a preview url exists", () => {
+    const tracks = Array.from({ length: 10 }, (_, index) => ({
+      id: `track-${index}`,
+      name: `Tema ${index + 1}`,
+      preview_url: index === 9 ? "https://p.scdn.co/mp3-preview/last" : null,
+    }))
+    assert.deepEqual(mapSpotifyTopTrack(tracks), {
+      previewUrl: "https://p.scdn.co/mp3-preview/last",
+      trackName: "Tema 10",
+    })
+  })
+
+  it("parses preview urls from Spotify embed html", () => {
+    const html =
+      '{"audioPreview":{"url":"https:\\u002F\\u002Fp.scdn.co\\u002Fmp3-preview\\u002Fembed"}}'
+    assert.equal(
+      parseSpotifyEmbedPreview(html),
+      "https://p.scdn.co/mp3-preview/embed",
+    )
+    assert.equal(parseSpotifyEmbedPreview(""), null)
   })
 })

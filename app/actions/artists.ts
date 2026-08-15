@@ -25,12 +25,20 @@ import {
   type LineupDraftItem,
 } from "@/lib/artists"
 import { logger } from "@/lib/logger"
+import { getArtistPreviewIpLimiter } from "@/lib/checkout/memory-rate-limit"
+import { getCheckoutRequestContext } from "@/lib/checkout/request-context"
 import {
   fetchArtistTopTrack,
   isSpotifyConfigured,
   searchSpotifyCatalog,
 } from "@/lib/spotify/client"
-import type { SpotifyArtistHit } from "@/lib/spotify/map"
+import {
+  isPlayablePreviewUrl,
+  type SpotifyArtistHit,
+  type SpotifyTopTrack,
+} from "@/lib/spotify/map"
+import { syncArtistPreviewRows } from "@/lib/spotify/sync-previews"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
 async function requireOrganizerSession() {
@@ -176,6 +184,178 @@ async function resolveTopTrack(input: {
     return { previewUrl: null, trackName: pastedName }
   }
   return fetchArtistTopTrack(input.spotifyId)
+}
+
+async function persistArtistPreview(
+  supabase: Awaited<ReturnType<typeof createClient>> | ReturnType<typeof createAdminClient>,
+  artistId: string,
+  track: SpotifyTopTrack,
+) {
+  const { error } = await supabase
+    .from("artists")
+    .update({
+      top_track_preview_url: track.previewUrl,
+      top_track_name: track.trackName,
+      updated_at: new Date().toISOString(),
+    } as never)
+    .eq("id", artistId)
+  return !error
+}
+
+export async function getArtistTopTrack(
+  spotifyId: string,
+): Promise<ArtistActionResult<SpotifyTopTrack>> {
+  try {
+    const access = await requireOrganizerSession()
+    if (!access.ok) return { success: false, error: access.error }
+
+    const id = normalizeSpotifyId(spotifyId)
+    if (!id) {
+      return { success: false, error: "Identificador de Spotify inválido." }
+    }
+    if (!isSpotifyConfigured()) {
+      return { success: false, error: "Spotify no está configurado." }
+    }
+
+    const track = await fetchArtistTopTrack(id)
+    return { success: true, data: track }
+  } catch (error) {
+    logger.error({
+      context: "artists",
+      message: "get_artist_top_track_unexpected",
+      error,
+    })
+    return { success: false, error: "No se pudo obtener la muestra de audio." }
+  }
+}
+
+export async function syncArtistAudioPreviews(input?: {
+  artistIds?: string[]
+}): Promise<
+  ArtistActionResult<{
+    updated: number
+    skipped: number
+    failed: number
+    previews: Record<string, { previewUrl: string; trackName: string | null }>
+  }>
+> {
+  try {
+    const access = await requireOrganizerSession()
+    if (!access.ok) return { success: false, error: access.error }
+    if (!isSpotifyConfigured()) {
+      return { success: false, error: "Spotify no está configurado." }
+    }
+
+    const ids = (input?.artistIds ?? []).filter(isArtistUuid).slice(0, 80)
+    let query = access.supabase
+      .from("artists")
+      .select("id, spotify_id, top_track_preview_url, top_track_name")
+      .not("spotify_id", "is", null)
+
+    if (ids.length > 0) {
+      query = query.in("id", ids)
+    } else {
+      query = query.limit(80)
+    }
+
+    const { data, error } = await query
+    if (error) {
+      logger.error({
+        context: "artists",
+        message: "sync_artist_previews_load_failed",
+        error,
+      })
+      return { success: false, error: "No se pudieron actualizar las muestras de audio." }
+    }
+
+    const result = await syncArtistPreviewRows(
+      (data ?? []) as Array<{
+        id: string
+        spotify_id?: string | null
+        top_track_preview_url?: string | null
+        top_track_name?: string | null
+      }>,
+      (artistId, track) => persistArtistPreview(access.supabase, artistId, track),
+      { limit: 80 },
+    )
+    return { success: true, data: result }
+  } catch (error) {
+    logger.error({
+      context: "artists",
+      message: "sync_artist_previews_unexpected",
+      error,
+    })
+    return { success: false, error: "No se pudieron actualizar las muestras de audio." }
+  }
+}
+
+export async function refreshArtistAudioPreviews(
+  artistIds: string[],
+): Promise<
+  ArtistActionResult<
+    Record<string, { previewUrl: string; trackName: string | null }>
+  >
+> {
+  try {
+    const ids = [...new Set(artistIds.filter(isArtistUuid))].slice(0, 12)
+    if (ids.length === 0) return { success: true, data: {} }
+
+    const context = await getCheckoutRequestContext()
+    if (!getArtistPreviewIpLimiter().consume(`artist-preview:${context.ip}`)) {
+      return { success: false, error: "Demasiados intentos. Probá de nuevo en un minuto." }
+    }
+    if (!isSpotifyConfigured()) return { success: true, data: {} }
+
+    const supabase = await createClient()
+    const { data, error } = await supabase
+      .from("artists")
+      .select("id, spotify_id, top_track_preview_url, top_track_name")
+      .in("id", ids)
+
+    if (error) {
+      return { success: false, error: "No se pudieron cargar las muestras de audio." }
+    }
+
+    const already: Record<string, { previewUrl: string; trackName: string | null }> = {}
+    for (const row of data ?? []) {
+      if (isPlayablePreviewUrl(row.top_track_preview_url)) {
+        already[row.id] = {
+          previewUrl: row.top_track_preview_url.trim(),
+          trackName: row.top_track_name?.trim() || null,
+        }
+      }
+    }
+
+    let admin: ReturnType<typeof createAdminClient> | null = null
+    try {
+      admin = createAdminClient()
+    } catch {
+      admin = null
+    }
+
+    const synced = await syncArtistPreviewRows(
+      (data ?? []) as Array<{
+        id: string
+        spotify_id?: string | null
+        top_track_preview_url?: string | null
+        top_track_name?: string | null
+      }>,
+      async (artistId, track) => {
+        if (!admin) return true
+        return persistArtistPreview(admin, artistId, track)
+      },
+      { limit: 8 },
+    )
+
+    return { success: true, data: { ...already, ...synced.previews } }
+  } catch (error) {
+    logger.error({
+      context: "artists",
+      message: "refresh_artist_previews_unexpected",
+      error,
+    })
+    return { success: false, error: "No se pudieron cargar las muestras de audio." }
+  }
 }
 
 export async function searchArtists(

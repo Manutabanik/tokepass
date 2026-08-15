@@ -1,3 +1,6 @@
+import { isPlayablePreviewUrl } from "@/lib/spotify/map"
+import { isSpotifyArtistId } from "@/lib/spotify/embed"
+
 export type EventLineupArtist = {
   id: string
   name: string
@@ -5,8 +8,21 @@ export type EventLineupArtist = {
   role: string | null
   performanceTime: string | null
   isHeadliner: boolean
+  spotifyId: string | null
   topTrackPreviewUrl: string | null
   topTrackName: string | null
+}
+
+export function hasArtistAudioPreview(
+  artist: Pick<EventLineupArtist, "topTrackPreviewUrl">,
+): boolean {
+  return isPlayablePreviewUrl(artist.topTrackPreviewUrl)
+}
+
+export function hasArtistSpotifyPlayer(
+  artist: Pick<EventLineupArtist, "spotifyId">,
+): boolean {
+  return isSpotifyArtistId(artist.spotifyId)
 }
 
 export const LINEUP_HEADLINER_FALLBACK = 4
@@ -75,6 +91,11 @@ function readPreviewName(row: Record<string, unknown>): string | null {
   )
 }
 
+function readSpotifyId(row: Record<string, unknown>): string | null {
+  const value = text(row.spotifyId) || text(row.spotify_id)
+  return isSpotifyArtistId(value) ? value.trim() : null
+}
+
 function readHeadliner(row: Record<string, unknown>): boolean {
   const value = row.isHeadliner ?? row.is_headliner
   return value === true || value === 1 || value === "true"
@@ -95,6 +116,7 @@ function parseArtist(
     role: text(row.role) || text(row.subtitle) || text(row.description),
     performanceTime: readTime(row),
     isHeadliner: readHeadliner(row),
+    spotifyId: readSpotifyId(row),
     topTrackPreviewUrl: readPreviewUrl(row),
     topTrackName: readPreviewName(row),
   }
@@ -190,6 +212,7 @@ function artistFromJoin(raw: unknown): EventLineupArtist | null {
     role: text(row.stage) || text(nested?.bio) || text(row.bio),
     performanceTime: text(row.performance_time) || readTime(row),
     isHeadliner: readHeadliner(row),
+    spotifyId: readSpotifyId(nested ?? {}) || readSpotifyId(row),
     topTrackPreviewUrl:
       readPreviewUrl(nested ?? {}) || readPreviewUrl(row),
     topTrackName: readPreviewName(nested ?? {}) || readPreviewName(row),

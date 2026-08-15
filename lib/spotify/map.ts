@@ -10,6 +10,21 @@ export type SpotifyTopTrack = {
   trackName: string | null
 }
 
+export type SpotifyTrackCandidate = {
+  id: string | null
+  name: string | null
+  previewUrl: string | null
+}
+
+export const SPOTIFY_TOP_TRACK_LIMIT = 10
+
+export function isPlayablePreviewUrl(value: unknown): value is string {
+  if (typeof value !== "string") return false
+  const trimmed = value.trim()
+  if (!trimmed || trimmed === "null" || trimmed === "undefined") return false
+  return trimmed.startsWith("http://") || trimmed.startsWith("https://")
+}
+
 export function isSuccessfulSpotifyStatus(status: number): boolean {
   return status === 200 || status === 201
 }
@@ -74,28 +89,54 @@ function asTrackRecord(value: unknown): Record<string, unknown> | null {
 }
 
 function httpUrl(value: unknown): string | null {
-  if (typeof value !== "string") return null
-  const trimmed = value.trim()
-  if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) return null
-  return trimmed
+  return isPlayablePreviewUrl(value) ? value.trim() : null
 }
 
-export function mapSpotifyTopTrack(tracks: unknown): SpotifyTopTrack {
-  if (!Array.isArray(tracks)) {
-    return { previewUrl: null, trackName: null }
-  }
-
-  let firstName: string | null = null
+export function listSpotifyTrackCandidates(
+  tracks: unknown,
+  limit = SPOTIFY_TOP_TRACK_LIMIT,
+): SpotifyTrackCandidate[] {
+  if (!Array.isArray(tracks)) return []
+  const out: SpotifyTrackCandidate[] = []
   for (const item of tracks) {
+    if (out.length >= limit) break
     const row = asTrackRecord(item)
     if (!row) continue
     const name = typeof row.name === "string" ? row.name.trim() : ""
-    if (name && !firstName) firstName = name
-    const previewUrl = httpUrl(row.preview_url)
-    if (previewUrl) {
-      return { previewUrl, trackName: name || firstName }
-    }
+    const id = typeof row.id === "string" ? row.id.trim() : ""
+    out.push({
+      id: id || null,
+      name: name || null,
+      previewUrl: httpUrl(row.preview_url),
+    })
   }
+  return out
+}
 
-  return { previewUrl: null, trackName: firstName }
+export function mapSpotifyTopTrack(tracks: unknown): SpotifyTopTrack {
+  const candidates = listSpotifyTrackCandidates(tracks)
+  const hit = candidates.find((item) => item.previewUrl)
+  if (hit?.previewUrl) {
+    return { previewUrl: hit.previewUrl, trackName: hit.name }
+  }
+  return { previewUrl: null, trackName: candidates[0]?.name ?? null }
+}
+
+export function parseSpotifyEmbedPreview(html: string): string | null {
+  if (!html) return null
+  const decoded = html
+    .replace(/\\u002F/gi, "/")
+    .replace(/\\\//g, "/")
+    .replace(/\\"/g, '"')
+  const patterns = [
+    /"audioPreview"\s*:\s*\{\s*"url"\s*:\s*"(https:[^"]+)"/i,
+    /"preview_url"\s*:\s*"(https:[^"]+)"/i,
+    /(https:\/\/p\.scdn\.co\/mp3-preview\/[A-Za-z0-9._-]+)/i,
+  ]
+  for (const pattern of patterns) {
+    const match = decoded.match(pattern)
+    const url = match?.[1]?.replace(/\\/g, "").trim()
+    if (isPlayablePreviewUrl(url)) return url
+  }
+  return null
 }

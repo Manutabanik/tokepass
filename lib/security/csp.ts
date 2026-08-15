@@ -144,7 +144,7 @@ export function buildContentSecurityPolicy(nonce?: string | null): string {
     "media-src 'self' blob: https://p.scdn.co https://*.scdn.co https://*.spotifycdn.com",
     "worker-src 'self' blob:",
     "child-src 'self' blob:",
-    "frame-src 'self' https://www.mercadopago.com https://*.mercadopago.com https://*.mercadopago.com.ar https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com https://www.google.com https://recaptcha.google.com https://challenges.cloudflare.com",
+    "frame-src 'self' https://open.spotify.com https://embed.spotify.com https://www.mercadopago.com https://*.mercadopago.com https://*.mercadopago.com.ar https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com https://www.google.com https://recaptcha.google.com https://challenges.cloudflare.com",
     `connect-src ${connectSrc}`,
   ]
     .join("; ")

@@ -3,6 +3,7 @@ import { describe, it } from "node:test"
 
 import {
   eventArtistsToLineup,
+  hasArtistAudioPreview,
   hasEventLineup,
   parseEventLineup,
   visibleLineupArtists,
@@ -30,6 +31,7 @@ describe("parseEventLineup", () => {
     assert.equal(parsed.slots[0]?.title, "Bizarrap")
     assert.equal(parsed.artists[0]?.isHeadliner, false)
     assert.equal(parsed.artists[0]?.topTrackPreviewUrl, null)
+    assert.equal(parsed.artists[0]?.spotifyId, null)
   })
 
   it("parses artists and schedule objects", () => {
@@ -63,6 +65,7 @@ describe("parseEventLineup", () => {
         name: "Bizarrap",
         top_track_preview_url: "https://p.scdn.co/mp3-preview/bzrp",
         top_track_name: "Music Sessions",
+        spotify_id: "0eHQ9o50hj6ZXyrqmx1rJg",
       },
     ])
     assert.equal(
@@ -70,6 +73,12 @@ describe("parseEventLineup", () => {
       "https://p.scdn.co/mp3-preview/bzrp",
     )
     assert.equal(parsed.artists[0]?.topTrackName, "Music Sessions")
+    assert.equal(parsed.artists[0]?.spotifyId, "0eHQ9o50hj6ZXyrqmx1rJg")
+    assert.equal(hasArtistAudioPreview(parsed.artists[0]!), true)
+    assert.equal(
+      hasArtistAudioPreview({ topTrackPreviewUrl: null }),
+      false,
+    )
   })
 })
 
@@ -85,6 +94,7 @@ describe("eventArtistsToLineup", () => {
           id: "a-bzrp",
           name: "Bizarrap",
           image_url: "https://cdn.example/bzrp.jpg",
+          spotify_id: "0eHQ9o50hj6ZXyrqmx1rJg",
         },
       },
       {
@@ -102,6 +112,8 @@ describe("eventArtistsToLineup", () => {
     assert.equal(parsed.slots[0]?.description, "Main")
     assert.equal(parsed.artists[0]?.isHeadliner, false)
     assert.equal(parsed.artists[1]?.isHeadliner, false)
+    assert.equal(parsed.artists[0]?.spotifyId, null)
+    assert.equal(parsed.artists[1]?.spotifyId, "0eHQ9o50hj6ZXyrqmx1rJg")
   })
 
   it("maps is_headliner from EventArtist rows", () => {
@@ -133,6 +145,7 @@ describe("visibleLineupArtists", () => {
     role: null,
     performanceTime: null,
     isHeadliner: false,
+    spotifyId: null,
     topTrackPreviewUrl: null,
     topTrackName: null,
   }))

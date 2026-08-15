@@ -1085,7 +1085,7 @@ async function loadEditableLineup(
       id: artist.id,
       artistId: artist.id.startsWith("artist-") ? null : artist.id,
       lineupEntryId: null,
-      spotifyId: null,
+      spotifyId: artist.spotifyId,
       name: artist.name,
       imageUrl: artist.imageUrl,
       genre: artist.role,

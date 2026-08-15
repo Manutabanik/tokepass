@@ -1132,8 +1132,10 @@ async function loadEventArtistsLineup(
 ): Promise<EventLineupData> {
   const empty: EventLineupData = { artists: [], slots: [] }
   const selects = [
+    "id, performance_time, stage, sort_order, is_headliner, artists(id, name, image_url, bio, spotify_id, top_track_preview_url, top_track_name)",
     "id, performance_time, stage, sort_order, is_headliner, artists(id, name, image_url, bio, top_track_preview_url, top_track_name)",
     "id, performance_time, stage, sort_order, is_headliner, artists(id, name, image_url, bio)",
+    "id, performance_time, stage, sort_order, artists(id, name, image_url, bio, spotify_id, top_track_preview_url, top_track_name)",
     "id, performance_time, stage, sort_order, artists(id, name, image_url, bio, top_track_preview_url, top_track_name)",
     "id, performance_time, stage, sort_order, artists(id, name, image_url, bio)",
   ]

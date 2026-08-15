@@ -2,6 +2,8 @@
 
 import { useCallback, useSyncExternalStore } from "react"
 
+import { isPlayablePreviewUrl } from "@/lib/spotify/map"
+
 type PreviewState = {
   artistId: string | null
   playing: boolean
@@ -32,37 +34,24 @@ function getServerSnapshot() {
   return IDLE
 }
 
-function getAudio() {
-  if (audio) return audio
-  audio = new Audio()
-  audio.preload = "none"
-  audio.addEventListener("ended", () => {
-    state = IDLE
-    emit()
-  })
-  audio.addEventListener("error", () => {
-    state = IDLE
-    emit()
-  })
-  return audio
+function silence(player: HTMLAudioElement) {
+  player.pause()
+  player.removeAttribute("src")
+  try {
+    player.load()
+  } catch {
+    /* Safari can throw if the element is already tearing down. */
+  }
 }
 
-function setPlaying(artistId: string) {
-  state = { artistId, playing: true }
-  emit()
-}
-
-function failPlayback() {
-  state = IDLE
-  emit()
+function releaseAudio() {
+  if (!audio) return
+  silence(audio)
+  audio = null
 }
 
 export function stopArtistPreview() {
-  if (audio) {
-    audio.pause()
-    audio.removeAttribute("src")
-    audio.load()
-  }
+  releaseAudio()
   if (state.artistId || state.playing) {
     state = IDLE
     emit()
@@ -71,27 +60,39 @@ export function stopArtistPreview() {
 
 export function toggleArtistPreview(artistId: string, url: string) {
   const source = url.trim()
-  if (!source) return
+  if (!isPlayablePreviewUrl(source)) return
 
-  const player = getAudio()
-  if (state.artistId === artistId && state.playing) {
-    player.pause()
+  if (state.artistId === artistId && state.playing && audio) {
+    audio.pause()
     state = { artistId, playing: false }
     emit()
     return
   }
 
-  if (state.artistId === artistId && !state.playing && !player.ended) {
-    setPlaying(artistId)
-    void player.play().catch(failPlayback)
-    return
+  if (audio) {
+    silence(audio)
+    audio = null
   }
 
-  player.pause()
-  player.src = source
-  player.currentTime = 0
-  setPlaying(artistId)
-  void player.play().catch(failPlayback)
+  const next = new Audio(source)
+  next.preload = "auto"
+  next.setAttribute("playsinline", "true")
+  next.setAttribute("webkit-playsinline", "true")
+  const onDone = () => {
+    if (audio !== next) return
+    audio = null
+    state = IDLE
+    emit()
+  }
+  next.addEventListener("ended", onDone)
+  next.addEventListener("error", onDone)
+  audio = next
+  state = { artistId, playing: true }
+  emit()
+  void next.play().catch(() => {
+    if (audio !== next) return
+    onDone()
+  })
 }
 
 export function useArtistPreview(artistId: string) {
