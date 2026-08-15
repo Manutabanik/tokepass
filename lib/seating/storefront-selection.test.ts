@@ -58,6 +58,7 @@ describe("storefront-selection", () => {
     assert.equal(item?.name, "Grada Amarilla · Mesa 18")
     assert.equal(item?.price, 12500)
     assert.equal(item?.type, "table")
+    assert.equal(item?.capacity, 6)
   })
 
   it("hidrata el carrito con el objeto vivo del mapa", () => {

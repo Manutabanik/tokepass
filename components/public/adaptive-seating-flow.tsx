@@ -42,6 +42,7 @@ import {
   zoneIdFromEventTarget,
 } from "@/lib/seating/venue-polygon"
 import { occupancyFromSeatingUnits } from "@/lib/seating/venue-map-occupancy"
+import { useStorefrontSeatStore } from "@/lib/stores/storefront-seat-store"
 import { cn } from "@/lib/utils"
 import { VenueMapBackgroundLayer } from "@/components/venue/venue-map-background-layer"
 import { VenueMapZoneLayer } from "@/components/venue/venue-map-zone-layer"
@@ -107,16 +108,31 @@ export function AdaptiveSeatingFlow({
           onSelectZone={(zone) => onSelectZone?.(zone)}
           onContinue={(seats) => {
             const seat = seats[0]
-            if (!seat) return
+            if (seat?.row.trim()) {
+              onContinue?.({
+                kind: "numbered",
+                sectorId: seat.sectorId,
+                sectorName: seat.sectorName,
+                color: seat.color,
+                unitPrice: seat.price,
+                groupId: `${seat.sectorId}-row-${seat.row}`,
+                groupName: `Fila ${seat.row}`,
+                seats: [{ id: seat.id, label: `${seat.row}-${seat.number}` }],
+              })
+              return
+            }
+            const stored = useStorefrontSeatStore.getState().selectedItems
+            const last = stored[stored.length - 1]
+            const sectorId = last?.sectorId ?? last?.id ?? seat?.sectorId
+            if (!sectorId) return
             onContinue?.({
-              kind: "numbered",
-              sectorId: seat.sectorId,
-              sectorName: seat.sectorName,
-              color: seat.color,
-              unitPrice: seat.price,
-              groupId: `${seat.sectorId}-row-${seat.row}`,
-              groupName: `Fila ${seat.row}`,
-              seats: [{ id: seat.id, label: `${seat.row}-${seat.number}` }],
+              kind: "general",
+              sectorId,
+              sectorName:
+                last?.name.split(" · ")[0] ?? seat?.sectorName ?? "Zona",
+              color: last?.color ?? seat?.color ?? "#34d399",
+              unitPrice: last?.price ?? seat?.price ?? 0,
+              quantity: Math.max(1, last?.capacity ?? seats.length ?? 1),
             })
           }}
         />

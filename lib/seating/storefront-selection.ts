@@ -59,7 +59,7 @@ export function storefrontItemFromElement(
       element.price,
       priceBySectorId,
     ),
-    capacity: 1,
+    capacity: buyerElementCapacity(element),
     sectorId: element.groupId?.trim() || element.id,
     color: element.color,
   }
@@ -130,6 +130,7 @@ export function hydrateStorefrontItemsFromMap(
       ...item,
       name: live.name,
       price: live.price,
+      capacity: live.capacity || item.capacity,
       color: live.color ?? item.color,
       type: live.type,
       sectorId: live.sectorId ?? item.sectorId,
