@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowLeft, CalendarPlus, Copy, Share2 } from "lucide-react"
+import { ArrowLeft, Copy, Share2 } from "lucide-react"
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
@@ -15,32 +15,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-function buildGoogleCalendarUrl(input: {
-  title: string
-  date: string
-  location: string
-  details?: string | null
-}) {
-  const start = new Date(input.date)
-  if (Number.isNaN(start.getTime())) return null
-  const end = new Date(start.getTime() + 3 * 60 * 60 * 1000)
-
-  const stamp = (value: Date) =>
-    value
-      .toISOString()
-      .replace(/[-:]/g, "")
-      .replace(/\.\d{3}Z$/, "Z")
-
-  const params = new URLSearchParams({
-    action: "TEMPLATE",
-    text: input.title,
-    dates: `${stamp(start)}/${stamp(end)}`,
-    location: input.location,
-    details: input.details?.trim() || "Entrada emitida con Tokepass",
-  })
-  return `https://calendar.google.com/calendar/render?${params.toString()}`
-}
-
 const iconButtonClass =
   "size-10 min-h-10 min-w-10 rounded-full border border-border bg-background p-2.5 text-foreground shadow-none hover:bg-muted"
 
@@ -48,9 +22,6 @@ export function EventActionBar({
   eventId,
   title,
   showBackLink,
-  date,
-  location,
-  details,
 }: {
   eventId: string
   title: string
@@ -60,14 +31,6 @@ export function EventActionBar({
   details?: string | null
 }) {
   const [favorited, setFavorited] = useState(false)
-  const calendarHref = date
-    ? buildGoogleCalendarUrl({
-        title,
-        date,
-        location: location ?? "",
-        details,
-      })
-    : null
 
   useEffect(() => {
     let cancelled = false
@@ -120,24 +83,6 @@ export function EventActionBar({
       )}
 
       <div className="flex items-center gap-2">
-        {calendarHref ? (
-          <Button
-            variant="outline"
-            size="icon"
-            className={iconButtonClass}
-            nativeButton={false}
-            render={
-              <a
-                href={calendarHref}
-                target="_blank"
-                rel="noreferrer"
-                aria-label="Agendar al calendario"
-              />
-            }
-          >
-            <CalendarPlus className="size-4" aria-hidden="true" />
-          </Button>
-        ) : null}
         <FavoriteToggleButton
           key={`${eventId}-${favorited ? "on" : "off"}`}
           eventId={eventId}

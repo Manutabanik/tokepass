@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-import { MAX_TICKETS_PER_PURCHASE } from "@/lib/checkout-limits"
+import { ABSOLUTE_MAX_ITEMS_PER_PURCHASE } from "@/lib/checkout-limits"
 import {
   DNI_ERROR,
   EMAIL_ERROR,
@@ -91,7 +91,11 @@ export const CheckoutBuyerInputSchema = z.union([
 
 export const CheckoutCartItemSchema = z.object({
   tierId: z.string().uuid(UUID_ERROR),
-  quantity: z.number().int().positive().max(MAX_TICKETS_PER_PURCHASE, QTY_ERROR),
+  quantity: z
+    .number()
+    .int()
+    .positive()
+    .max(ABSOLUTE_MAX_ITEMS_PER_PURCHASE, QTY_ERROR),
   seatingUnitId: z.string().uuid(UUID_ERROR).optional(),
   seatingIds: z.array(z.string().uuid(UUID_ERROR)).max(1).optional(),
   sectorKey: z.string().trim().max(120).nullable().optional(),
@@ -107,7 +111,7 @@ export const CheckoutAddonItemSchema = z.object({
 export const CheckoutPayloadSchema = z
   .object({
     eventId: z.string().uuid(UUID_ERROR),
-    items: z.array(CheckoutCartItemSchema).max(MAX_TICKETS_PER_PURCHASE).optional(),
+    items: z.array(CheckoutCartItemSchema).max(ABSOLUTE_MAX_ITEMS_PER_PURCHASE).optional(),
     seatingIds: z.array(z.string().uuid(UUID_ERROR)).max(1).optional(),
     addons: z.array(CheckoutAddonItemSchema).max(20).optional().default([]),
     buyer: CheckoutBuyerInputSchema,
@@ -155,11 +159,14 @@ export const CheckoutPayloadSchema = z
     }
 
     const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0)
-    if (items.length > 0 && (totalQuantity < 1 || totalQuantity > MAX_TICKETS_PER_PURCHASE)) {
+    if (
+      items.length > 0 &&
+      (totalQuantity < 1 || totalQuantity > ABSOLUTE_MAX_ITEMS_PER_PURCHASE)
+    ) {
       ctx.addIssue({
         code: "custom",
         path: ["items"],
-        message: `Podés reservar entre 1 y ${MAX_TICKETS_PER_PURCHASE} entradas por compra.`,
+        message: `Podés reservar entre 1 y ${ABSOLUTE_MAX_ITEMS_PER_PURCHASE} entradas por compra.`,
       })
     }
 

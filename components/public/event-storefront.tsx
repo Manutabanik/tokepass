@@ -174,8 +174,213 @@ export function EventStorefront({
   )
 
   const reduceMotion = useReducedMotion()
+
+  function renderDiscoveryColumn() {
+    return (
+      <motion.div
+        className="min-w-0 overflow-x-clip lg:col-span-7 xl:col-span-8"
+        variants={reduceMotion ? undefined : storefrontStagger}
+      >
+        <div className="flex flex-col gap-8 md:gap-10">
+          <motion.div variants={reduceMotion ? undefined : storefrontFade}>
+            <EventHeroMediaGallery
+              eventId={event.id}
+              title={event.title}
+              imageUrl={event.imageUrl}
+              promoVideoUrl={event.promoVideoUrl}
+              finished={finished}
+            />
+          </motion.div>
+
+          <motion.div
+            variants={reduceMotion ? undefined : storefrontFade}
+            className="space-y-3"
+          >
+            <EventActionBar
+              eventId={event.id}
+              title={event.title}
+              showBackLink={showBackLink}
+              date={event.date}
+              location={address}
+              details={event.description}
+            />
+            <div className="flex flex-wrap items-center gap-1.5 px-4 md:px-0">
+              {finished ? (
+                <span className="inline-flex items-center rounded-full border border-border bg-muted/50 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
+                  Finalizado
+                </span>
+              ) : soldOut ? (
+                <span className="inline-flex items-center rounded-full border border-rose-500/25 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold text-rose-700 dark:text-rose-300">
+                  Agotado
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/50 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
+                  <Music2 className="size-3" aria-hidden="true" />
+                  Evento en vivo
+                </span>
+              )}
+              {demand ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-500/20 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold text-rose-700 dark:text-rose-300">
+                  <Flame className="size-3" aria-hidden="true" />
+                  {demand}
+                </span>
+              ) : null}
+              {event.status === "draft" ? (
+                <span className="inline-flex items-center rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-800 dark:text-amber-200">
+                  Borrador
+                </span>
+              ) : null}
+            </div>
+          </motion.div>
+
+          <motion.div variants={reduceMotion ? undefined : storefrontFade}>
+            <HeaderInfoBlock
+              title={event.title}
+              organizerName={organizerName}
+            />
+          </motion.div>
+
+          <motion.div
+            variants={reduceMotion ? undefined : storefrontFade}
+            className="px-4 md:px-0"
+          >
+            <EventAboutExpandable description={description} />
+          </motion.div>
+
+          <motion.div
+            variants={reduceMotion ? undefined : storefrontFade}
+            className="px-4 md:px-0"
+          >
+            <EventLineup data={event.lineup} />
+          </motion.div>
+
+          <hr className="mx-4 border-border/40 md:mx-0" />
+
+          <motion.div variants={reduceMotion ? undefined : storefrontFade}>
+            <EventDateSelector
+              dates={availableDates}
+              selectedId={selectedDate}
+              onChange={setSelectedDate}
+            />
+          </motion.div>
+
+        </div>
+      </motion.div>
+    )
+  }
+
+  function renderDetailsColumn() {
+    return (
+      <motion.div
+        className="min-w-0 space-y-8 overflow-x-clip px-4 pb-6 md:px-0 lg:col-span-7 lg:col-start-1 xl:col-span-8"
+        variants={reduceMotion ? undefined : storefrontFade}
+      >
+        <EventResaleListings
+          listings={resaleListings}
+          currentUserId={currentUserId}
+        />
+
+        <EventLocationPanel
+          venueName={venueName}
+          address={address}
+          latitude={event.venue?.latitude ?? null}
+          longitude={event.venue?.longitude ?? null}
+        />
+
+        <EventExperienceGallery urls={event.galleryUrls} />
+
+        <section className="space-y-3">
+          <h2 className="text-lg font-bold tracking-tight text-foreground">
+            Información útil
+          </h2>
+          <Accordion className="rounded-2xl border border-border bg-card px-4 text-card-foreground">
+            <AccordionItem value="age">
+              <AccordionTrigger className="py-4 text-sm text-foreground hover:no-underline">
+                Restricciones y edad
+              </AccordionTrigger>
+              <AccordionContent className="text-muted-foreground">
+                Verificá la política de edad del organizador en puerta. Si el
+                evento es +18, deberás presentar DNI vigente. Tokepass no
+                garantiza el ingreso si no cumplís los requisitos del lugar.
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="bring">
+              <AccordionTrigger className="py-4 text-sm text-foreground hover:no-underline">
+                Qué llevar y qué no llevar
+              </AccordionTrigger>
+              <AccordionContent className="text-muted-foreground">
+                Llevá tu Living QR en el celular con batería. Evitá capturas
+                de pantalla: los códigos dinámicos vencen. La reventa solo es
+                válida a través del marketplace oficial de Tokepass.
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="refunds">
+              <AccordionTrigger className="py-4 text-sm text-foreground hover:no-underline">
+                Política de devoluciones
+              </AccordionTrigger>
+              <AccordionContent className="text-muted-foreground">
+                Las devoluciones dependen de la política del organizador y de
+                la normativa vigente. Si el evento se cancela, Tokepass
+                gestiona el proceso de reintegro según el estado del pago.
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </section>
+
+        <section className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 text-card-foreground">
+          <OrganizerAvatar
+            name={organizerName}
+            avatarUrl={event.organizerAvatarUrl}
+          />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="truncate font-bold text-foreground">
+                {organizerName}
+              </p>
+              <Badge
+                variant="outline"
+                className="rounded-full border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold text-sky-700 dark:text-sky-300"
+              >
+                <BadgeCheck className="size-3" aria-hidden="true" />
+                Verificado
+              </Badge>
+            </div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {organizerBio}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled
+            className="shrink-0 rounded-full border-border"
+            title="Próximamente"
+          >
+            Seguir
+          </Button>
+        </section>
+
+        <div className="flex items-start gap-3 rounded-2xl border border-border bg-muted/40 px-4 py-4 text-sm text-muted-foreground">
+          <ShieldCheck
+            className={cn(
+              "mt-0.5 size-5 shrink-0",
+              event.isSponsoredByTokepass
+                ? "text-amber-600 dark:text-amber-300"
+                : "text-emerald-600 dark:text-emerald-400",
+            )}
+          />
+          <p>
+            Tus entradas digitales quedan asociadas a tu cuenta Tokepass.
+            Presentalas en puerta con Living QR dinámico.
+          </p>
+        </div>
+      </motion.div>
+    )
+  }
+
   const asideClassName =
-    "h-fit min-w-0 scroll-mt-24 px-4 pb-12 md:px-0 lg:sticky lg:top-24 lg:z-30 lg:col-span-5 lg:col-start-8 lg:row-span-full lg:row-start-1 lg:self-start xl:col-span-4 xl:col-start-9"
+    "min-w-0 scroll-mt-24 px-4 pb-[140px] md:px-0 lg:sticky lg:top-24 lg:z-30 lg:col-span-5 lg:col-start-8 lg:row-span-full lg:row-start-1 lg:flex lg:max-h-[calc(100vh-6rem)] lg:flex-col lg:self-start lg:pb-0 xl:col-span-4 xl:col-start-9"
 
   return (
     <div className="relative isolate min-h-0 overflow-x-visible bg-background pb-8 text-foreground lg:pb-12">
@@ -205,84 +410,14 @@ export function EventStorefront({
         initial={reduceMotion ? false : "hidden"}
         animate="show"
       >
-        <motion.div
-          className="min-w-0 overflow-x-clip lg:col-span-7 xl:col-span-8"
-          variants={reduceMotion ? undefined : storefrontStagger}
-        >
-            <motion.div variants={reduceMotion ? undefined : storefrontFade}>
-            <EventHeroMediaGallery
-              eventId={event.id}
-              title={event.title}
-              imageUrl={event.imageUrl}
-              promoVideoUrl={event.promoVideoUrl}
-              finished={finished}
-            />
-            </motion.div>
-            <motion.div
-              variants={reduceMotion ? undefined : storefrontFade}
-              className="mt-4 space-y-3"
-            >
-              <EventActionBar
-                eventId={event.id}
-                title={event.title}
-                showBackLink={showBackLink}
-                date={event.date}
-                location={address}
-                details={event.description}
-              />
-              <div className="flex flex-wrap items-center gap-1.5 px-4 md:px-0">
-                {finished ? (
-                  <span className="inline-flex items-center rounded-full border border-border bg-muted/50 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
-                    Finalizado
-                  </span>
-                ) : soldOut ? (
-                  <span className="inline-flex items-center rounded-full border border-rose-500/25 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold text-rose-700 dark:text-rose-300">
-                    Agotado
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/50 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
-                    <Music2 className="size-3" aria-hidden="true" />
-                    Evento en vivo
-                  </span>
-                )}
-                {demand ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-500/20 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold text-rose-700 dark:text-rose-300">
-                    <Flame className="size-3" aria-hidden="true" />
-                    {demand}
-                  </span>
-                ) : null}
-                {event.status === "draft" ? (
-                  <span className="inline-flex items-center rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-800 dark:text-amber-200">
-                    Borrador
-                  </span>
-                ) : null}
-              </div>
-            </motion.div>
-            <motion.div variants={reduceMotion ? undefined : storefrontFade}>
-            <HeaderInfoBlock
-              title={event.title}
-              organizerName={organizerName}
-            />
-            </motion.div>
-            <motion.div variants={reduceMotion ? undefined : storefrontFade}>
-            <EventDateSelector
-              dates={availableDates}
-              selectedId={selectedDate}
-              onChange={setSelectedDate}
-            />
-            </motion.div>
-            <motion.div
-              variants={reduceMotion ? undefined : storefrontFade}
-              className="px-4 md:px-0"
-            >
-              <EventLineup data={event.lineup} />
-            </motion.div>
-        </motion.div>
-
         {finished ? (
-          <aside id="tickets" className={asideClassName}>
-            <EventSaleStatusNotice state="finished" />
-          </aside>
+          <>
+            {renderDiscoveryColumn()}
+            <aside id="tickets" className={asideClassName}>
+              <EventSaleStatusNotice state="finished" />
+            </aside>
+            {renderDetailsColumn()}
+          </>
         ) : (
           <TicketSelector
             eventId={event.id}
@@ -309,8 +444,10 @@ export function EventStorefront({
             tiers={ticketTiers}
             selectedDayId={selectedDate}
             defaultTicketTab={event.defaultTicketTab}
-            renderLayout={({ map, panel }) => (
+            maxTicketsPerUser={event.maxTicketsPerUser}
+            renderLayout={({ panel }) => (
               <>
+                {renderDiscoveryColumn()}
                 <aside id="tickets" className={asideClassName}>
                   {soldOut ? (
                     <div className="mb-4">
@@ -319,126 +456,11 @@ export function EventStorefront({
                   ) : null}
                   {panel}
                 </aside>
-                {map ? (
-                  <section
-                    id="mapa"
-                    className="min-w-0 px-4 pt-2 md:px-0 lg:col-span-7 lg:col-start-1 lg:pt-0 xl:col-span-8"
-                  >
-                    {map}
-                  </section>
-                ) : null}
+                {renderDetailsColumn()}
               </>
             )}
           />
         )}
-
-        <motion.div
-          className="min-w-0 space-y-8 overflow-x-clip px-4 pb-6 md:px-0 lg:col-span-7 lg:col-start-1 xl:col-span-8"
-          variants={reduceMotion ? undefined : storefrontFade}
-        >
-            <EventResaleListings
-              listings={resaleListings}
-              currentUserId={currentUserId}
-            />
-
-            <EventAboutExpandable description={description} />
-
-            <EventLocationPanel
-              venueName={venueName}
-              address={address}
-              latitude={event.venue?.latitude ?? null}
-              longitude={event.venue?.longitude ?? null}
-            />
-
-            <EventExperienceGallery urls={event.galleryUrls} />
-
-            <section className="space-y-3">
-              <h2 className="text-lg font-bold tracking-tight text-foreground">
-                Información útil
-              </h2>
-              <Accordion className="rounded-2xl border border-border bg-card px-4 text-card-foreground">
-                <AccordionItem value="age">
-                  <AccordionTrigger className="py-4 text-sm text-foreground hover:no-underline">
-                    Restricciones y edad
-                  </AccordionTrigger>
-                  <AccordionContent className="text-muted-foreground">
-                    Verificá la política de edad del organizador en puerta. Si el
-                    evento es +18, deberás presentar DNI vigente. Tokepass no
-                    garantiza el ingreso si no cumplís los requisitos del lugar.
-                  </AccordionContent>
-                </AccordionItem>
-                <AccordionItem value="bring">
-                  <AccordionTrigger className="py-4 text-sm text-foreground hover:no-underline">
-                    Qué llevar y qué no llevar
-                  </AccordionTrigger>
-                  <AccordionContent className="text-muted-foreground">
-                    Llevá tu Living QR en el celular con batería. Evitá capturas
-                    de pantalla: los códigos dinámicos vencen. La reventa solo es
-                    válida a través del marketplace oficial de Tokepass.
-                  </AccordionContent>
-                </AccordionItem>
-                <AccordionItem value="refunds">
-                  <AccordionTrigger className="py-4 text-sm text-foreground hover:no-underline">
-                    Política de devoluciones
-                  </AccordionTrigger>
-                  <AccordionContent className="text-muted-foreground">
-                    Las devoluciones dependen de la política del organizador y de
-                    la normativa vigente. Si el evento se cancela, Tokepass
-                    gestiona el proceso de reintegro según el estado del pago.
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-            </section>
-
-            <section className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 text-card-foreground">
-              <OrganizerAvatar
-                name={organizerName}
-                avatarUrl={event.organizerAvatarUrl}
-              />
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="truncate font-bold text-foreground">
-                    {organizerName}
-                  </p>
-                  <Badge
-                    variant="outline"
-                    className="rounded-full border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold text-sky-700 dark:text-sky-300"
-                  >
-                    <BadgeCheck className="size-3" aria-hidden="true" />
-                    Verificado
-                  </Badge>
-                </div>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {organizerBio}
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled
-                className="shrink-0 rounded-full border-border"
-                title="Próximamente"
-              >
-                Seguir
-              </Button>
-            </section>
-
-            <div className="flex items-start gap-3 rounded-2xl border border-border bg-muted/40 px-4 py-4 text-sm text-muted-foreground">
-              <ShieldCheck
-                className={cn(
-                  "mt-0.5 size-5 shrink-0",
-                  event.isSponsoredByTokepass
-                    ? "text-amber-600 dark:text-amber-300"
-                    : "text-emerald-600 dark:text-emerald-400",
-                )}
-              />
-              <p>
-                Tus entradas digitales quedan asociadas a tu cuenta Tokepass.
-                Presentalas en puerta con Living QR dinámico.
-              </p>
-            </div>
-        </motion.div>
       </motion.div>
 
       {(event.sponsors?.length ?? 0) > 0 ? (

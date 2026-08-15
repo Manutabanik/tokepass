@@ -23,12 +23,18 @@ import {
   fetchEventTicketManifest,
   getScannerEvents,
   getScannerGates,
+  getScannerOperatorLabel,
   scanAndValidateTicket,
   syncOfflineScansBatch,
   type ScannerEventOption,
   type ScanTicketResult,
 } from "@/app/actions/scanner"
 import {
+  ScanResultOverlay,
+  type ScanOverlayState,
+} from "@/components/admin/scan-result-overlay"
+import {
+  ALL_SCANNER_GATE_ID,
   GENERAL_SCANNER_GATE_ID,
   PARKING_SCANNER_GATE_ID,
   resolveTicketSectorKey,
@@ -43,8 +49,6 @@ import {
 } from "@/lib/scanner/access-mode"
 import { scannerCameraErrorMessage } from "@/lib/scanner/camera-error"
 import {
-  denegadoYaIngresoCopy,
-  permitidoCopy,
   playGateTone,
   vibrateGate,
 } from "@/lib/scanner/scan-copy"
@@ -78,7 +82,28 @@ const Scanner = dynamic(() => import("@/components/admin/qr-camera-scanner"), {
   ),
 })
 
-type VisualState = "idle" | "success" | "error"
+const OVERLAY_MS = 2500
+
+const FALLBACK_GATES: ScannerGate[] = [
+  {
+    id: ALL_SCANNER_GATE_ID,
+    label: "Todas las puertas",
+    color: "#a1a1aa",
+    kind: "general",
+  },
+  {
+    id: GENERAL_SCANNER_GATE_ID,
+    label: "Puerta Principal",
+    color: "#10b981",
+    kind: "general",
+  },
+  {
+    id: PARKING_SCANNER_GATE_ID,
+    label: "Barrera de Estacionamiento",
+    color: "#f59e0b",
+    kind: "parking",
+  },
+]
 
 function getLiveVideoTrack(): MediaStreamTrack | null {
   const video = document.querySelector(
@@ -87,32 +112,6 @@ function getLiveVideoTrack(): MediaStreamTrack | null {
   const stream = video?.srcObject
   if (!(stream instanceof MediaStream)) return null
   return stream.getVideoTracks()[0] ?? null
-}
-
-const ERROR_TITLES: Record<string, string> = {
-  expired_qr: "DENEGADO - QR expirado",
-  already_used: "DENEGADO - Ya ingresó",
-  revoked: "DENEGADO - Revocado",
-  transferred: "DENEGADO - Transferida",
-  cancelled: "DENEGADO - Cancelada",
-  wrong_event: "DENEGADO - Evento incorrecto",
-  wrong_day: "DENEGADO - Jornada incorrecta",
-  not_found: "DENEGADO - No encontrado",
-  invalid_payload: "DENEGADO - QR inválido",
-  forbidden: "DENEGADO - Sin permiso",
-  auth_required: "DENEGADO - Sin sesión",
-  update_failed: "DENEGADO - Error",
-  unpaid: "DENEGADO - Sin pago",
-  test_ticket_live: "DENEGADO - Entrada de prueba",
-  wrong_sector: "DENEGADO - Sector incorrecto",
-}
-
-function ticketSectorLabel(ticket: ScannerManifestTicket): string {
-  return (
-    ticket.seating_sector_name?.trim() ||
-    ticket.seating_label?.trim() ||
-    ticket.ticket_tier
-  )
 }
 
 export function DoorScanner() {
@@ -131,8 +130,8 @@ export function DoorScanner() {
   const [facingMode, setFacingMode] = useState<"user" | "environment">(
     "environment",
   )
-  const [visual, setVisual] = useState<VisualState>("idle")
-  const [feedbackTitle, setFeedbackTitle] = useState<string>("")
+  const [overlay, setOverlay] = useState<ScanOverlayState | null>(null)
+  const [operatorName, setOperatorName] = useState("Operador")
   const [isPending, startTransition] = useTransition()
   const [manifestMeta, setManifestMeta] = useState<ScannerManifestMeta | null>(
     null,
@@ -225,6 +224,9 @@ export function DoorScanner() {
         if (cancelled) return
         setEvents(data)
         if (data[0]) setEventId(data[0].id)
+        void getScannerOperatorLabel().then((name) => {
+          if (!cancelled) setOperatorName(name)
+        })
       })
       .catch((error: unknown) => {
         if (cancelled) return
@@ -262,32 +264,20 @@ export function DoorScanner() {
     void getScannerGates(eventId)
       .then((data) => {
         if (cancelled) return
-        setGates(data)
-        const validStored = data.some((gate) => gate.id === stored)
-        const next = validStored
-          ? stored!
-          : data.length === 1
-            ? data[0]!.id
-            : ""
-        setGateId(next)
+        const nextGates = data.length > 0 ? data : FALLBACK_GATES
+        setGates(nextGates)
+        const validStored = nextGates.some((gate) => gate.id === stored)
+        setGateId(
+          validStored
+            ? stored!
+            : (nextGates.find((gate) => gate.id === ALL_SCANNER_GATE_ID)?.id ??
+                nextGates[0]!.id),
+        )
       })
       .catch(() => {
         if (cancelled) return
-        setGates([
-          {
-            id: GENERAL_SCANNER_GATE_ID,
-            label: "Acceso General",
-            color: "#10b981",
-            kind: "general",
-          },
-          {
-            id: PARKING_SCANNER_GATE_ID,
-            label: "Barrera de Estacionamiento",
-            color: "#f59e0b",
-            kind: "parking",
-          },
-        ])
-        setGateId(GENERAL_SCANNER_GATE_ID)
+        setGates(FALLBACK_GATES)
+        setGateId(ALL_SCANNER_GATE_ID)
       })
     return () => {
       cancelled = true
@@ -326,8 +316,7 @@ export function DoorScanner() {
     (delayMs: number) => {
       if (resetTimerRef.current) window.clearTimeout(resetTimerRef.current)
       resetTimerRef.current = window.setTimeout(() => {
-        setVisual("idle")
-        setFeedbackTitle("")
+        setOverlay(null)
         cooldownRef.current = false
         void sendSignal("LED_OFF")
       }, delayMs)
@@ -335,26 +324,25 @@ export function DoorScanner() {
     [sendSignal],
   )
 
-  const flashGranted = useCallback(
-    (title: string) => {
-      playGateTone("success")
-      vibrateGate("success")
-      void sendSignal("LED_GREEN")
-      setVisual("success")
-      setFeedbackTitle(title)
-      returnToIdle(isTotemModeRef.current ? 1500 : 1000)
-    },
-    [returnToIdle, sendSignal],
-  )
-
-  const flashDenied = useCallback(
-    (title: string) => {
-      playGateTone("error")
-      vibrateGate("error")
-      void sendSignal("LED_RED")
-      setVisual("error")
-      setFeedbackTitle(title)
-      returnToIdle(2000)
+  const showOverlay = useCallback(
+    (next: ScanOverlayState) => {
+      const tone =
+        next.kind === "valid"
+          ? "success"
+          : next.kind === "wrong_sector"
+            ? "warning"
+            : "error"
+      playGateTone(tone)
+      vibrateGate(tone)
+      void sendSignal(
+        next.kind === "valid"
+          ? "LED_GREEN"
+          : next.kind === "wrong_sector"
+            ? "LED_OFF"
+            : "LED_RED",
+      )
+      setOverlay(next)
+      returnToIdle(isTotemModeRef.current ? 1500 : OVERLAY_MS)
     },
     [returnToIdle, sendSignal],
   )
@@ -362,51 +350,60 @@ export function DoorScanner() {
   const showLocalSuccess = useCallback(
     (ticket: ScannerManifestTicket) => {
       setAdmittedCount((count) => count + 1)
-      flashGranted(
-        permitidoCopy({
-          ownerName: ticket.owner_name,
-          sector: ticketSectorLabel(ticket),
-        }),
-      )
+      showOverlay({
+        kind: "valid",
+        holderName: ticket.owner_name || "Titular",
+        passType: ticket.ticket_tier || "GENERAL",
+        sector: ticket.seating_sector_name,
+        place: ticket.seating_label,
+      })
     },
-    [flashGranted],
+    [showOverlay],
   )
 
   const showAlreadyUsed = useCallback(
-    (when: string | number | null) => {
-      flashDenied(denegadoYaIngresoCopy(when))
+    (when: string | number | null, gateName?: string | null, operator?: string | null) => {
+      showOverlay({
+        kind: "duplicate",
+        scannedAt: when,
+        gateName: gateName ?? selectedGate?.label ?? "Puerta Principal",
+        operatorName: operator ?? operatorName,
+      })
     },
-    [flashDenied],
+    [operatorName, selectedGate?.label, showOverlay],
   )
 
   const applyServerResult = useCallback(
     (result: ScanTicketResult) => {
       if (result.success) {
         setAdmittedCount((count) => count + 1)
-        flashGranted(
-          permitidoCopy({
-            ownerName: result.ticket.ownerLabel ?? "Titular",
-            sector:
-              result.ticket.seatingSectorName ??
-              result.ticket.seatingLabel ??
-              result.ticket.tierName,
-          }),
-        )
+        showOverlay({
+          kind: "valid",
+          holderName: result.ticket.ownerLabel ?? "Titular",
+          passType: result.ticket.tierName || "GENERAL",
+          sector: result.ticket.seatingSectorName,
+          place: result.ticket.seatingLabel,
+        })
         return
       }
       if (result.status === "already_used") {
-        showAlreadyUsed(result.scannedAt ?? null)
-        return
-      }
-      if (result.status === "wrong_sector") {
-        flashDenied(
-          `DENEGADO - Dirigirse a ${result.redirectSector ?? "otra gatera"}`,
+        showAlreadyUsed(
+          result.scannedAt ?? null,
+          result.gateName,
+          result.operatorName,
         )
         return
       }
-      flashDenied(ERROR_TITLES[result.status] ?? "DENEGADO")
+      if (result.status === "wrong_sector") {
+        showOverlay({
+          kind: "wrong_sector",
+          correctGateName: result.redirectSector ?? "otra gatera",
+        })
+        return
+      }
+      showOverlay({ kind: "invalid" })
     },
-    [flashDenied, flashGranted, showAlreadyUsed],
+    [showAlreadyUsed, showOverlay],
   )
 
   const validateLocalTicket = useCallback(
@@ -414,7 +411,7 @@ export function DoorScanner() {
       const eventStatus =
         selectedEvent?.status ?? manifestMeta?.eventStatus ?? null
       if (ticket.is_test && !ticket.is_sandbox && eventStatus !== "draft") {
-        flashDenied("DENEGADO - Entrada de prueba")
+        showOverlay({ kind: "invalid" })
         return
       }
       if (ticket.status === "used" || ticket.status === "scanned") {
@@ -422,11 +419,11 @@ export function DoorScanner() {
         return
       }
       if (ticket.status === "transferred" || ticket.status === "cancelled") {
-        flashDenied("DENEGADO - Entrada inválida")
+        showOverlay({ kind: "invalid" })
         return
       }
       if (ticket.status === "pending_payment") {
-        flashDenied("DENEGADO - Pago pendiente")
+        showOverlay({ kind: "invalid" })
         return
       }
 
@@ -435,11 +432,14 @@ export function DoorScanner() {
         seatingSectorName: ticket.seating_sector_name,
       })
       const gateMatch = ticketMatchesScannerGate(
-        gateId || GENERAL_SCANNER_GATE_ID,
+        gateId || ALL_SCANNER_GATE_ID,
         { ...ticketGate, ticketType: ticket.ticket_type },
       )
       if (!gateMatch.ok) {
-        flashDenied(`DENEGADO - Dirigirse a ${gateMatch.correctSector}`)
+        showOverlay({
+          kind: "wrong_sector",
+          correctGateName: gateMatch.correctSector,
+        })
         return
       }
       if (ticket.status !== "valid") {
@@ -455,20 +455,20 @@ export function DoorScanner() {
       }
     },
     [
-      flashDenied,
       gateId,
       manifestMeta?.eventStatus,
       refreshQueueCount,
       selectedEvent?.status,
       showAlreadyUsed,
       showLocalSuccess,
+      showOverlay,
       syncQueueToServer,
     ],
   )
 
   const validateTicketToken = useCallback(
     (rawCode: string) => {
-      if (!eventId || !gateId || cooldownRef.current || visual !== "idle") {
+      if (!eventId || !gateId || cooldownRef.current || overlay) {
         return
       }
       const raw = rawCode.trim()
@@ -482,11 +482,11 @@ export function DoorScanner() {
           if (meta) {
             const resolved = resolveScanSecret(raw, qrType)
             if (!resolved) {
-              flashDenied("DENEGADO - QR inválido")
+              showOverlay({ kind: "invalid" })
               return
             }
             if (resolved.enforceFreshness && resolved.expired) {
-              flashDenied("DENEGADO - QR expirado")
+              showOverlay({ kind: "invalid" })
               return
             }
 
@@ -496,7 +496,7 @@ export function DoorScanner() {
               if (local && local.event_id === eventId) {
                 const ok = await assertLivingMac(local.totp_secret, resolved)
                 if (!ok) {
-                  flashDenied("DENEGADO - QR inválido")
+                  showOverlay({ kind: "invalid" })
                   return
                 }
               } else {
@@ -517,12 +517,12 @@ export function DoorScanner() {
               })
               return
             }
-            flashDenied("DENEGADO - No encontrado")
+            showOverlay({ kind: "invalid" })
             return
           }
 
           if (!navigator.onLine) {
-            flashDenied("DENEGADO - Sin lista local")
+            showOverlay({ kind: "invalid" })
             return
           }
           startTransition(async () => {
@@ -542,12 +542,12 @@ export function DoorScanner() {
     [
       applyServerResult,
       eventId,
-      flashDenied,
+      showOverlay,
       gateId,
       manifestMeta,
+      overlay,
       selectedEvent?.qrType,
       validateLocalTicket,
-      visual,
     ],
   )
 
@@ -673,103 +673,88 @@ export function DoorScanner() {
   return (
     <div
       className={cn(
-        "fixed inset-0 z-[80] flex flex-col text-white transition-colors duration-75",
-        visual === "success" && "bg-emerald-500",
-        visual === "error" && "bg-rose-600",
-        visual === "idle" && "bg-black",
+        "fixed inset-0 z-[80] flex flex-col bg-black text-white",
         isTotemMode && "select-none",
       )}
     >
-      {visual === "idle" ? (
-        <>
-          <DoorScannerSessionChrome
-            isTotem={isTotemMode}
-            gateLabel={selectedGate?.label ?? "Gatera"}
-            online={online}
-            admittedCount={admittedCount}
-            torchOn={torchOn}
-            torchAvailable={torchAvailable}
-            onChangeGate={() => {
-              setSessionActive(false)
-              setCameraError(null)
-              setTorchOn(false)
-            }}
-            onSearch={() => setSearchOpen(true)}
-            onToggleTorch={() => void toggleTorch()}
-            overlay={
-              isTotemMode ? (
-                <TotemRestOverlay
-                  enabled
-                  onScan={validateTicketToken}
-                />
-              ) : null
-            }
-            camera={
-              cameraError ? (
-                <div className="grid h-full place-items-center px-6 text-center">
-                  <div>
-                    <CameraOff className="mx-auto size-12 text-amber-400" />
-                    <p className="mt-4 text-xl font-bold">Cámara bloqueada</p>
-                    <p className="mt-2 max-w-sm text-sm leading-6 text-white/70">
-                      {cameraError}
-                    </p>
-                    <button
-                      type="button"
-                      className="mt-6 text-sm font-bold uppercase tracking-[0.14em] text-fuchsia-300"
-                      onClick={() => setCameraError(null)}
-                    >
-                      Reintentar
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <Scanner
-                  onScan={handleScan}
-                  onError={handleCameraError}
-                  constraints={{ facingMode }}
-                  formats={["qr_code"]}
-                  sound={false}
-                  scanDelay={250}
-                  allowMultiple={false}
-                  paused={isPending || visual !== "idle"}
-                  styles={{
-                    container: { width: "100%", height: "100%" },
-                    video: { objectFit: "cover" },
-                  }}
-                  components={{ finder: false, torch: false }}
-                />
-              )
-            }
-          />
-          {!isTotemMode ? (
-            <EmergencyTicketSearch
-              eventId={eventId}
-              open={searchOpen}
-              onOpenChange={setSearchOpen}
-              onValidate={(ticket) => {
-                setSearchOpen(false)
-                cooldownRef.current = true
-                void validateLocalTicket(ticket)
+      <DoorScannerSessionChrome
+        isTotem={isTotemMode}
+        gateLabel={selectedGate?.label ?? "Gatera"}
+        online={online}
+        admittedCount={admittedCount}
+        torchOn={torchOn}
+        torchAvailable={torchAvailable}
+        onChangeGate={() => {
+          setSessionActive(false)
+          setCameraError(null)
+          setTorchOn(false)
+        }}
+        onSearch={() => setSearchOpen(true)}
+        onToggleTorch={() => void toggleTorch()}
+        overlay={
+          isTotemMode ? (
+            <TotemRestOverlay enabled onScan={validateTicketToken} />
+          ) : null
+        }
+        camera={
+          cameraError ? (
+            <div className="grid h-full place-items-center px-6 text-center">
+              <div>
+                <CameraOff className="mx-auto size-12 text-amber-400" />
+                <p className="mt-4 text-xl font-bold">Camara bloqueada</p>
+                <p className="mt-2 max-w-sm text-sm leading-6 text-white/70">
+                  {cameraError}
+                </p>
+                <button
+                  type="button"
+                  className="mt-6 text-sm font-bold uppercase tracking-[0.14em] text-fuchsia-300"
+                  onClick={() => setCameraError(null)}
+                >
+                  Reintentar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <Scanner
+              onScan={handleScan}
+              onError={handleCameraError}
+              constraints={{ facingMode }}
+              formats={["qr_code"]}
+              sound={false}
+              scanDelay={150}
+              allowMultiple={false}
+              paused={isPending || overlay != null}
+              styles={{
+                container: { width: "100%", height: "100%" },
+                video: { objectFit: "cover" },
               }}
-              onValidateMany={(tickets) => {
-                setSearchOpen(false)
-                cooldownRef.current = true
-                void (async () => {
-                  for (const ticket of tickets) {
-                    await validateLocalTicket(ticket)
-                  }
-                })()
-              }}
+              components={{ finder: false, torch: false }}
             />
-          ) : null}
-        </>
-      ) : (
-        <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-          <p className="max-w-4xl text-5xl font-black leading-[0.95] tracking-tight text-white sm:text-7xl">
-            {feedbackTitle}
-          </p>
-        </div>
-      )}
+          )
+        }
+      />
+      {!isTotemMode ? (
+        <EmergencyTicketSearch
+          eventId={eventId}
+          open={searchOpen}
+          onOpenChange={setSearchOpen}
+          onValidate={(ticket) => {
+            setSearchOpen(false)
+            cooldownRef.current = true
+            void validateLocalTicket(ticket)
+          }}
+          onValidateMany={(tickets) => {
+            setSearchOpen(false)
+            cooldownRef.current = true
+            void (async () => {
+              for (const ticket of tickets) {
+                await validateLocalTicket(ticket)
+              }
+            })()
+          }}
+        />
+      ) : null}
+      {overlay ? <ScanResultOverlay state={overlay} /> : null}
     </div>
   )
 }

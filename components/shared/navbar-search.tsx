@@ -26,6 +26,7 @@ import {
   type OmniSearchResult,
 } from "@/lib/omni-search"
 import { publicEventPath } from "@/lib/seo/site"
+import { usePublicSearchUiStore } from "@/lib/stores/public-search-ui-store"
 import { cn, tapFeedbackClass } from "@/lib/utils"
 
 const EMPTY_RESULTS: OmniSearchResult = { events: [], artists: [] }
@@ -37,7 +38,7 @@ function activeEventsLabel(count: number): string {
 }
 
 function artistExploreHref(artistId: string): string {
-  return `/events?artist=${encodeURIComponent(artistId)}`
+  return `/buscar?artist=${encodeURIComponent(artistId)}`
 }
 
 function EventThumb({ imageUrl }: { imageUrl: string | null }) {
@@ -222,6 +223,7 @@ export function NavbarSearch() {
   const [query, setQuery] = useState("")
   const [open, setOpen] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const searchOpenTick = usePublicSearchUiStore((state) => state.openTick)
   const [results, setResults] = useState<OmniSearchResult>(EMPTY_RESULTS)
   const [fetchedFor, setFetchedFor] = useState("")
 
@@ -296,11 +298,15 @@ export function NavbarSearch() {
     mobileInputRef.current?.focus()
   }, [mobileOpen])
 
+  useEffect(() => {
+    if (searchOpenTick > 0) setMobileOpen(true)
+  }, [searchOpenTick])
+
   function submitExplore(event: FormEvent) {
     event.preventDefault()
     const needle = query.trim()
     dismiss()
-    router.push(needle ? `/events?q=${encodeURIComponent(needle)}` : "/events")
+    router.push(needle ? `/buscar?q=${encodeURIComponent(needle)}` : "/buscar")
   }
 
   const resultsProps = {
@@ -418,20 +424,6 @@ export function NavbarSearch() {
           </div>
         ) : null}
       </div>
-
-      <button
-        type="button"
-        onClick={() => setMobileOpen(true)}
-        className={cn(
-          tapFeedbackClass,
-          "grid size-11 place-items-center rounded-full border border-zinc-200 text-zinc-600 md:hidden",
-          "hover:bg-zinc-100 hover:text-zinc-900",
-          "dark:border-white/10 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white",
-        )}
-        aria-label="Buscar evento o artista"
-      >
-        <Search className="size-4" aria-hidden="true" />
-      </button>
 
       {overlay}
     </>

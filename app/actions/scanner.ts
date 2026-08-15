@@ -17,8 +17,11 @@ import {
 import { logger } from "@/lib/logger"
 import { createClient } from "@/lib/supabase/server"
 import {
+  ALL_SCANNER_GATE_ID,
+  GA_SCANNER_GATE_ID,
   GENERAL_SCANNER_GATE_ID,
   PARKING_SCANNER_GATE_ID,
+  VIP_SCANNER_GATE_ID,
   resolveTicketSectorKey,
   ticketMatchesScannerGate,
   type ScannerGate,
@@ -26,7 +29,7 @@ import {
 import type { QrType, TicketStatus } from "@/types/database"
 
 const TICKET_SCAN_SELECT =
-  "id, status, event_id, order_id, totp_secret, scanned_at, max_admissions, admissions_used, is_test, is_dynamic_qr, ticket_type, event_seating_units(label, sector_id, sector_name, row_label), ticket_tiers(name, price, time_limit, bonus_reward, day_id, seating_sector_id), events(id, title, organizer_id, qr_type, date, schedule_days, status), orders!tickets_order_id_fkey(payment_method)"
+  "id, status, event_id, order_id, totp_secret, scanned_at, validated_by, holder_name, holder_dni, max_admissions, admissions_used, is_test, is_dynamic_qr, ticket_type, event_seating_units(label, sector_id, sector_name, row_label), ticket_tiers(name, price, time_limit, bonus_reward, day_id, seating_sector_id), events(id, title, organizer_id, qr_type, date, schedule_days, status), orders!tickets_order_id_fkey(payment_method)"
 
 export type ScannerEventOption = {
   id: string
@@ -77,6 +80,8 @@ export type ScanTicketResult =
       message: string
       scannedAt?: string | null
       redirectSector?: string
+      gateName?: string | null
+      operatorName?: string | null
     }
 
 type TicketScanRow = {
@@ -86,6 +91,9 @@ type TicketScanRow = {
   order_id: string | null
   totp_secret?: string
   scanned_at: string | null
+  validated_by?: string | null
+  holder_name?: string | null
+  holder_dni?: string | null
   max_admissions: number
   admissions_used: number
   is_test?: boolean | null
@@ -171,50 +179,160 @@ export async function getScannerEvents(): Promise<ScannerEventOption[]> {
   }))
 }
 
+function prettyScannerGateLabel(name: string, fallbackId: string): string {
+  const raw = name.trim() || fallbackId
+  const lower = raw.toLowerCase()
+  if (/\bvip\b/.test(lower)) {
+    return /acceso/i.test(raw) ? raw : "Acceso VIP"
+  }
+  if (
+    (/\bcampo\b/.test(lower) || /\bgeneral\b/.test(lower) || lower === "ga") &&
+    !/\bvip\b/.test(lower)
+  ) {
+    return "Campo General"
+  }
+  if (lower === "general" || /puerta principal/.test(lower)) {
+    return "Puerta Principal"
+  }
+  return raw
+}
+
+function upsertGate(
+  gates: Map<string, ScannerGate>,
+  gate: ScannerGate,
+) {
+  if (!gate.id || gates.has(gate.id)) return
+  gates.set(gate.id, gate)
+}
+
+export async function getScannerOperatorLabel(): Promise<string> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return "Operador"
+  const { data } = await supabase
+    .from("profiles")
+    .select("full_name, email")
+    .eq("id", user.id)
+    .maybeSingle()
+  return data?.full_name?.trim() || data?.email?.trim() || "Operador"
+}
+
 export async function getScannerGates(
   eventId: string,
 ): Promise<ScannerGate[]> {
-  if (!eventId) return []
+  const defaults: ScannerGate[] = [
+    {
+      id: ALL_SCANNER_GATE_ID,
+      label: "Todas las puertas",
+      color: "#a1a1aa",
+      kind: "general",
+    },
+    {
+      id: GENERAL_SCANNER_GATE_ID,
+      label: "Puerta Principal",
+      color: "#10b981",
+      kind: "general",
+    },
+  ]
+  if (!eventId) return defaults
+
   const access = await assertEventOpsAccess(eventId, ["door_staff"])
-  if (!access.ok) return []
+  if (!access.ok) return defaults
 
   const supabase = await createClient()
-  const { data, error } = await supabase.rpc("get_event_scanner_gates", {
-    p_event_id: eventId,
-  })
-  if (error || !data) {
-    return [
-      {
-        id: GENERAL_SCANNER_GATE_ID,
-        label: "Acceso General",
-        color: "#10b981",
-        kind: "general",
-      },
-      {
-        id: PARKING_SCANNER_GATE_ID,
-        label: "Barrera de Estacionamiento",
-        color: "#f59e0b",
-        kind: "parking",
-      },
-    ]
+  const gates = new Map<string, ScannerGate>()
+  for (const gate of defaults) upsertGate(gates, gate)
+
+  const [rpc, tiers, units] = await Promise.all([
+    supabase.rpc("get_event_scanner_gates", { p_event_id: eventId }),
+    supabase
+      .from("ticket_tiers")
+      .select("id, name, seating_sector_id")
+      .eq("event_id", eventId),
+    supabase
+      .from("event_seating_units")
+      .select("sector_id, sector_name, color")
+      .eq("event_id", eventId)
+      .limit(800),
+  ])
+
+  for (const row of rpc.data ?? []) {
+    const id = String(row.gate_id ?? "").trim()
+    if (!id || id === GENERAL_SCANNER_GATE_ID || id === ALL_SCANNER_GATE_ID) {
+      continue
+    }
+    upsertGate(gates, {
+      id,
+      label: prettyScannerGateLabel(String(row.label ?? id), id),
+      color: String(row.color || "#6366f1"),
+      kind:
+        row.kind === "sector"
+          ? "sector"
+          : row.kind === "parking"
+            ? "parking"
+            : "general",
+    })
   }
 
-  return (data as Array<{
-    gate_id: string
-    label: string
-    color: string
-    kind: string | null
-  }>).map((row) => ({
-    id: row.gate_id,
-    label: row.label,
-    color: row.color,
-    kind:
-      row.kind === "sector"
-        ? "sector"
-        : row.kind === "parking"
-          ? "parking"
-          : "general",
-  }))
+  for (const unit of units.data ?? []) {
+    const id = String(unit.sector_id ?? "").trim()
+    if (!id) continue
+    upsertGate(gates, {
+      id,
+      label: prettyScannerGateLabel(String(unit.sector_name ?? id), id),
+      color: String(unit.color || "#6366f1"),
+      kind: "sector",
+    })
+  }
+
+  let hasVip = false
+  let hasCampo = false
+  for (const tier of tiers.data ?? []) {
+    const name = String(tier.name ?? "")
+    const sectorId = tier.seating_sector_id?.trim()
+    if (sectorId) {
+      upsertGate(gates, {
+        id: sectorId,
+        label: prettyScannerGateLabel(name || sectorId, sectorId),
+        color: "#6366f1",
+        kind: "sector",
+      })
+    }
+    if (/\bvip\b/i.test(name)) hasVip = true
+    if (/\bcampo\b|\bgeneral\b/i.test(name) && !/\bvip\b/i.test(name)) {
+      hasCampo = true
+    }
+  }
+
+  if (hasVip) {
+    upsertGate(gates, {
+      id: VIP_SCANNER_GATE_ID,
+      label: "Acceso VIP",
+      color: "#8b5cf6",
+      kind: "sector",
+    })
+  }
+  if (hasCampo) {
+    upsertGate(gates, {
+      id: GA_SCANNER_GATE_ID,
+      label: "Campo General",
+      color: "#22c55e",
+      kind: "sector",
+    })
+  }
+
+  if (!gates.has(PARKING_SCANNER_GATE_ID)) {
+    upsertGate(gates, {
+      id: PARKING_SCANNER_GATE_ID,
+      label: "Barrera de Estacionamiento",
+      color: "#f59e0b",
+      kind: "parking",
+    })
+  }
+
+  return [...gates.values()]
 }
 
 export async function scanAndValidateTicket(
@@ -428,11 +546,24 @@ export async function scanAndValidateTicket(
   }
 
   if (row.status === "used" || row.status === "scanned") {
+    let operatorName: string | null = null
+    if (row.validated_by) {
+      const { data: operator } = await supabase
+        .from("profiles")
+        .select("full_name, email")
+        .eq("id", row.validated_by)
+        .maybeSingle()
+      operatorName =
+        operator?.full_name?.trim() || operator?.email?.trim() || null
+    }
     return {
       success: false,
       status: "already_used",
       message: "Ticket ya escaneado",
       scannedAt: row.scanned_at,
+      gateName:
+        row.event_seating_units?.sector_name?.trim() || "Puerta Principal",
+      operatorName,
     }
   }
 
@@ -573,7 +704,7 @@ export async function scanAndValidateTicket(
       tierName: isFreePass
         ? "Cortesía / FreePass"
         : (tier?.name ?? "Entrada"),
-      ownerLabel: null,
+      ownerLabel: row.holder_name?.trim() || null,
       eventTitle: row.events?.title ?? "Evento",
       isFreePass,
       seatingLabel: row.event_seating_units?.label ?? null,

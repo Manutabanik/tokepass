@@ -124,6 +124,21 @@ const nextConfig: NextConfig = {
         destination: "/cuenta/perfil",
         permanent: true,
       },
+      {
+        source: "/perfil",
+        destination: "/cuenta/perfil",
+        permanent: true,
+      },
+      {
+        source: "/mis-entradas",
+        destination: "/cuenta/entradas",
+        permanent: true,
+      },
+      {
+        source: "/mis-entradas/:path*",
+        destination: "/cuenta/entradas",
+        permanent: true,
+      },
     ]
   },
   async headers() {

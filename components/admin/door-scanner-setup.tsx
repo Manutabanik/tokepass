@@ -4,13 +4,6 @@ import { LoaderCircle, Monitor, Smartphone } from "lucide-react"
 
 import type { ScannerEventOption } from "@/app/actions/scanner"
 import { Button } from "@/components/ui/button"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import type { ScannerAccessMode } from "@/lib/scanner/access-mode"
 import type { ScannerGate } from "@/lib/scanner/gate"
 import { cn } from "@/lib/utils"
@@ -40,8 +33,6 @@ export function DoorScannerSetup({
   onModeChange: (mode: ScannerAccessMode) => void
   onStart: () => void
 }) {
-  const selectedEvent = events.find((event) => event.id === eventId) ?? null
-  const selectedGate = gates.find((gate) => gate.id === gateId) ?? null
   const canStart = Boolean(eventId && gateId) && !isStarting
 
   return (
@@ -54,8 +45,8 @@ export function DoorScannerSetup({
           Setup de turno
         </h1>
         <p className="mx-auto mt-2 max-w-sm text-center text-sm leading-6 text-white/55">
-          Elegí evento, gatera y modo. Al iniciar se baja la lista local y se
-          abre la cámara.
+          Elegi evento, gatera y modo. Al iniciar se baja la lista local y se
+          abre la camara.
         </p>
 
         <div
@@ -88,7 +79,7 @@ export function DoorScannerSetup({
             )}
           >
             <Monitor className="size-5" aria-hidden="true" />
-            Modo Tótem
+            Modo Totem
             <span className="text-[10px] font-medium opacity-80">
               Autoservicio
             </span>
@@ -96,49 +87,42 @@ export function DoorScannerSetup({
         </div>
 
         <div className="mt-6 space-y-3">
-          <Select
+          <label className="block text-[11px] font-bold uppercase tracking-[0.16em] text-white/45">
+            Evento
+          </label>
+          <select
             value={eventId}
-            onValueChange={(value) => onEventChange(value ?? "")}
-            items={events.map((event) => ({
-              value: event.id,
-              label: event.title,
-            }))}
+            onChange={(event) => onEventChange(event.target.value)}
+            className="h-14 w-full appearance-none rounded-xl border border-white/15 bg-white/10 px-4 text-base text-white"
           >
-            <SelectTrigger className="h-14 w-full border-white/15 bg-white/10 text-left text-base text-white">
-              <SelectValue placeholder="Evento">
-                {selectedEvent?.title ?? null}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {events.map((event) => (
-                <SelectItem key={event.id} value={event.id}>
-                  {event.title}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            {events.length === 0 ? (
+              <option value="">Cargando eventos…</option>
+            ) : null}
+            {events.map((event) => (
+              <option key={event.id} value={event.id} className="text-zinc-950">
+                {event.title}
+              </option>
+            ))}
+          </select>
 
-          <Select
+          <label className="block text-[11px] font-bold uppercase tracking-[0.16em] text-white/45">
+            Gatera / sector
+          </label>
+          <select
             value={gateId}
-            onValueChange={(value) => onGateChange(value ?? "")}
-            items={gates.map((gate) => ({
-              value: gate.id,
-              label: gate.label,
-            }))}
+            onChange={(event) => onGateChange(event.target.value)}
+            disabled={!eventId}
+            className="h-14 w-full appearance-none rounded-xl border border-white/15 bg-white/10 px-4 text-base text-white disabled:opacity-40"
           >
-            <SelectTrigger className="h-14 w-full border-white/15 bg-white/10 text-left text-base text-white">
-              <SelectValue placeholder="Gatera / sector">
-                {selectedGate?.label ?? null}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {gates.map((gate) => (
-                <SelectItem key={gate.id} value={gate.id}>
-                  {gate.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            {gates.length === 0 ? (
+              <option value="">Cargando gateras…</option>
+            ) : null}
+            {gates.map((gate) => (
+              <option key={gate.id} value={gate.id} className="text-zinc-950">
+                {gate.label}
+              </option>
+            ))}
+          </select>
         </div>
 
         {loadError ? (

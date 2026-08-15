@@ -31,20 +31,25 @@ export function StorefrontViewToggle({
   value,
   onChange,
   className,
+  compact = false,
 }: {
   value: StorefrontViewMode
   onChange: (view: StorefrontViewMode) => void
   className?: string
+  compact?: boolean
 }) {
   return (
-    <div className={cn("space-y-4", className)}>
-      <h3 className="text-lg font-semibold">
+    <div className={cn(compact ? "space-y-3" : "space-y-4", className)}>
+      <h3 className={cn("font-semibold", compact ? "text-base" : "text-lg")}>
         ¿Cómo preferís elegir tus lugares?
       </h3>
       <div
         role="radiogroup"
         aria-label="Cómo preferís elegir tus lugares"
-        className="grid grid-cols-1 gap-3 md:grid-cols-2"
+        className={cn(
+          "grid grid-cols-1 gap-3",
+          compact ? "gap-2" : "md:grid-cols-2",
+        )}
       >
         {OPTIONS.map((option) => {
           const Icon = option.icon
@@ -57,7 +62,8 @@ export function StorefrontViewToggle({
               aria-checked={active}
               onClick={() => onChange(option.id)}
               className={cn(
-                "min-h-[100px] rounded-xl p-4 text-left shadow-sm transition-all",
+                "rounded-xl text-left shadow-sm transition-all",
+                compact ? "min-h-0 p-3" : "min-h-[100px] p-4",
                 active
                   ? "border-2 border-primary bg-primary/10 opacity-100"
                   : "border border-border bg-card opacity-70 hover:opacity-100",
@@ -78,7 +84,12 @@ export function StorefrontViewToggle({
                   <span className="block text-base font-semibold text-foreground">
                     {option.title}
                   </span>
-                  <span className="mt-1 block text-sm leading-5 text-muted-foreground">
+                  <span
+                    className={cn(
+                      "mt-1 block text-sm leading-5 text-muted-foreground",
+                      compact && "line-clamp-2",
+                    )}
+                  >
                     {option.description}
                   </span>
                 </span>

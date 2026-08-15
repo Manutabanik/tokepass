@@ -772,7 +772,9 @@ export async function reassignTicketAdmin(
       | null
     const eventMeta = Array.isArray(eventsJoin) ? eventsJoin[0] : eventsJoin
     const eventTitle = eventMeta?.title ?? "Evento Tokepass"
-    const maxPerUser = eventMeta?.max_tickets_per_user ?? 10
+    const rawMax = Number(eventMeta?.max_tickets_per_user)
+    const maxPerUser =
+      Number.isFinite(rawMax) && rawMax > 0 ? Math.floor(rawMax) : null
 
     const { data: receiverProfile } = await access.admin
       .from("profiles")
@@ -789,7 +791,7 @@ export async function reassignTicketAdmin(
       }
     }
 
-    if (receiverId) {
+    if (receiverId && maxPerUser != null) {
       const { count } = await access.admin
         .from("tickets")
         .select("id", { count: "exact", head: true })

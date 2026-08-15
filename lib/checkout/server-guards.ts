@@ -16,6 +16,7 @@ import {
   type CheckoutRequestContext,
 } from "@/lib/checkout/request-context"
 import { logger } from "@/lib/logger"
+import { resolvePurchaseLimit } from "@/lib/checkout-limits"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 export async function checkoutIpBurstBlocked(
@@ -43,7 +44,9 @@ export async function assertGuestTicketCap(input: {
   quantity: number
   maxTicketsPerUser: number | null | undefined
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  const max = Math.max(1, Number(input.maxTicketsPerUser ?? 10) || 10)
+  const max = resolvePurchaseLimit(input.maxTicketsPerUser)
+  if (max == null) return { ok: true }
+
   const admin = createAdminClient()
   const dni = input.dni.trim()
   const email = input.email.trim().toLowerCase()

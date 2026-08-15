@@ -14,10 +14,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 1,
     },
     {
-      url: `${siteUrl}/eventos`,
+      url: `${siteUrl}/buscar`,
       lastModified: new Date(),
       changeFrequency: "hourly",
       priority: 0.8,
+    },
+    {
+      url: `${siteUrl}/eventos`,
+      lastModified: new Date(),
+      changeFrequency: "hourly",
+      priority: 0.6,
     },
     {
       url: `${siteUrl}/terminos-y-condiciones`,

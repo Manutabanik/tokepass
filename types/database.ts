@@ -182,7 +182,7 @@ export type Event = {
   status: EventStatus
   organizer_id: string
   venue_id: string | null
-  max_tickets_per_user: number
+  max_tickets_per_user: number | null
   qr_type: QrType
   /** public | private | guest_list_only */
   visibility: "public" | "private" | "guest_list_only"
@@ -856,7 +856,7 @@ type EventInsert = Omit<
   age_restriction?: Event["age_restriction"]
   ends_at?: string | null
   status?: EventStatus
-  max_tickets_per_user?: number
+  max_tickets_per_user?: number | null
   qr_type?: QrType
   visibility?: Event["visibility"]
   schedule_days?: Json

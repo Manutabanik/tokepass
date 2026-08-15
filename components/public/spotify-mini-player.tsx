@@ -24,7 +24,7 @@ export function SpotifyMiniPlayer() {
 
   return (
     <div
-      className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] left-1/2 z-50 w-[min(calc(100vw-1.5rem),28rem)] -translate-x-1/2 md:bottom-4"
+      className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] left-1/2 z-50 w-[min(calc(100vw-1.5rem),28rem)] -translate-x-1/2 lg:bottom-4"
       role="region"
       aria-label={`Reproductor de ${label}`}
     >

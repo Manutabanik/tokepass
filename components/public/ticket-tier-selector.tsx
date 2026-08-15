@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { isFullPassDayId } from "@/lib/event-schedule"
 import { formatCurrency, formatEventDay } from "@/lib/format"
-import { MAX_TICKETS_PER_PURCHASE } from "@/lib/checkout-limits"
+import { purchaseCapForLayout } from "@/lib/checkout-limits"
 import type { TicketHighlightBadge } from "@/lib/checkout/ticket-picker"
 import type { PublicTicketPhase } from "@/lib/inventory/active-phase"
 import type { InventoryTierType } from "@/lib/inventory/unified-inventory"
@@ -59,6 +59,7 @@ type Props = {
   hasSeatingFlow: boolean
   onQuantityChange: (tierId: string, quantity: number, max: number) => void
   onOpenSeatFlow: () => void
+  maxTicketsPerUser?: number | null
 }
 
 export function TicketTierSelector({
@@ -69,6 +70,7 @@ export function TicketTierSelector({
   hasSeatingFlow,
   onQuantityChange,
   onOpenSeatFlow,
+  maxTicketsPerUser = null,
 }: Props) {
   const days = scheduleDays ?? []
   const multiDayEvent = days.length > 1
@@ -147,6 +149,7 @@ export function TicketTierSelector({
         variant="standard"
         onQuantityChange={onQuantityChange}
         onOpenSeatFlow={onOpenSeatFlow}
+        maxTicketsPerUser={maxTicketsPerUser}
       />
     </>
   )
@@ -161,6 +164,7 @@ export function TicketTierSelector({
       variant="bundle"
       onQuantityChange={onQuantityChange}
       onOpenSeatFlow={onOpenSeatFlow}
+      maxTicketsPerUser={maxTicketsPerUser}
     />
   )
 
@@ -179,6 +183,7 @@ export function TicketTierSelector({
         variant="special"
         onQuantityChange={onQuantityChange}
         onOpenSeatFlow={onOpenSeatFlow}
+        maxTicketsPerUser={maxTicketsPerUser}
       />
     </>
   )
@@ -277,6 +282,7 @@ function TierList({
   variant,
   onQuantityChange,
   onOpenSeatFlow,
+  maxTicketsPerUser = null,
 }: {
   tiers: TicketSelectorTier[]
   quantities: Record<string, number>
@@ -286,6 +292,7 @@ function TierList({
   variant: TicketTierCategory
   onQuantityChange: (tierId: string, quantity: number, max: number) => void
   onOpenSeatFlow: () => void
+  maxTicketsPerUser?: number | null
 }) {
   if (tiers.length === 0) {
     return (
@@ -299,7 +306,10 @@ function TierList({
     <div className="space-y-3">
       {tiers.map((tier) => {
         const quantity = quantities[tier.id] ?? 0
-        const maxSelectable = Math.min(MAX_TICKETS_PER_PURCHASE, tier.available)
+        const maxSelectable = Math.min(
+          purchaseCapForLayout(tier.layoutType, maxTicketsPerUser),
+          tier.available,
+        )
         const soldOut = tier.available <= 0
         const lowStock = !soldOut && tier.available <= 8
         const day = scheduleDays.find((item) => item.id === tier.dayId)

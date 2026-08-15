@@ -146,7 +146,7 @@ export function EmergencyTicketSearch({
                     className="min-h-10 flex-1 rounded-xl bg-emerald-600 font-bold text-white hover:bg-emerald-500"
                     onClick={() => onValidate(ticket)}
                   >
-                    Validar 1
+                    Validar Ingreso Manual
                   </Button>
                   {ticket.group_id && onValidateMany ? (
                     <Button

@@ -157,6 +157,8 @@ export type EventDetails = {
   >
   /** Tab inicial del picker. auto = el de más stock restante. */
   defaultTicketTab: "auto" | "seated" | "general" | "bundle" | "addon"
+  /** Tope por comprador y transacción. null o 0 = sin límite. */
+  maxTicketsPerUser: number | null
   pixels: EventPixelConfig
   /** Spot YouTube/Vimeo (URL). */
   promoVideoUrl: string | null
@@ -214,6 +216,7 @@ type EventDetailRow = {
   ends_at?: string | null
   is_sponsored_by_tokepass?: boolean | null
   max_free_tickets?: number | null
+  max_tickets_per_user?: number | null
   platform_fee_percentage?: number | null
   platform_fixed_fee?: number | null
   meta_pixel_id?: string | null
@@ -752,7 +755,7 @@ async function loadEventCoreRow(
   let query = supabase
     .from("events")
     .select(
-      "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, platform_fee_percentage, platform_fixed_fee, promo_video_url, gallery_urls",
+      "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, promo_video_url, gallery_urls",
     )
     .eq("id", eventId)
 
@@ -782,9 +785,9 @@ async function loadEventDetails(
   if (!resolvedId) return null
 
   const eventSelectWithPicker =
-    "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, lineup, default_ticket_tab, venue_id, venue_map, venues(id, name, location, address, city, capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, bundle_items, bundle_type, description, highlight_badge), profiles!events_organizer_id_fkey(full_name)"
+    "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, lineup, default_ticket_tab, venue_id, venue_map, venues(id, name, location, address, city, capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, bundle_items, bundle_type, description, highlight_badge), profiles!events_organizer_id_fkey(full_name)"
   const eventSelectCore =
-    "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, venue_id, venue_map, venues(id, name, location, address, city, capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, bundle_items, bundle_type), profiles!events_organizer_id_fkey(full_name)"
+    "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, venue_id, venue_map, venues(id, name, location, address, city, capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, bundle_items, bundle_type), profiles!events_organizer_id_fkey(full_name)"
 
   let query = supabase
     .from("events")
@@ -985,6 +988,11 @@ async function loadEventDetails(
     platformFixedFee,
     isSponsoredByTokepass,
     maxFreeTickets: Number(event.max_free_tickets ?? 100),
+    maxTicketsPerUser: (() => {
+      const raw = Number(event.max_tickets_per_user)
+      if (!Number.isFinite(raw) || raw <= 0) return null
+      return Math.floor(raw)
+    })(),
     organizerName,
     organizerBio,
     organizerAvatarUrl,

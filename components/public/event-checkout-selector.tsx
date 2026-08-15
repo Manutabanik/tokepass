@@ -8,8 +8,10 @@ import {
   Minus,
   Plus,
   Sparkles,
+  X,
 } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
+import { useState, type ReactNode } from "react"
 
 import { BundleCardSelector } from "@/components/public/bundle-card-selector"
 import type { TicketSelectorTier } from "@/components/public/ticket-tier-selector"
@@ -24,6 +26,7 @@ import {
   isQuantityInventoryType,
   type InventoryTierType,
 } from "@/lib/inventory/unified-inventory"
+import { resolvePurchaseLimit } from "@/lib/checkout-limits"
 import { cn, tapFeedbackClass } from "@/lib/utils"
 
 export type SelectedNumberedSeat = {
@@ -50,6 +53,9 @@ type Props = {
   onOpenSeatFlow: () => void
   onPurchaseIntent?: () => void
   onClearSeat: () => void
+  maxTicketsPerUser?: number | null
+  selectedCount?: number
+  mapTools?: ReactNode
 }
 
 export function EventCheckoutSelector({
@@ -67,13 +73,19 @@ export function EventCheckoutSelector({
   onOpenSeatFlow,
   onPurchaseIntent,
   onClearSeat,
+  maxTicketsPerUser = null,
+  selectedCount = 0,
+  mapTools = null,
 }: Props) {
+  const reduceMotion = useReducedMotion()
+  const [isMapExpanded, setIsMapExpanded] = useState(false)
   const grouped = groupCheckoutTiers(tiers)
-  const showSeatedCta = hasInteractiveMap || hasSeatingFlow
+  const showSeatedCta = hasInteractiveMap
   const hasInventory =
     grouped.general.length > 0 ||
     grouped.bundle.length > 0 ||
-    showSeatedCta
+    showSeatedCta ||
+    hasSeatingFlow
 
   if (!hasInventory) {
     return (
@@ -83,96 +95,172 @@ export function EventCheckoutSelector({
     )
   }
 
-  const placeLabel =
-    selectedSeat?.label?.trim() ||
-    (selectedPlaceCount > 0
-      ? `${selectedPlaceCount} ${selectedPlaceCount === 1 ? "lugar" : "lugares"} en el mapa`
-      : null)
+  const hasMapSelection = selectedPlaceCount > 0
+  const placeLabel = selectedSeat?.label?.trim() || null
   const generalQty = grouped.general.reduce(
     (sum, tier) => sum + (quantities[tier.id] ?? 0),
     0,
   )
   const showInclusionWarning =
-    includesGeneralAccess && Boolean(placeLabel) && generalQty > 0
+    includesGeneralAccess && hasMapSelection && generalQty > 0
+  const showReservedSeat = Boolean(placeLabel) && !hasMapSelection
+  const canExpandMap = showSeatedCta && Boolean(mapTools)
+  const showMapCta =
+    canExpandMap && !isMapExpanded && !hasMapSelection && !placeLabel
+  const showReopenMap = canExpandMap && !isMapExpanded && hasMapSelection
 
   return (
     <section className="space-y-5" aria-label="Elegí tu entrada">
-      {showSeatedCta ? (
-        placeLabel ? (
-          <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-primary/5 p-6">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">
-                  Lugar reservado
-                </p>
-                {includesGeneralAccess ? (
-                  <InclusionBadge />
-                ) : null}
-              </div>
-              <p className="mt-1 break-words text-base font-extrabold text-foreground">
-                {placeLabel}
+      {!hasInteractiveMap ? (
+        <h2 className="mb-4 text-2xl font-black text-foreground">
+          Elegí tus entradas
+        </h2>
+      ) : null}
+      {showReservedSeat ? (
+        <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-primary/5 p-6">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">
+                Lugar reservado
               </p>
-              {selectedSeat ? (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {formatCurrency(selectedSeat.price)} ·                   se confirma al
-                  continuar. El reloj de 8 minutos corre en el proceso de compra.
-                </p>
-              ) : null}
+              {includesGeneralAccess ? <InclusionBadge /> : null}
             </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={isPending}
-              onClick={onClearSeat}
-              className={cn(tapFeedbackClass, "mt-3")}
-            >
-              Cambiar
-            </Button>
-          </div>
-        ) : (
-          <div className="group relative overflow-hidden rounded-2xl border border-primary/20 bg-primary/5 p-6 transition-all hover:border-primary/40 hover:bg-primary/10 hover:shadow-lg">
-            <Map
-              className="pointer-events-none absolute -right-10 -bottom-10 size-48 text-foreground opacity-5 transition-opacity group-hover:opacity-10"
-              aria-hidden="true"
-            />
-            <div className="relative space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-xl font-bold tracking-tight text-foreground">
-                  Asientos Numerados
-                </p>
-                {includesGeneralAccess ? <InclusionBadge /> : null}
-              </div>
-              <p className="text-sm leading-6 text-muted-foreground">
-                Tocá el plano o usá la búsqueda rápida para elegir mesas o
-                butacas exactas.
+            <p className="mt-1 break-words text-base font-extrabold text-foreground">
+              {placeLabel}
+            </p>
+            {selectedSeat ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {formatCurrency(selectedSeat.price)} · se confirma al
+                continuar. El reloj de 8 minutos corre en el proceso de compra.
               </p>
-              <Button
-                type="button"
-                disabled={isPending || mapLoading}
-                onClick={onOpenSeatFlow}
-                className={cn(
-                  tapFeedbackClass,
-                  "w-full rounded-2xl py-4 text-lg font-bold shadow-md active:scale-95",
-                )}
-              >
-                <Map className="size-5" aria-hidden="true" />
-                {mapLoading ? "Cargando mapa…" : "Elegí lugares en el mapa"}
-              </Button>
-            </div>
+            ) : null}
           </div>
-        )
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={isPending}
+            onClick={onClearSeat}
+            className={cn(tapFeedbackClass, "mt-3")}
+          >
+            Cambiar
+          </Button>
+        </div>
       ) : null}
 
-      {grouped.general.length > 0 ? (
-        <QuantityList
-          tiers={grouped.general}
-          quantities={quantities}
-          isPending={isPending}
-          focusedTierId={focusedTierId}
-          onQuantityChange={onQuantityChange}
-        />
+      {showMapCta ? (
+        <div className="group relative overflow-hidden rounded-2xl border border-primary/20 bg-primary/5 p-6 transition-all duration-300 ease-in-out hover:border-primary/40 hover:bg-primary/10 hover:shadow-lg">
+          <Map
+            className="pointer-events-none absolute -right-10 -bottom-10 size-48 text-foreground opacity-5 transition-opacity group-hover:opacity-10"
+            aria-hidden="true"
+          />
+          <div className="relative space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-xl font-bold tracking-tight text-foreground">
+                Asientos Numerados
+              </p>
+              {includesGeneralAccess ? <InclusionBadge /> : null}
+            </div>
+            <p className="text-sm leading-6 text-muted-foreground">
+              Tocá el plano o usá la búsqueda rápida para elegir mesas o
+              butacas exactas.
+            </p>
+            <Button
+              type="button"
+              disabled={isPending || mapLoading}
+              onClick={() => {
+                if (canExpandMap) {
+                  setIsMapExpanded(true)
+                  return
+                }
+                onOpenSeatFlow()
+              }}
+              className={cn(
+                tapFeedbackClass,
+                "w-full rounded-2xl py-4 text-lg font-bold shadow-md active:scale-95",
+              )}
+            >
+              <Map className="size-5" aria-hidden="true" />
+              {mapLoading ? "Cargando mapa…" : "Elegí lugares en el mapa"}
+            </Button>
+          </div>
+        </div>
       ) : null}
+
+      <AnimatePresence initial={false}>
+        {isMapExpanded && mapTools ? (
+          <motion.div
+            key="map-accordion"
+            id="mapa"
+            initial={
+              reduceMotion ? false : { opacity: 0, height: 0 }
+            }
+            animate={{ opacity: 1, height: "auto" }}
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, height: 0 }}
+            transition={{ duration: 0.3, ease: "easeInOut" }}
+            className="overflow-hidden rounded-2xl border border-primary/20 bg-primary/5 transition-all duration-300 ease-in-out"
+          >
+            <div className="flex items-start justify-between gap-3 px-4 pt-4">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-lg font-bold tracking-tight text-foreground">
+                    Asientos Numerados
+                  </p>
+                  {includesGeneralAccess ? <InclusionBadge /> : null}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMapExpanded(false)}
+                className={cn(
+                  tapFeedbackClass,
+                  "inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border/70 bg-card/80 px-2.5 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground",
+                )}
+              >
+                <X className="size-3.5" aria-hidden="true" />
+                Cerrar mapa
+              </button>
+            </div>
+            <div className="p-4 pt-3">{mapTools}</div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      {showReopenMap ? (
+        <Button
+          type="button"
+          variant="outline"
+          disabled={isPending || mapLoading}
+          onClick={() => setIsMapExpanded(true)}
+          className={cn(tapFeedbackClass, "w-full rounded-2xl")}
+        >
+          <Map className="size-4" aria-hidden="true" />
+          Elegí lugares en el mapa
+        </Button>
+      ) : null}
+
+      <AnimatePresence initial={false}>
+        {grouped.general.length > 0 && !hasMapSelection ? (
+          <motion.div
+            key="general-tickets"
+            initial={reduceMotion ? false : { opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, height: 0 }}
+            transition={{ duration: 0.22, ease: "easeInOut" }}
+            className="overflow-hidden"
+          >
+            <QuantityList
+              tiers={grouped.general}
+              quantities={quantities}
+              isPending={isPending}
+              focusedTierId={focusedTierId}
+              maxTicketsPerUser={maxTicketsPerUser}
+              selectedCount={selectedCount}
+              onQuantityChange={onQuantityChange}
+            />
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
 
       <InclusionWarning visible={showInclusionWarning} />
 
@@ -262,6 +350,8 @@ export function QuantityList({
   focusedTierId = null,
   onQuantityChange,
   action = "stepper",
+  maxTicketsPerUser = null,
+  selectedCount = 0,
 }: {
   tiers: TicketSelectorTier[]
   quantities: Record<string, number>
@@ -269,14 +359,20 @@ export function QuantityList({
   focusedTierId?: string | null
   onQuantityChange: (tierId: string, quantity: number, max: number) => void
   action?: "stepper" | "add"
+  maxTicketsPerUser?: number | null
+  selectedCount?: number
 }) {
   return (
     <ul className="space-y-3">
       {tiers.map((tier) => {
         const sale = resolveSalePhases(tier.phases)
         const current = sale.current
-        const max = Math.max(0, tier.available)
         const quantity = quantities[tier.id] ?? 0
+        const limit = resolvePurchaseLimit(maxTicketsPerUser)
+        const otherSelected = Math.max(0, selectedCount - quantity)
+        const remaining =
+          limit == null ? Number.POSITIVE_INFINITY : Math.max(0, limit - otherSelected)
+        const max = Math.min(Math.max(0, tier.available), remaining)
         const description = tier.description?.trim() || ""
         const highlight = resolveTicketHighlightBadge(tier, tiers)
         const unitPrice = current?.price ?? tier.price
@@ -285,7 +381,7 @@ export function QuantityList({
           <li
             key={tier.id}
             className={cn(
-              "rounded-2xl border border-border bg-background px-4 py-4 transition-all duration-300 ease-in-out",
+              "rounded-2xl border border-border bg-card px-4 py-4 transition-all duration-300 ease-in-out",
               focusedTierId === tier.id && "ring-1 ring-primary/30",
               highlight === "bestseller" && "border-amber-400/35",
             )}
@@ -316,7 +412,7 @@ export function QuantityList({
                   </p>
                 ) : null}
                 <StockHint
-                  available={max}
+                  available={tier.available}
                   capacity={tier.capacity}
                   sold={tier.sold}
                 />

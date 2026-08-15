@@ -10,7 +10,10 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Button } from "@/components/ui/button"
-import { MAX_TICKETS_PER_PURCHASE } from "@/lib/checkout-limits"
+import {
+  ABSOLUTE_MAX_ITEMS_PER_PURCHASE,
+  resolvePurchaseLimit,
+} from "@/lib/checkout-limits"
 import { formatCurrency } from "@/lib/format"
 import {
   compactSeatToken,
@@ -31,12 +34,25 @@ import {
 import { flattenVenueMapSeats } from "@/lib/seating/venue-map-geometry"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import { cn } from "@/lib/utils"
+import type { TicketSelectorTier } from "@/components/public/ticket-tier-selector"
 import type { StorefrontLayoutSeat } from "@/lib/stores/storefront-seat-store"
 import type {
   InteractiveVenueMap,
   VenueMapElement,
   VenueMapZone,
 } from "@/types/venue-map"
+
+const GENERAL_TICKET_PREFIX = "ticket:"
+
+function generalTicketOptionId(tierId: string) {
+  return `${GENERAL_TICKET_PREFIX}${tierId}`
+}
+
+function parseGeneralTicketId(value: string): string | null {
+  return value.startsWith(GENERAL_TICKET_PREFIX)
+    ? value.slice(GENERAL_TICKET_PREFIX.length)
+    : null
+}
 
 export function AccessibleSeatSelector({
   map,
@@ -51,6 +67,9 @@ export function AccessibleSeatSelector({
   onAssignSeats,
   onAssignZoneQuantity,
   onAssignTables,
+  generalTiers = [],
+  onAssignGeneral,
+  maxTicketsPerUser = null,
 }: {
   map: InteractiveVenueMap
   occupancyBySeatId?: Record<string, SeatStatus>
@@ -64,7 +83,12 @@ export function AccessibleSeatSelector({
   onAssignSeats: (seats: StorefrontLayoutSeat[]) => void
   onAssignZoneQuantity: (sectorId: string, quantity: number) => void
   onAssignTables?: (tables: VenueMapElement[]) => void
+  generalTiers?: TicketSelectorTier[]
+  onAssignGeneral?: (tierId: string, quantity: number, max: number) => void
+  maxTicketsPerUser?: number | null
 }) {
+  const purchaseCap =
+    resolvePurchaseLimit(maxTicketsPerUser) ?? ABSOLUTE_MAX_ITEMS_PER_PURCHASE
   const selected = useMemo(() => new Set(selectedSeatIds), [selectedSeatIds])
   const sectors = useMemo(
     () =>
@@ -78,9 +102,26 @@ export function AccessibleSeatSelector({
   )
   const flatSeats = useMemo(() => flattenVenueMapSeats(map), [map])
   const numberedSectors = sectors.filter((sector) => sector.kind === "numbered")
-  const [autoSectorId, setAutoSectorId] = useState(
-    () => numberedSectors[0]?.id ?? sectors[0]?.id ?? "",
+  const ticketOptions = useMemo(
+    () =>
+      generalTiers.filter(
+        (tier) => tier.layoutType === "general" && tier.available > 0,
+      ),
+    [generalTiers],
   )
+  const [autoSectorId, setAutoSectorId] = useState(
+    () =>
+      ticketOptions[0]
+        ? generalTicketOptionId(ticketOptions[0].id)
+        : numberedSectors[0]?.id ?? sectors[0]?.id ?? "",
+  )
+  const selectedGeneralTier =
+    ticketOptions.find(
+      (tier) => generalTicketOptionId(tier.id) === autoSectorId,
+    ) ??
+    (parseGeneralTicketId(autoSectorId)
+      ? ticketOptions.find((tier) => tier.id === parseGeneralTicketId(autoSectorId))
+      : null)
   const [autoQuantity, setAutoQuantity] = useState(2)
   const [autoMode, setAutoMode] = useState<FastAssignMode>("SEATS")
   const [autoError, setAutoError] = useState<string | null>(null)
@@ -90,11 +131,21 @@ export function AccessibleSeatSelector({
     sectors.find((sector) => sector.id === autoSectorId) ?? sectors[0] ?? null
 
   function handleAssign() {
-    if (!autoSector || pending) return
-    const quantity = Math.min(
-      MAX_TICKETS_PER_PURCHASE,
-      Math.max(1, autoQuantity),
-    )
+    if (pending) return
+    if (selectedGeneralTier) {
+      const max = Math.max(0, selectedGeneralTier.available)
+      const quantity = Math.min(purchaseCap, Math.max(1, autoQuantity), max)
+      if (quantity <= 0) {
+        setAutoError("Esa entrada no tiene stock disponible.")
+        return
+      }
+      setAutoError(null)
+      setAutoHint(null)
+      onAssignGeneral?.(selectedGeneralTier.id, quantity, max)
+      return
+    }
+    if (!autoSector) return
+    const quantity = Math.min(purchaseCap, Math.max(1, autoQuantity))
     const mode = autoSector.isTableSector ? autoMode : "SEATS"
     if (autoSector.kind === "ga") {
       if (autoSector.soldOut) {
@@ -173,10 +224,12 @@ export function AccessibleSeatSelector({
     <div className="w-full space-y-6 bg-transparent">
       <AutoAssignCard
         sectors={sectors}
+        generalTiers={ticketOptions}
+        purchaseCap={purchaseCap}
         seats={flatSeats}
         occupancyBySeatId={occupancyBySeatId}
         selectedSeatIds={selected}
-        sectorId={autoSector?.id ?? ""}
+        sectorId={autoSectorId}
         quantity={autoQuantity}
         mode={autoMode}
         error={autoError}
@@ -356,6 +409,8 @@ function SeatMatrixButton({
 
 function AutoAssignCard({
   sectors,
+  generalTiers = [],
+  purchaseCap,
   seats,
   occupancyBySeatId,
   selectedSeatIds,
@@ -372,6 +427,8 @@ function AutoAssignCard({
   onAssign,
 }: {
   sectors: AccessibleSectorNode[]
+  generalTiers?: TicketSelectorTier[]
+  purchaseCap: number
   seats: ReturnType<typeof flattenVenueMapSeats>
   occupancyBySeatId: Record<string, SeatStatus>
   selectedSeatIds: Set<string>
@@ -387,8 +444,14 @@ function AutoAssignCard({
   onHintChange: (hint: string | null) => void
   onAssign: () => void
 }) {
-  const sector = sectors.find((item) => item.id === sectorId) ?? sectors[0] ?? null
-  const isTable = Boolean(sector?.isTableSector)
+  const generalTier =
+    generalTiers.find((tier) => generalTicketOptionId(tier.id) === sectorId) ??
+    null
+  const isGeneralTicket = Boolean(generalTier)
+  const sector = isGeneralTicket
+    ? null
+    : sectors.find((item) => item.id === sectorId) ?? sectors[0] ?? null
+  const isTable = Boolean(sector?.isTableSector) && !isGeneralTicket
   const capacity = Math.max(1, sector?.capacityPerUnit ?? 1)
   const unitNoun = sector?.unitNoun ?? "mesa"
   const unitPlural = unitNoun === "palco" ? "palcos" : "mesas"
@@ -403,25 +466,46 @@ function AutoAssignCard({
     : 0
   const maxQuantity = isTable
     ? activeMode === "FULL_TABLES"
-      ? Math.max(1, Math.min(MAX_TICKETS_PER_PURCHASE, availableTables || MAX_TICKETS_PER_PURCHASE))
+      ? Math.max(
+          1,
+          Math.min(purchaseCap, availableTables || purchaseCap),
+        )
       : capacity
     : Math.max(
         1,
-        Math.min(MAX_TICKETS_PER_PURCHASE, sector?.availableCount || MAX_TICKETS_PER_PURCHASE),
+        Math.min(
+          purchaseCap,
+          isGeneralTicket
+            ? generalTier?.available || purchaseCap
+            : sector?.availableCount || purchaseCap,
+        ),
       )
 
+  const unitPrice = isGeneralTicket
+    ? generalTier?.price ?? 0
+    : sector?.price ?? 0
   const preview = previewFastAssign({
     isTableSector: isTable,
     mode: activeMode,
     quantity,
     capacityPerUnit: capacity,
-    unitPrice: sector?.price ?? 0,
+    unitPrice,
     sellMode: sector?.sellMode,
     unitNoun,
   })
+  const generalNoun = /general/i.test(generalTier?.name ?? "")
+    ? quantity === 1
+      ? "General"
+      : "Generales"
+    : quantity === 1
+      ? generalTier?.name ?? "entrada"
+      : `${generalTier?.name ?? "entradas"}`
+  const assignLabel = isGeneralTicket
+    ? `Comprar ${quantity} ${generalNoun} por ${formatCurrency(quantity * unitPrice)}`
+    : preview.buttonLabel
 
   function step(delta: number) {
-    if (!sector || pending) return
+    if (pending || (!sector && !isGeneralTicket)) return
     const next = quantity + delta
     if (
       isTable &&
@@ -453,13 +537,17 @@ function AutoAssignCard({
   }
 
   const quantityLabel =
-    isTable && activeMode === "FULL_TABLES"
+    isGeneralTicket
       ? quantity === 1
-        ? `1 ${unitNoun}`
-        : `${quantity} ${unitPlural}`
-      : quantity === 1
-        ? "1 persona"
-        : `${quantity} personas`
+        ? "1 entrada"
+        : `${quantity} entradas`
+      : isTable && activeMode === "FULL_TABLES"
+        ? quantity === 1
+          ? `1 ${unitNoun}`
+          : `${quantity} ${unitPlural}`
+        : quantity === 1
+          ? "1 persona"
+          : `${quantity} personas`
 
   return (
     <section className="rounded-xl border border-primary/35 bg-primary/10 p-6 shadow-sm">
@@ -468,9 +556,11 @@ function AutoAssignCard({
         Buscar el mejor lugar automáticamente
       </p>
       <p className="mt-1 text-xs text-muted-foreground">
-        {isTable
-          ? `Elegí si reservás por personas o por ${unitPlural} completas. Capacidad: ${capacity} ${capacity === 1 ? "persona" : "personas"} por ${unitNoun}.`
-          : "Elegí cuántas personas y el sector. Asignamos lugares juntos si el plano tiene butacas."}
+        {isGeneralTicket
+          ? "Elegí el tipo de entrada y la cantidad. Se suma al carrito al instante."
+          : isTable
+            ? `Elegí si reservás por personas o por ${unitPlural} completas. Capacidad: ${capacity} ${capacity === 1 ? "persona" : "personas"} por ${unitNoun}.`
+            : "Elegí cuántas personas y el sector. Asignamos lugares juntos si el plano tiene butacas."}
       </p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <div className="block text-sm font-medium text-foreground">
@@ -500,19 +590,37 @@ function AutoAssignCard({
           </div>
         </div>
         <label className="block text-sm font-medium text-foreground">
-          Sector
+          Sector / Tipo de Entrada
           <select
             value={sectorId}
-            disabled={pending || sectors.length === 0}
+            disabled={pending || (sectors.length === 0 && generalTiers.length === 0)}
             onChange={(event) => onSectorChange(event.target.value)}
             className="mt-1 h-11 w-full rounded-xl border border-border bg-background px-3 text-foreground"
           >
-            {sectors.map((item) => (
-              <option key={item.id} value={item.id} disabled={item.soldOut}>
-                {item.name}
-                {item.soldOut ? " (agotado)" : ""}
-              </option>
-            ))}
+            {generalTiers.length > 0 ? (
+              <optgroup label="Entradas">
+                {generalTiers.map((tier) => (
+                  <option
+                    key={generalTicketOptionId(tier.id)}
+                    value={generalTicketOptionId(tier.id)}
+                    disabled={tier.available <= 0}
+                  >
+                    {tier.name}
+                    {tier.available <= 0 ? " (agotado)" : ""}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
+            {sectors.length > 0 ? (
+              <optgroup label="Lugares del mapa">
+                {sectors.map((item) => (
+                  <option key={item.id} value={item.id} disabled={item.soldOut}>
+                    {item.name}
+                    {item.soldOut ? " (agotado)" : ""}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
           </select>
         </label>
       </div>
@@ -594,7 +702,7 @@ function AutoAssignCard({
         onClick={onAssign}
         className="mt-4 h-auto w-full rounded-xl p-6 font-bold shadow-sm"
       >
-        {preview.buttonLabel}
+        {assignLabel}
       </Button>
     </section>
   )

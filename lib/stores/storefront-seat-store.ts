@@ -2,7 +2,11 @@
 
 import { create } from "zustand"
 
-import { MAX_TICKETS_PER_PURCHASE } from "@/lib/checkout-limits"
+import {
+  evaluateStorefrontSelectionLimit,
+  type StorefrontLimitReason,
+} from "@/lib/checkout-limits"
+import { useStorefrontCartStore } from "@/lib/stores/storefront-cart-store"
 
 export type StorefrontViewMode = "map" | "list"
 
@@ -33,7 +37,7 @@ export type StorefrontLayoutSeat = {
 
 export type StorefrontToggleResult =
   | { ok: true; added: boolean }
-  | { ok: false; reason: "limit" }
+  | { ok: false; reason: StorefrontLimitReason }
 
 type StorefrontSeatState = {
   eventId: string | null
@@ -48,17 +52,23 @@ type StorefrontSeatState = {
   pulseFocus: (ids: string[]) => void
   toggleSelectedItem: (
     item: StorefrontSelectedItem,
-    maxCount?: number,
+    maxCount?: number | null,
   ) => StorefrontToggleResult
-  upsertSelectedItem: (item: StorefrontSelectedItem, maxCount?: number) => StorefrontToggleResult
+  upsertSelectedItem: (
+    item: StorefrontSelectedItem,
+    maxCount?: number | null,
+  ) => StorefrontToggleResult
   removeSelectedItem: (id: string) => void
   patchSelectedItem: (id: string, patch: Partial<StorefrontSelectedItem>) => void
   clearSelectedItems: () => void
   toggleLayoutSeat: (
     seat: StorefrontLayoutSeat,
-    maxCount?: number,
+    maxCount?: number | null,
   ) => StorefrontToggleResult
-  setLayoutSeats: (seats: StorefrontLayoutSeat[], maxCount?: number) => StorefrontToggleResult
+  setLayoutSeats: (
+    seats: StorefrontLayoutSeat[],
+    maxCount?: number | null,
+  ) => StorefrontToggleResult
   clearLayoutSeats: () => void
 }
 
@@ -117,6 +127,12 @@ function uniqueItemsById(items: StorefrontSelectedItem[]) {
 
 function withDerived(items: StorefrontSelectedItem[]) {
   const unique = uniqueItemsById(items)
+  const totalAmount = unique.reduce(
+    (sum, item) => sum + item.price * itemCapacity(item),
+    0,
+  )
+  const itemsCount = selectionCount(unique)
+  useStorefrontCartStore.getState().setCartTotals({ totalAmount, itemsCount })
   return {
     selectedItems: unique,
     layoutSeats: deriveLayoutSeats(unique),
@@ -166,28 +182,38 @@ export const useStorefrontSeatStore = create<StorefrontSeatState>((set, get) => 
     }))
   },
 
-  toggleSelectedItem: (item, maxCount = MAX_TICKETS_PER_PURCHASE) => {
+  toggleSelectedItem: (item, maxCount) => {
     const current = get().selectedItems
     if (current.some((entry) => entry.id === item.id)) {
       set(withDerived(current.filter((entry) => entry.id !== item.id)))
       return { ok: true, added: false }
     }
-    const nextCount = selectionCount(current) + itemCapacity(item)
-    if (nextCount > maxCount) {
-      return { ok: false, reason: "limit" }
+    const nextItem = { ...item, capacity: itemCapacity(item) }
+    const allowed = evaluateStorefrontSelectionLimit({
+      current,
+      next: nextItem,
+      maxTicketsPerUser: maxCount,
+    })
+    if (!allowed.ok) {
+      return { ok: false, reason: allowed.reason }
     }
-    set(withDerived([...current, { ...item, capacity: itemCapacity(item) }]))
+    set(withDerived([...current, nextItem]))
     return { ok: true, added: true }
   },
 
-  upsertSelectedItem: (item, maxCount = MAX_TICKETS_PER_PURCHASE) => {
+  upsertSelectedItem: (item, maxCount) => {
     const current = get().selectedItems
     const nextItem = { ...item, capacity: itemCapacity(item) }
-    const without = current.filter((entry) => entry.id !== item.id)
-    const nextCount = selectionCount(without) + itemCapacity(nextItem)
-    if (nextCount > maxCount) {
-      return { ok: false, reason: "limit" }
+    const allowed = evaluateStorefrontSelectionLimit({
+      current,
+      next: nextItem,
+      replacingId: item.id,
+      maxTicketsPerUser: maxCount,
+    })
+    if (!allowed.ok) {
+      return { ok: false, reason: allowed.reason }
     }
+    const without = current.filter((entry) => entry.id !== item.id)
     set(withDerived([...without, nextItem]))
     return { ok: true, added: !current.some((entry) => entry.id === item.id) }
   },
@@ -215,11 +241,11 @@ export const useStorefrontSeatStore = create<StorefrontSeatState>((set, get) => 
     set(withDerived([]))
   },
 
-  toggleLayoutSeat: (seat, maxCount = MAX_TICKETS_PER_PURCHASE) => {
+  toggleLayoutSeat: (seat, maxCount) => {
     return get().toggleSelectedItem(layoutSeatToItem(seat), maxCount)
   },
 
-  setLayoutSeats: (seats, maxCount = MAX_TICKETS_PER_PURCHASE) => {
+  setLayoutSeats: (seats, maxCount) => {
     const others = get().selectedItems.filter((item) => item.type !== "seat")
     const seen = new Set<string>()
     const nextSeats = seats
@@ -230,9 +256,15 @@ export const useStorefrontSeatStore = create<StorefrontSeatState>((set, get) => 
         return true
       })
       .map(layoutSeatToItem)
-    const nextCount = selectionCount([...others, ...nextSeats])
-    if (nextCount > maxCount) {
-      return { ok: false, reason: "limit" }
+    for (const seat of nextSeats) {
+      const allowed = evaluateStorefrontSelectionLimit({
+        current: [...others, ...nextSeats.filter((item) => item.id !== seat.id)],
+        next: seat,
+        maxTicketsPerUser: maxCount,
+      })
+      if (!allowed.ok) {
+        return { ok: false, reason: allowed.reason }
+      }
     }
     set(withDerived([...others, ...nextSeats]))
     return { ok: true, added: seats.length > 0 }

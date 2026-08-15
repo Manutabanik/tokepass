@@ -72,7 +72,12 @@ import {
   validateCheckoutBuyer,
   type CheckoutBuyerInfo,
 } from "@/lib/checkout-buyer"
-import { MAX_TICKETS_PER_PURCHASE } from "@/lib/checkout-limits"
+import {
+  ABSOLUTE_MAX_ITEMS_PER_PURCHASE,
+  purchaseCapForLayout,
+  resolvePurchaseLimit,
+  storefrontLimitMessage,
+} from "@/lib/checkout-limits"
 import { GA_CHECKOUT_HOLD_MS } from "@/lib/checkout-hold"
 import { redirectToCheckoutPaymentOrToast } from "@/lib/checkout-redirect"
 import { ensureGuestCheckoutSession } from "@/lib/checkout/guest-session"
@@ -121,7 +126,10 @@ import { formatCurrency } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { publicEventLoginPath } from "@/lib/seo/site"
 import { useCheckoutIntentStore } from "@/lib/stores/checkout-intent-store"
+import { useStorefrontCartStore } from "@/lib/stores/storefront-cart-store"
 import {
+  storefrontSelectionCount,
+  storefrontSelectionTotal,
   useStorefrontSeatStore,
   type StorefrontLayoutSeat,
   type StorefrontSelectedItem,
@@ -190,6 +198,8 @@ type TicketSelectorProps = {
   purchaseLocked?: boolean
   /** Tab inicial configurado por el organizador. */
   defaultTicketTab?: DefaultTicketTab | null
+  /** Tope por comprador. null o 0 = sin límite. */
+  maxTicketsPerUser?: number | null
   renderLayout?: (parts: { map: ReactNode; panel: ReactNode }) => ReactNode
 }
 
@@ -244,6 +254,7 @@ export function TicketSelector({
   purchaseLocked = false,
   defaultTicketTab: _defaultTicketTab = "auto",
   selectedDayId = null,
+  maxTicketsPerUser = null,
   renderLayout,
 }: TicketSelectorProps) {
   const router = useRouter()
@@ -257,12 +268,13 @@ export function TicketSelector({
     null,
   )
   const [upsellSkipped, setUpsellSkipped] = useState(false)
-  const [seatPickerOpen, setSeatPickerOpen] = useState(false)
+  const [, setSeatPickerOpen] = useState(true)
   const [checkoutStep, setCheckoutStep] = useState<CheckoutFlowStep>("tickets")
   const [focusedZoneId, setFocusedZoneId] = useState<string | null>(null)
   const [focusedTierId, setFocusedTierId] = useState<string | null>(null)
   const storefrontView = useStorefrontSeatStore((state) => state.view)
   const setStorefrontView = useStorefrontSeatStore((state) => state.setView)
+  const mapContainerRef = useRef<HTMLDivElement>(null)
   const layoutSeats = useStorefrontSeatStore((state) => state.layoutSeats)
   const selectedItems = useStorefrontSeatStore((state) => state.selectedItems)
   const [fieldShake, setFieldShake] = useState(0)
@@ -376,12 +388,7 @@ export function TicketSelector({
     const counts: Record<string, number> = {}
     for (const item of selectedItems) {
       if (item.type === "seat") continue
-      const sectorName = item.name.split(" · ")[0] ?? item.name
-      const tierId = resolveTierIdForUniversalSector(
-        item.sectorId ?? item.id,
-        sectorName,
-        checkoutTierInput,
-      )
+      const tierId = resolveItemTierId(item)
       if (!tierId) continue
       counts[tierId] =
         (counts[tierId] ?? 0) + Math.max(1, Math.floor(item.capacity) || 1)
@@ -391,12 +398,16 @@ export function TicketSelector({
       let changed = false
       const next = { ...current }
       for (const [tierId, target] of Object.entries(counts)) {
+        const tier = displayTiers.find((item) => item.id === tierId)
+        const drivenByTable = selectedItems.some(
+          (item) => item.type === "table" && resolveItemTierId(item) === tierId,
+        )
         const max = Math.min(
-          MAX_TICKETS_PER_PURCHASE,
-          Math.max(
-            0,
-            displayTiers.find((tier) => tier.id === tierId)?.available ?? target,
+          purchaseCapForLayout(
+            drivenByTable ? "table_combo" : tier?.layoutType,
+            maxTicketsPerUser,
           ),
+          Math.max(0, tier?.available ?? target),
         )
         const clamped = Math.min(target, max)
         if ((next[tierId] ?? 0) !== clamped) {
@@ -413,15 +424,33 @@ export function TicketSelector({
       mapDrivenTierIds.current = nextDriven
       return changed ? next : current
     })
-  }, [checkoutTierInput, displayTiers, selectedItems])
+  }, [checkoutTierInput, displayTiers, maxTicketsPerUser, selectedItems, zoneTierPricing])
 
   function resolveItemTierId(item: StorefrontSelectedItem) {
     const sectorName = item.name.split(" · ")[0] ?? item.name
-    return resolveTierIdForUniversalSector(
+    const direct = resolveTierIdForUniversalSector(
       item.sectorId ?? item.id,
       sectorName,
       checkoutTierInput,
     )
+    if (direct) return direct
+    const key = (item.sectorId ?? "").trim().toLowerCase()
+    const priced = zoneTierPricing.find((row) => {
+      const sectorKey = row.sectorKey.trim().toLowerCase()
+      return (
+        sectorKey === key ||
+        sectorKey === sectorName.toLowerCase() ||
+        sectorKey === item.name.trim().toLowerCase()
+      )
+    })
+    if (priced) return priced.ticketTierId
+    if (item.type === "table") {
+      const tableTiers = checkoutTierInput.filter(
+        (tier) => tier.layoutType === "table_combo",
+      )
+      if (tableTiers.length === 1) return tableTiers[0]?.id ?? null
+    }
+    return null
   }
 
   useEffect(() => {
@@ -676,11 +705,15 @@ export function TicketSelector({
       seatingUnits: [],
       seatingSectorSummaries,
       zoneTierPricing,
+      maxPerUser:
+        resolvePurchaseLimit(maxTicketsPerUser) ??
+        ABSOLUTE_MAX_ITEMS_PER_PURCHASE,
     })
   }, [
     eventId,
     eventTitle,
     hasSeatingFlow,
+    maxTicketsPerUser,
     seatingBackgroundUrl,
     resolvedSeatingLayout,
     seatingSectorSummaries,
@@ -721,7 +754,7 @@ export function TicketSelector({
             quantity,
             subtotal: quantity * tier.price,
             maxSelectable: Math.min(
-              MAX_TICKETS_PER_PURCHASE,
+              purchaseCapForLayout(tier.layoutType, maxTicketsPerUser),
               Math.max(0, tier.available),
             ),
           }
@@ -730,7 +763,7 @@ export function TicketSelector({
           (tier) =>
             tier.quantity > 0 && isQuantityInventoryType(tier.inventoryType),
         ),
-    [displayTiers, quantities],
+    [displayTiers, maxTicketsPerUser, quantities],
   )
 
   const extraNumbered = selectedSeat ? Math.max(0, layoutSeats.length - 1) : 0
@@ -739,19 +772,53 @@ export function TicketSelector({
     ? selectedSeat.price +
       layoutSeats.slice(1).reduce((sum, seat) => sum + seat.price, 0)
     : layoutSeats.reduce((sum, seat) => sum + seat.price, 0)
-  const totalTickets =
-    selection.reduce((sum, tier) => sum + tier.quantity, 0) + seatLineCount
-  const ticketsSubtotal = roundMoney(
-    selection.reduce((sum, tier) => sum + tier.subtotal, 0) + numberedSubtotal,
+  const mapTierIds = new Set(
+    selectedItems
+      .filter((item) => item.type !== "seat")
+      .map((item) => resolveItemTierId(item))
+      .filter((id): id is string => Boolean(id)),
   )
+  const extraQuantitySubtotal = selection
+    .filter((tier) => !mapTierIds.has(tier.id))
+    .reduce((sum, tier) => sum + tier.subtotal, 0)
+  const extraQuantityCount = selection
+    .filter((tier) => !mapTierIds.has(tier.id))
+    .reduce((sum, tier) => sum + tier.quantity, 0)
+  const hasMapSeats = selectedItems.some((item) => item.type === "seat")
+  const numberedExtra = hasMapSeats ? 0 : numberedSubtotal
+  const numberedExtraCount = hasMapSeats ? 0 : seatLineCount
+  const totalMapSelectedItemsPrice = Math.max(
+    storefrontSelectionTotal(liveSelectedItems),
+    storefrontSelectionTotal(selectedItems),
+  )
+  const totalGeneralTicketsPrice = extraQuantitySubtotal + numberedExtra
+  const ticketsSubtotal = roundMoney(
+    totalMapSelectedItemsPrice + totalGeneralTicketsPrice,
+  )
+  const totalTickets = Math.max(
+    storefrontSelectionCount(liveSelectedItems),
+    storefrontSelectionCount(selectedItems),
+  ) + extraQuantityCount + numberedExtraCount
+  const hasMapSelection =
+    selectedItems.length > 0 || liveSelectedItems.length > 0
   // All-In: tier.price already includes Tokepass fee.
   const cartSubtotal = ticketsSubtotal
   const discountAmount = appliedPromo
     ? Math.min(appliedPromo.discountAmount, cartSubtotal)
     : 0
   const totalAmount = roundMoney(Math.max(0, cartSubtotal - discountAmount))
+  const finalTotal = hasMapSelection
+    ? Math.max(totalAmount, totalMapSelectedItemsPrice)
+    : totalAmount
+  const canProceedFromCart = hasMapSelection || finalTotal > 0
+  useEffect(() => {
+    useStorefrontCartStore.getState().setCartTotals({
+      totalAmount: finalTotal,
+      itemsCount: Math.max(totalTickets, selectedItems.length),
+    })
+  }, [finalTotal, selectedItems.length, totalTickets])
   const visibleStep: CheckoutFlowStep =
-    totalTickets > 0 ? checkoutStep : "tickets"
+    canProceedFromCart ? checkoutStep : "tickets"
   useEffect(() => {
     if (!intentRestored) return
     if (totalTickets <= 0) {
@@ -769,14 +836,14 @@ export function TicketSelector({
       quantities,
       selectedSeat,
       buyer,
-      subtotal: cartSubtotal,
+      subtotal: finalTotal,
       holdExpiresAt: useCheckoutIntentStore.getState().holdExpiresAt,
     })
   }, [
     buyer,
-    cartSubtotal,
     eventId,
     eventSlug,
+    finalTotal,
     portalReady,
     quantities,
     selectedSeat,
@@ -812,7 +879,16 @@ export function TicketSelector({
 
   function updateQuantity(tierId: string, next: number, max: number) {
     if (purchaseLocked) return
+    const currentQty = quantities[tierId] ?? 0
     const clamped = Math.min(Math.max(0, next), max)
+    const limit = resolvePurchaseLimit(maxTicketsPerUser)
+    if (limit != null && clamped > currentQty) {
+      const otherCount = Math.max(0, totalTickets - currentQty)
+      if (otherCount + clamped > limit) {
+        toast.error(storefrontLimitMessage())
+        return
+      }
+    }
     setQuantities((current) => ({
       ...current,
       [tierId]: clamped,
@@ -885,6 +961,18 @@ export function TicketSelector({
         quantity: tier.quantity,
       })),
     ]
+    const covered = new Set(items.map((item) => item.tierId))
+    const mapCounts: Record<string, number> = {}
+    for (const item of selectedItems) {
+      if (item.type === "seat") continue
+      const tierId = resolveItemTierId(item)
+      if (!tierId || covered.has(tierId)) continue
+      mapCounts[tierId] =
+        (mapCounts[tierId] ?? 0) + Math.max(1, Math.floor(item.capacity) || 1)
+    }
+    for (const [tierId, quantity] of Object.entries(mapCounts)) {
+      items.push({ tierId, quantity })
+    }
     if (extraAddonId) {
       const existing = items.find((item) => item.tierId === extraAddonId)
       if (existing) existing.quantity += 1
@@ -915,7 +1003,7 @@ export function TicketSelector({
 
     fireCartPixels({
       contentIds: items.map((item) => item.tierId),
-      value: totalAmount,
+      value: finalTotal,
       numItems: items.reduce((sum, item) => sum + item.quantity, 0),
     })
 
@@ -982,11 +1070,7 @@ export function TicketSelector({
   }
 
   function goToDetailsStep() {
-    if (
-      (selection.length === 0 && !selectedSeat && selectedItems.length === 0) ||
-      controlsLocked
-    )
-      return
+    if (!canProceedFromCart || controlsLocked) return
     const firstSeat = layoutSeats[0]
     if (firstSeat && !selectedSeat) {
       handleUniversalContinue(
@@ -1036,11 +1120,7 @@ export function TicketSelector({
   }
 
   function goToPaymentMethods() {
-    if (
-      (selection.length === 0 && !selectedSeat && selectedItems.length === 0) ||
-      controlsLocked
-    )
-      return
+    if (!canProceedFromCart || controlsLocked) return
     void buyerForm.handleSubmit(
       (values) => {
         setBuyer(values)
@@ -1085,10 +1165,10 @@ export function TicketSelector({
     if (!item) return
     const result = useStorefrontSeatStore.getState().toggleSelectedItem(
       item,
-      MAX_TICKETS_PER_PURCHASE,
+      maxTicketsPerUser,
     )
     if (!result.ok) {
-      toast.error("Alcanzaste el máximo de lugares permitidos por compra")
+      toast.error(storefrontLimitMessage(result.reason))
       return
     }
     if (!result.added) {
@@ -1115,10 +1195,10 @@ export function TicketSelector({
           sectorId: zone.id,
           color: zone.color,
         },
-        MAX_TICKETS_PER_PURCHASE,
+        maxTicketsPerUser,
       )
       if (!result.ok) {
-        toast.error("Alcanzaste el máximo de lugares permitidos por compra")
+        toast.error(storefrontLimitMessage(result.reason))
         return
       }
       focusSelectedZone(zone)
@@ -1137,21 +1217,40 @@ export function TicketSelector({
     if (!tier || tier.available <= 0) return
     updateQuantity(
       tierId,
-      Math.min(MAX_TICKETS_PER_PURCHASE, Math.max(1, quantity), tier.available),
-      Math.min(MAX_TICKETS_PER_PURCHASE, Math.max(0, tier.available)),
+      Math.min(
+        purchaseCapForLayout(tier.layoutType, maxTicketsPerUser),
+        Math.max(1, quantity),
+        tier.available,
+      ),
+      Math.min(
+        purchaseCapForLayout(tier.layoutType, maxTicketsPerUser),
+        Math.max(0, tier.available),
+      ),
     )
     ensureCartHoldClock()
     setFocusedTierId(tierId)
+    scrollToAssignedMap()
+  }
+
+  function scrollToAssignedMap() {
+    window.setTimeout(() => {
+      mapContainerRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+        inline: "nearest",
+      })
+    }, 80)
   }
 
   function applyLayoutSeats(seats: StorefrontLayoutSeat[]) {
     const store = useStorefrontSeatStore.getState()
-    const result = store.setLayoutSeats(seats, MAX_TICKETS_PER_PURCHASE)
+    const result = store.setLayoutSeats(seats, maxTicketsPerUser)
     if (!result.ok) {
-      toast.error("Alcanzaste el máximo de lugares permitidos por compra")
+      toast.error(storefrontLimitMessage(result.reason))
       return
     }
     store.pulseFocus(seats.map((seat) => seat.id))
+    scrollToAssignedMap()
   }
 
   function applyAssignedTables(tables: VenueMapElement[]) {
@@ -1160,22 +1259,25 @@ export function TicketSelector({
     for (const table of tables) {
       const item = storefrontItemFromElement(table, priceBySectorId)
       if (!item) continue
-      const result = store.upsertSelectedItem(item, MAX_TICKETS_PER_PURCHASE)
+      const result = store.upsertSelectedItem(item, maxTicketsPerUser)
       if (!result.ok) {
-        toast.error("Alcanzaste el máximo de lugares permitidos por compra")
+        toast.error(storefrontLimitMessage(result.reason))
         break
       }
       ids.push(table.id)
     }
-    if (ids.length > 0) store.pulseFocus(ids)
+    if (ids.length > 0) {
+      store.pulseFocus(ids)
+      scrollToAssignedMap()
+    }
   }
 
   function handleListToggleSeat(seat: StorefrontLayoutSeat) {
     const result = useStorefrontSeatStore
       .getState()
-      .toggleLayoutSeat(seat, MAX_TICKETS_PER_PURCHASE)
+      .toggleLayoutSeat(seat, maxTicketsPerUser)
     if (!result.ok) {
-      toast.error("Alcanzaste el máximo de lugares permitidos por compra")
+      toast.error(storefrontLimitMessage(result.reason))
       return
     }
     if (!result.added && selectedSeat?.label.includes(String(seat.number))) {
@@ -1202,7 +1304,7 @@ export function TicketSelector({
 
   function handleConfirmPay() {
     if (
-      (selection.length === 0 && !selectedSeat && selectedItems.length === 0) ||
+      !canProceedFromCart ||
       controlsLocked
     )
       return
@@ -1227,7 +1329,7 @@ export function TicketSelector({
   }
 
   function handleSandboxReserve() {
-    if (!sandboxEligible || (selection.length === 0 && !selectedSeat) || controlsLocked) {
+    if (!sandboxEligible || !canProceedFromCart || controlsLocked) {
       return
     }
     if (!identityReady) {
@@ -1263,11 +1365,6 @@ export function TicketSelector({
     persistCheckoutCart()
     if (hasInteractiveMap) {
       setSeatPickerOpen(true)
-      window.setTimeout(() => {
-        document
-          .getElementById("mapa")
-          ?.scrollIntoView({ behavior: "smooth", block: "start" })
-      }, 80)
       return
     }
     setShowSeatFlow(true)
@@ -1333,7 +1430,10 @@ export function TicketSelector({
       updateQuantity(
         tierId,
         selectionPayload.quantity,
-        Math.min(MAX_TICKETS_PER_PURCHASE, Math.max(0, tier?.available ?? 0)),
+        Math.min(
+          purchaseCapForLayout(tier?.layoutType, maxTicketsPerUser),
+          Math.max(0, tier?.available ?? 0),
+        ),
       )
       ensureCartHoldClock()
       setFocusedZoneId(selectionPayload.sectorId)
@@ -1479,6 +1579,7 @@ export function TicketSelector({
           key={selectedDayId ?? "all"}
           takeover
           pending={controlsLocked}
+          maxSelectable={maxTicketsPerUser}
           eventTitle={eventTitle}
           mapImageUrl={
             universalPayload?.mapImageUrl ?? seatingBackgroundUrl ?? null
@@ -1515,18 +1616,117 @@ export function TicketSelector({
           : "Confirmá el pago"
   const stepCta =
     visibleStep === "tickets"
-      ? totalTickets > 0
-        ? `Continuar con ${totalTickets} ${totalTickets === 1 ? "lugar" : "lugares"}`
+      ? canProceedFromCart
+        ? `Continuar con ${totalTickets || liveSelectedItems.length} ${
+            (totalTickets || liveSelectedItems.length) === 1 ? "lugar" : "lugares"
+          }`
         : "Continuar"
       : visibleStep === "upsell"
         ? "Sumar al pedido y continuar"
         : visibleStep === "details"
           ? "Continuar al pago"
-          : `Confirmar y Pagar ${formatCurrency(totalAmount)}`
+          : `Confirmar y Pagar ${formatCurrency(finalTotal)}`
+
+  const referenceMapUrl =
+    liveMap?.backgroundImage?.trim() ||
+    seatingBackgroundUrl?.trim() ||
+    universalPayload?.mapImageUrl?.trim() ||
+    null
+
+  const listSelector = liveMap ? (
+    <AccessibleSeatSelector
+      map={liveMap}
+      occupancyBySeatId={occupancyBySeatId}
+      selectedSeatIds={layoutSeats.map((seat) => seat.id)}
+      selectedZoneId={visibleZoneId}
+      unavailableZoneIds={soldOutZoneIds}
+      pending={controlsLocked}
+      referenceImageUrl={referenceMapUrl}
+      generalTiers={checkoutGroups.general}
+      maxTicketsPerUser={maxTicketsPerUser}
+      onAssignGeneral={updateQuantity}
+      onSelectZone={handleImmersiveZoneSelect}
+      onToggleSeat={handleListToggleSeat}
+      onAssignSeats={applyLayoutSeats}
+      onAssignZoneQuantity={applyZoneQuantity}
+      onAssignTables={applyAssignedTables}
+    />
+  ) : (
+    <p className="text-sm text-muted-foreground">
+      El plano no está disponible.
+    </p>
+  )
+
+  const isQuickSearch = storefrontView === "list"
+
+  const mapFrame = (
+    <div
+      ref={mapContainerRef}
+      className={cn(
+        "relative h-[300px] w-full min-w-0 max-h-[300px] overflow-hidden rounded-2xl transition-all duration-300 ease-in-out",
+        isQuickSearch && "mt-4 h-[200px] max-h-[200px]",
+      )}
+    >
+      {liveMap ? (
+        <AdaptiveSeatingFlow
+          key={selectedDayId ?? "all"}
+          immersive
+          readOnly={isQuickSearch}
+          pending={controlsLocked}
+          maxSelectable={maxTicketsPerUser}
+          eventTitle={eventTitle}
+          venueMap={liveMap}
+          selectedZoneId={visibleZoneId}
+          unavailableZoneIds={soldOutZoneIds}
+          occupancyBySeatId={occupancyBySeatId}
+          priceBySectorId={priceBySectorId}
+          sectors={universalPayload?.sectors ?? []}
+          onSelectZone={focusSelectedZone}
+          onContinue={(payload) =>
+            handleUniversalContinue(payload, { keepOpen: true })
+          }
+          onLoadSectorUnits={loadSectorUnits}
+          onLoadAllUnits={loadAllUnits}
+        />
+      ) : (
+        <div className="flex h-full items-center justify-center bg-zinc-950 text-sm text-zinc-500">
+          {mapLoading ? (
+            <>
+              <LoaderCircle
+                className="size-8 animate-spin text-white/40"
+                aria-hidden="true"
+              />
+              <span className="sr-only">Cargando mapa del recinto</span>
+            </>
+          ) : (
+            "El plano no está disponible."
+          )}
+        </div>
+      )}
+    </div>
+  )
+
+  const mapTools = hasInteractiveMap ? (
+    <div className="min-w-0 space-y-3 transition-all duration-300 ease-in-out">
+      <StorefrontViewToggle
+        compact
+        value={storefrontView}
+        onChange={setStorefrontView}
+      />
+      {isQuickSearch ? (
+        <>
+          <div className="w-full space-y-4 bg-transparent">{listSelector}</div>
+          {mapFrame}
+        </>
+      ) : (
+        mapFrame
+      )}
+    </div>
+  ) : null
 
   const checkoutPanel = (
-    <div className="flex h-fit w-full min-w-0 flex-col overflow-visible bg-card text-card-foreground">
-      <div className="space-y-3 border-b border-border px-6 pb-4 pt-6 lg:px-8">
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-card text-card-foreground">
+      <div className="mb-4 flex-none space-y-3 border-b border-border px-6 pb-4 pt-6 lg:px-8">
         <CheckoutStepper step={visibleStep} />
         <div>
           {visibleStep !== "tickets" ? (
@@ -1543,9 +1743,10 @@ export function TicketSelector({
             <h2 className="text-lg font-bold tracking-tight text-foreground lg:text-xl">
               {stepTitle}
             </h2>
-            {visibleStep === "tickets" ? (
-              <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground ring-1 ring-border">
-                Máx. {MAX_TICKETS_PER_PURCHASE}
+            {visibleStep === "tickets" &&
+            (maxTicketsPerUser ?? 0) > 0 ? (
+              <span className="rounded-full bg-secondary px-2.5 py-1 text-[10px] font-bold text-muted-foreground">
+                Máx. {maxTicketsPerUser} lugares
               </span>
             ) : null}
           </div>
@@ -1554,7 +1755,7 @@ export function TicketSelector({
 
       <div
         ref={panelBodyRef}
-        className="px-6 pb-2 pt-6 lg:px-8 max-lg:pb-28"
+        className="no-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto px-6 pb-[140px] pt-6 pr-1 lg:px-8 lg:pb-6"
       >
         <AnimatePresence mode="wait" initial={false}>
           {visibleStep === "tickets" ? (
@@ -1571,12 +1772,15 @@ export function TicketSelector({
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.22, ease: "easeInOut" }}
               >
+              <div>
               <EventCheckoutSelector
                 tiers={funnelTiers}
                 quantities={quantities}
                 isPending={controlsLocked}
                 hasSeatingFlow={hasSeatingFlow}
                 hasInteractiveMap={hasInteractiveMap}
+                maxTicketsPerUser={maxTicketsPerUser}
+                selectedCount={totalTickets}
                 includesGeneralAccess={mapIncludesGeneralAccess(liveMap)}
                 focusedTierId={focusedTierId}
                 mapLoading={
@@ -1593,6 +1797,7 @@ export function TicketSelector({
                 )}
                 onQuantityChange={updateQuantity}
                 onOpenSeatFlow={openSeatFlow}
+                mapTools={mapTools}
                 onPurchaseIntent={goToDetailsStep}
                 onClearSeat={() => {
                   const seat = selectedSeat
@@ -1606,6 +1811,23 @@ export function TicketSelector({
                   }
                 }}
               />
+              </div>
+              {liveSelectedItems.length > 0 ? (
+                <SelectionLedger
+                  className="bg-transparent"
+                  items={liveSelectedItems}
+                  onRemove={(id) => {
+                    useStorefrontSeatStore.getState().removeSelectedItem(id)
+                    if (selectedSeat && layoutSeats.some((seat) => seat.id === id)) {
+                      void releaseSeatingUnitCartHold(
+                        eventId,
+                        selectedSeat.seatingUnitId,
+                      )
+                      setSelectedSeat(null)
+                    }
+                  }}
+                />
+              ) : null}
               </motion.div>
             </motion.div>
           ) : visibleStep === "upsell" ? (
@@ -1695,7 +1917,7 @@ export function TicketSelector({
                 <div className="flex items-center justify-between border-t border-border pt-3">
                   <span className="font-medium text-foreground">Total</span>
                   <span className="text-xl font-black tabular-nums text-foreground">
-                    {formatCurrency(totalAmount)}
+                    {formatCurrency(finalTotal)}
                   </span>
                 </div>
               </div>
@@ -1706,7 +1928,7 @@ export function TicketSelector({
                 applied={appliedPromo}
                 onApplied={setAppliedPromo}
                 onCleared={() => setAppliedPromo(null)}
-                disabled={controlsLocked || cartSubtotal <= 0}
+                disabled={controlsLocked || !canProceedFromCart}
               />
 
               <PaymentMethodSelector
@@ -1731,31 +1953,34 @@ export function TicketSelector({
         </AnimatePresence>
       </div>
 
-      <div className="mt-6 bg-card">
-        {visibleStep === "tickets" ? (
-          <SelectionLedger
-            className="border-t-0 px-6 lg:px-8"
-            items={liveSelectedItems}
-            onRemove={(id) => {
-              useStorefrontSeatStore.getState().removeSelectedItem(id)
-              if (selectedSeat && layoutSeats.some((seat) => seat.id === id)) {
-                void releaseSeatingUnitCartHold(
-                  eventId,
-                  selectedSeat.seatingUnitId,
-                )
-                setSelectedSeat(null)
-              }
-            }}
-          />
-        ) : null}
+      <div className="mt-auto flex-none max-lg:contents lg:border-t lg:border-border/40 lg:bg-card/95 lg:backdrop-blur-md">
         <CheckoutFloatingBar
           variant="panel"
           actionLabel={
             visibleStep === "tickets" ? "Continuar" : stepCta
           }
           showArrow={visibleStep !== "payment"}
-          totalAmount={totalAmount}
-          disabled={visibleStep === "tickets" && totalTickets <= 0}
+          totalAmount={finalTotal}
+          itemsCount={Math.max(totalTickets, liveSelectedItems.length)}
+          detail={
+            liveSelectedItems.length > 0 ? (
+              <SelectionLedger
+                className="border-0 bg-transparent px-0 py-0"
+                items={liveSelectedItems}
+                onRemove={(id) => {
+                  useStorefrontSeatStore.getState().removeSelectedItem(id)
+                  if (selectedSeat && layoutSeats.some((seat) => seat.id === id)) {
+                    void releaseSeatingUnitCartHold(
+                      eventId,
+                      selectedSeat.seatingUnitId,
+                    )
+                    setSelectedSeat(null)
+                  }
+                }}
+              />
+            ) : null
+          }
+          disabled={visibleStep === "tickets" && !canProceedFromCart}
           pending={isPending && visibleStep === "payment"}
           locked={purchaseLocked}
           onPay={handlePrimaryCta}
@@ -1764,90 +1989,8 @@ export function TicketSelector({
     </div>
   )
 
-  const referenceMapUrl =
-    liveMap?.backgroundImage?.trim() ||
-    seatingBackgroundUrl?.trim() ||
-    universalPayload?.mapImageUrl?.trim() ||
-    null
-
-  const listSelector = liveMap ? (
-    <AccessibleSeatSelector
-      map={liveMap}
-      occupancyBySeatId={occupancyBySeatId}
-      selectedSeatIds={layoutSeats.map((seat) => seat.id)}
-      selectedZoneId={visibleZoneId}
-      unavailableZoneIds={soldOutZoneIds}
-      pending={controlsLocked}
-      referenceImageUrl={referenceMapUrl}
-      onSelectZone={handleImmersiveZoneSelect}
-      onToggleSeat={handleListToggleSeat}
-      onAssignSeats={applyLayoutSeats}
-      onAssignZoneQuantity={applyZoneQuantity}
-      onAssignTables={applyAssignedTables}
-    />
-  ) : (
-    <p className="text-sm text-muted-foreground">
-      El plano no está disponible.
-    </p>
-  )
-
-  const mapNode = hasInteractiveMap && seatPickerOpen ? (
-    <div className="min-w-0 space-y-4">
-      <StorefrontViewToggle
-        value={storefrontView}
-        onChange={setStorefrontView}
-      />
-      <div
-        className={cn(
-          "relative w-full min-w-0 overflow-hidden rounded-2xl border border-border bg-zinc-950",
-          storefrontView === "list"
-            ? "h-[36dvh] min-h-[240px] lg:h-[min(38vh,360px)]"
-            : "h-[50dvh] min-h-[50dvh] lg:h-[min(52vh,480px)] lg:min-h-0",
-        )}
-      >
-        {liveMap ? (
-          <AdaptiveSeatingFlow
-            key={selectedDayId ?? "all"}
-            immersive
-            pending={controlsLocked}
-            eventTitle={eventTitle}
-            venueMap={liveMap}
-            selectedZoneId={visibleZoneId}
-            unavailableZoneIds={soldOutZoneIds}
-            occupancyBySeatId={occupancyBySeatId}
-            priceBySectorId={priceBySectorId}
-            sectors={universalPayload?.sectors ?? []}
-            onSelectZone={focusSelectedZone}
-            onContinue={(payload) =>
-              handleUniversalContinue(payload, { keepOpen: true })
-            }
-            onLoadSectorUnits={loadSectorUnits}
-            onLoadAllUnits={loadAllUnits}
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center bg-zinc-950 text-sm text-zinc-500">
-            {mapLoading ? (
-              <>
-                <LoaderCircle
-                  className="size-8 animate-spin text-white/40"
-                  aria-hidden="true"
-                />
-                <span className="sr-only">Cargando mapa del recinto</span>
-              </>
-            ) : (
-              "El plano no está disponible."
-            )}
-          </div>
-        )}
-      </div>
-      {storefrontView === "list" ? (
-        <div className="w-full space-y-6 bg-transparent">{listSelector}</div>
-      ) : null}
-    </div>
-  ) : null
-
   const panelNode = (
-    <div className="h-fit min-w-0 overflow-visible rounded-2xl border border-border shadow-xl">
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-3xl border border-border/50 bg-card shadow-2xl">
       {checkoutPanel}
     </div>
   )
@@ -1867,12 +2010,9 @@ export function TicketSelector({
         onGuest={continueAsGuest}
       />
       {renderLayout ? (
-        renderLayout({ map: mapNode, panel: panelNode })
+        renderLayout({ map: null, panel: panelNode })
       ) : (
-        <div className="min-w-0 space-y-4">
-          {mapNode}
-          {panelNode}
-        </div>
+        panelNode
       )}
     </>
   )

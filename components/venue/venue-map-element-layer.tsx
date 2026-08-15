@@ -55,6 +55,10 @@ const VenueElementShape = memo(function VenueElementShape({
       : `rotate(${element.rotation} ${element.x} ${element.y})`
   const opacity = (element.opacity ?? 1) * (dimmed && !lit ? 0.7 : 1)
   const labelText = compactVenueElementLabel(element.label, lit ? 99 : zoom)
+  const tableLike =
+    element.type !== "standing_zone" &&
+    element.type !== "vip_chair" &&
+    element.type !== "infrastructure"
 
   return (
     <g
@@ -63,21 +67,8 @@ const VenueElementShape = memo(function VenueElementShape({
       opacity={opacity}
       className={
         interactive
-          ? cn(
-              "transition-all duration-200 ease-in-out",
-              lit &&
-                "animate-pulse-subtle stroke-white [stroke-width:2] drop-shadow-[0_0_12px_rgba(255,255,255,0.8)]",
-            )
-          : cn(
-              "pointer-events-none transition-all duration-200 ease-in-out",
-              lit &&
-                "animate-pulse-subtle stroke-white [stroke-width:2] drop-shadow-[0_0_12px_rgba(255,255,255,0.8)]",
-            )
-      }
-      style={
-        lit
-          ? { filter: "drop-shadow(0px 0px 12px rgba(255, 255, 255, 0.8))" }
-          : undefined
+          ? "transition-all duration-200 ease-in-out"
+          : "pointer-events-none transition-all duration-200 ease-in-out"
       }
       onPointerDown={
         interactive
@@ -90,24 +81,37 @@ const VenueElementShape = memo(function VenueElementShape({
           : undefined
       }
     >
-      <VenueElementSymbol
-        element={element}
-        selected={selected}
-        occupancyBySeatId={occupancyBySeatId}
-        selectedSeatIds={selectedSeatIds}
-        showLabels={showLabels}
-        showChairs={showChairs}
-        zoom={zoom}
-        label={element.type === "standing_zone" ? undefined : labelText}
-        onSeatPointerDown={
-          onSeatPointerDown
-            ? (event, seatId) => {
-                event.stopPropagation()
-                onSeatPointerDown(event, element, seatId)
+      <g
+        className={cn(lit && "animate-pulse-subtle")}
+        style={
+          lit
+            ? {
+                filter: tableLike
+                  ? "drop-shadow(0px 0px 6px color-mix(in srgb, var(--primary) 55%, transparent))"
+                  : "drop-shadow(0px 0px 12px rgba(255, 255, 255, 0.8))",
               }
             : undefined
         }
-      />
+      >
+        <VenueElementSymbol
+          element={element}
+          selected={selected}
+          occupancyBySeatId={occupancyBySeatId}
+          selectedSeatIds={selectedSeatIds}
+          showLabels={showLabels}
+          showChairs={showChairs}
+          zoom={zoom}
+          label={element.type === "standing_zone" ? undefined : labelText}
+          onSeatPointerDown={
+            onSeatPointerDown
+              ? (event, seatId) => {
+                  event.stopPropagation()
+                  onSeatPointerDown(event, element, seatId)
+                }
+              : undefined
+          }
+        />
+      </g>
       {element.type === "standing_zone" && showLabels ? (
         <>
           <text
@@ -139,7 +143,9 @@ const VenueElementShape = memo(function VenueElementShape({
           textAnchor="middle"
           dominantBaseline="central"
           fontSize={zoom >= 1.2 ? 8 : 7}
-          className="pointer-events-none select-none fill-white font-bold"
+          fill={selected ? "#09090B" : "#ffffff"}
+          fontWeight={selected ? 900 : 700}
+          className="pointer-events-none select-none"
         >
           {labelText}
         </text>

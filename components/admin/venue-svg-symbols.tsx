@@ -50,6 +50,19 @@ function strokeFor(color: string, selected: boolean, state: Occupancy = "availab
   return color
 }
 
+const TABLE_SELECTED_FILL = "#f4f4f5"
+const TABLE_SELECTED_FILL_OPACITY = 0.96
+
+function tableSurfaceProps(color: string, selected: boolean) {
+  return {
+    fill: selected ? TABLE_SELECTED_FILL : color,
+    fillOpacity: selected ? TABLE_SELECTED_FILL_OPACITY : 0.28,
+    stroke: selected ? "var(--primary)" : color,
+    strokeWidth: selected ? 3 : 1.4,
+    className: selected ? "stroke-primary" : undefined,
+  }
+}
+
 export function TheatreSeatSymbol({
   cx,
   cy,
@@ -207,10 +220,7 @@ export function RoundTableSymbol({
         cx={cx}
         cy={cy}
         r={r}
-        fill={color}
-        fillOpacity={selected ? 0.55 : 0.28}
-        stroke={selected ? "#ffffff" : color}
-        strokeWidth={selected ? 3.2 : 1.4}
+        {...tableSurfaceProps(color, selected)}
       />
     </g>
   )
@@ -290,10 +300,7 @@ export function LongTableSymbol({
         width={w}
         height={h}
         rx={rx}
-        fill={color}
-        fillOpacity={selected ? 0.55 : 0.28}
-        stroke={selected ? "#ffffff" : color}
-        strokeWidth={selected ? 3.2 : 1.4}
+        {...tableSurfaceProps(color, selected)}
       />
     </g>
   )
@@ -327,7 +334,8 @@ export function VipBoxSymbol({
   const w = Math.max(24, width)
   const h = Math.max(18, height)
   const rx = Math.max(2, Math.min(roundedCorner, 10))
-  const stroke = selected ? "#ffffff" : color
+  const stroke = color
+  const surface = tableSurfaceProps(color, selected)
   const arm = Math.max(7, w * 0.16)
   const back = Math.max(6, h * 0.22)
   const tableW = w * 0.28
@@ -344,10 +352,11 @@ export function VipBoxSymbol({
         width={w}
         height={h}
         rx={rx}
-        fill={color}
-        fillOpacity={selected ? 0.42 : 0.12}
-        stroke={stroke}
-        strokeWidth={selected ? 3 : 1.4}
+        fill={surface.fill}
+        fillOpacity={selected ? surface.fillOpacity : 0.12}
+        stroke={surface.stroke}
+        strokeWidth={surface.strokeWidth}
+        className={surface.className}
       />
       <rect
         x={cx - w / 2 + 3}

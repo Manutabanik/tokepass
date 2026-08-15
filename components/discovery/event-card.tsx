@@ -45,14 +45,125 @@ function gradientForId(id: string) {
   return fallbackGradients[hash] ?? fallbackGradients[0]
 }
 
+function EventListCard({
+  event,
+  priority,
+  index,
+  place,
+  city,
+  highlighted,
+  finished,
+  soldOut,
+  urgency,
+  secondary,
+}: {
+  event: CatalogEvent
+  priority: boolean
+  index: number
+  place: string
+  city: string
+  highlighted: boolean
+  finished: boolean
+  soldOut: boolean
+  urgency: string | null
+  secondary: string | null
+}) {
+  return (
+    <article style={{ animationDelay: `${Math.min(index * 40, 200)}ms` }}>
+      <Link
+        href={publicEventPath(event)}
+        className={cn(
+          "group flex cursor-pointer flex-row items-center gap-4 rounded-2xl border border-border/30 bg-card/40 p-3 transition-colors hover:bg-card/80",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        )}
+      >
+        <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-secondary md:h-32 md:w-32">
+          {event.imageUrl ? (
+            <Image
+              src={event.imageUrl}
+              alt={event.title}
+              fill
+              priority={priority}
+              sizes="(max-width: 768px) 96px, 128px"
+              className={cn(
+                "object-cover transition-transform duration-500 group-hover:scale-105",
+                finished && "grayscale-[50%]",
+              )}
+            />
+          ) : (
+            <div
+              className={cn(
+                "absolute inset-0 bg-gradient-to-br",
+                gradientForId(event.id),
+                finished && "grayscale-[50%]",
+              )}
+            />
+          )}
+          {highlighted ? (
+            <span className="absolute top-2 left-2 rounded-md bg-primary px-2 py-0.5 text-[8px] font-black tracking-wider text-primary-foreground uppercase">
+              Destacado
+            </span>
+          ) : null}
+          {soldOut ? (
+            <span className="absolute inset-x-1 bottom-1 rounded-md bg-red-600/90 px-1.5 py-0.5 text-center text-[8px] font-black tracking-wider text-white uppercase">
+              Agotado
+            </span>
+          ) : null}
+          {finished ? (
+            <span className="absolute inset-x-1 bottom-1 rounded-md bg-zinc-800/80 px-1.5 py-0.5 text-center text-[8px] font-black tracking-wider text-white uppercase">
+              Finalizado
+            </span>
+          ) : null}
+        </div>
+        <div className="flex min-w-0 flex-grow flex-col justify-center overflow-hidden">
+          <span className="mb-1 truncate text-[10px] font-bold tracking-wider text-primary uppercase md:text-xs">
+            {formatDiscoveryDateTime(event.date)}
+          </span>
+          <h3 className="mb-1 truncate text-sm leading-tight font-bold text-foreground md:text-lg">
+            {event.title}
+          </h3>
+          <p className="mb-2 flex items-center gap-1 truncate text-xs text-muted-foreground">
+            <MapPin className="size-3 shrink-0" aria-hidden="true" />
+            <span className="truncate">
+              {place}
+              {city && city !== place ? ` · ${city}` : ""}
+            </span>
+          </p>
+          <div className="mt-1 flex items-center justify-between">
+            <span className="text-xs font-medium text-foreground/80">
+              Desde{" "}
+              <strong className="text-sm text-foreground">
+                {event.startingPrice != null
+                  ? formatCurrency(event.startingPrice)
+                  : "ver precios"}
+              </strong>
+            </span>
+            {urgency ? (
+              <span className="truncate text-[10px] font-semibold text-muted-foreground">
+                {urgency}
+              </span>
+            ) : secondary ? (
+              <span className="truncate text-[10px] font-semibold text-muted-foreground">
+                {secondary}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      </Link>
+    </article>
+  )
+}
+
 export function EventCard({
   event,
   priority = false,
   index = 0,
+  variant = "poster",
 }: {
   event: CatalogEvent
   priority?: boolean
   index?: number
+  variant?: "poster" | "list"
 }) {
   const urgency = urgencyLabel(event)
   const secondary = eventSecondaryBadge(event)
@@ -63,6 +174,7 @@ export function EventCard({
   const saleState = deriveEventSaleState(event)
   const finished = saleState === "finished"
   const soldOut = saleState === "sold_out"
+  const highlighted = sponsored || boosted
   const [favorited, setFavorited] = useState(false)
   const [favReady, setFavReady] = useState(false)
 
@@ -78,6 +190,23 @@ export function EventCard({
       cancelled = true
     }
   }, [event.id])
+
+  if (variant === "list") {
+    return (
+      <EventListCard
+        event={event}
+        priority={priority}
+        index={index}
+        place={place}
+        city={city}
+        highlighted={highlighted}
+        finished={finished}
+        soldOut={soldOut}
+        urgency={urgency}
+        secondary={secondary}
+      />
+    )
+  }
 
   return (
     <article

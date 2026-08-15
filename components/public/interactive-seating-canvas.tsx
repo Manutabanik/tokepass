@@ -3,21 +3,15 @@
 import {
   ArrowLeft,
   ArrowRight,
-  CheckCircle2,
-  Circle,
-  Crosshair,
   Minus,
   Plus,
   RotateCcw,
   Trash2,
-  X,
-  XCircle,
 } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
   TransformComponent,
   TransformWrapper,
-  useControls,
   type ReactZoomPanPinchContentRef,
 } from "react-zoom-pan-pinch"
 
@@ -32,7 +26,7 @@ import {
 } from "@/components/ui/dialog"
 import { toast } from "sonner"
 
-import { MAX_TICKETS_PER_PURCHASE } from "@/lib/checkout-limits"
+import { storefrontLimitMessage } from "@/lib/checkout-limits"
 import { formatCurrency } from "@/lib/format"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import { flattenVenueMapSeats, type FlattenedVenueSeat } from "@/lib/seating/venue-map-geometry"
@@ -57,8 +51,14 @@ import {
   type StorefrontSelectedItem,
 } from "@/lib/stores/storefront-seat-store"
 import { cn } from "@/lib/utils"
+import { elementAabb, unionAabb, type Aabb } from "@/lib/seating/venue-transform"
 import {
+  CONTEXT_FOCUS_ANIM_MS,
+  CONTEXT_FOCUS_MAX_SCALE,
+  CONTEXT_FOCUS_MIN_SCALE,
+  CONTEXT_FOCUS_PADDING,
   elementBelongsToZone,
+  expandSelectionForContext,
   lodCameraTransform,
   resolveLodZones,
   seatBelongsToZone,
@@ -81,6 +81,7 @@ const ZOOM_ANIM_MS = 160
 const HOLD_MINUTES = 8
 const INACTIVITY_MS = 5 * 60 * 1000
 const MIN_HIT_PX = 44
+const VIEW_TOP_PAD = 40
 
 export type InteractiveSelectedSeat = {
   id: string
@@ -120,7 +121,8 @@ export function InteractiveSeatingCanvas({
   unavailableZoneIds = [],
   silentHover: _silentHover = false,
   hideChrome = false,
-  maxSelectable = MAX_TICKETS_PER_PURCHASE,
+  readOnly = false,
+  maxSelectable,
   heldSeatIds = [],
   onPickSeat,
   onPickElement,
@@ -139,6 +141,7 @@ export function InteractiveSeatingCanvas({
   unavailableZoneIds?: string[]
   silentHover?: boolean
   hideChrome?: boolean
+  readOnly?: boolean
   maxSelectable?: number
   heldSeatIds?: string[]
   onPickSeat?: (seat: InteractiveSelectedSeat) => void
@@ -155,8 +158,6 @@ export function InteractiveSeatingCanvas({
   const [idleOpen, setIdleOpen] = useState(false)
   const [viewMode, setViewMode] = useState<MapLodMode>("macro")
   const [focusedZoneId, setFocusedZoneId] = useState<string | null>(null)
-  const [popoverId, setPopoverId] = useState<string | null>(null)
-  const [popoverPos, setPopoverPos] = useState({ x: 24, y: 72 })
   const selectedItems = useStorefrontSeatStore((state) => state.selectedItems)
   const selectedSeats = useStorefrontSeatStore((state) => state.layoutSeats)
   const focusedMapIds = useStorefrontSeatStore((state) => state.focusedMapIds)
@@ -251,20 +252,67 @@ export function InteractiveSeatingCanvas({
     return () => observer.disconnect()
   }, [])
 
-  useEffect(() => {
-    if (focusTick <= 0) return
-    const targetId = focusedMapIds[0]
+  function aabbForItemId(id: string): Aabb | null {
+    const element = (map.elements ?? []).find((item) => item.id === id)
+    if (element) return elementAabb(element)
+    const zone = (map.zones ?? []).find((item) => item.id === id)
+    if (zone) return zoneCanvasAabb(zone)
+    const seat = plotSeats.find((item) => item.id === id)
+    if (!seat) return null
+    return {
+      minX: seat.x - 10,
+      minY: seat.y - 10,
+      maxX: seat.x + 10,
+      maxY: seat.y + 10,
+    }
+  }
+
+  function applyContextCamera(ids: string[]) {
     const controls = transformRef.current
-    if (!targetId || !controls) return
-    const node = document.getElementById(`venue-sel-${targetId}`)
-    if (!node) return
-    controls.zoomToElement(
-      node as unknown as HTMLElement,
-      1.35,
-      400,
+    if (!controls) return
+    if (ids.length === 0) {
+      controls.resetTransform(CONTEXT_FOCUS_ANIM_MS, "easeOut")
+      return
+    }
+    const boxes = ids
+      .map((id) => aabbForItemId(id))
+      .filter((box): box is Aabb => box != null)
+    const union = unionAabb(boxes)
+    if (!union) {
+      controls.resetTransform(CONTEXT_FOCUS_ANIM_MS, "easeOut")
+      return
+    }
+    const camera = lodCameraTransform(
+      expandSelectionForContext(union),
+      wrapWidth,
+      wrapHeight,
+      {
+        padding: CONTEXT_FOCUS_PADDING,
+        minScale: CONTEXT_FOCUS_MIN_SCALE,
+        maxScale: CONTEXT_FOCUS_MAX_SCALE,
+      },
+    )
+    controls.setTransform(
+      camera.positionX,
+      camera.positionY,
+      camera.scale,
+      CONTEXT_FOCUS_ANIM_MS,
       "easeOut",
     )
+  }
+
+  useEffect(() => {
+    if (focusTick <= 0) return
+    applyContextCamera(focusedMapIds)
   }, [focusTick, focusedMapIds])
+
+  const assignedFocusKey = liveSelectedItems.map((item) => item.id).join("|")
+
+  useEffect(() => {
+    const ids = assignedFocusKey ? assignedFocusKey.split("|") : []
+    const timer = window.setTimeout(() => applyContextCamera(ids), 40)
+    return () => window.clearTimeout(timer)
+  }, [assignedFocusKey, wrapWidth, wrapHeight])
 
   useEffect(() => {
     if (disableIdlePrompt || selectedSeats.length === 0) {
@@ -284,26 +332,6 @@ export function InteractiveSeatingCanvas({
     setIdleOpen(false)
   }
 
-  function placePopover(id: string) {
-    const wrap = wrapRef.current
-    const node = document.getElementById(`venue-sel-${id}`)
-    if (!wrap) {
-      setPopoverId(id)
-      return
-    }
-    const wr = wrap.getBoundingClientRect()
-    if (node) {
-      const nr = node.getBoundingClientRect()
-      setPopoverPos({
-        x: Math.min(Math.max(16, nr.left + nr.width / 2 - wr.left), wr.width - 16),
-        y: Math.min(Math.max(16, nr.top - wr.top - 10), wr.height - 16),
-      })
-    } else {
-      setPopoverPos({ x: wr.width / 2, y: 72 })
-    }
-    setPopoverId(id)
-  }
-
   function seatPrice(...keysAndFallback: Array<string | number>) {
     const fallback = keysAndFallback.find((value) => typeof value === "number")
     const keys = keysAndFallback.filter(
@@ -315,7 +343,7 @@ export function InteractiveSeatingCanvas({
   function applyToggle(item: StorefrontSelectedItem) {
     const result = toggleSelectedItem(item, maxSelectable)
     if (!result.ok) {
-      toast.error("Alcanzaste el máximo de lugares permitidos por compra")
+      toast.error(storefrontLimitMessage(result.reason))
       return { ok: false as const, added: false }
     }
     return { ok: true as const, added: result.added }
@@ -326,15 +354,11 @@ export function InteractiveSeatingCanvas({
     if (!item) return
     const result = toggleSelectedItem(item, maxSelectable)
     if (!result.ok) {
-      toast.error("Alcanzaste el máximo de lugares permitidos por compra")
+      toast.error(storefrontLimitMessage(result.reason))
       return
     }
-    if (!result.added) {
-      setPopoverId(null)
-      return
-    }
+    if (!result.added) return
     onSelectZone?.(zone)
-    requestAnimationFrame(() => placePopover(zone.id))
   }
 
   function zoomToZone(zone: VenueMapZone) {
@@ -384,7 +408,7 @@ export function InteractiveSeatingCanvas({
 
   function handleZoneClick(zoneId: string, event?: React.SyntheticEvent) {
     event?.stopPropagation()
-    if (pending) return
+    if (readOnly || pending) return
     const zone = lodZones.find((item) => item.id === zoneId)
     if (!zone) return
     if (lodEnabled && viewMode === "macro") {
@@ -397,6 +421,7 @@ export function InteractiveSeatingCanvas({
   }
 
   function toggleSeat(seat: FlattenedVenueSeat) {
+    if (readOnly) return
     const price = seatPrice(seat.sectorId, seat.price)
     const live = resolveLiveVenueSeatStatus({
       mapStatus: seat.mapStatus,
@@ -432,14 +457,12 @@ export function InteractiveSeatingCanvas({
       maxSelectable,
     )
     if (!result.ok) {
-      toast.error("Alcanzaste el máximo de lugares permitidos por compra")
-      return
+      toast.error(storefrontLimitMessage(result.reason))
     }
-    if (result.added) requestAnimationFrame(() => placePopover(seat.id))
-    else setPopoverId((current) => (current === seat.id ? null : current))
   }
 
   function toggleElement(element: VenueMapElement) {
+    if (readOnly) return
     const live = (map.elements ?? []).find((item) => item.id === element.id)
     if (!live || isInfrastructureElement(live) || pending) return
     if (live.type === "vip_chair") {
@@ -467,10 +490,7 @@ export function InteractiveSeatingCanvas({
     if (!item) return
     vibrateTap()
     markActivity()
-    const result = applyToggle(item)
-    if (!result.ok) return
-    if (result.added) requestAnimationFrame(() => placePopover(live.id))
-    else setPopoverId((current) => (current === live.id ? null : current))
+    applyToggle(item)
   }
 
   const continueLabel = pending
@@ -483,15 +503,6 @@ export function InteractiveSeatingCanvas({
   const focusCard = focusItem
     ? storefrontFocusCard(focusItem, map)
     : null
-  const popoverItem =
-    liveSelectedItems.find((item) => item.id === popoverId) ?? focusItem
-  const popoverCard = popoverItem
-    ? storefrontFocusCard(popoverItem, map)
-    : null
-  const popoverChairs = Math.max(
-    1,
-    Math.floor(popoverItem?.capacity ?? 1) || 1,
-  )
 
   const panel = (
     <aside className="hidden h-full w-[30%] shrink-0 flex-col border-l border-white/10 bg-zinc-950/80 p-5 md:flex">
@@ -618,33 +629,6 @@ export function InteractiveSeatingCanvas({
             : "pb-[11.5rem] md:pb-14",
         )}
       >
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 px-3 pt-3 md:px-6">
-        <div className="mx-auto w-2/3 rounded-b-2xl border-b border-violet-500/50 bg-gradient-to-r from-violet-600/30 via-violet-500/50 to-violet-600/30 py-1.5 text-center text-[10px] font-bold tracking-widest text-violet-200 uppercase md:py-2 md:text-xs">
-          {stageLabel}
-        </div>
-      </div>
-
-      {lodEnabled && viewMode === "micro" ? (
-        <div className="absolute top-3 left-3 z-30">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={exitLodView}
-            className="h-8 gap-1.5 border-white/15 bg-zinc-950/85 px-2.5 text-xs font-semibold text-zinc-100 hover:bg-zinc-800"
-          >
-            <ArrowLeft className="size-3.5" aria-hidden="true" />
-            Volver al plano general
-          </Button>
-        </div>
-      ) : onBack && fillParent ? (
-        <div className="absolute top-3 left-3 z-20">
-          <IconBtn label="Cerrar el plano" onClick={onBack}>
-            <X className="size-5" />
-          </IconBtn>
-        </div>
-      ) : null}
-
       <TransformWrapper
         ref={transformRef}
         minScale={MIN_ZOOM}
@@ -654,9 +638,13 @@ export function InteractiveSeatingCanvas({
         centerZoomedOut
         limitToBounds
         smooth
-        wheel={{ step: WHEEL_STEP }}
-        pinch={{ step: 5, allowPanning: true }}
-        panning={{ velocityDisabled: false, allowLeftClickPan: true }}
+        wheel={{ step: WHEEL_STEP, disabled: readOnly }}
+        pinch={{ step: 5, allowPanning: !readOnly, disabled: readOnly }}
+        panning={{
+          disabled: readOnly,
+          velocityDisabled: readOnly,
+          allowLeftClickPan: !readOnly,
+        }}
         doubleClick={{ disabled: true }}
         zoomAnimation={{
           disabled: false,
@@ -681,23 +669,52 @@ export function InteractiveSeatingCanvas({
         onPanningStop={() => markActivity()}
         onPinchStop={() => markActivity()}
       >
-        <MapViewportControls
-          onActivity={markActivity}
-          onReset={lodEnabled ? exitLodView : undefined}
-        />
-      <div ref={wrapRef} className="h-full w-full touch-none">
+      <div
+        ref={wrapRef}
+        className={cn(
+          "h-full w-full",
+          readOnly ? "pointer-events-none touch-pan-y" : "touch-none",
+        )}
+      >
         <TransformComponent
           wrapperClass="!h-full !w-full !overflow-hidden"
           contentClass="!h-full !w-full"
         >
         <svg
-          viewBox={`0 0 ${VIEW.width} ${VIEW.height}`}
+          viewBox={`0 ${-VIEW_TOP_PAD} ${VIEW.width} ${VIEW.height + VIEW_TOP_PAD}`}
           className="h-full w-full select-none"
           role="group"
-          aria-label="Plano del recinto. Pellizcá para acercar, arrastrá para mover y tocá una zona o butaca."
+          aria-label={
+            readOnly
+              ? "Plano del recinto. Vista de confirmación del lugar asignado."
+              : "Plano del recinto. Pellizcá para acercar, arrastrá para mover y tocá una zona o butaca."
+          }
         >
-          <rect width={VIEW.width} height={VIEW.height} className="fill-zinc-950" />
+          <rect
+            x={0}
+            y={-VIEW_TOP_PAD}
+            width={VIEW.width}
+            height={VIEW.height + VIEW_TOP_PAD}
+            className="fill-zinc-950"
+          />
           <g>
+            <rect
+              x={VIEW.width * 0.18}
+              y={-36}
+              width={VIEW.width * 0.64}
+              height={24}
+              rx={8}
+              className="pointer-events-none fill-violet-500/25 stroke-violet-400/40"
+            />
+            <text
+              x={VIEW.width / 2}
+              y={-19}
+              textAnchor="middle"
+              dominantBaseline="central"
+              className="pointer-events-none fill-violet-200 text-[11px] font-bold tracking-[0.28em]"
+            >
+              {stageLabel}
+            </text>
             <VenueMapBackgroundLayer map={map} />
             {map.aisles.map((aisle) => (
               <rect
@@ -745,10 +762,12 @@ export function InteractiveSeatingCanvas({
               highlightedIds={focusedMapIds}
               spotlight={spotlight && !lodActive}
               unavailableIds={unavailableZoneIds}
-              selectOnPointerUp
+              selectOnPointerUp={!readOnly}
               lodMode={lodEnabled ? viewMode : null}
               focusedZoneId={focusedZoneId}
-              onSelect={(zone) => handleZoneClick(zone.id)}
+              onSelect={
+                readOnly ? undefined : (zone) => handleZoneClick(zone.id)
+              }
             />
             <VenueMapElementLayer
               elements={(map.elements ?? []).filter(
@@ -763,7 +782,7 @@ export function InteractiveSeatingCanvas({
               zoom={zoom}
               lodHidden={false}
               visibleIds={microActive ? visibleElementIds : null}
-              interactive
+              interactive={!readOnly}
               onSeatPointerDown={(_event, element, seatId) => {
                 if (element.sellMode === "group") {
                   toggleElement(element)
@@ -812,7 +831,7 @@ export function InteractiveSeatingCanvas({
                   }
                   style={{
                     opacity: seatVisible ? (dimmed ? 0.7 : 1) : 0,
-                    pointerEvents: seatVisible ? "auto" : "none",
+                    pointerEvents: readOnly || !seatVisible ? "none" : "auto",
                     transition: "opacity 0.3s ease",
                     filter:
                       selected || highlighted
@@ -870,94 +889,49 @@ export function InteractiveSeatingCanvas({
         </TransformComponent>
       </div>
       </TransformWrapper>
-
-      {focusCard && !hideChrome && !popoverId ? (
-        <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 hidden md:left-3 md:block md:w-[min(100%-1.5rem,20rem)]">
-          <StorefrontSelectionCard card={focusCard} />
-        </div>
-      ) : null}
-
-      {popoverId && popoverCard ? (
-        <div
-          className="pointer-events-none absolute z-40 w-[min(18.5rem,calc(100%-1.5rem))] -translate-x-1/2 -translate-y-full"
-          style={{ left: popoverPos.x, top: popoverPos.y }}
-        >
-          <div className="pointer-events-auto rounded-2xl border border-white/15 bg-zinc-950/95 p-3 text-white shadow-2xl ring-1 ring-white/10 backdrop-blur-md">
-            <p className="text-sm font-bold leading-tight">{popoverCard.title}</p>
-            <p className="mt-0.5 truncate text-xs text-zinc-400">
-              {popoverCard.sector}
-            </p>
-            <p className="mt-2 text-xs font-medium text-zinc-300">
-              {popoverChairs === 1
-                ? "1 Butaca incluida"
-                : `${popoverChairs} Butacas incluidas`}
-            </p>
-            <p className="mt-1 text-lg font-black tabular-nums text-emerald-300">
-              {formatCurrency(popoverCard.price)}
-            </p>
-            <Button
-              type="button"
-              size="sm"
-              disabled={!canContinue}
-              onClick={() => {
-                markActivity()
-                const seats =
-                  selectedSeats.length > 0
-                    ? selectedSeats
-                    : liveSelectedItems.map((item) => ({
-                        id: item.id,
-                        row: item.row ?? "",
-                        number: item.number ?? 0,
-                        sectorId: item.sectorId ?? item.id,
-                        sectorName: item.name.split(" · ")[0] ?? item.name,
-                        price: item.price,
-                        color: item.color ?? "#34d399",
-                      }))
-                onContinue(seats)
-              }}
-              className="mt-3 h-10 w-full rounded-xl bg-emerald-500 text-xs font-black text-black hover:bg-emerald-400"
-            >
-              Seleccionar y Continuar
-            </Button>
-          </div>
-        </div>
-      ) : null}
-
-      {hideChrome ? null : (
-      <div
-        className={cn(
-          "absolute inset-x-0 z-20 hidden px-3 md:bottom-3 md:block",
-          fillParent ? "md:bottom-3" : "bottom-[7.25rem] md:bottom-3",
-        )}
-      >
-        <div className="flex flex-wrap items-center justify-center gap-4 rounded-2xl border border-white/10 bg-black/80 px-4 py-3 text-sm text-zinc-100 backdrop-blur-xl md:text-base">
-          <span className="inline-flex items-center gap-2">
-            <Circle className="h-4 w-4 fill-emerald-500/30 stroke-emerald-500 text-emerald-500" />
-            Libre
-          </span>
-          <span className="inline-flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 fill-emerald-400 text-black" />
-            Seleccionado por vos
-          </span>
-          <span className="inline-flex items-center gap-2">
-            <XCircle className="h-4 w-4 fill-zinc-800 text-zinc-600" />
-            Ocupado
-          </span>
-        </div>
-      </div>
-      )}
     </div>
   )
+
+  function handleZoomIn() {
+    transformRef.current?.zoomIn(0.2, ZOOM_ANIM_MS, "easeOut")
+    markActivity()
+  }
+
+  function handleZoomOut() {
+    transformRef.current?.zoomOut(0.2, ZOOM_ANIM_MS, "easeOut")
+    markActivity()
+  }
+
+  function handleResetView() {
+    if (lodEnabled && viewMode === "micro") exitLodView()
+    else transformRef.current?.resetTransform(280, "easeOut")
+    markActivity()
+  }
 
   const shell = (
     <div
       className={cn(
-        "relative flex w-full flex-col overflow-hidden bg-zinc-950 md:flex-row",
-        fillParent
-          ? "h-full min-h-0 rounded-none border-0 shadow-none"
-          : "h-[600px] rounded-3xl border border-white/10 shadow-2xl md:h-[650px]",
+        "flex w-full flex-col",
+        fillParent ? "h-full min-h-0" : "h-auto",
       )}
     >
+      {readOnly ? null : (
+      <ExternalMapToolbar
+        showLodBack={lodEnabled && viewMode === "micro"}
+        onExitLod={exitLodView}
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
+        onResetView={handleResetView}
+      />
+      )}
+      <div
+        className={cn(
+          "relative flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-zinc-950 md:flex-row",
+          fillParent
+            ? "rounded-2xl border border-border"
+            : "h-[600px] rounded-3xl border border-white/10 shadow-2xl md:h-[650px]",
+        )}
+      >
       {mapArea}
       {hideChrome ? null : panel}
 
@@ -994,6 +968,7 @@ export function InteractiveSeatingCanvas({
         </div>
       </div>
       )}
+      </div>
     </div>
   )
 
@@ -1049,96 +1024,66 @@ export function InteractiveSeatingCanvas({
   )
 }
 
-function MapViewportControls({
-  onActivity,
-  onReset,
+function ExternalMapToolbar({
+  showLodBack,
+  onExitLod,
+  onZoomIn,
+  onZoomOut,
+  onResetView,
 }: {
-  onActivity: () => void
-  onReset?: () => void
+  showLodBack: boolean
+  onExitLod: () => void
+  onZoomIn: () => void
+  onZoomOut: () => void
+  onResetView: () => void
 }) {
-  const { resetTransform, zoomIn, zoomOut, centerView } = useControls()
   const toolClass =
-    "size-8 border-white/10 bg-zinc-950/80 p-0 text-zinc-100 shadow-sm hover:bg-zinc-800"
+    "rounded-lg bg-secondary p-1.5 text-xs font-bold transition-all hover:bg-secondary/80"
 
   return (
-    <div className="absolute top-3 right-3 z-30 flex items-center gap-1.5">
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        aria-label="Acercar"
-        className={toolClass}
-        onClick={() => {
-          zoomIn(0.2, ZOOM_ANIM_MS, "easeOut")
-          onActivity()
-        }}
-      >
-        <Plus className="size-3.5" aria-hidden="true" />
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        aria-label="Alejar"
-        className={toolClass}
-        onClick={() => {
-          zoomOut(0.2, ZOOM_ANIM_MS, "easeOut")
-          onActivity()
-        }}
-      >
-        <Minus className="size-3.5" aria-hidden="true" />
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        aria-label="Centrar el plano"
-        className="h-8 gap-1.5 border-white/10 bg-zinc-950/80 px-2.5 text-xs font-semibold text-zinc-100 shadow-sm hover:bg-zinc-800"
-        onClick={() => {
-          centerView(1, 280, "easeOutCubic")
-          onActivity()
-        }}
-      >
-        <Crosshair className="size-3.5" aria-hidden="true" />
-        Centrar
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        onClick={() => {
-          if (onReset) onReset()
-          else resetTransform(280, "easeOut")
-          onActivity()
-        }}
-        aria-label="Restablecer"
-        className="h-8 gap-1.5 border-white/10 bg-zinc-950/70 px-2.5 text-xs font-semibold text-zinc-100 shadow-sm hover:bg-zinc-800"
-      >
-        <RotateCcw className="size-3.5" aria-hidden="true" />
-        Restablecer
-      </Button>
+    <div className="mb-3 flex items-center justify-between px-1">
+      {showLodBack ? (
+        <button
+          type="button"
+          onClick={onExitLod}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground transition-all hover:text-foreground"
+        >
+          <ArrowLeft className="size-3.5" aria-hidden="true" />
+          Volver al plano general
+        </button>
+      ) : (
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Plano Interactivo del Recinto
+        </span>
+      )}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onZoomIn}
+          aria-label="Acercar"
+          className={toolClass}
+        >
+          <Plus className="size-3.5" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          onClick={onZoomOut}
+          aria-label="Alejar"
+          className={toolClass}
+        >
+          <Minus className="size-3.5" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          onClick={onResetView}
+          aria-label="Restablecer vista"
+          className="flex items-center gap-1.5 rounded-lg bg-secondary px-3 py-1.5 text-xs font-bold transition-all hover:bg-secondary/80"
+        >
+          <RotateCcw className="size-3.5" aria-hidden="true" />
+          Restablecer Vista
+        </button>
+      </div>
     </div>
-  )
-}
-
-function IconBtn({
-  label,
-  onClick,
-  children,
-}: {
-  label: string
-  onClick: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <Button
-      type="button"
-      size="icon"
-      variant="outline"
-      aria-label={label}
-      onClick={onClick}
-      className="size-11 border-white/10 bg-zinc-950/80 text-zinc-100 hover:bg-zinc-800"
-    >
-      {children}
-    </Button>
   )
 }
 

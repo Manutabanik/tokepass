@@ -126,7 +126,7 @@ export function PosSeatingMap({
   }
 
   return (
-    <div className="h-[min(70vh,36rem)] overflow-hidden rounded-2xl border border-border bg-zinc-950">
+    <div className="flex h-[min(70vh,36rem)] flex-col">
       <InteractiveSeatingCanvas
         map={map}
         fillParent

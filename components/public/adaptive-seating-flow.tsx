@@ -61,6 +61,7 @@ type AdaptiveSeatingFlowProps = {
   preview?: boolean
   takeover?: boolean
   immersive?: boolean
+  readOnly?: boolean
   selectedZoneId?: string | null
   unavailableZoneIds?: string[]
   occupancyBySeatId?: Record<string, SeatStatus>
@@ -70,6 +71,7 @@ type AdaptiveSeatingFlowProps = {
   onContinue?: (selection: UniversalSeatSelection) => void
   onLoadSectorUnits?: (sectorId: string) => Promise<EventSeatingUnit[]>
   onLoadAllUnits?: () => Promise<EventSeatingUnit[]>
+  maxSelectable?: number | null
 }
 
 export function AdaptiveSeatingFlow({
@@ -82,6 +84,7 @@ export function AdaptiveSeatingFlow({
   preview = false,
   takeover = false,
   immersive = false,
+  readOnly = false,
   selectedZoneId = null,
   unavailableZoneIds = [],
   occupancyBySeatId = {},
@@ -91,16 +94,19 @@ export function AdaptiveSeatingFlow({
   onContinue,
   onLoadSectorUnits,
   onLoadAllUnits,
+  maxSelectable = null,
 }: AdaptiveSeatingFlowProps) {
   if (immersive && venueMap) {
     return (
-      <div className="h-full w-full overflow-hidden">
+      <div className="flex h-full min-h-0 w-full flex-col">
         <InteractiveSeatingCanvas
           map={venueMap}
           fillParent
           disableIdlePrompt
           silentHover
           hideChrome
+          readOnly={readOnly}
+          maxSelectable={maxSelectable ?? undefined}
           selectedZoneId={selectedZoneId}
           unavailableZoneIds={unavailableZoneIds}
           occupancyBySeatId={occupancyBySeatId}
@@ -163,6 +169,7 @@ export function AdaptiveSeatingFlow({
       map={venueMap}
       sectors={sectors}
       eventTitle={eventTitle}
+      maxSelectable={maxSelectable}
       pending={pending}
       embedded={embedded}
       preview={preview}
@@ -185,6 +192,7 @@ function MacroSeatingFlow({
   onBack,
   onContinue,
   onLoadSectorUnits,
+  maxSelectable = null,
 }: {
   map: InteractiveVenueMap
   sectors: UniversalSector[]
@@ -196,6 +204,7 @@ function MacroSeatingFlow({
   onBack?: () => void
   onContinue?: (selection: UniversalSeatSelection) => void
   onLoadSectorUnits?: (sectorId: string) => Promise<EventSeatingUnit[]>
+  maxSelectable?: number | null
 }) {
   const [zoneId, setZoneId] = useState<string | null>(null)
   const [quantity, setQuantity] = useState(1)
@@ -569,6 +578,7 @@ function MacroSeatingFlow({
                 fillParent={takeover}
                 disableIdlePrompt
                 selectedZoneId={zoneId}
+                maxSelectable={maxSelectable ?? undefined}
                 onSelectZone={handleSelectZone}
                 onContinue={handleCanvasContinue}
                 onBack={takeover ? undefined : onBack}

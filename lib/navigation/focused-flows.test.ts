@@ -4,6 +4,7 @@ import { describe, it } from "node:test"
 import {
   isAccountFocusedFlow,
   isAdminFocusedFlow,
+  isPublicFocusedFlow,
 } from "@/lib/navigation/focused-flows"
 
 describe("focused-flows", () => {
@@ -22,5 +23,13 @@ describe("focused-flows", () => {
     assert.equal(isAccountFocusedFlow("/cuenta/compras/xyz"), true)
     assert.equal(isAccountFocusedFlow("/cuenta/entradas"), false)
     assert.equal(isAccountFocusedFlow("/cuenta"), false)
+  })
+
+  it("oculta la bottom nav publica en checkout y detalle", () => {
+    assert.equal(isPublicFocusedFlow("/checkout/success"), true)
+    assert.equal(isPublicFocusedFlow("/tickets/abc/print"), true)
+    assert.equal(isPublicFocusedFlow("/cuenta/entradas/abc"), true)
+    assert.equal(isPublicFocusedFlow("/"), false)
+    assert.equal(isPublicFocusedFlow("/events"), false)
   })
 })

@@ -3,7 +3,12 @@ import { describe, it } from "node:test"
 
 import { createVenueElement } from "./venue-element-geometry"
 import {
+  CONTEXT_FOCUS_MAX_SCALE,
+  CONTEXT_FOCUS_MIN_SCALE,
+  CONTEXT_FOCUS_PADDING,
+  CONTEXT_FOCUS_STAGE_TOP,
   elementBelongsToZone,
+  expandSelectionForContext,
   lodCameraTransform,
   pointInPolygon,
   resolveLodZones,
@@ -121,5 +126,22 @@ describe("venue-map-lod", () => {
     assert.equal(camera.scale > 1, true)
     assert.equal(Number.isFinite(camera.positionX), true)
     assert.equal(Number.isFinite(camera.positionY), true)
+  })
+
+  it("el foco contextual incluye el escenario y no supera 1.5x", () => {
+    const framed = expandSelectionForContext({
+      minX: 360,
+      minY: 420,
+      maxX: 400,
+      maxY: 460,
+    })
+    assert.equal(framed.minY <= CONTEXT_FOCUS_STAGE_TOP, true)
+    const camera = lodCameraTransform(framed, 400, 250, {
+      padding: CONTEXT_FOCUS_PADDING,
+      minScale: CONTEXT_FOCUS_MIN_SCALE,
+      maxScale: CONTEXT_FOCUS_MAX_SCALE,
+    })
+    assert.equal(camera.scale <= CONTEXT_FOCUS_MAX_SCALE, true)
+    assert.equal(camera.scale >= 1, true)
   })
 })

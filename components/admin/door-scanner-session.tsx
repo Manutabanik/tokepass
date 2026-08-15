@@ -46,26 +46,38 @@ export function DoorScannerSessionChrome({
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex shrink-0 items-center justify-between gap-3 px-4 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))]">
-        <div className="flex min-w-0 items-center gap-2">
-          <span
-            className={cn(
-              "size-2 shrink-0 rounded-full",
-              online ? "bg-emerald-500" : "bg-amber-500",
-            )}
-            aria-label={online ? "Conectado" : "Modo Offline"}
-          />
-          <p className="truncate text-[11px] font-semibold uppercase tracking-[0.16em] text-white/70">
-            {gateLabel}
-          </p>
+      <header className="shrink-0 space-y-2 px-4 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))]">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <span
+              className={cn(
+                "size-2 shrink-0 rounded-full",
+                online ? "bg-emerald-500" : "bg-amber-500",
+              )}
+              aria-label={online ? "Conectado" : "Modo Offline"}
+            />
+            <p className="truncate text-[11px] font-semibold uppercase tracking-[0.16em] text-white/70">
+              {gateLabel}
+            </p>
+          </div>
+          {!isTotem ? (
+            <button
+              type="button"
+              onClick={onChangeGate}
+              className="shrink-0 text-[11px] font-bold uppercase tracking-[0.12em] text-fuchsia-300"
+            >
+              Cambiar gatera
+            </button>
+          ) : null}
         </div>
         {!isTotem ? (
           <button
             type="button"
-            onClick={onChangeGate}
-            className="shrink-0 text-[11px] font-bold uppercase tracking-[0.12em] text-fuchsia-300"
+            onClick={onSearch}
+            className="flex min-h-12 w-full items-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 text-left text-sm font-semibold text-white/80"
           >
-            Cambiar gatera
+            <Search className="size-4 shrink-0" aria-hidden="true" />
+            Buscar por DNI o Nombre
           </button>
         ) : null}
       </header>

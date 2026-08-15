@@ -18,3 +18,10 @@ export function isAccountFocusedFlow(pathname: string): boolean {
     /^\/cuenta\/compras\/[^/]+$/.test(pathname)
   )
 }
+
+export function isPublicFocusedFlow(pathname: string): boolean {
+  if (isAccountFocusedFlow(pathname)) return true
+  if (pathname.startsWith("/checkout")) return true
+  if (/^\/tickets\/[^/]+\/print\/?$/.test(pathname)) return true
+  return false
+}

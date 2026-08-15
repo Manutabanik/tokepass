@@ -16,6 +16,12 @@ export type MapLodMode = "macro" | "micro"
 
 export const LOD_CAMERA_PADDING = 0.1
 export const LOD_OPACITY_MS = 300
+export const CONTEXT_FOCUS_MAX_SCALE = 1.5
+export const CONTEXT_FOCUS_MIN_SCALE = 1
+export const CONTEXT_FOCUS_PADDING = 0.45
+export const CONTEXT_FOCUS_MIN_SPAN = 320
+export const CONTEXT_FOCUS_STAGE_TOP = -40
+export const CONTEXT_FOCUS_ANIM_MS = 400
 
 const SYNTH_PAD = 18
 
@@ -130,6 +136,22 @@ export function resolveLodZones(map: InteractiveVenueMap): VenueMapZone[] {
 
 export function shouldEnableMapLod(map: InteractiveVenueMap): boolean {
   return resolveLodZones(map).length > 0
+}
+
+export function expandSelectionForContext(
+  box: Aabb,
+  canvas = VENUE_MAP_CANVAS,
+): Aabb {
+  const cx = (box.minX + box.maxX) / 2
+  const cy = (box.minY + box.maxY) / 2
+  const spanX = Math.max(CONTEXT_FOCUS_MIN_SPAN, box.maxX - box.minX)
+  const spanY = Math.max(CONTEXT_FOCUS_MIN_SPAN * 0.7, box.maxY - box.minY)
+  return {
+    minX: Math.max(0, cx - spanX / 2),
+    maxX: Math.min(canvas.width, cx + spanX / 2),
+    minY: Math.min(CONTEXT_FOCUS_STAGE_TOP, cy - spanY / 2),
+    maxY: Math.min(canvas.height, Math.max(box.maxY, cy + spanY / 2)),
+  }
 }
 
 export function lodCameraTransform(
