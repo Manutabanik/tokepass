@@ -216,7 +216,7 @@ export function StoryCanvas({
                 ? "rgba(255,255,255,0.1)"
                 : "rgba(24,16,36,0.94)",
               border: "1px solid rgba(255,255,255,0.2)",
-              boxShadow: `${theme.ticketShadow}, 0 24px 80px rgba(168,85,247,0.2)`,
+              boxShadow: `${theme.ticketShadow}, 0 32px 90px rgba(0,0,0,0.45), 0 0 0 1px ${theme.accent}55`,
               ...(live
                 ? {
                     backdropFilter: "blur(18px)",

@@ -6,7 +6,7 @@ import {
   ImagePlus,
   Loader2,
   PartyPopper,
-  Video,
+  Share2,
   X,
 } from "lucide-react"
 import { motion } from "motion/react"
@@ -48,9 +48,8 @@ import {
 import {
   downloadImageBlob,
   isNativeFileShareAvailable,
-  shareOrDownloadVideo,
+  shareOrDownloadFlyer,
 } from "@/lib/story-flyer-share"
-import { exportStoryVideo } from "@/lib/story-video-export"
 import { cn } from "@/lib/utils"
 
 function isStoryDataImage(url?: string | null): boolean {
@@ -67,8 +66,6 @@ type StoryFlyerModalProps = {
 
 const SAVED_TOAST =
   "Imagen guardada. Abri Instagram para subirla a tus Historias"
-const VIDEO_SAVED_TOAST =
-  "Video MP4 guardado. Listo para WhatsApp o Historias"
 
 export function StoryFlyerModal({
   data,
@@ -77,8 +74,7 @@ export function StoryFlyerModal({
 }: StoryFlyerModalProps) {
   const storyCardRef = useRef<HTMLDivElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
-  const [busyKind, setBusyKind] = useState<"video" | "png" | null>(null)
-  const busy = busyKind !== null
+  const [busy, setBusy] = useState(false)
   const [hydrating, setHydrating] = useState(
     () => Boolean(data.imageUrl?.trim()) && !isStoryDataImage(data.imageUrl),
   )
@@ -193,39 +189,31 @@ export function StoryFlyerModal({
     }
   }
 
-  async function handleDownloadVideo() {
+  async function handleShareInstagram() {
     if (!exportReady) return
-    setBusyKind("video")
-    let posterUrl: string | null = null
+    setBusy(true)
     try {
-      const png = await captureStoryBlob()
-      if (!png) return
-      posterUrl = URL.createObjectURL(png)
-      const recorded = await exportStoryVideo(posterUrl)
-      if (recorded.ok) {
-        const result = await shareOrDownloadVideo({
-          blob: recorded.blob,
-          title: "Mi Entrada Tokepass",
-          text: resolved.eventTitle,
-        })
-        if (result.ok && result.method === "download") {
-          toast.success(VIDEO_SAVED_TOAST)
-        }
-        return
+      const blob = await captureStoryBlob()
+      if (!blob) return
+      const result = await shareOrDownloadFlyer({
+        blob,
+        filename: "tokepass-entrada.png",
+        title: "Mi Entrada Tokepass",
+        text: resolved.eventTitle,
+      })
+      if (result.ok && result.method === "download") {
+        toast.success(SAVED_TOAST)
       }
-      downloadImageBlob(png, "tokepass-entrada.png")
-      toast.success(SAVED_TOAST)
     } catch {
-      // Silent PNG fallback. Never ship VP8/VP9 as a fake mp4.
+      // Native share cancel or silent download. No error banners.
     } finally {
-      if (posterUrl) URL.revokeObjectURL(posterUrl)
-      setBusyKind(null)
+      setBusy(false)
     }
   }
 
   async function handleDownloadPng() {
     if (!exportReady) return
-    setBusyKind("png")
+    setBusy(true)
     try {
       const blob = await captureStoryBlob()
       if (!blob) return
@@ -234,12 +222,12 @@ export function StoryFlyerModal({
     } catch {
       // Silent fallback: never surface export errors on mobile.
     } finally {
-      setBusyKind(null)
+      setBusy(false)
     }
   }
 
   function handleOpenChange(next: boolean) {
-    if (!next) setBusyKind(null)
+    if (!next) setBusy(false)
     onOpenChange(next)
   }
 
@@ -393,23 +381,23 @@ export function StoryFlyerModal({
             <Button
               type="button"
               disabled={!exportReady}
-              onClick={() => void handleDownloadVideo()}
+              onClick={() => void handleShareInstagram()}
               className="min-h-14 w-full rounded-full bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-500 text-base font-bold text-white hover:from-violet-500 hover:via-fuchsia-500 hover:to-pink-400"
             >
-              {busyKind === "video" ? (
+              {busy ? (
                 <>
                   <Loader2 className="size-5 animate-spin" aria-hidden />
-                  Generando MP4 H.264…
+                  Generando imagen…
                 </>
               ) : hydrating || !imagesReady ? (
                 <>
                   <Loader2 className="size-5 animate-spin" aria-hidden />
-                  Preparando historia…
+                  Preparando imagen…
                 </>
               ) : (
                 <>
-                  <Video className="size-5" aria-hidden />
-                  Descargar Video MP4 (Historias / WhatsApp)
+                  <Share2 className="size-5" aria-hidden />
+                  Compartir en Instagram
                 </>
               )}
             </Button>
@@ -420,17 +408,13 @@ export function StoryFlyerModal({
               onClick={() => void handleDownloadPng()}
               className="min-h-12 w-full rounded-full border-white/20 bg-white/5 text-white hover:bg-white/10"
             >
-              {busyKind === "png" ? (
-                <Loader2 className="size-5 animate-spin" aria-hidden />
-              ) : (
-                <Download className="size-5" aria-hidden />
-              )}
-              Descargar Imagen PNG HD (Foto Estatica)
+              <Download className="size-5" aria-hidden />
+              Descargar Imagen PNG
             </Button>
             <p className="text-center text-xs text-zinc-500">
               {nativeShare
-                ? "MP4 H.264 para WhatsApp, o PNG 1080 x 1920."
-                : "MP4 H.264 o PNG HD. Se guarda en el telefono si no puede compartir."}
+                ? "PNG Ultra HD 1080 x 1920 para Instagram o WhatsApp."
+                : "PNG Ultra HD 1080 x 1920. Se guarda en el telefono si no puede compartir."}
             </p>
           </div>
         </DialogPrimitive.Popup>

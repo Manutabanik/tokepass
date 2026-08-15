@@ -91,7 +91,7 @@ export async function shareOrDownloadFlyer(input: {
   title: string
   text: string
 }): Promise<ShareFlyerResult> {
-  const filename = input.filename ?? "historia-tokepass.png"
+  const filename = input.filename ?? "tokepass-entrada.png"
   const file = new File([input.blob], filename, {
     type: input.blob.type || "image/png",
   })
@@ -116,37 +116,6 @@ export async function shareOrDownloadFlyer(input: {
     return { ok: true, method: "download" }
   } catch {
     return { ok: false, error: "No se pudo guardar la imagen." }
-  }
-}
-
-export async function shareOrDownloadVideo(input: {
-  blob: Blob
-  title: string
-  text: string
-}): Promise<ShareFlyerResult> {
-  const filename = "tokepass-entrada.mp4"
-  const file = new File([input.blob], filename, { type: "video/mp4" })
-
-  if (canShareFiles(file)) {
-    try {
-      await navigator.share({
-        files: [file],
-        title: input.title,
-        text: input.text,
-      })
-      return { ok: true, method: "share" }
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
-        return { ok: false, cancelled: true, error: "cancelado" }
-      }
-    }
-  }
-
-  try {
-    downloadImageBlob(file, filename)
-    return { ok: true, method: "download" }
-  } catch {
-    return { ok: false, error: "No se pudo guardar el video." }
   }
 }
 
