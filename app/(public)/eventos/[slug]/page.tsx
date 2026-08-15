@@ -113,7 +113,7 @@ export default async function PublicEventPage({
   const seo = eventSeoFromDetails(event)
 
   return (
-    <div className="overflow-x-clip">
+    <div className="relative">
       <EventSchemaScript {...seo} />
       <EventStorefront
         event={event}

@@ -175,10 +175,10 @@ export function EventStorefront({
 
   const reduceMotion = useReducedMotion()
   const asideClassName =
-    "h-fit min-w-0 scroll-mt-24 overflow-visible px-4 pb-12 md:px-0 lg:sticky lg:top-24 lg:col-span-5 lg:col-start-8 lg:row-span-4 lg:row-start-1 lg:self-start xl:col-span-4 xl:col-start-9"
+    "h-fit min-w-0 scroll-mt-24 px-4 pb-12 md:px-0 lg:sticky lg:top-24 lg:z-30 lg:col-span-5 lg:col-start-8 lg:row-span-full lg:row-start-1 lg:self-start xl:col-span-4 xl:col-start-9"
 
   return (
-    <div className="relative isolate min-h-0 overflow-x-clip bg-background pb-8 text-foreground lg:pb-12">
+    <div className="relative isolate min-h-0 overflow-x-visible bg-background pb-8 text-foreground lg:pb-12">
       <AnalyticsTracker
         config={event.pixels}
         trackPageView
@@ -200,13 +200,13 @@ export function EventStorefront({
 
       {/* Mobile-first immersive column; desktop widens with side checkout */}
       <motion.div
-        className="mx-auto grid max-w-7xl grid-cols-1 gap-8 px-0 md:px-4 lg:grid-cols-12 lg:items-start lg:gap-12 lg:py-8"
+        className="relative mx-auto grid max-w-7xl grid-cols-1 items-start gap-8 px-0 md:px-4 lg:grid-cols-12 lg:gap-12 lg:py-8"
         variants={reduceMotion ? undefined : storefrontStagger}
         initial={reduceMotion ? false : "hidden"}
         animate="show"
       >
         <motion.div
-          className="min-w-0 lg:col-span-7 xl:col-span-8"
+          className="min-w-0 overflow-x-clip lg:col-span-7 xl:col-span-8"
           variants={reduceMotion ? undefined : storefrontStagger}
         >
             <motion.div variants={reduceMotion ? undefined : storefrontFade}>
@@ -311,20 +311,14 @@ export function EventStorefront({
             defaultTicketTab={event.defaultTicketTab}
             renderLayout={({ map, panel }) => (
               <>
-                <motion.aside
-                  id="tickets"
-                  className={asideClassName}
-                  variants={reduceMotion ? undefined : storefrontFade}
-                  initial={reduceMotion ? false : "hidden"}
-                  animate="show"
-                >
+                <aside id="tickets" className={asideClassName}>
                   {soldOut ? (
                     <div className="mb-4">
                       <EventSaleStatusNotice state="sold_out" />
                     </div>
                   ) : null}
                   {panel}
-                </motion.aside>
+                </aside>
                 {map ? (
                   <section
                     id="mapa"
@@ -339,7 +333,7 @@ export function EventStorefront({
         )}
 
         <motion.div
-          className="min-w-0 space-y-8 px-4 pb-6 md:px-0 lg:col-span-7 lg:col-start-1 xl:col-span-8"
+          className="min-w-0 space-y-8 overflow-x-clip px-4 pb-6 md:px-0 lg:col-span-7 lg:col-start-1 xl:col-span-8"
           variants={reduceMotion ? undefined : storefrontFade}
         >
             <EventResaleListings
