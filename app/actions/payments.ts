@@ -281,16 +281,6 @@ export async function createPaymentPreference(
     const initPoint = resolveCheckoutInitPoint(created)
     const preferenceId = created.id
 
-    console.log("Redirecting to:", initPoint)
-    console.log("MP preference URLs:", {
-      sandbox_init_point: created.sandbox_init_point ?? null,
-      init_point: created.init_point ?? null,
-      sandboxMode,
-      testToken: isMercadoPagoSandboxToken(),
-      localSite,
-      hasPayerEmail: Boolean(payer?.email),
-    })
-
     if (!preferenceId) {
       return {
         success: false,

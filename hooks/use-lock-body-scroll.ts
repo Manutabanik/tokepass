@@ -1,3 +1,5 @@
+"use client"
+
 import { useEffect } from "react"
 
 /** Locks document scroll while a fullscreen overlay (map takeover) is open. */

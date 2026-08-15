@@ -80,6 +80,11 @@ const nextConfig: NextConfig = {
         hostname: "p.scdn.co",
         pathname: "/**",
       },
+      {
+        protocol: "https",
+        hostname: "open.spotify.com",
+        pathname: "/**",
+      },
     ],
   },
   async redirects() {
