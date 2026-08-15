@@ -16,12 +16,14 @@ export function FavoriteToggleButton({
   isAuthenticated = true,
   className,
   size = "icon",
+  tone = "overlay",
 }: {
   eventId: string
   initiallyFavorited?: boolean
   isAuthenticated?: boolean
   className?: string
   size?: "icon" | "pill"
+  tone?: "overlay" | "bar"
 }) {
   const router = useRouter()
   const [favorited, setFavorited] = useState(initiallyFavorited)
@@ -92,7 +94,9 @@ export function FavoriteToggleButton({
       aria-label={favorited ? "Quitar de favoritos" : "Guardar favorito"}
       aria-pressed={favorited}
       className={cn(
-        "size-12 rounded-full border-0 bg-black/45 text-white shadow-lg shadow-black/30 backdrop-blur-md hover:bg-black/60",
+        tone === "bar"
+          ? "size-10 rounded-full border border-border bg-background p-2.5 text-foreground shadow-none hover:bg-muted"
+          : "size-12 rounded-full border-0 bg-black/45 text-white shadow-lg shadow-black/30 backdrop-blur-md hover:bg-black/60",
         className,
       )}
       onClick={handleClick}
@@ -101,7 +105,10 @@ export function FavoriteToggleButton({
         <LoaderCircle className="size-5 animate-spin" />
       ) : (
         <Heart
-          className={cn("size-5", favorited && "fill-rose-500 text-rose-500")}
+          className={cn(
+            "size-5",
+            favorited && "fill-rose-700 text-rose-700",
+          )}
           aria-hidden="true"
         />
       )}

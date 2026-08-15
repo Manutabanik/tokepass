@@ -13,7 +13,7 @@ import { useMemo, useState } from "react"
 import type { EventDetails } from "@/app/actions/public-events"
 import type { ResaleListingPublic } from "@/app/actions/resale"
 import { EventDateSelector } from "@/components/public/event-date-selector"
-import { EventDetailTopActions } from "@/components/public/event-detail-actions"
+import { EventActionBar } from "@/components/public/event-action-bar"
 import { AnalyticsTracker } from "@/components/public/analytics-tracker"
 import { EventAboutExpandable } from "@/components/public/event-about-expandable"
 import { EventExperienceGallery } from "@/components/public/event-experience-gallery"
@@ -216,46 +216,47 @@ export function EventStorefront({
               imageUrl={event.imageUrl}
               promoVideoUrl={event.promoVideoUrl}
               finished={finished}
-              badge={
-                <>
-                  {finished ? (
-                    <span className="flex items-center gap-1.5 rounded-full border border-white/20 bg-background/70 px-3 py-1.5 text-xs font-bold text-foreground shadow-sm backdrop-blur-md">
-                      FINALIZADO
-                    </span>
-                  ) : soldOut ? (
-                    <span className="flex items-center gap-1.5 rounded-full border border-white/20 bg-red-600/80 px-3 py-1.5 text-xs font-bold text-white shadow-sm backdrop-blur-md">
-                      AGOTADO
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-1.5 rounded-full border border-white/20 bg-background/70 px-3 py-1.5 text-xs font-bold text-foreground shadow-sm backdrop-blur-md">
-                      <Music2 className="size-3.5" aria-hidden="true" />
-                      Evento en vivo
-                    </span>
-                  )}
-                  {demand ? (
-                    <span className="flex items-center gap-1.5 rounded-full border border-white/20 bg-rose-500/80 px-3 py-1.5 text-xs font-bold text-white shadow-sm backdrop-blur-md">
-                      <Flame className="size-3.5" aria-hidden="true" />
-                      {demand}
-                    </span>
-                  ) : null}
-                  {event.status === "draft" ? (
-                    <span className="flex items-center gap-1.5 rounded-full border border-white/20 bg-amber-500/85 px-3 py-1.5 text-xs font-bold text-zinc-950 shadow-sm backdrop-blur-md">
-                      Borrador
-                    </span>
-                  ) : null}
-                </>
-              }
-              actions={
-                <EventDetailTopActions
-                  eventId={event.id}
-                  title={event.title}
-                  showBackLink={showBackLink}
-                  date={event.date}
-                  location={address}
-                  details={event.description}
-                />
-              }
             />
+            </motion.div>
+            <motion.div
+              variants={reduceMotion ? undefined : storefrontFade}
+              className="mt-4 space-y-3"
+            >
+              <EventActionBar
+                eventId={event.id}
+                title={event.title}
+                showBackLink={showBackLink}
+                date={event.date}
+                location={address}
+                details={event.description}
+              />
+              <div className="flex flex-wrap items-center gap-1.5 px-4 md:px-0">
+                {finished ? (
+                  <span className="inline-flex items-center rounded-full border border-border bg-muted/50 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
+                    Finalizado
+                  </span>
+                ) : soldOut ? (
+                  <span className="inline-flex items-center rounded-full border border-rose-500/25 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold text-rose-700 dark:text-rose-300">
+                    Agotado
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/50 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
+                    <Music2 className="size-3" aria-hidden="true" />
+                    Evento en vivo
+                  </span>
+                )}
+                {demand ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-500/20 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold text-rose-700 dark:text-rose-300">
+                    <Flame className="size-3" aria-hidden="true" />
+                    {demand}
+                  </span>
+                ) : null}
+                {event.status === "draft" ? (
+                  <span className="inline-flex items-center rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-800 dark:text-amber-200">
+                    Borrador
+                  </span>
+                ) : null}
+              </div>
             </motion.div>
             <motion.div variants={reduceMotion ? undefined : storefrontFade}>
             <HeaderInfoBlock
