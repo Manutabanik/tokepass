@@ -148,7 +148,7 @@ export function StoryCanvas({
           zIndex: 1,
           height: "100%",
           boxSizing: "border-box",
-          padding: "60px 52px 40px",
+          padding: "48px 52px 36px",
           display: "flex",
           flexDirection: "column",
         }}
@@ -195,7 +195,8 @@ export function StoryCanvas({
 
         <div
           style={{
-            flex: 1,
+            flex: "0 0 auto",
+            height: Math.round(STORY_CANVAS_HEIGHT * 0.55),
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -213,8 +214,8 @@ export function StoryCanvas({
               willChange: live ? "transform" : "auto",
               position: "relative",
               overflow: "hidden",
-              borderRadius: 32,
-              padding: 16,
+              borderRadius: 16,
+              padding: 12,
               background: live
                 ? "rgba(255,255,255,0.1)"
                 : "rgba(24,16,36,0.94)",
@@ -245,7 +246,7 @@ export function StoryCanvas({
             <div
               style={{
                 position: "relative",
-                borderRadius: 24,
+                borderRadius: 16,
                 overflow: "hidden",
                 height: "100%",
                 background: theme.background,
@@ -298,25 +299,28 @@ export function StoryCanvas({
           </motion.div>
         </div>
 
-        <div style={{ marginTop: 20 }}>
+        <div style={{ marginTop: 28, flex: 1 }}>
           <p
             style={{
               margin: 0,
-              fontSize: 36,
+              fontSize: 50,
               lineHeight: 1.08,
-              fontWeight: 900,
+              fontWeight: 800,
               letterSpacing: "-0.04em",
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
             }}
           >
             {data.eventTitle}
           </p>
           <p
             style={{
-              margin: "8px 0 0",
-              fontSize: 22,
-              fontWeight: 700,
-              color: "rgba(255,255,255,0.86)",
-              textTransform: "capitalize",
+              margin: "12px 0 0",
+              fontSize: 28,
+              fontWeight: 600,
+              color: theme.accent,
             }}
           >
             {dateLabel}
@@ -347,8 +351,8 @@ export function StoryCanvas({
                   <div
                     key={`${artist.name}-${index}`}
                     style={{
-                      width: 56,
-                      height: 56,
+                      width: 72,
+                      height: 72,
                       marginLeft: index === 0 ? 0 : -14,
                       borderRadius: 999,
                       overflow: "hidden",
@@ -384,8 +388,8 @@ export function StoryCanvas({
             ) : (
               <div
                 style={{
-                  width: 88,
-                  height: 88,
+                  width: 96,
+                  height: 96,
                   borderRadius: 999,
                   overflow: "hidden",
                   flexShrink: 0,
@@ -419,8 +423,8 @@ export function StoryCanvas({
               <p
                 style={{
                   margin: 0,
-                  fontSize: showLineupStack ? 20 : 22,
-                  fontWeight: 700,
+                  fontSize: showLineupStack ? 24 : 26,
+                  fontWeight: 600,
                   lineHeight: 1.25,
                   letterSpacing: "-0.02em",
                   color: showLineupStack
@@ -436,33 +440,26 @@ export function StoryCanvas({
 
         <div
           style={{
-            marginTop: 18,
-            borderRadius: 999,
-            padding: "14px 22px",
-            background: "rgba(255,255,255,0.08)",
-            border: `1px solid ${theme.accent}66`,
+            marginTop: 22,
+            width: "100%",
+            boxSizing: "border-box",
+            borderRadius: 16,
+            padding: "18px 28px",
+            background: "rgba(255,255,255,0.1)",
+            border: "1px solid rgba(255,255,255,0.2)",
             textAlign: "center",
+            boxShadow: "0 16px 32px rgba(168,85,247,0.1)",
           }}
         >
           <p
             style={{
               margin: 0,
-              fontSize: 22,
-              fontWeight: 800,
-              letterSpacing: "-0.03em",
+              fontSize: 24,
+              fontWeight: 700,
+              letterSpacing: "0.04em",
             }}
           >
             Adquiri tu entrada en tokepass.com.ar
-          </p>
-          <p
-            style={{
-              margin: "6px 0 0",
-              fontSize: 16,
-              fontWeight: 600,
-              color: "rgba(255,255,255,0.55)",
-            }}
-          >
-            Pega tu sticker de enlace aqui
           </p>
         </div>
 
@@ -513,8 +510,8 @@ export function StoryCanvas({
           </div>
           <div
             style={{
-              width: 112,
-              height: 112,
+              width: 140,
+              height: 140,
               borderRadius: 16,
               overflow: "hidden",
               background: "#fff",
@@ -525,7 +522,7 @@ export function StoryCanvas({
           >
             <QRCodeSVG
               value={cta}
-              size={96}
+              size={124}
               level="H"
               includeMargin
               bgColor="#ffffff"

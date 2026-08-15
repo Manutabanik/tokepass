@@ -42,21 +42,43 @@ export function downloadDataUrl(dataUrl: string, filename: string) {
 
 export function downloadImageBlob(
   blob: Blob,
-  filename = "historia-tokepass.png",
+  filename = "tokepass-entrada.png",
 ) {
-  const url = URL.createObjectURL(blob)
-  const ios = /iP(ad|hone|od)/.test(navigator.userAgent)
+  const binary =
+    blob.type === "image/png" ? blob : new Blob([blob], { type: "image/png" })
+  const url = URL.createObjectURL(binary)
   const anchor = document.createElement("a")
   anchor.href = url
   anchor.download = filename
   anchor.rel = "noopener"
-  if (ios) {
-    anchor.target = "_blank"
-  }
   document.body.appendChild(anchor)
   anchor.click()
-  anchor.remove()
-  window.setTimeout(() => URL.revokeObjectURL(url), ios ? 60_000 : 1500)
+  document.body.removeChild(anchor)
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+export async function shareOrDownloadPngBlob(
+  blob: Blob,
+  filename = "tokepass-entrada.png",
+): Promise<ShareFlyerResult> {
+  const file = new File([blob], filename, { type: "image/png" })
+  if (canShareFiles(file)) {
+    try {
+      await navigator.share({
+        files: [file],
+        title: "Mi Entrada Tokepass",
+      })
+      return { ok: true, method: "share" }
+    } catch {
+      // Cancelar la hoja nativa no debe bloquear: sigue la descarga Blob.
+    }
+  }
+  try {
+    downloadImageBlob(file, filename)
+    return { ok: true, method: "download" }
+  } catch {
+    return { ok: false, error: "No se pudo guardar la imagen." }
+  }
 }
 
 /** @deprecated Prefer downloadImageBlob */

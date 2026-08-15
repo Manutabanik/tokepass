@@ -46,9 +46,8 @@ import {
   type StoryThemeId,
 } from "@/lib/story-canvas"
 import {
-  downloadImageBlob,
   isNativeFileShareAvailable,
-  shareOrDownloadFlyer,
+  shareOrDownloadPngBlob,
 } from "@/lib/story-flyer-share"
 import {
   fitStoryPngWeight,
@@ -205,12 +204,10 @@ export function StoryFlyerModal({
     try {
       const blob = await captureStoryBlob()
       if (!blob) return
-      const result = await shareOrDownloadFlyer({
+      const result = await shareOrDownloadPngBlob(
         blob,
-        filename: "tokepass-entrada.png",
-        title: "Mi Entrada Tokepass",
-        text: resolved.eventTitle,
-      })
+        "tokepass-entrada.png",
+      )
       if (result.ok && result.method === "download") {
         toast.success(SAVED_TOAST)
       }
@@ -227,8 +224,13 @@ export function StoryFlyerModal({
     try {
       const blob = await captureStoryBlob()
       if (!blob) return
-      downloadImageBlob(blob, "tokepass-entrada.png")
-      toast.success(SAVED_TOAST)
+      const result = await shareOrDownloadPngBlob(
+        blob,
+        "tokepass-entrada.png",
+      )
+      if (result.ok && result.method === "download") {
+        toast.success(SAVED_TOAST)
+      }
     } catch {
       // Silent fallback: never surface export errors on mobile.
     } finally {
