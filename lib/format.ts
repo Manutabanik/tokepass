@@ -198,6 +198,103 @@ export function formatPercent(value: number, fractionDigits = 1): string {
   return `${value.toFixed(fractionDigits)}%`
 }
 
+function titleStoryDate(value: string): string {
+  return value
+    .split(" ")
+    .map((word, index) => {
+      const bare = word.replace(/[.,]/g, "").toLowerCase()
+      if (index > 0 && ["de", "del", "al", "y"].includes(bare)) {
+        return word.toLowerCase()
+      }
+      if (!word) return word
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+    })
+    .join(" ")
+}
+
+function storyCalendarDay(value: string): {
+  y: number
+  m: number
+  d: number
+  iso: string
+} | null {
+  const date = toValidDate(value)
+  if (!date) return null
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: EVENT_TIME_ZONE,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  }).formatToParts(date)
+  const y = Number(parts.find((part) => part.type === "year")?.value)
+  const m = Number(parts.find((part) => part.type === "month")?.value)
+  const d = Number(parts.find((part) => part.type === "day")?.value)
+  if (!y || !m || !d) return null
+  return { y, m, d, iso: value }
+}
+
+function storyMonthName(month: number): string {
+  return titleStoryDate(
+    new Intl.DateTimeFormat("es-AR", { month: "long" }).format(
+      new Date(2026, month - 1, 15),
+    ),
+  )
+}
+
+function uniqueStoryDays(values: string[]) {
+  const map = new Map<string, { y: number; m: number; d: number; iso: string }>()
+  for (const value of values) {
+    const day = storyCalendarDay(value)
+    if (!day) continue
+    map.set(`${day.y}-${day.m}-${day.d}`, day)
+  }
+  return [...map.values()].sort(
+    (a, b) => a.y - b.y || a.m - b.m || a.d - b.d,
+  )
+}
+
+function areConsecutiveStoryDays(
+  days: Array<{ y: number; m: number; d: number }>,
+): boolean {
+  for (let index = 1; index < days.length; index += 1) {
+    const previous = Date.UTC(
+      days[index - 1].y,
+      days[index - 1].m - 1,
+      days[index - 1].d,
+    )
+    const current = Date.UTC(days[index].y, days[index].m - 1, days[index].d)
+    if (current - previous !== 86_400_000) return false
+  }
+  return true
+}
+
+export function formatStoryEventDates(values: string[]): string {
+  const days = uniqueStoryDays(values)
+  if (days.length === 0) return ""
+  if (days.length === 1) return titleStoryDate(formatEventDay(days[0].iso))
+
+  const first = days[0]
+  const last = days[days.length - 1]
+  if (areConsecutiveStoryDays(days)) {
+    if (first.m === last.m && first.y === last.y) {
+      return `Del ${first.d} al ${last.d} de ${storyMonthName(first.m)} de ${first.y}`
+    }
+    if (first.y === last.y) {
+      return `Del ${first.d} de ${storyMonthName(first.m)} al ${last.d} de ${storyMonthName(last.m)} de ${first.y}`
+    }
+    return `Del ${first.d} de ${storyMonthName(first.m)} de ${first.y} al ${last.d} de ${storyMonthName(last.m)} de ${last.y}`
+  }
+
+  const sameMonth = days.every((day) => day.m === first.m && day.y === first.y)
+  if (sameMonth) {
+    const numbers = days.map((day) => String(day.d))
+    return `${numbers.slice(0, -1).join(", ")} y ${numbers.at(-1)} de ${storyMonthName(first.m)} de ${first.y}`
+  }
+
+  const labels = days.map((day) => `${day.d} de ${storyMonthName(day.m)}`)
+  return `${labels.slice(0, -1).join(", ")} y ${labels.at(-1)} de ${last.y}`
+}
+
 export function getInitials(name: string | null, fallback: string): string {
   const source = name?.trim() || fallback
   return (

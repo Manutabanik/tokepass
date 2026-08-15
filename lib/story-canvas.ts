@@ -27,6 +27,7 @@ export type StoryFlyerData = {
   categoryLabel?: string | null
   lineupArtists?: StoryLineupArtist[]
   lineupRemainingCount?: number
+  eventDates?: string[]
 }
 
 export type StoryTheme = {

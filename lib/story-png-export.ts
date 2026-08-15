@@ -83,6 +83,24 @@ async function scalePngBlob(
   return next ?? blob
 }
 
+export async function waitForStoryFlyerPaint(node: HTMLElement) {
+  const flyer = node.querySelector<HTMLImageElement>("img[data-flyer-img]")
+  if (flyer) {
+    if (!flyer.complete || flyer.naturalWidth === 0) {
+      await new Promise<void>((resolve) => {
+        flyer.onload = () => resolve()
+        flyer.onerror = () => resolve()
+      })
+    }
+    if ("decode" in flyer) {
+      await flyer.decode().catch(() => undefined)
+    }
+  }
+  await new Promise<void>((resolve) => {
+    window.setTimeout(() => resolve(), 100)
+  })
+}
+
 export async function fitStoryPngWeight(blob: Blob): Promise<Blob> {
   if (blob.size <= STORY_EXPORT_MAX_BYTES) return blob
   const fourK = await scalePngBlob(blob, 2160, 3840)

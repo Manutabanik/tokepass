@@ -6,7 +6,7 @@ import { QRCodeSVG } from "qrcode.react"
 
 import { StoryLiquidBackdrop } from "@/components/public/story-liquid-backdrop"
 import { StoryParticles } from "@/components/public/story-particles"
-import { formatEventDay, formatEventTime } from "@/lib/format"
+import { formatStoryEventDates } from "@/lib/format"
 import {
   STORY_CANVAS_HEIGHT,
   STORY_CANVAS_WIDTH,
@@ -104,7 +104,9 @@ export function StoryCanvas({
     lineup.map((artist) => artist.name),
     data.lineupRemainingCount ?? 0,
   )
-  const category = (data.categoryLabel?.trim() || "ACCESO GENERAL").toUpperCase()
+  const dateLabel = formatStoryEventDates(
+    data.eventDates?.length ? data.eventDates : [data.eventDate],
+  )
   const cta = storyCtaUrl()
 
   const rootStyle: CSSProperties = {
@@ -258,6 +260,7 @@ export function StoryCanvas({
                   src={eventImage}
                   alt=""
                   data-story-image="hero"
+                  data-flyer-img=""
                   onLoad={onPainted}
                   onError={onPainted}
                   ref={(node) => {
@@ -316,9 +319,7 @@ export function StoryCanvas({
               textTransform: "capitalize",
             }}
           >
-            {formatEventDay(data.eventDate)}
-            {" · "}
-            {formatEventTime(data.eventDate)}
+            {dateLabel}
           </p>
         </div>
 
@@ -429,54 +430,40 @@ export function StoryCanvas({
               >
                 {showLineupStack ? lineupCopy : stampLabel}
               </p>
-              <span
-                style={{
-                  display: "inline-block",
-                  marginTop: 8,
-                  borderRadius: 999,
-                  padding: "6px 14px",
-                  background: theme.accent,
-                  color: "#09090b",
-                  fontSize: 14,
-                  fontWeight: 900,
-                  letterSpacing: "0.12em",
-                }}
-              >
-                {category}
-              </span>
             </div>
           </div>
-          <div
+        </div>
+
+        <div
+          style={{
+            marginTop: 18,
+            borderRadius: 999,
+            padding: "14px 22px",
+            background: "rgba(255,255,255,0.08)",
+            border: `1px solid ${theme.accent}66`,
+            textAlign: "center",
+          }}
+        >
+          <p
             style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 8,
-              flexShrink: 0,
+              margin: 0,
+              fontSize: 22,
+              fontWeight: 800,
+              letterSpacing: "-0.03em",
             }}
           >
-            <div
-              style={{
-                width: 120,
-                height: 120,
-                borderRadius: 16,
-                overflow: "hidden",
-                background: "#fff",
-                padding: 8,
-                boxSizing: "border-box",
-              }}
-            >
-              <QRCodeSVG
-                value={cta}
-                size={104}
-                level="H"
-                includeMargin
-                bgColor="#ffffff"
-                fgColor="#09090b"
-              />
-            </div>
-            <WhiteTokepassMark size={36} />
-          </div>
+            Adquiri tu entrada en tokepass.com.ar
+          </p>
+          <p
+            style={{
+              margin: "6px 0 0",
+              fontSize: 16,
+              fontWeight: 600,
+              color: "rgba(255,255,255,0.55)",
+            }}
+          >
+            Pega tu sticker de enlace aqui
+          </p>
         </div>
 
         <div
@@ -484,35 +471,67 @@ export function StoryCanvas({
             marginTop: 16,
             display: "flex",
             alignItems: "center",
-            gap: 12,
+            justifyContent: "space-between",
+            gap: 16,
           }}
         >
-          {organizerAvatar ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={organizerAvatar}
-              alt=""
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: 999,
-                objectFit: "cover",
-                border: "1px solid rgba(255,255,255,0.28)",
-                flexShrink: 0,
-              }}
-            />
-          ) : null}
-          <p
+          <div
             style={{
-              margin: 0,
-              fontSize: 18,
-              fontWeight: 600,
-              color: "rgba(255,255,255,0.58)",
-              letterSpacing: "-0.01em",
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              minWidth: 0,
             }}
           >
-            {`Organizado por ${organizerName}`}
-          </p>
+            <WhiteTokepassMark size={40} />
+            {organizerAvatar ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={organizerAvatar}
+                alt=""
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 999,
+                  objectFit: "cover",
+                  border: "1px solid rgba(255,255,255,0.28)",
+                  flexShrink: 0,
+                }}
+              />
+            ) : null}
+            <p
+              style={{
+                margin: 0,
+                fontSize: 18,
+                fontWeight: 600,
+                color: "rgba(255,255,255,0.58)",
+                letterSpacing: "-0.01em",
+              }}
+            >
+              {`Organizado por ${organizerName}`}
+            </p>
+          </div>
+          <div
+            style={{
+              width: 112,
+              height: 112,
+              borderRadius: 16,
+              overflow: "hidden",
+              background: "#fff",
+              padding: 8,
+              boxSizing: "border-box",
+              flexShrink: 0,
+            }}
+          >
+            <QRCodeSVG
+              value={cta}
+              size={96}
+              level="H"
+              includeMargin
+              bgColor="#ffffff"
+              fgColor="#09090b"
+            />
+          </div>
         </div>
       </div>
     </div>

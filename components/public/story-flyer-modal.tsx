@@ -50,7 +50,11 @@ import {
   isNativeFileShareAvailable,
   shareOrDownloadFlyer,
 } from "@/lib/story-flyer-share"
-import { fitStoryPngWeight, storyPngOptions } from "@/lib/story-png-export"
+import {
+  fitStoryPngWeight,
+  storyPngOptions,
+  waitForStoryFlyerPaint,
+} from "@/lib/story-png-export"
 import { cn } from "@/lib/utils"
 
 function isStoryDataImage(url?: string | null): boolean {
@@ -169,6 +173,7 @@ export function StoryFlyerModal({
     const node = storyCardRef.current
     if (!node) return null
     await waitForImages(node)
+    await waitForStoryFlyerPaint(node)
     const { toBlob } = await import("html-to-image")
     const options = storyPngOptions(findStoryTheme(themeId).background)
     let blob: Blob | null

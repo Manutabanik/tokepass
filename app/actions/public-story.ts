@@ -1,6 +1,7 @@
 "use server"
 
 import { eventArtistsToLineup, visibleLineupArtists } from "@/lib/event-lineup"
+import { parseScheduleDays } from "@/lib/event-schedule"
 import { isEventUuid } from "@/lib/seo/site"
 import {
   STORY_LINEUP_AVATAR_MAX,
@@ -72,13 +73,35 @@ export async function getPublicStoryLineup(eventId: string): Promise<{
   }
 }
 
+export async function getPublicStoryDates(eventId: string): Promise<string[]> {
+  if (!isEventUuid(eventId)) return []
+
+  const supabase = await createClient()
+  const query = await supabase
+    .from("events")
+    .select("date, schedule_days")
+    .eq("id", eventId)
+    .maybeSingle()
+
+  if (query.error || !query.data) return []
+
+  const days = parseScheduleDays(query.data.schedule_days)
+  if (days.length > 0) {
+    return days.map((day) => day.start_time).filter(Boolean)
+  }
+  return query.data.date ? [query.data.date] : []
+}
+
 export async function getStoryCardData(
   input: StoryFlyerData,
 ): Promise<StoryFlyerData> {
   let next = { ...input }
   const eventId = next.eventId?.trim()
   if (eventId) {
-    const lineup = await getPublicStoryLineup(eventId)
+    const [lineup, eventDates] = await Promise.all([
+      getPublicStoryLineup(eventId),
+      getPublicStoryDates(eventId),
+    ])
     if (lineup.artists.length > 0) {
       const headliner = lineup.artists[0]
       next = {
@@ -87,6 +110,13 @@ export async function getStoryCardData(
         artistImageUrl: next.artistImageUrl || headliner.imageUrl,
         lineupArtists: lineup.artists,
         lineupRemainingCount: lineup.remainingCount,
+      }
+    }
+    if (eventDates.length > 0) {
+      next = {
+        ...next,
+        eventDates,
+        eventDate: next.eventDate || eventDates[0],
       }
     }
   }
