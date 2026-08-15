@@ -18,6 +18,7 @@ const VenueElementShape = memo(function VenueElementShape({
   showChairs,
   interactive,
   zoom,
+  dimmed = false,
 }: {
   element: VenueMapElement
   selected: boolean
@@ -40,16 +41,29 @@ const VenueElementShape = memo(function VenueElementShape({
   showChairs: boolean
   interactive: boolean
   zoom: number
+  dimmed?: boolean
 }) {
-  const transform = `rotate(${element.rotation} ${element.x} ${element.y})`
-  const opacity = element.opacity ?? 1
+  const transform = selected
+    ? `translate(${element.x} ${element.y}) scale(1.15) translate(${-element.x} ${-element.y}) rotate(${element.rotation} ${element.x} ${element.y})`
+    : `rotate(${element.rotation} ${element.x} ${element.y})`
+  const opacity = (element.opacity ?? 1) * (dimmed ? 0.4 : 1)
   const labelText = compactVenueElementLabel(element.label, selected ? 99 : zoom)
 
   return (
     <g
+      id={`venue-sel-${element.id}`}
       transform={transform}
       opacity={opacity}
-      className={interactive ? undefined : "pointer-events-none"}
+      className={
+        interactive
+          ? "origin-center transition-all duration-300 ease-in-out"
+          : "pointer-events-none origin-center transition-all duration-300 ease-in-out"
+      }
+      style={
+        selected
+          ? { filter: "drop-shadow(0 0 8px rgba(255,255,255,0.85))" }
+          : undefined
+      }
       onPointerDown={
         interactive
           ? (event) => onElementPointerDown?.(event, element)
@@ -130,6 +144,7 @@ export function VenueMapElementLayer({
   showSeats = true,
   zoom = 1,
   interactive = true,
+  spotlight = false,
 }: {
   elements: VenueMapElement[]
   selectedIds?: string[]
@@ -151,8 +166,11 @@ export function VenueMapElementLayer({
   showSeats?: boolean
   zoom?: number
   interactive?: boolean
+  spotlight?: boolean
 }) {
   const selected = new Set(selectedIds)
+  const hasSelection =
+    spotlight || selected.size > 0 || (selectedSeatIds?.length ?? 0) > 0
   const selectedSeats = useMemo(
     () => new Set(selectedSeatIds ?? []),
     [selectedSeatIds],
@@ -178,6 +196,7 @@ export function VenueMapElementLayer({
           showChairs={renderChairs || selected.has(element.id)}
           interactive={interactive}
           zoom={zoom}
+          dimmed={hasSelection && !selected.has(element.id)}
         />
       ))}
     </>

@@ -165,13 +165,25 @@ export function EventStorefront({
     </>
   )
 
+  if (hasInteractiveMap) {
+    return (
+      <div className="h-[100dvh] w-full overflow-hidden bg-background text-foreground">
+        <AnalyticsTracker
+          config={event.pixels}
+          trackPageView
+          contentName={event.title}
+          contentIds={[event.id]}
+          value={startingPrice ?? undefined}
+        />
+        <div id="tickets" className="h-[100dvh] w-full overflow-hidden">
+          {checkout}
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div
-      className={cn(
-        "relative isolate min-h-screen overflow-x-clip bg-background text-foreground",
-        hasInteractiveMap ? "pb-8 lg:pb-12" : "pb-28 lg:overflow-x-visible lg:pb-12",
-      )}
-    >
+    <div className="relative isolate min-h-screen overflow-x-clip bg-background pb-28 text-foreground lg:overflow-x-visible lg:pb-12">
       <AnalyticsTracker
         config={event.pixels}
         trackPageView
@@ -195,9 +207,7 @@ export function EventStorefront({
       <div
         className={cn(
           "mx-auto grid gap-0 lg:items-start lg:px-6 lg:py-8",
-          hasInteractiveMap
-            ? "max-w-[1400px] lg:grid-cols-1 lg:gap-8"
-            : "max-w-6xl lg:grid-cols-[minmax(0,1.05fr)_minmax(340px,0.95fr)] lg:gap-10",
+          "max-w-6xl lg:grid-cols-[minmax(0,1.05fr)_minmax(340px,0.95fr)] lg:gap-10",
         )}
       >
         <div className="min-w-0">
@@ -278,18 +288,12 @@ export function EventStorefront({
             </div>
           </div>
 
-        {hasInteractiveMap ? (
-          <section id="tickets" className="scroll-mt-24 min-w-0 px-0 pb-6 lg:pb-2">
-            {checkout}
-          </section>
-        ) : (
-          <aside
-            id="tickets"
-            className="scroll-mt-24 px-4 pb-8 lg:sticky lg:top-24 lg:row-span-2 lg:h-fit lg:max-h-[calc(100vh-6rem)] lg:self-start lg:overflow-y-auto lg:px-0 lg:pb-0"
-          >
-            {checkout}
-          </aside>
-        )}
+        <aside
+          id="tickets"
+          className="scroll-mt-24 px-4 pb-8 lg:sticky lg:top-24 lg:row-span-2 lg:h-fit lg:max-h-[calc(100dvh-6rem)] lg:self-start lg:overflow-y-auto lg:px-0 lg:pb-0"
+        >
+          {checkout}
+        </aside>
 
         <div className="min-w-0 space-y-8 px-4 pb-6 pt-2 sm:px-6 lg:px-0 lg:pt-0">
             <div className="flex flex-wrap items-center gap-3">

@@ -32,6 +32,7 @@ import {
   type ParametricOccupiedItem,
 } from "@/lib/seating/adaptive-seating"
 import type {
+  SeatStatus,
   UniversalSeatSelection,
   UniversalSector,
 } from "@/lib/seating/universal-seat-types"
@@ -61,6 +62,7 @@ type AdaptiveSeatingFlowProps = {
   immersive?: boolean
   selectedZoneId?: string | null
   unavailableZoneIds?: string[]
+  occupancyBySeatId?: Record<string, SeatStatus>
   onSelectZone?: (zone: VenueMapZone) => void
   onBack?: () => void
   onContinue?: (selection: UniversalSeatSelection) => void
@@ -80,6 +82,7 @@ export function AdaptiveSeatingFlow({
   immersive = false,
   selectedZoneId = null,
   unavailableZoneIds = [],
+  occupancyBySeatId = {},
   onSelectZone,
   onBack,
   onContinue,
@@ -88,30 +91,33 @@ export function AdaptiveSeatingFlow({
 }: AdaptiveSeatingFlowProps) {
   if (immersive && venueMap) {
     return (
-      <InteractiveSeatingCanvas
-        map={venueMap}
-        fillParent
-        disableIdlePrompt
-        silentHover
-        hideChrome
-        selectedZoneId={selectedZoneId}
-        unavailableZoneIds={unavailableZoneIds}
-        onSelectZone={(zone) => onSelectZone?.(zone)}
-        onContinue={(seats) => {
-          const seat = seats[0]
-          if (!seat) return
-          onContinue?.({
-            kind: "numbered",
-            sectorId: seat.sectorId,
-            sectorName: seat.sectorName,
-            color: seat.color,
-            unitPrice: seat.price,
-            groupId: `${seat.sectorId}-row-${seat.row}`,
-            groupName: `Fila ${seat.row}`,
-            seats: [{ id: seat.id, label: `${seat.row}-${seat.number}` }],
-          })
-        }}
-      />
+      <div className="h-full w-full overflow-hidden">
+        <InteractiveSeatingCanvas
+          map={venueMap}
+          fillParent
+          disableIdlePrompt
+          silentHover
+          hideChrome
+          selectedZoneId={selectedZoneId}
+          unavailableZoneIds={unavailableZoneIds}
+          occupancyBySeatId={occupancyBySeatId}
+          onSelectZone={(zone) => onSelectZone?.(zone)}
+          onContinue={(seats) => {
+            const seat = seats[0]
+            if (!seat) return
+            onContinue?.({
+              kind: "numbered",
+              sectorId: seat.sectorId,
+              sectorName: seat.sectorName,
+              color: seat.color,
+              unitPrice: seat.price,
+              groupId: `${seat.sectorId}-row-${seat.row}`,
+              groupName: `Fila ${seat.row}`,
+              seats: [{ id: seat.id, label: `${seat.row}-${seat.number}` }],
+            })
+          }}
+        />
+      </div>
     )
   }
 

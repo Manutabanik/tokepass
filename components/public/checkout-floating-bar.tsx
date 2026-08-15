@@ -24,27 +24,24 @@ export function CheckoutFloatingBar({
   onPay: () => void
   variant?: "page" | "panel"
 }) {
-  const visible = !hidden
+  if (hidden) return null
 
   return (
     <div
       className={cn(
-        "transition-all duration-300 ease-in-out",
+        "z-30 w-full shrink-0 border-t border-border",
         variant === "panel"
-          ? "sticky bottom-0 z-20 border-t border-border bg-card/95 px-6 pt-4 backdrop-blur-md"
-          : "fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background px-4 pt-3 shadow-xl",
-        "pb-[max(1rem,env(safe-area-inset-bottom))]",
-        visible
-          ? "translate-y-0 opacity-100"
-          : "pointer-events-none translate-y-full opacity-0",
+          ? "mt-auto bg-background/95 p-4 backdrop-blur"
+          : "fixed inset-x-0 bottom-0 bg-background p-4 shadow-xl",
+        variant === "page" && "pb-[max(1rem,env(safe-area-inset-bottom))]",
+        variant === "panel" && "pb-[max(1rem,env(safe-area-inset-bottom))]",
       )}
-      aria-hidden={!visible}
     >
       <Button
         type="button"
-        disabled={pending || locked || disabled || !visible}
+        disabled={pending || locked || disabled}
         onClick={onPay}
-        className="h-12 w-full rounded-2xl bg-primary text-base font-bold text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90"
+        className="h-12 w-full rounded-2xl bg-primary text-base font-bold text-primary-foreground hover:bg-primary/90"
       >
         {pending ? (
           <>

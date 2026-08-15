@@ -18,6 +18,8 @@ function canvasSvgPoints(points: VenueMapPoint[]): string {
 export function VenueMapZoneLayer({
   zones,
   selectedId = null,
+  selectedIds,
+  spotlight = false,
   draft = [],
   cursor = null,
   onSelect,
@@ -27,6 +29,8 @@ export function VenueMapZoneLayer({
 }: {
   zones: VenueMapZone[]
   selectedId?: string | null
+  selectedIds?: string[]
+  spotlight?: boolean
   draft?: VenueMapPoint[]
   cursor?: VenueMapPoint | null
   onSelect?: (zone: VenueMapZone) => void
@@ -64,9 +68,14 @@ export function VenueMapZoneLayer({
         if (canvasPoints.length < 3) return null
         const points = polygonSvgPoints(zone.polygon)
         const center = zoneCanvasCentroid(zone)
-        const selected = zone.id === selectedId
+        const selected =
+          zone.id === selectedId || Boolean(selectedIds?.includes(zone.id))
         const soldOut = unavailableIds.includes(zone.id)
         const interactive = Boolean(onSelect) && !soldOut
+        const hasSelection =
+          spotlight ||
+          Boolean(selectedId) ||
+          Boolean(selectedIds && selectedIds.length > 0)
 
         function eventClientPoint(
           event: React.PointerEvent | React.MouseEvent | React.TouchEvent,
@@ -100,14 +109,24 @@ export function VenueMapZoneLayer({
           onSelect(zone)
         }
 
+        const dimmed = hasSelection && !selected && !soldOut
+
         return (
           <g
             key={zone.id}
+            id={`venue-sel-${zone.id}`}
             data-zone-id={zone.id}
+            transform={
+              selected
+                ? `translate(${center.x} ${center.y}) scale(1.15) translate(${-center.x} ${-center.y})`
+                : undefined
+            }
             className={cn(
+              "origin-center transition-all duration-300 ease-in-out",
               interactive ? "cursor-pointer" : undefined,
               soldOut && "pointer-events-none opacity-50",
             )}
+            opacity={dimmed ? 0.4 : 1}
             style={{ pointerEvents: interactive ? "auto" : "none" }}
             onContextMenu={(event) => onContextMenu?.(event, zone)}
             onPointerDown={(event) => {
@@ -137,17 +156,28 @@ export function VenueMapZoneLayer({
               data-zone-id={zone.id}
               points={points}
               fill={soldOut ? "#9ca3af" : zone.color || "#22d3ee"}
-              stroke={soldOut ? "#9ca3af" : zone.color || "#67e8f9"}
-              strokeWidth={selected ? 2.8 : 2}
+              stroke={
+                soldOut
+                  ? "#9ca3af"
+                  : selected
+                    ? "#ffffff"
+                    : zone.color || "#67e8f9"
+              }
+              strokeWidth={selected ? 3 : 2}
               strokeLinejoin="round"
               pointerEvents={soldOut ? "none" : "auto"}
               filter={soldOut ? undefined : `url(#zone-neon-${glowId})`}
+              style={
+                selected
+                  ? { filter: "drop-shadow(0 0 10px rgba(255,255,255,0.85))" }
+                  : undefined
+              }
               className={cn(
-                "transition-[fill-opacity,opacity] duration-200 ease-in-out",
+                "transition-all duration-300 ease-in-out",
                 soldOut
                   ? "[fill-opacity:0.45]"
                   : selected
-                    ? "[fill-opacity:0.42]"
+                    ? "[fill-opacity:0.62]"
                     : "[fill-opacity:0.28]",
                 interactive &&
                   "cursor-pointer hover:[fill-opacity:0.72]",
@@ -157,7 +187,10 @@ export function VenueMapZoneLayer({
               x={center.x}
               y={center.y}
               textAnchor="middle"
-              className="pointer-events-none fill-white text-[12px] font-bold"
+              className={cn(
+                "pointer-events-none fill-white font-bold",
+                selected ? "text-[14px]" : "text-[12px]",
+              )}
             >
               {zone.name}
             </text>

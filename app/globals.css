@@ -398,3 +398,12 @@ select:-webkit-autofill {
 .animate-checkout-shake-b {
   animation: checkout-shake 0.42s ease-in-out;
 }
+
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}

@@ -16,6 +16,7 @@ import {
   buildEventMetadata,
   eventSeoFromDetails,
 } from "@/lib/seo/event-metadata"
+import { deriveEventSaleState } from "@/lib/event-status"
 import { decodeEventParam } from "@/lib/seo/event-slug"
 import { createClient } from "@/lib/supabase/server"
 
@@ -111,6 +112,14 @@ export default async function PublicEventPage({
   ])
 
   const seo = eventSeoFromDetails(event)
+  const saleState = deriveEventSaleState({
+    date: event.date,
+    endsAt: event.endsAt,
+    scheduleDays: event.scheduleDays ?? [],
+    tiers: event.tiers,
+  })
+  const immersiveCheckout =
+    Boolean(event.hasInteractiveMap) && saleState !== "finished"
 
   return (
     <div className="overflow-x-clip lg:overflow-x-visible">
@@ -123,7 +132,9 @@ export default async function PublicEventPage({
         resaleListings={resaleListings}
         sandboxEligible={sandboxEligible}
       />
-      <RelatedEventsSection events={relatedEvents} />
+      {immersiveCheckout ? null : (
+        <RelatedEventsSection events={relatedEvents} />
+      )}
     </div>
   )
 }

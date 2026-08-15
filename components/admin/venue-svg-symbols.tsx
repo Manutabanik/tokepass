@@ -41,7 +41,7 @@ function fillFor(color: string, state: Occupancy) {
 }
 
 function strokeFor(color: string, selected: boolean, state: Occupancy = "available") {
-  if (selected || state === "selected") return "#34d399"
+  if (selected || state === "selected") return "#ffffff"
   if (state === "occupied" || state === "blocked") return "#52525b"
   return color
 }
@@ -89,7 +89,7 @@ export function TheatreSeatSymbol({
         fill={fill}
         fillOpacity={occupied ? 0.4 : 0.95}
         stroke={stroke}
-        strokeWidth={selected ? 1.4 : 0.9}
+        strokeWidth={selected ? 2.2 : 0.9}
       />
       <rect
         x={cx - w * 0.4}
@@ -100,7 +100,7 @@ export function TheatreSeatSymbol({
         fill={fill}
         fillOpacity={occupied ? 0.35 : 0.82}
         stroke={stroke}
-        strokeWidth={selected ? 1.4 : 0.9}
+        strokeWidth={selected ? 2.2 : 0.9}
       />
       {showLabel && label ? (
         <text
@@ -154,21 +154,33 @@ export function RoundTableSymbol({
           ? seatState(seat, occupancyBySeatId, selectedSeatIds)
           : "available"
         return (
-          <circle
-            key={seat?.id ?? `chair-${index}`}
-            cx={x}
-            cy={y}
-            r={CHAIR_DOT_RADIUS}
-            fill={fillFor(color, state)}
-            fillOpacity={state === "occupied" || state === "blocked" ? 0.4 : 0.95}
-            stroke={strokeFor(color, selected, state)}
-            strokeWidth={state === "selected" || selected ? 1.1 : 0.7}
-            onPointerDown={
-              seat && onSeatPointerDown
-                ? (event) => onSeatPointerDown(event, seat.id)
-                : undefined
-            }
-          />
+          <g key={seat?.id ?? `chair-${index}`}>
+            {seat && onSeatPointerDown ? (
+              <circle
+                cx={x}
+                cy={y}
+                r={Math.max(CHAIR_DOT_RADIUS, 11)}
+                fill="transparent"
+                stroke="transparent"
+                strokeWidth={14}
+                onPointerDown={(event) => onSeatPointerDown(event, seat.id)}
+              />
+            ) : null}
+            <circle
+              cx={x}
+              cy={y}
+              r={CHAIR_DOT_RADIUS}
+              fill={fillFor(color, state)}
+              fillOpacity={state === "occupied" || state === "blocked" ? 0.4 : 0.95}
+              stroke={strokeFor(color, selected, state)}
+              strokeWidth={state === "selected" || selected ? 1.8 : 0.7}
+              onPointerDown={
+                seat && onSeatPointerDown
+                  ? (event) => onSeatPointerDown(event, seat.id)
+                  : undefined
+              }
+            />
+          </g>
         )
       })}
       <circle
@@ -177,8 +189,8 @@ export function RoundTableSymbol({
         r={r}
         fill={color}
         fillOpacity={0.28}
-        stroke={selected ? "#34d399" : color}
-        strokeWidth={selected ? 2 : 1.4}
+        stroke={selected ? "#ffffff" : color}
+        strokeWidth={selected ? 3.2 : 1.4}
       />
     </g>
   )
@@ -260,8 +272,8 @@ export function LongTableSymbol({
         rx={rx}
         fill={color}
         fillOpacity={0.28}
-        stroke={selected ? "#34d399" : color}
-        strokeWidth={selected ? 2 : 1.4}
+        stroke={selected ? "#ffffff" : color}
+        strokeWidth={selected ? 3.2 : 1.4}
       />
     </g>
   )
@@ -295,7 +307,7 @@ export function VipBoxSymbol({
   const w = Math.max(24, width)
   const h = Math.max(18, height)
   const rx = Math.max(2, Math.min(roundedCorner, 10))
-  const stroke = selected ? "#34d399" : color
+  const stroke = selected ? "#ffffff" : color
   const arm = Math.max(7, w * 0.16)
   const back = Math.max(6, h * 0.22)
   const tableW = w * 0.28
@@ -515,8 +527,8 @@ export function StandingZoneSymbol({
       rx={rx}
       fill={color}
       fillOpacity={0.16}
-      stroke={selected ? "#34d399" : color}
-      strokeWidth={selected ? 2 : 1.4}
+      stroke={selected ? "#ffffff" : color}
+      strokeWidth={selected ? 3.2 : 1.4}
       strokeDasharray="5 3"
     />
   )

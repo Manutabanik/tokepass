@@ -1,10 +1,17 @@
 "use client"
 
 import {
+  AlignCenterHorizontal,
+  AlignCenterVertical,
+  AlignEndHorizontal,
+  AlignEndVertical,
+  AlignStartHorizontal,
+  AlignStartVertical,
   ArrowLeft,
   CircleDot,
   Copy,
   Eye,
+  Hash,
   Info,
   Layers,
   LayoutTemplate,
@@ -40,6 +47,7 @@ import { VenueSetupGuide } from "@/components/admin/venue-setup-guide"
 import { SvgTransformBox } from "@/components/admin/svg-transform-box"
 import { InspectorShapeSelector } from "@/components/admin/inspector-shape-selector"
 import { TheatreSeatSymbol } from "@/components/admin/venue-svg-symbols"
+import { VenueStudioHud } from "@/components/admin/venue-studio-hud"
 import { VenueTemplateLibrary } from "@/components/admin/venue-template-selector"
 import {
   deleteOrganizerVenueTemplate,
@@ -98,6 +106,7 @@ import {
   translatePercentPolygon,
   VENUE_MAP_CANVAS,
 } from "@/lib/seating/venue-polygon"
+import { applyAutoNumbering } from "@/lib/seating/auto-numbering"
 import {
   rebuildSectorSeats,
   venueMapCapacity,
@@ -872,6 +881,47 @@ export function InteractiveVenueMapEditor({
     })
   }
 
+  function alignSelection(
+    mode: "left" | "centerX" | "right" | "top" | "centerY" | "bottom",
+  ) {
+    if (selectedElements.length < 2) return
+    const xs = selectedElements.map((item) => item.x)
+    const ys = selectedElements.map((item) => item.y)
+    const minX = Math.min(...xs)
+    const maxX = Math.max(...xs)
+    const minY = Math.min(...ys)
+    const maxY = Math.max(...ys)
+    const midX = (minX + maxX) / 2
+    const midY = (minY + maxY) / 2
+    const ids = new Set(selectedElementIds)
+    const current = mapRef.current
+    commit({
+      ...current,
+      elements: ensureElements(current).map((item) => {
+        if (!ids.has(item.id)) return item
+        if (mode === "left") return { ...item, x: minX }
+        if (mode === "right") return { ...item, x: maxX }
+        if (mode === "centerX") return { ...item, x: midX }
+        if (mode === "top") return { ...item, y: minY }
+        if (mode === "bottom") return { ...item, y: maxY }
+        return { ...item, y: midY }
+      }),
+    })
+  }
+
+  function distributePrefixes() {
+    if (selectedElementIds.length < 2) return
+    const current = mapRef.current
+    commit({
+      ...current,
+      elements: applyAutoNumbering(
+        ensureElements(current),
+        new Set(selectedElementIds),
+        { start: 1, prefix: "Mesa ", suffix: "", direction: "ltr" },
+      ),
+    })
+  }
+
   function deleteSelection() {
     if (!selection) return
     if (selection.kind === "stage") {
@@ -1330,7 +1380,7 @@ export function InteractiveVenueMapEditor({
       className={cn(
         "z-20 flex w-full items-center gap-2 border-b border-border bg-card",
         isStudio
-          ? "justify-between gap-4 overflow-x-auto px-6 py-3"
+          ? "shrink-0 justify-between gap-4 overflow-x-auto px-6 py-3"
           : "flex-wrap px-3 py-2",
       )}
     >
@@ -1505,7 +1555,7 @@ export function InteractiveVenueMapEditor({
       className={cn(
         "relative overflow-hidden bg-background",
         isStudio
-          ? "flex h-full min-h-0 flex-1 flex-col"
+          ? "flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden"
           : "rounded-2xl border border-border",
       )}
     >
@@ -1514,7 +1564,7 @@ export function InteractiveVenueMapEditor({
       <div
         className={cn(
           isStudio
-            ? "flex min-h-0 flex-1"
+            ? "flex min-h-0 flex-1 overflow-hidden"
             : "grid lg:grid-cols-[220px_1fr_280px]",
         )}
       >
@@ -1535,8 +1585,8 @@ export function InteractiveVenueMapEditor({
         <div
           ref={canvasRef}
           className={cn(
-            "relative overflow-hidden bg-zinc-950 bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.08)_1px,transparent_0)] bg-[size:20px_20px]",
-            isStudio ? "min-h-0 flex-1" : "min-h-[420px]",
+            "relative overflow-hidden bg-background bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.08)_1px,transparent_0)] bg-[size:20px_20px]",
+            isStudio ? "min-h-0 flex-1" : "min-h-[420px] bg-zinc-950",
           )}
           onDragOver={(event) => {
             event.preventDefault()
@@ -1784,6 +1834,7 @@ export function InteractiveVenueMapEditor({
               ) : null}
             </g>
           </svg>
+          {isStudio && tool !== "polygon" ? <VenueStudioHud map={map} /> : null}
           {tool === "polygon" ? (
             <div className="pointer-events-none absolute bottom-3 left-1/2 z-20 w-[min(100%-1.5rem,28rem)] -translate-x-1/2 rounded-full border border-cyan-400/30 bg-zinc-950/90 px-4 py-2 text-center text-xs text-cyan-100">
               Clic: vértice. Clic en el primero, Enter o doble clic: cerrar. Escape: cancelar.
@@ -1853,21 +1904,47 @@ export function InteractiveVenueMapEditor({
         <aside
           ref={propertiesRef}
           className={cn(
-            "space-y-4 overflow-y-auto border-t border-border bg-card/50 p-4 lg:border-t-0 lg:border-l",
-            isStudio ? "h-full w-80 shrink-0" : "lg:max-h-[min(70vh,560px)]",
+            "flex flex-col border-border bg-card",
+            isStudio
+              ? "h-full w-80 shrink-0 overflow-hidden border-l"
+              : "space-y-4 overflow-y-auto border-t bg-card/50 p-4 lg:max-h-[min(70vh,560px)] lg:border-t-0 lg:border-l",
           )}
         >
+          {isStudio ? (
+            <div className="shrink-0 border-b border-border px-4 py-3">
+              <p className="text-sm font-semibold text-foreground">
+                {selection?.kind === "elements"
+                  ? `${selection.ids.length} Elementos Seleccionados`
+                  : selection
+                    ? "Propiedades"
+                    : "Predio"}
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {selection?.kind === "elements"
+                  ? "Los cambios se aplican a todo el grupo."
+                  : selection
+                    ? "Edición del elemento activo."
+                    : "Foto aérea y medidas del recinto."}
+              </p>
+            </div>
+          ) : (
+            <div>
+              <p className="text-[11px] font-bold tracking-[0.2em] text-zinc-500 uppercase">
+                Propiedades
+              </p>
+              <p className="mt-1 text-xs text-zinc-500">
+                {capacity} {capacity === 1 ? "lugar configurado" : "lugares configurados"}
+              </p>
+            </div>
+          )}
+          <div
+            className={cn(
+              isStudio ? "min-h-0 flex-1 space-y-4 overflow-y-auto p-4" : "contents",
+            )}
+          >
           {showRings ? (
             <ConcentricRingGenerator onGenerate={applyGeneratedRing} />
           ) : null}
-          <div>
-            <p className="text-[11px] font-bold tracking-[0.2em] text-zinc-500 uppercase">
-              Propiedades
-            </p>
-            <p className="mt-1 text-xs text-zinc-500">
-              {capacity} {capacity === 1 ? "lugar configurado" : "lugares configurados"}
-            </p>
-          </div>
 
           {tool === "polygon" ? (
             <div className="rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-3 py-3">
@@ -2254,11 +2331,7 @@ export function InteractiveVenueMapEditor({
             </div>
           ) : selection?.kind === "elements" ? (
             <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                {selection.ids.length} componentes seleccionados. Los cambios se
-                aplican a todo el grupo.
-              </p>
-              <Field label="Precio en lote (ARS)">
+              <Field label="Aplicar precio a todos (ARS)">
                 <PriceInput
                   value={undefined}
                   onValueChange={(value) => {
@@ -2301,6 +2374,75 @@ export function InteractiveVenueMapEditor({
                   />
                 </div>
               </Field>
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">Alinear</p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    title="Alinear a la izquierda"
+                    onClick={() => alignSelection("left")}
+                  >
+                    <AlignStartVertical className="size-4" />
+                    Izq
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    title="Centrar horizontalmente"
+                    onClick={() => alignSelection("centerX")}
+                  >
+                    <AlignCenterVertical className="size-4" />
+                    Centro
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    title="Alinear a la derecha"
+                    onClick={() => alignSelection("right")}
+                  >
+                    <AlignEndVertical className="size-4" />
+                    Der
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    title="Alinear arriba"
+                    onClick={() => alignSelection("top")}
+                  >
+                    <AlignStartHorizontal className="size-4" />
+                    Arriba
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    title="Centrar verticalmente"
+                    onClick={() => alignSelection("centerY")}
+                  >
+                    <AlignCenterHorizontal className="size-4" />
+                    Medio
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    title="Alinear abajo"
+                    onClick={() => alignSelection("bottom")}
+                  >
+                    <AlignEndHorizontal className="size-4" />
+                    Abajo
+                  </Button>
+                </div>
+              </div>
+              <Button type="button" variant="outline" onClick={distributePrefixes}>
+                <Hash className="size-4" />
+                Distribuir prefijos secuencialmente
+              </Button>
               <AutoNumberingPanel
                 elements={ensureElements(map)}
                 selectedIds={selection.ids}
@@ -2349,11 +2491,55 @@ export function InteractiveVenueMapEditor({
               </Button>
             </div>
           ) : (
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              {isStudio
-                ? "Clic izquierdo: ver ficha y precio. Clic derecho: duplicar, girar o borrar. El mouse alcanza para todo el mapa."
-                : "Arrastrá componentes al plano. Clic izquierdo abre la ficha. Clic derecho duplica, gira o borra."}
-            </p>
+            <div className="space-y-4">
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                {isStudio
+                  ? "Nada seleccionado. Arrastrá un recuadro en el plano para elegir varias mesas, o tocá un elemento para editarlo."
+                  : "Arrastrá componentes al plano. Clic izquierdo abre la ficha. Clic derecho duplica, gira o borra."}
+              </p>
+              {isStudio ? (
+                <>
+                  <VenueMapBackgroundPanel
+                    map={map}
+                    onChange={(patch) => commit({ ...mapRef.current, ...patch })}
+                  />
+                  <div className="space-y-3 rounded-xl border border-border bg-background p-3">
+                    <p className="text-sm font-semibold text-foreground">
+                      Dimensiones del predio
+                    </p>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      Lienzo de trabajo {CANVAS.width} × {CANVAS.height} px. Usá
+                      la escala y la posición de la foto para encajar el recinto.
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Field label="Ancho (px)">
+                        <Input value={CANVAS.width} readOnly />
+                      </Field>
+                      <Field label="Alto (px)">
+                        <Input value={CANVAS.height} readOnly />
+                      </Field>
+                    </div>
+                    <Field
+                      label={`Escala de encaje (${Math.round((map.backgroundScale ?? 1) * 100)}%)`}
+                    >
+                      <input
+                        type="range"
+                        min={20}
+                        max={250}
+                        value={Math.round((map.backgroundScale ?? 1) * 100)}
+                        onChange={(event) =>
+                          commit({
+                            ...mapRef.current,
+                            backgroundScale: Number(event.target.value) / 100,
+                          })
+                        }
+                        className="w-full accent-emerald-500"
+                      />
+                    </Field>
+                  </div>
+                </>
+              ) : null}
+            </div>
           )}
 
           {selection ? (
@@ -2367,10 +2553,13 @@ export function InteractiveVenueMapEditor({
             </Button>
           ) : null}
 
-          <VenueMapBackgroundPanel
-            map={map}
-            onChange={(patch) => commit({ ...mapRef.current, ...patch })}
-          />
+          {!isStudio ? (
+            <VenueMapBackgroundPanel
+              map={map}
+              onChange={(patch) => commit({ ...mapRef.current, ...patch })}
+            />
+          ) : null}
+          </div>
         </aside>
       </div>
 

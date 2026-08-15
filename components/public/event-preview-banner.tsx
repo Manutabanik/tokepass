@@ -26,7 +26,7 @@ export function EventPreviewBanner({
 
   return (
     <>
-      <div className="sticky top-0 z-[60] border-b border-amber-500/35 bg-gradient-to-r from-amber-950 via-amber-900 to-amber-950 text-amber-50 shadow-[0_8px_30px_rgba(180,83,9,0.35)]">
+      <div className="sticky top-0 z-[70] border-b border-amber-500/35 bg-gradient-to-r from-amber-950 via-amber-900 to-amber-950 text-amber-50 shadow-[0_8px_30px_rgba(180,83,9,0.35)]">
         <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-start gap-3">
             <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl bg-amber-400/15 text-amber-200 ring-1 ring-amber-300/30">

@@ -63,6 +63,10 @@ type Props = {
   onAddUpsell: (tierId: string) => void
   onSkipUpsell: () => void
   defaultTicketTab?: DefaultTicketTab | null
+  hideTabs?: boolean
+  tabValue?: InventoryTierType
+  onTabChange?: (tab: InventoryTierType) => void
+  selectedMapLabel?: string | null
 }
 
 export function EventCheckoutSelector({
@@ -84,8 +88,12 @@ export function EventCheckoutSelector({
   onAddUpsell,
   onSkipUpsell,
   defaultTicketTab = "auto",
+  hideTabs = false,
+  tabValue,
+  onTabChange,
+  selectedMapLabel = null,
 }: Props) {
-  const grouped = groupTiers(tiers)
+  const grouped = groupCheckoutTiers(tiers)
   const mapCopy = seatingRenderModeCopy(seatingRenderMode)
   const tabs = (
     [
@@ -113,6 +121,119 @@ export function EventCheckoutSelector({
     )
   }
 
+  const tabPanels = (
+    <>
+      {tabs.includes("seated") ? (
+        <TabsContent value="seated" className="space-y-3">
+          {selectedSeat || selectedMapLabel ? (
+            <div className="flex items-start justify-between gap-3 rounded-2xl border border-primary/40 bg-primary/10 p-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">
+                  Has seleccionado
+                </p>
+                <p className="mt-1 text-base font-extrabold text-foreground">
+                  {selectedSeat?.label ?? selectedMapLabel}
+                </p>
+                {selectedSeat ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {formatCurrency(selectedSeat.price)} · reservada al
+                    continuar. El reloj de 8 minutos corre en el checkout.
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Tocá Continuar para reservarla 8 minutos.
+                  </p>
+                )}
+              </div>
+              {selectedSeat ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={isPending}
+                  onClick={onClearSeat}
+                >
+                  Cambiar
+                </Button>
+              ) : null}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-border p-4">
+              <p className="text-sm font-medium text-foreground">
+                {mapEmbedded
+                  ? "Tocá una zona del mapa para verla acá."
+                  : mapCopy.hint}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Al continuar, la ubicación queda reservada 8 minutos. Nombre,
+                DNI y teléfono se piden en el siguiente paso.
+              </p>
+              {mapEmbedded ? null : (
+                <Button
+                  type="button"
+                  className="mt-3"
+                  disabled={isPending || !hasSeatingFlow}
+                  onClick={onOpenSeatFlow}
+                >
+                  {seatingRenderMode === "micro" ? (
+                    <Armchair className="size-4" />
+                  ) : (
+                    <LayoutGrid className="size-4" />
+                  )}
+                  {mapCopy.cta}
+                </Button>
+              )}
+            </div>
+          )}
+        </TabsContent>
+      ) : null}
+
+      {tabs.includes("general") ? (
+        <TabsContent value="general" className="space-y-3">
+          {hasSeatingFlow || hasInteractiveMap ? (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <LayoutGrid className="size-3.5 shrink-0" aria-hidden="true" />
+              Estas entradas coinciden con las zonas de acceso del recinto.
+            </p>
+          ) : null}
+          <QuantityList
+            tiers={grouped.general}
+            quantities={quantities}
+            isPending={isPending}
+            focusedTierId={focusedTierId}
+            onQuantityChange={onQuantityChange}
+          />
+        </TabsContent>
+      ) : null}
+
+      {tabs.includes("bundle") ? (
+        <TabsContent value="bundle" className="space-y-3">
+          <BundleCardSelector
+            bundles={grouped.bundle}
+            quantities={quantities}
+            isPending={isPending}
+            onBuy={(tierId) => {
+              const bundle = grouped.bundle.find((row) => row.id === tierId)
+              onQuantityChange(tierId, 1, Math.max(0, bundle?.available ?? 1))
+              onPurchaseIntent?.()
+            }}
+          />
+        </TabsContent>
+      ) : null}
+
+      {tabs.includes("addon") ? (
+        <TabsContent value="addon">
+          <QuantityList
+            tiers={grouped.addon}
+            quantities={quantities}
+            isPending={isPending}
+            onQuantityChange={onQuantityChange}
+          />
+        </TabsContent>
+      ) : null}
+    </>
+  )
+
   return (
     <div className="space-y-5">
       {mapEmbedded ? null : hasInteractiveMap ? (
@@ -133,126 +254,27 @@ export function EventCheckoutSelector({
         />
       ) : null}
 
-      <Tabs key={defaultTab} defaultValue={defaultTab} className="gap-5">
-        <TabsList className="flex h-auto w-full flex-wrap rounded-xl bg-muted p-1">
-          {tabs.includes("seated") ? (
-            <TabsTrigger value="seated" className="min-h-10 flex-1 gap-1.5">
-              <LayoutGrid className="size-3.5" />
-              {ticketPickerTabLabel("seated", grouped.seated)}
-            </TabsTrigger>
-          ) : null}
-          {tabs.includes("general") ? (
-            <TabsTrigger value="general" className="min-h-10 flex-1 gap-1.5">
-              <Ticket className="size-3.5" />
-              {ticketPickerTabLabel("general", grouped.general)}
-            </TabsTrigger>
-          ) : null}
-          {tabs.includes("bundle") ? (
-            <TabsTrigger value="bundle" className="min-h-10 flex-1 gap-1.5">
-              <Sparkles className="size-3.5" />
-              {ticketPickerTabLabel("bundle", grouped.bundle)}
-            </TabsTrigger>
-          ) : null}
-          {tabs.includes("addon") ? (
-            <TabsTrigger value="addon" className="min-h-10 flex-1 gap-1.5">
-              <Tag className="size-3.5" />
-              {ticketPickerTabLabel("addon", grouped.addon)}
-            </TabsTrigger>
-          ) : null}
-        </TabsList>
-
-        {tabs.includes("seated") ? (
-          <TabsContent value="seated" className="space-y-3">
-            {selectedSeat ? (
-              <div className="flex items-start justify-between gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">
-                    {selectedSeat.label}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {formatCurrency(selectedSeat.price)} · reservada al
-                    continuar. El reloj de 8 minutos corre en el checkout.
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={isPending}
-                  onClick={onClearSeat}
-                >
-                  Cambiar
-                </Button>
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-border p-4">
-                <p className="text-sm text-foreground">{mapCopy.hint}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Al continuar, la ubicación queda reservada 8 minutos. Nombre,
-                  DNI y teléfono se piden en el siguiente paso.
-                </p>
-                <Button
-                  type="button"
-                  className="mt-3"
-                  disabled={isPending || !hasSeatingFlow}
-                  onClick={onOpenSeatFlow}
-                >
-                  {seatingRenderMode === "micro" ? (
-                    <Armchair className="size-4" />
-                  ) : (
-                    <LayoutGrid className="size-4" />
-                  )}
-                  {mapCopy.cta}
-                </Button>
-              </div>
-            )}
-          </TabsContent>
-        ) : null}
-
-        {tabs.includes("general") ? (
-          <TabsContent value="general" className="space-y-3">
-            {hasSeatingFlow || hasInteractiveMap ? (
-              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <LayoutGrid className="size-3.5 shrink-0" aria-hidden="true" />
-                Estas entradas coinciden con las zonas de acceso del recinto.
-              </p>
-            ) : null}
-            <QuantityList
-              tiers={grouped.general}
-              quantities={quantities}
-              isPending={isPending}
-              focusedTierId={focusedTierId}
-              onQuantityChange={onQuantityChange}
-            />
-          </TabsContent>
-        ) : null}
-
-        {tabs.includes("bundle") ? (
-          <TabsContent value="bundle" className="space-y-3">
-            <BundleCardSelector
-              bundles={grouped.bundle}
-              quantities={quantities}
-              isPending={isPending}
-              onBuy={(tierId) => {
-                const bundle = grouped.bundle.find((row) => row.id === tierId)
-                onQuantityChange(tierId, 1, Math.max(0, bundle?.available ?? 1))
-                onPurchaseIntent?.()
-              }}
-            />
-          </TabsContent>
-        ) : null}
-
-        {tabs.includes("addon") ? (
-          <TabsContent value="addon">
-            <QuantityList
-              tiers={grouped.addon}
-              quantities={quantities}
-              isPending={isPending}
-              onQuantityChange={onQuantityChange}
-            />
-          </TabsContent>
-        ) : null}
-      </Tabs>
+      {hideTabs ? (
+        tabPanels
+      ) : (
+        <Tabs
+          value={tabValue ?? defaultTab}
+          onValueChange={(value) => {
+            if (
+              value === "seated" ||
+              value === "general" ||
+              value === "bundle" ||
+              value === "addon"
+            ) {
+              onTabChange?.(value)
+            }
+          }}
+          className="gap-5"
+        >
+          <CheckoutTabBar tabs={tabs} grouped={grouped} />
+          {tabPanels}
+        </Tabs>
+      )}
 
       {showUpsell && upsellTier ? (
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
@@ -289,7 +311,44 @@ export function EventCheckoutSelector({
   )
 }
 
-function groupTiers(tiers: TicketSelectorTier[]) {
+export function CheckoutTabBar({
+  tabs,
+  grouped,
+}: {
+  tabs: InventoryTierType[]
+  grouped: Record<InventoryTierType, TicketSelectorTier[]>
+}) {
+  return (
+    <TabsList className="hide-scrollbar flex h-auto w-full flex-nowrap justify-start gap-1 overflow-x-auto whitespace-nowrap rounded-xl bg-muted px-1 py-1">
+      {tabs.includes("seated") ? (
+        <TabsTrigger value="seated" className="min-h-11 shrink-0 gap-1.5 px-3 text-sm font-semibold">
+          <LayoutGrid className="size-3.5" />
+          {ticketPickerTabLabel("seated", grouped.seated)}
+        </TabsTrigger>
+      ) : null}
+      {tabs.includes("general") ? (
+        <TabsTrigger value="general" className="min-h-11 shrink-0 gap-1.5 px-3 text-sm font-semibold">
+          <Ticket className="size-3.5" />
+          {ticketPickerTabLabel("general", grouped.general)}
+        </TabsTrigger>
+      ) : null}
+      {tabs.includes("bundle") ? (
+        <TabsTrigger value="bundle" className="min-h-11 shrink-0 gap-1.5 px-3 text-sm font-semibold">
+          <Sparkles className="size-3.5" />
+          {ticketPickerTabLabel("bundle", grouped.bundle)}
+        </TabsTrigger>
+      ) : null}
+      {tabs.includes("addon") ? (
+        <TabsTrigger value="addon" className="min-h-11 shrink-0 gap-1.5 px-3 text-sm font-semibold">
+          <Tag className="size-3.5" />
+          {ticketPickerTabLabel("addon", grouped.addon)}
+        </TabsTrigger>
+      ) : null}
+    </TabsList>
+  )
+}
+
+export function groupCheckoutTiers(tiers: TicketSelectorTier[]) {
   const buckets: Record<InventoryTierType, TicketSelectorTier[]> = {
     seated: [],
     general: [],
