@@ -1,7 +1,10 @@
 import type { Metadata } from "next"
 
 import { getActiveEventCategories } from "@/app/actions/categories"
-import { getPublishedEvents } from "@/app/actions/public-events"
+import {
+  getPublishedEvents,
+  getPublishedEventsByArtist,
+} from "@/app/actions/public-events"
 import { AnimatedBackground } from "@/components/discovery/animated-background"
 import { DiscoveryHub } from "@/components/discovery/discovery-hub"
 import { mapDbCategoriesToDiscovery } from "@/lib/category-icons"
@@ -16,11 +19,20 @@ export const metadata: Metadata = {
 export default async function EventsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; location?: string; category?: string }>
+  searchParams: Promise<{
+    q?: string
+    location?: string
+    category?: string
+    artist?: string
+  }>
 }) {
-  const { q, location, category } = await searchParams
+  const { q, location, category, artist } = await searchParams
+  const artistId = artist?.trim() || ""
   const [events, dbCategories] = await Promise.all([
-    getPublishedEvents(q).catch(() => []),
+    (artistId
+      ? getPublishedEventsByArtist(artistId)
+      : getPublishedEvents(q)
+    ).catch(() => []),
     getActiveEventCategories().catch(() => []),
   ])
   const categories =
@@ -38,6 +50,7 @@ export default async function EventsPage({
           initialQuery={q ?? ""}
           initialLocation={location?.trim() || "todas"}
           initialCategoryId={category?.trim() || "all"}
+          initialArtistId={artistId}
           categories={categories}
         />
       </div>

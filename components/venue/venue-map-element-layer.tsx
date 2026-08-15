@@ -149,6 +149,8 @@ export function VenueMapElementLayer({
   interactive = true,
   spotlight = false,
   popSelected = true,
+  visibleIds = null,
+  lodHidden = false,
 }: {
   elements: VenueMapElement[]
   selectedIds?: string[]
@@ -172,6 +174,8 @@ export function VenueMapElementLayer({
   interactive?: boolean
   spotlight?: boolean
   popSelected?: boolean
+  visibleIds?: Set<string> | null
+  lodHidden?: boolean
 }) {
   const selected = new Set(selectedIds)
   const hasSelection =
@@ -192,24 +196,42 @@ export function VenueMapElementLayer({
 
   return (
     <>
-      {ordered.map((element) => (
-        <VenueElementShape
-          key={element.id}
-          element={element}
-          selected={selected.has(element.id)}
-          occupancyBySeatId={occupancyBySeatId}
-          selectedSeatIds={selectedSeats}
-          onElementPointerDown={interactive ? onElementPointerDown : undefined}
-          onElementContextMenu={interactive ? onElementContextMenu : undefined}
-          onSeatPointerDown={interactive ? onSeatPointerDown : undefined}
-          showLabels={renderLabels || selected.has(element.id)}
-          showChairs={renderChairs || selected.has(element.id)}
-          interactive={interactive}
-          zoom={zoom}
-          dimmed={hasSelection && !selected.has(element.id)}
-          popSelected={popSelected}
-        />
-      ))}
+      {ordered.map((element) => {
+        const visible =
+          !lodHidden && (!visibleIds || visibleIds.has(element.id))
+        return (
+          <g
+            key={element.id}
+            style={{
+              opacity: visible ? 1 : 0,
+              pointerEvents: visible && interactive ? "auto" : "none",
+              transition: "opacity 0.3s ease",
+            }}
+          >
+            <VenueElementShape
+              element={element}
+              selected={selected.has(element.id)}
+              occupancyBySeatId={occupancyBySeatId}
+              selectedSeatIds={selectedSeats}
+              onElementPointerDown={
+                visible && interactive ? onElementPointerDown : undefined
+              }
+              onElementContextMenu={
+                visible && interactive ? onElementContextMenu : undefined
+              }
+              onSeatPointerDown={
+                visible && interactive ? onSeatPointerDown : undefined
+              }
+              showLabels={renderLabels || selected.has(element.id)}
+              showChairs={renderChairs || selected.has(element.id)}
+              interactive={visible && interactive}
+              zoom={zoom}
+              dimmed={hasSelection && !selected.has(element.id)}
+              popSelected={popSelected}
+            />
+          </g>
+        )
+      })}
     </>
   )
 }

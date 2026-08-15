@@ -23,7 +23,7 @@ describe("ticket picker taxonomy", () => {
     )
     assert.equal(
       generalAdmissionTabLabel([{ name: "Acceso al predio" }]),
-      "Acceso General",
+      "Entrada General",
     )
   })
 
@@ -77,7 +77,7 @@ describe("ticket picker taxonomy", () => {
     )
   })
 
-  it("prefers Acceso General over Ubicaciones when remaining stock ties", () => {
+  it("prefers Entrada General over Ubicaciones when remaining stock ties", () => {
     const grouped = {
       seated: [{ available: 100 }],
       general: [{ available: 100 }],

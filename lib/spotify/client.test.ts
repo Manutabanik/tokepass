@@ -1,0 +1,43 @@
+import assert from "node:assert/strict"
+import { describe, it } from "node:test"
+
+import { mapSpotifyArtist, pickSpotifyArtistImage, isSuccessfulSpotifyStatus } from "@/lib/spotify/map"
+
+describe("spotify artist mapping", () => {
+  it("prefers the 300px image and falls back to null", () => {
+    assert.equal(
+      pickSpotifyArtistImage([
+        { url: "https://i.scdn.co/large.jpg", width: 640 },
+        { url: "https://i.scdn.co/medium.jpg", width: 300 },
+        { url: "https://i.scdn.co/small.jpg", width: 64 },
+      ]),
+      "https://i.scdn.co/medium.jpg",
+    )
+    assert.equal(pickSpotifyArtistImage([]), null)
+    assert.equal(pickSpotifyArtistImage([{ url: "not-a-url" }]), null)
+  })
+
+  it("maps only the fields the storefront needs", () => {
+    const mapped = mapSpotifyArtist({
+      id: "0eHQ9o50hj6ZXyrqmx1rJg",
+      name: "Bizarrap",
+      genres: ["argentine hip hop", "pop argentino"],
+      images: [{ url: "https://i.scdn.co/bzrp.jpg", width: 320 }],
+    })
+    assert.deepEqual(mapped, {
+      spotifyId: "0eHQ9o50hj6ZXyrqmx1rJg",
+      name: "Bizarrap",
+      imageUrl: "https://i.scdn.co/bzrp.jpg",
+      genres: ["argentine hip hop", "pop argentino"],
+    })
+    assert.equal(mapSpotifyArtist({ name: "Sin ID" }), null)
+  })
+
+  it("accepts only 200 and 201 as successful Spotify HTTP statuses", () => {
+    assert.equal(isSuccessfulSpotifyStatus(200), true)
+    assert.equal(isSuccessfulSpotifyStatus(201), true)
+    assert.equal(isSuccessfulSpotifyStatus(204), false)
+    assert.equal(isSuccessfulSpotifyStatus(401), false)
+    assert.equal(isSuccessfulSpotifyStatus(500), false)
+  })
+})

@@ -26,7 +26,6 @@ import {
 import { InteractiveVenueMapStudio } from "@/components/admin/interactive-venue-map-studio"
 import { VenueMapStudioSummary } from "@/components/admin/venue-map-studio-summary"
 import { useEventFormStore } from "@/lib/stores/event-form-store"
-import { listVenuePriceGroups } from "@/lib/seating/venue-price-groups"
 import { venueMapToPricingMap } from "@/lib/seating/venue-map-pricing"
 import {
   createEmptyZone,
@@ -50,7 +49,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { formatCurrency, formatDiscoveryDateTime, formatNumber } from "@/lib/format"
+import { formatDiscoveryDateTime, formatNumber } from "@/lib/format"
 import {
   draftZonesToBlueprint,
   draftZonesToSeatingLayout,
@@ -595,48 +594,6 @@ export function EventVenueStep({
           ) : null}
 
           {showZones ? (
-          <ul className="grid gap-2 sm:grid-cols-2">
-            {(selectedVenue.seatingLayout.length > 0
-              ? selectedVenue.seatingLayout.map((sector) => ({
-                  id: sector.id,
-                  name: sector.sector_name,
-                  color: sector.color,
-                  detail:
-                    sector.layout_type === "general"
-                      ? "Entradas generales"
-                      : `${(sector.rows ?? []).length} fila${
-                          (sector.rows ?? []).length === 1 ? "" : "s"
-                        }`,
-                }))
-              : selectedVenue.zoneBlueprint.map((zone, index) => ({
-                  id: `z-${index}`,
-                  name: zone.name,
-                  color: "#10b981",
-                  detail:
-                    zone.type === "general_admission"
-                      ? "Entradas generales"
-                      : "Asientos numerados",
-                }))
-            ).map((item) => (
-              <li
-                key={item.id}
-                className="flex items-center gap-2 rounded-xl border border-zinc-200 dark:border-white/8 bg-muted dark:bg-black/25 px-3 py-2.5 text-sm"
-              >
-                <span
-                  className="size-2.5 rounded-full"
-                  style={{ backgroundColor: item.color }}
-                  aria-hidden
-                />
-                <span className="min-w-0 flex-1 truncate text-foreground">
-                  {item.name}
-                </span>
-                <span className="text-[11px] text-muted-foreground">{item.detail}</span>
-              </li>
-            ))}
-          </ul>
-          ) : null}
-
-          {showZones ? (
             <MapStudioFields
               form={form}
               venueMap={venueMap}
@@ -678,7 +635,7 @@ export function EventVenueStep({
                       </FormLabel>
                       <FormDescription className="mt-1 text-xs leading-5">
                         Activalo para trazar zonas en el estudio. Precio y
-                        cupo se definen ahí, no en Tickets y Combos.
+                        cupo se definen ahí, no en Entradas y combos.
                       </FormDescription>
                     </div>
                   </div>
@@ -876,38 +833,9 @@ function MapStudioFields({
     options?: { syncDrafts?: boolean },
   ) => void
 }) {
-  const groups = listVenuePriceGroups(venueMap)
   return (
     <div className="space-y-3">
       <VenueMapStudioSummary map={venueMap} onOpen={onOpenStudio} />
-      {groups.length > 0 ? (
-        <ul className="grid gap-2 sm:grid-cols-2">
-          {groups.map((group) => (
-            <li
-              key={group.key}
-              className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-muted px-3 py-2.5 text-sm dark:border-white/8 dark:bg-black/25"
-            >
-              <span
-                className="size-2.5 shrink-0 rounded-full"
-                style={{ backgroundColor: group.color }}
-                aria-hidden
-              />
-              <span className="min-w-0 flex-1 truncate text-foreground">
-                {group.name}
-              </span>
-              <span className="shrink-0 text-[11px] text-muted-foreground">
-                {group.count} {group.unit}
-                {group.price > 0 ? ` · ${formatCurrency(group.price)}` : ""}
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="rounded-xl border border-dashed border-zinc-200 px-3 py-3 text-xs text-muted-foreground dark:border-white/10">
-          Trazá un polígono o zona en el estudio y definí precio y capacidad
-          en el panel lateral. Esas tarifas quedan en el mapa.
-        </p>
-      )}
       <InteractiveVenueMapStudio
         open={studioOpen}
         eventTitle={form.watch("basics.title") || "Evento"}

@@ -12,6 +12,7 @@ import { toast } from "sonner"
 import { listMyFavoriteEventIds } from "@/app/actions/favorites"
 import { FavoriteToggleButton } from "@/components/public/favorite-toggle-button"
 import { Button } from "@/components/ui/button"
+import { cn, tapFeedbackClass } from "@/lib/utils"
 
 function buildGoogleCalendarUrl(input: {
   title: string
@@ -39,16 +40,35 @@ function buildGoogleCalendarUrl(input: {
   return `https://calendar.google.com/calendar/render?${params.toString()}`
 }
 
+const heroIconClassName = cn(
+  tapFeedbackClass,
+  "size-11 min-h-11 min-w-11 rounded-full border border-white/20 bg-black/30 text-white shadow-none backdrop-blur-md hover:bg-black/45 hover:text-white",
+)
+
 export function EventDetailTopActions({
   eventId,
   title,
   showBackLink,
+  date,
+  location,
+  details,
 }: {
   eventId: string
   title: string
   showBackLink: boolean
+  date?: string
+  location?: string
+  details?: string | null
 }) {
   const [favorited, setFavorited] = useState(false)
+  const calendarHref = date
+    ? buildGoogleCalendarUrl({
+        title,
+        date,
+        location: location ?? "",
+        details,
+      })
+    : null
 
   useEffect(() => {
     let cancelled = false
@@ -75,32 +95,52 @@ export function EventDetailTopActions({
   }
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between px-4 pt-[max(0.85rem,env(safe-area-inset-top))]">
+    <div className="pointer-events-none absolute inset-0 z-20">
       {showBackLink ? (
         <Button
           variant="secondary"
           size="icon"
-          className="pointer-events-auto size-12 rounded-full border-0 bg-black/45 text-white shadow-lg shadow-black/30 backdrop-blur-md hover:bg-black/60"
+          className={cn(
+            "pointer-events-auto absolute top-4 left-4 z-10 mt-[max(0px,env(safe-area-inset-top))]",
+            heroIconClassName,
+          )}
           nativeButton={false}
           render={<Link href="/" aria-label="Volver" />}
         >
           <ArrowLeft className="size-5" aria-hidden="true" />
         </Button>
-      ) : (
-        <span className="size-12" />
-      )}
+      ) : null}
 
-      <div className="pointer-events-auto flex items-center gap-2">
+      <div className="pointer-events-auto absolute top-4 right-4 z-10 mt-[max(0px,env(safe-area-inset-top))] flex items-center gap-2">
+        {calendarHref ? (
+          <Button
+            variant="secondary"
+            size="icon"
+            className={heroIconClassName}
+            nativeButton={false}
+            render={
+              <a
+                href={calendarHref}
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Añadir al calendario"
+              />
+            }
+          >
+            <CalendarPlus className="size-5" aria-hidden="true" />
+          </Button>
+        ) : null}
         <FavoriteToggleButton
           eventId={eventId}
           initiallyFavorited={favorited}
+          className={heroIconClassName}
         />
         <Button
           type="button"
           variant="secondary"
           size="icon"
           aria-label="Compartir evento"
-          className="size-12 rounded-full border-0 bg-black/45 text-white shadow-lg shadow-black/30 backdrop-blur-md hover:bg-black/60"
+          className={heroIconClassName}
           onClick={() => void share()}
         >
           <Share2 className="size-5" aria-hidden="true" />

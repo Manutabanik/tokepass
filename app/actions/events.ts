@@ -6,6 +6,9 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { isPlatformOwnerRole } from "@/lib/auth/platform-owner"
+import { persistEventLineupSnapshot } from "@/app/actions/artists"
+import { lineupDraftsFromItems, mapLineupItem, performanceTimeToInput } from "@/lib/artists"
+import { parseEventLineup } from "@/lib/event-lineup"
 import { parseScheduleDays } from "@/lib/event-schedule"
 import {
   parseDefaultTicketTab,
@@ -990,6 +993,44 @@ function parseVenueZones(raw: unknown): EventFormValues["venue"]["zones"] {
   return zones.length > 0 ? zones : undefined
 }
 
+async function loadEditableLineup(
+  supabase: SupabaseClient,
+  eventId: string,
+  jsonLineup: unknown,
+) {
+  const { data } = await supabase
+    .from("event_artists")
+    .select(
+      "id, event_id, artist_id, performance_time, stage, sort_order, artists(id, name, image_url, spotify_id)",
+    )
+    .eq("event_id", eventId)
+    .order("sort_order", { ascending: true })
+
+  const relational = lineupDraftsFromItems(
+    (data ?? []).map((row) => mapLineupItem(row)),
+  )
+  if (relational.length > 0) return relational
+
+  const parsed = parseEventLineup(jsonLineup)
+  return parsed.artists.map((artist, index) => {
+    const slot =
+      parsed.slots.find((item) => item.title === artist.name) ??
+      parsed.slots[index]
+    return {
+      id: artist.id,
+      artistId: artist.id.startsWith("artist-") ? null : artist.id,
+      lineupEntryId: null,
+      spotifyId: null,
+      name: artist.name,
+      imageUrl: artist.imageUrl,
+      genre: artist.role,
+      performanceTime: performanceTimeToInput(slot?.time),
+      stage: artist.role ?? "",
+      order: index,
+    }
+  })
+}
+
 export async function getEventForEditing(
   eventId: string,
 ): Promise<EditableEventData | null> {
@@ -1004,7 +1045,7 @@ export async function getEventForEditing(
       .maybeSingle()
 
     const eventSelectWithPicker =
-      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab"
+      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup"
     const eventSelectWithPlace =
       "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, province, department, venue_map"
     const eventSelectCore =
@@ -1018,7 +1059,7 @@ export async function getEventForEditing(
 
     if (
       eventQuery.error &&
-      /default_ticket_tab|schema cache|PGRST204|42703/i.test(
+      /default_ticket_tab|lineup|schema cache|PGRST204|42703/i.test(
         eventQuery.error.message,
       )
     ) {
@@ -1337,6 +1378,11 @@ export async function getEventForEditing(
         ticketsDefaultTab: parseDefaultTicketTab(
           (event as { default_ticket_tab?: string | null }).default_ticket_tab,
         ),
+        lineup: await loadEditableLineup(
+          supabase,
+          eventId,
+          (event as { lineup?: unknown }).lineup,
+        ),
       },
       zoneTierPricing: (pricingRows ?? []).map((row) => ({
         id: row.id,
@@ -1541,6 +1587,9 @@ export async function createCompleteEvent(
 
   await syncTierAdmitCounts(String(eventId), formValues.tickets)
   await syncTicketTierPhases(String(eventId), formValues.tickets)
+  await persistEventLineupSnapshot(String(eventId), formValues.lineup ?? []).catch(
+    () => undefined,
+  )
   const venueId = await persistEventVenueFields(
     rpcClient,
     String(eventId),
@@ -1768,6 +1817,9 @@ export async function updateCompleteEvent(
 
   await syncTierAdmitCounts(eventId, formValues.tickets)
   await syncTicketTierPhases(eventId, formValues.tickets)
+  await persistEventLineupSnapshot(eventId, formValues.lineup ?? []).catch(
+    () => undefined,
+  )
 
   if (!draftMode) {
     const { data: live } = await mutationClient

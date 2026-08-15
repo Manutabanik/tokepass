@@ -125,7 +125,7 @@ export function MobileFilterSheet({
                 type="search"
                 value={query}
                 onChange={(event) => onQueryChange(event.target.value)}
-                placeholder="Evento, artista…"
+                placeholder="Buscar evento o artista..."
                 enterKeyHint="search"
                 autoComplete="off"
                 autoCorrect="off"

@@ -75,7 +75,7 @@ test.describe("Wizard de creación — 4 pasos y localStorage", () => {
     await expect(page.getByRole("tab", { name: /Identidad/i })).toBeVisible()
     await expect(page.getByRole("tab", { name: /Mapa y Sectores/i })).toBeVisible()
     await expect(
-      page.getByRole("tab", { name: /Tickets y Combos/i }),
+      page.getByRole("tab", { name: /Entradas y combos/i }),
     ).toBeVisible()
     await expect(
       page.getByRole("tab", { name: /Configuración Final/i }),

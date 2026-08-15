@@ -3,8 +3,6 @@
 import {
   ChevronLeft,
   LoaderCircle,
-  Maximize2,
-  Minimize2,
   Ticket,
 } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
@@ -50,13 +48,12 @@ import { AccessibleSeatSelector } from "@/components/public/accessible-seat-sele
 import { SelectionLedger } from "@/components/public/selection-ledger"
 import { StorefrontViewToggle } from "@/components/public/storefront-view-toggle"
 import { CheckoutIdentityDialog } from "@/components/public/checkout-identity-dialog"
+import { CheckoutUpsellStep } from "@/components/public/checkout-upsell-step"
 import {
-  CheckoutTabBar,
   EventCheckoutSelector,
   groupCheckoutTiers,
   type SelectedNumberedSeat,
 } from "@/components/public/event-checkout-selector"
-import { Tabs } from "@/components/ui/tabs"
 import {
   PaymentMethodSelector,
   type CheckoutPaymentProvider,
@@ -80,10 +77,7 @@ import { GA_CHECKOUT_HOLD_MS } from "@/lib/checkout-hold"
 import { redirectToCheckoutPaymentOrToast } from "@/lib/checkout-redirect"
 import { ensureGuestCheckoutSession } from "@/lib/checkout/guest-session"
 import { hasCheckoutIdentity } from "@/lib/checkout/identity"
-import {
-  resolveDefaultTicketPickerTab,
-  type DefaultTicketTab,
-} from "@/lib/checkout/ticket-picker"
+import { type DefaultTicketTab } from "@/lib/checkout/ticket-picker"
 import {
   firstCheckoutBuyerErrorField,
   onValidationError,
@@ -96,12 +90,11 @@ import {
 import {
   inferInventoryTierType,
   isQuantityInventoryType,
-  type InventoryTierType,
 } from "@/lib/inventory/unified-inventory"
+import { isFullPassDayId } from "@/lib/event-schedule"
 import { getStoredReferralCode, persistReferralCode } from "@/lib/referral"
 import {
   hasParametricZones,
-  resolveVenueRenderMode,
 } from "@/lib/seating/adaptive-seating"
 import type { UniversalSeatSelection } from "@/lib/seating/universal-seat-types"
 import {
@@ -113,13 +106,12 @@ import {
   seatingLayoutToVenueMap,
   venueMapToSeatingLayout,
 } from "@/lib/seating/venue-map-geometry"
+import { mapIncludesGeneralAccess } from "@/types/venue-map"
 import { occupancyFromSeatingUnits } from "@/lib/seating/venue-map-occupancy"
 import {
   hydrateStorefrontItemsFromMap,
-  storefrontFocusCard,
   storefrontItemFromZone,
 } from "@/lib/seating/storefront-selection"
-import { StorefrontSelectionCard } from "@/components/public/storefront-selection-card"
 import { formatCurrency } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { publicEventLoginPath } from "@/lib/seo/site"
@@ -165,6 +157,7 @@ type TicketSelectorProps = {
   initialBuyer?: Partial<CheckoutBuyerInfo> | null
   tiers: TicketSelectorTier[]
   scheduleDays?: ScheduleDay[]
+  selectedDayId?: string | null
   /** @deprecated All-In pricing absorbs the fee; ignored. */
   serviceChargeRate?: number
   /** Código RRPP desde ?ref= — nunca se envía promoter_id al servidor */
@@ -200,6 +193,16 @@ function roundMoney(value: number): number {
 }
 
 function toastCheckoutError(error: string, fallbackTitle: string) {
+  const technical =
+    /invalid token|hydrat|undefined|cannot read|failed to fetch|networkerror|internal server/i.test(
+      error,
+    )
+  if (technical) {
+    toast.error(
+      "Ocurrió un problema al cargar los datos. Por favor, intentá de nuevo.",
+    )
+    return
+  }
   if (error === "out_of_stock") {
     toast.error("Stock insuficiente de entradas")
     return
@@ -216,7 +219,7 @@ function toastCheckoutError(error: string, fallbackTitle: string) {
 
 export function TicketSelector({
   eventId,
-  eventTitle = "Selección de entradas",
+  eventTitle = "Elegí tu entrada",
   currentUserId = null,
   initialBuyer = null,
   tiers,
@@ -234,7 +237,8 @@ export function TicketSelector({
   sandboxEligible = false,
   zoneTierPricing = [],
   purchaseLocked = false,
-  defaultTicketTab = "auto",
+  defaultTicketTab: _defaultTicketTab = "auto",
+  selectedDayId = null,
   renderLayout,
 }: TicketSelectorProps) {
   const router = useRouter()
@@ -247,8 +251,8 @@ export function TicketSelector({
   const [selectedSeat, setSelectedSeat] = useState<SelectedNumberedSeat | null>(
     null,
   )
-  const [showUpsell, setShowUpsell] = useState(false)
   const [upsellSkipped, setUpsellSkipped] = useState(false)
+  const [seatPickerOpen, setSeatPickerOpen] = useState(false)
   const [checkoutStep, setCheckoutStep] = useState<CheckoutFlowStep>("tickets")
   const [focusedZoneId, setFocusedZoneId] = useState<string | null>(null)
   const [focusedTierId, setFocusedTierId] = useState<string | null>(null)
@@ -311,6 +315,16 @@ export function TicketSelector({
       })),
     [tierOverrides, tiers],
   )
+  const funnelTiers = useMemo(() => {
+    if (!selectedDayId) return displayTiers
+    const matchesDay = displayTiers.some(
+      (tier) => !isFullPassDayId(tier.dayId) && tier.dayId === selectedDayId,
+    )
+    if (!matchesDay) return displayTiers
+    return displayTiers.filter(
+      (tier) => isFullPassDayId(tier.dayId) || tier.dayId === selectedDayId,
+    )
+  }, [displayTiers, selectedDayId])
   const [appliedPromo, setAppliedPromo] = useState<ValidatedPromo | null>(null)
   const [selectedProvider, setSelectedProvider] =
     useState<CheckoutPaymentProvider>("mercadopago")
@@ -341,7 +355,7 @@ export function TicketSelector({
 
   const checkoutTierInput = useMemo(
     () =>
-      displayTiers.map((tier) => ({
+      funnelTiers.map((tier) => ({
         id: tier.id,
         name: tier.name,
         price: tier.price,
@@ -349,7 +363,7 @@ export function TicketSelector({
         seatingSectorId: tier.seatingSectorId,
         layoutType: tier.layoutType,
       })),
-    [displayTiers],
+    [funnelTiers],
   )
   const mapDrivenTierIds = useRef(new Set<string>())
 
@@ -507,7 +521,7 @@ export function TicketSelector({
     if (!hasCheckoutIdentity(currentUserId, mode)) {
       requestIdentity("open_map")
       toast.error(
-        "Elegí iniciar sesión o continuar como invitado para reservar.",
+        "Elegí ingresar o continuar como invitado para reservar.",
       )
       return false
     }
@@ -545,13 +559,12 @@ export function TicketSelector({
 
   const hasInteractiveMap =
     hasInteractiveMapProp || hasInteractiveVenueMap(liveMap)
-  const [mapExpanded, setMapExpanded] = useState(false)
   useLockBodyScroll(showSeatFlow)
 
   const soldOutZoneIds = useMemo(() => {
     const zones = liveMap?.zones ?? []
     if (zones.length === 0) return []
-    const tierRefs = displayTiers.map((tier) => ({
+    const tierRefs = funnelTiers.map((tier) => ({
       id: tier.id,
       name: tier.name,
       price: tier.price,
@@ -566,7 +579,7 @@ export function TicketSelector({
           zone.name,
           tierRefs,
         )
-        const tier = displayTiers.find((item) => item.id === tierId)
+        const tier = funnelTiers.find((item) => item.id === tierId)
         const summary = seatingSectorSummaries.find(
           (row) => row.sectorId === zone.id || row.sectorName === zone.name,
         )
@@ -574,7 +587,7 @@ export function TicketSelector({
         return available != null && available <= 0
       })
       .map((zone) => zone.id)
-  }, [displayTiers, liveMap?.zones, seatingSectorSummaries])
+  }, [funnelTiers, liveMap?.zones, seatingSectorSummaries])
 
   const hasSeatingFlow =
     seatingSectorSummaries.length > 0 ||
@@ -583,36 +596,12 @@ export function TicketSelector({
     tiers.some((tier) => tier.layoutType !== "general")
 
   const checkoutGroups = useMemo(
-    () => groupCheckoutTiers(displayTiers),
-    [displayTiers],
+    () => groupCheckoutTiers(funnelTiers),
+    [funnelTiers],
   )
-  const ticketTabs = useMemo(
-    () =>
-      (
-        [
-          hasSeatingFlow || checkoutGroups.seated.length > 0 ? "seated" : null,
-          checkoutGroups.general.length > 0 ? "general" : null,
-          checkoutGroups.bundle.length > 0 ? "bundle" : null,
-          checkoutGroups.addon.length > 0 ? "addon" : null,
-        ] as Array<InventoryTierType | null>
-      ).filter((tab): tab is InventoryTierType => Boolean(tab)),
-    [checkoutGroups, hasSeatingFlow],
+  const availableExtras = checkoutGroups.addon.filter(
+    (tier) => tier.available > 0,
   )
-  const defaultPickerTab = useMemo(
-    () =>
-      resolveDefaultTicketPickerTab({
-        tabs: ticketTabs,
-        grouped: checkoutGroups,
-        configured: defaultTicketTab,
-      }),
-    [checkoutGroups, defaultTicketTab, ticketTabs],
-  )
-  const [ticketTabOverride, setTicketTabOverride] =
-    useState<InventoryTierType | null>(null)
-  const ticketTab =
-    ticketTabOverride && ticketTabs.includes(ticketTabOverride)
-      ? ticketTabOverride
-      : defaultPickerTab
 
   const visibleZoneId =
     focusedZoneId && selectedItems.some((item) => item.id === focusedZoneId)
@@ -621,20 +610,19 @@ export function TicketSelector({
 
   const priceBySectorId = useMemo(() => {
     const prices: Record<string, number> = {}
-    for (const tier of displayTiers) {
+    for (const tier of funnelTiers) {
       if (Number.isFinite(tier.price)) {
         if (tier.seatingSectorId) prices[tier.seatingSectorId] = tier.price
         if (tier.name.trim()) prices[tier.name.trim()] = tier.price
       }
     }
     return prices
-  }, [displayTiers])
+  }, [funnelTiers])
   const liveSelectedItems = useMemo(
     () => hydrateStorefrontItemsFromMap(selectedItems, liveMap, priceBySectorId),
     [liveMap, priceBySectorId, selectedItems],
   )
 
-  const seatingRenderMode = resolveVenueRenderMode(liveMap)
   const resolvedSeatingLayout = useMemo(() => {
     if (seatingLayout.length > 0) return seatingLayout
     if (!liveMap) return []
@@ -672,7 +660,7 @@ export function TicketSelector({
       seatingLayout: resolvedSeatingLayout,
       seatingBackgroundUrl,
       capacity: venueCapacity ?? undefined,
-      tiers: displayTiers.map((tier) => ({
+      tiers: funnelTiers.map((tier) => ({
         id: tier.id,
         name: tier.name,
         price: tier.price,
@@ -691,7 +679,7 @@ export function TicketSelector({
     seatingBackgroundUrl,
     resolvedSeatingLayout,
     seatingSectorSummaries,
-    displayTiers,
+    funnelTiers,
     venueCapacity,
     venueId,
     venueName,
@@ -900,21 +888,6 @@ export function TicketSelector({
     return items
   }
 
-  function hasPendingAddonUpsell() {
-    return displayTiers.some((tier) => {
-      const type = inferInventoryTierType({
-        tierType: tier.tierType,
-        layoutType: tier.layoutType,
-        category: tier.category,
-      })
-      return (
-        type === "addon" &&
-        (quantities[tier.id] ?? 0) === 0 &&
-        tier.available > 0
-      )
-    })
-  }
-
   function submitCheckout(
     extraAddonId?: string,
     sandbox = false,
@@ -946,7 +919,7 @@ export function TicketSelector({
         const authed = await ensureGuestCheckoutSession()
         if (!authed) {
           requestIdentity("pay")
-          toast.error("Elegí iniciar sesión o continuar como invitado para pagar.")
+          toast.error("Elegí ingresar o continuar como invitado para pagar.")
           return
         }
       }
@@ -973,7 +946,7 @@ export function TicketSelector({
       if (!result.success) {
         if (result.error === "auth_required") {
           persistCheckoutCart()
-          toast.error("Iniciá sesión para pagar. Tu selección está guardada.")
+          toast.error("Ingresá para pagar. Tu selección está guardada.")
           router.push(loginHref)
           return
         }
@@ -993,7 +966,7 @@ export function TicketSelector({
       }
 
       if (sandbox) {
-        toast.success("Compra de prueba OK · Modo Sandbox")
+        toast.success("Compra de prueba lista")
       }
       enterPaymentHold(result)
     })
@@ -1021,16 +994,36 @@ export function TicketSelector({
         { keepOpen: true },
       )
     }
-    if (hasPendingAddonUpsell() && !upsellSkipped) {
-      setShowUpsell(true)
+    if (availableExtras.length > 0 && !upsellSkipped) {
+      setCheckoutStep("upsell")
+      panelBodyRef.current?.scrollTo({ top: 0, behavior: "smooth" })
       return
     }
+    proceedToDetails()
+  }
+
+  function proceedToDetails() {
     if (!identityReady) {
       useCheckoutIntentStore.getState().chooseGuest(eventId, eventSlug)
       void ensureGuestCheckoutSession()
     }
     setCheckoutStep("details")
     panelBodyRef.current?.scrollTo({ top: 0, behavior: "smooth" })
+  }
+
+  function continueWithExtras() {
+    setUpsellSkipped(true)
+    proceedToDetails()
+  }
+
+  function skipExtras() {
+    for (const extra of availableExtras) {
+      if ((quantities[extra.id] ?? 0) > 0) {
+        updateQuantity(extra.id, 0, extra.available)
+      }
+    }
+    setUpsellSkipped(true)
+    proceedToDetails()
   }
 
   function goToPaymentMethods() {
@@ -1070,16 +1063,6 @@ export function TicketSelector({
       panelBodyRef.current?.scrollTo({ top: 0, behavior: "smooth" })
       return
     }
-    const tab = inferInventoryTierType({
-      tierType: tier.tierType,
-      layoutType: tier.layoutType,
-      category: tier.category,
-      bundleItems: (tier.comboItems ?? []).map((item, index) => ({
-        tierId: `${tier.id}-${index}`,
-        quantity: item.quantity,
-      })),
-    })
-    if (ticketTabs.includes(tab)) setTicketTabOverride(tab)
     setFocusedTierId(tierId)
     ensureCartHoldClock()
     requestAnimationFrame(() => {
@@ -1179,6 +1162,10 @@ export function TicketSelector({
       goToDetailsStep()
       return
     }
+    if (visibleStep === "upsell") {
+      continueWithExtras()
+      return
+    }
     if (visibleStep === "details") {
       goToPaymentMethods()
       return
@@ -1196,8 +1183,8 @@ export function TicketSelector({
       requestIdentity("pay")
       return
     }
-    if (hasPendingAddonUpsell() && !upsellSkipped) {
-      setShowUpsell(true)
+    if (availableExtras.length > 0 && !upsellSkipped) {
+      setCheckoutStep("upsell")
       return
     }
     void buyerForm.handleSubmit(
@@ -1247,9 +1234,32 @@ export function TicketSelector({
       return
     }
     persistCheckoutCart()
+    if (hasInteractiveMap) {
+      setSeatPickerOpen(true)
+      window.setTimeout(() => {
+        document
+          .getElementById("mapa")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" })
+      }, 80)
+      return
+    }
     setShowSeatFlow(true)
     if (!identityReady) {
       requestIdentity("open_map")
+    }
+  }
+
+  function goBackStep() {
+    if (visibleStep === "payment") {
+      setCheckoutStep("details")
+      return
+    }
+    if (visibleStep === "details") {
+      setCheckoutStep(availableExtras.length > 0 ? "upsell" : "tickets")
+      return
+    }
+    if (visibleStep === "upsell") {
+      setCheckoutStep("tickets")
     }
   }
 
@@ -1439,6 +1449,7 @@ export function TicketSelector({
     showSeatFlow && !hasInteractiveMap ? (
       <div className="fixed inset-0 z-[80] flex h-dvh w-screen flex-col overflow-hidden overscroll-none bg-zinc-950">
         <AdaptiveSeatingFlow
+          key={selectedDayId ?? "all"}
           takeover
           pending={controlsLocked}
           eventTitle={eventTitle}
@@ -1469,70 +1480,54 @@ export function TicketSelector({
 
   const stepTitle =
     visibleStep === "tickets"
-      ? "Elegí tu experiencia"
-      : visibleStep === "details"
-        ? "Tus datos"
-        : "Confirmá el pago"
+      ? "Elegí tu entrada"
+      : visibleStep === "upsell"
+        ? "Mejorá tu experiencia"
+        : visibleStep === "details"
+          ? "Confirmá tus datos"
+          : "Confirmá el pago"
   const stepCta =
     visibleStep === "tickets"
       ? totalTickets > 0
         ? `Continuar con ${totalTickets} ${totalTickets === 1 ? "lugar" : "lugares"}`
         : "Continuar"
-      : visibleStep === "details"
-        ? "Ir a Medios de Pago"
-        : `Confirmar y Pagar ${formatCurrency(totalAmount)}`
+      : visibleStep === "upsell"
+        ? "Sumar al pedido y continuar"
+        : visibleStep === "details"
+          ? "Continuar al pago"
+          : `Confirmar y Pagar ${formatCurrency(totalAmount)}`
 
   const checkoutPanel = (
-    <Tabs
-      value={ticketTab}
-      onValueChange={(value) => {
-        if (
-          value === "seated" ||
-          value === "general" ||
-          value === "bundle" ||
-          value === "addon"
-        ) {
-          setTicketTabOverride(value)
-        }
-      }}
-      className="flex w-full min-w-0 flex-col gap-0 overflow-hidden bg-card text-card-foreground"
-    >
-      <div className="shrink-0 space-y-3 border-b border-border px-4 pb-3 pt-4">
+    <div className="flex h-fit w-full min-w-0 flex-col overflow-visible bg-card text-card-foreground">
+      <div className="space-y-3 border-b border-border px-6 pb-4 pt-6 lg:px-8">
         <CheckoutStepper step={visibleStep} />
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            {visibleStep !== "tickets" ? (
-              <button
-                type="button"
-                onClick={() =>
-                  setCheckoutStep(
-                    visibleStep === "payment" ? "details" : "tickets",
-                  )
-                }
-                className="mb-1 inline-flex items-center gap-1 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-              >
-                <ChevronLeft className="size-4" aria-hidden="true" />
-                Volver
-              </button>
-            ) : null}
-            <h2 className="text-lg font-bold tracking-tight text-foreground">
+        <div>
+          {visibleStep !== "tickets" ? (
+            <button
+              type="button"
+              onClick={goBackStep}
+              className="mb-1 inline-flex items-center gap-1 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <ChevronLeft className="size-4" aria-hidden="true" />
+              Volver
+            </button>
+          ) : null}
+          <div className="flex items-start justify-between gap-3">
+            <h2 className="text-lg font-bold tracking-tight text-foreground lg:text-xl">
               {stepTitle}
             </h2>
+            {visibleStep === "tickets" ? (
+              <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground ring-1 ring-border">
+                Máx. {MAX_TICKETS_PER_PURCHASE}
+              </span>
+            ) : null}
           </div>
-          {visibleStep === "tickets" ? (
-            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground ring-1 ring-border">
-              Máx. {MAX_TICKETS_PER_PURCHASE}
-            </span>
-          ) : null}
         </div>
-        {visibleStep === "tickets" && ticketTabs.length > 0 ? (
-          <CheckoutTabBar tabs={ticketTabs} grouped={checkoutGroups} />
-        ) : null}
       </div>
 
       <div
         ref={panelBodyRef}
-        className="min-h-0 flex-1 overflow-y-auto p-4 pb-6"
+        className="px-6 pb-2 pt-6 lg:px-8 max-lg:pb-28"
       >
         <AnimatePresence mode="wait" initial={false}>
           {visibleStep === "tickets" ? (
@@ -1543,16 +1538,19 @@ export function TicketSelector({
               exit={{ opacity: 0, y: -12 }}
               transition={{ duration: 0.28, ease: "easeInOut" }}
             >
+              <motion.div
+                key={selectedDayId ?? "all"}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.22, ease: "easeInOut" }}
+              >
               <EventCheckoutSelector
-                hideTabs
-                tabValue={ticketTab}
-                onTabChange={setTicketTabOverride}
-                tiers={displayTiers}
+                tiers={funnelTiers}
                 quantities={quantities}
                 isPending={controlsLocked}
                 hasSeatingFlow={hasSeatingFlow}
                 hasInteractiveMap={hasInteractiveMap}
-                mapEmbedded={hasInteractiveMap}
+                includesGeneralAccess={mapIncludesGeneralAccess(liveMap)}
                 focusedTierId={focusedTierId}
                 mapLoading={
                   mapLoading &&
@@ -1561,32 +1559,43 @@ export function TicketSelector({
                   resolvedSeatingLayout.length === 0 &&
                   (universalPayload?.sectors.length ?? 0) === 0
                 }
-                seatingRenderMode={seatingRenderMode}
                 selectedSeat={selectedSeat}
-                showUpsell={showUpsell}
-                defaultTicketTab={defaultTicketTab}
+                selectedPlaceCount={liveSelectedItems.reduce(
+                  (sum, item) => sum + Math.max(1, item.capacity || 1),
+                  0,
+                )}
                 onQuantityChange={updateQuantity}
                 onOpenSeatFlow={openSeatFlow}
                 onPurchaseIntent={goToDetailsStep}
                 onClearSeat={() => {
                   const seat = selectedSeat
                   setSelectedSeat(null)
+                  const store = useStorefrontSeatStore.getState()
+                  store.clearSelectedItems()
+                  store.clearLayoutSeats()
+                  setSeatPickerOpen(true)
                   if (seat) {
                     void releaseSeatingUnitCartHold(eventId, seat.seatingUnitId)
                   }
                 }}
-                onAddUpsell={(tierId) => {
-                  const addon = displayTiers.find((tier) => tier.id === tierId)
-                  updateQuantity(tierId, 1, addon?.available ?? 1)
-                  setShowUpsell(false)
-                  setUpsellSkipped(true)
-                  goToDetailsStep()
-                }}
-                onSkipUpsell={() => {
-                  setShowUpsell(false)
-                  setUpsellSkipped(true)
-                  goToDetailsStep()
-                }}
+              />
+              </motion.div>
+            </motion.div>
+          ) : visibleStep === "upsell" ? (
+            <motion.div
+              key="upsell"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.28, ease: "easeInOut" }}
+            >
+              <CheckoutUpsellStep
+                extras={availableExtras}
+                quantities={quantities}
+                isPending={controlsLocked}
+                onQuantityChange={updateQuantity}
+                onContinueWithExtras={continueWithExtras}
+                onSkipExtras={skipExtras}
               />
             </motion.div>
           ) : visibleStep === "details" ? (
@@ -1640,7 +1649,7 @@ export function TicketSelector({
 
               <div className="space-y-3 rounded-2xl border border-border bg-muted/20 p-4">
                 <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
-                  Resumen
+                  Resumen de compra
                 </p>
                 <div className="flex items-center justify-between text-sm text-muted-foreground">
                   <span>Entradas · {totalTickets}</span>
@@ -1687,7 +1696,7 @@ export function TicketSelector({
                   onClick={handleSandboxReserve}
                   className="w-full border-dashed text-muted-foreground hover:text-foreground"
                 >
-                  Compra de prueba (modo test)
+                  Compra de prueba
                 </Button>
               ) : null}
             </motion.div>
@@ -1695,20 +1704,10 @@ export function TicketSelector({
         </AnimatePresence>
       </div>
 
-      <div className="sticky bottom-0 z-20 border-t border-border bg-background/95 backdrop-blur lg:static">
-        {visibleStep === "tickets" && liveSelectedItems.length > 0 ? (
-          <div className="px-3 pt-3">
-            <StorefrontSelectionCard
-              card={storefrontFocusCard(
-                liveSelectedItems[liveSelectedItems.length - 1]!,
-                liveMap,
-              )}
-            />
-          </div>
-        ) : null}
+      <div className="mt-6 bg-card">
         {visibleStep === "tickets" ? (
           <SelectionLedger
-            className="border-t-0"
+            className="border-t-0 px-6 lg:px-8"
             items={liveSelectedItems}
             onRemove={(id) => {
               useStorefrontSeatStore.getState().removeSelectedItem(id)
@@ -1724,106 +1723,118 @@ export function TicketSelector({
         ) : null}
         <CheckoutFloatingBar
           variant="panel"
-          actionLabel={stepCta}
+          actionLabel={
+            visibleStep === "tickets" ? "Continuar" : stepCta
+          }
           showArrow={visibleStep !== "payment"}
+          totalAmount={totalAmount}
           disabled={visibleStep === "tickets" && totalTickets <= 0}
           pending={isPending && visibleStep === "payment"}
           locked={purchaseLocked}
           onPay={handlePrimaryCta}
         />
       </div>
-    </Tabs>
+    </div>
   )
 
-  const mapNode = hasInteractiveMap ? (
-    <div className="min-w-0 space-y-2">
-      <div
-        className={cn(
-          "relative w-full min-w-0 overflow-hidden rounded-2xl border border-border bg-zinc-950",
-          mapExpanded
-            ? "h-[min(72dvh,560px)]"
-            : "h-[min(42vh,300px)] sm:h-[min(46vh,360px)] lg:h-[min(52vh,480px)]",
-        )}
-      >
-        <div className="absolute left-2 top-2 z-20 flex max-w-[calc(100%-4.5rem)] items-center gap-2">
-          <StorefrontViewToggle
-            compact
-            value={storefrontView}
-            onChange={setStorefrontView}
-          />
-        </div>
-        <button
-          type="button"
-          className="absolute right-2 top-2 z-20 inline-flex h-7 items-center gap-1 rounded-lg bg-zinc-950/80 px-2 text-[11px] font-semibold text-zinc-100 ring-1 ring-white/15 lg:hidden"
-          onClick={() => setMapExpanded((value) => !value)}
-        >
-          {mapExpanded ? (
-            <Minimize2 className="size-3" aria-hidden="true" />
-          ) : (
-            <Maximize2 className="size-3" aria-hidden="true" />
-          )}
-          {mapExpanded ? "Reducir" : "Ampliar"}
-        </button>
-        {storefrontView === "list" ? (
-          <div className="h-full overflow-y-auto bg-card p-3 pt-11">
+  const referenceMapUrl =
+    liveMap?.backgroundImage?.trim() ||
+    seatingBackgroundUrl?.trim() ||
+    universalPayload?.mapImageUrl?.trim() ||
+    null
+
+  const listSelector = liveMap ? (
+    <AccessibleSeatSelector
+      map={liveMap}
+      occupancyBySeatId={occupancyBySeatId}
+      selectedSeatIds={layoutSeats.map((seat) => seat.id)}
+      selectedZoneId={visibleZoneId}
+      unavailableZoneIds={soldOutZoneIds}
+      pending={controlsLocked}
+      referenceImageUrl={referenceMapUrl}
+      onSelectZone={handleImmersiveZoneSelect}
+      onToggleSeat={handleListToggleSeat}
+      onAssignSeats={applyLayoutSeats}
+      onAssignZoneQuantity={applyZoneQuantity}
+    />
+  ) : (
+    <p className="text-sm text-muted-foreground">
+      El plano no está disponible.
+    </p>
+  )
+
+  const mapNode = hasInteractiveMap && seatPickerOpen ? (
+    <div className="min-w-0 space-y-4">
+      <StorefrontViewToggle
+        value={storefrontView}
+        onChange={setStorefrontView}
+      />
+      <AnimatePresence mode="wait" initial={false}>
+        {storefrontView === "map" ? (
+          <motion.div
+            key="map"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.22, ease: "easeInOut" }}
+            className={cn(
+              "relative w-full min-w-0 overflow-hidden rounded-2xl border border-border bg-zinc-950",
+              "h-[50dvh] min-h-[50dvh] lg:h-[min(52vh,480px)] lg:min-h-0",
+            )}
+          >
             {liveMap ? (
-              <AccessibleSeatSelector
-                map={liveMap}
-                occupancyBySeatId={occupancyBySeatId}
-                selectedSeatIds={layoutSeats.map((seat) => seat.id)}
+              <AdaptiveSeatingFlow
+                key={selectedDayId ?? "all"}
+                immersive
+                pending={controlsLocked}
+                eventTitle={eventTitle}
+                venueMap={liveMap}
                 selectedZoneId={visibleZoneId}
                 unavailableZoneIds={soldOutZoneIds}
-                pending={controlsLocked}
-                onSelectZone={handleImmersiveZoneSelect}
-                onToggleSeat={handleListToggleSeat}
-                onAssignSeats={applyLayoutSeats}
-                onAssignZoneQuantity={applyZoneQuantity}
+                occupancyBySeatId={occupancyBySeatId}
+                priceBySectorId={priceBySectorId}
+                sectors={universalPayload?.sectors ?? []}
+                onSelectZone={focusSelectedZone}
+                onContinue={(payload) =>
+                  handleUniversalContinue(payload, { keepOpen: true })
+                }
+                onLoadSectorUnits={loadSectorUnits}
+                onLoadAllUnits={loadAllUnits}
               />
             ) : (
-              <p className="text-sm text-muted-foreground">
-                El plano no está disponible.
-              </p>
+              <div className="flex h-full items-center justify-center bg-zinc-950 text-sm text-zinc-500">
+                {mapLoading ? (
+                  <>
+                    <LoaderCircle
+                      className="size-8 animate-spin text-white/40"
+                      aria-hidden="true"
+                    />
+                    <span className="sr-only">Cargando mapa del recinto</span>
+                  </>
+                ) : (
+                  "El plano no está disponible."
+                )}
+              </div>
             )}
-          </div>
-        ) : liveMap ? (
-          <AdaptiveSeatingFlow
-            immersive
-            pending={controlsLocked}
-            eventTitle={eventTitle}
-            venueMap={liveMap}
-            selectedZoneId={visibleZoneId}
-            unavailableZoneIds={soldOutZoneIds}
-            occupancyBySeatId={occupancyBySeatId}
-            priceBySectorId={priceBySectorId}
-            sectors={universalPayload?.sectors ?? []}
-            onSelectZone={focusSelectedZone}
-            onContinue={(payload) =>
-              handleUniversalContinue(payload, { keepOpen: true })
-            }
-            onLoadSectorUnits={loadSectorUnits}
-            onLoadAllUnits={loadAllUnits}
-          />
+          </motion.div>
         ) : (
-          <div className="flex h-full items-center justify-center bg-zinc-950 text-sm text-zinc-500">
-            {mapLoading ? (
-              <>
-                <LoaderCircle
-                  className="size-8 animate-spin text-white/40"
-                  aria-hidden="true"
-                />
-                <span className="sr-only">Cargando mapa del recinto</span>
-              </>
-            ) : (
-              "El plano no está disponible."
-            )}
-          </div>
+          <motion.div
+            key="list"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.22, ease: "easeInOut" }}
+            className="w-full space-y-6 bg-transparent"
+          >
+            {listSelector}
+          </motion.div>
         )}
-      </div>
+      </AnimatePresence>
     </div>
   ) : null
 
   const panelNode = (
-    <div className="min-w-0 overflow-hidden rounded-2xl border border-border shadow-xl">
+    <div className="h-fit min-w-0 overflow-visible rounded-2xl border border-border shadow-xl">
       {checkoutPanel}
     </div>
   )

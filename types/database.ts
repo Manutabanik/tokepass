@@ -142,6 +142,30 @@ export type OrganizerMpConnect = {
   created_at: string
 }
 
+export type Artist = {
+  id: string
+  name: string
+  image_url: string | null
+  spotify_id: string | null
+  genres: string[]
+  bio: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** Join event ↔ artist (P73 / event_artists). `sort_order` es el orden de grilla. */
+export type EventArtist = {
+  id: string
+  event_id: string
+  artist_id: string
+  performance_time: string | null
+  stage: string | null
+  /** Orden de grilla. Equivale a EventArtist.order. */
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
 export type Event = {
   id: string
   title: string
@@ -201,6 +225,10 @@ export type Event = {
   department: string | null
   /** Tab inicial del picker B2C. auto = el de más stock restante. */
   default_ticket_tab: "auto" | "seated" | "general" | "bundle" | "addon"
+  /** Fallback JSON de lineup (P72). La grilla canónica es event_artists. */
+  lineup?: Json | null
+  /** Relación inversa EventArtist[] (join event_artists). */
+  event_artists?: EventArtist[]
   created_at: string
   updated_at: string
 }
@@ -805,11 +833,14 @@ type EventInsert = Omit<
   | "province"
   | "department"
   | "default_ticket_tab"
+  | "lineup"
+  | "event_artists"
   | "created_at"
   | "updated_at"
 > & {
   id?: string
   default_ticket_tab?: Event["default_ticket_tab"]
+  lineup?: Json | null
   description?: string | null
   image_url?: string | null
   flyer_url?: string | null
@@ -1222,6 +1253,13 @@ export type Database = {
             referencedRelation: "event_categories"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "event_artists_event_id_fkey"
+            columns: ["id"]
+            isOneToOne: false
+            referencedRelation: "event_artists"
+            referencedColumns: ["event_id"]
+          },
         ]
       }
       event_categories: {
@@ -1295,6 +1333,65 @@ export type Database = {
             columns: ["event_id"]
             isOneToOne: false
             referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      artists: {
+        Row: Artist
+        Insert: {
+          id?: string
+          name: string
+          image_url?: string | null
+          spotify_id?: string | null
+          genres?: string[]
+          bio?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<{
+          name: string
+          image_url: string | null
+          spotify_id: string | null
+          genres: string[]
+          bio: string | null
+          updated_at: string
+        }>
+        Relationships: []
+      }
+      event_artists: {
+        Row: EventArtist
+        Insert: {
+          id?: string
+          event_id: string
+          artist_id: string
+          performance_time?: string | null
+          stage?: string | null
+          sort_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<{
+          event_id: string
+          artist_id: string
+          performance_time: string | null
+          stage: string | null
+          sort_order: number
+          updated_at: string
+        }>
+        Relationships: [
+          {
+            foreignKeyName: "event_artists_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_artists_artist_id_fkey"
+            columns: ["artist_id"]
+            isOneToOne: false
+            referencedRelation: "artists"
             referencedColumns: ["id"]
           },
         ]

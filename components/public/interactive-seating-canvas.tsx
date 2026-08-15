@@ -1,17 +1,14 @@
 "use client"
 
 import {
+  ArrowLeft,
   ArrowRight,
   CheckCircle2,
   Circle,
-  Maximize2,
-  Minimize2,
   RotateCcw,
   Trash2,
   X,
   XCircle,
-  ZoomIn,
-  ZoomOut,
 } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
@@ -57,7 +54,16 @@ import {
   type StorefrontSelectedItem,
 } from "@/lib/stores/storefront-seat-store"
 import { cn } from "@/lib/utils"
-import { isInfrastructureElement } from "@/types/venue-map"
+import {
+  elementBelongsToZone,
+  lodCameraTransform,
+  resolveLodZones,
+  seatBelongsToZone,
+  shouldEnableMapLod,
+  zoneCanvasAabb,
+  type MapLodMode,
+} from "@/lib/seating/venue-map-lod"
+import { isInfrastructureElement, isSellableElement } from "@/types/venue-map"
 import type {
   InteractiveVenueMap,
   VenueMapElement,
@@ -131,9 +137,11 @@ export function InteractiveSeatingCanvas({
   const lastActivity = useRef(0)
 
   const [zoom, setZoom] = useState(1)
-  const [expanded, setExpanded] = useState(false)
   const [wrapWidth, setWrapWidth] = useState(360)
+  const [wrapHeight, setWrapHeight] = useState(280)
   const [idleOpen, setIdleOpen] = useState(false)
+  const [viewMode, setViewMode] = useState<MapLodMode>("macro")
+  const [focusedZoneId, setFocusedZoneId] = useState<string | null>(null)
   const selectedItems = useStorefrontSeatStore((state) => state.selectedItems)
   const selectedSeats = useStorefrontSeatStore((state) => state.layoutSeats)
   const toggleSelectedItem = useStorefrontSeatStore(
@@ -171,6 +179,32 @@ export function InteractiveSeatingCanvas({
         .map((item) => item.id),
     [liveSelectedItems],
   )
+  const lodEnabled = shouldEnableMapLod(map)
+  const lodZones = useMemo(() => resolveLodZones(map), [map])
+  const focusedZone = useMemo(
+    () => lodZones.find((zone) => zone.id === focusedZoneId) ?? null,
+    [focusedZoneId, lodZones],
+  )
+  const lodActive = lodEnabled && viewMode === "macro"
+  const microActive = !lodEnabled || viewMode === "micro"
+  const visibleElementIds = useMemo(() => {
+    if (!microActive) return new Set<string>()
+    const sellable = (map.elements ?? []).filter(isSellableElement)
+    if (!focusedZone) return new Set(sellable.map((element) => element.id))
+    const matched = sellable.filter((element) =>
+      elementBelongsToZone(element, focusedZone),
+    )
+    const source = matched.length > 0 ? matched : sellable
+    return new Set(source.map((element) => element.id))
+  }, [focusedZone, map.elements, microActive])
+  const focusedHasMicro = useMemo(() => {
+    if (!focusedZone) return false
+    const hasElement = (map.elements ?? [])
+      .filter(isSellableElement)
+      .some((element) => elementBelongsToZone(element, focusedZone))
+    if (hasElement) return true
+    return plotSeats.some((seat) => seatBelongsToZone(seat, focusedZone))
+  }, [focusedZone, map.elements, plotSeats])
   const spotlight = liveSelectedItems.length > 0
   const selectionCount = liveSelectedItems.reduce(
     (sum, item) => sum + Math.max(1, Math.floor(item.capacity) || 1),
@@ -188,14 +222,16 @@ export function InteractiveSeatingCanvas({
     const node = wrapRef.current
     if (!node) return
     const sync = () => {
-      const next = node.clientWidth || 360
-      setWrapWidth((current) => (Math.abs(current - next) < 4 ? current : next))
+      const nextW = node.clientWidth || 360
+      const nextH = node.clientHeight || 280
+      setWrapWidth((current) => (Math.abs(current - nextW) < 4 ? current : nextW))
+      setWrapHeight((current) => (Math.abs(current - nextH) < 4 ? current : nextH))
     }
     sync()
     const observer = new ResizeObserver(sync)
     observer.observe(node)
     return () => observer.disconnect()
-  }, [expanded])
+  }, [])
 
   useEffect(() => {
     if (disableIdlePrompt || selectedSeats.length === 0) {
@@ -232,13 +268,7 @@ export function InteractiveSeatingCanvas({
     return true
   }
 
-  function handleZoneClick(zoneId: string, event?: React.SyntheticEvent) {
-    event?.stopPropagation()
-    if (pending) return
-    const zone = (map.zones ?? []).find((item) => item.id === zoneId)
-    if (!zone) return
-    vibrateTap()
-    markActivity()
+  function selectZoneItem(zone: VenueMapZone) {
     const item = storefrontItemFromZone(zone, priceBySectorId)
     if (!item) return
     const result = toggleSelectedItem(item, maxSelectable)
@@ -248,6 +278,65 @@ export function InteractiveSeatingCanvas({
     }
     if (!result.added) return
     onSelectZone?.(zone)
+  }
+
+  function zoomToZone(zone: VenueMapZone) {
+    const box = zoneCanvasAabb(zone)
+    const controls = transformRef.current
+    if (!box || !controls) return
+    const camera = lodCameraTransform(box, wrapWidth, wrapHeight)
+    const node = document.getElementById(`venue-sel-${zone.id}`)
+    if (node) {
+      controls.zoomToElement(
+        node as unknown as HTMLElement,
+        camera.scale,
+        400,
+        "easeOut",
+      )
+      return
+    }
+    controls.setTransform(
+      camera.positionX,
+      camera.positionY,
+      camera.scale,
+      400,
+      "easeOut",
+    )
+  }
+
+  function enterLodZone(zone: VenueMapZone) {
+    vibrateTap()
+    markActivity()
+    zoomToZone(zone)
+    setFocusedZoneId(zone.id)
+    setViewMode("micro")
+    const hasMicro =
+      (map.elements ?? [])
+        .filter(isSellableElement)
+        .some((element) => elementBelongsToZone(element, zone)) ||
+      plotSeats.some((seat) => seatBelongsToZone(seat, zone))
+    if (!hasMicro) selectZoneItem(zone)
+  }
+
+  function exitLodView() {
+    markActivity()
+    transformRef.current?.resetTransform(400, "easeOut")
+    setViewMode("macro")
+    setFocusedZoneId(null)
+  }
+
+  function handleZoneClick(zoneId: string, event?: React.SyntheticEvent) {
+    event?.stopPropagation()
+    if (pending) return
+    const zone = lodZones.find((item) => item.id === zoneId)
+    if (!zone) return
+    if (lodEnabled && viewMode === "macro") {
+      enterLodZone(zone)
+      return
+    }
+    vibrateTap()
+    markActivity()
+    selectZoneItem(zone)
   }
 
   function toggleSeat(seat: FlattenedVenueSeat) {
@@ -445,7 +534,20 @@ export function InteractiveSeatingCanvas({
         </div>
       </div>
 
-      {onBack && fillParent ? (
+      {lodEnabled && viewMode === "micro" ? (
+        <div className="absolute top-3 left-3 z-30">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={exitLodView}
+            className="h-8 gap-1.5 border-white/15 bg-zinc-950/85 px-2.5 text-xs font-semibold text-zinc-100 hover:bg-zinc-800"
+          >
+            <ArrowLeft className="size-3.5" aria-hidden="true" />
+            Volver al plano general
+          </Button>
+        </div>
+      ) : onBack && fillParent ? (
         <div className="absolute top-3 left-3 z-20">
           <IconBtn label="Cerrar el plano" onClick={onBack}>
             <X className="size-5" />
@@ -474,10 +576,8 @@ export function InteractiveSeatingCanvas({
         onPinchStop={() => markActivity()}
       >
         <MapViewportControls
-          expanded={expanded}
-          hideExpand={fillParent}
-          onToggleExpanded={() => setExpanded((value) => !value)}
           onActivity={markActivity}
+          onReset={lodEnabled ? exitLodView : undefined}
         />
       <div ref={wrapRef} className="h-full w-full touch-none">
         <TransformComponent
@@ -533,12 +633,14 @@ export function InteractiveSeatingCanvas({
               interactive={false}
             />
             <VenueMapZoneLayer
-              zones={map.zones ?? []}
+              zones={lodZones}
               selectedId={selectedZoneId}
               selectedIds={selectedZoneIds}
-              spotlight={spotlight}
+              spotlight={spotlight && !lodActive}
               unavailableIds={unavailableZoneIds}
               selectOnPointerUp
+              lodMode={lodEnabled ? viewMode : null}
+              focusedZoneId={focusedZoneId}
               onSelect={(zone) => handleZoneClick(zone.id)}
             />
             <VenueMapElementLayer
@@ -551,6 +653,9 @@ export function InteractiveSeatingCanvas({
               spotlight={spotlight}
               showSeats
               zoom={zoom}
+              lodHidden={!microActive}
+              visibleIds={microActive ? visibleElementIds : null}
+              interactive={microActive}
               onSeatPointerDown={(_event, element, seatId) => {
                 if (element.sellMode === "group") {
                   toggleElement(element)
@@ -583,8 +688,20 @@ export function InteractiveSeatingCanvas({
               const label = `${seat.sectorName} · Fila ${seat.row} · ${seat.number} — ${formatCurrency(price)}`
               const selected = live === "selected"
               const dimmed = spotlight && !selected
+              const seatVisible =
+                microActive &&
+                (!focusedZone ||
+                  seatBelongsToZone(seat, focusedZone) ||
+                  !focusedHasMicro)
               return (
-                <g key={seat.id}>
+                <g
+                  key={seat.id}
+                  style={{
+                    opacity: seatVisible ? 1 : 0,
+                    pointerEvents: seatVisible ? "auto" : "none",
+                    transition: "opacity 0.3s ease",
+                  }}
+                >
                   <circle
                     cx={seat.x}
                     cy={seat.y}
@@ -635,8 +752,8 @@ export function InteractiveSeatingCanvas({
       </div>
       </TransformWrapper>
 
-      {focusCard ? (
-        <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 md:inset-x-auto md:left-3 md:w-[min(100%-1.5rem,20rem)]">
+      {focusCard && !hideChrome ? (
+        <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 hidden md:left-3 md:block md:w-[min(100%-1.5rem,20rem)]">
           <StorefrontSelectionCard card={focusCard} />
         </div>
       ) : null}
@@ -673,9 +790,7 @@ export function InteractiveSeatingCanvas({
         "relative flex w-full flex-col overflow-hidden bg-zinc-950 md:flex-row",
         fillParent
           ? "h-full min-h-0 rounded-none border-0 shadow-none"
-          : expanded
-            ? "fixed inset-0 z-[80] h-dvh rounded-none border-0"
-            : "h-[600px] rounded-3xl border border-white/10 shadow-2xl md:h-[650px]",
+          : "h-[600px] rounded-3xl border border-white/10 shadow-2xl md:h-[650px]",
       )}
     >
       {mapArea}
@@ -770,83 +885,31 @@ export function InteractiveSeatingCanvas({
 }
 
 function MapViewportControls({
-  expanded,
-  hideExpand,
-  onToggleExpanded,
   onActivity,
+  onReset,
 }: {
-  expanded: boolean
-  hideExpand: boolean
-  onToggleExpanded: () => void
   onActivity: () => void
+  onReset?: () => void
 }) {
-  const { zoomIn, zoomOut, resetTransform } = useControls()
-
-  function run(action: () => void) {
-    action()
-    onActivity()
-  }
+  const { resetTransform } = useControls()
 
   return (
-    <>
-      <div className="absolute top-3 right-3 z-20 hidden flex-col gap-2 md:flex">
-        <ZoomTextButton
-          label="Acercar"
-          hint="Ver más grande"
-          onClick={() => run(() => zoomIn(0.35))}
-        >
-          <ZoomIn className="size-4" />
-        </ZoomTextButton>
-        <ZoomTextButton
-          label="Alejar"
-          hint="Ver todo el plano"
-          onClick={() => run(() => zoomOut(0.35))}
-        >
-          <ZoomOut className="size-4" />
-        </ZoomTextButton>
-        <ZoomTextButton
-          label="Restablecer"
-          hint="Volver al inicio"
-          onClick={() => run(() => resetTransform())}
-        >
-          <RotateCcw className="size-4" />
-        </ZoomTextButton>
-        {hideExpand ? null : (
-          <ZoomTextButton
-            label={expanded ? "Cerrar" : "Ampliar"}
-            hint="Pantalla completa"
-            onClick={onToggleExpanded}
-          >
-            {expanded ? (
-              <Minimize2 className="size-4" />
-            ) : (
-              <Maximize2 className="size-4" />
-            )}
-          </ZoomTextButton>
-        )}
-      </div>
-
-      <div className="absolute top-3 right-3 z-20 flex flex-col gap-1.5 md:hidden">
-        <IconBtn
-          label="Acercar el plano"
-          onClick={() => run(() => zoomIn(0.35))}
-        >
-          <ZoomIn className="size-5" />
-        </IconBtn>
-        <IconBtn
-          label="Alejar el plano"
-          onClick={() => run(() => zoomOut(0.35))}
-        >
-          <ZoomOut className="size-5" />
-        </IconBtn>
-        <IconBtn
-          label="Volver a ver todo el plano"
-          onClick={() => run(() => resetTransform())}
-        >
-          <RotateCcw className="size-5" />
-        </IconBtn>
-      </div>
-    </>
+    <div className="absolute top-3 right-3 z-20">
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => {
+          if (onReset) onReset()
+          else resetTransform()
+          onActivity()
+        }}
+        aria-label="Restablecer"
+        className="h-8 gap-1.5 border-white/10 bg-zinc-950/70 px-2.5 text-xs font-semibold text-zinc-100 shadow-sm hover:bg-zinc-800"
+      >
+        <RotateCcw className="size-3.5" aria-hidden="true" />
+        Restablecer
+      </Button>
+    </div>
   )
 }
 
@@ -873,30 +936,3 @@ function IconBtn({
   )
 }
 
-function ZoomTextButton({
-  label,
-  hint,
-  onClick,
-  children,
-}: {
-  label: string
-  hint: string
-  onClick: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <Button
-      type="button"
-      variant="outline"
-      onClick={onClick}
-      aria-label={`${label}. ${hint}`}
-      className="h-auto min-h-11 justify-start gap-2 border-white/10 bg-zinc-950/85 px-3 py-2 text-left text-zinc-100 hover:bg-zinc-800"
-    >
-      {children}
-      <span className="flex flex-col">
-        <span className="text-sm font-semibold">{label}</span>
-        <span className="text-[11px] font-normal text-zinc-400">{hint}</span>
-      </span>
-    </Button>
-  )
-}

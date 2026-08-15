@@ -11,6 +11,7 @@ import {
   Sparkles,
   Ticket,
   Trash2,
+  Lock,
 } from "lucide-react"
 import type { ReactNode } from "react"
 import { useState } from "react"
@@ -57,10 +58,15 @@ import {
 import { CapacityBudgetBar } from "@/components/admin/capacity-budget-bar"
 import { useEventCapacity } from "@/hooks/use-event-capacity"
 import {
+  asPositiveInt,
   createBlankPhase,
   generalRemainingForTicket,
+  parseStrictInt,
   phaseLimitSum,
+  ticketPhasesExceedParent,
 } from "@/lib/inventory/capacity-budget"
+import { formatNumber } from "@/lib/format"
+import { cn } from "@/lib/utils"
 import { isMapBackedTicket } from "@/lib/seating/venue-map-pricing"
 import type { EventFormValues } from "@/lib/validations/event-form"
 
@@ -194,6 +200,18 @@ export function UnifiedInventoryPanel({ form }: Props) {
   return (
     <div className="space-y-5">
       <CapacityBudgetBar form={form} />
+      {capacity.mapAllocatedCapacity > 0 ? (
+        <div className="flex items-start gap-2 rounded-xl border border-border bg-muted/50 px-3 py-2.5 text-sm text-muted-foreground">
+          <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+          <p>
+            <span className="font-medium text-foreground">
+              Bloqueados por el Mapa.{" "}
+            </span>
+            {formatNumber(capacity.mapAllocatedCapacity)} lugares ya están
+            asignados a tu mapa interactivo. No pueden editarse aquí.
+          </p>
+        </div>
+      ) : null}
       {typeof form.formState.errors.tickets?.message === "string" ? (
         <p className="text-sm text-destructive" role="alert">
           {form.formState.errors.tickets.message}
@@ -201,11 +219,11 @@ export function UnifiedInventoryPanel({ form }: Props) {
       ) : null}
       <div>
         <p className="text-sm font-semibold text-foreground">
-          Tickets generales, adicionales y combos
+          Inventario general (editable)
         </p>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          Las zonas del mapa se cobran en el paso anterior. Acá solo van
-          entradas sin asiento fijo, extras y promociones.
+          Campo, extras y combos. Las mesas y butacas del mapa no se tocan
+          acá: ya quedaron bloqueadas en el paso anterior.
         </p>
       </div>
 
@@ -271,6 +289,7 @@ export function UnifiedInventoryPanel({ form }: Props) {
                 tickets[item.index],
                 tickets,
               )}
+              capacityExceeded={capacity.exceeded}
               showPhases
               onRemove={() => remove(item.index)}
             />
@@ -464,6 +483,7 @@ function InventoryRow({
   showListPrice = false,
   showPhases = false,
   venueRemaining,
+  capacityExceeded = false,
   onRemove,
 }: {
   form: UseFormReturn<EventFormValues>
@@ -472,22 +492,37 @@ function InventoryRow({
   showListPrice?: boolean
   showPhases?: boolean
   venueRemaining?: number
+  capacityExceeded?: boolean
   onRemove: () => void
 }) {
   const phases = form.watch(`tickets.${index}.phases`) ?? []
-  const parentCapacity = Number(form.watch(`tickets.${index}.capacity`)) || 0
+  const parentCapacity = asPositiveInt(form.watch(`tickets.${index}.capacity`))
   const parentPrice = Number(form.watch(`tickets.${index}.price`)) || 0
   const phaseCap = phaseLimitSum(phases)
-  const phaseRemaining = Math.max(1, parentCapacity - phaseCap)
+  const phaseRemaining = Math.max(0, parentCapacity - phaseCap)
+  const phasesOverflow = ticketPhasesExceedParent({
+    capacity: parentCapacity,
+    phases,
+  })
 
   return (
-    <div className="space-y-3 rounded-xl border border-border bg-card p-3">
-      <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_7rem_7rem_auto]">
+    <div className="relative space-y-3 rounded-xl border border-border bg-card p-3 pr-12">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="absolute top-2 right-2 size-9"
+        onClick={onRemove}
+        aria-label="Quitar ítem"
+      >
+        <Trash2 className="size-4" />
+      </Button>
+      <div className="grid min-w-0 grid-cols-1 items-end gap-4 md:grid-cols-12">
         <FormField
           control={form.control}
           name={`tickets.${index}.name`}
           render={({ field, fieldState }) => (
-            <FormItem className="min-w-0">
+            <FormItem className="min-w-0 md:col-span-6">
               <FormLabel>Nombre</FormLabel>
               <Input
                 {...field}
@@ -502,38 +537,40 @@ function InventoryRow({
           control={form.control}
           name={`tickets.${index}.capacity`}
           render={({ field, fieldState }) => {
-            const maxAllowed =
-              venueRemaining != null ? Math.max(1, venueRemaining) : undefined
+            const typed = asPositiveInt(field.value)
             const overflow =
-              maxAllowed != null &&
-              Number(field.value) > 0 &&
-              Number(field.value) > maxAllowed
+              Boolean(capacityExceeded) ||
+              (venueRemaining != null && typed > venueRemaining)
             return (
-            <FormItem>
+            <FormItem className="md:col-span-3">
               <FormLabel>{capacityLabel}</FormLabel>
               <Input
-                type="number"
-                min={1}
-                max={maxAllowed}
-                value={field.value ?? ""}
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                value={
+                  field.value === undefined ||
+                  field.value === null ||
+                  Number.isNaN(Number(field.value))
+                    ? ""
+                    : String(field.value)
+                }
                 onChange={(event) => {
-                  if (event.target.value === "") {
+                  const parsed = parseStrictInt(event.target.value)
+                  if (parsed === "") {
                     field.onChange(undefined)
                     return
                   }
-                  const next = Number(event.target.value)
-                  if (!Number.isFinite(next)) return
-                  if (maxAllowed != null && next > maxAllowed) {
-                    field.onChange(maxAllowed)
-                    return
-                  }
-                  field.onChange(next)
+                  if (typeof parsed === "number" && Number.isNaN(parsed)) return
+                  field.onChange(parsed)
                 }}
-                className="h-11"
+                aria-invalid={overflow || undefined}
+                className={cn("h-11", overflow && "border-destructive")}
               />
               {overflow ? (
-                <p className="text-xs text-red-500" role="alert">
-                  Superás el saldo del recinto ({maxAllowed} disponibles).
+                <p className="text-xs text-destructive" role="alert">
+                  Superás el aforo oficial. Bajá el número o ajustá el aforo
+                  total.
                 </p>
               ) : null}
               <FormMessage>{fieldState.error?.message}</FormMessage>
@@ -545,28 +582,17 @@ function InventoryRow({
           control={form.control}
           name={`tickets.${index}.price`}
           render={({ field, fieldState }) => (
-            <FormItem>
+            <FormItem className="md:col-span-3">
               <FormLabel>Precio</FormLabel>
               <PriceInput
                 value={field.value}
-                onValueChange={(value) => field.onChange(value ?? 0)}
+                onValueChange={(value) => field.onChange(value ?? undefined)}
                 className="h-11"
               />
               <FormMessage>{fieldState.error?.message}</FormMessage>
             </FormItem>
           )}
         />
-        <div className="flex items-end">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={onRemove}
-            aria-label="Quitar ítem"
-          >
-            <Trash2 className="size-4" />
-          </Button>
-        </div>
       </div>
       <FormField
         control={form.control}
@@ -645,13 +671,17 @@ function InventoryRow({
                 este se agote. La suma de los lotes no puede superar{" "}
                 {parentCapacity || 0} entradas de este tipo.
               </p>
+              {phasesOverflow ? (
+                <p className="mt-1 text-xs text-destructive" role="alert">
+                  La suma de los lotes ({phaseCap}) supera la capacidad máxima
+                  de este ticket ({parentCapacity}).
+                </p>
+              ) : null}
             </div>
           </div>
 
           {phases.map((phase, phaseIndex) => {
             const sold = phase.sold ?? 0
-            const otherSum = phaseLimitSum(phases, phaseIndex)
-            const maxLot = Math.max(sold || 1, parentCapacity - otherSum)
             return (
               <div
                 key={phase.id ?? `phase-${phaseIndex}`}
@@ -701,24 +731,35 @@ function InventoryRow({
                     <FormItem>
                       <FormLabel>Límite</FormLabel>
                       <Input
-                        type="number"
-                        min={Math.max(1, sold)}
-                        max={maxLot}
-                        value={field.value ?? ""}
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        value={
+                          field.value === undefined ||
+                          field.value === null ||
+                          Number.isNaN(Number(field.value))
+                            ? ""
+                            : String(field.value)
+                        }
                         onChange={(event) => {
-                          if (event.target.value === "") {
+                          const parsed = parseStrictInt(event.target.value)
+                          if (parsed === "") {
                             field.onChange(undefined)
                             return
                           }
-                          const next = Number(event.target.value)
-                          if (!Number.isFinite(next)) return
-                          if (next > maxLot) {
-                            field.onChange(maxLot)
+                          if (typeof parsed === "number" && Number.isNaN(parsed)) {
                             return
                           }
-                          field.onChange(Math.max(sold || 1, next))
+                          field.onChange(parsed)
                         }}
-                        className="h-10"
+                        aria-invalid={
+                          phaseLimitSum(phases) > parentCapacity || undefined
+                        }
+                        className={cn(
+                          "h-10",
+                          phaseLimitSum(phases) > parentCapacity &&
+                            "border-destructive",
+                        )}
                       />
                       <FormMessage>{fieldState.error?.message}</FormMessage>
                     </FormItem>
@@ -750,7 +791,7 @@ function InventoryRow({
             type="button"
             variant="outline"
             size="sm"
-            disabled={phaseCap >= parentCapacity && parentCapacity > 0}
+            disabled={phaseCap >= parentCapacity}
             onClick={() => {
               form.setValue(
                 `tickets.${index}.phases`,

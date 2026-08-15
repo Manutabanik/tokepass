@@ -45,10 +45,41 @@ export type EventCapacitySnapshot = {
   exceeded: boolean
 }
 
-function asPositiveInt(value: unknown): number {
+export function asPositiveInt(value: unknown): number {
+  if (value === "" || value == null) return 0
   const parsed = Math.floor(Number(value))
   if (!Number.isFinite(parsed) || parsed < 0) return 0
   return parsed
+}
+
+export function parseStrictInt(raw: string): number | "" {
+  const trimmed = raw.trim()
+  if (trimmed === "") return ""
+  if (!/^\d+$/.test(trimmed)) return Number.NaN
+  const val = Number.parseInt(trimmed, 10)
+  return Number.isFinite(val) ? val : Number.NaN
+}
+
+export function parseStrictPrice(raw: string): number | "" {
+  const trimmed = raw.trim().replace(",", ".")
+  if (trimmed === "" || trimmed === ".") return ""
+  const val = Number.parseFloat(trimmed)
+  return Number.isFinite(val) && val >= 0 ? val : Number.NaN
+}
+
+export function ticketPhasesExceedParent(tier: {
+  capacity?: unknown
+  phases?: TicketPhaseDraft[] | null
+}): boolean {
+  const phases = tier.phases ?? []
+  if (phases.length === 0) return false
+  return phaseLimitSum(phases) > asPositiveInt(tier.capacity)
+}
+
+export function ticketsHavePhaseOverflow(
+  tickets: readonly { capacity?: unknown; phases?: TicketPhaseDraft[] | null }[] = [],
+): boolean {
+  return tickets.some((tier) => ticketPhasesExceedParent(tier))
 }
 
 function componentTierTypes(

@@ -76,7 +76,7 @@ export function GuestListClaimForm({
       }
 
       toast.success("Te anotaste en la lista", {
-        description: "Ingresá para canjear tu QR Living Ticket.",
+        description: "Ingresá para canjear el QR de tu entrada.",
       })
       router.push(
         `/login?next=/lists/claim/${meta.id}?entry=${result.data.entryId}`,

@@ -22,6 +22,13 @@ export type EmbedUrlResult = {
   id: string | null
 }
 
+export type GalleryVideoType = "youtube" | "mp4"
+
+export type GetEmbedUrlOptions = {
+  /** Hero gallery: YouTube tap-to-play (no autoplay). */
+  gallery?: boolean
+}
+
 const YOUTUBE_RE =
   /(?:youtube\.com\/(?:watch\?(?:[^#]*&)?v=|embed\/|shorts\/|live\/|v\/)|youtu\.be\/|youtube-nocookie\.com\/embed\/)([A-Za-z0-9_-]{6,})/i
 
@@ -71,7 +78,10 @@ function isDirectVideoUrl(url: URL): boolean {
  * Convierte cualquier URL de video al formato embebible o directo.
  * Preferí esta API en UI nuevas; `parsePromoVideoUrl` sigue disponible.
  */
-export function getEmbedUrl(url: string | null | undefined): EmbedUrlResult {
+export function getEmbedUrl(
+  url: string | null | undefined,
+  options?: GetEmbedUrlOptions,
+): EmbedUrlResult {
   const input = url?.trim() ?? ""
   if (!input) {
     return { type: null, embedUrl: null, canonicalUrl: null, id: null }
@@ -87,11 +97,14 @@ export function getEmbedUrl(url: string | null | undefined): EmbedUrlResult {
   const yt = href.match(YOUTUBE_RE)
   if (yt?.[1]) {
     const id = yt[1]
+    const embedUrl = options?.gallery
+      ? `https://www.youtube.com/embed/${id}?rel=0&modestbranding=1&playsinline=1`
+      : `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&mute=1&controls=1&playsinline=1&rel=0`
     return {
       type: "youtube",
       id,
       canonicalUrl: `https://www.youtube.com/watch?v=${id}`,
-      embedUrl: `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&mute=1&muted=1&enablejsapi=1&rel=0&playsinline=1&modestbranding=1`,
+      embedUrl,
     }
   }
 
@@ -102,7 +115,9 @@ export function getEmbedUrl(url: string | null | undefined): EmbedUrlResult {
       type: "vimeo",
       id,
       canonicalUrl: `https://vimeo.com/${id}`,
-      embedUrl: `https://player.vimeo.com/video/${id}?autoplay=1&muted=1&background=0`,
+      embedUrl: options?.gallery
+        ? `https://player.vimeo.com/video/${id}`
+        : `https://player.vimeo.com/video/${id}?autoplay=1&muted=1&controls=1`,
     }
   }
 
@@ -138,4 +153,25 @@ export function isValidPromoVideoUrl(raw: string | null | undefined): boolean {
   const trimmed = raw?.trim() ?? ""
   if (!trimmed) return true
   return getEmbedUrl(trimmed).type != null
+}
+
+/** Classifies a promo URL for the hero gallery (YouTube iframe vs native MP4). */
+export function getVideoType(
+  url: string | null | undefined,
+): GalleryVideoType | null {
+  const input = url?.trim() ?? ""
+  if (!input) return null
+  if (/youtube\.com|youtu\.be|youtube-nocookie\.com/i.test(input)) {
+    return "youtube"
+  }
+  const parsed = getEmbedUrl(input)
+  if (parsed.type === "file") return "mp4"
+  if (parsed.type === "youtube") return "youtube"
+  return null
+}
+
+/** Slide 2 only for YouTube / Vimeo embeds. */
+export function hasGalleryEmbed(url: string | null | undefined): boolean {
+  const type = getEmbedUrl(url).type
+  return type === "youtube" || type === "vimeo"
 }

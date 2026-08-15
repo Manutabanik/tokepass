@@ -37,6 +37,7 @@ import { PublishEventConfirmDialog } from "@/components/admin/publish-event-conf
 import type { OrganizerVenue } from "@/app/actions/venues"
 import { createVenue } from "@/app/actions/venues"
 import { EventSponsorsManager } from "@/components/admin/event-sponsors-manager"
+import { LineupBuilder } from "@/components/admin/lineup-builder"
 import { EventVenueStep } from "@/components/admin/event-venue-step"
 import {
   createInventoryTicket,
@@ -92,7 +93,9 @@ import {
 import {
   computeEventCapacityFromForm,
   eventCapacityOverflowMessage,
+  ticketsHavePhaseOverflow,
 } from "@/lib/inventory/capacity-budget"
+import { useEventCapacity } from "@/hooks/use-event-capacity"
 import { toUserFacingError } from "@/lib/errors/user-facing-error"
 import {
   collectLiveSeatingSectorIds,
@@ -121,7 +124,7 @@ const steps = [
     icon: MapPin,
   },
   {
-    title: "Tickets y Combos",
+    title: "Entradas y combos",
     description: "Generales, extras y promociones",
     icon: Ticket,
   },
@@ -179,6 +182,7 @@ const defaultValues: EventFormValues = {
   },
   tickets: [blankTicket()],
   ticketsDefaultTab: "auto",
+  lineup: [],
 }
 
 export function EventCreationWizard({
@@ -221,6 +225,11 @@ export function EventCreationWizard({
     defaultValues: initialData?.values ?? defaultValues,
   })
 
+  const capacitySnapshot = useEventCapacity(form)
+  const watchedTickets = useWatch({ control: form.control, name: "tickets" })
+  const inventoryBlocked =
+    activeStep === 2 &&
+    (capacitySnapshot.exceeded || ticketsHavePhaseOverflow(watchedTickets ?? []))
   const flyerName = useWatch({ control: form.control, name: "basics.flyerName" })
   const isMultiDay = useWatch({
     control: form.control,
@@ -292,6 +301,13 @@ export function EventCreationWizard({
         const message = eventCapacityOverflowMessage(capacity)
         form.setError("tickets", { type: "manual", message })
         toast.error("El aforo está excedido", { description: message })
+        return
+      }
+      if (ticketsHavePhaseOverflow(form.getValues("tickets") ?? [])) {
+        const message =
+          "La suma de los lotes de precio no puede superar la capacidad máxima del ticket."
+        form.setError("tickets", { type: "manual", message })
+        toast.error("Lotes de precio excedidos", { description: message })
         return
       }
     }
@@ -824,8 +840,8 @@ export function EventCreationWizard({
                       <span className="mb-1.5 block text-sm font-semibold text-zinc-900 transition-colors group-hover:text-emerald-800 dark:text-white dark:group-hover:text-emerald-300">
                         {flyerName ||
                           (isEditing
-                            ? "Reemplazar flyer actual"
-                            : "Subí el arte del evento")}
+                            ? "Reemplazar imagen actual"
+                            : "Subir imagen del evento")}
                       </span>
                       <span className="mx-auto block max-w-[240px] text-xs leading-relaxed text-muted-foreground">
                         Tamaño máximo 5MB. Recomendamos formato horizontal
@@ -875,6 +891,19 @@ export function EventCreationWizard({
                   )}
                 </FormItem>
                 <div className="lg:col-span-12">
+                  <FormField
+                    control={form.control}
+                    name="lineup"
+                    render={({ field }) => (
+                      <LineupBuilder
+                        eventId={initialData?.id ?? persistedEventId}
+                        value={field.value ?? []}
+                        onChange={field.onChange}
+                      />
+                    )}
+                  />
+                </div>
+                <div className="lg:col-span-12">
                   <EventSponsorsManager
                     eventId={initialData?.id ?? persistedEventId}
                   />
@@ -915,7 +944,7 @@ export function EventCreationWizard({
             >
               <CardHeader className="border-b border-zinc-200 px-4 py-6 dark:border-white/8 lg:px-8">
                 <CardTitle className="text-xl text-foreground">
-                  Tickets y combos
+                  Entradas y combos
                 </CardTitle>
                 <CardDescription className="text-muted-foreground">
                   Entradas generales, adicionales y combos. El aforo del
@@ -953,8 +982,8 @@ export function EventCreationWizard({
                       Mercado Pago
                     </p>
                     <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                      Checkout online con tarjeta, débito y dinero en cuenta.
-                      La comisión All-In se calcula sobre el precio público.
+                      Pago online con tarjeta, débito y dinero en cuenta.
+                      La comisión se incluye en el precio público.
                     </p>
                   </div>
                   <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950/50">
@@ -1072,7 +1101,7 @@ export function EventCreationWizard({
                 </Button>
                 <Button
                   type="submit"
-                  disabled={form.formState.isSubmitting}
+                  disabled={form.formState.isSubmitting || inventoryBlocked}
                   variant="ghost"
                   className="min-h-11 min-w-11 text-muted-foreground hover:bg-zinc-100 hover:text-foreground dark:hover:bg-white/5 lg:hidden"
                 >
@@ -1090,7 +1119,7 @@ export function EventCreationWizard({
                   <Button
                     key="draft-mid"
                     type="submit"
-                    disabled={form.formState.isSubmitting}
+                    disabled={form.formState.isSubmitting || inventoryBlocked}
                     variant="outline"
                     className="hidden min-h-11 border-zinc-300 bg-zinc-100 text-base text-zinc-900 hover:bg-zinc-200 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 lg:inline-flex"
                   >
@@ -1104,6 +1133,7 @@ export function EventCreationWizard({
                   <Button
                     key="next"
                     type="button"
+                    disabled={inventoryBlocked}
                     onClick={() => void moveToStep(activeStep + 1)}
                     className="min-h-11 w-full bg-violet-600 text-base text-white hover:bg-violet-500 lg:w-auto"
                   >

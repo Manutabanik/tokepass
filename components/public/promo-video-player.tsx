@@ -1,42 +1,46 @@
 "use client"
 
 import Image from "next/image"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { getEmbedUrl } from "@/lib/promo-video"
 import { cn } from "@/lib/utils"
 
 type PromoVideoPlayerProps = {
   url: string | null | undefined
-  /** Banner / flyer del evento si la URL falla o no hay video. */
   fallbackImageUrl?: string | null
   title?: string
   className?: string
-  /** Si true y no hay URL válida, renderiza el fallback. Default: false (null). */
   showFallbackWhenEmpty?: boolean
+  /** When false, native video pauses and embeds unmount so playback stops. */
+  active?: boolean
+  /** Do not mount iframe/video until `active` becomes true at least once. */
+  deferUntilActive?: boolean
+  /** Fill the parent instead of reserving aspect-video. */
+  fill?: boolean
+  /** Hero gallery: standard YouTube/Vimeo embed, tap to play, no autoplay. */
+  gallery?: boolean
 }
 
-const IFRAME_ALLOW =
-  "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+const FRAME_CLASS =
+  "w-full aspect-video overflow-hidden rounded-xl bg-muted shadow-sm"
 
-function FallbackBanner({
-  imageUrl,
+function Poster({
+  src,
   title,
   className,
 }: {
-  imageUrl: string
+  src?: string | null
   title: string
   className?: string
 }) {
+  if (!src) {
+    return <div className={className} aria-hidden />
+  }
   return (
-    <div
-      className={cn(
-        "relative aspect-video w-full overflow-hidden rounded-2xl bg-muted shadow-lg",
-        className,
-      )}
-    >
+    <div className={cn("relative", className)}>
       <Image
-        src={imageUrl}
+        src={src}
         alt={title}
         fill
         className="object-cover"
@@ -46,91 +50,90 @@ function FallbackBanner({
   )
 }
 
-/**
- * Reproduce YouTube / Shorts / Vimeo / MP4-WebM con autoplay muted (iOS/Android).
- * Si la URL es inválida, muestra el banner del evento sin romper la página.
- */
 export function PromoVideoPlayer({
   url,
   fallbackImageUrl = null,
   title = "Spot promocional",
   className,
   showFallbackWhenEmpty = false,
+  active = true,
+  deferUntilActive = false,
+  fill = false,
+  gallery = false,
 }: PromoVideoPlayerProps) {
-  const embed = useMemo(() => getEmbedUrl(url), [url])
-  const [mediaFailed, setMediaFailed] = useState(false)
+  const embed = useMemo(
+    () => getEmbedUrl(url, { gallery }),
+    [gallery, url],
+  )
+  const canPlay = Boolean(embed.type && embed.embedUrl)
+  const [armed, setArmed] = useState(!deferUntilActive || active)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const frameClass = cn(
+    fill || gallery
+      ? "relative h-full w-full overflow-hidden bg-black"
+      : FRAME_CLASS,
+    className,
+  )
 
-  const showFallback =
-    mediaFailed ||
-    !embed.type ||
-    !embed.embedUrl ||
-    (showFallbackWhenEmpty && !url?.trim())
+  useEffect(() => {
+    if (active) setArmed(true)
+  }, [active])
 
-  if (showFallback) {
-    if (fallbackImageUrl) {
+  useEffect(() => {
+    const node = videoRef.current
+    if (!node) return
+    if (active) {
+      void node.play().catch(() => undefined)
+      return
+    }
+    node.pause()
+  }, [active, armed])
+
+  if (!canPlay) {
+    if (fallbackImageUrl && showFallbackWhenEmpty) {
       return (
-        <FallbackBanner
-          imageUrl={fallbackImageUrl}
-          title={title}
-          className={className}
-        />
+        <Poster src={fallbackImageUrl} title={title} className={frameClass} />
       )
     }
     if (!url?.trim() && !showFallbackWhenEmpty) return null
+    return <div className={frameClass} aria-hidden />
+  }
+
+  if (!armed || (embed.type !== "file" && !active)) {
     return (
-      <div
-        className={cn(
-          "aspect-video w-full rounded-2xl bg-muted shadow-lg",
-          className,
-        )}
-        aria-hidden
+      <Poster
+        src={fallbackImageUrl}
+        title={title}
+        className={frameClass}
       />
     )
   }
 
   if (embed.type === "file") {
     return (
-      <div
-        className={cn(
-          "relative aspect-video w-full overflow-hidden rounded-2xl bg-black shadow-lg",
-          className,
-        )}
-      >
+      <div className={frameClass}>
         <video
+          ref={videoRef}
           key={embed.embedUrl}
-          src={embed.embedUrl!}
-          autoPlay
-          muted
+          src={embed.embedUrl ?? undefined}
           playsInline
-          loop
           controls
-          preload="metadata"
           className="h-full w-full object-cover"
-          onError={() => setMediaFailed(true)}
-        >
-          Tu navegador no puede reproducir este video.
-        </video>
+        />
       </div>
     )
   }
 
   return (
-    <div
-      className={cn(
-          "relative aspect-video w-full overflow-hidden rounded-2xl bg-black shadow-lg",
-        className,
-      )}
-    >
+    <div className={frameClass}>
       <iframe
         key={embed.embedUrl}
-        src={embed.embedUrl!}
+        src={embed.embedUrl ?? undefined}
         title={title}
-        allow={IFRAME_ALLOW}
+        loading="lazy"
+        allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
         allowFullScreen
-        loading="eager"
-        referrerPolicy="strict-origin-when-cross-origin"
-        className="absolute inset-0 h-full w-full border-0"
-        onError={() => setMediaFailed(true)}
+        className="h-full w-full border-0"
       />
     </div>
   )

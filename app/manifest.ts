@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Tokepass - Boletería Digital",
     short_name: "Tokepass",
     description:
-      "Billetera digital Tokepass: Living Tickets con QR dinámico, incluso sin conexión.",
+      "Billetera digital Tokepass: entradas con QR vivo, incluso sin conexión.",
     start_url: "/cuenta/entradas",
     scope: "/",
     display: "standalone",

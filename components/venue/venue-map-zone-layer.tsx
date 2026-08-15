@@ -26,6 +26,8 @@ export function VenueMapZoneLayer({
   onContextMenu,
   selectOnPointerUp = false,
   unavailableIds = [],
+  lodMode = null,
+  focusedZoneId = null,
 }: {
   zones: VenueMapZone[]
   selectedId?: string | null
@@ -37,6 +39,8 @@ export function VenueMapZoneLayer({
   onContextMenu?: (event: React.MouseEvent, zone: VenueMapZone) => void
   selectOnPointerUp?: boolean
   unavailableIds?: string[]
+  lodMode?: "macro" | "micro" | null
+  focusedZoneId?: string | null
 }) {
   const glowId = useId().replace(/:/g, "")
   const press = useRef<{ x: number; y: number } | null>(null)
@@ -117,49 +121,55 @@ export function VenueMapZoneLayer({
         }
 
         const dimmed = hasSelection && !selected && !soldOut
+        const lodHidden = lodMode === "micro"
+        const lodSolid = lodMode === "macro"
+        const zoneInteractive = interactive && !lodHidden
 
         return (
           <g
             key={zone.id}
             id={`venue-sel-${zone.id}`}
             data-zone-id={zone.id}
+            data-lod-zone={zone.id}
+            data-lod-focused={focusedZoneId === zone.id ? "true" : undefined}
             transform={
-              selected
+              selected && !lodSolid
                 ? `translate(${center.x} ${center.y}) scale(1.15) translate(${-center.x} ${-center.y})`
                 : undefined
             }
             className={cn(
-              "transition-all duration-200 ease-in-out",
-              interactive ? "cursor-pointer" : undefined,
-              soldOut && "pointer-events-none opacity-50",
+              interactive && !lodHidden ? "cursor-pointer" : undefined,
+              soldOut && "pointer-events-none",
             )}
-            opacity={dimmed ? 0.4 : 1}
             style={{
-              pointerEvents: interactive ? "auto" : "none",
-              filter: selected
-                ? "drop-shadow(0px 0px 8px rgba(255, 255, 255, 0.8))"
-                : undefined,
+              opacity: lodHidden ? 0 : dimmed && !lodSolid ? 0.4 : soldOut ? 0.5 : 1,
+              pointerEvents: zoneInteractive ? "auto" : "none",
+              transition: "opacity 0.3s ease",
+              filter:
+                selected && !lodHidden
+                  ? "drop-shadow(0px 0px 8px rgba(255, 255, 255, 0.8))"
+                  : undefined,
             }}
             onContextMenu={(event) => onContextMenu?.(event, zone)}
             onPointerDown={(event) => {
-              if (!interactive) return
+              if (!zoneInteractive) return
               press.current = { x: event.clientX, y: event.clientY }
               if (selectOnPointerUp) return
               if (event.button !== 0) return
               handleZoneClick(event)
             }}
             onPointerUp={(event) => {
-              if (!interactive || !selectOnPointerUp) return
+              if (!zoneInteractive || !selectOnPointerUp) return
               if (event.button !== 0) return
               handleZoneClick(event, true)
               press.current = null
             }}
             onClick={(event) => {
-              if (!interactive) return
+              if (!zoneInteractive) return
               handleZoneClick(event, selectOnPointerUp)
             }}
             onTouchEnd={(event) => {
-              if (!interactive) return
+              if (!zoneInteractive) return
               handleZoneClick(event, true)
               press.current = null
             }}
@@ -168,26 +178,31 @@ export function VenueMapZoneLayer({
               data-zone-id={zone.id}
               points={points}
               fill={soldOut ? "#9ca3af" : zone.color || "#22d3ee"}
+              fillOpacity={
+                soldOut ? 0.45 : lodSolid ? 0.3 : selected ? 0.62 : 0.28
+              }
               stroke={
                 soldOut
                   ? "#9ca3af"
-                  : selected
-                    ? "#ffffff"
-                    : zone.color || "#67e8f9"
+                  : lodSolid
+                    ? zone.color || "#67e8f9"
+                    : selected
+                      ? "#ffffff"
+                      : zone.color || "#67e8f9"
               }
-              strokeWidth={selected ? 3 : 2}
+              strokeWidth={lodSolid ? 2 : selected ? 3 : 2}
               strokeLinejoin="round"
-              pointerEvents={soldOut ? "none" : "auto"}
-              filter={soldOut ? undefined : `url(#zone-neon-${glowId})`}
+              pointerEvents={soldOut || lodHidden ? "none" : "auto"}
+              filter={
+                soldOut || lodHidden || lodSolid
+                  ? undefined
+                  : `url(#zone-neon-${glowId})`
+              }
               className={cn(
-                "transition-all duration-200 ease-in-out",
-                soldOut
-                  ? "[fill-opacity:0.45]"
-                  : selected
-                    ? "[fill-opacity:0.62]"
-                    : "[fill-opacity:0.28]",
-                interactive &&
-                  "cursor-pointer hover:[fill-opacity:0.72]",
+                zoneInteractive &&
+                  (lodSolid
+                    ? "cursor-pointer hover:[fill-opacity:0.45]"
+                    : "cursor-pointer hover:[fill-opacity:0.82]"),
               )}
             />
             <text
@@ -196,7 +211,7 @@ export function VenueMapZoneLayer({
               textAnchor="middle"
               className={cn(
                 "pointer-events-none fill-white font-bold",
-                selected ? "text-[14px]" : "text-[12px]",
+                lodSolid || selected ? "text-[14px]" : "text-[12px]",
               )}
             >
               {zone.name}

@@ -148,7 +148,7 @@ export function SearchBar({
               type="search"
               value={query}
               onChange={(event) => onQueryChange(event.target.value)}
-              placeholder="Evento, artista…"
+              placeholder="Buscar evento o artista..."
               className="min-w-0 flex-1 border-0 bg-transparent text-base font-medium text-zinc-900 outline-none placeholder:text-zinc-400 focus:ring-0 md:text-sm dark:text-white dark:placeholder:text-zinc-500"
             />
           </span>

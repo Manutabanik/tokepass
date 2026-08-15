@@ -56,7 +56,7 @@ export function generalAdmissionTabLabel(
 ): string {
   const blob = tiers.map((tier) => tier.name.toLocaleLowerCase("es")).join(" ")
   if (/(^|[^\p{L}])campo([^\p{L}]|$)/u.test(blob)) return "Campo"
-  return "Acceso General"
+  return "Entrada General"
 }
 
 export function resolveDefaultTicketPickerTab(input: {

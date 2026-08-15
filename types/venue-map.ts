@@ -126,7 +126,7 @@ export type VenueMapPoint = { x: number; y: number }
 
 export type VenueZoneLayoutType = "general" | "table_combo" | "numbered_seat"
 
-/** Polígono paramétrico para festivales (generación masiva de inventario). */
+/** Polígono paramétrico. El JSON también acepta `points` o `x,y,width,height`. */
 export type VenueMapZone = {
   id: string
   name: string
@@ -140,6 +140,8 @@ export type VenueMapZone = {
   capacityPerUnit: number
   capacity: number
   labelPrefix: string
+  /** Reserved seats/tables already include venue (GA) access. */
+  includesGeneralAccess?: boolean
 }
 
 export type InteractiveVenueMap = {
@@ -368,12 +370,41 @@ function parseMapPoint(raw: unknown): VenueMapPoint | null {
   return { x: Math.round(x * 1000) / 1000, y: Math.round(y * 1000) / 1000 }
 }
 
+function rectToPolygon(item: Record<string, unknown>): VenueMapPoint[] {
+  const x = Number(item.x)
+  const y = Number(item.y)
+  const width = Number(item.width)
+  const height = Number(item.height)
+  if (
+    !Number.isFinite(x) ||
+    !Number.isFinite(y) ||
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    return []
+  }
+  return [
+    { x, y },
+    { x: x + width, y },
+    { x: x + width, y: y + height },
+    { x, y: y + height },
+  ]
+}
+
 function parseVenueZone(raw: unknown): VenueMapZone | null {
   if (!raw || typeof raw !== "object") return null
   const item = raw as Record<string, unknown>
-  const polygon = Array.isArray(item.polygon)
-    ? item.polygon.map(parseMapPoint).filter((point): point is VenueMapPoint => Boolean(point))
-    : []
+  const rawPoints = Array.isArray(item.polygon)
+    ? item.polygon
+    : Array.isArray(item.points)
+      ? item.points
+      : []
+  const fromPoints = rawPoints
+    .map(parseMapPoint)
+    .filter((point): point is VenueMapPoint => Boolean(point))
+  const polygon = fromPoints.length >= 3 ? fromPoints : rectToPolygon(item)
   if (polygon.length < 3) return null
   const layoutRaw = String(item.layoutType ?? item.layout_type ?? "table_combo")
   const layoutType: VenueZoneLayoutType =
@@ -395,7 +426,34 @@ function parseVenueZone(raw: unknown): VenueMapZone | null {
     capacityPerUnit: Math.min(100, Math.max(1, asNumber(item.capacityPerUnit ?? item.capacity_per_unit, 1))),
     capacity: Math.max(0, asNumber(item.capacity, rows * itemsPerRow)),
     labelPrefix: String(item.labelPrefix ?? item.label_prefix ?? (layoutType === "numbered_seat" ? "Butaca " : "Mesa ")).slice(0, 24),
+    includesGeneralAccess: parseOptionalBoolean(
+      item.includesGeneralAccess ?? item.includes_general_access,
+    ),
   }
+}
+
+function parseOptionalBoolean(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") return value
+  if (value === "true" || value === 1 || value === "1") return true
+  if (value === "false" || value === 0 || value === "0") return false
+  return undefined
+}
+
+export function zoneIncludesGeneralAccess(
+  zone: Pick<VenueMapZone, "includesGeneralAccess" | "layoutType">,
+): boolean {
+  if (typeof zone.includesGeneralAccess === "boolean") {
+    return zone.includesGeneralAccess
+  }
+  return zone.layoutType === "table_combo" || zone.layoutType === "numbered_seat"
+}
+
+export function mapIncludesGeneralAccess(
+  map: InteractiveVenueMap | null | undefined,
+): boolean {
+  const zones = map?.zones ?? []
+  if (zones.length === 0) return true
+  return zones.some(zoneIncludesGeneralAccess)
 }
 
 function parsePolygonSector(raw: unknown): VenueMapSector | null {

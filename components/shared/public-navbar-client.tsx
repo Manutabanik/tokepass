@@ -15,6 +15,7 @@ import { useState } from "react"
 import { AccountAvatarMenu } from "@/components/account/account-avatar-menu"
 import { MobileAccountAvatarLink } from "@/components/account/mobile-account-avatar-link"
 import { BrandLogo } from "@/components/shared/brand-logo"
+import { NavbarSearch } from "@/components/shared/navbar-search"
 import { SignOutButton } from "@/components/shared/sign-out-button"
 import { Button } from "@/components/ui/button"
 import {
@@ -65,9 +66,7 @@ export function PublicNavbarClient({
   return (
     <header
       className={cn(
-        "sticky top-0 z-50 w-full border-b backdrop-blur-xl",
-        "border-zinc-200/70 bg-white/80",
-        "dark:border-white/8 dark:bg-[#030712]/80",
+        "sticky top-0 z-50 w-full border-b border-border/50 bg-background/80 backdrop-blur-md",
       )}
     >
       <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-2 px-4 sm:h-[4.25rem] sm:gap-3 lg:px-8">
@@ -118,7 +117,7 @@ export function PublicNavbarClient({
                     className={mobileNavLinkClass}
                   >
                     <Search className="size-5 shrink-0" aria-hidden="true" />
-                    Buscar eventos
+                    Buscar evento o artista
                   </Link>
                   <Link
                     href="/events"
@@ -234,18 +233,7 @@ export function PublicNavbarClient({
         </nav>
 
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-          {/* Búsqueda y tema: solo desktop; en mobile viven en el drawer */}
-          <Link
-            href="/events"
-            className={cn(
-              "hidden size-11 place-items-center rounded-full border border-zinc-200 text-zinc-600 transition md:grid",
-              "hover:bg-zinc-100 hover:text-zinc-900",
-              "dark:border-white/10 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white",
-            )}
-            aria-label="Buscar eventos"
-          >
-            <Search className="size-4" aria-hidden="true" />
-          </Link>
+          <NavbarSearch />
 
           <ThemeToggle
             className={cn(

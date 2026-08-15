@@ -3,27 +3,24 @@
 import {
   BadgeCheck,
   Flame,
-  MapPin,
   Music2,
   ShieldCheck,
   Sparkles,
 } from "lucide-react"
-import { useMemo } from "react"
+import { motion, useReducedMotion } from "motion/react"
+import { useMemo, useState } from "react"
 
 import type { EventDetails } from "@/app/actions/public-events"
 import type { ResaleListingPublic } from "@/app/actions/resale"
-import {
-  AddToCalendarButton,
-  EventDetailTopActions,
-} from "@/components/public/event-detail-actions"
+import { EventDateSelector } from "@/components/public/event-date-selector"
+import { EventDetailTopActions } from "@/components/public/event-detail-actions"
 import { AnalyticsTracker } from "@/components/public/analytics-tracker"
 import { EventAboutExpandable } from "@/components/public/event-about-expandable"
 import { EventExperienceGallery } from "@/components/public/event-experience-gallery"
-import { EventFlyer } from "@/components/public/event-flyer"
+import { HeaderInfoBlock } from "@/components/public/event-header-info-block"
+import { EventHeroMediaGallery } from "@/components/public/event-hero-media-gallery"
+import { EventLineup } from "@/components/public/event-lineup"
 import { EventLocationPanel } from "@/components/public/event-location-panel"
-import { EventPromoSpotButton } from "@/components/public/event-promo-spot"
-import { PromoVideoPlayer } from "@/components/public/promo-video-player"
-import { StoryFlyerVisitorButton } from "@/components/public/story-flyer-modal"
 import { EventResaleListings } from "@/components/public/event-resale-listings"
 import { EventSaleStatusNotice } from "@/components/public/event-sale-status-notice"
 import { SponsorGrid } from "@/components/public/sponsor-grid"
@@ -38,9 +35,29 @@ import {
 } from "@/components/ui/accordion"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { formatEventDay, formatEventTime } from "@/lib/format"
+import {
+  formatEventDay,
+  formatEventDayMonthNumeric,
+  formatEventWeekdayShort,
+} from "@/lib/format"
 import { deriveEventSaleState } from "@/lib/event-status"
 import { cn } from "@/lib/utils"
+
+const storefrontStagger = {
+  hidden: {},
+  show: {
+    transition: { staggerChildren: 0.1 },
+  },
+}
+
+const storefrontFade = {
+  hidden: { opacity: 0, y: 15 },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: { type: "spring" as const, stiffness: 260, damping: 20 },
+  },
+}
 
 type EventStorefrontProps = {
   event: EventDetails
@@ -107,6 +124,29 @@ export function EventStorefront({
   const organizerBio =
     event.organizerBio?.trim() || "Productora en Tokepass"
 
+  const availableDates = useMemo(() => {
+    const days = event.scheduleDays ?? []
+    if (days.length > 0) {
+      return days.map((day) => ({
+        id: day.id,
+        weekday: formatEventWeekdayShort(day.start_time),
+        dayMonth: formatEventDayMonthNumeric(day.start_time),
+        label: day.title || formatEventDay(day.start_time),
+      }))
+    }
+    return [
+      {
+        id: event.id,
+        weekday: formatEventWeekdayShort(event.date),
+        dayMonth: formatEventDayMonthNumeric(event.date),
+        label: formatEventDay(event.date),
+      },
+    ]
+  }, [event.date, event.id, event.scheduleDays])
+  const [selectedDate, setSelectedDate] = useState(
+    () => availableDates[0]?.id ?? event.id,
+  )
+
   const ticketTiers = useMemo(
     () =>
       event.tiers.map((tier) => ({
@@ -133,8 +173,9 @@ export function EventStorefront({
     [event.comboItemsByTier, event.tiers],
   )
 
+  const reduceMotion = useReducedMotion()
   const asideClassName =
-    "min-w-0 scroll-mt-24 px-4 pb-8 lg:col-start-2 lg:row-start-1 lg:row-span-4 lg:sticky lg:top-24 lg:h-fit lg:max-h-[calc(100dvh-6rem)] lg:self-start lg:overflow-y-auto lg:overflow-x-hidden lg:px-0 lg:pb-0"
+    "h-fit min-w-0 scroll-mt-24 overflow-visible px-4 pb-12 md:px-0 lg:sticky lg:top-24 lg:col-span-5 lg:col-start-8 lg:row-span-4 lg:row-start-1 lg:self-start xl:col-span-4 xl:col-start-9"
 
   return (
     <div className="relative isolate min-h-screen overflow-x-clip bg-background pb-8 text-foreground lg:overflow-x-visible lg:pb-12">
@@ -158,111 +199,78 @@ export function EventStorefront({
       ) : null}
 
       {/* Mobile-first immersive column; desktop widens with side checkout */}
-      <div
-        className={cn(
-          "mx-auto grid gap-0 lg:items-start lg:px-6 lg:py-8",
-          "max-w-6xl lg:grid-cols-[minmax(0,1.05fr)_minmax(340px,0.95fr)] lg:gap-10",
-        )}
+      <motion.div
+        className="mx-auto grid max-w-7xl grid-cols-1 gap-8 px-0 md:px-4 lg:grid-cols-12 lg:items-start lg:gap-12 lg:py-8"
+        variants={reduceMotion ? undefined : storefrontStagger}
+        initial={reduceMotion ? false : "hidden"}
+        animate="show"
       >
-        <div className="min-w-0">
-          <section className="relative">
-            <div className="relative h-[32vh] min-h-[220px] max-h-[360px] overflow-hidden sm:h-[38vh] lg:min-h-[320px] lg:rounded-3xl lg:border lg:border-border">
-              <EventFlyer
-                eventId={event.id}
-                title={event.title}
-                imageUrl={event.imageUrl}
-                priority
-                className={finished ? "grayscale-[50%]" : undefined}
-              />
-              <div
-                className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-black/35"
-                aria-hidden="true"
-              />
-              <EventDetailTopActions
-                eventId={event.id}
-                title={event.title}
-                showBackLink={showBackLink}
-              />
-              <div className="absolute bottom-4 left-4 right-4 z-10 flex flex-wrap gap-2">
-                {finished ? (
-                  <Badge className="rounded-full border-0 bg-zinc-800/80 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-white backdrop-blur-md">
-                    FINALIZADO
-                  </Badge>
-                ) : soldOut ? (
-                  <Badge className="rounded-full border-0 bg-red-600 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-white">
-                    AGOTADO
-                  </Badge>
-                ) : (
-                  <Badge className="rounded-full border-0 bg-white/95 px-3 py-1 text-[11px] font-bold text-zinc-950">
-                    <Music2 className="size-3.5" aria-hidden="true" />
-                    Evento en vivo
-                  </Badge>
-                )}
-                {demand ? (
-                  <Badge className="rounded-full border-0 bg-rose-500 px-3 py-1 text-[11px] font-bold text-white">
-                    <Flame className="size-3.5" aria-hidden="true" />
-                    {demand}
-                  </Badge>
-                ) : null}
-                {event.status === "draft" ? (
-                  <Badge className="rounded-full border-0 bg-amber-500 px-3 py-1 text-[11px] font-bold text-zinc-950">
-                    Borrador
-                  </Badge>
-                ) : null}
-              </div>
-            </div>
-          </section>
-
-          <div className="space-y-5 px-4 pb-4 pt-5 sm:px-6 lg:px-0 lg:pt-8">
-            <header className="min-w-0 space-y-4">
-              <h1 className="break-words text-[1.85rem] font-black leading-[1.1] tracking-[-0.04em] text-foreground sm:text-4xl">
-                {event.title}
-              </h1>
-
-              <div className="flex min-w-0 flex-wrap items-center gap-3">
-                <div className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-2xl border border-border bg-card px-3.5 py-2.5 text-card-foreground">
-                  <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
-                    <span className="text-[10px] font-black uppercase leading-none">
-                      {formatEventDay(event.date).slice(0, 3)}
+        <motion.div
+          className="min-w-0 lg:col-span-7 xl:col-span-8"
+          variants={reduceMotion ? undefined : storefrontStagger}
+        >
+            <motion.div variants={reduceMotion ? undefined : storefrontFade}>
+            <EventHeroMediaGallery
+              eventId={event.id}
+              title={event.title}
+              imageUrl={event.imageUrl}
+              promoVideoUrl={event.promoVideoUrl}
+              finished={finished}
+              badge={
+                <>
+                  {finished ? (
+                    <span className="flex items-center gap-1.5 rounded-full border border-white/20 bg-background/70 px-3 py-1.5 text-xs font-bold text-foreground shadow-sm backdrop-blur-md">
+                      FINALIZADO
                     </span>
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold capitalize text-foreground">
-                      {formatEventDay(event.date)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {event.scheduleDays?.length > 1
-                        ? `${event.scheduleDays.length} jornadas · desde ${formatEventTime(event.date)}`
-                        : formatEventTime(event.date)}
-                    </p>
-                  </div>
-                </div>
-                {venueName ? (
-                  <div className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-2xl border border-border bg-card px-3.5 py-2.5 text-card-foreground">
-                    <MapPin
-                      className="size-4 shrink-0 text-muted-foreground"
-                      aria-hidden="true"
-                    />
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-foreground">
-                        {venueName}
-                      </p>
-                      {address && address !== venueName ? (
-                        <p className="truncate text-xs text-muted-foreground">
-                          {address}
-                        </p>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-
-              <p className="line-clamp-3 break-words text-sm leading-relaxed text-muted-foreground">
-                {description}
-              </p>
-            </header>
-            </div>
-          </div>
+                  ) : soldOut ? (
+                    <span className="flex items-center gap-1.5 rounded-full border border-white/20 bg-red-600/80 px-3 py-1.5 text-xs font-bold text-white shadow-sm backdrop-blur-md">
+                      AGOTADO
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1.5 rounded-full border border-white/20 bg-background/70 px-3 py-1.5 text-xs font-bold text-foreground shadow-sm backdrop-blur-md">
+                      <Music2 className="size-3.5" aria-hidden="true" />
+                      Evento en vivo
+                    </span>
+                  )}
+                  {demand ? (
+                    <span className="flex items-center gap-1.5 rounded-full border border-white/20 bg-rose-500/80 px-3 py-1.5 text-xs font-bold text-white shadow-sm backdrop-blur-md">
+                      <Flame className="size-3.5" aria-hidden="true" />
+                      {demand}
+                    </span>
+                  ) : null}
+                  {event.status === "draft" ? (
+                    <span className="flex items-center gap-1.5 rounded-full border border-white/20 bg-amber-500/85 px-3 py-1.5 text-xs font-bold text-zinc-950 shadow-sm backdrop-blur-md">
+                      Borrador
+                    </span>
+                  ) : null}
+                </>
+              }
+              actions={
+                <EventDetailTopActions
+                  eventId={event.id}
+                  title={event.title}
+                  showBackLink={showBackLink}
+                  date={event.date}
+                  location={address}
+                  details={event.description}
+                />
+              }
+            />
+            </motion.div>
+            <motion.div variants={reduceMotion ? undefined : storefrontFade}>
+            <HeaderInfoBlock
+              title={event.title}
+              organizerName={organizerName}
+            />
+            </motion.div>
+            <motion.div variants={reduceMotion ? undefined : storefrontFade}>
+            <EventDateSelector
+              dates={availableDates}
+              selectedId={selectedDate}
+              onChange={setSelectedDate}
+            />
+            </motion.div>
+        </motion.div>
 
         {finished ? (
           <aside id="tickets" className={asideClassName}>
@@ -292,70 +300,42 @@ export function EventStorefront({
             zoneTierPricing={event.zoneTierPricing}
             purchaseLocked={soldOut}
             tiers={ticketTiers}
+            selectedDayId={selectedDate}
             defaultTicketTab={event.defaultTicketTab}
             renderLayout={({ map, panel }) => (
               <>
-                {map ? (
-                  <section
-                    id="mapa"
-                    className="min-w-0 px-4 pt-1 sm:px-6 lg:col-start-1 lg:px-0"
-                  >
-                    {map}
-                  </section>
-                ) : null}
-                <aside id="tickets" className={asideClassName}>
+                <motion.aside
+                  id="tickets"
+                  className={asideClassName}
+                  variants={reduceMotion ? undefined : storefrontFade}
+                  initial={reduceMotion ? false : "hidden"}
+                  animate="show"
+                >
                   {soldOut ? (
                     <div className="mb-4">
                       <EventSaleStatusNotice state="sold_out" />
                     </div>
                   ) : null}
                   {panel}
-                </aside>
+                </motion.aside>
+                {map ? (
+                  <section
+                    id="mapa"
+                    className="min-w-0 px-4 pt-2 md:px-0 lg:col-span-7 lg:col-start-1 lg:pt-0 xl:col-span-8"
+                  >
+                    {map}
+                  </section>
+                ) : null}
               </>
             )}
           />
         )}
 
-        <div className="min-w-0 space-y-8 px-4 pb-6 pt-2 sm:px-6 lg:col-start-1 lg:px-0 lg:pt-0">
-            <div className="flex flex-wrap items-center gap-3">
-              <AddToCalendarButton
-                title={event.title}
-                date={event.date}
-                location={address}
-                details={event.description}
-              />
-              <StoryFlyerVisitorButton
-                className="h-9 min-h-9 rounded-full border-border bg-card px-4 text-sm font-semibold"
-                data={{
-                  eventTitle: event.title,
-                  eventDate: event.date,
-                  eventLocation: address,
-                  imageUrl: event.imageUrl,
-                  mode: "visitor",
-                  organizerName: event.organizerName,
-                  organizerAvatarUrl: event.organizerAvatarUrl,
-                }}
-              />
-              <EventPromoSpotButton
-                className="h-9 min-h-9 rounded-full border-border bg-card px-4 text-sm font-semibold"
-                promoVideoUrl={event.promoVideoUrl}
-              />
-            </div>
-
-            {event.promoVideoUrl ? (
-              <section
-                aria-label="Spot promocional"
-                className="w-full overflow-hidden rounded-2xl bg-muted shadow-lg"
-              >
-                <PromoVideoPlayer
-                  url={event.promoVideoUrl}
-                  fallbackImageUrl={event.imageUrl}
-                  title={`Spot · ${event.title}`}
-                  showFallbackWhenEmpty
-                  className="aspect-video w-full rounded-2xl"
-                />
-              </section>
-            ) : null}
+        <motion.div
+          className="min-w-0 space-y-8 px-4 pb-6 md:px-0 lg:col-span-7 lg:col-start-1 xl:col-span-8"
+          variants={reduceMotion ? undefined : storefrontFade}
+        >
+            <EventLineup data={event.lineup} />
 
             <EventResaleListings
               listings={resaleListings}
@@ -370,32 +350,6 @@ export function EventStorefront({
               latitude={event.venue?.latitude ?? null}
               longitude={event.venue?.longitude ?? null}
             />
-
-            {event.scheduleDays?.length > 1 ? (
-              <section className="space-y-3">
-                <h2 className="text-lg font-bold tracking-tight text-foreground">
-                  Jornadas
-                </h2>
-                <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                  {event.scheduleDays?.map((day) => (
-                    <div
-                      key={day.id}
-                      className="min-w-[148px] rounded-2xl border border-border bg-card px-4 py-3 text-card-foreground shadow-sm"
-                    >
-                      <p className="text-sm font-bold text-foreground">
-                        {day.title}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {formatEventDay(day.start_time)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatEventTime(day.start_time)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            ) : null}
 
             <EventExperienceGallery urls={event.galleryUrls} />
 
@@ -485,11 +439,11 @@ export function EventStorefront({
                 Presentalas en puerta con Living QR dinámico.
               </p>
             </div>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
 
       {(event.sponsors?.length ?? 0) > 0 ? (
-        <div className="mx-auto max-w-6xl px-4 pb-8 lg:px-6">
+        <div className="mx-auto max-w-7xl px-4 pb-8">
           <SponsorGrid
             heading="Auspician este evento:"
             sponsors={event.sponsors ?? []}

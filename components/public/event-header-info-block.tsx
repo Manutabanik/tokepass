@@ -1,0 +1,26 @@
+import { cn } from "@/lib/utils"
+
+export function HeaderInfoBlock({
+  title,
+  organizerName,
+  className,
+}: {
+  title: string
+  organizerName?: string | null
+  className?: string
+}) {
+  const subtitle = organizerName?.trim() || null
+
+  return (
+    <header className={cn("px-4 md:px-0", className)}>
+      <h1 className="mt-5 mb-1 text-4xl font-black leading-[1.05] tracking-tighter text-foreground lg:mt-8 lg:text-6xl">
+        {title}
+      </h1>
+      {subtitle ? (
+        <p className="text-sm font-medium text-muted-foreground sm:text-base">
+          {subtitle}
+        </p>
+      ) : null}
+    </header>
+  )
+}

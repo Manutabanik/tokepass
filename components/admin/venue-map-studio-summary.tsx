@@ -1,10 +1,25 @@
 "use client"
 
-import { LayoutGrid, Map } from "lucide-react"
+import { Map } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { venueMapStudioStatus } from "@/lib/seating/venue-map-geometry"
+import { formatCurrency } from "@/lib/format"
+import { summarizeVenueInventory } from "@/lib/seating/venue-inventory-dashboard"
 import type { InteractiveVenueMap } from "@/types/venue-map"
+
+function sectorSummary(row: {
+  unitCount: number
+  unitLabel: string
+  people: number
+  price: number
+}) {
+  const parts = [
+    `${row.unitCount} ${row.unitLabel}`,
+    `${row.people} ${row.people === 1 ? "persona" : "personas"}`,
+  ]
+  if (row.price > 0) parts.push(formatCurrency(row.price))
+  return parts.join(" · ")
+}
 
 export function VenueMapStudioSummary({
   map,
@@ -13,32 +28,82 @@ export function VenueMapStudioSummary({
   map: InteractiveVenueMap
   onOpen: () => void
 }) {
+  const inventory = summarizeVenueInventory(map)
+
   return (
-    <div className="space-y-4 rounded-2xl border border-border bg-card p-5 shadow-sm">
-      <div className="flex items-start gap-3">
-        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-500">
-          <Map className="size-5" aria-hidden="true" />
-        </span>
-        <div className="min-w-0 flex-1">
+    <div className="rounded-xl border border-border bg-card p-6">
+      {inventory.hasInventory ? (
+        <>
+          <div className="mb-6 grid grid-cols-3 gap-4 border-b border-border/50 pb-6">
+            <div className="min-w-0">
+              <p className="text-2xl font-bold tabular-nums text-foreground">
+                {inventory.capacity}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {inventory.capacity === 1 ? "Lugar" : "Lugares"}
+              </p>
+            </div>
+            <div className="min-w-0">
+              <p className="text-2xl font-bold tabular-nums text-foreground">
+                {inventory.elementCount}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {inventory.elementLabel}
+              </p>
+            </div>
+            <div className="min-w-0">
+              <p className="text-2xl font-bold tabular-nums text-foreground">
+                {inventory.sectorCount}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {inventory.sectorLabel}
+              </p>
+            </div>
+          </div>
+
+          <ul>
+            {inventory.sectors.map((row) => (
+              <li
+                key={row.id}
+                className="flex items-center justify-between gap-3 py-2"
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <span
+                    className="size-3 shrink-0 rounded-full"
+                    style={{ backgroundColor: row.color }}
+                    aria-hidden="true"
+                  />
+                  <span className="truncate font-medium text-foreground">
+                    {row.name}
+                  </span>
+                </span>
+                <span className="shrink-0 text-sm text-muted-foreground">
+                  {sectorSummary(row)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        <div className="mb-6">
           <h3 className="text-base font-semibold text-foreground">
-            Mapa y Distribución del Recinto
+            Mapa del recinto
           </h3>
-          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-            Diseñá la distribución y asigná precio y capacidad de cada zona en
-            el mismo panel, sin pasar a otro paso.
-          </p>
-          <p className="mt-3 text-sm font-medium text-foreground">
-            {venueMapStudioStatus(map)}
+          <p className="mt-1 text-sm text-muted-foreground">
+            Todavía no hay zonas ni mesas. Diseñá el plano para ver aforo,
+            elementos y sectores en un solo lugar.
           </p>
         </div>
-      </div>
+      )}
+
       <Button
         type="button"
+        variant="default"
         size="lg"
         onClick={onOpen}
-        className="flex w-full items-center justify-center gap-2 bg-primary font-bold text-primary-foreground sm:w-auto"
+        className="mt-6 w-full"
       >
-        <LayoutGrid className="h-5 w-5" />
+        <Map className="size-4" aria-hidden="true" />
         Diseñar Mapa en Pantalla Completa
       </Button>
     </div>

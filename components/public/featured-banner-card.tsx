@@ -76,6 +76,7 @@ export function FeaturedBannerCard({
         <Button
           size="lg"
           className="h-auto w-full rounded-2xl bg-emerald-500 py-6 font-extrabold text-black shadow-lg hover:bg-emerald-400 md:w-auto"
+          nativeButton={false}
           render={<Link href={href} />}
         >
           Conseguí tus entradas

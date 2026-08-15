@@ -26,6 +26,7 @@ export function EventFlyer({
   className,
   children,
   priority = false,
+  objectFit = "cover",
 }: {
   eventId: string
   title: string
@@ -33,17 +34,24 @@ export function EventFlyer({
   className?: string
   children?: ReactNode
   priority?: boolean
+  objectFit?: "cover" | "contain"
 }) {
   if (imageUrl) {
     return (
-      <div className={cn("relative h-full w-full overflow-hidden", className)}>
+      <div
+        className={cn(
+          "relative h-full w-full overflow-hidden",
+          objectFit === "contain" && "bg-zinc-950",
+          className,
+        )}
+      >
         <Image
           src={imageUrl}
           alt={title}
           fill
           priority={priority}
           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-          className="object-cover"
+          className={objectFit === "contain" ? "object-contain" : "object-cover"}
         />
       </div>
     )

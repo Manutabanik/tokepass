@@ -14,6 +14,71 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { parsePromoVideoUrl } from "@/lib/promo-video"
 import { cn } from "@/lib/utils"
 
+export function PromoVideoLightbox({
+  url,
+  title = "Spot del evento",
+  open,
+  onOpenChange,
+}: {
+  url: string | null | undefined
+  title?: string
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const parsed = useMemo(() => parsePromoVideoUrl(url), [url])
+  if (!parsed) return null
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogPortal>
+        <DialogOverlay className="bg-black/90 supports-backdrop-filter:backdrop-blur-sm" />
+        <DialogPrimitive.Popup className="fixed inset-0 z-50 flex h-dvh w-screen flex-col outline-none">
+          <div className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
+            <DialogTitle className="text-sm font-semibold text-white">
+              {title}
+            </DialogTitle>
+            <DialogClose
+              className="grid size-11 place-items-center rounded-full border border-white/15 bg-white/10 text-white transition hover:bg-white/20"
+              aria-label="Cerrar"
+            >
+              <X className="size-4" />
+            </DialogClose>
+          </div>
+
+          <div className="flex flex-1 items-center justify-center px-3 pb-6 sm:px-8">
+            <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-black shadow-lg">
+              {open ? (
+                parsed.provider === "file" ? (
+                  <video
+                    key={parsed.embedUrl}
+                    src={parsed.embedUrl}
+                    autoPlay
+                    muted
+                    playsInline
+                    loop
+                    controls
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
+                ) : (
+                  <iframe
+                    key={parsed.embedUrl}
+                    src={parsed.embedUrl}
+                    title={title}
+                    loading="eager"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                    className="absolute inset-0 h-full w-full border-0"
+                  />
+                )
+              ) : null}
+            </div>
+          </div>
+        </DialogPrimitive.Popup>
+      </DialogPortal>
+    </Dialog>
+  )
+}
+
 export function EventPromoSpotButton({
   promoVideoUrl,
   className,
@@ -44,54 +109,11 @@ export function EventPromoSpotButton({
         <Play className="h-4 w-4" aria-hidden="true" />
         Ver Spot
       </button>
-
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogPortal>
-          <DialogOverlay className="bg-black/90 supports-backdrop-filter:backdrop-blur-sm" />
-          <DialogPrimitive.Popup className="fixed inset-0 z-50 flex h-dvh w-screen flex-col outline-none">
-            <div className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
-              <DialogTitle className="text-sm font-semibold text-white">
-                Spot del evento
-              </DialogTitle>
-              <DialogClose
-                className="grid size-10 place-items-center rounded-full border border-white/15 bg-white/10 text-white transition hover:bg-white/20"
-                aria-label="Cerrar"
-              >
-                <X className="size-4" />
-              </DialogClose>
-            </div>
-
-            <div className="flex flex-1 items-center justify-center px-3 pb-6 sm:px-8">
-              <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-black shadow-lg">
-                {open ? (
-                  parsed.provider === "file" ? (
-                    <video
-                      key={parsed.embedUrl}
-                      src={parsed.embedUrl}
-                      autoPlay
-                      muted
-                      playsInline
-                      loop
-                      controls
-                      className="absolute inset-0 h-full w-full object-cover"
-                    />
-                  ) : (
-                    <iframe
-                      key={parsed.embedUrl}
-                      src={parsed.embedUrl}
-                      title="Spot promocional"
-                      loading="eager"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                      allowFullScreen
-                      className="absolute inset-0 h-full w-full border-0"
-                    />
-                  )
-                ) : null}
-              </div>
-            </div>
-          </DialogPrimitive.Popup>
-        </DialogPortal>
-      </Dialog>
+      <PromoVideoLightbox
+        url={promoVideoUrl}
+        open={open}
+        onOpenChange={setOpen}
+      />
     </>
   )
 }

@@ -16,7 +16,7 @@ import { getWalletUiFlags } from "@/lib/wallet-cache"
 export const metadata: Metadata = {
   title: "Mis entradas",
   description:
-    "Billetera digital Tokepass: Living Tickets offline-first con QR vivo.",
+    "Billetera digital Tokepass: tus entradas con QR vivo, incluso sin conexión.",
 }
 
 export default async function CuentaEntradasPage() {

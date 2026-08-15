@@ -95,6 +95,9 @@ export function buildContentSecurityPolicy(nonce?: string | null): string {
     "https://www.google-analytics.com",
     "https://*.google-analytics.com",
     "https://www.googletagmanager.com",
+    "https://i.scdn.co",
+    "https://*.scdn.co",
+    "https://*.spotifycdn.com",
   ]
     .filter(Boolean)
     .join(" ")

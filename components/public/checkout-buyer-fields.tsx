@@ -88,7 +88,7 @@ export function CheckoutBuyerFields({
           className="inline-flex items-center gap-1.5 text-sm text-foreground"
         >
           <Mail className="size-3.5" aria-hidden="true" />
-          Email
+          Mail
         </Label>
         <Input
           id={CHECKOUT_BUYER_FIELD_IDS.buyerEmail}

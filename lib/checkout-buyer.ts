@@ -53,7 +53,7 @@ export const checkoutBuyerFormSchema = z.object({
     .string()
     .trim()
     .toLowerCase()
-    .email("Ingresá un email válido para la confirmación."),
+    .email("Ingresá un mail válido para la confirmación."),
 })
 
 export type CheckoutBuyerFormValues = z.infer<typeof checkoutBuyerFormSchema>
@@ -96,7 +96,7 @@ export function getCheckoutBuyerFieldErrors(
     }
   }
   if (Object.keys(errors).length === 0) {
-    errors.buyerName = "Completá nombre, DNI, teléfono y email del asistente."
+    errors.buyerName = "Completá nombre, DNI, teléfono y mail del asistente."
   }
   return errors
 }
@@ -114,7 +114,7 @@ export function validateCheckoutBuyer(
   if (!buyer) {
     return {
       ok: false,
-      error: "Completá nombre, DNI, teléfono y email del asistente.",
+      error: "Completá nombre, DNI, teléfono y mail del asistente.",
     }
   }
 

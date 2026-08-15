@@ -70,6 +70,7 @@ export function PriceInput({
         const rawValue = event.target.value
         if (rawValue === "") {
           setDraft("")
+          onValueChange(undefined)
           return
         }
         if (!/^\d*[.,]?\d{0,2}$/.test(rawValue)) return

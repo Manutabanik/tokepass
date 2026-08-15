@@ -30,7 +30,7 @@ export function SelectionLedger({
   return (
     <div
       className={cn(
-        "shrink-0 border-t border-border bg-background/95 px-3 py-2.5 backdrop-blur sm:px-4 sm:py-3",
+        "shrink-0 border-t border-border bg-background/95 px-3 py-1.5 backdrop-blur sm:px-4 sm:py-3",
         className,
       )}
     >
@@ -46,7 +46,7 @@ export function SelectionLedger({
           {formatCurrency(total)}
         </p>
       </div>
-      <ul className="mt-2 flex flex-col gap-1.5">
+      <ul className="mt-1.5 flex flex-col gap-1 sm:mt-2 sm:gap-1.5">
         {groups.map((group) => (
           <li key={group.key} className="min-w-0">
             <span className="flex w-full min-w-0 items-start gap-1.5 rounded-xl border border-border bg-card px-2.5 py-1.5 text-xs text-foreground">

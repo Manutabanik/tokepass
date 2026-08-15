@@ -39,7 +39,7 @@ export function CheckoutIdentityDialog({
       >
         <DialogHeader>
           <DialogTitle className="text-lg font-bold text-foreground">
-            Iniciar sesión o continuar como invitado
+            Ingresá o continuá como invitado
           </DialogTitle>
           <DialogDescription className="text-muted-foreground">
             El mapa se abre ahora. Nombre, DNI y teléfono se piden recién al
@@ -61,7 +61,7 @@ export function CheckoutIdentityDialog({
             onClick={onLogin}
           >
             <LogIn className="size-4" aria-hidden="true" />
-            Iniciar sesión
+            Ingresar
           </Button>
           <Button
             type="button"

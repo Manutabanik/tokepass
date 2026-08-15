@@ -65,6 +65,16 @@ const nextConfig: NextConfig = {
         hostname: "localhost",
         pathname: "/storage/v1/object/public/**",
       },
+      {
+        protocol: "https",
+        hostname: "i.ytimg.com",
+        pathname: "/vi/**",
+      },
+      {
+        protocol: "https",
+        hostname: "i.scdn.co",
+        pathname: "/**",
+      },
     ],
   },
   async redirects() {

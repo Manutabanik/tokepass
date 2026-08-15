@@ -121,7 +121,7 @@ export default async function EventGuestListsPage({
               Listas · {event.title}
             </h1>
             <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-              Cortesías $0 con QR Living Ticket, cupos y hora límite de ingreso.
+              Cortesías a $0 con QR de entrada, cupos y hora límite de ingreso.
             </p>
           </div>
           <CreateGuestListDialog eventId={eventId} />

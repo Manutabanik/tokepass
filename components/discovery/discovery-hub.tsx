@@ -27,6 +27,7 @@ export function DiscoveryHub({
   initialQuery = "",
   initialLocation = "todas",
   initialCategoryId = "all",
+  initialArtistId = "",
   initialFeatured,
   categories = DEFAULT_DISCOVERY_CATEGORIES,
 }: {
@@ -36,6 +37,8 @@ export function DiscoveryHub({
   initialLocation?: string
   /** UUID de categoría (o `all`). */
   initialCategoryId?: string
+  /** UUID de artista (filtro de exploración desde la búsqueda omnicanal). */
+  initialArtistId?: string
   /** Pool de destacados mezclado en el server (Fisher–Yates). */
   initialFeatured?: FeaturedRotationResult<CatalogEvent>
   /** Categorías / tags — hoy default local; mañana desde DB. */
@@ -49,6 +52,7 @@ export function DiscoveryHub({
   const [categoryId, setCategoryId] = useState(initialCategoryId)
   const [tagId, setTagId] = useState<string | null>(null)
   const [city, setCity] = useState(initialLocation)
+  const artistId = initialArtistId.trim()
 
   useEffect(() => {
     publishDiscoveryControls({
@@ -67,6 +71,7 @@ export function DiscoveryHub({
     if (query.trim()) nextParams.set("q", query.trim())
     if (city && city !== "todas") nextParams.set("location", city)
     if (categoryId && categoryId !== "all") nextParams.set("category", categoryId)
+    if (artistId) nextParams.set("artist", artistId)
 
     const currentParams =
       typeof window !== "undefined"
@@ -88,7 +93,7 @@ export function DiscoveryHub({
 
     const next = nextParams.toString()
     router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false })
-  }, [query, city, categoryId, pathname, router])
+  }, [query, city, categoryId, artistId, pathname, router])
 
   const featuredPool = useMemo(
     () => featuredPoolSafe(events, initialFeatured),
@@ -111,7 +116,8 @@ export function DiscoveryHub({
     query.trim().length > 0 ||
     categoryId !== "all" ||
     tagId != null ||
-    city !== "todas"
+    city !== "todas" ||
+    Boolean(artistId)
 
   const gridEvents = isBrowsing ? filtered : events
 

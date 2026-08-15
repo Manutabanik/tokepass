@@ -4,7 +4,9 @@ import { describe, it } from "node:test"
 import {
   computeEventCapacity,
   occupiesVenueBudget,
+  parseStrictInt,
   phaseLimitSum,
+  ticketPhasesExceedParent,
   venueCapacityBudget,
 } from "@/lib/inventory/capacity-budget"
 import type { EventFormValues } from "@/lib/validations/event-form"
@@ -109,6 +111,46 @@ describe("capacity-budget", () => {
       customMaxCapacity: 200,
     })
     assert.equal(snap.effectiveMaxCapacity, 300)
+  })
+
+  it("parsea enteros vacios como UI vacia y NaN invalido", () => {
+    assert.equal(parseStrictInt(""), "")
+    assert.equal(parseStrictInt("120"), 120)
+    assert.equal(Number.isNaN(parseStrictInt("12a")), true)
+  })
+
+  it("trata capacidad vacia como 0 en el aforo", () => {
+    const general = ticket({ tierType: "general", capacity: Number.NaN })
+    const snap = computeEventCapacity({
+      tickets: [{ ...general, capacity: undefined }],
+      venueMap: standingMap(100),
+      baseVenueCapacity: 100,
+    })
+    assert.equal(snap.generalAllocatedCapacity, 0)
+    assert.equal(snap.totalAllocated, 100)
+  })
+
+  it("marca overflow si los lotes superan la capacidad padre", () => {
+    assert.equal(
+      ticketPhasesExceedParent({
+        capacity: 50,
+        phases: [
+          { name: "P1", price: 1, capacityLimit: 30, status: "active" },
+          { name: "P2", price: 2, capacityLimit: 30, status: "scheduled" },
+        ],
+      }),
+      true,
+    )
+    assert.equal(
+      ticketPhasesExceedParent({
+        capacity: 50,
+        phases: [
+          { name: "P1", price: 1, capacityLimit: 20, status: "active" },
+          { name: "P2", price: 2, capacityLimit: 30, status: "scheduled" },
+        ],
+      }),
+      false,
+    )
   })
 
   it("no deja que la suma de lotes pase el padre", () => {

@@ -13,8 +13,13 @@ import { Button } from "@/components/ui/button"
 import { MAX_TICKETS_PER_PURCHASE } from "@/lib/checkout-limits"
 import { formatCurrency } from "@/lib/format"
 import {
+  compactSeatToken,
+  groupSeatsForMatrix,
+} from "@/lib/seating/accessible-seat-matrix"
+import {
   assignContiguousSeats,
   buildAccessibleSeatTree,
+  type AccessibleSeatNode,
   type AccessibleSectorNode,
 } from "@/lib/seating/accessible-seat-tree"
 import { flattenVenueMapSeats } from "@/lib/seating/venue-map-geometry"
@@ -30,6 +35,7 @@ export function AccessibleSeatSelector({
   selectedZoneId = null,
   unavailableZoneIds = [],
   pending = false,
+  referenceImageUrl = null,
   onSelectZone,
   onToggleSeat,
   onAssignSeats,
@@ -41,6 +47,7 @@ export function AccessibleSeatSelector({
   selectedZoneId?: string | null
   unavailableZoneIds?: string[]
   pending?: boolean
+  referenceImageUrl?: string | null
   onSelectZone?: (zone: VenueMapZone) => void
   onToggleSeat: (seat: StorefrontLayoutSeat) => void
   onAssignSeats: (seats: StorefrontLayoutSeat[]) => void
@@ -111,38 +118,54 @@ export function AccessibleSeatSelector({
     )
   }
 
-  return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-6">
-        <AutoAssignCard
-          sectors={sectors}
-          sectorId={autoSector?.id ?? ""}
-          quantity={autoQuantity}
-          error={autoError}
-          pending={pending}
-          onSectorChange={(value) => {
-            setAutoSectorId(value)
-            setAutoError(null)
-          }}
-          onQuantityChange={(value) => {
-            setAutoQuantity(value)
-            setAutoError(null)
-          }}
-          onAssign={handleAssign}
-        />
+  const referenceSrc = referenceImageUrl?.trim() || map.backgroundImage?.trim() || ""
 
-        {sectors.length === 0 ? (
-          <p className="mt-4 text-sm text-muted-foreground">
-            No hay sectores publicados para elegir en lista.
-          </p>
-        ) : (
-          <Accordion
-            multiple
-            className="mt-4 overflow-hidden rounded-2xl border border-border"
-          >
-            {sectors.map((sector) => (
-              <AccordionItem key={sector.id} value={sector.id} className="px-3">
-                <AccordionTrigger className="min-h-12 py-3 hover:no-underline">
+  return (
+    <div className="w-full space-y-6 bg-transparent">
+      {referenceSrc ? (
+        <figure className="mb-6">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={referenceSrc}
+            alt="Plano de referencia del recinto"
+            className="mb-2 h-auto max-h-[300px] w-full rounded-xl border object-contain shadow-sm"
+          />
+          <figcaption className="text-xs text-muted-foreground">
+            Plano de referencia. Los colores y sectores pueden variar.
+          </figcaption>
+        </figure>
+      ) : null}
+      <AutoAssignCard
+        sectors={sectors}
+        sectorId={autoSector?.id ?? ""}
+        quantity={autoQuantity}
+        error={autoError}
+        pending={pending}
+        onSectorChange={(value) => {
+          setAutoSectorId(value)
+          setAutoError(null)
+        }}
+        onQuantityChange={(value) => {
+          setAutoQuantity(value)
+          setAutoError(null)
+        }}
+        onAssign={handleAssign}
+      />
+
+      {sectors.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No hay sectores publicados para elegir en lista.
+        </p>
+      ) : (
+        <div className="space-y-4">
+          {sectors.map((sector) => (
+            <Accordion
+              key={sector.id}
+              multiple
+              className="overflow-hidden rounded-xl border border-border bg-card shadow-sm"
+            >
+              <AccordionItem value={sector.id} className="border-0 px-2">
+                <AccordionTrigger className="min-h-12 px-4 py-4 hover:no-underline">
                   <span className="flex min-w-0 items-center gap-3">
                     <span
                       className="size-3.5 shrink-0 rounded-full ring-1 ring-border"
@@ -165,7 +188,7 @@ export function AccessibleSeatSelector({
                 </AccordionTrigger>
                 <AccordionContent>
                   {sector.kind === "ga" ? (
-                    <div className="pb-3">
+                    <div className="px-4 pb-6">
                       <p className="text-sm text-muted-foreground">
                         Acceso general. No hace falta elegir butaca.
                       </p>
@@ -179,7 +202,7 @@ export function AccessibleSeatSelector({
                           if (zone) onSelectZone?.(zone)
                           else onAssignZoneQuantity(sector.id, 1)
                         }}
-                        className="mt-3 h-11 w-full rounded-xl"
+                        className="mt-4 h-auto w-full rounded-xl p-6 font-bold shadow-sm"
                       >
                         {selectedZoneId === sector.id
                           ? "Sector seleccionado"
@@ -187,61 +210,42 @@ export function AccessibleSeatSelector({
                       </Button>
                     </div>
                   ) : (
-                    <div className="space-y-4 pb-3">
-                      {sector.rows.map((row) => (
-                        <div key={row.id}>
-                          <p className="mb-2 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">
-                            Fila {row.label}
-                          </p>
-                          <div className="grid grid-cols-6 gap-2 sm:grid-cols-8">
-                            {row.seats.map((seat) => {
-                              const disabled =
-                                pending ||
-                                seat.status === "occupied" ||
-                                seat.status === "blocked"
-                              const picked = seat.status === "selected"
-                              return (
-                                <button
-                                  key={seat.id}
-                                  type="button"
-                                  disabled={disabled}
-                                  aria-pressed={picked}
-                                  aria-label={
-                                    disabled
-                                      ? `Asiento ${seat.number} ocupado`
-                                      : `Asiento ${seat.number} de la fila ${row.label}`
-                                  }
-                                  onClick={() => {
-                                    const source = flatSeats.find(
-                                      (item) => item.id === seat.id,
-                                    )
-                                    if (!source) return
-                                    onToggleSeat({
-                                      id: source.id,
-                                      row: source.row,
-                                      number: source.number,
-                                      sectorId: source.sectorId,
-                                      sectorName: source.sectorName,
-                                      price: source.price,
-                                      color: source.color,
-                                      label: source.label,
-                                    })
-                                  }}
-                                  className={cn(
-                                    "grid size-11 place-items-center rounded-lg border-2 text-sm font-bold transition-colors",
-                                    disabled &&
-                                      "cursor-not-allowed border-border bg-muted text-muted-foreground",
-                                    !disabled &&
-                                      !picked &&
-                                      "border-primary bg-transparent text-foreground hover:bg-primary/10",
-                                    picked &&
-                                      "border-primary bg-primary text-primary-foreground",
-                                  )}
-                                >
-                                  {seat.label}
-                                </button>
-                              )
-                            })}
+                    <div className="px-4 pb-6">
+                      {groupSeatsForMatrix(sector.rows).map((group, index) => (
+                        <div key={group.title}>
+                          <h4
+                            className={cn(
+                              "mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground",
+                              index === 0 ? "mt-1" : "mt-6",
+                            )}
+                          >
+                            {group.title}
+                          </h4>
+                          <div className="flex flex-wrap gap-2">
+                            {group.seats.map((seat) => (
+                              <SeatMatrixButton
+                                key={seat.id}
+                                seat={seat}
+                                groupTitle={group.title}
+                                pending={pending}
+                                onToggle={() => {
+                                  const source = flatSeats.find(
+                                    (item) => item.id === seat.id,
+                                  )
+                                  if (!source) return
+                                  onToggleSeat({
+                                    id: source.id,
+                                    row: source.row,
+                                    number: source.number,
+                                    sectorId: source.sectorId,
+                                    sectorName: source.sectorName,
+                                    price: source.price,
+                                    color: source.color,
+                                    label: source.label,
+                                  })
+                                }}
+                              />
+                            ))}
                           </div>
                         </div>
                       ))}
@@ -249,11 +253,54 @@ export function AccessibleSeatSelector({
                   )}
                 </AccordionContent>
               </AccordionItem>
-            ))}
-          </Accordion>
-        )}
-      </div>
+            </Accordion>
+          ))}
+        </div>
+      )}
     </div>
+  )
+}
+
+function SeatMatrixButton({
+  seat,
+  groupTitle,
+  pending,
+  onToggle,
+}: {
+  seat: AccessibleSeatNode
+  groupTitle: string
+  pending: boolean
+  onToggle: () => void
+}) {
+  const token = compactSeatToken(seat.label, seat.number)
+  const taken = seat.status === "occupied" || seat.status === "blocked"
+  const selected = seat.status === "selected"
+  const disabled = pending || taken
+
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      aria-pressed={selected}
+      aria-label={
+        taken
+          ? `${groupTitle} ${token} ocupado`
+          : `${groupTitle} ${token}`
+      }
+      onClick={onToggle}
+      className={cn(
+        "flex h-12 w-12 shrink-0 items-center justify-center rounded-md text-sm font-medium tabular-nums transition-colors",
+        !disabled &&
+          !selected &&
+          "border border-input bg-background text-foreground hover:border-primary hover:bg-primary/10",
+        selected &&
+          "border border-primary bg-primary text-primary-foreground shadow-sm",
+        taken &&
+          "cursor-not-allowed border-transparent bg-muted text-muted-foreground opacity-50",
+      )}
+    >
+      {token}
+    </button>
   )
 }
 
@@ -277,7 +324,7 @@ function AutoAssignCard({
   onAssign: () => void
 }) {
   return (
-    <section className="rounded-2xl border border-primary/35 bg-primary/10 p-4">
+    <section className="rounded-xl border border-primary/35 bg-primary/10 p-6 shadow-sm">
       <p className="flex items-center gap-2 text-sm font-extrabold text-foreground">
         <Sparkles className="size-4 text-primary" aria-hidden="true" />
         Buscar el mejor lugar automáticamente
@@ -332,7 +379,7 @@ function AutoAssignCard({
         type="button"
         disabled={pending || !sectorId}
         onClick={onAssign}
-        className="mt-3 h-11 w-full rounded-xl font-bold"
+        className="mt-4 h-auto w-full rounded-xl p-6 font-bold shadow-sm"
       >
         Asignar lugares
       </Button>

@@ -50,7 +50,7 @@ export function UniversalCheckoutBar({
           onClick={onContinue}
           className="min-h-11 h-12 w-full shrink-0 rounded-2xl bg-emerald-500 px-4 text-sm font-bold text-zinc-950 shadow-[0_10px_30px_rgba(16,185,129,0.35)] hover:bg-emerald-400 disabled:opacity-50 sm:w-auto"
         >
-          {pending ? "Reservando…" : "Continuar"}
+          {pending ? "Reservando…" : "Asegurá tu lugar"}
           <ArrowRight className="size-4" aria-hidden="true" />
         </Button>
       </div>

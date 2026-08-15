@@ -26,6 +26,19 @@ export const AGE_RESTRICTION_LABELS: Record<AgeRestriction, string> = {
 
 export const MAX_EVENT_FLYER_BYTES = 5 * 1024 * 1024
 
+export const lineupDraftItemSchema = z.object({
+  id: z.string().min(1),
+  artistId: z.string().nullable().optional().default(null),
+  lineupEntryId: z.string().nullable().optional().default(null),
+  spotifyId: z.string().nullable().optional().default(null),
+  name: z.string().trim().min(1),
+  imageUrl: z.string().nullable().optional().default(null),
+  genre: z.string().nullable().optional().default(null),
+  performanceTime: z.string().optional().default(""),
+  stage: z.string().optional().default(""),
+  order: z.number().int().min(0).optional().default(0),
+})
+
 export const scheduleDaySchema = z.object({
   id: z.string().uuid(),
   title: z.string().trim().min(2, "Nombrá la jornada."),
@@ -181,6 +194,7 @@ const eventFormObject = z
       .array(ticketTierSchema)
       .min(1, "Creá al menos un tipo de entrada."),
     ticketsDefaultTab: z.enum(DEFAULT_TICKET_TABS).optional().default("auto"),
+    lineup: z.array(lineupDraftItemSchema).optional().default([]),
   })
   .superRefine((data, context) => {
     const tierNames = new Set<string>()
@@ -451,6 +465,7 @@ export const draftEventSchema = z.object({
     }),
   tickets: z.array(draftTicketSchema).optional().default([]),
   ticketsDefaultTab: z.enum(DEFAULT_TICKET_TABS).optional().default("auto"),
+  lineup: z.array(lineupDraftItemSchema).optional().default([]),
 })
 
 export type EventFormValues = z.infer<typeof publishEventSchema>
@@ -641,5 +656,6 @@ export function coerceDraftEventForm(
       raw.ticketsDefaultTab === "addon"
         ? raw.ticketsDefaultTab
         : "auto",
+    lineup: Array.isArray(raw.lineup) ? raw.lineup : [],
   } as EventFormValues
 }
