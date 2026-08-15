@@ -15,6 +15,7 @@ import {
   publicStoryName,
   storyCtaUrl,
   storyInitials,
+  storyLineupLabel,
   type StoryFlyerData,
   type StoryHeadlineId,
   type StoryThemeId,
@@ -87,11 +88,22 @@ export function StoryCanvas({
   const artistImage = storyDataImage(data.artistImageUrl)
   const organizerName = publicStoryName(data.organizerName, "Tokepass")
   const organizerAvatar = storyDataImage(data.organizerAvatarUrl)
-  const stampName = artistName || organizerName
-  const stampImage = artistName ? artistImage : organizerAvatar
+  const lineup = (data.lineupArtists ?? [])
+    .map((artist) => ({
+      name: publicStoryName(artist.name, ""),
+      imageUrl: storyDataImage(artist.imageUrl),
+    }))
+    .filter((artist) => artist.name)
+  const showLineupStack = lineup.length > 1
+  const stampName = artistName || lineup[0]?.name || organizerName
+  const stampImage = artistImage || lineup[0]?.imageUrl || organizerAvatar
   const stampLabel = artistName
     ? `Voy a ver a ${artistName}`
     : `Presentado por ${organizerName}`
+  const lineupCopy = storyLineupLabel(
+    lineup.map((artist) => artist.name),
+    data.lineupRemainingCount ?? 0,
+  )
   const category = (data.categoryLabel?.trim() || "ACCESO GENERAL").toUpperCase()
   const cta = storyCtaUrl()
 
@@ -134,14 +146,14 @@ export function StoryCanvas({
           zIndex: 1,
           height: "100%",
           boxSizing: "border-box",
-          padding: "72px 56px 52px",
+          padding: "60px 52px 40px",
           display: "flex",
           flexDirection: "column",
         }}
       >
         <svg
           width="100%"
-          height="220"
+          height="188"
           viewBox="0 0 936 220"
           role="img"
           aria-label={`${headline.lines[0]} ${headline.lines[1]}`}
@@ -283,11 +295,11 @@ export function StoryCanvas({
           </motion.div>
         </div>
 
-        <div style={{ marginTop: 28 }}>
+        <div style={{ marginTop: 20 }}>
           <p
             style={{
               margin: 0,
-              fontSize: 40,
+              fontSize: 36,
               lineHeight: 1.08,
               fontWeight: 900,
               letterSpacing: "-0.04em",
@@ -297,8 +309,8 @@ export function StoryCanvas({
           </p>
           <p
             style={{
-              margin: "10px 0 0",
-              fontSize: 24,
+              margin: "8px 0 0",
+              fontSize: 22,
               fontWeight: 700,
               color: "rgba(255,255,255,0.86)",
               textTransform: "capitalize",
@@ -312,75 +324,120 @@ export function StoryCanvas({
 
         <div
           style={{
-            marginTop: 28,
+            marginTop: 18,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            gap: 20,
+            gap: 18,
           }}
         >
           <div
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 18,
+              gap: 14,
               minWidth: 0,
               flex: 1,
             }}
           >
-            <div
-              style={{
-                width: 112,
-                height: 112,
-                borderRadius: 999,
-                overflow: "hidden",
-                flexShrink: 0,
-                border: `3px solid ${theme.accent}`,
-                boxShadow: `0 0 0 4px ${theme.accent}33, 0 10px 18px rgba(0,0,0,0.45)`,
-                background: "rgba(255,255,255,0.12)",
-                display: "grid",
-                placeItems: "center",
-                fontSize: 32,
-                fontWeight: 900,
-              }}
-            >
-              {stampImage ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={stampImage}
-                  alt=""
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "cover",
-                    display: "block",
-                  }}
-                />
-              ) : (
-                <span>{storyInitials(stampName)}</span>
-              )}
-            </div>
+            {showLineupStack ? (
+              <div style={{ display: "flex", alignItems: "center" }}>
+                {lineup.slice(0, 3).map((artist, index) => (
+                  <div
+                    key={`${artist.name}-${index}`}
+                    style={{
+                      width: 56,
+                      height: 56,
+                      marginLeft: index === 0 ? 0 : -14,
+                      borderRadius: 999,
+                      overflow: "hidden",
+                      flexShrink: 0,
+                      border: `2px solid ${theme.accent}`,
+                      boxShadow: "0 6px 12px rgba(0,0,0,0.4)",
+                      background: "rgba(255,255,255,0.12)",
+                      display: "grid",
+                      placeItems: "center",
+                      fontSize: 16,
+                      fontWeight: 800,
+                      zIndex: 8 - index,
+                    }}
+                  >
+                    {artist.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={artist.imageUrl}
+                        alt=""
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                          display: "block",
+                        }}
+                      />
+                    ) : (
+                      <span>{storyInitials(artist.name)}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div
+                style={{
+                  width: 88,
+                  height: 88,
+                  borderRadius: 999,
+                  overflow: "hidden",
+                  flexShrink: 0,
+                  border: `3px solid ${theme.accent}`,
+                  boxShadow: `0 0 0 4px ${theme.accent}33, 0 10px 18px rgba(0,0,0,0.45)`,
+                  background: "rgba(255,255,255,0.12)",
+                  display: "grid",
+                  placeItems: "center",
+                  fontSize: 26,
+                  fontWeight: 900,
+                }}
+              >
+                {stampImage ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={stampImage}
+                    alt=""
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                      display: "block",
+                    }}
+                  />
+                ) : (
+                  <span>{storyInitials(stampName)}</span>
+                )}
+              </div>
+            )}
             <div style={{ minWidth: 0 }}>
               <p
                 style={{
                   margin: 0,
-                  fontSize: 24,
-                  fontWeight: 800,
-                  lineHeight: 1.2,
-                  letterSpacing: "-0.03em",
+                  fontSize: showLineupStack ? 20 : 22,
+                  fontWeight: 700,
+                  lineHeight: 1.25,
+                  letterSpacing: "-0.02em",
+                  color: showLineupStack
+                    ? "rgba(255,255,255,0.72)"
+                    : "#fafafa",
                 }}
               >
-                {stampLabel}
+                {showLineupStack ? lineupCopy : stampLabel}
               </p>
               <span
                 style={{
                   display: "inline-block",
-                  marginTop: 10,
+                  marginTop: 8,
                   borderRadius: 999,
-                  padding: "8px 16px",
+                  padding: "6px 14px",
                   background: theme.accent,
                   color: "#09090b",
-                  fontSize: 16,
+                  fontSize: 14,
                   fontWeight: 900,
                   letterSpacing: "0.12em",
                 }}
@@ -394,15 +451,15 @@ export function StoryCanvas({
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
-              gap: 10,
+              gap: 8,
               flexShrink: 0,
             }}
           >
             <div
               style={{
-                width: 132,
-                height: 132,
-                borderRadius: 18,
+                width: 120,
+                height: 120,
+                borderRadius: 16,
                 overflow: "hidden",
                 background: "#fff",
                 padding: 8,
@@ -411,15 +468,51 @@ export function StoryCanvas({
             >
               <QRCodeSVG
                 value={cta}
-                size={116}
+                size={104}
                 level="H"
                 includeMargin
                 bgColor="#ffffff"
                 fgColor="#09090b"
               />
             </div>
-            <WhiteTokepassMark size={44} />
+            <WhiteTokepassMark size={36} />
           </div>
+        </div>
+
+        <div
+          style={{
+            marginTop: 16,
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          {organizerAvatar ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={organizerAvatar}
+              alt=""
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 999,
+                objectFit: "cover",
+                border: "1px solid rgba(255,255,255,0.28)",
+                flexShrink: 0,
+              }}
+            />
+          ) : null}
+          <p
+            style={{
+              margin: 0,
+              fontSize: 18,
+              fontWeight: 600,
+              color: "rgba(255,255,255,0.58)",
+              letterSpacing: "-0.01em",
+            }}
+          >
+            {`Organizado por ${organizerName}`}
+          </p>
         </div>
       </div>
     </div>

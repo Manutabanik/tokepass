@@ -7,6 +7,11 @@ export type StoryHeadlineId = "see-you" | "got-ticket" | "going-out"
 
 export type StoryFlyerMode = "visitor" | "buyer"
 
+export type StoryLineupArtist = {
+  name: string
+  imageUrl?: string | null
+}
+
 export type StoryFlyerData = {
   eventTitle: string
   eventDate: string
@@ -20,6 +25,8 @@ export type StoryFlyerData = {
   artistName?: string | null
   artistImageUrl?: string | null
   categoryLabel?: string | null
+  lineupArtists?: StoryLineupArtist[]
+  lineupRemainingCount?: number
 }
 
 export type StoryTheme = {
@@ -131,6 +138,22 @@ export function storyInitials(name: string): string {
       .map((part) => part[0]?.toUpperCase() ?? "")
       .join("") || "TP"
   )
+}
+
+export const STORY_LINEUP_AVATAR_MAX = 3
+
+export function storyLineupLabel(
+  names: string[],
+  remainingCount = 0,
+): string {
+  const clean = names.map((name) => name.trim()).filter(Boolean)
+  if (clean.length === 0) return ""
+  const extra = remainingCount + Math.max(0, clean.length - 2)
+  const shown = clean.slice(0, 2)
+  if (shown.length === 1 && extra <= 0) return `Lineup: ${shown[0]}`
+  if (shown.length === 1) return `Lineup: ${shown[0]} y mas`
+  if (extra <= 0) return `Lineup: ${shown[0]} y ${shown[1]}`
+  return `Lineup: ${shown[0]}, ${shown[1]} y mas`
 }
 
 export function storyCtaUrl(): string {

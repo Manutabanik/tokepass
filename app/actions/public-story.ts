@@ -2,7 +2,11 @@
 
 import { eventArtistsToLineup, visibleLineupArtists } from "@/lib/event-lineup"
 import { isEventUuid } from "@/lib/seo/site"
-import type { StoryFlyerData } from "@/lib/story-canvas"
+import {
+  STORY_LINEUP_AVATAR_MAX,
+  type StoryFlyerData,
+  type StoryLineupArtist,
+} from "@/lib/story-canvas"
 import { fetchImageAsDataUrl } from "@/lib/story-image-proxy"
 import { createClient } from "@/lib/supabase/server"
 
@@ -11,10 +15,8 @@ export type StoryHeadliner = {
   imageUrl: string | null
 }
 
-export async function getPublicStoryHeadliner(
-  eventId: string,
-): Promise<StoryHeadliner | null> {
-  if (!isEventUuid(eventId)) return null
+async function loadEventLineupArtists(eventId: string) {
+  if (!isEventUuid(eventId)) return []
 
   const supabase = await createClient()
   const withFlag = await supabase
@@ -33,16 +35,40 @@ export async function getPublicStoryHeadliner(
         .limit(12)
     : withFlag
 
-  if (query.error) return null
+  if (query.error) return []
+  return eventArtistsToLineup(query.data ?? []).artists
+}
 
-  const lineup = eventArtistsToLineup(query.data ?? [])
+export async function getPublicStoryHeadliner(
+  eventId: string,
+): Promise<StoryHeadliner | null> {
+  const artists = await loadEventLineupArtists(eventId)
   const featured =
-    visibleLineupArtists(lineup.artists).featured[0] ?? lineup.artists[0]
+    visibleLineupArtists(artists).featured[0] ?? artists[0]
   if (!featured?.name) return null
-
   return {
     name: featured.name,
     imageUrl: featured.imageUrl,
+  }
+}
+
+export async function getPublicStoryLineup(eventId: string): Promise<{
+  artists: StoryLineupArtist[]
+  remainingCount: number
+}> {
+  const artists = await loadEventLineupArtists(eventId)
+  if (artists.length === 0) return { artists: [], remainingCount: 0 }
+
+  const visible = visibleLineupArtists(artists)
+  const pool = visible.featured.length > 0 ? visible.featured : artists
+  const shown = pool.slice(0, STORY_LINEUP_AVATAR_MAX).map((artist) => ({
+    name: artist.name,
+    imageUrl: artist.imageUrl,
+  }))
+
+  return {
+    artists: shown,
+    remainingCount: Math.max(0, artists.length - shown.length),
   }
 }
 
@@ -50,27 +76,40 @@ export async function getStoryCardData(
   input: StoryFlyerData,
 ): Promise<StoryFlyerData> {
   let next = { ...input }
-  if (!next.artistName?.trim() && next.eventId?.trim()) {
-    const artist = await getPublicStoryHeadliner(next.eventId.trim())
-    if (artist) {
+  const eventId = next.eventId?.trim()
+  if (eventId) {
+    const lineup = await getPublicStoryLineup(eventId)
+    if (lineup.artists.length > 0) {
+      const headliner = lineup.artists[0]
       next = {
         ...next,
-        artistName: next.artistName || artist.name,
-        artistImageUrl: next.artistImageUrl || artist.imageUrl,
+        artistName: next.artistName || headliner.name,
+        artistImageUrl: next.artistImageUrl || headliner.imageUrl,
+        lineupArtists: lineup.artists,
+        lineupRemainingCount: lineup.remainingCount,
       }
     }
   }
 
-  const [imageUrl, artistImageUrl, organizerAvatarUrl] = await Promise.all([
+  const lineup = next.lineupArtists ?? []
+  const [imageUrl, organizerAvatarUrl, ...lineupImages] = await Promise.all([
     fetchImageAsDataUrl(next.imageUrl),
-    fetchImageAsDataUrl(next.artistImageUrl),
     fetchImageAsDataUrl(next.organizerAvatarUrl),
+    ...lineup.map((artist) => fetchImageAsDataUrl(artist.imageUrl)),
   ])
+
+  const hydratedLineup = lineup.map((artist, index) => ({
+    name: artist.name,
+    imageUrl: lineupImages[index] ?? null,
+  }))
 
   return {
     ...next,
     imageUrl,
-    artistImageUrl,
+    artistImageUrl: hydratedLineup[0]?.imageUrl ?? null,
+    artistName: next.artistName || hydratedLineup[0]?.name || null,
     organizerAvatarUrl,
+    lineupArtists: hydratedLineup,
+    lineupRemainingCount: next.lineupRemainingCount ?? 0,
   }
 }
