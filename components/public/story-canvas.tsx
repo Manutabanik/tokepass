@@ -103,28 +103,17 @@ export function StoryCanvas({
     backgroundColor: theme.background,
     color: "#fafafa",
     fontFamily: FONT,
+    WebkitFontSmoothing: "antialiased",
+    MozOsxFontSmoothing: "grayscale",
+    textRendering: "optimizeLegibility",
   }
 
   return (
     <div ref={canvasRef} data-story-canvas style={rootStyle}>
-      <StoryLiquidBackdrop theme={theme} frozen={Boolean(reduceMotion)} />
-
-      {eventImage ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={eventImage}
-          alt=""
-          style={{
-            position: "absolute",
-            inset: "-8%",
-            width: "116%",
-            height: "116%",
-            objectFit: "cover",
-            filter: "blur(56px) saturate(1.45)",
-            opacity: 0.38,
-          }}
-        />
-      ) : null}
+      <StoryLiquidBackdrop
+        theme={theme}
+        frozen={!live || Boolean(reduceMotion)}
+      />
 
       {live ? (
         <StoryParticles color={theme.accent} paused={pauseMotion} />
@@ -216,7 +205,7 @@ export function StoryCanvas({
                 ? "rgba(255,255,255,0.1)"
                 : "rgba(24,16,36,0.94)",
               border: "1px solid rgba(255,255,255,0.2)",
-              boxShadow: `${theme.ticketShadow}, 0 32px 90px rgba(0,0,0,0.45), 0 0 0 1px ${theme.accent}55`,
+              boxShadow: `0 28px 48px rgba(0,0,0,0.55), 0 0 0 2px ${theme.accent}`,
               ...(live
                 ? {
                     backdropFilter: "blur(18px)",
@@ -252,46 +241,27 @@ export function StoryCanvas({
               }}
             >
               {eventImage ? (
-                <>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={eventImage}
-                    alt=""
-                    aria-hidden="true"
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "cover",
-                      transform: "scale(1.12)",
-                      filter: live ? "blur(28px) saturate(1.25)" : "none",
-                      opacity: 0.42,
-                    }}
-                  />
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={eventImage}
-                    alt=""
-                    data-story-image="hero"
-                    onLoad={onPainted}
-                    onError={onPainted}
-                    ref={(node) => {
-                      if (!onPainted || !node) return
-                      if (node.complete && node.naturalWidth > 0) {
-                        queueMicrotask(onPainted)
-                      }
-                    }}
-                    style={{
-                      position: "relative",
-                      zIndex: 1,
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "contain",
-                      display: "block",
-                    }}
-                  />
-                </>
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={eventImage}
+                  alt=""
+                  data-story-image="hero"
+                  onLoad={onPainted}
+                  onError={onPainted}
+                  ref={(node) => {
+                    if (!onPainted || !node) return
+                    if (node.complete && node.naturalWidth > 0) {
+                      queueMicrotask(onPainted)
+                    }
+                  }}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    objectPosition: "center",
+                    display: "block",
+                  }}
+                />
               ) : (
                 <div
                   style={{
@@ -366,7 +336,7 @@ export function StoryCanvas({
                 overflow: "hidden",
                 flexShrink: 0,
                 border: `3px solid ${theme.accent}`,
-                boxShadow: `0 0 0 8px rgba(255,255,255,0.08), 0 0 28px ${theme.accent}`,
+                boxShadow: `0 0 0 4px ${theme.accent}33, 0 10px 18px rgba(0,0,0,0.45)`,
                 background: "rgba(255,255,255,0.12)",
                 display: "grid",
                 placeItems: "center",
@@ -442,8 +412,8 @@ export function StoryCanvas({
               <QRCodeSVG
                 value={cta}
                 size={116}
-                level="M"
-                includeMargin={false}
+                level="H"
+                includeMargin
                 bgColor="#ffffff"
                 fgColor="#09090b"
               />

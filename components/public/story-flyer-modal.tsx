@@ -50,6 +50,7 @@ import {
   isNativeFileShareAvailable,
   shareOrDownloadFlyer,
 } from "@/lib/story-flyer-share"
+import { fitStoryPngWeight, storyPngOptions } from "@/lib/story-png-export"
 import { cn } from "@/lib/utils"
 
 function isStoryDataImage(url?: string | null): boolean {
@@ -169,24 +170,15 @@ export function StoryFlyerModal({
     if (!node) return null
     await waitForImages(node)
     const { toBlob } = await import("html-to-image")
-    const options = {
-      pixelRatio: 1,
-      cacheBust: false,
-      width: STORY_CANVAS_WIDTH,
-      height: STORY_CANVAS_HEIGHT,
-      skipAutoScale: true,
-      backgroundColor: findStoryTheme(themeId).background,
-      style: {
-        transform: "none",
-        left: "0",
-        top: "0",
-      },
-    }
+    const options = storyPngOptions(findStoryTheme(themeId).background)
+    let blob: Blob | null
     try {
-      return await toBlob(node, { ...options, skipFonts: false })
+      blob = await toBlob(node, options)
     } catch {
-      return toBlob(node, { ...options, skipFonts: true })
+      blob = await toBlob(node, { ...options, skipFonts: true })
     }
+    if (!blob) return null
+    return fitStoryPngWeight(blob)
   }
 
   async function handleShareInstagram() {

@@ -40,8 +40,8 @@ export async function fetchImageAsDataUrl(
     const upstream = await fetch(href, {
       cache: "no-store",
       redirect: "error",
-      headers: { Accept: "image/*" },
-      signal: AbortSignal.timeout(8000),
+      headers: { Accept: "image/*,*/*;q=0.1" },
+      signal: AbortSignal.timeout(12000),
     })
     if (!upstream.ok) return null
     const contentType = upstream.headers.get("content-type") ?? ""
@@ -72,8 +72,8 @@ export async function handleStoryImageProxy(request: Request) {
     const upstream = await fetch(parsed.toString(), {
       cache: "no-store",
       redirect: "error",
-      headers: { Accept: "image/*" },
-      signal: AbortSignal.timeout(8000),
+      headers: { Accept: "image/*,*/*;q=0.1" },
+      signal: AbortSignal.timeout(12000),
     })
     if (!upstream.ok) {
       return NextResponse.json({ error: "upstream_error" }, { status: 502 })
