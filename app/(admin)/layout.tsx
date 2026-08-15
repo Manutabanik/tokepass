@@ -4,17 +4,14 @@ import Link from "next/link"
 import { redirect } from "next/navigation"
 
 import { getMyStaffRoles } from "@/app/actions/event-staff"
-import {
-  AdminBottomNav,
-  ADMIN_BOTTOM_NAV_SPACE,
-} from "@/components/shared/admin-bottom-nav"
+import { AdminBottomNav } from "@/components/shared/admin-bottom-nav"
+import { AdminMain } from "@/components/shared/admin-main"
 import { AdminSidebar } from "@/components/shared/admin-sidebar"
 import { BrandLogo } from "@/components/shared/brand-logo"
 import { SignOutButton } from "@/components/shared/sign-out-button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { createClient } from "@/lib/supabase/server"
-import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = {
   robots: { index: false, follow: false },
@@ -116,11 +113,11 @@ export default async function AdminLayout({
   const mode = isOrganizer ? ("organizer" as const) : ("staff" as const)
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <div className="flex min-h-screen">
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-background text-foreground">
+      <div className="flex min-h-0 flex-1">
         <AdminSidebar mode={mode} staffRoles={staffRoles} />
-        <div className="min-w-0 flex-1">
-          <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border bg-background/85 px-4 backdrop-blur-xl sm:h-16 sm:px-8">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between border-b border-border bg-background/85 px-4 backdrop-blur-xl sm:h-16 sm:px-8">
             <div className="flex min-w-0 items-center gap-2 lg:hidden">
               <BrandLogo />
             </div>
@@ -168,14 +165,7 @@ export default async function AdminLayout({
               />
             </div>
           </header>
-          <main
-            className={cn(
-              "mx-auto w-full max-w-[1600px] p-4 sm:p-8 lg:p-10",
-              ADMIN_BOTTOM_NAV_SPACE,
-            )}
-          >
-            {children}
-          </main>
+          <AdminMain>{children}</AdminMain>
         </div>
       </div>
 

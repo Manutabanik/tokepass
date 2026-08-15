@@ -12,6 +12,7 @@ import {
   parametricZoneCapacity,
 } from "@/lib/seating/adaptive-seating"
 import { elementSeatLabel } from "@/lib/seating/venue-element-geometry"
+import { venueElementSelectionName } from "@/lib/seating/storefront-selection"
 
 const SEAT_GAP = 18
 const ROW_GAP = 20
@@ -389,6 +390,7 @@ export type FlattenedVenueSeat = {
   price: number
   mapStatus: VenueMapSeatStatus
   source: "sector" | "element"
+  label?: string
 }
 
 export function flattenVenueMapSeats(map: InteractiveVenueMap): FlattenedVenueSeat[] {
@@ -417,19 +419,21 @@ export function flattenVenueMapSeats(map: InteractiveVenueMap): FlattenedVenueSe
       return []
     }
     if (element.sellMode === "group") {
+      const label = venueElementSelectionName(element)
       return [
         {
           id: element.id,
-          row: "1",
-          number: 1,
+          row: element.label,
+          number: 0,
           x: element.x,
           y: element.y,
           sectorId: elementInventorySectorId(element),
-          sectorName: element.groupName || element.label,
+          sectorName: element.sectorName || element.groupName || element.label,
           color: element.color,
           price: element.price,
           mapStatus: "available" as const,
           source: "element" as const,
+          label,
         },
       ]
     }

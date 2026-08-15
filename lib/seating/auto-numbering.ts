@@ -91,3 +91,24 @@ export function applyAutoNumbering(
     return next
   })
 }
+
+export function applySequentialLabels(
+  elements: VenueMapElement[],
+  selectedIds: string[],
+  prefix: string,
+  start = 1,
+): VenueMapElement[] {
+  const base = prefix.trim()
+  const begin = Number.isFinite(start) ? Math.floor(start) : 1
+  const labels = new Map<string, string>()
+  selectedIds.forEach((id, index) => {
+    if (labels.has(id)) return
+    const sequence = begin + index
+    labels.set(id, base ? `${base} ${sequence}` : String(sequence))
+  })
+  return elements.map((element) => {
+    const label = labels.get(element.id)
+    if (!label) return element
+    return { ...element, label }
+  })
+}

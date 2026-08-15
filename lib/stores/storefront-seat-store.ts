@@ -28,6 +28,7 @@ export type StorefrontLayoutSeat = {
   sectorName: string
   price: number
   color: string
+  label?: string
 }
 
 export type StorefrontToggleResult =
@@ -66,9 +67,14 @@ function selectionCount(items: StorefrontSelectedItem[]) {
 }
 
 function layoutSeatToItem(seat: StorefrontLayoutSeat): StorefrontSelectedItem {
+  const name =
+    seat.label?.trim() ||
+    [seat.sectorName.trim(), `Fila ${seat.row}`, String(seat.number)]
+      .filter((part) => part.length > 0)
+      .join(" · ")
   return {
     id: seat.id,
-    name: `${seat.sectorName} · Fila ${seat.row} · ${seat.number}`,
+    name,
     type: "seat",
     price: seat.price,
     capacity: 1,
@@ -93,10 +99,23 @@ function deriveLayoutSeats(items: StorefrontSelectedItem[]): StorefrontLayoutSea
     }))
 }
 
+function uniqueItemsById(items: StorefrontSelectedItem[]) {
+  const seen = new Set<string>()
+  const next: StorefrontSelectedItem[] = []
+  for (const item of items) {
+    const id = item.id?.trim()
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    next.push(item)
+  }
+  return next
+}
+
 function withDerived(items: StorefrontSelectedItem[]) {
+  const unique = uniqueItemsById(items)
   return {
-    selectedItems: items,
-    layoutSeats: deriveLayoutSeats(items),
+    selectedItems: unique,
+    layoutSeats: deriveLayoutSeats(unique),
   }
 }
 
@@ -175,7 +194,15 @@ export const useStorefrontSeatStore = create<StorefrontSeatState>((set, get) => 
 
   setLayoutSeats: (seats, maxCount = MAX_TICKETS_PER_PURCHASE) => {
     const others = get().selectedItems.filter((item) => item.type !== "seat")
-    const nextSeats = seats.map(layoutSeatToItem)
+    const seen = new Set<string>()
+    const nextSeats = seats
+      .filter((seat) => {
+        const id = seat.id?.trim()
+        if (!id || seen.has(id)) return false
+        seen.add(id)
+        return true
+      })
+      .map(layoutSeatToItem)
     const nextCount = selectionCount([...others, ...nextSeats])
     if (nextCount > maxCount) {
       return { ok: false, reason: "limit" }

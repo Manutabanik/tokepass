@@ -10,25 +10,28 @@ const OPTIONS: Array<{
   label: string
   icon: typeof Map
 }> = [
-  { id: "map", label: "Vista Mapa", icon: Map },
-  { id: "list", label: "Vista Lista", icon: List },
+  { id: "map", label: "Mapa", icon: Map },
+  { id: "list", label: "Lista", icon: List },
 ]
 
 export function StorefrontViewToggle({
   value,
   onChange,
   className,
+  compact = false,
 }: {
   value: StorefrontViewMode
   onChange: (view: StorefrontViewMode) => void
   className?: string
+  compact?: boolean
 }) {
   return (
     <div
       role="tablist"
       aria-label="Modo de selección de ubicaciones"
       className={cn(
-        "grid grid-cols-2 gap-1 rounded-xl bg-muted p-1",
+        "inline-grid grid-cols-2 rounded-lg bg-muted/90 p-0.5 ring-1 ring-border backdrop-blur",
+        compact ? "gap-0" : "gap-0.5",
         className,
       )}
     >
@@ -43,13 +46,16 @@ export function StorefrontViewToggle({
             aria-selected={active}
             onClick={() => onChange(option.id)}
             className={cn(
-              "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 text-sm font-semibold transition-colors",
+              "inline-flex items-center justify-center gap-1 rounded-md font-semibold transition-colors",
+              compact
+                ? "h-7 min-w-[4.25rem] px-2 text-[11px]"
+                : "min-h-9 px-2.5 text-xs",
               active
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            <Icon className="size-4 shrink-0" aria-hidden="true" />
+            <Icon className={cn("shrink-0", compact ? "size-3" : "size-3.5")} aria-hidden="true" />
             {option.label}
           </button>
         )

@@ -457,7 +457,10 @@ begin
             using errcode = '23514';
         end if;
 
-        -- Packs de mesas: descuentan cupo del tier numerado, sin elegir unidad en mapa.
+        if v_child_type = 'seated' or v_child_layout in ('numbered_seat', 'table_combo') then
+          raise exception 'Los combos no reservan asientos numerados automáticamente'
+            using errcode = '23514';
+        end if;
 
         if (v_child_cap - v_child_sold) < v_child_qty then
           raise exception 'Sold out'

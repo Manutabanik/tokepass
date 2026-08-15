@@ -23,6 +23,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
+import { isAdminFocusedFlow } from "@/lib/navigation/focused-flows"
 import { cn } from "@/lib/utils"
 import type { EventStaffRole } from "@/types/auth"
 
@@ -130,12 +131,7 @@ export function AdminBottomNav({
   )
   const navigation = getAdminNavItems({ mode, staffRoles })
 
-  // Escáner fullscreen: no tapar con la barra inferior.
-  if (
-    pathname.startsWith("/admin/scanner") ||
-    pathname.startsWith("/admin/store-scanner") ||
-    pathname.startsWith("/admin/bar-scanner")
-  ) {
+  if (isAdminFocusedFlow(pathname)) {
     return null
   }
 

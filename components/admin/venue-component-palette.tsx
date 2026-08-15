@@ -187,12 +187,17 @@ export function VenueComponentPalette({
   active,
   onPick,
   variant = "compact",
+  surface = "sidebar",
+  className,
 }: {
   active: PalettePlacement | null
   onPick: (placement: PalettePlacement) => void
   variant?: "compact" | "studio"
+  surface?: "sidebar" | "sheet"
+  className?: string
 }) {
   const studio = variant === "studio"
+  const sheet = surface === "sheet"
 
   const commercial = COMMERCIAL_GROUPS.map((group) => (
     <div key={group.id} className={studio ? "space-y-1.5" : "space-y-2"}>
@@ -214,6 +219,7 @@ export function VenueComponentPalette({
             active={active}
             onPick={onPick}
             compact={studio}
+            touchFriendly={sheet}
           />
         ))}
       </div>
@@ -236,6 +242,7 @@ export function VenueComponentPalette({
             active={active}
             onPick={onPick}
             compact={studio}
+            touchFriendly={sheet}
           />
         ))}
       </div>
@@ -246,12 +253,15 @@ export function VenueComponentPalette({
     <aside
       className={cn(
         "flex shrink-0 flex-col border-border bg-card",
-        studio
-          ? "h-full w-64 overflow-hidden border-r"
-          : "max-h-[min(70vh,560px)] overflow-y-auto border-b bg-card/50 p-4 lg:border-r lg:border-b-0",
+        sheet
+          ? "h-auto w-full overflow-hidden border-0"
+          : studio
+            ? "h-full w-64 overflow-hidden border-r"
+            : "max-h-[min(70vh,560px)] overflow-y-auto border-b bg-card/50 p-4 lg:border-r lg:border-b-0",
+        className,
       )}
     >
-      {studio ? (
+      {sheet ? null : studio ? (
         <p className="shrink-0 border-b border-border px-3 py-2.5 text-xs font-semibold text-foreground">
           Herramientas
         </p>
@@ -274,9 +284,11 @@ export function VenueComponentPalette({
             value="commercial"
             className={cn(
               "flex-1",
-              studio
-                ? "h-8 px-1.5 text-[11px]"
-                : "h-auto min-h-11 whitespace-normal px-2 py-2 text-sm leading-snug",
+              sheet
+                ? "min-h-[44px] px-2 text-sm"
+                : studio
+                  ? "h-8 px-1.5 text-[11px]"
+                  : "h-auto min-h-11 whitespace-normal px-2 py-2 text-sm leading-snug",
             )}
           >
             {studio ? "Venta" : "Lugares a la venta"}
@@ -285,9 +297,11 @@ export function VenueComponentPalette({
             value="map"
             className={cn(
               "flex-1",
-              studio
-                ? "h-8 px-1.5 text-[11px]"
-                : "h-auto min-h-11 whitespace-normal px-2 py-2 text-sm leading-snug",
+              sheet
+                ? "min-h-[44px] px-2 text-sm"
+                : studio
+                  ? "h-8 px-1.5 text-[11px]"
+                  : "h-auto min-h-11 whitespace-normal px-2 py-2 text-sm leading-snug",
             )}
           >
             {studio ? "Mapa" : "Mapa y referencias"}
@@ -317,11 +331,13 @@ function PaletteButton({
   active,
   onPick,
   compact,
+  touchFriendly = false,
 }: {
   item: PaletteItem
   active: PalettePlacement | null
   onPick: (placement: PalettePlacement) => void
   compact?: boolean
+  touchFriendly?: boolean
 }) {
   const Icon = item.icon
   const selected = placementKey(active) === placementKey(item.placement)
@@ -345,6 +361,7 @@ function PaletteButton({
         compact
           ? "flex aspect-square flex-col items-center justify-center gap-1 rounded-lg px-1.5 py-2"
           : "flex w-full items-start gap-3 rounded-xl px-3 py-3",
+        touchFriendly && "min-h-[44px] aspect-auto py-3",
         selected
           ? "border-emerald-500/50 bg-emerald-500/10 ring-1 ring-emerald-500/30"
           : "border-border bg-background hover:border-emerald-500/30 hover:bg-muted/40",

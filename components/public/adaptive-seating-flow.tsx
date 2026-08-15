@@ -63,6 +63,7 @@ type AdaptiveSeatingFlowProps = {
   selectedZoneId?: string | null
   unavailableZoneIds?: string[]
   occupancyBySeatId?: Record<string, SeatStatus>
+  priceBySectorId?: Record<string, number>
   onSelectZone?: (zone: VenueMapZone) => void
   onBack?: () => void
   onContinue?: (selection: UniversalSeatSelection) => void
@@ -83,6 +84,7 @@ export function AdaptiveSeatingFlow({
   selectedZoneId = null,
   unavailableZoneIds = [],
   occupancyBySeatId = {},
+  priceBySectorId = {},
   onSelectZone,
   onBack,
   onContinue,
@@ -101,6 +103,7 @@ export function AdaptiveSeatingFlow({
           selectedZoneId={selectedZoneId}
           unavailableZoneIds={unavailableZoneIds}
           occupancyBySeatId={occupancyBySeatId}
+          priceBySectorId={priceBySectorId}
           onSelectZone={(zone) => onSelectZone?.(zone)}
           onContinue={(seats) => {
             const seat = seats[0]

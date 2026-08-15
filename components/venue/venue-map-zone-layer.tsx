@@ -44,6 +44,13 @@ export function VenueMapZoneLayer({
   const previewPoints =
     draft.length > 0 && cursor && !closing ? [...draft, cursor] : draft
   const first = draft[0]
+  const selectedSet = new Set(selectedIds ?? [])
+  if (selectedId) selectedSet.add(selectedId)
+  const orderedZones = [...zones].sort((left, right) => {
+    const leftSelected = selectedSet.has(left.id) ? 1 : 0
+    const rightSelected = selectedSet.has(right.id) ? 1 : 0
+    return leftSelected - rightSelected
+  })
 
   return (
     <g>
@@ -63,7 +70,7 @@ export function VenueMapZoneLayer({
         </filter>
       </defs>
 
-      {zones.map((zone) => {
+      {orderedZones.map((zone) => {
         const canvasPoints = polygonToCanvas(zone.polygon)
         if (canvasPoints.length < 3) return null
         const points = polygonSvgPoints(zone.polygon)
@@ -122,12 +129,17 @@ export function VenueMapZoneLayer({
                 : undefined
             }
             className={cn(
-              "transition-opacity duration-300 ease-in-out",
+              "transition-all duration-200 ease-in-out",
               interactive ? "cursor-pointer" : undefined,
               soldOut && "pointer-events-none opacity-50",
             )}
             opacity={dimmed ? 0.4 : 1}
-            style={{ pointerEvents: interactive ? "auto" : "none" }}
+            style={{
+              pointerEvents: interactive ? "auto" : "none",
+              filter: selected
+                ? "drop-shadow(0px 0px 8px rgba(255, 255, 255, 0.8))"
+                : undefined,
+            }}
             onContextMenu={(event) => onContextMenu?.(event, zone)}
             onPointerDown={(event) => {
               if (!interactive) return
@@ -167,13 +179,8 @@ export function VenueMapZoneLayer({
               strokeLinejoin="round"
               pointerEvents={soldOut ? "none" : "auto"}
               filter={soldOut ? undefined : `url(#zone-neon-${glowId})`}
-              style={
-                selected
-                  ? { filter: "drop-shadow(0 0 10px rgba(255,255,255,0.85))" }
-                  : undefined
-              }
               className={cn(
-                "transition-all duration-300 ease-in-out",
+                "transition-all duration-200 ease-in-out",
                 soldOut
                   ? "[fill-opacity:0.45]"
                   : selected

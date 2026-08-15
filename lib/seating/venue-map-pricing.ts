@@ -30,9 +30,12 @@ export function venueMapToPricingMap(
   return pricing
 }
 
-export function isMapBackedTicket(
-  tier: EventFormValues["tickets"][number],
-): boolean {
+export function isMapBackedTicket(tier: {
+  seatingSectorId?: string | null
+  tierType?: string | null
+  layoutType?: string | null
+  bundleItems?: EventFormValues["tickets"][number]["bundleItems"]
+}): boolean {
   if (tier.seatingSectorId?.trim()) return true
   return (
     inferInventoryTierType({

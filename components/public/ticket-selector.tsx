@@ -3,6 +3,8 @@
 import {
   ChevronLeft,
   LoaderCircle,
+  Maximize2,
+  Minimize2,
   Ticket,
 } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
@@ -15,6 +17,7 @@ import {
   useRef,
   useState,
   useTransition,
+  type ReactNode,
 } from "react"
 import { createPortal } from "react-dom"
 import { useForm } from "react-hook-form"
@@ -44,7 +47,6 @@ import {
   type CheckoutFlowStep,
 } from "@/components/public/checkout-stepper"
 import { AccessibleSeatSelector } from "@/components/public/accessible-seat-selector"
-import { ImmersiveCheckoutShell } from "@/components/public/immersive-checkout-shell"
 import { SelectionLedger } from "@/components/public/selection-ledger"
 import { StorefrontViewToggle } from "@/components/public/storefront-view-toggle"
 import { CheckoutIdentityDialog } from "@/components/public/checkout-identity-dialog"
@@ -112,7 +114,14 @@ import {
   venueMapToSeatingLayout,
 } from "@/lib/seating/venue-map-geometry"
 import { occupancyFromSeatingUnits } from "@/lib/seating/venue-map-occupancy"
+import {
+  hydrateStorefrontItemsFromMap,
+  storefrontFocusCard,
+  storefrontItemFromZone,
+} from "@/lib/seating/storefront-selection"
+import { StorefrontSelectionCard } from "@/components/public/storefront-selection-card"
 import { formatCurrency } from "@/lib/format"
+import { cn } from "@/lib/utils"
 import { publicEventLoginPath } from "@/lib/seo/site"
 import { useCheckoutIntentStore } from "@/lib/stores/checkout-intent-store"
 import {
@@ -138,18 +147,12 @@ const AdaptiveSeatingFlow = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex h-dvh w-screen flex-col bg-zinc-950">
-        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-          <div className="h-4 w-32 animate-pulse rounded bg-white/10" />
-          <div className="h-8 w-8 animate-pulse rounded-full bg-white/10" />
-        </div>
-        <div className="flex flex-1 items-center justify-center">
-          <LoaderCircle
-            className="size-8 animate-spin text-white/40"
-            aria-hidden="true"
-          />
-          <span className="sr-only">Cargando mapa del recinto</span>
-        </div>
+      <div className="flex h-full w-full items-center justify-center bg-zinc-950">
+        <LoaderCircle
+          className="size-8 animate-spin text-white/40"
+          aria-hidden="true"
+        />
+        <span className="sr-only">Cargando mapa del recinto</span>
       </div>
     ),
   },
@@ -189,6 +192,7 @@ type TicketSelectorProps = {
   purchaseLocked?: boolean
   /** Tab inicial configurado por el organizador. */
   defaultTicketTab?: DefaultTicketTab | null
+  renderLayout?: (parts: { map: ReactNode; panel: ReactNode }) => ReactNode
 }
 
 function roundMoney(value: number): number {
@@ -231,6 +235,7 @@ export function TicketSelector({
   zoneTierPricing = [],
   purchaseLocked = false,
   defaultTicketTab = "auto",
+  renderLayout,
 }: TicketSelectorProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -540,8 +545,8 @@ export function TicketSelector({
 
   const hasInteractiveMap =
     hasInteractiveMapProp || hasInteractiveVenueMap(liveMap)
-  const immersiveMap = hasInteractiveMap
-  useLockBodyScroll(showSeatFlow || immersiveMap)
+  const [mapExpanded, setMapExpanded] = useState(false)
+  useLockBodyScroll(showSeatFlow)
 
   const soldOutZoneIds = useMemo(() => {
     const zones = liveMap?.zones ?? []
@@ -614,34 +619,20 @@ export function TicketSelector({
       ? focusedZoneId
       : (selectedItems.find((item) => item.type === "zone")?.id ?? null)
 
-  const selectedMapLabel = useMemo(() => {
-    if (layoutSeats.length > 0) {
-      const first = layoutSeats[0]
-      if (!first) return null
-      if (layoutSeats.length === 1) {
-        return `${first.sectorName} - Fila ${first.row}`
+  const priceBySectorId = useMemo(() => {
+    const prices: Record<string, number> = {}
+    for (const tier of displayTiers) {
+      if (Number.isFinite(tier.price)) {
+        if (tier.seatingSectorId) prices[tier.seatingSectorId] = tier.price
+        if (tier.name.trim()) prices[tier.name.trim()] = tier.price
       }
-      const numbers = layoutSeats.map((seat) => seat.number).join(", ")
-      return `${first.sectorName} - Fila ${first.row} · Asientos ${numbers}`
     }
-    if (selectedSeat?.label?.trim()) return selectedSeat.label.trim()
-    const zone = (liveMap?.zones ?? []).find((item) => item.id === visibleZoneId)
-    const tier = displayTiers.find((item) => item.id === focusedTierId)
-    if (zone && selectedSeat) {
-      return `${zone.name} - Fila ${selectedSeat.tableNumber ?? selectedSeat.label}`
-    }
-    if (zone && tier) return `${zone.name} · ${tier.name}`
-    if (zone) return zone.name
-    if (tier) return tier.name
-    return null
-  }, [
-    displayTiers,
-    focusedTierId,
-    visibleZoneId,
-    layoutSeats,
-    liveMap?.zones,
-    selectedSeat,
-  ])
+    return prices
+  }, [displayTiers])
+  const liveSelectedItems = useMemo(
+    () => hydrateStorefrontItemsFromMap(selectedItems, liveMap, priceBySectorId),
+    [liveMap, priceBySectorId, selectedItems],
+  )
 
   const seatingRenderMode = resolveVenueRenderMode(liveMap)
   const resolvedSeatingLayout = useMemo(() => {
@@ -1098,16 +1089,10 @@ export function TicketSelector({
 
   function handleImmersiveZoneSelect(zone: VenueMapZone) {
     if (purchaseLocked || soldOutZoneIds.includes(zone.id)) return
+    const item = storefrontItemFromZone(zone, priceBySectorId)
+    if (!item) return
     const result = useStorefrontSeatStore.getState().toggleSelectedItem(
-      {
-        id: zone.id,
-        name: zone.name,
-        type: "zone",
-        price: zone.price,
-        capacity: 1,
-        sectorId: zone.id,
-        color: zone.color,
-      },
+      item,
       MAX_TICKETS_PER_PURCHASE,
     )
     if (!result.ok) {
@@ -1316,7 +1301,7 @@ export function TicketSelector({
       ensureCartHoldClock()
       setFocusedZoneId(selectionPayload.sectorId)
       setFocusedTierId(tierId)
-      if (!options?.keepOpen && !immersiveMap) returnToCheckout()
+      if (!options?.keepOpen && !hasInteractiveMap) returnToCheckout()
       return
     }
 
@@ -1367,7 +1352,7 @@ export function TicketSelector({
       useCheckoutIntentStore.getState().setHoldExpiresAt(hold.reservedUntil)
       setFocusedZoneId(selectionPayload.sectorId)
       setFocusedTierId(unit.tierId)
-      if (!options?.keepOpen && !immersiveMap) returnToCheckout()
+      if (!options?.keepOpen && !hasInteractiveMap) returnToCheckout()
     }
 
     const cached =
@@ -1451,7 +1436,7 @@ export function TicketSelector({
   }, [eventId])
 
   const seatFlowOverlay =
-    showSeatFlow && !immersiveMap ? (
+    showSeatFlow && !hasInteractiveMap ? (
       <div className="fixed inset-0 z-[80] flex h-dvh w-screen flex-col overflow-hidden overscroll-none bg-zinc-950">
         <AdaptiveSeatingFlow
           takeover
@@ -1461,6 +1446,7 @@ export function TicketSelector({
             universalPayload?.mapImageUrl ?? seatingBackgroundUrl ?? null
           }
           venueMap={liveMap}
+          priceBySectorId={priceBySectorId}
           sectors={universalPayload?.sectors ?? []}
           onBack={() => setShowSeatFlow(false)}
           onContinue={handleUniversalContinue}
@@ -1509,16 +1495,9 @@ export function TicketSelector({
           setTicketTabOverride(value)
         }
       }}
-      className="flex h-full min-h-0 w-full flex-col gap-0 overflow-hidden bg-card text-card-foreground"
+      className="flex w-full min-w-0 flex-col gap-0 overflow-hidden bg-card text-card-foreground"
     >
       <div className="shrink-0 space-y-3 border-b border-border px-4 pb-3 pt-4">
-        {immersiveMap ? (
-          <StorefrontViewToggle
-            className="md:hidden"
-            value={storefrontView}
-            onChange={setStorefrontView}
-          />
-        ) : null}
         <CheckoutStepper step={visibleStep} />
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -1549,11 +1528,6 @@ export function TicketSelector({
         {visibleStep === "tickets" && ticketTabs.length > 0 ? (
           <CheckoutTabBar tabs={ticketTabs} grouped={checkoutGroups} />
         ) : null}
-        {visibleStep === "tickets" && selectedMapLabel ? (
-          <p className="rounded-xl border border-primary/40 bg-primary/15 px-3 py-2 text-sm font-extrabold text-foreground">
-            Has seleccionado: {selectedMapLabel}
-          </p>
-        ) : null}
       </div>
 
       <div
@@ -1573,15 +1547,12 @@ export function TicketSelector({
                 hideTabs
                 tabValue={ticketTab}
                 onTabChange={setTicketTabOverride}
-                selectedMapLabel={
-                  selectedItems.length > 0 ? null : selectedMapLabel
-                }
                 tiers={displayTiers}
                 quantities={quantities}
                 isPending={controlsLocked}
                 hasSeatingFlow={hasSeatingFlow}
                 hasInteractiveMap={hasInteractiveMap}
-                mapEmbedded={immersiveMap}
+                mapEmbedded={hasInteractiveMap}
                 focusedTierId={focusedTierId}
                 mapLoading={
                   mapLoading &&
@@ -1724,28 +1695,137 @@ export function TicketSelector({
         </AnimatePresence>
       </div>
 
-      {visibleStep === "tickets" ? (
-        <SelectionLedger
-          items={selectedItems}
-          onRemove={(id) => {
-            useStorefrontSeatStore.getState().removeSelectedItem(id)
-            if (selectedSeat && layoutSeats.some((seat) => seat.id === id)) {
-              void releaseSeatingUnitCartHold(eventId, selectedSeat.seatingUnitId)
-              setSelectedSeat(null)
-            }
-          }}
+      <div className="sticky bottom-0 z-20 border-t border-border bg-background/95 backdrop-blur lg:static">
+        {visibleStep === "tickets" && liveSelectedItems.length > 0 ? (
+          <div className="px-3 pt-3">
+            <StorefrontSelectionCard
+              card={storefrontFocusCard(
+                liveSelectedItems[liveSelectedItems.length - 1]!,
+                liveMap,
+              )}
+            />
+          </div>
+        ) : null}
+        {visibleStep === "tickets" ? (
+          <SelectionLedger
+            className="border-t-0"
+            items={liveSelectedItems}
+            onRemove={(id) => {
+              useStorefrontSeatStore.getState().removeSelectedItem(id)
+              if (selectedSeat && layoutSeats.some((seat) => seat.id === id)) {
+                void releaseSeatingUnitCartHold(
+                  eventId,
+                  selectedSeat.seatingUnitId,
+                )
+                setSelectedSeat(null)
+              }
+            }}
+          />
+        ) : null}
+        <CheckoutFloatingBar
+          variant="panel"
+          actionLabel={stepCta}
+          showArrow={visibleStep !== "payment"}
+          disabled={visibleStep === "tickets" && totalTickets <= 0}
+          pending={isPending && visibleStep === "payment"}
+          locked={purchaseLocked}
+          onPay={handlePrimaryCta}
         />
-      ) : null}
-      <CheckoutFloatingBar
-        variant="panel"
-        actionLabel={stepCta}
-        showArrow={visibleStep !== "payment"}
-        disabled={visibleStep === "tickets" && totalTickets <= 0}
-        pending={isPending && visibleStep === "payment"}
-        locked={purchaseLocked}
-        onPay={handlePrimaryCta}
-      />
+      </div>
     </Tabs>
+  )
+
+  const mapNode = hasInteractiveMap ? (
+    <div className="min-w-0 space-y-2">
+      <div
+        className={cn(
+          "relative w-full min-w-0 overflow-hidden rounded-2xl border border-border bg-zinc-950",
+          mapExpanded
+            ? "h-[min(72dvh,560px)]"
+            : "h-[min(42vh,300px)] sm:h-[min(46vh,360px)] lg:h-[min(52vh,480px)]",
+        )}
+      >
+        <div className="absolute left-2 top-2 z-20 flex max-w-[calc(100%-4.5rem)] items-center gap-2">
+          <StorefrontViewToggle
+            compact
+            value={storefrontView}
+            onChange={setStorefrontView}
+          />
+        </div>
+        <button
+          type="button"
+          className="absolute right-2 top-2 z-20 inline-flex h-7 items-center gap-1 rounded-lg bg-zinc-950/80 px-2 text-[11px] font-semibold text-zinc-100 ring-1 ring-white/15 lg:hidden"
+          onClick={() => setMapExpanded((value) => !value)}
+        >
+          {mapExpanded ? (
+            <Minimize2 className="size-3" aria-hidden="true" />
+          ) : (
+            <Maximize2 className="size-3" aria-hidden="true" />
+          )}
+          {mapExpanded ? "Reducir" : "Ampliar"}
+        </button>
+        {storefrontView === "list" ? (
+          <div className="h-full overflow-y-auto bg-card p-3 pt-11">
+            {liveMap ? (
+              <AccessibleSeatSelector
+                map={liveMap}
+                occupancyBySeatId={occupancyBySeatId}
+                selectedSeatIds={layoutSeats.map((seat) => seat.id)}
+                selectedZoneId={visibleZoneId}
+                unavailableZoneIds={soldOutZoneIds}
+                pending={controlsLocked}
+                onSelectZone={handleImmersiveZoneSelect}
+                onToggleSeat={handleListToggleSeat}
+                onAssignSeats={applyLayoutSeats}
+                onAssignZoneQuantity={applyZoneQuantity}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                El plano no está disponible.
+              </p>
+            )}
+          </div>
+        ) : liveMap ? (
+          <AdaptiveSeatingFlow
+            immersive
+            pending={controlsLocked}
+            eventTitle={eventTitle}
+            venueMap={liveMap}
+            selectedZoneId={visibleZoneId}
+            unavailableZoneIds={soldOutZoneIds}
+            occupancyBySeatId={occupancyBySeatId}
+            priceBySectorId={priceBySectorId}
+            sectors={universalPayload?.sectors ?? []}
+            onSelectZone={focusSelectedZone}
+            onContinue={(payload) =>
+              handleUniversalContinue(payload, { keepOpen: true })
+            }
+            onLoadSectorUnits={loadSectorUnits}
+            onLoadAllUnits={loadAllUnits}
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center bg-zinc-950 text-sm text-zinc-500">
+            {mapLoading ? (
+              <>
+                <LoaderCircle
+                  className="size-8 animate-spin text-white/40"
+                  aria-hidden="true"
+                />
+                <span className="sr-only">Cargando mapa del recinto</span>
+              </>
+            ) : (
+              "El plano no está disponible."
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  ) : null
+
+  const panelNode = (
+    <div className="min-w-0 overflow-hidden rounded-2xl border border-border shadow-xl">
+      {checkoutPanel}
+    </div>
   )
 
   return (
@@ -1762,74 +1842,12 @@ export function TicketSelector({
         onLogin={goToLogin}
         onGuest={continueAsGuest}
       />
-      {immersiveMap ? (
-        <ImmersiveCheckoutShell
-          view={storefrontView}
-          toolbar={
-            <StorefrontViewToggle
-              value={storefrontView}
-              onChange={setStorefrontView}
-            />
-          }
-          list={
-            liveMap ? (
-              <AccessibleSeatSelector
-                map={liveMap}
-                occupancyBySeatId={occupancyBySeatId}
-                selectedSeatIds={layoutSeats.map((seat) => seat.id)}
-                selectedZoneId={visibleZoneId}
-                unavailableZoneIds={soldOutZoneIds}
-                pending={controlsLocked}
-                onSelectZone={handleImmersiveZoneSelect}
-                onToggleSeat={handleListToggleSeat}
-                onAssignSeats={applyLayoutSeats}
-                onAssignZoneQuantity={applyZoneQuantity}
-              />
-            ) : null
-          }
-          paying={visibleStep === "payment"}
-          onDismissPay={() =>
-            setCheckoutStep(visibleStep === "payment" ? "details" : "tickets")
-          }
-          map={
-            liveMap ? (
-              <AdaptiveSeatingFlow
-                immersive
-                pending={controlsLocked}
-                eventTitle={eventTitle}
-                venueMap={liveMap}
-                selectedZoneId={visibleZoneId}
-                unavailableZoneIds={soldOutZoneIds}
-                occupancyBySeatId={occupancyBySeatId}
-                sectors={universalPayload?.sectors ?? []}
-                onSelectZone={focusSelectedZone}
-                onContinue={(payload) =>
-                  handleUniversalContinue(payload, { keepOpen: true })
-                }
-                onLoadSectorUnits={loadSectorUnits}
-                onLoadAllUnits={loadAllUnits}
-              />
-            ) : (
-              <div className="flex h-full items-center justify-center bg-zinc-950 text-sm text-zinc-500">
-                {mapLoading ? (
-                  <>
-                    <LoaderCircle
-                      className="size-8 animate-spin text-white/40"
-                      aria-hidden="true"
-                    />
-                    <span className="sr-only">Cargando mapa del recinto</span>
-                  </>
-                ) : (
-                  "El plano no está disponible."
-                )}
-              </div>
-            )
-          }
-          panel={checkoutPanel}
-        />
+      {renderLayout ? (
+        renderLayout({ map: mapNode, panel: panelNode })
       ) : (
-        <div className="min-h-[32rem] overflow-hidden rounded-2xl border border-border shadow-xl">
-          {checkoutPanel}
+        <div className="min-w-0 space-y-4">
+          {mapNode}
+          {panelNode}
         </div>
       )}
     </>

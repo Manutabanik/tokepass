@@ -3,7 +3,11 @@
 import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
 
-import type { TicketPhaseDraft } from "@/lib/inventory/capacity-budget"
+import {
+  computeEventCapacityFromForm,
+  type EventCapacitySnapshot,
+  type TicketPhaseDraft,
+} from "@/lib/inventory/capacity-budget"
 import { migrateLegacyWizardStep } from "@/lib/seating/venue-map-pricing"
 import type { EventFormValues } from "@/lib/validations/event-form"
 import type { VenuePricingMap } from "@/lib/seating/venue-adapter"
@@ -174,3 +178,10 @@ export const useEventFormStore = create<EventFormStore>()(
     },
   ),
 )
+
+/** Derivado: nunca persistir la suma, solo recalcular desde el formulario. */
+export function selectEventCapacity(
+  state: Pick<EventFormPersistedState, "values">,
+): EventCapacitySnapshot {
+  return computeEventCapacityFromForm(state.values)
+}

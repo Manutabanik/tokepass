@@ -5,6 +5,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 
 import { NotificationDot } from "@/components/account/notification-dot"
+import { isAccountFocusedFlow } from "@/lib/navigation/focused-flows"
 import { useUserNotifications } from "@/hooks/use-user-notifications"
 import { cn } from "@/lib/utils"
 
@@ -50,6 +51,10 @@ export function AccountBottomNav() {
   const pathname = usePathname()
   const { unreadByTab, hasUnread } = useUserNotifications()
 
+  if (isAccountFocusedFlow(pathname)) {
+    return null
+  }
+
   function showDot(badge: (typeof TABS)[number]["badge"]) {
     if (badge === "entradas") return unreadByTab.entradas
     if (badge === "compras") return unreadByTab.compras
@@ -70,7 +75,7 @@ export function AccountBottomNav() {
               <Link
                 href={href}
                 className={cn(
-                  "relative flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[11px] font-medium transition",
+                  "relative flex min-h-11 min-w-11 flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[11px] font-medium transition",
                   active
                     ? "text-emerald-700 dark:text-emerald-300"
                     : "text-muted-foreground hover:text-foreground",

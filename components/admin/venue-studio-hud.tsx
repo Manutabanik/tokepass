@@ -39,18 +39,18 @@ export function VenueStudioHud({
         className,
       )}
     >
-      <div className="flex gap-6 rounded-full bg-foreground/90 px-6 py-3 text-sm font-medium text-background shadow-2xl backdrop-blur-md">
-        <span className="inline-flex items-center gap-2">
-          <Users className="size-4 shrink-0" aria-hidden="true" />
-          Total: {stats.total} {stats.total === 1 ? "lugar" : "lugares"}
+      <div className="flex max-w-[calc(100vw-1.5rem)] flex-nowrap gap-3 overflow-x-auto rounded-full bg-foreground/90 px-3 py-2 text-xs font-medium text-background shadow-2xl backdrop-blur-md hide-scrollbar md:gap-6 md:px-6 md:py-3 md:text-sm">
+        <span className="inline-flex shrink-0 items-center gap-1.5">
+          <Users className="size-3.5 shrink-0 md:size-4" aria-hidden="true" />
+          {stats.total} {stats.total === 1 ? "lugar" : "lugares"}
         </span>
-        <span className="inline-flex items-center gap-2 text-background/80">
-          <LayoutGrid className="size-4 shrink-0" aria-hidden="true" />
-          Mesas: {stats.tables}
+        <span className="inline-flex shrink-0 items-center gap-1.5 text-background/80">
+          <LayoutGrid className="size-3.5 shrink-0 md:size-4" aria-hidden="true" />
+          {stats.tables} {stats.tables === 1 ? "mesa" : "mesas"}
         </span>
-        <span className="inline-flex items-center gap-2 text-background/80">
-          <MapPinned className="size-4 shrink-0" aria-hidden="true" />
-          Zonas: {stats.zones}
+        <span className="inline-flex shrink-0 items-center gap-1.5 text-background/80">
+          <MapPinned className="size-3.5 shrink-0 md:size-4" aria-hidden="true" />
+          {stats.zones} {stats.zones === 1 ? "zona" : "zonas"}
         </span>
       </div>
     </div>

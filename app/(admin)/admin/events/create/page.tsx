@@ -60,7 +60,7 @@ export default async function CreateEventPage({
   const organizerServiceRate = DEFAULT_PLATFORM_FEE_PERCENTAGE / 100
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 sm:gap-8">
       <Link
         href={impersonation ? "/superadmin" : "/admin/events"}
         className="inline-flex w-fit items-center gap-2 text-sm text-muted-foreground transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-foreground"

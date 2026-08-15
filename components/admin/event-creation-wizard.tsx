@@ -85,8 +85,19 @@ import {
   syncMapBackedTickets,
   venueMapToPricingMap,
 } from "@/lib/seating/venue-map-pricing"
-import { seatingLayoutToVenueMap } from "@/lib/seating/venue-map-geometry"
-import { sanitizeTicketTiersForPersist } from "@/lib/events/sanitize-ticket-tiers"
+import {
+  seatingLayoutToVenueMap,
+  venueMapCapacity,
+} from "@/lib/seating/venue-map-geometry"
+import {
+  computeEventCapacityFromForm,
+  eventCapacityOverflowMessage,
+} from "@/lib/inventory/capacity-budget"
+import { toUserFacingError } from "@/lib/errors/user-facing-error"
+import {
+  collectLiveSeatingSectorIds,
+  sanitizeEventSubmitPayload,
+} from "@/lib/events/sanitize-ticket-tiers"
 import { parseVenueMap } from "@/types/venue-map"
 import {
   AGE_RESTRICTION_LABELS,
@@ -154,6 +165,7 @@ const defaultValues: EventFormValues = {
     provinceId: null,
     departmentId: null,
     capacity: undefined,
+    customMaxCapacity: null,
     rows: undefined,
     seatsPerRow: undefined,
     latitude: null,
@@ -256,6 +268,11 @@ export function EventCreationWizard({
     if (!mapBackedTicketsUnchanged(current, next)) {
       form.setValue("tickets", next, { shouldDirty: true })
     }
+    const mapCap = venueMapCapacity(map)
+    const official = Number(form.getValues("venue.capacity")) || 0
+    if (mapCap > official) {
+      form.setValue("venue.capacity", mapCap, { shouldDirty: true })
+    }
   }
 
   function handleApplySavedVenue(venue: OrganizerVenue) {
@@ -269,6 +286,15 @@ export function EventCreationWizard({
 
   async function moveToStep(nextStep: number) {
     if (nextStep < 0 || nextStep >= steps.length) return
+    if (nextStep > activeStep && activeStep === 2) {
+      const capacity = computeEventCapacityFromForm(form.getValues())
+      if (capacity.exceeded) {
+        const message = eventCapacityOverflowMessage(capacity)
+        form.setError("tickets", { type: "manual", message })
+        toast.error("El aforo está excedido", { description: message })
+        return
+      }
+    }
     flushAutosave()
     setActiveStep(nextStep)
     setWizardStep(nextStep)
@@ -279,6 +305,17 @@ export function EventCreationWizard({
     intent: "draft" | "publish" = "draft",
   ) {
     setResultMessage(null)
+
+    const capacity = computeEventCapacityFromForm(data)
+    if (capacity.exceeded) {
+      const message = eventCapacityOverflowMessage(capacity)
+      form.setError("tickets", { type: "manual", message })
+      toast.error("El aforo está excedido", { description: message })
+      setResultMessage({ type: "error", text: message })
+      setActiveStep(2)
+      setWizardStep(2)
+      return
+    }
 
     if (intent === "publish") {
       const strict = publishEventSchema.safeParse(data)
@@ -330,8 +367,9 @@ export function EventCreationWizard({
           : undefined,
       })
       if (!persist.success) {
-        toast.error(persist.error)
-        setResultMessage({ type: "error", text: persist.error })
+        const persistError = toUserFacingError(persist.error)
+        toast.error(persistError)
+        setResultMessage({ type: "error", text: persistError })
         return
       }
       payloadData = {
@@ -348,15 +386,17 @@ export function EventCreationWizard({
     }
 
     const editingId = initialData?.id ?? persistedEventId
-    payloadData = {
-      ...payloadData,
-      tickets: sanitizeTicketTiersForPersist(payloadData.tickets ?? [], {
-        mode: editingId ? "update" : "create",
-        persistedIds: (initialData?.values.tickets ?? [])
-          .map((tier) => tier.id)
-          .filter((id): id is string => Boolean(id)),
-      }),
-    }
+    const liveSectorIds = collectLiveSeatingSectorIds({
+      venueMap: payloadData.venue.venueMap,
+      seatingLayout: payloadData.venue.seatingLayout,
+    })
+    payloadData = sanitizeEventSubmitPayload(payloadData, {
+      mode: editingId ? "update" : "create",
+      persistedIds: (initialData?.values.tickets ?? [])
+        .map((tier) => tier.id)
+        .filter((id): id is string => Boolean(id)),
+      liveSectorIds,
+    })
 
     const formData = new FormData()
     formData.set("payload", JSON.stringify(payloadData))
@@ -379,13 +419,14 @@ export function EventCreationWizard({
       : await createCompleteEvent(formData)
 
     if (!result.success) {
-      setResultMessage({ type: "error", text: result.error })
+      const safeError = toUserFacingError(result.error)
+      setResultMessage({ type: "error", text: safeError })
       toast.error(
         isEditing || editingId
           ? "No se pudieron guardar los cambios"
           : "No se pudo crear el evento",
         {
-          description: result.error,
+          description: safeError,
         },
       )
       return
@@ -396,7 +437,9 @@ export function EventCreationWizard({
       const { syncZoneTierPricing } = await import("@/app/actions/event-autosave")
       await syncZoneTierPricing({
         eventId: result.eventId,
-        rows: zoneTierPricing,
+        rows: zoneTierPricing.filter(
+          (row) => !row.sectorKey || liveSectorIds.has(row.sectorKey),
+        ),
       })
     }
 
@@ -427,7 +470,18 @@ export function EventCreationWizard({
     <>
     <Form {...form}>
       <form
-        onSubmit={form.handleSubmit((data) => onSubmit(data, "draft"))}
+        onSubmit={form.handleSubmit(
+          (data) => onSubmit(data, "draft"),
+          () => {
+            const capacity = computeEventCapacityFromForm(form.getValues())
+            if (capacity.exceeded) {
+              const message = eventCapacityOverflowMessage(capacity)
+              toast.error("El aforo está excedido", { description: message })
+              setActiveStep(2)
+              setWizardStep(2)
+            }
+          },
+        )}
       >
         <Tabs
           value={String(activeStep)}
@@ -437,7 +491,7 @@ export function EventCreationWizard({
           <div className="flex flex-wrap items-center justify-end gap-2">
             <EventAutosaveIndicator />
           </div>
-          <TabsList className="grid w-full grid-cols-1 items-stretch gap-3 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/80 p-2 shadow-lg shadow-zinc-200/70 dark:shadow-black/20 backdrop-blur-md group-data-horizontal/tabs:h-auto sm:grid-cols-2 lg:grid-cols-4">
+          <TabsList className="flex w-full items-stretch gap-2 overflow-x-auto rounded-2xl border border-zinc-200 bg-white p-2 shadow-lg shadow-zinc-200/70 backdrop-blur-md group-data-horizontal/tabs:h-auto max-sm:snap-x max-sm:snap-mandatory dark:border-zinc-800 dark:bg-zinc-900/80 dark:shadow-black/20 sm:grid sm:grid-cols-2 sm:overflow-visible lg:grid-cols-4">
             {steps.map(({ title, description }, index) => {
               const completed = index < activeStep
               const available = true
@@ -447,7 +501,7 @@ export function EventCreationWizard({
                   key={title}
                   value={String(index)}
                   disabled={!available}
-                  className="h-auto min-w-0 items-center justify-start gap-3 rounded-xl border border-transparent bg-transparent p-3.5 text-left text-foreground opacity-60 transition-all hover:bg-zinc-100 dark:hover:bg-zinc-800/40 hover:opacity-100 data-active:border-emerald-500/40 data-active:bg-zinc-100 dark:data-active:bg-zinc-800/90 data-active:text-zinc-900 dark:data-active:text-white data-active:opacity-100 data-active:shadow-[0_0_20px_rgba(16,185,129,0.15)]"
+                  className="h-auto min-w-[15.5rem] shrink-0 snap-start items-center justify-start gap-3 rounded-xl border border-transparent bg-transparent p-3 text-left text-foreground opacity-60 transition-all hover:bg-zinc-100 hover:opacity-100 data-active:border-emerald-500/40 data-active:bg-zinc-100 data-active:text-zinc-900 data-active:opacity-100 data-active:shadow-[0_0_20px_rgba(16,185,129,0.15)] dark:hover:bg-zinc-800/40 dark:data-active:bg-zinc-800/90 dark:data-active:text-white sm:min-w-0"
                 >
                   <span
                     className={cn(
@@ -477,13 +531,13 @@ export function EventCreationWizard({
             })}
           </TabsList>
 
-          <Card className="gap-0 rounded-3xl border border-zinc-200 bg-gradient-to-b from-white to-zinc-50 py-0 shadow-2xl shadow-zinc-200/80 ring-0 dark:border-zinc-800 dark:from-zinc-900/90 dark:to-zinc-950/95 dark:shadow-black/30 [&_[data-slot=input]]:rounded-xl [&_[data-slot=input]]:border-zinc-200 [&_[data-slot=input]]:bg-white [&_[data-slot=input]]:text-zinc-900 [&_[data-slot=input]]:shadow-inner [&_[data-slot=input]]:placeholder:text-slate-500 dark:placeholder:text-muted-foreground [&_[data-slot=input]:focus-visible]:border-emerald-500/60 [&_[data-slot=input]:focus-visible]:bg-white [&_[data-slot=input]:focus-visible]:ring-2 [&_[data-slot=input]:focus-visible]:ring-emerald-500/15 dark:[&_[data-slot=input]]:border-zinc-800 dark:[&_[data-slot=input]]:bg-zinc-950 dark:[&_[data-slot=input]]:text-white dark:[&_[data-slot=input]]:placeholder:text-zinc-600 dark:[&_[data-slot=input]:focus-visible]:bg-zinc-900 [&_[data-slot=select-trigger]]:rounded-xl [&_[data-slot=select-trigger]]:border-zinc-200 [&_[data-slot=select-trigger]]:bg-zinc-50 [&_[data-slot=select-trigger]]:text-zinc-900 [&_[data-slot=select-trigger]]:shadow-inner [&_[data-slot=select-trigger]:focus-visible]:border-emerald-500/60 [&_[data-slot=select-trigger]:focus-visible]:ring-2 [&_[data-slot=select-trigger]:focus-visible]:ring-emerald-500/15 dark:[&_[data-slot=select-trigger]]:border-zinc-800 dark:[&_[data-slot=select-trigger]]:bg-zinc-950/80 dark:[&_[data-slot=select-trigger]]:text-white">
+          <Card className="gap-0 rounded-3xl border border-zinc-200 bg-gradient-to-b from-white to-zinc-50 pt-0 pb-32 shadow-2xl shadow-zinc-200/80 ring-0 max-sm:overflow-x-hidden dark:border-zinc-800 dark:from-zinc-900/90 dark:to-zinc-950/95 dark:shadow-black/30 lg:pb-0 [&_[data-slot=input]]:rounded-xl [&_[data-slot=input]]:border-zinc-200 [&_[data-slot=input]]:bg-white [&_[data-slot=input]]:text-zinc-900 [&_[data-slot=input]]:shadow-inner [&_[data-slot=input]]:placeholder:text-slate-500 dark:placeholder:text-muted-foreground [&_[data-slot=input]:focus-visible]:border-emerald-500/60 [&_[data-slot=input]:focus-visible]:bg-white [&_[data-slot=input]:focus-visible]:ring-2 [&_[data-slot=input]:focus-visible]:ring-emerald-500/15 dark:[&_[data-slot=input]]:border-zinc-800 dark:[&_[data-slot=input]]:bg-zinc-950 dark:[&_[data-slot=input]]:text-white dark:[&_[data-slot=input]]:placeholder:text-zinc-600 dark:[&_[data-slot=input]:focus-visible]:bg-zinc-900 [&_[data-slot=select-trigger]]:rounded-xl [&_[data-slot=select-trigger]]:border-zinc-200 [&_[data-slot=select-trigger]]:bg-zinc-50 [&_[data-slot=select-trigger]]:text-zinc-900 [&_[data-slot=select-trigger]]:shadow-inner [&_[data-slot=select-trigger]:focus-visible]:border-emerald-500/60 [&_[data-slot=select-trigger]:focus-visible]:ring-2 [&_[data-slot=select-trigger]:focus-visible]:ring-emerald-500/15 dark:[&_[data-slot=select-trigger]]:border-zinc-800 dark:[&_[data-slot=select-trigger]]:bg-zinc-950/80 dark:[&_[data-slot=select-trigger]]:text-white">
             <TabsContent
               keepMounted
               value="0"
               className="animate-in fade-in slide-in-from-right-2 duration-300"
             >
-              <CardHeader className="px-6 pt-8 sm:px-10 sm:pt-10">
+              <CardHeader className="px-4 pt-6 sm:px-10 sm:pt-10">
                 <CardTitle className="mb-1 text-2xl font-bold text-foreground">
                   Identidad del evento
                 </CardTitle>
@@ -492,7 +546,7 @@ export function EventCreationWizard({
                   también viven acá.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="grid grid-cols-1 items-start gap-8 px-6 py-8 sm:px-10 lg:grid-cols-12">
+              <CardContent className="grid grid-cols-1 items-start gap-6 px-4 py-6 sm:gap-8 sm:px-10 sm:py-8 lg:grid-cols-12">
                 <div className="space-y-6 lg:col-span-7">
                   <FormField
                     control={form.control}
@@ -555,7 +609,7 @@ export function EventCreationWizard({
                             ) : (
                               categories.map((category) => (
                                 <SelectItem key={category.id} value={category.id}>
-                                  <span className="block max-w-[200px] truncate sm:max-w-[300px]">
+                                  <span className="block min-w-0 max-w-full truncate">
                                     {category.name}
                                   </span>
                                 </SelectItem>
@@ -833,7 +887,7 @@ export function EventCreationWizard({
               value="1"
               className="animate-in fade-in slide-in-from-right-2 duration-300"
             >
-              <CardHeader className="border-b border-zinc-200 dark:border-white/8 px-6 py-6 lg:px-8">
+              <CardHeader className="border-b border-zinc-200 px-4 py-6 dark:border-white/8 lg:px-8">
                 <CardTitle className="text-xl text-foreground">
                   Mapa y sectores
                 </CardTitle>
@@ -842,7 +896,7 @@ export function EventCreationWizard({
                   de cada zona se definen en el estudio, al trazar el polígono.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-7 px-6 py-7 lg:px-8">
+              <CardContent className="space-y-7 px-4 py-7 lg:px-8">
                 <EventVenueStep
                   form={form}
                   venues={venueCatalog}
@@ -859,7 +913,7 @@ export function EventCreationWizard({
               value="2"
               className="animate-in fade-in slide-in-from-right-2 duration-300"
             >
-              <CardHeader className="border-b border-zinc-200 dark:border-white/8 px-6 py-6 lg:px-8">
+              <CardHeader className="border-b border-zinc-200 px-4 py-6 dark:border-white/8 lg:px-8">
                 <CardTitle className="text-xl text-foreground">
                   Tickets y combos
                 </CardTitle>
@@ -869,7 +923,7 @@ export function EventCreationWizard({
                   una misma entrada, no como tipos duplicados.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4 px-6 py-7 lg:px-8">
+              <CardContent className="space-y-4 px-4 py-7 lg:px-8">
                 <UnifiedInventoryPanel form={form} />
                 <FormMessage>
                   {form.formState.errors.tickets?.root?.message}
@@ -882,7 +936,7 @@ export function EventCreationWizard({
               value="3"
               className="animate-in fade-in slide-in-from-right-2 duration-300"
             >
-              <CardHeader className="border-b border-zinc-200 dark:border-white/8 px-6 py-6 lg:px-8">
+              <CardHeader className="border-b border-zinc-200 px-4 py-6 dark:border-white/8 lg:px-8">
                 <CardTitle className="text-xl text-foreground">
                   Configuración final
                 </CardTitle>
@@ -891,7 +945,7 @@ export function EventCreationWizard({
                   autoguardado ya dejó el borrador en la nube.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6 px-6 py-7 lg:px-8">
+              <CardContent className="space-y-6 px-4 py-7 lg:px-8">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950/50">
                     <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
@@ -989,7 +1043,9 @@ export function EventCreationWizard({
                         : "bg-red-500/10 text-red-300",
                     )}
                   >
-                    {resultMessage.text}
+                    {resultMessage.type === "error"
+                      ? toUserFacingError(resultMessage.text)
+                      : resultMessage.text}
                   </p>
                 ) : null}
               </CardContent>
@@ -997,30 +1053,46 @@ export function EventCreationWizard({
 
             <div
               className={cn(
-                "sticky z-30 flex items-center justify-between gap-3 border-t border-zinc-200 bg-white/95 px-4 py-4 backdrop-blur-xl",
+                "fixed inset-x-0 bottom-0 z-50 flex w-full flex-col gap-2 border-t border-zinc-200 bg-white/95 px-4 pt-3 backdrop-blur-xl",
+                "pb-[max(0.75rem,env(safe-area-inset-bottom))]",
                 "dark:border-white/8 dark:bg-[#0c0c0f]/95",
-                "bottom-[calc(4.5rem+env(safe-area-inset-bottom))] lg:bottom-0 lg:static lg:border-t lg:bg-transparent lg:px-6 lg:py-5 lg:backdrop-blur-none lg:px-8",
+                "lg:static lg:z-auto lg:flex-row lg:items-center lg:justify-between lg:bg-transparent lg:px-6 lg:py-5 lg:pb-5 lg:backdrop-blur-none",
               )}
             >
-              <Button
-                type="button"
-                variant="ghost"
-                disabled={activeStep === 0 || form.formState.isSubmitting}
-                onClick={() => void moveToStep(activeStep - 1)}
-                className="min-h-12 text-muted-foreground hover:bg-zinc-100 dark:hover:bg-white/5 hover:text-foreground"
-              >
-                <ArrowLeft />
-                Anterior
-              </Button>
+              <div className="flex items-center justify-between gap-2 lg:justify-start">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={activeStep === 0 || form.formState.isSubmitting}
+                  onClick={() => void moveToStep(activeStep - 1)}
+                  className="min-h-11 min-w-11 text-muted-foreground hover:bg-zinc-100 hover:text-foreground dark:hover:bg-white/5"
+                >
+                  <ArrowLeft />
+                  Anterior
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={form.formState.isSubmitting}
+                  variant="ghost"
+                  className="min-h-11 min-w-11 text-muted-foreground hover:bg-zinc-100 hover:text-foreground dark:hover:bg-white/5 lg:hidden"
+                >
+                  {form.formState.isSubmitting ? (
+                    <LoaderCircle className="animate-spin" />
+                  ) : (
+                    <Save />
+                  )}
+                  Guardar
+                </Button>
+              </div>
 
               {activeStep < steps.length - 1 ? (
-                <div className="flex flex-wrap items-center justify-end gap-2">
+                <div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:items-center">
                   <Button
                     key="draft-mid"
                     type="submit"
                     disabled={form.formState.isSubmitting}
                     variant="outline"
-                    className="min-h-12 border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900 text-base text-zinc-900 dark:text-zinc-100 hover:bg-zinc-200 dark:hover:bg-zinc-800"
+                    className="hidden min-h-11 border-zinc-300 bg-zinc-100 text-base text-zinc-900 hover:bg-zinc-200 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 lg:inline-flex"
                   >
                     {form.formState.isSubmitting ? (
                       <LoaderCircle className="animate-spin" />
@@ -1033,35 +1105,33 @@ export function EventCreationWizard({
                     key="next"
                     type="button"
                     onClick={() => void moveToStep(activeStep + 1)}
-                    className="min-h-12 bg-violet-600 text-base text-white hover:bg-violet-500"
+                    className="min-h-11 w-full bg-violet-600 text-base text-white hover:bg-violet-500 lg:w-auto"
                   >
                     Siguiente
                     <ArrowRight />
                   </Button>
                 </div>
               ) : (
-                <div className="flex flex-wrap items-center justify-end gap-2">
+                <div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:items-center">
                   <Button
                     key="draft"
                     type="submit"
                     disabled={form.formState.isSubmitting}
                     variant="outline"
-                    className="min-h-12 border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-900 text-base text-zinc-900 dark:text-zinc-100 hover:bg-zinc-200 dark:hover:bg-zinc-800"
+                    className="hidden min-h-11 border-zinc-300 bg-zinc-100 text-base text-zinc-900 hover:bg-zinc-200 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 lg:inline-flex"
                   >
                     {form.formState.isSubmitting ? (
                       <LoaderCircle className="animate-spin" />
                     ) : (
                       <Save />
                     )}
-                    {form.formState.isSubmitting
-                      ? "Guardando…"
-                      : "Guardar"}
+                    {form.formState.isSubmitting ? "Guardando…" : "Guardar"}
                   </Button>
                   <Button
                     key="publish"
                     type="button"
                     disabled={form.formState.isSubmitting}
-                    className="min-h-12 bg-emerald-600 text-base text-white hover:bg-emerald-500"
+                    className="min-h-11 w-full bg-emerald-600 text-base text-white hover:bg-emerald-500 lg:w-auto"
                     onClick={() => void onSubmit(form.getValues(), "publish")}
                   >
                     {form.formState.isSubmitting ? (
@@ -1069,9 +1139,7 @@ export function EventCreationWizard({
                     ) : (
                       <Rocket />
                     )}
-                    {form.formState.isSubmitting
-                      ? "Publicando…"
-                      : "Publicar"}
+                    {form.formState.isSubmitting ? "Publicando…" : "Publicar"}
                   </Button>
                 </div>
               )}

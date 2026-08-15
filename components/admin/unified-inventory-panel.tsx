@@ -55,11 +55,11 @@ import {
   type InventoryTierType,
 } from "@/lib/inventory/unified-inventory"
 import { CapacityBudgetBar } from "@/components/admin/capacity-budget-bar"
+import { useEventCapacity } from "@/hooks/use-event-capacity"
 import {
   createBlankPhase,
-  occupiesVenueBudget,
+  generalRemainingForTicket,
   phaseLimitSum,
-  venueCapacityBudget,
 } from "@/lib/inventory/capacity-budget"
 import { isMapBackedTicket } from "@/lib/seating/venue-map-pricing"
 import type { EventFormValues } from "@/lib/validations/event-form"
@@ -103,8 +103,7 @@ type Props = {
 export function UnifiedInventoryPanel({ form }: Props) {
   const tickets = form.watch("tickets") ?? []
   const scheduleDays = form.watch("basics.scheduleDays") ?? []
-  const venueCapacity = form.watch("venue.capacity")
-  const budget = venueCapacityBudget(venueCapacity, tickets)
+  const capacity = useEventCapacity(form)
   const [bundleOpen, setBundleOpen] = useState(false)
   const [editingBundleIndex, setEditingBundleIndex] = useState<number | null>(
     null,
@@ -194,7 +193,12 @@ export function UnifiedInventoryPanel({ form }: Props) {
 
   return (
     <div className="space-y-5">
-      <CapacityBudgetBar venueCapacity={venueCapacity} tickets={tickets} />
+      <CapacityBudgetBar form={form} />
+      {typeof form.formState.errors.tickets?.message === "string" ? (
+        <p className="text-sm text-destructive" role="alert">
+          {form.formState.errors.tickets.message}
+        </p>
+      ) : null}
       <div>
         <p className="text-sm font-semibold text-foreground">
           Tickets generales, adicionales y combos
@@ -246,7 +250,12 @@ export function UnifiedInventoryPanel({ form }: Props) {
         description="Zonas sin asiento numerado: predio, campo de pie o platea libre."
         icon={Ticket}
         actionLabel="Agregar sector general"
-        onAdd={() => append(createInventoryTicket("general"))}
+        onAdd={() =>
+          append({
+            ...createInventoryTicket("general"),
+            capacity: Math.max(1, Math.min(100, capacity.remaining || 1)),
+          })
+        }
       >
         {generals.length === 0 ? (
           <EmptyHint text="Opcional. Sumá una general de predio si no alcanza con las zonas del mapa." />
@@ -257,12 +266,11 @@ export function UnifiedInventoryPanel({ form }: Props) {
               form={form}
               index={item.index}
               capacityLabel="Capacidad máxima"
-              venueRemaining={
-                budget.remaining +
-                (occupiesVenueBudget(tickets[item.index]!)
-                  ? Math.max(0, Number(tickets[item.index]?.capacity) || 0)
-                  : 0)
-              }
+              venueRemaining={generalRemainingForTicket(
+                capacity,
+                tickets[item.index],
+                tickets,
+              )}
               showPhases
               onRemove={() => remove(item.index)}
             />
@@ -474,16 +482,16 @@ function InventoryRow({
 
   return (
     <div className="space-y-3 rounded-xl border border-border bg-card p-3">
-      <div className="grid gap-3 sm:grid-cols-[1fr_7rem_7rem_auto]">
+      <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_7rem_7rem_auto]">
         <FormField
           control={form.control}
           name={`tickets.${index}.name`}
           render={({ field, fieldState }) => (
-            <FormItem>
+            <FormItem className="min-w-0">
               <FormLabel>Nombre</FormLabel>
               <Input
                 {...field}
-                className="h-11"
+                className="h-11 min-w-0"
                 placeholder="Nombre del ítem"
               />
               <FormMessage>{fieldState.error?.message}</FormMessage>
@@ -495,9 +503,7 @@ function InventoryRow({
           name={`tickets.${index}.capacity`}
           render={({ field, fieldState }) => {
             const maxAllowed =
-              venueRemaining != null && venueRemaining > 0
-                ? venueRemaining
-                : undefined
+              venueRemaining != null ? Math.max(1, venueRemaining) : undefined
             const overflow =
               maxAllowed != null &&
               Number(field.value) > 0 &&

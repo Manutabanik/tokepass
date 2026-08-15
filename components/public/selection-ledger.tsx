@@ -4,6 +4,7 @@ import { CheckCircle, MapPin, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { formatCurrency } from "@/lib/format"
+import { formatStorefrontSelectionGroups } from "@/lib/seating/storefront-selection"
 import type { StorefrontSelectedItem } from "@/lib/stores/storefront-seat-store"
 import { storefrontSelectionTotal } from "@/lib/stores/storefront-seat-store"
 import { cn } from "@/lib/utils"
@@ -17,7 +18,8 @@ export function SelectionLedger({
   onRemove: (id: string) => void
   className?: string
 }) {
-  if (items.length === 0) return null
+  const groups = formatStorefrontSelectionGroups(items)
+  if (groups.length === 0) return null
 
   const total = storefrontSelectionTotal(items)
   const count = items.reduce(
@@ -28,41 +30,45 @@ export function SelectionLedger({
   return (
     <div
       className={cn(
-        "shrink-0 border-t border-border bg-background/95 px-4 py-3 backdrop-blur",
+        "shrink-0 border-t border-border bg-background/95 px-3 py-2.5 backdrop-blur sm:px-4 sm:py-3",
         className,
       )}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground">
-            <CheckCircle className="size-4 text-primary" aria-hidden="true" />
-            Lugares seleccionados ({count})
-          </p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Revisá el detalle antes de continuar. El total incluye todos los
-            lugares de la lista.
-          </p>
-        </div>
-        <p className="text-2xl font-bold tabular-nums text-foreground">
+        <p className="min-w-0 text-sm font-semibold text-foreground">
+          <CheckCircle
+            className="mr-1.5 inline size-4 align-text-bottom text-primary"
+            aria-hidden="true"
+          />
+          Seleccionados ({count})
+        </p>
+        <p className="shrink-0 text-lg font-bold tabular-nums text-foreground sm:text-xl">
           {formatCurrency(total)}
         </p>
       </div>
-      <ul className="mt-3 flex flex-wrap gap-2">
-        {items.map((item) => (
-          <li key={item.id}>
-            <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-xs font-medium text-foreground">
-              <MapPin className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-              <span className="max-w-[9rem] truncate">{item.name}</span>
-              <span className="tabular-nums text-muted-foreground">
-                {formatCurrency(item.price * Math.max(1, item.capacity))}
+      <ul className="mt-2 flex flex-col gap-1.5">
+        {groups.map((group) => (
+          <li key={group.key} className="min-w-0">
+            <span className="flex w-full min-w-0 items-start gap-1.5 rounded-xl border border-border bg-card px-2.5 py-1.5 text-xs text-foreground">
+              <MapPin
+                className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <span className="min-w-0 flex-1 break-words font-medium leading-snug">
+                {group.label}
+              </span>
+              <span className="shrink-0 tabular-nums text-muted-foreground">
+                {formatCurrency(group.price)}
               </span>
               <Button
                 type="button"
                 size="icon-xs"
                 variant="ghost"
-                className="size-5 rounded-full text-muted-foreground hover:text-foreground"
-                onClick={() => onRemove(item.id)}
-                aria-label={`Quitar ${item.name}`}
+                className="size-5 shrink-0 rounded-full text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  for (const id of group.ids) onRemove(id)
+                }}
+                aria-label={`Quitar ${group.label}`}
               >
                 <X className="size-3" />
               </Button>

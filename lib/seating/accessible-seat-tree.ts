@@ -126,12 +126,12 @@ function toSectorNode(input: {
       occupancy: input.occupancy[seat.id],
       selected: input.selected.has(seat.id),
     })
-    const rowKey = seat.row.trim() || "1"
+    const rowKey = seat.row.trim() || seat.label?.trim() || seat.id
     const list = rowsMap.get(rowKey) ?? []
     list.push({
       id: seat.id,
       number: seat.number,
-      label: String(seat.number),
+      label: seat.label?.trim() || String(seat.number),
       price: seat.price,
       status,
     })

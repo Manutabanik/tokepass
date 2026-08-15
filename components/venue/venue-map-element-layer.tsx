@@ -59,12 +59,12 @@ const VenueElementShape = memo(function VenueElementShape({
       opacity={opacity}
       className={
         interactive
-          ? "transition-opacity duration-300 ease-in-out"
-          : "pointer-events-none transition-opacity duration-300 ease-in-out"
+          ? "transition-all duration-200 ease-in-out"
+          : "pointer-events-none transition-all duration-200 ease-in-out"
       }
       style={
         selected
-          ? { filter: "drop-shadow(0 0 8px rgba(255,255,255,0.85))" }
+          ? { filter: "drop-shadow(0px 0px 8px rgba(255, 255, 255, 0.8))" }
           : undefined
       }
       onPointerDown={
@@ -184,10 +184,15 @@ export function VenueMapElementLayer({
   const veryDense = elements.length >= 800
   const renderLabels = !veryDense && zoom >= 0.8
   const renderChairs = showSeats && (!dense || zoom >= 1.15)
+  const ordered = [...elements].sort((left, right) => {
+    const leftSelected = selected.has(left.id) ? 1 : 0
+    const rightSelected = selected.has(right.id) ? 1 : 0
+    return leftSelected - rightSelected
+  })
 
   return (
     <>
-      {elements.map((element) => (
+      {ordered.map((element) => (
         <VenueElementShape
           key={element.id}
           element={element}

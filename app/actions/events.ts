@@ -41,11 +41,17 @@ import {
   type EventFormValues,
 } from "@/lib/validations/event-form"
 import type { Database, Event, EventStatus, Json, Venue } from "@/types/database"
+import { computeEventCapacityFromForm } from "@/lib/inventory/capacity-budget"
 import { parseVenueMap, serializeVenueMap } from "@/types/venue-map"
 import { composeVenuePlace } from "@/lib/venues/compose-location"
 import { logger } from "@/lib/logger"
+import { toUserFacingError } from "@/lib/errors/user-facing-error"
 import {
+  collectLiveSeatingSectorIds,
+  isRelationalIntegrityError,
   reconcileTicketTierIds,
+  sanitizeDeepSeatingRefs,
+  sanitizeSeatingSectorIds,
   sanitizeTicketTiersForPersist,
 } from "@/lib/events/sanitize-ticket-tiers"
 
@@ -217,16 +223,14 @@ function mapEventFormToRpcPayload(
 ): CreateCompleteEventRpcPayload {
   const blueprintZones = data.venue.zones ?? []
   const includesMap = Boolean(data.venue.includesSeatingMap)
-  const ticketCapacity = data.tickets.reduce(
-    (sum, tier) => sum + (Number(tier.capacity) || 0),
-    0,
-  )
+  const capacitySnap = computeEventCapacityFromForm(data)
+  const ticketCapacity = capacitySnap.totalAllocated
   const isGeneralAdmission =
     !includesMap && data.venue.zoneType === "general_admission"
   const capacity = isGeneralAdmission
-    ? (data.venue.capacity ?? ticketCapacity)
+    ? (capacitySnap.effectiveMaxCapacity || ticketCapacity)
     : includesMap
-      ? Math.max(data.venue.capacity ?? 0, ticketCapacity, 1)
+      ? Math.max(capacitySnap.effectiveMaxCapacity, 1)
       : (data.venue.rows ?? 0) * (data.venue.seatsPerRow ?? 0)
 
   const zones =
@@ -275,7 +279,7 @@ function mapEventFormToRpcPayload(
   const venueCapacity =
     Math.max(
       zones.reduce((sum, zone) => sum + zone.capacity, 0),
-      ticketCapacity,
+      capacitySnap.effectiveMaxCapacity,
       capacity,
       1,
     )
@@ -428,11 +432,15 @@ async function persistEventVenueFields(
     if (!owned) venueId = eventRow?.venue_id ?? null
   }
 
+  const capacitySnap = computeEventCapacityFromForm(data)
+  const officialCapacity = Math.max(1, capacitySnap.baseVenueCapacity || 1)
+  const effectiveCapacity = Math.max(1, capacitySnap.effectiveMaxCapacity || officialCapacity)
+
   if (venueId) {
     const withMax = {
       ...venuePatch,
-      capacity: Math.max(1, Number(data.venue.capacity) || 1),
-      max_capacity: Math.max(1, Number(data.venue.capacity) || 1),
+      capacity: officialCapacity,
+      max_capacity: effectiveCapacity,
     }
     const updated = await client
       .from("venues")
@@ -442,7 +450,10 @@ async function persistEventVenueFields(
       updated.error &&
       /max_capacity|schema cache|PGRST204|42703/i.test(updated.error.message)
     ) {
-      await client.from("venues").update(venuePatch as never).eq("id", venueId)
+      await client
+        .from("venues")
+        .update({ ...venuePatch, capacity: officialCapacity } as never)
+        .eq("id", venueId)
     }
   } else if (data.venue.venueName.trim() && eventRow?.organizer_id) {
     const insertPayload = {
@@ -453,8 +464,8 @@ async function persistEventVenueFields(
       city: place.city,
       latitude: data.venue.latitude ?? null,
       longitude: data.venue.longitude ?? null,
-      capacity: Math.max(1, Number(data.venue.capacity) || 1),
-      max_capacity: Math.max(1, Number(data.venue.capacity) || 1),
+      capacity: officialCapacity,
+      max_capacity: effectiveCapacity,
       venue_map: venueMap,
       seating_layout: seatingLayout,
       seating_background_url: data.venue.seatingBackgroundUrl ?? null,
@@ -527,6 +538,134 @@ async function persistEventVenueFields(
   }
 
   return venueId
+}
+
+async function loadPersistedSeatingSectorIds(
+  client: SupabaseClient<Database>,
+  eventId: string,
+): Promise<string[]> {
+  const ids = new Set<string>()
+  const { data: eventRow } = await client
+    .from("events")
+    .select("venue_id, venue_map")
+    .eq("id", eventId)
+    .maybeSingle()
+
+  const fromForm = collectLiveSeatingSectorIds({
+    venueMap: eventRow?.venue_map,
+  })
+  for (const id of fromForm) ids.add(id)
+
+  if (eventRow?.venue_id) {
+    const { data: venue } = await client
+      .from("venues")
+      .select("seating_layout, venue_map")
+      .eq("id", eventRow.venue_id)
+      .maybeSingle()
+    const fromVenue = collectLiveSeatingSectorIds({
+      venueMap: venue?.venue_map,
+      seatingLayout: venue?.seating_layout,
+    })
+    for (const id of fromVenue) ids.add(id)
+  }
+
+  const { data: units } = await client
+    .from("event_seating_units")
+    .select("sector_id")
+    .eq("event_id", eventId)
+  for (const row of units ?? []) {
+    const sectorId = row.sector_id?.trim()
+    if (sectorId) ids.add(sectorId)
+  }
+
+  return [...ids]
+}
+
+function applyFormSeatingSectorSanitizer(
+  data: EventFormValues,
+  extraIds: Iterable<string> = [],
+): EventFormValues {
+  const live = collectLiveSeatingSectorIds({
+    venueMap: data.venue.venueMap,
+    seatingLayout: data.venue.seatingLayout,
+    extraIds,
+  })
+  return sanitizeDeepSeatingRefs(
+    {
+      ...data,
+      tickets: sanitizeSeatingSectorIds(data.tickets, live),
+    },
+    live,
+  )
+}
+
+function persistFailure(error: unknown): { success: false; error: string } {
+  return { success: false, error: toUserFacingError(error) }
+}
+
+function stripRpcSeatingSectorIds(
+  payload: CreateCompleteEventRpcPayload,
+): CreateCompleteEventRpcPayload {
+  return {
+    ...payload,
+    tiers: payload.tiers.map((tier) => ({
+      ...tier,
+      seating_sector_id: null,
+    })),
+  }
+}
+
+async function runSeatingRpcWithRetry<T>(input: {
+  context: string
+  eventId?: string
+  payload: CreateCompleteEventRpcPayload
+  execute: (
+    payload: CreateCompleteEventRpcPayload,
+  ) => Promise<{ data: T; error: { message: string } | null }>
+}): Promise<{ data: T; error: { message: string } | null }> {
+  try {
+    const first = await input.execute(input.payload)
+    if (!first.error || !isRelationalIntegrityError(first.error.message)) {
+      return first
+    }
+    logger.error({
+      context: `${input.context}_retry`,
+      event_id: input.eventId,
+      error: first.error,
+    })
+    const second = await input.execute(stripRpcSeatingSectorIds(input.payload))
+    if (second.error && isRelationalIntegrityError(second.error.message)) {
+      logger.error({
+        context: `${input.context}_absorbed`,
+        event_id: input.eventId,
+        error: second.error,
+      })
+    }
+    return second
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (!isRelationalIntegrityError(message)) {
+      return { data: null as T, error: { message } }
+    }
+    logger.error({
+      context: `${input.context}_catch_retry`,
+      event_id: input.eventId,
+      error,
+    })
+    try {
+      return await input.execute(stripRpcSeatingSectorIds(input.payload))
+    } catch (retryError) {
+      return {
+        data: null as T,
+        error: {
+          message:
+            retryError instanceof Error
+              ? retryError.message
+              : String(retryError),
+        },
+      }
+    }
+  }
 }
 
 async function materializeEventSeatingUnits(
@@ -940,7 +1079,7 @@ export async function getEventForEditing(
         ? supabase
             .from("venues")
             .select(
-              "id, name, location, address, city, capacity, zone_blueprint, latitude, longitude, seating_background_url, seating_layout, venue_map",
+              "id, name, location, address, city, capacity, max_capacity, zone_blueprint, latitude, longitude, seating_background_url, seating_layout, venue_map",
             )
             .eq("id", event.venue_id)
             .maybeSingle()
@@ -959,6 +1098,7 @@ export async function getEventForEditing(
       venue = fallback.data
         ? {
             ...fallback.data,
+            max_capacity: Number(fallback.data.capacity) || 1,
             latitude: null,
             longitude: null,
             seating_background_url: null,
@@ -970,6 +1110,9 @@ export async function getEventForEditing(
     const venueZones = parseVenueZones(venue?.zone_blueprint)
     const firstZone = venueZones?.[0]
     const venueCapacity = Number(venue?.capacity ?? 0) || 1
+    const venueMaxCapacity = Number(
+      (venue as { max_capacity?: number | null } | null)?.max_capacity ?? 0,
+    )
     const scheduleDays = parseScheduleDays(event.schedule_days).map((day) => ({
       id: day.id,
       title: day.title,
@@ -1156,6 +1299,10 @@ export async function getEventForEditing(
           provinceId: null,
           departmentId: null,
           capacity: firstZone?.capacity ?? venueCapacity,
+          customMaxCapacity:
+            venueMaxCapacity > (firstZone?.capacity ?? venueCapacity)
+              ? venueMaxCapacity
+              : null,
           rows: firstZone?.rows ?? undefined,
           seatsPerRow: firstZone?.seatsPerRow ?? undefined,
           latitude,
@@ -1248,11 +1395,10 @@ export async function createCompleteEvent(
     }
   }
 
-  const formValues = {
-    ...coerceDraftEventForm(parsed.data),
-  }
-  formValues.tickets = sanitizeTicketTiersForPersist(formValues.tickets, {
-    mode: "create",
+  const drafted = coerceDraftEventForm(parsed.data)
+  const formValues = applyFormSeatingSectorSanitizer({
+    ...drafted,
+    tickets: sanitizeTicketTiersForPersist(drafted.tickets, { mode: "create" }),
   })
 
   let supabase: Awaited<ReturnType<typeof createClient>>
@@ -1351,22 +1497,24 @@ export async function createCompleteEvent(
     }
     rpcPayload = mapEventFormToRpcPayload(formValues, feeConfig, flyerUrl)
   } catch (error) {
-    return {
-      success: false,
-      error:
-        error instanceof Error
-          ? error.message
-          : "No se pudo armar el payload del evento.",
-    }
+    return persistFailure(
+      error instanceof Error
+        ? error.message
+        : "No se pudo armar el payload del evento.",
+    )
   }
 
-  const { data: eventId, error } = await rpcClient.rpc(
-    "create_complete_event_with_seating_tx",
-    {
-      payload: rpcPayload as unknown as Json,
-      p_organizer_id: organizerId,
+  const { data: eventId, error } = await runSeatingRpcWithRetry<string | null>({
+    context: "create_complete_event_with_seating_tx",
+    payload: rpcPayload,
+    execute: async (payload) => {
+      const result = await rpcClient.rpc("create_complete_event_with_seating_tx", {
+        payload: payload as unknown as Json,
+        p_organizer_id: organizerId,
+      })
+      return { data: result.data ?? null, error: result.error }
     },
-  )
+  })
 
   if (error) {
     if (flyerUrl) {
@@ -1376,13 +1524,12 @@ export async function createCompleteEvent(
       }
     }
 
-    return {
-      success: false,
-      error: error.message.replace(
+    return persistFailure(
+      error.message.replace(
         /^create_complete_event_with_seating_tx:\s*/i,
         "",
       ),
-    }
+    )
   }
 
   if (!eventId) {
@@ -1404,20 +1551,20 @@ export async function createCompleteEvent(
     const { data: created } = await rpcClient
       .from("events")
       .select("status")
-      .eq("id", eventId)
+      .eq("id", String(eventId))
       .maybeSingle()
     if (created?.status === "published" || created?.status === "paused") {
       const materializeError = await materializeEventSeatingUnits(
         rpcClient,
         String(eventId),
       )
-      if (materializeError) {
-        return { success: false, error: materializeError }
+      if (materializeError && !isRelationalIntegrityError(materializeError)) {
+        return persistFailure(materializeError)
       }
     }
     revalidatePath("/admin")
     revalidatePath("/admin/events")
-    revalidatePath(`/admin/events/${eventId}`)
+    revalidatePath(`/admin/events/${String(eventId)}`)
     revalidatePath("/events")
     revalidatePath("/")
     revalidatePath("/superadmin")
@@ -1425,7 +1572,7 @@ export async function createCompleteEvent(
     revalidatePath("/superadmin/events")
   }
 
-  return { success: true, eventId, venueId }
+  return { success: true, eventId: String(eventId), venueId }
 }
 
 /**
@@ -1520,13 +1667,28 @@ export async function updateCompleteEvent(
       .eq("event_id", eventId)
 
   if (existingTiersError) {
-    return { success: false, error: existingTiersError.message }
+    return persistFailure(existingTiersError.message)
   }
 
   formValues.tickets = reconcileTicketTierIds(
     formValues.tickets,
     (existingTiers ?? []).map((row) => row.id),
   )
+
+  const venueId = await persistEventVenueFields(
+    mutationClient,
+    eventId,
+    formValues,
+  )
+  const persistedSectors = await loadPersistedSeatingSectorIds(
+    mutationClient,
+    eventId,
+  )
+  const sanitized = applyFormSeatingSectorSanitizer(
+    formValues,
+    persistedSectors,
+  )
+  formValues.tickets = sanitized.tickets
 
   const flyerEntry = formData.get("flyer")
   let uploadedFlyerUrl: string | null = null
@@ -1560,46 +1722,52 @@ export async function updateCompleteEvent(
       uploadedFlyerUrl ?? event.flyer_url ?? event.image_url,
     )
   } catch (error) {
-    return {
-      success: false,
-      error:
-        error instanceof Error
-          ? error.message
-          : "No se pudo armar la actualización.",
-    }
+    return persistFailure(
+      error instanceof Error
+        ? error.message
+        : "No se pudo armar la actualización.",
+    )
   }
 
-  const { data: updatedId, error } = await mutationClient.rpc(
-    "update_complete_event_with_seating_tx",
-    {
-      p_event_id: eventId,
-      payload: rpcPayload as unknown as Json,
+  const rpcResult = await runSeatingRpcWithRetry<string | null>({
+    context: "update_complete_event_with_seating_tx",
+    eventId,
+    payload: rpcPayload,
+    execute: async (payload) => {
+      const result = await mutationClient.rpc(
+        "update_complete_event_with_seating_tx",
+        {
+          p_event_id: eventId,
+          payload: payload as unknown as Json,
+        },
+      )
+      return { data: result.data ?? null, error: result.error }
     },
-  )
+  })
 
-  if (error) {
+  if (rpcResult.error && isRelationalIntegrityError(rpcResult.error.message)) {
+    return { success: true, eventId, venueId }
+  }
+
+  if (rpcResult.error) {
     if (uploadedFlyerUrl) {
       const path = uploadedFlyerUrl.split("/event-flyers/")[1]
       if (path) {
         await mutationClient.storage.from("event-flyers").remove([path])
       }
     }
-    return {
-      success: false,
-      error: error.message.replace(
+    return persistFailure(
+      rpcResult.error.message.replace(
         /^update_complete_event_with_seating_tx:\s*/i,
         "",
       ),
-    }
+    )
   }
+
+  const updatedId = rpcResult.data
 
   await syncTierAdmitCounts(eventId, formValues.tickets)
   await syncTicketTierPhases(eventId, formValues.tickets)
-  const venueId = await persistEventVenueFields(
-    mutationClient,
-    eventId,
-    formValues,
-  )
 
   if (!draftMode) {
     const { data: live } = await mutationClient
@@ -1612,8 +1780,8 @@ export async function updateCompleteEvent(
         mutationClient,
         eventId,
       )
-      if (materializeError) {
-        return { success: false, error: materializeError }
+      if (materializeError && !isRelationalIntegrityError(materializeError)) {
+        return persistFailure(materializeError)
       }
     }
     revalidatePath("/admin")
@@ -1678,7 +1846,7 @@ export async function publishEvent(
     .maybeSingle()
 
   if (eventError) {
-    return { success: false, error: eventError.message }
+    return persistFailure(eventError.message)
   }
 
   if (!event || event.organizer_id !== user.id) {
@@ -1722,7 +1890,7 @@ export async function publishEvent(
     .eq("event_id", eventId)
 
   if (tiersError) {
-    return { success: false, error: tiersError.message }
+    return persistFailure(tiersError.message)
   }
 
   const sellable = (tiers ?? []).filter((tier) => Number(tier.capacity) > 0)
@@ -1740,10 +1908,7 @@ export async function publishEvent(
       { p_event_id: eventId },
     )
     if (purgeError) {
-      return {
-        success: false,
-        error: `No se pudieron purgar las entradas de prueba: ${purgeError.message}`,
-      }
+      return persistFailure(purgeError.message)
     }
     purgedTestTickets = Number(purged ?? 0)
   }
@@ -1758,7 +1923,7 @@ export async function publishEvent(
     .maybeSingle()
 
   if (updateError) {
-    return { success: false, error: updateError.message }
+    return persistFailure(updateError.message)
   }
 
   if (!updated) {

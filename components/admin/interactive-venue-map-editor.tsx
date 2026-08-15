@@ -11,7 +11,8 @@ import {
   CircleDot,
   Copy,
   Eye,
-  Hash,
+  Plus,
+  SlidersHorizontal,
   Info,
   Layers,
   LayoutTemplate,
@@ -25,6 +26,7 @@ import {
   Trash2,
   Type,
   Undo,
+  Wand2,
   ZoomIn,
   ZoomOut,
   Armchair,
@@ -34,7 +36,7 @@ import {
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react"
 import { toast } from "sonner"
 
-import { AutoNumberingPanel } from "@/components/admin/auto-numbering-panel"
+import { VenueBulkEditPanel } from "@/components/admin/venue-bulk-edit-panel"
 import { BuyerViewModal } from "@/components/admin/buyer-view-modal"
 import { ConcentricRingGenerator } from "@/components/admin/concentric-ring-generator"
 import { QuickPriceAssigner } from "@/components/admin/quick-price-assigner"
@@ -57,6 +59,14 @@ import {
 } from "@/app/actions/venue-templates"
 import { Button } from "@/components/ui/button"
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
+import { useIsDesktop } from "@/hooks/use-media-query"
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -70,6 +80,13 @@ import { Label } from "@/components/ui/label"
 import { VenueMapBackgroundLayer } from "@/components/venue/venue-map-background-layer"
 import { VenueMapElementLayer } from "@/components/venue/venue-map-element-layer"
 import { VenueMapZoneLayer } from "@/components/venue/venue-map-zone-layer"
+import { applySequentialLabels } from "@/lib/seating/auto-numbering"
+import {
+  applyBulkElementCapacity,
+  applyBulkElementColor,
+  applyBulkElementPrice,
+  selectSimilarElementIds,
+} from "@/lib/seating/studio-bulk-edit"
 import {
   cloneVenueElement,
   createVenueElement,
@@ -85,6 +102,7 @@ import {
 } from "@/lib/seating/venue-price-groups"
 import {
   aabbIntersects,
+  alignElementsWithGap,
   angleAt,
   bakeLiveTransform,
   clampScale,
@@ -106,7 +124,6 @@ import {
   translatePercentPolygon,
   VENUE_MAP_CANVAS,
 } from "@/lib/seating/venue-polygon"
-import { applyAutoNumbering } from "@/lib/seating/auto-numbering"
 import {
   rebuildSectorSeats,
   venueMapCapacity,
@@ -210,6 +227,9 @@ export function InteractiveVenueMapEditor({
     () => !venueMapHasInventory(parseVenueMap(value ?? emptyVenueMap())),
   )
   const [pricePanelOpen, setPricePanelOpen] = useState(false)
+  const [toolsOpen, setToolsOpen] = useState(false)
+  const [propertiesOpen, setPropertiesOpen] = useState(false)
+  const isDesktop = useIsDesktop()
   const [customTemplates, setCustomTemplates] = useState<OrganizerVenueTemplate[]>(
     [],
   )
@@ -944,16 +964,63 @@ export function InteractiveVenueMapEditor({
     else if (ids.length > 1) setSelection({ kind: "elements", ids })
   }
 
+  function selectSimilarByColor() {
+    const sourceId = selectedElement?.id
+    if (!sourceId) return
+    const ids = selectSimilarElementIds(ensureElements(mapRef.current), sourceId)
+    if (ids.length === 0) return
+    if (ids.length === 1) {
+      setSelection({ kind: "element", id: ids[0]! })
+      return
+    }
+    setSelection({ kind: "elements", ids })
+  }
+
   function batchPrice(price: number) {
-    const ids = new Set(selectedElementIds)
-    if (ids.size === 0) return
     const current = mapRef.current
     commit({
       ...current,
-      elements: ensureElements(current).map((item) =>
-        ids.has(item.id) && !isInfrastructureElement(item)
-          ? { ...item, price }
-          : item,
+      elements: applyBulkElementPrice(
+        ensureElements(current),
+        selectedElementIds,
+        price,
+      ),
+    })
+  }
+
+  function batchColor(color: string) {
+    const current = mapRef.current
+    commit({
+      ...current,
+      elements: applyBulkElementColor(
+        ensureElements(current),
+        selectedElementIds,
+        color,
+      ),
+    })
+  }
+
+  function batchCapacity(capacity: number) {
+    const current = mapRef.current
+    commit({
+      ...current,
+      elements: applyBulkElementCapacity(
+        ensureElements(current),
+        selectedElementIds,
+        capacity,
+      ),
+    })
+  }
+
+  function batchSequentialLabels(prefix: string, start: number) {
+    const current = mapRef.current
+    commit({
+      ...current,
+      elements: applySequentialLabels(
+        ensureElements(current),
+        selectedElementIds,
+        prefix,
+        start,
       ),
     })
   }
@@ -978,40 +1045,14 @@ export function InteractiveVenueMapEditor({
   function alignSelection(
     mode: "left" | "centerX" | "right" | "top" | "centerY" | "bottom",
   ) {
-    if (selectedElements.length < 2) return
-    const xs = selectedElements.map((item) => item.x)
-    const ys = selectedElements.map((item) => item.y)
-    const minX = Math.min(...xs)
-    const maxX = Math.max(...xs)
-    const minY = Math.min(...ys)
-    const maxY = Math.max(...ys)
-    const midX = (minX + maxX) / 2
-    const midY = (minY + maxY) / 2
-    const ids = new Set(selectedElementIds)
-    const current = mapRef.current
-    commit({
-      ...current,
-      elements: ensureElements(current).map((item) => {
-        if (!ids.has(item.id)) return item
-        if (mode === "left") return { ...item, x: minX }
-        if (mode === "right") return { ...item, x: maxX }
-        if (mode === "centerX") return { ...item, x: midX }
-        if (mode === "top") return { ...item, y: minY }
-        if (mode === "bottom") return { ...item, y: maxY }
-        return { ...item, y: midY }
-      }),
-    })
-  }
-
-  function distributePrefixes() {
     if (selectedElementIds.length < 2) return
     const current = mapRef.current
     commit({
       ...current,
-      elements: applyAutoNumbering(
+      elements: alignElementsWithGap(
         ensureElements(current),
-        new Set(selectedElementIds),
-        { start: 1, prefix: "Mesa ", suffix: "", direction: "ltr" },
+        selectedElementIds,
+        mode,
       ),
     })
   }
@@ -1076,6 +1117,10 @@ export function InteractiveVenueMapEditor({
   }
 
   function focusProperties() {
+    if (variant === "studio" && !isDesktop) {
+      setPropertiesOpen(true)
+      return
+    }
     propertiesRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" })
   }
 
@@ -1469,13 +1514,40 @@ export function InteractiveVenueMapEditor({
     else setPreview(true)
   }
 
+  function pickPaletteItem(next: PalettePlacement) {
+    if (next.kind === "zone_polygon") {
+      setPlacement(next)
+      setTool("polygon")
+      setPolygonDraft([])
+      setToolsOpen(false)
+      return
+    }
+    setPlacement(next)
+    setTool("select")
+    setToolsOpen(false)
+  }
+
+  const hasPropertiesTarget = Boolean(selection)
+  const studioMobile = isStudio && !isDesktop
+
+  useEffect(() => {
+    if (isDesktop) {
+      setToolsOpen(false)
+      setPropertiesOpen(false)
+    }
+  }, [isDesktop])
+
+  useEffect(() => {
+    if (!selection) setPropertiesOpen(false)
+  }, [selection])
+
   const toolbar = (
     <div
       className={cn(
-        "z-20 flex w-full items-center overflow-hidden border-b border-border bg-card",
+        "z-20 flex w-full items-center border-b border-border bg-card",
         isStudio
-          ? "shrink-0 flex-wrap gap-2 px-3 py-2"
-          : "flex-wrap gap-2 px-3 py-2",
+          ? "h-14 shrink-0 flex-nowrap gap-2 overflow-x-auto px-2 hide-scrollbar"
+          : "flex-wrap gap-2 overflow-hidden px-3 py-2",
       )}
     >
       {isStudio ? (
@@ -1484,13 +1556,13 @@ export function InteractiveVenueMapEditor({
             type="button"
             variant="ghost"
             onClick={onClose}
-            className="shrink-0"
+            className="h-9 shrink-0 px-2 md:px-3"
             aria-label="Salir sin guardar"
           >
             <ArrowLeft className="size-4" />
-            Salir
+            <span className="hidden md:inline">Salir</span>
           </Button>
-          <p className="max-w-[160px] truncate text-sm font-semibold text-foreground">
+          <p className="hidden max-w-[7rem] truncate text-sm font-semibold text-foreground sm:block md:max-w-[160px]">
             {eventTitle}
           </p>
         </div>
@@ -1511,7 +1583,7 @@ export function InteractiveVenueMapEditor({
             setPlacement(null)
           }}
           label="Select"
-          showLabel
+          showLabel={isStudio ? "md" : true}
         >
           <MousePointer className="size-4" />
         </ToolButton>
@@ -1522,7 +1594,7 @@ export function InteractiveVenueMapEditor({
             setPlacement({ kind: "zone_polygon" })
           }}
           label="Trazar zona"
-          showLabel
+          showLabel={isStudio ? "md" : true}
         >
           <PenTool className="size-4" />
         </ToolButton>
@@ -1592,7 +1664,7 @@ export function InteractiveVenueMapEditor({
         className={cn(
           "flex min-w-0 items-center gap-1.5",
           isStudio
-            ? "ml-auto justify-end overflow-hidden"
+            ? "ml-auto shrink-0 flex-nowrap justify-end"
             : "ml-auto flex-wrap",
         )}
       >
@@ -1601,55 +1673,60 @@ export function InteractiveVenueMapEditor({
             <Button
               type="button"
               variant="outline"
-              className="shrink-0 whitespace-nowrap"
+              className="h-9 shrink-0 px-2 md:px-3"
               onClick={handleClearMap}
+              aria-label="Limpiar mapa"
             >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Limpiar Mapa
+              <Trash2 className="size-4 md:mr-2" />
+              <span className="hidden md:inline">Limpiar Mapa</span>
             </Button>
             <Button
               type="button"
               variant="outline"
-              className="shrink-0 whitespace-nowrap"
+              className="h-9 shrink-0 px-2 md:px-3"
               onClick={() => setLibraryOpen(true)}
+              aria-label="Plantillas"
             >
-              <LayoutTemplate className="mr-2 h-4 w-4" />
-              Plantillas
+              <LayoutTemplate className="size-4 md:mr-2" />
+              <span className="hidden md:inline">Plantillas</span>
             </Button>
             <VenueSetupGuide compact />
             <Button
               type="button"
               variant="outline"
-              className="shrink-0 whitespace-nowrap"
+              className="h-9 shrink-0 px-2 md:px-3"
               disabled={pendingTemplates}
+              aria-label="Guardar como mi plantilla"
               onClick={() => {
                 setTemplateName(eventTitle || "Mi recinto")
                 setSaveOpen(true)
               }}
             >
-              <Save className="mr-2 h-4 w-4" />
-              Mi plantilla
+              <Save className="size-4 md:mr-2" />
+              <span className="hidden md:inline">Mi plantilla</span>
             </Button>
           </>
         ) : null}
         <Button
           type="button"
           variant="outline"
-          className="shrink-0 whitespace-nowrap"
+          className="h-9 shrink-0 px-2 md:px-3"
           onClick={openPreview}
+          aria-label="Vista previa del comprador"
         >
-          <Eye className="mr-2 h-4 w-4 text-emerald-500" />
-          Vista Previa del Comprador
+          <Eye className="size-4 text-emerald-500 md:mr-2" />
+          <span className="hidden md:inline">Vista Previa del Comprador</span>
         </Button>
         {onSave ? (
           <Button
             type="button"
             disabled={saving}
             onClick={() => onSave(map)}
-            className="shrink-0 whitespace-nowrap bg-emerald-500 font-bold text-black hover:bg-emerald-400"
+            className="h-9 shrink-0 bg-emerald-500 px-2 font-bold text-black hover:bg-emerald-400 md:px-3"
+            aria-label="Guardar cambios"
           >
-            <Save className="mr-2 h-4 w-4" />
-            Guardar Cambios
+            <Save className="size-4 md:mr-2" />
+            <span className="hidden md:inline">Guardar Cambios</span>
           </Button>
         ) : null}
       </div>
@@ -1674,25 +1751,20 @@ export function InteractiveVenueMapEditor({
             : "grid lg:grid-cols-[220px_1fr_280px]",
         )}
       >
-        <VenueComponentPalette
-          variant={isStudio ? "studio" : "compact"}
-          active={placement}
-          onPick={(next) => {
-            if (next.kind === "zone_polygon") {
-              setPlacement(next)
-              setTool("polygon")
-              setPolygonDraft([])
-              return
-            }
-            setPlacement(next)
-            setTool("select")
-          }}
-        />
+        {!isStudio || isDesktop ? (
+          <VenueComponentPalette
+            variant={isStudio ? "studio" : "compact"}
+            active={placement}
+            onPick={pickPaletteItem}
+          />
+        ) : null}
         <div
           ref={canvasRef}
           className={cn(
             "relative overflow-hidden bg-background bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.08)_1px,transparent_0)] bg-[size:20px_20px]",
-            isStudio ? "min-h-0 flex-1" : "min-h-[420px] bg-zinc-950",
+            isStudio
+              ? "relative h-full min-h-0 w-full flex-1"
+              : "min-h-[420px] bg-zinc-950",
           )}
           onDragOver={(event) => {
             event.preventDefault()
@@ -1932,7 +2004,12 @@ export function InteractiveVenueMapEditor({
               ) : null}
             </g>
           </svg>
-          {isStudio && tool !== "polygon" ? <VenueStudioHud map={map} /> : null}
+          {isStudio && tool !== "polygon" ? (
+            <VenueStudioHud
+              map={map}
+              className={studioMobile ? "bottom-20" : undefined}
+            />
+          ) : null}
           {tool === "polygon" ? (
             <div className="pointer-events-none absolute bottom-3 left-1/2 z-20 w-[min(100%-1.5rem,28rem)] -translate-x-1/2 rounded-full border border-cyan-400/30 bg-zinc-950/90 px-4 py-2 text-center text-xs text-cyan-100">
               Clic: vértice. Clic en el primero, Enter o doble clic: cerrar. Escape: cancelar.
@@ -1999,30 +2076,30 @@ export function InteractiveVenueMapEditor({
           ) : null}
         </div>
 
-        <aside
-          ref={propertiesRef}
-          className={cn(
-            "flex flex-col border-border bg-card",
-            isStudio
-              ? "h-full w-80 shrink-0 overflow-hidden border-l"
-              : "space-y-4 overflow-y-auto border-t bg-card/50 p-4 lg:max-h-[min(70vh,560px)] lg:border-t-0 lg:border-l",
-          )}
+        <StudioInspectorFrame
+          isStudio={isStudio}
+          isDesktop={isDesktop}
+          open={propertiesOpen}
+          onOpenChange={setPropertiesOpen}
+          propertiesRef={propertiesRef}
         >
           {isStudio ? (
-            <div className="shrink-0 border-b border-border px-4 py-3">
+            <div className="hidden shrink-0 border-b border-border px-4 py-3 md:block">
               <p className="text-sm font-semibold text-foreground">
-                {selection?.kind === "elements"
-                  ? `${selection.ids.length} Elementos Seleccionados`
-                  : selection
+                {selectedElementIds.length > 1
+                  ? `${selectedElementIds.length} Elementos seleccionados`
+                  : selectedElementIds.length === 1 || selection
                     ? "Propiedades"
                     : "Predio"}
               </p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                {selection?.kind === "elements"
-                  ? "Los cambios se aplican a todo el grupo."
-                  : selection
-                    ? "Edición del elemento activo."
-                    : "Foto aérea y medidas del recinto."}
+                {selectedElementIds.length > 1
+                  ? "Edición masiva del grupo."
+                  : selectedElementIds.length === 1
+                    ? "Ficha del elemento activo."
+                    : selection
+                      ? "Edición del elemento activo."
+                      : "Foto aérea y medidas del recinto."}
               </p>
             </div>
           ) : (
@@ -2296,18 +2373,29 @@ export function InteractiveVenueMapEditor({
                 />
               </Field>
               <Field label="Color">
-                <div className="flex items-center gap-2">
-                  <Palette className="size-4 text-zinc-500" />
-                  <input
-                    type="color"
-                    value={selectedElement.color}
-                    onChange={(event) =>
-                      patchElement(selectedElement.id, {
-                        color: event.target.value,
-                      })
-                    }
-                    className="h-8 w-full cursor-pointer rounded border border-zinc-700 bg-transparent"
-                  />
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Palette className="size-4 text-zinc-500" />
+                    <input
+                      type="color"
+                      value={selectedElement.color}
+                      onChange={(event) =>
+                        patchElement(selectedElement.id, {
+                          color: event.target.value,
+                        })
+                      }
+                      className="h-11 w-full cursor-pointer rounded border border-zinc-700 bg-transparent"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-[44px] w-full"
+                    onClick={selectSimilarByColor}
+                  >
+                    <Wand2 className="size-4" />
+                    Seleccionar todos de este color
+                  </Button>
                 </div>
               </Field>
               <InspectorShapeSelector
@@ -2407,11 +2495,6 @@ export function InteractiveVenueMapEditor({
                   Vender el grupo completo
                 </label>
               ) : null}
-              <AutoNumberingPanel
-                elements={ensureElements(map)}
-                selectedIds={[selectedElement.id]}
-                onApply={(next) => commit({ ...map, elements: next })}
-              />
               {selectedElement.groupId ? (
                 <Button
                   type="button"
@@ -2428,50 +2511,14 @@ export function InteractiveVenueMapEditor({
               </Button>
             </div>
           ) : selection?.kind === "elements" ? (
-            <div className="space-y-3">
-              <Field label="Aplicar precio a todos (ARS)">
-                <PriceInput
-                  value={undefined}
-                  onValueChange={(value) => {
-                    if (value == null) return
-                    batchPrice(value)
-                  }}
-                />
-              </Field>
-              <Field label="Sector del grupo">
-                <Input
-                  value={
-                    selectedElements.every(
-                      (item) => item.sectorName === selectedElements[0]?.sectorName,
-                    )
-                      ? (selectedElements[0]?.sectorName ?? "")
-                      : ""
-                  }
-                  placeholder="Nombre de sector"
-                  onChange={(event) =>
-                    batchPatchElements({ sectorName: event.target.value }, true)
-                  }
-                />
-              </Field>
-              <Field label="Color del grupo">
-                <div className="flex items-center gap-2">
-                  <Palette className="size-4 text-zinc-500" />
-                  <input
-                    type="color"
-                    value={
-                      selectedElements.every(
-                        (item) => item.color === selectedElements[0]?.color,
-                      )
-                        ? (selectedElements[0]?.color ?? "#888888")
-                        : "#888888"
-                    }
-                    onChange={(event) =>
-                      batchPatchElements({ color: event.target.value })
-                    }
-                    className="h-8 w-full cursor-pointer rounded border border-zinc-700 bg-transparent"
-                  />
-                </div>
-              </Field>
+            <div className="space-y-4">
+              <VenueBulkEditPanel
+                elements={selectedElements}
+                onPrice={batchPrice}
+                onColor={batchColor}
+                onCapacity={batchCapacity}
+                onNumber={batchSequentialLabels}
+              />
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground">Alinear</p>
                 <div className="grid grid-cols-3 gap-1.5">
@@ -2479,6 +2526,7 @@ export function InteractiveVenueMapEditor({
                     type="button"
                     variant="outline"
                     size="sm"
+                    className="min-h-[44px]"
                     title="Alinear a la izquierda"
                     onClick={() => alignSelection("left")}
                   >
@@ -2489,6 +2537,7 @@ export function InteractiveVenueMapEditor({
                     type="button"
                     variant="outline"
                     size="sm"
+                    className="min-h-[44px]"
                     title="Centrar horizontalmente"
                     onClick={() => alignSelection("centerX")}
                   >
@@ -2499,6 +2548,7 @@ export function InteractiveVenueMapEditor({
                     type="button"
                     variant="outline"
                     size="sm"
+                    className="min-h-[44px]"
                     title="Alinear a la derecha"
                     onClick={() => alignSelection("right")}
                   >
@@ -2509,6 +2559,7 @@ export function InteractiveVenueMapEditor({
                     type="button"
                     variant="outline"
                     size="sm"
+                    className="min-h-[44px]"
                     title="Alinear arriba"
                     onClick={() => alignSelection("top")}
                   >
@@ -2519,6 +2570,7 @@ export function InteractiveVenueMapEditor({
                     type="button"
                     variant="outline"
                     size="sm"
+                    className="min-h-[44px]"
                     title="Centrar verticalmente"
                     onClick={() => alignSelection("centerY")}
                   >
@@ -2529,6 +2581,7 @@ export function InteractiveVenueMapEditor({
                     type="button"
                     variant="outline"
                     size="sm"
+                    className="min-h-[44px]"
                     title="Alinear abajo"
                     onClick={() => alignSelection("bottom")}
                   >
@@ -2537,15 +2590,6 @@ export function InteractiveVenueMapEditor({
                   </Button>
                 </div>
               </div>
-              <Button type="button" variant="outline" onClick={distributePrefixes}>
-                <Hash className="size-4" />
-                Distribuir prefijos secuencialmente
-              </Button>
-              <AutoNumberingPanel
-                elements={ensureElements(map)}
-                selectedIds={selection.ids}
-                onApply={(next) => commit({ ...map, elements: next })}
-              />
               <Button type="button" variant="outline" onClick={duplicateSelection}>
                 <Copy className="size-4" />
                 Duplicar selección
@@ -2590,11 +2634,12 @@ export function InteractiveVenueMapEditor({
             </div>
           ) : (
             <div className="space-y-4">
-              <p className="text-sm leading-relaxed text-muted-foreground">
-                {isStudio
-                  ? "Nada seleccionado. Arrastrá un recuadro en el plano para elegir varias mesas, o tocá un elemento para editarlo."
-                  : "Arrastrá componentes al plano. Clic izquierdo abre la ficha. Clic derecho duplica, gira o borra."}
-              </p>
+              {!isStudio ? (
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  Arrastrá componentes al plano. Clic izquierdo abre la ficha.
+                  Clic derecho duplica, gira o borra.
+                </p>
+              ) : null}
               {isStudio ? (
                 <>
                   <VenueMapBackgroundPanel
@@ -2658,8 +2703,53 @@ export function InteractiveVenueMapEditor({
             />
           ) : null}
           </div>
-        </aside>
+        </StudioInspectorFrame>
       </div>
+
+      {studioMobile ? (
+        <>
+          <div className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 gap-4">
+            <Button
+              type="button"
+              onClick={() => setToolsOpen(true)}
+              className="min-h-[44px] rounded-full bg-foreground px-4 text-background shadow-2xl hover:bg-foreground/90"
+            >
+              <Plus className="size-4" aria-hidden="true" />
+              Herramientas
+            </Button>
+            {hasPropertiesTarget ? (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setPropertiesOpen(true)}
+                className="min-h-[44px] rounded-full px-4 shadow-2xl"
+              >
+                <SlidersHorizontal className="size-4" aria-hidden="true" />
+                Propiedades
+              </Button>
+            ) : null}
+          </div>
+          <Sheet open={toolsOpen} onOpenChange={setToolsOpen}>
+            <SheetContent side="bottom" className="max-h-[85dvh] gap-0 p-0">
+              <div className="mx-auto mt-2 h-1.5 w-10 rounded-full bg-muted" />
+              <SheetHeader>
+                <SheetTitle>Herramientas</SheetTitle>
+                <SheetDescription>
+                  Elegí mesas, zonas o referencias para colocarlas en el plano.
+                </SheetDescription>
+              </SheetHeader>
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[max(1rem,env(safe-area-inset-bottom))]">
+                <VenueComponentPalette
+                  variant="studio"
+                  surface="sheet"
+                  active={placement}
+                  onPick={pickPaletteItem}
+                />
+              </div>
+            </SheetContent>
+          </Sheet>
+        </>
+      ) : null}
 
       <VenueCanvasContextMenu
         open={Boolean(contextMenu)}
@@ -2787,6 +2877,66 @@ export function InteractiveVenueMapEditor({
   )
 }
 
+function StudioInspectorFrame({
+  isStudio,
+  isDesktop,
+  open,
+  onOpenChange,
+  propertiesRef,
+  children,
+}: {
+  isStudio: boolean
+  isDesktop: boolean
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  propertiesRef: React.RefObject<HTMLElement | null>
+  children: React.ReactNode
+}) {
+  if (!isStudio) {
+    return (
+      <aside
+        ref={propertiesRef}
+        className="flex flex-col space-y-4 overflow-y-auto border-t border-border bg-card/50 p-4 lg:max-h-[min(70vh,560px)] lg:border-t-0 lg:border-l"
+      >
+        {children}
+      </aside>
+    )
+  }
+
+  if (isDesktop) {
+    return (
+      <aside
+        ref={propertiesRef}
+        className="flex h-full w-80 shrink-0 flex-col overflow-hidden border-l border-border bg-card"
+      >
+        {children}
+      </aside>
+    )
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="bottom" className="max-h-[85dvh] gap-0 p-0">
+        <div className="mx-auto mt-2 h-1.5 w-10 rounded-full bg-muted" />
+        <SheetHeader>
+          <SheetTitle>Propiedades</SheetTitle>
+          <SheetDescription>
+            Editá nombre, precio y reglas del elemento seleccionado.
+          </SheetDescription>
+        </SheetHeader>
+        <div
+          ref={(node) => {
+            propertiesRef.current = node
+          }}
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[max(1rem,env(safe-area-inset-bottom))]"
+        >
+          {children}
+        </div>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
 function ToolButton({
   active,
   onClick,
@@ -2800,7 +2950,7 @@ function ToolButton({
   label: string
   children: React.ReactNode
   disabled?: boolean
-  showLabel?: boolean
+  showLabel?: boolean | "md"
 }) {
   return (
     <Button
@@ -2808,10 +2958,16 @@ function ToolButton({
       variant={active ? "secondary" : "outline"}
       onClick={onClick}
       disabled={disabled}
-      className={cn("h-9 shrink-0 gap-1.5", active && "ring-1 ring-emerald-500/40")}
+      className={cn("h-9 shrink-0 gap-1.5 px-2 md:px-3", active && "ring-1 ring-emerald-500/40")}
     >
       {children}
-      {showLabel ? <span>{label}</span> : <span className="sr-only">{label}</span>}
+      {showLabel === true ? (
+        <span>{label}</span>
+      ) : showLabel === "md" ? (
+        <span className="hidden md:inline">{label}</span>
+      ) : (
+        <span className="sr-only">{label}</span>
+      )}
     </Button>
   )
 }

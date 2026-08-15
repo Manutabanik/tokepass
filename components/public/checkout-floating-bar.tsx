@@ -41,7 +41,7 @@ export function CheckoutFloatingBar({
         type="button"
         disabled={pending || locked || disabled}
         onClick={onPay}
-        className="h-12 w-full rounded-2xl bg-primary text-base font-bold text-primary-foreground hover:bg-primary/90"
+        className="min-h-11 h-12 w-full rounded-2xl bg-primary text-base font-bold text-primary-foreground hover:bg-primary/90"
       >
         {pending ? (
           <>

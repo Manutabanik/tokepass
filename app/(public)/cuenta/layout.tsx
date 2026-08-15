@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 
 import { getMyAccountProfile } from "@/app/actions/account"
 import { AccountBottomNav } from "@/components/account/account-bottom-nav"
+import { AccountShell } from "@/components/account/account-shell"
 import {
   AccountPillsNav,
   AccountSidebar,
@@ -31,7 +32,7 @@ export default async function CuentaLayout({
   }))
 
   return (
-    <div className="relative isolate min-h-[calc(100vh-4rem)] bg-background text-foreground">
+    <div className="relative isolate min-h-[100dvh] bg-background text-foreground">
       <ClaimPendingTransfers />
       <div
         className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[420px] bg-[radial-gradient(circle_at_20%_0%,rgba(16,185,129,0.12),transparent_40%),radial-gradient(circle_at_85%_8%,rgba(139,92,246,0.1),transparent_36%)] dark:bg-[radial-gradient(circle_at_20%_0%,rgba(16,185,129,0.12),transparent_40%),radial-gradient(circle_at_85%_8%,rgba(139,92,246,0.1),transparent_36%)]"
@@ -47,7 +48,7 @@ export default async function CuentaLayout({
         />
         <div className="min-w-0">
           <AccountPillsNav />
-          <div className="pb-24 md:pb-4 lg:pb-0">{children}</div>
+          <AccountShell>{children}</AccountShell>
         </div>
       </div>
       <AccountBottomNav />

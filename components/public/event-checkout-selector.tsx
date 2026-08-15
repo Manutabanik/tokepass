@@ -66,7 +66,6 @@ type Props = {
   hideTabs?: boolean
   tabValue?: InventoryTierType
   onTabChange?: (tab: InventoryTierType) => void
-  selectedMapLabel?: string | null
 }
 
 export function EventCheckoutSelector({
@@ -91,7 +90,6 @@ export function EventCheckoutSelector({
   hideTabs = false,
   tabValue,
   onTabChange,
-  selectedMapLabel = null,
 }: Props) {
   const grouped = groupCheckoutTiers(tiers)
   const mapCopy = seatingRenderModeCopy(seatingRenderMode)
@@ -125,25 +123,19 @@ export function EventCheckoutSelector({
     <>
       {tabs.includes("seated") ? (
         <TabsContent value="seated" className="space-y-3">
-          {selectedSeat || selectedMapLabel ? (
+          {selectedSeat ? (
             <div className="flex items-start justify-between gap-3 rounded-2xl border border-primary/40 bg-primary/10 p-4">
-              <div>
+              <div className="min-w-0">
                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">
-                  Has seleccionado
+                  Lugar reservado
                 </p>
-                <p className="mt-1 text-base font-extrabold text-foreground">
-                  {selectedSeat?.label ?? selectedMapLabel}
+                <p className="mt-1 break-words text-base font-extrabold text-foreground">
+                  {selectedSeat.label}
                 </p>
-                {selectedSeat ? (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {formatCurrency(selectedSeat.price)} · reservada al
-                    continuar. El reloj de 8 minutos corre en el checkout.
-                  </p>
-                ) : (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Tocá Continuar para reservarla 8 minutos.
-                  </p>
-                )}
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {formatCurrency(selectedSeat.price)} · reservada al
+                  continuar. El reloj de 8 minutos corre en el checkout.
+                </p>
               </div>
               {selectedSeat ? (
                 <Button

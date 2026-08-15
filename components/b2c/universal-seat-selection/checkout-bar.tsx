@@ -35,7 +35,7 @@ export function UniversalCheckoutBar({
           : "fixed inset-x-0 bottom-0",
       )}
     >
-      <div className="mx-auto flex max-w-lg items-center gap-3 px-4">
+      <div className="mx-auto flex w-full max-w-lg flex-col gap-2 px-4 sm:flex-row sm:items-center sm:gap-3">
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-zinc-900 dark:text-white">
             {selectionSummary(selection)}
@@ -48,7 +48,7 @@ export function UniversalCheckoutBar({
           type="button"
           disabled={!valid || pending}
           onClick={onContinue}
-          className="h-12 shrink-0 rounded-2xl bg-emerald-500 px-4 text-sm font-bold text-zinc-950 shadow-[0_10px_30px_rgba(16,185,129,0.35)] hover:bg-emerald-400 disabled:opacity-50"
+          className="min-h-11 h-12 w-full shrink-0 rounded-2xl bg-emerald-500 px-4 text-sm font-bold text-zinc-950 shadow-[0_10px_30px_rgba(16,185,129,0.35)] hover:bg-emerald-400 disabled:opacity-50 sm:w-auto"
         >
           {pending ? "Reservando…" : "Continuar"}
           <ArrowRight className="size-4" aria-hidden="true" />

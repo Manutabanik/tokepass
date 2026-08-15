@@ -101,7 +101,7 @@ export function TicketDetailView({
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-300/90">
               Detalle de la entrada
             </p>
-            <h1 className="text-2xl font-black tracking-tight text-white">
+            <h1 className="min-w-0 break-words text-2xl font-black tracking-tight text-white">
               {ticket.eventTitle}
             </h1>
           </div>
@@ -122,7 +122,7 @@ export function TicketDetailView({
               ) : null}
             </span>
           </p>
-          <p className="rounded-xl bg-muted px-3 py-2 font-semibold text-foreground">
+          <p className="min-w-0 break-words rounded-xl bg-muted px-3 py-2 font-semibold text-foreground">
             {ticket.tierName}
             {seatingLabel ? ` · ${seatingLabel}` : ""}
           </p>
@@ -134,21 +134,22 @@ export function TicketDetailView({
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
             {isStatic ? "QR de ingreso" : "Living QR"}
           </p>
-          <div className="mx-auto mt-4 inline-block rounded-2xl bg-white p-2">
+          <div className="mx-auto mt-4 w-full max-w-[220px] rounded-2xl bg-white p-2">
             {isStatic ? (
               <QRCodeSVG
                 value={ticket.totpSecret}
-                size={260}
+                size={200}
                 level="H"
                 includeMargin
                 bgColor="#ffffff"
                 fgColor="#09090b"
+                className="h-auto w-full"
               />
             ) : (
               <LivingTicketQR
                 ticketId={ticket.id}
                 totpSecret={ticket.totpSecret}
-                size={240}
+                size={200}
               />
             )}
           </div>

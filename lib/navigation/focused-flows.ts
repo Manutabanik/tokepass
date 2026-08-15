@@ -1,0 +1,18 @@
+/** Flujos a pantalla completa: la bottom nav global no debe competir. */
+
+export function isAdminFocusedFlow(pathname: string): boolean {
+  if (pathname.startsWith("/admin/scanner")) return true
+  if (pathname.startsWith("/admin/store-scanner")) return true
+  if (pathname.startsWith("/admin/bar-scanner")) return true
+  if (pathname.startsWith("/admin/events/create")) return true
+  if (pathname.startsWith("/admin/events/new")) return true
+  if (/^\/admin\/events\/[^/]+\/edit\/?$/.test(pathname)) return true
+  return false
+}
+
+export function isAccountFocusedFlow(pathname: string): boolean {
+  return (
+    /^\/cuenta\/entradas\/[^/]+$/.test(pathname) ||
+    /^\/cuenta\/compras\/[^/]+$/.test(pathname)
+  )
+}

@@ -13,7 +13,11 @@ import {
   createCompleteEvent,
   updateCompleteEvent,
 } from "@/app/actions/events"
-import { sanitizeTicketTiersForPersist } from "@/lib/events/sanitize-ticket-tiers"
+import { toUserFacingError } from "@/lib/errors/user-facing-error"
+import {
+  collectLiveSeatingSectorIds,
+  sanitizeEventSubmitPayload,
+} from "@/lib/events/sanitize-ticket-tiers"
 
 export type AutosaveEventDraftResult =
   | {
@@ -42,9 +46,10 @@ function sanitizeAutosaveValues(
       ...values.venue,
       existingVenueId: values.venue.existingVenueId || null,
     },
-    tickets: sanitizeTicketTiersForPersist(tickets, {
-      mode: eventId ? "update" : "create",
-    }),
+    tickets: sanitizeEventSubmitPayload(
+      { ...values, tickets },
+      { mode: eventId ? "update" : "create" },
+    ).tickets,
   }
 }
 
@@ -242,12 +247,36 @@ export async function syncZoneTierPricing(input: {
     ]),
   )
 
+  const { data: eventVenue } = await supabase
+    .from("events")
+    .select("venue_id, venue_map")
+    .eq("id", input.eventId)
+    .maybeSingle()
+  let venueLayout: unknown = null
+  let venueMap: unknown = eventVenue?.venue_map ?? null
+  if (eventVenue?.venue_id) {
+    const { data: venue } = await supabase
+      .from("venues")
+      .select("seating_layout, venue_map")
+      .eq("id", eventVenue.venue_id)
+      .maybeSingle()
+    venueLayout = venue?.seating_layout ?? null
+    venueMap = venue?.venue_map ?? venueMap
+  }
+  const liveSectorIds = collectLiveSeatingSectorIds({
+    venueMap,
+    seatingLayout: venueLayout,
+  })
+
   const payload = input.rows
     .map((row) => {
       const resolvedTierId = validTier.has(row.ticketTierId)
         ? row.ticketTierId
         : tierIdByName.get(row.ticketTierName.trim().toLocaleLowerCase("es"))
       if (!row.sectorKey || !resolvedTierId) return null
+      if (liveSectorIds.size > 0 && !liveSectorIds.has(row.sectorKey)) {
+        return null
+      }
       const zoneId =
         zoneByName.get(row.sectorName.trim().toLocaleLowerCase("es")) ?? null
       return {
@@ -275,7 +304,7 @@ export async function syncZoneTierPricing(input: {
     .eq("event_id", input.eventId)
 
   if (delError) {
-    return { success: false, error: delError.message }
+    return { success: false, error: toUserFacingError(delError.message) }
   }
 
   if (payload.length > 0) {
@@ -289,7 +318,7 @@ export async function syncZoneTierPricing(input: {
         success: false,
         error: overlap
           ? "Los rangos de mesa se superponen para el mismo sector y tipo de entrada."
-          : upsertError.message,
+          : toUserFacingError(upsertError.message),
       }
     }
   }

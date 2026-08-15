@@ -224,6 +224,91 @@ export function bakeLiveTransform(
   return rotateElementsAround(elements, { x: live.cx, y: live.cy }, live.deg)
 }
 
+export const ALIGN_MIN_GAP = 20
+
+export type AlignMode = "left" | "centerX" | "right" | "top" | "centerY" | "bottom"
+
+function isHorizontalAlign(mode: AlignMode) {
+  return mode === "top" || mode === "centerY" || mode === "bottom"
+}
+
+export function alignElementsWithGap(
+  elements: VenueMapElement[],
+  selectedIds: string[],
+  mode: AlignMode,
+  minGap = ALIGN_MIN_GAP,
+): VenueMapElement[] {
+  const idSet = new Set(selectedIds)
+  const selected = elements.filter((element) => idSet.has(element.id))
+  if (selected.length < 2) return elements
+
+  const measured = selected.map((element) => {
+    const box = elementAabb(element)
+    return {
+      id: element.id,
+      element,
+      box,
+      width: Math.max(1, box.maxX - box.minX),
+      height: Math.max(1, box.maxY - box.minY),
+    }
+  })
+  const union = unionAabb(measured.map((item) => item.box))
+  if (!union) return elements
+
+  const horizontal = isHorizontalAlign(mode)
+  const ordered = [...measured].sort((left, right) => {
+    if (horizontal) {
+      const dx = left.element.x - right.element.x
+      return dx !== 0 ? dx : left.element.y - right.element.y
+    }
+    const dy = left.element.y - right.element.y
+    return dy !== 0 ? dy : left.element.x - right.element.x
+  })
+
+  const nextPos = new Map<string, { x: number; y: number }>()
+  const gap = Number.isFinite(minGap) ? Math.max(0, minGap) : ALIGN_MIN_GAP
+
+  if (horizontal) {
+    let cursor = ordered[0]!.box.minX
+    for (const item of ordered) {
+      const y =
+        mode === "top"
+          ? union.minY + item.height / 2
+          : mode === "bottom"
+            ? union.maxY - item.height / 2
+            : (union.minY + union.maxY) / 2
+      nextPos.set(item.id, {
+        x: roundCoord(cursor + item.width / 2),
+        y: roundCoord(y),
+      })
+      cursor += item.width + gap
+    }
+  } else {
+    let cursor = ordered[0]!.box.minY
+    for (const item of ordered) {
+      const x =
+        mode === "left"
+          ? union.minX + item.width / 2
+          : mode === "right"
+            ? union.maxX - item.width / 2
+            : (union.minX + union.maxX) / 2
+      nextPos.set(item.id, {
+        x: roundCoord(x),
+        y: roundCoord(cursor + item.height / 2),
+      })
+      cursor += item.height + gap
+    }
+  }
+
+  return elements.map((element) => {
+    const pos = nextPos.get(element.id)
+    if (!pos) return element
+    const next = { ...element, x: pos.x, y: pos.y }
+    if (!isInfrastructureElement(next)) next.seats = rebuildElementSeats(next)
+    return next
+  })
+}
+
 export function angleAt(
   center: { x: number; y: number },
   point: { x: number; y: number },

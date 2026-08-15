@@ -1,6 +1,10 @@
 import { z } from "zod"
 
 import {
+  computeEventCapacity,
+  eventCapacityOverflowMessage,
+} from "@/lib/inventory/capacity-budget"
+import {
   DEFAULT_TICKET_TABS,
   TICKET_DESCRIPTION_MAX,
   TICKET_HIGHLIGHT_BADGES,
@@ -151,6 +155,7 @@ const eventFormObject = z
       provinceId: z.string().trim().optional().nullable(),
       departmentId: z.string().trim().optional().nullable(),
       capacity: z.number().int().positive().optional(),
+      customMaxCapacity: z.number().int().min(0).nullable().optional(),
       rows: z.number().int().positive().optional(),
       seatsPerRow: z.number().int().positive().optional(),
       latitude: z.number().nullable().optional(),
@@ -259,21 +264,21 @@ const eventFormObject = z
 
     const hasBlueprintZones = (data.venue.zones?.length ?? 0) > 0
     const usesSeatingMap = Boolean(data.venue.includesSeatingMap)
-    const venueBudgetMax = Math.max(0, Number(data.venue.capacity) || 0)
-    let venueAllocated = 0
-    for (const [index, tier] of data.tickets.entries()) {
-      const type = tier.tierType ?? "general"
-      const occupies =
-        Boolean(tier.seatingSectorId) ||
-        type === "general" ||
-        type === "seated" ||
-        tier.layoutType === "numbered_seat" ||
-        tier.layoutType === "table_combo"
-      const addonOrBundle = type === "addon" || type === "bundle"
-      if (occupies && !addonOrBundle) {
-        venueAllocated += Number(tier.capacity) || 0
-      }
+    const capacitySnap = computeEventCapacity({
+      tickets: data.tickets,
+      venueMap: data.venue.venueMap,
+      baseVenueCapacity: data.venue.capacity,
+      customMaxCapacity: data.venue.customMaxCapacity,
+    })
+    if (capacitySnap.exceeded) {
+      context.addIssue({
+        code: "custom",
+        path: ["tickets"],
+        message: eventCapacityOverflowMessage(capacitySnap),
+      })
+    }
 
+    for (const [index, tier] of data.tickets.entries()) {
       const phases = tier.phases ?? []
       const phaseSum = phases.reduce(
         (sum, phase) => sum + (Number(phase.capacityLimit) || 0),
@@ -287,14 +292,6 @@ const eventFormObject = z
             "La suma de los lotes no puede superar la capacidad de esta entrada.",
         })
       }
-    }
-
-    if (venueBudgetMax > 0 && venueAllocated > venueBudgetMax) {
-      context.addIssue({
-        code: "custom",
-        path: ["tickets"],
-        message: `El stock asignado (${venueAllocated}) supera la capacidad del recinto (${venueBudgetMax}).`,
-      })
     }
 
     const ticketCapacity = data.tickets.reduce(
@@ -431,6 +428,7 @@ export const draftEventSchema = z.object({
       provinceId: z.string().optional().nullable(),
       departmentId: z.string().optional().nullable(),
       capacity: z.number().int().optional(),
+      customMaxCapacity: z.number().int().min(0).nullable().optional(),
       rows: z.number().int().optional(),
       seatsPerRow: z.number().int().optional(),
       latitude: z.number().nullable().optional(),
@@ -619,6 +617,10 @@ export function coerceDraftEventForm(
       provinceId: venue.provinceId ?? null,
       departmentId: venue.departmentId ?? null,
       capacity: venue.capacity && venue.capacity > 0 ? venue.capacity : 1,
+      customMaxCapacity:
+        venue.customMaxCapacity != null && venue.customMaxCapacity > 0
+          ? venue.customMaxCapacity
+          : null,
       rows: reservedIncomplete ? undefined : venue.rows,
       seatsPerRow: reservedIncomplete ? undefined : venue.seatsPerRow,
       latitude: venue.latitude ?? null,

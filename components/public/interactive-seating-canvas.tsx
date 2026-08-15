@@ -40,6 +40,14 @@ import {
   hexToRgba,
   resolveLiveVenueSeatStatus,
 } from "@/lib/seating/venue-map-occupancy"
+import {
+  hydrateStorefrontItemsFromMap,
+  resolveVenueUnitPrice,
+  storefrontFocusCard,
+  storefrontItemFromElement,
+  storefrontItemFromZone,
+} from "@/lib/seating/storefront-selection"
+import { StorefrontSelectionCard } from "@/components/public/storefront-selection-card"
 import { VenueMapBackgroundLayer } from "@/components/venue/venue-map-background-layer"
 import { VenueMapElementLayer } from "@/components/venue/venue-map-element-layer"
 import { VenueMapZoneLayer } from "@/components/venue/venue-map-zone-layer"
@@ -99,7 +107,7 @@ export function InteractiveSeatingCanvas({
   selectedZoneId = null,
   onSelectZone,
   unavailableZoneIds = [],
-  silentHover = false,
+  silentHover: _silentHover = false,
   hideChrome = false,
   maxSelectable = MAX_TICKETS_PER_PURCHASE,
 }: {
@@ -135,42 +143,40 @@ export function InteractiveSeatingCanvas({
   const removeSelectedItem = useStorefrontSeatStore(
     (state) => state.removeSelectedItem,
   )
-  const [hover, setHover] = useState<{
-    x: number
-    y: number
-    text: string
-  } | null>(null)
-
   const plotSeats = useMemo(() => {
     const zoneIds = new Set((map.zones ?? []).map((zone) => zone.id))
     return flattenVenueMapSeats(map).filter(
-      (seat) => !zoneIds.has(seat.sectorId),
+      (seat) => seat.source === "sector" && !zoneIds.has(seat.sectorId),
     )
   }, [map])
+  const liveSelectedItems = useMemo(
+    () => hydrateStorefrontItemsFromMap(selectedItems, map, priceBySectorId),
+    [map, priceBySectorId, selectedItems],
+  )
   const selectedIds = useMemo(
     () => new Set(selectedSeats.map((seat) => seat.id)),
     [selectedSeats],
   )
   const selectedElementIds = useMemo(
     () =>
-      selectedItems
+      liveSelectedItems
         .filter((item) => item.type === "table" || item.type === "standing")
         .map((item) => item.id),
-    [selectedItems],
+    [liveSelectedItems],
   )
   const selectedZoneIds = useMemo(
     () =>
-      selectedItems
+      liveSelectedItems
         .filter((item) => item.type === "zone")
         .map((item) => item.id),
-    [selectedItems],
+    [liveSelectedItems],
   )
-  const spotlight = selectedItems.length > 0
-  const selectionCount = selectedItems.reduce(
+  const spotlight = liveSelectedItems.length > 0
+  const selectionCount = liveSelectedItems.reduce(
     (sum, item) => sum + Math.max(1, Math.floor(item.capacity) || 1),
     0,
   )
-  const subtotal = selectedItems.reduce(
+  const subtotal = liveSelectedItems.reduce(
     (sum, item) => sum + item.price * Math.max(1, Math.floor(item.capacity) || 1),
     0,
   )
@@ -209,9 +215,12 @@ export function InteractiveSeatingCanvas({
     setIdleOpen(false)
   }
 
-  function seatPrice(sectorId: string, fallback: number) {
-    const priced = priceBySectorId[sectorId]
-    return Number.isFinite(priced) ? Number(priced) : fallback
+  function seatPrice(...keysAndFallback: Array<string | number>) {
+    const fallback = keysAndFallback.find((value) => typeof value === "number")
+    const keys = keysAndFallback.filter(
+      (value): value is string => typeof value === "string",
+    )
+    return resolveVenueUnitPrice(keys, Number(fallback) || 0, priceBySectorId)
   }
 
   function applyToggle(item: StorefrontSelectedItem) {
@@ -230,27 +239,15 @@ export function InteractiveSeatingCanvas({
     if (!zone) return
     vibrateTap()
     markActivity()
-    const result = toggleSelectedItem(
-      {
-        id: zone.id,
-        name: zone.name,
-        type: "zone",
-        price: seatPrice(zone.id, zone.price),
-        capacity: 1,
-        sectorId: zone.id,
-        color: zone.color,
-      },
-      maxSelectable,
-    )
+    const item = storefrontItemFromZone(zone, priceBySectorId)
+    if (!item) return
+    const result = toggleSelectedItem(item, maxSelectable)
     if (!result.ok) {
       toast.error("Alcanzaste el máximo de lugares permitidos por compra")
       return
     }
     if (!result.added) return
     onSelectZone?.(zone)
-    window.requestAnimationFrame(() => {
-      transformRef.current?.zoomToElement(`venue-sel-${zone.id}`, 1.85, 280)
-    })
   }
 
   function toggleSeat(seat: FlattenedVenueSeat) {
@@ -282,28 +279,28 @@ export function InteractiveSeatingCanvas({
   }
 
   function toggleElement(element: VenueMapElement) {
-    if (isInfrastructureElement(element) || pending) return
-    if (element.type === "vip_chair") {
+    const live = (map.elements ?? []).find((item) => item.id === element.id)
+    if (!live || isInfrastructureElement(live) || pending) return
+    if (live.type === "vip_chair") {
       const match = plotSeats.find(
-        (seat) => seat.id === element.seats[0]?.id || seat.sectorId === element.id,
+        (seat) =>
+          seat.id === live.seats[0]?.id ||
+          seat.id === live.id ||
+          seat.sectorId === live.id,
       )
-      if (match) toggleSeat(match)
+      if (match) {
+        toggleSeat(match)
+        return
+      }
+    }
+    if (live.sellMode === "per_seat" && live.type !== "standing_zone") {
       return
     }
-    if (element.sellMode === "per_seat") {
-      return
-    }
+    const item = storefrontItemFromElement(live, priceBySectorId)
+    if (!item) return
     vibrateTap()
     markActivity()
-    applyToggle({
-      id: element.id,
-      name: element.label || element.sectorName || "Lugar",
-      type: element.type === "standing_zone" ? "standing" : "table",
-      price: seatPrice(element.id, element.price),
-      capacity: 1,
-      sectorId: element.id,
-      color: element.color,
-    })
+    applyToggle(item)
   }
 
   const continueLabel = pending
@@ -312,15 +309,10 @@ export function InteractiveSeatingCanvas({
       ? `Continuar con ${selectionCount} ${selectionCount === 1 ? "lugar" : "lugares"}`
       : "Continuar"
   const canContinue = selectionCount > 0 && !pending
-  const mapConfirmLabel =
-    selectedItems.length === 1
-      ? selectedItems[0]?.name ?? null
-      : selectedItems.length > 1
-        ? `${selectionCount} lugares seleccionados`
-        : selectedZoneId
-          ? (map.zones ?? []).find((zone) => zone.id === selectedZoneId)?.name ??
-            null
-          : null
+  const focusItem = liveSelectedItems[liveSelectedItems.length - 1] ?? null
+  const focusCard = focusItem
+    ? storefrontFocusCard(focusItem, map)
+    : null
 
   const panel = (
     <aside className="hidden h-full w-[30%] shrink-0 flex-col border-l border-white/10 bg-zinc-950/80 p-5 md:flex">
@@ -347,17 +339,23 @@ export function InteractiveSeatingCanvas({
         ))}
       </ul>
 
+      {focusCard ? (
+        <div className="mt-6">
+          <StorefrontSelectionCard card={focusCard} />
+        </div>
+      ) : null}
+
       <p className="mt-8 text-sm font-bold text-white">
         Lugares seleccionados ({selectionCount})
       </p>
       <div className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto">
-        {selectedItems.length === 0 ? (
+        {liveSelectedItems.length === 0 ? (
           <p className="text-base leading-relaxed text-zinc-400">
             Tocá mesas, zonas o butacas para armar tu lista. Un segundo toque
             las saca.
           </p>
         ) : (
-          selectedItems.map((item) => (
+          liveSelectedItems.map((item) => (
             <div
               key={item.id}
               className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-3"
@@ -491,7 +489,6 @@ export function InteractiveSeatingCanvas({
           className="h-full w-full select-none"
           role="group"
           aria-label="Plano del recinto. Pellizcá para acercar, arrastrá para mover y tocá una zona o butaca."
-          onPointerLeave={() => setHover(null)}
         >
           <rect width={VIEW.width} height={VIEW.height} className="fill-zinc-950" />
           <g>
@@ -555,6 +552,10 @@ export function InteractiveSeatingCanvas({
               showSeats
               zoom={zoom}
               onSeatPointerDown={(_event, element, seatId) => {
+                if (element.sellMode === "group") {
+                  toggleElement(element)
+                  return
+                }
                 const match = plotSeats.find((seat) => seat.id === seatId)
                 if (match) {
                   toggleSeat(match)
@@ -566,75 +567,53 @@ export function InteractiveSeatingCanvas({
                 toggleElement(element)
               }}
             />
-            {plotSeats.map((seat) => {
+            {[...plotSeats]
+              .sort((left, right) => {
+                const leftSelected = selectedIds.has(left.id) ? 1 : 0
+                const rightSelected = selectedIds.has(right.id) ? 1 : 0
+                return leftSelected - rightSelected
+              })
+              .map((seat) => {
               const price = seatPrice(seat.sectorId, seat.price)
               const live = resolveLiveVenueSeatStatus({
                 mapStatus: seat.mapStatus,
                 occupancy: occupancyBySeatId[seat.id],
                 selected: selectedIds.has(seat.id),
               })
-              const label = `Fila ${seat.row} — Asiento ${seat.number} — ${formatCurrency(price)}`
+              const label = `${seat.sectorName} · Fila ${seat.row} · ${seat.number} — ${formatCurrency(price)}`
               const selected = live === "selected"
               const dimmed = spotlight && !selected
               return (
-                <g
-                  key={seat.id}
-                  opacity={dimmed ? 0.4 : 1}
-                  transform={
-                    selected
-                      ? `translate(${seat.x} ${seat.y}) scale(1.15) translate(${-seat.x} ${-seat.y})`
-                      : undefined
-                  }
-                  className="origin-center transition-all duration-300 ease-in-out"
-                >
-                  {selected ? (
-                    <circle
-                      cx={seat.x}
-                      cy={seat.y}
-                      r={hitRadius * 0.72}
-                      fill="none"
-                      stroke="#ffffff"
-                      strokeWidth={3}
-                      className="pointer-events-none"
-                      style={{
-                        filter: "drop-shadow(0 0 7px rgba(255,255,255,0.9))",
-                      }}
-                    />
-                  ) : null}
+                <g key={seat.id}>
                   <circle
                     cx={seat.x}
                     cy={seat.y}
                     r={hitRadius}
                     fill="transparent"
-                    stroke="transparent"
-                    strokeWidth={Math.max(10, hitRadius * 0.45)}
+                    stroke="none"
                     className={
                       live === "occupied" || live === "blocked"
                         ? "cursor-not-allowed"
                         : "cursor-pointer"
                     }
                     aria-label={label}
-                    role="button"
-                    tabIndex={live === "occupied" || live === "blocked" ? -1 : 0}
+                    tabIndex={-1}
                     onClick={(event) => {
                       event.stopPropagation()
                       toggleSeat(seat)
                     }}
-                    onPointerEnter={(event) => {
-                      if (silentHover) return
-                      const box = wrapRef.current?.getBoundingClientRect()
-                      if (!box) return
-                      setHover({
-                        x: event.clientX - box.left,
-                        y: event.clientY - box.top,
-                        text: label,
-                      })
-                    }}
-                    onPointerLeave={() => {
-                      if (!silentHover) setHover(null)
-                    }}
-                  />
-                  {seat.source === "sector" ? (
+                  >
+                    <title>{label}</title>
+                  </circle>
+                  <g
+                    opacity={dimmed ? 0.4 : 1}
+                    transform={
+                      selected
+                        ? `translate(${seat.x} ${seat.y}) scale(1.15) translate(${-seat.x} ${-seat.y})`
+                        : undefined
+                    }
+                    className="pointer-events-none transition-all duration-200 ease-in-out"
+                  >
                     <TheatreSeatSymbol
                       cx={seat.x}
                       cy={seat.y}
@@ -646,17 +625,7 @@ export function InteractiveSeatingCanvas({
                       label={String(seat.number)}
                       showLabel={zoom >= 1.35 || selected}
                     />
-                  ) : selected ? (
-                    <circle
-                      cx={seat.x}
-                      cy={seat.y}
-                      r={4.2}
-                      fill="none"
-                      stroke="#ffffff"
-                      strokeWidth={2.2}
-                      className="pointer-events-none"
-                    />
-                  ) : null}
+                  </g>
                 </g>
               )
             })}
@@ -666,23 +635,9 @@ export function InteractiveSeatingCanvas({
       </div>
       </TransformWrapper>
 
-      {mapConfirmLabel ? (
-        <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 rounded-xl bg-zinc-950/90 px-3 py-2 ring-1 ring-white/25">
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-400">
-            Has seleccionado
-          </p>
-          <p className="truncate text-sm font-extrabold text-white">
-            {mapConfirmLabel}
-          </p>
-        </div>
-      ) : null}
-
-      {hover && !silentHover ? (
-        <div
-          className="pointer-events-none absolute z-30 max-w-[min(90%,18rem)] rounded-2xl border border-white/15 bg-zinc-900/95 px-4 py-3 text-base font-semibold leading-snug text-white shadow-2xl"
-          style={{ left: Math.min(hover.x + 12, wrapWidth - 12), top: hover.y + 16 }}
-        >
-          {hover.text}
+      {focusCard ? (
+        <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 md:inset-x-auto md:left-3 md:w-[min(100%-1.5rem,20rem)]">
+          <StorefrontSelectionCard card={focusCard} />
         </div>
       ) : null}
 
@@ -736,7 +691,7 @@ export function InteractiveSeatingCanvas({
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-extrabold text-white">
-              {selectedItems.length === 0
+              {liveSelectedItems.length === 0
                 ? "Elegí tus lugares"
                 : formatCurrency(subtotal)}
             </p>

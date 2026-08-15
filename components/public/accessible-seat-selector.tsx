@@ -106,6 +106,7 @@ export function AccessibleSeatSelector({
         sectorName: seat.sectorName,
         price: seat.price,
         color: seat.color,
+        label: seat.label,
       })),
     )
   }
@@ -223,6 +224,7 @@ export function AccessibleSeatSelector({
                                       sectorName: source.sectorName,
                                       price: source.price,
                                       color: source.color,
+                                      label: source.label,
                                     })
                                   }}
                                   className={cn(

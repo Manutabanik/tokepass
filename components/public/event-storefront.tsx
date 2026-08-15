@@ -3,6 +3,7 @@
 import {
   BadgeCheck,
   Flame,
+  MapPin,
   Music2,
   ShieldCheck,
   Sparkles,
@@ -132,62 +133,11 @@ export function EventStorefront({
     [event.comboItemsByTier, event.tiers],
   )
 
-  const checkout = finished ? (
-    <EventSaleStatusNotice state="finished" />
-  ) : (
-    <>
-      {soldOut ? (
-        <div className="mb-4">
-          <EventSaleStatusNotice state="sold_out" />
-        </div>
-      ) : null}
-      <TicketSelector
-        eventId={event.id}
-        eventSlug={event.slug}
-        eventTitle={event.title}
-        currentUserId={currentUserId}
-        initialBuyer={initialBuyer}
-        referralCode={referralCode}
-        sandboxEligible={sandboxEligible}
-        serviceChargeRate={event.serviceChargeRate}
-        scheduleDays={event.scheduleDays ?? []}
-        seatingUnits={event.seatingUnits}
-        seatingSectorSummaries={event.seatingSectorSummaries}
-        seatingBackgroundUrl={event.venue?.seating_background_url}
-        venueMap={event.venue?.venue_map ?? null}
-        hasInteractiveMap={event.hasInteractiveMap}
-        seatingLayout={event.venue?.seating_layout ?? []}
-        venueId={event.venue?.id}
-        venueName={event.venue?.name}
-        venueCapacity={event.venue?.capacity}
-        pixels={event.pixels}
-        zoneTierPricing={event.zoneTierPricing}
-        purchaseLocked={soldOut}
-        tiers={ticketTiers}
-        defaultTicketTab={event.defaultTicketTab}
-      />
-    </>
-  )
-
-  if (hasInteractiveMap) {
-    return (
-      <div className="h-[100dvh] w-full overflow-hidden bg-background text-foreground">
-        <AnalyticsTracker
-          config={event.pixels}
-          trackPageView
-          contentName={event.title}
-          contentIds={[event.id]}
-          value={startingPrice ?? undefined}
-        />
-        <div id="tickets" className="h-[100dvh] w-full overflow-hidden">
-          {checkout}
-        </div>
-      </div>
-    )
-  }
+  const asideClassName =
+    "min-w-0 scroll-mt-24 px-4 pb-8 lg:col-start-2 lg:row-start-1 lg:row-span-4 lg:sticky lg:top-24 lg:h-fit lg:max-h-[calc(100dvh-6rem)] lg:self-start lg:overflow-y-auto lg:overflow-x-hidden lg:px-0 lg:pb-0"
 
   return (
-    <div className="relative isolate min-h-screen overflow-x-clip bg-background pb-28 text-foreground lg:overflow-x-visible lg:pb-12">
+    <div className="relative isolate min-h-screen overflow-x-clip bg-background pb-8 text-foreground lg:overflow-x-visible lg:pb-12">
       <AnalyticsTracker
         config={event.pixels}
         trackPageView
@@ -263,20 +213,20 @@ export function EventStorefront({
             </div>
           </section>
 
-          <div className="space-y-8 px-4 pb-6 pt-5 sm:px-6 lg:px-0 lg:pt-8">
-            <header className="space-y-4">
-              <h1 className="text-[1.85rem] font-black leading-[1.1] tracking-[-0.04em] text-foreground sm:text-4xl">
+          <div className="space-y-5 px-4 pb-4 pt-5 sm:px-6 lg:px-0 lg:pt-8">
+            <header className="min-w-0 space-y-4">
+              <h1 className="break-words text-[1.85rem] font-black leading-[1.1] tracking-[-0.04em] text-foreground sm:text-4xl">
                 {event.title}
               </h1>
 
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="inline-flex items-center gap-2 rounded-2xl border border-border bg-card px-3.5 py-2.5 text-card-foreground">
-                  <span className="grid size-9 place-items-center rounded-xl bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+              <div className="flex min-w-0 flex-wrap items-center gap-3">
+                <div className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-2xl border border-border bg-card px-3.5 py-2.5 text-card-foreground">
+                  <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
                     <span className="text-[10px] font-black uppercase leading-none">
                       {formatEventDay(event.date).slice(0, 3)}
                     </span>
                   </span>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-sm font-semibold capitalize text-foreground">
                       {formatEventDay(event.date)}
                     </p>
@@ -287,19 +237,86 @@ export function EventStorefront({
                     </p>
                   </div>
                 </div>
+                {venueName ? (
+                  <div className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-2xl border border-border bg-card px-3.5 py-2.5 text-card-foreground">
+                    <MapPin
+                      className="size-4 shrink-0 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-foreground">
+                        {venueName}
+                      </p>
+                      {address && address !== venueName ? (
+                        <p className="truncate text-xs text-muted-foreground">
+                          {address}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
               </div>
+
+              <p className="line-clamp-3 break-words text-sm leading-relaxed text-muted-foreground">
+                {description}
+              </p>
             </header>
             </div>
           </div>
 
-        <aside
-          id="tickets"
-          className="scroll-mt-24 px-4 pb-8 lg:sticky lg:top-24 lg:row-span-2 lg:h-fit lg:max-h-[calc(100dvh-6rem)] lg:self-start lg:overflow-y-auto lg:px-0 lg:pb-0"
-        >
-          {checkout}
-        </aside>
+        {finished ? (
+          <aside id="tickets" className={asideClassName}>
+            <EventSaleStatusNotice state="finished" />
+          </aside>
+        ) : (
+          <TicketSelector
+            eventId={event.id}
+            eventSlug={event.slug}
+            eventTitle={event.title}
+            currentUserId={currentUserId}
+            initialBuyer={initialBuyer}
+            referralCode={referralCode}
+            sandboxEligible={sandboxEligible}
+            serviceChargeRate={event.serviceChargeRate}
+            scheduleDays={event.scheduleDays ?? []}
+            seatingUnits={event.seatingUnits}
+            seatingSectorSummaries={event.seatingSectorSummaries}
+            seatingBackgroundUrl={event.venue?.seating_background_url}
+            venueMap={event.venue?.venue_map ?? null}
+            hasInteractiveMap={event.hasInteractiveMap || hasInteractiveMap}
+            seatingLayout={event.venue?.seating_layout ?? []}
+            venueId={event.venue?.id}
+            venueName={event.venue?.name}
+            venueCapacity={event.venue?.capacity}
+            pixels={event.pixels}
+            zoneTierPricing={event.zoneTierPricing}
+            purchaseLocked={soldOut}
+            tiers={ticketTiers}
+            defaultTicketTab={event.defaultTicketTab}
+            renderLayout={({ map, panel }) => (
+              <>
+                {map ? (
+                  <section
+                    id="mapa"
+                    className="min-w-0 px-4 pt-1 sm:px-6 lg:col-start-1 lg:px-0"
+                  >
+                    {map}
+                  </section>
+                ) : null}
+                <aside id="tickets" className={asideClassName}>
+                  {soldOut ? (
+                    <div className="mb-4">
+                      <EventSaleStatusNotice state="sold_out" />
+                    </div>
+                  ) : null}
+                  {panel}
+                </aside>
+              </>
+            )}
+          />
+        )}
 
-        <div className="min-w-0 space-y-8 px-4 pb-6 pt-2 sm:px-6 lg:px-0 lg:pt-0">
+        <div className="min-w-0 space-y-8 px-4 pb-6 pt-2 sm:px-6 lg:col-start-1 lg:px-0 lg:pt-0">
             <div className="flex flex-wrap items-center gap-3">
               <AddToCalendarButton
                 title={event.title}

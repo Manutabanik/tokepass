@@ -79,7 +79,15 @@ export function TheatreSeatSymbol({
   const fontSize = Math.max(5, Math.min(7.5, w * 0.42))
 
   return (
-    <g transform={`rotate(${rotation} ${cx} ${cy})`}>
+    <g
+      transform={`rotate(${rotation} ${cx} ${cy})`}
+      className="transition-all duration-200 ease-in-out"
+      style={
+        selected
+          ? { filter: "drop-shadow(0px 0px 8px rgba(255, 255, 255, 0.8))" }
+          : undefined
+      }
+    >
       <rect
         x={cx - w * 0.42}
         y={cy - h * 0.5}
@@ -89,7 +97,7 @@ export function TheatreSeatSymbol({
         fill={fill}
         fillOpacity={occupied ? 0.4 : 0.95}
         stroke={stroke}
-        strokeWidth={selected ? 2.2 : 0.9}
+        strokeWidth={selected ? 3 : 0.9}
       />
       <rect
         x={cx - w * 0.4}
@@ -100,7 +108,7 @@ export function TheatreSeatSymbol({
         fill={fill}
         fillOpacity={occupied ? 0.35 : 0.82}
         stroke={stroke}
-        strokeWidth={selected ? 2.2 : 0.9}
+        strokeWidth={selected ? 3 : 0.9}
       />
       {showLabel && label ? (
         <text
@@ -188,7 +196,7 @@ export function RoundTableSymbol({
         cy={cy}
         r={r}
         fill={color}
-        fillOpacity={0.28}
+        fillOpacity={selected ? 0.55 : 0.28}
         stroke={selected ? "#ffffff" : color}
         strokeWidth={selected ? 3.2 : 1.4}
       />
@@ -271,7 +279,7 @@ export function LongTableSymbol({
         height={h}
         rx={rx}
         fill={color}
-        fillOpacity={0.28}
+        fillOpacity={selected ? 0.55 : 0.28}
         stroke={selected ? "#ffffff" : color}
         strokeWidth={selected ? 3.2 : 1.4}
       />
@@ -325,9 +333,9 @@ export function VipBoxSymbol({
         height={h}
         rx={rx}
         fill={color}
-        fillOpacity={0.12}
+        fillOpacity={selected ? 0.42 : 0.12}
         stroke={stroke}
-        strokeWidth={selected ? 2 : 1.4}
+        strokeWidth={selected ? 3 : 1.4}
       />
       <rect
         x={cx - w / 2 + 3}

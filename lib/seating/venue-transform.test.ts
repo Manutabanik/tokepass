@@ -3,7 +3,9 @@ import { describe, it } from "node:test"
 
 import { createVenueElement } from "./venue-element-geometry"
 import {
+  ALIGN_MIN_GAP,
   aabbIntersects,
+  alignElementsWithGap,
   bakeLiveTransform,
   elementAabb,
   scaleElements,
@@ -81,5 +83,37 @@ describe("venue-transform", () => {
     })
     assert.equal(hit, true)
     assert.equal(miss, false)
+  })
+
+  it("alinea al centro sin superponer, con gap minimo", () => {
+    const a = createVenueElement("round_table", 0, { x: 100, y: 100 })
+    const b = createVenueElement("round_table", 1, { x: 108, y: 102 })
+    const c = createVenueElement("round_table", 2, { x: 104, y: 98 })
+    const next = alignElementsWithGap([a, b, c], [a.id, b.id, c.id], "centerX")
+    const boxes = next.map((item) => elementAabb(item))
+    for (let i = 0; i < boxes.length; i += 1) {
+      for (let j = i + 1; j < boxes.length; j += 1) {
+        assert.equal(aabbIntersects(boxes[i]!, boxes[j]!), false)
+        const gap = boxes[j]!.minY - boxes[i]!.maxY
+        const reverse = boxes[i]!.minY - boxes[j]!.maxY
+        assert.equal(Math.max(gap, reverse) >= ALIGN_MIN_GAP - 0.2, true)
+      }
+    }
+    const xs = next.map((item) => item.x)
+    assert.equal(Math.max(...xs) - Math.min(...xs) < 1, true)
+  })
+
+  it("alinea al medio y empaqueta en X usando el ancho rotado", () => {
+    const a = createVenueElement("long_table", 0, { x: 80, y: 120 })
+    const b = createVenueElement("long_table", 1, { x: 90, y: 130 })
+    a.rotation = 90
+    b.rotation = 90
+    const next = alignElementsWithGap([a, b], [a.id, b.id], "centerY")
+    const boxA = elementAabb(next[0]!)
+    const boxB = elementAabb(next[1]!)
+    assert.equal(aabbIntersects(boxA, boxB), false)
+    const ordered = [boxA, boxB].sort((left, right) => left.minX - right.minX)
+    assert.equal(ordered[1]!.minX - ordered[0]!.maxX >= ALIGN_MIN_GAP - 0.2, true)
+    assert.equal(Math.abs(next[0]!.y - next[1]!.y) < 1, true)
   })
 })
