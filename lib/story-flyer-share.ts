@@ -1,5 +1,16 @@
 /** Web Share API + descarga de flyers PNG para Historias. */
 
+export function includeStoryCaptureNode(node: unknown): boolean {
+  if (!node || typeof node !== "object") return true
+  const candidate = node as { closest?: unknown }
+  if (typeof candidate.closest !== "function") return true
+  try {
+    return !(candidate as Element).closest("[data-story-actions]")
+  } catch {
+    return true
+  }
+}
+
 import { storyImageSrc } from "@/lib/story-image"
 
 export function canShareFiles(file: File): boolean {
@@ -52,6 +63,20 @@ export function downloadImageBlob(
 /** @deprecated Prefer downloadImageBlob */
 export function downloadBlob(blob: Blob, filename: string) {
   downloadImageBlob(blob, filename)
+}
+
+export function openInstagramStoryCamera() {
+  window.setTimeout(() => {
+    window.location.href = "instagram://story-camera"
+  }, 500)
+}
+
+export function downloadAndOpenInstagram(
+  blob: Blob,
+  filename = "tokepass-historia.png",
+) {
+  downloadImageBlob(blob, filename)
+  openInstagramStoryCamera()
 }
 
 export type ShareFlyerResult =

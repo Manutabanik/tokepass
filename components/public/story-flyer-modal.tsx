@@ -44,7 +44,9 @@ import {
   type StoryThemeId,
 } from "@/lib/story-canvas"
 import {
+  downloadAndOpenInstagram,
   downloadImageBlob,
+  includeStoryCaptureNode,
   isNativeFileShareAvailable,
 } from "@/lib/story-flyer-share"
 import { hydrateStoryFlyerImages } from "@/lib/story-image"
@@ -69,32 +71,33 @@ export function StoryFlyerModal({
   const captureRef = useRef<HTMLDivElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
   const [busy, setBusy] = useState(false)
-  const [hydrating, setHydrating] = useState(false)
+  const [hydrating, setHydrating] = useState(true)
   const [themeId, setThemeId] = useState<StoryThemeId>("neon-purple")
   const [headlineId, setHeadlineId] = useState<StoryHeadlineId>(() =>
     defaultStoryHeadlineId(data.mode),
   )
   const [resolved, setResolved] = useState(data)
+  const [dataKey, setDataKey] = useState(
+    () => `${data.eventId}-${data.imageUrl}-${data.mode}`,
+  )
+  const nextDataKey = `${data.eventId}-${data.imageUrl}-${data.mode}`
+  if (dataKey !== nextDataKey) {
+    setDataKey(nextDataKey)
+    setResolved(data)
+    setHeadlineId(defaultStoryHeadlineId(data.mode))
+  }
   const [previewScale, setPreviewScale] = useState(0.22)
-  const [nativeShare, setNativeShare] = useState(false)
+  const [nativeShare] = useState(() =>
+    typeof navigator === "undefined" ? false : isNativeFileShareAvailable(),
+  )
   const titleId = useId()
   const tilt = useStoryTilt(open && !busy)
 
   useLockBodyScroll(open)
 
   useEffect(() => {
-    setResolved(data)
-    setHeadlineId(defaultStoryHeadlineId(data.mode))
-  }, [data])
-
-  useEffect(() => {
-    setNativeShare(isNativeFileShareAvailable())
-  }, [])
-
-  useEffect(() => {
     if (!open) return
     let cancelled = false
-    setHydrating(true)
 
     async function hydrate() {
       let next = data
@@ -123,11 +126,9 @@ export function StoryFlyerModal({
   useEffect(() => {
     const node = previewRef.current
     if (!open || !node) return
-    const update = () => {
+    const observer = new ResizeObserver(() => {
       setPreviewScale(node.clientWidth / STORY_CANVAS_WIDTH)
-    }
-    update()
-    const observer = new ResizeObserver(update)
+    })
     observer.observe(node)
     return () => observer.disconnect()
   }, [open])
@@ -175,10 +176,6 @@ export function StoryFlyerModal({
     const node = captureRef.current
     if (!node) return null
     await waitForImages(node)
-    await new Promise((r) => window.setTimeout(r, 80))
-    await new Promise<void>((resolve) => {
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
-    })
     const { toBlob } = await import("html-to-image")
     const options = {
       cacheBust: true,
@@ -187,14 +184,13 @@ export function StoryFlyerModal({
       height: STORY_CANVAS_HEIGHT,
       skipAutoScale: true,
       includeQueryParams: true,
-      filter: (element: HTMLElement) =>
-        !element.closest("[data-story-actions]"),
+      filter: includeStoryCaptureNode,
       style: {
         transform: "none",
         left: "0",
         top: "0",
       },
-    } as const
+    }
     try {
       return await toBlob(node, {
         ...options,
@@ -206,20 +202,18 @@ export function StoryFlyerModal({
     }
   }
 
-  async function handleShareToInstagram() {
+  async function handleInstagramShare() {
     if (busy) return
     setBusy(true)
-    await new Promise((r) => window.setTimeout(r, 140))
 
     try {
-      const blob = await captureFlyerBlob()
-      if (!blob) {
-        toast.error("No se pudo generar la historia.")
+      const pngBlob = await captureFlyerBlob()
+      if (!pngBlob) {
         return
       }
 
-      const file = new File([blob], "historia-tokepass.png", {
-        type: blob.type || "image/png",
+      const file = new File([pngBlob], "tokepass-story.png", {
+        type: "image/png",
       })
 
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -227,27 +221,18 @@ export function StoryFlyerModal({
           await navigator.share({
             files: [file],
             title: "Mi Entrada Tokepass",
-            text: "Ya tengo mi entrada!",
           })
           return
         } catch (error) {
           if (error instanceof DOMException && error.name === "AbortError") {
             return
           }
-          downloadImageBlob(blob)
-          toast.success(SAVED_TOAST)
-          return
         }
       }
 
-      downloadImageBlob(blob)
-      toast.success(SAVED_TOAST)
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "No se pudo generar la historia.",
-      )
+      downloadAndOpenInstagram(pngBlob)
+    } catch {
+      // Download / deep-link already ran, or capture failed silently.
     } finally {
       setBusy(false)
     }
@@ -256,22 +241,14 @@ export function StoryFlyerModal({
   async function handleDownloadImage() {
     if (busy) return
     setBusy(true)
-    await new Promise((r) => window.setTimeout(r, 140))
 
     try {
       const blob = await captureFlyerBlob()
-      if (!blob) {
-        toast.error("No se pudo generar la historia.")
-        return
-      }
-      downloadImageBlob(blob)
+      if (!blob) return
+      downloadImageBlob(blob, "tokepass-historia.png")
       toast.success(SAVED_TOAST)
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "No se pudo generar la historia.",
-      )
+    } catch {
+      // Silent fallback: the tap already tried to generate the PNG.
     } finally {
       setBusy(false)
     }
@@ -287,10 +264,10 @@ export function StoryFlyerModal({
       <DialogPortal>
         <DialogOverlay className="z-[100] bg-black/90 backdrop-blur-lg" />
         <DialogPrimitive.Popup
-          className="fixed inset-0 z-[100] flex flex-col items-center justify-center overflow-y-auto bg-black/90 p-4 outline-none backdrop-blur-lg"
+          className="fixed inset-0 z-[100] flex h-dvh flex-col bg-black/90 outline-none backdrop-blur-lg"
           aria-labelledby={titleId}
         >
-          <div className="flex w-full max-w-sm items-center justify-between gap-3 pb-3">
+          <div className="flex w-full shrink-0 items-center justify-between gap-3 px-4 pt-4 pb-2">
             <DialogTitle
               id={titleId}
               className="text-sm font-semibold text-white"
@@ -328,11 +305,12 @@ export function StoryFlyerModal({
             </div>
           ) : null}
 
+          <div className="flex min-h-0 flex-1 items-center justify-center px-4">
           <div
             ref={previewRef}
-            className="relative aspect-[9/16] max-h-[60vh] overflow-hidden rounded-2xl shadow-2xl ring-1 ring-white/10"
+            className="relative aspect-[9/16] max-h-[58vh] overflow-hidden rounded-2xl shadow-2xl ring-1 ring-white/10"
             style={{
-              width: "min(calc(60vh * 9 / 16), calc(100vw - 2rem))",
+              width: "min(calc(58vh * 9 / 16), calc(100vw - 2rem))",
               willChange: "transform",
               transform: "translateZ(0)",
               touchAction: "none",
@@ -363,16 +341,17 @@ export function StoryFlyerModal({
               />
             </div>
           </div>
+          </div>
 
           <div
             data-story-actions
-            className="mt-4 flex w-full max-w-sm flex-col gap-3"
+            className="mx-auto flex w-full max-w-sm shrink-0 flex-col gap-3 px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]"
           >
             <div>
               <p className="mb-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-white/50">
                 Tema
               </p>
-              <div className="flex flex-wrap justify-center gap-2">
+              <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto scroll-smooth pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {STORY_THEMES.map((theme) => {
                   const selected = theme.id === themeId
                   return (
@@ -383,7 +362,7 @@ export function StoryFlyerModal({
                       aria-pressed={selected}
                       title={theme.label}
                       className={cn(
-                        "h-9 rounded-full px-3 text-[11px] font-bold transition",
+                        "h-9 shrink-0 snap-start rounded-full px-3 text-[11px] font-bold transition",
                         selected
                           ? "bg-white text-zinc-950"
                           : "border border-white/15 bg-white/8 text-white/80 hover:bg-white/15",
@@ -400,7 +379,7 @@ export function StoryFlyerModal({
               <p className="mb-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-white/50">
                 Frase
               </p>
-              <div className="flex justify-center gap-2 overflow-x-auto pb-1">
+              <div className="flex snap-x snap-mandatory justify-start gap-2 overflow-x-auto scroll-smooth pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {STORY_HEADLINES.map((headline) => {
                   const selected = headline.id === headlineId
                   return (
@@ -410,7 +389,7 @@ export function StoryFlyerModal({
                       onClick={() => setHeadlineId(headline.id)}
                       aria-pressed={selected}
                       className={cn(
-                        "shrink-0 rounded-full px-3 py-1.5 text-[11px] font-bold tracking-wide transition",
+                        "shrink-0 snap-start rounded-full px-3 py-1.5 text-[11px] font-bold tracking-wide transition",
                         selected
                           ? "bg-white text-zinc-950"
                           : "border border-white/15 bg-white/8 text-white/80 hover:bg-white/15",
@@ -426,8 +405,8 @@ export function StoryFlyerModal({
             <Button
               type="button"
               disabled={busy}
-              onClick={() => void handleShareToInstagram()}
-              className="min-h-12 w-full rounded-full bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-500 text-base font-bold text-white hover:from-violet-500 hover:via-fuchsia-500 hover:to-pink-400"
+              onClick={() => void handleInstagramShare()}
+              className="min-h-14 w-full rounded-full bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-500 text-base font-bold text-white hover:from-violet-500 hover:via-fuchsia-500 hover:to-pink-400"
             >
               {busy ? (
                 <>
