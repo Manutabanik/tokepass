@@ -121,6 +121,10 @@ export function InteractiveSeatingCanvas({
   silentHover: _silentHover = false,
   hideChrome = false,
   maxSelectable = MAX_TICKETS_PER_PURCHASE,
+  heldSeatIds = [],
+  onPickSeat,
+  onPickElement,
+  posStatusColors = false,
 }: {
   map: InteractiveVenueMap
   occupancyBySeatId?: Record<string, SeatStatus>
@@ -136,6 +140,10 @@ export function InteractiveSeatingCanvas({
   silentHover?: boolean
   hideChrome?: boolean
   maxSelectable?: number
+  heldSeatIds?: string[]
+  onPickSeat?: (seat: InteractiveSelectedSeat) => void
+  onPickElement?: (element: VenueMapElement) => void
+  posStatusColors?: boolean
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const transformRef = useRef<ReactZoomPanPinchContentRef>(null)
@@ -170,6 +178,7 @@ export function InteractiveSeatingCanvas({
     () => hydrateStorefrontItemsFromMap(selectedItems, map, priceBySectorId),
     [map, priceBySectorId, selectedItems],
   )
+  const heldSet = useMemo(() => new Set(heldSeatIds), [heldSeatIds])
   const selectedIds = useMemo(
     () => new Set(selectedSeats.map((seat) => seat.id)),
     [selectedSeats],
@@ -392,12 +401,24 @@ export function InteractiveSeatingCanvas({
     const live = resolveLiveVenueSeatStatus({
       mapStatus: seat.mapStatus,
       occupancy: occupancyBySeatId[seat.id],
-      selected: selectedIds.has(seat.id),
+      selected: selectedIds.has(seat.id) || heldSet.has(seat.id),
     })
     if (live === "blocked" || live === "occupied") return
 
     vibrateTap()
     markActivity()
+    if (onPickSeat) {
+      onPickSeat({
+        id: seat.id,
+        row: seat.row,
+        number: seat.number,
+        sectorId: seat.sectorId,
+        sectorName: seat.sectorName,
+        price,
+        color: seat.color,
+      })
+      return
+    }
     const result = toggleLayoutSeat(
       {
         id: seat.id,
@@ -434,6 +455,12 @@ export function InteractiveSeatingCanvas({
       }
     }
     if (live.sellMode === "per_seat" && live.type !== "standing_zone") {
+      return
+    }
+    if (onPickElement) {
+      vibrateTap()
+      markActivity()
+      onPickElement(live)
       return
     }
     const item = storefrontItemFromElement(live, priceBySectorId)
@@ -728,8 +755,8 @@ export function InteractiveSeatingCanvas({
                 (element) => !isInfrastructureElement(element),
               )}
               occupancyBySeatId={occupancyBySeatId}
-              selectedIds={selectedElementIds}
-              selectedSeatIds={[...selectedIds]}
+              selectedIds={[...selectedElementIds, ...heldSeatIds]}
+              selectedSeatIds={[...selectedIds, ...heldSeatIds]}
               highlightedIds={focusedMapIds}
               spotlight={spotlight}
               showSeats
@@ -764,10 +791,11 @@ export function InteractiveSeatingCanvas({
               const live = resolveLiveVenueSeatStatus({
                 mapStatus: seat.mapStatus,
                 occupancy: occupancyBySeatId[seat.id],
-                selected: selectedIds.has(seat.id),
+                selected: selectedIds.has(seat.id) || heldSet.has(seat.id),
               })
               const label = `${seat.sectorName} · Fila ${seat.row} · ${seat.number} — ${formatCurrency(price)}`
               const selected = live === "selected"
+              const held = heldSet.has(seat.id)
               const highlighted = focusedMapIds.includes(seat.id)
               const dimmed = spotlight && !selected && !highlighted
               const seatVisible =
@@ -826,9 +854,10 @@ export function InteractiveSeatingCanvas({
                       cy={seat.y}
                       width={12}
                       height={12}
-                      color={seat.color}
-                      selected={selected}
+                      color={posStatusColors ? "#22c55e" : seat.color}
+                      selected={selected && !held}
                       occupied={live === "occupied" || live === "blocked"}
+                      held={held}
                       label={String(seat.number)}
                       showLabel={zoom >= 1.35 || selected}
                     />

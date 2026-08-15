@@ -38,7 +38,38 @@ export type PosEventOption = {
     available: number
     admitCount: number
     requiresSupervisorPin: boolean
+    seatingSectorId: string | null
   }>
+}
+
+export type PosPinContext = {
+  eventId: string
+  hasSupervisorPin: boolean
+  hasCashierPin: boolean
+  canManagePins: boolean
+}
+
+export type PosThermalReceipt = {
+  ticketId: string
+  qrPayload: string
+  eventTitle: string
+  eventDate: string
+  eventLocation: string
+  tierName: string
+  total: number
+  holderName: string
+  holderDni: string | null
+  seatLabel: string | null
+}
+
+export type PosReprintRow = {
+  orderId: string
+  createdAt: string
+  totalAmount: number
+  ticketCount: number
+  holderName: string | null
+  tierName: string | null
+  receipts: PosThermalReceipt[]
 }
 
 export type CashierShiftRow = {
@@ -173,6 +204,9 @@ export async function getPosEvents(): Promise<PosEventOption[]> {
             Number((tier as { admit_count?: number }).admit_count ?? 1),
           ),
           requiresSupervisorPin,
+          seatingSectorId:
+            (tier as { seating_sector_id?: string | null }).seating_sector_id ??
+            null,
         }
       }),
     }
@@ -561,6 +595,7 @@ export async function setPosSupervisorPin(input: {
     }
 
     revalidatePath("/admin/pos")
+    revalidatePath("/admin/settings/users")
     return { success: true }
   } catch (error) {
     return {
@@ -568,6 +603,108 @@ export async function setPosSupervisorPin(input: {
       error: error instanceof Error ? error.message : "No se pudo guardar el PIN.",
     }
   }
+}
+
+export async function getPosPinContext(
+  eventId: string,
+): Promise<PosPinContext> {
+  const empty: PosPinContext = {
+    eventId,
+    hasSupervisorPin: false,
+    hasCashierPin: false,
+    canManagePins: false,
+  }
+  if (!eventId) return empty
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return empty
+
+  const [{ data: event }, { data: profile }, cashierPin] = await Promise.all([
+    supabase
+      .from("events")
+      .select("id, organizer_id, pos_supervisor_pin_hash")
+      .eq("id", eventId)
+      .maybeSingle(),
+    supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
+    supabase.rpc("pos_cashier_has_pin", { p_event_id: eventId }),
+  ])
+
+  const role = profile?.role ?? ""
+  const canManagePins = Boolean(
+    event &&
+      (event.organizer_id === user.id ||
+        role === "admin" ||
+        role === "super_admin"),
+  )
+
+  return {
+    eventId,
+    hasSupervisorPin: Boolean(
+      (event as { pos_supervisor_pin_hash?: string | null } | null)
+        ?.pos_supervisor_pin_hash,
+    ),
+    hasCashierPin: Boolean(cashierPin.data),
+    canManagePins,
+  }
+}
+
+export async function verifyPosCashierPin(input: {
+  eventId: string
+  pin: string
+}): Promise<{ success: true } | { success: false; error: string }> {
+  const pin = input.pin.trim()
+  if (!/^\d{4}$/.test(pin)) {
+    return { success: false, error: "Ingresa el PIN de 4 digitos." }
+  }
+
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc("verify_pos_cashier_pin", {
+    p_event_id: input.eventId,
+    p_pin: pin,
+  })
+
+  if (error) return { success: false, error: error.message }
+  if (!data) return { success: false, error: "PIN de cajero invalido." }
+  return { success: true }
+}
+
+export async function bootstrapPosCashierPin(input: {
+  eventId: string
+  newPin: string
+  adminPin?: string | null
+}): Promise<{ success: true } | { success: false; error: string }> {
+  const newPin = input.newPin.trim()
+  if (!/^\d{4}$/.test(newPin)) {
+    return { success: false, error: "El PIN de caja debe tener 4 digitos." }
+  }
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc("bootstrap_pos_cashier_pin", {
+    p_event_id: input.eventId,
+    p_new_pin: newPin,
+    p_admin_pin: input.adminPin?.trim() || "",
+  })
+
+  if (error) {
+    const lower = error.message.toLowerCase()
+    if (lower.includes("supervisor_pin") || lower.includes("forbidden")) {
+      return {
+        success: false,
+        error: "Se necesita autorizacion de un administrador.",
+      }
+    }
+    if (lower.includes("pin_invalid") || lower.includes("22023")) {
+      return { success: false, error: "El PIN de caja debe tener 4 digitos." }
+    }
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath("/admin/pos")
+  revalidatePath("/admin/settings/users")
+  return { success: true }
 }
 
 export type PosShiftOrder = {
@@ -579,6 +716,7 @@ export type PosShiftOrder = {
   holderName: string | null
   holderDni: string | null
   tierName: string | null
+  ticketIds: string[]
 }
 
 export async function listOpenShiftOrders(
@@ -604,12 +742,18 @@ export async function listOpenShiftOrders(
   const orderIds = orders.map((o) => o.id)
   const { data: tickets } = await supabase
     .from("tickets")
-    .select("order_id, holder_name, holder_dni, ticket_tiers(name)")
+    .select("id, order_id, holder_name, holder_dni, ticket_tiers(name)")
     .in("order_id", orderIds)
 
   const metaByOrder = new Map<
     string,
-    { count: number; holderName: string | null; holderDni: string | null; tierName: string | null }
+    {
+      count: number
+      holderName: string | null
+      holderDni: string | null
+      tierName: string | null
+      ticketIds: string[]
+    }
   >()
   for (const row of tickets ?? []) {
     const orderId = row.order_id as string
@@ -618,8 +762,10 @@ export async function listOpenShiftOrders(
       holderName: null,
       holderDni: null,
       tierName: null,
+      ticketIds: [],
     }
     current.count += 1
+    current.ticketIds.push(row.id as string)
     if (!current.holderName) {
       current.holderName = (row.holder_name as string | null) ?? null
       current.holderDni = (row.holder_dni as string | null) ?? null
@@ -640,8 +786,76 @@ export async function listOpenShiftOrders(
       holderName: meta?.holderName ?? null,
       holderDni: meta?.holderDni ?? null,
       tierName: meta?.tierName ?? null,
+      ticketIds: meta?.ticketIds ?? [],
     }
   })
+}
+
+export async function listShiftReprintReceipts(
+  shiftId: string,
+): Promise<PosReprintRow[]> {
+  const orders = (await listOpenShiftOrders(shiftId)).slice(0, 10)
+  if (orders.length === 0) return []
+
+  const ticketIds = orders.flatMap((order) => order.ticketIds)
+  if (ticketIds.length === 0) {
+    return orders.map((order) => ({
+      orderId: order.orderId,
+      createdAt: order.createdAt,
+      totalAmount: order.totalAmount,
+      ticketCount: order.ticketCount,
+      holderName: order.holderName,
+      tierName: order.tierName,
+      receipts: [],
+    }))
+  }
+
+  const supabase = await createClient()
+  const { data: tickets } = await supabase
+    .from("tickets")
+    .select(
+      "id, order_id, totp_secret, holder_name, holder_dni, ticket_tiers(name, price), events(title, date, location)",
+    )
+    .in("id", ticketIds)
+
+  const receiptsByOrder = new Map<string, PosThermalReceipt[]>()
+  for (const row of tickets ?? []) {
+    const event = row.events as unknown as {
+      title?: string
+      date?: string
+      location?: string
+    } | null
+    const tier = row.ticket_tiers as unknown as {
+      name?: string
+      price?: number | null
+    } | null
+    const receipt: PosThermalReceipt = {
+      ticketId: row.id as string,
+      qrPayload: (row.totp_secret as string) ?? "",
+      eventTitle: event?.title ?? "Evento",
+      eventDate: event?.date ?? "",
+      eventLocation: event?.location ?? "",
+      tierName: tier?.name ?? "Entrada",
+      total: Number(tier?.price ?? 0),
+      holderName: (row.holder_name as string | null) ?? "Consumidor Final",
+      holderDni: (row.holder_dni as string | null) ?? null,
+      seatLabel: null,
+    }
+    const orderId = row.order_id as string
+    const list = receiptsByOrder.get(orderId) ?? []
+    list.push(receipt)
+    receiptsByOrder.set(orderId, list)
+  }
+
+  return orders.map((order) => ({
+    orderId: order.orderId,
+    createdAt: order.createdAt,
+    totalAmount: order.totalAmount,
+    ticketCount: order.ticketCount,
+    holderName: order.holderName,
+    tierName: order.tierName,
+    receipts: receiptsByOrder.get(order.orderId) ?? [],
+  }))
 }
 
 export async function voidPosOrder(input: {

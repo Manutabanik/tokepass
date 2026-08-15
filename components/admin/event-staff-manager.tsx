@@ -7,6 +7,7 @@ import { toast } from "sonner"
 import {
   assignEventStaff,
   revokeEventStaff,
+  setCashierPosSecurityPin,
   type StaffAssignmentRow,
 } from "@/app/actions/event-staff"
 import type { OrganizerEvent } from "@/app/actions/events"
@@ -33,6 +34,7 @@ export function EventStaffManager({
   const [eventId, setEventId] = useState(events[0]?.id ?? "")
   const [email, setEmail] = useState("")
   const [role, setRole] = useState<EventStaffRole>("door_staff")
+  const [cashierPins, setCashierPins] = useState<Record<string, string>>({})
 
   const sorted = useMemo(
     () =>
@@ -144,8 +146,59 @@ export function EventStaffManager({
                 </p>
                 <p className="text-sm text-muted-foreground">
                   {row.userEmail} · {row.eventTitle} · {ROLE_LABEL[row.role]}
+                  {row.role === "cashier"
+                    ? row.hasPosSecurityPin
+                      ? " · PIN de caja activo"
+                      : " · Sin PIN de caja"
+                    : ""}
                 </p>
               </div>
+              <div className="flex flex-wrap items-center gap-2">
+              {row.role === "cashier" ? (
+                <form
+                  className="flex gap-2"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    const pin = cashierPins[row.id] ?? ""
+                    startTransition(async () => {
+                      const result = await setCashierPosSecurityPin({
+                        assignmentId: row.id,
+                        pin,
+                      })
+                      if (!result.success) {
+                        toast.error(result.error)
+                        return
+                      }
+                      toast.success("PIN de caja guardado")
+                      setCashierPins((current) => ({ ...current, [row.id]: "" }))
+                      router.refresh()
+                    })
+                  }}
+                >
+                  <Input
+                    inputMode="numeric"
+                    autoComplete="off"
+                    maxLength={4}
+                    value={cashierPins[row.id] ?? ""}
+                    onChange={(e) =>
+                      setCashierPins((current) => ({
+                        ...current,
+                        [row.id]: e.target.value.replace(/\D/g, "").slice(0, 4),
+                      }))
+                    }
+                    placeholder="PIN"
+                    className="h-9 w-20 border-zinc-300 bg-white font-mono tracking-widest dark:border-zinc-700 dark:bg-zinc-900"
+                  />
+                  <Button
+                    type="submit"
+                    variant="outline"
+                    disabled={pending || (cashierPins[row.id] ?? "").length !== 4}
+                    className="h-9"
+                  >
+                    Guardar PIN
+                  </Button>
+                </form>
+              ) : null}
               <Button
                 type="button"
                 variant="ghost"
@@ -165,6 +218,7 @@ export function EventStaffManager({
               >
                 Revocar
               </Button>
+              </div>
             </div>
           ))}
         </div>

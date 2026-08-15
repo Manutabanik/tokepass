@@ -20,6 +20,7 @@ export type StaffAssignmentRow = {
   createdAt: string
   isActive: boolean
   expiresAt: string | null
+  hasPosSecurityPin: boolean
 }
 
 type ActionResult<T = undefined> =
@@ -109,14 +110,26 @@ export async function listStaffAssignmentsForOrganizer(): Promise<
 
   const { data: assignments, error } = await supabase
     .from("event_staff_assignments")
-    .select("id, event_id, user_id, role, created_at, is_active, expires_at")
+    .select(
+      "id, event_id, user_id, role, created_at, is_active, expires_at, pos_security_pin_hash",
+    )
     .in("event_id", eventIds)
     .eq("is_active", true)
     .order("created_at", { ascending: false })
 
-  if (error) throw new Error(error.message)
+  const query = error
+    ? await supabase
+        .from("event_staff_assignments")
+        .select("id, event_id, user_id, role, created_at, is_active, expires_at")
+        .in("event_id", eventIds)
+        .eq("is_active", true)
+        .order("created_at", { ascending: false })
+    : { data: assignments, error }
 
-  const userIds = [...new Set((assignments ?? []).map((row) => row.user_id))]
+  if (query.error) throw new Error(query.error.message)
+  const rows = query.data
+
+  const userIds = [...new Set((rows ?? []).map((row) => row.user_id))]
   const profileMap = new Map<
     string,
     { email: string; full_name: string | null }
@@ -138,8 +151,10 @@ export async function listStaffAssignmentsForOrganizer(): Promise<
     }
   }
 
-  return (assignments ?? []).map((row) => {
+  return (rows ?? []).map((row) => {
     const profile = profileMap.get(row.user_id)
+    const hash = (row as { pos_security_pin_hash?: string | null })
+      .pos_security_pin_hash
     return {
       id: row.id,
       eventId: row.event_id,
@@ -151,8 +166,49 @@ export async function listStaffAssignmentsForOrganizer(): Promise<
       createdAt: row.created_at,
       isActive: Boolean(row.is_active),
       expiresAt: row.expires_at ?? null,
+      hasPosSecurityPin: Boolean(hash && hash.trim()),
     }
   })
+}
+
+export async function setCashierPosSecurityPin(input: {
+  assignmentId: string
+  pin: string
+}): Promise<ActionResult> {
+  try {
+    const pin = input.pin.trim()
+    if (!/^\d{4}$/.test(pin)) {
+      return { success: false, error: "El PIN de caja debe tener 4 digitos." }
+    }
+
+    const { supabase } = await requireOrganizer()
+    const { error } = await supabase.rpc("set_pos_cashier_pin", {
+      p_assignment_id: input.assignmentId,
+      p_pin: pin,
+    })
+
+    if (error) {
+      const lower = error.message.toLowerCase()
+      if (lower.includes("forbidden")) {
+        return { success: false, error: "Solo el organizador puede asignar el PIN." }
+      }
+      if (lower.includes("pin_invalid") || lower.includes("22023")) {
+        return { success: false, error: "El PIN de caja debe tener 4 digitos." }
+      }
+      return { success: false, error: error.message }
+    }
+
+    revalidatePath("/admin/team")
+    revalidatePath("/admin/settings/users")
+    revalidatePath("/admin/pos")
+    return { success: true, data: undefined }
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : "No se pudo guardar el PIN.",
+    }
+  }
 }
 
 export async function assignEventStaff(input: {

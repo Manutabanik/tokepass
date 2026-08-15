@@ -5,8 +5,10 @@ import {
   Ban,
   CreditCard,
   KeyRound,
+  LayoutGrid,
   LoaderCircle,
   Lock,
+  Map as MapIcon,
   Minus,
   Plus,
   Printer,
@@ -26,18 +28,28 @@ import {
 import { toast } from "sonner"
 
 import {
+  bootstrapPosCashierPin,
   closeCashierShift,
   createPosSale,
   getOpenCashierShift,
+  getPosPinContext,
   listOpenShiftOrders,
+  listShiftReprintReceipts,
   openCashierShift,
   setPosSupervisorPin,
+  verifyPosCashierPin,
   voidPosOrder,
   type CashierShiftRow,
   type PosEventOption,
+  type PosPinContext,
+  type PosReprintRow,
   type PosShiftOrder,
+  type PosThermalReceipt,
   type TicketZReport,
 } from "@/app/actions/pos"
+import { PosNumpad } from "@/components/admin/pos-numpad"
+import { PosSeatingMap } from "@/components/admin/pos-seating-map"
+import { PosThermalReceiptStack } from "@/components/admin/pos-thermal-receipt"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -62,11 +74,15 @@ import {
   bumpPosCart,
   posCartItemCount,
   posCartLines,
+  posSeatPicksForTier,
   splitPosQuantity,
+  togglePosSeatPick,
   type PosCart,
+  type PosSeatPick,
 } from "@/lib/pos-cart"
+import { armPosSaleBeep, playPosSaleBeep } from "@/lib/pos-sale-beep"
 import {
-  printTicketsViaHiddenIframe,
+  printThermalNodeNow,
   printUrlViaHiddenIframe,
 } from "@/lib/pos-thermal-print"
 import { cn } from "@/lib/utils"
@@ -101,12 +117,20 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
   const [countedAmount, setCountedAmount] = useState("")
   const [isPending, startTransition] = useTransition()
   const [lastTicketIds, setLastTicketIds] = useState<string[]>([])
+  const [seatPicks, setSeatPicks] = useState<PosSeatPick[]>([])
+  const [catalogView, setCatalogView] = useState<"quick" | "map">("quick")
+  const [printReceipts, setPrintReceipts] = useState<PosThermalReceipt[]>([])
+  const [reprintModal, setReprintModal] = useState(false)
+  const [reprintRows, setReprintRows] = useState<PosReprintRow[]>([])
+  const [pinCtx, setPinCtx] = useState<PosPinContext | null>(null)
   const [pinModal, setPinModal] = useState<{
-    mode: "courtesy" | "void" | "config"
+    mode: "courtesy" | "void" | "config" | "unlock" | "setup"
     orderId?: string
+    step?: "admin" | "pin"
   } | null>(null)
   const [supervisorPin, setSupervisorPin] = useState("")
   const [configPin, setConfigPin] = useState("")
+  const [adminAuthPin, setAdminAuthPin] = useState("")
   const [voidOrders, setVoidOrders] = useState<PosShiftOrder[]>([])
   const [voidModal, setVoidModal] = useState(false)
   const [zReport, setZReport] = useState<TicketZReport | null>(null)
@@ -114,7 +138,12 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
   const clearTimerRef = useRef<number | null>(null)
   const keyHandlerRef = useRef<(event: KeyboardEvent) => void>(() => {})
   const dialogsOpen =
-    openModal || closeModal || !!pinModal || voidModal || !!zReport
+    openModal ||
+    closeModal ||
+    !!pinModal ||
+    voidModal ||
+    !!zReport ||
+    reprintModal
 
   const selectedEvent = useMemo(
     () => events.find((event) => event.id === eventId) ?? null,
@@ -167,6 +196,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
 
   const resetSaleForm = useCallback(() => {
     setCart({})
+    setSeatPicks([])
     setPhone("")
     setDni("")
     setBuyerName("")
@@ -203,6 +233,9 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
       setShiftLoading(false)
       if (!row) setOpenModal(true)
     })
+    void getPosPinContext(eventId).then((ctx) => {
+      if (!cancelled) setPinCtx(ctx)
+    })
     return () => {
       cancelled = true
     }
@@ -228,15 +261,66 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
   function onEventChange(nextEventId: string) {
     setEventId(nextEventId)
     setCart({})
+    setSeatPicks([])
     setSoldDelta({})
     setTendered(null)
     setCustomTender("")
+    setCatalogView("quick")
   }
 
   function addTier(tierId: string, delta = 1) {
     const tier = liveTiers.find((item) => item.id === tierId)
     if (!tier || !shift) return
+    if (delta < 0) {
+      const picks = posSeatPicksForTier(seatPicks, tierId)
+      if (picks.length > 0) {
+        const last = picks[picks.length - 1]
+        setSeatPicks((current) =>
+          current.filter((item) => item.seatId !== last.seatId),
+        )
+      }
+    }
     setCart((current) => bumpPosCart(current, tierId, delta, tier.available))
+  }
+
+  function toggleMapSeat(pick: PosSeatPick) {
+    const tier = liveTiers.find((item) => item.id === pick.tierId)
+    if (!tier || !shift) {
+      toast.error("No hay tipo de entrada para ese sector.")
+      return
+    }
+    const next = togglePosSeatPick(seatPicks, pick)
+    const delta = next.added ? 1 : -1
+    if (next.added && (cart[pick.tierId] ?? 0) >= tier.available) {
+      toast.error("Sin stock para ese sector.")
+      return
+    }
+    setSeatPicks(next.picks)
+    setCart((current) => bumpPosCart(current, pick.tierId, delta, tier.available))
+  }
+
+  function openPinModal() {
+    setSupervisorPin("")
+    setConfigPin("")
+    setAdminAuthPin("")
+    const hasPin = Boolean(pinCtx?.hasCashierPin || pinCtx?.hasSupervisorPin)
+    if (!hasPin) {
+      setPinModal({
+        mode: "setup",
+        step: pinCtx?.canManagePins ? "pin" : "admin",
+      })
+      return
+    }
+    setPinModal({ mode: "unlock" })
+  }
+
+  function flushThermalPrint(receipts: PosThermalReceipt[]) {
+    setPrintReceipts(receipts)
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        printThermalNodeNow()
+      })
+    })
   }
 
   function handleOpenShift() {
@@ -286,6 +370,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
 
   function requestEmit() {
     if (!eventId || !shift || isPending || lines.length === 0) return
+    armPosSaleBeep()
     if (needsPin) {
       setSupervisorPin("")
       setPinModal({ mode: "courtesy" })
@@ -308,7 +393,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
     }))
 
     startTransition(async () => {
-      const issuedIds: string[] = []
+      const issued: Array<{ id: string; totpSecret: string }> = []
       let billed = 0
       const remaining: PosCart = {}
       let failed = false
@@ -346,7 +431,12 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
 
           leftover -= quantity
           billed += sale.totalAmount
-          issuedIds.push(...sale.tickets.map((ticket) => ticket.id))
+          issued.push(
+            ...sale.tickets.map((ticket) => ({
+              id: ticket.id,
+              totpSecret: ticket.totpSecret,
+            })),
+          )
           setSoldDelta((current) => ({
             ...current,
             [line.tierId]: (current[line.tierId] ?? 0) + quantity,
@@ -356,11 +446,31 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
         if (failed) break
       }
 
+      const issuedIds = issued.map((ticket) => ticket.id)
       if (issuedIds.length > 0) {
         persistLastTickets(issuedIds)
-        void printTicketsViaHiddenIframe(issuedIds).catch(() => {
-          toast.message("Usá Reimprimir si el papel se trabó.")
+        const receipts: PosThermalReceipt[] = issued.map((ticket, index) => {
+          const pick = seatPicks[index]
+          const line =
+            snapshot.find((item) => item.tierId === pick?.tierId) ?? snapshot[0]
+          const tier = liveTiers.find(
+            (item) => item.id === (pick?.tierId ?? line?.tierId),
+          )
+          return {
+            ticketId: ticket.id,
+            qrPayload: ticket.totpSecret,
+            eventTitle: selectedEvent?.title ?? "Evento",
+            eventDate: selectedEvent?.date ?? "",
+            eventLocation: "",
+            tierName: tier?.name ?? "Entrada",
+            total: pick?.price ?? line?.price ?? 0,
+            holderName: buyer.name,
+            holderDni: buyer.dni,
+            seatLabel: pick ? `${pick.sectorName} · ${pick.label}` : null,
+          }
         })
+        flushThermalPrint(receipts)
+        playPosSaleBeep()
         setShift((current) => {
           if (!current) return current
           return {
@@ -406,18 +516,27 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
   }
 
   function handleReprint() {
-    if (lastTicketIds.length === 0) {
-      toast.error("No hay un ticket reciente para reimprimir.")
+    if (!shift) {
+      toast.error("No hay un turno abierto para reimprimir.")
       return
     }
     startTransition(async () => {
-      try {
-        await printTicketsViaHiddenIframe(lastTicketIds)
-        toast.success("Reimpresión enviada")
-      } catch {
-        toast.error("No se pudo reimprimir. Probá de nuevo.")
+      const rows = await listShiftReprintReceipts(shift.id)
+      setReprintRows(rows)
+      setReprintModal(true)
+      if (rows.length === 0 && lastTicketIds.length === 0) {
+        toast.error("No hay tickets emitidos en este turno.")
       }
     })
+  }
+
+  function printReprintRow(row: PosReprintRow) {
+    if (row.receipts.length === 0) {
+      toast.error("Ese ticket no tiene datos para imprimir.")
+      return
+    }
+    flushThermalPrint(row.receipts)
+    toast.success("Reimpresion enviada")
   }
 
   function openVoidList() {
@@ -436,6 +555,74 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
 
   function submitPin() {
     if (!pinModal) return
+
+    if (pinModal.mode === "unlock") {
+      if (!eventId) return
+      const pin = supervisorPin.trim()
+      startTransition(async () => {
+        if (pinCtx?.hasCashierPin) {
+          const res = await verifyPosCashierPin({ eventId, pin })
+          if (!res.success) {
+            toast.error(res.error)
+            return
+          }
+          toast.success("Cajero autenticado")
+          setPinModal(null)
+          setSupervisorPin("")
+          return
+        }
+        if (pin.length < 4) {
+          toast.error("Ingresa el PIN de autorizacion")
+          return
+        }
+        toast.success("PIN validado")
+        setPinModal(null)
+        setSupervisorPin("")
+      })
+      return
+    }
+
+    if (pinModal.mode === "setup") {
+      if (!eventId) return
+      if (pinModal.step === "admin") {
+        if (adminAuthPin.trim().length < 4) {
+          toast.error("Ingresa el PIN de administrador")
+          return
+        }
+        setPinModal({ mode: "setup", step: "pin" })
+        return
+      }
+      const newPin = configPin.trim()
+      if (!/^\d{4}$/.test(newPin)) {
+        toast.error("El PIN de caja debe tener 4 digitos")
+        return
+      }
+      startTransition(async () => {
+        const boot = await bootstrapPosCashierPin({
+          eventId,
+          newPin,
+          adminPin: adminAuthPin,
+        })
+        if (!boot.success && pinCtx?.canManagePins) {
+          const res = await setPosSupervisorPin({ eventId, pin: newPin })
+          if (!res.success) {
+            toast.error(boot.error)
+            return
+          }
+        } else if (!boot.success) {
+          toast.error(boot.error)
+          return
+        }
+        toast.success("PIN de caja configurado")
+        setPinModal(null)
+        setConfigPin("")
+        setAdminAuthPin("")
+        const next = await getPosPinContext(eventId)
+        setPinCtx(next)
+      })
+      return
+    }
+
     if (pinModal.mode === "config") {
       if (!eventId) return
       startTransition(async () => {
@@ -447,17 +634,18 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
           toast.error(res.error)
           return
         }
-        toast.success("PIN de Autorización guardado")
+        toast.success("PIN de Autorizacion guardado")
         setPinModal(null)
         setConfigPin("")
         setSupervisorPin("")
-        window.location.reload()
+        const next = await getPosPinContext(eventId)
+        setPinCtx(next)
       })
       return
     }
 
     if (supervisorPin.trim().length < 4) {
-      toast.error("Ingresá el PIN de Autorización")
+      toast.error("Ingresa el PIN de Autorizacion")
       return
     }
 
@@ -579,7 +767,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
               type="button"
               variant="outline"
               className="min-h-11 rounded-xl"
-              disabled={isPending || lastTicketIds.length === 0}
+              disabled={isPending}
               onClick={handleReprint}
             >
               <Printer className="size-4" />
@@ -599,11 +787,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
               type="button"
               variant="ghost"
               className="min-h-11 rounded-xl"
-              onClick={() => {
-                setSupervisorPin("")
-                setConfigPin("")
-                setPinModal({ mode: "config" })
-              }}
+              onClick={openPinModal}
             >
               <KeyRound className="size-4" />
               PIN
@@ -648,6 +832,47 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
           </div>
 
           <fieldset disabled={!canSell} className="mt-4 disabled:opacity-50">
+            <div className="mb-3 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setCatalogView("quick")}
+                className={cn(
+                  "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border-2 text-sm font-bold",
+                  catalogView === "quick"
+                    ? "border-emerald-500 bg-emerald-500/10 text-foreground"
+                    : "border-border bg-card text-muted-foreground",
+                )}
+              >
+                <LayoutGrid className="size-4" />
+                Vista Rapida (Botones)
+              </button>
+              <button
+                type="button"
+                onClick={() => setCatalogView("map")}
+                className={cn(
+                  "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border-2 text-sm font-bold",
+                  catalogView === "map"
+                    ? "border-emerald-500 bg-emerald-500/10 text-foreground"
+                    : "border-border bg-card text-muted-foreground",
+                )}
+              >
+                <MapIcon className="size-4" />
+                Vista Mapa (Plano Interactivo)
+              </button>
+            </div>
+            {catalogView === "map" && selectedEvent ? (
+              <div className="mb-4">
+                <PosSeatingMap
+                  event={selectedEvent}
+                  heldSeatIds={seatPicks.map((pick) => pick.seatId)}
+                  disabled={!canSell}
+                  onToggleSeat={toggleMapSeat}
+                />
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Verde: libre · Rojo: ocupado · Amarillo: en cobro
+                </p>
+              </div>
+            ) : null}
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
               {liveTiers.map((tier, index) => {
                 const inCart = cart[tier.id] ?? 0
@@ -700,7 +925,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
               </p>
               {lines.length === 0 ? (
                 <p className="mt-3 text-sm text-muted-foreground">
-                  Tocá un tipo de entrada para sumar +1.
+                  Toca un tipo de entrada o una mesa/butaca del mapa.
                 </p>
               ) : (
                 <ul className="mt-3 space-y-2">
@@ -711,6 +936,13 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
                     >
                       <div className="min-w-0">
                         <p className="truncate font-semibold">{line.tier.name}</p>
+                        {posSeatPicksForTier(seatPicks, line.tierId).length > 0 ? (
+                          <p className="truncate text-xs text-muted-foreground">
+                            {posSeatPicksForTier(seatPicks, line.tierId)
+                              .map((pick) => `${pick.sectorName} ${pick.label}`)
+                              .join(" · ")}
+                          </p>
+                        ) : null}
                         <p className="text-sm font-bold tabular-nums">
                           {formatCurrency(line.tier.price * line.quantity)}
                         </p>
@@ -1024,40 +1256,61 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
         <DialogContent className="border-border bg-card text-foreground sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {pinModal?.mode === "config"
-                ? "Configurar PIN de Autorización"
-                : pinModal?.mode === "void"
-                  ? "Anular Venta"
-                  : "Requiere PIN de Supervisor"}
+              {pinModal?.mode === "setup"
+                ? pinModal.step === "admin"
+                  ? "Autorizacion de administrador"
+                  : "Crear PIN de caja"
+                : pinModal?.mode === "unlock"
+                  ? "Validar PIN de cajero"
+                  : pinModal?.mode === "config"
+                    ? "Configurar PIN de Autorizacion"
+                    : pinModal?.mode === "void"
+                      ? "Anular Venta"
+                      : "Requiere PIN de Supervisor"}
             </DialogTitle>
             <DialogDescription className="text-muted-foreground">
-              {pinModal?.mode === "config"
-                ? "Solo organizador/admin. 4 a 12 caracteres."
-                : "Pedile el PIN al supervisor para continuar."}
+              {pinModal?.mode === "setup" && pinModal.step === "admin"
+                ? "Este cajero no tiene PIN. Un administrador debe autorizar el alta."
+                : pinModal?.mode === "setup"
+                  ? "Ingresa un PIN numerico de 4 digitos."
+                  : pinModal?.mode === "unlock"
+                    ? "Validacion rapida del cajero de este turno."
+                    : "Ingresa el PIN para continuar."}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="supervisor-pin">PIN de Autorización</Label>
-            <Input
-              id="supervisor-pin"
-              type="password"
-              inputMode="numeric"
-              autoComplete="off"
-              value={pinModal?.mode === "config" ? configPin : supervisorPin}
-              onChange={(e) =>
-                pinModal?.mode === "config"
-                  ? setConfigPin(e.target.value.slice(0, 12))
-                  : setSupervisorPin(e.target.value.slice(0, 12))
+          <PosNumpad
+            value={
+              pinModal?.mode === "setup" && pinModal.step === "admin"
+                ? adminAuthPin
+                : pinModal?.mode === "setup" || pinModal?.mode === "config"
+                  ? configPin
+                  : supervisorPin
+            }
+            maxLength={
+              pinModal?.mode === "setup" || pinModal?.mode === "unlock" ? 4 : 12
+            }
+            disabled={isPending}
+            onChange={(next) => {
+              if (pinModal?.mode === "setup" && pinModal.step === "admin") {
+                setAdminAuthPin(next)
+                return
               }
-              className="min-h-12 text-base tracking-widest"
-            />
-            {!selectedEvent?.hasSupervisorPin && pinModal?.mode !== "config" ? (
-              <p className="text-xs text-amber-600 dark:text-amber-200">
-                Este evento todavía no tiene PIN. Configuralo con el botón PIN
-                (organizador) o usá el código ORG si sos el organizador.
-              </p>
-            ) : null}
-          </div>
+              if (pinModal?.mode === "setup" || pinModal?.mode === "config") {
+                setConfigPin(next)
+                return
+              }
+              setSupervisorPin(next)
+            }}
+          />
+          {!pinCtx?.hasSupervisorPin &&
+          !pinCtx?.hasCashierPin &&
+          pinModal?.mode !== "setup" &&
+          pinModal?.mode !== "config" ? (
+            <p className="text-xs text-amber-600 dark:text-amber-200">
+              No hay PIN cargado. Configuralo en Usuarios y PIN de caja o
+              usa este modal si sos administrador.
+            </p>
+          ) : null}
           <DialogFooter>
             <Button
               type="button"
@@ -1145,6 +1398,52 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <Dialog open={reprintModal} onOpenChange={setReprintModal}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto border-border bg-card text-foreground sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reimprimir tickets del turno</DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              Ultimos 10 tickets emitidos en la caja abierta.
+            </DialogDescription>
+          </DialogHeader>
+          {reprintRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No hay tickets para reimprimir en este turno.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {reprintRows.map((row) => (
+                <li
+                  key={row.orderId}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-border px-3 py-3"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold">
+                      {row.tierName ?? "Entrada"} · {row.ticketCount} QR
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {row.holderName ?? "Consumidor Final"} ·{" "}
+                      {formatCurrency(row.totalAmount)}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-11 shrink-0 rounded-xl"
+                    onClick={() => printReprintRow(row)}
+                  >
+                    <Printer className="size-4" />
+                    Imprimir
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <PosThermalReceiptStack receipts={printReceipts} />
     </div>
   )
 }

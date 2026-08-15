@@ -281,7 +281,30 @@ select:-webkit-autofill {
   );
 }
 
+#thermal-ticket-print.thermal-ticket-print {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  width: 80mm;
+}
+
 @media print {
+  body.pos-thermal-printing * {
+    visibility: hidden;
+  }
+
+  body.pos-thermal-printing #thermal-ticket-print,
+  body.pos-thermal-printing #thermal-ticket-print * {
+    visibility: visible;
+  }
+
+  body.pos-thermal-printing #thermal-ticket-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 80mm;
+  }
+
   /* Térmica 80mm (estándar POS). Fallback 58mm vía clase .print-ticket-58. */
   @page {
     size: 80mm auto;

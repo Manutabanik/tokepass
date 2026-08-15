@@ -20,7 +20,7 @@ import type { VenueMapElement, VenueMapElementSeat, VenueShapeType } from "@/typ
 
 export const CHAIR_DOT_RADIUS = VENUE_SHAPE.chairRadius
 
-type Occupancy = "available" | "occupied" | "blocked" | "selected"
+type Occupancy = "available" | "occupied" | "blocked" | "selected" | "held"
 
 function seatState(
   seat: VenueMapElementSeat,
@@ -29,20 +29,24 @@ function seatState(
 ): Occupancy {
   if (selectedSeatIds.has(seat.id)) return "selected"
   const live = occupancyBySeatId[seat.id]
-  if (live === "occupied" || live === "blocked" || live === "selected") return live
+  if (live === "occupied" || live === "blocked" || live === "selected" || live === "held") {
+    return live
+  }
   if (seat.status === "blocked") return "blocked"
   return "available"
 }
 
 function fillFor(color: string, state: Occupancy) {
+  if (state === "held") return "#eab308"
   if (state === "selected") return "#34d399"
-  if (state === "occupied" || state === "blocked") return "#3f3f46"
-  return color
+  if (state === "occupied" || state === "blocked") return "#ef4444"
+  return color || "#22c55e"
 }
 
 function strokeFor(color: string, selected: boolean, state: Occupancy = "available") {
+  if (state === "held") return "#854d0e"
   if (selected || state === "selected") return "#ffffff"
-  if (state === "occupied" || state === "blocked") return "#52525b"
+  if (state === "occupied" || state === "blocked") return "#7f1d1d"
   return color
 }
 
@@ -54,6 +58,7 @@ export function TheatreSeatSymbol({
   color,
   selected = false,
   occupied = false,
+  held = false,
   rotation = 0,
   label,
   showLabel = false,
@@ -65,13 +70,20 @@ export function TheatreSeatSymbol({
   color: string
   selected?: boolean
   occupied?: boolean
+  held?: boolean
   rotation?: number
   label?: string
   showLabel?: boolean
 }) {
   const w = Math.max(10, width)
   const h = Math.max(10, height)
-  const state: Occupancy = occupied ? "blocked" : selected ? "selected" : "available"
+  const state: Occupancy = occupied
+    ? "occupied"
+    : held
+      ? "held"
+      : selected
+        ? "selected"
+        : "available"
   const fill = fillFor(color, state)
   const stroke = strokeFor(color, selected, state)
   const rxBack = Math.min(3.2, w * 0.22)

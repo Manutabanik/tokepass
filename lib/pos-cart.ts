@@ -2,6 +2,35 @@ export const POS_RPC_QTY_CAP = 20
 
 export type PosCart = Record<string, number>
 
+export type PosSeatPick = {
+  seatId: string
+  tierId: string
+  label: string
+  sectorName: string
+  price: number
+}
+
+export function togglePosSeatPick(
+  picks: PosSeatPick[],
+  pick: PosSeatPick,
+): { picks: PosSeatPick[]; added: boolean } {
+  const exists = picks.some((item) => item.seatId === pick.seatId)
+  if (exists) {
+    return {
+      picks: picks.filter((item) => item.seatId !== pick.seatId),
+      added: false,
+    }
+  }
+  return { picks: [...picks, pick], added: true }
+}
+
+export function posSeatPicksForTier(
+  picks: PosSeatPick[],
+  tierId: string,
+): PosSeatPick[] {
+  return picks.filter((item) => item.tierId === tierId)
+}
+
 export function bumpPosCart(
   cart: PosCart,
   tierId: string,

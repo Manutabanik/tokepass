@@ -70,6 +70,7 @@ export type EventStaffAssignment = {
   created_at: string
   is_active: boolean
   expires_at: string | null
+  pos_security_pin_hash: string | null
 }
 
 export type GuestListEntryStatus = "pending" | "claimed" | "checked_in"
@@ -1706,6 +1707,7 @@ export type Database = {
           created_at?: string
           is_active?: boolean
           expires_at?: string | null
+          pos_security_pin_hash?: string | null
         }
         Update: Partial<EventStaffAssignment>
         Relationships: []
@@ -2638,6 +2640,22 @@ export type Database = {
       }
       verify_pos_supervisor_pin: {
         Args: { p_event_id: string; p_pin: string }
+        Returns: boolean
+      }
+      pos_cashier_has_pin: {
+        Args: { p_event_id: string }
+        Returns: boolean
+      }
+      set_pos_cashier_pin: {
+        Args: { p_assignment_id: string; p_pin: string }
+        Returns: boolean
+      }
+      verify_pos_cashier_pin: {
+        Args: { p_event_id: string; p_pin: string }
+        Returns: boolean
+      }
+      bootstrap_pos_cashier_pin: {
+        Args: { p_event_id: string; p_new_pin: string; p_admin_pin: string }
         Returns: boolean
       }
       void_pos_order: {

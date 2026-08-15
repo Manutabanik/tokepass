@@ -73,4 +73,16 @@ export async function printUrlViaHiddenIframe(url: string): Promise<void> {
   }
 }
 
+export function printThermalNodeNow(): void {
+  if (typeof window === "undefined") return
+  document.body.classList.add("pos-thermal-printing")
+  const cleanup = () => {
+    document.body.classList.remove("pos-thermal-printing")
+    window.removeEventListener("afterprint", cleanup)
+  }
+  window.addEventListener("afterprint", cleanup)
+  window.print()
+  window.setTimeout(cleanup, 1500)
+}
+
 export { PRINT_DONE as TOKEPASS_PRINT_DONE_MESSAGE }
