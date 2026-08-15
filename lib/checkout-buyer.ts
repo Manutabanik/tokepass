@@ -1,6 +1,16 @@
 import { z } from "zod"
 
 import {
+  DNI_ERROR,
+  EMAIL_ERROR,
+  PHONE_ERROR,
+  isStrictEmail,
+  isValidDni,
+  normalizeArgentineMobile,
+  normalizeDni,
+  normalizeEmail,
+} from "@/lib/checkout/guest-input"
+import {
   firstCheckoutBuyerErrorField,
   type CheckoutBuyerField,
 } from "@/lib/checkout/validation-scroll"
@@ -35,25 +45,16 @@ export const checkoutBuyerFormSchema = z.object({
     ),
   buyerDni: z
     .string()
-    .transform((value) => value.replace(/\D/g, ""))
-    .pipe(
-      z
-        .string()
-        .regex(/^\d{7,9}$/, "El DNI debe tener entre 7 y 9 dígitos."),
-    ),
+    .transform((value) => normalizeDni(value))
+    .refine(isValidDni, DNI_ERROR),
   buyerPhone: z
     .string()
-    .transform((value) => value.replace(/\D/g, ""))
-    .pipe(
-      z
-        .string()
-        .regex(/^\d{8,15}$/, "Ingresá un teléfono / WhatsApp válido."),
-    ),
+    .transform((value) => normalizeArgentineMobile(value) ?? "")
+    .refine((value) => value.length > 0, PHONE_ERROR),
   buyerEmail: z
     .string()
-    .trim()
-    .toLowerCase()
-    .email("Ingresá un mail válido para la confirmación."),
+    .transform((value) => normalizeEmail(value))
+    .refine(isStrictEmail, EMAIL_ERROR),
 })
 
 export type CheckoutBuyerFormValues = z.infer<typeof checkoutBuyerFormSchema>
@@ -63,9 +64,9 @@ export function normalizeCheckoutBuyer(
 ): NormalizedCheckoutBuyer | null {
   if (!input) return null
   const buyerName = input.buyerName?.trim().replace(/\s+/g, " ") ?? ""
-  const buyerDni = (input.buyerDni ?? "").replace(/\D/g, "")
-  const buyerEmail = input.buyerEmail?.trim().toLowerCase() ?? ""
-  const buyerPhone = (input.buyerPhone ?? "").replace(/\D/g, "")
+  const buyerDni = normalizeDni(input.buyerDni ?? "")
+  const buyerEmail = normalizeEmail(input.buyerEmail ?? "")
+  const buyerPhone = normalizeArgentineMobile(input.buyerPhone ?? "") ?? ""
 
   if (!buyerName && !buyerDni && !buyerEmail && !buyerPhone) return null
 

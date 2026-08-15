@@ -11,6 +11,11 @@ import {
 } from "@/lib/checkout/ticket-picker"
 import { BUNDLE_TYPES } from "@/lib/inventory/flexible-bundles"
 import { INVENTORY_TIER_TYPES } from "@/lib/inventory/unified-inventory"
+import {
+  normalizeScheduleDaysFromForm,
+  parseDateTimeLocal,
+  scheduleDaysToFormValues,
+} from "@/lib/event-schedule"
 import { EVENT_VISIBILITY_VALUES } from "@/types/events"
 import { TICKET_TIER_VISIBILITY_VALUES } from "@/types/tickets"
 
@@ -37,23 +42,26 @@ export const lineupDraftItemSchema = z.object({
   performanceTime: z.string().optional().default(""),
   stage: z.string().optional().default(""),
   order: z.number().int().min(0).optional().default(0),
+  isHeadliner: z.boolean().optional().default(false),
+  topTrackPreviewUrl: z.string().nullable().optional().default(null),
+  topTrackName: z.string().nullable().optional().default(null),
 })
 
 export const scheduleDaySchema = z.object({
-  id: z.string().uuid(),
+  id: z.string().min(1),
   title: z.string().trim().min(2, "Nombrá la jornada."),
   startTime: z
     .string()
     .min(1, "Definí el inicio de la jornada.")
     .refine(
-      (value) => !Number.isNaN(new Date(value).getTime()),
+      (value) => parseDateTimeLocal(value) != null,
       "La hora de inicio no es válida.",
     ),
   endTime: z
     .string()
     .min(1, "Definí el cierre de la jornada.")
     .refine(
-      (value) => !Number.isNaN(new Date(value).getTime()),
+      (value) => parseDateTimeLocal(value) != null,
       "La hora de cierre no es válida.",
     ),
 })
@@ -232,8 +240,8 @@ const eventFormObject = z
         })
       }
       for (const [index, day] of data.basics.scheduleDays.entries()) {
-        const start = new Date(day.startTime).getTime()
-        const end = new Date(day.endTime).getTime()
+        const start = parseDateTimeLocal(day.startTime)?.getTime() ?? NaN
+        const end = parseDateTimeLocal(day.endTime)?.getTime() ?? NaN
         if (!(end > start)) {
           context.addIssue({
             code: "custom",
@@ -244,7 +252,8 @@ const eventFormObject = z
       }
     } else {
       const date = data.basics.date?.trim() ?? ""
-      if (!date || Number.isNaN(new Date(date).getTime())) {
+      const dateMs = parseDateTimeLocal(date)?.getTime() ?? NaN
+      if (!date || Number.isNaN(dateMs)) {
         context.addIssue({
           code: "custom",
           path: ["basics", "date"],
@@ -253,13 +262,14 @@ const eventFormObject = z
       }
 
       const endDate = data.basics.endDate?.trim() ?? ""
-      if (!endDate || Number.isNaN(new Date(endDate).getTime())) {
+      const endMs = parseDateTimeLocal(endDate)?.getTime() ?? NaN
+      if (!endDate || Number.isNaN(endMs)) {
         context.addIssue({
           code: "custom",
           path: ["basics", "endDate"],
           message: "Seleccioná la hora de finalización.",
         })
-      } else if (date && new Date(endDate).getTime() <= new Date(date).getTime()) {
+      } else if (date && endMs <= dateMs) {
         context.addIssue({
           code: "custom",
           path: ["basics", "endDate"],
@@ -507,16 +517,16 @@ function blankDraftTicket(): EventFormValues["tickets"][number] {
 export function coerceDraftEventForm(
   raw: EventFormValues | DraftEventFormValues,
 ): EventFormValues {
-  const startRaw = new Date(raw.basics.date ?? "")
-  const startOk = !Number.isNaN(startRaw.getTime())
+  const startRaw = parseDateTimeLocal(raw.basics.date ?? "")
+  const startOk = startRaw != null
   const startDate = startOk
     ? startRaw
     : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-  const endRaw = new Date(raw.basics.endDate ?? "")
+  const endParsed = parseDateTimeLocal(raw.basics.endDate ?? "")
   const endOk =
-    !Number.isNaN(endRaw.getTime()) && endRaw.getTime() > startDate.getTime()
+    endParsed != null && endParsed.getTime() > startDate.getTime()
   const endDate = endOk
-    ? endRaw
+    ? endParsed
     : new Date(startDate.getTime() + 4 * 60 * 60 * 1000)
 
   const age = AGE_RESTRICTION_VALUES.includes(
@@ -571,15 +581,12 @@ export function coerceDraftEventForm(
     !(venue.zones && venue.zones.length > 0) &&
     (!venue.rows || !venue.seatsPerRow)
 
-  const scheduleDays = (
-    (raw.basics.scheduleDays ?? []) as EventFormValues["basics"]["scheduleDays"]
-  ).filter((day) => {
-    if (!day?.id || !day.startTime || !day.endTime) return false
-    const start = new Date(day.startTime).getTime()
-    const end = new Date(day.endTime).getTime()
-    return !Number.isNaN(start) && !Number.isNaN(end) && end > start
-  })
-  const isMultiDay = Boolean(raw.basics.isMultiDay) && scheduleDays.length >= 2
+  const scheduleDays = scheduleDaysToFormValues(
+    normalizeScheduleDaysFromForm(
+      (raw.basics.scheduleDays ?? []) as EventFormValues["basics"]["scheduleDays"],
+    ),
+  )
+  const isMultiDay = Boolean(raw.basics.isMultiDay)
 
   const zones = Array.isArray(venue.zones)
     ? venue.zones.map((zone) => {
@@ -603,8 +610,14 @@ export function coerceDraftEventForm(
   return {
     basics: {
       title: raw.basics.title.trim() || "Evento sin título",
-      date: toDatetimeLocal(startDate),
-      endDate: toDatetimeLocal(endDate),
+      date:
+        isMultiDay && scheduleDays[0]?.startTime
+          ? scheduleDays[0].startTime
+          : toDatetimeLocal(startDate),
+      endDate:
+        isMultiDay && scheduleDays[scheduleDays.length - 1]?.endTime
+          ? scheduleDays[scheduleDays.length - 1].endTime
+          : toDatetimeLocal(endDate),
       description: raw.basics.description ?? "",
       flyerName: raw.basics.flyerName ?? null,
       visibility: raw.basics.visibility ?? "public",

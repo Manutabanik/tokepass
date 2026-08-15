@@ -20,6 +20,7 @@ export type TicketReceiptEmailProps = {
   totalPaidLabel: string
   walletUrl: string
   logoUrl: string
+  otpCode?: string
 }
 
 export function TicketReceiptEmail({
@@ -31,6 +32,7 @@ export function TicketReceiptEmail({
   totalPaidLabel,
   walletUrl,
   logoUrl,
+  otpCode,
 }: TicketReceiptEmailProps) {
   const greeting = buyerName?.trim() ? `Hola ${buyerName.trim()},` : "Hola,"
   const ticketLabel =
@@ -79,9 +81,16 @@ export function TicketReceiptEmail({
 
           <Section style={styles.ctaWrap}>
             <Button href={walletUrl} style={styles.button}>
-              {"\uD83C\uDF9F\uFE0F"} Ver mis entradas en la Billetera
+              Abrir mis entradas
             </Button>
           </Section>
+
+          {otpCode ? (
+            <Text style={styles.security}>
+              Tu codigo de acceso es {otpCode}. Lo vas a necesitar para ver el QR
+              en un dispositivo nuevo.
+            </Text>
+          ) : null}
 
           <Text style={styles.security}>
             Por motivos de seguridad y para evitar fraudes, tus códigos QR son

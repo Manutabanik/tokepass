@@ -6,6 +6,7 @@ import { useState, useTransition } from "react"
 import { toast } from "sonner"
 
 import type { MyTicket } from "@/app/actions/tickets"
+import { WalletPassButtons } from "@/components/account/wallet-pass-buttons"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -21,13 +22,10 @@ export function SaveTicketButton({
   ticket,
   userId,
   disabled = false,
-  appleWalletEnabled = false,
-  googleWalletEnabled = false,
 }: {
   ticket: MyTicket
   userId: string
   disabled?: boolean
-  /** Solo true si el server tiene PassKit/certs reales + flag público. */
   appleWalletEnabled?: boolean
   googleWalletEnabled?: boolean
 }) {
@@ -53,6 +51,7 @@ export function SaveTicketButton({
       ticket.flyerUrl,
       `/tickets/${ticket.id}/print`,
       "/cuenta/entradas",
+      "/offline/billetera",
     ])
   }
 
@@ -105,43 +104,11 @@ export function SaveTicketButton({
               Descargar PDF
             </Button>
 
-            {appleWalletEnabled ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="h-12 justify-start rounded-2xl"
-                nativeButton={false}
-                render={
-                  <a href={`/api/tickets/${ticket.id}/apple-pass`} />
-                }
-                onClick={persistBeforePrint}
-              >
-                Apple Wallet
-              </Button>
-            ) : null}
-
-            {googleWalletEnabled ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="h-12 justify-start rounded-2xl"
-                nativeButton={false}
-                render={
-                  <a href={`/api/tickets/${ticket.id}/google-wallet`} />
-                }
-                onClick={persistBeforePrint}
-              >
-                Google Wallet
-              </Button>
-            ) : null}
+            <WalletPassButtons
+              ticketId={ticket.id}
+              flyerUrl={ticket.flyerUrl}
+            />
           </div>
-
-          {!appleWalletEnabled && !googleWalletEnabled ? (
-            <p className="text-[11px] leading-4 text-zinc-500">
-              Apple Wallet / Google Wallet no están configurados en este entorno.
-              Usá la billetera PWA o el PDF.
-            </p>
-          ) : null}
         </DialogContent>
       </Dialog>
     </>

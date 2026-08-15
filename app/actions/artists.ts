@@ -4,7 +4,13 @@ import { revalidatePath } from "next/cache"
 
 import {
   ARTIST_SEARCH_LIMIT,
+  EVENT_ARTISTS_LINEUP_SELECT,
+  EVENT_ARTISTS_LINEUP_SELECT_LEGACY,
+  EVENT_ARTISTS_LINEUP_SELECT_LEGACY_NO_PREVIEW,
+  EVENT_ARTISTS_LINEUP_SELECT_NO_PREVIEW,
   isArtistUuid,
+  isMissingHeadlinerColumn,
+  isMissingTopTrackColumn,
   mapArtistHit,
   mapLineupItem,
   normalizeArtistName,
@@ -20,6 +26,7 @@ import {
 } from "@/lib/artists"
 import { logger } from "@/lib/logger"
 import {
+  fetchArtistTopTrack,
   isSpotifyConfigured,
   searchSpotifyCatalog,
 } from "@/lib/spotify/client"
@@ -88,11 +95,94 @@ function revalidateLineup(eventId: string, slug?: string | null) {
   if (slug) revalidatePath(`/eventos/${slug}`)
 }
 
+const ARTIST_ROW_SELECT =
+  "id, name, image_url, spotify_id, top_track_preview_url, top_track_name"
+const ARTIST_ROW_SELECT_LEGACY = "id, name, image_url, spotify_id"
+
+async function selectArtistRow(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  filter: { column: string; value: string },
+) {
+  const withPreview = await supabase
+    .from("artists")
+    .select(ARTIST_ROW_SELECT)
+    .eq(filter.column, filter.value)
+    .maybeSingle()
+  if (!withPreview.error || !isMissingTopTrackColumn(withPreview.error.message)) {
+    return withPreview
+  }
+  return supabase
+    .from("artists")
+    .select(ARTIST_ROW_SELECT_LEGACY)
+    .eq(filter.column, filter.value)
+    .maybeSingle()
+}
+
+async function queryEventArtistsLineup(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  eventId: string,
+) {
+  const withPreview = await supabase
+    .from("event_artists")
+    .select(EVENT_ARTISTS_LINEUP_SELECT)
+    .eq("event_id", eventId)
+    .order("sort_order", { ascending: true })
+
+  if (!withPreview.error) return withPreview
+
+  if (isMissingTopTrackColumn(withPreview.error.message)) {
+    const noPreview = await supabase
+      .from("event_artists")
+      .select(EVENT_ARTISTS_LINEUP_SELECT_NO_PREVIEW)
+      .eq("event_id", eventId)
+      .order("sort_order", { ascending: true })
+    if (!noPreview.error || !isMissingHeadlinerColumn(noPreview.error.message)) {
+      return noPreview
+    }
+  }
+
+  if (isMissingHeadlinerColumn(withPreview.error.message)) {
+    const legacyPreview = await supabase
+      .from("event_artists")
+      .select(EVENT_ARTISTS_LINEUP_SELECT_LEGACY)
+      .eq("event_id", eventId)
+      .order("sort_order", { ascending: true })
+    if (
+      !legacyPreview.error ||
+      !isMissingTopTrackColumn(legacyPreview.error.message)
+    ) {
+      return legacyPreview
+    }
+  }
+
+  return supabase
+    .from("event_artists")
+    .select(EVENT_ARTISTS_LINEUP_SELECT_LEGACY_NO_PREVIEW)
+    .eq("event_id", eventId)
+    .order("sort_order", { ascending: true })
+}
+
+async function resolveTopTrack(input: {
+  spotifyId: string | null
+  previewUrl?: string | null
+  trackName?: string | null
+}) {
+  const pastedUrl = input.previewUrl?.trim() || null
+  const pastedName = input.trackName?.trim() || null
+  if (pastedUrl) {
+    return { previewUrl: pastedUrl, trackName: pastedName }
+  }
+  if (!input.spotifyId) {
+    return { previewUrl: null, trackName: pastedName }
+  }
+  return fetchArtistTopTrack(input.spotifyId)
+}
+
 export async function searchArtists(
-  query: string,
+  rawQuery: string,
 ): Promise<ArtistActionResult<ArtistSearchHit[]>> {
   try {
-    const needle = sanitizeArtistQuery(query)
+    const needle = sanitizeArtistQuery(rawQuery)
     if (needle.length < 2) {
       return { success: true, data: [] }
     }
@@ -100,16 +190,26 @@ export async function searchArtists(
     const supabase = await createClient()
     const { data, error } = await supabase
       .from("artists")
-      .select("id, name, image_url, spotify_id")
+      .select(ARTIST_ROW_SELECT)
       .ilike("name", `%${needle}%`)
       .order("name", { ascending: true })
       .limit(ARTIST_SEARCH_LIMIT)
 
-    if (error) {
+    const result =
+      error && isMissingTopTrackColumn(error.message)
+        ? await supabase
+            .from("artists")
+            .select(ARTIST_ROW_SELECT_LEGACY)
+            .ilike("name", `%${needle}%`)
+            .order("name", { ascending: true })
+            .limit(ARTIST_SEARCH_LIMIT)
+        : { data, error }
+
+    if (result.error) {
       logger.error({
         context: "artists",
         message: "search_artists_failed",
-        error,
+        error: result.error,
       })
       return {
         success: false,
@@ -118,7 +218,7 @@ export async function searchArtists(
       }
     }
 
-    return { success: true, data: (data ?? []).map(mapArtistHit) }
+    return { success: true, data: (result.data ?? []).map(mapArtistHit) }
   } catch (error) {
     logger.error({
       context: "artists",
@@ -180,6 +280,8 @@ export async function createArtist(data: {
   name: string
   imageUrl?: string
   spotifyId?: string
+  topTrackPreviewUrl?: string | null
+  topTrackName?: string | null
 }): Promise<ArtistActionResult<ArtistSearchHit>> {
   try {
     const access = await requireOrganizerSession()
@@ -195,20 +297,79 @@ export async function createArtist(data: {
       return { success: false, error: "La foto tiene que ser una URL http o https." }
     }
 
-    const spotifyId = normalizeSpotifyId(data.spotifyId)
+    const pastedPreview = normalizeOptionalUrl(data.topTrackPreviewUrl)
+    if (pastedPreview === undefined) {
+      return {
+        success: false,
+        error: "La muestra de audio tiene que ser una URL http o https.",
+      }
+    }
 
-    const { data: row, error } = await access.supabase
+    const spotifyId = normalizeSpotifyId(data.spotifyId)
+    const topTrack = await resolveTopTrack({
+      spotifyId,
+      previewUrl: pastedPreview,
+      trackName: data.topTrackName,
+    })
+
+    const payload = {
+      name,
+      image_url: imageUrl,
+      spotify_id: spotifyId,
+      top_track_preview_url: topTrack.previewUrl,
+      top_track_name: topTrack.trackName,
+    }
+
+    let inserted = await access.supabase
       .from("artists")
-      .insert({
-        name,
-        image_url: imageUrl,
-        spotify_id: spotifyId,
-      })
-      .select("id, name, image_url, spotify_id")
+      .insert(payload as never)
+      .select(ARTIST_ROW_SELECT)
       .single()
 
-    if (error) {
-      if (error.code === "23505") {
+    if (inserted.error && isMissingTopTrackColumn(inserted.error.message)) {
+      inserted = await access.supabase
+        .from("artists")
+        .insert({
+          name,
+          image_url: imageUrl,
+          spotify_id: spotifyId,
+        } as never)
+        .select(ARTIST_ROW_SELECT_LEGACY)
+        .single()
+    }
+
+    if (inserted.error) {
+      if (inserted.error.code === "23505") {
+        const existing = spotifyId
+          ? await selectArtistRow(access.supabase, {
+              column: "spotify_id",
+              value: spotifyId,
+            })
+          : { data: null, error: inserted.error }
+        if (existing.data) {
+          const row = existing.data as {
+            id: string
+            top_track_preview_url?: string | null
+          }
+          if (!row.top_track_preview_url && (topTrack.previewUrl || spotifyId)) {
+            await access.supabase
+              .from("artists")
+              .update({
+                top_track_preview_url: topTrack.previewUrl,
+                top_track_name: topTrack.trackName,
+                updated_at: new Date().toISOString(),
+              } as never)
+              .eq("id", row.id)
+            const refreshed = await selectArtistRow(access.supabase, {
+              column: "id",
+              value: row.id,
+            })
+            if (refreshed.data) {
+              return { success: true, data: mapArtistHit(refreshed.data) }
+            }
+          }
+          return { success: true, data: mapArtistHit(existing.data) }
+        }
         return {
           success: false,
           error: "Ya existe un artista con ese identificador de Spotify.",
@@ -217,12 +378,12 @@ export async function createArtist(data: {
       logger.error({
         context: "artists",
         message: "create_artist_failed",
-        error,
+        error: inserted.error,
       })
       return { success: false, error: "No se pudo crear el artista." }
     }
 
-    return { success: true, data: mapArtistHit(row) }
+    return { success: true, data: mapArtistHit(inserted.data) }
   } catch (error) {
     logger.error({
       context: "artists",
@@ -230,6 +391,61 @@ export async function createArtist(data: {
       error,
     })
     return { success: false, error: "No se pudo crear el artista." }
+  }
+}
+
+export async function updateArtistAudioPreview(input: {
+  artistId: string
+  previewUrl?: string | null
+  trackName?: string | null
+}): Promise<ArtistActionResult<ArtistSearchHit>> {
+  try {
+    const access = await requireOrganizerSession()
+    if (!access.ok) return { success: false, error: access.error }
+    if (!isArtistUuid(input.artistId)) {
+      return { success: false, error: "Artista inválido." }
+    }
+
+    const previewUrl = normalizeOptionalUrl(input.previewUrl)
+    if (previewUrl === undefined) {
+      return {
+        success: false,
+        error: "La muestra de audio tiene que ser una URL http o https.",
+      }
+    }
+    const trackName = input.trackName?.trim() || null
+
+    const { data, error } = await access.supabase
+      .from("artists")
+      .update({
+        top_track_preview_url: previewUrl,
+        top_track_name: trackName,
+        updated_at: new Date().toISOString(),
+      } as never)
+      .eq("id", input.artistId)
+      .select(ARTIST_ROW_SELECT)
+      .maybeSingle()
+
+    if (error) {
+      if (isMissingTopTrackColumn(error.message)) {
+        return {
+          success: false,
+          error:
+            "Todavía no se puede guardar la muestra de audio. Actualizá la base de datos e intentá de nuevo.",
+        }
+      }
+      return { success: false, error: "No se pudo guardar la muestra de audio." }
+    }
+    if (!data) return { success: false, error: "Artista no encontrado." }
+
+    return { success: true, data: mapArtistHit(data) }
+  } catch (error) {
+    logger.error({
+      context: "artists",
+      message: "update_artist_preview_unexpected",
+      error,
+    })
+    return { success: false, error: "No se pudo guardar la muestra de audio." }
   }
 }
 
@@ -247,11 +463,10 @@ export async function addArtistToLineup(
     const access = await requireEventOrganizer(eventId)
     if (!access.ok) return { success: false, error: access.error }
 
-    const { data: artist, error: artistError } = await access.supabase
-      .from("artists")
-      .select("id, name, image_url, spotify_id")
-      .eq("id", artistId)
-      .maybeSingle()
+    const { data: artist, error: artistError } = await selectArtistRow(
+      access.supabase,
+      { column: "id", value: artistId },
+    )
 
     if (artistError || !artist) {
       return { success: false, error: "Artista no encontrado." }
@@ -326,25 +541,19 @@ export async function getEventLineup(
     }
 
     const supabase = await createClient()
-    const { data, error } = await supabase
-      .from("event_artists")
-      .select(
-        "id, event_id, artist_id, performance_time, stage, sort_order, artists(id, name, image_url, spotify_id)",
-      )
-      .eq("event_id", eventId)
-      .order("sort_order", { ascending: true })
+    const query = await queryEventArtistsLineup(supabase, eventId)
 
-    if (error) {
+    if (query.error) {
       logger.error({
         context: "artists",
         message: "get_event_lineup_failed",
         event_id: eventId,
-        error,
+        error: query.error,
       })
       return { success: false, error: "No se pudo cargar la grilla de artistas." }
     }
 
-    return { success: true, data: (data ?? []).map(mapLineupItem) }
+    return { success: true, data: (query.data ?? []).map(mapLineupItem) }
   } catch (error) {
     logger.error({
       context: "artists",
@@ -426,14 +635,26 @@ export async function persistEventLineupSnapshot(
     const ordered = lineup.map((item, index) => ({ ...item, order: index }))
     for (const item of ordered) {
       if (!item.lineupEntryId || !isArtistUuid(item.lineupEntryId)) continue
-      await access.supabase
+      const base = {
+        sort_order: item.order,
+        stage: item.stage?.trim() || null,
+      }
+      const { error: rowError } = await access.supabase
         .from("event_artists")
         .update({
-          sort_order: item.order,
-          stage: item.stage?.trim() || null,
+          ...base,
+          is_headliner: Boolean(item.isHeadliner),
         })
         .eq("id", item.lineupEntryId)
         .eq("event_id", access.event.id)
+
+      if (rowError && isMissingHeadlinerColumn(rowError.message)) {
+        await access.supabase
+          .from("event_artists")
+          .update(base)
+          .eq("id", item.lineupEntryId)
+          .eq("event_id", access.event.id)
+      }
     }
 
     revalidateLineup(access.event.id, access.event.slug)

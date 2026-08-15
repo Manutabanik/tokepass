@@ -15,14 +15,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import type { CatalogEvent } from "@/app/actions/public-events"
 import {
   DEFAULT_DISCOVERY_CATEGORIES,
   findCategory,
   type DiscoveryCategory,
 } from "@/lib/discovery-categories"
+import type { FeaturedDiscoveryArtist } from "@/lib/discovery-artists"
+import type {
+  DiscoveryDatePreset,
+  DiscoveryFilterDraft,
+} from "@/lib/discovery-filters"
+import { datePresetLabel } from "@/lib/discovery-filters"
 import { cn } from "@/lib/utils"
 
 type SearchBarProps = {
+  events: CatalogEvent[]
   query: string
   onQueryChange: (value: string) => void
   city: string
@@ -33,8 +41,11 @@ type SearchBarProps = {
   onCategoryChange: (value: string) => void
   tagId: string | null
   onTagChange: (value: string | null) => void
+  selectedArtistId?: string
+  datePreset?: DiscoveryDatePreset
+  featuredArtists?: FeaturedDiscoveryArtist[]
   categories?: DiscoveryCategory[]
-  resultCount: number
+  onCommitFilters: (draft: DiscoveryFilterDraft) => void
 }
 
 function scrollToResults() {
@@ -52,6 +63,7 @@ function locationLabel(city: string, cities: string[]): string {
 }
 
 export function SearchBar({
+  events,
   query,
   onQueryChange,
   city,
@@ -62,23 +74,31 @@ export function SearchBar({
   onCategoryChange,
   tagId,
   onTagChange,
+  selectedArtistId = "",
+  datePreset = "all",
+  featuredArtists = [],
   categories = DEFAULT_DISCOVERY_CATEGORIES,
-  resultCount,
+  onCommitFilters,
 }: SearchBarProps) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const reduceMotion = useReducedMotion()
 
   const category = findCategory(categories, categoryId)
   const cityLabel = locationLabel(city, cities)
+  const selectedArtistName =
+    featuredArtists.find((artist) => artist.id === selectedArtistId)?.name ??
+    null
 
   const mobileSummary = useMemo(() => {
     const parts = [
       category && category.id !== "all" ? category.label : null,
+      selectedArtistName,
       city !== "todas" ? cityLabel : null,
+      datePreset !== "all" ? datePresetLabel(datePreset) : null,
       query.trim() || null,
     ].filter(Boolean)
     return parts.length ? parts.join(" · ") : "Buscar filtros"
-  }, [category, city, cityLabel, query])
+  }, [category, city, cityLabel, datePreset, query, selectedArtistName])
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -111,18 +131,18 @@ export function SearchBar({
       <MobileFilterSheet
         open={mobileOpen}
         onOpenChange={setMobileOpen}
+        events={events}
         query={query}
-        onQueryChange={onQueryChange}
         city={city}
         cities={cities}
-        onCityChange={onCityChange}
         locationsLoading={locationsLoading}
         categoryId={categoryId}
-        onCategoryChange={onCategoryChange}
         tagId={tagId}
-        onTagChange={onTagChange}
+        selectedArtistId={selectedArtistId}
+        datePreset={datePreset}
+        featuredArtists={featuredArtists}
         categories={categories}
-        resultCount={resultCount}
+        onCommit={onCommitFilters}
         onApply={scrollToResults}
       />
 

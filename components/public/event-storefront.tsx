@@ -270,6 +270,12 @@ export function EventStorefront({
               onChange={setSelectedDate}
             />
             </motion.div>
+            <motion.div
+              variants={reduceMotion ? undefined : storefrontFade}
+              className="px-4 md:px-0"
+            >
+              <EventLineup data={event.lineup} />
+            </motion.div>
         </motion.div>
 
         {finished ? (
@@ -335,8 +341,6 @@ export function EventStorefront({
           className="min-w-0 space-y-8 px-4 pb-6 md:px-0 lg:col-span-7 lg:col-start-1 xl:col-span-8"
           variants={reduceMotion ? undefined : storefrontFade}
         >
-            <EventLineup data={event.lineup} />
-
             <EventResaleListings
               listings={resaleListings}
               currentUserId={currentUserId}

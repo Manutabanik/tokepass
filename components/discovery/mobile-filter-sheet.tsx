@@ -1,13 +1,21 @@
 "use client"
 
 import {
+  ChevronDown,
   MapPin,
   Search,
   Sparkles,
   X,
 } from "lucide-react"
-import { useEffect, useMemo, useRef } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
+import { ArtistAvatar } from "@/components/shared/artist-avatar"
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 import {
   Sheet,
   SheetContent,
@@ -15,31 +23,47 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
+import { useDebounce } from "@/hooks/use-debounce"
 import { resolveCategoryIcon } from "@/lib/category-icons"
+import type { CatalogEvent } from "@/app/actions/public-events"
+import type { FeaturedDiscoveryArtist } from "@/lib/discovery-artists"
 import {
   DEFAULT_DISCOVERY_CATEGORIES,
   findCategory,
   type DiscoveryCategory,
 } from "@/lib/discovery-categories"
+import {
+  DISCOVERY_DATE_PRESETS,
+  datePresetLabel,
+  filterCatalogEvents,
+  provinceChipLabel,
+  type DiscoveryDatePreset,
+  type DiscoveryFilterDraft,
+} from "@/lib/discovery-filters"
 import { cn } from "@/lib/utils"
 
 type MobileFilterSheetProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
+  events: CatalogEvent[]
   query: string
-  onQueryChange: (value: string) => void
   city: string
   cities: string[]
-  onCityChange: (value: string) => void
   locationsLoading?: boolean
   categoryId: string
-  onCategoryChange: (value: string) => void
   tagId: string | null
-  onTagChange: (value: string | null) => void
+  selectedArtistId: string
+  datePreset: DiscoveryDatePreset
+  featuredArtists?: FeaturedDiscoveryArtist[]
   categories?: DiscoveryCategory[]
-  resultCount: number
+  onCommit: (draft: DiscoveryFilterDraft) => void
   onApply: () => void
 }
+
+const triggerClassName = cn(
+  "items-center py-3.5 hover:no-underline",
+  "[&_[data-slot=accordion-trigger-icon]]:hidden",
+)
 
 /**
  * Modal fullscreen en mobile: evita que el teclado virtual colapse
@@ -48,35 +72,107 @@ type MobileFilterSheetProps = {
 export function MobileFilterSheet({
   open,
   onOpenChange,
+  events,
   query,
-  onQueryChange,
   city,
   cities,
-  onCityChange,
   locationsLoading = false,
   categoryId,
-  onCategoryChange,
   tagId,
-  onTagChange,
+  selectedArtistId,
+  datePreset,
+  featuredArtists = [],
   categories = DEFAULT_DISCOVERY_CATEGORIES,
-  resultCount,
+  onCommit,
   onApply,
 }: MobileFilterSheetProps) {
-  const inputRef = useRef<HTMLInputElement>(null)
+  const [draft, setDraft] = useState<DiscoveryFilterDraft>(() => ({
+    query,
+    categoryId,
+    tagId,
+    city,
+    artistId: selectedArtistId,
+    datePreset,
+  }))
+  const [artistSearch, setArtistSearch] = useState("")
+  const wasOpen = useRef(false)
+
+  useEffect(() => {
+    if (open && !wasOpen.current) {
+      setDraft({
+        query,
+        categoryId,
+        tagId,
+        city,
+        artistId: selectedArtistId,
+        datePreset,
+      })
+      setArtistSearch("")
+    }
+    wasOpen.current = open
+  }, [open, query, categoryId, tagId, city, selectedArtistId, datePreset])
+
+  const debouncedQuery = useDebounce(draft.query, 200)
+  const debouncedArtistSearch = useDebounce(artistSearch, 200)
+
+  const resultCount = useMemo(
+    () =>
+      filterCatalogEvents(events, {
+        query: debouncedQuery,
+        categoryId: draft.categoryId,
+        tagId: draft.tagId,
+        city: draft.city,
+        artistId: draft.artistId,
+        datePreset: draft.datePreset,
+        categories,
+      }).length,
+    [events, debouncedQuery, draft, categories],
+  )
+
   const activeCategory = useMemo(
-    () => findCategory(categories, categoryId),
-    [categories, categoryId],
+    () => findCategory(categories, draft.categoryId),
+    [categories, draft.categoryId],
   )
   const subTags = activeCategory?.tags ?? []
+  const selectedArtist = featuredArtists.find(
+    (artist) => artist.id === draft.artistId,
+  )
+  const visibleArtists = useMemo(() => {
+    const needle = debouncedArtistSearch.trim().toLowerCase()
+    const filtered = needle
+      ? featuredArtists.filter((artist) =>
+          artist.name.toLowerCase().includes(needle),
+        )
+      : featuredArtists
+    if (
+      selectedArtist &&
+      !filtered.some((artist) => artist.id === selectedArtist.id)
+    ) {
+      return [selectedArtist, ...filtered]
+    }
+    return filtered
+  }, [debouncedArtistSearch, featuredArtists, selectedArtist])
 
   const countLabel =
     resultCount === 1 ? "Mostrar 1 evento" : `Mostrar ${resultCount} eventos`
 
-  useEffect(() => {
-    if (!open) return
-    const id = window.setTimeout(() => inputRef.current?.focus(), 80)
-    return () => window.clearTimeout(id)
-  }, [open])
+  const categoryBadge =
+    activeCategory && activeCategory.id !== "all" ? activeCategory.label : null
+  const artistBadge = selectedArtist?.name ?? null
+  const locationBadge =
+    draft.city && draft.city !== "todas" ? provinceChipLabel(draft.city) : null
+  const dateBadge =
+    draft.datePreset !== "all" ? datePresetLabel(draft.datePreset) : null
+
+  function patchDraft(partial: Partial<DiscoveryFilterDraft>) {
+    setDraft((current) => ({ ...current, ...partial }))
+  }
+
+  function commitAndClose() {
+    onCommit(draft)
+    onApply()
+    onOpenChange(false)
+  }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -84,25 +180,24 @@ export function MobileFilterSheet({
         side="bottom"
         showCloseButton={false}
         className={cn(
-          "inset-0 h-dvh max-h-none w-full gap-0 rounded-none border-0 p-0",
-          "bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100",
+          "inset-0 h-dvh max-h-none w-full gap-0 rounded-none border-0 bg-background p-0 text-foreground",
           "data-open:slide-in-from-bottom data-closed:slide-out-to-bottom",
         )}
       >
-        <SheetHeader className="shrink-0 border-b border-zinc-200/80 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] text-left dark:border-white/10 sm:px-5">
+        <SheetHeader className="shrink-0 border-b border-border/20 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] text-left sm:px-5">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <SheetTitle className="text-lg font-semibold text-zinc-900 dark:text-white">
+              <SheetTitle className="text-lg font-semibold text-foreground">
                 Buscar y filtrar
               </SheetTitle>
-              <SheetDescription className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+              <SheetDescription className="mt-1 text-sm text-muted-foreground">
                 Elegí qué querés hacer y dónde.
               </SheetDescription>
             </div>
             <button
               type="button"
               onClick={() => onOpenChange(false)}
-              className="grid size-11 shrink-0 place-items-center rounded-full text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/10 dark:hover:text-white"
+              className="grid size-11 shrink-0 place-items-center rounded-full text-muted-foreground transition hover:bg-secondary hover:text-foreground"
               aria-label="Cerrar filtros"
             >
               <X className="size-5" aria-hidden="true" />
@@ -110,138 +205,302 @@ export function MobileFilterSheet({
           </div>
         </SheetHeader>
 
-        <div className="min-h-0 flex-1 space-y-7 overflow-y-auto overscroll-contain px-4 py-5 pb-28 sm:px-5">
-          <label className="block space-y-2">
-            <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-              Buscar
-            </span>
-            <span className="flex min-h-12 items-center gap-3 rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
-              <Search
-                className="size-4 shrink-0 text-zinc-400"
-                aria-hidden="true"
-              />
-              <input
-                ref={inputRef}
-                type="search"
-                value={query}
-                onChange={(event) => onQueryChange(event.target.value)}
-                placeholder="Buscar evento o artista..."
-                enterKeyHint="search"
-                autoComplete="off"
-                autoCorrect="off"
-                className="min-w-0 flex-1 border-0 bg-transparent text-base text-zinc-900 outline-none placeholder:text-zinc-400 dark:text-white dark:placeholder:text-zinc-500"
-              />
-            </span>
-          </label>
-
-          <div className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-              Categoría
-            </p>
-            <div
-              className="grid grid-cols-2 gap-2.5"
-              role="listbox"
-              aria-label="Categorías"
-            >
-              {categories.map((item) => {
-                const Icon =
-                  resolveCategoryIcon(item.iconName ?? item.icon) ?? Sparkles
-                const active = categoryId === item.id
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    role="option"
-                    aria-selected={active}
-                    onClick={() => {
-                      onCategoryChange(item.id)
-                      onTagChange(null)
-                    }}
-                    className={cn(
-                      "flex min-h-14 items-center gap-2.5 rounded-2xl border px-3.5 py-3 text-left text-sm font-medium transition",
-                      active
-                        ? "border-violet-500/50 bg-violet-500/10 text-violet-800 dark:border-violet-400/40 dark:bg-violet-500/15 dark:text-violet-100"
-                        : "border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 hover:bg-zinc-50 dark:border-white/10 dark:bg-white/[0.03] dark:text-zinc-200 dark:hover:bg-white/[0.06]",
-                    )}
-                  >
-                    <Icon className="size-4 shrink-0 opacity-80" aria-hidden />
-                    <span className="leading-snug">{item.label}</span>
-                  </button>
-                )
-              })}
-            </div>
-
-            {subTags.length > 0 ? (
-              <div className="flex gap-2 overflow-x-auto pb-1 pt-1 scrollbar-none">
-                {subTags.map((tag) => {
-                  const active = tagId === tag.id
-                  return (
-                    <button
-                      key={tag.id}
-                      type="button"
-                      onClick={() => onTagChange(active ? null : tag.id)}
-                      className={cn(
-                        "inline-flex min-h-11 shrink-0 items-center rounded-full border px-3.5 text-sm font-medium transition",
-                        active
-                          ? "border-violet-500/50 bg-violet-600 text-white dark:bg-violet-500"
-                          : "border-zinc-200 bg-zinc-50 text-zinc-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300",
-                      )}
-                    >
-                      {tag.label}
-                    </button>
-                  )
-                })}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-              Ubicación
-            </p>
-            {locationsLoading && cities.length === 0 ? (
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                Cargando provincias…
-              </p>
-            ) : (
-              <div className="flex max-h-48 flex-wrap gap-2 overflow-y-auto pb-1">
-                <LocationChip
-                  active={city === "todas"}
-                  label="Todas las ubicaciones"
-                  onClick={() => onCityChange("todas")}
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-5 pb-24 sm:px-5">
+            <label className="mb-5 block space-y-2">
+              <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                Buscar
+              </span>
+              <span className="flex min-h-12 items-center gap-3 rounded-2xl border border-border/50 bg-secondary/40 px-4 py-3">
+                <Search
+                  className="size-4 shrink-0 text-muted-foreground"
+                  aria-hidden="true"
                 />
-                {cities.map((item) => (
-                  <LocationChip
-                    key={item}
-                    active={city.toLowerCase() === item.toLowerCase()}
-                    label={item}
-                    onClick={() => onCityChange(item)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+                <input
+                  type="search"
+                  value={draft.query}
+                  onChange={(event) => patchDraft({ query: event.target.value })}
+                  placeholder="Buscar evento o artista..."
+                  enterKeyHint="search"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  className="min-w-0 flex-1 border-0 bg-transparent text-base text-foreground outline-none placeholder:text-muted-foreground"
+                />
+              </span>
+            </label>
 
-        <div className="absolute inset-x-0 bottom-0 border-t border-zinc-200/80 bg-white/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md dark:border-white/10 dark:bg-zinc-950/95">
-          <button
-            type="button"
-            onClick={() => {
-              onApply()
-              onOpenChange(false)
-            }}
-            className={cn(
-              "flex h-12 w-full items-center justify-center rounded-2xl text-base font-semibold text-white",
-              "bg-gradient-to-r from-violet-600 to-fuchsia-600",
-              "shadow-sm transition hover:from-violet-500 hover:to-fuchsia-500 hover:shadow-md",
-              "active:scale-[0.99]",
-            )}
-          >
-            {countLabel}
-          </button>
+            <Accordion
+              multiple
+              defaultValue={["category", "artists"]}
+              className="divide-y divide-border/40 rounded-2xl border border-border/40 bg-secondary/20 px-3"
+            >
+              <AccordionItem value="category" className="border-0">
+                <AccordionTrigger className={triggerClassName}>
+                  <FilterHeader title="Categoría" badge={categoryBadge} />
+                </AccordionTrigger>
+                <AccordionContent className="pb-4">
+                  <div
+                    className="grid grid-cols-2 gap-2.5"
+                    role="listbox"
+                    aria-label="Categorías"
+                  >
+                    {categories.map((item) => {
+                      const Icon =
+                        resolveCategoryIcon(item.iconName ?? item.icon) ??
+                        Sparkles
+                      const active = draft.categoryId === item.id
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          role="option"
+                          aria-selected={active}
+                          onClick={() =>
+                            patchDraft({
+                              categoryId: item.id,
+                              tagId: null,
+                            })
+                          }
+                          className={cn(
+                            "flex min-h-14 items-center gap-2.5 rounded-2xl border px-3.5 py-3 text-left text-sm font-medium transition",
+                            active
+                              ? "border-violet-500/50 bg-violet-500/10 text-violet-800 dark:border-violet-400/40 dark:bg-violet-500/15 dark:text-violet-100"
+                              : "border-border/50 bg-secondary/40 text-foreground hover:bg-secondary",
+                          )}
+                        >
+                          <Icon
+                            className="size-4 shrink-0 opacity-80"
+                            aria-hidden
+                          />
+                          <span className="leading-snug">{item.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {subTags.length > 0 ? (
+                    <div className="mt-3 flex gap-2 overflow-x-auto pt-1 pb-1 scrollbar-none">
+                      {subTags.map((tag) => {
+                        const active = draft.tagId === tag.id
+                        return (
+                          <button
+                            key={tag.id}
+                            type="button"
+                            onClick={() =>
+                              patchDraft({ tagId: active ? null : tag.id })
+                            }
+                            className={cn(
+                              "inline-flex min-h-11 shrink-0 items-center rounded-full border px-3.5 text-sm font-medium transition",
+                              active
+                                ? "border-violet-500/50 bg-violet-600 text-white dark:bg-violet-500"
+                                : "border-border/50 bg-secondary/40 text-foreground",
+                            )}
+                          >
+                            {tag.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ) : null}
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem value="artists" className="border-0">
+                <AccordionTrigger className={triggerClassName}>
+                  <FilterHeader
+                    title="Artistas destacados"
+                    badge={artistBadge}
+                  />
+                </AccordionTrigger>
+                <AccordionContent className="pb-4">
+                  <label className="mb-3 flex min-h-11 items-center gap-2 rounded-xl border border-border/50 bg-background/60 px-3">
+                    <Search
+                      className="size-3.5 shrink-0 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                    <input
+                      type="search"
+                      value={artistSearch}
+                      onChange={(event) => setArtistSearch(event.target.value)}
+                      placeholder="Buscar artista por nombre..."
+                      autoComplete="off"
+                      autoCorrect="off"
+                      className="min-w-0 flex-1 border-0 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                    />
+                  </label>
+                  {visibleArtists.length > 0 ? (
+                    <div
+                      className="flex flex-wrap gap-2 py-1"
+                      role="listbox"
+                      aria-label="Artistas destacados"
+                    >
+                      {visibleArtists.map((artist) => {
+                        const active = draft.artistId === artist.id
+                        return (
+                          <button
+                            key={artist.id}
+                            type="button"
+                            role="option"
+                            aria-selected={active}
+                            onClick={() =>
+                              patchDraft({
+                                artistId: active ? "" : artist.id,
+                              })
+                            }
+                            className={cn(
+                              "inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium whitespace-nowrap transition",
+                              active
+                                ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                                : "border-border/50 bg-secondary/40 text-foreground hover:bg-secondary",
+                            )}
+                          >
+                            <ArtistAvatar
+                              name={artist.name}
+                              imageUrl={artist.imageUrl}
+                              size="xs"
+                              className="h-7 w-7 rounded-full object-cover"
+                            />
+                            <span className="max-w-[9rem] truncate">
+                              {artist.name}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      {featuredArtists.length === 0
+                        ? "Todavía no hay artistas con eventos activos."
+                        : "No se encontraron artistas coincidentes."}
+                    </p>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem value="location" className="border-0">
+                <AccordionTrigger className={triggerClassName}>
+                  <FilterHeader
+                    title="Ubicación por provincia"
+                    badge={locationBadge}
+                  />
+                </AccordionTrigger>
+                <AccordionContent className="pb-4">
+                  {locationsLoading && cities.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Cargando provincias…
+                    </p>
+                  ) : (
+                    <div
+                      className="flex flex-wrap gap-2 pb-1"
+                      role="listbox"
+                      aria-label="Provincias"
+                    >
+                      <LocationChip
+                        active={draft.city === "todas"}
+                        label="Todas las provincias"
+                        onClick={() => patchDraft({ city: "todas" })}
+                      />
+                      {cities.map((item) => (
+                        <LocationChip
+                          key={item}
+                          active={
+                            draft.city.toLowerCase() === item.toLowerCase()
+                          }
+                          label={provinceChipLabel(item)}
+                          onClick={() =>
+                            patchDraft({
+                              city:
+                                draft.city.toLowerCase() === item.toLowerCase()
+                                  ? "todas"
+                                  : item,
+                            })
+                          }
+                        />
+                      ))}
+                    </div>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem value="date" className="border-0">
+                <AccordionTrigger className={triggerClassName}>
+                  <FilterHeader title="Fecha" badge={dateBadge} />
+                </AccordionTrigger>
+                <AccordionContent className="pb-4">
+                  <div
+                    className="flex flex-wrap gap-2"
+                    role="listbox"
+                    aria-label="Fecha"
+                  >
+                    {DISCOVERY_DATE_PRESETS.map((item) => {
+                      const active = draft.datePreset === item.id
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          role="option"
+                          aria-selected={active}
+                          onClick={() =>
+                            patchDraft({
+                              datePreset: active && item.id !== "all" ? "all" : item.id,
+                            })
+                          }
+                          className={cn(
+                            "inline-flex min-h-11 shrink-0 items-center rounded-full border px-3.5 text-sm font-medium transition",
+                            active
+                              ? "border-violet-500/50 bg-violet-500/10 text-violet-800 dark:border-violet-400/40 dark:bg-violet-500/15 dark:text-violet-100"
+                              : "border-border/50 bg-secondary/40 text-foreground hover:bg-secondary",
+                          )}
+                        >
+                          {item.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </div>
+
+          <div className="sticky bottom-0 left-0 z-20 w-full border-t border-border/20 bg-gradient-to-t from-background via-background/95 to-transparent px-6 pt-6 pb-4 backdrop-blur-md">
+            <button
+              type="button"
+              onClick={commitAndClose}
+              className={cn(
+                "flex h-12 w-full items-center justify-center rounded-2xl text-base font-semibold text-white",
+                "bg-gradient-to-r from-violet-600 to-fuchsia-600",
+                "shadow-sm transition hover:from-violet-500 hover:to-fuchsia-500 hover:shadow-md",
+                "mb-[max(0px,env(safe-area-inset-bottom))] active:scale-[0.99]",
+              )}
+            >
+              {countLabel}
+            </button>
+          </div>
         </div>
       </SheetContent>
     </Sheet>
+  )
+}
+
+function FilterHeader({
+  title,
+  badge,
+}: {
+  title: string
+  badge?: string | null
+}) {
+  return (
+    <span className="flex min-w-0 flex-1 items-center gap-2 pr-2">
+      <span className="text-sm font-bold text-foreground">{title}</span>
+      {badge ? (
+        <span className="max-w-[9rem] truncate rounded-full bg-violet-500/15 px-2 py-0.5 text-[11px] font-semibold text-violet-800 group-aria-expanded/accordion-trigger:hidden dark:text-violet-100">
+          {badge}
+        </span>
+      ) : null}
+      <ChevronDown
+        className="ml-auto size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-aria-expanded/accordion-trigger:rotate-180"
+        aria-hidden="true"
+      />
+    </span>
   )
 }
 
@@ -262,7 +521,7 @@ function LocationChip({
         "inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition",
         active
           ? "border-violet-500/50 bg-violet-500/10 text-violet-800 dark:border-violet-400/40 dark:bg-violet-500/15 dark:text-violet-100"
-          : "border-zinc-200 bg-white text-zinc-700 dark:border-white/10 dark:bg-white/[0.03] dark:text-zinc-300",
+          : "border-border/50 bg-secondary/40 text-foreground hover:bg-secondary",
       )}
     >
       <MapPin className="size-3.5 shrink-0 opacity-70" aria-hidden="true" />

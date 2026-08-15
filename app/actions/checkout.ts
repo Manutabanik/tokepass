@@ -30,6 +30,16 @@ import { PaymentGatewayFactory } from "@/lib/payments/core/factory"
 import type { SupportedPaymentProvider } from "@/lib/payments/core/interfaces"
 import { buildCheckoutBackUrls } from "@/lib/payments/mercadopago"
 import { consumeRateLimit } from "@/lib/rate-limit"
+import { getCheckoutRequestContext } from "@/lib/checkout/request-context"
+import {
+  CHECKOUT_BUSY_ERROR,
+  assertGuestTicketCap,
+  checkoutFailuresBlocked,
+  persistCheckoutSecurityEvent,
+  persistOrderCustomerPhone,
+  persistOrderGuestToken,
+  recordCheckoutFailure,
+} from "@/lib/checkout/server-guards"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import type { PaymentProvider } from "@/types/database"
@@ -614,6 +624,11 @@ export async function reserveSeatAtomic(
   buyer?: CheckoutBuyerInfo | null,
   promoCodeId?: string | null,
   paymentProvider?: SupportedPaymentProvider,
+  security?: {
+    captchaToken?: string | null
+    deviceHash?: string | null
+    dwellMs?: number | null
+  },
 ): Promise<CheckoutResult> {
   const parsed = CheckoutPayloadSchema.safeParse({
     eventId,
@@ -678,7 +693,7 @@ export async function reserveSeatAtomic(
     [],
     buyerToHolderFields(parsed.data.buyer),
     parsed.data.promoCodeId,
-    { paymentProvider: parsed.data.paymentProvider },
+    { paymentProvider: parsed.data.paymentProvider, ...security },
   )
 
   if (!result.success && result.error === "out_of_stock") {
@@ -745,8 +760,16 @@ export async function startCheckoutWithPayment(
   options?: {
     sandbox?: boolean
     paymentProvider?: SupportedPaymentProvider
+    captchaToken?: string | null
+    deviceHash?: string | null
+    dwellMs?: number | null
   },
 ): Promise<CheckoutResult> {
+  const ctx = await getCheckoutRequestContext()
+  if (await checkoutFailuresBlocked(ctx)) {
+    return { success: false, error: CHECKOUT_BUSY_ERROR }
+  }
+
   const parsed = CheckoutPayloadSchema.safeParse({
     eventId,
     items,
@@ -763,6 +786,7 @@ export async function startCheckoutWithPayment(
     paymentProvider: options?.paymentProvider,
   })
   if (!parsed.success) {
+    await recordCheckoutFailure(ctx)
     return { success: false, error: formatCheckoutPayloadError(parsed.error) }
   }
 
@@ -772,6 +796,7 @@ export async function startCheckoutWithPayment(
   const seatingItems = cartItems.filter(
     (item) => item.seatingUnitId || (item.seatingIds?.length ?? 0) > 0,
   )
+  const cartQuantity = cartItems.reduce((sum, item) => sum + item.quantity, 0)
 
   const supabase = await createClient()
   const {
@@ -800,7 +825,7 @@ export async function startCheckoutWithPayment(
   const [{ data: eventRow }, { data: eventTiers }] = await Promise.all([
     supabase
       .from("events")
-      .select("date, ends_at, schedule_days, title")
+      .select("date, ends_at, schedule_days, title, max_tickets_per_user")
       .eq("id", payload.eventId)
       .maybeSingle(),
     supabase
@@ -822,6 +847,18 @@ export async function startCheckoutWithPayment(
 
   if (isSoldOut({ tiers: eventTiers })) {
     return { success: false, error: EVENT_SOLD_OUT_ERROR }
+  }
+
+  const identityCap = await assertGuestTicketCap({
+    eventId: payload.eventId,
+    dni: buyer.buyerDni,
+    email: buyer.buyerEmail,
+    quantity: cartQuantity,
+    maxTicketsPerUser: eventRow?.max_tickets_per_user,
+  })
+  if (!identityCap.ok) {
+    await recordCheckoutFailure(ctx)
+    return { success: false, error: identityCap.error }
   }
 
   // Progressive profiling: DNI + teléfono permanentes en el perfil.
@@ -1011,8 +1048,23 @@ export async function startCheckoutWithPayment(
     })
     if (!holderApplied.ok) {
       await cleanupPendingOrder(orderId)
+      await recordCheckoutFailure(ctx)
       return { success: false, error: holderApplied.error }
     }
+
+    await persistOrderCustomerPhone({
+      orderId,
+      phone: buyer.buyerPhone,
+    })
+    await persistOrderGuestToken(orderId)
+    await persistCheckoutSecurityEvent({
+      orderId,
+      eventId: payload.eventId,
+      buyerId: user.id,
+      ctx,
+      deviceHash: options?.deviceHash,
+      dwellMs: options?.dwellMs,
+    })
 
     if (payload.addons.length > 0) {
       const { error: addonsError } = await supabase.rpc(

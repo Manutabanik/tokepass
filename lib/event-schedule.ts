@@ -12,22 +12,161 @@ export function normalizeDayId(
   return String(dayId).trim() || null
 }
 
+const DATETIME_LOCAL_RE =
+  /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/
+
+export type ScheduleDayFormValue = {
+  id: string
+  title: string
+  startTime: string
+  endTime: string
+}
+
+export function parseDateTimeLocal(value: string): Date | null {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  if (/[zZ]$/.test(trimmed) || /[+-]\d{2}:\d{2}$/.test(trimmed)) {
+    const parsed = new Date(trimmed)
+    return Number.isNaN(parsed.getTime()) ? null : parsed
+  }
+  const match = DATETIME_LOCAL_RE.exec(trimmed)
+  if (match) {
+    const date = new Date(
+      Number(match[1]),
+      Number(match[2]) - 1,
+      Number(match[3]),
+      Number(match[4]),
+      Number(match[5]),
+      Number(match[6] ?? 0),
+    )
+    return Number.isNaN(date.getTime()) ? null : date
+  }
+  const parsed = new Date(trimmed)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+export function toDatetimeLocalInput(value: string | Date): string {
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return ""
+
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  })
+    .format(date)
+    .replace(" ", "T")
+}
+
+export function newScheduleDayId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID()
+  }
+  return `day-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function readScheduleDayField(
+  row: Record<string, unknown>,
+  ...keys: string[]
+): string {
+  for (const key of keys) {
+    const value = row[key]
+    if (typeof value === "string" && value.trim()) return value.trim()
+  }
+  return ""
+}
+
 export function parseScheduleDays(raw: unknown): ScheduleDay[] {
+  if (typeof raw === "string") {
+    try {
+      return parseScheduleDays(JSON.parse(raw) as unknown)
+    } catch {
+      return []
+    }
+  }
   if (!Array.isArray(raw)) return []
   const days: ScheduleDay[] = []
   for (const item of raw) {
     if (!item || typeof item !== "object") continue
     const row = item as Record<string, unknown>
-    const id = String(row.id ?? "").trim()
-    const title = String(row.title ?? "").trim()
-    const start = String(row.start_time ?? "").trim()
-    const end = String(row.end_time ?? "").trim()
-    if (!id || !title || !start || !end) continue
-    if (Number.isNaN(new Date(start).getTime())) continue
-    if (Number.isNaN(new Date(end).getTime())) continue
-    days.push({ id, title, start_time: start, end_time: end })
+    const startRaw = readScheduleDayField(row, "start_time", "startTime")
+    const endRaw = readScheduleDayField(row, "end_time", "endTime")
+    const start = parseDateTimeLocal(startRaw) ?? new Date(startRaw)
+    const end = parseDateTimeLocal(endRaw) ?? new Date(endRaw)
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) continue
+    if (end.getTime() <= start.getTime()) continue
+    const title =
+      readScheduleDayField(row, "title", "name", "label") ||
+      `Día ${days.length + 1}`
+    const id = readScheduleDayField(row, "id") || newScheduleDayId()
+    days.push({
+      id,
+      title,
+      start_time: start.toISOString(),
+      end_time: end.toISOString(),
+    })
   }
-  return days
+  return days.sort(
+    (a, b) =>
+      new Date(a.start_time).getTime() - new Date(b.start_time).getTime(),
+  )
+}
+
+export function scheduleDaysToFormValues(
+  days: ScheduleDay[],
+): ScheduleDayFormValue[] {
+  return days.map((day) => ({
+    id: day.id,
+    title: day.title,
+    startTime: toDatetimeLocalInput(day.start_time),
+    endTime: toDatetimeLocalInput(day.end_time),
+  }))
+}
+
+export function normalizeScheduleDaysFromForm(
+  days: Array<Partial<ScheduleDayFormValue> | ScheduleDay | null | undefined>,
+): ScheduleDay[] {
+  return parseScheduleDays(
+    days.map((day) => {
+      if (!day) return null
+      const row = day as Record<string, unknown>
+      return {
+        id: row.id,
+        title: row.title,
+        start_time: row.start_time ?? row.startTime,
+        end_time: row.end_time ?? row.endTime,
+      }
+    }),
+  )
+}
+
+export function seedTwoScheduleDays(startLocal: string): ScheduleDayFormValue[] {
+  const start = parseDateTimeLocal(startLocal) ?? new Date()
+  const dayMs = 24 * 60 * 60 * 1000
+  const windowMs = 8 * 60 * 60 * 1000
+  const day2 = new Date(start.getTime() + dayMs)
+  return [
+    {
+      id: newScheduleDayId(),
+      title: "Día 1",
+      startTime: toDatetimeLocalInput(start),
+      endTime: toDatetimeLocalInput(new Date(start.getTime() + windowMs)),
+    },
+    {
+      id: newScheduleDayId(),
+      title: "Día 2",
+      startTime: toDatetimeLocalInput(day2),
+      endTime: toDatetimeLocalInput(new Date(day2.getTime() + windowMs)),
+    },
+  ]
+}
+
+export function isMultiDaySchedule(days: ScheduleDay[]): boolean {
+  return days.length >= 2
 }
 
 export function resolveEventAnchorDate(

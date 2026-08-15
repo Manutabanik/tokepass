@@ -20,6 +20,7 @@ export type GobiOrderPaidPayload = {
   customer_name: string
   customer_phone: string
   ticket_url: string
+  access_code?: string
 }
 
 export type GobiDispatchResult =

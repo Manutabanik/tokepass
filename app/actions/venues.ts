@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache"
 
 import { createClient } from "@/lib/supabase/server"
 import type { Json } from "@/types/database"
-import { composeVenuePlace, venueDedupeKey } from "@/lib/venues/compose-location"
+import { composeVenuePlace } from "@/lib/venues/compose-location"
 import { parseVenueMap, serializeVenueMap, type InteractiveVenueMap } from "@/types/venue-map"
 import type {
   VenueSeatingLayout,
@@ -33,8 +33,15 @@ export type OrganizerVenue = {
   seatingLayout: VenueSeatingLayout
   venueMap: InteractiveVenueMap
   seatingBackgroundUrl: string | null
+  isArchived: boolean
+  linkedEventCount: number
   createdAt: string
   updatedAt: string
+}
+
+export type ListOrganizerVenuesOptions = {
+  includeArchived?: boolean
+  includeIds?: string[]
 }
 
 type ActionResult<T = undefined> =
@@ -469,111 +476,112 @@ function parseBlueprint(raw: unknown): VenueZoneBlueprint[] {
   return zones
 }
 
-export async function listOrganizerVenues(): Promise<OrganizerVenue[]> {
+function missingArchivedColumn(message: string) {
+  return /is_archived|schema cache|PGRST204|42703/i.test(message)
+}
+
+function revalidateVenuePaths() {
+  revalidatePath("/admin/venues")
+  revalidatePath("/admin/events")
+  revalidatePath("/admin/events/create")
+}
+
+function mapVenueRow(
+  row: Record<string, unknown>,
+  linkedEventCount: number,
+): OrganizerVenue {
+  const cleaned = composeVenuePlace({
+    street: String(row.address ?? row.location ?? ""),
+    city: (row.city as string | null) ?? null,
+  })
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    location: cleaned.display || String(row.location ?? ""),
+    address: cleaned.street || String(row.address ?? row.location ?? ""),
+    city: cleaned.city ?? ((row.city as string | null) ?? null),
+    latitude:
+      row.latitude == null || !Number.isFinite(Number(row.latitude))
+        ? null
+        : Number(row.latitude),
+    longitude:
+      row.longitude == null || !Number.isFinite(Number(row.longitude))
+        ? null
+        : Number(row.longitude),
+    capacity: Number(row.capacity),
+    zoneBlueprint: parseBlueprint(row.zone_blueprint),
+    seatingLayout: parseSeatingLayout(row.seating_layout),
+    venueMap: parseVenueMap(row.venue_map),
+    seatingBackgroundUrl:
+      typeof row.seating_background_url === "string"
+        ? row.seating_background_url
+        : null,
+    isArchived: Boolean(row.is_archived),
+    linkedEventCount,
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  }
+}
+
+function sortVenuesByName(venues: OrganizerVenue[]) {
+  return [...venues].sort((left, right) =>
+    left.name.localeCompare(right.name, "es", { sensitivity: "base" }),
+  )
+}
+
+function parseCoordinate(
+  value: number | null | undefined,
+  min: number,
+  max: number,
+): number | null {
+  if (value == null) return null
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed < min || parsed > max) return null
+  return parsed
+}
+
+export async function listOrganizerVenues(
+  options: ListOrganizerVenuesOptions = {},
+): Promise<OrganizerVenue[]> {
   const { supabase, userId } = await requireOrganizer()
+  const includeArchived = Boolean(options.includeArchived)
+  const includeIds = new Set(
+    (options.includeIds ?? []).map((id) => id.trim()).filter(Boolean),
+  )
+
   const [{ data, error }, { data: eventRows }] = await Promise.all([
     supabase
       .from("venues")
       .select("*")
       .eq("organizer_id", userId)
-      .order("updated_at", { ascending: false }),
+      .order("name", { ascending: true }),
     supabase
       .from("events")
-      .select("venue_id, status")
+      .select("venue_id")
       .eq("organizer_id", userId)
       .not("venue_id", "is", null),
   ])
 
   if (error) throw new Error(error.message)
 
-  const mapped = (data ?? []).map((row) => {
-    const r = row as Record<string, unknown>
-    return {
-      id: String(r.id),
-      name: String(r.name),
-      location: String(r.location),
-      address: String(r.address ?? r.location),
-      city: (r.city as string | null) ?? null,
-      latitude:
-        r.latitude == null || !Number.isFinite(Number(r.latitude))
-          ? null
-          : Number(r.latitude),
-      longitude:
-        r.longitude == null || !Number.isFinite(Number(r.longitude))
-          ? null
-          : Number(r.longitude),
-      capacity: Number(r.capacity),
-      zoneBlueprint: parseBlueprint(r.zone_blueprint),
-      seatingLayout: parseSeatingLayout(r.seating_layout),
-      venueMap: parseVenueMap(r.venue_map),
-      seatingBackgroundUrl:
-        typeof r.seating_background_url === "string"
-          ? r.seating_background_url
-          : null,
-      createdAt: String(r.created_at),
-      updatedAt: String(r.updated_at),
-    }
-  })
-
   const eventCount = new Map<string, number>()
-  const liveCount = new Map<string, number>()
   for (const row of eventRows ?? []) {
     const id = row.venue_id
     if (!id) continue
     eventCount.set(id, (eventCount.get(id) ?? 0) + 1)
-    if (row.status === "published" || row.status === "paused") {
-      liveCount.set(id, (liveCount.get(id) ?? 0) + 1)
-    }
   }
 
-  const best = new Map<string, OrganizerVenue>()
-  for (const venue of mapped) {
-    const cleaned = composeVenuePlace({
-      street: venue.address || venue.location,
-      city: venue.city,
-    })
-    const next: OrganizerVenue = {
-      ...venue,
-      location: cleaned.display || venue.location,
-      address: cleaned.street || venue.address,
-      city: cleaned.city ?? venue.city,
-    }
-    const key = venueDedupeKey({
-      name: next.name,
-      city: next.city,
-      location: next.address,
-    })
-    const current = best.get(key)
-    if (!current) {
-      best.set(key, next)
-      continue
-    }
-    const nextScore =
-      (liveCount.get(next.id) ?? 0) * 1000 + (eventCount.get(next.id) ?? 0)
-    const currentScore =
-      (liveCount.get(current.id) ?? 0) * 1000 + (eventCount.get(current.id) ?? 0)
-    const nextHasGeo = next.latitude != null && next.longitude != null
-    const currentHasGeo = current.latitude != null && current.longitude != null
-    if (
-      nextScore > currentScore ||
-      (nextScore === currentScore && nextHasGeo && !currentHasGeo) ||
-      (nextScore === currentScore &&
-        nextHasGeo === currentHasGeo &&
-        next.updatedAt > current.updatedAt)
-    ) {
-      best.set(key, next)
-    }
-  }
-
-  return [...best.values()].sort((left, right) => {
-    const leftLive = liveCount.get(left.id) ?? 0
-    const rightLive = liveCount.get(right.id) ?? 0
-    if (rightLive !== leftLive) return rightLive - leftLive
-    const leftEvents = eventCount.get(left.id) ?? 0
-    const rightEvents = eventCount.get(right.id) ?? 0
-    if (rightEvents !== leftEvents) return rightEvents - leftEvents
-    return right.updatedAt.localeCompare(left.updatedAt)
+  const mapped = (data ?? []).map((row) => {
+    const r = row as Record<string, unknown>
+    return mapVenueRow(r, eventCount.get(String(r.id)) ?? 0)
   })
+
+  return sortVenuesByName(
+    mapped.filter(
+      (venue) =>
+        includeArchived || !venue.isArchived || includeIds.has(venue.id),
+    ),
+  )
 }
 
 export async function createVenue(
@@ -610,15 +618,45 @@ export async function createVenue(
         seating_layout: seatingLayout as unknown as Json,
         venue_map: serializeVenueMap(venueMap) as unknown as Json,
         seating_background_url: seatingBackgroundUrl,
+        is_archived: false,
       } as never)
       .select("id")
       .single()
+
+    if (error && missingArchivedColumn(error.message)) {
+      const retry = await supabase
+        .from("venues")
+        .insert({
+          organizer_id: userId,
+          name,
+          location,
+          address: location,
+          city,
+          latitude,
+          longitude,
+          capacity,
+          zone_blueprint: zones as unknown as Json,
+          seating_layout: seatingLayout as unknown as Json,
+          venue_map: serializeVenueMap(venueMap) as unknown as Json,
+          seating_background_url: seatingBackgroundUrl,
+        } as never)
+        .select("id")
+        .single()
+      if (retry.error || !retry.data) {
+        return {
+          success: false,
+          error: retry.error?.message ?? "No se pudo crear.",
+        }
+      }
+      revalidateVenuePaths()
+      return { success: true, data: { id: retry.data.id } }
+    }
 
     if (error || !data) {
       return { success: false, error: error?.message ?? "No se pudo crear." }
     }
 
-    revalidatePath("/admin/venues")
+    revalidateVenuePaths()
     return { success: true, data: { id: data.id } }
   } catch (error) {
     return {
@@ -671,7 +709,7 @@ export async function updateVenue(input: {
     if (error) return { success: false, error: error.message }
     if (!data) return { success: false, error: "No encontramos ese lugar." }
 
-    revalidatePath("/admin/venues")
+    revalidateVenuePaths()
     return { success: true, data: undefined }
   } catch (error) {
     return {
@@ -681,9 +719,124 @@ export async function updateVenue(input: {
   }
 }
 
+export async function updateVenueIdentity(input: {
+  id: string
+  name: string
+  address: string
+  city?: string | null
+  latitude?: number | null
+  longitude?: number | null
+}): Promise<ActionResult> {
+  try {
+    const { supabase, userId } = await requireOrganizer()
+    const name = input.name.trim()
+    const address = input.address.trim()
+    const city = input.city?.trim() || null
+    const latitude = parseCoordinate(input.latitude, -90, 90)
+    const longitude = parseCoordinate(input.longitude, -180, 180)
+
+    if (!name || !address) {
+      return { success: false, error: "Nombre y dirección son obligatorios." }
+    }
+    if ((latitude == null) !== (longitude == null)) {
+      return { success: false, error: "Las coordenadas del lugar son inválidas." }
+    }
+    if (
+      (input.latitude != null && latitude == null) ||
+      (input.longitude != null && longitude == null)
+    ) {
+      return { success: false, error: "Las coordenadas del lugar son inválidas." }
+    }
+
+    const { data, error } = await supabase
+      .from("venues")
+      .update({
+        name,
+        location: address,
+        address,
+        city,
+        latitude,
+        longitude,
+        updated_at: new Date().toISOString(),
+      } as never)
+      .eq("id", input.id)
+      .eq("organizer_id", userId)
+      .select("id")
+      .maybeSingle()
+
+    if (error) return { success: false, error: error.message }
+    if (!data) return { success: false, error: "No encontramos ese lugar." }
+
+    revalidateVenuePaths()
+    return { success: true, data: undefined }
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No pudimos actualizar el lugar.",
+    }
+  }
+}
+
+export async function setVenueArchived(
+  venueId: string,
+  archived: boolean,
+): Promise<ActionResult> {
+  try {
+    const { supabase, userId } = await requireOrganizer()
+    const { data, error } = await supabase
+      .from("venues")
+      .update({
+        is_archived: archived,
+        updated_at: new Date().toISOString(),
+      } as never)
+      .eq("id", venueId)
+      .eq("organizer_id", userId)
+      .select("id")
+      .maybeSingle()
+
+    if (error) {
+      if (missingArchivedColumn(error.message)) {
+        return {
+          success: false,
+          error:
+            "Todavía no se puede archivar recintos. Actualizá la base de datos e intentá de nuevo.",
+        }
+      }
+      return { success: false, error: error.message }
+    }
+    if (!data) return { success: false, error: "No encontramos ese lugar." }
+
+    revalidateVenuePaths()
+    return { success: true, data: undefined }
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : "No pudimos archivar el lugar.",
+    }
+  }
+}
+
 export async function deleteVenue(venueId: string): Promise<ActionResult> {
   try {
     const { supabase, userId } = await requireOrganizer()
+    const { count, error: countError } = await supabase
+      .from("events")
+      .select("id", { count: "exact", head: true })
+      .eq("venue_id", venueId)
+
+    if (countError) return { success: false, error: countError.message }
+    if ((count ?? 0) > 0) {
+      return {
+        success: false,
+        error:
+          "No se puede eliminar un recinto con eventos vinculados. Archiválo para ocultarlo del selector.",
+      }
+    }
+
     const { error } = await supabase
       .from("venues")
       .delete()
@@ -692,7 +845,7 @@ export async function deleteVenue(venueId: string): Promise<ActionResult> {
 
     if (error) return { success: false, error: error.message }
 
-    revalidatePath("/admin/venues")
+    revalidateVenuePaths()
     return { success: true, data: undefined }
   } catch (error) {
     return {

@@ -18,7 +18,7 @@ export function EventDateSelector({
   selectedId: string
   onChange: (id: string) => void
 }) {
-  if (dates.length === 0) return null
+  if (dates.length < 2) return null
 
   return (
     <nav aria-label="Elegí la fecha" className="px-4 md:px-0">

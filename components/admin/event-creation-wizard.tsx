@@ -110,6 +110,7 @@ import {
   publishEventSchema,
   type EventFormValues,
 } from "@/lib/validations/event-form"
+import { seedTwoScheduleDays } from "@/lib/event-schedule"
 import { cn } from "@/lib/utils"
 
 const steps = [
@@ -708,23 +709,34 @@ export function EventCreationWizard({
                                 "basics.scheduleDays",
                               )
                               if (current.length < 2) {
-                                form.setValue("basics.scheduleDays", [
+                                form.setValue(
+                                  "basics.scheduleDays",
+                                  seedTwoScheduleDays(
+                                    form.getValues("basics.date") || "",
+                                  ),
                                   {
-                                    id: crypto.randomUUID(),
-                                    title: "Día 1",
-                                    startTime: form.getValues("basics.date") || "",
-                                    endTime: "",
+                                    shouldDirty: true,
+                                    shouldTouch: true,
+                                    shouldValidate: false,
                                   },
-                                  {
-                                    id: crypto.randomUUID(),
-                                    title: "Día 2",
-                                    startTime: "",
-                                    endTime: "",
-                                  },
-                                ])
+                                )
                               }
                             } else {
-                              form.setValue("basics.scheduleDays", [])
+                              const days = form.getValues("basics.scheduleDays")
+                              const first = days[0]
+                              if (first?.startTime) {
+                                form.setValue("basics.date", first.startTime, {
+                                  shouldDirty: true,
+                                })
+                              }
+                              if (first?.endTime) {
+                                form.setValue("basics.endDate", first.endTime, {
+                                  shouldDirty: true,
+                                })
+                              }
+                              form.setValue("basics.scheduleDays", [], {
+                                shouldDirty: true,
+                              })
                             }
                           }}
                           aria-label="Activar evento multijornada"

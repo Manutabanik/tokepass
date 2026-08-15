@@ -37,10 +37,12 @@ export function RemoteImage({
 }
 
 const AVATAR_SIZE = {
+  xs: "size-7 text-[10px] font-bold",
   sm: "size-9 text-[11px] font-bold",
   md: "size-10 text-xs font-black",
   lg: "h-12 w-12 text-sm font-black",
   xl: "h-20 w-20 text-lg font-black",
+  hero: "h-20 w-20 text-lg font-black md:h-24 md:w-24",
 } as const
 
 export function ArtistAvatar({
@@ -60,6 +62,7 @@ export function ArtistAvatar({
     <div
       className={cn(
         "grid shrink-0 place-items-center rounded-full text-white shadow-sm",
+        size === "hero" && "border-2 border-primary/50 shadow-md",
         sizeClass,
         artistGradientClass(label),
         className,
@@ -76,6 +79,7 @@ export function ArtistAvatar({
       className={cn(
         "shrink-0 rounded-full object-cover",
         size === "xl" && "border-2 border-border",
+        size === "hero" && "border-2 border-primary/50 shadow-md",
         size === "lg" && "border border-border/50",
         sizeClass,
         className,

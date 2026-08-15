@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
-import { mapSpotifyArtist, pickSpotifyArtistImage, isSuccessfulSpotifyStatus } from "@/lib/spotify/map"
+import { mapSpotifyArtist, mapSpotifyTopTrack, pickSpotifyArtistImage, isSuccessfulSpotifyStatus } from "@/lib/spotify/map"
 
 describe("spotify artist mapping", () => {
   it("prefers the 300px image and falls back to null", () => {
@@ -39,5 +39,20 @@ describe("spotify artist mapping", () => {
     assert.equal(isSuccessfulSpotifyStatus(204), false)
     assert.equal(isSuccessfulSpotifyStatus(401), false)
     assert.equal(isSuccessfulSpotifyStatus(500), false)
+  })
+
+  it("picks the first top track that has a preview url", () => {
+    const mapped = mapSpotifyTopTrack([
+      { name: "Sin preview", preview_url: null },
+      { name: "Bzrp Music Sessions", preview_url: "https://p.scdn.co/mp3-preview/demo" },
+    ])
+    assert.deepEqual(mapped, {
+      previewUrl: "https://p.scdn.co/mp3-preview/demo",
+      trackName: "Bzrp Music Sessions",
+    })
+    assert.deepEqual(mapSpotifyTopTrack([]), {
+      previewUrl: null,
+      trackName: null,
+    })
   })
 })

@@ -48,11 +48,15 @@ export async function sendTicketConfirmationEmail({
   orderDetails,
   eventDetails,
   buyerName,
+  walletUrl,
+  otpCode,
 }: {
   to: string
   orderDetails: TicketOrderDetails
   eventDetails: TicketEventDetails
   buyerName?: string
+  walletUrl?: string
+  otpCode?: string
 }): Promise<void> {
   const email = to.trim().toLowerCase()
   if (!email || !email.includes("@")) {
@@ -75,7 +79,7 @@ export async function sendTicketConfirmationEmail({
   }
 
   const appUrl = getEmailAppUrl()
-  const walletUrl = `${appUrl}/cuenta/entradas`
+  const accessUrl = walletUrl || `${appUrl}/cuenta/entradas`
   const logoUrl = `${appUrl}/brand/tokepass-mark.png`
   const ticketCount = Math.max(1, orderDetails.ticketCount)
   const eventDateLabel = formatEventDate(eventDetails.date)
@@ -91,8 +95,9 @@ export async function sendTicketConfirmationEmail({
       eventLocation: eventDetails.location,
       ticketCount,
       totalPaidLabel,
-      walletUrl,
+      walletUrl: accessUrl,
       logoUrl,
+      otpCode,
     }),
   )
 
@@ -104,9 +109,12 @@ export async function sendTicketConfirmationEmail({
     `Lugar: ${eventDetails.location}`,
     `Entradas: ${ticketCount}`,
     `Total pagado: ${totalPaidLabel}`,
-    `Billetera: ${walletUrl}`,
+    `Billetera: ${accessUrl}`,
+    otpCode ? `Codigo de acceso: ${otpCode}` : "",
     "Por motivos de seguridad y para evitar fraudes, tus códigos QR son dinámicos y solo pueden visualizarse desde la plataforma. No se adjuntan PDFs.",
-  ].join("\n")
+  ]
+    .filter(Boolean)
+    .join("\n")
 
   const { error } = await client.emails.send({
     from,
@@ -121,12 +129,35 @@ export async function sendTicketConfirmationEmail({
   }
 }
 
+export async function sendGuestOtpEmail(input: {
+  to: string
+  otp: string
+  magicUrl: string
+}): Promise<void> {
+  await sendTicketConfirmationEmail({
+    to: input.to,
+    otpCode: input.otp,
+    walletUrl: input.magicUrl,
+    orderDetails: {
+      orderId: "otp",
+      ticketCount: 1,
+      totalPaid: 0,
+    },
+    eventDetails: {
+      title: "Tu entrada Tokepass",
+      date: new Date().toISOString(),
+      location: "Tokepass",
+    },
+  })
+}
+
 /**
  * Carga orden + evento y envía el recibo. Pensado para el webhook de MP.
  */
 export async function sendPaidOrderReceiptEmail(
   admin: SupabaseClient,
   orderId: string,
+  access?: { magicUrl: string; otp: string } | null,
 ): Promise<void> {
   const { data: order, error: orderError } = await admin
     .from("orders")
@@ -193,9 +224,22 @@ export async function sendPaidOrderReceiptEmail(
     profile?.full_name?.trim() ||
     undefined
 
+  let walletUrl: string | undefined = access?.magicUrl
+  let otpCode: string | undefined = access?.otp?.trim() || undefined
+  if (to && !walletUrl) {
+    const { issueGuestReceiptAccess } = await import(
+      "@/app/actions/guest-ticket-access"
+    )
+    const issued = await issueGuestReceiptAccess(order.id)
+    walletUrl = issued?.magicUrl
+    otpCode = issued?.otp?.trim() || undefined
+  }
+
   await sendTicketConfirmationEmail({
     to,
     buyerName,
+    walletUrl,
+    otpCode,
     orderDetails: {
       orderId: order.id,
       ticketCount: ticketRows.length || 1,

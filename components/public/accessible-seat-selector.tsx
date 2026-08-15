@@ -1,6 +1,6 @@
 "use client"
 
-import { Sparkles } from "lucide-react"
+import { Minus, Plus, Sparkles } from "lucide-react"
 import { useMemo, useState } from "react"
 
 import {
@@ -17,11 +17,16 @@ import {
   groupSeatsForMatrix,
 } from "@/lib/seating/accessible-seat-matrix"
 import {
-  assignContiguousSeats,
   buildAccessibleSeatTree,
   type AccessibleSeatNode,
   type AccessibleSectorNode,
 } from "@/lib/seating/accessible-seat-tree"
+import {
+  assignBestSeats,
+  countAvailableTables,
+  previewFastAssign,
+  type FastAssignMode,
+} from "@/lib/seating/assign-best-seats"
 import { flattenVenueMapSeats } from "@/lib/seating/venue-map-geometry"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import { cn } from "@/lib/utils"
@@ -70,7 +75,9 @@ export function AccessibleSeatSelector({
     () => numberedSectors[0]?.id ?? sectors[0]?.id ?? "",
   )
   const [autoQuantity, setAutoQuantity] = useState(2)
+  const [autoMode, setAutoMode] = useState<FastAssignMode>("SEATS")
   const [autoError, setAutoError] = useState<string | null>(null)
+  const [autoHint, setAutoHint] = useState<string | null>(null)
 
   const autoSector =
     sectors.find((sector) => sector.id === autoSectorId) ?? sectors[0] ?? null
@@ -81,29 +88,50 @@ export function AccessibleSeatSelector({
       MAX_TICKETS_PER_PURCHASE,
       Math.max(1, autoQuantity),
     )
+    const mode = autoSector.isTableSector ? autoMode : "SEATS"
     if (autoSector.kind === "ga") {
       if (autoSector.soldOut) {
         setAutoError("Ese sector no tiene lugares disponibles.")
         return
       }
+      const preview = previewFastAssign({
+        isTableSector: autoSector.isTableSector,
+        mode,
+        quantity,
+        capacityPerUnit: autoSector.capacityPerUnit,
+        unitPrice: autoSector.price,
+        sellMode: autoSector.sellMode,
+        unitNoun: autoSector.unitNoun,
+      })
       setAutoError(null)
-      onAssignZoneQuantity(autoSector.id, quantity)
+      setAutoHint(null)
+      onAssignZoneQuantity(
+        autoSector.id,
+        autoSector.sellMode === "group"
+          ? Math.max(1, preview.tableCount || 1)
+          : Math.max(1, preview.seatCount || quantity),
+      )
       return
     }
-    const found = assignContiguousSeats({
+    const found = assignBestSeats({
       seats: flatSeats,
       sectorId: autoSector.id,
-      quantity,
+      count: quantity,
+      mode,
+      isTableSector: autoSector.isTableSector,
       occupancyBySeatId,
       selectedSeatIds: selected,
     })
     if (found.length === 0) {
       setAutoError(
-        "No hay asientos juntos en ese sector. Probá otra cantidad o sector.",
+        mode === "FULL_TABLES"
+          ? `No hay ${autoSector.unitNoun === "palco" ? "palcos completos" : "mesas completas"} disponibles para esa cantidad.`
+          : "No hay asientos juntos en ese sector. Probá otra cantidad o sector.",
       )
       return
     }
     setAutoError(null)
+    setAutoHint(null)
     onAssignSeats(
       found.map((seat) => ({
         id: seat.id,
@@ -137,18 +165,32 @@ export function AccessibleSeatSelector({
       ) : null}
       <AutoAssignCard
         sectors={sectors}
+        seats={flatSeats}
+        occupancyBySeatId={occupancyBySeatId}
+        selectedSeatIds={selected}
         sectorId={autoSector?.id ?? ""}
         quantity={autoQuantity}
+        mode={autoMode}
         error={autoError}
+        hint={autoHint}
         pending={pending}
         onSectorChange={(value) => {
           setAutoSectorId(value)
           setAutoError(null)
+          setAutoHint(null)
+          const next = sectors.find((sector) => sector.id === value)
+          if (!next?.isTableSector) setAutoMode("SEATS")
         }}
         onQuantityChange={(value) => {
           setAutoQuantity(value)
           setAutoError(null)
         }}
+        onModeChange={(value) => {
+          setAutoMode(value)
+          setAutoError(null)
+          setAutoHint(null)
+        }}
+        onHintChange={setAutoHint}
         onAssign={handleAssign}
       />
 
@@ -306,23 +348,111 @@ function SeatMatrixButton({
 
 function AutoAssignCard({
   sectors,
+  seats,
+  occupancyBySeatId,
+  selectedSeatIds,
   sectorId,
   quantity,
+  mode,
   error,
+  hint,
   pending,
   onSectorChange,
   onQuantityChange,
+  onModeChange,
+  onHintChange,
   onAssign,
 }: {
   sectors: AccessibleSectorNode[]
+  seats: ReturnType<typeof flattenVenueMapSeats>
+  occupancyBySeatId: Record<string, SeatStatus>
+  selectedSeatIds: Set<string>
   sectorId: string
   quantity: number
+  mode: FastAssignMode
   error: string | null
+  hint: string | null
   pending: boolean
   onSectorChange: (sectorId: string) => void
   onQuantityChange: (quantity: number) => void
+  onModeChange: (mode: FastAssignMode) => void
+  onHintChange: (hint: string | null) => void
   onAssign: () => void
 }) {
+  const sector = sectors.find((item) => item.id === sectorId) ?? sectors[0] ?? null
+  const isTable = Boolean(sector?.isTableSector)
+  const capacity = Math.max(1, sector?.capacityPerUnit ?? 1)
+  const unitNoun = sector?.unitNoun ?? "mesa"
+  const unitPlural = unitNoun === "palco" ? "palcos" : "mesas"
+  const activeMode = isTable ? mode : "SEATS"
+  const availableTables = sector
+    ? countAvailableTables({
+        seats,
+        sectorId: sector.id,
+        occupancyBySeatId,
+        selectedSeatIds,
+      })
+    : 0
+  const maxQuantity = isTable
+    ? activeMode === "FULL_TABLES"
+      ? Math.max(1, Math.min(MAX_TICKETS_PER_PURCHASE, availableTables || MAX_TICKETS_PER_PURCHASE))
+      : capacity
+    : Math.max(
+        1,
+        Math.min(MAX_TICKETS_PER_PURCHASE, sector?.availableCount || MAX_TICKETS_PER_PURCHASE),
+      )
+
+  const preview = previewFastAssign({
+    isTableSector: isTable,
+    mode: activeMode,
+    quantity,
+    capacityPerUnit: capacity,
+    unitPrice: sector?.price ?? 0,
+    sellMode: sector?.sellMode,
+    unitNoun,
+  })
+
+  function step(delta: number) {
+    if (!sector || pending) return
+    const next = quantity + delta
+    if (
+      isTable &&
+      activeMode === "SEATS" &&
+      delta > 0 &&
+      quantity >= capacity
+    ) {
+      onModeChange("FULL_TABLES")
+      onQuantityChange(Math.min(2, Math.max(1, availableTables || 2)))
+      onHintChange(
+        `Una ${unitNoun} admite hasta ${capacity} ${capacity === 1 ? "persona" : "personas"}. Pasamos a ${unitPlural} completas.`,
+      )
+      return
+    }
+    const clamped = Math.min(maxQuantity, Math.max(1, next))
+    onQuantityChange(clamped)
+    onHintChange(null)
+  }
+
+  function selectMode(nextMode: FastAssignMode) {
+    if (nextMode === activeMode) return
+    if (nextMode === "SEATS") {
+      onQuantityChange(Math.min(2, capacity))
+    } else {
+      onQuantityChange(1)
+    }
+    onModeChange(nextMode)
+    onHintChange(null)
+  }
+
+  const quantityLabel =
+    isTable && activeMode === "FULL_TABLES"
+      ? quantity === 1
+        ? `1 ${unitNoun}`
+        : `${quantity} ${unitPlural}`
+      : quantity === 1
+        ? "1 persona"
+        : `${quantity} personas`
+
   return (
     <section className="rounded-xl border border-primary/35 bg-primary/10 p-6 shadow-sm">
       <p className="flex items-center gap-2 text-sm font-extrabold text-foreground">
@@ -330,29 +460,37 @@ function AutoAssignCard({
         Buscar el mejor lugar automáticamente
       </p>
       <p className="mt-1 text-xs text-muted-foreground">
-        Elegí cuántas entradas y el sector. Asignamos lugares juntos si el
-        plano tiene butacas.
+        {isTable
+          ? `Elegí si reservás por personas o por ${unitPlural} completas. Capacidad: ${capacity} ${capacity === 1 ? "persona" : "personas"} por ${unitNoun}.`
+          : "Elegí cuántas personas y el sector. Asignamos lugares juntos si el plano tiene butacas."}
       </p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <label className="block text-sm font-medium text-foreground">
+        <div className="block text-sm font-medium text-foreground">
           Cantidad
-          <input
-            type="number"
-            min={1}
-            max={MAX_TICKETS_PER_PURCHASE}
-            value={quantity}
-            disabled={pending}
-            onChange={(event) =>
-              onQuantityChange(
-                Math.min(
-                  MAX_TICKETS_PER_PURCHASE,
-                  Math.max(1, Number(event.target.value) || 1),
-                ),
-              )
-            }
-            className="mt-1 h-11 w-full rounded-xl border border-border bg-background px-3 text-foreground"
-          />
-        </label>
+          <div className="mt-1 flex h-11 items-center rounded-xl border border-border bg-background">
+            <button
+              type="button"
+              disabled={pending || quantity <= 1}
+              onClick={() => step(-1)}
+              className="grid size-11 shrink-0 place-items-center text-foreground transition hover:bg-secondary disabled:opacity-40"
+              aria-label="Restar"
+            >
+              <Minus className="size-4" aria-hidden="true" />
+            </button>
+            <p className="min-w-0 flex-1 text-center text-sm font-semibold tabular-nums">
+              {quantityLabel}
+            </p>
+            <button
+              type="button"
+              disabled={pending || (activeMode === "SEATS" && isTable ? false : quantity >= maxQuantity)}
+              onClick={() => step(1)}
+              className="grid size-11 shrink-0 place-items-center text-foreground transition hover:bg-secondary disabled:opacity-40"
+              aria-label="Sumar"
+            >
+              <Plus className="size-4" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
         <label className="block text-sm font-medium text-foreground">
           Sector
           <select
@@ -361,15 +499,82 @@ function AutoAssignCard({
             onChange={(event) => onSectorChange(event.target.value)}
             className="mt-1 h-11 w-full rounded-xl border border-border bg-background px-3 text-foreground"
           >
-            {sectors.map((sector) => (
-              <option key={sector.id} value={sector.id} disabled={sector.soldOut}>
-                {sector.name}
-                {sector.soldOut ? " (agotado)" : ""}
+            {sectors.map((item) => (
+              <option key={item.id} value={item.id} disabled={item.soldOut}>
+                {item.name}
+                {item.soldOut ? " (agotado)" : ""}
               </option>
             ))}
           </select>
         </label>
       </div>
+
+      {isTable ? (
+        <div
+          className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-background/70 p-1"
+          role="radiogroup"
+          aria-label="Modo de reserva"
+        >
+          <button
+            type="button"
+            role="radio"
+            aria-checked={activeMode === "SEATS"}
+            disabled={pending}
+            onClick={() => selectMode("SEATS")}
+            className={cn(
+              "rounded-lg px-3 py-2.5 text-left text-xs font-semibold transition",
+              activeMode === "SEATS"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-foreground hover:bg-secondary",
+            )}
+          >
+            <span className="block">Por personas</span>
+            <span className="mt-0.5 block font-medium opacity-80">
+              Somos {activeMode === "SEATS" ? quantity : Math.min(2, capacity)}{" "}
+              {(activeMode === "SEATS" ? quantity : Math.min(2, capacity)) === 1
+                ? "persona"
+                : "personas"}
+            </span>
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={activeMode === "FULL_TABLES"}
+            disabled={pending}
+            onClick={() => selectMode("FULL_TABLES")}
+            className={cn(
+              "rounded-lg px-3 py-2.5 text-left text-xs font-semibold transition",
+              activeMode === "FULL_TABLES"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-foreground hover:bg-secondary",
+            )}
+          >
+            <span className="block">
+              {unitNoun === "palco" ? "Palcos completos" : "Mesas completas"}
+            </span>
+            <span className="mt-0.5 block font-medium opacity-80">
+              Quiero {activeMode === "FULL_TABLES" ? quantity : 1}{" "}
+              {(activeMode === "FULL_TABLES" ? quantity : 1) === 1
+                ? `${unitNoun} ${unitNoun === "palco" ? "entero" : "entera"}`
+                : `${unitPlural} ${unitNoun === "palco" ? "enteros" : "enteras"}`}
+            </span>
+          </button>
+        </div>
+      ) : null}
+
+      {preview.legend ? (
+        <p
+          className="mt-2 rounded-xl bg-primary/10 p-3 text-xs font-medium text-primary"
+          role="status"
+        >
+          {preview.legend}
+        </p>
+      ) : null}
+      {hint ? (
+        <p className="mt-2 text-xs font-medium text-amber-800 dark:text-amber-200" role="status">
+          {hint}
+        </p>
+      ) : null}
       {error ? (
         <p className="mt-2 text-sm font-medium text-amber-800 dark:text-amber-200" role="status">
           {error}
@@ -381,7 +586,7 @@ function AutoAssignCard({
         onClick={onAssign}
         className="mt-4 h-auto w-full rounded-xl p-6 font-bold shadow-sm"
       >
-        Asignar lugares
+        {preview.buttonLabel}
       </Button>
     </section>
   )

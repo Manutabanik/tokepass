@@ -4,15 +4,18 @@ import { logger } from "@/lib/logger"
 import {
   isSuccessfulSpotifyStatus,
   mapSpotifyArtist,
+  mapSpotifyTopTrack,
   type SpotifyArtistHit,
   type SpotifyArtistItem,
+  type SpotifyTopTrack,
 } from "@/lib/spotify/map"
 
-export type { SpotifyArtistHit }
+export type { SpotifyArtistHit, SpotifyTopTrack }
 export { isSuccessfulSpotifyStatus }
 
 const TOKEN_URL = "https://accounts.spotify.com/api/token"
 const SEARCH_URL = "https://api.spotify.com/v1/search"
+const ARTIST_TOP_TRACKS_URL = "https://api.spotify.com/v1/artists"
 const SEARCH_LIMIT = 8
 const FETCH_TIMEOUT_MS = 8000
 const TOKEN_SKEW_MS = 60_000
@@ -146,5 +149,43 @@ export async function searchSpotifyCatalog(
       error,
     })
     return { ok: false, items: [] }
+  }
+}
+
+export async function fetchArtistTopTrack(
+  spotifyId: string,
+): Promise<SpotifyTopTrack> {
+  const empty: SpotifyTopTrack = { previewUrl: null, trackName: null }
+  const id = spotifyId.trim()
+  if (!id || !isSpotifyConfigured()) return empty
+
+  try {
+    const token = await getClientAccessToken()
+    const url = new URL(`${ARTIST_TOP_TRACKS_URL}/${encodeURIComponent(id)}/top-tracks`)
+    url.searchParams.set("market", "AR")
+
+    const response = await fetchWithTimeout(url.toString(), {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    if (!isSuccessfulSpotifyStatus(response.status)) {
+      if (response.status === 401) tokenCache = null
+      logger.error({
+        context: "spotify",
+        message: "top_tracks_request_failed",
+        status: response.status,
+      })
+      return empty
+    }
+
+    const payload = (await response.json()) as { tracks?: unknown }
+    return mapSpotifyTopTrack(payload.tracks)
+  } catch (error) {
+    logger.error({
+      context: "spotify",
+      message: "top_tracks_failed",
+      error,
+    })
+    return empty
   }
 }

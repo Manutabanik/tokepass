@@ -6,9 +6,8 @@ import { PosTerminal } from "@/components/admin/pos-terminal"
 import { createClient } from "@/lib/supabase/server"
 
 export const metadata: Metadata = {
-  title: "Boletería",
-  description:
-    "Cobrá en puerta: efectivo, Posnet o transferencia — Tokepass.",
+  title: "Boletería POS",
+  description: "Punto de venta táctil Tokepass: cobro a un tap e impresión térmica.",
 }
 
 export default async function AdminPosPage() {
@@ -31,20 +30,7 @@ export default async function AdminPosPage() {
   }
 
   return (
-    <div className="mx-auto max-w-lg space-y-6">
-      <header>
-        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-700 dark:text-emerald-400/90">
-          Puerta
-        </p>
-        <h1 className="mt-1 text-3xl font-black tracking-tight text-foreground">
-          Boletería
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Abrí la caja, cobrá (efectivo / Posnet / transferencia) e imprimí el
-          ticket térmico.
-        </p>
-      </header>
-
+    <div className="-m-4 h-full min-h-0 sm:-m-8 lg:-m-10">
       <PosTerminal events={events} />
     </div>
   )

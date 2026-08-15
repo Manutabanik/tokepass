@@ -3,6 +3,16 @@
 import { listEventSponsors } from "@/app/actions/event-sponsors"
 import { logger } from "@/lib/logger"
 import { createClient } from "@/lib/supabase/server"
+import {
+  buildCatalogSearchOr,
+  FEATURED_DISCOVERY_ARTISTS_LIMIT,
+  isMissingArtistSchema,
+  mapCatalogEventArtists,
+  rankFeaturedArtists,
+  sanitizeCatalogSearch,
+  type CatalogEventArtist,
+  type FeaturedDiscoveryArtist,
+} from "@/lib/discovery-artists"
 import { parseScheduleDays } from "@/lib/event-schedule"
 import {
   eventArtistsToLineup,
@@ -67,6 +77,8 @@ export type CatalogEvent = {
   isSponsoredByTokepass: boolean
   /** FK event_categories — taxonomía centralizada. */
   categoryId: string | null
+  /** Lineup público (`event_artists` o JSON `events.lineup`). */
+  artists: CatalogEventArtist[]
 }
 
 export type EventDetails = {
@@ -182,6 +194,8 @@ type EventListRow = {
     visibility?: string | null
   }[] | null
   profiles: { full_name: string | null } | null
+  lineup?: unknown
+  event_artists?: unknown
 }
 
 type EventDetailRow = {
@@ -293,39 +307,115 @@ function startOfTodayIso(): string {
 const EVENT_LIST_SELECT =
   "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location), ticket_tiers(price, capacity, sold, visibility), profiles!events_organizer_id_fkey(full_name)"
 
-export async function getPublishedEvents(
-  search?: string,
-): Promise<CatalogEvent[]> {
-  const supabase = await createClient()
+const EVENT_ARTISTS_EMBED =
+  "event_artists(artist_id, artists(id, name, image_url))"
+const EVENT_ARTISTS_INNER_EMBED =
+  "event_artists!inner(artist_id, artists(id, name, image_url))"
+const EVENT_LIST_SELECT_WITH_LINEUP = `${EVENT_LIST_SELECT}, lineup`
+const EVENT_LIST_SELECT_WITH_ARTISTS = `${EVENT_LIST_SELECT_WITH_LINEUP}, ${EVENT_ARTISTS_EMBED}`
+const EVENT_LIST_SELECT_BY_ARTIST = `${EVENT_LIST_SELECT_WITH_LINEUP}, ${EVENT_ARTISTS_INNER_EMBED}`
 
-  let query = supabase
-    .from("events")
-    .select(EVENT_LIST_SELECT)
-    .eq("status", "published")
-    .eq("visibility", "public")
-    .order("date", { ascending: true })
+async function findEventIdsMatchingArtistName(
+  needle: string,
+): Promise<string[]> {
+  if (!needle) return []
+  try {
+    const supabase = await createClient()
+    const { data, error } = await supabase
+      .from("event_artists")
+      .select("event_id, artists!inner(name)")
+      .ilike("artists.name", `%${needle}%`)
+      .limit(200)
 
-  if (search?.trim()) {
-    const term = `%${search.trim()}%`
-    query = query.or(
-      `title.ilike.${term},location.ilike.${term},description.ilike.${term}`,
-    )
-  }
+    if (error) {
+      if (!isMissingArtistSchema(error.message)) {
+        logger.error({
+          context: "public-events",
+          message: "list_published_artist_name_failed",
+          error,
+        })
+      }
+      return []
+    }
 
-  const { data, error } = await query
-
-  if (error) {
+    return [
+      ...new Set(
+        (data ?? [])
+          .map((row) => (row.event_id as string | null)?.trim() || "")
+          .filter(Boolean),
+      ),
+    ]
+  } catch (error) {
     logger.error({
       context: "public-events",
-      message: "list_published_failed",
+      message: "list_published_artist_name_unexpected",
       error,
     })
     return []
   }
+}
 
-  const mapped = ((data ?? []) as unknown as EventListRow[]).map(mapEventListRow)
+export async function getPublishedEvents(
+  search?: string,
+  options?: { artistId?: string },
+): Promise<CatalogEvent[]> {
+  const supabase = await createClient()
+  const needle = sanitizeCatalogSearch(search ?? "")
+  const artistId = options?.artistId?.trim() || ""
+  const filterByArtist = Boolean(artistId) && isEventUuid(artistId)
+  const artistEventIds = needle ? await findEventIdsMatchingArtistName(needle) : []
+  const orFilter = needle ? buildCatalogSearchOr(needle, artistEventIds) : null
 
-  return sortCatalogForHome(mapped)
+  const selects = filterByArtist
+    ? [EVENT_LIST_SELECT_BY_ARTIST, EVENT_LIST_SELECT_WITH_LINEUP]
+    : [EVENT_LIST_SELECT_WITH_ARTISTS, EVENT_LIST_SELECT_WITH_LINEUP]
+
+  for (const [index, select] of selects.entries()) {
+    const usingArtistJoin = select.includes("event_artists")
+    if (filterByArtist && !usingArtistJoin) return []
+
+    let query = supabase
+      .from("events")
+      .select(select)
+      .eq("status", "published")
+      .eq("visibility", "public")
+      .order("date", { ascending: true })
+
+    if (filterByArtist) {
+      query = query.eq("event_artists.artist_id", artistId)
+    }
+    if (orFilter) {
+      query = query.or(orFilter)
+    }
+
+    const { data, error } = await query
+
+    if (!error) {
+      const mapped = ((data ?? []) as unknown as EventListRow[]).map(
+        mapEventListRow,
+      )
+      return sortCatalogForHome(mapped)
+    }
+
+    const canRetryWithoutJoin =
+      usingArtistJoin &&
+      index === 0 &&
+      isMissingArtistSchema(error.message)
+
+    if (!canRetryWithoutJoin) {
+      logger.error({
+        context: "public-events",
+        message: filterByArtist
+          ? "list_published_by_artist_failed"
+          : "list_published_failed",
+        artist_id: filterByArtist ? artistId : undefined,
+        error,
+      })
+      return []
+    }
+  }
+
+  return []
 }
 
 /** Eventos públicos vigentes asociados a un artista (event_artists). */
@@ -333,29 +423,56 @@ export async function getPublishedEventsByArtist(
   artistId: string,
 ): Promise<CatalogEvent[]> {
   if (!isEventUuid(artistId)) return []
+  return getPublishedEvents(undefined, { artistId })
+}
 
-  const supabase = await createClient()
-  const { data, error } = await supabase
-    .from("events")
-    .select(`${EVENT_LIST_SELECT}, event_artists!inner(artist_id)`)
-    .eq("status", "published")
-    .eq("visibility", "public")
-    .eq("event_artists.artist_id", artistId)
-    .order("date", { ascending: true })
+/** Top artistas con más eventos publicados vigentes. */
+export async function getFeaturedDiscoveryArtists(
+  limit = FEATURED_DISCOVERY_ARTISTS_LIMIT,
+): Promise<FeaturedDiscoveryArtist[]> {
+  try {
+    const supabase = await createClient()
+    const { data, error } = await supabase
+      .from("event_artists")
+      .select(
+        "artist_id, artists(id, name, image_url), events!inner(status, visibility)",
+      )
+      .eq("events.status", "published")
+      .eq("events.visibility", "public")
 
-  if (error) {
-    if (!/event_artists|schema cache|PGRST204|42703/i.test(error.message)) {
-      logger.error({
-        context: "public-events",
-        message: "list_published_by_artist_failed",
-        artist_id: artistId,
-        error,
+    if (error) {
+      if (!isMissingArtistSchema(error.message)) {
+        logger.error({
+          context: "public-events",
+          message: "featured_discovery_artists_failed",
+          error,
+        })
+      }
+      return []
+    }
+
+    const artists: CatalogEventArtist[] = []
+    for (const row of data ?? []) {
+      const nested = Array.isArray(row.artists) ? row.artists[0] : row.artists
+      const id = String(nested?.id ?? row.artist_id ?? "").trim()
+      const name = String(nested?.name ?? "").trim()
+      if (!id || !name) continue
+      artists.push({
+        id,
+        name,
+        imageUrl: nested?.image_url?.trim() || null,
       })
     }
+
+    return rankFeaturedArtists(artists, limit)
+  } catch (error) {
+    logger.error({
+      context: "public-events",
+      message: "featured_discovery_artists_unexpected",
+      error,
+    })
     return []
   }
-
-  return ((data ?? []) as unknown as EventListRow[]).map(mapEventListRow)
 }
 
 function mapEventListRow(event: EventListRow): CatalogEvent {
@@ -389,6 +506,10 @@ function mapEventListRow(event: EventListRow): CatalogEvent {
     featuredUntil: stillActive ? featuredUntil : null,
     isSponsoredByTokepass: Boolean(event.is_sponsored_by_tokepass),
     categoryId: event.category_id ?? null,
+    artists: mapCatalogEventArtists({
+      eventArtists: event.event_artists,
+      lineupJson: event.lineup,
+    }),
   }
 }
 
@@ -845,18 +966,6 @@ async function loadEventDetails(
     Boolean(event.venues?.seating_background_url?.trim()) ||
     seatingLayout.length > 0
 
-  console.log("Venue Data:", {
-    venueId: event.venues?.id ?? event.venue_id ?? null,
-    eventId: event.id,
-    seatingLayoutCount: seatingLayout.length,
-    mapElements: venueMap.elements?.length ?? 0,
-    mapZones: venueMap.zones?.length ?? 0,
-    mapSectors: venueMap.sectors.length,
-    backgroundImage: Boolean(venueMap.backgroundImage),
-    seatingBackground: Boolean(event.venues?.seating_background_url?.trim()),
-    hasInteractiveMap,
-  })
-
   return {
     id: event.id,
     slug: event.slug?.trim() || event.id,
@@ -1022,27 +1131,35 @@ async function loadEventArtistsLineup(
   eventId: string,
 ): Promise<EventLineupData> {
   const empty: EventLineupData = { artists: [], slots: [] }
-  const { data, error } = await supabase
-    .from("event_artists")
-    .select(
-      "id, performance_time, stage, sort_order, artists(id, name, image_url, bio)",
-    )
-    .eq("event_id", eventId)
-    .order("sort_order", { ascending: true })
+  const selects = [
+    "id, performance_time, stage, sort_order, is_headliner, artists(id, name, image_url, bio, top_track_preview_url, top_track_name)",
+    "id, performance_time, stage, sort_order, is_headliner, artists(id, name, image_url, bio)",
+    "id, performance_time, stage, sort_order, artists(id, name, image_url, bio, top_track_preview_url, top_track_name)",
+    "id, performance_time, stage, sort_order, artists(id, name, image_url, bio)",
+  ]
 
-  if (error) {
-    if (!/event_artists|schema cache|PGRST204|42703/i.test(error.message)) {
-      logger.error({
-        context: "public-events",
-        message: "event_artists_load_failed",
-        event_id: eventId,
-        error,
-      })
+  let lastError: { message: string } | null = null
+  for (const columns of selects) {
+    const query = await supabase
+      .from("event_artists")
+      .select(columns)
+      .eq("event_id", eventId)
+      .order("sort_order", { ascending: true })
+    if (!query.error) {
+      return eventArtistsToLineup(query.data ?? [])
     }
-    return empty
+    lastError = query.error
   }
 
-  return eventArtistsToLineup(data ?? [])
+  if (lastError && !/event_artists|schema cache|PGRST204|42703/i.test(lastError.message)) {
+    logger.error({
+      context: "public-events",
+      message: "event_artists_load_failed",
+      event_id: eventId,
+      error: lastError,
+    })
+  }
+  return empty
 }
 
 async function resolvePublicVenueMap(

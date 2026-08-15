@@ -5,6 +5,7 @@ import {
   ImageIcon,
   LoaderCircle,
   Pencil,
+  Settings2,
   UploadCloud,
 } from "lucide-react"
 import dynamic from "next/dynamic"
@@ -24,6 +25,7 @@ import {
   type VenueArgentinaValue,
 } from "@/components/admin/venue-argentina-selector"
 import { InteractiveVenueMapStudio } from "@/components/admin/interactive-venue-map-studio"
+import { VenueManagerModal } from "@/components/admin/venue-manager-modal"
 import { VenueMapStudioSummary } from "@/components/admin/venue-map-studio-summary"
 import { useEventFormStore } from "@/lib/stores/event-form-store"
 import { venueMapToPricingMap } from "@/lib/seating/venue-map-pricing"
@@ -124,8 +126,15 @@ export function EventVenueStep({
   const existingVenueId = form.watch("venue.existingVenueId")
   const includesSeatingMap = Boolean(form.watch("venue.includesSeatingMap"))
   const selectedVenue = uniqueVenues(venues).find((venue) => venue.id === existingVenueId)
-  const venueOptions = uniqueVenues(venues)
+  const venueCatalog = uniqueVenues(venues)
+  const venueOptions = [...venueCatalog]
+    .filter((venue) => !venue.isArchived || venue.id === existingVenueId)
+    .sort((left, right) =>
+      left.name.localeCompare(right.name, "es", { sensitivity: "base" }),
+    )
   const structured = includesSeatingMap
+
+  const [managerOpen, setManagerOpen] = useState(false)
 
   const [editingSaved, setEditingSaved] = useState(false)
   const [zoneDrafts, setZoneDrafts] = useState<VenueZoneDraft[]>([
@@ -395,6 +404,8 @@ export function EventVenueStep({
         seatingLayout: payload.seatingLayout,
         venueMap: payload.venueMap,
         seatingBackgroundUrl: payload.seatingBackgroundUrl,
+        isArchived: previous?.isArchived ?? false,
+        linkedEventCount: previous?.linkedEventCount ?? 0,
         createdAt: previous?.createdAt ?? now,
         updatedAt: now,
       }
@@ -457,19 +468,40 @@ export function EventVenueStep({
     })
   }
 
-  const showCreateForm = venueMode === "new" || venues.length === 0 || editingSaved
+  function handleCatalogChange(next: OrganizerVenue[]) {
+    onVenuesChange?.(next)
+    if (!existingVenueId) return
+    if (next.some((item) => item.id === existingVenueId)) return
+    const first = next.find((item) => !item.isArchived)
+    if (first) applySavedVenue(first)
+    else switchToNew()
+  }
+
+  const showCreateForm =
+    venueMode === "new" || venueOptions.length === 0 || editingSaved
 
   return (
     <div className="space-y-7">
       {showLocation ? (
+      <div className="space-y-2">
+      <div className="flex items-center justify-end">
+        <button
+          type="button"
+          onClick={() => setManagerOpen(true)}
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+        >
+          <Settings2 className="size-3.5" aria-hidden="true" />
+          Gestionar Lugares
+        </button>
+      </div>
       <div className="grid gap-2 sm:grid-cols-2">
         <button
           type="button"
-          disabled={venues.length === 0}
+          disabled={venueOptions.length === 0}
           onClick={() => {
             form.setValue("venue.mode", "existing")
             setEditingSaved(false)
-            if (!existingVenueId && venues[0]) applySavedVenue(venues[0])
+            if (!existingVenueId && venueOptions[0]) applySavedVenue(venueOptions[0])
           }}
           className={cn(
             "rounded-2xl border px-4 py-3 text-left text-sm transition disabled:opacity-40",
@@ -479,9 +511,9 @@ export function EventVenueStep({
           )}
         >
           Elegir un lugar guardado
-          {venues.length === 0
+          {venueOptions.length === 0
             ? " (todavía no hay)"
-            : ` (${venues.length})`}
+            : ` (${venueOptions.length})`}
         </button>
         <button
           type="button"
@@ -495,6 +527,7 @@ export function EventVenueStep({
         >
           Crear un lugar nuevo
         </button>
+      </div>
       </div>
       ) : null}
 
@@ -538,7 +571,17 @@ export function EventVenueStep({
             name="venue.existingVenueId"
             render={({ field, fieldState }) => (
               <FormItem>
-                <FormLabel>Cambiar lugar</FormLabel>
+                <div className="flex items-center justify-between gap-3">
+                  <FormLabel>Cambiar lugar</FormLabel>
+                  <button
+                    type="button"
+                    onClick={() => setManagerOpen(true)}
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                  >
+                    <Settings2 className="size-3.5" aria-hidden="true" />
+                    Gestionar Lugares
+                  </button>
+                </div>
                 <Select
                   value={field.value ?? ""}
                   onValueChange={(value) => {
@@ -809,6 +852,12 @@ export function EventVenueStep({
             : null}
         </div>
       ) : null}
+
+      <VenueManagerModal
+        open={managerOpen}
+        onOpenChange={setManagerOpen}
+        onCatalogChange={handleCatalogChange}
+      />
     </div>
   )
 }

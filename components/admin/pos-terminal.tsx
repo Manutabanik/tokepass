@@ -4,7 +4,6 @@ import {
   Banknote,
   Ban,
   CreditCard,
-  Gift,
   KeyRound,
   LoaderCircle,
   Lock,
@@ -15,8 +14,15 @@ import {
   Ticket,
   Unlock,
 } from "lucide-react"
-import { useEffect, useMemo, useState, useTransition } from "react"
-import { QRCodeSVG } from "qrcode.react"
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type ReactNode,
+} from "react"
 import { toast } from "sonner"
 
 import {
@@ -29,7 +35,6 @@ import {
   voidPosOrder,
   type CashierShiftRow,
   type PosEventOption,
-  type PosSaleResult,
   type PosShiftOrder,
   type TicketZReport,
 } from "@/app/actions/pos"
@@ -52,6 +57,14 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { formatCurrency } from "@/lib/format"
+import { cashChangeDue, cashTenderSuggestions, resolvePosBuyer } from "@/lib/pos-cash"
+import {
+  bumpPosCart,
+  posCartItemCount,
+  posCartLines,
+  splitPosQuantity,
+  type PosCart,
+} from "@/lib/pos-cart"
 import {
   printTicketsViaHiddenIframe,
   printUrlViaHiddenIframe,
@@ -62,13 +75,24 @@ type PayMethod = "cash_pos" | "transfer_pos" | "card_pos"
 
 const LAST_TICKETS_KEY = "tokepass.pos.lastTicketIds"
 
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  const tag = target.tagName
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true
+  return target.isContentEditable
+}
+
 export function PosTerminal({ events }: { events: PosEventOption[] }) {
   const [eventId, setEventId] = useState(events[0]?.id ?? "")
-  const [tierId, setTierId] = useState(events[0]?.tiers[0]?.id ?? "")
-  const [quantity, setQuantity] = useState(1)
+  const [cart, setCart] = useState<PosCart>({})
+  const [soldDelta, setSoldDelta] = useState<Record<string, number>>({})
   const [phone, setPhone] = useState("")
   const [dni, setDni] = useState("")
   const [buyerName, setBuyerName] = useState("")
+  const [expressSale, setExpressSale] = useState(true)
+  const [payMethod, setPayMethod] = useState<PayMethod>("cash_pos")
+  const [tendered, setTendered] = useState<number | null>(null)
+  const [customTender, setCustomTender] = useState("")
   const [shift, setShift] = useState<CashierShiftRow | null>(null)
   const [shiftLoading, setShiftLoading] = useState(true)
   const [openCashAmount, setOpenCashAmount] = useState("0")
@@ -76,14 +100,9 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
   const [closeModal, setCloseModal] = useState(false)
   const [countedAmount, setCountedAmount] = useState("")
   const [isPending, startTransition] = useTransition()
-  const [result, setResult] = useState<Extract<
-    PosSaleResult,
-    { success: true }
-  > | null>(null)
   const [lastTicketIds, setLastTicketIds] = useState<string[]>([])
   const [pinModal, setPinModal] = useState<{
     mode: "courtesy" | "void" | "config"
-    method?: PayMethod
     orderId?: string
   } | null>(null)
   const [supervisorPin, setSupervisorPin] = useState("")
@@ -92,20 +111,70 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
   const [voidModal, setVoidModal] = useState(false)
   const [zReport, setZReport] = useState<TicketZReport | null>(null)
 
+  const clearTimerRef = useRef<number | null>(null)
+  const keyHandlerRef = useRef<(event: KeyboardEvent) => void>(() => {})
+  const dialogsOpen =
+    openModal || closeModal || !!pinModal || voidModal || !!zReport
+
   const selectedEvent = useMemo(
     () => events.find((event) => event.id === eventId) ?? null,
     [events, eventId],
   )
 
-  const selectedTier = selectedEvent?.tiers ?? []
-  const selectedTierId =
-    selectedTier.find((tier) => tier.id === tierId)?.id ??
-    selectedTier[0]?.id ??
-    ""
-  const selectedTierItem =
-    selectedTier.find((tier) => tier.id === selectedTierId) ?? null
-  const total = selectedTierItem ? selectedTierItem.price * quantity : 0
-  const needsPin = Boolean(selectedTierItem?.requiresSupervisorPin)
+  const tiers = selectedEvent?.tiers ?? []
+
+  const liveTiers = useMemo(
+    () =>
+      tiers.map((tier) => ({
+        ...tier,
+        available: Math.max(0, tier.available - (soldDelta[tier.id] ?? 0)),
+      })),
+    [tiers, soldDelta],
+  )
+
+  const stockFingerprint = useMemo(
+    () => tiers.map((tier) => `${tier.id}:${tier.available}`).join("|"),
+    [tiers],
+  )
+
+  useEffect(() => {
+    setSoldDelta({})
+  }, [stockFingerprint])
+
+  const lines = useMemo(
+    () =>
+      posCartLines(cart)
+        .map((line) => {
+          const tier = liveTiers.find((item) => item.id === line.tierId)
+          if (!tier) return null
+          return { ...line, tier }
+        })
+        .filter((line): line is NonNullable<typeof line> => line != null),
+    [cart, liveTiers],
+  )
+
+  const total = lines.reduce(
+    (sum, line) => sum + line.tier.price * line.quantity,
+    0,
+  )
+  const itemCount = posCartItemCount(cart)
+  const needsPin = lines.some((line) => line.tier.requiresSupervisorPin)
+  const cashSuggestions = cashTenderSuggestions(total)
+  const effectiveTender =
+    payMethod === "cash_pos" ? (tendered ?? total) : total
+  const changeDue =
+    payMethod === "cash_pos" ? cashChangeDue(total, effectiveTender) : 0
+
+  const resetSaleForm = useCallback(() => {
+    setCart({})
+    setPhone("")
+    setDni("")
+    setBuyerName("")
+    setExpressSale(true)
+    setPayMethod("cash_pos")
+    setTendered(null)
+    setCustomTender("")
+  }, [])
 
   useEffect(() => {
     try {
@@ -139,6 +208,14 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
     }
   }, [eventId])
 
+  useEffect(() => {
+    return () => {
+      if (clearTimerRef.current != null) {
+        window.clearTimeout(clearTimerRef.current)
+      }
+    }
+  }, [])
+
   function persistLastTickets(ids: string[]) {
     setLastTicketIds(ids)
     try {
@@ -150,9 +227,16 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
 
   function onEventChange(nextEventId: string) {
     setEventId(nextEventId)
-    const next = events.find((event) => event.id === nextEventId)
-    setTierId(next?.tiers[0]?.id ?? "")
-    setQuantity(1)
+    setCart({})
+    setSoldDelta({})
+    setTendered(null)
+    setCustomTender("")
+  }
+
+  function addTier(tierId: string, delta = 1) {
+    const tier = liveTiers.find((item) => item.id === tierId)
+    if (!tier || !shift) return
+    setCart((current) => bumpPosCart(current, tierId, delta, tier.available))
   }
 
   function handleOpenShift() {
@@ -200,70 +284,124 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
     })
   }
 
-  function requestSell(method: PayMethod) {
-    if (!eventId || !selectedTierId || !shift || isPending) return
-    const cleanDni = dni.replace(/\D/g, "")
-    if (cleanDni.length < 7) {
-      toast.error("Ingresá el DNI del comprador")
-      return
-    }
+  function requestEmit() {
+    if (!eventId || !shift || isPending || lines.length === 0) return
     if (needsPin) {
       setSupervisorPin("")
-      setPinModal({ mode: "courtesy", method })
+      setPinModal({ mode: "courtesy" })
       return
     }
-    runSale(method, null)
+    runSale(null)
   }
 
-  function runSale(method: PayMethod, pin: string | null) {
-    if (!eventId || !selectedTierId || !shift) return
-    const cleanDni = dni.replace(/\D/g, "")
+  function runSale(pin: string | null) {
+    if (!eventId || !shift || lines.length === 0) return
+    const buyer = resolvePosBuyer({
+      express: expressSale,
+      dni,
+      name: buyerName,
+    })
+    const snapshot = lines.map((line) => ({
+      tierId: line.tierId,
+      quantity: line.quantity,
+      price: line.tier.price,
+    }))
 
     startTransition(async () => {
-      const sale = await createPosSale({
-        eventId,
-        tierId: selectedTierId,
-        quantity,
-        paymentMethod: method,
-        customerPhone: phone,
-        customerDni: cleanDni,
-        customerName: buyerName,
-        shiftId: shift.id,
-        supervisorPin: pin,
-      })
+      const issuedIds: string[] = []
+      let billed = 0
+      const remaining: PosCart = {}
+      let failed = false
 
-      if (!sale.success) {
-        toast.error(sale.error)
-        if (sale.error.toLowerCase().includes("abrir la caja")) {
-          setOpenModal(true)
+      for (let index = 0; index < snapshot.length; index++) {
+        const line = snapshot[index]
+        const chunks = splitPosQuantity(line.quantity)
+        let leftover = line.quantity
+
+        for (const quantity of chunks) {
+          const sale = await createPosSale({
+            eventId,
+            tierId: line.tierId,
+            quantity,
+            paymentMethod: payMethod,
+            customerPhone: phone,
+            customerDni: buyer.dni,
+            customerName: buyer.name,
+            shiftId: shift.id,
+            supervisorPin: pin,
+          })
+
+          if (!sale.success) {
+            remaining[line.tierId] = leftover
+            for (let rest = index + 1; rest < snapshot.length; rest++) {
+              remaining[snapshot[rest].tierId] = snapshot[rest].quantity
+            }
+            toast.error(sale.error)
+            if (sale.error.toLowerCase().includes("abrir la caja")) {
+              setOpenModal(true)
+            }
+            failed = true
+            break
+          }
+
+          leftover -= quantity
+          billed += sale.totalAmount
+          issuedIds.push(...sale.tickets.map((ticket) => ticket.id))
+          setSoldDelta((current) => ({
+            ...current,
+            [line.tierId]: (current[line.tierId] ?? 0) + quantity,
+          }))
         }
+
+        if (failed) break
+      }
+
+      if (issuedIds.length > 0) {
+        persistLastTickets(issuedIds)
+        void printTicketsViaHiddenIframe(issuedIds).catch(() => {
+          toast.message("Usá Reimprimir si el papel se trabó.")
+        })
+        setShift((current) => {
+          if (!current) return current
+          return {
+            ...current,
+            cashSalesTotal:
+              current.cashSalesTotal + (payMethod === "cash_pos" ? billed : 0),
+            cardSalesTotal:
+              current.cardSalesTotal + (payMethod === "card_pos" ? billed : 0),
+            transferSalesTotal:
+              current.transferSalesTotal +
+              (payMethod === "transfer_pos" ? billed : 0),
+            ticketsSold: current.ticketsSold + issuedIds.length,
+          }
+        })
+        const next = await getOpenCashierShift(eventId)
+        if (next) setShift(next)
+      }
+
+      if (failed) {
+        setCart(remaining)
+        setPinModal(null)
+        setSupervisorPin("")
         return
       }
 
       const labels: Record<PayMethod, string> = {
         cash_pos: "Cobrado en efectivo",
         card_pos: "Cobrado con Posnet / tarjeta",
-        transfer_pos: "Cobrado por transferencia",
+        transfer_pos: "Cobrado por QR / transferencia",
       }
       toast.success(
-        needsPin || sale.totalAmount === 0
-          ? "Cortesía emitida"
-          : labels[method],
+        needsPin || billed === 0 ? "Cortesía emitida" : labels[payMethod],
       )
-      setResult(sale)
       setPinModal(null)
       setSupervisorPin("")
-      setQuantity(1)
-      setPhone("")
-      setDni("")
-      setBuyerName("")
-      const ids = sale.tickets.map((t) => t.id)
-      persistLastTickets(ids)
-      void printTicketsViaHiddenIframe(ids).catch(() => {
-        toast.message("Usá Reimprimir si el papel se trabó.")
-      })
-      const next = await getOpenCashierShift(eventId)
-      if (next) setShift(next)
+      if (clearTimerRef.current != null) {
+        window.clearTimeout(clearTimerRef.current)
+      }
+      clearTimerRef.current = window.setTimeout(() => {
+        resetSaleForm()
+      }, 100)
     })
   }
 
@@ -323,8 +461,8 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
       return
     }
 
-    if (pinModal.mode === "courtesy" && pinModal.method) {
-      runSale(pinModal.method, supervisorPin.trim())
+    if (pinModal.mode === "courtesy") {
+      runSale(supervisorPin.trim())
       return
     }
 
@@ -350,6 +488,54 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
     }
   }
 
+  keyHandlerRef.current = (event: KeyboardEvent) => {
+    if (dialogsOpen) return
+    const typing = isTypingTarget(event.target)
+
+    if (event.key === "Escape") {
+      event.preventDefault()
+      resetSaleForm()
+      return
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault()
+      requestEmit()
+      return
+    }
+
+    if (event.key === "F1") {
+      event.preventDefault()
+      setPayMethod("cash_pos")
+      return
+    }
+    if (event.key === "F2") {
+      event.preventDefault()
+      setPayMethod("card_pos")
+      return
+    }
+    if (event.key === "F3") {
+      event.preventDefault()
+      setPayMethod("transfer_pos")
+      return
+    }
+
+    if (typing || event.ctrlKey || event.metaKey || event.altKey) return
+    if (/^[1-9]$/.test(event.key)) {
+      event.preventDefault()
+      const tier = liveTiers[Number(event.key) - 1]
+      if (tier) addTier(tier.id)
+    }
+  }
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      keyHandlerRef.current(event)
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [])
+
   if (events.length === 0) {
     return (
       <div className="rounded-3xl border border-dashed border-border bg-card px-5 py-12 text-center">
@@ -361,15 +547,15 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
     )
   }
 
-  const cashExpected =
-    (shift?.startAmount ?? 0) + (shift?.cashSalesTotal ?? 0)
+  const cashExpected = (shift?.startAmount ?? 0) + (shift?.cashSalesTotal ?? 0)
+  const canSell = Boolean(shift) && !isPending
 
   return (
-    <div className="mx-auto w-full max-w-md space-y-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-      {shift ? (
-        <div className="space-y-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
+    <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
+      <header className="shrink-0 border-b border-border bg-card px-3 py-3 sm:px-4">
+        {shift ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="min-w-0 flex-1">
               <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-200">
                 <Unlock className="size-3.5" />
                 Caja abierta
@@ -389,12 +575,10 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
               <Lock className="size-4" />
               Cerrar Turno (Ticket Z)
             </Button>
-          </div>
-          <div className="flex flex-wrap gap-2">
             <Button
               type="button"
               variant="outline"
-              className="min-h-11 flex-1 rounded-xl"
+              className="min-h-11 rounded-xl"
               disabled={isPending || lastTicketIds.length === 0}
               onClick={handleReprint}
             >
@@ -404,12 +588,12 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
             <Button
               type="button"
               variant="outline"
-              className="min-h-11 flex-1 rounded-xl border-red-500/40 text-rose-600 dark:text-rose-200"
+              className="min-h-11 rounded-xl border-red-500/40 text-rose-600 dark:text-rose-200"
               disabled={isPending}
               onClick={openVoidList}
             >
               <Ban className="size-4" />
-              Anular Venta
+              Anular
             </Button>
             <Button
               type="button"
@@ -425,259 +609,298 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
               PIN
             </Button>
           </div>
-        </div>
-      ) : (
-        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-600 dark:text-amber-200">
-          {shiftLoading
-            ? "Revisando turno…"
-            : "Abrí la caja para empezar a cobrar."}
-        </div>
-      )}
+        ) : (
+          <p className="text-sm text-amber-600 dark:text-amber-200">
+            {shiftLoading
+              ? "Revisando turno…"
+              : "Abrí la caja para empezar a cobrar."}
+          </p>
+        )}
+      </header>
 
-      <div className="space-y-2">
-        <Label className="text-muted-foreground">Evento</Label>
-        <Select
-          value={eventId}
-          onValueChange={(v) => v && onEventChange(v)}
-          items={events.map((event) => ({
-            value: event.id,
-            label: event.title,
-          }))}
-        >
-          <SelectTrigger className="h-14 w-full max-w-full overflow-hidden rounded-2xl border-border bg-card text-base text-foreground">
-            <SelectValue placeholder="Elegí evento">
-              {selectedEvent?.title ?? null}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {events.map((event) => (
-              <SelectItem key={event.id} value={event.id}>
-                <span className="block max-w-[200px] truncate sm:max-w-[300px]">
-                  {event.title}
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,3fr)_minmax(22rem,2fr)]">
+        <section className="min-h-0 overflow-y-auto border-border p-3 sm:p-4 lg:border-r">
+          <div className="space-y-2">
+            <Label className="text-muted-foreground">Evento activo</Label>
+            <Select
+              value={eventId}
+              onValueChange={(value) => value && onEventChange(value)}
+              items={events.map((event) => ({
+                value: event.id,
+                label: event.title,
+              }))}
+            >
+              <SelectTrigger className="h-14 w-full max-w-full overflow-hidden rounded-2xl border-border bg-card text-base text-foreground">
+                <SelectValue placeholder="Elegí evento">
+                  {selectedEvent?.title ?? null}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {events.map((event) => (
+                  <SelectItem key={event.id} value={event.id}>
+                    <span className="block max-w-[220px] truncate sm:max-w-[420px]">
+                      {event.title}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-      <fieldset
-        disabled={!shift || isPending}
-        className="space-y-4 disabled:opacity-50"
-      >
-        <div className="space-y-2">
-          <Label className="text-muted-foreground">
-            Tipo de entrada
-          </Label>
-          <Select
-            value={selectedTierId}
-            onValueChange={(v) => v && setTierId(v)}
-            items={selectedTier.map((tier) => ({
-              value: tier.id,
-              label: `${tier.name}${
-                tier.admitCount > 1 ? ` · Mesa x${tier.admitCount}` : ""
-              }${
-                tier.requiresSupervisorPin
-                  ? " · Cortesía (PIN)"
-                  : ` · ${formatCurrency(tier.price)}`
-              }`,
-            }))}
-          >
-            <SelectTrigger className="h-14 w-full max-w-full overflow-hidden rounded-2xl border-border bg-card text-base text-foreground">
-              <SelectValue placeholder="Seleccioná un tipo de entrada">
-                {selectedTierItem
-                  ? `${selectedTierItem.name} (${
-                      selectedTierItem.requiresSupervisorPin
+          <fieldset disabled={!canSell} className="mt-4 disabled:opacity-50">
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+              {liveTiers.map((tier, index) => {
+                const inCart = cart[tier.id] ?? 0
+                const soldOut = tier.available <= 0
+                return (
+                  <button
+                    key={tier.id}
+                    type="button"
+                    disabled={soldOut}
+                    onClick={() => addTier(tier.id)}
+                    className={cn(
+                      "flex min-h-36 flex-col items-start justify-between rounded-2xl border-2 bg-card p-4 text-left transition active:scale-[0.98]",
+                      inCart > 0
+                        ? "border-emerald-500 bg-emerald-500/10"
+                        : "border-border hover:border-emerald-500/50",
+                      soldOut && "cursor-not-allowed opacity-40",
+                    )}
+                  >
+                    <div className="flex w-full items-start justify-between gap-2">
+                      <span className="text-lg font-bold leading-tight text-foreground">
+                        {tier.name}
+                      </span>
+                      {index < 9 ? (
+                        <span className="rounded-md bg-muted px-1.5 py-0.5 text-xs font-black tabular-nums text-muted-foreground">
+                          {index + 1}
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-3 text-2xl font-black tabular-nums text-foreground">
+                      {tier.requiresSupervisorPin
                         ? "Cortesía"
-                        : selectedTierItem.price === 0
-                          ? "Gratis"
-                          : formatCurrency(selectedTierItem.price)
-                    })`
-                  : null}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {selectedTier.map((tier) => (
-                <SelectItem key={tier.id} value={tier.id}>
-                  <span className="block max-w-[200px] truncate sm:max-w-[300px]">
-                    {tier.name}
-                  </span>
-                  <span className="shrink-0 text-sm text-muted-foreground">
-                    {tier.admitCount > 1 ? `Mesa x${tier.admitCount} · ` : ""}
-                    {tier.requiresSupervisorPin
-                      ? "Cortesía (PIN)"
-                      : formatCurrency(tier.price)}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {selectedTierItem ? (
-            <p className="text-xs text-muted-foreground">
-              {selectedTierItem.available} disponibles
-              {selectedTierItem.requiresSupervisorPin
-                ? " · Requiere PIN de Autorización"
-                : ""}
-            </p>
-          ) : null}
-        </div>
-
-        <div className="flex items-center justify-between rounded-2xl border border-border bg-card px-4 py-3">
-          <span className="text-sm font-medium text-muted-foreground">
-            Cantidad
-          </span>
-          <div className="flex items-center gap-3">
-            <Button
-              type="button"
-              size="icon"
-              variant="outline"
-              className="size-12 rounded-full border-border"
-              disabled={quantity <= 1}
-              onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-            >
-              <Minus />
-            </Button>
-            <span className="w-8 text-center text-2xl font-black tabular-nums text-foreground">
-              {quantity}
-            </span>
-            <Button
-              type="button"
-              size="icon"
-              variant="outline"
-              className="size-12 rounded-full border-border"
-              disabled={
-                !selectedTierItem ||
-                quantity >= Math.min(10, selectedTierItem.available)
-              }
-              onClick={() =>
-                setQuantity((q) =>
-                  Math.min(10, selectedTierItem?.available ?? 10, q + 1),
+                        : formatCurrency(tier.price)}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {Math.max(0, tier.available - inCart)} disponibles
+                      {inCart > 0 ? ` · ${inCart} en carrito` : ""}
+                    </p>
+                  </button>
                 )
-              }
-            >
-              <Plus />
-            </Button>
-          </div>
-        </div>
+              })}
+            </div>
+          </fieldset>
+        </section>
 
-        <div className="space-y-2">
-          <Label htmlFor="pos-dni" className="text-muted-foreground">
-            DNI del comprador <span className="text-rose-600 dark:text-rose-400">*</span>
-          </Label>
-          <Input
-            id="pos-dni"
-            inputMode="numeric"
-            autoComplete="off"
-            placeholder="Solo números"
-            value={dni}
-            onChange={(e) =>
-              setDni(e.target.value.replace(/\D/g, "").slice(0, 11))
-            }
-            className="h-14 rounded-2xl border-border bg-card text-base text-foreground"
-            required
-          />
-        </div>
+        <aside className="flex min-h-0 flex-col border-t border-border bg-card lg:border-t-0">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3 sm:p-4">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                Carrito
+              </p>
+              {lines.length === 0 ? (
+                <p className="mt-3 text-sm text-muted-foreground">
+                  Tocá un tipo de entrada para sumar +1.
+                </p>
+              ) : (
+                <ul className="mt-3 space-y-2">
+                  {lines.map((line) => (
+                    <li
+                      key={line.tierId}
+                      className="flex items-center justify-between gap-3 rounded-2xl border border-border px-3 py-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold">{line.tier.name}</p>
+                        <p className="text-sm font-bold tabular-nums">
+                          {formatCurrency(line.tier.price * line.quantity)}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="outline"
+                          className="size-11 rounded-full"
+                          disabled={!canSell}
+                          onClick={() => addTier(line.tierId, -1)}
+                        >
+                          <Minus />
+                        </Button>
+                        <span className="w-7 text-center text-xl font-black tabular-nums">
+                          {line.quantity}
+                        </span>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="outline"
+                          className="size-11 rounded-full"
+                          disabled={!canSell || line.quantity >= line.tier.available}
+                          onClick={() => addTier(line.tierId, 1)}
+                        >
+                          <Plus />
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="pos-name" className="text-muted-foreground">
-            Nombre (opcional)
-          </Label>
-          <Input
-            id="pos-name"
-            autoComplete="name"
-            placeholder="Ej. Juan Pérez"
-            value={buyerName}
-            onChange={(e) => setBuyerName(e.target.value)}
-            className="h-14 rounded-2xl border-border bg-card text-base text-foreground"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label
-            htmlFor="pos-phone"
-            className="text-muted-foreground"
-          >
-            Teléfono / WhatsApp (opcional)
-          </Label>
-          <Input
-            id="pos-phone"
-            inputMode="tel"
-            placeholder="+54 9 11 ..."
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            className="h-14 rounded-2xl border-border bg-card text-base text-foreground"
-          />
-        </div>
-
-        <div className="rounded-2xl border border-border bg-card px-4 py-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Total</span>
-            <span className="text-3xl font-black tabular-nums text-foreground">
-              {formatCurrency(total)}
-            </span>
-          </div>
-        </div>
-
-        <div className="grid gap-3">
-          {needsPin ? (
-            <Button
+            <button
               type="button"
-              disabled={!selectedTierItem}
-              onClick={() => requestSell("cash_pos")}
-              className="h-16 rounded-2xl border border-amber-500/40 bg-amber-500/15 text-lg font-bold text-amber-600 dark:text-amber-200 hover:bg-amber-500/25"
+              disabled={!canSell}
+              onClick={() => setExpressSale((value) => !value)}
+              className={cn(
+                "flex min-h-12 w-full items-center justify-between rounded-2xl border-2 px-4 py-3 text-left font-semibold",
+                expressSale
+                  ? "border-emerald-500 bg-emerald-500/15 text-foreground"
+                  : "border-border bg-background text-muted-foreground",
+              )}
+            >
+              <span>Venta Express (Consumidor Final)</span>
+              <span className="text-xs font-black uppercase tracking-wide">
+                {expressSale ? "ON" : "OFF"}
+              </span>
+            </button>
+
+            {!expressSale ? (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="pos-dni" className="text-muted-foreground">
+                    DNI / Nombre{" "}
+                    <span className="font-semibold text-foreground">(Opcional)</span>
+                  </Label>
+                  <Input
+                    id="pos-dni"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    placeholder="DNI (opcional)"
+                    value={dni}
+                    onChange={(e) =>
+                      setDni(e.target.value.replace(/\D/g, "").slice(0, 11))
+                    }
+                    className="h-12 rounded-2xl border-border bg-background text-base"
+                  />
+                </div>
+                <Input
+                  id="pos-name"
+                  autoComplete="name"
+                  placeholder="Nombre (opcional)"
+                  value={buyerName}
+                  onChange={(e) => setBuyerName(e.target.value)}
+                  className="h-12 rounded-2xl border-border bg-background text-base"
+                />
+                <Input
+                  id="pos-phone"
+                  inputMode="tel"
+                  placeholder="WhatsApp (opcional)"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="h-12 rounded-2xl border-border bg-background text-base"
+                />
+              </div>
+            ) : null}
+
+            <div className="rounded-2xl border border-border px-4 py-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">
+                  Total · {itemCount} {itemCount === 1 ? "ítem" : "ítems"}
+                </span>
+                <span className="text-3xl font-black tabular-nums">
+                  {formatCurrency(total)}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              <PayMethodButton
+                active={payMethod === "cash_pos"}
+                disabled={!canSell}
+                onClick={() => setPayMethod("cash_pos")}
+                icon={<Banknote className="size-5" />}
+                label="EFECTIVO (F1)"
+              />
+              <PayMethodButton
+                active={payMethod === "card_pos"}
+                disabled={!canSell}
+                onClick={() => setPayMethod("card_pos")}
+                icon={<CreditCard className="size-5" />}
+                label="TARJETA / POSNET (F2)"
+              />
+              <PayMethodButton
+                active={payMethod === "transfer_pos"}
+                disabled={!canSell}
+                onClick={() => setPayMethod("transfer_pos")}
+                icon={<Smartphone className="size-5" />}
+                label="QR / TRANSFERENCIA (F3)"
+              />
+            </div>
+
+            {payMethod === "cash_pos" && total > 0 ? (
+              <div className="space-y-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3">
+                <p className="text-xs font-bold uppercase tracking-wide text-emerald-700 dark:text-emerald-200">
+                  Pago en efectivo
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {cashSuggestions.map((amount) => (
+                    <button
+                      key={amount}
+                      type="button"
+                      disabled={!canSell}
+                      onClick={() => {
+                        setTendered(amount)
+                        setCustomTender("")
+                      }}
+                      className={cn(
+                        "min-h-12 rounded-xl border-2 px-2 text-sm font-black tabular-nums",
+                        tendered === amount
+                          ? "border-emerald-500 bg-emerald-500 text-white"
+                          : "border-border bg-background",
+                      )}
+                    >
+                      {formatCurrency(amount)}
+                    </button>
+                  ))}
+                </div>
+                <Input
+                  inputMode="decimal"
+                  placeholder="Otro monto recibido"
+                  value={customTender}
+                  onChange={(e) => {
+                    setCustomTender(e.target.value)
+                    const parsed = Number(e.target.value.replace(",", "."))
+                    setTendered(Number.isFinite(parsed) && parsed > 0 ? parsed : null)
+                  }}
+                  className="h-12 rounded-xl bg-background text-base"
+                />
+                <div className="text-center">
+                  <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                    Vuelto
+                  </p>
+                  <p className="text-5xl font-black tabular-nums text-emerald-600 dark:text-emerald-300">
+                    {formatCurrency(changeDue)}
+                  </p>
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="shrink-0 border-t border-border p-3 sm:p-4">
+            <button
+              type="button"
+              disabled={!canSell || lines.length === 0}
+              onClick={requestEmit}
+              className="inline-flex h-16 w-full items-center justify-center rounded-2xl bg-emerald-500 text-xl font-black text-white hover:bg-emerald-600 disabled:pointer-events-none disabled:opacity-50"
             >
               {isPending ? (
                 <LoaderCircle className="animate-spin" />
               ) : (
-                <Gift className="size-6" />
+                "EMITIR E IMPRIMIR TICKET (ENTER)"
               )}
-              Emitir cortesía (PIN)
-            </Button>
-          ) : (
-            <>
-              <Button
-                type="button"
-                disabled={!selectedTierItem || total <= 0}
-                onClick={() => requestSell("cash_pos")}
-                className="h-16 rounded-2xl bg-emerald-500 text-lg font-bold text-zinc-950 hover:bg-emerald-400"
-              >
-                {isPending ? (
-                  <LoaderCircle className="animate-spin" />
-                ) : (
-                  <Banknote className="size-6" />
-                )}
-                Cobrar en efectivo
-              </Button>
-              <Button
-                type="button"
-                disabled={!selectedTierItem || total <= 0}
-                onClick={() => requestSell("card_pos")}
-                className="h-16 rounded-2xl border border-violet-500/40 bg-violet-500/15 text-lg font-bold text-violet-700 dark:text-violet-200 hover:bg-violet-500/25"
-              >
-                {isPending ? (
-                  <LoaderCircle className="animate-spin" />
-                ) : (
-                  <CreditCard className="size-6" />
-                )}
-                Cobrar con Posnet / tarjeta
-              </Button>
-              <Button
-                type="button"
-                disabled={!selectedTierItem || total <= 0}
-                onClick={() => requestSell("transfer_pos")}
-                className="h-16 rounded-2xl border border-sky-500/40 bg-sky-500/15 text-lg font-bold text-sky-700 dark:text-sky-200 hover:bg-sky-500/25"
-              >
-                {isPending ? (
-                  <LoaderCircle className="animate-spin" />
-                ) : (
-                  <Smartphone className="size-6" />
-                )}
-                Cobrar por transferencia
-              </Button>
-            </>
-          )}
-        </div>
-      </fieldset>
+            </button>
+          </div>
+        </aside>
+      </div>
 
       <Dialog
         open={openModal && !shift}
@@ -896,72 +1119,6 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
       </Dialog>
 
       <Dialog
-        open={!!result}
-        onOpenChange={(open) => {
-          if (!open) setResult(null)
-        }}
-      >
-        <DialogContent className="max-h-[90dvh] overflow-y-auto border-border bg-card text-foreground sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Venta registrada</DialogTitle>
-            <DialogDescription className="text-muted-foreground">
-              Impresión térmica enviada automáticamente.
-            </DialogDescription>
-          </DialogHeader>
-
-          {result ? (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Total:{" "}
-                <span className="font-semibold text-foreground">
-                  {formatCurrency(result.totalAmount)}
-                </span>
-              </p>
-              {result.tickets.map((ticket, index) => (
-                <div
-                  key={ticket.id}
-                  className="rounded-2xl border border-border bg-muted/50 px-4 py-4 text-center"
-                >
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Entrada {index + 1}
-                  </p>
-                  <p className="text-sm font-medium text-foreground">
-                    {ticket.holderName} · DNI {ticket.holderDni}
-                  </p>
-                  <div className="mx-auto mt-3 inline-block rounded-xl bg-card p-3">
-                    <QRCodeSVG
-                      value={ticket.totpSecret}
-                      size={220}
-                      level="H"
-                      includeMargin
-                      bgColor="#ffffff"
-                      fgColor="#09090b"
-                    />
-                  </div>
-                </div>
-              ))}
-              <Button
-                type="button"
-                variant="outline"
-                className="h-12 w-full rounded-full"
-                onClick={handleReprint}
-              >
-                <Printer className="size-4" />
-                Reimprimir
-              </Button>
-              <Button
-                type="button"
-                className="h-12 w-full rounded-full"
-                onClick={() => setResult(null)}
-              >
-                Nueva venta
-              </Button>
-            </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
         open={!!zReport}
         onOpenChange={(open) => {
           if (!open) setZReport(null)
@@ -979,9 +1136,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
               type="button"
               className="min-h-12 w-full rounded-xl"
               onClick={() => {
-                void printUrlViaHiddenIframe(
-                  `/admin/pos/z/${zReport.shiftId}`,
-                )
+                void printUrlViaHiddenIframe(`/admin/pos/z/${zReport.shiftId}`)
               }}
             >
               <Printer className="size-4" />
@@ -991,6 +1146,37 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+function PayMethodButton({
+  active,
+  disabled,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean
+  disabled: boolean
+  onClick: () => void
+  icon: ReactNode
+  label: string
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "flex min-h-14 items-center justify-center gap-2 rounded-2xl border-2 px-3 text-sm font-black tracking-wide",
+        active
+          ? "border-emerald-500 bg-emerald-500 text-white"
+          : "border-border bg-background text-foreground",
+      )}
+    >
+      {icon}
+      {label}
+    </button>
   )
 }
 

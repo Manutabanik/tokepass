@@ -1,11 +1,14 @@
 "use client"
 
 import { IdCard, Mail, Phone, User } from "lucide-react"
+import { useEffect, useMemo } from "react"
 import type { FieldErrors } from "react-hook-form"
 
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import type { CheckoutBuyerInfo } from "@/lib/checkout-buyer"
+import { suggestEmailTypo } from "@/lib/checkout/guest-input"
+import { markCheckoutDwellStart } from "@/lib/checkout/client-security"
 import { CHECKOUT_BUYER_FIELD_IDS } from "@/lib/checkout/validation-scroll"
 import { cn } from "@/lib/utils"
 
@@ -53,12 +56,20 @@ export function CheckoutBuyerFields({
   const phoneError = fieldMessage(errors, "buyerPhone")
   const emailError = fieldMessage(errors, "buyerEmail")
   const names = splitBuyerName(value.buyerName)
+  const emailSuggestion = useMemo(
+    () => suggestEmailTypo(value.buyerEmail),
+    [value.buyerEmail],
+  )
   const shakeClass =
     shakeSignal > 0
       ? shakeSignal % 2 === 0
         ? "animate-checkout-shake-a"
         : "animate-checkout-shake-b"
       : null
+
+  useEffect(() => {
+    markCheckoutDwellStart()
+  }, [])
 
   function inputClass(invalid: boolean, field: keyof CheckoutBuyerInfo) {
     const firstInvalid =
@@ -109,6 +120,15 @@ export function CheckoutBuyerFields({
           placeholder="tunombre@email.com"
           className={inputClass(Boolean(emailError), "buyerEmail")}
         />
+        {emailSuggestion ? (
+          <button
+            type="button"
+            className="text-left text-xs font-medium text-emerald-700 underline-offset-2 hover:underline dark:text-emerald-300"
+            onClick={() => onChange({ ...value, buyerEmail: emailSuggestion })}
+          >
+            ¿Quisiste decir {emailSuggestion}?
+          </button>
+        ) : null}
         <FieldHint id="buyer-email-error" message={emailError} />
       </div>
 
@@ -180,7 +200,7 @@ export function CheckoutBuyerFields({
           onChange={(event) =>
             onChange({
               ...value,
-              buyerDni: event.target.value.replace(/\D/g, "").slice(0, 9),
+              buyerDni: event.target.value.replace(/\D/g, "").slice(0, 8),
             })
           }
           placeholder="Solo números"
@@ -214,9 +234,12 @@ export function CheckoutBuyerFields({
               buyerPhone: event.target.value.replace(/\D/g, "").slice(0, 15),
             })
           }
-          placeholder="Ej. 1123456789"
+          placeholder="11 2345 6789"
           className={inputClass(Boolean(phoneError), "buyerPhone")}
         />
+        <p className="text-xs text-muted-foreground">
+          Celular argentino. Se guarda como +549...
+        </p>
         <FieldHint id="buyer-phone-error" message={phoneError} />
       </div>
     </div>

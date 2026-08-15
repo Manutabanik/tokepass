@@ -1,3 +1,4 @@
+import { resolveSectorAssignMeta, type SectorAssignMeta } from "@/lib/seating/assign-best-seats"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import {
   flattenVenueMapSeats,
@@ -32,6 +33,10 @@ export type AccessibleSectorNode = {
   kind: "ga" | "numbered"
   soldOut: boolean
   availableCount: number
+  isTableSector: boolean
+  capacityPerUnit: number
+  sellMode: SectorAssignMeta["sellMode"]
+  unitNoun: SectorAssignMeta["unitNoun"]
   rows: AccessibleRowNode[]
 }
 
@@ -67,6 +72,7 @@ export function buildAccessibleSeatTree(input: {
         occupancy,
         selected,
         soldOut: soldOut.has(zone.id),
+        map: input.map,
       }),
     )
   }
@@ -84,6 +90,7 @@ export function buildAccessibleSeatTree(input: {
         occupancy,
         selected,
         soldOut: soldOut.has(sector.id),
+        map: input.map,
       }),
     )
   }
@@ -102,6 +109,7 @@ export function buildAccessibleSeatTree(input: {
         occupancy,
         selected,
         soldOut: soldOut.has(sectorId),
+        map: input.map,
       }),
     )
   }
@@ -118,6 +126,7 @@ function toSectorNode(input: {
   occupancy: Record<string, SeatStatus>
   selected: Set<string>
   soldOut: boolean
+  map: InteractiveVenueMap
 }): AccessibleSectorNode {
   const rowsMap = new Map<string, AccessibleSeatNode[]>()
   for (const seat of input.seats) {
@@ -151,6 +160,12 @@ function toSectorNode(input: {
       sum + row.seats.filter((seat) => seat.status === "available" || seat.status === "selected").length,
     0,
   )
+  const tableMeta = resolveSectorAssignMeta(
+    input.map,
+    input.id,
+    input.seats,
+    input.name,
+  )
 
   return {
     id: input.id,
@@ -160,6 +175,10 @@ function toSectorNode(input: {
     kind: rows.length > 0 ? "numbered" : "ga",
     soldOut: input.soldOut || (rows.length > 0 && availableCount === 0),
     availableCount,
+    isTableSector: tableMeta.isTableSector,
+    capacityPerUnit: tableMeta.capacityPerUnit,
+    sellMode: tableMeta.sellMode,
+    unitNoun: tableMeta.unitNoun,
     rows,
   }
 }

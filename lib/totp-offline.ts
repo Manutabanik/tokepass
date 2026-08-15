@@ -19,6 +19,11 @@ export function getTotpWindowProgress(nowMs: number = Date.now()): number {
   return Math.max(0, Math.min(100, (remaining / LIVING_QR_PERIOD_MS) * 100))
 }
 
+export function getTotpRemainingSeconds(nowMs: number = Date.now()): number {
+  const remainingMs = LIVING_QR_PERIOD_MS - (nowMs % LIVING_QR_PERIOD_MS)
+  return Math.max(1, Math.ceil(remainingMs / 1000))
+}
+
 function toHex(bytes: ArrayBuffer | Uint8Array): string {
   const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)
   return Array.from(view)

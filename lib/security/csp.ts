@@ -70,6 +70,12 @@ export function buildContentSecurityPolicy(nonce?: string | null): string {
     "https://*.analytics.google.com",
     "https://www.googletagmanager.com",
     "https://*.googletagmanager.com",
+    "https://www.google.com/recaptcha/",
+    "https://www.gstatic.com/recaptcha/",
+    "https://challenges.cloudflare.com",
+    "https://p.scdn.co",
+    "https://*.scdn.co",
+    "https://*.spotifycdn.com",
   ]
     .filter(Boolean)
     .join(" ")
@@ -117,6 +123,9 @@ export function buildContentSecurityPolicy(nonce?: string | null): string {
     "https://analytics.tiktok.com",
     "https://www.googletagmanager.com",
     "https://www.google-analytics.com",
+    "https://www.google.com/recaptcha/",
+    "https://www.gstatic.com/recaptcha/",
+    "https://challenges.cloudflare.com",
   ]
     .filter(Boolean)
     .join(" ")
@@ -132,10 +141,10 @@ export function buildContentSecurityPolicy(nonce?: string | null): string {
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' data: https://fonts.gstatic.com",
     `img-src ${imgSrc}`,
-    "media-src 'self' blob:",
+    "media-src 'self' blob: https://p.scdn.co https://*.scdn.co https://*.spotifycdn.com",
     "worker-src 'self' blob:",
     "child-src 'self' blob:",
-    "frame-src 'self' https://www.mercadopago.com https://*.mercadopago.com https://*.mercadopago.com.ar https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com",
+    "frame-src 'self' https://www.mercadopago.com https://*.mercadopago.com https://*.mercadopago.com.ar https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com https://www.google.com https://recaptcha.google.com https://challenges.cloudflare.com",
     `connect-src ${connectSrc}`,
   ]
     .join("; ")

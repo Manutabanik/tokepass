@@ -37,13 +37,17 @@ export default async function TicketPrintPage({
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-zinc-100 px-4 py-8 text-zinc-950">
-      <div className="no-print mx-auto mb-6 flex max-w-[300px] items-center justify-between gap-3">
+      <div
+        className={`no-print mx-auto mb-6 flex items-center justify-between gap-3 ${
+          autoPrint ? "max-w-[300px]" : "max-w-[28rem]"
+        }`}
+      >
         {!autoPrint ? (
           <Link
             href="/cuenta/entradas"
             className="text-sm font-medium text-zinc-600 hover:text-zinc-950"
           >
-            ← Volver
+            Volver
           </Link>
         ) : (
           <span />
@@ -51,7 +55,10 @@ export default async function TicketPrintPage({
         <PrintTicketActions autoPrint={autoPrint} />
       </div>
 
-      <PrintableTicketView ticket={ticket} />
+      <PrintableTicketView
+        ticket={ticket}
+        variant={autoPrint ? "thermal" : "pass"}
+      />
     </div>
   )
 }

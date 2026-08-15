@@ -10,6 +10,7 @@ describe("venue-inventory-dashboard", () => {
     const summary = summarizeVenueInventory(emptyVenueMap())
     assert.equal(summary.hasInventory, false)
     assert.equal(summary.capacity, 0)
+    assert.equal(summary.projectedRevenue, 0)
     assert.equal(summary.sectors.length, 0)
   })
 
@@ -48,5 +49,9 @@ describe("venue-inventory-dashboard", () => {
     assert.ok(vip)
     assert.equal(vip.unitCount, 2)
     assert.equal(vip.price, 80000)
+    assert.equal(vip.mode, "tables")
+    assert.equal(vip.modeLabel, "Mesas")
+    assert.equal(vip.revenue, 160000)
+    assert.equal(summary.projectedRevenue, 200000)
   })
 })

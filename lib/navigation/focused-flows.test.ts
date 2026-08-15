@@ -10,7 +10,9 @@ describe("focused-flows", () => {
   it("oculta chrome admin en wizard y escaner", () => {
     assert.equal(isAdminFocusedFlow("/admin/events/create"), true)
     assert.equal(isAdminFocusedFlow("/admin/events/abc/edit"), true)
+    assert.equal(isAdminFocusedFlow("/admin/pos"), true)
     assert.equal(isAdminFocusedFlow("/admin/scanner"), true)
+    assert.equal(isAdminFocusedFlow("/admin/validator"), true)
     assert.equal(isAdminFocusedFlow("/admin/events"), false)
     assert.equal(isAdminFocusedFlow("/admin"), false)
   })

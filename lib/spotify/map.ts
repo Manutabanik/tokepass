@@ -5,6 +5,11 @@ export type SpotifyArtistHit = {
   genres: string[]
 }
 
+export type SpotifyTopTrack = {
+  previewUrl: string | null
+  trackName: string | null
+}
+
 export function isSuccessfulSpotifyStatus(status: number): boolean {
   return status === 200 || status === 201
 }
@@ -61,4 +66,36 @@ export function mapSpotifyArtist(item: SpotifyArtistItem): SpotifyArtistHit | nu
     imageUrl: pickSpotifyArtistImage(item.images),
     genres,
   }
+}
+
+function asTrackRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+  return value as Record<string, unknown>
+}
+
+function httpUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null
+  const trimmed = value.trim()
+  if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) return null
+  return trimmed
+}
+
+export function mapSpotifyTopTrack(tracks: unknown): SpotifyTopTrack {
+  if (!Array.isArray(tracks)) {
+    return { previewUrl: null, trackName: null }
+  }
+
+  let firstName: string | null = null
+  for (const item of tracks) {
+    const row = asTrackRecord(item)
+    if (!row) continue
+    const name = typeof row.name === "string" ? row.name.trim() : ""
+    if (name && !firstName) firstName = name
+    const previewUrl = httpUrl(row.preview_url)
+    if (previewUrl) {
+      return { previewUrl, trackName: name || firstName }
+    }
+  }
+
+  return { previewUrl: null, trackName: firstName }
 }

@@ -2,13 +2,14 @@ import type { Metadata } from "next"
 
 import { getActiveEventCategories } from "@/app/actions/categories"
 import {
+  getFeaturedDiscoveryArtists,
   getPublishedEvents,
-  getPublishedEventsByArtist,
 } from "@/app/actions/public-events"
 import { AnimatedBackground } from "@/components/discovery/animated-background"
 import { DiscoveryHub } from "@/components/discovery/discovery-hub"
 import { mapDbCategoriesToDiscovery } from "@/lib/category-icons"
 import { DEFAULT_DISCOVERY_CATEGORIES } from "@/lib/discovery-categories"
+import { DISCOVERY_FILTER_ARTISTS_LIMIT } from "@/lib/discovery-artists"
 
 export const metadata: Metadata = {
   title: "Eventos",
@@ -24,16 +25,15 @@ export default async function EventsPage({
     location?: string
     category?: string
     artist?: string
+    when?: string
   }>
 }) {
-  const { q, location, category, artist } = await searchParams
+  const { q, location, category, artist, when } = await searchParams
   const artistId = artist?.trim() || ""
-  const [events, dbCategories] = await Promise.all([
-    (artistId
-      ? getPublishedEventsByArtist(artistId)
-      : getPublishedEvents(q)
-    ).catch(() => []),
+  const [events, dbCategories, featuredArtists] = await Promise.all([
+    getPublishedEvents().catch(() => []),
     getActiveEventCategories().catch(() => []),
+    getFeaturedDiscoveryArtists(DISCOVERY_FILTER_ARTISTS_LIMIT).catch(() => []),
   ])
   const categories =
     dbCategories.length > 0
@@ -51,6 +51,8 @@ export default async function EventsPage({
           initialLocation={location?.trim() || "todas"}
           initialCategoryId={category?.trim() || "all"}
           initialArtistId={artistId}
+          initialDatePreset={when}
+          featuredArtists={featuredArtists}
           categories={categories}
         />
       </div>

@@ -28,6 +28,10 @@ import {
   firstCheckoutBuyerErrorField,
   onValidationError,
 } from "@/lib/checkout/validation-scroll"
+import {
+  getCheckoutDwellMs,
+  getOrCreateDeviceHash,
+} from "@/lib/checkout/client-security"
 import { formatCurrency } from "@/lib/format"
 import { redirectToCheckoutPaymentOrToast } from "@/lib/checkout-redirect"
 import { cn } from "@/lib/utils"
@@ -229,6 +233,12 @@ export function DualSeatingSelector({
         currentUserId,
         referralCode,
         buyerCheck.buyer,
+        null,
+        undefined,
+        {
+          deviceHash: getOrCreateDeviceHash(),
+          dwellMs: getCheckoutDwellMs(),
+        },
       )
 
       if (!result.success) {

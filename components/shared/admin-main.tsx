@@ -16,7 +16,7 @@ export function AdminMain({ children }: { children: ReactNode }) {
       className={cn(
         "mx-auto min-h-0 w-full max-w-[1600px] flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain p-4 sm:p-8 lg:p-10",
         focused
-          ? "pb-[env(safe-area-inset-bottom)]"
+          ? "flex min-h-0 flex-col pb-[env(safe-area-inset-bottom)]"
           : ADMIN_BOTTOM_NAV_SPACE,
       )}
     >

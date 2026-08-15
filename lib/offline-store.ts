@@ -404,8 +404,21 @@ function precacheTicketAssets(tickets: MyTicket[]) {
   requestTicketAssetCache([
     "/brand/tokepass-mark.png",
     "/icons/icon-192.png",
-    ...tickets.flatMap((ticket) => [ticket.flyerUrl]),
+    "/offline/billetera",
+    "/cuenta/entradas",
+    ...tickets.flatMap((ticket) => [
+      ticket.flyerUrl,
+      `/cuenta/entradas/${ticket.id}`,
+    ]),
   ])
+  try {
+    window.localStorage.setItem(
+      "tokepass-offline-ready",
+      String(Date.now()),
+    )
+  } catch {
+    // Safari private / quota
+  }
 }
 
 /** Sync completo: reemplaza la billetera local del usuario y cachea assets. */

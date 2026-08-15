@@ -6,7 +6,7 @@ import {
   isLivingWindowAccepted,
   resolveScanSecret,
 } from "./scan-payload"
-import { generateLivingQrPayload, getTotpWindow } from "./totp-offline"
+import { generateLivingQrPayload, getTotpRemainingSeconds, getTotpWindow } from "./totp-offline"
 
 describe("Living QR time window", () => {
   it("accepts the current and adjacent 15-second windows", () => {
@@ -59,5 +59,10 @@ describe("Living QR time window", () => {
       expired: false,
       enforceFreshness: false,
     })
+  })
+
+  it("counts remaining seconds inside the 15-second Living QR window", () => {
+    assert.equal(getTotpRemainingSeconds(1_725_000_000_000), 15)
+    assert.equal(getTotpRemainingSeconds(1_725_000_000_000 + 14_250), 1)
   })
 })

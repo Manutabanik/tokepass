@@ -1,6 +1,6 @@
 /* Tokepass PWA Service Worker — Offline-First billetera /cuenta/entradas */
 
-const CACHE_VERSION = "tokepass-wallet-v6"
+const CACHE_VERSION = "tokepass-wallet-v7"
 const ASSET_CACHE = `${CACHE_VERSION}-assets`
 
 const PRECACHE_URLS = [
@@ -9,12 +9,19 @@ const PRECACHE_URLS = [
   "/icons/apple-touch-icon.png",
   "/manifest.webmanifest",
   "/brand/tokepass-mark.png",
+  "/offline/billetera",
 ]
 
-const OFFLINE_WALLET_HTML = `<!doctype html><html lang="es"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Tokepass Offline</title><style>body{margin:0;background:#09090b;color:#fff;font-family:system-ui;display:grid;min-height:100vh;place-items:center;padding:24px;text-align:center}p{color:#a1a1aa;line-height:1.5}</style></head><body><div><h1>Modo offline</h1><p>Las entradas viven en este dispositivo. Conectate para sincronizar el estado más reciente.</p></div></body></html>`
+const OFFLINE_WALLET_HTML = `<!doctype html><html lang="es"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Tokepass Offline</title><style>body{margin:0;background:#090014;color:#fff;font-family:system-ui;display:grid;min-height:100vh;place-items:center;padding:24px;text-align:center}a{color:#e879f9}p{color:#a1a1aa;line-height:1.5}</style></head><body><div><h1>Modo sin conexion</h1><p>Las entradas viven en este dispositivo. Abri la billetera offline para mostrar el QR.</p><p><a href="/offline/billetera">Abrir entradas</a></p></div></body></html>`
+
+function isLocalhost() {
+  return (
+    self.location.hostname === "localhost" ||
+    self.location.hostname === "127.0.0.1"
+  )
+}
 
 function isStaticAsset(url) {
-  // Nunca cachear runtime/HMR de Next — provoca módulos stale (factory missing).
   if (url.pathname.startsWith("/_next/")) return false
 
   return (
@@ -41,6 +48,7 @@ function isWalletRoute(url) {
 }
 
 function shouldSkipDocumentCache(url) {
+  if (url.pathname.startsWith("/offline/")) return false
   return (
     url.pathname.startsWith("/cuenta/") ||
     url.pathname === "/cuenta" ||
@@ -50,6 +58,20 @@ function shouldSkipDocumentCache(url) {
     url.pathname === "/mis-tickets" ||
     url.pathname.startsWith("/mis-tickets/")
   )
+}
+
+function extractNextStaticUrls(html) {
+  return [...html.matchAll(/\/_next\/static\/[^"'\\s>]+/g)].map((match) => match[0])
+}
+
+function offlineHtmlResponse() {
+  return new Response(OFFLINE_WALLET_HTML, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+    },
+  })
 }
 
 self.addEventListener("install", (event) => {
@@ -62,6 +84,17 @@ self.addEventListener("install", (event) => {
             const response = await fetch(url, { credentials: "same-origin" })
             if (response.ok && !response.redirected) {
               await cache.put(url, response.clone())
+              if (url === "/offline/billetera") {
+                const html = await response.text()
+                await Promise.allSettled(
+                  extractNextStaticUrls(html).map(async (asset) => {
+                    const assetRes = await fetch(asset, {
+                      credentials: "same-origin",
+                    })
+                    if (assetRes.ok) await cache.put(asset, assetRes.clone())
+                  }),
+                )
+              }
             }
           } catch {
             // Precache best-effort
@@ -91,20 +124,6 @@ self.addEventListener("activate", (event) => {
   )
 })
 
-async function networkOnlyWallet(request) {
-  try {
-    return await fetch(request)
-  } catch {
-    return new Response(OFFLINE_WALLET_HTML, {
-      status: 200,
-      headers: {
-        "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": "no-store",
-      },
-    })
-  }
-}
-
 async function cacheFirstAsset(request) {
   const cache = await caches.open(ASSET_CACHE)
   const cached = await cache.match(request)
@@ -129,6 +148,35 @@ async function cacheFirstAsset(request) {
   }
 }
 
+async function networkFirstOfflineShell(request) {
+  const cache = await caches.open(ASSET_CACHE)
+  try {
+    const fresh = await fetch(request)
+    if (fresh.ok) {
+      await cache.put("/offline/billetera", fresh.clone())
+      return fresh
+    }
+  } catch {
+    // fall through
+  }
+  return (await cache.match("/offline/billetera")) || offlineHtmlResponse()
+}
+
+async function networkThenOfflineWallet(request) {
+  try {
+    return await fetch(request)
+  } catch {
+    const cache = await caches.open(ASSET_CACHE)
+    if (await cache.match("/offline/billetera")) {
+      return Response.redirect(
+        new URL("/offline/billetera", self.location.origin),
+        302,
+      )
+    }
+    return offlineHtmlResponse()
+  }
+}
+
 async function cacheUrls(urls) {
   const assets = await caches.open(ASSET_CACHE)
 
@@ -138,14 +186,15 @@ async function cacheUrls(urls) {
         const url = new URL(raw, self.location.origin)
         const sameOrigin = url.origin === self.location.origin
 
-        // Never persist authenticated HTML/RSC documents. Wallet data stays in
-        // IndexedDB (totp_secret / Living QR), scoped to the browsing profile.
         if (sameOrigin && shouldSkipDocumentCache(url)) {
           return
         }
 
-        // Solo assets de imagen / estáticos para flyers offline.
-        if (sameOrigin && !isStaticAsset(url)) {
+        if (
+          sameOrigin &&
+          !url.pathname.startsWith("/offline/") &&
+          !isStaticAsset(url)
+        ) {
           return
         }
 
@@ -168,6 +217,16 @@ async function cacheUrls(urls) {
         if (response.redirected && sameOrigin) return
 
         await assets.put(url.href, response.clone())
+
+        if (sameOrigin && url.pathname.startsWith("/offline/")) {
+          const html = await response.text()
+          await Promise.allSettled(
+            extractNextStaticUrls(html).map(async (asset) => {
+              const assetRes = await fetch(asset, { credentials: "same-origin" })
+              if (assetRes.ok) await assets.put(asset, assetRes.clone())
+            }),
+          )
+        }
       } catch {
         // best-effort
       }
@@ -181,12 +240,13 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url)
 
-  // Dejar que Next/Turbopack manejen su propio runtime y HMR.
   if (url.origin === self.location.origin && url.pathname.startsWith("/_next/")) {
+    if (!isLocalhost() && url.pathname.startsWith("/_next/static/")) {
+      event.respondWith(cacheFirstAsset(request))
+    }
     return
   }
 
-  // Assets de flyers en CDN/Supabase: cache-first si ya visitados.
   if (url.origin !== self.location.origin) {
     if (
       isStaticAsset(url) ||
@@ -198,15 +258,17 @@ self.addEventListener("fetch", (event) => {
     return
   }
 
-  if (
-    url.pathname.startsWith("/api/") ||
-    url.pathname.startsWith("/auth/")
-  ) {
+  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/")) {
     return
   }
 
-  if (isWalletRoute(url)) {
-    event.respondWith(networkOnlyWallet(request))
+  if (request.mode === "navigate" && url.pathname.startsWith("/offline/")) {
+    event.respondWith(networkFirstOfflineShell(request))
+    return
+  }
+
+  if (request.mode === "navigate" && isWalletRoute(url)) {
+    event.respondWith(networkThenOfflineWallet(request))
     return
   }
 

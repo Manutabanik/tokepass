@@ -126,7 +126,7 @@ export function OfflineTicketWallet({
               variant="outline"
               className="rounded-full border-amber-500/40 bg-transparent px-2 py-0 text-[10px] font-semibold uppercase tracking-wide text-amber-200"
             >
-              Modo offline · acceso válido para ingreso
+              Modo sin conexión - QR disponible para lectura
             </Badge>
             <p className="mt-1.5 text-sm leading-5 text-amber-100/90">
               Tu entrada está guardada en tu dispositivo y lista para ser

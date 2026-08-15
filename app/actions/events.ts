@@ -7,9 +7,24 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { isPlatformOwnerRole } from "@/lib/auth/platform-owner"
 import { persistEventLineupSnapshot } from "@/app/actions/artists"
-import { lineupDraftsFromItems, mapLineupItem, performanceTimeToInput } from "@/lib/artists"
+import {
+  EVENT_ARTISTS_LINEUP_SELECT,
+  EVENT_ARTISTS_LINEUP_SELECT_LEGACY,
+  EVENT_ARTISTS_LINEUP_SELECT_LEGACY_NO_PREVIEW,
+  EVENT_ARTISTS_LINEUP_SELECT_NO_PREVIEW,
+  lineupDraftsFromItems,
+  mapLineupItem,
+  performanceTimeToInput,
+} from "@/lib/artists"
 import { parseEventLineup } from "@/lib/event-lineup"
-import { parseScheduleDays } from "@/lib/event-schedule"
+import {
+  isMultiDaySchedule,
+  normalizeScheduleDaysFromForm,
+  parseDateTimeLocal,
+  parseScheduleDays,
+  scheduleDaysToFormValues,
+  toDatetimeLocalInput,
+} from "@/lib/event-schedule"
 import {
   parseDefaultTicketTab,
   parseTicketHighlightBadge,
@@ -144,7 +159,7 @@ export type CreateCompleteEventRpcPayload = {
   visibility: "public" | "private" | "guest_list_only"
   category_id: string
   age_restriction: AgeRestriction
-  schedule_days: Array<{
+  schedule_days?: Array<{
     id: string
     title: string
     start_time: string
@@ -219,10 +234,19 @@ async function loadEventFeeConfig(
   }
 }
 
+function formDateToIso(value: string | null | undefined, fallback: string): string {
+  return parseDateTimeLocal(value ?? "")?.toISOString() ?? fallback
+}
+
 function mapEventFormToRpcPayload(
   data: EventFormValues,
   feeConfig: EventFeeConfig,
   flyerUrl: string | null = null,
+  existing?: {
+    date?: string | null
+    ends_at?: string | null
+    schedule_days?: unknown
+  },
 ): CreateCompleteEventRpcPayload {
   const blueprintZones = data.venue.zones ?? []
   const includesMap = Boolean(data.venue.includesSeatingMap)
@@ -295,25 +319,30 @@ function mapEventFormToRpcPayload(
   })
   const location = place.display || data.venue.venueName
 
+  const incomingDays = data.basics.isMultiDay
+    ? normalizeScheduleDaysFromForm(data.basics.scheduleDays ?? [])
+    : []
+  const existingDays = parseScheduleDays(existing?.schedule_days)
+  const preserveExistingSchedule =
+    Boolean(data.basics.isMultiDay) && incomingDays.length === 0 && existingDays.length > 0
   const scheduleDays = data.basics.isMultiDay
-    ? data.basics.scheduleDays.map((day) => ({
-        id: day.id,
-        title: day.title.trim(),
-        start_time: new Date(day.startTime).toISOString(),
-        end_time: new Date(day.endTime).toISOString(),
-      }))
+    ? preserveExistingSchedule
+      ? existingDays
+      : incomingDays
     : []
 
+  const nowIso = new Date().toISOString()
   const anchorDate = data.basics.isMultiDay
-    ? scheduleDays[0]?.start_time ?? new Date().toISOString()
-    : new Date(data.basics.date).toISOString()
+    ? scheduleDays[0]?.start_time ??
+      existing?.date ??
+      formDateToIso(data.basics.date, nowIso)
+    : formDateToIso(data.basics.date, existing?.date ?? nowIso)
 
-  const endsAt =
-    !data.basics.isMultiDay && data.basics.endDate?.trim()
-      ? new Date(data.basics.endDate).toISOString()
-      : data.basics.isMultiDay
-        ? scheduleDays[scheduleDays.length - 1]?.end_time ?? null
-        : null
+  const endsAt = data.basics.isMultiDay
+    ? scheduleDays[scheduleDays.length - 1]?.end_time ?? existing?.ends_at ?? null
+    : data.basics.endDate?.trim()
+      ? formDateToIso(data.basics.endDate, existing?.ends_at ?? nowIso)
+      : existing?.ends_at ?? null
 
   return {
     title: data.basics.title,
@@ -541,6 +570,41 @@ async function persistEventVenueFields(
   }
 
   return venueId
+}
+
+async function persistEventSchedule(
+  client: SupabaseClient<Database>,
+  eventId: string,
+  data: EventFormValues,
+  existing?: { date?: string | null; ends_at?: string | null; schedule_days?: unknown },
+): Promise<void> {
+  const incomingDays = data.basics.isMultiDay
+    ? normalizeScheduleDaysFromForm(data.basics.scheduleDays ?? [])
+    : []
+
+  if (data.basics.isMultiDay && incomingDays.length === 0) {
+    return
+  }
+
+  const scheduleDays = data.basics.isMultiDay ? incomingDays : []
+  const nowIso = new Date().toISOString()
+  const date = data.basics.isMultiDay
+    ? scheduleDays[0]?.start_time ?? existing?.date ?? nowIso
+    : formDateToIso(data.basics.date, existing?.date ?? nowIso)
+  const endsAt = data.basics.isMultiDay
+    ? scheduleDays[scheduleDays.length - 1]?.end_time ?? null
+    : data.basics.endDate?.trim()
+      ? parseDateTimeLocal(data.basics.endDate)?.toISOString() ?? null
+      : null
+
+  await client
+    .from("events")
+    .update({
+      schedule_days: scheduleDays,
+      date,
+      ends_at: endsAt,
+    } as never)
+    .eq("id", eventId)
 }
 
 async function loadPersistedSeatingSectorIds(
@@ -952,20 +1016,7 @@ export type EditableEventData = {
 }
 
 function toLocalDateTimeInput(value: string): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ""
-
-  return new Intl.DateTimeFormat("sv-SE", {
-    timeZone: "America/Argentina/Buenos_Aires",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  })
-    .format(date)
-    .replace(" ", "T")
+  return toDatetimeLocalInput(value)
 }
 
 function parseVenueZones(raw: unknown): EventFormValues["venue"]["zones"] {
@@ -998,16 +1049,30 @@ async function loadEditableLineup(
   eventId: string,
   jsonLineup: unknown,
 ) {
-  const { data } = await supabase
-    .from("event_artists")
-    .select(
-      "id, event_id, artist_id, performance_time, stage, sort_order, artists(id, name, image_url, spotify_id)",
-    )
-    .eq("event_id", eventId)
-    .order("sort_order", { ascending: true })
+  const attempts = [
+    EVENT_ARTISTS_LINEUP_SELECT,
+    EVENT_ARTISTS_LINEUP_SELECT_NO_PREVIEW,
+    EVENT_ARTISTS_LINEUP_SELECT_LEGACY,
+    EVENT_ARTISTS_LINEUP_SELECT_LEGACY_NO_PREVIEW,
+  ]
+
+  let rows: unknown[] = []
+  for (const columns of attempts) {
+    const result = await supabase
+      .from("event_artists")
+      .select(columns)
+      .eq("event_id", eventId)
+      .order("sort_order", { ascending: true })
+    if (!result.error) {
+      rows = result.data ?? []
+      break
+    }
+  }
 
   const relational = lineupDraftsFromItems(
-    (data ?? []).map((row) => mapLineupItem(row)),
+    rows.map((row) =>
+      mapLineupItem(row as Parameters<typeof mapLineupItem>[0]),
+    ),
   )
   if (relational.length > 0) return relational
 
@@ -1027,6 +1092,9 @@ async function loadEditableLineup(
       performanceTime: performanceTimeToInput(slot?.time),
       stage: artist.role ?? "",
       order: index,
+      isHeadliner: Boolean(artist.isHeadliner),
+      topTrackPreviewUrl: artist.topTrackPreviewUrl,
+      topTrackName: artist.topTrackName,
     }
   })
 }
@@ -1154,13 +1222,9 @@ export async function getEventForEditing(
     const venueMaxCapacity = Number(
       (venue as { max_capacity?: number | null } | null)?.max_capacity ?? 0,
     )
-    const scheduleDays = parseScheduleDays(event.schedule_days).map((day) => ({
-      id: day.id,
-      title: day.title,
-      startTime: toLocalDateTimeInput(day.start_time),
-      endTime: toLocalDateTimeInput(day.end_time),
-    }))
-    const isMultiDay = scheduleDays.length > 1
+    const parsedDays = parseScheduleDays(event.schedule_days)
+    const scheduleDays = scheduleDaysToFormValues(parsedDays)
+    const isMultiDay = isMultiDaySchedule(parsedDays)
     const visibility =
       event.visibility === "private" || event.visibility === "guest_list_only"
         ? event.visibility
@@ -1590,6 +1654,7 @@ export async function createCompleteEvent(
   await persistEventLineupSnapshot(String(eventId), formValues.lineup ?? []).catch(
     () => undefined,
   )
+  await persistEventSchedule(rpcClient, String(eventId), formValues)
   const venueId = await persistEventVenueFields(
     rpcClient,
     String(eventId),
@@ -1683,7 +1748,7 @@ export async function updateCompleteEvent(
 
   const { data: event, error: eventError } = await supabase
     .from("events")
-    .select("id, organizer_id, image_url, flyer_url")
+    .select("id, organizer_id, image_url, flyer_url, date, ends_at, schedule_days")
     .eq("id", eventId)
     .maybeSingle()
 
@@ -1769,6 +1834,11 @@ export async function updateCompleteEvent(
       formValues,
       feeConfig,
       uploadedFlyerUrl ?? event.flyer_url ?? event.image_url,
+      {
+        date: event.date,
+        ends_at: event.ends_at,
+        schedule_days: event.schedule_days,
+      },
     )
   } catch (error) {
     return persistFailure(
@@ -1820,6 +1890,11 @@ export async function updateCompleteEvent(
   await persistEventLineupSnapshot(eventId, formValues.lineup ?? []).catch(
     () => undefined,
   )
+  await persistEventSchedule(mutationClient, eventId, formValues, {
+    date: event.date,
+    ends_at: event.ends_at,
+    schedule_days: event.schedule_days,
+  })
 
   if (!draftMode) {
     const { data: live } = await mutationClient

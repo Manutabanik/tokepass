@@ -40,6 +40,10 @@ export function PwaRegister() {
       .then((registration) => {
         if (cancelled) return
         registration.update().catch(() => {})
+        registration.active?.postMessage({
+          type: "CACHE_TICKET_ASSETS",
+          urls: ["/offline/billetera", "/cuenta/entradas"],
+        })
       })
       .catch((error: unknown) => {
         console.warn("[pwa] SW register failed", error)

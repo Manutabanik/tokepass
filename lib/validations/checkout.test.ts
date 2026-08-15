@@ -8,6 +8,7 @@ const buyer = {
   lastName: "Perez",
   email: "ana@example.com",
   dni: "30111222",
+  phone: "1123456789",
 }
 
 const eventId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
@@ -67,5 +68,21 @@ describe("CheckoutPayloadSchema mixed inventory", () => {
       ],
     })
     assert.equal(parsed.success, false)
+  })
+
+  it("rejects a 9-digit DNI and a missing phone", () => {
+    const withoutPhone = CheckoutPayloadSchema.safeParse({
+      eventId,
+      buyer: { ...buyer, phone: "" },
+      items: [{ tierId: generalId, quantity: 1 }],
+    })
+    assert.equal(withoutPhone.success, false)
+
+    const longDni = CheckoutPayloadSchema.safeParse({
+      eventId,
+      buyer: { ...buyer, dni: "123456789" },
+      items: [{ tierId: generalId, quantity: 1 }],
+    })
+    assert.equal(longDni.success, false)
   })
 })

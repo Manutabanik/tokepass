@@ -16,6 +16,120 @@ export {
   findCategory,
 } from "@/lib/discovery-categories"
 
+export type DiscoveryDatePreset = "all" | "today" | "weekend" | "week" | "month"
+
+export const DISCOVERY_DATE_PRESETS: Array<{
+  id: DiscoveryDatePreset
+  label: string
+}> = [
+  { id: "all", label: "Todas las fechas" },
+  { id: "today", label: "Hoy" },
+  { id: "weekend", label: "Este fin de semana" },
+  { id: "week", label: "Próximos 7 días" },
+  { id: "month", label: "Este mes" },
+]
+
+export function datePresetLabel(preset?: string | null): string {
+  return (
+    DISCOVERY_DATE_PRESETS.find((item) => item.id === preset)?.label ??
+    DISCOVERY_DATE_PRESETS[0].label
+  )
+}
+
+export function parseDatePreset(value?: string | null): DiscoveryDatePreset {
+  if (
+    value === "today" ||
+    value === "weekend" ||
+    value === "week" ||
+    value === "month"
+  ) {
+    return value
+  }
+  return "all"
+}
+
+const ARGENTINA_TZ = "America/Argentina/Buenos_Aires"
+
+function ymdInArgentina(value: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: ARGENTINA_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(value)
+}
+
+function addDaysYmd(ymd: string, days: number): string {
+  const [year, month, day] = ymd.split("-").map(Number)
+  const utc = new Date(Date.UTC(year, month - 1, day + days))
+  return utc.toISOString().slice(0, 10)
+}
+
+function weekdayMondayFirst(ymd: string): number {
+  const [year, month, day] = ymd.split("-").map(Number)
+  const utcDay = new Date(Date.UTC(year, month - 1, day)).getUTCDay()
+  return utcDay === 0 ? 6 : utcDay - 1
+}
+
+export function matchesDatePreset(
+  dateIso: string,
+  preset: DiscoveryDatePreset = "all",
+  now = new Date(),
+): boolean {
+  if (preset === "all") return true
+  const eventDay = ymdInArgentina(new Date(dateIso))
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDay)) return false
+  const today = ymdInArgentina(now)
+
+  if (preset === "today") return eventDay === today
+  if (preset === "week") {
+    return eventDay >= today && eventDay <= addDaysYmd(today, 6)
+  }
+  if (preset === "month") {
+    return eventDay.slice(0, 7) === today.slice(0, 7) && eventDay >= today
+  }
+
+  const mondayOffset = weekdayMondayFirst(today)
+  const thisMonday = addDaysYmd(today, -mondayOffset)
+  const friday = addDaysYmd(thisMonday, 4)
+  const sunday = addDaysYmd(thisMonday, 6)
+  if (today <= sunday) {
+    return eventDay >= friday && eventDay <= sunday
+  }
+  const nextFriday = addDaysYmd(friday, 7)
+  return eventDay >= nextFriday && eventDay <= addDaysYmd(nextFriday, 2)
+}
+
+export function eventPlaceHaystack(event: CatalogEvent): string {
+  return `${event.venueLocation ?? ""} ${event.location} ${event.venueName ?? ""}`.toLowerCase()
+}
+
+export function matchesProvince(event: CatalogEvent, province: string): boolean {
+  const needle = province.trim().toLowerCase()
+  if (!needle || needle === "todas") return true
+  const place = eventPlaceHaystack(event)
+  if (needle.includes("ciudad autónoma") || needle === "caba") {
+    return /caba|capital federal|ciudad aut[oó]noma/.test(place)
+  }
+  return place.includes(needle)
+}
+
+export function provinceChipLabel(name: string): string {
+  const lower = name.trim().toLowerCase()
+  if (lower.includes("ciudad autónoma")) return "CABA"
+  if (lower.startsWith("tierra del fuego")) return "Tierra del Fuego"
+  return name
+}
+
+export type DiscoveryFilterDraft = {
+  query: string
+  categoryId: string
+  tagId: string | null
+  city: string
+  artistId: string
+  datePreset: DiscoveryDatePreset
+}
+
 /** Eventos de hoy (00:00 → 23:59:59 local). */
 export function isTonight(dateIso: string): boolean {
   const date = new Date(dateIso)
@@ -41,10 +155,13 @@ export function isThisWeekend(dateIso: string): boolean {
   return date >= saturday && date <= monday
 }
 
+function catalogSearchHaystack(event: CatalogEvent): string {
+  const artistNames = (event.artists ?? []).map((artist) => artist.name).join(" ")
+  return `${event.title} ${event.description ?? ""} ${event.location} ${event.organizerName ?? ""} ${event.venueName ?? ""} ${artistNames}`.toLowerCase()
+}
+
 function matchesKeyword(event: CatalogEvent, keys: string[]): boolean {
-  const haystack =
-    `${event.title} ${event.description ?? ""} ${event.location}`.toLowerCase()
-  return keys.some((key) => haystack.includes(key))
+  return keys.some((key) => catalogSearchHaystack(event).includes(key))
 }
 
 export function filterCatalogEvents(
@@ -56,27 +173,33 @@ export function filterCatalogEvents(
     categoryId?: string
     tagId?: string | null
     city?: string
+    /** UUID de artista (`event_artists.artist_id`). */
+    artistId?: string | null
+    datePreset?: DiscoveryDatePreset
+    now?: Date
     categories?: DiscoveryCategory[]
   },
 ): CatalogEvent[] {
   const q = options.query?.trim().toLowerCase() ?? ""
-  const city = options.city?.trim().toLowerCase() ?? ""
+  const artistId = options.artistId?.trim() ?? ""
+  const datePreset = options.datePreset ?? "all"
   const categoryId = options.categoryId ?? options.mood ?? "all"
   const categories = options.categories ?? DEFAULT_DISCOVERY_CATEGORIES
   const category = findCategory(categories, categoryId)
 
   return events.filter((event) => {
-    if (q) {
-      const haystack =
-        `${event.title} ${event.description ?? ""} ${event.location} ${event.organizerName ?? ""} ${event.venueName ?? ""}`.toLowerCase()
-      if (!haystack.includes(q)) return false
+    if (artistId) {
+      const inLineup = (event.artists ?? []).some(
+        (artist) => artist.id === artistId,
+      )
+      if (!inLineup) return false
     }
 
-    if (city && city !== "todas") {
-      const place =
-        `${event.venueLocation ?? ""} ${event.location} ${event.venueName ?? ""}`.toLowerCase()
-      if (!place.includes(city)) return false
-    }
+    if (q && !catalogSearchHaystack(event).includes(q)) return false
+
+    if (!matchesProvince(event, options.city ?? "")) return false
+
+    if (!matchesDatePreset(event.date, datePreset, options.now)) return false
 
     if (!category || category.id === "all") return true
 
@@ -187,6 +310,7 @@ export function buildSearchSuggestions(
       event.organizerName ?? "",
       event.venueName ?? "",
       eventCityLabel(event),
+      ...(event.artists ?? []).map((artist) => artist.name),
     ]
     const hit = fields.some((field) => field.toLowerCase().includes(q))
     if (!hit || seen.has(event.id)) continue

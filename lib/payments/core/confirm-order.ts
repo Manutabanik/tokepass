@@ -156,8 +156,23 @@ export async function processPaidOrderNotification(
   }
 
   if (!finalize.idempotent) {
+    let access: { magicUrl: string; otp: string } | null = null
     try {
-      await notifyGobiOrderPaid(admin, orderId)
+      const { issueGuestReceiptAccess } = await import(
+        "@/app/actions/guest-ticket-access"
+      )
+      access = await issueGuestReceiptAccess(orderId)
+    } catch (error) {
+      logger.error({
+        context: "payments/confirm-order",
+        message: "guest_access_issue_failed",
+        orderId,
+        error,
+      })
+    }
+
+    try {
+      await notifyGobiOrderPaid(admin, orderId, access)
     } catch (error) {
       logger.error({
         context: "payments/confirm-order",
@@ -170,7 +185,7 @@ export async function processPaidOrderNotification(
     }
 
     try {
-      await sendPaidOrderReceiptEmail(admin, orderId)
+      await sendPaidOrderReceiptEmail(admin, orderId, access)
     } catch (error) {
       logger.error({
         context: "payments/confirm-order",

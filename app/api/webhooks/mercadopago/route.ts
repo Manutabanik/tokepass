@@ -555,15 +555,6 @@ async function processMercadoPagoWebhook(
 ) {
   try {
     const paymentId = await extractPaymentId(request)
-    const url = new URL(request.url)
-    const typeHint =
-      url.searchParams.get("topic") ??
-      url.searchParams.get("type") ??
-      url.searchParams.get("action")
-
-    console.log(
-      `[MP WEBHOOK] Notification received - Type: ${typeHint ?? "n/a"}, ID: ${paymentId ?? "n/a"}`,
-    )
 
     if (!paymentId) {
       return webhookOk({ ignored: true, reason: "missing_payment_id" })
@@ -610,10 +601,6 @@ async function processMercadoPagoWebhook(
       })
       return webhookOk({ handled: "payment_fetch_failed" })
     }
-
-    console.log(
-      `[MP WEBHOOK] Payment Status for ID ${paymentId}: ${payment.status}`,
-    )
 
     const externalReference = firstString(payment.external_reference)
     if (!externalReference) {
@@ -964,13 +951,24 @@ async function processMercadoPagoWebhook(
         },
       })
 
-      console.log(
-        `[MP WEBHOOK] Tickets issued via finalize_paid_order for order=${orderId} payment=${mpPaymentId}`,
-      )
-
       if (!finalize.idempotent) {
+        let access: { magicUrl: string; otp: string } | null = null
         try {
-          await notifyGobiOrderPaid(admin, orderId)
+          const { issueGuestReceiptAccess } = await import(
+            "@/app/actions/guest-ticket-access"
+          )
+          access = await issueGuestReceiptAccess(orderId)
+        } catch (accessErr) {
+          logger.error({
+            context: "webhooks/mercadopago",
+            message: "guest_access_issue_failed",
+            order_id: orderId,
+            error: accessErr,
+          })
+        }
+
+        try {
+          await notifyGobiOrderPaid(admin, orderId, access)
         } catch (gobiErr) {
           console.error("[WEBHOOK ERROR] gobi dispatch failed:", gobiErr)
           logger.error({
@@ -983,7 +981,7 @@ async function processMercadoPagoWebhook(
         }
 
         try {
-          await sendPaidOrderReceiptEmail(admin, orderId)
+          await sendPaidOrderReceiptEmail(admin, orderId, access)
         } catch (emailErr) {
           console.error("[WEBHOOK ERROR] ticket receipt email failed:", emailErr)
           logger.error({

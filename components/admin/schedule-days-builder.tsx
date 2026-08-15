@@ -12,13 +12,7 @@ import {
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import type { EventFormValues } from "@/lib/validations/event-form"
-
-function newScheduleDayId() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID()
-  }
-  return `day-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-}
+import { newScheduleDayId } from "@/lib/event-schedule"
 
 export function ScheduleDaysBuilder({
   control,
@@ -28,6 +22,7 @@ export function ScheduleDaysBuilder({
   const { fields, append, remove } = useFieldArray({
     control,
     name: "basics.scheduleDays",
+    keyName: "_rowId",
   })
 
   return (
@@ -47,7 +42,7 @@ export function ScheduleDaysBuilder({
       <div className="space-y-3">
         {fields.map((field, index) => (
           <article
-            key={field.id}
+            key={field._rowId}
             className="mb-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/60 p-4"
           >
             <div className="mb-3 flex items-center justify-between gap-2">

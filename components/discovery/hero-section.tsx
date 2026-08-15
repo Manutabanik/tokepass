@@ -5,10 +5,17 @@ import { motion, useReducedMotion } from "motion/react"
 import { useEffect, useState } from "react"
 
 import { SearchBar } from "@/components/discovery/search-bar"
+import type { CatalogEvent } from "@/app/actions/public-events"
+import type { FeaturedDiscoveryArtist } from "@/lib/discovery-artists"
 import type { DiscoveryCategory } from "@/lib/discovery-categories"
 import { DEFAULT_DISCOVERY_CATEGORIES } from "@/lib/discovery-categories"
+import type {
+  DiscoveryDatePreset,
+  DiscoveryFilterDraft,
+} from "@/lib/discovery-filters"
 
 type HeroSectionProps = {
+  events: CatalogEvent[]
   query: string
   onQueryChange: (value: string) => void
   city: string
@@ -19,11 +26,15 @@ type HeroSectionProps = {
   onCategoryChange: (value: string) => void
   tagId: string | null
   onTagChange: (value: string | null) => void
+  selectedArtistId?: string
+  datePreset?: DiscoveryDatePreset
+  featuredArtists?: FeaturedDiscoveryArtist[]
   categories?: DiscoveryCategory[]
-  resultCount: number
+  onCommitFilters: (draft: DiscoveryFilterDraft) => void
 }
 
 export function HeroSection({
+  events,
   query,
   onQueryChange,
   city,
@@ -34,8 +45,11 @@ export function HeroSection({
   onCategoryChange,
   tagId,
   onTagChange,
+  selectedArtistId,
+  datePreset,
+  featuredArtists,
   categories = DEFAULT_DISCOVERY_CATEGORIES,
-  resultCount,
+  onCommitFilters,
 }: HeroSectionProps) {
   const reduceMotion = useReducedMotion()
   const [isMobile, setIsMobile] = useState(true)
@@ -79,6 +93,7 @@ export function HeroSection({
 
       <div className="mx-auto mt-8 w-full max-w-4xl sm:mt-10">
         <SearchBar
+          events={events}
           query={query}
           onQueryChange={onQueryChange}
           city={city}
@@ -89,8 +104,11 @@ export function HeroSection({
           onCategoryChange={onCategoryChange}
           tagId={tagId}
           onTagChange={onTagChange}
+          selectedArtistId={selectedArtistId}
+          datePreset={datePreset}
+          featuredArtists={featuredArtists}
           categories={categories}
-          resultCount={resultCount}
+          onCommitFilters={onCommitFilters}
         />
       </div>
     </section>

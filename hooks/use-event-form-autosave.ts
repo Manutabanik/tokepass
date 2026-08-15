@@ -217,8 +217,8 @@ export function useEventFormAutosave(input: {
 
   useEffect(() => {
     if (!enabled) return
-    const subscription = form.watch((values) => {
-      const next = values as EventFormValues
+    const subscription = form.watch(() => {
+      const next = form.getValues()
       latestRef.current.values = next
       if (!readyRef.current) return
       setFormValues(next)

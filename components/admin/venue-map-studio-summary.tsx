@@ -2,24 +2,12 @@
 
 import { Map } from "lucide-react"
 
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { formatCurrency } from "@/lib/format"
+import { formatCurrency, formatNumber } from "@/lib/format"
 import { summarizeVenueInventory } from "@/lib/seating/venue-inventory-dashboard"
+import { cn } from "@/lib/utils"
 import type { InteractiveVenueMap } from "@/types/venue-map"
-
-function sectorSummary(row: {
-  unitCount: number
-  unitLabel: string
-  people: number
-  price: number
-}) {
-  const parts = [
-    `${row.unitCount} ${row.unitLabel}`,
-    `${row.people} ${row.people === 1 ? "persona" : "personas"}`,
-  ]
-  if (row.price > 0) parts.push(formatCurrency(row.price))
-  return parts.join(" · ")
-}
 
 export function VenueMapStudioSummary({
   map,
@@ -29,82 +17,119 @@ export function VenueMapStudioSummary({
   onOpen: () => void
 }) {
   const inventory = summarizeVenueInventory(map)
+  const segments = inventory.sectors.filter((row) => row.share > 0)
 
   return (
-    <div className="rounded-xl border border-border bg-card p-6">
-      {inventory.hasInventory ? (
-        <>
-          <div className="mb-6 grid grid-cols-3 gap-4 border-b border-border/50 pb-6">
-            <div className="min-w-0">
-              <p className="text-2xl font-bold tabular-nums text-foreground">
-                {inventory.capacity}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {inventory.capacity === 1 ? "Lugar" : "Lugares"}
-              </p>
-            </div>
-            <div className="min-w-0">
-              <p className="text-2xl font-bold tabular-nums text-foreground">
-                {inventory.elementCount}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {inventory.elementLabel}
-              </p>
-            </div>
-            <div className="min-w-0">
-              <p className="text-2xl font-bold tabular-nums text-foreground">
-                {inventory.sectorCount}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {inventory.sectorLabel}
-              </p>
-            </div>
-          </div>
-
-          <ul>
-            {inventory.sectors.map((row) => (
-              <li
-                key={row.id}
-                className="flex items-center justify-between gap-3 py-2"
-              >
-                <span className="flex min-w-0 items-center gap-2">
-                  <span
-                    className="size-3 shrink-0 rounded-full"
-                    style={{ backgroundColor: row.color }}
-                    aria-hidden="true"
-                  />
-                  <span className="truncate font-medium text-foreground">
-                    {row.name}
-                  </span>
-                </span>
-                <span className="shrink-0 text-sm text-muted-foreground">
-                  {sectorSummary(row)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : (
-        <div className="mb-6">
-          <h3 className="text-base font-semibold text-foreground">
-            Mapa del recinto
-          </h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Todavía no hay zonas ni mesas. Diseñá el plano para ver aforo,
-            elementos y sectores en un solo lugar.
+    <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <article className="rounded-xl border border-border bg-muted/40 p-4">
+          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+            Aforo total
           </p>
-        </div>
-      )}
+          <p className="mt-2 text-3xl font-bold tabular-nums tracking-tight text-foreground">
+            {formatNumber(inventory.capacity)}
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {inventory.capacity === 1 ? "lugar" : "lugares"}
+            {inventory.elementCount > 0
+              ? ` · ${formatNumber(inventory.elementCount)} ${inventory.elementLabel.toLocaleLowerCase("es")}`
+              : ""}
+          </p>
+          <div
+            className="mt-4 h-2.5 overflow-hidden rounded-full bg-muted"
+            role="img"
+            aria-label="Distribucion del aforo por sector"
+          >
+            {segments.length > 0 ? (
+              <div className="flex h-full w-full">
+                {segments.map((row) => (
+                  <div
+                    key={row.id}
+                    className="h-full min-w-0 transition-[flex-grow] duration-300"
+                    style={{
+                      flexGrow: Math.max(row.share, 0.0001),
+                      backgroundColor: row.color,
+                    }}
+                    title={`${row.name}: ${Math.round(row.share * 100)}%`}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="h-full w-full bg-muted" />
+            )}
+          </div>
+        </article>
+
+        <article className="rounded-xl border border-border bg-muted/40 p-4">
+          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+            Proyección de recaudación
+          </p>
+          <p className="mt-2 text-3xl font-bold tabular-nums tracking-tight text-foreground">
+            {formatCurrency(inventory.projectedRevenue)}
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Suma de capacidad por precio de cada sector
+          </p>
+        </article>
+
+        <article className="rounded-xl border border-border bg-muted/40 p-4">
+          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+            Configuración de sectores
+          </p>
+          {inventory.sectors.length > 0 ? (
+            <ul className="mt-3 max-h-44 space-y-2 overflow-y-auto pr-1">
+              {inventory.sectors.map((row) => (
+                <li key={row.id}>
+                  <button
+                    type="button"
+                    onClick={onOpen}
+                    className="flex w-full items-start justify-between gap-3 rounded-lg px-1 py-1 text-left transition hover:bg-background/80"
+                  >
+                    <span className="flex min-w-0 items-start gap-2">
+                      <span
+                        className="mt-1 size-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: row.color }}
+                        aria-hidden="true"
+                      />
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium text-foreground">
+                          {row.name}
+                        </span>
+                        <span className="mt-1 flex flex-wrap items-center gap-1.5">
+                          <Badge variant="outline" className="font-medium">
+                            {row.modeLabel}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {formatNumber(row.unitCount)} {row.unitLabel}
+                          </span>
+                        </span>
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">
+                      {formatCurrency(row.price)}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-3 text-sm text-muted-foreground">
+              Todavía no hay zonas ni mesas. Diseñá el plano para ver aforo,
+              recaudación y sectores en un solo lugar.
+            </p>
+          )}
+        </article>
+      </div>
 
       <Button
         type="button"
-        variant="default"
-        size="lg"
         onClick={onOpen}
-        className="mt-6 w-full"
+        className={cn(
+          "bg-primary hover:bg-primary/90 text-primary-foreground font-bold h-12 rounded-xl w-full mt-4",
+        )}
       >
         <Map className="size-4" aria-hidden="true" />
-        Diseñar Mapa en Pantalla Completa
+        DISEÑAR MAPA EN PANTALLA COMPLETA
       </Button>
     </div>
   )

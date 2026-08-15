@@ -1,6 +1,16 @@
 import { z } from "zod"
 
 import { MAX_TICKETS_PER_PURCHASE } from "@/lib/checkout-limits"
+import {
+  DNI_ERROR,
+  EMAIL_ERROR,
+  PHONE_ERROR,
+  isStrictEmail,
+  isValidDni,
+  normalizeArgentineMobile,
+  normalizeDni,
+  normalizeEmail,
+} from "@/lib/checkout/guest-input"
 
 const UUID_ERROR = "Identificador inválido."
 const QTY_ERROR = "La cantidad de entradas no es válida."
@@ -43,30 +53,16 @@ export const CheckoutBuyerSchema = z.object({
     ),
   email: z
     .string()
-    .trim()
-    .toLowerCase()
-    .email("Ingresá un email válido para la confirmación."),
+    .transform((value) => normalizeEmail(value))
+    .refine(isStrictEmail, EMAIL_ERROR),
   dni: z
     .string()
-    .transform((value) => value.replace(/\D/g, ""))
-    .pipe(
-      z
-        .string()
-        .regex(/^\d{7,9}$/, "El DNI debe tener entre 7 y 9 dígitos."),
-    ),
+    .transform((value) => normalizeDni(value))
+    .refine(isValidDni, DNI_ERROR),
   phone: z
     .string()
-    .optional()
-    .transform((value) => {
-      const digits = (value ?? "").replace(/\D/g, "")
-      return digits.length > 0 ? digits : undefined
-    })
-    .pipe(
-      z
-        .string()
-        .regex(/^\d{8,15}$/, "Ingresá un teléfono / WhatsApp válido.")
-        .optional(),
-    ),
+    .transform((value) => normalizeArgentineMobile(value) ?? "")
+    .refine((value) => value.length > 0, PHONE_ERROR),
 })
 
 const CheckoutLegacyBuyerSchema = z
@@ -74,7 +70,7 @@ const CheckoutLegacyBuyerSchema = z
     buyerName: z.string(),
     buyerEmail: z.string(),
     buyerDni: z.string(),
-    buyerPhone: z.string().optional(),
+    buyerPhone: z.string(),
   })
   .transform((legacy) => {
     const names = splitFullName(legacy.buyerName)
@@ -83,7 +79,7 @@ const CheckoutLegacyBuyerSchema = z
       lastName: names.lastName,
       email: legacy.buyerEmail,
       dni: legacy.buyerDni,
-      ...(legacy.buyerPhone ? { phone: legacy.buyerPhone } : {}),
+      phone: legacy.buyerPhone,
     }
   })
   .pipe(CheckoutBuyerSchema)
@@ -228,6 +224,6 @@ export function buyerToHolderFields(buyer: CheckoutBuyer): {
     buyerName: `${buyer.firstName} ${buyer.lastName}`.replace(/\s+/g, " ").trim(),
     buyerDni: buyer.dni,
     buyerEmail: buyer.email,
-    buyerPhone: buyer.phone ?? "",
+    buyerPhone: buyer.phone,
   }
 }

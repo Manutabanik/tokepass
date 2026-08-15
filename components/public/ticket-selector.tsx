@@ -77,6 +77,10 @@ import { GA_CHECKOUT_HOLD_MS } from "@/lib/checkout-hold"
 import { redirectToCheckoutPaymentOrToast } from "@/lib/checkout-redirect"
 import { ensureGuestCheckoutSession } from "@/lib/checkout/guest-session"
 import { hasCheckoutIdentity } from "@/lib/checkout/identity"
+import {
+  getCheckoutDwellMs,
+  getOrCreateDeviceHash,
+} from "@/lib/checkout/client-security"
 import { type DefaultTicketTab } from "@/lib/checkout/ticket-picker"
 import {
   firstCheckoutBuyerErrorField,
@@ -940,7 +944,11 @@ export function TicketSelector({
             [],
             buyerCheck.buyer,
             appliedPromo?.promoCodeId ?? null,
-            { paymentProvider: selectedProvider },
+            {
+              paymentProvider: selectedProvider,
+              deviceHash: getOrCreateDeviceHash(),
+              dwellMs: getCheckoutDwellMs(),
+            },
           )
 
       if (!result.success) {

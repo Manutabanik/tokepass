@@ -8,7 +8,9 @@ import {
 } from "@/lib/georef-provincias"
 
 export function useArgentinaProvinces() {
-  const [provinces, setProvinces] = useState<string[]>([])
+  const [provinces, setProvinces] = useState<string[]>([
+    ...ARGENTINA_PROVINCES_FALLBACK,
+  ])
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {

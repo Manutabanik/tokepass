@@ -36,3 +36,28 @@ export async function consumeRateLimit(input: {
 
   return Boolean(data)
 }
+
+export async function isRateLimited(input: {
+  bucketKey: string
+  limit: number
+  windowSeconds: number
+}): Promise<boolean> {
+  const client = createAdminClient()
+  const { data, error } = await client.rpc("is_rate_limited", {
+    p_bucket_key: input.bucketKey,
+    p_limit: input.limit,
+    p_window_seconds: input.windowSeconds,
+  })
+
+  if (error) {
+    logger.error({
+      context: "lib/rate-limit",
+      message: "is_rate_limited_failed",
+      error: error.message,
+      bucketKey: input.bucketKey,
+    })
+    return false
+  }
+
+  return Boolean(data)
+}

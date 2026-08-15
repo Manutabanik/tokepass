@@ -4,7 +4,12 @@ export type EventLineupArtist = {
   imageUrl: string | null
   role: string | null
   performanceTime: string | null
+  isHeadliner: boolean
+  topTrackPreviewUrl: string | null
+  topTrackName: string | null
 }
+
+export const LINEUP_HEADLINER_FALLBACK = 4
 
 export type EventLineupSlot = {
   id: string
@@ -50,6 +55,31 @@ function readTime(row: Record<string, unknown>): string | null {
   )
 }
 
+function readPreviewUrl(row: Record<string, unknown>): string | null {
+  return (
+    text(row.topTrackPreviewUrl) ||
+    text(row.top_track_preview_url) ||
+    text(row.previewUrl) ||
+    text(row.preview_url) ||
+    null
+  )
+}
+
+function readPreviewName(row: Record<string, unknown>): string | null {
+  return (
+    text(row.topTrackName) ||
+    text(row.top_track_name) ||
+    text(row.trackName) ||
+    text(row.track_name) ||
+    null
+  )
+}
+
+function readHeadliner(row: Record<string, unknown>): boolean {
+  const value = row.isHeadliner ?? row.is_headliner
+  return value === true || value === 1 || value === "true"
+}
+
 function parseArtist(
   raw: unknown,
   index: number,
@@ -64,6 +94,9 @@ function parseArtist(
     imageUrl: readImage(row),
     role: text(row.role) || text(row.subtitle) || text(row.description),
     performanceTime: readTime(row),
+    isHeadliner: readHeadliner(row),
+    topTrackPreviewUrl: readPreviewUrl(row),
+    topTrackName: readPreviewName(row),
   }
 }
 
@@ -126,6 +159,21 @@ export function hasEventLineup(data: EventLineupData): boolean {
   return data.artists.length > 0 || data.slots.length > 0
 }
 
+export function visibleLineupArtists(artists: EventLineupArtist[]): {
+  featured: EventLineupArtist[]
+  remainingCount: number
+} {
+  const headliners = artists.filter((artist) => artist.isHeadliner)
+  const featured =
+    headliners.length > 0
+      ? headliners
+      : artists.slice(0, LINEUP_HEADLINER_FALLBACK)
+  return {
+    featured,
+    remainingCount: Math.max(0, artists.length - featured.length),
+  }
+}
+
 function artistFromJoin(raw: unknown): EventLineupArtist | null {
   const row = asRecord(raw)
   if (!row) return null
@@ -141,6 +189,10 @@ function artistFromJoin(raw: unknown): EventLineupArtist | null {
     imageUrl: readImage(nested ?? {}) || readImage(row),
     role: text(row.stage) || text(nested?.bio) || text(row.bio),
     performanceTime: text(row.performance_time) || readTime(row),
+    isHeadliner: readHeadliner(row),
+    topTrackPreviewUrl:
+      readPreviewUrl(nested ?? {}) || readPreviewUrl(row),
+    topTrackName: readPreviewName(nested ?? {}) || readPreviewName(row),
   }
 }
 

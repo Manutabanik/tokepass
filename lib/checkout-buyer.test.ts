@@ -15,7 +15,7 @@ describe("checkout buyer field errors", () => {
       buyerPhone: "123",
       buyerEmail: "ana@tokepass.com",
     })
-    assert.equal(errors.buyerPhone, "Ingresá un teléfono / WhatsApp válido.")
+    assert.equal(errors.buyerPhone, "Ingresá un celular argentino con código de área.")
     assert.equal(firstCheckoutBuyerErrorField(errors), "buyerPhone")
     const result = validateCheckoutBuyer({
       buyerName: "Ana Pérez",
@@ -25,7 +25,7 @@ describe("checkout buyer field errors", () => {
     })
     assert.equal(result.ok, false)
     if (!result.ok) {
-      assert.equal(result.error, "Ingresá un teléfono / WhatsApp válido.")
+      assert.equal(result.error, "Ingresá un celular argentino con código de área.")
     }
   })
 

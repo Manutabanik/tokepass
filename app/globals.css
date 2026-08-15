@@ -323,6 +323,21 @@ select:-webkit-autofill {
     height: 48mm !important;
     max-width: 100% !important;
   }
+
+  .print-ticket-pass {
+    width: 180mm !important;
+    max-width: 180mm !important;
+    margin: 0 auto !important;
+    border-color: #d4d4d8 !important;
+    box-shadow: none !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .print-ticket-pass .print-ticket-qr {
+    width: 55mm !important;
+    height: 55mm !important;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -406,4 +421,25 @@ select:-webkit-autofill {
 
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+@keyframes tokepass-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: tokepass-fade-in 180ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in {
+    animation: none;
+  }
 }

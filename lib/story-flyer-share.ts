@@ -19,6 +19,17 @@ export function canShareFiles(file: File): boolean {
   }
 }
 
+export function isNativeFileShareAvailable(): boolean {
+  try {
+    const file = new File([new Uint8Array([137, 80, 78, 71])], "t.png", {
+      type: "image/png",
+    })
+    return canShareFiles(file)
+  } catch {
+    return false
+  }
+}
+
 export function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement("a")
@@ -44,7 +55,7 @@ export async function shareOrDownloadFlyer(input: {
   title: string
   text: string
 }): Promise<ShareFlyerResult> {
-  const filename = input.filename ?? "flyer-tokepass.png"
+  const filename = input.filename ?? "historia-tokepass.png"
   const file = new File([input.blob], filename, {
     type: input.blob.type || "image/png",
   })
@@ -61,7 +72,6 @@ export async function shareOrDownloadFlyer(input: {
       if (error instanceof DOMException && error.name === "AbortError") {
         return { ok: false, cancelled: true, error: "cancelado" }
       }
-      // Fallback a descarga
     }
   }
 
@@ -69,7 +79,7 @@ export async function shareOrDownloadFlyer(input: {
     downloadBlob(input.blob, filename)
     return { ok: true, method: "download" }
   } catch {
-    return { ok: false, error: "No se pudo guardar el flyer." }
+    return { ok: false, error: "No se pudo guardar la imagen." }
   }
 }
 
@@ -89,7 +99,7 @@ export async function shareRemoteImage(input: {
     const blob = await response.blob()
     return shareOrDownloadFlyer({
       blob,
-      filename: input.filename ?? "flyer-tokepass.png",
+      filename: input.filename ?? "historia-tokepass.png",
       title: input.title,
       text: input.text,
     })

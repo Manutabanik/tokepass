@@ -19,6 +19,7 @@ export default function robots(): MetadataRoute.Robots {
           "/super-admin/",
           "/promoter/",
           "/checkout/",
+          "/entrada/",
           "/events/preview/",
         ],
       },

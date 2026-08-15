@@ -7,6 +7,8 @@ import {
   type VenueMapElement,
 } from "@/types/venue-map"
 
+export type VenueSectorMode = "tables" | "seats" | "ga"
+
 export type VenueInventorySectorRow = {
   id: string
   name: string
@@ -15,6 +17,10 @@ export type VenueInventorySectorRow = {
   unitLabel: string
   people: number
   price: number
+  mode: VenueSectorMode
+  modeLabel: string
+  revenue: number
+  share: number
 }
 
 export type VenueInventoryDashboard = {
@@ -24,6 +30,7 @@ export type VenueInventoryDashboard = {
   elementLabel: string
   sectorCount: number
   sectorLabel: string
+  projectedRevenue: number
   sectors: VenueInventorySectorRow[]
 }
 
@@ -94,6 +101,20 @@ function physicalElements(map: InteractiveVenueMap) {
   }
 }
 
+function sectorMode(group: VenuePriceGroup): {
+  mode: VenueSectorMode
+  modeLabel: string
+} {
+  const unit = group.unit.toLocaleLowerCase("es")
+  if (group.match.kind === "sector" || unit.startsWith("butaca")) {
+    return { mode: "seats", modeLabel: "Butacas Numeradas" }
+  }
+  if (unit.startsWith("mesa") || unit.startsWith("box")) {
+    return { mode: "tables", modeLabel: "Mesas" }
+  }
+  return { mode: "ga", modeLabel: "Entrada General" }
+}
+
 export function summarizeVenueInventory(
   map: InteractiveVenueMap | null | undefined,
 ): VenueInventoryDashboard {
@@ -105,6 +126,7 @@ export function summarizeVenueInventory(
       elementLabel: "Elementos",
       sectorCount: 0,
       sectorLabel: "Sectores",
+      projectedRevenue: 0,
       sectors: [],
     }
   }
@@ -113,24 +135,37 @@ export function summarizeVenueInventory(
   const elements = physicalElements(map)
   const zoneOnly =
     groups.length > 0 && groups.every((group) => group.match.kind === "zone")
+  const capacity = venueMapCapacity(map)
+
+  const sectors = groups.map((group) => {
+    const people = peopleForGroup(map, group)
+    const { mode, modeLabel } = sectorMode(group)
+    const billable = mode === "tables" ? group.count : people
+    return {
+      id: group.key,
+      name: group.name,
+      color: group.color,
+      unitCount: group.count,
+      unitLabel: group.unit,
+      people,
+      price: group.price,
+      mode,
+      modeLabel,
+      revenue: Math.max(0, billable) * Math.max(0, group.price),
+      share: capacity > 0 ? Math.max(0, people) / capacity : 0,
+    }
+  })
 
   return {
     hasInventory: true,
-    capacity: venueMapCapacity(map),
+    capacity,
     elementCount: elements.count,
     elementLabel: elements.label,
     sectorCount: groups.length,
     sectorLabel: zoneOnly
       ? plural(groups.length, "Zona", "Zonas")
       : plural(groups.length, "Sector", "Sectores"),
-    sectors: groups.map((group) => ({
-      id: group.key,
-      name: group.name,
-      color: group.color,
-      unitCount: group.count,
-      unitLabel: group.unit,
-      people: peopleForGroup(map, group),
-      price: group.price,
-    })),
+    projectedRevenue: sectors.reduce((sum, row) => sum + row.revenue, 0),
+    sectors,
   }
 }

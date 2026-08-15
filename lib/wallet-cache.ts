@@ -35,21 +35,19 @@ export function isAppleWalletConfigured(): boolean {
 }
 
 export function isGoogleWalletConfigured(): boolean {
-  return Boolean(
-    process.env.GOOGLE_WALLET_ISSUER_ID &&
-      process.env.GOOGLE_WALLET_CLASS_ID &&
-      process.env.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL,
+  const issuer = Boolean(process.env.GOOGLE_WALLET_ISSUER_ID)
+  const json = Boolean(process.env.GOOGLE_WALLET_SERVICE_ACCOUNT_JSON)
+  const split = Boolean(
+    process.env.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL &&
+      process.env.GOOGLE_WALLET_SERVICE_ACCOUNT_PRIVATE_KEY,
   )
+  return issuer && (json || split)
 }
 
-/** Server-only: public flag AND real credentials. Never show broken wallet CTAs. */
+/** True when the server can actually sign a native wallet pass. */
 export function getWalletUiFlags() {
   return {
-    appleWalletEnabled:
-      process.env.NEXT_PUBLIC_APPLE_WALLET_ENABLED === "true" &&
-      isAppleWalletConfigured(),
-    googleWalletEnabled:
-      process.env.NEXT_PUBLIC_GOOGLE_WALLET_ENABLED === "true" &&
-      isGoogleWalletConfigured(),
+    appleWalletEnabled: isAppleWalletConfigured(),
+    googleWalletEnabled: isGoogleWalletConfigured(),
   }
 }

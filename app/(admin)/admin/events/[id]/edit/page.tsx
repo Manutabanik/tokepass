@@ -47,7 +47,7 @@ export default async function EditEventPage({
   try {
     const [eventData, venueList, categoryList, eventFees] = await Promise.all([
       getEventForEditing(id),
-      listOrganizerVenues().catch(() => []),
+      listOrganizerVenues({ includeArchived: true }).catch(() => []),
       getActiveEventCategories().catch(() => []),
       supabase
         .from("events")

@@ -5,6 +5,7 @@ import {
   eventArtistsToLineup,
   hasEventLineup,
   parseEventLineup,
+  visibleLineupArtists,
 } from "@/lib/event-lineup"
 
 describe("parseEventLineup", () => {
@@ -27,6 +28,8 @@ describe("parseEventLineup", () => {
     assert.equal(parsed.artists[0]?.performanceTime, "00:30")
     assert.equal(parsed.slots[0]?.time, "00:30")
     assert.equal(parsed.slots[0]?.title, "Bizarrap")
+    assert.equal(parsed.artists[0]?.isHeadliner, false)
+    assert.equal(parsed.artists[0]?.topTrackPreviewUrl, null)
   })
 
   it("parses artists and schedule objects", () => {
@@ -43,6 +46,30 @@ describe("parseEventLineup", () => {
     assert.equal(parsed.artists.length, 1)
     assert.equal(parsed.slots[0]?.title, "Apertura de puertas")
     assert.equal(hasEventLineup(parsed), true)
+  })
+
+  it("parses is_headliner from JSON fallback payloads", () => {
+    const parsed = parseEventLineup([
+      { name: "Bizarrap", is_headliner: true, time: "00:30" },
+      { name: "Nathy Peluso", isHeadliner: false },
+    ])
+    assert.equal(parsed.artists[0]?.isHeadliner, true)
+    assert.equal(parsed.artists[1]?.isHeadliner, false)
+  })
+
+  it("parses top track preview fields from JSON payloads", () => {
+    const parsed = parseEventLineup([
+      {
+        name: "Bizarrap",
+        top_track_preview_url: "https://p.scdn.co/mp3-preview/bzrp",
+        top_track_name: "Music Sessions",
+      },
+    ])
+    assert.equal(
+      parsed.artists[0]?.topTrackPreviewUrl,
+      "https://p.scdn.co/mp3-preview/bzrp",
+    )
+    assert.equal(parsed.artists[0]?.topTrackName, "Music Sessions")
   })
 })
 
@@ -73,5 +100,68 @@ describe("eventArtistsToLineup", () => {
     assert.equal(parsed.slots.length, 1)
     assert.equal(parsed.slots[0]?.title, "Bizarrap")
     assert.equal(parsed.slots[0]?.description, "Main")
+    assert.equal(parsed.artists[0]?.isHeadliner, false)
+    assert.equal(parsed.artists[1]?.isHeadliner, false)
+  })
+
+  it("maps is_headliner from EventArtist rows", () => {
+    const parsed = eventArtistsToLineup([
+      {
+        id: "ea-1",
+        sort_order: 1,
+        is_headliner: true,
+        artists: { id: "a-1", name: "Bizarrap" },
+      },
+      {
+        id: "ea-2",
+        sort_order: 2,
+        is_headliner: false,
+        artists: { id: "a-2", name: "Nathy Peluso" },
+      },
+    ])
+    assert.equal(parsed.artists[0]?.isHeadliner, true)
+    assert.equal(parsed.artists[1]?.isHeadliner, false)
+  })
+})
+
+describe("visibleLineupArtists", () => {
+  const names = ["A", "B", "C", "D", "E", "F"]
+  const artists = names.map((name, index) => ({
+    id: `a-${index}`,
+    name,
+    imageUrl: null,
+    role: null,
+    performanceTime: null,
+    isHeadliner: false,
+    topTrackPreviewUrl: null,
+    topTrackName: null,
+  }))
+
+  it("falls back to the first four artists when none are headliners", () => {
+    const visible = visibleLineupArtists(artists)
+    assert.deepEqual(
+      visible.featured.map((artist) => artist.name),
+      ["A", "B", "C", "D"],
+    )
+    assert.equal(visible.remainingCount, 2)
+  })
+
+  it("shows only marked headliners when present", () => {
+    const withHeadliners = artists.map((artist, index) => ({
+      ...artist,
+      isHeadliner: index === 1 || index === 4,
+    }))
+    const visible = visibleLineupArtists(withHeadliners)
+    assert.deepEqual(
+      visible.featured.map((artist) => artist.name),
+      ["B", "E"],
+    )
+    assert.equal(visible.remainingCount, 4)
+  })
+
+  it("hides the overflow control when every artist is already featured", () => {
+    const visible = visibleLineupArtists(artists.slice(0, 3))
+    assert.equal(visible.featured.length, 3)
+    assert.equal(visible.remainingCount, 0)
   })
 })

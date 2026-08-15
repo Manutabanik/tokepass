@@ -305,6 +305,24 @@ export async function getSyncQueueCount(): Promise<number> {
   return count
 }
 
+/** Tickets ya marcados como ingresados en el manifiesto local. */
+export async function countAdmittedTickets(eventId: string): Promise<number> {
+  if (!eventId) return 0
+  const db = await openDb()
+  const tx = db.transaction(TICKETS, "readonly")
+  const rows = (await requestToPromise(
+    tx.objectStore(TICKETS).index("by_event").getAll(eventId),
+  )) as ScannerManifestTicket[]
+  await txDone(tx)
+  db.close()
+  return rows.filter(
+    (row) =>
+      row.status === "used" ||
+      row.status === "scanned" ||
+      (row.admissions_used ?? 0) > 0,
+  ).length
+}
+
 export async function clearSyncQueueItems(ticketIds: string[]): Promise<void> {
   if (ticketIds.length === 0) return
   const db = await openDb()

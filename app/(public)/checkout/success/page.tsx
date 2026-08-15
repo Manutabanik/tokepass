@@ -112,6 +112,7 @@ export default async function CheckoutSuccessPage({
                 imageUrl: purchaseAnalytics.eventImageUrl,
                 customStoryUrl: purchaseAnalytics.socialShareImageUrl,
                 mode: "buyer",
+                eventId: purchaseAnalytics.eventId,
                 organizerName: purchaseAnalytics.organizerName,
                 organizerAvatarUrl: purchaseAnalytics.organizerAvatarUrl,
               }}

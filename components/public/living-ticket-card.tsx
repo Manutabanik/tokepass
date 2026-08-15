@@ -18,10 +18,12 @@ import { QRCodeSVG } from "qrcode.react"
 
 import type { MyTicket } from "@/app/actions/tickets"
 import { LivingTicketQR } from "@/components/public/living-ticket-qr"
+import { QrEnlargeTrigger, QrScanLightbox } from "@/components/public/qr-scan-lightbox"
 import { ResaleTicketDialog } from "@/components/public/resale-ticket-dialog"
 import { SaveTicketButton } from "@/components/public/save-ticket-button"
 import { StoryFlyerWalletButton } from "@/components/public/story-flyer-modal"
 import { TransferTicketDialog } from "@/components/public/transfer-ticket-dialog"
+import { WalletPassButtons } from "@/components/account/wallet-pass-buttons"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -32,6 +34,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
+import { storyCategoryLabel } from "@/lib/story-canvas"
 
 function isVipTier(tierName: string): boolean {
   return /\bvip\b/i.test(tierName)
@@ -99,13 +102,20 @@ function TicketManageSheet({
 
         <div className="flex flex-col gap-3 px-4 pb-4">
           {ticket.status === "valid" ? (
-            <SaveTicketButton
-              ticket={ticket}
-              userId={userId}
-              disabled={offline}
-              appleWalletEnabled={appleWalletEnabled}
-              googleWalletEnabled={googleWalletEnabled}
-            />
+            <>
+              <WalletPassButtons
+                ticketId={ticket.id}
+                flyerUrl={ticket.flyerUrl}
+                disabled={offline}
+              />
+              <SaveTicketButton
+                ticket={ticket}
+                userId={userId}
+                disabled={offline}
+                appleWalletEnabled={appleWalletEnabled}
+                googleWalletEnabled={googleWalletEnabled}
+              />
+            </>
           ) : null}
 
           {ticket.status === "valid" ? (
@@ -119,6 +129,12 @@ function TicketManageSheet({
                 mode: "buyer",
                 organizerName: ticket.organizerName,
                 organizerAvatarUrl: ticket.organizerAvatarUrl,
+                eventId: ticket.eventId,
+                categoryLabel: storyCategoryLabel({
+                  tierName: ticket.tierName,
+                  seatingLabel: ticket.seatingLabel,
+                  seatingSectorName: ticket.seatingSectorName,
+                }),
               }}
             />
           ) : null}
@@ -224,6 +240,7 @@ export function LivingTicketCard({
   googleWalletEnabled?: boolean
 }) {
   const [manageOpen, setManageOpen] = useState(false)
+  const [scanOpen, setScanOpen] = useState(false)
   const vip = isVipTier(ticket.tierName)
   const isFree = Number(ticket.tierPrice) === 0
   const canShowLiveQr = showQr && ticket.status === "valid"
@@ -341,23 +358,25 @@ export function LivingTicketCard({
             className="w-full"
             onContextMenu={(event) => event.preventDefault()}
           >
-            {isStatic ? (
-              <div className="pointer-events-none mx-auto w-fit select-none rounded-[1.35rem] bg-white p-3.5 shadow-sm">
-                <QRCodeSVG
-                  value={ticket.totpSecret}
+            <QrEnlargeTrigger onOpen={() => setScanOpen(true)} className="mx-auto w-fit">
+              {isStatic ? (
+                <div className="pointer-events-none mx-auto w-fit select-none rounded-[1.35rem] bg-white p-3.5 shadow-sm">
+                  <QRCodeSVG
+                    value={ticket.totpSecret}
+                    size={220}
+                    level="H"
+                    bgColor="#ffffff"
+                    fgColor="#09090b"
+                  />
+                </div>
+              ) : (
+                <LivingTicketQR
+                  ticketId={ticket.id}
+                  totpSecret={ticket.totpSecret}
                   size={220}
-                  level="H"
-                  bgColor="#ffffff"
-                  fgColor="#09090b"
                 />
-              </div>
-            ) : (
-              <LivingTicketQR
-                ticketId={ticket.id}
-                totpSecret={ticket.totpSecret}
-                size={220}
-              />
-            )}
+              )}
+            </QrEnlargeTrigger>
             <div className="mt-3 flex justify-center">
               <span
                 className={cn(
@@ -372,10 +391,20 @@ export function LivingTicketCard({
                 ) : (
                   <Wifi className="size-3" aria-hidden="true" />
                 )}
-                {isStatic ? "QR fijo" : "Living QR"}
-                {offline ? " · offline" : ""}
+                {offline
+                  ? "Modo sin conexión - QR disponible para lectura"
+                  : isStatic
+                    ? "QR fijo"
+                    : "Living QR"}
               </span>
             </div>
+            <QrScanLightbox
+              open={scanOpen}
+              onOpenChange={setScanOpen}
+              isStatic={isStatic}
+              ticketId={ticket.id}
+              totpSecret={ticket.totpSecret}
+            />
           </div>
         ) : (
           <p className="px-2 text-center text-sm text-muted-foreground">

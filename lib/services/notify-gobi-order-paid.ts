@@ -10,6 +10,7 @@ import { dispatchOrderPaidToGobi } from "@/lib/services/gobi-dispatcher"
 export async function notifyGobiOrderPaid(
   admin: SupabaseClient,
   orderId: string,
+  access?: { magicUrl: string; otp: string } | null,
 ): Promise<void> {
   const { data: order, error: orderError } = await admin
     .from("orders")
@@ -45,7 +46,7 @@ export async function notifyGobiOrderPaid(
       .maybeSingle(),
     admin
       .from("tickets")
-      .select("id, event_id")
+      .select("id, event_id, holder_email")
       .eq("order_id", orderId)
       .order("created_at", { ascending: true })
       .limit(1),
@@ -67,14 +68,29 @@ export async function notifyGobiOrderPaid(
     if (event?.title) eventName = String(event.title)
   }
 
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
-    "https://tokepass.app"
-  const ticketUrl = `${siteUrl}/tickets/${ticket.id}/print`
   const customerName =
     String(profile?.full_name ?? "").trim() ||
     String(profile?.email ?? "").trim() ||
     "Cliente"
+
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
+    "https://tokepass.app"
+  let ticketUrl = access?.magicUrl ?? ""
+  let accessCode = access?.otp?.trim() || undefined
+  if (!ticketUrl) {
+    const { issueGuestReceiptAccess } = await import(
+      "@/app/actions/guest-ticket-access"
+    )
+    const issued = await issueGuestReceiptAccess(orderId)
+    if (issued) {
+      ticketUrl = issued.magicUrl
+      accessCode = issued.otp.trim() || undefined
+    }
+  }
+  if (!ticketUrl) {
+    ticketUrl = `${siteUrl}/cuenta/entradas`
+  }
 
   await dispatchOrderPaidToGobi({
     order_id: orderId,
@@ -82,5 +98,6 @@ export async function notifyGobiOrderPaid(
     customer_name: customerName,
     customer_phone: phone,
     ticket_url: ticketUrl,
+    ...(accessCode ? { access_code: accessCode } : {}),
   })
 }

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 
+import { findScheduleDay, parseScheduleDays } from "@/lib/event-schedule"
 import { listOperableEvents } from "@/lib/event-ops-access"
 import { logger } from "@/lib/logger"
 import { notifyPosTicketIssued } from "@/lib/notifications"
@@ -87,6 +88,10 @@ export type PrintableTicket = {
   eventLocation: string
   qrType: QrType
   scannedAt: string | null
+  flyerUrl: string | null
+  doorsOpenAt: string
+  sectorLabel: string | null
+  seatingLabel: string | null
 }
 
 function mapShift(row: {
@@ -391,7 +396,7 @@ export async function createPosSale(input: {
   quantity: number
   paymentMethod: "cash_pos" | "transfer_pos" | "card_pos"
   customerPhone?: string | null
-  customerDni: string
+  customerDni?: string | null
   customerName?: string | null
   shiftId: string
   supervisorPin?: string | null
@@ -406,13 +411,9 @@ export async function createPosSale(input: {
       return { success: false, error: "Sesión requerida." }
     }
 
-    const dni = input.customerDni.replace(/\D/g, "")
-    if (dni.length < 7 || dni.length > 11) {
-      return {
-        success: false,
-        error: "Ingresá el DNI del comprador (7 a 11 dígitos).",
-      }
-    }
+    const rawDni = input.customerDni?.replace(/\D/g, "") ?? ""
+    const dni =
+      rawDni.length >= 7 && rawDni.length <= 11 ? rawDni : "00000000"
 
     if (
       !input.eventId ||
@@ -478,7 +479,7 @@ export async function createPosSale(input: {
       return { success: false, error: "La venta no generó tickets." }
     }
 
-    const holderName = input.customerName?.trim() || "Comprador POS"
+    const holderName = input.customerName?.trim() || "Consumidor Final"
 
     const { data: event } = await supabase
       .from("events")
@@ -702,13 +703,29 @@ export async function getPrintableTicket(
 
   if (!user) return null
 
-  const { data, error } = await supabase
+  const rich = await supabase
     .from("tickets")
     .select(
-      "id, status, totp_secret, scanned_at, is_dynamic_qr, owner_id, holder_name, holder_dni, ticket_tiers(name, price), events(id, title, date, location, qr_type, organizer_id)",
+      "id, status, totp_secret, scanned_at, is_dynamic_qr, owner_id, holder_name, holder_dni, event_seating_units(label, sector_name, row_label, layout_type), ticket_tiers(name, price, day_id), events(id, title, date, location, qr_type, organizer_id, flyer_url, image_url, schedule_days)",
     )
     .eq("id", ticketId)
     .maybeSingle()
+
+  const query =
+    rich.error &&
+    /event_seating_units|flyer_url|schedule_days|day_id|schema cache|PGRST204|42703/i.test(
+      rich.error.message,
+    )
+      ? await supabase
+          .from("tickets")
+          .select(
+            "id, status, totp_secret, scanned_at, is_dynamic_qr, owner_id, holder_name, holder_dni, ticket_tiers(name, price), events(id, title, date, location, qr_type, organizer_id)",
+          )
+          .eq("id", ticketId)
+          .maybeSingle()
+      : rich
+
+  const { data, error } = query
 
   if (error || !data) return null
 
@@ -721,7 +738,13 @@ export async function getPrintableTicket(
     owner_id: string | null
     holder_name: string | null
     holder_dni: string | null
-    ticket_tiers: { name: string; price?: number | null } | null
+    ticket_tiers: { name: string; price?: number | null; day_id?: string | null } | null
+    event_seating_units: {
+      label: string | null
+      sector_name: string | null
+      row_label: string | null
+      layout_type: string | null
+    } | null
     events: {
       id: string
       title: string
@@ -729,6 +752,9 @@ export async function getPrintableTicket(
       location: string
       qr_type: QrType | null
       organizer_id: string
+      flyer_url?: string | null
+      image_url?: string | null
+      schedule_days?: unknown
     } | null
   }
 
@@ -781,6 +807,19 @@ export async function getPrintableTicket(
       ? "static"
       : "static"
 
+  const scheduleDays = parseScheduleDays(row.events.schedule_days)
+  const dayBound = findScheduleDay(
+    scheduleDays,
+    row.ticket_tiers?.day_id ?? undefined,
+  )
+  const seatingParts = [
+    row.event_seating_units?.sector_name?.trim(),
+    row.event_seating_units?.label?.trim(),
+    row.event_seating_units?.row_label
+      ? `Fila ${row.event_seating_units.row_label.trim()}`
+      : null,
+  ].filter((part): part is string => Boolean(part))
+
   return {
     id: row.id,
     totpSecret: row.totp_secret,
@@ -796,5 +835,9 @@ export async function getPrintableTicket(
     eventLocation: row.events.location,
     qrType,
     scannedAt: row.scanned_at,
+    flyerUrl: row.events.flyer_url?.trim() || row.events.image_url?.trim() || null,
+    doorsOpenAt: dayBound?.start_time || row.events.date,
+    sectorLabel: seatingParts[0] ?? null,
+    seatingLabel: seatingParts.length > 0 ? seatingParts.join(" · ") : null,
   }
 }

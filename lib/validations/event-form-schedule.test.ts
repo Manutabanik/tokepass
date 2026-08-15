@@ -1,0 +1,76 @@
+import assert from "node:assert/strict"
+import { describe, it } from "node:test"
+
+import { coerceDraftEventForm, type DraftEventFormValues } from "@/lib/validations/event-form"
+
+function draftWithDays(
+  isMultiDay: boolean,
+  scheduleDays: DraftEventFormValues["basics"]["scheduleDays"],
+): DraftEventFormValues {
+  return {
+    basics: {
+      title: "Festival Test",
+      date: "2026-11-14T20:00",
+      endDate: "2026-11-14T23:00",
+      description: "",
+      flyerName: null,
+      visibility: "public",
+      isMultiDay,
+      scheduleDays,
+      categoryId: "",
+      ageRestriction: "",
+    },
+    venue: {
+      mode: "new",
+      existingVenueId: null,
+      zoneType: "general_admission",
+      venueName: "Club",
+      includesSeatingMap: false,
+      saveVenueForReuse: true,
+    },
+    tickets: [
+      {
+        name: "General",
+        price: 10000,
+        capacity: 100,
+        visibility: "public",
+        layoutType: "general",
+        capacityPerUnit: 1,
+        admitCount: 1,
+      },
+    ],
+    ticketsDefaultTab: "auto",
+    lineup: [],
+  }
+}
+
+describe("multi-day draft coercion", () => {
+  it("keeps isMultiDay and both jornadas when dates are complete", () => {
+    const coerced = coerceDraftEventForm(
+      draftWithDays(true, [
+        {
+          id: "11111111-1111-4111-8111-111111111111",
+          title: "Día 1",
+          startTime: "2026-11-14T20:00",
+          endTime: "2026-11-15T04:00",
+        },
+        {
+          id: "22222222-2222-4222-8222-222222222222",
+          title: "Día 2",
+          startTime: "2026-11-15T20:00",
+          endTime: "2026-11-16T04:00",
+        },
+      ]),
+    )
+    assert.equal(coerced.basics.isMultiDay, true)
+    assert.equal(coerced.basics.scheduleDays.length, 2)
+    assert.equal(coerced.basics.scheduleDays[0]?.title, "Día 1")
+    assert.equal(coerced.basics.scheduleDays[1]?.title, "Día 2")
+  })
+
+  it("does not flip a single-day event to multi-day", () => {
+    const coerced = coerceDraftEventForm(draftWithDays(false, []))
+    assert.equal(coerced.basics.isMultiDay, false)
+    assert.equal(coerced.basics.scheduleDays.length, 0)
+  })
+})

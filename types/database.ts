@@ -149,6 +149,8 @@ export type Artist = {
   spotify_id: string | null
   genres: string[]
   bio: string | null
+  top_track_preview_url: string | null
+  top_track_name: string | null
   created_at: string
   updated_at: string
 }
@@ -162,6 +164,8 @@ export type EventArtist = {
   stage: string | null
   /** Orden de grilla. Equivale a EventArtist.order. */
   sort_order: number
+  /** Headliner destacado en la grilla pública (P74). */
+  is_headliner: boolean
   created_at: string
   updated_at: string
 }
@@ -305,6 +309,7 @@ export type Venue = {
   seating_layout: Json
   venue_map: Json
   seating_background_url: string | null
+  is_archived: boolean
   created_at: string
   updated_at: string
 }
@@ -634,6 +639,7 @@ export type Order = {
   provider_metadata: Json
   payment_method: PaymentMethod
   customer_phone: string | null
+  guest_token: string | null
   cashier_shift_id: string | null
   created_at: string
   updated_at: string
@@ -883,6 +889,7 @@ type VenueInsert = Omit<
   | "seating_layout"
   | "venue_map"
   | "seating_background_url"
+  | "is_archived"
   | "max_capacity"
   | "created_at"
   | "updated_at"
@@ -891,6 +898,7 @@ type VenueInsert = Omit<
   seating_layout?: Json
   venue_map?: Json
   seating_background_url?: string | null
+  is_archived?: boolean
   max_capacity?: number
   created_at?: string
   updated_at?: string
@@ -1073,6 +1081,7 @@ type OrderInsert = Omit<
   | "provider_metadata"
   | "payment_method"
   | "customer_phone"
+  | "guest_token"
   | "cashier_shift_id"
   | "created_at"
   | "updated_at"
@@ -1093,6 +1102,7 @@ type OrderInsert = Omit<
   provider_metadata?: Json
   payment_method?: PaymentMethod
   customer_phone?: string | null
+  guest_token?: string | null
   cashier_shift_id?: string | null
   created_at?: string
   updated_at?: string
@@ -1346,6 +1356,8 @@ export type Database = {
           spotify_id?: string | null
           genres?: string[]
           bio?: string | null
+          top_track_preview_url?: string | null
+          top_track_name?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -1355,6 +1367,8 @@ export type Database = {
           spotify_id: string | null
           genres: string[]
           bio: string | null
+          top_track_preview_url: string | null
+          top_track_name: string | null
           updated_at: string
         }>
         Relationships: []
@@ -1368,6 +1382,7 @@ export type Database = {
           performance_time?: string | null
           stage?: string | null
           sort_order?: number
+          is_headliner?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -1377,6 +1392,7 @@ export type Database = {
           performance_time: string | null
           stage: string | null
           sort_order: number
+          is_headliner: boolean
           updated_at: string
         }>
         Relationships: [
@@ -1586,6 +1602,70 @@ export type Database = {
           created_at?: string
         }
         Update: Partial<PlatformOpsAudit>
+        Relationships: []
+      }
+      checkout_security_events: {
+        Row: {
+          id: string
+          order_id: string | null
+          event_id: string | null
+          buyer_id: string | null
+          ip: string | null
+          user_agent: string | null
+          device_hash: string | null
+          dwell_ms: number | null
+          captcha_provider: string | null
+          captcha_score: number | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          order_id?: string | null
+          event_id?: string | null
+          buyer_id?: string | null
+          ip?: string | null
+          user_agent?: string | null
+          device_hash?: string | null
+          dwell_ms?: number | null
+          captcha_provider?: string | null
+          captcha_score?: number | null
+          created_at?: string
+        }
+        Update: Record<string, never>
+        Relationships: []
+      }
+      guest_access_challenges: {
+        Row: {
+          id: string
+          order_id: string
+          email: string
+          phone: string | null
+          otp_hash: string
+          magic_jti: string
+          otp_attempts: number
+          verified_at: string | null
+          expires_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          order_id: string
+          email: string
+          phone?: string | null
+          otp_hash: string
+          magic_jti: string
+          otp_attempts?: number
+          verified_at?: string | null
+          expires_at: string
+          created_at?: string
+        }
+        Update: {
+          otp_attempts?: number
+          verified_at?: string | null
+          otp_hash?: string
+          expires_at?: string
+          magic_jti?: string
+        }
         Relationships: []
       }
       organizer_mp_connect: {
@@ -2264,6 +2344,22 @@ export type Database = {
           p_window_seconds: number
         }
         Returns: boolean
+      }
+      is_rate_limited: {
+        Args: {
+          p_bucket_key: string
+          p_limit: number
+          p_window_seconds: number
+        }
+        Returns: boolean
+      }
+      count_guest_identity_tickets: {
+        Args: {
+          p_event_id: string
+          p_holder_dni: string
+          p_holder_email: string
+        }
+        Returns: number
       }
       user_has_event_staff_role: {
         Args: {

@@ -76,7 +76,7 @@ export function EmergencyTicketSearch({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85dvh] overflow-hidden border-zinc-200 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Ingreso por DNI</DialogTitle>
+          <DialogTitle>Buscar por DNI / Nombre</DialogTitle>
           <DialogDescription className="text-muted-foreground">
             Buscá por nombre o DNI. Si es una mesa, podés validar un acceso o
             todos juntos.

@@ -9,6 +9,8 @@ export type ArtistSearchHit = {
   name: string
   imageUrl: string | null
   spotifyId: string | null
+  topTrackPreviewUrl: string | null
+  topTrackName: string | null
 }
 
 export type EventLineupItem = {
@@ -18,7 +20,28 @@ export type EventLineupItem = {
   performanceTime: string | null
   stage: string | null
   order: number
+  isHeadliner: boolean
   artist: ArtistSearchHit
+}
+
+export const EVENT_ARTISTS_LINEUP_SELECT =
+  "id, event_id, artist_id, performance_time, stage, sort_order, is_headliner, artists(id, name, image_url, spotify_id, top_track_preview_url, top_track_name)"
+
+export const EVENT_ARTISTS_LINEUP_SELECT_LEGACY =
+  "id, event_id, artist_id, performance_time, stage, sort_order, artists(id, name, image_url, spotify_id, top_track_preview_url, top_track_name)"
+
+export const EVENT_ARTISTS_LINEUP_SELECT_NO_PREVIEW =
+  "id, event_id, artist_id, performance_time, stage, sort_order, is_headliner, artists(id, name, image_url, spotify_id)"
+
+export const EVENT_ARTISTS_LINEUP_SELECT_LEGACY_NO_PREVIEW =
+  "id, event_id, artist_id, performance_time, stage, sort_order, artists(id, name, image_url, spotify_id)"
+
+export function isMissingHeadlinerColumn(message?: string | null): boolean {
+  return /is_headliner/i.test(message ?? "")
+}
+
+export function isMissingTopTrackColumn(message?: string | null): boolean {
+  return /top_track_preview_url|top_track_name/i.test(message ?? "")
 }
 
 export const ARTIST_SEARCH_LIMIT = 10
@@ -81,6 +104,9 @@ export type LineupDraftItem = {
   performanceTime: string
   stage: string
   order: number
+  isHeadliner: boolean
+  topTrackPreviewUrl: string | null
+  topTrackName: string | null
 }
 
 export function performanceTimeToInput(value: string | null | undefined): string {
@@ -108,6 +134,9 @@ export function serializeLineupForEvent(lineup: LineupDraftItem[]) {
     spotify_id: item.spotifyId,
     artist_id: item.artistId,
     order: index,
+    is_headliner: Boolean(item.isHeadliner),
+    top_track_preview_url: item.topTrackPreviewUrl,
+    top_track_name: item.topTrackName,
   }))
 }
 
@@ -125,6 +154,9 @@ export function lineupDraftsFromItems(
     performanceTime: performanceTimeToInput(item.performanceTime),
     stage: item.stage ?? "",
     order: Number.isFinite(item.order) ? item.order : index,
+    isHeadliner: Boolean(item.isHeadliner),
+    topTrackPreviewUrl: item.artist.topTrackPreviewUrl,
+    topTrackName: item.artist.topTrackName,
   }))
 }
 
@@ -133,12 +165,16 @@ export function mapArtistHit(row: {
   name?: string | null
   image_url?: string | null
   spotify_id?: string | null
+  top_track_preview_url?: string | null
+  top_track_name?: string | null
 }): ArtistSearchHit {
   return {
     id: row.id?.trim() || "",
     name: row.name?.trim() || "Artista",
     imageUrl: row.image_url?.trim() || null,
     spotifyId: row.spotify_id?.trim() || null,
+    topTrackPreviewUrl: row.top_track_preview_url?.trim() || null,
+    topTrackName: row.top_track_name?.trim() || null,
   }
 }
 
@@ -149,18 +185,23 @@ export function mapLineupItem(row: {
   performance_time?: string | null
   stage?: string | null
   sort_order?: number
+  is_headliner?: boolean | null
   artists?:
     | {
         id: string
         name: string
         image_url?: string | null
         spotify_id?: string | null
+        top_track_preview_url?: string | null
+        top_track_name?: string | null
       }
     | Array<{
         id: string
         name: string
         image_url?: string | null
         spotify_id?: string | null
+        top_track_preview_url?: string | null
+        top_track_name?: string | null
       }>
     | null
 }): EventLineupItem {
@@ -172,12 +213,15 @@ export function mapLineupItem(row: {
     performanceTime: row.performance_time ?? null,
     stage: row.stage ?? null,
     order: Number.isFinite(Number(row.sort_order)) ? Number(row.sort_order) : 0,
+    isHeadliner: Boolean(row.is_headliner),
     artist: mapArtistHit(
       nested ?? {
         id: row.artist_id,
         name: "Artista",
         image_url: null,
         spotify_id: null,
+        top_track_preview_url: null,
+        top_track_name: null,
       },
     ),
   }

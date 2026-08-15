@@ -4,7 +4,7 @@ import { QrCode } from "lucide-react"
 import { useState } from "react"
 
 import type { MyStoreRedemption } from "@/app/actions/addons"
-import { LivingTicketQR } from "@/components/public/living-ticket-qr"
+import { QrScanLightbox } from "@/components/public/qr-scan-lightbox"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { formatCurrency, formatEventDay, formatEventTime } from "@/lib/format"
@@ -19,7 +19,7 @@ export function LivingStoreCard({
 }: {
   redemption: MyStoreRedemption
 }) {
-  const [showQr, setShowQr] = useState(false)
+  const [scanOpen, setScanOpen] = useState(false)
   const isValid = redemption.status === "valid"
   const isRedeemed = redemption.status === "redeemed"
   const CategoryIcon = EVENT_ITEM_CATEGORY_ICONS[redemption.itemCategory]
@@ -95,18 +95,21 @@ export function LivingStoreCard({
           <div className="space-y-3">
             <Button
               type="button"
-              className="h-11 w-full rounded-full bg-violet-500 text-white hover:bg-violet-400"
-              onClick={() => setShowQr((current) => !current)}
+              className="h-11 w-full cursor-pointer rounded-full bg-violet-500 text-white transition-transform hover:scale-105 hover:bg-violet-400"
+              onClick={() => setScanOpen(true)}
+              title="Tocar para agrandar"
             >
               <QrCode className="size-4" aria-hidden="true" />
-              {showQr ? "Ocultar QR de canje" : "Mostrar QR de canje"}
+              Mostrar QR de canje
             </Button>
-
-            {showQr ? (
-              <div className="rounded-2xl border border-violet-500/20 bg-muted/40 px-3 py-4">
-                <LivingTicketQR ticketId={redemption.qrCodeToken} />
-              </div>
-            ) : null}
+            <QrScanLightbox
+              open={scanOpen}
+              onOpenChange={setScanOpen}
+              isStatic={false}
+              ticketId={redemption.qrCodeToken}
+              totpSecret={redemption.qrCodeToken}
+              caption="Acercá este código al escáner de canje"
+            />
           </div>
         ) : (
           <p className="rounded-2xl bg-muted px-3 py-3 text-center text-xs text-muted-foreground">

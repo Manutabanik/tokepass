@@ -9,10 +9,14 @@ import {
 } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 
 import type { MyTicket } from "@/app/actions/tickets"
+import { GuestOtpGate } from "@/components/account/guest-otp-gate"
 import { LivingTicketQR } from "@/components/public/living-ticket-qr"
+import { QrEnlargeTrigger, QrScanLightbox } from "@/components/public/qr-scan-lightbox"
+import { WalletPassButtons } from "@/components/account/wallet-pass-buttons"
 import { SaveTicketButton } from "@/components/public/save-ticket-button"
 import { SponsorGrid } from "@/components/public/sponsor-grid"
 import { StoryFlyerWalletButton } from "@/components/public/story-flyer-modal"
@@ -20,6 +24,7 @@ import { TransferTicketDialog } from "@/components/public/transfer-ticket-dialog
 import { useOnlineStatus } from "@/components/pwa/use-online-status"
 import { Button } from "@/components/ui/button"
 import { formatEventDay, formatEventTime } from "@/lib/format"
+import { storyCategoryLabel } from "@/lib/story-canvas"
 import { getTicketsOffline } from "@/lib/offline-store"
 import type { PublicSponsor } from "@/lib/sponsors"
 import { QRCodeSVG } from "qrcode.react"
@@ -30,29 +35,38 @@ export function TicketDetailView({
   appleWalletEnabled = false,
   googleWalletEnabled = false,
   sponsors = [],
+  requireGuestOtp = false,
 }: {
   ticket: MyTicket
   userId: string
   appleWalletEnabled?: boolean
   googleWalletEnabled?: boolean
   sponsors?: PublicSponsor[]
+  requireGuestOtp?: boolean
 }) {
   const online = useOnlineStatus()
-  const [ticket, setTicket] = useState(initialTicket)
-
-  useEffect(() => {
-    setTicket(initialTicket)
-  }, [initialTicket])
+  const router = useRouter()
+  const [offlineTicket, setOfflineTicket] = useState<MyTicket | null>(null)
+  const [scanOpen, setScanOpen] = useState(false)
+  const [otpUnlocked, setOtpUnlocked] = useState(!requireGuestOtp)
+  const ticket =
+    !online && offlineTicket?.id === initialTicket.id
+      ? offlineTicket
+      : initialTicket
 
   useEffect(() => {
     if (online) return
+    let cancelled = false
     void getTicketsOffline(userId).then((cached) => {
       const local = cached.find((row) => row.id === initialTicket.id)
-      if (local) setTicket(local)
+      if (!cancelled && local) setOfflineTicket(local)
     })
+    return () => {
+      cancelled = true
+    }
   }, [online, userId, initialTicket.id])
 
-  const canShowQr = ticket.status === "valid"
+  const canShowQr = ticket.status === "valid" && otpUnlocked
   const isStatic = ticket.qrType === "static"
   const canTransfer =
     ticket.status === "valid" &&
@@ -129,30 +143,47 @@ export function TicketDetailView({
         </div>
       </header>
 
-      {canShowQr ? (
+      {ticket.status === "valid" && requireGuestOtp && !otpUnlocked && ticket.orderId ? (
+        <GuestOtpGate
+          orderId={ticket.orderId}
+          onVerified={() => {
+            setOtpUnlocked(true)
+            router.refresh()
+          }}
+        />
+      ) : canShowQr ? (
         <div className="rounded-3xl border border-border bg-card p-5 text-center text-card-foreground shadow-2xl shadow-black/20">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
             {isStatic ? "QR de ingreso" : "Living QR"}
           </p>
           <div className="mx-auto mt-4 w-full max-w-[220px] rounded-2xl bg-white p-2">
-            {isStatic ? (
-              <QRCodeSVG
-                value={ticket.totpSecret}
-                size={200}
-                level="H"
-                includeMargin
-                bgColor="#ffffff"
-                fgColor="#09090b"
-                className="h-auto w-full"
-              />
-            ) : (
-              <LivingTicketQR
-                ticketId={ticket.id}
-                totpSecret={ticket.totpSecret}
-                size={200}
-              />
-            )}
+            <QrEnlargeTrigger onOpen={() => setScanOpen(true)} className="w-full">
+              {isStatic ? (
+                <QRCodeSVG
+                  value={ticket.totpSecret}
+                  size={200}
+                  level="H"
+                  includeMargin
+                  bgColor="#ffffff"
+                  fgColor="#09090b"
+                  className="h-auto w-full"
+                />
+              ) : (
+                <LivingTicketQR
+                  ticketId={ticket.id}
+                  totpSecret={ticket.totpSecret}
+                  size={200}
+                />
+              )}
+            </QrEnlargeTrigger>
           </div>
+          <QrScanLightbox
+            open={scanOpen}
+            onOpenChange={setScanOpen}
+            isStatic={isStatic}
+            ticketId={ticket.id}
+            totpSecret={ticket.totpSecret}
+          />
           <p className="mt-3 font-mono text-xs tracking-wider text-muted-foreground">
             #{ticket.id.slice(0, 8).toUpperCase()}
           </p>
@@ -163,8 +194,11 @@ export function TicketDetailView({
               : "Abrí esta pantalla al llegar. El código cambia cada 15 segundos."}
           </p>
           {!online ? (
-            <p className="mt-2 text-xs font-medium text-amber-800 dark:text-amber-300">
-              Modo offline · QR válido para ingreso
+            <p
+              role="status"
+              className="mt-3 inline-flex rounded-full border border-amber-400/40 bg-amber-500/15 px-3 py-1 text-[11px] font-semibold tracking-wide text-amber-100"
+            >
+              Modo sin conexión - QR disponible para lectura
             </p>
           ) : null}
           {sponsors.length > 0 ? (
@@ -196,6 +230,11 @@ export function TicketDetailView({
 
         {ticket.status === "valid" ? (
           <>
+            <WalletPassButtons
+              ticketId={ticket.id}
+              flyerUrl={ticket.flyerUrl}
+              disabled={!online}
+            />
             <SaveTicketButton
               ticket={ticket}
               userId={userId}
@@ -213,6 +252,12 @@ export function TicketDetailView({
                 mode: "buyer",
                 organizerName: ticket.organizerName,
                 organizerAvatarUrl: ticket.organizerAvatarUrl,
+                eventId: ticket.eventId,
+                categoryLabel: storyCategoryLabel({
+                  tierName: ticket.tierName,
+                  seatingLabel: ticket.seatingLabel,
+                  seatingSectorName: ticket.seatingSectorName,
+                }),
               }}
             />
             <Button

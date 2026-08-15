@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 
 import { getActiveEventCategories } from "@/app/actions/categories"
 import {
+  getFeaturedDiscoveryArtists,
   getFeaturedEvents,
   getPublishedEvents,
 } from "@/app/actions/public-events"
@@ -11,6 +12,7 @@ import { DiscoveryHub } from "@/components/discovery/discovery-hub"
 import { SponsorMarquee } from "@/components/public/sponsor-grid"
 import { mapDbCategoriesToDiscovery } from "@/lib/category-icons"
 import { DEFAULT_DISCOVERY_CATEGORIES } from "@/lib/discovery-categories"
+import { DISCOVERY_FILTER_ARTISTS_LIMIT } from "@/lib/discovery-artists"
 import type { FeaturedRotationResult } from "@/lib/featured-rotation"
 
 export const metadata: Metadata = {
@@ -22,9 +24,15 @@ export const metadata: Metadata = {
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; location?: string; category?: string }>
+  searchParams: Promise<{
+    q?: string
+    location?: string
+    category?: string
+    artist?: string
+    when?: string
+  }>
 }) {
-  const { q, location, category } = await searchParams
+  const { q, location, category, artist, when } = await searchParams
   let events: Awaited<ReturnType<typeof getPublishedEvents>> = []
   let featured: FeaturedRotationResult<
     Awaited<ReturnType<typeof getPublishedEvents>>[number]
@@ -35,17 +43,21 @@ export default async function HomePage({
   }
   let categories = DEFAULT_DISCOVERY_CATEGORIES
   let platformSponsors: Awaited<ReturnType<typeof getActivePlatformSponsors>> = []
+  let featuredArtists: Awaited<ReturnType<typeof getFeaturedDiscoveryArtists>> = []
   let loadError: string | null = null
 
   try {
-    const [published, featuredResult, dbCategories, sponsors] = await Promise.all([
-      getPublishedEvents(q),
-      getFeaturedEvents(),
-      getActiveEventCategories().catch(() => []),
-      getActivePlatformSponsors().catch(() => []),
-    ])
+    const [published, featuredResult, dbCategories, sponsors, discoveryArtists] =
+      await Promise.all([
+        getPublishedEvents(),
+        getFeaturedEvents(),
+        getActiveEventCategories().catch(() => []),
+        getActivePlatformSponsors().catch(() => []),
+        getFeaturedDiscoveryArtists(DISCOVERY_FILTER_ARTISTS_LIMIT).catch(() => []),
+      ])
     events = published
     featured = featuredResult
+    featuredArtists = discoveryArtists
     platformSponsors = sponsors
     if (dbCategories.length > 0) {
       categories = mapDbCategoriesToDiscovery(dbCategories)
@@ -72,7 +84,10 @@ export default async function HomePage({
             initialQuery={q ?? ""}
             initialLocation={location?.trim() || "todas"}
             initialCategoryId={category?.trim() || "all"}
+            initialArtistId={artist?.trim() || ""}
+            initialDatePreset={when}
             initialFeatured={featured}
+            featuredArtists={featuredArtists}
             categories={categories}
           />
         )}

@@ -36,6 +36,8 @@ function baseVenue(
       backgroundY: 0,
     },
     seatingBackgroundUrl: "https://example.com/map.png",
+    isArchived: false,
+    linkedEventCount: 0,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     ...overrides,

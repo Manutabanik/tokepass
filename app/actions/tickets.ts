@@ -38,6 +38,7 @@ export type MyTicket = {
   qrType: QrType
   holderName: string
   holderDni: string | null
+  orderId?: string | null
   isTest: boolean
   /** Precio público All-In del tier (0 = gratuita). */
   tierPrice: number
@@ -200,6 +201,7 @@ export async function getMyTickets(): Promise<MyTicket[]> {
         qrType,
         holderName,
         holderDni,
+        orderId: ticket.order_id,
         isTest: Boolean(ticket.is_test),
         tierPrice: Number(ticket.ticket_tiers?.price ?? 0),
         isSponsoredByTokepass: Boolean(

@@ -6,6 +6,7 @@ import {
   LoaderCircle,
   Plus,
   Search,
+  Star,
   Trash2,
   UserPlus,
 } from "lucide-react"
@@ -19,6 +20,7 @@ import {
   removeArtistFromLineup,
   searchArtists,
   searchSpotifyArtists,
+  updateArtistAudioPreview,
 } from "@/app/actions/artists"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -37,6 +39,8 @@ type SuggestItem = {
   spotifyId: string | null
   artistId: string | null
   source: "spotify" | "local"
+  topTrackPreviewUrl: string | null
+  topTrackName: string | null
 }
 
 export function LineupBuilder({
@@ -56,6 +60,7 @@ export function LineupBuilder({
   const [fetchedFor, setFetchedFor] = useState("")
   const [manualOpen, setManualOpen] = useState(false)
   const [manualName, setManualName] = useState("")
+  const [manualPreviewUrl, setManualPreviewUrl] = useState("")
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const persistRef = useRef<number | null>(null)
@@ -102,6 +107,8 @@ export function LineupBuilder({
               spotifyId: hit.spotifyId,
               artistId: null,
               source: "spotify",
+              topTrackPreviewUrl: null,
+              topTrackName: null,
             })
           }
           for (const hit of local.data ?? []) {
@@ -120,6 +127,8 @@ export function LineupBuilder({
               spotifyId: hit.spotifyId,
               artistId: hit.id,
               source: "local",
+              topTrackPreviewUrl: hit.topTrackPreviewUrl,
+              topTrackName: hit.topTrackName,
             })
           }
           setSuggestions(next.slice(0, 8))
@@ -168,12 +177,16 @@ export function LineupBuilder({
         name: item.name,
         imageUrl: item.imageUrl,
         spotifyId: item.spotifyId,
+        topTrackPreviewUrl: item.topTrackPreviewUrl,
+        topTrackName: item.topTrackName,
       }
     }
     const created = await createArtist({
       name: item.name,
       imageUrl: item.imageUrl ?? undefined,
       spotifyId: item.spotifyId ?? undefined,
+      topTrackPreviewUrl: item.topTrackPreviewUrl,
+      topTrackName: item.topTrackName,
     })
     if (created.success) return created.data
     const local = await searchArtists(item.name)
@@ -217,6 +230,9 @@ export function LineupBuilder({
           performanceTime: "",
           stage: "",
           order: value.length,
+          isHeadliner: false,
+          topTrackPreviewUrl: artist.topTrackPreviewUrl,
+          topTrackName: artist.topTrackName,
         },
       ])
       setQuery("")
@@ -239,8 +255,11 @@ export function LineupBuilder({
       spotifyId: null,
       artistId: null,
       source: "local",
+      topTrackPreviewUrl: manualPreviewUrl.trim() || null,
+      topTrackName: null,
     })
     setManualName("")
+    setManualPreviewUrl("")
   }
 
   function updateItem(id: string, patch: Partial<LineupDraftItem>) {
@@ -277,6 +296,7 @@ export function LineupBuilder({
         <h3 className="text-sm font-semibold text-foreground">Carga de artistas</h3>
         <p className="mt-1 text-xs text-muted-foreground">
           Buscá en Spotify o creá el artista a mano. Arrastrá para reordenar.
+          Tocá la estrella para destacar un headliner.
         </p>
       </div>
 
@@ -337,22 +357,31 @@ export function LineupBuilder({
             </ul>
             <div className="border-t border-border p-2">
               {manualOpen ? (
-                <div className="flex items-center gap-2">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={manualName}
+                      onChange={(event) => setManualName(event.target.value)}
+                      placeholder="Nombre del artista"
+                      className="h-9 rounded-xl"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={pending}
+                      onClick={createManual}
+                      className={cn(tapFeedbackClass, "rounded-xl")}
+                    >
+                      Crear artista
+                    </Button>
+                  </div>
                   <Input
-                    value={manualName}
-                    onChange={(event) => setManualName(event.target.value)}
-                    placeholder="Nombre del artista"
+                    value={manualPreviewUrl}
+                    onChange={(event) => setManualPreviewUrl(event.target.value)}
+                    placeholder="URL de muestra de audio (opcional)"
                     className="h-9 rounded-xl"
+                    inputMode="url"
                   />
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={pending}
-                    onClick={createManual}
-                    className={cn(tapFeedbackClass, "rounded-xl")}
-                  >
-                    Crear artista
-                  </Button>
                 </div>
               ) : (
                 <Button
@@ -390,7 +419,14 @@ export function LineupBuilder({
                 animate={{ opacity: 1, y: 0 }}
                 exit={reduceMotion ? undefined : { opacity: 0, y: -8 }}
                 draggable
-                onDragStart={() => setDraggingId(item.id)}
+                onDragStart={(event) => {
+                  const target = event.target as HTMLElement
+                  if (target.closest("button, input")) {
+                    event.preventDefault()
+                    return
+                  }
+                  setDraggingId(item.id)
+                }}
                 onDragOver={(event) => {
                   event.preventDefault()
                 }}
@@ -424,6 +460,27 @@ export function LineupBuilder({
                     placeholder="Escenario o pista"
                     className="mt-1 h-8 rounded-lg text-xs"
                   />
+                  <Input
+                    value={item.topTrackPreviewUrl ?? ""}
+                    onChange={(event) => {
+                      const nextUrl = event.target.value
+                      updateItem(item.id, { topTrackPreviewUrl: nextUrl || null })
+                      if (!item.artistId) return
+                      if (persistRef.current) window.clearTimeout(persistRef.current)
+                      persistRef.current = window.setTimeout(() => {
+                        startTransition(() => {
+                          void updateArtistAudioPreview({
+                            artistId: item.artistId!,
+                            previewUrl: nextUrl || null,
+                            trackName: item.topTrackName,
+                          })
+                        })
+                      }, 500)
+                    }}
+                    placeholder="URL de muestra de audio (opcional)"
+                    className="mt-1 h-8 rounded-lg text-xs"
+                    inputMode="url"
+                  />
                 </div>
                 <Input
                   type="time"
@@ -434,6 +491,33 @@ export function LineupBuilder({
                   aria-label={`Horario de presentación de ${item.name}`}
                   className="h-9 w-[7.25rem] rounded-xl text-sm"
                 />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  disabled={pending}
+                  onClick={() =>
+                    updateItem(item.id, { isHeadliner: !item.isHeadliner })
+                  }
+                  aria-pressed={item.isHeadliner}
+                  aria-label={
+                    item.isHeadliner
+                      ? `Quitar a ${item.name} de headliners`
+                      : `Destacar a ${item.name} como headliner`
+                  }
+                  className={cn(
+                    tapFeedbackClass,
+                    "rounded-full",
+                    item.isHeadliner
+                      ? "text-amber-500 hover:text-amber-400"
+                      : "text-muted-foreground",
+                  )}
+                >
+                  <Star
+                    className={cn("size-4", item.isHeadliner && "fill-current")}
+                    aria-hidden="true"
+                  />
+                </Button>
                 <Button
                   type="button"
                   variant="ghost"

@@ -2,6 +2,11 @@
 
 import { searchArtists } from "@/app/actions/artists"
 import { sanitizeArtistQuery } from "@/lib/artists"
+import {
+  buildCatalogSearchOr,
+  isMissingArtistSchema,
+  sanitizeCatalogSearch,
+} from "@/lib/discovery-artists"
 import { logger } from "@/lib/logger"
 import {
   OMNI_SEARCH_LIMIT,
@@ -12,10 +17,6 @@ import {
 } from "@/lib/omni-search"
 import { createClient } from "@/lib/supabase/server"
 
-function isMissingArtistStack(message: string) {
-  return /artists|event_artists|schema cache|PGRST204|42703/i.test(message)
-}
-
 function sanitizeOmniQuery(query: string): string {
   return sanitizeArtistQuery(query).replace(/[,.()\\]/g, "")
 }
@@ -25,7 +26,34 @@ async function searchPublishedEventsLight(
 ): Promise<OmniEventHit[]> {
   try {
     const supabase = await createClient()
-    const term = `%${needle}%`
+    const safeNeedle = sanitizeCatalogSearch(needle)
+    if (!safeNeedle) return []
+
+    let artistEventIds: string[] = []
+    const artistNameMatch = await supabase
+      .from("event_artists")
+      .select("event_id, artists!inner(name)")
+      .ilike("artists.name", `%${safeNeedle}%`)
+      .limit(OMNI_SEARCH_LIMIT)
+
+    if (artistNameMatch.error) {
+      if (!isMissingArtistSchema(artistNameMatch.error.message)) {
+        logger.error({
+          context: "public-search",
+          message: "omni_events_artist_name_failed",
+          error: artistNameMatch.error,
+        })
+      }
+    } else {
+      artistEventIds = [
+        ...new Set(
+          (artistNameMatch.data ?? [])
+            .map((row) => (row.event_id as string | null)?.trim() || "")
+            .filter(Boolean),
+        ),
+      ]
+    }
+
     const { data, error } = await supabase
       .from("events")
       .select(
@@ -33,7 +61,7 @@ async function searchPublishedEventsLight(
       )
       .eq("status", "published")
       .eq("visibility", "public")
-      .or(`title.ilike.${term},location.ilike.${term}`)
+      .or(buildCatalogSearchOr(safeNeedle, artistEventIds))
       .order("date", { ascending: true })
       .limit(OMNI_SEARCH_LIMIT)
 
@@ -85,7 +113,7 @@ async function countActiveEventsByArtistIds(
       .eq("events.visibility", "public")
 
     if (error) {
-      if (!isMissingArtistStack(error.message)) {
+      if (!isMissingArtistSchema(error.message)) {
         logger.error({
           context: "public-search",
           message: "omni_artist_counts_failed",
