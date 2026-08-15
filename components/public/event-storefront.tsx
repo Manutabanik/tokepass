@@ -28,6 +28,7 @@ import { EventSaleStatusNotice } from "@/components/public/event-sale-status-not
 import { SponsorGrid } from "@/components/public/sponsor-grid"
 import { OrganizerAvatar } from "@/components/public/organizer-avatar"
 import { TicketSelector } from "@/components/public/ticket-selector"
+import { hasInteractiveVenueMap } from "@/lib/seating/venue-map-geometry"
 import {
   Accordion,
   AccordionContent,
@@ -91,7 +92,10 @@ export function EventStorefront({
   })
   const finished = saleState === "finished"
   const soldOut = saleState === "sold_out"
-  const hasInteractiveMap = Boolean(event.hasInteractiveMap) && !finished
+  const hasInteractiveMap =
+    !finished &&
+    (Boolean(event.hasInteractiveMap) ||
+      hasInteractiveVenueMap(event.venue?.venue_map))
   const demand = finished || soldOut ? null : demandLabel(event.tiers)
   const venueName = event.venue?.name ?? event.location
   const address = event.venue?.location ?? event.location

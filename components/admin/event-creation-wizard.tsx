@@ -86,6 +86,7 @@ import {
   venueMapToPricingMap,
 } from "@/lib/seating/venue-map-pricing"
 import { seatingLayoutToVenueMap } from "@/lib/seating/venue-map-geometry"
+import { sanitizeTicketTiersForPersist } from "@/lib/events/sanitize-ticket-tiers"
 import { parseVenueMap } from "@/types/venue-map"
 import {
   AGE_RESTRICTION_LABELS,
@@ -346,6 +347,17 @@ export function EventCreationWizard({
       form.setValue("venue.existingVenueId", persist.data.id)
     }
 
+    const editingId = initialData?.id ?? persistedEventId
+    payloadData = {
+      ...payloadData,
+      tickets: sanitizeTicketTiersForPersist(payloadData.tickets ?? [], {
+        mode: editingId ? "update" : "create",
+        persistedIds: (initialData?.values.tickets ?? [])
+          .map((tier) => tier.id)
+          .filter((id): id is string => Boolean(id)),
+      }),
+    }
+
     const formData = new FormData()
     formData.set("payload", JSON.stringify(payloadData))
     if (intent === "draft") {
@@ -362,7 +374,6 @@ export function EventCreationWizard({
       formData.set("eventId", initialData?.id ?? persistedEventId!)
     }
 
-    const editingId = initialData?.id ?? persistedEventId
     const result = editingId
       ? await updateCompleteEvent(formData)
       : await createCompleteEvent(formData)

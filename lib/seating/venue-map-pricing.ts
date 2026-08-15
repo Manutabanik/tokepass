@@ -71,6 +71,7 @@ function layoutTypeFromGroup(
 
 function blankMapTicket(): EventFormValues["tickets"][number] {
   return {
+    isNew: true,
     name: "Ubicación",
     price: 0,
     capacity: 1,
@@ -95,9 +96,11 @@ export function syncMapBackedTickets(
   tickets: EventFormValues["tickets"],
   map: InteractiveVenueMap,
 ): EventFormValues["tickets"] {
+  const groups = listVenuePriceGroups(map)
+  const liveSectorIds = new Set(groups.map((group) => priceGroupSectorId(group)))
   const commercial = tickets.filter((tier) => !isMapBackedTicket(tier))
   const existingMap = tickets.filter((tier) => isMapBackedTicket(tier))
-  const nextMap = listVenuePriceGroups(map).map((group) => {
+  const nextMap = groups.map((group) => {
     const sectorId = priceGroupSectorId(group)
     const existing = existingMap.find(
       (tier) => tier.seatingSectorId === sectorId,
@@ -106,8 +109,13 @@ export function syncMapBackedTickets(
     const zone = zoneId
       ? (map.zones ?? []).find((item) => item.id === zoneId)
       : undefined
+    const inheritedId =
+      existing?.id && existing.isNew !== true ? existing.id : undefined
+    const base = existing ?? blankMapTicket()
     return {
-      ...(existing ?? blankMapTicket()),
+      ...base,
+      id: inheritedId,
+      isNew: inheritedId ? false : true,
       name: group.name || existing?.name || "Zona",
       price: group.price,
       capacity: Math.max(1, group.count),
@@ -119,16 +127,11 @@ export function syncMapBackedTickets(
     }
   })
 
-  const used = new Set(
-    nextMap
-      .map((tier) => tier.seatingSectorId)
-      .filter((id): id is string => Boolean(id)),
-  )
   const orphanSold = existingMap.filter(
     (tier) =>
       (tier.sold ?? 0) > 0 &&
       Boolean(tier.seatingSectorId) &&
-      !used.has(tier.seatingSectorId as string),
+      !liveSectorIds.has(tier.seatingSectorId as string),
   )
 
   return [...nextMap, ...orphanSold, ...commercial]

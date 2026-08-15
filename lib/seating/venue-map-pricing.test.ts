@@ -121,10 +121,110 @@ describe("venue-map-pricing", () => {
 
     assert.equal(next.length, 2)
     assert.equal(next[0]?.seatingSectorId, "zone-naranja")
+    assert.equal(next[0]?.id, undefined)
+    assert.equal(next[0]?.isNew, true)
     assert.equal(next[0]?.price, 12000)
     assert.equal(next[0]?.tierType, "seated")
     assert.equal(next[1]?.name, "Estacionamiento")
     assert.equal(isMapBackedTicket(next[1]!), false)
+  })
+
+  it("elimina tiers de mapa sin ventas cuando el sector desaparece", () => {
+    const map = emptyVenueMap()
+    map.zones = [
+      {
+        id: "zone-viva",
+        name: "Viva",
+        color: "#22d3ee",
+        price: 5000,
+        polygon: [
+          { x: 0, y: 0 },
+          { x: 4, y: 0 },
+          { x: 4, y: 4 },
+        ],
+        layoutType: "general",
+        sellMode: "group",
+        rows: 1,
+        itemsPerRow: 1,
+        capacityPerUnit: 1,
+        capacity: 20,
+        labelPrefix: "Viva ",
+      },
+    ]
+
+    const next = syncMapBackedTickets(
+      [
+        {
+          id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          name: "Zombie",
+          price: 9000,
+          capacity: 30,
+          sold: 0,
+          timeLimit: "",
+          bonusReward: "",
+          dayId: null,
+          visibility: "public",
+          layoutType: "numbered_seat",
+          seatingSectorId: "zone-borrada",
+          capacityPerUnit: 1,
+          admitCount: 1,
+          tierType: "seated",
+          listPrice: null,
+          bundleItems: [],
+          description: "",
+          highlightBadge: null,
+          phases: [],
+        },
+        {
+          id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          name: "Vendida",
+          price: 9000,
+          capacity: 10,
+          sold: 3,
+          timeLimit: "",
+          bonusReward: "",
+          dayId: null,
+          visibility: "public",
+          layoutType: "numbered_seat",
+          seatingSectorId: "zone-borrada",
+          capacityPerUnit: 1,
+          admitCount: 1,
+          tierType: "seated",
+          listPrice: null,
+          bundleItems: [],
+          description: "",
+          highlightBadge: null,
+          phases: [],
+        },
+        {
+          name: "Combo",
+          price: 15000,
+          capacity: 20,
+          timeLimit: "",
+          bonusReward: "",
+          dayId: null,
+          visibility: "public",
+          layoutType: "general",
+          seatingSectorId: null,
+          capacityPerUnit: 1,
+          admitCount: 1,
+          tierType: "bundle",
+          listPrice: 18000,
+          bundleItems: [],
+          description: "",
+          highlightBadge: null,
+          phases: [],
+        },
+      ],
+      map,
+    )
+
+    assert.equal(next.some((tier) => tier.name === "Zombie"), false)
+    assert.equal(next.some((tier) => tier.name === "Vendida"), true)
+    assert.equal(next.some((tier) => tier.name === "Combo"), true)
+    const created = next.find((tier) => tier.seatingSectorId === "zone-viva")
+    assert.equal(created?.id, undefined)
+    assert.equal(created?.isNew, true)
   })
 
   it("migra el paso persistido del wizard de 5 a 4", () => {

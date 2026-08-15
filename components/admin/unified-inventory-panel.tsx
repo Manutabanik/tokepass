@@ -74,6 +74,7 @@ export function createInventoryTicket(
     bundle: "Pack Familia",
   }
   return {
+    isNew: true,
     name: names[tierType],
     price: 0,
     capacity: tierType === "bundle" ? 50 : 100,

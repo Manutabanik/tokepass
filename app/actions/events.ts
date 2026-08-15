@@ -44,6 +44,10 @@ import type { Database, Event, EventStatus, Json, Venue } from "@/types/database
 import { parseVenueMap, serializeVenueMap } from "@/types/venue-map"
 import { composeVenuePlace } from "@/lib/venues/compose-location"
 import { logger } from "@/lib/logger"
+import {
+  reconcileTicketTierIds,
+  sanitizeTicketTiersForPersist,
+} from "@/lib/events/sanitize-ticket-tiers"
 
 export type OrganizerEvent = Pick<
   Event,
@@ -1244,7 +1248,12 @@ export async function createCompleteEvent(
     }
   }
 
-  const formValues = coerceDraftEventForm(parsed.data)
+  const formValues = {
+    ...coerceDraftEventForm(parsed.data),
+  }
+  formValues.tickets = sanitizeTicketTiersForPersist(formValues.tickets, {
+    mode: "create",
+  })
 
   let supabase: Awaited<ReturnType<typeof createClient>>
   let userId: string
@@ -1456,7 +1465,9 @@ export async function updateCompleteEvent(
     }
   }
 
-  const formValues = coerceDraftEventForm(parsed.data)
+  const formValues = {
+    ...coerceDraftEventForm(parsed.data),
+  }
 
   let supabase: Awaited<ReturnType<typeof createClient>>
   let userId: string
@@ -1501,6 +1512,22 @@ export async function updateCompleteEvent(
 
   const mutationClient =
     event.organizer_id !== userId ? createAdminClient() : supabase
+
+  const { data: existingTiers, error: existingTiersError } =
+    await mutationClient
+      .from("ticket_tiers")
+      .select("id")
+      .eq("event_id", eventId)
+
+  if (existingTiersError) {
+    return { success: false, error: existingTiersError.message }
+  }
+
+  formValues.tickets = reconcileTicketTierIds(
+    formValues.tickets,
+    (existingTiers ?? []).map((row) => row.id),
+  )
+
   const flyerEntry = formData.get("flyer")
   let uploadedFlyerUrl: string | null = null
 

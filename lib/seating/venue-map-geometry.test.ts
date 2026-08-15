@@ -180,6 +180,45 @@ describe("venue-map-geometry", () => {
     assert.equal(map.elements[0]?.groupId, "grada-naranja")
   })
 
+  it("parses studio maps from JSON strings and nested layout.elements", () => {
+    const nested = parseVenueMap({
+      layout: {
+        elements: [
+          {
+            id: "mesa-12",
+            type: "round_table",
+            label: "Mesa 12",
+            x: 40,
+            y: 40,
+            width: 28,
+            height: 28,
+            price: 15000,
+          },
+        ],
+      },
+    })
+    assert.equal(nested.elements[0]?.id, "mesa-12")
+    assert.equal(hasInteractiveVenueMap(nested), true)
+
+    const encoded = parseVenueMap(
+      JSON.stringify({
+        elements: [
+          {
+            id: "box-1",
+            type: "vip_box",
+            label: "Box 1",
+            x: 10,
+            y: 10,
+            width: 40,
+            height: 24,
+          },
+        ],
+      }),
+    )
+    assert.equal(encoded.elements[0]?.id, "box-1")
+    assert.equal(hasInteractiveVenueMap(encoded), true)
+  })
+
   it("detects an interactive public map from zones or background", () => {
     assert.equal(hasInteractiveVenueMap(parseVenueMap({})), false)
     assert.equal(

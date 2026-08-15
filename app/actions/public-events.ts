@@ -24,7 +24,10 @@ import { parseBundleItems, serializeBundleItems } from "@/lib/inventory/unified-
 import type { Event, TicketTier, Venue } from "@/types/database"
 import type { ScheduleDay } from "@/types/events"
 import type { EventSeatingUnit, SeatingSectorSummary, VenueSeatingLayout } from "@/types/venues"
-import { hasInteractiveVenueMap } from "@/lib/seating/venue-map-geometry"
+import {
+  hasInteractiveVenueMap,
+  seatingLayoutToVenueMap,
+} from "@/lib/seating/venue-map-geometry"
 import { parseVenueMap, type InteractiveVenueMap } from "@/types/venue-map"
 import type { EventPixelConfig } from "@/lib/analytics/pixels"
 import type { PublicSponsor } from "@/lib/sponsors"
@@ -199,6 +202,7 @@ type EventDetailRow = {
   created_at?: string | null
   default_ticket_tab?: string | null
   venue_id?: string | null
+  venue_map?: unknown
   venues:
     | (Pick<
         Venue,
@@ -613,9 +617,9 @@ async function loadEventDetails(
   if (!resolvedId) return null
 
   const eventSelectWithPicker =
-    "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, default_ticket_tab, venue_id, venues(id, name, location, address, city, capacity, seating_background_url, seating_layout, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, bundle_items, bundle_type, description, highlight_badge), profiles!events_organizer_id_fkey(full_name)"
+    "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, default_ticket_tab, venue_id, venue_map, venues(id, name, location, address, city, capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, bundle_items, bundle_type, description, highlight_badge), profiles!events_organizer_id_fkey(full_name)"
   const eventSelectCore =
-    "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, venue_id, venues(id, name, location, address, city, capacity, seating_background_url, seating_layout, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, bundle_items, bundle_type), profiles!events_organizer_id_fkey(full_name)"
+    "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, venue_id, venue_map, venues(id, name, location, address, city, capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, bundle_items, bundle_type), profiles!events_organizer_id_fkey(full_name)"
 
   let query = supabase
     .from("events")
@@ -630,7 +634,7 @@ async function loadEventDetails(
 
   if (
     error &&
-    /default_ticket_tab|highlight_badge|ticket_tiers.*description|schema cache|PGRST204|42703/i.test(
+    /default_ticket_tab|highlight_badge|ticket_tiers.*description|venue_map|schema cache|PGRST204|42703/i.test(
       error.message,
     )
   ) {
@@ -787,9 +791,23 @@ async function loadEventDetails(
   const seatingLayout = event.venues
     ? parsePublicSeatingLayout(event.venues.seating_layout)
     : []
+  const venueMap = await resolvePublicVenueMap(supabase, event, seatingLayout)
   const hasInteractiveMap =
+    hasInteractiveVenueMap(venueMap) ||
     Boolean(event.venues?.seating_background_url?.trim()) ||
     seatingLayout.length > 0
+
+  console.log("Venue Data:", {
+    venueId: event.venues?.id ?? event.venue_id ?? null,
+    eventId: event.id,
+    seatingLayoutCount: seatingLayout.length,
+    mapElements: venueMap.elements?.length ?? 0,
+    mapZones: venueMap.zones?.length ?? 0,
+    mapSectors: venueMap.sectors.length,
+    backgroundImage: Boolean(venueMap.backgroundImage),
+    seatingBackground: Boolean(event.venues?.seating_background_url?.trim()),
+    hasInteractiveMap,
+  })
 
   return {
     id: event.id,
@@ -825,9 +843,23 @@ async function loadEventDetails(
           latitude: event.venues.latitude,
           longitude: event.venues.longitude,
           seating_layout: seatingLayout,
-          venue_map: parseVenueMap(null),
+          venue_map: venueMap,
         }
-      : null,
+      : hasInteractiveVenueMap(venueMap)
+        ? {
+            id: event.venue_id ?? event.id,
+            name: event.location,
+            location: event.location,
+            address: null,
+            city: null,
+            capacity: 0,
+            seating_background_url: null,
+            latitude: null,
+            longitude: null,
+            seating_layout: seatingLayout,
+            venue_map: venueMap,
+          }
+        : null,
     hasInteractiveMap,
     seatingUnits: [],
     seatingSectorSummaries: sectorSummaries.map((row) => ({
@@ -945,6 +977,34 @@ async function loadEventDetails(
     categoryId: event.category_id ?? null,
     createdAt: event.created_at ?? null,
   }
+}
+
+async function resolvePublicVenueMap(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  event: EventDetailRow,
+  seatingLayout: VenueSeatingLayout,
+): Promise<InteractiveVenueMap> {
+  const candidates = [
+    parseVenueMap(event.venues?.venue_map),
+    parseVenueMap(event.venue_map),
+    parseVenueMap(
+      Array.isArray(event.venues?.seating_layout)
+        ? null
+        : event.venues?.seating_layout,
+    ),
+    parseVenueMap(
+      await loadVenueMapJson(
+        supabase,
+        event.venue_id ?? event.venues?.id,
+        event.id,
+      ),
+    ),
+    seatingLayout.length > 0
+      ? seatingLayoutToVenueMap(seatingLayout)
+      : parseVenueMap(null),
+  ]
+  const interactive = candidates.find((map) => hasInteractiveVenueMap(map))
+  return interactive ?? parseVenueMap(null)
 }
 
 function parsePublicSeatingLayout(raw: unknown): VenueSeatingLayout {

@@ -31,7 +31,7 @@ import {
   PenTool,
   Send,
 } from "lucide-react"
-import { useEffect, useMemo, useRef, useState, useTransition } from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react"
 import { toast } from "sonner"
 
 import { AutoNumberingPanel } from "@/components/admin/auto-numbering-panel"
@@ -223,6 +223,8 @@ export function InteractiveVenueMapEditor({
   } | null>(null)
   const propertiesRef = useRef<HTMLElement>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
+  const selectedVisualRef = useRef<SVGGElement>(null)
+  const [measuredBounds, setMeasuredBounds] = useState<BoundsRect | null>(null)
   const spaceHeld = useRef(false)
   const elementDrag = useRef<{
     kind: "stage" | "label" | "aisle" | "sector" | "element" | "pan"
@@ -281,6 +283,40 @@ export function InteractiveVenueMapEditor({
     })
   }
 
+  function handleClearMap() {
+    const confirmed = window.confirm(
+      "¿Estás seguro de que deseas borrar todo el mapa? Esta acción no se puede deshacer.",
+    )
+    if (!confirmed) return
+    const cleared: InteractiveVenueMap = {
+      ...emptyVenueMap(),
+      stage: null,
+      elements: [],
+      zones: [],
+      sectors: [],
+      labels: [],
+      aisles: [],
+      backgroundImage: null,
+      backgroundOpacity: 0.4,
+      backgroundScale: 1,
+      backgroundX: 0,
+      backgroundY: 0,
+    }
+    undoStack.current = []
+    redoStack.current = []
+    setHistoryTick((tick) => tick + 1)
+    mapRef.current = cleared
+    setMap(cleared)
+    onChange(cleared, venueMapToSeatingLayout(cleared))
+    setSelection(null)
+    setPolygonDraft([])
+    setPolygonCursor(null)
+    setPlacement(null)
+    setMarquee(null)
+    setLive(null)
+    setMeasuredBounds(null)
+  }
+
   function loadMap(next: InteractiveVenueMap, showPrices: boolean) {
     const parsed = parseVenueMap(next)
     undoStack.current = []
@@ -311,12 +347,15 @@ export function InteractiveVenueMapEditor({
     selection?.kind === "element"
       ? (map.elements ?? []).find((item) => item.id === selection.id) ?? null
       : null
-  const selectedElementIds =
-    selection?.kind === "elements"
-      ? selection.ids
-      : selection?.kind === "element"
-        ? [selection.id]
-        : []
+  const selectedElementIds = useMemo(
+    () =>
+      selection?.kind === "elements"
+        ? selection.ids
+        : selection?.kind === "element"
+          ? [selection.id]
+          : [],
+    [selection],
+  )
   const selectedElements = (map.elements ?? []).filter((item) =>
     selectedElementIds.includes(item.id),
   )
@@ -324,10 +363,65 @@ export function InteractiveVenueMapEditor({
   const unselectedElements = (map.elements ?? []).filter(
     (item) => !selectedIdSet.has(item.id),
   )
-  const transformBounds =
+  const computedBounds =
     !preview && tool === "select" && !placement
       ? selectionBounds(selectedElements)
       : null
+  const transformBounds = measuredBounds ?? computedBounds
+
+  useLayoutEffect(() => {
+    if (preview || tool !== "select" || placement || selectedElementIds.length === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- getBBox is only valid after the SVG commits
+      setMeasuredBounds((current) => (current ? null : current))
+      return
+    }
+    const fallback = selectionBounds(selectedElements)
+    const node = selectedVisualRef.current
+    let next = fallback
+    if (node) {
+      try {
+        const box = node.getBBox()
+        if (
+          Number.isFinite(box.x) &&
+          Number.isFinite(box.y) &&
+          Number.isFinite(box.width) &&
+          Number.isFinite(box.height) &&
+          box.width >= 0.5 &&
+          box.height >= 0.5
+        ) {
+          next = {
+            x: box.x,
+            y: box.y,
+            width: box.width,
+            height: box.height,
+          }
+        }
+      } catch {
+        next = fallback
+      }
+    }
+    setMeasuredBounds((current) => {
+      if (!next) return current ? null : current
+      if (
+        current &&
+        Math.abs(current.x - next.x) < 0.05 &&
+        Math.abs(current.y - next.y) < 0.05 &&
+        Math.abs(current.width - next.width) < 0.05 &&
+        Math.abs(current.height - next.height) < 0.05
+      ) {
+        return current
+      }
+      return next
+    })
+  }, [
+    map.elements,
+    placement,
+    preview,
+    selectedElementIds,
+    selectedElements,
+    tool,
+    zoom,
+  ])
 
   function setLive(next: LiveTransform | null) {
     liveTransformRef.current = next
@@ -1378,14 +1472,14 @@ export function InteractiveVenueMapEditor({
   const toolbar = (
     <div
       className={cn(
-        "z-20 flex w-full items-center gap-2 border-b border-border bg-card",
+        "z-20 flex w-full items-center overflow-hidden border-b border-border bg-card",
         isStudio
-          ? "shrink-0 justify-between gap-4 overflow-x-auto px-6 py-3"
-          : "flex-wrap px-3 py-2",
+          ? "shrink-0 flex-wrap gap-2 px-3 py-2"
+          : "flex-wrap gap-2 px-3 py-2",
       )}
     >
       {isStudio ? (
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex min-w-0 shrink-0 items-center gap-1.5">
           <Button
             type="button"
             variant="ghost"
@@ -1396,7 +1490,7 @@ export function InteractiveVenueMapEditor({
             <ArrowLeft className="size-4" />
             Salir
           </Button>
-          <p className="max-w-[220px] truncate text-sm font-semibold text-foreground">
+          <p className="max-w-[160px] truncate text-sm font-semibold text-foreground">
             {eventTitle}
           </p>
         </div>
@@ -1405,7 +1499,8 @@ export function InteractiveVenueMapEditor({
       <div
         data-slot="button-group"
         className={cn(
-          "inline-flex shrink-0 items-center rounded-lg border border-border bg-muted/40 p-0.5",
+          "inline-flex min-w-0 items-center rounded-lg border border-border bg-muted/40 p-0.5",
+          isStudio && "scrollbar-none overflow-x-auto",
           !isStudio && "flex-wrap gap-1 border-0 bg-transparent p-0",
         )}
       >
@@ -1435,7 +1530,7 @@ export function InteractiveVenueMapEditor({
           active={false}
           onClick={() => setZoom((z) => Math.max(0.6, z - 0.1))}
           label="Zoom -"
-          showLabel={isStudio}
+          showLabel={false}
         >
           <ZoomOut className="size-4" />
         </ToolButton>
@@ -1443,7 +1538,7 @@ export function InteractiveVenueMapEditor({
           active={false}
           onClick={() => setZoom((z) => Math.min(2.4, z + 0.1))}
           label="Zoom +"
-          showLabel={isStudio}
+          showLabel={false}
         >
           <ZoomIn className="size-4" />
         </ToolButton>
@@ -1452,7 +1547,7 @@ export function InteractiveVenueMapEditor({
           onClick={undo}
           label="Deshacer"
           disabled={!canUndo}
-          showLabel={isStudio}
+          showLabel={false}
         >
           <Undo className="size-4" />
         </ToolButton>
@@ -1461,7 +1556,7 @@ export function InteractiveVenueMapEditor({
           onClick={redo}
           label="Rehacer"
           disabled={!canRedo}
-          showLabel={isStudio}
+          showLabel={false}
         >
           <Redo className="size-4" />
         </ToolButton>
@@ -1495,12 +1590,23 @@ export function InteractiveVenueMapEditor({
 
       <div
         className={cn(
-          "flex shrink-0 items-center gap-2",
-          isStudio ? "justify-end" : "ml-auto flex-wrap",
+          "flex min-w-0 items-center gap-1.5",
+          isStudio
+            ? "ml-auto justify-end overflow-hidden"
+            : "ml-auto flex-wrap",
         )}
       >
         {isStudio ? (
           <>
+            <Button
+              type="button"
+              variant="outline"
+              className="shrink-0 whitespace-nowrap"
+              onClick={handleClearMap}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Limpiar Mapa
+            </Button>
             <Button
               type="button"
               variant="outline"
@@ -1759,13 +1865,27 @@ export function InteractiveVenueMapEditor({
                 selectedIds={[]}
                 showSeats={(map.elements?.length ?? 0) < 220}
                 zoom={zoom}
+                popSelected={false}
                 onElementPointerDown={onMapElementPointerDown}
                 onElementContextMenu={(event, element) =>
                   openObjectMenu(event, { kind: "element", id: element.id })
                 }
               />
-              {transformBounds ? (
-                <g transform={liveTransformToSvg(liveTransform)}>
+              <g transform={liveTransformToSvg(liveTransform)}>
+                <g ref={selectedVisualRef}>
+                  <VenueMapElementLayer
+                    elements={selectedElements}
+                    selectedIds={selectedElementIds}
+                    showSeats={(map.elements?.length ?? 0) < 220}
+                    zoom={zoom}
+                    popSelected={false}
+                    onElementPointerDown={onMapElementPointerDown}
+                    onElementContextMenu={(event, element) =>
+                      openObjectMenu(event, { kind: "element", id: element.id })
+                    }
+                  />
+                </g>
+                {transformBounds ? (
                   <SvgTransformBox
                     bounds={transformBounds}
                     zoom={zoom}
@@ -1778,31 +1898,9 @@ export function InteractiveVenueMapEditor({
                       beginScale(handle, transformBounds, event)
                     }
                     onRotateStart={(event) => beginRotate(transformBounds, event)}
-                  >
-                    <VenueMapElementLayer
-                      elements={selectedElements}
-                      selectedIds={selectedElementIds}
-                      showSeats={(map.elements?.length ?? 0) < 220}
-                      zoom={zoom}
-                      onElementPointerDown={onMapElementPointerDown}
-                      onElementContextMenu={(event, element) =>
-                        openObjectMenu(event, { kind: "element", id: element.id })
-                      }
-                    />
-                  </SvgTransformBox>
-                </g>
-              ) : (
-                <VenueMapElementLayer
-                  elements={selectedElements}
-                  selectedIds={selectedElementIds}
-                  showSeats={(map.elements?.length ?? 0) < 220}
-                  zoom={zoom}
-                  onElementPointerDown={onMapElementPointerDown}
-                  onElementContextMenu={(event, element) =>
-                    openObjectMenu(event, { kind: "element", id: element.id })
-                  }
-                />
-              )}
+                  />
+                ) : null}
+              </g>
               {map.labels.map((label) => (
                 <text
                   key={label.id}
@@ -2713,7 +2811,7 @@ function ToolButton({
       className={cn("h-9 shrink-0 gap-1.5", active && "ring-1 ring-emerald-500/40")}
     >
       {children}
-      <span className={cn(!showLabel && "hidden sm:inline")}>{label}</span>
+      {showLabel ? <span>{label}</span> : <span className="sr-only">{label}</span>}
     </Button>
   )
 }

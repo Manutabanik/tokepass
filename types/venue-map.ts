@@ -437,9 +437,41 @@ function asOpacity(value: unknown, fallback: number): number {
   return Math.min(1, Math.max(0, n))
 }
 
+function unwrapVenueMapRecord(raw: unknown): Record<string, unknown> | null {
+  let current: unknown = raw
+  if (typeof current === "string") {
+    const trimmed = current.trim()
+    if (!trimmed) return null
+    try {
+      current = JSON.parse(trimmed) as unknown
+    } catch {
+      return null
+    }
+  }
+  if (!current || typeof current !== "object" || Array.isArray(current)) {
+    return null
+  }
+  const record = current as Record<string, unknown>
+  const looksLikeMap =
+    Array.isArray(record.sectors) ||
+    Array.isArray(record.elements) ||
+    Array.isArray(record.zones) ||
+    typeof record.backgroundImage === "string" ||
+    typeof record.background_image === "string"
+  if (looksLikeMap) return record
+  const nested =
+    record.layout ??
+    record.map ??
+    record.venue_map ??
+    record.venueMap ??
+    record.data
+  if (nested && nested !== current) return unwrapVenueMapRecord(nested)
+  return record
+}
+
 export function parseVenueMap(raw: unknown): InteractiveVenueMap {
-  if (!raw || typeof raw !== "object") return emptyVenueMap()
-  const record = raw as Record<string, unknown>
+  const record = unwrapVenueMapRecord(raw)
+  if (!record) return emptyVenueMap()
   if (
     !Array.isArray(record.sectors) &&
     !Array.isArray(record.elements) &&

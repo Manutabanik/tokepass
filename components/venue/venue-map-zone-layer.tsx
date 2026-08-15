@@ -122,7 +122,7 @@ export function VenueMapZoneLayer({
                 : undefined
             }
             className={cn(
-              "origin-center transition-all duration-300 ease-in-out",
+              "transition-opacity duration-300 ease-in-out",
               interactive ? "cursor-pointer" : undefined,
               soldOut && "pointer-events-none opacity-50",
             )}

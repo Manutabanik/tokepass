@@ -19,6 +19,7 @@ const VenueElementShape = memo(function VenueElementShape({
   interactive,
   zoom,
   dimmed = false,
+  popSelected = true,
 }: {
   element: VenueMapElement
   selected: boolean
@@ -42,10 +43,12 @@ const VenueElementShape = memo(function VenueElementShape({
   interactive: boolean
   zoom: number
   dimmed?: boolean
+  popSelected?: boolean
 }) {
-  const transform = selected
-    ? `translate(${element.x} ${element.y}) scale(1.15) translate(${-element.x} ${-element.y}) rotate(${element.rotation} ${element.x} ${element.y})`
-    : `rotate(${element.rotation} ${element.x} ${element.y})`
+  const transform =
+    selected && popSelected
+      ? `translate(${element.x} ${element.y}) scale(1.15) translate(${-element.x} ${-element.y}) rotate(${element.rotation} ${element.x} ${element.y})`
+      : `rotate(${element.rotation} ${element.x} ${element.y})`
   const opacity = (element.opacity ?? 1) * (dimmed ? 0.4 : 1)
   const labelText = compactVenueElementLabel(element.label, selected ? 99 : zoom)
 
@@ -56,8 +59,8 @@ const VenueElementShape = memo(function VenueElementShape({
       opacity={opacity}
       className={
         interactive
-          ? "origin-center transition-all duration-300 ease-in-out"
-          : "pointer-events-none origin-center transition-all duration-300 ease-in-out"
+          ? "transition-opacity duration-300 ease-in-out"
+          : "pointer-events-none transition-opacity duration-300 ease-in-out"
       }
       style={
         selected
@@ -145,6 +148,7 @@ export function VenueMapElementLayer({
   zoom = 1,
   interactive = true,
   spotlight = false,
+  popSelected = true,
 }: {
   elements: VenueMapElement[]
   selectedIds?: string[]
@@ -167,6 +171,7 @@ export function VenueMapElementLayer({
   zoom?: number
   interactive?: boolean
   spotlight?: boolean
+  popSelected?: boolean
 }) {
   const selected = new Set(selectedIds)
   const hasSelection =
@@ -197,6 +202,7 @@ export function VenueMapElementLayer({
           interactive={interactive}
           zoom={zoom}
           dimmed={hasSelection && !selected.has(element.id)}
+          popSelected={popSelected}
         />
       ))}
     </>

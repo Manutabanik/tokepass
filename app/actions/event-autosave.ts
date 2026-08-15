@@ -13,6 +13,7 @@ import {
   createCompleteEvent,
   updateCompleteEvent,
 } from "@/app/actions/events"
+import { sanitizeTicketTiersForPersist } from "@/lib/events/sanitize-ticket-tiers"
 
 export type AutosaveEventDraftResult =
   | {
@@ -27,17 +28,23 @@ function hasMinimumDraftContent(values: EventFormValues): boolean {
   return values.basics.title.trim().length >= 3
 }
 
-function sanitizeAutosaveValues(values: EventFormValues): EventFormValues {
+function sanitizeAutosaveValues(
+  values: EventFormValues,
+  eventId: string | null,
+): EventFormValues {
+  const tickets = (values.tickets ?? []).map((tier) => ({
+    ...tier,
+    price: Number.isFinite(Number(tier.price)) ? Number(tier.price) : 0,
+  }))
   return {
     ...values,
     venue: {
       ...values.venue,
       existingVenueId: values.venue.existingVenueId || null,
     },
-    tickets: (values.tickets ?? []).map((tier) => ({
-      ...tier,
-      price: Number.isFinite(Number(tier.price)) ? Number(tier.price) : 0,
-    })),
+    tickets: sanitizeTicketTiersForPersist(tickets, {
+      mode: eventId ? "update" : "create",
+    }),
   }
 }
 
@@ -51,7 +58,7 @@ export async function autosaveEventDraft(input: {
   zoneTierPricing?: ZoneTierPriceDraft[]
   targetOrganizerId?: string | null
 }): Promise<AutosaveEventDraftResult> {
-  const values = sanitizeAutosaveValues(input.values)
+  const values = sanitizeAutosaveValues(input.values, input.eventId)
   if (!hasMinimumDraftContent(values)) {
     return { ok: true, eventId: input.eventId ?? "", mode: "skipped" }
   }

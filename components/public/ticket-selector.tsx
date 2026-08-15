@@ -108,6 +108,7 @@ import {
 } from "@/lib/seating/venue-adapter"
 import {
   hasInteractiveVenueMap,
+  seatingLayoutToVenueMap,
   venueMapToSeatingLayout,
 } from "@/lib/seating/venue-map-geometry"
 import { occupancyFromSeatingUnits } from "@/lib/seating/venue-map-occupancy"
@@ -255,7 +256,17 @@ export function TicketSelector({
   const [mapFetchDone, setMapFetchDone] = useState(
     hasInteractiveVenueMap(venueMap),
   )
-  const liveMap = hasInteractiveVenueMap(venueMap) ? venueMap : fetchedMap
+  const reconstructedMap =
+    !hasInteractiveVenueMap(venueMap) && seatingLayout.length > 0
+      ? seatingLayoutToVenueMap(seatingLayout, venueMap)
+      : null
+  const liveMap = hasInteractiveVenueMap(venueMap)
+    ? venueMap
+    : hasInteractiveVenueMap(fetchedMap)
+      ? fetchedMap
+      : hasInteractiveVenueMap(reconstructedMap)
+        ? reconstructedMap
+        : fetchedMap
   const mapLoading = !hasInteractiveVenueMap(liveMap) && !mapFetchDone
   const [loadedUnitsBySector, setLoadedUnitsBySector] = useState<
     Record<string, EventSeatingUnit[]>

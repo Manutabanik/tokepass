@@ -62,6 +62,8 @@ export const ticketPhaseSchema = z.object({
 
 export const ticketTierSchema = z.object({
   id: z.string().uuid().optional(),
+  /** Solo cliente: el persist lo elimina para forzar INSERT. */
+  isNew: z.boolean().optional(),
   name: z.string().trim().min(2, "Ingresá un nombre para el tipo de entrada."),
   price: z
     .number({ error: "Indicá el precio de la entrada." })
@@ -353,6 +355,7 @@ export const eventFormSchema = publishEventSchema
 
 const draftTicketSchema = z.object({
   id: z.string().uuid().optional(),
+  isNew: z.boolean().optional(),
   name: z.string().optional().default(""),
   price: z.number().optional(),
   capacity: z.number().int().optional(),
