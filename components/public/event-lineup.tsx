@@ -1,9 +1,11 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { LoaderCircle } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { toast } from "sonner"
 
+import { resolveArtistSpotifyId } from "@/app/actions/artists"
 import { ArtistAvatar } from "@/components/shared/artist-avatar"
-import { SpotifyMiniPlayer } from "@/components/public/spotify-mini-player"
 import {
   Sheet,
   SheetContent,
@@ -12,12 +14,13 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import {
+  beginSpotifyMiniPlayerResolve,
   closeSpotifyMiniPlayer,
+  setActiveSpotifyId,
   toggleSpotifyMiniPlayer,
   useIsSpotifyMiniPlayerActive,
 } from "@/hooks/use-spotify-mini-player"
 import {
-  hasArtistSpotifyPlayer,
   hasEventLineup,
   visibleLineupArtists,
   type EventLineupArtist,
@@ -25,6 +28,7 @@ import {
   type EventLineupSlot,
 } from "@/lib/event-lineup"
 import { formatEventTime } from "@/lib/format"
+import { isSpotifyArtistId } from "@/lib/spotify/embed"
 import { cn, tapFeedbackClass } from "@/lib/utils"
 
 function formatSlotTime(value: string | null | undefined): string {
@@ -43,52 +47,112 @@ function moreArtistsLabel(count: number): string {
 function ArtistGridAvatar({
   artist,
   size,
+  onResolved,
 }: {
   artist: EventLineupArtist
   size: "xs" | "hero"
+  onResolved?: (artistId: string, spotifyId: string) => void
 }) {
   const name = artist.name?.trim() || "Artista"
-  const canPlay = hasArtistSpotifyPlayer(artist)
-  const active = useIsSpotifyMiniPlayerActive(artist.spotifyId)
+  const [resolving, setResolving] = useState(false)
+  const requestRef = useRef(0)
+  const active = useIsSpotifyMiniPlayerActive({
+    id: artist.id,
+    spotifyId: artist.spotifyId,
+  })
 
-  const avatar = (
-    <ArtistAvatar
-      name={name}
-      imageUrl={artist.imageUrl}
-      size={size}
-      className={
-        active
-          ? "ring-2 ring-primary ring-offset-2 ring-offset-background animate-pulse"
-          : undefined
-      }
-    />
-  )
+  const handleClick = () => {
+    if (isSpotifyArtistId(artist.spotifyId)) {
+      toggleSpotifyMiniPlayer(artist.spotifyId, name, artist.id)
+      return
+    }
 
-  if (!canPlay || !artist.spotifyId) return avatar
+    const token = ++requestRef.current
+    setResolving(true)
+    beginSpotifyMiniPlayerResolve(artist.id, name)
+    void resolveArtistSpotifyId(artist.id, name)
+      .then((result) => {
+        if (token !== requestRef.current) return
+        if (!result.success) {
+          closeSpotifyMiniPlayer()
+          toast.error(result.error)
+          return
+        }
+        if (!isSpotifyArtistId(result.data.spotifyId)) {
+          closeSpotifyMiniPlayer()
+          toast.error("No encontramos este artista en Spotify.")
+          return
+        }
+        onResolved?.(artist.id, result.data.spotifyId)
+        setActiveSpotifyId(result.data.spotifyId, {
+          artistId: artist.id,
+          artistName: name,
+        })
+      })
+      .catch(() => {
+        if (token !== requestRef.current) return
+        closeSpotifyMiniPlayer()
+        toast.error("No se pudo abrir el reproductor.")
+      })
+      .finally(() => {
+        if (token !== requestRef.current) return
+        setResolving(false)
+      })
+  }
 
-  const label = active
-    ? `Cerrar reproductor de ${name}`
-    : `Escuchar a ${name}`
+  const label = resolving
+    ? `Buscando a ${name} en Spotify`
+    : active
+      ? `Cerrar reproductor de ${name}`
+      : `Escuchar a ${name}`
 
   return (
     <button
       type="button"
-      onClick={() => toggleSpotifyMiniPlayer(artist.spotifyId!, name)}
-      className={cn(tapFeedbackClass, "relative block rounded-full")}
+      onClick={handleClick}
+      disabled={resolving}
+      className={cn(
+        tapFeedbackClass,
+        "relative block cursor-pointer rounded-full transition-transform hover:scale-105",
+      )}
       aria-pressed={active}
+      aria-busy={resolving}
       aria-label={label}
     >
-      {avatar}
+      <ArtistAvatar
+        name={name}
+        imageUrl={artist.imageUrl}
+        size={size}
+        className={cn(
+          resolving && "animate-pulse opacity-70",
+          active &&
+            "ring-2 ring-primary ring-offset-2 ring-offset-background animate-pulse",
+        )}
+      />
+      {resolving ? (
+        <span className="absolute inset-0 grid place-items-center rounded-full bg-black/35">
+          <LoaderCircle
+            className="size-5 animate-spin text-white"
+            aria-hidden="true"
+          />
+        </span>
+      ) : null}
     </button>
   )
 }
 
-function ArtistChip({ artist }: { artist: EventLineupArtist }) {
+function ArtistChip({
+  artist,
+  onResolved,
+}: {
+  artist: EventLineupArtist
+  onResolved?: (artistId: string, spotifyId: string) => void
+}) {
   const name = artist.name?.trim() || "Artista"
   const time = formatSlotTime(artist.performanceTime)
   return (
     <li className="flex items-center gap-2 rounded-full border border-border bg-secondary/40 py-1 pr-3 pl-1">
-      <ArtistGridAvatar artist={artist} size="xs" />
+      <ArtistGridAvatar artist={artist} size="xs" onResolved={onResolved} />
       <span className="max-w-[10rem] truncate text-sm font-semibold text-foreground">
         {name}
       </span>
@@ -99,7 +163,13 @@ function ArtistChip({ artist }: { artist: EventLineupArtist }) {
   )
 }
 
-function VisualLineup({ artists }: { artists: EventLineupArtist[] }) {
+function VisualLineup({
+  artists,
+  onResolved,
+}: {
+  artists: EventLineupArtist[]
+  onResolved?: (artistId: string, spotifyId: string) => void
+}) {
   const [open, setOpen] = useState(false)
   const { featured, remainingCount } = visibleLineupArtists(artists)
 
@@ -117,7 +187,11 @@ function VisualLineup({ artists }: { artists: EventLineupArtist[] }) {
               key={artist.id}
               className="flex min-w-[90px] max-w-[110px] shrink-0 snap-start flex-col items-center gap-2"
             >
-              <ArtistGridAvatar artist={artist} size="hero" />
+              <ArtistGridAvatar
+                artist={artist}
+                size="hero"
+                onResolved={onResolved}
+              />
               <p className="w-full truncate text-center text-xs font-bold leading-tight text-foreground">
                 {name}
               </p>
@@ -164,7 +238,11 @@ function VisualLineup({ artists }: { artists: EventLineupArtist[] }) {
           </SheetHeader>
           <ul className="flex max-h-[min(70dvh,32rem)] flex-wrap content-start gap-2 overflow-y-auto px-4 pb-2">
             {artists.map((artist) => (
-              <ArtistChip key={artist.id} artist={artist} />
+              <ArtistChip
+                key={artist.id}
+                artist={artist}
+                onResolved={onResolved}
+              />
             ))}
           </ul>
         </SheetContent>
@@ -207,6 +285,12 @@ export function EventLineup({
   data?: EventLineupData | null
   className?: string
 }) {
+  const [artists, setArtists] = useState(data?.artists ?? [])
+
+  useEffect(() => {
+    setArtists(data?.artists ?? [])
+  }, [data])
+
   useEffect(() => {
     return () => {
       closeSpotifyMiniPlayer()
@@ -214,7 +298,7 @@ export function EventLineup({
   }, [])
 
   if (!data || !hasEventLineup(data)) return null
-  const hasArtists = data.artists.length > 0
+  const hasArtists = artists.length > 0
 
   return (
     <section aria-label="Grilla de artistas y cronograma" className={cn("space-y-2", className)}>
@@ -223,7 +307,16 @@ export function EventLineup({
           <h2 className="mb-3 text-xl font-bold tracking-tight text-foreground">
             Grilla de artistas
           </h2>
-          <VisualLineup artists={data.artists} />
+          <VisualLineup
+            artists={artists}
+            onResolved={(artistId, spotifyId) => {
+              setArtists((current) =>
+                current.map((artist) =>
+                  artist.id === artistId ? { ...artist, spotifyId } : artist,
+                ),
+              )
+            }}
+          />
         </div>
       ) : null}
       {!hasArtists && data.slots.length > 0 ? (
@@ -234,7 +327,6 @@ export function EventLineup({
           <SmartTimeline slots={data.slots} />
         </div>
       ) : null}
-      {hasArtists ? <SpotifyMiniPlayer /> : null}
     </section>
   )
 }

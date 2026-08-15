@@ -30,8 +30,10 @@ import { getCheckoutRequestContext } from "@/lib/checkout/request-context"
 import {
   fetchArtistTopTrack,
   isSpotifyConfigured,
+  searchFirstSpotifyArtist,
   searchSpotifyCatalog,
 } from "@/lib/spotify/client"
+import { isSpotifyArtistId, pickSpotifyArtistId } from "@/lib/spotify/embed"
 import {
   isPlayablePreviewUrl,
   type SpotifyArtistHit,
@@ -200,6 +202,80 @@ async function persistArtistPreview(
     } as never)
     .eq("id", artistId)
   return !error
+}
+
+export async function resolveArtistSpotifyId(
+  artistId: string,
+  artistName: string,
+): Promise<ArtistActionResult<{ spotifyId: string }>> {
+  try {
+    const context = await getCheckoutRequestContext()
+    if (!getArtistPreviewIpLimiter().consume(`artist-spotify:${context.ip}`)) {
+      return {
+        success: false,
+        error: "Demasiados intentos. Probá de nuevo en un minuto.",
+      }
+    }
+
+    const name = normalizeArtistName(artistName)
+    if (!name) {
+      return { success: false, error: "El nombre del artista no es válido." }
+    }
+    if (!isSpotifyConfigured()) {
+      return { success: false, error: "Spotify no está configurado." }
+    }
+
+    let admin: ReturnType<typeof createAdminClient> | null = null
+    try {
+      admin = createAdminClient()
+    } catch {
+      admin = null
+    }
+
+    if (admin && isArtistUuid(artistId)) {
+      const existing = await admin
+        .from("artists")
+        .select("id, spotify_id")
+        .eq("id", artistId)
+        .maybeSingle()
+      const stored = existing.data?.spotify_id?.trim() ?? ""
+      if (isSpotifyArtistId(stored)) {
+        return { success: true, data: { spotifyId: stored } }
+      }
+    }
+
+    const hit = await searchFirstSpotifyArtist(sanitizeArtistQuery(name))
+    const foundId = pickSpotifyArtistId(hit ? [hit] : [])
+    if (!foundId) {
+      return { success: false, error: "No encontramos este artista en Spotify." }
+    }
+
+    if (admin && isArtistUuid(artistId)) {
+      const { error } = await admin
+        .from("artists")
+        .update({
+          spotify_id: foundId,
+          updated_at: new Date().toISOString(),
+        } as never)
+        .eq("id", artistId)
+      if (error && error.code !== "23505") {
+        logger.error({
+          context: "artists",
+          message: "resolve_spotify_id_persist_failed",
+          error,
+        })
+      }
+    }
+
+    return { success: true, data: { spotifyId: foundId } }
+  } catch (error) {
+    logger.error({
+      context: "artists",
+      message: "resolve_spotify_id_unexpected",
+      error,
+    })
+    return { success: false, error: "No se pudo resolver el artista en Spotify." }
+  }
 }
 
 export async function getArtistTopTrack(

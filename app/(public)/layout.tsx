@@ -1,4 +1,5 @@
 import { SiteFooter } from "@/components/layout/site-footer"
+import { SpotifyMiniPlayer } from "@/components/public/spotify-mini-player"
 import { PublicNavbar } from "@/components/shared/public-navbar"
 
 export default function PublicLayout({
@@ -9,6 +10,7 @@ export default function PublicLayout({
       <PublicNavbar />
       <main className="flex-1">{children}</main>
       <SiteFooter />
+      <SpotifyMiniPlayer />
     </div>
   )
 }

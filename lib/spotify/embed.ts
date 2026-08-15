@@ -6,6 +6,15 @@ export function isSpotifyArtistId(value: unknown): value is string {
   return /^[0-9A-Za-z]{10,32}$/.test(id)
 }
 
+export function pickSpotifyArtistId(
+  items: Array<{ spotifyId?: string | null }>,
+): string | null {
+  for (const item of items) {
+    if (isSpotifyArtistId(item.spotifyId)) return item.spotifyId.trim()
+  }
+  return null
+}
+
 export function spotifyArtistEmbedSrc(spotifyId: string): string | null {
   const id = spotifyId.trim()
   if (!isSpotifyArtistId(id)) return null

@@ -3,6 +3,7 @@ import { describe, it } from "node:test"
 
 import {
   isSpotifyArtistId,
+  pickSpotifyArtistId,
   spotifyArtistEmbedSrc,
 } from "@/lib/spotify/embed"
 
@@ -19,5 +20,16 @@ describe("spotify artist embed", () => {
     assert.equal(isSpotifyArtistId("javascript:alert(1)"), false)
     assert.equal(isSpotifyArtistId("../open"), false)
     assert.equal(spotifyArtistEmbedSrc("bad id"), null)
+  })
+
+  it("picks the first valid spotify artist id", () => {
+    assert.equal(pickSpotifyArtistId([]), null)
+    assert.equal(
+      pickSpotifyArtistId([
+        { spotifyId: null },
+        { spotifyId: "0eHQ9o50hj6ZXyrqmx1rJg" },
+      ]),
+      "0eHQ9o50hj6ZXyrqmx1rJg",
+    )
   })
 })

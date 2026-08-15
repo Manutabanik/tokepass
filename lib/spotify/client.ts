@@ -20,6 +20,7 @@ const TOKEN_URL = "https://accounts.spotify.com/api/token"
 const SEARCH_URL = "https://api.spotify.com/v1/search"
 const ARTIST_TOP_TRACKS_URL = "https://api.spotify.com/v1/artists"
 const SEARCH_LIMIT = 8
+const RESOLVE_SEARCH_LIMIT = 1
 const FETCH_TIMEOUT_MS = 8000
 const EMBED_TIMEOUT_MS = 5000
 const TOKEN_SKEW_MS = 60_000
@@ -110,6 +111,7 @@ async function getClientAccessToken(): Promise<string> {
 
 export async function searchSpotifyCatalog(
   query: string,
+  options?: { limit?: number },
 ): Promise<SpotifyCatalogResult> {
   if (!isSpotifyConfigured()) {
     return { ok: false, items: [] }
@@ -120,7 +122,11 @@ export async function searchSpotifyCatalog(
     const url = new URL(SEARCH_URL)
     url.searchParams.set("q", query)
     url.searchParams.set("type", "artist")
-    url.searchParams.set("limit", String(SEARCH_LIMIT))
+    const limit = Math.min(
+      50,
+      Math.max(1, Math.floor(options?.limit ?? SEARCH_LIMIT)),
+    )
+    url.searchParams.set("limit", String(limit))
 
     const response = await fetchWithTimeout(url.toString(), {
       headers: { Authorization: `Bearer ${token}` },
@@ -156,6 +162,13 @@ export async function searchSpotifyCatalog(
     })
     return { ok: false, items: [] }
   }
+}
+
+export async function searchFirstSpotifyArtist(
+  query: string,
+): Promise<SpotifyArtistHit | null> {
+  const result = await searchSpotifyCatalog(query, { limit: RESOLVE_SEARCH_LIMIT })
+  return result.items[0] ?? null
 }
 
 async function fetchWithTimeoutMs(
