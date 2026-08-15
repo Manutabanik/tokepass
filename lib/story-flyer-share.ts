@@ -30,16 +30,28 @@ export function isNativeFileShareAvailable(): boolean {
   }
 }
 
-export function downloadBlob(blob: Blob, filename: string) {
+export function downloadImageBlob(
+  blob: Blob,
+  filename = "historia-tokepass.png",
+) {
   const url = URL.createObjectURL(blob)
+  const ios = /iP(ad|hone|od)/.test(navigator.userAgent)
   const anchor = document.createElement("a")
   anchor.href = url
   anchor.download = filename
   anchor.rel = "noopener"
+  if (ios) {
+    anchor.target = "_blank"
+  }
   document.body.appendChild(anchor)
   anchor.click()
   anchor.remove()
-  window.setTimeout(() => URL.revokeObjectURL(url), 1500)
+  window.setTimeout(() => URL.revokeObjectURL(url), ios ? 60_000 : 1500)
+}
+
+/** @deprecated Prefer downloadImageBlob */
+export function downloadBlob(blob: Blob, filename: string) {
+  downloadImageBlob(blob, filename)
 }
 
 export type ShareFlyerResult =
@@ -76,7 +88,7 @@ export async function shareOrDownloadFlyer(input: {
   }
 
   try {
-    downloadBlob(input.blob, filename)
+    downloadImageBlob(input.blob, filename)
     return { ok: true, method: "download" }
   } catch {
     return { ok: false, error: "No se pudo guardar la imagen." }

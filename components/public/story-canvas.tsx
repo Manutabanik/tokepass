@@ -1,7 +1,12 @@
 "use client"
 
 import { motion, useMotionValue, useReducedMotion, useTransform, type MotionValue } from "motion/react"
-import { useId, type CSSProperties, type RefObject } from "react"
+import {
+  useId,
+  type CSSProperties,
+  type ImgHTMLAttributes,
+  type RefObject,
+} from "react"
 import { QRCodeSVG } from "qrcode.react"
 
 import { StoryLiquidBackdrop } from "@/components/public/story-liquid-backdrop"
@@ -24,6 +29,13 @@ import { specularFromTilt } from "@/lib/story-tilt"
 
 const FONT =
   "var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
+
+function storyImgCors(
+  src: string,
+): Pick<ImgHTMLAttributes<HTMLImageElement>, "crossOrigin"> {
+  if (src.startsWith("data:") || src.startsWith("blob:")) return {}
+  return { crossOrigin: "anonymous" }
+}
 
 function WhiteTokepassMark({ size = 72 }: { size?: number }) {
   return (
@@ -107,7 +119,7 @@ export function StoryCanvas({
         <img
           src={eventImage}
           alt=""
-          crossOrigin="anonymous"
+          {...storyImgCors(eventImage)}
           style={{
             position: "absolute",
             inset: "-8%",
@@ -238,7 +250,7 @@ export function StoryCanvas({
                 <img
                   src={eventImage}
                   alt=""
-                  crossOrigin="anonymous"
+                  {...storyImgCors(eventImage)}
                   style={{
                     width: "100%",
                     height: "100%",
@@ -328,7 +340,7 @@ export function StoryCanvas({
               <img
                 src={stampImage}
                 alt=""
-                crossOrigin="anonymous"
+                {...storyImgCors(stampImage)}
                 style={{
                   width: "100%",
                   height: "100%",

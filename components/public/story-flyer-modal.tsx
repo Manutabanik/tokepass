@@ -22,6 +22,7 @@ import { toast } from "sonner"
 import { getPublicStoryHeadliner } from "@/app/actions/public-story"
 import { StoryCanvas } from "@/components/public/story-canvas"
 import { Button } from "@/components/ui/button"
+import { useLockBodyScroll } from "@/hooks/use-lock-body-scroll"
 import { useStoryTilt } from "@/hooks/use-story-tilt"
 import {
   Dialog,
@@ -43,10 +44,10 @@ import {
   type StoryThemeId,
 } from "@/lib/story-canvas"
 import {
-  downloadBlob,
+  downloadImageBlob,
   isNativeFileShareAvailable,
-  shareOrDownloadFlyer,
 } from "@/lib/story-flyer-share"
+import { hydrateStoryFlyerImages } from "@/lib/story-image"
 import { cn } from "@/lib/utils"
 
 export type { StoryFlyerData, StoryFlyerMode }
@@ -57,7 +58,8 @@ type StoryFlyerModalProps = {
   onOpenChange: (open: boolean) => void
 }
 
-const PREVIEW_SCALE = 0.24
+const SAVED_TOAST =
+  "Imagen guardada. Abri Instagram para subirla a tus Historias"
 
 export function StoryFlyerModal({
   data,
@@ -65,15 +67,20 @@ export function StoryFlyerModal({
   onOpenChange,
 }: StoryFlyerModalProps) {
   const captureRef = useRef<HTMLDivElement>(null)
+  const previewRef = useRef<HTMLDivElement>(null)
   const [busy, setBusy] = useState(false)
+  const [hydrating, setHydrating] = useState(false)
   const [themeId, setThemeId] = useState<StoryThemeId>("neon-purple")
   const [headlineId, setHeadlineId] = useState<StoryHeadlineId>(() =>
     defaultStoryHeadlineId(data.mode),
   )
   const [resolved, setResolved] = useState(data)
+  const [previewScale, setPreviewScale] = useState(0.22)
   const [nativeShare, setNativeShare] = useState(false)
   const titleId = useId()
   const tilt = useStoryTilt(open && !busy)
+
+  useLockBodyScroll(open)
 
   useEffect(() => {
     setResolved(data)
@@ -86,22 +93,44 @@ export function StoryFlyerModal({
 
   useEffect(() => {
     if (!open) return
-    if (data.artistName?.trim()) return
-    const eventId = data.eventId?.trim()
-    if (!eventId) return
     let cancelled = false
-    void getPublicStoryHeadliner(eventId).then((artist) => {
-      if (cancelled || !artist) return
-      setResolved((current) => ({
-        ...current,
-        artistName: current.artistName || artist.name,
-        artistImageUrl: current.artistImageUrl || artist.imageUrl,
-      }))
-    })
+    setHydrating(true)
+
+    async function hydrate() {
+      let next = data
+      if (!data.artistName?.trim() && data.eventId?.trim()) {
+        const artist = await getPublicStoryHeadliner(data.eventId.trim())
+        if (artist) {
+          next = {
+            ...next,
+            artistName: next.artistName || artist.name,
+            artistImageUrl: next.artistImageUrl || artist.imageUrl,
+          }
+        }
+      }
+      const hydrated = await hydrateStoryFlyerImages(next)
+      if (cancelled) return
+      setResolved(hydrated)
+      setHydrating(false)
+    }
+
+    void hydrate()
     return () => {
       cancelled = true
     }
-  }, [open, data.artistName, data.eventId])
+  }, [open, data])
+
+  useEffect(() => {
+    const node = previewRef.current
+    if (!open || !node) return
+    const update = () => {
+      setPreviewScale(node.clientWidth / STORY_CANVAS_WIDTH)
+    }
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [open])
 
   const waitForImages = useCallback(async (node: HTMLElement) => {
     const images = Array.from(node.querySelectorAll("img"))
@@ -136,7 +165,7 @@ export function StoryFlyerModal({
             img.onerror = () => resolve()
           })
         } catch {
-          // CORS bloqueado: intentamos capturar igual
+          // Same-origin proxy already applied; capture anyway.
         }
       }),
     )
@@ -157,6 +186,9 @@ export function StoryFlyerModal({
       width: STORY_CANVAS_WIDTH,
       height: STORY_CANVAS_HEIGHT,
       skipAutoScale: true,
+      includeQueryParams: true,
+      filter: (element: HTMLElement) =>
+        !element.closest("[data-story-actions]"),
       style: {
         transform: "none",
         left: "0",
@@ -174,7 +206,7 @@ export function StoryFlyerModal({
     }
   }
 
-  async function generateAndShare(intent: "share" | "download") {
+  async function handleShareToInstagram() {
     if (busy) return
     setBusy(true)
     await new Promise((r) => window.setTimeout(r, 140))
@@ -186,25 +218,54 @@ export function StoryFlyerModal({
         return
       }
 
-      if (intent === "download") {
-        downloadBlob(blob, "historia-tokepass.png")
-        toast.success("Imagen 9:16 guardada.")
-        return
-      }
-
-      const headline = STORY_HEADLINES.find((item) => item.id === headlineId)
-      const result = await shareOrDownloadFlyer({
-        blob,
-        filename: "historia-tokepass.png",
-        title: data.eventTitle,
-        text: `${headline?.lines.join(" ") ?? "NOS VEMOS AHÍ"} · ${data.eventTitle} en tokepass.com.ar`,
+      const file = new File([blob], "historia-tokepass.png", {
+        type: blob.type || "image/png",
       })
 
-      if (result.ok && result.method === "download") {
-        toast.success("Imagen guardada. Subila a tus historias de Instagram.")
-      } else if (!result.ok && !result.cancelled) {
-        toast.error(result.error)
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: "Mi Entrada Tokepass",
+            text: "Ya tengo mi entrada!",
+          })
+          return
+        } catch (error) {
+          if (error instanceof DOMException && error.name === "AbortError") {
+            return
+          }
+          downloadImageBlob(blob)
+          toast.success(SAVED_TOAST)
+          return
+        }
       }
+
+      downloadImageBlob(blob)
+      toast.success(SAVED_TOAST)
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudo generar la historia.",
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleDownloadImage() {
+    if (busy) return
+    setBusy(true)
+    await new Promise((r) => window.setTimeout(r, 140))
+
+    try {
+      const blob = await captureFlyerBlob()
+      if (!blob) {
+        toast.error("No se pudo generar la historia.")
+        return
+      }
+      downloadImageBlob(blob)
+      toast.success(SAVED_TOAST)
     } catch (error) {
       toast.error(
         error instanceof Error
@@ -224,9 +285,12 @@ export function StoryFlyerModal({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogPortal>
-        <DialogOverlay className="bg-black/92 supports-backdrop-filter:backdrop-blur-md" />
-        <DialogPrimitive.Popup className="fixed inset-0 z-50 flex h-dvh w-screen flex-col outline-none">
-          <div className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
+        <DialogOverlay className="z-[100] bg-black/90 backdrop-blur-lg" />
+        <DialogPrimitive.Popup
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center overflow-y-auto bg-black/90 p-4 outline-none backdrop-blur-lg"
+          aria-labelledby={titleId}
+        >
+          <div className="flex w-full max-w-sm items-center justify-between gap-3 pb-3">
             <DialogTitle
               id={titleId}
               className="text-sm font-semibold text-white"
@@ -241,167 +305,157 @@ export function StoryFlyerModal({
             </DialogClose>
           </div>
 
-          <div className="flex flex-1 flex-col items-center gap-4 overflow-y-auto px-4 pb-8">
-            {open ? (
-              <div
-                aria-hidden
-                className="pointer-events-none fixed"
-                style={{
-                  left: -12000,
-                  top: 0,
-                  width: STORY_CANVAS_WIDTH,
-                  height: STORY_CANVAS_HEIGHT,
-                  overflow: "hidden",
-                }}
-              >
-                <StoryCanvas
-                  data={resolved}
-                  themeId={themeId}
-                  headlineId={headlineId}
-                  canvasRef={captureRef}
-                  live={false}
-                  pauseMotion={busy}
-                />
-              </div>
-            ) : null}
-
+          {open ? (
             <div
-              className="relative overflow-hidden rounded-2xl shadow-2xl shadow-primary/20 ring-1 ring-white/10"
+              aria-hidden
+              className="pointer-events-none fixed"
               style={{
-                width: STORY_CANVAS_WIDTH * PREVIEW_SCALE,
-                height: STORY_CANVAS_HEIGHT * PREVIEW_SCALE,
-                willChange: "transform",
-                transform: "translateZ(0)",
-                touchAction: "none",
-              }}
-              onPointerMove={tilt.onPointerMove}
-              onPointerLeave={tilt.onPointerLeave}
-              onPointerDown={(event) => {
-                if (event.pointerType === "touch") void tilt.enableGyro()
+                left: -12000,
+                top: 0,
+                width: STORY_CANVAS_WIDTH,
+                height: STORY_CANVAS_HEIGHT,
+                overflow: "hidden",
               }}
             >
-              <div
-                style={{
-                  transform: `scale(${PREVIEW_SCALE})`,
-                  transformOrigin: "top left",
-                  willChange: "transform",
-                }}
-              >
-                <StoryCanvas
-                  data={resolved}
-                  themeId={themeId}
-                  headlineId={headlineId}
-                  live
-                  pauseMotion={busy}
-                  rotateX={tilt.rotateX}
-                  rotateY={tilt.rotateY}
-                />
-              </div>
+              <StoryCanvas
+                data={resolved}
+                themeId={themeId}
+                headlineId={headlineId}
+                canvasRef={captureRef}
+                live={false}
+                pauseMotion={busy}
+              />
             </div>
+          ) : null}
 
-            <div className="flex w-full max-w-sm flex-col gap-3">
-              <div>
-                <p className="mb-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-white/50">
-                  Fondo
-                </p>
-                <div className="flex flex-wrap justify-center gap-2">
-                  {STORY_THEMES.map((theme) => {
-                    const selected = theme.id === themeId
-                    return (
-                      <button
-                        key={theme.id}
-                        type="button"
-                        onClick={() => setThemeId(theme.id)}
-                        aria-pressed={selected}
-                        title={theme.label}
-                        className={cn(
-                          "h-9 rounded-full px-3 text-[11px] font-bold transition",
-                          selected
-                            ? "bg-white text-zinc-950"
-                            : "border border-white/15 bg-white/8 text-white/80 hover:bg-white/15",
-                        )}
-                      >
-                        {theme.label}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
+          <div
+            ref={previewRef}
+            className="relative aspect-[9/16] max-h-[60vh] overflow-hidden rounded-2xl shadow-2xl ring-1 ring-white/10"
+            style={{
+              width: "min(calc(60vh * 9 / 16), calc(100vw - 2rem))",
+              willChange: "transform",
+              transform: "translateZ(0)",
+              touchAction: "none",
+            }}
+            onPointerMove={tilt.onPointerMove}
+            onPointerLeave={tilt.onPointerLeave}
+            onPointerDown={(event) => {
+              if (event.pointerType === "touch") void tilt.enableGyro()
+            }}
+          >
+            <div
+              style={{
+                width: STORY_CANVAS_WIDTH,
+                height: STORY_CANVAS_HEIGHT,
+                transform: `scale(${previewScale})`,
+                transformOrigin: "top left",
+                willChange: "transform",
+              }}
+            >
+              <StoryCanvas
+                data={resolved}
+                themeId={themeId}
+                headlineId={headlineId}
+                live
+                pauseMotion={busy || hydrating}
+                rotateX={tilt.rotateX}
+                rotateY={tilt.rotateY}
+              />
+            </div>
+          </div>
 
-              <div>
-                <p className="mb-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-white/50">
-                  Frase
-                </p>
-                <div className="flex justify-center gap-2 overflow-x-auto pb-1">
-                  {STORY_HEADLINES.map((headline) => {
-                    const selected = headline.id === headlineId
-                    return (
-                      <button
-                        key={headline.id}
-                        type="button"
-                        onClick={() => setHeadlineId(headline.id)}
-                        aria-pressed={selected}
-                        className={cn(
-                          "shrink-0 rounded-full px-3 py-1.5 text-[11px] font-bold tracking-wide transition",
-                          selected
-                            ? "bg-white text-zinc-950"
-                            : "border border-white/15 bg-white/8 text-white/80 hover:bg-white/15",
-                        )}
-                      >
-                        {headline.lines.join(" ")}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              {nativeShare ? (
-                <Button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void generateAndShare("share")}
-                  className="min-h-12 w-full rounded-full bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-500 text-base font-bold text-white hover:from-violet-500 hover:via-fuchsia-500 hover:to-pink-400"
-                >
-                  {busy ? (
-                    <>
-                      <Loader2 className="size-5 animate-spin" aria-hidden />
-                      Generando historia…
-                    </>
-                  ) : (
-                    <>
-                      <Share2 className="size-5" aria-hidden />
-                      Compartir en Instagram
-                    </>
-                  )}
-                </Button>
-              ) : null}
-              <Button
-                type="button"
-                disabled={busy}
-                variant={nativeShare ? "outline" : "default"}
-                onClick={() => void generateAndShare("download")}
-                className={
-                  nativeShare
-                    ? "min-h-12 w-full rounded-full border-white/20 bg-white/5 text-white hover:bg-white/10"
-                    : "min-h-12 w-full rounded-full bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-500 text-base font-bold text-white hover:from-violet-500 hover:via-fuchsia-500 hover:to-pink-400"
-                }
-              >
-                {busy && !nativeShare ? (
-                  <>
-                    <Loader2 className="size-5 animate-spin" aria-hidden />
-                    Generando imagen…
-                  </>
-                ) : (
-                  <>
-                    <Download className="size-5" aria-hidden />
-                    Descargar Imagen 9:16
-                  </>
-                )}
-              </Button>
-              <p className="text-center text-xs text-zinc-500">
-                1080 x 1920. Sin tus datos personales.
+          <div
+            data-story-actions
+            className="mt-4 flex w-full max-w-sm flex-col gap-3"
+          >
+            <div>
+              <p className="mb-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-white/50">
+                Tema
               </p>
+              <div className="flex flex-wrap justify-center gap-2">
+                {STORY_THEMES.map((theme) => {
+                  const selected = theme.id === themeId
+                  return (
+                    <button
+                      key={theme.id}
+                      type="button"
+                      onClick={() => setThemeId(theme.id)}
+                      aria-pressed={selected}
+                      title={theme.label}
+                      className={cn(
+                        "h-9 rounded-full px-3 text-[11px] font-bold transition",
+                        selected
+                          ? "bg-white text-zinc-950"
+                          : "border border-white/15 bg-white/8 text-white/80 hover:bg-white/15",
+                      )}
+                    >
+                      {theme.label}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
+
+            <div>
+              <p className="mb-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-white/50">
+                Frase
+              </p>
+              <div className="flex justify-center gap-2 overflow-x-auto pb-1">
+                {STORY_HEADLINES.map((headline) => {
+                  const selected = headline.id === headlineId
+                  return (
+                    <button
+                      key={headline.id}
+                      type="button"
+                      onClick={() => setHeadlineId(headline.id)}
+                      aria-pressed={selected}
+                      className={cn(
+                        "shrink-0 rounded-full px-3 py-1.5 text-[11px] font-bold tracking-wide transition",
+                        selected
+                          ? "bg-white text-zinc-950"
+                          : "border border-white/15 bg-white/8 text-white/80 hover:bg-white/15",
+                      )}
+                    >
+                      {headline.lines.join(" ")}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              disabled={busy}
+              onClick={() => void handleShareToInstagram()}
+              className="min-h-12 w-full rounded-full bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-500 text-base font-bold text-white hover:from-violet-500 hover:via-fuchsia-500 hover:to-pink-400"
+            >
+              {busy ? (
+                <>
+                  <Loader2 className="size-5 animate-spin" aria-hidden />
+                  Generando historia…
+                </>
+              ) : (
+                <>
+                  <Share2 className="size-5" aria-hidden />
+                  Compartir en Instagram
+                </>
+              )}
+            </Button>
+            <Button
+              type="button"
+              disabled={busy}
+              variant="outline"
+              onClick={() => void handleDownloadImage()}
+              className="min-h-12 w-full rounded-full border-white/20 bg-white/5 text-white hover:bg-white/10"
+            >
+              <Download className="size-5" aria-hidden />
+              Descargar Imagen 9:16
+            </Button>
+            <p className="text-center text-xs text-zinc-500">
+              {nativeShare
+                ? "1080 x 1920. Sin tus datos personales."
+                : "1080 x 1920. Se guarda en Descargas si el telefono no comparte archivos."}
+            </p>
           </div>
         </DialogPrimitive.Popup>
       </DialogPortal>

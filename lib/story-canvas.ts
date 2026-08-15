@@ -41,7 +41,7 @@ export type StoryHeadline = {
 export const STORY_THEMES: StoryTheme[] = [
   {
     id: "neon-purple",
-    label: "Neon Purple",
+    label: "Neon",
     background: "#090014",
     orbs: [
       { x: "16%", y: "10%", color: "rgba(168,85,247,0.58)", size: 760 },
@@ -54,7 +54,7 @@ export const STORY_THEMES: StoryTheme[] = [
   },
   {
     id: "dark-mesh",
-    label: "Dark Mesh",
+    label: "Dark",
     background: "#050507",
     orbs: [
       { x: "18%", y: "14%", color: "rgba(16,185,129,0.34)", size: 700 },
@@ -67,7 +67,7 @@ export const STORY_THEMES: StoryTheme[] = [
   },
   {
     id: "gradient-minimal",
-    label: "Gradient Minimal",
+    label: "Minimal",
     background: "#08060f",
     overlay:
       "linear-gradient(180deg, #241b4b 0%, #120c24 46%, #05040a 100%)",
