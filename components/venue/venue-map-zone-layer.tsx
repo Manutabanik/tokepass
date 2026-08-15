@@ -28,6 +28,7 @@ export function VenueMapZoneLayer({
   unavailableIds = [],
   lodMode = null,
   focusedZoneId = null,
+  highlightedIds = [],
 }: {
   zones: VenueMapZone[]
   selectedId?: string | null
@@ -41,6 +42,7 @@ export function VenueMapZoneLayer({
   unavailableIds?: string[]
   lodMode?: "macro" | "micro" | null
   focusedZoneId?: string | null
+  highlightedIds?: string[]
 }) {
   const glowId = useId().replace(/:/g, "")
   const press = useRef<{ x: number; y: number } | null>(null)
@@ -81,12 +83,14 @@ export function VenueMapZoneLayer({
         const center = zoneCanvasCentroid(zone)
         const selected =
           zone.id === selectedId || Boolean(selectedIds?.includes(zone.id))
+        const highlighted = highlightedIds.includes(zone.id)
         const soldOut = unavailableIds.includes(zone.id)
         const interactive = Boolean(onSelect) && !soldOut
         const hasSelection =
           spotlight ||
           Boolean(selectedId) ||
-          Boolean(selectedIds && selectedIds.length > 0)
+          Boolean(selectedIds && selectedIds.length > 0) ||
+          highlightedIds.length > 0
 
         function eventClientPoint(
           event: React.PointerEvent | React.MouseEvent | React.TouchEvent,
@@ -120,10 +124,11 @@ export function VenueMapZoneLayer({
           onSelect(zone)
         }
 
-        const dimmed = hasSelection && !selected && !soldOut
+        const dimmed = hasSelection && !selected && !highlighted && !soldOut
         const lodHidden = lodMode === "micro"
         const lodSolid = lodMode === "macro"
         const zoneInteractive = interactive && !lodHidden
+        const lit = selected || highlighted
 
         return (
           <g
@@ -133,21 +138,22 @@ export function VenueMapZoneLayer({
             data-lod-zone={zone.id}
             data-lod-focused={focusedZoneId === zone.id ? "true" : undefined}
             transform={
-              selected && !lodSolid
+              lit && !lodSolid
                 ? `translate(${center.x} ${center.y}) scale(1.15) translate(${-center.x} ${-center.y})`
                 : undefined
             }
             className={cn(
               interactive && !lodHidden ? "cursor-pointer" : undefined,
               soldOut && "pointer-events-none",
+              lit && !lodHidden && "animate-pulse-subtle",
             )}
             style={{
-              opacity: lodHidden ? 0 : dimmed && !lodSolid ? 0.4 : soldOut ? 0.5 : 1,
+              opacity: lodHidden ? 0 : dimmed && !lodSolid ? 0.7 : soldOut ? 0.5 : 1,
               pointerEvents: zoneInteractive ? "auto" : "none",
               transition: "opacity 0.3s ease",
               filter:
-                selected && !lodHidden
-                  ? "drop-shadow(0px 0px 8px rgba(255, 255, 255, 0.8))"
+                lit && !lodHidden
+                  ? "drop-shadow(0px 0px 12px rgba(255, 255, 255, 0.8))"
                   : undefined,
             }}
             onContextMenu={(event) => onContextMenu?.(event, zone)}

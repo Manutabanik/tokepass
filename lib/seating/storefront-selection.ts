@@ -178,14 +178,45 @@ function isNumberedSeat(item: StorefrontSelectedItem): boolean {
 export type StorefrontSelectionGroup = {
   key: string
   label: string
+  placeLabel: string
+  sectorLabel: string
+  color: string | null
+  chairsLabel: string | null
   ids: string[]
   price: number
+}
+
+function chairsCopy(count: number): string | null {
+  const seats = Math.max(0, Math.floor(count) || 0)
+  if (seats <= 1) return seats === 1 ? "Incluye 1 silla / butaca" : null
+  return `Incluye ${seats} sillas / butacas`
+}
+
+function splitSelectionName(item: StorefrontSelectedItem): {
+  sector: string
+  place: string
+} {
+  const parts = item.name
+    .split(/\s[·-]\s/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+  if (parts.length >= 2) {
+    return { sector: parts[0] ?? item.name, place: parts.slice(1).join(" · ") }
+  }
+  return { sector: sectorLabelFromItem(item), place: item.name }
+}
+
+function sectorBadgeLabel(sector: string): string {
+  const trimmed = sector.trim()
+  if (!trimmed) return "Sector"
+  return /^sector\b/i.test(trimmed) ? trimmed : `Sector ${trimmed}`
 }
 
 export function formatStorefrontSelectionGroups(
   items: StorefrontSelectedItem[],
 ): StorefrontSelectionGroup[] {
   const unique = dedupeStorefrontItemsById(items)
+  const byId = new Map(unique.map((item) => [item.id, item]))
   const seatGroups = new Map<
     string,
     {
@@ -194,6 +225,7 @@ export function formatStorefrontSelectionGroups(
       numbers: Set<number>
       ids: string[]
       price: number
+      color: string | null
     }
   >()
   const others: StorefrontSelectionGroup[] = []
@@ -210,16 +242,23 @@ export function formatStorefrontSelectionGroups(
         numbers: new Set<number>(),
         ids: [],
         price: 0,
+        color: item.color ?? null,
       }
       group.numbers.add(item.number)
       if (!group.ids.includes(item.id)) group.ids.push(item.id)
       group.price += linePrice
+      if (!group.color && item.color) group.color = item.color
       seatGroups.set(key, group)
       continue
     }
+    const split = splitSelectionName(item)
     others.push({
       key: item.id,
       label: item.name,
+      placeLabel: split.place,
+      sectorLabel: sectorBadgeLabel(split.sector),
+      color: item.color ?? null,
+      chairsLabel: chairsCopy(item.capacity),
       ids: [item.id],
       price: linePrice,
     })
@@ -227,9 +266,14 @@ export function formatStorefrontSelectionGroups(
 
   const seatLines = [...seatGroups.entries()].map(([key, group]) => {
     const nums = [...group.numbers].sort((a, b) => a - b).join(", ")
+    const first = byId.get(group.ids[0] ?? "")
     return {
       key,
       label: `${group.sector} · Fila ${group.row} - Asientos: ${nums}`,
+      placeLabel: `Fila ${group.row} · Asientos ${nums}`,
+      sectorLabel: sectorBadgeLabel(group.sector),
+      color: group.color ?? first?.color ?? null,
+      chairsLabel: chairsCopy(group.ids.length),
       ids: group.ids,
       price: group.price,
     }

@@ -182,6 +182,49 @@ function toAllocationSeats(
   }))
 }
 
+export function assignBestTableElements(input: {
+  map: InteractiveVenueMap
+  sectorId: string
+  sectorName?: string
+  count: number
+  occupancyBySeatId?: Record<string, SeatStatus>
+  selectedIds?: Iterable<string>
+}): VenueMapElement[] {
+  const count = Math.max(1, Math.floor(input.count) || 1)
+  const occupancy = input.occupancyBySeatId ?? {}
+  const selected = new Set(input.selectedIds ?? [])
+  const sectorName = input.sectorName?.trim().toLowerCase() ?? ""
+
+  const tables = (input.map.elements ?? []).filter((element) => {
+    if (!TABLE_ELEMENT_TYPES.has(element.type)) return false
+    const sameSector =
+      elementMatchesSector(element, input.sectorId) ||
+      (sectorName &&
+        (element.sectorName?.trim().toLowerCase() === sectorName ||
+          element.groupName?.trim().toLowerCase() === sectorName))
+    if (!sameSector) return false
+    if (selected.has(element.id)) return false
+    const chairs = element.seats ?? []
+    if (chairs.length === 0) return element.sellMode === "group"
+    return chairs.every((seat) => {
+      const live = resolveLiveVenueSeatStatus({
+        mapStatus: seat.status,
+        occupancy: occupancy[seat.id],
+        selected: selected.has(seat.id),
+      })
+      return isSelectableStatus(live)
+    })
+  })
+
+  return [...tables]
+    .sort((left, right) =>
+      (left.label || left.id).localeCompare(right.label || right.id, "es", {
+        numeric: true,
+      }),
+    )
+    .slice(0, count)
+}
+
 export function assignBestSeats(input: {
   seats: FlattenedVenueSeat[]
   sectorId: string

@@ -40,8 +40,12 @@ type StorefrontSeatState = {
   view: StorefrontViewMode
   selectedItems: StorefrontSelectedItem[]
   layoutSeats: StorefrontLayoutSeat[]
+  focusedMapIds: string[]
+  focusTick: number
   bindEvent: (eventId: string) => void
   setView: (view: StorefrontViewMode) => void
+  setFocusedMapIds: (ids: string[]) => void
+  pulseFocus: (ids: string[]) => void
   toggleSelectedItem: (
     item: StorefrontSelectedItem,
     maxCount?: number,
@@ -124,12 +128,16 @@ export const useStorefrontSeatStore = create<StorefrontSeatState>((set, get) => 
   view: "map",
   selectedItems: [],
   layoutSeats: [],
+  focusedMapIds: [],
+  focusTick: 0,
 
   bindEvent: (eventId) => {
     if (get().eventId === eventId) return
     set({
       eventId,
       view: "map",
+      focusedMapIds: [],
+      focusTick: 0,
       ...withDerived([]),
     })
   },
@@ -137,6 +145,25 @@ export const useStorefrontSeatStore = create<StorefrontSeatState>((set, get) => 
   setView: (view) => {
     if (get().view === view) return
     set({ view })
+  },
+
+  setFocusedMapIds: (ids) => {
+    const next = ids.filter(Boolean)
+    const current = get().focusedMapIds
+    if (
+      current.length === next.length &&
+      current.every((id, index) => id === next[index])
+    ) {
+      return
+    }
+    set({ focusedMapIds: next })
+  },
+
+  pulseFocus: (ids) => {
+    set((state) => ({
+      focusedMapIds: ids.filter(Boolean),
+      focusTick: state.focusTick + 1,
+    }))
   },
 
   toggleSelectedItem: (item, maxCount = MAX_TICKETS_PER_PURCHASE) => {

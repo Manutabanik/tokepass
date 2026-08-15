@@ -23,6 +23,7 @@ import {
 } from "@/lib/seating/accessible-seat-tree"
 import {
   assignBestSeats,
+  assignBestTableElements,
   countAvailableTables,
   previewFastAssign,
   type FastAssignMode,
@@ -31,7 +32,11 @@ import { flattenVenueMapSeats } from "@/lib/seating/venue-map-geometry"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import { cn } from "@/lib/utils"
 import type { StorefrontLayoutSeat } from "@/lib/stores/storefront-seat-store"
-import type { InteractiveVenueMap, VenueMapZone } from "@/types/venue-map"
+import type {
+  InteractiveVenueMap,
+  VenueMapElement,
+  VenueMapZone,
+} from "@/types/venue-map"
 
 export function AccessibleSeatSelector({
   map,
@@ -40,11 +45,12 @@ export function AccessibleSeatSelector({
   selectedZoneId = null,
   unavailableZoneIds = [],
   pending = false,
-  referenceImageUrl = null,
+  referenceImageUrl: _referenceImageUrl = null,
   onSelectZone,
   onToggleSeat,
   onAssignSeats,
   onAssignZoneQuantity,
+  onAssignTables,
 }: {
   map: InteractiveVenueMap
   occupancyBySeatId?: Record<string, SeatStatus>
@@ -57,6 +63,7 @@ export function AccessibleSeatSelector({
   onToggleSeat: (seat: StorefrontLayoutSeat) => void
   onAssignSeats: (seats: StorefrontLayoutSeat[]) => void
   onAssignZoneQuantity: (sectorId: string, quantity: number) => void
+  onAssignTables?: (tables: VenueMapElement[]) => void
 }) {
   const selected = useMemo(() => new Set(selectedSeatIds), [selectedSeatIds])
   const sectors = useMemo(
@@ -113,6 +120,22 @@ export function AccessibleSeatSelector({
       )
       return
     }
+    if (autoSector.isTableSector && onAssignTables) {
+      const tables = assignBestTableElements({
+        map,
+        sectorId: autoSector.id,
+        sectorName: autoSector.name,
+        count: quantity,
+        occupancyBySeatId,
+        selectedIds: selected,
+      })
+      if (tables.length > 0) {
+        setAutoError(null)
+        setAutoHint(null)
+        onAssignTables(tables)
+        return
+      }
+    }
     const found = assignBestSeats({
       seats: flatSeats,
       sectorId: autoSector.id,
@@ -146,23 +169,8 @@ export function AccessibleSeatSelector({
     )
   }
 
-  const referenceSrc = referenceImageUrl?.trim() || map.backgroundImage?.trim() || ""
-
   return (
     <div className="w-full space-y-6 bg-transparent">
-      {referenceSrc ? (
-        <figure className="mb-6">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={referenceSrc}
-            alt="Plano de referencia del recinto"
-            className="mb-2 h-auto max-h-[300px] w-full rounded-xl border object-contain shadow-sm"
-          />
-          <figcaption className="text-xs text-muted-foreground">
-            Plano de referencia. Los colores y sectores pueden variar.
-          </figcaption>
-        </figure>
-      ) : null}
       <AutoAssignCard
         sectors={sectors}
         seats={flatSeats}

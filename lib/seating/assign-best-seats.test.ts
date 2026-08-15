@@ -6,6 +6,7 @@ import type { FlattenedVenueSeat } from "@/lib/seating/venue-map-geometry"
 
 import {
   assignBestSeats,
+  assignBestTableElements,
   previewFastAssign,
   resolveSectorAssignMeta,
   shouldSuggestFullTables,
@@ -154,5 +155,66 @@ describe("resolveSectorAssignMeta", () => {
     assert.equal(meta.capacityPerUnit, 4)
     assert.equal(meta.unitNoun, "palco")
     assert.equal(meta.sellMode, "group")
+  })
+})
+
+describe("assignBestTableElements", () => {
+  it("elige mesas libres del sector en orden", () => {
+    const map = emptyVenueMap()
+    map.elements = [
+      {
+        id: "t-17",
+        type: "long_table",
+        label: "Tablón 17",
+        category: "commercial",
+        sectorName: "Mesas",
+        groupName: "Mesas",
+        groupId: "mesas",
+        x: 10,
+        y: 10,
+        width: 40,
+        height: 16,
+        rotation: 0,
+        price: 58824,
+        color: "#22c55e",
+        opacity: 1,
+        chairCount: 4,
+        sideA: 2,
+        sideB: 2,
+        sellMode: "group",
+        capacity: 4,
+        seats: [],
+      },
+      {
+        id: "t-18",
+        type: "long_table",
+        label: "Tablón 18",
+        category: "commercial",
+        sectorName: "Mesas",
+        groupName: "Mesas",
+        groupId: "mesas",
+        x: 60,
+        y: 10,
+        width: 40,
+        height: 16,
+        rotation: 0,
+        price: 58824,
+        color: "#22c55e",
+        opacity: 1,
+        chairCount: 4,
+        sideA: 2,
+        sideB: 2,
+        sellMode: "group",
+        capacity: 4,
+        seats: [],
+      },
+    ]
+    const found = assignBestTableElements({
+      map,
+      sectorId: "mesas",
+      sectorName: "Mesas",
+      count: 1,
+    })
+    assert.equal(found[0]?.id, "t-17")
   })
 })

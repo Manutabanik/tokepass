@@ -3,8 +3,9 @@
 import { memo, useMemo } from "react"
 
 import { VenueElementSymbol } from "@/components/admin/venue-svg-symbols"
-import type { InteractiveVenueMap, VenueMapElement } from "@/types/venue-map"
 import { compactVenueElementLabel } from "@/lib/seating/venue-element-geometry"
+import { cn } from "@/lib/utils"
+import type { InteractiveVenueMap, VenueMapElement } from "@/types/venue-map"
 
 const VenueElementShape = memo(function VenueElementShape({
   element,
@@ -19,6 +20,7 @@ const VenueElementShape = memo(function VenueElementShape({
   interactive,
   zoom,
   dimmed = false,
+  highlighted = false,
   popSelected = true,
 }: {
   element: VenueMapElement
@@ -43,14 +45,16 @@ const VenueElementShape = memo(function VenueElementShape({
   interactive: boolean
   zoom: number
   dimmed?: boolean
+  highlighted?: boolean
   popSelected?: boolean
 }) {
+  const lit = selected || highlighted
   const transform =
-    selected && popSelected
+    lit && popSelected
       ? `translate(${element.x} ${element.y}) scale(1.15) translate(${-element.x} ${-element.y}) rotate(${element.rotation} ${element.x} ${element.y})`
       : `rotate(${element.rotation} ${element.x} ${element.y})`
-  const opacity = (element.opacity ?? 1) * (dimmed ? 0.4 : 1)
-  const labelText = compactVenueElementLabel(element.label, selected ? 99 : zoom)
+  const opacity = (element.opacity ?? 1) * (dimmed && !lit ? 0.7 : 1)
+  const labelText = compactVenueElementLabel(element.label, lit ? 99 : zoom)
 
   return (
     <g
@@ -59,12 +63,20 @@ const VenueElementShape = memo(function VenueElementShape({
       opacity={opacity}
       className={
         interactive
-          ? "transition-all duration-200 ease-in-out"
-          : "pointer-events-none transition-all duration-200 ease-in-out"
+          ? cn(
+              "transition-all duration-200 ease-in-out",
+              lit &&
+                "animate-pulse-subtle stroke-white [stroke-width:2] drop-shadow-[0_0_12px_rgba(255,255,255,0.8)]",
+            )
+          : cn(
+              "pointer-events-none transition-all duration-200 ease-in-out",
+              lit &&
+                "animate-pulse-subtle stroke-white [stroke-width:2] drop-shadow-[0_0_12px_rgba(255,255,255,0.8)]",
+            )
       }
       style={
-        selected
-          ? { filter: "drop-shadow(0px 0px 8px rgba(255, 255, 255, 0.8))" }
+        lit
+          ? { filter: "drop-shadow(0px 0px 12px rgba(255, 255, 255, 0.8))" }
           : undefined
       }
       onPointerDown={
@@ -151,6 +163,7 @@ export function VenueMapElementLayer({
   popSelected = true,
   visibleIds = null,
   lodHidden = false,
+  highlightedIds = [],
 }: {
   elements: VenueMapElement[]
   selectedIds?: string[]
@@ -176,14 +189,19 @@ export function VenueMapElementLayer({
   popSelected?: boolean
   visibleIds?: Set<string> | null
   lodHidden?: boolean
+  highlightedIds?: string[]
 }) {
   const selected = new Set(selectedIds)
-  const hasSelection =
-    spotlight || selected.size > 0 || (selectedSeatIds?.length ?? 0) > 0
+  const highlighted = new Set(highlightedIds)
   const selectedSeats = useMemo(
     () => new Set(selectedSeatIds ?? []),
     [selectedSeatIds],
   )
+  const hasSelection =
+    spotlight ||
+    selected.size > 0 ||
+    highlighted.size > 0 ||
+    selectedSeats.size > 0
   const dense = elements.length >= 220
   const veryDense = elements.length >= 800
   const renderLabels = !veryDense && zoom >= 0.8
@@ -199,6 +217,12 @@ export function VenueMapElementLayer({
       {ordered.map((element) => {
         const visible =
           !lodHidden && (!visibleIds || visibleIds.has(element.id))
+        const isSelected =
+          selected.has(element.id) ||
+          element.seats.some((seat) => selectedSeats.has(seat.id))
+        const isHighlighted =
+          highlighted.has(element.id) ||
+          element.seats.some((seat) => highlighted.has(seat.id))
         return (
           <g
             key={element.id}
@@ -210,7 +234,7 @@ export function VenueMapElementLayer({
           >
             <VenueElementShape
               element={element}
-              selected={selected.has(element.id)}
+              selected={isSelected}
               occupancyBySeatId={occupancyBySeatId}
               selectedSeatIds={selectedSeats}
               onElementPointerDown={
@@ -222,11 +246,12 @@ export function VenueMapElementLayer({
               onSeatPointerDown={
                 visible && interactive ? onSeatPointerDown : undefined
               }
-              showLabels={renderLabels || selected.has(element.id)}
-              showChairs={renderChairs || selected.has(element.id)}
+              showLabels={renderLabels || isSelected || isHighlighted}
+              showChairs={renderChairs || isSelected}
               interactive={visible && interactive}
               zoom={zoom}
-              dimmed={hasSelection && !selected.has(element.id)}
+              dimmed={hasSelection && !isSelected && !isHighlighted}
+              highlighted={isHighlighted}
               popSelected={popSelected}
             />
           </g>

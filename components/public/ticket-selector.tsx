@@ -110,10 +110,11 @@ import {
   seatingLayoutToVenueMap,
   venueMapToSeatingLayout,
 } from "@/lib/seating/venue-map-geometry"
-import { mapIncludesGeneralAccess } from "@/types/venue-map"
+import { mapIncludesGeneralAccess, type VenueMapElement } from "@/types/venue-map"
 import { occupancyFromSeatingUnits } from "@/lib/seating/venue-map-occupancy"
 import {
   hydrateStorefrontItemsFromMap,
+  storefrontItemFromElement,
   storefrontItemFromZone,
 } from "@/lib/seating/storefront-selection"
 import { formatCurrency } from "@/lib/format"
@@ -1121,6 +1122,7 @@ export function TicketSelector({
         return
       }
       focusSelectedZone(zone)
+      useStorefrontSeatStore.getState().pulseFocus([zone.id])
     } else {
       setFocusedZoneId(sectorId)
       setCheckoutStep("tickets")
@@ -1143,12 +1145,29 @@ export function TicketSelector({
   }
 
   function applyLayoutSeats(seats: StorefrontLayoutSeat[]) {
-    const result = useStorefrontSeatStore
-      .getState()
-      .setLayoutSeats(seats, MAX_TICKETS_PER_PURCHASE)
+    const store = useStorefrontSeatStore.getState()
+    const result = store.setLayoutSeats(seats, MAX_TICKETS_PER_PURCHASE)
     if (!result.ok) {
       toast.error("Alcanzaste el máximo de lugares permitidos por compra")
+      return
     }
+    store.pulseFocus(seats.map((seat) => seat.id))
+  }
+
+  function applyAssignedTables(tables: VenueMapElement[]) {
+    const store = useStorefrontSeatStore.getState()
+    const ids: string[] = []
+    for (const table of tables) {
+      const item = storefrontItemFromElement(table, priceBySectorId)
+      if (!item) continue
+      const result = store.upsertSelectedItem(item, MAX_TICKETS_PER_PURCHASE)
+      if (!result.ok) {
+        toast.error("Alcanzaste el máximo de lugares permitidos por compra")
+        break
+      }
+      ids.push(table.id)
+    }
+    if (ids.length > 0) store.pulseFocus(ids)
   }
 
   function handleListToggleSeat(seat: StorefrontLayoutSeat) {
@@ -1764,6 +1783,7 @@ export function TicketSelector({
       onToggleSeat={handleListToggleSeat}
       onAssignSeats={applyLayoutSeats}
       onAssignZoneQuantity={applyZoneQuantity}
+      onAssignTables={applyAssignedTables}
     />
   ) : (
     <p className="text-sm text-muted-foreground">
@@ -1777,67 +1797,52 @@ export function TicketSelector({
         value={storefrontView}
         onChange={setStorefrontView}
       />
-      <AnimatePresence mode="wait" initial={false}>
-        {storefrontView === "map" ? (
-          <motion.div
-            key="map"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.22, ease: "easeInOut" }}
-            className={cn(
-              "relative w-full min-w-0 overflow-hidden rounded-2xl border border-border bg-zinc-950",
-              "h-[50dvh] min-h-[50dvh] lg:h-[min(52vh,480px)] lg:min-h-0",
-            )}
-          >
-            {liveMap ? (
-              <AdaptiveSeatingFlow
-                key={selectedDayId ?? "all"}
-                immersive
-                pending={controlsLocked}
-                eventTitle={eventTitle}
-                venueMap={liveMap}
-                selectedZoneId={visibleZoneId}
-                unavailableZoneIds={soldOutZoneIds}
-                occupancyBySeatId={occupancyBySeatId}
-                priceBySectorId={priceBySectorId}
-                sectors={universalPayload?.sectors ?? []}
-                onSelectZone={focusSelectedZone}
-                onContinue={(payload) =>
-                  handleUniversalContinue(payload, { keepOpen: true })
-                }
-                onLoadSectorUnits={loadSectorUnits}
-                onLoadAllUnits={loadAllUnits}
-              />
-            ) : (
-              <div className="flex h-full items-center justify-center bg-zinc-950 text-sm text-zinc-500">
-                {mapLoading ? (
-                  <>
-                    <LoaderCircle
-                      className="size-8 animate-spin text-white/40"
-                      aria-hidden="true"
-                    />
-                    <span className="sr-only">Cargando mapa del recinto</span>
-                  </>
-                ) : (
-                  "El plano no está disponible."
-                )}
-              </div>
-            )}
-          </motion.div>
-        ) : (
-          <motion.div
-            key="list"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.22, ease: "easeInOut" }}
-            className="w-full space-y-6 bg-transparent"
-          >
-            {listSelector}
-          </motion.div>
+      <div
+        className={cn(
+          "relative w-full min-w-0 overflow-hidden rounded-2xl border border-border bg-zinc-950",
+          storefrontView === "list"
+            ? "h-[36dvh] min-h-[240px] lg:h-[min(38vh,360px)]"
+            : "h-[50dvh] min-h-[50dvh] lg:h-[min(52vh,480px)] lg:min-h-0",
         )}
-      </AnimatePresence>
+      >
+        {liveMap ? (
+          <AdaptiveSeatingFlow
+            key={selectedDayId ?? "all"}
+            immersive
+            pending={controlsLocked}
+            eventTitle={eventTitle}
+            venueMap={liveMap}
+            selectedZoneId={visibleZoneId}
+            unavailableZoneIds={soldOutZoneIds}
+            occupancyBySeatId={occupancyBySeatId}
+            priceBySectorId={priceBySectorId}
+            sectors={universalPayload?.sectors ?? []}
+            onSelectZone={focusSelectedZone}
+            onContinue={(payload) =>
+              handleUniversalContinue(payload, { keepOpen: true })
+            }
+            onLoadSectorUnits={loadSectorUnits}
+            onLoadAllUnits={loadAllUnits}
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center bg-zinc-950 text-sm text-zinc-500">
+            {mapLoading ? (
+              <>
+                <LoaderCircle
+                  className="size-8 animate-spin text-white/40"
+                  aria-hidden="true"
+                />
+                <span className="sr-only">Cargando mapa del recinto</span>
+              </>
+            ) : (
+              "El plano no está disponible."
+            )}
+          </div>
+        )}
+      </div>
+      {storefrontView === "list" ? (
+        <div className="w-full space-y-6 bg-transparent">{listSelector}</div>
+      ) : null}
     </div>
   ) : null
 

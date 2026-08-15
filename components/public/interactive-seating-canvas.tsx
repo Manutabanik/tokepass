@@ -151,6 +151,8 @@ export function InteractiveSeatingCanvas({
   const [popoverPos, setPopoverPos] = useState({ x: 24, y: 72 })
   const selectedItems = useStorefrontSeatStore((state) => state.selectedItems)
   const selectedSeats = useStorefrontSeatStore((state) => state.layoutSeats)
+  const focusedMapIds = useStorefrontSeatStore((state) => state.focusedMapIds)
+  const focusTick = useStorefrontSeatStore((state) => state.focusTick)
   const toggleSelectedItem = useStorefrontSeatStore(
     (state) => state.toggleSelectedItem,
   )
@@ -239,6 +241,21 @@ export function InteractiveSeatingCanvas({
     observer.observe(node)
     return () => observer.disconnect()
   }, [])
+
+  useEffect(() => {
+    if (focusTick <= 0) return
+    const targetId = focusedMapIds[0]
+    const controls = transformRef.current
+    if (!targetId || !controls) return
+    const node = document.getElementById(`venue-sel-${targetId}`)
+    if (!node) return
+    controls.zoomToElement(
+      node as unknown as HTMLElement,
+      1.35,
+      400,
+      "easeOut",
+    )
+  }, [focusTick, focusedMapIds])
 
   useEffect(() => {
     if (disableIdlePrompt || selectedSeats.length === 0) {
@@ -698,6 +715,7 @@ export function InteractiveSeatingCanvas({
               zones={lodZones}
               selectedId={selectedZoneId}
               selectedIds={selectedZoneIds}
+              highlightedIds={focusedMapIds}
               spotlight={spotlight && !lodActive}
               unavailableIds={unavailableZoneIds}
               selectOnPointerUp
@@ -712,6 +730,7 @@ export function InteractiveSeatingCanvas({
               occupancyBySeatId={occupancyBySeatId}
               selectedIds={selectedElementIds}
               selectedSeatIds={[...selectedIds]}
+              highlightedIds={focusedMapIds}
               spotlight={spotlight}
               showSeats
               zoom={zoom}
@@ -749,7 +768,8 @@ export function InteractiveSeatingCanvas({
               })
               const label = `${seat.sectorName} · Fila ${seat.row} · ${seat.number} — ${formatCurrency(price)}`
               const selected = live === "selected"
-              const dimmed = spotlight && !selected
+              const highlighted = focusedMapIds.includes(seat.id)
+              const dimmed = spotlight && !selected && !highlighted
               const seatVisible =
                 microActive &&
                 (!focusedZone ||
@@ -759,10 +779,17 @@ export function InteractiveSeatingCanvas({
                 <g
                   key={seat.id}
                   id={`venue-sel-${seat.id}`}
+                  className={
+                    selected || highlighted ? "animate-pulse-subtle" : undefined
+                  }
                   style={{
-                    opacity: seatVisible ? 1 : 0,
+                    opacity: seatVisible ? (dimmed ? 0.7 : 1) : 0,
                     pointerEvents: seatVisible ? "auto" : "none",
                     transition: "opacity 0.3s ease",
+                    filter:
+                      selected || highlighted
+                        ? "drop-shadow(0px 0px 12px rgba(255, 255, 255, 0.8))"
+                        : undefined,
                   }}
                 >
                   <circle
@@ -786,9 +813,9 @@ export function InteractiveSeatingCanvas({
                     <title>{label}</title>
                   </circle>
                   <g
-                    opacity={dimmed ? 0.4 : 1}
+                    opacity={dimmed ? 0.7 : 1}
                     transform={
-                      selected
+                      selected || highlighted
                         ? `translate(${seat.x} ${seat.y}) scale(1.15) translate(${-seat.x} ${-seat.y})`
                         : undefined
                     }

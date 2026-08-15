@@ -1,6 +1,7 @@
 "use client"
 
 import { ArrowRight, LoaderCircle } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { formatCurrency } from "@/lib/format"
@@ -27,8 +28,19 @@ export function CheckoutFloatingBar({
   onPay: () => void
   variant?: "page" | "panel"
 }) {
-  if (hidden) return null
   const showTotal = typeof totalAmount === "number"
+  const [totalBump, setTotalBump] = useState(false)
+  const lastTotal = useRef(totalAmount)
+
+  useEffect(() => {
+    if (hidden || !showTotal || lastTotal.current === totalAmount) return
+    lastTotal.current = totalAmount
+    setTotalBump(true)
+    const timer = window.setTimeout(() => setTotalBump(false), 280)
+    return () => window.clearTimeout(timer)
+  }, [hidden, showTotal, totalAmount])
+
+  if (hidden) return null
 
   return (
     <div
@@ -44,7 +56,12 @@ export function CheckoutFloatingBar({
         {showTotal ? (
           <div className="min-w-0">
             <p className="text-xs font-medium text-muted-foreground">Total</p>
-            <p className="text-lg font-black tabular-nums tracking-tight text-foreground">
+            <p
+              className={cn(
+                "text-lg font-black tabular-nums tracking-tight text-foreground transition-all",
+                totalBump && "scale-105 text-primary",
+              )}
+            >
               {formatCurrency(totalAmount)}
             </p>
           </div>

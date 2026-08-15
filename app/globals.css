@@ -438,8 +438,23 @@ select:-webkit-autofill {
   animation: tokepass-fade-in 180ms ease-out;
 }
 
+@keyframes tokepass-pulse-subtle {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.55));
+  }
+  50% {
+    filter: drop-shadow(0 0 16px rgba(255, 255, 255, 0.95));
+  }
+}
+
+.animate-pulse-subtle {
+  animation: tokepass-pulse-subtle 1.35s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .animate-fade-in {
+  .animate-fade-in,
+  .animate-pulse-subtle {
     animation: none;
   }
 }
