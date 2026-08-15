@@ -6,9 +6,9 @@ export default function PublicLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
+    <div className="relative flex min-h-screen flex-col overflow-x-hidden bg-background text-foreground">
       <PublicNavbar />
-      <main className="flex-1">{children}</main>
+      <main className="relative flex-1 overflow-x-hidden">{children}</main>
       <SiteFooter />
       <SpotifyMiniPlayer />
     </div>

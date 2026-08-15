@@ -18,6 +18,7 @@ import {
   useState,
   type ReactNode,
 } from "react"
+import { createPortal } from "react-dom"
 import { toast } from "sonner"
 
 import { getStoryCardData } from "@/app/actions/public-story"
@@ -249,39 +250,32 @@ export function StoryFlyerModal({
   const chipScroller =
     "flex w-full snap-x snap-mandatory gap-2 overflow-x-auto scroll-smooth pb-1 [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden"
 
-  return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogPortal>
+  if (!open || typeof window === "undefined") return null
+
+  return createPortal(
+    <>
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 -z-50 overflow-hidden opacity-0"
+      >
+        <StoryCanvas
+          data={resolved}
+          themeId={themeId}
+          headlineId={headlineId}
+          canvasRef={storyCardRef}
+          live={false}
+          pauseMotion={busy}
+          onPainted={() => setImagesReady(true)}
+        />
+      </div>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogPortal>
         <DialogOverlay className="z-[100] bg-black/90 backdrop-blur-md" />
         <DialogPrimitive.Popup
-          className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/90 p-4 outline-none backdrop-blur-md sm:p-6"
+          className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto overflow-x-hidden bg-black/90 p-4 outline-none backdrop-blur-md sm:p-6"
           aria-labelledby={titleId}
           style={{ WebkitOverflowScrolling: "touch" }}
         >
-          {open ? (
-            <div
-              aria-hidden
-              className="pointer-events-none fixed"
-              style={{
-                left: -12000,
-                top: 0,
-                width: STORY_CANVAS_WIDTH,
-                height: STORY_CANVAS_HEIGHT,
-                overflow: "hidden",
-              }}
-            >
-              <StoryCanvas
-                data={resolved}
-                themeId={themeId}
-                headlineId={headlineId}
-                canvasRef={storyCardRef}
-                live={false}
-                pauseMotion={busy}
-                onPainted={() => setImagesReady(true)}
-              />
-            </div>
-          ) : null}
-
           <div
             className="relative my-auto flex w-full max-w-4xl max-h-[90vh] flex-col overflow-y-auto rounded-3xl border border-white/10 bg-zinc-950 p-4 sm:p-6"
             style={{
@@ -496,8 +490,10 @@ export function StoryFlyerModal({
             </p>
           </div>
         ) : null}
-      </DialogPortal>
-    </Dialog>
+        </DialogPortal>
+      </Dialog>
+    </>,
+    document.body,
   )
 }
 

@@ -178,7 +178,7 @@ export function EventStorefront({
     "h-fit min-w-0 scroll-mt-24 overflow-visible px-4 pb-12 md:px-0 lg:sticky lg:top-24 lg:col-span-5 lg:col-start-8 lg:row-span-4 lg:row-start-1 lg:self-start xl:col-span-4 xl:col-start-9"
 
   return (
-    <div className="relative isolate min-h-screen overflow-x-clip bg-background pb-8 text-foreground lg:overflow-x-visible lg:pb-12">
+    <div className="relative isolate min-h-0 overflow-x-clip bg-background pb-8 text-foreground lg:pb-12">
       <AnalyticsTracker
         config={event.pixels}
         trackPageView
