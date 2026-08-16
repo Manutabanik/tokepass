@@ -21,6 +21,7 @@ export type StoryPngOptions = {
   backgroundColor: string
   imagePlaceholder: string
   skipFonts: boolean
+  fetchRequestInit: RequestInit
   style: {
     transform: string
     left: string
@@ -39,6 +40,10 @@ export function storyPngOptions(backgroundColor: string): StoryPngOptions {
     backgroundColor,
     imagePlaceholder: IMAGE_PLACEHOLDER,
     skipFonts: false,
+    fetchRequestInit: {
+      mode: "cors",
+      cache: "no-cache",
+    },
     style: {
       transform: "none",
       left: "0",

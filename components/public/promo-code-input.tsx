@@ -61,7 +61,7 @@ export function PromoCodeInput({
 
   return (
     <div className="space-y-2">
-      <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+      <p className="text-base font-semibold text-foreground">
         Código de descuento
       </p>
       {applied ? (
@@ -93,7 +93,7 @@ export function PromoCodeInput({
           </Button>
         </div>
       ) : (
-        <div className="flex gap-2">
+        <div className="flex min-w-0 gap-2">
           <Input
             value={code}
             onChange={(event) => setCode(event.target.value.toUpperCase())}
@@ -101,7 +101,7 @@ export function PromoCodeInput({
             disabled={disabled || pending}
             autoCapitalize="characters"
             className={cn(
-              "min-h-12 h-12 flex-1 rounded-xl border-input bg-background font-mono uppercase text-base text-foreground",
+              "h-12 min-w-0 flex-1 rounded-xl border border-border bg-secondary/30 px-4 font-mono text-base uppercase text-foreground md:h-14",
               "placeholder:normal-case placeholder:text-muted-foreground",
             )}
             onKeyDown={(event) => {
@@ -115,7 +115,7 @@ export function PromoCodeInput({
             type="button"
             disabled={disabled || pending || !code.trim()}
             onClick={apply}
-            className="min-h-12 h-12 min-w-12 rounded-xl bg-foreground px-4 text-base font-bold text-background hover:bg-foreground/90"
+            className="h-12 shrink-0 rounded-xl bg-foreground px-4 text-base font-bold text-background hover:bg-foreground/90 md:h-14"
           >
             {pending ? (
               <Loader2 className="size-4 animate-spin" aria-hidden />

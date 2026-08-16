@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 
 import { resolveCheckoutExpiresAt } from "@/lib/checkout-hold"
+import { releaseWaitingRoomPassFromCookies } from "@/lib/waiting-room/release"
 import {
   type CheckoutBuyerInfo,
   type NormalizedCheckoutBuyer,
@@ -545,6 +546,140 @@ export async function getSeatingUnitCartHold(
   return { success: true, reservedUntil: row.reserved_until }
 }
 
+export type LockTicketsItem = {
+  tierId: string
+  quantity: number
+}
+
+export type LockTicketsResult =
+  | { success: true; reservedUntil: string }
+  | { success: false; error: "auth_required" | "out_of_stock" | string }
+
+export async function lockTickets(
+  eventId: string,
+  items: LockTicketsItem[],
+): Promise<LockTicketsResult> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    return { success: false, error: "auth_required" }
+  }
+
+  const allowed = await consumeRateLimit({
+    bucketKey: `ga-hold:user:${user.id}`,
+    limit: 20,
+    windowSeconds: 60,
+  })
+  if (!allowed) {
+    return {
+      success: false,
+      error: "Demasiados intentos. Esperá un momento y volvé a elegir.",
+    }
+  }
+
+  const payload = items
+    .map((item) => ({
+      tier_id: item.tierId.trim(),
+      quantity: Math.max(0, Math.floor(item.quantity)),
+    }))
+    .filter((item) => item.tier_id.length > 0 && item.quantity > 0)
+
+  if (payload.length === 0) {
+    return { success: false, error: "out_of_stock" }
+  }
+
+  const { data, error } = await supabase.rpc("hold_ga_tickets_for_cart", {
+    p_event_id: eventId,
+    p_owner_id: user.id,
+    p_items: payload,
+  })
+
+  if (error) {
+    const mapped = mapReserveRpcError(error.message)
+    if (mapped) {
+      return mapped.success
+        ? { success: false, error: "out_of_stock" }
+        : { success: false, error: mapped.error }
+    }
+    logger.error({
+      context: "checkout/ga-hold",
+      message: "hold_ga_tickets_for_cart_failed",
+      eventId,
+      error: error.message,
+    })
+    return {
+      success: false,
+      error: "No se pudo reservar el stock. Probá de nuevo.",
+    }
+  }
+
+  const row = Array.isArray(data) ? data[0] : data
+  const reservedUntil = row?.reserved_until
+  if (!reservedUntil) {
+    return { success: false, error: "out_of_stock" }
+  }
+
+  return { success: true, reservedUntil }
+}
+
+export async function releaseGaCartHolds(
+  eventId: string,
+): Promise<{ success: true } | { success: false; error: string }> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+  if (authError || !user) {
+    return { success: false, error: "auth_required" }
+  }
+
+  const { error } = await supabase.rpc("release_ga_cart_holds", {
+    p_event_id: eventId,
+    p_owner_id: user.id,
+  })
+  if (error) {
+    logger.error({
+      context: "checkout/ga-hold",
+      message: "release_ga_cart_holds_failed",
+      eventId,
+      error: error.message,
+    })
+    return { success: false, error: error.message }
+  }
+  return { success: true }
+}
+
+export async function getGaCartHold(
+  eventId: string,
+): Promise<LockTicketsResult> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+  if (authError || !user) {
+    return { success: false, error: "auth_required" }
+  }
+
+  const { data, error } = await supabase.rpc("get_ga_cart_hold", {
+    p_event_id: eventId,
+    p_owner_id: user.id,
+  })
+  if (error) {
+    return { success: false, error: error.message }
+  }
+  const row = Array.isArray(data) ? data[0] : data
+  if (!row?.reserved_until) {
+    return { success: false, error: "out_of_stock" }
+  }
+  return { success: true, reservedUntil: row.reserved_until }
+}
+
 async function applyHolderIdentityToOrder(input: {
   orderId: string
   buyer: NormalizedCheckoutBuyer
@@ -918,6 +1053,31 @@ export async function startCheckoutWithPayment(
       })
     } catch {
       // RPC ausente en entornos sin P22 todavía — reserve_tickets_tx cubre el caso.
+    }
+
+    const { error: claimGaError } = await supabase.rpc(
+      "claim_ga_cart_holds_for_checkout",
+      {
+        p_event_id: payload.eventId,
+        p_owner_id: user.id,
+      },
+    )
+    if (claimGaError) {
+      const missing = /could not find|schema cache|does not exist/i.test(
+        claimGaError.message,
+      )
+      if (!missing) {
+        logger.error({
+          context: "checkout/ga-hold",
+          message: "claim_ga_cart_holds_for_checkout_failed",
+          eventId: payload.eventId,
+          error: claimGaError.message,
+        })
+        return {
+          success: false,
+          error: "No se pudo confirmar el stock reservado. Probá de nuevo.",
+        }
+      }
     }
 
     const seatingItem = seatingItems[0]
@@ -1333,6 +1493,11 @@ export async function startCheckoutWithPayment(
     }
 
     pendingOrderId = null
+    try {
+      await releaseWaitingRoomPassFromCookies()
+    } catch {
+      // Slot GC must not block a successful payment redirect.
+    }
     revalidatePath(`/events/${payload.eventId}`)
     revalidatePath("/events")
     revalidatePath("/cuenta/entradas")

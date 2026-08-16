@@ -6,7 +6,6 @@ import {
   evaluateStorefrontSelectionLimit,
   type StorefrontLimitReason,
 } from "@/lib/checkout-limits"
-import { useStorefrontCartStore } from "@/lib/stores/storefront-cart-store"
 
 export type StorefrontViewMode = "map" | "list"
 
@@ -127,12 +126,6 @@ function uniqueItemsById(items: StorefrontSelectedItem[]) {
 
 function withDerived(items: StorefrontSelectedItem[]) {
   const unique = uniqueItemsById(items)
-  const totalAmount = unique.reduce(
-    (sum, item) => sum + item.price * itemCapacity(item),
-    0,
-  )
-  const itemsCount = selectionCount(unique)
-  useStorefrontCartStore.getState().setCartTotals({ totalAmount, itemsCount })
   return {
     selectedItems: unique,
     layoutSeats: deriveLayoutSeats(unique),

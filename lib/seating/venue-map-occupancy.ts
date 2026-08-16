@@ -7,10 +7,12 @@ export function resolveLiveVenueSeatStatus(input: {
   mapStatus: VenueMapSeatStatus
   occupancy?: SeatStatus
   selected: boolean
+  held?: boolean
 }): LiveVenueSeatStatus {
   if (input.mapStatus === "blocked" || input.occupancy === "blocked") {
     return "blocked"
   }
+  if (input.held) return "selected"
   if (input.occupancy === "occupied") return "occupied"
   if (input.selected) return "selected"
   return "available"

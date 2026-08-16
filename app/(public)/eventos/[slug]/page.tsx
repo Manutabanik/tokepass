@@ -1,25 +1,25 @@
 import type { Metadata } from "next"
+import { Suspense } from "react"
 import { notFound } from "next/navigation"
 
-import {
-  getEventAccessGate,
-  getEventDetails,
-  getRelatedEvents,
-} from "@/app/actions/public-events"
-import { getActiveResaleListingsForEvent } from "@/app/actions/resale"
-import { canUserSandboxCheckout } from "@/app/actions/checkout"
+import { StorefrontChromeGate } from "@/components/layout/public-shell"
 import { EventSchemaScript } from "@/components/public/event-schema-script"
-import { EventStorefront } from "@/components/public/event-storefront"
+import { EventStorefrontSession } from "@/components/public/event-storefront-session"
 import { EventUnavailableNotice } from "@/components/public/event-unavailable-notice"
 import { RelatedEventsSection } from "@/components/public/related-events-section"
+import {
+  cachedEventAccessGate,
+  cachedEventDetails,
+  cachedRelatedEvents,
+  cachedResaleListings,
+} from "@/lib/catalog/cached-public-reads"
 import {
   buildEventMetadata,
   eventSeoFromDetails,
 } from "@/lib/seo/event-metadata"
 import { decodeEventParam } from "@/lib/seo/event-slug"
-import { createClient } from "@/lib/supabase/server"
 
-export const dynamic = "force-dynamic"
+export const revalidate = 30
 export const dynamicParams = true
 
 export async function generateMetadata({
@@ -28,7 +28,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>
 }): Promise<Metadata> {
   const { slug: rawSlug } = await params
-  const event = await getEventDetails(decodeEventParam(rawSlug))
+  const event = await cachedEventDetails(decodeEventParam(rawSlug))
 
   if (!event) {
     return { title: "Evento no encontrado" }
@@ -39,21 +39,15 @@ export async function generateMetadata({
 
 export default async function PublicEventPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ slug: string }>
-  searchParams: Promise<{ ref?: string }>
 }) {
   const { slug: rawSlug } = await params
-  const { ref: referralCode } = await searchParams
   const slug = decodeEventParam(rawSlug)
-  const [event, supabase] = await Promise.all([
-    getEventDetails(slug).catch(() => null),
-    createClient(),
-  ])
+  const event = await cachedEventDetails(slug).catch(() => null)
 
   if (!event) {
-    const gate = await getEventAccessGate(slug)
+    const gate = await cachedEventAccessGate(slug)
     if (
       gate &&
       (gate.status === "paused" ||
@@ -67,47 +61,17 @@ export default async function PublicEventPage({
     notFound()
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  const sandboxEligible = user
-    ? await canUserSandboxCheckout(event.id)
-    : false
-
-  let initialBuyer: {
-    buyerName?: string
-    buyerDni?: string
-    buyerEmail?: string
-    buyerPhone?: string
-  } | null = null
-
-  if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("full_name, dni, email, phone")
-      .eq("id", user.id)
-      .maybeSingle()
-
-    initialBuyer = {
-      buyerName: profile?.full_name ?? "",
-      buyerDni: profile?.dni ?? "",
-      buyerEmail: profile?.email ?? user.email ?? "",
-      buyerPhone: profile?.phone ?? "",
-    }
-  }
-
   const locationText = event.venue?.location ?? event.location ?? ""
   const province = locationText.split(",")[0]?.trim() ?? ""
 
   const [resaleListings, relatedEvents] = await Promise.all([
-    getActiveResaleListingsForEvent(event.id).catch(() => []),
-    getRelatedEvents({
-      currentEventId: event.id,
-      category: event.categoryId,
+    cachedResaleListings(event.id).catch(() => []),
+    cachedRelatedEvents(
+      event.id,
+      event.categoryId ?? "",
       province,
-      limit: 4,
-    }).catch(() => []),
+      4,
+    ).catch(() => []),
   ])
 
   const seo = eventSeoFromDetails(event)
@@ -115,15 +79,15 @@ export default async function PublicEventPage({
   return (
     <div className="relative">
       <EventSchemaScript {...seo} />
-      <EventStorefront
-        event={event}
-        currentUserId={user?.id ?? null}
-        referralCode={referralCode ?? null}
-        initialBuyer={initialBuyer}
-        resaleListings={resaleListings}
-        sandboxEligible={sandboxEligible}
-      />
-      <RelatedEventsSection events={relatedEvents} />
+      <Suspense fallback={null}>
+        <EventStorefrontSession
+          event={event}
+          resaleListings={resaleListings}
+        />
+      </Suspense>
+      <StorefrontChromeGate>
+        <RelatedEventsSection events={relatedEvents} />
+      </StorefrontChromeGate>
     </div>
   )
 }

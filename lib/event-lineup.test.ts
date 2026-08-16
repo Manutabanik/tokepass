@@ -3,9 +3,11 @@ import { describe, it } from "node:test"
 
 import {
   eventArtistsToLineup,
+  filterLineupByDay,
   hasArtistAudioPreview,
   hasEventLineup,
   parseEventLineup,
+  resolveLineupArtistDayId,
   visibleLineupArtists,
 } from "@/lib/event-lineup"
 
@@ -30,6 +32,7 @@ describe("parseEventLineup", () => {
     assert.equal(parsed.slots[0]?.time, "00:30")
     assert.equal(parsed.slots[0]?.title, "Bizarrap")
     assert.equal(parsed.artists[0]?.isHeadliner, false)
+    assert.equal(parsed.artists[0]?.dayId, null)
     assert.equal(parsed.artists[0]?.topTrackPreviewUrl, null)
     assert.equal(parsed.artists[0]?.spotifyId, null)
   })
@@ -144,6 +147,7 @@ describe("visibleLineupArtists", () => {
     imageUrl: null,
     role: null,
     performanceTime: null,
+    dayId: null,
     isHeadliner: false,
     spotifyId: null,
     topTrackPreviewUrl: null,
@@ -176,5 +180,86 @@ describe("visibleLineupArtists", () => {
     const visible = visibleLineupArtists(artists.slice(0, 3))
     assert.equal(visible.featured.length, 3)
     assert.equal(visible.remainingCount, 0)
+  })
+})
+
+describe("filterLineupByDay", () => {
+  const days = [
+    {
+      id: "jue",
+      title: "Jueves",
+      start_time: "2026-11-12T22:00:00.000Z",
+      end_time: "2026-11-13T06:00:00.000Z",
+    },
+    {
+      id: "vie",
+      title: "Viernes",
+      start_time: "2026-11-13T22:00:00.000Z",
+      end_time: "2026-11-14T06:00:00.000Z",
+    },
+  ]
+
+  function artist(
+    name: string,
+    extras: Partial<{ dayId: string | null; performanceTime: string | null }> = {},
+  ) {
+    return {
+      id: name,
+      name,
+      imageUrl: null,
+      role: null,
+      performanceTime: extras.performanceTime ?? null,
+      dayId: extras.dayId ?? null,
+      isHeadliner: false,
+      spotifyId: null,
+      topTrackPreviewUrl: null,
+      topTrackName: null,
+    }
+  }
+
+  it("reads explicit day_id from JSON payloads", () => {
+    const parsed = parseEventLineup([
+      { name: "Chaqueño Palavecino", day_id: "jue" },
+    ])
+    assert.equal(parsed.artists[0]?.dayId, "jue")
+  })
+
+  it("infers the day from a performance timestamp", () => {
+    assert.equal(
+      resolveLineupArtistDayId(
+        { dayId: null, performanceTime: "2026-11-13T23:30:00.000Z" },
+        days,
+      ),
+      "vie",
+    )
+  })
+
+  it("filters bound artists to the selected day", () => {
+    const data = {
+      artists: [
+        artist("Jueves Headliner", { dayId: "jue" }),
+        artist("Viernes Headliner", { dayId: "vie" }),
+      ],
+      slots: [],
+    }
+    const jue = filterLineupByDay(data, "jue", days)
+    const vie = filterLineupByDay(data, "vie", days)
+    assert.deepEqual(
+      jue.artists.map((item) => item.name),
+      ["Jueves Headliner"],
+    )
+    assert.deepEqual(
+      vie.artists.map((item) => item.name),
+      ["Viernes Headliner"],
+    )
+  })
+
+  it("keeps the full lineup when no artist is bound to a day", () => {
+    const data = {
+      artists: [artist("A"), artist("B")],
+      slots: [],
+    }
+    const filtered = filterLineupByDay(data, "jue", days)
+    assert.equal(filtered.artists.length, 2)
   })
 })

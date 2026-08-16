@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 
 import { createAdminClient } from "@/lib/supabase/admin"
+import { createPublicClient } from "@/lib/supabase/public"
 import { createClient } from "@/lib/supabase/server"
 import { SuperAdminForbiddenError } from "@/lib/superadmin-errors"
 import type { EventCategoryOption } from "@/lib/category-icons"
@@ -45,7 +46,7 @@ function slugify(raw: string): string {
 
 /** Lectura pública: categorías activas para B2C y wizard organizador. */
 export async function getActiveEventCategories(): Promise<EventCategoryOption[]> {
-  const supabase = await createClient()
+  const supabase = createPublicClient()
   const { data, error } = await supabase
     .from("event_categories")
     .select("id, name, slug, icon_name")

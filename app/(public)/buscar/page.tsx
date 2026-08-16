@@ -1,15 +1,17 @@
 import type { Metadata } from "next"
 
-import { getActiveEventCategories } from "@/app/actions/categories"
-import {
-  getFeaturedDiscoveryArtists,
-  getPublishedEvents,
-} from "@/app/actions/public-events"
-import { AnimatedBackground } from "@/components/discovery/animated-background"
+import { CATALOG_PAGE_SIZE } from "@/lib/catalog/constants"
 import { DiscoveryHub } from "@/components/discovery/discovery-hub"
+import { AnimatedBackground } from "@/components/discovery/animated-background"
+import {
+  cachedActiveEventCategories,
+  cachedFeaturedDiscoveryArtists,
+  cachedPublishedEvents,
+} from "@/lib/catalog/cached-public-reads"
 import { mapDbCategoriesToDiscovery } from "@/lib/category-icons"
 import { DEFAULT_DISCOVERY_CATEGORIES } from "@/lib/discovery-categories"
-import { DISCOVERY_FILTER_ARTISTS_LIMIT } from "@/lib/discovery-artists"
+
+export const revalidate = 60
 
 export const metadata: Metadata = {
   title: "Buscar eventos",
@@ -17,23 +19,11 @@ export const metadata: Metadata = {
     "Buscá por artista, evento o lugar. Filtrá la cartelera de Tokepass y encontrá tu próxima noche.",
 }
 
-export default async function SearchEventsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{
-    q?: string
-    location?: string
-    category?: string
-    artist?: string
-    when?: string
-  }>
-}) {
-  const { q, location, category, artist, when } = await searchParams
-  const artistId = artist?.trim() || ""
+export default async function SearchEventsPage() {
   const [events, dbCategories, featuredArtists] = await Promise.all([
-    getPublishedEvents().catch(() => []),
-    getActiveEventCategories().catch(() => []),
-    getFeaturedDiscoveryArtists(DISCOVERY_FILTER_ARTISTS_LIMIT).catch(() => []),
+    cachedPublishedEvents(CATALOG_PAGE_SIZE).catch(() => []),
+    cachedActiveEventCategories().catch(() => []),
+    cachedFeaturedDiscoveryArtists().catch(() => []),
   ])
   const categories =
     dbCategories.length > 0
@@ -48,11 +38,6 @@ export default async function SearchEventsPage({
         <DiscoveryHub
           variant="directory"
           events={events}
-          initialQuery={q ?? ""}
-          initialLocation={location?.trim() || "todas"}
-          initialCategoryId={category?.trim() || "all"}
-          initialArtistId={artistId}
-          initialDatePreset={when}
           featuredArtists={featuredArtists}
           categories={categories}
         />

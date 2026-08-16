@@ -9,7 +9,7 @@ import {
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-border bg-background/50 backdrop-blur-sm">
+    <footer className="relative z-10 border-t border-border bg-background pt-10 pb-8">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 sm:flex-row sm:items-center sm:justify-between lg:px-8">
         <div className="flex min-w-0 flex-col gap-2 sm:max-w-xs">
           <BrandLogo size="sm" href="/" className="w-fit" />

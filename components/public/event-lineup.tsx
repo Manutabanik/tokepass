@@ -1,7 +1,8 @@
 "use client"
 
 import { LoaderCircle } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { AnimatePresence, motion, useReducedMotion } from "motion/react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 
 import { resolveArtistSpotifyId } from "@/app/actions/artists"
@@ -21,6 +22,7 @@ import {
   useIsSpotifyMiniPlayerActive,
 } from "@/hooks/use-spotify-mini-player"
 import {
+  filterLineupByDay,
   hasEventLineup,
   visibleLineupArtists,
   type EventLineupArtist,
@@ -28,6 +30,7 @@ import {
   type EventLineupSlot,
 } from "@/lib/event-lineup"
 import { formatEventTime } from "@/lib/format"
+import type { ScheduleDay } from "@/types/events"
 import { isSpotifyArtistId } from "@/lib/spotify/embed"
 import { cn, tapFeedbackClass } from "@/lib/utils"
 
@@ -281,10 +284,15 @@ function SmartTimeline({ slots }: { slots: EventLineupSlot[] }) {
 export function EventLineup({
   data,
   className,
+  selectedDayId = null,
+  scheduleDays = [],
 }: {
   data?: EventLineupData | null
   className?: string
+  selectedDayId?: string | null
+  scheduleDays?: ScheduleDay[]
 }) {
+  const reduceMotion = useReducedMotion()
   const [artists, setArtists] = useState(data?.artists ?? [])
 
   useEffect(() => {
@@ -297,8 +305,20 @@ export function EventLineup({
     }
   }, [])
 
+  const filtered = useMemo(
+    () =>
+      filterLineupByDay(
+        { artists, slots: data?.slots ?? [] },
+        selectedDayId,
+        scheduleDays,
+      ),
+    [artists, data?.slots, scheduleDays, selectedDayId],
+  )
+
   if (!data || !hasEventLineup(data)) return null
   const hasArtists = artists.length > 0
+  const visibleArtists = filtered.artists
+  const dayKey = selectedDayId ?? "all"
 
   return (
     <section aria-label="Grilla de artistas y cronograma" className={cn("space-y-2", className)}>
@@ -307,24 +327,42 @@ export function EventLineup({
           <h2 className="mb-3 text-xl font-bold tracking-tight text-foreground">
             Grilla de artistas
           </h2>
-          <VisualLineup
-            artists={artists}
-            onResolved={(artistId, spotifyId) => {
-              setArtists((current) =>
-                current.map((artist) =>
-                  artist.id === artistId ? { ...artist, spotifyId } : artist,
-                ),
-              )
-            }}
-          />
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={dayKey}
+              initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={reduceMotion ? undefined : { opacity: 0, y: -8 }}
+              transition={{ duration: 0.22, ease: "easeInOut" }}
+            >
+              {visibleArtists.length > 0 ? (
+                <VisualLineup
+                  artists={visibleArtists}
+                  onResolved={(artistId, spotifyId) => {
+                    setArtists((current) =>
+                      current.map((artist) =>
+                        artist.id === artistId
+                          ? { ...artist, spotifyId }
+                          : artist,
+                      ),
+                    )
+                  }}
+                />
+              ) : (
+                <p className="rounded-2xl border border-border/60 bg-secondary/30 px-4 py-6 text-center text-sm text-muted-foreground">
+                  Lineup a confirmar para este día.
+                </p>
+              )}
+            </motion.div>
+          </AnimatePresence>
         </div>
       ) : null}
-      {!hasArtists && data.slots.length > 0 ? (
+      {!hasArtists && filtered.slots.length > 0 ? (
         <div>
           <h2 className="mb-3 text-xl font-bold tracking-tight text-foreground">
             Cronograma
           </h2>
-          <SmartTimeline slots={data.slots} />
+          <SmartTimeline slots={filtered.slots} />
         </div>
       ) : null}
     </section>

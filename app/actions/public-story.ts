@@ -8,7 +8,6 @@ import {
   type StoryFlyerData,
   type StoryLineupArtist,
 } from "@/lib/story-canvas"
-import { fetchImageAsDataUrl } from "@/lib/story-image-proxy"
 import { createClient } from "@/lib/supabase/server"
 
 export type StoryHeadliner = {
@@ -122,24 +121,11 @@ export async function getStoryCardData(
   }
 
   const lineup = next.lineupArtists ?? []
-  const [imageUrl, organizerAvatarUrl, ...lineupImages] = await Promise.all([
-    fetchImageAsDataUrl(next.imageUrl),
-    fetchImageAsDataUrl(next.organizerAvatarUrl),
-    ...lineup.map((artist) => fetchImageAsDataUrl(artist.imageUrl)),
-  ])
-
-  const hydratedLineup = lineup.map((artist, index) => ({
-    name: artist.name,
-    imageUrl: lineupImages[index] ?? null,
-  }))
-
   return {
     ...next,
-    imageUrl,
-    artistImageUrl: hydratedLineup[0]?.imageUrl ?? null,
-    artistName: next.artistName || hydratedLineup[0]?.name || null,
-    organizerAvatarUrl,
-    lineupArtists: hydratedLineup,
+    artistName: next.artistName || lineup[0]?.name || null,
+    artistImageUrl: next.artistImageUrl || lineup[0]?.imageUrl || null,
+    lineupArtists: lineup,
     lineupRemainingCount: next.lineupRemainingCount ?? 0,
   }
 }

@@ -2007,6 +2007,48 @@ export type Database = {
           reserved_until: string
         }[]
       }
+      checkout_hold_until: {
+        Args: Record<string, never>
+        Returns: string
+      }
+      hold_ga_tickets_for_cart: {
+        Args: {
+          p_event_id: string
+          p_owner_id: string
+          p_items: Json
+        }
+        Returns: {
+          reserved_until: string
+        }[]
+      }
+      release_ga_cart_holds: {
+        Args: {
+          p_event_id: string
+          p_owner_id: string
+        }
+        Returns: number
+      }
+      get_ga_cart_hold: {
+        Args: {
+          p_event_id: string
+          p_owner_id: string
+        }
+        Returns: {
+          reserved_until: string
+          quantity: number
+        }[]
+      }
+      claim_ga_cart_holds_for_checkout: {
+        Args: {
+          p_event_id: string
+          p_owner_id: string
+        }
+        Returns: number
+      }
+      expire_ga_cart_holds: {
+        Args: Record<string, never>
+        Returns: number
+      }
       claim_seating_unit_for_checkout: {
         Args: {
           p_unit_id: string

@@ -51,14 +51,18 @@ import {
   shareOrDownloadPngBlob,
 } from "@/lib/story-flyer-share"
 import {
+  hydrateStoryFlyerImages,
+  storySafeImageSrc,
+} from "@/lib/story-image"
+import {
   fitStoryPngWeight,
   storyPngOptions,
   waitForStoryFlyerPaint,
 } from "@/lib/story-png-export"
 import { cn } from "@/lib/utils"
 
-function isStoryDataImage(url?: string | null): boolean {
-  return Boolean(url?.trim().startsWith("data:image/"))
+function isStorySafeImage(url?: string | null): boolean {
+  return Boolean(storySafeImageSrc(url))
 }
 
 export type { StoryFlyerData, StoryFlyerMode }
@@ -81,7 +85,10 @@ export function StoryFlyerModal({
   const previewRef = useRef<HTMLButtonElement>(null)
   const [busy, setBusy] = useState(false)
   const [hydrating, setHydrating] = useState(
-    () => Boolean(data.imageUrl?.trim()) && !isStoryDataImage(data.imageUrl),
+    () => Boolean(data.imageUrl?.trim()) && !isStorySafeImage(data.imageUrl),
+  )
+  const [safeImageUrl, setSafeImageUrl] = useState<string | null>(() =>
+    storySafeImageSrc(data.imageUrl),
   )
   const [imagesReady, setImagesReady] = useState(() => !data.imageUrl?.trim())
   const [themeId, setThemeId] = useState<StoryThemeId>("neon-purple")
@@ -97,12 +104,18 @@ export function StoryFlyerModal({
     setDataKey(nextDataKey)
     setResolved(data)
     setHeadlineId(defaultStoryHeadlineId(data.mode))
+    setSafeImageUrl(storySafeImageSrc(data.imageUrl))
     setHydrating(
-      Boolean(data.imageUrl?.trim()) && !isStoryDataImage(data.imageUrl),
+      Boolean(data.imageUrl?.trim()) && !isStorySafeImage(data.imageUrl),
     )
     setImagesReady(!data.imageUrl?.trim())
   }
-  const exportReady = !hydrating && imagesReady && !busy
+  const flyerRequired = Boolean(data.imageUrl?.trim())
+  const exportReady =
+    !hydrating &&
+    imagesReady &&
+    !busy &&
+    (!flyerRequired || Boolean(safeImageUrl))
   const [isZoomed, setIsZoomed] = useState(false)
   const [previewScale, setPreviewScale] = useState(0.22)
   const [zoomScale, setZoomScale] = useState(0.4)
@@ -119,23 +132,32 @@ export function StoryFlyerModal({
     if (!open) return
     void import("html-to-image")
 
-    if (isStoryDataImage(data.imageUrl) || !data.imageUrl?.trim()) {
-      return
-    }
-
     let cancelled = false
     async function hydrate() {
       try {
         const card = await getStoryCardData(data)
+        const safe = await hydrateStoryFlyerImages(card)
         if (cancelled) return
-        setResolved(card)
+        const flyer = storySafeImageSrc(safe.imageUrl)
+        setSafeImageUrl(flyer)
+        setResolved({
+          ...safe,
+          imageUrl: flyer,
+        })
         setHydrating(false)
-        if (!isStoryDataImage(card.imageUrl)) setImagesReady(true)
+        if (!flyer) setImagesReady(true)
       } catch {
         if (cancelled) return
-        setResolved(data)
+        const fallback = await hydrateStoryFlyerImages(data)
+        if (cancelled) return
+        const flyer = storySafeImageSrc(fallback.imageUrl)
+        setSafeImageUrl(flyer)
+        setResolved({
+          ...fallback,
+          imageUrl: flyer,
+        })
         setHydrating(false)
-        setImagesReady(true)
+        if (!flyer) setImagesReady(true)
       }
     }
 
@@ -265,6 +287,7 @@ export function StoryFlyerModal({
           canvasRef={storyCardRef}
           live={false}
           pauseMotion={busy}
+          imagePending={hydrating && flyerRequired}
           onPainted={() => setImagesReady(true)}
         />
       </div>
@@ -333,6 +356,7 @@ export function StoryFlyerModal({
                       headlineId={headlineId}
                       live
                       pauseMotion={busy || hydrating || isZoomed}
+                      imagePending={hydrating && flyerRequired}
                       rotateX={tilt.rotateX}
                       rotateY={tilt.rotateY}
                     />
@@ -482,6 +506,7 @@ export function StoryFlyerModal({
                   headlineId={headlineId}
                   live={false}
                   pauseMotion
+                  imagePending={hydrating && flyerRequired}
                 />
               </div>
             </div>
@@ -520,9 +545,7 @@ export function StoryFlyerTrigger({
     if (preparing) return
     setPreparing(true)
     try {
-      const hydrated = isStoryDataImage(data.imageUrl)
-        ? data
-        : await getStoryCardData(data)
+      const hydrated = await getStoryCardData(data)
       setCard(hydrated)
       setOpen(true)
     } catch {

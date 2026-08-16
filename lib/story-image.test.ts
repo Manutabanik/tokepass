@@ -5,6 +5,7 @@ import {
   parseStoryImageUrl,
   storyImageDataUrlEndpoint,
   storyImageSrc,
+  storySafeImageSrc,
 } from "@/lib/story-image"
 
 describe("story image proxy helpers", () => {
@@ -40,5 +41,18 @@ describe("story image proxy helpers", () => {
       "/api/proxy-image?url=https%3A%2F%2Fcdn.example%2Fevent.jpg&format=dataurl",
     )
     assert.equal(storyImageSrc("data:image/png;base64,aaa"), "data:image/png;base64,aaa")
+  })
+
+  it("accepts only untainted sources for the story canvas", () => {
+    assert.equal(
+      storySafeImageSrc("data:image/png;base64,aaa"),
+      "data:image/png;base64,aaa",
+    )
+    assert.equal(
+      storySafeImageSrc("/api/proxy-image?url=https%3A%2F%2Fcdn.example%2Fa.jpg"),
+      "/api/proxy-image?url=https%3A%2F%2Fcdn.example%2Fa.jpg",
+    )
+    assert.equal(storySafeImageSrc("https://cdn.example/event.jpg"), null)
+    assert.equal(storySafeImageSrc("//cdn.example/event.jpg"), null)
   })
 })

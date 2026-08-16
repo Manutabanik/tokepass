@@ -55,6 +55,7 @@ type AdaptiveSeatingFlowProps = {
   sectors?: UniversalSector[]
   mapImageUrl?: string | null
   venueMap?: InteractiveVenueMap | null
+  eventId?: string | null
   eventTitle?: string
   pending?: boolean
   embedded?: boolean
@@ -72,12 +73,14 @@ type AdaptiveSeatingFlowProps = {
   onLoadSectorUnits?: (sectorId: string) => Promise<EventSeatingUnit[]>
   onLoadAllUnits?: () => Promise<EventSeatingUnit[]>
   maxSelectable?: number | null
+  heldSeatIds?: string[]
 }
 
 export function AdaptiveSeatingFlow({
   sectors = [],
   mapImageUrl = null,
   venueMap = null,
+  eventId = null,
   eventTitle = "Selección de entradas",
   pending = false,
   embedded = false,
@@ -95,12 +98,14 @@ export function AdaptiveSeatingFlow({
   onLoadSectorUnits,
   onLoadAllUnits,
   maxSelectable = null,
+  heldSeatIds = [],
 }: AdaptiveSeatingFlowProps) {
   if (immersive && venueMap) {
     return (
       <div className="flex h-full min-h-0 w-full flex-col">
         <InteractiveSeatingCanvas
           map={venueMap}
+          eventId={eventId}
           fillParent
           disableIdlePrompt
           silentHover
@@ -111,6 +116,7 @@ export function AdaptiveSeatingFlow({
           unavailableZoneIds={unavailableZoneIds}
           occupancyBySeatId={occupancyBySeatId}
           priceBySectorId={priceBySectorId}
+          heldSeatIds={heldSeatIds}
           onSelectZone={(zone) => onSelectZone?.(zone)}
           onContinue={(seats) => {
             const seat = seats[0]
@@ -152,6 +158,7 @@ export function AdaptiveSeatingFlow({
         sectors={sectors}
         mapImageUrl={mapImageUrl}
         venueMap={venueMap}
+        eventId={eventId}
         eventTitle={eventTitle}
         pending={pending}
         embedded={embedded}
@@ -167,6 +174,7 @@ export function AdaptiveSeatingFlow({
   return (
     <MacroSeatingFlow
       map={venueMap}
+      eventId={eventId}
       sectors={sectors}
       eventTitle={eventTitle}
       maxSelectable={maxSelectable}
@@ -183,6 +191,7 @@ export function AdaptiveSeatingFlow({
 
 function MacroSeatingFlow({
   map,
+  eventId,
   sectors,
   eventTitle,
   pending,
@@ -195,6 +204,7 @@ function MacroSeatingFlow({
   maxSelectable = null,
 }: {
   map: InteractiveVenueMap
+  eventId?: string | null
   sectors: UniversalSector[]
   eventTitle: string
   pending: boolean
@@ -573,6 +583,7 @@ function MacroSeatingFlow({
             ) : (
               <InteractiveSeatingCanvas
                 map={map}
+                eventId={eventId}
                 occupancyBySeatId={mapOccupancy}
                 pending={pending}
                 fillParent={takeover}

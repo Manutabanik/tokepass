@@ -129,6 +129,7 @@ export function PosSeatingMap({
     <div className="flex h-[min(70vh,36rem)] flex-col">
       <InteractiveSeatingCanvas
         map={map}
+        eventId={event.id}
         fillParent
         hideChrome
         disableIdlePrompt

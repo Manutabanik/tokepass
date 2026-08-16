@@ -1,6 +1,7 @@
 "use client"
 
 import {
+  ArrowLeft,
   BadgeCheck,
   Flame,
   Music2,
@@ -8,7 +9,7 @@ import {
   Sparkles,
 } from "lucide-react"
 import { motion, useReducedMotion } from "motion/react"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import type { EventDetails } from "@/app/actions/public-events"
 import type { ResaleListingPublic } from "@/app/actions/resale"
@@ -36,10 +37,29 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { useLockBodyScroll } from "@/hooks/use-lock-body-scroll"
+import {
+  releaseGaCartHolds,
+  releaseSeatingUnitCartHold,
+} from "@/app/actions/checkout"
+import { releaseWaitingRoomPass } from "@/app/actions/waiting-room"
+import { useCheckoutStore } from "@/lib/stores/checkout-store"
+import { useStorefrontChromeStore } from "@/lib/stores/storefront-chrome-store"
+import { useStorefrontSeatStore } from "@/lib/stores/storefront-seat-store"
+import {
+  formatCurrency,
   formatEventDay,
   formatEventDayMonthNumeric,
   formatEventWeekdayShort,
 } from "@/lib/format"
+import { isFullPassDayId, normalizeDayId } from "@/lib/event-schedule"
 import { deriveEventSaleState } from "@/lib/event-status"
 import { cn } from "@/lib/utils"
 
@@ -146,6 +166,112 @@ export function EventStorefront({
   const [selectedDate, setSelectedDate] = useState(
     () => availableDates[0]?.id ?? event.id,
   )
+  const viewMode = useCheckoutStore((state) => state.viewMode)
+  const setViewMode = useCheckoutStore((state) => state.setViewMode)
+  const [exitDialogOpen, setExitDialogOpen] = useState(false)
+
+  useEffect(() => {
+    if (viewMode !== "checkout") return
+    window.scrollTo(0, 0)
+  }, [viewMode])
+
+  const showInfoCta = !finished && !soldOut && viewMode === "info"
+  const showCheckout = !finished && !soldOut && viewMode === "checkout"
+
+  useLockBodyScroll(showCheckout)
+
+  useEffect(() => {
+    useStorefrontChromeStore.getState().setCheckoutTunnel(showCheckout)
+    return () => {
+      useStorefrontChromeStore.getState().setCheckoutTunnel(false)
+    }
+  }, [showCheckout])
+
+  function hasActiveCheckoutCart() {
+    const checkout = useCheckoutStore.getState()
+    const selectedCount =
+      useStorefrontSeatStore.getState().selectedItems.length
+    return checkout.itemsCount > 0 || selectedCount > 0
+  }
+
+  function enterCheckout() {
+    useStorefrontChromeStore.getState().setCheckoutTunnel(true)
+    setViewMode("checkout")
+  }
+
+  function leaveCheckout() {
+    const checkout = useCheckoutStore.getState()
+    const seat = checkout.selectedSeat
+    void releaseGaCartHolds(event.id)
+    if (seat) void releaseSeatingUnitCartHold(event.id, seat.seatingUnitId)
+    void releaseWaitingRoomPass()
+    checkout.clearCart()
+    checkout.clearBuyerData()
+    checkout.setViewMode("info")
+    setExitDialogOpen(false)
+    useStorefrontChromeStore.getState().setCheckoutTunnel(false)
+    window.scrollTo(0, 0)
+  }
+
+  function requestLeaveCheckout() {
+    if (!hasActiveCheckoutCart()) {
+      leaveCheckout()
+      return
+    }
+    setExitDialogOpen(true)
+  }
+
+  const teaserPrice = useMemo(() => {
+    const available = event.tiers.filter((tier) => tier.available > 0)
+    const pool = available.length > 0 ? available : event.tiers
+    if (pool.length === 0) return null
+    const forDay = pool.filter(
+      (tier) => !tier.day_id || tier.day_id === selectedDate,
+    )
+    const priced = (forDay.length > 0 ? forDay : pool).map((tier) => tier.price)
+    return Math.min(...priced)
+  }, [event.tiers, selectedDate])
+
+  function renderPurchaseCta(variant: "aside" | "dock") {
+    const content = (
+      <>
+        <h3 className="mb-1 text-center text-xl font-black text-foreground">
+          Asegurá tu lugar
+        </h3>
+        {teaserPrice != null ? (
+          <p className="mb-4 text-center text-sm font-medium text-primary">
+            Entradas desde {formatCurrency(teaserPrice)}
+          </p>
+        ) : (
+          <p className="mb-4 text-center text-sm text-muted-foreground">
+            Iniciá el proceso de compra para elegir tus entradas o lugares en el
+            mapa.
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={enterCheckout}
+          className="w-full rounded-2xl bg-primary py-3.5 text-lg font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:bg-primary/90"
+        >
+          Adquirir Entradas
+        </button>
+      </>
+    )
+
+    if (variant === "dock") {
+      return (
+        <div className="fixed inset-x-0 bottom-0 z-[100] rounded-t-3xl border-t border-border bg-card px-6 pt-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] shadow-[0_-10px_40px_rgba(0,0,0,0.8)] lg:hidden">
+          {content}
+        </div>
+      )
+    }
+
+    return (
+      <div className="rounded-3xl border border-border bg-card p-6 text-center">
+        {content}
+      </div>
+    )
+  }
 
   const ticketTiers = useMemo(
     () =>
@@ -157,6 +283,8 @@ export function EventStorefront({
         capacity: tier.capacity,
         bonusReward: tier.bonus_reward,
         dayId: tier.day_id,
+        dateId: normalizeDayId(tier.day_id),
+        isFullPass: isFullPassDayId(tier.day_id),
         layoutType: tier.layout_type,
         seatingSectorId: tier.seating_sector_id,
         capacityPerUnit: tier.capacity_per_unit,
@@ -247,20 +375,22 @@ export function EventStorefront({
             <EventAboutExpandable description={description} />
           </motion.div>
 
-          <motion.div
-            variants={reduceMotion ? undefined : storefrontFade}
-            className="px-4 md:px-0"
-          >
-            <EventLineup data={event.lineup} />
-          </motion.div>
-
-          <hr className="mx-4 border-border/40 md:mx-0" />
-
           <motion.div variants={reduceMotion ? undefined : storefrontFade}>
             <EventDateSelector
               dates={availableDates}
               selectedId={selectedDate}
               onChange={setSelectedDate}
+            />
+          </motion.div>
+
+          <motion.div
+            variants={reduceMotion ? undefined : storefrontFade}
+            className="px-4 md:px-0"
+          >
+            <EventLineup
+              data={event.lineup}
+              selectedDayId={selectedDate}
+              scheduleDays={event.scheduleDays ?? []}
             />
           </motion.div>
 
@@ -380,45 +510,29 @@ export function EventStorefront({
   }
 
   const asideClassName =
-    "min-w-0 scroll-mt-24 px-4 pb-[140px] md:px-0 lg:sticky lg:top-24 lg:z-30 lg:col-span-5 lg:col-start-8 lg:row-span-full lg:row-start-1 lg:flex lg:max-h-[calc(100vh-6rem)] lg:flex-col lg:self-start lg:pb-0 xl:col-span-4 xl:col-start-9"
+    "min-w-0 scroll-mt-24 px-4 pb-[100px] md:px-0 lg:sticky lg:top-24 lg:z-30 lg:col-span-5 lg:col-start-8 lg:row-span-full lg:row-start-1 lg:flex lg:max-h-[calc(100vh-6rem)] lg:flex-col lg:self-start lg:pb-0 xl:col-span-4 xl:col-start-9"
 
-  return (
-    <div className="relative isolate min-h-0 overflow-x-visible bg-background pb-8 text-foreground lg:pb-12">
-      <AnalyticsTracker
-        config={event.pixels}
-        trackPageView
-        contentName={event.title}
-        contentIds={[event.id]}
-        value={startingPrice ?? undefined}
-      />
-      {event.isSponsoredByTokepass ? (
-        <div className="border-b border-amber-500/35 bg-gradient-to-r from-amber-500/15 via-background to-amber-500/15">
-          <div className="mx-auto flex max-w-3xl items-center justify-center gap-2 px-4 py-2.5 text-center">
-            <Sparkles className="size-3.5 text-amber-600 dark:text-amber-300" aria-hidden="true" />
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-800 dark:text-amber-100">
-              Evento auspiciado y protegido por Tokepass
-            </p>
-            <ShieldCheck className="size-3.5 text-emerald-600 dark:text-emerald-300" aria-hidden="true" />
-          </div>
+  if (showCheckout) {
+    return (
+      <div className="flex h-[100dvh] flex-col overflow-hidden bg-background text-foreground">
+        <AnalyticsTracker
+          config={event.pixels}
+          trackPageView
+          contentName={event.title}
+          contentIds={[event.id]}
+          value={startingPrice ?? undefined}
+        />
+        <div className="flex-none border-b border-border/70 bg-background/95 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-sm">
+          <button
+            type="button"
+            onClick={requestLeaveCheckout}
+            className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ArrowLeft className="size-4" aria-hidden="true" />
+            Volver
+          </button>
         </div>
-      ) : null}
-
-      {/* Mobile-first immersive column; desktop widens with side checkout */}
-      <motion.div
-        className="relative mx-auto grid max-w-7xl grid-cols-1 items-start gap-8 px-0 md:px-4 lg:grid-cols-12 lg:gap-12 lg:py-8"
-        variants={reduceMotion ? undefined : storefrontStagger}
-        initial={reduceMotion ? false : "hidden"}
-        animate="show"
-      >
-        {finished ? (
-          <>
-            {renderDiscoveryColumn()}
-            <aside id="tickets" className={asideClassName}>
-              <EventSaleStatusNotice state="finished" />
-            </aside>
-            {renderDetailsColumn()}
-          </>
-        ) : (
+        <div className="min-h-0 flex-1 overflow-hidden">
           <TicketSelector
             eventId={event.id}
             eventSlug={event.slug}
@@ -445,25 +559,109 @@ export function EventStorefront({
             selectedDayId={selectedDate}
             defaultTicketTab={event.defaultTicketTab}
             maxTicketsPerUser={event.maxTicketsPerUser}
-            renderLayout={({ panel }) => (
-              <>
-                {renderDiscoveryColumn()}
-                <aside id="tickets" className={asideClassName}>
-                  {soldOut ? (
-                    <div className="mb-4">
-                      <EventSaleStatusNotice state="sold_out" />
-                    </div>
-                  ) : null}
-                  {panel}
-                </aside>
-                {renderDetailsColumn()}
-              </>
-            )}
+            fillViewport
+            onReservationExpired={leaveCheckout}
+            renderLayout={({ panel }) => panel}
           />
+        </div>
+        <Dialog open={exitDialogOpen} onOpenChange={setExitDialogOpen}>
+          <DialogContent
+            showCloseButton={false}
+            className="z-[110] sm:max-w-md"
+            overlayClassName="z-[110]"
+          >
+            <DialogHeader>
+              <DialogTitle>Cancelar proceso de compra</DialogTitle>
+              <DialogDescription>
+                ¿Estás seguro que deseas salir? Los lugares que seleccionaste
+                serán liberados y tu carrito se vaciará.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setExitDialogOpen(false)}
+              >
+                Continuar Comprando
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={leaveCheckout}
+              >
+                Sí, salir y cancelar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className={cn(
+        "relative min-h-screen overflow-x-visible bg-background pb-8 text-foreground lg:pb-12",
+        showInfoCta && "max-lg:pb-[160px]",
+      )}
+    >
+      <AnalyticsTracker
+        config={event.pixels}
+        trackPageView
+        contentName={event.title}
+        contentIds={[event.id]}
+        value={startingPrice ?? undefined}
+      />
+      {event.isSponsoredByTokepass && viewMode === "info" ? (
+        <div className="border-b border-amber-500/35 bg-gradient-to-r from-amber-500/15 via-background to-amber-500/15">
+          <div className="mx-auto flex max-w-3xl items-center justify-center gap-2 px-4 py-2.5 text-center">
+            <Sparkles className="size-3.5 text-amber-600 dark:text-amber-300" aria-hidden="true" />
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-800 dark:text-amber-100">
+              Evento auspiciado y protegido por Tokepass
+            </p>
+            <ShieldCheck className="size-3.5 text-emerald-600 dark:text-emerald-300" aria-hidden="true" />
+          </div>
+        </div>
+      ) : null}
+
+      <motion.div
+        className="relative mx-auto grid max-w-7xl grid-cols-1 items-start gap-8 px-0 md:px-4 lg:grid-cols-12 lg:gap-12 lg:py-8"
+        variants={reduceMotion ? undefined : storefrontStagger}
+        initial={reduceMotion ? false : "hidden"}
+        animate="show"
+      >
+        {finished ? (
+          <>
+            {renderDiscoveryColumn()}
+            <aside id="tickets" className={asideClassName}>
+              <EventSaleStatusNotice state="finished" />
+            </aside>
+            {renderDetailsColumn()}
+          </>
+        ) : soldOut ? (
+          <>
+            {renderDiscoveryColumn()}
+            <aside id="tickets" className={asideClassName}>
+              <EventSaleStatusNotice state="sold_out" />
+            </aside>
+            {renderDetailsColumn()}
+          </>
+        ) : (
+          <>
+            {renderDiscoveryColumn()}
+            <aside
+              id="tickets"
+              className={cn(asideClassName, "hidden lg:flex")}
+            >
+              {renderPurchaseCta("aside")}
+            </aside>
+            {renderDetailsColumn()}
+          </>
         )}
       </motion.div>
 
-      {(event.sponsors?.length ?? 0) > 0 ? (
+      {viewMode === "info" && (event.sponsors?.length ?? 0) > 0 ? (
         <div className="mx-auto max-w-7xl px-4 pb-8">
           <SponsorGrid
             heading="Auspician este evento:"
@@ -472,6 +670,8 @@ export function EventStorefront({
           />
         </div>
       ) : null}
+
+      {showInfoCta ? renderPurchaseCta("dock") : null}
     </div>
   )
 }

@@ -1,19 +1,22 @@
 import type { Metadata } from "next"
 
-import { getActiveEventCategories } from "@/app/actions/categories"
 import {
-  getFeaturedDiscoveryArtists,
-  getFeaturedEvents,
-  getPublishedEvents,
-} from "@/app/actions/public-events"
-import { getActivePlatformSponsors } from "@/app/actions/platform-sponsors"
+  cachedActiveEventCategories,
+  cachedActivePlatformSponsors,
+  cachedFeaturedDiscoveryArtists,
+  cachedFeaturedEvents,
+  cachedPublishedEvents,
+} from "@/lib/catalog/cached-public-reads"
+import { CATALOG_PAGE_SIZE } from "@/lib/catalog/constants"
 import { AnimatedBackground } from "@/components/discovery/animated-background"
 import { DiscoveryHub } from "@/components/discovery/discovery-hub"
 import { SponsorMarquee } from "@/components/public/sponsor-grid"
 import { mapDbCategoriesToDiscovery } from "@/lib/category-icons"
 import { DEFAULT_DISCOVERY_CATEGORIES } from "@/lib/discovery-categories"
-import { DISCOVERY_FILTER_ARTISTS_LIMIT } from "@/lib/discovery-artists"
 import type { FeaturedRotationResult } from "@/lib/featured-rotation"
+import type { CatalogEvent } from "@/app/actions/public-events"
+
+export const revalidate = 60
 
 export const metadata: Metadata = {
   title: "Tokepass — Tu próxima gran noche",
@@ -21,39 +24,30 @@ export const metadata: Metadata = {
     "Fiestas, festivales y las mejores noches de tu ciudad. Entradas digitales seguras que funcionan sin internet.",
 }
 
-export default async function HomePage({
-  searchParams,
-}: {
-  searchParams: Promise<{
-    q?: string
-    location?: string
-    category?: string
-    artist?: string
-    when?: string
-  }>
-}) {
-  const { q, location, category, artist, when } = await searchParams
-  let events: Awaited<ReturnType<typeof getPublishedEvents>> = []
-  let featured: FeaturedRotationResult<
-    Awaited<ReturnType<typeof getPublishedEvents>>[number]
-  > = {
+export default async function HomePage() {
+  let events: CatalogEvent[] = []
+  let featured: FeaturedRotationResult<CatalogEvent> = {
     events: [],
     pool: [],
     totalSponsored: 0,
   }
   let categories = DEFAULT_DISCOVERY_CATEGORIES
-  let platformSponsors: Awaited<ReturnType<typeof getActivePlatformSponsors>> = []
-  let featuredArtists: Awaited<ReturnType<typeof getFeaturedDiscoveryArtists>> = []
+  let platformSponsors: Awaited<
+    ReturnType<typeof cachedActivePlatformSponsors>
+  > = []
+  let featuredArtists: Awaited<
+    ReturnType<typeof cachedFeaturedDiscoveryArtists>
+  > = []
   let loadError: string | null = null
 
   try {
     const [published, featuredResult, dbCategories, sponsors, discoveryArtists] =
       await Promise.all([
-        getPublishedEvents(),
-        getFeaturedEvents(),
-        getActiveEventCategories().catch(() => []),
-        getActivePlatformSponsors().catch(() => []),
-        getFeaturedDiscoveryArtists(DISCOVERY_FILTER_ARTISTS_LIMIT).catch(() => []),
+        cachedPublishedEvents(CATALOG_PAGE_SIZE),
+        cachedFeaturedEvents(),
+        cachedActiveEventCategories().catch(() => []),
+        cachedActivePlatformSponsors().catch(() => []),
+        cachedFeaturedDiscoveryArtists().catch(() => []),
       ])
     events = published
     featured = featuredResult
@@ -81,11 +75,6 @@ export default async function HomePage({
         ) : (
           <DiscoveryHub
             events={events}
-            initialQuery={q ?? ""}
-            initialLocation={location?.trim() || "todas"}
-            initialCategoryId={category?.trim() || "all"}
-            initialArtistId={artist?.trim() || ""}
-            initialDatePreset={when}
             initialFeatured={featured}
             featuredArtists={featuredArtists}
             categories={categories}

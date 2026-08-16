@@ -6,13 +6,14 @@ import { usePathname } from "next/navigation"
 
 import { AccountAvatarMenu } from "@/components/account/account-avatar-menu"
 import { MobileAccountAvatarLink } from "@/components/account/mobile-account-avatar-link"
+import { PublicMobileNav } from "@/components/navigation/public-mobile-nav"
 import { BrandLogo } from "@/components/shared/brand-logo"
 import { NavbarSearch } from "@/components/shared/navbar-search"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { cn } from "@/lib/utils"
 
 const navLinkClass =
-  "rounded-full px-3 py-2 text-sm font-medium text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white"
+  "shrink-0 whitespace-nowrap rounded-full px-3 py-2 text-sm font-medium text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white"
 
 export function PublicNavbarClient({
   isAuthenticated,
@@ -38,12 +39,13 @@ export function PublicNavbarClient({
       )}
     >
       <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-2 px-4 sm:h-[4.25rem] sm:gap-3 lg:px-8">
-        <div className="flex min-w-0 flex-1 items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
+          <PublicMobileNav isAuthenticated={isAuthenticated} />
           <BrandLogo size="header" className="min-w-0 truncate" />
         </div>
 
         <nav
-          className="hidden min-w-0 flex-1 items-center justify-center gap-1 lg:flex lg:gap-2"
+          className="hidden shrink-0 items-center justify-center gap-1 lg:flex lg:gap-2"
           aria-label="Principal"
         >
           <Link href={exploreHref} className={navLinkClass}>
@@ -71,12 +73,12 @@ export function PublicNavbarClient({
           </Link>
         </nav>
 
-        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+        <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
           <NavbarSearch />
 
           <ThemeToggle
             className={cn(
-              "hidden size-11 place-items-center rounded-full border border-zinc-200 text-zinc-600 lg:grid",
+              "hidden size-11 shrink-0 place-items-center rounded-full border border-zinc-200 text-zinc-600 lg:grid",
               "hover:bg-zinc-100 hover:text-zinc-900",
               "dark:border-white/10 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white",
             )}
@@ -100,13 +102,13 @@ export function PublicNavbarClient({
             <Link
               href="/login"
               className={cn(
-                "inline-flex h-11 shrink-0 items-center gap-1.5 truncate rounded-full px-3.5 text-sm font-semibold text-white sm:h-10 sm:px-4",
+                "inline-flex h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-sm font-semibold text-white sm:h-10 sm:px-4",
                 "bg-gradient-to-r from-violet-600 to-fuchsia-600",
                 "shadow-sm transition hover:from-violet-500 hover:to-fuchsia-500",
               )}
             >
               <UserRound className="size-3.5 shrink-0" aria-hidden="true" />
-              <span className="truncate">Ingresar</span>
+              <span className="whitespace-nowrap">Ingresar</span>
             </Link>
           )}
         </div>

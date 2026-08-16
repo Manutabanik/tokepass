@@ -42,6 +42,65 @@ export function storyImageSrc(url: string | null | undefined): string | null {
   return `/api/proxy-image?url=${encodeURIComponent(trimmed)}`
 }
 
+/** URLs that html-to-image can snapshot without tainting the canvas. */
+export function storySafeImageSrc(
+  url: string | null | undefined,
+): string | null {
+  const trimmed = url?.trim()
+  if (!trimmed) return null
+  if (trimmed.startsWith("data:image/")) return trimmed
+  if (trimmed.startsWith("blob:")) return trimmed
+  if (trimmed.startsWith("/api/proxy-image?")) return trimmed
+  if (trimmed.startsWith("/") && !trimmed.startsWith("//")) return trimmed
+  return null
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      const result = typeof reader.result === "string" ? reader.result : ""
+      if (result.startsWith("data:")) {
+        resolve(result)
+        return
+      }
+      reject(new Error("invalid_data_url"))
+    }
+    reader.onerror = () => reject(reader.error ?? new Error("read_failed"))
+    reader.readAsDataURL(blob)
+  })
+}
+
+/**
+ * Convert a flyer URL to a local data URL so the story canvas is never tainted.
+ * Uses the same-origin proxy — a direct browser fetch to Supabase/S3 fails CORS.
+ */
+export async function fetchImageAsBase64(
+  imageUrl: string | null | undefined,
+): Promise<string | null> {
+  const trimmed = imageUrl?.trim()
+  if (!trimmed) return null
+  if (trimmed.startsWith("data:image/")) return trimmed
+
+  const proxy = storyImageSrc(trimmed)
+  if (!proxy) return null
+  if (proxy.startsWith("data:image/")) return proxy
+
+  try {
+    const response = await fetch(proxy, {
+      mode: "cors",
+      cache: "no-cache",
+    })
+    if (!response.ok) {
+      return storySafeImageSrc(proxy)
+    }
+    const blob = await response.blob()
+    return await blobToDataUrl(blob)
+  } catch {
+    return storySafeImageSrc(proxy)
+  }
+}
+
 export function storyImageDataUrlEndpoint(
   url: string | null | undefined,
 ): string | null {
@@ -54,26 +113,7 @@ export function storyImageDataUrlEndpoint(
 export async function fetchStoryImageDataUrl(
   url: string | null | undefined,
 ): Promise<string | null> {
-  const trimmed = url?.trim()
-  if (!trimmed) return null
-  if (trimmed.startsWith("data:image/")) return trimmed
-
-  const endpoint = storyImageDataUrlEndpoint(trimmed)
-  if (!endpoint) return null
-  if (endpoint.startsWith("data:image/")) return endpoint
-
-  if (!endpoint.includes("format=dataurl")) return null
-
-  try {
-    const response = await fetch(endpoint, { cache: "no-store" })
-    if (!response.ok) return null
-    const payload = (await response.json()) as { dataUrl?: unknown }
-    const dataUrl =
-      typeof payload.dataUrl === "string" ? payload.dataUrl.trim() : ""
-    return dataUrl.startsWith("data:image/") ? dataUrl : null
-  } catch {
-    return null
-  }
+  return fetchImageAsBase64(url)
 }
 
 export async function hydrateStoryFlyerImages<
@@ -81,17 +121,34 @@ export async function hydrateStoryFlyerImages<
     imageUrl?: string | null
     artistImageUrl?: string | null
     organizerAvatarUrl?: string | null
+    lineupArtists?: Array<{ name: string; imageUrl?: string | null }>
   },
 >(data: T): Promise<T> {
-  const [imageUrl, artistImageUrl, organizerAvatarUrl] = await Promise.all([
-    fetchStoryImageDataUrl(data.imageUrl),
-    fetchStoryImageDataUrl(data.artistImageUrl),
-    fetchStoryImageDataUrl(data.organizerAvatarUrl),
-  ])
+  const lineup = data.lineupArtists ?? []
+  const [imageUrl, artistImageUrl, organizerAvatarUrl, ...lineupImages] =
+    await Promise.all([
+      fetchImageAsBase64(data.imageUrl),
+      fetchImageAsBase64(data.artistImageUrl),
+      fetchImageAsBase64(data.organizerAvatarUrl),
+      ...lineup.map((artist) => fetchImageAsBase64(artist.imageUrl)),
+    ])
   return {
     ...data,
-    imageUrl: imageUrl ?? data.imageUrl,
-    artistImageUrl: artistImageUrl ?? data.artistImageUrl,
-    organizerAvatarUrl: organizerAvatarUrl ?? data.organizerAvatarUrl,
+    imageUrl: imageUrl ?? storySafeImageSrc(data.imageUrl),
+    artistImageUrl:
+      artistImageUrl ?? storySafeImageSrc(data.artistImageUrl),
+    organizerAvatarUrl:
+      organizerAvatarUrl ?? storySafeImageSrc(data.organizerAvatarUrl),
+    ...(lineup.length > 0
+      ? {
+          lineupArtists: lineup.map((artist, index) => ({
+            ...artist,
+            imageUrl:
+              lineupImages[index] ??
+              storySafeImageSrc(artist.imageUrl) ??
+              null,
+          })),
+        }
+      : {}),
   }
 }

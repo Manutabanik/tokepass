@@ -4,6 +4,7 @@ import { describe, it } from "node:test"
 import {
   isAccountFocusedFlow,
   isAdminFocusedFlow,
+  isPublicEventStorefrontPath,
   isPublicFocusedFlow,
 } from "@/lib/navigation/focused-flows"
 
@@ -31,5 +32,13 @@ describe("focused-flows", () => {
     assert.equal(isPublicFocusedFlow("/cuenta/entradas/abc"), true)
     assert.equal(isPublicFocusedFlow("/"), false)
     assert.equal(isPublicFocusedFlow("/events"), false)
+  })
+
+  it("detecta la ficha publica de un evento", () => {
+    assert.equal(isPublicEventStorefrontPath("/eventos/fiesta-tradicion"), true)
+    assert.equal(isPublicEventStorefrontPath("/events/abc"), true)
+    assert.equal(isPublicEventStorefrontPath("/events/preview/abc"), true)
+    assert.equal(isPublicEventStorefrontPath("/events"), false)
+    assert.equal(isPublicEventStorefrontPath("/"), false)
   })
 })

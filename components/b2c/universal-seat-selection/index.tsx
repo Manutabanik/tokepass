@@ -35,6 +35,7 @@ type UniversalSeatSelectionFlowProps = {
   sectors?: UniversalSector[]
   mapImageUrl?: string | null
   venueMap?: InteractiveVenueMap | null
+  eventId?: string | null
   eventTitle?: string
   pending?: boolean
   embedded?: boolean
@@ -49,6 +50,7 @@ export function UniversalSeatSelectionFlow({
   sectors = UNIVERSAL_SEAT_MOCK,
   mapImageUrl = null,
   venueMap = null,
+  eventId = null,
   eventTitle = "Selección de entradas",
   pending = false,
   embedded = false,
@@ -299,6 +301,7 @@ export function UniversalSeatSelectionFlow({
           ) : (
             <InteractiveSeatingCanvas
               map={venueMap}
+              eventId={eventId}
               occupancyBySeatId={mapOccupancy}
               priceBySectorId={priceBySectorId}
               pending={pending}

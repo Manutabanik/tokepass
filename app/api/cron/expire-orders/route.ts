@@ -25,9 +25,10 @@ function authorizeCron(request: NextRequest): boolean {
 
 /**
  * Libera stock de checkouts abandonados.
- * - GA / pending: TTL = GA_CHECKOUT_HOLD_INTERVAL (8m), batch 2500 en RPC.
- * - Seating: reserved_until (8m) vía expire_seating_orders.
+ * - GA / pending: TTL = GA_CHECKOUT_HOLD_INTERVAL, batch 2500 en RPC.
+ * - Seating: reserved_until vía expire_seating_orders.
  * - Cart holds (sin orden): expire_seating_cart_holds.
+ * - GA cart holds: expire_ga_cart_holds.
  * Secure with CRON_SECRET (Vercel Cron sends Authorization: Bearer …).
  */
 export async function GET(request: NextRequest) {
@@ -41,24 +42,34 @@ export async function GET(request: NextRequest) {
       { data, error },
       { data: seatingData, error: seatingError },
       { data: cartHoldData, error: cartHoldError },
+      { data: gaHoldData, error: gaHoldError },
     ] = await Promise.all([
       admin.rpc("expire_abandoned_orders", {
         p_older_than: GA_CHECKOUT_HOLD_INTERVAL,
       }),
       admin.rpc("expire_seating_orders"),
       admin.rpc("expire_seating_cart_holds"),
+      admin.rpc("expire_ga_cart_holds"),
     ])
 
-    if (error || seatingError || cartHoldError) {
+    if (error || seatingError || cartHoldError || gaHoldError) {
       logger.error({
         context: "api/cron/expire-orders",
         message: "expire_abandoned_orders_failed",
-        error: error?.message ?? seatingError?.message ?? cartHoldError?.message,
+        error:
+          error?.message ??
+          seatingError?.message ??
+          cartHoldError?.message ??
+          gaHoldError?.message,
       })
       return NextResponse.json(
         {
           success: false,
-          error: error?.message ?? seatingError?.message ?? cartHoldError?.message,
+          error:
+            error?.message ??
+            seatingError?.message ??
+            cartHoldError?.message ??
+            gaHoldError?.message,
         },
         { status: 500 },
       )
@@ -70,6 +81,7 @@ export async function GET(request: NextRequest) {
       expiredCount: Number(data ?? 0),
       expiredSeatingCount: Number(seatingData ?? 0),
       expiredCartHoldCount: Number(cartHoldData ?? 0),
+      expiredGaHoldCount: Number(gaHoldData ?? 0),
       holdInterval: GA_CHECKOUT_HOLD_INTERVAL,
     })
 
@@ -79,6 +91,7 @@ export async function GET(request: NextRequest) {
         expiredCount: Number(data ?? 0),
         expiredSeatingCount: Number(seatingData ?? 0),
         expiredCartHoldCount: Number(cartHoldData ?? 0),
+        expiredGaHoldCount: Number(gaHoldData ?? 0),
         holdInterval: GA_CHECKOUT_HOLD_INTERVAL,
       },
     })

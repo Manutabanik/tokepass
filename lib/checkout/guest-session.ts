@@ -2,7 +2,18 @@
 
 import { createClient } from "@/lib/supabase/client"
 
-/** Best-effort anonymous session so guest checkout can reserve against a user id. */
+export async function hasCheckoutAuthSession(): Promise<boolean> {
+  const supabase = createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  return Boolean(user)
+}
+
+/**
+ * Anonymous Auth is created only at pay confirmation.
+ * Do not call this when entering the tunnel or choosing guest.
+ */
 export async function ensureGuestCheckoutSession(): Promise<boolean> {
   const supabase = createClient()
   const {

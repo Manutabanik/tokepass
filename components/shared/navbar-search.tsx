@@ -378,7 +378,7 @@ export function NavbarSearch() {
 
   return (
     <>
-      <div ref={rootRef} className="relative hidden md:block">
+      <div ref={rootRef} className="relative hidden min-w-0 w-full max-w-md flex-1 md:block">
         <form onSubmit={submitExplore}>
           <label className="sr-only" htmlFor="omni-search-desktop">
             Buscar evento o artista
@@ -408,7 +408,7 @@ export function NavbarSearch() {
                 setOpen(true)
               }}
               onFocus={() => setOpen(true)}
-              className="h-10 w-52 rounded-full border border-zinc-200 bg-zinc-50 pl-9 pr-3 text-sm text-zinc-900 outline-none placeholder:text-zinc-400 focus-visible:border-violet-400 focus-visible:ring-3 focus-visible:ring-violet-400/30 lg:w-64 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-500"
+              className="h-10 w-full min-w-0 rounded-full border border-zinc-200 bg-zinc-50 pl-9 pr-3 text-sm text-zinc-900 outline-none placeholder:text-zinc-400 focus-visible:border-violet-400 focus-visible:ring-3 focus-visible:ring-violet-400/30 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-500"
               aria-autocomplete="list"
               aria-controls={listId}
             />

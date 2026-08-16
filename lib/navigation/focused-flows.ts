@@ -19,6 +19,13 @@ export function isAccountFocusedFlow(pathname: string): boolean {
   )
 }
 
+export function isPublicEventStorefrontPath(pathname: string): boolean {
+  if (/^\/eventos\/[^/]+/.test(pathname)) return true
+  if (/^\/events\/preview\//.test(pathname)) return true
+  if (pathname === "/events" || pathname === "/eventos") return false
+  return /^\/events\/[^/]+/.test(pathname)
+}
+
 export function isPublicFocusedFlow(pathname: string): boolean {
   if (isAccountFocusedFlow(pathname)) return true
   if (pathname.startsWith("/checkout")) return true

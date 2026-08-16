@@ -5,6 +5,8 @@ import { AnimatePresence, motion } from "motion/react"
 import { usePathname, useRouter } from "next/navigation"
 import { useEffect, useMemo, useState, useTransition } from "react"
 
+import { useDebounce } from "@/hooks/use-debounce"
+
 import type { CatalogEvent } from "@/app/actions/public-events"
 import { EmptyState } from "@/components/discovery/empty-state"
 import { EventCard } from "@/components/discovery/event-card"
@@ -73,6 +75,29 @@ export function DiscoveryHub({
   const [datePreset, setDatePreset] = useState<DiscoveryDatePreset>(
     parseDatePreset(initialDatePreset),
   )
+  const debouncedQuery = useDebounce(query, 450)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const nextQuery = params.get("q") ?? ""
+    const nextLocation = params.get("location")?.trim() || "todas"
+    const nextCategory = params.get("category")?.trim() || "all"
+    const nextArtist = params.get("artist")?.trim() || ""
+    const nextWhen = parseDatePreset(params.get("when") ?? "all")
+    if (nextQuery && !initialQuery) setQuery(nextQuery)
+    if (nextLocation !== "todas" && initialLocation === "todas") {
+      setCity(nextLocation)
+    }
+    if (nextCategory !== "all" && initialCategoryId === "all") {
+      setCategoryId(nextCategory)
+    }
+    if (nextArtist && !initialArtistId) setArtistId(nextArtist)
+    if (nextWhen !== "all" && parseDatePreset(initialDatePreset) === "all") {
+      setDatePreset(nextWhen)
+    }
+    // Hydrate shared search URLs after the static shell. Run once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     publishDiscoveryControls({
@@ -88,7 +113,7 @@ export function DiscoveryHub({
 
   useEffect(() => {
     const nextParams = new URLSearchParams()
-    if (query.trim()) nextParams.set("q", query.trim())
+    if (debouncedQuery.trim()) nextParams.set("q", debouncedQuery.trim())
     if (city && city !== "todas") nextParams.set("location", city)
     if (categoryId && categoryId !== "all") nextParams.set("category", categoryId)
     if (artistId) nextParams.set("artist", artistId)
@@ -114,7 +139,7 @@ export function DiscoveryHub({
 
     const next = nextParams.toString()
     router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false })
-  }, [query, city, categoryId, artistId, datePreset, pathname, router])
+  }, [artistId, categoryId, city, datePreset, debouncedQuery, pathname, router])
 
   const featuredPool = useMemo(
     () => featuredPoolSafe(events, initialFeatured),

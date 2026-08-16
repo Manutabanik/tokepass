@@ -8,7 +8,7 @@ import {
   RotateCcw,
   Trash2,
 } from "lucide-react"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   TransformComponent,
   TransformWrapper,
@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dialog"
 import { toast } from "sonner"
 
+import { useSeatingOccupancyRealtime } from "@/hooks/use-seating-occupancy-realtime"
 import { storefrontLimitMessage } from "@/lib/checkout-limits"
 import { formatCurrency } from "@/lib/format"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
@@ -78,7 +79,7 @@ const MIN_ZOOM = 0.8
 const MAX_ZOOM = 3.5
 const WHEEL_STEP = 0.05
 const ZOOM_ANIM_MS = 160
-const HOLD_MINUTES = 8
+const HOLD_MINUTES = 10
 const INACTIVITY_MS = 5 * 60 * 1000
 const MIN_HIT_PX = 44
 const VIEW_TOP_PAD = 40
@@ -109,6 +110,7 @@ function vibrateTap() {
 
 export function InteractiveSeatingCanvas({
   map,
+  eventId = null,
   occupancyBySeatId = {},
   priceBySectorId = {},
   pending = false,
@@ -129,6 +131,7 @@ export function InteractiveSeatingCanvas({
   posStatusColors = false,
 }: {
   map: InteractiveVenueMap
+  eventId?: string | null
   occupancyBySeatId?: Record<string, SeatStatus>
   priceBySectorId?: Record<string, number>
   pending?: boolean
@@ -178,6 +181,20 @@ export function InteractiveSeatingCanvas({
   const liveSelectedItems = useMemo(
     () => hydrateStorefrontItemsFromMap(selectedItems, map, priceBySectorId),
     [map, priceBySectorId, selectedItems],
+  )
+  const [liveOccupancy, setLiveOccupancy] = useState<Record<string, SeatStatus>>(
+    {},
+  )
+  const applyOccupancyPatch = useCallback((patch: Record<string, SeatStatus>) => {
+    setLiveOccupancy((current) => ({ ...current, ...patch }))
+  }, [])
+  useSeatingOccupancyRealtime(eventId, applyOccupancyPatch, "canvas")
+  useEffect(() => {
+    setLiveOccupancy({})
+  }, [eventId])
+  const occupancy = useMemo(
+    () => ({ ...occupancyBySeatId, ...liveOccupancy }),
+    [liveOccupancy, occupancyBySeatId],
   )
   const heldSet = useMemo(() => new Set(heldSeatIds), [heldSeatIds])
   const selectedIds = useMemo(
@@ -425,8 +442,9 @@ export function InteractiveSeatingCanvas({
     const price = seatPrice(seat.sectorId, seat.price)
     const live = resolveLiveVenueSeatStatus({
       mapStatus: seat.mapStatus,
-      occupancy: occupancyBySeatId[seat.id],
-      selected: selectedIds.has(seat.id) || heldSet.has(seat.id),
+      occupancy: occupancy[seat.id],
+      selected: selectedIds.has(seat.id),
+      held: heldSet.has(seat.id),
     })
     if (live === "blocked" || live === "occupied") return
 
@@ -773,7 +791,7 @@ export function InteractiveSeatingCanvas({
               elements={(map.elements ?? []).filter(
                 (element) => !isInfrastructureElement(element),
               )}
-              occupancyBySeatId={occupancyBySeatId}
+              occupancyBySeatId={occupancy}
               selectedIds={[...selectedElementIds, ...heldSeatIds]}
               selectedSeatIds={[...selectedIds, ...heldSeatIds]}
               highlightedIds={focusedMapIds}
@@ -809,8 +827,9 @@ export function InteractiveSeatingCanvas({
               const price = seatPrice(seat.sectorId, seat.price)
               const live = resolveLiveVenueSeatStatus({
                 mapStatus: seat.mapStatus,
-                occupancy: occupancyBySeatId[seat.id],
-                selected: selectedIds.has(seat.id) || heldSet.has(seat.id),
+                occupancy: occupancy[seat.id],
+                selected: selectedIds.has(seat.id),
+                held: heldSet.has(seat.id),
               })
               const label = `${seat.sectorName} · Fila ${seat.row} · ${seat.number} — ${formatCurrency(price)}`
               const selected = live === "selected"

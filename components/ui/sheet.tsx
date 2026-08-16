@@ -44,16 +44,18 @@ function SheetContent({
   children,
   side = "left",
   showCloseButton = true,
+  overlayClassName,
   ...props
 }: DialogPrimitive.Popup.Props & {
   side?: "left" | "right" | "bottom" | "top"
   showCloseButton?: boolean
+  overlayClassName?: string
 }) {
   const isEdge = side === "left" || side === "right"
 
   return (
     <SheetPortal>
-      <SheetOverlay />
+      <SheetOverlay className={overlayClassName} />
       <DialogPrimitive.Popup
         data-slot="sheet-content"
         className={cn(

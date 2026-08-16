@@ -35,6 +35,8 @@ export type TicketSelectorTier = {
   capacity?: number
   bonusReward?: string | null
   dayId?: string | null
+  dateId?: string | null
+  isFullPass?: boolean
   layoutType: "general" | "table_combo" | "numbered_seat"
   seatingSectorId?: string | null
   capacityPerUnit: number

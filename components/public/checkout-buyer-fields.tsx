@@ -22,7 +22,7 @@ type CheckoutBuyerFieldsProps = {
 }
 
 const fieldInputClass =
-  "min-h-12 h-12 rounded-xl border-input bg-background text-base text-foreground placeholder:text-muted-foreground/70 md:text-base"
+  "h-12 w-full min-w-0 rounded-xl border border-border bg-secondary/30 px-4 text-base text-foreground placeholder:text-muted-foreground transition-all focus-visible:ring-2 focus-visible:ring-primary/50 md:h-14"
 
 function fieldMessage(
   errors: CheckoutBuyerFieldsProps["errors"],
@@ -92,11 +92,11 @@ export function CheckoutBuyerFields({
   }
 
   return (
-    <div className={cn("space-y-5", className)}>
-      <div className="space-y-1.5">
+    <div className={cn("flex min-w-0 flex-col gap-5", className)}>
+      <div className="min-w-0 space-y-1.5">
         <Label
           htmlFor={CHECKOUT_BUYER_FIELD_IDS.buyerEmail}
-          className="inline-flex items-center gap-1.5 text-sm text-foreground"
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground"
         >
           <Mail className="size-3.5" aria-hidden="true" />
           Mail
@@ -123,7 +123,7 @@ export function CheckoutBuyerFields({
         {emailSuggestion ? (
           <button
             type="button"
-            className="text-left text-xs font-medium text-emerald-700 underline-offset-2 hover:underline dark:text-emerald-300"
+            className="break-words text-left text-xs font-medium whitespace-normal text-emerald-700 underline-offset-2 hover:underline dark:text-emerald-300"
             onClick={() => onChange({ ...value, buyerEmail: emailSuggestion })}
           >
             ¿Quisiste decir {emailSuggestion}?
@@ -132,11 +132,11 @@ export function CheckoutBuyerFields({
         <FieldHint id="buyer-email-error" message={emailError} />
       </div>
 
-      <div className="grid gap-5 sm:grid-cols-2">
-        <div className="space-y-1.5">
+      <div className="grid min-w-0 gap-5 sm:grid-cols-2">
+        <div className="min-w-0 space-y-1.5">
           <Label
             htmlFor={CHECKOUT_BUYER_FIELD_IDS.buyerName}
-            className="inline-flex items-center gap-1.5 text-sm text-foreground"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground"
           >
             <User className="size-3.5" aria-hidden="true" />
             Nombre
@@ -155,10 +155,10 @@ export function CheckoutBuyerFields({
             className={inputClass(Boolean(nameError), "buyerName")}
           />
         </div>
-        <div className="space-y-1.5">
+        <div className="min-w-0 space-y-1.5">
           <Label
             htmlFor="buyer-last-name"
-            className="inline-flex items-center gap-1.5 text-sm text-foreground"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground"
           >
             Apellido
           </Label>
@@ -178,10 +178,10 @@ export function CheckoutBuyerFields({
       </div>
       <FieldHint id="buyer-name-error" message={nameError} />
 
-      <div className="space-y-1.5">
+      <div className="min-w-0 space-y-1.5">
         <Label
           htmlFor={CHECKOUT_BUYER_FIELD_IDS.buyerDni}
-          className="inline-flex items-center gap-1.5 text-sm text-foreground"
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground"
         >
           <IdCard className="size-3.5" aria-hidden="true" />
           DNI
@@ -189,7 +189,7 @@ export function CheckoutBuyerFields({
         <Input
           id={CHECKOUT_BUYER_FIELD_IDS.buyerDni}
           name="buyerDni"
-          type="tel"
+          type="text"
           inputMode="numeric"
           pattern="[0-9]*"
           autoComplete="off"
@@ -209,10 +209,10 @@ export function CheckoutBuyerFields({
         <FieldHint id="buyer-dni-error" message={dniError} />
       </div>
 
-      <div className="space-y-1.5">
+      <div className="min-w-0 space-y-1.5">
         <Label
           htmlFor={CHECKOUT_BUYER_FIELD_IDS.buyerPhone}
-          className="inline-flex items-center gap-1.5 text-sm text-foreground"
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground"
         >
           <Phone className="size-3.5" aria-hidden="true" />
           Teléfono
@@ -220,7 +220,7 @@ export function CheckoutBuyerFields({
         <Input
           id={CHECKOUT_BUYER_FIELD_IDS.buyerPhone}
           name="buyerPhone"
-          type="tel"
+          type="text"
           inputMode="numeric"
           pattern="[0-9]*"
           autoComplete="tel"
@@ -237,7 +237,7 @@ export function CheckoutBuyerFields({
           placeholder="11 2345 6789"
           className={inputClass(Boolean(phoneError), "buyerPhone")}
         />
-        <p className="text-xs text-muted-foreground">
+        <p className="break-words text-sm whitespace-normal text-foreground/80">
           Celular argentino. Se guarda como +549...
         </p>
         <FieldHint id="buyer-phone-error" message={phoneError} />
@@ -249,7 +249,7 @@ export function CheckoutBuyerFields({
 function FieldHint({ id, message }: { id: string; message?: string }) {
   if (!message) return null
   return (
-    <p id={id} role="status" className="text-xs text-muted-foreground">
+    <p id={id} role="status" className="text-sm font-medium text-amber-600 dark:text-amber-300">
       {message}
     </p>
   )

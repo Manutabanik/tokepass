@@ -20,13 +20,8 @@ import {
   type StoryHeadlineId,
   type StoryThemeId,
 } from "@/lib/story-canvas"
+import { storySafeImageSrc } from "@/lib/story-image"
 import { specularFromTilt } from "@/lib/story-tilt"
-
-function storyDataImage(url: string | null | undefined): string | null {
-  const trimmed = url?.trim()
-  if (!trimmed?.startsWith("data:image/")) return null
-  return trimmed
-}
 
 const FONT =
   "var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
@@ -57,6 +52,7 @@ export function StoryCanvas({
   rotateX: rotateXProp,
   rotateY: rotateYProp,
   onPainted,
+  imagePending = false,
 }: {
   data: StoryFlyerData
   themeId: StoryThemeId
@@ -67,6 +63,7 @@ export function StoryCanvas({
   rotateX?: MotionValue<number>
   rotateY?: MotionValue<number>
   onPainted?: () => void
+  imagePending?: boolean
 }) {
   const gradientId = `story-chrome-${useId().replace(/:/g, "")}`
   const reduceMotion = useReducedMotion()
@@ -83,15 +80,15 @@ export function StoryCanvas({
   })
   const theme = findStoryTheme(themeId)
   const headline = findStoryHeadline(headlineId)
-  const eventImage = storyDataImage(data.imageUrl)
+  const eventImage = storySafeImageSrc(data.imageUrl)
   const artistName = publicStoryName(data.artistName, "")
-  const artistImage = storyDataImage(data.artistImageUrl)
+  const artistImage = storySafeImageSrc(data.artistImageUrl)
   const organizerName = publicStoryName(data.organizerName, "Tokepass")
-  const organizerAvatar = storyDataImage(data.organizerAvatarUrl)
+  const organizerAvatar = storySafeImageSrc(data.organizerAvatarUrl)
   const lineup = (data.lineupArtists ?? [])
     .map((artist) => ({
       name: publicStoryName(artist.name, ""),
-      imageUrl: storyDataImage(artist.imageUrl),
+      imageUrl: storySafeImageSrc(artist.imageUrl),
     }))
     .filter((artist) => artist.name)
   const showLineupStack = lineup.length > 1
@@ -259,7 +256,8 @@ export function StoryCanvas({
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={eventImage}
-                  alt=""
+                  alt="Event Flyer"
+                  crossOrigin="anonymous"
                   data-story-image="hero"
                   data-flyer-img=""
                   onLoad={onPainted}
@@ -276,6 +274,15 @@ export function StoryCanvas({
                     objectFit: "cover",
                     objectPosition: "center",
                     display: "block",
+                  }}
+                />
+              ) : imagePending ? (
+                <div
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    borderRadius: 16,
+                    background: "rgba(255,255,255,0.08)",
                   }}
                 />
               ) : (
@@ -372,6 +379,7 @@ export function StoryCanvas({
                       <img
                         src={artist.imageUrl}
                         alt=""
+                        crossOrigin="anonymous"
                         style={{
                           width: "100%",
                           height: "100%",
@@ -407,6 +415,7 @@ export function StoryCanvas({
                   <img
                     src={stampImage}
                     alt=""
+                    crossOrigin="anonymous"
                     style={{
                       width: "100%",
                       height: "100%",
@@ -486,6 +495,7 @@ export function StoryCanvas({
               <img
                 src={organizerAvatar}
                 alt=""
+                crossOrigin="anonymous"
                 style={{
                   width: 36,
                   height: 36,

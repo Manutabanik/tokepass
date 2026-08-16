@@ -4,6 +4,10 @@ import { listEventSponsors } from "@/app/actions/event-sponsors"
 import { logger } from "@/lib/logger"
 import { createClient } from "@/lib/supabase/server"
 import {
+  createPublicClient,
+  type PublicSupabase,
+} from "@/lib/supabase/public"
+import {
   buildCatalogSearchOr,
   FEATURED_DISCOVERY_ARTISTS_LIMIT,
   isMissingArtistSchema,
@@ -40,6 +44,11 @@ import { parseBundleItems, serializeBundleItems } from "@/lib/inventory/unified-
 import type { Event, TicketTier, Venue } from "@/types/database"
 import type { ScheduleDay } from "@/types/events"
 import type { EventSeatingUnit, SeatingSectorSummary, VenueSeatingLayout } from "@/types/venues"
+import {
+  CATALOG_MAX_PAGE_SIZE,
+  CATALOG_PAGE_SIZE,
+  type PublishedEventsOptions,
+} from "@/lib/catalog/constants"
 import {
   isSeatingSummaryMinUuidError,
   mapSeatingSectorSummaryRows,
@@ -318,12 +327,21 @@ const EVENT_LIST_SELECT_WITH_LINEUP = `${EVENT_LIST_SELECT}, lineup`
 const EVENT_LIST_SELECT_WITH_ARTISTS = `${EVENT_LIST_SELECT_WITH_LINEUP}, ${EVENT_ARTISTS_EMBED}`
 const EVENT_LIST_SELECT_BY_ARTIST = `${EVENT_LIST_SELECT_WITH_LINEUP}, ${EVENT_ARTISTS_INNER_EMBED}`
 
+function resolveCatalogLimit(limit?: number) {
+  const requested = limit ?? CATALOG_PAGE_SIZE
+  return Math.min(CATALOG_MAX_PAGE_SIZE, Math.max(1, Math.floor(requested)))
+}
+
+function resolveCatalogOffset(offset?: number) {
+  return Math.max(0, Math.floor(offset ?? 0))
+}
+
 async function findEventIdsMatchingArtistName(
   needle: string,
 ): Promise<string[]> {
   if (!needle) return []
   try {
-    const supabase = await createClient()
+    const supabase = createPublicClient()
     const { data, error } = await supabase
       .from("event_artists")
       .select("event_id, artists!inner(name)")
@@ -360,12 +378,14 @@ async function findEventIdsMatchingArtistName(
 
 export async function getPublishedEvents(
   search?: string,
-  options?: { artistId?: string },
+  options?: PublishedEventsOptions,
 ): Promise<CatalogEvent[]> {
-  const supabase = await createClient()
+  const supabase = createPublicClient()
   const needle = sanitizeCatalogSearch(search ?? "")
   const artistId = options?.artistId?.trim() || ""
   const filterByArtist = Boolean(artistId) && isEventUuid(artistId)
+  const limit = resolveCatalogLimit(options?.limit)
+  const offset = resolveCatalogOffset(options?.offset)
   const artistEventIds = needle ? await findEventIdsMatchingArtistName(needle) : []
   const orFilter = needle ? buildCatalogSearchOr(needle, artistEventIds) : null
 
@@ -390,6 +410,8 @@ export async function getPublishedEvents(
     if (orFilter) {
       query = query.or(orFilter)
     }
+
+    query = query.range(offset, offset + limit - 1)
 
     const { data, error } = await query
 
@@ -426,7 +448,10 @@ export async function getPublishedEventsByArtist(
   artistId: string,
 ): Promise<CatalogEvent[]> {
   if (!isEventUuid(artistId)) return []
-  return getPublishedEvents(undefined, { artistId })
+  return getPublishedEvents(undefined, {
+    artistId,
+    limit: CATALOG_MAX_PAGE_SIZE,
+  })
 }
 
 /** Top artistas con más eventos publicados vigentes. */
@@ -434,7 +459,7 @@ export async function getFeaturedDiscoveryArtists(
   limit = FEATURED_DISCOVERY_ARTISTS_LIMIT,
 ): Promise<FeaturedDiscoveryArtist[]> {
   try {
-    const supabase = await createClient()
+    const supabase = createPublicClient()
     const { data, error } = await supabase
       .from("event_artists")
       .select(
@@ -524,7 +549,7 @@ function mapEventListRow(event: EventListRow): CatalogEvent {
 export async function getFeaturedEvents(options?: {
   province?: string | null
 }): Promise<FeaturedRotationResult<CatalogEvent>> {
-  const supabase = await createClient()
+  const supabase = createPublicClient()
   const province = options?.province?.trim().toLowerCase() ?? ""
 
   const { data, error } = await supabase
@@ -588,7 +613,7 @@ export async function getEventAccessGate(
   eventId: string,
 ): Promise<EventAccessGate | null> {
   if (!eventId) return null
-  const supabase = await createClient()
+  const supabase = createPublicClient()
   const resolvedId = await resolveEventRecordId(supabase, eventId)
   if (!resolvedId) return null
   const { data, error } = await supabase.rpc("get_event_public_access_gate", {
@@ -615,7 +640,7 @@ export async function getPreviewEventDetails(
 }
 
 async function resolveEventRecordId(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: PublicSupabase | Awaited<ReturnType<typeof createClient>>,
   slugOrId: string,
 ): Promise<string | null> {
   const value = decodeEventParam(slugOrId)
@@ -665,7 +690,7 @@ async function resolveEventRecordId(
 }
 
 async function loadVenueMapJson(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: PublicSupabase | Awaited<ReturnType<typeof createClient>>,
   venueId: string | null | undefined,
   eventId: string,
 ): Promise<unknown> {
@@ -714,7 +739,7 @@ export async function getPublicEventVenueMap(
 }
 
 async function loadPublicTicketPhases(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: PublicSupabase | Awaited<ReturnType<typeof createClient>>,
   tierIds: string[],
 ): Promise<Map<string, PublicTicketPhase[]>> {
   const byTier = new Map<string, PublicTicketPhase[]>()
@@ -748,7 +773,7 @@ async function loadPublicTicketPhases(
 }
 
 async function loadEventCoreRow(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: PublicSupabase | Awaited<ReturnType<typeof createClient>>,
   eventId: string,
   mode: "public" | "preview",
 ) {
@@ -780,7 +805,8 @@ async function loadEventDetails(
   eventId: string,
   options: { mode: "public" | "preview" },
 ): Promise<EventDetails | null> {
-  const supabase = await createClient()
+  const supabase =
+    options.mode === "preview" ? await createClient() : createPublicClient()
   const resolvedId = await resolveEventRecordId(supabase, eventId)
   if (!resolvedId) return null
 
@@ -1135,7 +1161,7 @@ async function loadEventDetails(
 }
 
 async function loadEventArtistsLineup(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: PublicSupabase | Awaited<ReturnType<typeof createClient>>,
   eventId: string,
 ): Promise<EventLineupData> {
   const empty: EventLineupData = { artists: [], slots: [] }
@@ -1173,7 +1199,7 @@ async function loadEventArtistsLineup(
 }
 
 async function resolvePublicVenueMap(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: PublicSupabase | Awaited<ReturnType<typeof createClient>>,
   event: EventDetailRow,
   seatingLayout: VenueSeatingLayout,
 ): Promise<InteractiveVenueMap> {
@@ -1321,7 +1347,7 @@ export async function getRelatedEvents(input: {
   if (!currentEventId) return []
 
   const limit = Math.min(Math.max(input.limit ?? 4, 1), 6)
-  const supabase = await createClient()
+  const supabase = createPublicClient()
 
   const { data, error } = await supabase
     .from("events")

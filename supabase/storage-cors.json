@@ -1,0 +1,24 @@
+[
+  {
+    "id": "tokepass-local",
+    "allowedOrigins": [
+      "http://localhost:3000",
+      "http://127.0.0.1:3000"
+    ],
+    "allowedMethods": ["GET", "HEAD", "OPTIONS"],
+    "allowedHeaders": ["*"],
+    "exposeHeaders": ["Content-Type", "Content-Length", "ETag"],
+    "maxAgeSeconds": 3600
+  },
+  {
+    "id": "tokepass-production",
+    "allowedOrigins": [
+      "https://tokepass.com.ar",
+      "https://www.tokepass.com.ar"
+    ],
+    "allowedMethods": ["GET", "HEAD", "OPTIONS"],
+    "allowedHeaders": ["*"],
+    "exposeHeaders": ["Content-Type", "Content-Length", "ETag"],
+    "maxAgeSeconds": 3600
+  }
+]

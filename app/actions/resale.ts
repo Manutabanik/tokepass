@@ -20,6 +20,7 @@ import {
   resaleExternalRef,
 } from "@/lib/resale"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { createPublicClient } from "@/lib/supabase/public"
 import { createClient } from "@/lib/supabase/server"
 import { formatCurrency } from "@/lib/format"
 
@@ -46,7 +47,7 @@ type ActionResult<T> = ActionOk<T> | ActionErr
 export async function getActiveResaleListingsForEvent(
   eventId: string,
 ): Promise<ResaleListingPublic[]> {
-  const supabase = await createClient()
+  const supabase = createPublicClient()
   const { data, error } = await supabase
     .from("ticket_resale_listings")
     .select("id, price, created_at, ticket_id")

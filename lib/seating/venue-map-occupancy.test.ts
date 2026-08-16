@@ -30,6 +30,18 @@ describe("venue-map-occupancy", () => {
     )
   })
 
+  it("keeps a server-held seat selected while occupancy is reserved", () => {
+    assert.equal(
+      resolveLiveVenueSeatStatus({
+        mapStatus: "available",
+        occupancy: "occupied",
+        selected: true,
+        held: true,
+      }),
+      "selected",
+    )
+  })
+
   it("converts hex to rgba", () => {
     assert.equal(hexToRgba("#10b981", 0.2), "rgba(16, 185, 129, 0.2)")
   })

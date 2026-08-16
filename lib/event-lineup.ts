@@ -1,5 +1,7 @@
+import { parseDateTimeLocal, toDatetimeLocalInput } from "@/lib/event-schedule"
 import { isPlayablePreviewUrl } from "@/lib/spotify/map"
 import { isSpotifyArtistId } from "@/lib/spotify/embed"
+import type { ScheduleDay } from "@/types/events"
 
 export type EventLineupArtist = {
   id: string
@@ -7,6 +9,8 @@ export type EventLineupArtist = {
   imageUrl: string | null
   role: string | null
   performanceTime: string | null
+  /** Jornada del schedule; null = grilla general / sin asignar. */
+  dayId: string | null
   isHeadliner: boolean
   spotifyId: string | null
   topTrackPreviewUrl: string | null
@@ -115,6 +119,7 @@ function parseArtist(
     imageUrl: readImage(row),
     role: text(row.role) || text(row.subtitle) || text(row.description),
     performanceTime: readTime(row),
+    dayId: text(row.dayId) || text(row.day_id) || text(row.dateId),
     isHeadliner: readHeadliner(row),
     spotifyId: readSpotifyId(row),
     topTrackPreviewUrl: readPreviewUrl(row),
@@ -211,6 +216,7 @@ function artistFromJoin(raw: unknown): EventLineupArtist | null {
     imageUrl: readImage(nested ?? {}) || readImage(row),
     role: text(row.stage) || text(nested?.bio) || text(row.bio),
     performanceTime: text(row.performance_time) || readTime(row),
+    dayId: text(row.day_id) || text(row.dayId) || text(row.dateId),
     isHeadliner: readHeadliner(row),
     spotifyId: readSpotifyId(nested ?? {}) || readSpotifyId(row),
     topTrackPreviewUrl:
@@ -239,8 +245,9 @@ export function eventArtistsToLineup(rows: unknown): EventLineupData {
 
   sorted.forEach((item, index) => {
     const artist = artistFromJoin(item)
-    if (artist && !seen.has(artist.id)) {
-      seen.add(artist.id)
+    const artistKey = artist ? `${artist.id}:${artist.dayId ?? ""}` : ""
+    if (artist && !seen.has(artistKey)) {
+      seen.add(artistKey)
       artists.push(artist)
     }
 
@@ -258,6 +265,71 @@ export function eventArtistsToLineup(rows: unknown): EventLineupData {
   })
 
   return attachPerformanceTimes({ artists, slots })
+}
+
+function calendarDayKey(value: string | null | undefined): string | null {
+  const raw = value?.trim()
+  if (!raw) return null
+  const local = toDatetimeLocalInput(raw)
+  return local ? local.slice(0, 10) : null
+}
+
+export function resolveLineupArtistDayId(
+  artist: Pick<EventLineupArtist, "dayId" | "performanceTime">,
+  scheduleDays: ScheduleDay[],
+): string | null {
+  const explicit = artist.dayId?.trim()
+  if (explicit) return explicit
+  if (scheduleDays.length === 0) return null
+
+  const raw = artist.performanceTime?.trim()
+  if (!raw) return null
+  const parsed = parseDateTimeLocal(raw) ?? new Date(raw)
+  if (Number.isNaN(parsed.getTime())) return null
+
+  const ts = parsed.getTime()
+  const inWindow = scheduleDays.find((day) => {
+    const start = new Date(day.start_time).getTime()
+    const end = new Date(day.end_time).getTime()
+    return ts >= start && ts < end
+  })
+  if (inWindow) return inWindow.id
+
+  const key = calendarDayKey(parsed.toISOString())
+  if (!key) return null
+  return (
+    scheduleDays.find((day) => calendarDayKey(day.start_time) === key)?.id ??
+    null
+  )
+}
+
+export function filterLineupByDay(
+  data: EventLineupData,
+  selectedDayId: string | null | undefined,
+  scheduleDays: ScheduleDay[] = [],
+): EventLineupData {
+  if (!selectedDayId || selectedDayId === "all" || scheduleDays.length < 2) {
+    return data
+  }
+  const hasBindings = data.artists.some((artist) =>
+    resolveLineupArtistDayId(artist, scheduleDays),
+  )
+  if (!hasBindings) return data
+
+  return {
+    ...data,
+    artists: data.artists.filter(
+      (artist) =>
+        resolveLineupArtistDayId(artist, scheduleDays) === selectedDayId,
+    ),
+    slots: data.slots.filter((slot) => {
+      const inferred = resolveLineupArtistDayId(
+        { dayId: null, performanceTime: slot.time },
+        scheduleDays,
+      )
+      return !inferred || inferred === selectedDayId
+    }),
+  }
 }
 
 function attachPerformanceTimes(data: EventLineupData): EventLineupData {

@@ -1,18 +1,33 @@
 /**
  * Política de holds de checkout / stock (Tokepass).
  *
- * GA, tienda y asientos numerados: 8 minutos.
+ * GA, tienda y asientos numerados: 10 minutos.
  * - GA / pending: desde `orders.created_at` (`expire_abandoned_orders` + preferencia MP).
  * - Seating: `event_seating_units.reserved_until` al reservar (mismo TTL).
  */
-export const GA_CHECKOUT_HOLD_MINUTES = 8
-export const SEATING_HOLD_MINUTES = 8
+export const GA_CHECKOUT_HOLD_MINUTES = 10
+export const SEATING_HOLD_MINUTES = 10
 
 export const GA_CHECKOUT_HOLD_INTERVAL = `${GA_CHECKOUT_HOLD_MINUTES} minutes` as const
 
 export const GA_CHECKOUT_HOLD_MS = GA_CHECKOUT_HOLD_MINUTES * 60 * 1000
 
-/** Fin del hold: seating usa reserved_until; GA/tienda = ahora + 8m. */
+/** El más próximo de dos `reserved_until` ISO del servidor. */
+export function minReservedUntil(
+  left?: string | null,
+  right?: string | null,
+): string | null {
+  const leftMs = left ? new Date(left).getTime() : Number.NaN
+  const rightMs = right ? new Date(right).getTime() : Number.NaN
+  const leftOk = Number.isFinite(leftMs)
+  const rightOk = Number.isFinite(rightMs)
+  if (leftOk && rightOk) return leftMs <= rightMs ? left! : right!
+  if (leftOk) return left!
+  if (rightOk) return right!
+  return null
+}
+
+/** Fin del hold: seating usa reserved_until; GA/tienda = ahora + 10m. */
 export function resolveCheckoutExpiresAt(
   reservedUntil?: string | null,
   nowMs: number = Date.now(),

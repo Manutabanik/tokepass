@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation"
 
 import { canUserSandboxCheckout } from "@/app/actions/checkout"
 import { getPreviewEventDetails } from "@/app/actions/public-events"
+import { StorefrontChromeGate } from "@/components/layout/public-shell"
 import { EventPreviewBanner } from "@/components/public/event-preview-banner"
 import { EventStorefront } from "@/components/public/event-storefront"
 import { createClient } from "@/lib/supabase/server"
@@ -54,11 +55,13 @@ export default async function EventPreviewPage({
 
   return (
     <div>
-      <EventPreviewBanner
-        eventId={event.id}
-        canPublish={event.status === "draft"}
-        status={event.status}
-      />
+      <StorefrontChromeGate>
+        <EventPreviewBanner
+          eventId={event.id}
+          canPublish={event.status === "draft"}
+          status={event.status}
+        />
+      </StorefrontChromeGate>
       <EventStorefront
         event={event}
         currentUserId={user.id}

@@ -89,7 +89,7 @@ export function PaymentMethodSelector({
             <label
               key={option.value}
               className={cn(
-                "flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-card p-4 transition-all dark:border-border dark:bg-card",
+                "flex min-w-0 cursor-pointer items-start gap-3 rounded-xl border border-border bg-card p-4 transition-all dark:border-border dark:bg-card",
                 "hover:border-primary/40",
                 selected &&
                   "border-primary bg-primary/5 ring-2 ring-primary/20 dark:bg-primary/10",
@@ -106,10 +106,10 @@ export function PaymentMethodSelector({
                 <Icon className={option.iconClassName} aria-hidden="true" />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-sm font-semibold text-foreground">
+                <span className="block break-words text-sm font-semibold whitespace-normal text-foreground">
                   {option.title}
                 </span>
-                <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
+                <span className="mt-0.5 block break-words text-xs leading-relaxed whitespace-normal text-muted-foreground">
                   {option.subtitle}
                 </span>
               </span>

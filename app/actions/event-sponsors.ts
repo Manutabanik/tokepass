@@ -12,6 +12,7 @@ import {
   type PublicSponsor,
   type SponsorTier,
 } from "@/lib/sponsors"
+import { createPublicClient } from "@/lib/supabase/public"
 import { createClient } from "@/lib/supabase/server"
 import type { EventSponsor } from "@/types/database"
 
@@ -41,7 +42,7 @@ async function requireEventOrganizer(eventId: string) {
 
 export async function listEventSponsors(eventId: string): Promise<PublicSponsor[]> {
   if (!eventId) return []
-  const supabase = await createClient()
+  const supabase = createPublicClient()
   const { data, error } = await supabase
     .from("event_sponsors")
     .select("id, name, logo_url, website_url, tier")

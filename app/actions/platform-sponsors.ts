@@ -11,6 +11,7 @@ import {
   storagePathFromSponsorUrl,
   type PublicSponsor,
 } from "@/lib/sponsors"
+import { createPublicClient } from "@/lib/supabase/public"
 import { createClient } from "@/lib/supabase/server"
 import type { PlatformSponsor } from "@/types/database"
 
@@ -39,7 +40,7 @@ async function requireSuperAdmin() {
 }
 
 export async function getActivePlatformSponsors(): Promise<PublicSponsor[]> {
-  const supabase = await createClient()
+  const supabase = createPublicClient()
   const { data, error } = await supabase
     .from("platform_sponsors")
     .select("id, name, logo_url, website_url")
