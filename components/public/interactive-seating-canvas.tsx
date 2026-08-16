@@ -188,7 +188,11 @@ export function InteractiveSeatingCanvas({
   const applyOccupancyPatch = useCallback((patch: Record<string, SeatStatus>) => {
     setLiveOccupancy((current) => ({ ...current, ...patch }))
   }, [])
-  useSeatingOccupancyRealtime(eventId, applyOccupancyPatch, "canvas")
+  useSeatingOccupancyRealtime(
+    readOnly ? null : eventId,
+    applyOccupancyPatch,
+    "canvas",
+  )
   useEffect(() => {
     setLiveOccupancy({})
   }, [eventId])

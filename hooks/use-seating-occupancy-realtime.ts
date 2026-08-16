@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 
 import { createClient } from "@/lib/supabase/client"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
@@ -10,6 +10,8 @@ type SeatingUnitRealtimeRow = {
   layout_item_id?: string
   status?: string
 }
+
+let occupancyChannelSeq = 0
 
 function statusToOccupancy(status: string | undefined): SeatStatus {
   if (status === "available") return "available"
@@ -31,13 +33,19 @@ export function useSeatingOccupancyRealtime(
   onPatch: (patch: Record<string, SeatStatus>) => void,
   channelKey = "map",
 ) {
+  const onPatchRef = useRef(onPatch)
+  onPatchRef.current = onPatch
+
   useEffect(() => {
     const cleanEventId = eventId?.trim()
     if (!cleanEventId) return
 
     const supabase = createClient()
+    const topic = `public:event_seating_units:${cleanEventId}:${channelKey}:${++occupancyChannelSeq}`
+    let cancelled = false
+
     const channel = supabase
-      .channel(`public:event_seating_units:${cleanEventId}:${channelKey}`)
+      .channel(topic)
       .on(
         "postgres_changes",
         {
@@ -47,16 +55,18 @@ export function useSeatingOccupancyRealtime(
           filter: `event_id=eq.${cleanEventId}`,
         },
         (payload) => {
+          if (cancelled) return
           const next = occupancyPatchFromSeatingRow(
             payload.new as SeatingUnitRealtimeRow | null,
           )
-          if (next) onPatch(next)
+          if (next) onPatchRef.current(next)
         },
       )
       .subscribe()
 
     return () => {
+      cancelled = true
       void supabase.removeChannel(channel)
     }
-  }, [channelKey, eventId, onPatch])
+  }, [channelKey, eventId])
 }

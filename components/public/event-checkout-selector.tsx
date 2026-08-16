@@ -35,13 +35,15 @@ import {
   type InventoryTierType,
 } from "@/lib/inventory/unified-inventory"
 import { resolvePurchaseLimit } from "@/lib/checkout-limits"
-import { isCategorySoldOut } from "@/lib/checkout/category-stock"
+import { resolveCategoryAvailability } from "@/lib/checkout/category-stock"
 import {
   FULL_PASS_TAB_ID,
   groupTicketsByDate,
+  isSamePriceAnyDay,
+  listCheckoutDayTabs,
   ticketMatchesTab,
 } from "@/lib/checkout/ticket-day-groups"
-import { flattenVenueMapSeats } from "@/lib/seating/venue-map-geometry"
+import { flattenSeatsForAvailability } from "@/lib/seating/venue-map-geometry"
 import { cn, tapFeedbackClass } from "@/lib/utils"
 import type { ScheduleDay } from "@/types/events"
 
@@ -170,6 +172,28 @@ export function EventCheckoutSelector({
     name: string
     sectorId?: string | null
   }) {
+    const tier = listTiers.find((item) => item.id === category.id)
+    if (tier) {
+      const soldOut = resolveCategoryAvailability({
+        requiresMap: tierRequiresMap(tier),
+        stock: tier.available,
+        categoryId: tier.id,
+        seatingSectorId: tier.seatingSectorId ?? category.sectorId,
+        categoryName: tier.name,
+        seats: seatSelection?.map
+          ? flattenSeatsForAvailability(seatSelection.map)
+          : [],
+        occupancyBySeatId: seatSelection?.occupancyBySeatId,
+        summaryAvailable: seatSelection?.sectorSummaries?.find(
+          (row) =>
+            row.tierId === tier.id ||
+            row.sectorId === (tier.seatingSectorId ?? category.sectorId) ||
+            row.sectorName.trim().toLowerCase() === tier.name.trim().toLowerCase(),
+        )?.available,
+        mapReady: Boolean(seatSelection?.map) && !mapLoading,
+      }).isSoldOut
+      if (soldOut) return
+    }
     if (hasInteractiveMap && seatSelection) {
       setActiveSeatCategory({
         id: category.id,
@@ -305,31 +329,48 @@ function TicketSelectionList({
     () => groupTicketsByDate(listTiers, scheduleDays),
     [listTiers, scheduleDays],
   )
+  const dayTabs = useMemo(
+    () => listCheckoutDayTabs(scheduleDays, listTiers),
+    [listTiers, scheduleDays],
+  )
   const hasFullPass = groupedDays.fullPassTickets.length > 0
-  const dayGroups = groupedDays.ticketsByDate
-  const showDayTabs = hasFullPass || dayGroups.length > 1
+  const samePriceAnyDay = useMemo(
+    () => isSamePriceAnyDay(listTiers, scheduleDays),
+    [listTiers, scheduleDays],
+  )
+  const showDayTabs = dayTabs.length > 1 || (hasFullPass && dayTabs.length >= 1)
   const defaultTab = hasFullPass
     ? FULL_PASS_TAB_ID
-    : (dayGroups[0]?.dateId ?? FULL_PASS_TAB_ID)
+    : (dayTabs[0]?.dateId ?? FULL_PASS_TAB_ID)
   const [activeTabId, setActiveTabId] = useState(defaultTab)
 
   useEffect(() => {
     const validIds = new Set<string>([
       ...(hasFullPass ? [FULL_PASS_TAB_ID] : []),
-      ...dayGroups.map((group) => group.dateId),
+      ...dayTabs.map((tab) => tab.dateId),
     ])
     if (!validIds.has(activeTabId)) {
       setActiveTabId(defaultTab)
     }
-  }, [activeTabId, defaultTab, dayGroups, hasFullPass])
+  }, [activeTabId, defaultTab, dayTabs, hasFullPass])
 
   const displayedTickets = useMemo(() => {
     if (!showDayTabs) return listTiers
-    return listTiers.filter((tier) => ticketMatchesTab(tier, activeTabId))
-  }, [activeTabId, listTiers, showDayTabs])
+    const dayHasOwnTickets = listTiers.some((tier) => {
+      const meta = ticketMatchesTab(tier, activeTabId)
+      return meta && !ticketMatchesTab(tier, FULL_PASS_TAB_ID)
+    })
+    const treatFullPassAsAnyDay =
+      activeTabId !== FULL_PASS_TAB_ID &&
+      (samePriceAnyDay || !dayHasOwnTickets)
+    return listTiers.filter((tier) =>
+      ticketMatchesTab(tier, activeTabId, { treatFullPassAsAnyDay }),
+    )
+  }, [activeTabId, listTiers, samePriceAnyDay, showDayTabs])
 
   const mapSeats = useMemo(
-    () => (seatSelection?.map ? flattenVenueMapSeats(seatSelection.map) : []),
+    () =>
+      seatSelection?.map ? flattenSeatsForAvailability(seatSelection.map) : [],
     [seatSelection?.map],
   )
   const occupancyBySeatId = seatSelection?.occupancyBySeatId ?? {}
@@ -356,6 +397,7 @@ function TicketSelectionList({
         mapSeats={mapSeats}
         occupancyBySeatId={occupancyBySeatId}
         mapReady={Boolean(seatSelection?.map) && !mapLoading}
+        sectorSummaries={seatSelection?.sectorSummaries}
         onQuantityChange={onQuantityChange}
         onOpenSeatSelection={() =>
           onOpenSeatSelection({
@@ -441,7 +483,7 @@ function TicketSelectionList({
                 Pase Completo
               </button>
             ) : null}
-            {dayGroups.map((day) => (
+            {dayTabs.map((day) => (
               <button
                 key={day.dateId}
                 type="button"
@@ -461,6 +503,11 @@ function TicketSelectionList({
             ))}
           </div>
         </div>
+      ) : null}
+      {showDayTabs && samePriceAnyDay ? (
+        <p className="mb-4 text-xs font-medium text-muted-foreground">
+          Mismo valor para cualquier día seleccionado
+        </p>
       ) : null}
 
       <div className="relative z-0 flex flex-col gap-4 pb-[140px]">
@@ -513,6 +560,7 @@ function UnifiedTicketCard({
   mapSeats,
   occupancyBySeatId,
   mapReady,
+  sectorSummaries,
   onQuantityChange,
   onOpenSeatSelection,
 }: {
@@ -527,9 +575,10 @@ function UnifiedTicketCard({
   mapLoading: boolean
   includesGeneralAccess: boolean
   selectedPlaces: string[]
-  mapSeats: ReturnType<typeof flattenVenueMapSeats>
+  mapSeats: ReturnType<typeof flattenSeatsForAvailability>
   occupancyBySeatId: SeatSelectionContext["occupancyBySeatId"]
   mapReady: boolean
+  sectorSummaries?: SeatSelectionContext["sectorSummaries"]
   onQuantityChange: (tierId: string, quantity: number, max: number) => void
   onOpenSeatSelection: () => void
 }) {
@@ -545,7 +594,13 @@ function UnifiedTicketCard({
   const unitPrice = current?.price ?? tier.price
   const phaseName = current?.name
 
-  const isSoldOut = isCategorySoldOut({
+  const summary = sectorSummaries?.find(
+    (row) =>
+      row.tierId === tier.id ||
+      row.sectorId === tier.seatingSectorId ||
+      row.sectorName.trim().toLowerCase() === tier.name.trim().toLowerCase(),
+  )
+  const availability = resolveCategoryAvailability({
     requiresMap,
     stock: tier.available,
     categoryId: tier.id,
@@ -553,8 +608,10 @@ function UnifiedTicketCard({
     categoryName: tier.name,
     seats: mapSeats,
     occupancyBySeatId,
+    summaryAvailable: summary?.available,
     mapReady,
   })
+  const isSoldOut = availability.isSoldOut
 
   return (
     <div
@@ -591,12 +648,16 @@ function UnifiedTicketCard({
               <AlertCircle className="size-3" aria-hidden="true" />
               Agotado
             </span>
-          ) : (
+          ) : availability.available > 0 ? (
             <StockHint
-              available={tier.available}
+              available={availability.available}
               capacity={tier.capacity}
               sold={tier.sold}
             />
+          ) : (
+            <span className="mt-1 text-xs font-semibold text-emerald-500">
+              Disponible
+            </span>
           )}
           {phaseName ? (
             <p className="text-xs text-muted-foreground">{phaseName}</p>
@@ -609,18 +670,28 @@ function UnifiedTicketCard({
         </div>
         <div className="flex-shrink-0">
           {isSoldOut ? (
-            <div className="flex h-12 items-center justify-center rounded-xl bg-secondary/50 px-6 text-sm font-bold text-muted-foreground">
-              Sin Stock
-            </div>
+            <button
+              type="button"
+              disabled
+              className="pointer-events-none h-12 cursor-not-allowed rounded-xl bg-secondary/40 px-6 text-sm font-bold text-muted-foreground opacity-50"
+            >
+              Agotado
+            </button>
           ) : requiresMap ? (
             selectedPlaces.length === 0 ? (
               <button
                 type="button"
                 disabled={isPending || mapLoading}
-                onClick={onOpenSeatSelection}
+                onClick={(event) => {
+                  if (isSoldOut) {
+                    event.preventDefault()
+                    return
+                  }
+                  onOpenSeatSelection()
+                }}
                 className={cn(
                   tapFeedbackClass,
-                  "h-12 whitespace-nowrap rounded-xl bg-primary/20 px-6 text-sm font-bold text-primary transition-all hover:bg-primary hover:text-primary-foreground disabled:opacity-50",
+                  "h-12 whitespace-nowrap rounded-xl bg-primary/20 px-6 text-sm font-bold text-primary transition-all hover:bg-primary hover:text-primary-foreground disabled:pointer-events-none disabled:opacity-50",
                 )}
               >
                 {mapLoading ? "Cargando mapa…" : "Seleccionar lugares"}
@@ -630,9 +701,9 @@ function UnifiedTicketCard({
             <Stepper
               value={quantity}
               max={max}
-              disabled={isPending || max === 0}
+              disabled={isPending || isSoldOut || max === 0}
               onChange={(next) => {
-                if (tier.available <= 0) return
+                if (isSoldOut || availability.available <= 0) return
                 onQuantityChange(tier.id, next, max)
               }}
             />
@@ -659,7 +730,7 @@ function UnifiedTicketCard({
           ))}
         </ul>
       ) : null}
-      {requiresMap ? (
+      {requiresMap && !isSoldOut ? (
         <SelectedPlacesSummary
           labels={selectedPlaces}
           onModify={onOpenSeatSelection}

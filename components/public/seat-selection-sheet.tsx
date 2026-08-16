@@ -50,6 +50,12 @@ export type SeatSelectionContext = {
   onSelectZone: (zone: VenueMapZone) => void
   onUniversalContinue: (selection: UniversalSeatSelection) => void
   onConfirmed: () => void
+  sectorSummaries?: Array<{
+    sectorId: string
+    sectorName: string
+    available: number
+    tierId?: string | null
+  }>
 }
 
 export function selectedPlacesForCategory(
@@ -347,7 +353,7 @@ export function SeatSelectionSheet({
               </p>
             ) : null}
 
-            {justAssigned && context.map ? (
+            {tab === "list" && justAssigned && context.map ? (
               <div className="mt-5 min-h-[200px] flex-1 overflow-hidden rounded-2xl border border-primary/20 bg-zinc-950">
                 <AdaptiveSeatingFlow
                   immersive
@@ -372,7 +378,7 @@ export function SeatSelectionSheet({
             value="map"
             className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden"
           >
-            {context.map ? (
+            {tab === "map" && context.map ? (
               <div className="min-h-0 flex-1">
                 <AdaptiveSeatingFlow
                   immersive

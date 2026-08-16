@@ -47,10 +47,41 @@ export const FULL_PASS_TAB_ID = "full_pass"
 export function ticketMatchesTab(
   tier: TicketSelectorTier,
   activeTabId: string,
+  options?: { treatFullPassAsAnyDay?: boolean },
 ): boolean {
   const meta = resolveTicketDateMeta(tier)
   if (activeTabId === FULL_PASS_TAB_ID) return meta.isFullPass
-  return meta.dateId === activeTabId
+  if (meta.dateId === activeTabId) return true
+  return Boolean(options?.treatFullPassAsAnyDay && meta.isFullPass)
+}
+
+export function listCheckoutDayTabs(
+  scheduleDays: ScheduleDay[] = [],
+  tiers: TicketSelectorTier[] = [],
+): TicketDayGroup[] {
+  if (scheduleDays.length > 0) {
+    return scheduleDays.map((day) => ({
+      dateId: day.id,
+      dateLabel: day.title?.trim() || formatEventDay(day.start_time),
+      tickets: [],
+    }))
+  }
+  return groupTicketsByDate(tiers, scheduleDays).ticketsByDate
+}
+
+export function isSamePriceAnyDay(
+  tiers: TicketSelectorTier[],
+  scheduleDays: ScheduleDay[] = [],
+) {
+  if (scheduleDays.length < 2) return false
+  const priced = tiers.filter((tier) => Number.isFinite(tier.price))
+  if (priced.length === 0) return false
+  const daySpecific = priced.filter(
+    (tier) => !resolveTicketDateMeta(tier).isFullPass,
+  )
+  if (daySpecific.length === 0) return true
+  const prices = new Set(daySpecific.map((tier) => tier.price))
+  return prices.size <= 1
 }
 
 export function groupTicketsByDate(

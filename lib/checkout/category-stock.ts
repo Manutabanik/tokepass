@@ -18,6 +18,11 @@ function normalize(value: string | null | undefined) {
   return value?.trim().toLowerCase() ?? ""
 }
 
+function namesOverlap(left: string, right: string) {
+  if (!left || !right) return false
+  return left === right || left.includes(right) || right.includes(left)
+}
+
 export function seatMatchesCategory(
   seat: Pick<FlattenedVenueSeat, "id" | "sectorId" | "sectorName">,
   input: Pick<
@@ -33,8 +38,7 @@ export function seatMatchesCategory(
   if (categoryId && (seat.sectorId === categoryId || seat.id === categoryId)) {
     return true
   }
-  const name = normalize(input.categoryName)
-  return Boolean(name) && normalize(seat.sectorName) === name
+  return namesOverlap(normalize(input.categoryName), normalize(seat.sectorName))
 }
 
 export function isSeatNodeAvailable(
@@ -75,20 +79,51 @@ export function getAvailableStock(input: CategoryStockInput) {
   return Math.max(0, input.stock)
 }
 
-export function isCategorySoldOut(input: CategoryStockInput) {
-  if (!input.requiresMap) return input.stock <= 0
+export function resolveCategoryAvailability(input: CategoryStockInput) {
+  if (!input.requiresMap) {
+    const available = Math.max(0, input.stock)
+    return {
+      available,
+      matchedCount: 0,
+      isSoldOut: available <= 0,
+    }
+  }
 
   const matched = (input.seats ?? []).filter((seat) =>
     seatMatchesCategory(seat, input),
   )
+  const availableSeatsCount = matched.filter((seat) =>
+    isSeatNodeAvailable(seat, input.occupancyBySeatId),
+  ).length
+
   if (matched.length > 0) {
-    return matched.every(
-      (seat) => !isSeatNodeAvailable(seat, input.occupancyBySeatId),
-    )
+    return {
+      available: availableSeatsCount,
+      matchedCount: matched.length,
+      isSoldOut: availableSeatsCount === 0,
+    }
   }
+
   if (typeof input.summaryAvailable === "number") {
-    return input.summaryAvailable <= 0
+    const available = Math.max(0, input.summaryAvailable)
+    return {
+      available,
+      matchedCount: 0,
+      isSoldOut: available <= 0,
+    }
   }
-  if (!input.mapReady) return false
-  return false
+
+  return {
+    available: Math.max(0, input.stock),
+    matchedCount: 0,
+    isSoldOut: false,
+  }
+}
+
+export function getCategoryAvailability(input: CategoryStockInput) {
+  return resolveCategoryAvailability(input)
+}
+
+export function isCategorySoldOut(input: CategoryStockInput) {
+  return resolveCategoryAvailability(input).isSoldOut
 }

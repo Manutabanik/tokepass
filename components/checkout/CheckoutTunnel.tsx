@@ -115,14 +115,17 @@ import {
   resolveTierIdForUniversalSector,
 } from "@/lib/seating/venue-adapter"
 import {
-  flattenVenueMapSeats,
+  flattenSeatsForAvailability,
   hasInteractiveVenueMap,
   seatingLayoutToVenueMap,
   venueMapToSeatingLayout,
 } from "@/lib/seating/venue-map-geometry"
 import { isCategorySoldOut } from "@/lib/checkout/category-stock"
 import { mapIncludesGeneralAccess, type VenueMapElement } from "@/types/venue-map"
-import { occupancyFromSeatingUnits } from "@/lib/seating/venue-map-occupancy"
+import {
+  occupancyFromSeatingUnits,
+  resolveLiveVenueSeatStatus,
+} from "@/lib/seating/venue-map-occupancy"
 import { useSeatingOccupancyRealtime } from "@/hooks/use-seating-occupancy-realtime"
 import {
   hydrateStorefrontItemsFromMap,
@@ -720,7 +723,7 @@ export function CheckoutTunnel({
   const soldOutZoneIds = useMemo(() => {
     const zones = liveMap?.zones ?? []
     if (zones.length === 0) return []
-    const seats = liveMap ? flattenVenueMapSeats(liveMap) : []
+    const seats = liveMap ? flattenSeatsForAvailability(liveMap) : []
     const tierRefs = funnelTiers.map((tier) => ({
       id: tier.id,
       name: tier.name,
@@ -1382,6 +1385,18 @@ export function CheckoutTunnel({
   }
 
   function applyLayoutSeats(seats: StorefrontLayoutSeat[]) {
+    const blocked = seats.find((seat) => {
+      const live = resolveLiveVenueSeatStatus({
+        mapStatus: "available",
+        occupancy: occupancyBySeatId[seat.id],
+        selected: false,
+      })
+      return live !== "available" && live !== "selected"
+    })
+    if (blocked) {
+      toast.error("El lugar seleccionado ya no está disponible.")
+      return
+    }
     const store = useStorefrontSeatStore.getState()
     const result = store.setLayoutSeats(seats, maxTicketsPerUser)
     if (!result.ok) {
@@ -1392,6 +1407,29 @@ export function CheckoutTunnel({
   }
 
   function applyAssignedTables(tables: VenueMapElement[]) {
+    const blocked = tables.some((table) => {
+      const chairs = table.seats ?? []
+      if (chairs.length === 0) {
+        const live = resolveLiveVenueSeatStatus({
+          mapStatus: "available",
+          occupancy: occupancyBySeatId[table.id],
+          selected: false,
+        })
+        return live !== "available" && live !== "selected"
+      }
+      return chairs.some((seat) => {
+        const live = resolveLiveVenueSeatStatus({
+          mapStatus: seat.status,
+          occupancy: occupancyBySeatId[seat.id],
+          selected: false,
+        })
+        return live !== "available" && live !== "selected"
+      })
+    })
+    if (blocked) {
+      toast.error("El lugar seleccionado ya no está disponible.")
+      return
+    }
     const store = useStorefrontSeatStore.getState()
     const ids: string[] = []
     for (const table of tables) {
@@ -1588,9 +1626,7 @@ export function CheckoutTunnel({
     async function applyNumbered(unit: EventSeatingUnit) {
       if (!(await ensureGuestAuthForHold())) return
       if (unit.status !== "available" && unit.status !== "reserved") {
-        toast.error(
-          "Esta ubicación acaba de ser reservada por otra persona. Por favor elegí otra.",
-        )
+        toast.error("El lugar seleccionado ya no está disponible.")
         router.refresh()
         return
       }
@@ -1600,7 +1636,7 @@ export function CheckoutTunnel({
           hold.error === "not_materialized"
             ? "El inventario de esta zona todavía no está publicado."
             : hold.error === "out_of_stock"
-              ? "Esta ubicación acaba de ser reservada por otra persona. Por favor elegí otra."
+              ? "El lugar seleccionado ya no está disponible."
               : hold.error,
         )
         router.refresh()
@@ -1786,6 +1822,12 @@ export function CheckoutTunnel({
           setHighlightContinue(true)
           window.setTimeout(() => setHighlightContinue(false), 2400)
         },
+        sectorSummaries: seatingSectorSummaries.map((row) => ({
+          sectorId: row.sectorId,
+          sectorName: row.sectorName,
+          available: row.available,
+          tierId: row.tierId,
+        })),
       }
     : null
 

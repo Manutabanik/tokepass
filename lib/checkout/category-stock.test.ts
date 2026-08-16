@@ -6,6 +6,7 @@ import type { FlattenedVenueSeat } from "@/lib/seating/venue-map-geometry"
 import {
   countAvailableSeatsForCategory,
   isCategorySoldOut,
+  resolveCategoryAvailability,
 } from "./category-stock"
 
 function seat(
@@ -92,5 +93,50 @@ describe("isCategorySoldOut", () => {
       }),
       false,
     )
+  })
+
+  it("matches zone-grouped tables by sector name", () => {
+    const seats = [
+      seat({
+        id: "mesa-4",
+        sectorId: "zone-naranja",
+        sectorName: "Grada Naranja",
+      }),
+    ]
+    const open = resolveCategoryAvailability({
+      requiresMap: true,
+      stock: 0,
+      categoryName: "Grada Naranja",
+      seats,
+      occupancyBySeatId: {},
+      mapReady: true,
+    })
+    assert.equal(open.isSoldOut, false)
+    assert.equal(open.available, 1)
+  })
+
+  it("keeps sold-out label and action in sync for mapped seats", () => {
+    const seats = [seat({ id: "a1" })]
+    const sold = resolveCategoryAvailability({
+      requiresMap: true,
+      stock: 12,
+      seatingSectorId: "grada-naranja",
+      seats,
+      occupancyBySeatId: { a1: "occupied" },
+      mapReady: true,
+    })
+    assert.equal(sold.isSoldOut, true)
+    assert.equal(sold.available, 0)
+
+    const open = resolveCategoryAvailability({
+      requiresMap: true,
+      stock: 0,
+      seatingSectorId: "grada-naranja",
+      seats,
+      occupancyBySeatId: {},
+      mapReady: true,
+    })
+    assert.equal(open.isSoldOut, false)
+    assert.equal(open.available, 1)
   })
 })

@@ -382,6 +382,16 @@ export async function holdSeatingUnitForCart(
     }
   }
 
+  const { data: unitRow } = await supabase
+    .from("event_seating_units")
+    .select("status")
+    .eq("id", seatingUnitId)
+    .eq("event_id", eventId)
+    .maybeSingle()
+  if (unitRow && unitRow.status !== "available" && unitRow.status !== "reserved") {
+    return { success: false, error: "out_of_stock" }
+  }
+
   const { data, error } = await supabase.rpc("hold_seating_unit_for_cart", {
     p_event_id: eventId,
     p_owner_id: user.id,
@@ -442,6 +452,16 @@ export async function holdSeatingUnitForCartByLayoutItem(
       success: false,
       error: "Demasiados intentos. Esperá un momento y volvé a elegir.",
     }
+  }
+
+  const { data: unitRow } = await supabase
+    .from("event_seating_units")
+    .select("status")
+    .eq("event_id", eventId)
+    .eq("layout_item_id", layoutItemId)
+    .maybeSingle()
+  if (unitRow && unitRow.status !== "available" && unitRow.status !== "reserved") {
+    return { success: false, error: "out_of_stock" }
   }
 
   const { data, error } = await supabase.rpc(

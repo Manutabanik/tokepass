@@ -454,6 +454,73 @@ export function flattenVenueMapSeats(map: InteractiveVenueMap): FlattenedVenueSe
   return [...fromSectors, ...fromElements]
 }
 
+function flattenSellableElement(
+  element: VenueMapElement,
+  sectorNameFallback = "",
+): FlattenedVenueSeat[] {
+  if (!isSellableElement(element) || element.type === "standing_zone") {
+    return []
+  }
+  const sectorId = elementInventorySectorId(element)
+  const sectorName =
+    element.sectorName || element.groupName || sectorNameFallback || element.label
+  if (element.sellMode === "group") {
+    return [
+      {
+        id: element.id,
+        row: element.label,
+        number: 0,
+        x: element.x,
+        y: element.y,
+        sectorId,
+        sectorName,
+        color: element.color,
+        price: element.price,
+        mapStatus: "available",
+        source: "element",
+        label: venueElementSelectionName(element),
+      },
+    ]
+  }
+  return element.seats.map((seat) => ({
+    id: seat.id,
+    row: element.label,
+    number: seat.number,
+    x: seat.x,
+    y: seat.y,
+    sectorId,
+    sectorName,
+    color: element.color,
+    price: element.price,
+    mapStatus: seat.status,
+    source: "element" as const,
+  }))
+}
+
+/** Includes zone-grouped tables/gradas skipped by flattenVenueMapSeats. */
+export function flattenSeatsForAvailability(
+  map: InteractiveVenueMap,
+): FlattenedVenueSeat[] {
+  const base = flattenVenueMapSeats(map)
+  const seen = new Set(base.map((seat) => seat.id))
+  const extras: FlattenedVenueSeat[] = []
+  const zoneNameById = new Map(
+    (map.zones ?? []).map((zone) => [zone.id, zone.name] as const),
+  )
+  for (const element of map.elements ?? []) {
+    const zoneName =
+      (element.groupId && zoneNameById.get(element.groupId)) ||
+      zoneNameById.get(element.id) ||
+      ""
+    for (const seat of flattenSellableElement(element, zoneName)) {
+      if (seen.has(seat.id)) continue
+      seen.add(seat.id)
+      extras.push(seat)
+    }
+  }
+  return [...base, ...extras]
+}
+
 export function venueMapHasInventory(map: InteractiveVenueMap | null | undefined): boolean {
   if (!map) return false
   const sellable = (map.elements ?? []).some((element) => isSellableElement(element))
