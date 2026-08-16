@@ -1,0 +1,96 @@
+import assert from "node:assert/strict"
+import { describe, it } from "node:test"
+
+import type { FlattenedVenueSeat } from "@/lib/seating/venue-map-geometry"
+
+import {
+  countAvailableSeatsForCategory,
+  isCategorySoldOut,
+} from "./category-stock"
+
+function seat(
+  patch: Partial<FlattenedVenueSeat> & Pick<FlattenedVenueSeat, "id">,
+): FlattenedVenueSeat {
+  return {
+    row: "1",
+    number: 1,
+    x: 0,
+    y: 0,
+    sectorId: "grada-naranja",
+    sectorName: "Grada Naranja",
+    color: "#f97316",
+    price: 90000,
+    mapStatus: "available",
+    source: "element",
+    ...patch,
+  }
+}
+
+describe("isCategorySoldOut", () => {
+  it("uses GA stock when the category has no map", () => {
+    assert.equal(
+      isCategorySoldOut({ requiresMap: false, stock: 0 }),
+      true,
+    )
+    assert.equal(
+      isCategorySoldOut({ requiresMap: false, stock: 4 }),
+      false,
+    )
+  })
+
+  it("does not mark a mapped sector sold out from empty tier stock", () => {
+    const seats = [
+      seat({ id: "a1" }),
+      seat({ id: "a2", number: 2 }),
+    ]
+    assert.equal(
+      isCategorySoldOut({
+        requiresMap: true,
+        stock: 0,
+        seatingSectorId: "grada-naranja",
+        categoryName: "Grada Naranja",
+        seats,
+        occupancyBySeatId: {},
+        mapReady: true,
+      }),
+      false,
+    )
+    assert.equal(
+      countAvailableSeatsForCategory({
+        requiresMap: true,
+        stock: 0,
+        seatingSectorId: "grada-naranja",
+        seats,
+      }),
+      2,
+    )
+  })
+
+  it("marks a mapped sector sold out only when every seat is taken", () => {
+    const seats = [seat({ id: "a1" }), seat({ id: "a2", number: 2 })]
+    assert.equal(
+      isCategorySoldOut({
+        requiresMap: true,
+        stock: 99,
+        seatingSectorId: "grada-naranja",
+        seats,
+        occupancyBySeatId: { a1: "occupied", a2: "occupied" },
+        mapReady: true,
+      }),
+      true,
+    )
+  })
+
+  it("never fakes sold-out when the map has no matching seats yet", () => {
+    assert.equal(
+      isCategorySoldOut({
+        requiresMap: true,
+        stock: 0,
+        seatingSectorId: "grada-naranja",
+        seats: [],
+        mapReady: false,
+      }),
+      false,
+    )
+  })
+})

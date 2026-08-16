@@ -35,7 +35,13 @@ import {
   type InventoryTierType,
 } from "@/lib/inventory/unified-inventory"
 import { resolvePurchaseLimit } from "@/lib/checkout-limits"
-import { groupTicketsByDate } from "@/lib/checkout/ticket-day-groups"
+import { isCategorySoldOut } from "@/lib/checkout/category-stock"
+import {
+  FULL_PASS_TAB_ID,
+  groupTicketsByDate,
+  ticketMatchesTab,
+} from "@/lib/checkout/ticket-day-groups"
+import { flattenVenueMapSeats } from "@/lib/seating/venue-map-geometry"
 import { cn, tapFeedbackClass } from "@/lib/utils"
 import type { ScheduleDay } from "@/types/events"
 
@@ -178,7 +184,7 @@ export function EventCheckoutSelector({
 
   return (
     <section
-      className="mx-auto flex h-full w-full max-w-3xl flex-col space-y-5 px-4 md:px-0"
+      className="mx-auto flex h-full w-full max-w-2xl flex-col space-y-5 px-4 md:px-0"
       aria-label="Elegí tu entrada"
     >
       {showReservedSeat ? (
@@ -225,6 +231,7 @@ export function EventCheckoutSelector({
         selectedItems={selectedItems}
         scheduleDays={scheduleDays}
         showSyntheticMapRow={showSyntheticMapRow}
+        seatSelection={seatSelection}
         onQuantityChange={onQuantityChange}
         onOpenSeatSelection={openSeatSelection}
       />
@@ -271,6 +278,7 @@ function TicketSelectionList({
   selectedItems,
   scheduleDays,
   showSyntheticMapRow,
+  seatSelection,
   onQuantityChange,
   onOpenSeatSelection,
 }: {
@@ -285,6 +293,7 @@ function TicketSelectionList({
   selectedItems: StorefrontSelectedItem[]
   scheduleDays: ScheduleDay[]
   showSyntheticMapRow: boolean
+  seatSelection: SeatSelectionContext | null
   onQuantityChange: (tierId: string, quantity: number, max: number) => void
   onOpenSeatSelection: (category: {
     id: string
@@ -300,31 +309,30 @@ function TicketSelectionList({
   const dayGroups = groupedDays.ticketsByDate
   const showDayTabs = hasFullPass || dayGroups.length > 1
   const defaultTab = hasFullPass
-    ? "full_pass"
-    : (dayGroups[0]?.dateId ?? "full_pass")
-  const [selectedTab, setSelectedTab] = useState(defaultTab)
+    ? FULL_PASS_TAB_ID
+    : (dayGroups[0]?.dateId ?? FULL_PASS_TAB_ID)
+  const [activeTabId, setActiveTabId] = useState(defaultTab)
 
   useEffect(() => {
     const validIds = new Set<string>([
-      ...(hasFullPass ? ["full_pass"] : []),
+      ...(hasFullPass ? [FULL_PASS_TAB_ID] : []),
       ...dayGroups.map((group) => group.dateId),
     ])
-    if (!validIds.has(selectedTab)) {
-      setSelectedTab(defaultTab)
+    if (!validIds.has(activeTabId)) {
+      setActiveTabId(defaultTab)
     }
-  }, [defaultTab, dayGroups, hasFullPass, selectedTab])
+  }, [activeTabId, defaultTab, dayGroups, hasFullPass])
 
-  const visibleTiers = useMemo(() => {
+  const displayedTickets = useMemo(() => {
     if (!showDayTabs) return listTiers
-    if (selectedTab === "full_pass") return groupedDays.fullPassTickets
-    return dayGroups.find((group) => group.dateId === selectedTab)?.tickets ?? []
-  }, [
-    dayGroups,
-    groupedDays.fullPassTickets,
-    listTiers,
-    selectedTab,
-    showDayTabs,
-  ])
+    return listTiers.filter((tier) => ticketMatchesTab(tier, activeTabId))
+  }, [activeTabId, listTiers, showDayTabs])
+
+  const mapSeats = useMemo(
+    () => (seatSelection?.map ? flattenVenueMapSeats(seatSelection.map) : []),
+    [seatSelection?.map],
+  )
+  const occupancyBySeatId = seatSelection?.occupancyBySeatId ?? {}
 
   function renderTierCard(tier: TicketSelectorTier) {
     const requiresMap = tierRequiresMap(tier)
@@ -345,6 +353,9 @@ function TicketSelectionList({
         mapLoading={mapLoading}
         includesGeneralAccess={includesGeneralAccess && requiresMap}
         selectedPlaces={selectedPlaces}
+        mapSeats={mapSeats}
+        occupancyBySeatId={occupancyBySeatId}
+        mapReady={Boolean(seatSelection?.map) && !mapLoading}
         onQuantityChange={onQuantityChange}
         onOpenSeatSelection={() =>
           onOpenSeatSelection({
@@ -358,7 +369,7 @@ function TicketSelectionList({
   }
 
   const syntheticRow = showSyntheticMapRow ? (
-    <div className="group rounded-2xl border border-border/60 bg-card p-4 transition-all hover:border-border hover:bg-card/80 md:p-5">
+    <div className="relative rounded-2xl border border-border/50 bg-card/50 p-5 backdrop-blur-sm transition-all hover:border-primary/50 hover:bg-card/80">
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div className="flex min-w-0 flex-col gap-1.5">
           <div className="flex flex-wrap items-center gap-2">
@@ -405,11 +416,11 @@ function TicketSelectionList({
   ) : null
 
   return (
-    <div className="flex h-full w-full flex-col">
+    <div className="relative flex w-full flex-col">
       {showDayTabs ? (
-        <div className="sticky top-0 z-30 -mx-4 mb-6 border-b border-border/50 bg-background px-4 pb-4 pt-4 backdrop-blur-xl md:mx-0 md:px-0">
+        <div className="relative z-0 mb-6 flex w-full items-center gap-2 overflow-x-auto border-b border-border/40 py-3 no-scrollbar">
           <div
-            className="no-scrollbar flex items-center gap-3 overflow-x-auto pb-1"
+            className="flex min-w-max items-center gap-2"
             role="tablist"
             aria-label="Filtrar entradas por día"
           >
@@ -417,13 +428,13 @@ function TicketSelectionList({
               <button
                 type="button"
                 role="tab"
-                aria-selected={selectedTab === "full_pass"}
-                onClick={() => setSelectedTab("full_pass")}
+                aria-selected={activeTabId === FULL_PASS_TAB_ID}
+                onClick={() => setActiveTabId(FULL_PASS_TAB_ID)}
                 className={cn(
-                  "inline-flex flex-shrink-0 items-center gap-2 whitespace-nowrap rounded-full px-5 py-2.5 text-sm font-bold transition-all",
-                  selectedTab === "full_pass"
-                    ? "bg-primary text-primary-foreground shadow-md"
-                    : "bg-secondary text-muted-foreground hover:bg-secondary/80",
+                  "inline-flex flex-shrink-0 items-center gap-2 whitespace-nowrap rounded-full px-5 py-2.5 text-sm font-bold transition-all duration-200",
+                  activeTabId === FULL_PASS_TAB_ID
+                    ? "scale-105 bg-primary text-primary-foreground shadow-md"
+                    : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground",
                 )}
               >
                 <Sparkles className="size-3.5" aria-hidden="true" />
@@ -435,13 +446,13 @@ function TicketSelectionList({
                 key={day.dateId}
                 type="button"
                 role="tab"
-                aria-selected={selectedTab === day.dateId}
-                onClick={() => setSelectedTab(day.dateId)}
+                aria-selected={activeTabId === day.dateId}
+                onClick={() => setActiveTabId(day.dateId)}
                 className={cn(
-                  "inline-flex flex-shrink-0 items-center gap-2 whitespace-nowrap rounded-full px-5 py-2.5 text-sm font-bold transition-all",
-                  selectedTab === day.dateId
-                    ? "bg-primary text-primary-foreground shadow-md"
-                    : "bg-secondary text-muted-foreground hover:bg-secondary/80",
+                  "inline-flex flex-shrink-0 items-center gap-2 whitespace-nowrap rounded-full px-5 py-2.5 text-sm font-bold transition-all duration-200",
+                  activeTabId === day.dateId
+                    ? "scale-105 bg-primary text-primary-foreground shadow-md"
+                    : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground",
                 )}
               >
                 <CalendarDays className="size-3.5" aria-hidden="true" />
@@ -452,8 +463,8 @@ function TicketSelectionList({
         </div>
       ) : null}
 
-      <div className="flex flex-col gap-3 pb-[140px]">
-        {visibleTiers.map(renderTierCard)}
+      <div className="relative z-0 flex flex-col gap-4 pb-[140px]">
+        {displayedTickets.map(renderTierCard)}
         {syntheticRow}
       </div>
     </div>
@@ -499,6 +510,9 @@ function UnifiedTicketCard({
   mapLoading,
   includesGeneralAccess,
   selectedPlaces,
+  mapSeats,
+  occupancyBySeatId,
+  mapReady,
   onQuantityChange,
   onOpenSeatSelection,
 }: {
@@ -513,6 +527,9 @@ function UnifiedTicketCard({
   mapLoading: boolean
   includesGeneralAccess: boolean
   selectedPlaces: string[]
+  mapSeats: ReturnType<typeof flattenVenueMapSeats>
+  occupancyBySeatId: SeatSelectionContext["occupancyBySeatId"]
+  mapReady: boolean
   onQuantityChange: (tierId: string, quantity: number, max: number) => void
   onOpenSeatSelection: () => void
 }) {
@@ -528,26 +545,38 @@ function UnifiedTicketCard({
   const unitPrice = current?.price ?? tier.price
   const phaseName = current?.name
 
-  const isSoldOut = max === 0 && quantity === 0
+  const isSoldOut = isCategorySoldOut({
+    requiresMap,
+    stock: tier.available,
+    categoryId: tier.id,
+    seatingSectorId: tier.seatingSectorId,
+    categoryName: tier.name,
+    seats: mapSeats,
+    occupancyBySeatId,
+    mapReady,
+  })
 
   return (
     <div
       className={cn(
-        "group rounded-2xl border border-border/60 bg-card p-4 transition-all hover:border-border hover:bg-card/80 md:p-5",
-        focused && "ring-1 ring-primary/30",
-        highlight === "bestseller" && "border-amber-400/35",
-        selectedPlaces.length > 0 && "border-primary/30",
+        "relative rounded-2xl border border-border/50 bg-card/50 p-5 backdrop-blur-sm transition-all",
+        isSoldOut
+          ? "cursor-not-allowed opacity-50 grayscale"
+          : "hover:border-primary/50 hover:bg-card/80",
+        focused && !isSoldOut && "ring-1 ring-primary/30",
+        highlight === "bestseller" && !isSoldOut && "border-amber-400/35",
+        selectedPlaces.length > 0 && !isSoldOut && "border-primary/30",
       )}
     >
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
-        <div className="flex min-w-0 flex-col gap-1.5">
+        <div className="flex min-w-0 flex-col gap-1">
           <div className="flex flex-wrap items-center gap-2">
             <h4 className="text-lg font-black text-foreground">{tier.name}</h4>
             {includesGeneralAccess ? <InclusionBadge /> : null}
-            {highlight === "bestseller" ? (
+            {highlight === "bestseller" && !isSoldOut ? (
               <Badge
                 variant="secondary"
-                className="h-5 gap-1 border border-amber-400/30 bg-amber-400/15 text-[10px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-200"
+                className="h-5 gap-1 border border-amber-500/20 bg-amber-500/10 text-[10px] font-bold uppercase tracking-wide text-amber-400"
               >
                 <Sparkles className="size-3" aria-hidden="true" />
                 Más vendida
@@ -558,7 +587,7 @@ function UnifiedTicketCard({
             {formatCurrency(unitPrice)}
           </span>
           {isSoldOut ? (
-            <span className="flex items-center gap-1 text-xs font-bold text-destructive">
+            <span className="mt-1 flex items-center gap-1 text-xs font-bold text-destructive">
               <AlertCircle className="size-3" aria-hidden="true" />
               Agotado
             </span>
@@ -579,15 +608,19 @@ function UnifiedTicketCard({
           ) : null}
         </div>
         <div className="flex-shrink-0">
-          {requiresMap ? (
+          {isSoldOut ? (
+            <div className="flex h-12 items-center justify-center rounded-xl bg-secondary/50 px-6 text-sm font-bold text-muted-foreground">
+              Sin Stock
+            </div>
+          ) : requiresMap ? (
             selectedPlaces.length === 0 ? (
               <button
                 type="button"
-                disabled={isPending || mapLoading || isSoldOut}
+                disabled={isPending || mapLoading}
                 onClick={onOpenSeatSelection}
                 className={cn(
                   tapFeedbackClass,
-                  "whitespace-nowrap rounded-full bg-primary/20 px-4 py-2 text-sm font-bold text-primary transition-colors hover:bg-primary hover:text-primary-foreground disabled:opacity-50",
+                  "h-12 whitespace-nowrap rounded-xl bg-primary/20 px-6 text-sm font-bold text-primary transition-all hover:bg-primary hover:text-primary-foreground disabled:opacity-50",
                 )}
               >
                 {mapLoading ? "Cargando mapa…" : "Seleccionar lugares"}
@@ -598,7 +631,10 @@ function UnifiedTicketCard({
               value={quantity}
               max={max}
               disabled={isPending || max === 0}
-              onChange={(next) => onQuantityChange(tier.id, next, max)}
+              onChange={(next) => {
+                if (tier.available <= 0) return
+                onQuantityChange(tier.id, next, max)
+              }}
             />
           )}
         </div>
@@ -657,10 +693,9 @@ export function groupCheckoutTiers(tiers: TicketSelectorTier[]) {
 
 function InclusionBadge() {
   return (
-    <Badge className="border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/70 dark:text-amber-200">
-      <Sparkles className="size-3" aria-hidden="true" />
-      Incluye acceso general
-    </Badge>
+    <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-400">
+      Incluye Acceso
+    </span>
   )
 }
 
@@ -861,7 +896,7 @@ function Stepper({
   onChange: (next: number) => void
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-full bg-secondary/50 px-1 py-1">
+    <div className="flex items-center rounded-xl bg-secondary/60 p-1">
       <Button
         type="button"
         size="icon-sm"

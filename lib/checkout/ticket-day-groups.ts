@@ -42,6 +42,17 @@ export function ticketDateLabel(
   return meta.dateId ?? "Fecha específica"
 }
 
+export const FULL_PASS_TAB_ID = "full_pass"
+
+export function ticketMatchesTab(
+  tier: TicketSelectorTier,
+  activeTabId: string,
+): boolean {
+  const meta = resolveTicketDateMeta(tier)
+  if (activeTabId === FULL_PASS_TAB_ID) return meta.isFullPass
+  return meta.dateId === activeTabId
+}
+
 export function groupTicketsByDate(
   tiers: TicketSelectorTier[],
   scheduleDays: ScheduleDay[] = [],

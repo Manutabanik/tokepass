@@ -1,7 +1,7 @@
 "use client"
 
 import { Minus, Plus, X } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { AdaptiveSeatingFlow } from "@/components/public/adaptive-seating-flow"
 import { Button } from "@/components/ui/button"
@@ -17,10 +17,7 @@ import { useLockBodyScroll } from "@/hooks/use-lock-body-scroll"
 import { resolvePurchaseLimit } from "@/lib/checkout-limits"
 import { formatCurrency } from "@/lib/format"
 import { buildAccessibleSeatTree } from "@/lib/seating/accessible-seat-tree"
-import {
-  assignBestSeats,
-  assignBestTableElements,
-} from "@/lib/seating/assign-best-seats"
+import { suggestAssignmentForPeople } from "@/lib/seating/assign-best-seats"
 import type {
   UniversalSeatSelection,
   UniversalSector,
@@ -92,6 +89,7 @@ export function SeatSelectionSheet({
   const [quantity, setQuantity] = useState(2)
   const [assignError, setAssignError] = useState<string | null>(null)
   const [justAssigned, setJustAssigned] = useState(false)
+  const preserveSelectionRef = useRef<number | null>(null)
 
   useLockBodyScroll(open)
 
@@ -99,9 +97,17 @@ export function SeatSelectionSheet({
     if (!open) return
     setTab("list")
     setAssignError(null)
-    setJustAssigned(
-      useStorefrontSeatStore.getState().selectedItems.length > 0,
+    const existing = storefrontSelectionCount(
+      useStorefrontSeatStore.getState().selectedItems,
     )
+    if (existing > 0) {
+      setQuantity(existing)
+      setJustAssigned(true)
+      preserveSelectionRef.current = existing
+    } else {
+      setJustAssigned(false)
+      preserveSelectionRef.current = null
+    }
     useStorefrontSeatStore.getState().setView("list")
   }, [open])
 
@@ -125,17 +131,22 @@ export function SeatSelectionSheet({
     selectedSeatIds,
   ])
 
-  function handleAssignBest() {
-    if (pending || !context.map || quantity < 1) return
+  function resolveTargetSector() {
     const preferred = sectorId
       ? sectors.find((sector) => sector.id === sectorId)
       : null
-    const sector =
+    return (
       preferred ??
       sectors.find((item) => item.kind === "numbered" && !item.soldOut) ??
       sectors.find((item) => !item.soldOut) ??
       sectors[0] ??
       null
+    )
+  }
+
+  function handleAssignBest() {
+    if (pending || !context.map || quantity < 1) return
+    const sector = resolveTargetSector()
 
     if (!sector) {
       setAssignError("No hay sectores disponibles para asignar.")
@@ -149,53 +160,60 @@ export function SeatSelectionSheet({
       return
     }
 
-    if (sector.isTableSector) {
-      const tables = assignBestTableElements({
-        map: context.map,
-        sectorId: sector.id,
-        sectorName: sector.name,
-        count: quantity,
-        occupancyBySeatId: context.occupancyBySeatId,
-        selectedIds: selectedSeatIds,
-      })
-      if (tables.length > 0) {
-        context.onAssignTables(tables)
-        setAssignError(null)
-        setJustAssigned(true)
-        return
-      }
-    }
-
-    const found = assignBestSeats({
+    const suggestion = suggestAssignmentForPeople({
+      map: context.map,
       seats: flattenVenueMapSeats(context.map),
       sectorId: sector.id,
-      count: quantity,
-      mode: "SEATS",
+      sectorName: sector.name,
+      people: quantity,
       isTableSector: sector.isTableSector,
+      capacityPerUnit: sector.capacityPerUnit,
       occupancyBySeatId: context.occupancyBySeatId,
-      selectedSeatIds,
     })
-    if (found.length === 0) {
-      setAssignError(
-        "No hay lugares juntos disponibles. Probá otra cantidad o elegí en el mapa.",
-      )
+
+    if (suggestion.kind === "tables") {
+      context.onAssignTables(suggestion.tables)
+      useStorefrontSeatStore
+        .getState()
+        .pulseFocus(suggestion.tables.map((table) => table.id))
+      setAssignError(null)
+      setJustAssigned(true)
       return
     }
-    context.onAssignSeats(
-      found.map((seat) => ({
-        id: seat.id,
-        row: seat.row,
-        number: seat.number,
-        sectorId: seat.sectorId,
-        sectorName: seat.sectorName,
-        price: seat.price,
-        color: seat.color,
-        label: seat.label,
-      })),
+
+    if (suggestion.kind === "seats") {
+      context.onAssignSeats(
+        suggestion.seats.map((seat) => ({
+          id: seat.id,
+          row: seat.row,
+          number: seat.number,
+          sectorId: seat.sectorId,
+          sectorName: seat.sectorName,
+          price: seat.price,
+          color: seat.color,
+          label: seat.label,
+        })),
+      )
+      useStorefrontSeatStore
+        .getState()
+        .pulseFocus(suggestion.seats.map((seat) => seat.id))
+      setAssignError(null)
+      setJustAssigned(true)
+      return
+    }
+
+    setAssignError(
+      "No hay lugares juntos disponibles. Probá otra cantidad o elegí en el mapa.",
     )
-    setAssignError(null)
-    setJustAssigned(true)
   }
+
+  useEffect(() => {
+    if (!open || tab !== "list" || pending || !context.map || quantity < 1) {
+      return
+    }
+    if (preserveSelectionRef.current === quantity) return
+    handleAssignBest()
+  }, [open, tab, quantity, sectorId, pending, context.map])
 
   function handleConfirm() {
     if (!canConfirm) return
@@ -221,7 +239,7 @@ export function SeatSelectionSheet({
                 {title}
               </SheetTitle>
               <SheetDescription className="mt-0.5 text-sm text-muted-foreground">
-                Elegí automáticamente o marcá el lugar exacto en el mapa.
+                Indicá cuántas personas son y te armamos la mejor combinación.
               </SheetDescription>
             </div>
             <button
@@ -266,7 +284,7 @@ export function SeatSelectionSheet({
             className="no-scrollbar mt-0 flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-5"
           >
             <p className="text-center text-base font-semibold text-foreground">
-              ¿Cuántos lugares necesitás?
+              ¿Cuántas personas son?
             </p>
             <div className="mt-4 flex items-center justify-center">
               <div className="flex items-center gap-3 rounded-full bg-secondary/50 px-1 py-1">
@@ -274,6 +292,7 @@ export function SeatSelectionSheet({
                   type="button"
                   disabled={pending || quantity <= 1}
                   onClick={() => {
+                    preserveSelectionRef.current = null
                     setQuantity((current) => Math.max(1, current - 1))
                     setAssignError(null)
                   }}
@@ -292,6 +311,7 @@ export function SeatSelectionSheet({
                   type="button"
                   disabled={pending || quantity >= purchaseCap}
                   onClick={() => {
+                    preserveSelectionRef.current = null
                     setQuantity((current) => Math.min(purchaseCap, current + 1))
                     setAssignError(null)
                   }}
@@ -305,16 +325,21 @@ export function SeatSelectionSheet({
                 </button>
               </div>
             </div>
+            <p className="mt-4 text-center text-sm text-muted-foreground">
+              {justAssigned
+                ? `Combinación sugerida para ${quantity} ${quantity === 1 ? "persona" : "personas"}.`
+                : "Buscamos mesas o sillas juntas para tu grupo."}
+            </p>
             <Button
               type="button"
               disabled={pending || !context.map}
               onClick={handleAssignBest}
               className={cn(
                 tapFeedbackClass,
-                "mt-5 h-auto w-full rounded-2xl py-3.5 text-base font-bold",
+                "mt-4 h-auto w-full rounded-2xl py-3.5 text-base font-bold",
               )}
             >
-              Asignar mejores lugares
+              Recalcular mejor combinación
             </Button>
             {assignError ? (
               <p className="mt-3 text-center text-sm text-destructive">
@@ -385,7 +410,7 @@ export function SeatSelectionSheet({
             )}
           >
             {canConfirm
-              ? `Confirmar ${placeCount} ${placeCount === 1 ? "lugar" : "lugares"} - ${formatCurrency(placeTotal)}`
+              ? `Confirmar selección de ${placeCount} ${placeCount === 1 ? "lugar" : "lugares"} · ${formatCurrency(placeTotal)}`
               : "Confirmá al menos un lugar"}
           </Button>
         </div>

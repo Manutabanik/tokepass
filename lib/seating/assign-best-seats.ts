@@ -363,6 +363,55 @@ export function previewFastAssign(input: {
   }
 }
 
+export function suggestAssignmentForPeople(input: {
+  map: InteractiveVenueMap
+  seats: FlattenedVenueSeat[]
+  sectorId: string
+  sectorName?: string
+  people: number
+  isTableSector: boolean
+  capacityPerUnit: number
+  occupancyBySeatId?: Record<string, SeatStatus>
+  selectedSeatIds?: Iterable<string>
+}):
+  | { kind: "seats"; seats: FlattenedVenueSeat[] }
+  | { kind: "tables"; tables: VenueMapElement[] }
+  | { kind: "none" } {
+  const people = Math.max(1, Math.floor(input.people) || 1)
+  const found = assignBestSeats({
+    seats: input.seats,
+    sectorId: input.sectorId,
+    count: people,
+    mode: "SEATS",
+    isTableSector: input.isTableSector,
+    occupancyBySeatId: input.occupancyBySeatId,
+    selectedSeatIds: input.selectedSeatIds,
+  })
+  if (found.length > 0) {
+    return { kind: "seats", seats: found }
+  }
+
+  if (input.isTableSector) {
+    const tablesNeeded = Math.max(
+      1,
+      Math.ceil(people / Math.max(1, input.capacityPerUnit)),
+    )
+    const tables = assignBestTableElements({
+      map: input.map,
+      sectorId: input.sectorId,
+      sectorName: input.sectorName,
+      count: tablesNeeded,
+      occupancyBySeatId: input.occupancyBySeatId,
+      selectedIds: input.selectedSeatIds,
+    })
+    if (tables.length > 0) {
+      return { kind: "tables", tables }
+    }
+  }
+
+  return { kind: "none" }
+}
+
 export function availableOnBestTable(input: {
   seats: FlattenedVenueSeat[]
   sectorId: string

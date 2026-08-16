@@ -51,7 +51,7 @@ export function CheckoutTicketList({
   const seatSheetOpen = useCheckoutStore((state) => state.seatSheetOpen)
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-3xl flex-col">
+    <div className="mx-auto flex h-full w-full max-w-2xl flex-col">
       <EventCheckoutSelector
         tiers={tiers}
         quantities={quantities}

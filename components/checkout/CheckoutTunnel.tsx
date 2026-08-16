@@ -115,10 +115,12 @@ import {
   resolveTierIdForUniversalSector,
 } from "@/lib/seating/venue-adapter"
 import {
+  flattenVenueMapSeats,
   hasInteractiveVenueMap,
   seatingLayoutToVenueMap,
   venueMapToSeatingLayout,
 } from "@/lib/seating/venue-map-geometry"
+import { isCategorySoldOut } from "@/lib/checkout/category-stock"
 import { mapIncludesGeneralAccess, type VenueMapElement } from "@/types/venue-map"
 import { occupancyFromSeatingUnits } from "@/lib/seating/venue-map-occupancy"
 import { useSeatingOccupancyRealtime } from "@/hooks/use-seating-occupancy-realtime"
@@ -650,34 +652,6 @@ export function CheckoutTunnel({
     hasInteractiveMapProp || hasInteractiveVenueMap(liveMap)
   useLockBodyScroll(showSeatFlow)
 
-  const soldOutZoneIds = useMemo(() => {
-    const zones = liveMap?.zones ?? []
-    if (zones.length === 0) return []
-    const tierRefs = funnelTiers.map((tier) => ({
-      id: tier.id,
-      name: tier.name,
-      price: tier.price,
-      available: tier.available,
-      seatingSectorId: tier.seatingSectorId,
-      layoutType: tier.layoutType,
-    }))
-    return zones
-      .filter((zone) => {
-        const tierId = resolveTierIdForUniversalSector(
-          zone.id,
-          zone.name,
-          tierRefs,
-        )
-        const tier = funnelTiers.find((item) => item.id === tierId)
-        const summary = seatingSectorSummaries.find(
-          (row) => row.sectorId === zone.id || row.sectorName === zone.name,
-        )
-        const available = tier?.available ?? summary?.available
-        return available != null && available <= 0
-      })
-      .map((zone) => zone.id)
-  }, [funnelTiers, liveMap?.zones, seatingSectorSummaries])
-
   const hasSeatingFlow =
     seatingSectorSummaries.length > 0 ||
     seatingUnits.length > 0 ||
@@ -742,6 +716,44 @@ export function CheckoutTunnel({
     }),
     [liveOccupancy, mergedSeatingUnits],
   )
+
+  const soldOutZoneIds = useMemo(() => {
+    const zones = liveMap?.zones ?? []
+    if (zones.length === 0) return []
+    const seats = liveMap ? flattenVenueMapSeats(liveMap) : []
+    const tierRefs = funnelTiers.map((tier) => ({
+      id: tier.id,
+      name: tier.name,
+      price: tier.price,
+      available: tier.available,
+      seatingSectorId: tier.seatingSectorId,
+      layoutType: tier.layoutType,
+    }))
+    return zones
+      .filter((zone) => {
+        const tierId = resolveTierIdForUniversalSector(
+          zone.id,
+          zone.name,
+          tierRefs,
+        )
+        const tier = funnelTiers.find((item) => item.id === tierId)
+        const summary = seatingSectorSummaries.find(
+          (row) => row.sectorId === zone.id || row.sectorName === zone.name,
+        )
+        return isCategorySoldOut({
+          requiresMap: true,
+          stock: tier?.available ?? 0,
+          categoryId: zone.id,
+          seatingSectorId: tier?.seatingSectorId ?? zone.id,
+          categoryName: zone.name,
+          seats,
+          occupancyBySeatId,
+          summaryAvailable: summary?.available,
+          mapReady: Boolean(liveMap),
+        })
+      })
+      .map((zone) => zone.id)
+  }, [funnelTiers, liveMap, occupancyBySeatId, seatingSectorSummaries])
   const heldSeatIds = useMemo(() => {
     if (!selectedSeat) return []
     const unit = mergedSeatingUnits.find(

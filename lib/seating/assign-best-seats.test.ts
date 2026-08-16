@@ -10,6 +10,7 @@ import {
   previewFastAssign,
   resolveSectorAssignMeta,
   shouldSuggestFullTables,
+  suggestAssignmentForPeople,
 } from "./assign-best-seats"
 
 function seat(
@@ -216,5 +217,28 @@ describe("assignBestTableElements", () => {
       count: 1,
     })
     assert.equal(found[0]?.id, "t-17")
+  })
+})
+
+describe("suggestAssignmentForPeople", () => {
+  it("suggests contiguous seats for a party of two", () => {
+    const map = emptyVenueMap()
+    const seats = [
+      ...table("Mesa 1", ["m1a", "m1b", "m1c", "m1d"]),
+      ...table("Mesa 2", ["m2a", "m2b", "m2c", "m2d"]),
+    ]
+    const suggestion = suggestAssignmentForPeople({
+      map,
+      seats,
+      sectorId: "mesas",
+      people: 2,
+      isTableSector: true,
+      capacityPerUnit: 4,
+      occupancyBySeatId: { m1a: "occupied" },
+    })
+    assert.equal(suggestion.kind, "seats")
+    if (suggestion.kind === "seats") {
+      assert.equal(suggestion.seats.length, 2)
+    }
   })
 })
