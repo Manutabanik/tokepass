@@ -19,7 +19,7 @@ import { EVENT_STAFF_ROLES, type EventStaffRole } from "@/types/auth"
 const ROLE_LABEL: Record<EventStaffRole, string> = {
   door_staff: "Puerta (scanner)",
   bar_staff: "Tienda / Canjes",
-  cashier: "Caja / POS",
+  cashier: "Boletería / Caja POS",
 }
 
 export function EventStaffManager({
@@ -54,8 +54,9 @@ export function EventStaffManager({
           Staff por evento
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Delegá puerta, barra o caja sin compartir tu cuenta de organizador.
-          El staff solo ve las herramientas de su rol.
+          Delegá puerta, barra o boletería sin compartir tu cuenta de organizador.
+          Puerta y cajero de boletería pueden operar el POS. El staff solo ve las
+          herramientas de su rol.
         </p>
       </div>
 

@@ -38,8 +38,7 @@ export default async function CuentaCompraDetallePage({
     order.createdAt,
     order.reservedUntil,
   ).toISOString()
-  const holdActive =
-    order.status === "pending" && new Date(expiresAt).getTime() > Date.now()
+  const holdActive = order.status === "pending"
 
   return (
     <section className="space-y-6">

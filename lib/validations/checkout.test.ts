@@ -35,7 +35,7 @@ describe("CheckoutPayloadSchema mixed inventory", () => {
     assert.equal(parsed.success, true)
   })
 
-  it("rejects two numbered seating units in the same order", () => {
+  it("allows two numbered seating units plus general and addon lines", () => {
     const parsed = CheckoutPayloadSchema.safeParse({
       eventId,
       buyer,
@@ -49,6 +49,28 @@ describe("CheckoutPayloadSchema mixed inventory", () => {
           tierId: seatedTierId,
           quantity: 1,
           seatingUnitId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+        },
+        { tierId: generalId, quantity: 3 },
+        { tierId: addonId, quantity: 1 },
+      ],
+    })
+    assert.equal(parsed.success, true)
+  })
+
+  it("rejects duplicate seating unit ids", () => {
+    const parsed = CheckoutPayloadSchema.safeParse({
+      eventId,
+      buyer,
+      items: [
+        {
+          tierId: seatedTierId,
+          quantity: 1,
+          seatingUnitId: seatId,
+        },
+        {
+          tierId: seatedTierId,
+          quantity: 1,
+          seatingUnitId: seatId,
         },
       ],
     })

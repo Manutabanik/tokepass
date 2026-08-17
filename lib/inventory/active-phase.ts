@@ -64,11 +64,55 @@ export function isPhaseInWindow(
   return true
 }
 
+export function healPhaseStatuses(
+  phases: PublicTicketPhase[] | undefined,
+  now = Date.now(),
+): PublicTicketPhase[] {
+  const sorted = sortTicketPhases(phases ?? [])
+  if (sorted.length === 0) return []
+
+  const closed = sorted.map((phase) => {
+    if (phase.status === "sold_out") return phase
+    if (phaseRemaining(phase) <= 0) {
+      return { ...phase, status: "sold_out" as const }
+    }
+    if (phase.endTime) {
+      const end = Date.parse(phase.endTime)
+      if (Number.isFinite(end) && end <= now) {
+        return { ...phase, status: "sold_out" as const }
+      }
+    }
+    if (phase.startTime) {
+      const start = Date.parse(phase.startTime)
+      if (Number.isFinite(start) && start > now) {
+        return { ...phase, status: "scheduled" as const }
+      }
+    }
+    return phase
+  })
+
+  const current =
+    closed.find(
+      (phase) =>
+        phase.status !== "sold_out" &&
+        isPhaseInWindow(phase, now) &&
+        phaseRemaining(phase) > 0,
+    ) ?? null
+
+  return closed.map((phase) => {
+    if (phase.status === "sold_out") return phase
+    if (current && phase.id === current.id) {
+      return { ...phase, status: "active" as const }
+    }
+    return { ...phase, status: "scheduled" as const }
+  })
+}
+
 export function resolveSalePhases(
   phases: PublicTicketPhase[] | undefined,
   now = Date.now(),
 ) {
-  const sorted = sortTicketPhases(phases ?? [])
+  const sorted = healPhaseStatuses(phases, now)
   const displayActive =
     sorted.find(
       (phase) =>

@@ -1,8 +1,10 @@
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
+import { isPosStaffRole } from "@/lib/pos-checkout"
 import {
   REFERRAL_COOKIE_NAME,
+  RRPP_COOKIE_NAME,
   buildReferralCookieOptions,
   normalizeReferralCode,
 } from "@/lib/referral"
@@ -10,7 +12,12 @@ import {
   buildContentSecurityPolicy,
   createCspNonce,
 } from "@/lib/security/csp"
-import { isStaffOpsPath, staffHomeForRoles } from "@/types/auth"
+import {
+  isPosOpsPath,
+  isStaffOpsPath,
+  staffCanAccessPath,
+  staffHomeForRoles,
+} from "@/types/auth"
 import type { EventStaffRole } from "@/types/auth"
 import type { Database } from "@/types/database"
 
@@ -51,15 +58,15 @@ function captureReferralFromRequest(
   request: NextRequest,
   response: NextResponse,
 ): NextResponse {
-  const raw = request.nextUrl.searchParams.get("ref")
+  const raw =
+    request.nextUrl.searchParams.get("rrpp") ??
+    request.nextUrl.searchParams.get("ref")
   const code = normalizeReferralCode(raw)
   if (!code) return response
 
-  response.cookies.set(
-    REFERRAL_COOKIE_NAME,
-    code,
-    buildReferralCookieOptions(),
-  )
+  const cookieOptions = buildReferralCookieOptions()
+  response.cookies.set(REFERRAL_COOKIE_NAME, code, cookieOptions)
+  response.cookies.set(RRPP_COOKIE_NAME, code, cookieOptions)
   return response
 }
 
@@ -127,8 +134,11 @@ export async function updateSession(request: NextRequest) {
   const isAdminRoute = pathname.startsWith("/admin")
   const isSuperAdminRoute =
     pathname.startsWith("/superadmin") || pathname.startsWith("/super-admin")
-  const isPromoterRoute = pathname.startsWith("/promoter")
-  const isProtectedRoute = isAdminRoute || isSuperAdminRoute || isPromoterRoute
+  const isPosRoute = isPosOpsPath(pathname)
+  const isRrppRoute = pathname === "/rrpp" || pathname.startsWith("/rrpp/")
+  const isPromoterRoute = pathname.startsWith("/promoter") || isRrppRoute
+  const isProtectedRoute =
+    isAdminRoute || isSuperAdminRoute || isPromoterRoute || isPosRoute
 
   if (!user && isProtectedRoute) {
     const loginUrl = request.nextUrl.clone()
@@ -155,19 +165,37 @@ export async function updateSession(request: NextRequest) {
       return redirectWithRefreshedCookies(fallbackUrl, response, nonce)
     }
 
-    if (isAdminRoute && role !== "admin" && role !== "super_admin") {
+    const actorId = user.id
+
+    async function loadStaffRoles(): Promise<string[]> {
       const { data: assignments } = await supabase
         .from("event_staff_assignments")
         .select("role")
-        .eq("user_id", user.id)
+        .eq("user_id", actorId)
         .eq("is_active", true)
         .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
 
-      const staffRoles = [
-        ...new Set(
-          (assignments ?? []).map((row) => row.role as EventStaffRole),
-        ),
+      return [
+        ...new Set((assignments ?? []).map((row) => String(row.role))),
       ]
+    }
+
+    function staffHome(roles: string[]): string {
+      return staffHomeForRoles(roles as EventStaffRole[])
+    }
+
+    if (isPosRoute && role !== "admin" && role !== "super_admin") {
+      const staffRoles = await loadStaffRoles()
+      if (!staffRoles.some((staffRole) => isPosStaffRole(staffRole))) {
+        const homeUrl = request.nextUrl.clone()
+        homeUrl.pathname = staffRoles.length > 0 ? staffHome(staffRoles) : "/"
+        homeUrl.search = ""
+        return redirectWithRefreshedCookies(homeUrl, response, nonce)
+      }
+    }
+
+    if (isAdminRoute && role !== "admin" && role !== "super_admin") {
+      const staffRoles = await loadStaffRoles()
 
       if (staffRoles.length === 0) {
         const homeUrl = request.nextUrl.clone()
@@ -176,12 +204,14 @@ export async function updateSession(request: NextRequest) {
         return redirectWithRefreshedCookies(homeUrl, response, nonce)
       }
 
-      // Delegated staff: only scanner / bar / POS — never finances or event edit.
-      if (!isStaffOpsPath(pathname)) {
-        const staffHome = request.nextUrl.clone()
-        staffHome.pathname = staffHomeForRoles(staffRoles)
-        staffHome.search = ""
-        return redirectWithRefreshedCookies(staffHome, response, nonce)
+      if (
+        !isStaffOpsPath(pathname) ||
+        !staffCanAccessPath(pathname, staffRoles)
+      ) {
+        const staffHomeUrl = request.nextUrl.clone()
+        staffHomeUrl.pathname = staffHome(staffRoles)
+        staffHomeUrl.search = ""
+        return redirectWithRefreshedCookies(staffHomeUrl, response, nonce)
       }
     }
   }

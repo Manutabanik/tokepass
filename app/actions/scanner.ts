@@ -77,6 +77,7 @@ export type ScanTicketResult =
         | "unpaid"
         | "test_ticket_live"
         | "wrong_sector"
+        | "transfer_pending"
       message: string
       scannedAt?: string | null
       redirectSector?: string
@@ -604,6 +605,32 @@ export async function scanAndValidateTicket(
     }
   }
 
+  const { data: pendingTransfer, error: pendingError } = await supabase.rpc(
+    "ticket_has_pending_transfer",
+    { p_ticket_id: row.id },
+  )
+
+  if (pendingError) {
+    logger.error({
+      context: "actions/scanner",
+      message: "pending_transfer_check_failed",
+      error: pendingError.message,
+    })
+    return {
+      success: false,
+      status: "update_failed",
+      message: "No se pudo verificar el estado de la entrada",
+    }
+  }
+
+  if (pendingTransfer) {
+    return {
+      success: false,
+      status: "transfer_pending",
+      message: "Transferencia pendiente — QR bloqueado",
+    }
+  }
+
   const { data: admissionOk, error: admissionError } = await supabase.rpc(
     "is_ticket_admission_eligible",
     { p_ticket_id: row.id },
@@ -725,6 +752,10 @@ export type EventTicketManifestPayload = {
   eventStatus: string
   qrType: QrType
   hash: string
+  eventDate: string | null
+  scheduleDays: ReturnType<typeof parseScheduleDays>
+  /** Epoch ms del servidor al cerrar el manifiesto. */
+  server_timestamp: number
   tickets: Array<{
     id: string
     event_id: string
@@ -756,6 +787,8 @@ export type EventTicketManifestPayload = {
     group_slot: number | null
     batch_id: string | null
     ticket_type: string | null
+    pending_transfer: boolean
+    day_id: string | null
   }>
 }
 
@@ -787,7 +820,7 @@ export async function fetchEventTicketManifest(
 
   const { data: event, error: eventError } = await supabase
     .from("events")
-    .select("id, title, qr_type, organizer_id, status")
+    .select("id, title, qr_type, organizer_id, status, date, schedule_days")
     .eq("id", eventId)
     .maybeSingle()
 
@@ -802,7 +835,7 @@ export async function fetchEventTicketManifest(
   const withHolder = await supabase
     .from("tickets")
     .select(
-      "id, event_id, totp_secret, status, scanned_at, owner_id, max_admissions, admissions_used, is_test, ticket_type, holder_name, holder_dni, holder_email, group_id, group_slot, batch_id, event_seating_units(label, sector_id, sector_name, row_label), ticket_tiers(name, price, seating_sector_id), orders!tickets_order_id_fkey(payment_method)",
+      "id, event_id, totp_secret, status, scanned_at, owner_id, max_admissions, admissions_used, is_test, ticket_type, holder_name, holder_dni, holder_email, group_id, group_slot, batch_id, event_seating_units(label, sector_id, sector_name, row_label), ticket_tiers(name, price, seating_sector_id, day_id), orders!tickets_order_id_fkey(payment_method)",
     )
     .eq("event_id", eventId)
     .in("status", ["valid", "used", "scanned"])
@@ -811,7 +844,7 @@ export async function fetchEventTicketManifest(
     const fallback = await supabase
       .from("tickets")
       .select(
-        "id, event_id, totp_secret, status, scanned_at, owner_id, max_admissions, admissions_used, is_test, ticket_type, event_seating_units(label, sector_id, sector_name, row_label), ticket_tiers(name, price, seating_sector_id), orders!tickets_order_id_fkey(payment_method)",
+        "id, event_id, totp_secret, status, scanned_at, owner_id, max_admissions, admissions_used, is_test, ticket_type, event_seating_units(label, sector_id, sector_name, row_label), ticket_tiers(name, price, seating_sector_id, day_id), orders!tickets_order_id_fkey(payment_method)",
       )
       .eq("event_id", eventId)
       .in("status", ["valid", "used", "scanned"])
@@ -847,6 +880,7 @@ export async function fetchEventTicketManifest(
       name: string
       price?: number | null
       seating_sector_id?: string | null
+      day_id?: string | null
     } | null
     max_admissions: number
     admissions_used: number
@@ -909,6 +943,22 @@ export async function fetchEventTicketManifest(
     }
   }
 
+  const pendingTransferIds = new Set<string>()
+  const ticketIds = rows.map((row) => row.id)
+  if (ticketIds.length > 0) {
+    const pending = await supabase
+      .from("ticket_transfers")
+      .select("original_ticket_id")
+      .eq("status", "pending")
+      .in("original_ticket_id", ticketIds)
+    if (!pending.error) {
+      for (const row of pending.data ?? []) {
+        const id = String(row.original_ticket_id ?? "").trim()
+        if (id) pendingTransferIds.add(id)
+      }
+    }
+  }
+
   const tickets = rows
     .filter((row) => {
       const isSandbox = orderPaymentMethod(row) === "test_sandbox"
@@ -959,13 +1009,15 @@ export async function fetchEventTicketManifest(
         row.group_slot == null ? null : Number(row.group_slot),
       batch_id: row.batch_id ?? null,
       ticket_type: row.ticket_type ?? "admission",
+      pending_transfer: pendingTransferIds.has(row.id),
+      day_id: row.ticket_tiers?.day_id ?? null,
     }
   })
 
   const hashSource = tickets
     .map(
       (t) =>
-        `${t.id}:${t.status}:${t.totp_secret}:${t.is_test ? 1 : 0}:${t.is_sandbox ? 1 : 0}`,
+        `${t.id}:${t.status}:${t.totp_secret}:${t.is_test ? 1 : 0}:${t.is_sandbox ? 1 : 0}:${t.pending_transfer ? 1 : 0}:${t.day_id ?? ""}`,
     )
     .sort()
     .join("|")
@@ -978,6 +1030,9 @@ export async function fetchEventTicketManifest(
     eventStatus: event.status,
     qrType: event.qr_type === "static" ? "static" : "dynamic",
     hash,
+    eventDate: event.date ?? null,
+    scheduleDays: parseScheduleDays(event.schedule_days),
+    server_timestamp: Date.now(),
     tickets,
   }
 }

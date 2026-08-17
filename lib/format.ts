@@ -157,6 +157,20 @@ export function formatEventMonthShort(value: string | Date): string {
   )
 }
 
+function titleCaseShortToken(value: string): string {
+  const token = value.trim()
+  if (!token) return ""
+  return token.charAt(0).toUpperCase() + token.slice(1).toLowerCase()
+}
+
+/** Carrito y confirmación: "Jue 12 Nov" */
+export function formatEventCartDate(value: string | Date): string {
+  const weekday = titleCaseShortToken(formatEventWeekdayShort(value))
+  const day = formatEventDayNumber(value)
+  const month = titleCaseShortToken(formatEventMonthShort(value))
+  return [weekday, day, month].filter(Boolean).join(" ")
+}
+
 /** Formato cartelera: "SAB 24 NOV" */
 export function formatDiscoveryDate(value: string | Date): string {
   return formatOrEmpty(value, (date) => {

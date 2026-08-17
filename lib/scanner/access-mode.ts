@@ -31,6 +31,7 @@ export function writeScannerAccessMode(mode: ScannerAccessMode) {
   if (typeof window === "undefined") return
   try {
     window.localStorage.setItem(SCANNER_MODE_STORAGE_KEY, mode)
+    window.dispatchEvent(new Event("tokepass-scanner-access-mode"))
   } catch {
     // private mode / quota
   }

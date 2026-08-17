@@ -36,13 +36,11 @@ export function CheckoutCountdown({
   const router = useRouter()
   const expiredRef = useRef(false)
   const onExpiredRef = useRef(onExpired)
-  onExpiredRef.current = onExpired
-  const [remainingSeconds, setRemainingSeconds] = useState(() =>
-    Math.max(
-      0,
-      Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 1000),
-    ),
-  )
+  const [remainingSeconds, setRemainingSeconds] = useState(0)
+
+  useEffect(() => {
+    onExpiredRef.current = onExpired
+  }, [onExpired])
 
   useEffect(() => {
     expiredRef.current = false

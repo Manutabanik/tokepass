@@ -21,6 +21,10 @@ import {
 } from "@/components/ui/dialog"
 import { formatCurrency } from "@/lib/format"
 import { redirectToCheckoutPaymentOrToast } from "@/lib/checkout-redirect"
+import {
+  HIGH_DEMAND_LOCK_MESSAGE,
+  HIGH_DEMAND_LOCK_TIMEOUT,
+} from "@/lib/checkout/lock-timeout"
 import { cn } from "@/lib/utils"
 import type { EventSeatingUnit } from "@/types/venues"
 
@@ -95,6 +99,10 @@ export function SeatingSelector({
       if (!result.success) {
         if (result.error === "auth_required") {
           router.push(`/login?next=/events/${eventId}`)
+          return
+        }
+        if (result.error === HIGH_DEMAND_LOCK_TIMEOUT) {
+          toast.error(HIGH_DEMAND_LOCK_MESSAGE)
           return
         }
         if (result.error === "out_of_stock") {

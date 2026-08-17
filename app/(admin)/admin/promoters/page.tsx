@@ -63,9 +63,9 @@ export default async function AdminPromotersPage() {
           <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
             Invitá a tu equipo, compartí links con{" "}
             <code className="rounded bg-zinc-100 px-1.5 py-0.5 text-violet-700 dark:bg-white/5 dark:text-violet-200">
-              ?ref=CODIGO
+              ?rrpp=CODIGO
             </code>{" "}
-            (válido en toda Tokepass) y medí clics, ventas y comisiones.
+            (válido en toda Tokepass, alias ?ref=) y medí clics, ventas y comisiones.
           </p>
         </div>
         <AddPromoterDialog />
@@ -141,7 +141,7 @@ export default async function AdminPromotersPage() {
                 <TableRow className="border-zinc-200 hover:bg-transparent dark:border-white/8">
                   <TableHead className="text-muted-foreground">Nombre</TableHead>
                   <TableHead className="text-muted-foreground">Código</TableHead>
-                  <TableHead className="text-muted-foreground">Comisión %</TableHead>
+                  <TableHead className="text-muted-foreground">Comisión</TableHead>
                   <TableHead className="text-right text-muted-foreground">
                     Clics
                   </TableHead>
@@ -179,7 +179,9 @@ export default async function AdminPromotersPage() {
                       </code>
                     </TableCell>
                     <TableCell className="text-foreground">
-                      {formatPercent(promoter.commissionRate * 100, 0)}
+                      {promoter.commissionType === "fixed"
+                        ? `${formatCurrency(promoter.commissionFixedAmount)} / entrada`
+                        : formatPercent(promoter.commissionRate * 100, 0)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-foreground">
                       {formatNumber(promoter.clickCount)}

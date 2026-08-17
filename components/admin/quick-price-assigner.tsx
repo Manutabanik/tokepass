@@ -57,6 +57,7 @@ export function QuickPriceAssigner({
                 {group.name} · {group.count} {group.unit}
               </span>
             </Label>
+            <p className="text-[11px] text-muted-foreground">{group.priceHint}</p>
             <PriceInput
               min={0}
               value={group.price}

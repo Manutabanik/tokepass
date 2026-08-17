@@ -1,11 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useSyncExternalStore } from "react"
 import { createPortal } from "react-dom"
 
 import { BuyerViewModal } from "@/components/admin/buyer-view-modal"
 import { InteractiveVenueMapEditor } from "@/components/admin/interactive-venue-map-editor"
 import { venueMapToSeatingLayout } from "@/lib/seating/venue-map-geometry"
+import type { VenueMapSkuTicketRef } from "@/lib/seating/venue-map-sku-consistency"
 import { parseVenueMap, type InteractiveVenueMap } from "@/types/venue-map"
 import type { VenueSeatingLayout } from "@/types/venues"
 
@@ -19,6 +20,7 @@ export function InteractiveVenueMapStudio({
   onChange,
   onClose,
   saving = false,
+  tickets,
 }: {
   open: boolean
   eventTitle: string
@@ -29,19 +31,26 @@ export function InteractiveVenueMapStudio({
   onChange?: (map: InteractiveVenueMap) => void
   onClose: () => void
   saving?: boolean
+  tickets?: VenueMapSkuTicketRef[] | null
 }) {
   const [draft, setDraft] = useState(() => parseVenueMap(value))
   const [preview, setPreview] = useState(false)
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  )
+  const [openSeen, setOpenSeen] = useState(open)
+  if (open !== openSeen) {
+    setOpenSeen(open)
+    if (open) {
+      setDraft(parseVenueMap(value))
+      setPreview(false)
+    }
+  }
 
   useEffect(() => {
     if (!open) return
-    setDraft(parseVenueMap(value))
-    setPreview(false)
     const previous = document.body.style.overflow
     document.body.style.overflow = "hidden"
     return () => {
@@ -58,6 +67,7 @@ export function InteractiveVenueMapStudio({
         eventTitle={eventTitle}
         value={draft}
         saving={saving}
+        tickets={tickets}
         onChange={(next) => {
           setDraft(next)
           onChange?.(next)

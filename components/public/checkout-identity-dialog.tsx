@@ -48,7 +48,7 @@ export function CheckoutIdentityDialog({
         </DialogHeader>
 
         <p className="flex items-start gap-2 rounded-2xl border border-border bg-muted/40 px-3 py-3 text-sm text-muted-foreground">
-          <UserRound className="mt-0.5 size-4 shrink-0 text-emerald-500" aria-hidden="true" />
+          <UserRound className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
           Si seguís como invitado, tu selección queda en este dispositivo y te
           pedimos los datos al pagar.
         </p>
@@ -57,7 +57,7 @@ export function CheckoutIdentityDialog({
           <Button
             type="button"
             disabled={pending}
-            className="h-12 w-full rounded-xl bg-emerald-500 font-bold text-zinc-950 hover:bg-emerald-400"
+            className="h-12 w-full rounded-xl bg-primary font-bold text-primary-foreground hover:bg-primary/90"
             onClick={onLogin}
           >
             <LogIn className="size-4" aria-hidden="true" />

@@ -236,6 +236,7 @@ export function generateConcentricRing(
       created.color = config.color
       created.price = Math.max(0, config.price)
       created.sellMode = kind === "vip_chair" ? "per_seat" : "group"
+      created.priceMode = kind === "vip_chair" ? "per_person" : "closed_unit"
       created.label =
         kind === "long_table"
           ? `Tablón ${String(index + 1).padStart(2, "0")}`

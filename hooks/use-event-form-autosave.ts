@@ -78,6 +78,8 @@ export function useEventFormAutosave(input: {
   const readyRef = useRef(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const savingRef = useRef(false)
+  const scheduleSaveRef = useRef<() => void>(() => {})
+  const flushAutosaveRef = useRef<() => void>(() => {})
   const latestRef = useRef({
     values: initialValues,
     venuePricingMap,
@@ -87,8 +89,10 @@ export function useEventFormAutosave(input: {
     targetOrganizerId,
   })
 
-  latestRef.current.enabled = enabled
-  latestRef.current.targetOrganizerId = targetOrganizerId
+  useEffect(() => {
+    latestRef.current.enabled = enabled
+    latestRef.current.targetOrganizerId = targetOrganizerId
+  }, [enabled, targetOrganizerId])
 
   useEffect(() => {
     let cancelled = false
@@ -216,13 +220,18 @@ export function useEventFormAutosave(input: {
   }
 
   useEffect(() => {
+    scheduleSaveRef.current = scheduleSave
+    flushAutosaveRef.current = flushAutosave
+  })
+
+  useEffect(() => {
     if (!enabled) return
     const subscription = form.watch(() => {
       const next = form.getValues()
       latestRef.current.values = next
       if (!readyRef.current) return
       setFormValues(next)
-      scheduleSave()
+      scheduleSaveRef.current()
     })
     return () => subscription.unsubscribe()
   }, [enabled, form, setFormValues])
@@ -231,19 +240,19 @@ export function useEventFormAutosave(input: {
     if (!enabled || !readyRef.current) return
     setVenuePricingMapStore(venuePricingMap)
     latestRef.current.venuePricingMap = venuePricingMap
-    scheduleSave()
+    scheduleSaveRef.current()
   }, [enabled, venuePricingMap, setVenuePricingMapStore])
 
   useEffect(() => {
     if (!enabled || !readyRef.current) return
     setZoneTierPricing(zoneTierPricing)
     latestRef.current.zoneTierPricing = zoneTierPricing
-    scheduleSave()
+    scheduleSaveRef.current()
   }, [enabled, zoneTierPricing, setZoneTierPricing])
 
   useEffect(() => {
     function onHide() {
-      flushAutosave()
+      flushAutosaveRef.current()
     }
     window.addEventListener("beforeunload", onHide)
     const onVisibility = () => {

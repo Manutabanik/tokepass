@@ -22,6 +22,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   useTransition,
   type ReactNode,
 } from "react"
@@ -50,6 +51,7 @@ import {
 import { PosNumpad } from "@/components/admin/pos-numpad"
 import { PosSeatingMap } from "@/components/admin/pos-seating-map"
 import { PosThermalReceiptStack } from "@/components/admin/pos-thermal-receipt"
+import { PosTicketHandoffDialog } from "@/components/admin/pos-ticket-handoff"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -90,6 +92,29 @@ import { cn } from "@/lib/utils"
 type PayMethod = "cash_pos" | "transfer_pos" | "card_pos"
 
 const LAST_TICKETS_KEY = "tokepass.pos.lastTicketIds"
+const LAST_TICKETS_EVENT = "tokepass-pos-last-tickets"
+
+function readLastTicketIds(): string[] {
+  if (typeof window === "undefined") return []
+  try {
+    const raw = localStorage.getItem(LAST_TICKETS_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((id): id is string => typeof id === "string")
+  } catch {
+    return []
+  }
+}
+
+function subscribeLastTicketIds(onChange: () => void) {
+  window.addEventListener(LAST_TICKETS_EVENT, onChange)
+  window.addEventListener("storage", onChange)
+  return () => {
+    window.removeEventListener(LAST_TICKETS_EVENT, onChange)
+    window.removeEventListener("storage", onChange)
+  }
+}
 
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
@@ -103,6 +128,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
   const [cart, setCart] = useState<PosCart>({})
   const [soldDelta, setSoldDelta] = useState<Record<string, number>>({})
   const [phone, setPhone] = useState("")
+  const [buyerEmail, setBuyerEmail] = useState("")
   const [dni, setDni] = useState("")
   const [buyerName, setBuyerName] = useState("")
   const [expressSale, setExpressSale] = useState(true)
@@ -110,13 +136,21 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
   const [tendered, setTendered] = useState<number | null>(null)
   const [customTender, setCustomTender] = useState("")
   const [shift, setShift] = useState<CashierShiftRow | null>(null)
-  const [shiftLoading, setShiftLoading] = useState(true)
+  const [shiftLoading, setShiftLoading] = useState(() => Boolean(eventId))
+  const [shiftEventId, setShiftEventId] = useState(eventId)
   const [openCashAmount, setOpenCashAmount] = useState("0")
   const [openModal, setOpenModal] = useState(false)
   const [closeModal, setCloseModal] = useState(false)
   const [countedAmount, setCountedAmount] = useState("")
   const [isPending, startTransition] = useTransition()
-  const [lastTicketIds, setLastTicketIds] = useState<string[]>([])
+  const lastTicketIds = useSyncExternalStore(
+    subscribeLastTicketIds,
+    readLastTicketIds,
+    () => [],
+  )
+  const [handoffTickets, setHandoffTickets] = useState<
+    Array<{ id: string; totpSecret: string }>
+  >([])
   const [seatPicks, setSeatPicks] = useState<PosSeatPick[]>([])
   const [catalogView, setCatalogView] = useState<"quick" | "map">("quick")
   const [printReceipts, setPrintReceipts] = useState<PosThermalReceipt[]>([])
@@ -150,7 +184,10 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
     [events, eventId],
   )
 
-  const tiers = selectedEvent?.tiers ?? []
+  const tiers = useMemo(
+    () => selectedEvent?.tiers ?? [],
+    [selectedEvent],
+  )
 
   const liveTiers = useMemo(
     () =>
@@ -166,9 +203,18 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
     [tiers],
   )
 
-  useEffect(() => {
+  const [prevStockFingerprint, setPrevStockFingerprint] =
+    useState(stockFingerprint)
+  if (stockFingerprint !== prevStockFingerprint) {
+    setPrevStockFingerprint(stockFingerprint)
     setSoldDelta({})
-  }, [stockFingerprint])
+  }
+
+  if (eventId !== shiftEventId) {
+    setShiftEventId(eventId)
+    setShift(null)
+    setShiftLoading(Boolean(eventId))
+  }
 
   const lines = useMemo(
     () =>
@@ -198,6 +244,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
     setCart({})
     setSeatPicks([])
     setPhone("")
+    setBuyerEmail("")
     setDni("")
     setBuyerName("")
     setExpressSale(true)
@@ -207,26 +254,8 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
   }, [])
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(LAST_TICKETS_KEY)
-      if (!raw) return
-      const parsed = JSON.parse(raw) as unknown
-      if (Array.isArray(parsed)) {
-        setLastTicketIds(parsed.filter((id): id is string => typeof id === "string"))
-      }
-    } catch {
-      // ignore
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!eventId) {
-      setShift(null)
-      setShiftLoading(false)
-      return
-    }
+    if (!eventId) return
     let cancelled = false
-    setShiftLoading(true)
     void getOpenCashierShift(eventId).then((row) => {
       if (cancelled) return
       setShift(row)
@@ -250,9 +279,9 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
   }, [])
 
   function persistLastTickets(ids: string[]) {
-    setLastTicketIds(ids)
     try {
       localStorage.setItem(LAST_TICKETS_KEY, JSON.stringify(ids))
+      window.dispatchEvent(new Event(LAST_TICKETS_EVENT))
     } catch {
       // ignore
     }
@@ -362,7 +391,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
       setOpenModal(true)
       setCountedAmount("")
       setZReport(res.zReport)
-      void printUrlViaHiddenIframe(`/admin/pos/z/${res.shift.id}`).catch(() => {
+      void printUrlViaHiddenIframe(`/dashboard/pos/z/${res.shift.id}`).catch(() => {
         toast.message("Abrí de nuevo el Ticket Z si no salió la impresión.")
       })
     })
@@ -400,20 +429,32 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
 
       for (let index = 0; index < snapshot.length; index++) {
         const line = snapshot[index]
-        const chunks = splitPosQuantity(line.quantity)
+        const picks = posSeatPicksForTier(seatPicks, line.tierId)
+        const units =
+          picks.length > 0
+            ? picks.map((pick) => ({
+                quantity: 1 as const,
+                seatingLayoutItemId: pick.seatId,
+              }))
+            : splitPosQuantity(line.quantity).map((quantity) => ({
+                quantity,
+                seatingLayoutItemId: null as string | null,
+              }))
         let leftover = line.quantity
 
-        for (const quantity of chunks) {
+        for (const unit of units) {
           const sale = await createPosSale({
             eventId,
             tierId: line.tierId,
-            quantity,
+            quantity: unit.quantity,
             paymentMethod: payMethod,
             customerPhone: phone,
+            customerEmail: buyerEmail,
             customerDni: buyer.dni,
             customerName: buyer.name,
             shiftId: shift.id,
             supervisorPin: pin,
+            seatingLayoutItemId: unit.seatingLayoutItemId,
           })
 
           if (!sale.success) {
@@ -429,7 +470,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
             break
           }
 
-          leftover -= quantity
+          leftover -= unit.quantity
           billed += sale.totalAmount
           issued.push(
             ...sale.tickets.map((ticket) => ({
@@ -439,7 +480,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
           )
           setSoldDelta((current) => ({
             ...current,
-            [line.tierId]: (current[line.tierId] ?? 0) + quantity,
+            [line.tierId]: (current[line.tierId] ?? 0) + unit.quantity,
           }))
         }
 
@@ -510,6 +551,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
         window.clearTimeout(clearTimerRef.current)
       }
       clearTimerRef.current = window.setTimeout(() => {
+        setHandoffTickets(issued)
         resetSaleForm()
       }, 100)
     })
@@ -676,45 +718,47 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
     }
   }
 
-  keyHandlerRef.current = (event: KeyboardEvent) => {
-    if (dialogsOpen) return
-    const typing = isTypingTarget(event.target)
+  useEffect(() => {
+    keyHandlerRef.current = (event: KeyboardEvent) => {
+      if (dialogsOpen) return
+      const typing = isTypingTarget(event.target)
 
-    if (event.key === "Escape") {
-      event.preventDefault()
-      resetSaleForm()
-      return
-    }
+      if (event.key === "Escape") {
+        event.preventDefault()
+        resetSaleForm()
+        return
+      }
 
-    if (event.key === "Enter") {
-      event.preventDefault()
-      requestEmit()
-      return
-    }
+      if (event.key === "Enter") {
+        event.preventDefault()
+        requestEmit()
+        return
+      }
 
-    if (event.key === "F1") {
-      event.preventDefault()
-      setPayMethod("cash_pos")
-      return
-    }
-    if (event.key === "F2") {
-      event.preventDefault()
-      setPayMethod("card_pos")
-      return
-    }
-    if (event.key === "F3") {
-      event.preventDefault()
-      setPayMethod("transfer_pos")
-      return
-    }
+      if (event.key === "F1") {
+        event.preventDefault()
+        setPayMethod("cash_pos")
+        return
+      }
+      if (event.key === "F2") {
+        event.preventDefault()
+        setPayMethod("card_pos")
+        return
+      }
+      if (event.key === "F3") {
+        event.preventDefault()
+        setPayMethod("transfer_pos")
+        return
+      }
 
-    if (typing || event.ctrlKey || event.metaKey || event.altKey) return
-    if (/^[1-9]$/.test(event.key)) {
-      event.preventDefault()
-      const tier = liveTiers[Number(event.key) - 1]
-      if (tier) addTier(tier.id)
+      if (typing || event.ctrlKey || event.metaKey || event.altKey) return
+      if (/^[1-9]$/.test(event.key)) {
+        event.preventDefault()
+        const tier = liveTiers[Number(event.key) - 1]
+        if (tier) addTier(tier.id)
+      }
     }
-  }
+  })
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -761,7 +805,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
               onClick={() => setCloseModal(true)}
             >
               <Lock className="size-4" />
-              Cerrar Turno (Ticket Z)
+              Cerrar caja / arqueo
             </Button>
             <Button
               type="button"
@@ -1030,6 +1074,14 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
                   onChange={(e) => setPhone(e.target.value)}
                   className="h-12 rounded-2xl border-border bg-background text-base"
                 />
+                <Input
+                  id="pos-email"
+                  type="email"
+                  placeholder="Email (opcional)"
+                  value={buyerEmail}
+                  onChange={(e) => setBuyerEmail(e.target.value)}
+                  className="h-12 rounded-2xl border-border bg-background text-base"
+                />
               </div>
             ) : null}
 
@@ -1180,9 +1232,10 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
       <Dialog open={closeModal} onOpenChange={setCloseModal}>
         <DialogContent className="border-border bg-card text-foreground sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Cerrar Turno (Ticket Z)</DialogTitle>
+            <DialogTitle>Cierre de caja / arqueo de turno</DialogTitle>
             <DialogDescription className="text-muted-foreground">
-              Se imprime el resumen 80mm al confirmar.
+              Consolidado de efectivo, Posnet y transferencia. Se imprime el
+              Ticket Z 80mm al confirmar.
             </DialogDescription>
           </DialogHeader>
           {shift ? (
@@ -1241,7 +1294,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
               ) : (
                 <Lock className="size-4" />
               )}
-              Cerrar Turno (Ticket Z)
+              Cerrar caja / arqueo
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1389,7 +1442,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
               type="button"
               className="min-h-12 w-full rounded-xl"
               onClick={() => {
-                void printUrlViaHiddenIframe(`/admin/pos/z/${zReport.shiftId}`)
+                void printUrlViaHiddenIframe(`/dashboard/pos/z/${zReport.shiftId}`)
               }}
             >
               <Printer className="size-4" />
@@ -1442,6 +1495,14 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
           )}
         </DialogContent>
       </Dialog>
+
+      <PosTicketHandoffDialog
+        open={handoffTickets.length > 0}
+        eventTitle={selectedEvent?.title ?? "Evento Tokepass"}
+        tickets={handoffTickets}
+        initialPhone={phone}
+        onClose={() => setHandoffTickets([])}
+      />
 
       <PosThermalReceiptStack receipts={printReceipts} />
     </div>

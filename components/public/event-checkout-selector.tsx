@@ -2,7 +2,6 @@
 
 import {
   AlertCircle,
-  CalendarDays,
   Clock,
   Info,
   Minus,
@@ -10,7 +9,7 @@ import {
   Sparkles,
 } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 
 import { BundleCardSelector } from "@/components/public/bundle-card-selector"
 import {
@@ -37,11 +36,19 @@ import {
 import { resolvePurchaseLimit } from "@/lib/checkout-limits"
 import { resolveCategoryAvailability } from "@/lib/checkout/category-stock"
 import {
+  displayChargePrice,
+  resolveChargeUnit,
+} from "@/lib/checkout/charge-unit"
+import { resolveSectorAssignMeta } from "@/lib/seating/assign-best-seats"
+import {
   FULL_PASS_TAB_ID,
-  groupTicketsByDate,
+  defaultCheckoutDateId,
+  defaultCheckoutKindTab,
   isSamePriceAnyDay,
-  listCheckoutDayTabs,
+  listCheckoutDateCards,
+  shouldShowCheckoutKindTabs,
   ticketMatchesTab,
+  type CheckoutKindTab,
 } from "@/lib/checkout/ticket-day-groups"
 import { flattenSeatsForAvailability } from "@/lib/seating/venue-map-geometry"
 import { cn, tapFeedbackClass } from "@/lib/utils"
@@ -75,6 +82,8 @@ type Props = {
   selectedCount?: number
   seatSelection?: SeatSelectionContext | null
   scheduleDays?: ScheduleDay[]
+  selectedDateId?: string | null
+  onSelectedDateIdChange?: (dateId: string) => void
   seatSheetOpen?: boolean
   onSeatSheetOpenChange?: (open: boolean) => void
 }
@@ -114,6 +123,8 @@ export function EventCheckoutSelector({
   selectedCount = 0,
   seatSelection = null,
   scheduleDays = [],
+  selectedDateId = null,
+  onSelectedDateIdChange,
   seatSheetOpen,
   onSeatSheetOpenChange,
 }: Props) {
@@ -208,7 +219,7 @@ export function EventCheckoutSelector({
 
   return (
     <section
-      className="mx-auto flex h-full w-full max-w-2xl flex-col space-y-5 px-4 md:px-0"
+      className="flex h-full w-full flex-col space-y-5"
       aria-label="Elegí tu entrada"
     >
       {showReservedSeat ? (
@@ -243,22 +254,26 @@ export function EventCheckoutSelector({
         </div>
       ) : null}
 
-      <TicketSelectionList
-        listTiers={listTiers}
-        quantities={quantities}
-        isPending={isPending}
-        focusedTierId={focusedTierId}
-        maxTicketsPerUser={maxTicketsPerUser}
-        selectedCount={selectedCount}
-        mapLoading={mapLoading}
-        includesGeneralAccess={includesGeneralAccess}
-        selectedItems={selectedItems}
-        scheduleDays={scheduleDays}
-        showSyntheticMapRow={showSyntheticMapRow}
-        seatSelection={seatSelection}
-        onQuantityChange={onQuantityChange}
-        onOpenSeatSelection={openSeatSelection}
-      />
+      <div className="flex flex-col gap-6">
+        <TicketSelectionList
+            listTiers={listTiers}
+            quantities={quantities}
+            isPending={isPending}
+            focusedTierId={focusedTierId}
+            maxTicketsPerUser={maxTicketsPerUser}
+            selectedCount={selectedCount}
+            mapLoading={mapLoading}
+            includesGeneralAccess={includesGeneralAccess}
+            selectedItems={selectedItems}
+            scheduleDays={scheduleDays}
+            selectedDateId={selectedDateId}
+            onSelectedDateIdChange={onSelectedDateIdChange}
+            showSyntheticMapRow={showSyntheticMapRow}
+            seatSelection={seatSelection}
+            onQuantityChange={onQuantityChange}
+            onOpenSeatSelection={openSeatSelection}
+          />
+        </div>
 
       {seatSelection ? (
         <SeatSelectionSheet
@@ -301,6 +316,8 @@ function TicketSelectionList({
   includesGeneralAccess,
   selectedItems,
   scheduleDays,
+  selectedDateId,
+  onSelectedDateIdChange,
   showSyntheticMapRow,
   seatSelection,
   onQuantityChange,
@@ -316,6 +333,8 @@ function TicketSelectionList({
   includesGeneralAccess: boolean
   selectedItems: StorefrontSelectedItem[]
   scheduleDays: ScheduleDay[]
+  selectedDateId: string | null
+  onSelectedDateIdChange?: (dateId: string) => void
   showSyntheticMapRow: boolean
   seatSelection: SeatSelectionContext | null
   onQuantityChange: (tierId: string, quantity: number, max: number) => void
@@ -325,53 +344,68 @@ function TicketSelectionList({
     sectorId?: string | null
   }) => void
 }) {
-  const groupedDays = useMemo(
-    () => groupTicketsByDate(listTiers, scheduleDays),
+  const dateCards = useMemo(
+    () => listCheckoutDateCards(scheduleDays, listTiers),
     [listTiers, scheduleDays],
   )
-  const dayTabs = useMemo(
-    () => listCheckoutDayTabs(scheduleDays, listTiers),
-    [listTiers, scheduleDays],
-  )
-  const hasFullPass = groupedDays.fullPassTickets.length > 0
+  const showKindTabs = shouldShowCheckoutKindTabs(listTiers, scheduleDays)
   const samePriceAnyDay = useMemo(
     () => isSamePriceAnyDay(listTiers, scheduleDays),
     [listTiers, scheduleDays],
   )
-  const showDayTabs = dayTabs.length > 1 || (hasFullPass && dayTabs.length >= 1)
-  const defaultTab = hasFullPass
-    ? FULL_PASS_TAB_ID
-    : (dayTabs[0]?.dateId ?? FULL_PASS_TAB_ID)
-  const [activeTabId, setActiveTabId] = useState(defaultTab)
+  const initialKind = defaultCheckoutKindTab(listTiers)
+  const initialDateId = defaultCheckoutDateId(dateCards, listTiers)
+  const [kindTab, setKindTab] = useState<CheckoutKindTab>(initialKind)
+  const [uncontrolledDateId, setUncontrolledDateId] = useState<string | null>(
+    initialDateId,
+  )
+  const reduceMotion = useReducedMotion()
+  const defaultKind = defaultCheckoutKindTab(listTiers)
+  if (!showKindTabs && kindTab !== defaultKind) {
+    setKindTab(defaultKind)
+  }
+  const nextDate = defaultCheckoutDateId(dateCards, listTiers)
+  const dateIsControlled = typeof onSelectedDateIdChange === "function"
+  const activeDateId = dateIsControlled
+    ? (selectedDateId ?? nextDate)
+    : uncontrolledDateId
+  const dateStillValid =
+    Boolean(activeDateId) &&
+    dateCards.some((card) => card.dateId === activeDateId)
+  if (!dateIsControlled && !dateStillValid && uncontrolledDateId !== nextDate) {
+    setUncontrolledDateId(nextDate)
+  }
 
-  useEffect(() => {
-    const validIds = new Set<string>([
-      ...(hasFullPass ? [FULL_PASS_TAB_ID] : []),
-      ...dayTabs.map((tab) => tab.dateId),
-    ])
-    if (!validIds.has(activeTabId)) {
-      setActiveTabId(defaultTab)
+  function selectDate(dateId: string) {
+    if (dateIsControlled) {
+      onSelectedDateIdChange?.(dateId)
+      return
     }
-  }, [activeTabId, defaultTab, dayTabs, hasFullPass])
+    setUncontrolledDateId(dateId)
+  }
+
+  const showDateCards = kindTab === "days" && dateCards.length > 1
 
   const displayedTickets = useMemo(() => {
-    if (!showDayTabs) return listTiers
-    const dayHasOwnTickets = listTiers.some((tier) => {
-      const meta = ticketMatchesTab(tier, activeTabId)
-      return meta && !ticketMatchesTab(tier, FULL_PASS_TAB_ID)
-    })
-    const treatFullPassAsAnyDay =
-      activeTabId !== FULL_PASS_TAB_ID &&
-      (samePriceAnyDay || !dayHasOwnTickets)
+    if (!showKindTabs && !showDateCards) return listTiers
+    if (kindTab === "passes") {
+      return listTiers.filter((tier) => ticketMatchesTab(tier, FULL_PASS_TAB_ID))
+    }
+    if (!activeDateId) return listTiers
     return listTiers.filter((tier) =>
-      ticketMatchesTab(tier, activeTabId, { treatFullPassAsAnyDay }),
+      ticketMatchesTab(tier, activeDateId, {
+        treatFullPassAsAnyDay: !showKindTabs,
+      }),
     )
-  }, [activeTabId, listTiers, samePriceAnyDay, showDayTabs])
+  }, [activeDateId, kindTab, listTiers, showDateCards, showKindTabs])
 
+  const listKey =
+    kindTab === "passes" ? "passes" : (activeDateId ?? "days")
+
+  const seatMap = seatSelection?.map ?? null
   const mapSeats = useMemo(
-    () =>
-      seatSelection?.map ? flattenSeatsForAvailability(seatSelection.map) : [],
-    [seatSelection?.map],
+    () => (seatMap ? flattenSeatsForAvailability(seatMap) : []),
+    [seatMap],
   )
   const occupancyBySeatId = seatSelection?.occupancyBySeatId ?? {}
 
@@ -397,6 +431,7 @@ function TicketSelectionList({
         mapSeats={mapSeats}
         occupancyBySeatId={occupancyBySeatId}
         mapReady={Boolean(seatSelection?.map) && !mapLoading}
+        venueMap={seatSelection?.map ?? null}
         sectorSummaries={seatSelection?.sectorSummaries}
         onQuantityChange={onQuantityChange}
         onOpenSeatSelection={() =>
@@ -412,7 +447,7 @@ function TicketSelectionList({
 
   const syntheticRow = showSyntheticMapRow ? (
     <div className="relative rounded-2xl border border-border/50 bg-card/50 p-5 backdrop-blur-sm transition-all hover:border-primary/50 hover:bg-card/80">
-      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 flex-col gap-1.5">
           <div className="flex flex-wrap items-center gap-2">
             <h4 className="text-lg font-black text-foreground">
@@ -459,61 +494,106 @@ function TicketSelectionList({
 
   return (
     <div className="relative flex w-full flex-col">
-      {showDayTabs ? (
-        <div className="relative z-0 mb-6 flex w-full items-center gap-2 overflow-x-auto border-b border-border/40 py-3 no-scrollbar">
-          <div
-            className="flex min-w-max items-center gap-2"
-            role="tablist"
-            aria-label="Filtrar entradas por día"
+      <h2 className="mb-3 pt-2 text-lg font-black text-foreground md:mb-4 md:text-xl">
+        Elegí tu entrada
+      </h2>
+      {showKindTabs ? (
+        <div
+          className="grid grid-cols-2 gap-1 rounded-full bg-secondary p-1"
+          role="tablist"
+          aria-label="Tipo de entrada"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={kindTab === "days"}
+            onClick={() => setKindTab("days")}
+            className={cn(
+              "rounded-full px-3 py-2.5 text-center text-sm font-bold transition-colors",
+              kindTab === "days"
+                ? "bg-primary text-primary-foreground"
+                : "bg-secondary text-secondary-foreground",
+            )}
           >
-            {hasFullPass ? (
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeTabId === FULL_PASS_TAB_ID}
-                onClick={() => setActiveTabId(FULL_PASS_TAB_ID)}
-                className={cn(
-                  "inline-flex flex-shrink-0 items-center gap-2 whitespace-nowrap rounded-full px-5 py-2.5 text-sm font-bold transition-all duration-200",
-                  activeTabId === FULL_PASS_TAB_ID
-                    ? "scale-105 bg-primary text-primary-foreground shadow-md"
-                    : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground",
-                )}
-              >
-                <Sparkles className="size-3.5" aria-hidden="true" />
-                Pase Completo
-              </button>
-            ) : null}
-            {dayTabs.map((day) => (
-              <button
-                key={day.dateId}
-                type="button"
-                role="tab"
-                aria-selected={activeTabId === day.dateId}
-                onClick={() => setActiveTabId(day.dateId)}
-                className={cn(
-                  "inline-flex flex-shrink-0 items-center gap-2 whitespace-nowrap rounded-full px-5 py-2.5 text-sm font-bold transition-all duration-200",
-                  activeTabId === day.dateId
-                    ? "scale-105 bg-primary text-primary-foreground shadow-md"
-                    : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground",
-                )}
-              >
-                <CalendarDays className="size-3.5" aria-hidden="true" />
-                {day.dateLabel}
-              </button>
-            ))}
-          </div>
+            Entradas por Día
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={kindTab === "passes"}
+            onClick={() => setKindTab("passes")}
+            className={cn(
+              "rounded-full px-3 py-2.5 text-center text-sm font-bold transition-colors",
+              kindTab === "passes"
+                ? "bg-primary text-primary-foreground"
+                : "bg-secondary text-secondary-foreground",
+            )}
+          >
+            Pases / Abonos
+          </button>
         </div>
       ) : null}
-      {showDayTabs && samePriceAnyDay ? (
-        <p className="mb-4 text-xs font-medium text-muted-foreground">
+      {showDateCards ? (
+        <div
+          className="hide-scrollbar flex gap-3 overflow-x-auto snap-x snap-mandatory pb-4 lg:flex-wrap lg:gap-4 lg:overflow-visible lg:snap-none lg:pb-6"
+          role="tablist"
+          aria-label="Elegí el día"
+        >
+          {dateCards.map((card) => {
+            const selected = activeDateId === card.dateId
+            return (
+              <button
+                key={card.dateId}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                onClick={() => selectDate(card.dateId)}
+                className={cn(
+                  "flex min-w-[120px] snap-start cursor-pointer flex-col items-center justify-center rounded-xl border-2 px-6 py-3 transition-all",
+                  selected
+                    ? "border-primary bg-primary/10 font-bold text-primary"
+                    : "border-border bg-card text-muted-foreground hover:border-muted-foreground/40",
+                )}
+              >
+                <span className="text-xs font-bold uppercase tracking-wider">
+                  {card.weekday}
+                </span>
+                <span className="mt-0.5 text-lg font-black tracking-tight">
+                  {card.dayNumber} {card.month}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
+      {showDateCards && samePriceAnyDay ? (
+        <p className="text-xs font-medium text-muted-foreground">
           Mismo valor para cualquier día seleccionado
         </p>
       ) : null}
 
-      <div className="relative z-0 flex flex-col gap-4 pb-[140px]">
-        {displayedTickets.map(renderTierCard)}
-        {syntheticRow}
-      </div>
+      <h3 className="mb-4 mt-6 text-sm font-bold text-foreground">
+        Seleccioná tus entradas
+      </h3>
+      <AnimatePresence initial={false} mode="wait">
+        <motion.div
+          key={listKey}
+          initial={reduceMotion ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={reduceMotion ? undefined : { opacity: 0 }}
+          transition={{ duration: 0.3, ease: "easeInOut" }}
+          className="relative z-0 flex flex-col gap-4 pb-8"
+        >
+          {displayedTickets.length > 0 ? (
+            displayedTickets.map(renderTierCard)
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No hay entradas para esta selección.
+            </p>
+          )}
+          {kindTab === "days" || !showKindTabs ? syntheticRow : null}
+        </motion.div>
+      </AnimatePresence>
     </div>
   )
 }
@@ -560,6 +640,7 @@ function UnifiedTicketCard({
   mapSeats,
   occupancyBySeatId,
   mapReady,
+  venueMap,
   sectorSummaries,
   onQuantityChange,
   onOpenSeatSelection,
@@ -578,6 +659,7 @@ function UnifiedTicketCard({
   mapSeats: ReturnType<typeof flattenSeatsForAvailability>
   occupancyBySeatId: SeatSelectionContext["occupancyBySeatId"]
   mapReady: boolean
+  venueMap: SeatSelectionContext["map"]
   sectorSummaries?: SeatSelectionContext["sectorSummaries"]
   onQuantityChange: (tierId: string, quantity: number, max: number) => void
   onOpenSeatSelection: () => void
@@ -593,6 +675,23 @@ function UnifiedTicketCard({
   const highlight = resolveTicketHighlightBadge(tier, siblingTiers)
   const unitPrice = current?.price ?? tier.price
   const phaseName = current?.name
+  const sectorMeta =
+    requiresMap && venueMap && tier.seatingSectorId
+      ? resolveSectorAssignMeta(
+          venueMap,
+          tier.seatingSectorId,
+          mapSeats,
+          tier.name,
+        )
+      : null
+  const charge = resolveChargeUnit({
+    layoutType: tier.layoutType,
+    capacityPerUnit: sectorMeta?.capacityPerUnit ?? tier.capacityPerUnit,
+    sellMode: sectorMeta?.sellMode,
+    isTableSector: sectorMeta?.isTableSector || tier.layoutType === "table_combo",
+    name: tier.name,
+  })
+  const shownPrice = displayChargePrice(charge, unitPrice)
 
   const summary = sectorSummaries?.find(
     (row) =>
@@ -616,16 +715,16 @@ function UnifiedTicketCard({
   return (
     <div
       className={cn(
-        "relative rounded-2xl border border-border/50 bg-card/50 p-5 backdrop-blur-sm transition-all",
+        "relative rounded-2xl border border-border bg-card p-5 backdrop-blur-sm transition-all",
         isSoldOut
-          ? "cursor-not-allowed opacity-50 grayscale"
-          : "hover:border-primary/50 hover:bg-card/80",
+          ? "cursor-not-allowed border-border bg-muted/50 opacity-70"
+          : "hover:border-primary/50 hover:bg-card",
         focused && !isSoldOut && "ring-1 ring-primary/30",
         highlight === "bestseller" && !isSoldOut && "border-amber-400/35",
         selectedPlaces.length > 0 && !isSoldOut && "border-primary/30",
       )}
     >
-      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 flex-col gap-1">
           <div className="flex flex-wrap items-center gap-2">
             <h4 className="text-lg font-black text-foreground">{tier.name}</h4>
@@ -640,9 +739,23 @@ function UnifiedTicketCard({
               </Badge>
             ) : null}
           </div>
-          <span className="text-xl font-black text-foreground">
-            {formatCurrency(unitPrice)}
-          </span>
+          <div className="mt-1 flex flex-wrap items-baseline gap-2 lg:hidden">
+            <span className="text-xl font-black tabular-nums text-foreground">
+              {formatCurrency(shownPrice)}
+            </span>
+            {charge.badge ? (
+              <span
+                className={cn(
+                  "rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                  charge.unitType === "full_table"
+                    ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                    : "border-sky-500/35 bg-sky-500/15 text-sky-700 dark:text-sky-300",
+                )}
+              >
+                {charge.badge}
+              </span>
+            ) : null}
+          </div>
           {isSoldOut ? (
             <span className="mt-1 flex items-center gap-1 text-xs font-bold text-destructive">
               <AlertCircle className="size-3" aria-hidden="true" />
@@ -668,12 +781,30 @@ function UnifiedTicketCard({
             </p>
           ) : null}
         </div>
-        <div className="flex-shrink-0">
+        <div className="flex shrink-0 items-center justify-between gap-4 lg:flex-col lg:items-end">
+          <div className="hidden flex-wrap items-baseline justify-end gap-2 lg:flex">
+            <span className="text-xl font-black tabular-nums text-foreground">
+              {formatCurrency(shownPrice)}
+            </span>
+            {charge.badge ? (
+              <span
+                className={cn(
+                  "rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                  charge.unitType === "full_table"
+                    ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                    : "border-sky-500/35 bg-sky-500/15 text-sky-700 dark:text-sky-300",
+                )}
+              >
+                {charge.badge}
+              </span>
+            ) : null}
+          </div>
+          <div className="flex-shrink-0">
           {isSoldOut ? (
             <button
               type="button"
               disabled
-              className="pointer-events-none h-12 cursor-not-allowed rounded-xl bg-secondary/40 px-6 text-sm font-bold text-muted-foreground opacity-50"
+              className="pointer-events-none h-12 cursor-not-allowed rounded-xl bg-secondary px-6 text-sm font-bold text-muted-foreground"
             >
               Agotado
             </button>
@@ -708,6 +839,7 @@ function UnifiedTicketCard({
               }}
             />
           )}
+          </div>
         </div>
       </div>
       {sale.upcoming.length > 0 ? (
@@ -982,7 +1114,7 @@ function Stepper({
       >
         <Minus className="size-3.5" />
       </Button>
-      <span className="w-4 text-center text-sm font-bold tabular-nums">
+      <span className="w-4 text-center text-sm font-bold tabular-nums text-foreground">
         {value}
       </span>
       <Button

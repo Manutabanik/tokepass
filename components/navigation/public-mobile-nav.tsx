@@ -10,7 +10,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 
 import { BrandLogo } from "@/components/shared/brand-logo"
 import { Button } from "@/components/ui/button"
@@ -43,7 +43,9 @@ const ITEMS = [
     label: "Mis Entradas",
     icon: Ticket,
     match: (path: string) =>
-      path.startsWith("/mis-entradas") || path.startsWith("/cuenta/entradas"),
+      path.startsWith("/mis-entradas") ||
+      path.startsWith("/cuenta/entradas") ||
+      path.startsWith("/profile/tickets"),
     guestHref: "/login?next=/mis-entradas",
   },
   {
@@ -68,10 +70,11 @@ const ITEMS = [
 export function PublicMobileNav({ isAuthenticated }: PublicMobileNavProps) {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
-
-  useEffect(() => {
-    setOpen(false)
-  }, [pathname])
+  const [menuPath, setMenuPath] = useState(pathname)
+  if (pathname !== menuPath) {
+    setMenuPath(pathname)
+    if (open) setOpen(false)
+  }
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>

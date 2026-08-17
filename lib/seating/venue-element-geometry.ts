@@ -183,6 +183,7 @@ export function createVenueElement(
     sideA: 4,
     sideB: 4,
     sellMode: type === "vip_box" ? "group" : "per_seat",
+    priceMode: type === "vip_box" ? "closed_unit" : "per_person",
     capacity: type === "standing_zone" ? 80 : 0,
     seats: [],
   }
@@ -328,6 +329,7 @@ export function applyVenueShape(
     next.sideA = fresh.sideA
     next.sideB = fresh.sideB
     next.sellMode = fresh.sellMode
+    next.priceMode = fresh.priceMode
     next.capacity = fresh.capacity
     next.roundedCorner = fresh.roundedCorner
     next.seats = rebuildElementSeats(next)

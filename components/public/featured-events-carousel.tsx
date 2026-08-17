@@ -44,10 +44,11 @@ export function FeaturedEventsCarousel({
 
   useEffect(() => {
     if (!emblaApi) return
-    updateButtons()
+    const start = window.setTimeout(() => updateButtons(), 0)
     emblaApi.on("select", updateButtons)
     emblaApi.on("reInit", updateButtons)
     return () => {
+      window.clearTimeout(start)
       emblaApi.off("select", updateButtons)
       emblaApi.off("reInit", updateButtons)
     }

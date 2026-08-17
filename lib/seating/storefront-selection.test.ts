@@ -59,6 +59,8 @@ describe("storefront-selection", () => {
     assert.equal(item?.price, 12500)
     assert.equal(item?.type, "table")
     assert.equal(item?.capacity, 6)
+    assert.equal(item?.sellMode, "group")
+    assert.equal(item?.priceMode, "closed_unit")
   })
 
   it("hidrata el carrito con el objeto vivo del mapa", () => {
@@ -242,5 +244,35 @@ describe("storefront-selection", () => {
     assert.equal(card.sector, "Sector Mesas")
     assert.equal(card.capacityLabel, "8 Asientos")
     assert.equal(card.price, 70000)
+  })
+
+  it("no multiplica el precio cerrado de una mesa por las sillas", () => {
+    const groups = formatStorefrontSelectionGroups([
+      {
+        id: "tbl-1",
+        name: "Grada Amarilla · Mesa 1",
+        type: "table",
+        price: 58824,
+        capacity: 6,
+        sellMode: "group",
+        priceMode: "closed_unit",
+      },
+    ])
+    assert.equal(groups[0]?.price, 58824)
+  })
+
+  it("multiplica el precio por persona de una mesa por las sillas", () => {
+    const groups = formatStorefrontSelectionGroups([
+      {
+        id: "tbl-1",
+        name: "Grada Amarilla · Mesa 1",
+        type: "table",
+        price: 58824,
+        capacity: 6,
+        sellMode: "per_seat",
+        priceMode: "per_person",
+      },
+    ])
+    assert.equal(groups[0]?.price, 352944)
   })
 })

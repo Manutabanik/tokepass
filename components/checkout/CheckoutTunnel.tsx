@@ -1,7 +1,6 @@
 "use client"
 
 import {
-  ChevronLeft,
   LoaderCircle,
   Ticket,
 } from "lucide-react"
@@ -14,6 +13,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   useTransition,
   type ReactNode,
 } from "react"
@@ -27,6 +27,7 @@ import {
   startSandboxCheckout,
   getGaCartHold,
   getSeatingUnitCartHold,
+  listCartHolds,
   holdSeatingUnitForCart,
   holdSeatingUnitForCartByLayoutItem,
   lockTickets,
@@ -40,15 +41,19 @@ import {
   getEventSeatingUnitsForSector,
   getPublicEventVenueMap,
 } from "@/app/actions/public-events"
+import { CheckoutHeader } from "@/components/checkout/CheckoutHeader"
 import { CheckoutIdentity } from "@/components/checkout/CheckoutIdentity"
 import { CheckoutPaymentForm } from "@/components/checkout/CheckoutPaymentForm"
 import { CheckoutTicketList } from "@/components/checkout/CheckoutTicketList"
 import { CheckoutTimer } from "@/components/checkout/CheckoutTimer"
 import { CheckoutFloatingBar } from "@/components/public/checkout-floating-bar"
+import { CheckoutSelectionSidebar } from "@/components/public/checkout-selection-sidebar"
+import { type CheckoutFlowStep } from "@/components/public/checkout-stepper"
 import {
-  CheckoutStepper,
-  type CheckoutFlowStep,
-} from "@/components/public/checkout-stepper"
+  formatSelectionChargeDetail,
+  storefrontLineSkuQuantity,
+  storefrontLineTotal,
+} from "@/lib/checkout/charge-unit"
 import { cartTicketLineId } from "@/lib/checkout/cart-lines"
 import { CheckoutUpsellStep } from "@/components/public/checkout-upsell-step"
 import { groupCheckoutTiers } from "@/components/public/event-checkout-selector"
@@ -69,11 +74,23 @@ import {
 } from "@/lib/checkout-buyer"
 import {
   ABSOLUTE_MAX_ITEMS_PER_PURCHASE,
+  MAX_TABLES_PER_PURCHASE,
+  MAX_TICKETS_PER_PURCHASE,
   purchaseCapForLayout,
   resolvePurchaseLimit,
   storefrontLimitMessage,
 } from "@/lib/checkout-limits"
 import { minReservedUntil } from "@/lib/checkout-hold"
+import {
+  HIGH_DEMAND_LOCK_MESSAGE,
+  HIGH_DEMAND_LOCK_TIMEOUT,
+} from "@/lib/checkout/lock-timeout"
+import {
+  CHECKOUT_STOCK_TAKEN_MESSAGE,
+  earliestHoldExpiry,
+  isCheckoutStockConflict,
+  rehydrateSelectedItemsFromHolds,
+} from "@/lib/checkout/revalidate-seat-holds"
 import { redirectToCheckoutPaymentOrToast } from "@/lib/checkout-redirect"
 import {
   ensureGuestCheckoutSession,
@@ -99,10 +116,15 @@ import {
   isQuantityInventoryType,
 } from "@/lib/inventory/unified-inventory"
 import {
+  defaultCheckoutDateId,
+  listCheckoutDateCards,
   resolveTicketDateMeta,
-  ticketDateLabel,
+  scheduleDayCartLabel,
+  ticketDateCartLabel,
+  ticketMatchesTab,
 } from "@/lib/checkout/ticket-day-groups"
 import { getStoredReferralCode, persistReferralCode } from "@/lib/referral"
+import { extractAffiliateCode } from "@/lib/rrpp"
 import {
   hasParametricZones,
 } from "@/lib/seating/adaptive-seating"
@@ -121,7 +143,7 @@ import {
   venueMapToSeatingLayout,
 } from "@/lib/seating/venue-map-geometry"
 import { isCategorySoldOut } from "@/lib/checkout/category-stock"
-import { mapIncludesGeneralAccess, type VenueMapElement } from "@/types/venue-map"
+import { mapIncludesGeneralAccess, venuePriceModeFromSellMode, type VenueMapElement } from "@/types/venue-map"
 import {
   occupancyFromSeatingUnits,
   resolveLiveVenueSeatStatus,
@@ -129,6 +151,7 @@ import {
 import { useSeatingOccupancyRealtime } from "@/hooks/use-seating-occupancy-realtime"
 import {
   hydrateStorefrontItemsFromMap,
+  resolveStorefrontItemFromMap,
   storefrontItemFromElement,
   storefrontItemFromZone,
 } from "@/lib/seating/storefront-selection"
@@ -164,9 +187,9 @@ const AdaptiveSeatingFlow = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex h-full w-full items-center justify-center bg-zinc-950">
+      <div className="flex h-full w-full items-center justify-center bg-background">
         <LoaderCircle
-          className="size-8 animate-spin text-white/40"
+          className="size-8 animate-spin text-muted-foreground"
           aria-hidden="true"
         />
         <span className="sr-only">Cargando mapa del recinto</span>
@@ -185,7 +208,7 @@ type TicketSelectorProps = {
   selectedDayId?: string | null
   /** @deprecated All-In pricing absorbs the fee; ignored. */
   serviceChargeRate?: number
-  /** Código RRPP desde ?ref= — nunca se envía promoter_id al servidor */
+  /** Código RRPP desde ?rrpp= / cookie — nunca se envía promoter_id al servidor */
   referralCode?: string | null
   seatingUnits?: EventSeatingUnit[]
   seatingSectorSummaries?: SeatingSectorSummary[]
@@ -215,6 +238,7 @@ type TicketSelectorProps = {
   /** Flatten the checkout panel to fill a 100dvh tunnel. */
   fillViewport?: boolean
   onReservationExpired?: () => void
+  onLeaveCheckout?: () => void
   renderLayout?: (parts: { map: ReactNode; panel: ReactNode }) => ReactNode
 }
 
@@ -233,8 +257,12 @@ function toastCheckoutError(error: string, fallbackTitle: string) {
     )
     return
   }
-  if (error === "out_of_stock") {
-    toast.error("Stock insuficiente de entradas")
+  if (error === HIGH_DEMAND_LOCK_TIMEOUT) {
+    toast.error(HIGH_DEMAND_LOCK_MESSAGE)
+    return
+  }
+  if (isCheckoutStockConflict(error)) {
+    toast.error(CHECKOUT_STOCK_TAKEN_MESSAGE)
     return
   }
   if (
@@ -267,19 +295,26 @@ export function CheckoutTunnel({
   sandboxEligible = false,
   zoneTierPricing = [],
   purchaseLocked = false,
-  defaultTicketTab: _defaultTicketTab = "auto",
   selectedDayId = null,
   scheduleDays = [],
   maxTicketsPerUser = null,
   fillViewport = false,
   onReservationExpired,
+  onLeaveCheckout,
   renderLayout,
 }: TicketSelectorProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
-  const controlsLocked = isPending || purchaseLocked
+  const [ctaBusy, setCtaBusy] = useState(false)
+  const ctaBusyRef = useRef(false)
+  const checkoutBusy = isPending || ctaBusy
+  const controlsLocked = checkoutBusy || purchaseLocked
   const [showSeatFlow, setShowSeatFlow] = useState(false)
-  const portalReady = typeof document !== "undefined"
+  const portalReady = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  )
   const checkoutMode = useCheckoutStore((state) => state.mode)
   const selectedSeat = useCheckoutStore((state) => state.selectedSeat)
   const setSelectedSeat = useCheckoutStore((state) => state.setSelectedSeat)
@@ -318,13 +353,15 @@ export function CheckoutTunnel({
   const [liveOccupancy, setLiveOccupancy] = useState<Record<string, SeatStatus>>(
     {},
   )
+  const [occupancyEventId, setOccupancyEventId] = useState(eventId)
+  if (eventId !== occupancyEventId) {
+    setOccupancyEventId(eventId)
+    setLiveOccupancy({})
+  }
   const applyOccupancyPatch = useCallback((patch: Record<string, SeatStatus>) => {
     setLiveOccupancy((current) => ({ ...current, ...patch }))
   }, [])
   useSeatingOccupancyRealtime(eventId, applyOccupancyPatch, "tunnel")
-  useEffect(() => {
-    setLiveOccupancy({})
-  }, [eventId])
   const buyer = useCheckoutStore((state) => state.buyer)
   const setBuyer = useCheckoutStore((state) => state.setBuyer)
   const buyerForm = useForm<CheckoutBuyerInfo>({
@@ -336,6 +373,9 @@ export function CheckoutTunnel({
     },
     resolver: zodResolver(checkoutBuyerFormSchema),
     mode: "onSubmit",
+    reValidateMode: "onChange",
+    criteriaMode: "all",
+    shouldFocusError: true,
   })
   const holdExpiresAt = useCheckoutStore((state) =>
     state.eventId === eventId ? state.holdExpiresAt : null,
@@ -353,14 +393,41 @@ export function CheckoutTunnel({
       })),
     [tierOverrides, tiers],
   )
+  const checkoutDateCards = useMemo(
+    () => listCheckoutDateCards(scheduleDays, displayTiers),
+    [displayTiers, scheduleDays],
+  )
+  const defaultDateId = useMemo(
+    () =>
+      selectedDayId &&
+      checkoutDateCards.some((card) => card.dateId === selectedDayId)
+        ? selectedDayId
+        : defaultCheckoutDateId(checkoutDateCards, displayTiers),
+    [checkoutDateCards, displayTiers, selectedDayId],
+  )
+  const [selectedDateId, setSelectedDateId] = useState<string | null>(
+    defaultDateId,
+  )
+  const selectedDateStillValid =
+    Boolean(selectedDateId) &&
+    checkoutDateCards.some((card) => card.dateId === selectedDateId)
+  if (!selectedDateStillValid && selectedDateId !== defaultDateId) {
+    setSelectedDateId(defaultDateId)
+  }
   const funnelTiers = displayTiers
   const [appliedPromo, setAppliedPromo] = useState<ValidatedPromo | null>(null)
   const [selectedProvider, setSelectedProvider] =
     useState<CheckoutPaymentProvider>("mercadopago")
-  const [storedRef] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null
-    return getStoredReferralCode()
-  })
+  const storedRef = useSyncExternalStore(
+    (onChange) => {
+      window.addEventListener("popstate", onChange)
+      return () => window.removeEventListener("popstate", onChange)
+    },
+    () =>
+      extractAffiliateCode(new URLSearchParams(window.location.search)) ??
+      getStoredReferralCode(),
+    () => null,
+  )
 
   const restoredIntent = useRef(false)
   const [intentRestored, setIntentRestored] = useState(false)
@@ -398,7 +465,12 @@ export function CheckoutTunnel({
   }, [eventId, venueMap])
 
   useEffect(() => {
-    useStorefrontSeatStore.getState().bindEvent(eventId)
+    const bind = () => useStorefrontSeatStore.getState().bindEvent(eventId)
+    if (useStorefrontSeatStore.persist.hasHydrated()) {
+      bind()
+      return
+    }
+    return useStorefrontSeatStore.persist.onFinishHydration(bind)
   }, [eventId])
 
   useEffect(() => {
@@ -422,14 +494,44 @@ export function CheckoutTunnel({
   )
   const mapDrivenTierIds = useRef(new Set<string>())
 
+  const resolveItemTierId = useCallback(
+    (item: StorefrontSelectedItem) => {
+      const sectorName = item.name.split(" · ")[0] ?? item.name
+      const direct = resolveTierIdForUniversalSector(
+        item.sectorId ?? item.id,
+        sectorName,
+        checkoutTierInput,
+      )
+      if (direct) return direct
+      const key = (item.sectorId ?? "").trim().toLowerCase()
+      const priced = zoneTierPricing.find((row) => {
+        const sectorKey = row.sectorKey.trim().toLowerCase()
+        return (
+          sectorKey === key ||
+          sectorKey === sectorName.toLowerCase() ||
+          sectorKey === item.name.trim().toLowerCase()
+        )
+      })
+      if (priced) return priced.ticketTierId
+      if (item.type === "table") {
+        const tableTiers = checkoutTierInput.filter(
+          (tier) => tier.layoutType === "table_combo",
+        )
+        if (tableTiers.length === 1) return tableTiers[0]?.id ?? null
+      }
+      return null
+    },
+    [checkoutTierInput, zoneTierPricing],
+  )
+
   useEffect(() => {
     const counts: Record<string, number> = {}
     for (const item of selectedItems) {
-      if (item.type === "seat") continue
+      if (item.type === "seat" || item.type === "table") continue
       const tierId = resolveItemTierId(item)
       if (!tierId) continue
       counts[tierId] =
-        (counts[tierId] ?? 0) + Math.max(1, Math.floor(item.capacity) || 1)
+        (counts[tierId] ?? 0) + storefrontLineSkuQuantity(item)
     }
     const nextDriven = new Set(Object.keys(counts))
     setQuantities((current) => {
@@ -462,34 +564,7 @@ export function CheckoutTunnel({
       mapDrivenTierIds.current = nextDriven
       return changed ? next : current
     })
-  }, [checkoutTierInput, displayTiers, maxTicketsPerUser, selectedItems, zoneTierPricing])
-
-  function resolveItemTierId(item: StorefrontSelectedItem) {
-    const sectorName = item.name.split(" · ")[0] ?? item.name
-    const direct = resolveTierIdForUniversalSector(
-      item.sectorId ?? item.id,
-      sectorName,
-      checkoutTierInput,
-    )
-    if (direct) return direct
-    const key = (item.sectorId ?? "").trim().toLowerCase()
-    const priced = zoneTierPricing.find((row) => {
-      const sectorKey = row.sectorKey.trim().toLowerCase()
-      return (
-        sectorKey === key ||
-        sectorKey === sectorName.toLowerCase() ||
-        sectorKey === item.name.trim().toLowerCase()
-      )
-    })
-    if (priced) return priced.ticketTierId
-    if (item.type === "table") {
-      const tableTiers = checkoutTierInput.filter(
-        (tier) => tier.layoutType === "table_combo",
-      )
-      if (tableTiers.length === 1) return tableTiers[0]?.id ?? null
-    }
-    return null
-  }
+  }, [checkoutTierInput, displayTiers, maxTicketsPerUser, resolveItemTierId, selectedItems, setQuantities, zoneTierPricing])
 
   useEffect(() => {
     function restoreIntent() {
@@ -557,6 +632,43 @@ export function CheckoutTunnel({
           useCheckoutStore.getState().setHoldExpiresAt(null)
         }
       })
+      void listCartHolds(eventId).then((result) => {
+        const source = result.success ? "server" : "unavailable"
+        const holds = result.success ? result.holds : []
+        const seatStore = useStorefrontSeatStore.getState()
+        const nextItems = rehydrateSelectedItemsFromHolds({
+          items: seatStore.selectedItems,
+          holds,
+          source,
+          resolveHoldItem: (hold) => {
+            const id = hold.layout_item_id || hold.seating_unit_id
+            if (!id) return null
+            return {
+              id,
+              name: hold.label?.trim() || "Lugar reservado",
+              type: "table",
+              price: 0,
+              capacity: 1,
+            }
+          },
+        })
+        if (
+          nextItems.length !== seatStore.selectedItems.length ||
+          nextItems.some(
+            (item, index) => item.id !== seatStore.selectedItems[index]?.id,
+          )
+        ) {
+          seatStore.replaceSelectedItems(nextItems)
+        }
+        const fromHolds = earliestHoldExpiry(holds)
+        if (fromHolds) {
+          const next = minReservedUntil(
+            useCheckoutStore.getState().holdExpiresAt,
+            fromHolds,
+          )
+          if (next) useCheckoutStore.getState().setHoldExpiresAt(next)
+        }
+      })
       if (!hasCheckoutIdentity(currentUserId, store.mode)) return
       const action = store.consumePendingAction()
       if (action === "open_map") {
@@ -570,11 +682,25 @@ export function CheckoutTunnel({
       }
     }
 
-    if (useCheckoutStore.persist.hasHydrated()) {
+    function tryRestore() {
+      if (
+        !useCheckoutStore.persist.hasHydrated() ||
+        !useStorefrontSeatStore.persist.hasHydrated()
+      ) {
+        return
+      }
       restoreIntent()
-      return
     }
-    return useCheckoutStore.persist.onFinishHydration(restoreIntent)
+
+    tryRestore()
+    const unsubCheckout =
+      useCheckoutStore.persist.onFinishHydration(tryRestore)
+    const unsubSeat =
+      useStorefrontSeatStore.persist.onFinishHydration(tryRestore)
+    return () => {
+      unsubCheckout?.()
+      unsubSeat?.()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot cart restore
   }, [currentUserId, eventId, tiers])
 
@@ -582,7 +708,15 @@ export function CheckoutTunnel({
     initPoint?: string
     paymentUrl?: string
   }) {
-    redirectToCheckoutPaymentOrToast(result.paymentUrl ?? result.initPoint)
+    const paymentUrl = result.paymentUrl ?? result.initPoint
+    if (!paymentUrl?.trim()) {
+      toast.error("No se pudo iniciar el pago", {
+        description:
+          "La pasarela no confirmó la intención de pago. Intentá de nuevo.",
+      })
+      return
+    }
+    redirectToCheckoutPaymentOrToast(paymentUrl)
   }
 
   const resolvedRef = referralCode?.trim() || storedRef
@@ -689,6 +823,73 @@ export function CheckoutTunnel({
     [liveMap, priceBySectorId, selectedItems],
   )
 
+  useEffect(() => {
+    if (!intentRestored || !liveMap) return
+
+    function applyHydratedItems(items: StorefrontSelectedItem[]) {
+      const seatStore = useStorefrontSeatStore.getState()
+      const hydrated = hydrateStorefrontItemsFromMap(
+        items,
+        liveMap,
+        priceBySectorId,
+      )
+      const same =
+        hydrated.length === seatStore.selectedItems.length &&
+        hydrated.every((item, index) => {
+          const current = seatStore.selectedItems[index]
+          return (
+            current?.id === item.id &&
+            current.name === item.name &&
+            current.price === item.price &&
+            current.sellMode === item.sellMode &&
+            current.priceMode === item.priceMode
+          )
+        })
+      if (!same) seatStore.replaceSelectedItems(hydrated)
+    }
+
+    applyHydratedItems(useStorefrontSeatStore.getState().selectedItems)
+
+    let cancelled = false
+    void listCartHolds(eventId).then((result) => {
+      if (cancelled) return
+      const source = result.success ? "server" : "unavailable"
+      const holds = result.success ? result.holds : []
+      const seatStore = useStorefrontSeatStore.getState()
+      const merged = rehydrateSelectedItemsFromHolds({
+        items: seatStore.selectedItems,
+        holds,
+        source,
+        resolveHoldItem: (hold) => {
+          const ids = [hold.layout_item_id, hold.seating_unit_id].filter(
+            (id): id is string => Boolean(id),
+          )
+          for (const id of ids) {
+            const fromMap = resolveStorefrontItemFromMap(
+              liveMap,
+              id,
+              priceBySectorId,
+            )
+            if (fromMap) return fromMap
+          }
+          const id = hold.layout_item_id || hold.seating_unit_id
+          if (!id) return null
+          return {
+            id,
+            name: hold.label?.trim() || "Lugar reservado",
+            type: "table",
+            price: 0,
+            capacity: 1,
+          }
+        },
+      })
+      applyHydratedItems(merged)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [currentUserId, eventId, intentRestored, liveMap, priceBySectorId])
+
   const resolvedSeatingLayout = useMemo(() => {
     if (seatingLayout.length > 0) return seatingLayout
     if (!liveMap) return []
@@ -713,6 +914,7 @@ export function CheckoutTunnel({
         mergedSeatingUnits.map((unit) => ({
           layoutItemId: unit.layoutItemId,
           status: unit.status,
+          reservedUntil: unit.reservedUntil,
         })),
       ),
       ...liveOccupancy,
@@ -758,14 +960,22 @@ export function CheckoutTunnel({
       .map((zone) => zone.id)
   }, [funnelTiers, liveMap, occupancyBySeatId, seatingSectorSummaries])
   const heldSeatIds = useMemo(() => {
-    if (!selectedSeat) return []
-    const unit = mergedSeatingUnits.find(
-      (item) => item.id === selectedSeat.seatingUnitId,
-    )
-    if (unit?.layoutItemId) return [unit.layoutItemId]
-    const first = layoutSeats[0]?.id
-    return first ? [first] : []
-  }, [layoutSeats, mergedSeatingUnits, selectedSeat])
+    const ids = new Set<string>()
+    for (const item of selectedItems) {
+      if (item.id) ids.add(item.id)
+    }
+    for (const seat of layoutSeats) {
+      if (seat.id) ids.add(seat.id)
+    }
+    if (selectedSeat) {
+      ids.add(selectedSeat.seatingUnitId)
+      const unit = mergedSeatingUnits.find(
+        (item) => item.id === selectedSeat.seatingUnitId,
+      )
+      if (unit?.layoutItemId) ids.add(unit.layoutItemId)
+    }
+    return [...ids]
+  }, [layoutSeats, mergedSeatingUnits, selectedItems, selectedSeat])
 
   const universalPayload = useMemo(() => {
     if (!hasSeatingFlow) return null
@@ -853,12 +1063,15 @@ export function CheckoutTunnel({
     ? selectedSeat.price +
       layoutSeats.slice(1).reduce((sum, seat) => sum + seat.price, 0)
     : layoutSeats.reduce((sum, seat) => sum + seat.price, 0)
-  const mapTierIds = new Set(
-    selectedItems
-      .filter((item) => item.type !== "seat")
-      .map((item) => resolveItemTierId(item))
-      .filter((id): id is string => Boolean(id)),
-  )
+  const mapTierIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const item of selectedItems) {
+      if (item.type === "seat") continue
+      const tierId = resolveItemTierId(item)
+      if (tierId) ids.add(tierId)
+    }
+    return ids
+  }, [resolveItemTierId, selectedItems])
   const extraQuantitySubtotal = selection
     .filter((tier) => !mapTierIds.has(tier.id))
     .reduce((sum, tier) => sum + tier.subtotal, 0)
@@ -900,20 +1113,37 @@ export function CheckoutTunnel({
           (tier.seatingSectorId === item.sectorId ||
             tier.seatingSectorId === item.id),
       )
-      const dateSource = matched.length === 1 ? matched[0] : null
+      const datedMatch = selectedDateId
+        ? matched.filter((tier) => ticketMatchesTab(tier, selectedDateId))
+        : []
+      const dateSource =
+        datedMatch.length === 1
+          ? datedMatch[0]
+          : matched.length === 1
+            ? matched[0]
+            : null
+      const dateId = dateSource
+        ? resolveTicketDateMeta(dateSource).dateId
+        : selectedDateId
+      const dateLabel = dateSource
+        ? ticketDateCartLabel(dateSource, scheduleDays)
+        : scheduleDayCartLabel(dateId, scheduleDays)
       return {
         id: item.id,
         name: item.name,
-        detail:
-          item.capacity > 1 ? `${item.capacity} lugares` : undefined,
-        dateId: dateSource
-          ? resolveTicketDateMeta(dateSource).dateId
-          : null,
-        dateLabel: dateSource
-          ? ticketDateLabel(dateSource, scheduleDays)
-          : "Todos los días",
-        quantity: Math.max(1, item.capacity || 1),
-        price: item.price * Math.max(1, item.capacity || 1),
+        detail: formatSelectionChargeDetail({
+          type: item.type,
+          name: item.name,
+          capacity: item.capacity,
+          unitPrice: item.price,
+          quantity: 1,
+          sellMode: item.sellMode,
+          priceMode: item.priceMode,
+        }),
+        dateId,
+        dateLabel,
+        quantity: storefrontLineSkuQuantity(item),
+        price: storefrontLineTotal(item),
       }
     })
     const ticketLines = selection
@@ -925,13 +1155,20 @@ export function CheckoutTunnel({
           name: tier.name,
           detail: `${tier.quantity} ${tier.quantity === 1 ? "entrada" : "entradas"}`,
           dateId: meta.dateId,
-          dateLabel: ticketDateLabel(tier, scheduleDays),
+          dateLabel: ticketDateCartLabel(tier, scheduleDays),
           quantity: tier.quantity,
           price: tier.subtotal,
         }
       })
     return [...seatLines, ...ticketLines]
-  }, [displayTiers, liveSelectedItems, mapTierIds, scheduleDays, selection])
+  }, [
+    displayTiers,
+    liveSelectedItems,
+    mapTierIds,
+    scheduleDays,
+    selectedDateId,
+    selection,
+  ])
   useEffect(() => {
     useCheckoutStore.getState().setCartTotals({
       totalAmount: finalTotal,
@@ -1095,19 +1332,101 @@ export function CheckoutTunnel({
     trackInitiateCheckout(payload)
   }
 
+  function seatingLineFromUnit(
+    unit: EventSeatingUnit,
+    fallback?: {
+      tierId: string
+      sectorKey?: string | null
+      tableNumber?: number | null
+    },
+  ) {
+    const tableMatch = String(unit.label ?? "").match(/(\d+)/)
+    return {
+      tierId: fallback?.tierId ?? unit.tierId,
+      quantity: 1,
+      seatingUnitId: unit.id,
+      sectorKey: fallback?.sectorKey ?? unit.sectorId,
+      tableNumber:
+        fallback?.tableNumber ?? (tableMatch ? Number(tableMatch[1]) : null),
+    }
+  }
+
   function buildCheckoutItems(extraAddonId?: string) {
-    const items = [
-      ...(selectedSeat
-        ? [
-            {
+    const seatedById = new Map<
+      string,
+      {
+        tierId: string
+        quantity: number
+        seatingUnitId: string
+        sectorKey?: string | null
+        tableNumber?: number | null
+      }
+    >()
+
+    function addSeatedLine(line: {
+      tierId: string
+      quantity: number
+      seatingUnitId: string
+      sectorKey?: string | null
+      tableNumber?: number | null
+    }) {
+      if (seatedById.has(line.seatingUnitId)) return
+      seatedById.set(line.seatingUnitId, line)
+    }
+
+    if (selectedSeat) {
+      const unit = mergedSeatingUnits.find(
+        (item) => item.id === selectedSeat.seatingUnitId,
+      )
+      addSeatedLine(
+        unit
+          ? seatingLineFromUnit(unit, selectedSeat)
+          : {
               tierId: selectedSeat.tierId,
               quantity: 1,
               seatingUnitId: selectedSeat.seatingUnitId,
               sectorKey: selectedSeat.sectorKey,
               tableNumber: selectedSeat.tableNumber,
             },
-          ]
-        : []),
+      )
+    }
+
+    for (const item of selectedItems) {
+      if (item.type !== "seat" && item.type !== "table") continue
+      const unit =
+        mergedSeatingUnits.find((row) => row.id === item.id) ??
+        seatIdByLayoutItem.get(item.id)
+      if (unit) {
+        addSeatedLine(seatingLineFromUnit(unit))
+        continue
+      }
+      const resolvedTierId = resolveItemTierId(item)
+      if (
+        resolvedTierId &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          item.id,
+        )
+      ) {
+        addSeatedLine({
+          tierId: resolvedTierId,
+          quantity: 1,
+          seatingUnitId: item.id,
+          sectorKey: item.sectorId ?? null,
+          tableNumber: item.number ?? null,
+        })
+      }
+    }
+
+    for (const seat of layoutSeats) {
+      const unit =
+        mergedSeatingUnits.find((row) => row.id === seat.id) ??
+        seatIdByLayoutItem.get(seat.id)
+      if (!unit) continue
+      addSeatedLine(seatingLineFromUnit(unit))
+    }
+
+    const items = [
+      ...seatedById.values(),
       ...selection.map((tier) => ({
         tierId: tier.id,
         quantity: tier.quantity,
@@ -1116,7 +1435,7 @@ export function CheckoutTunnel({
     const covered = new Set(items.map((item) => item.tierId))
     const mapCounts: Record<string, number> = {}
     for (const item of selectedItems) {
-      if (item.type === "seat") continue
+      if (item.type === "seat" || item.type === "table") continue
       const tierId = resolveItemTierId(item)
       if (!tierId || covered.has(tierId)) continue
       mapCounts[tierId] =
@@ -1133,12 +1452,36 @@ export function CheckoutTunnel({
     return items
   }
 
-  function submitCheckout(
+  async function runCheckoutBusy(task: () => Promise<void> | void) {
+    if (ctaBusyRef.current || purchaseLocked) return
+    ctaBusyRef.current = true
+    setCtaBusy(true)
+    try {
+      await task()
+    } finally {
+      ctaBusyRef.current = false
+      setCtaBusy(false)
+    }
+  }
+
+  function clearConflictingCheckoutSelection() {
+    useStorefrontSeatStore.getState().clearSelectedItems()
+    setSelectedSeat(null)
+  }
+
+  function applyCheckoutActionError(error: string, fallbackTitle: string) {
+    toastCheckoutError(error, fallbackTitle)
+    if (isCheckoutStockConflict(error)) {
+      clearConflictingCheckoutSelection()
+    }
+  }
+
+  async function submitCheckout(
     extraAddonId?: string,
     sandbox = false,
     buyerOverride?: CheckoutBuyerInfo,
   ) {
-    if (controlsLocked) return
+    if (purchaseLocked) return
     const items = buildCheckoutItems(extraAddonId)
     if (items.length === 0) return
 
@@ -1159,7 +1502,11 @@ export function CheckoutTunnel({
       numItems: items.reduce((sum, item) => sum + item.quantity, 0),
     })
 
-    startTransition(async () => {
+    const fallbackTitle = sandbox
+      ? "No se pudo completar la compra de prueba"
+      : "No se pudo iniciar el pago"
+
+    try {
       if (!currentUserId) {
         const authed = await ensureGuestCheckoutSession()
         if (!authed) {
@@ -1205,12 +1552,7 @@ export function CheckoutTunnel({
           router.refresh()
           return
         }
-        toastCheckoutError(
-          result.error,
-          sandbox
-            ? "No se pudo completar la compra de prueba"
-            : "No se pudo iniciar el pago",
-        )
+        applyCheckoutActionError(result.error, fallbackTitle)
         router.refresh()
         return
       }
@@ -1219,11 +1561,16 @@ export function CheckoutTunnel({
         toast.success("Compra de prueba lista")
       }
       enterPaymentHold(result)
-    })
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "checkout_failed"
+      applyCheckoutActionError(message, fallbackTitle)
+      router.refresh()
+    }
   }
 
   async function goToDetailsStep() {
-    if (!canProceedFromCart || controlsLocked) return
+    if (!canProceedFromCart || purchaseLocked) return
     const firstSeat = layoutSeats[0]
     if (firstSeat && !selectedSeat) {
       handleUniversalContinue(
@@ -1259,8 +1606,10 @@ export function CheckoutTunnel({
   }
 
   function continueWithExtras() {
-    setUpsellSkipped(true)
-    proceedToDetails()
+    void runCheckoutBusy(async () => {
+      setUpsellSkipped(true)
+      await proceedToDetails()
+    })
   }
 
   function skipExtras() {
@@ -1269,12 +1618,14 @@ export function CheckoutTunnel({
         updateQuantity(extra.id, 0, extra.available)
       }
     }
-    setUpsellSkipped(true)
-    proceedToDetails()
+    void runCheckoutBusy(async () => {
+      setUpsellSkipped(true)
+      await proceedToDetails()
+    })
   }
 
   function goToPaymentMethods() {
-    if (!canProceedFromCart || controlsLocked) return
+    if (!canProceedFromCart || purchaseLocked) return
     void buyerForm.handleSubmit(
       (values) => {
         setBuyer(values)
@@ -1347,6 +1698,8 @@ export function CheckoutTunnel({
           capacity: Math.max(1, quantity),
           sectorId: zone.id,
           color: zone.color,
+          sellMode: zone.sellMode,
+          priceMode: zone.priceMode ?? venuePriceModeFromSellMode(zone.sellMode),
         },
         maxTicketsPerUser,
       )
@@ -1448,8 +1801,9 @@ export function CheckoutTunnel({
   }
 
   function handlePrimaryCta() {
+    if (ctaBusyRef.current || checkoutBusy || purchaseLocked) return
     if (visibleStep === "tickets") {
-      void goToDetailsStep()
+      void runCheckoutBusy(goToDetailsStep)
       return
     }
     if (visibleStep === "upsell") {
@@ -1464,11 +1818,7 @@ export function CheckoutTunnel({
   }
 
   function handleConfirmPay() {
-    if (
-      !canProceedFromCart ||
-      controlsLocked
-    )
-      return
+    if (!canProceedFromCart || purchaseLocked) return
     if (!identityReady) {
       requestIdentity("pay")
       return
@@ -1479,7 +1829,7 @@ export function CheckoutTunnel({
     }
     void buyerForm.handleSubmit(
       (values) => {
-        submitCheckout(undefined, false, values)
+        void runCheckoutBusy(() => submitCheckout(undefined, false, values))
       },
       (formErrors) => {
         setFieldShake((current) => current + 1)
@@ -1490,7 +1840,7 @@ export function CheckoutTunnel({
   }
 
   function handleSandboxReserve() {
-    if (!sandboxEligible || !canProceedFromCart || controlsLocked) {
+    if (!sandboxEligible || !canProceedFromCart || purchaseLocked) {
       return
     }
     if (!identityReady) {
@@ -1499,7 +1849,7 @@ export function CheckoutTunnel({
     }
     void buyerForm.handleSubmit(
       (values) => {
-        submitCheckout(undefined, true, values)
+        void runCheckoutBusy(() => submitCheckout(undefined, true, values))
       },
       (formErrors) => {
         setFieldShake((current) => current + 1)
@@ -1556,18 +1906,30 @@ export function CheckoutTunnel({
     if (items.length === 0) return true
     if (!(await ensureGuestAuthForHold())) return false
     if (!(await hasCheckoutAuthSession())) return true
-    const result = await lockTickets(eventId, items)
-    if (!result.success) {
-      toast.error("Algunos lugares ya no están disponibles")
+    try {
+      const result = await lockTickets(eventId, items)
+      if (!result.success) {
+        if (result.error === "auth_required") {
+          requestIdentity("open_map")
+          return false
+        }
+        applyCheckoutActionError(result.error, CHECKOUT_STOCK_TAKEN_MESSAGE)
+        router.refresh()
+        return false
+      }
+      const next = minReservedUntil(
+        useCheckoutStore.getState().holdExpiresAt,
+        result.reservedUntil,
+      )
+      if (next) useCheckoutStore.getState().setHoldExpiresAt(next)
+      return true
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "out_of_stock"
+      applyCheckoutActionError(message, CHECKOUT_STOCK_TAKEN_MESSAGE)
       router.refresh()
       return false
     }
-    const next = minReservedUntil(
-      useCheckoutStore.getState().holdExpiresAt,
-      result.reservedUntil,
-    )
-    if (next) useCheckoutStore.getState().setHoldExpiresAt(next)
-    return true
   }
 
   function handleHoldExpiredAck() {
@@ -1613,25 +1975,34 @@ export function CheckoutTunnel({
       return
     }
 
-    const seat = selectionPayload.seats[0]
-    if (!seat) {
+    const seats = selectionPayload.seats
+    if (seats.length === 0) {
       toast.error("Elegí una ubicación para continuar.")
       return
     }
-    if (selectionPayload.seats.length > 1) {
-      toast.error("Comprá una ubicación numerada por operación.")
+    const seatingCap = Math.max(MAX_TABLES_PER_PURCHASE, MAX_TICKETS_PER_PURCHASE)
+    if (seats.length > seatingCap) {
+      toast.error(
+        `Podés reservar hasta ${seatingCap} ubicaciones numeradas por compra.`,
+      )
       return
     }
 
+    const releasePrevious = seats.length === 1
+
     async function applyNumbered(unit: EventSeatingUnit) {
-      if (!(await ensureGuestAuthForHold())) return
+      if (!(await ensureGuestAuthForHold())) return false
       if (unit.status !== "available" && unit.status !== "reserved") {
         toast.error("El lugar seleccionado ya no está disponible.")
         router.refresh()
-        return
+        return false
       }
       const hold = await holdSeatingUnitForCart(eventId, unit.id)
       if (!hold.success && hold.error !== "auth_required") {
+        if (hold.error === HIGH_DEMAND_LOCK_TIMEOUT) {
+          toast.error(HIGH_DEMAND_LOCK_MESSAGE)
+          return false
+        }
         toast.error(
           hold.error === "not_materialized"
             ? "El inventario de esta zona todavía no está publicado."
@@ -1640,9 +2011,13 @@ export function CheckoutTunnel({
               : hold.error,
         )
         router.refresh()
-        return
+        return false
       }
-      if (selectedSeat && selectedSeat.seatingUnitId !== unit.id) {
+      if (
+        releasePrevious &&
+        selectedSeat &&
+        selectedSeat.seatingUnitId !== unit.id
+      ) {
         void releaseSeatingUnitCartHold(eventId, selectedSeat.seatingUnitId)
       }
       const tableMatch = String(unit.label ?? "").match(/(\d+)/)
@@ -1659,63 +2034,71 @@ export function CheckoutTunnel({
       }
       setFocusedZoneId(selectionPayload.sectorId)
       setFocusedTierId(unit.tierId)
-      if (!options?.keepOpen && !hasInteractiveMap) returnToCheckout()
-    }
-
-    const cached =
-      (seat.seatingUnitId
-        ? mergedSeatingUnits.find((unit) => unit.id === seat.seatingUnitId)
-        : null) ?? seatIdByLayoutItem.get(seat.id)
-    if (cached) {
-      void applyNumbered(cached)
-      return
+      return true
     }
 
     startTransition(async () => {
-      if (!(await ensureGuestAuthForHold())) return
-      const hold = await holdSeatingUnitForCartByLayoutItem(
-        eventId,
-        selectionPayload.sectorId,
-        seat.id,
-      )
-      if (!hold.success) {
-        toast.error(
-          hold.error === "not_materialized"
-            ? "El inventario de esta zona todavía no está publicado."
-            : hold.error === "out_of_stock" || hold.error === "auth_required"
-              ? "Esta ubicación acaba de ser reservada por otra persona. Por favor elegí otra."
-              : hold.error,
-          hold.error === "not_materialized"
-            ? {
-                description:
-                  "No se puede comprar un tablón hasta que el stock esté materializado.",
-              }
-            : undefined,
+      for (const seat of seats) {
+        const cached =
+          (seat.seatingUnitId
+            ? mergedSeatingUnits.find((unit) => unit.id === seat.seatingUnitId)
+            : null) ?? seatIdByLayoutItem.get(seat.id)
+        if (cached) {
+          const ok = await applyNumbered(cached)
+          if (!ok) return
+          continue
+        }
+        if (!(await ensureGuestAuthForHold())) return
+        const hold = await holdSeatingUnitForCartByLayoutItem(
+          eventId,
+          selectionPayload.sectorId,
+          seat.id,
         )
-        if (hold.error === "auth_required") requestIdentity("open_map")
-        else router.refresh()
-        return
+        if (!hold.success) {
+          if (hold.error === HIGH_DEMAND_LOCK_TIMEOUT) {
+            toast.error(HIGH_DEMAND_LOCK_MESSAGE)
+            return
+          }
+          toast.error(
+            hold.error === "not_materialized"
+              ? "El inventario de esta zona todavía no está publicado."
+              : hold.error === "out_of_stock" || hold.error === "auth_required"
+                ? "Esta ubicación acaba de ser reservada por otra persona. Por favor elegí otra."
+                : hold.error,
+            hold.error === "not_materialized"
+              ? {
+                  description:
+                    "No se puede comprar un tablón hasta que el stock esté materializado.",
+                }
+              : undefined,
+          )
+          if (hold.error === "auth_required") requestIdentity("open_map")
+          else router.refresh()
+          return
+        }
+        const units = await getEventSeatingUnitsForSector(
+          eventId,
+          selectionPayload.sectorId,
+        )
+        setLoadedUnitsBySector((current) => ({
+          ...current,
+          [selectionPayload.sectorId]: units,
+        }))
+        const unit =
+          units.find((item) => item.id === hold.seatingUnitId) ??
+          units.find((item) => item.layoutItemId === seat.id)
+        if (!unit) {
+          toast.error("El inventario de esta zona todavía no está publicado.", {
+            description:
+              "No se puede comprar un tablón hasta que el stock esté materializado.",
+          })
+          router.refresh()
+          return
+        }
+        const ok = await applyNumbered(unit)
+        if (!ok) return
       }
-      const units = await getEventSeatingUnitsForSector(
-        eventId,
-        selectionPayload.sectorId,
-      )
-      setLoadedUnitsBySector((current) => ({
-        ...current,
-        [selectionPayload.sectorId]: units,
-      }))
-      const unit =
-        units.find((item) => item.id === hold.seatingUnitId) ??
-        units.find((item) => item.layoutItemId === seat.id)
-      if (!unit) {
-        toast.error("El inventario de esta zona todavía no está publicado.", {
-          description:
-            "No se puede comprar un tablón hasta que el stock esté materializado.",
-        })
-        router.refresh()
-        return
-      }
-      await applyNumbered(unit)
+      if (!options?.keepOpen && !hasInteractiveMap) returnToCheckout()
     })
   }
 
@@ -1744,7 +2127,7 @@ export function CheckoutTunnel({
 
   const seatFlowOverlay =
     showSeatFlow && !hasInteractiveMap ? (
-      <div className="fixed inset-0 z-[80] flex h-dvh w-screen flex-col overflow-hidden overscroll-none bg-zinc-950">
+      <div className="fixed inset-0 z-[80] flex h-dvh w-screen flex-col overflow-hidden overscroll-none bg-background">
         <AdaptiveSeatingFlow
           key={selectedDayId ?? "all"}
           takeover
@@ -1831,49 +2214,46 @@ export function CheckoutTunnel({
       }
     : null
 
-  const showReservationTimer =
-    (visibleStep === "details" || visibleStep === "payment") &&
-    Boolean(holdExpiresAt)
+  const showReservationTimer = Boolean(holdExpiresAt)
 
-  const checkoutPanel = (
+    const checkoutPanel = (
     <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-x-hidden overflow-hidden bg-card text-card-foreground">
-      {showReservationTimer && holdExpiresAt ? (
-        <CheckoutTimer
-          eventId={eventId}
-          onAcknowledged={handleHoldExpiredAck}
-        />
-      ) : null}
-      <div className="mb-4 flex-none space-y-3 border-b border-border px-6 pb-4 pt-6 lg:px-8">
-        <CheckoutStepper step={visibleStep} />
-        <div>
-          {visibleStep !== "tickets" ? (
-            <button
-              type="button"
-              onClick={goBackStep}
-              className="mb-1 inline-flex items-center gap-1 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <ChevronLeft className="size-4" aria-hidden="true" />
-              Volver
-            </button>
-          ) : null}
-          <div className="flex items-start justify-between gap-3">
-            <h2 className="text-lg font-bold tracking-tight text-foreground lg:text-xl">
-              {stepTitle}
-            </h2>
-            {visibleStep === "tickets" &&
-            (maxTicketsPerUser ?? 0) > 0 ? (
-              <span className="rounded-full bg-secondary px-2.5 py-1 text-[10px] font-bold text-muted-foreground">
-                Máx. {maxTicketsPerUser} lugares
-              </span>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
+      <CheckoutTimer
+        eventId={eventId}
+        onAcknowledged={handleHoldExpiredAck}
+      />
       <div
         ref={panelBodyRef}
-        className="no-scrollbar min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pb-[140px] pt-6 md:px-8"
+        className="no-scrollbar min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto"
       >
+        <CheckoutHeader
+          step={visibleStep}
+          holdExpiresAt={showReservationTimer ? holdExpiresAt : null}
+          maxTicketsPerUser={maxTicketsPerUser}
+          onBack={
+            visibleStep === "tickets" && onLeaveCheckout
+              ? onLeaveCheckout
+              : goBackStep
+          }
+          backLabel={
+            visibleStep === "tickets" && onLeaveCheckout
+              ? "Volver al evento"
+              : "Volver"
+          }
+        />
+        <div
+          className={cn(
+            "mx-auto w-full max-w-7xl px-4 pt-1 sm:px-6 lg:px-8 lg:pt-6 lg:pb-10",
+            visibleStep === "payment" ? "pb-8" : "pb-36",
+          )}
+        >
+          {visibleStep !== "tickets" ? (
+            <h2 className="mb-3 pt-2 text-lg font-black text-foreground md:mb-4 md:text-xl">
+              {stepTitle}
+            </h2>
+          ) : null}
+          <div className="grid grid-cols-1 lg:grid-cols-12 lg:gap-8">
+            <div className="min-w-0 lg:col-span-7">
         <AnimatePresence mode="wait" initial={false}>
           {visibleStep === "tickets" ? (
             <motion.div
@@ -1913,7 +2293,9 @@ export function CheckoutTunnel({
                 onQuantityChange={updateQuantity}
                 onOpenSeatFlow={openSeatFlow}
                 seatSelection={seatSelection}
-                onPurchaseIntent={goToDetailsStep}
+                onPurchaseIntent={() => {
+                  void runCheckoutBusy(goToDetailsStep)
+                }}
                 onClearSeat={() => {
                   const seat = selectedSeat
                   useCheckoutStore.getState().clearCart()
@@ -1921,6 +2303,8 @@ export function CheckoutTunnel({
                     void releaseSeatingUnitCartHold(eventId, seat.seatingUnitId)
                   }
                 }}
+                selectedDateId={selectedDateId}
+                onSelectedDateIdChange={setSelectedDateId}
               />
               </motion.div>
             </motion.div>
@@ -1967,12 +2351,20 @@ export function CheckoutTunnel({
                 buyerErrors={buyerForm.formState.errors}
                 onBuyerChange={(next) => {
                   setBuyer(next)
-                  buyerForm.reset(next)
+                  buyerForm.reset(next, {
+                    keepDirty: true,
+                    keepIsSubmitted: true,
+                    keepTouched: true,
+                  })
+                  if (buyerForm.formState.isSubmitted) {
+                    void buyerForm.trigger()
+                  }
                 }}
                 onAppliedPromo={setAppliedPromo}
                 onClearedPromo={() => setAppliedPromo(null)}
                 onSelectProvider={setSelectedProvider}
                 onSandboxReserve={handleSandboxReserve}
+                onDetailsSubmit={goToPaymentMethods}
               />
             </motion.div>
           ) : (
@@ -2001,21 +2393,53 @@ export function CheckoutTunnel({
                 buyerErrors={buyerForm.formState.errors}
                 onBuyerChange={(next) => {
                   setBuyer(next)
-                  buyerForm.reset(next)
+                  buyerForm.reset(next, {
+                    keepDirty: true,
+                    keepIsSubmitted: true,
+                    keepTouched: true,
+                  })
+                  if (buyerForm.formState.isSubmitted) {
+                    void buyerForm.trigger()
+                  }
                 }}
                 onAppliedPromo={setAppliedPromo}
                 onClearedPromo={() => setAppliedPromo(null)}
                 onSelectProvider={setSelectedProvider}
                 onSandboxReserve={handleSandboxReserve}
+                onDetailsSubmit={goToPaymentMethods}
+                onConfirmPay={handlePrimaryCta}
+                confirmPending={checkoutBusy}
+                confirmLocked={purchaseLocked}
               />
             </motion.div>
           )}
         </AnimatePresence>
+        </div>
+        <div className="hidden min-h-0 lg:col-span-5 lg:block">
+          <CheckoutSelectionSidebar
+            seatSelection={visibleStep === "tickets" ? seatSelection : null}
+            maxSelectable={maxTicketsPerUser}
+            cta={{
+              label: visibleStep === "tickets" ? "Continuar" : stepCta,
+              showArrow: visibleStep !== "payment",
+              pending: checkoutBusy,
+              pendingLabel:
+                visibleStep === "payment" ? "Preparando pago" : "Procesando",
+              disabled: visibleStep === "tickets" && !canProceedFromCart,
+              locked: purchaseLocked,
+              pulse: highlightContinue,
+              onClick: handlePrimaryCta,
+            }}
+          />
+        </div>
+        </div>
+        </div>
       </div>
 
-      <div className="mt-auto flex-none max-lg:contents lg:border-t lg:border-border/40 lg:bg-card/95 lg:backdrop-blur-md">
+      <div className="mt-auto flex-none lg:hidden">
         <CheckoutFloatingBar
           variant="panel"
+          hidden={visibleStep === "payment"}
           actionLabel={
             visibleStep === "tickets" ? "Continuar" : stepCta
           }
@@ -2023,13 +2447,17 @@ export function CheckoutTunnel({
           totalAmount={finalTotal}
           itemsCount={Math.max(totalTickets, liveSelectedItems.length)}
           disabled={visibleStep === "tickets" && !canProceedFromCart}
-          pending={isPending && visibleStep === "payment"}
+          pending={checkoutBusy}
+          pendingLabel={
+            visibleStep === "payment" ? "Preparando pago" : "Procesando"
+          }
           locked={purchaseLocked}
           pulseCta={highlightContinue}
           prominentCta={
             visibleStep === "details" || visibleStep === "payment"
           }
           onPay={handlePrimaryCta}
+          onEditMap={hasInteractiveMap ? openSeatFlow : undefined}
         />
       </div>
     </div>

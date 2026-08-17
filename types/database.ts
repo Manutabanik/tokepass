@@ -186,7 +186,7 @@ export type Event = {
   qr_type: QrType
   /** public | private | guest_list_only */
   visibility: "public" | "private" | "guest_list_only"
-  /** Jornadas: [{id,title,start_time,end_time}, ...] */
+  /** Espejo JSONB de event_schedules (transición). Fuente canónica: tabla relacional. */
   schedule_days: Json
   is_featured: boolean
   featured_tier: "silver" | "gold" | "platinum" | null
@@ -236,6 +236,14 @@ export type Event = {
   event_artists?: EventArtist[]
   created_at: string
   updated_at: string
+}
+
+export type EventSchedule = {
+  id: string
+  event_id: string
+  title: string
+  start_time: string
+  end_time: string
 }
 
 export type EventCategory = {
@@ -332,7 +340,7 @@ export type TicketTier = {
   time_limit: string | null
   bonus_reward: string | null
   zone_id: string | null
-  /** NULL = abono / fecha única; si no, id de schedule_days */
+  /** NULL = abono / fecha única; si no, FK a event_schedules.id */
   day_id: string | null
   visibility: "public" | "private"
   layout_type: "general" | "table_combo" | "numbered_seat"
@@ -409,6 +417,18 @@ export type TicketTierPhase = {
   created_at: string
 }
 
+export type EventSkuChangelog = {
+  id: string
+  event_id: string
+  tier_id: string | null
+  phase_id: string | null
+  changed_by: string | null
+  field_changed: string
+  old_value: string | null
+  new_value: string | null
+  created_at: string
+}
+
 export type TicketReservation = {
   id: string
   event_id: string
@@ -422,6 +442,8 @@ export type TicketReservation = {
   created_at: string
 }
 
+export type TicketTransferStatus = "pending" | "accepted" | "cancelled"
+
 export type TicketTransfer = {
   id: string
   sender_id: string
@@ -429,6 +451,11 @@ export type TicketTransfer = {
   original_ticket_id: string
   new_ticket_id: string | null
   created_at: string
+  status: TicketTransferStatus
+  claim_token: string | null
+  receiver_id: string | null
+  accepted_at: string | null
+  cancelled_at: string | null
 }
 
 export type TicketResaleListingStatus = "active" | "sold" | "cancelled"
@@ -577,6 +604,9 @@ export type Promoter = {
   name: string
   /** Fracción decimal: 0.10 = 10% */
   commission_rate: number
+  /** percent = sobre subtotal; fixed = monto por entrada */
+  commission_type: "percent" | "fixed"
+  commission_fixed_amount: number | null
   referral_code: string
   created_at: string
   updated_at: string
@@ -629,6 +659,8 @@ export type Order = {
   total_amount: number
   status: OrderStatus
   promoter_id: string | null
+  promoter_commission_amount: number | null
+  promoter_commission_type: "percent" | "fixed" | null
   promo_code_id: string | null
   discount_amount: number
   mp_preference_id: string | null
@@ -642,6 +674,7 @@ export type Order = {
   customer_phone: string | null
   guest_token: string | null
   cashier_shift_id: string | null
+  cashier_user_id: string | null
   created_at: string
   updated_at: string
 }
@@ -1044,10 +1077,19 @@ type EventSeatingUnitInsert = Omit<
   created_at?: string
   updated_at?: string
 }
-type PromoterInsert = Omit<Promoter, "id" | "created_at" | "updated_at"> & {
+type PromoterInsert = Omit<
+  Promoter,
+  | "id"
+  | "created_at"
+  | "updated_at"
+  | "commission_type"
+  | "commission_fixed_amount"
+> & {
   id?: string
   created_at?: string
   updated_at?: string
+  commission_type?: "percent" | "fixed"
+  commission_fixed_amount?: number | null
 }
 type PromoterReferralVisitInsert = Omit<
   PromoterReferralVisit,
@@ -1059,11 +1101,6 @@ type PromoterReferralVisitInsert = Omit<
   visitor_key?: string | null
   created_at?: string
 }
-type AddonInsert = Omit<Addon, "id" | "created_at" | "updated_at"> & {
-  id?: string
-  created_at?: string
-  updated_at?: string
-}
 type OrderInsert = Omit<
   Order,
   | "id"
@@ -1071,6 +1108,8 @@ type OrderInsert = Omit<
   | "subtotal"
   | "service_charge"
   | "promoter_id"
+  | "promoter_commission_amount"
+  | "promoter_commission_type"
   | "promo_code_id"
   | "discount_amount"
   | "mp_preference_id"
@@ -1084,6 +1123,7 @@ type OrderInsert = Omit<
   | "customer_phone"
   | "guest_token"
   | "cashier_shift_id"
+  | "cashier_user_id"
   | "created_at"
   | "updated_at"
 > & {
@@ -1092,6 +1132,8 @@ type OrderInsert = Omit<
   subtotal?: number
   service_charge?: number
   promoter_id?: string | null
+  promoter_commission_amount?: number | null
+  promoter_commission_type?: "percent" | "fixed" | null
   promo_code_id?: string | null
   discount_amount?: number
   mp_preference_id?: string | null
@@ -1105,6 +1147,7 @@ type OrderInsert = Omit<
   customer_phone?: string | null
   guest_token?: string | null
   cashier_shift_id?: string | null
+  cashier_user_id?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -1135,14 +1178,6 @@ type OrganizerSettlementInsert = Omit<
   period_label?: string | null
   notes?: string | null
   completed_at?: string | null
-  created_at?: string
-  updated_at?: string
-}
-type OrderAddonInsert = Omit<
-  OrderAddon,
-  "id" | "created_at" | "updated_at"
-> & {
-  id?: string
   created_at?: string
   updated_at?: string
 }
@@ -1270,6 +1305,31 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "event_artists"
             referencedColumns: ["event_id"]
+          },
+        ]
+      }
+      event_schedules: {
+        Row: EventSchedule
+        Insert: {
+          id?: string
+          event_id: string
+          title?: string
+          start_time: string
+          end_time: string
+        }
+        Update: Partial<{
+          event_id: string
+          title: string
+          start_time: string
+          end_time: string
+        }>
+        Relationships: [
+          {
+            foreignKeyName: "event_schedules_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -1457,7 +1517,15 @@ export type Database = {
         Row: TicketTier
         Insert: TicketTierInsert
         Update: Partial<TicketTierInsert>
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ticket_tiers_day_id_fkey"
+            columns: ["day_id"]
+            isOneToOne: false
+            referencedRelation: "event_schedules"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       ticket_tier_phases: {
         Row: TicketTierPhase
@@ -1470,18 +1538,17 @@ export type Database = {
           status?: TicketTierPhaseStatus
           created_at?: string
         }
-        Update: Partial<
-          Omit<TicketTierPhase, "id" | "tier_id" | "created_at">
-        >
-        Relationships: [
-          {
-            foreignKeyName: "ticket_tier_phases_tier_id_fkey"
-            columns: ["tier_id"]
-            isOneToOne: false
-            referencedRelation: "ticket_tiers"
-            referencedColumns: ["id"]
-          },
-        ]
+        Update: Partial<TicketTierPhase>
+        Relationships: []
+      }
+      event_sku_changelog: {
+        Row: EventSkuChangelog
+        Insert: Omit<EventSkuChangelog, "id" | "created_at"> & {
+          id?: string
+          created_at?: string
+        }
+        Update: never
+        Relationships: []
       }
       ticket_reservations: {
         Row: TicketReservation
@@ -1738,10 +1805,25 @@ export type Database = {
       }
       ticket_transfers: {
         Row: TicketTransfer
-        Insert: Omit<TicketTransfer, "id" | "new_ticket_id" | "created_at"> & {
+        Insert: Omit<
+          TicketTransfer,
+          | "id"
+          | "new_ticket_id"
+          | "created_at"
+          | "status"
+          | "claim_token"
+          | "receiver_id"
+          | "accepted_at"
+          | "cancelled_at"
+        > & {
           id?: string
           new_ticket_id?: string | null
           created_at?: string
+          status?: TicketTransferStatus
+          claim_token?: string | null
+          receiver_id?: string | null
+          accepted_at?: string | null
+          cancelled_at?: string | null
         }
         Update: Partial<TicketTransfer>
         Relationships: []
@@ -2045,9 +2127,76 @@ export type Database = {
         }
         Returns: number
       }
+      claim_and_reserve_ga_cart_tx: {
+        Args: {
+          p_event_id: string
+          p_owner_id: string
+          p_items: Json
+          p_promoter_id?: string | null
+        }
+        Returns: {
+          order_id: string
+          ticket_id: string
+          subtotal: number
+          service_charge: number
+          total_amount: number
+        }[]
+      }
+      list_cart_holds: {
+        Args: {
+          p_event_id: string
+          p_owner_id: string
+        }
+        Returns: {
+          hold_kind: string
+          tier_id: string
+          quantity: number
+          seating_unit_id: string | null
+          layout_item_id: string | null
+          label: string | null
+          reserved_until: string
+        }[]
+      }
+      all_in_platform_fee_for_event: {
+        Args: {
+          p_event_id: string
+          p_public: number
+        }
+        Returns: number
+      }
       expire_ga_cart_holds: {
         Args: Record<string, never>
         Returns: number
+      }
+      heal_ticket_tier_phases: {
+        Args: {
+          p_event_id?: string | null
+        }
+        Returns: number
+      }
+      purge_expired_checkout_holds: {
+        Args: {
+          p_event_id?: string | null
+        }
+        Returns: number
+      }
+      get_event_tier_live_stock: {
+        Args: {
+          p_event_id: string
+        }
+        Returns: {
+          tier_id: string
+          capacity: number
+          sold: number
+          available: number
+          venue_remaining: number | null
+        }[]
+      }
+      event_schedules_as_jsonb: {
+        Args: {
+          p_event_id: string
+        }
+        Returns: Json
       }
       claim_seating_unit_for_checkout: {
         Args: {
@@ -2236,6 +2385,20 @@ export type Database = {
         }
         Returns: Json
       }
+      organizer_paid_ledger: {
+        Args: {
+          p_organizer_id: string
+        }
+        Returns: Array<{
+          gross_revenue: number
+          tokepass_service_charge: number
+          organizer_net_payout: number
+          mp_gross: number
+          pos_gross: number
+          mp_fees: number
+          pos_fees: number
+        }>
+      }
       get_organizer_governance_metrics: {
         Args: {
           p_organizer_id: string
@@ -2348,6 +2511,22 @@ export type Database = {
           p_metadata?: Json
         }
         Returns: Json
+      }
+      claim_and_finalize_paid_order: {
+        Args: {
+          p_order_id: string
+          p_provider: string
+          p_transaction_id: string
+          p_event_type?: string
+          p_payload?: Json
+        }
+        Returns: Json
+      }
+      release_leftover_cart_holds_for_order: {
+        Args: {
+          p_order_id: string
+        }
+        Returns: number
       }
       mark_order_test_sandbox: {
         Args: { p_order_id: string }
@@ -2642,6 +2821,47 @@ export type Database = {
           receiver_user_id: string | null
         }[]
       }
+      ticket_has_pending_transfer: {
+        Args: { p_ticket_id: string }
+        Returns: boolean
+      }
+      initiate_ticket_transfer: {
+        Args: {
+          p_ticket_id: string
+          p_receiver_email: string
+        }
+        Returns: {
+          transfer_id: string
+          claim_token: string
+          event_title: string
+          receiver_email: string
+        }[]
+      }
+      cancel_ticket_transfer: {
+        Args: { p_transfer_id: string }
+        Returns: boolean
+      }
+      peek_ticket_transfer_claim: {
+        Args: { p_token: string }
+        Returns: {
+          transfer_id: string
+          status: TicketTransferStatus
+          event_title: string
+          event_date: string | null
+          flyer_url: string | null
+          receiver_email: string
+          email_matches: boolean
+          already_owner: boolean
+        }[]
+      }
+      claim_ticket_transfer_by_token: {
+        Args: { p_token: string }
+        Returns: {
+          transfer_id: string
+          ticket_id: string
+          event_title: string
+        }[]
+      }
       complete_ticket_resale_purchase: {
         Args: {
           p_listing_id: string
@@ -2675,6 +2895,37 @@ export type Database = {
           unit_price: number
           total_amount: number
         }[]
+      }
+      process_pos_checkout_tx: {
+        Args: {
+          p_event_id: string
+          p_tier_id: string
+          p_quantity: number
+          p_payment_method: string
+          p_cashier_user_id: string
+          p_customer_phone?: string | null
+          p_customer_dni?: string | null
+          p_customer_name?: string | null
+          p_shift_id?: string | null
+          p_supervisor_pin?: string | null
+          p_seating_unit_id?: string | null
+          p_seating_layout_item_id?: string | null
+        }
+        Returns: {
+          order_id: string
+          ticket_id: string
+          totp_secret: string
+          qr_code: string
+          unit_price: number
+          total_amount: number
+        }[]
+      }
+      user_can_operate_pos: {
+        Args: {
+          p_event_id: string
+          p_user_id: string
+        }
+        Returns: boolean
       }
       set_pos_supervisor_pin: {
         Args: { p_event_id: string; p_pin: string }
@@ -2787,6 +3038,7 @@ export type Database = {
       seat_status: SeatStatus
       order_status: OrderStatus
       ticket_resale_listing_status: TicketResaleListingStatus
+      ticket_transfer_status: TicketTransferStatus
       payout_pending_status: PayoutPendingStatus
       payout_request_status: PayoutRequestStatus
     }

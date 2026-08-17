@@ -15,7 +15,6 @@ export function useArgentinaProvinces() {
 
   useEffect(() => {
     let cancelled = false
-    setIsLoading(true)
     void fetchArgentinaProvinces().then((names) => {
       if (cancelled) return
       setProvinces(names.length ? names : [...ARGENTINA_PROVINCES_FALLBACK])

@@ -22,6 +22,9 @@ const requiredGroups = [
   ["MERCADOPAGO_ACCESS_TOKEN", "MP_ACCESS_TOKEN"],
   ["MERCADOPAGO_WEBHOOK_SECRET", "MP_WEBHOOK_SECRET"],
   ["CRON_SECRET"],
+  ["RESEND_API_KEY"],
+  ["CHECKOUT_FULFILLMENT_SECRET"],
+  ["GUEST_TICKET_SECRET"],
 ]
 
 for (const group of requiredGroups) {
@@ -61,6 +64,9 @@ for (const group of [
   ["MERCADOPAGO_ACCESS_TOKEN", "MP_ACCESS_TOKEN"],
   ["MERCADOPAGO_WEBHOOK_SECRET", "MP_WEBHOOK_SECRET"],
   ["CRON_SECRET"],
+  ["CHECKOUT_FULFILLMENT_SECRET"],
+  ["GUEST_TICKET_SECRET"],
+  ["RESEND_API_KEY"],
 ]) {
   const found = firstConfigured(...group)
   if (found && found.value.length < 24) {

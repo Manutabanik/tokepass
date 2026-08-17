@@ -26,6 +26,8 @@ export interface CreateCheckoutInput {
     pending: string
   }
   webhookUrl: string
+  /** ISO del hold vigente (`hold_expires_at` / reserved_until). */
+  expiresAt?: string
 }
 
 export interface CheckoutResult {

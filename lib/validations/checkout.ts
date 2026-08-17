@@ -1,6 +1,15 @@
 import { z } from "zod"
 
-import { ABSOLUTE_MAX_ITEMS_PER_PURCHASE } from "@/lib/checkout-limits"
+import {
+  ABSOLUTE_MAX_ITEMS_PER_PURCHASE,
+  MAX_TABLES_PER_PURCHASE,
+  MAX_TICKETS_PER_PURCHASE,
+} from "@/lib/checkout-limits"
+
+const MAX_SEATING_UNITS_PER_PURCHASE = Math.max(
+  MAX_TABLES_PER_PURCHASE,
+  MAX_TICKETS_PER_PURCHASE,
+)
 import {
   DNI_ERROR,
   EMAIL_ERROR,
@@ -112,7 +121,10 @@ export const CheckoutPayloadSchema = z
   .object({
     eventId: z.string().uuid(UUID_ERROR),
     items: z.array(CheckoutCartItemSchema).max(ABSOLUTE_MAX_ITEMS_PER_PURCHASE).optional(),
-    seatingIds: z.array(z.string().uuid(UUID_ERROR)).max(1).optional(),
+    seatingIds: z
+      .array(z.string().uuid(UUID_ERROR))
+      .max(MAX_SEATING_UNITS_PER_PURCHASE)
+      .optional(),
     addons: z.array(CheckoutAddonItemSchema).max(20).optional().default([]),
     buyer: CheckoutBuyerInputSchema,
     referralCode: z
@@ -170,31 +182,39 @@ export const CheckoutPayloadSchema = z
       })
     }
 
-    if (allSeatIds.length > 1) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["seatingIds"],
-        message: "Comprá una ubicación numerada por operación.",
-      })
-    }
-
     const seatingLineItems = items.filter(
       (item) => item.seatingUnitId || (item.seatingIds?.length ?? 0) > 0,
     )
-    if (seatingLineItems.length > 1) {
+    const seatingUnitIds = seatingLineItems.flatMap((item) => {
+      const ids = [...(item.seatingIds ?? [])]
+      if (item.seatingUnitId) ids.push(item.seatingUnitId)
+      return ids
+    })
+    const uniqueSeatingUnitIds = new Set(seatingUnitIds)
+
+    if (allSeatIds.length > MAX_SEATING_UNITS_PER_PURCHASE) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["seatingIds"],
+        message: `Podés reservar hasta ${MAX_SEATING_UNITS_PER_PURCHASE} ubicaciones numeradas por compra.`,
+      })
+    }
+
+    if (uniqueSeatingUnitIds.size !== seatingUnitIds.length) {
       ctx.addIssue({
         code: "custom",
         path: ["items"],
-        message: "Comprá una ubicación numerada por operación.",
+        message: "No podés reservar la misma ubicación más de una vez.",
       })
-    } else if (
-      seatingLineItems.length === 1 &&
-      seatingLineItems[0]?.quantity !== 1
+    }
+
+    if (
+      seatingLineItems.some((item) => item.quantity !== 1)
     ) {
       ctx.addIssue({
         code: "custom",
         path: ["items"],
-        message: "Comprá una ubicación numerada por operación.",
+        message: "Cada ubicación numerada requiere cantidad 1.",
       })
     }
   })

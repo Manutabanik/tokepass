@@ -61,7 +61,6 @@ export function AccessibleSeatSelector({
   selectedZoneId = null,
   unavailableZoneIds = [],
   pending = false,
-  referenceImageUrl: _referenceImageUrl = null,
   onSelectZone,
   onToggleSeat,
   onAssignSeats,

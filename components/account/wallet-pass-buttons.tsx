@@ -41,6 +41,7 @@ export function WalletPassButtons({
   disabled = false,
   appleWalletEnabled = false,
   googleWalletEnabled = false,
+  alwaysShowPdf = false,
   className,
 }: {
   ticketId: string
@@ -48,6 +49,7 @@ export function WalletPassButtons({
   disabled?: boolean
   appleWalletEnabled?: boolean
   googleWalletEnabled?: boolean
+  alwaysShowPdf?: boolean
   className?: string
 }) {
   const [busy, setBusy] = useState(false)
@@ -170,16 +172,16 @@ export function WalletPassButtons({
         </button>
       ) : null}
 
-      {target === "pdf" ? (
+      {target === "pdf" || alwaysShowPdf ? (
         <button
           type="button"
           disabled={disabled || busy}
           onClick={downloadPdf}
-          aria-label="Descargar Entrada en PDF"
+          aria-label="Descargar PDF / Comprobante"
           className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-border bg-muted/40 px-4 text-[15px] font-semibold text-foreground transition hover:bg-muted disabled:opacity-60"
         >
           <Download className="size-4" aria-hidden="true" />
-          Descargar Entrada en PDF
+          Descargar PDF / Comprobante
         </button>
       ) : null}
     </div>

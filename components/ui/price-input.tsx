@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -36,13 +36,6 @@ export function PriceInput({
 }) {
   const [focused, setFocused] = useState(false)
   const [draft, setDraft] = useState("")
-
-  useEffect(() => {
-    if (focused) return
-    setDraft(
-      value == null || Number.isNaN(Number(value)) ? "" : String(value),
-    )
-  }, [focused, value])
 
   return (
     <Input

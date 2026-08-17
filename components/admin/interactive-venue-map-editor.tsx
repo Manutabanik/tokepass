@@ -48,6 +48,7 @@ import { VenueQuickInspector } from "@/components/admin/venue-quick-inspector"
 import { VenueSetupGuide } from "@/components/admin/venue-setup-guide"
 import { SvgTransformBox } from "@/components/admin/svg-transform-box"
 import { InspectorShapeSelector } from "@/components/admin/inspector-shape-selector"
+import { VenuePriceModeControl } from "@/components/admin/venue-price-mode-control"
 import { TheatreSeatSymbol } from "@/components/admin/venue-svg-symbols"
 import { VenueStudioHud } from "@/components/admin/venue-studio-hud"
 import { VenueTemplateLibrary } from "@/components/admin/venue-template-selector"
@@ -130,11 +131,19 @@ import {
   venueMapHasInventory,
   venueMapToSeatingLayout,
 } from "@/lib/seating/venue-map-geometry"
+import {
+  formatVenueMapSkuErrors,
+  validateVenueMapSkuConsistency,
+  type VenueMapSkuTicketRef,
+} from "@/lib/seating/venue-map-sku-consistency"
 import { cn } from "@/lib/utils"
 import {
   emptyVenueMap,
   parseVenueMap,
   isInfrastructureElement,
+  resolveVenuePricing,
+  venuePriceModeFromSellMode,
+  venueUnitPriceLabel,
   type InteractiveVenueMap,
   type VenueMapElement,
   type VenueMapPoint,
@@ -183,6 +192,7 @@ export function InteractiveVenueMapEditor({
   saving = false,
   variant = "card",
   eventTitle = "Mapa del recinto",
+  tickets,
 }: {
   value?: InteractiveVenueMap | null
   onChange: (map: InteractiveVenueMap, seatingLayout: VenueSeatingLayout) => void
@@ -192,6 +202,7 @@ export function InteractiveVenueMapEditor({
   saving?: boolean
   variant?: "card" | "studio"
   eventTitle?: string
+  tickets?: VenueMapSkuTicketRef[] | null
 }) {
   const svgRef = useRef<SVGSVGElement>(null)
   const [map, setMap] = useState<InteractiveVenueMap>(
@@ -218,11 +229,11 @@ export function InteractiveVenueMapEditor({
     ids?: string[]
   } | null>(null)
   const mapRef = useRef(map)
-  mapRef.current = map
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const undoStack = useRef<InteractiveVenueMap[]>([])
   const redoStack = useRef<InteractiveVenueMap[]>([])
-  const [historyTick, setHistoryTick] = useState(0)
+  const [undoCount, setUndoCount] = useState(0)
+  const [redoCount, setRedoCount] = useState(0)
   const [libraryOpen, setLibraryOpen] = useState(
     () => !venueMapHasInventory(parseVenueMap(value ?? emptyVenueMap())),
   )
@@ -230,6 +241,9 @@ export function InteractiveVenueMapEditor({
   const [toolsOpen, setToolsOpen] = useState(false)
   const [propertiesOpen, setPropertiesOpen] = useState(false)
   const isDesktop = useIsDesktop()
+  useEffect(() => {
+    mapRef.current = map
+  }, [map])
   const [customTemplates, setCustomTemplates] = useState<OrganizerVenueTemplate[]>(
     [],
   )
@@ -324,7 +338,8 @@ export function InteractiveVenueMapEditor({
     }
     undoStack.current = []
     redoStack.current = []
-    setHistoryTick((tick) => tick + 1)
+    setUndoCount(0)
+    setRedoCount(0)
     mapRef.current = cleared
     setMap(cleared)
     onChange(cleared, venueMapToSeatingLayout(cleared))
@@ -341,7 +356,8 @@ export function InteractiveVenueMapEditor({
     const parsed = parseVenueMap(next)
     undoStack.current = []
     redoStack.current = []
-    setHistoryTick((tick) => tick + 1)
+    setUndoCount(0)
+    setRedoCount(0)
     mapRef.current = parsed
     setMap(parsed)
     onChange(parsed, venueMapToSeatingLayout(parsed))
@@ -581,7 +597,8 @@ export function InteractiveVenueMapEditor({
     undoStack.current.push(structuredClone(mapRef.current))
     if (undoStack.current.length > 40) undoStack.current.shift()
     redoStack.current = []
-    setHistoryTick((tick) => tick + 1)
+    setUndoCount(undoStack.current.length)
+    setRedoCount(0)
   }
 
   function commit(next: InteractiveVenueMap, options?: { skipHistory?: boolean }) {
@@ -595,7 +612,8 @@ export function InteractiveVenueMapEditor({
     const previous = undoStack.current.pop()
     if (!previous) return
     redoStack.current.push(structuredClone(mapRef.current))
-    setHistoryTick((tick) => tick + 1)
+    setUndoCount(undoStack.current.length)
+    setRedoCount(redoStack.current.length)
     commit(previous, { skipHistory: true })
   }
 
@@ -603,7 +621,8 @@ export function InteractiveVenueMapEditor({
     const next = redoStack.current.pop()
     if (!next) return
     undoStack.current.push(structuredClone(mapRef.current))
-    setHistoryTick((tick) => tick + 1)
+    setUndoCount(undoStack.current.length)
+    setRedoCount(redoStack.current.length)
     commit(next, { skipHistory: true })
   }
 
@@ -719,6 +738,24 @@ export function InteractiveVenueMapEditor({
       zones: ensureZones(current).map((zone) => {
         if (zone.id !== id) return zone
         const next = { ...zone, ...patch }
+        if (next.layoutType === "numbered_seat") {
+          next.sellMode = "per_seat"
+          next.priceMode = "per_person"
+        } else if (patch.priceMode != null || patch.sellMode != null) {
+          const synced = resolveVenuePricing({
+            sellMode: patch.sellMode ?? next.sellMode,
+            priceMode: patch.priceMode,
+            fallback: next.layoutType === "table_combo" ? "group" : next.sellMode,
+          })
+          next.sellMode = synced.sellMode
+          next.priceMode = synced.priceMode
+        } else if (patch.layoutType === "table_combo") {
+          next.sellMode = "group"
+          next.priceMode = "closed_unit"
+        } else {
+          next.priceMode =
+            next.priceMode ?? venuePriceModeFromSellMode(next.sellMode)
+        }
         if (next.layoutType === "general") return next
         const rows = Math.min(80, Math.max(1, Math.floor(next.rows) || 1))
         const itemsPerRow = Math.min(80, Math.max(1, Math.floor(next.itemsPerRow) || 1))
@@ -817,6 +854,17 @@ export function InteractiveVenueMapEditor({
       elements: ensureElements(current).map((item) => {
         if (item.id !== id) return item
         const next = { ...item, ...patch }
+        if (patch.priceMode != null || patch.sellMode != null) {
+          const synced = resolveVenuePricing({
+            sellMode: patch.sellMode ?? next.sellMode,
+            priceMode: patch.priceMode,
+            fallback: next.sellMode,
+          })
+          next.sellMode = synced.sellMode
+          next.priceMode = synced.priceMode
+        } else if (!next.priceMode) {
+          next.priceMode = venuePriceModeFromSellMode(next.sellMode)
+        }
         if (
           !isInfrastructureElement(next) &&
           (
@@ -1022,23 +1070,6 @@ export function InteractiveVenueMapEditor({
         prefix,
         start,
       ),
-    })
-  }
-
-  function batchPatchElements(
-    patch: Partial<VenueMapElement>,
-    commercialOnly = false,
-  ) {
-    const ids = new Set(selectedElementIds)
-    if (ids.size === 0) return
-    const current = mapRef.current
-    commit({
-      ...current,
-      elements: ensureElements(current).map((item) => {
-        if (!ids.has(item.id)) return item
-        if (commercialOnly && isInfrastructureElement(item)) return item
-        return { ...item, ...patch }
-      }),
     })
   }
 
@@ -1413,8 +1444,8 @@ export function InteractiveVenueMapEditor({
 
   const selectedSeatCount = selection?.kind === "seats" ? selection.ids.length : 0
   const capacity = useMemo(() => venueMapCapacity(map), [map])
-  const canUndo = historyTick >= 0 && undoStack.current.length > 0
-  const canRedo = historyTick >= 0 && redoStack.current.length > 0
+  const canUndo = undoCount > 0
+  const canRedo = redoCount > 0
   const isStudio = variant === "studio"
 
   useEffect(() => {
@@ -1529,17 +1560,13 @@ export function InteractiveVenueMapEditor({
 
   const hasPropertiesTarget = Boolean(selection)
   const studioMobile = isStudio && !isDesktop
-
-  useEffect(() => {
-    if (isDesktop) {
-      setToolsOpen(false)
-      setPropertiesOpen(false)
-    }
-  }, [isDesktop])
-
-  useEffect(() => {
-    if (!selection) setPropertiesOpen(false)
-  }, [selection])
+  if (isDesktop && (toolsOpen || propertiesOpen)) {
+    setToolsOpen(false)
+    setPropertiesOpen(false)
+  }
+  if (!selection && propertiesOpen) {
+    setPropertiesOpen(false)
+  }
 
   const toolbar = (
     <div
@@ -1721,7 +1748,20 @@ export function InteractiveVenueMapEditor({
           <Button
             type="button"
             disabled={saving}
-            onClick={() => onSave(map)}
+            onClick={() => {
+              if (!onSave) return
+              const result = validateVenueMapSkuConsistency({
+                map,
+                tickets,
+              })
+              if (!result.ok) {
+                toast.error("No se puede guardar el mapa", {
+                  description: formatVenueMapSkuErrors(result.errors),
+                })
+                return
+              }
+              onSave(map)
+            }}
             className="h-9 shrink-0 bg-emerald-500 px-2 font-bold text-black hover:bg-emerald-400 md:px-3"
             aria-label="Guardar cambios"
           >
@@ -2363,7 +2403,7 @@ export function InteractiveVenueMapEditor({
                   }
                 />
               </Field>
-              <Field label="Sector / precio (ARS)">
+              <Field label={venueUnitPriceLabel({ type: selectedElement.type, sellMode: selectedElement.sellMode, priceMode: selectedElement.priceMode })}>
                 <PriceInput
                   value={selectedElement.price}
                   onValueChange={(value) => {
@@ -2482,18 +2522,14 @@ export function InteractiveVenueMapEditor({
               {selectedElement.type === "round_table" ||
               selectedElement.type === "long_table" ||
               selectedElement.type === "vip_box" ? (
-                <label className="flex items-center gap-2 text-sm text-foreground">
-                  <input
-                    type="checkbox"
-                    checked={selectedElement.sellMode === "group"}
-                    onChange={(event) =>
-                      patchElement(selectedElement.id, {
-                        sellMode: event.target.checked ? "group" : "per_seat",
-                      })
-                    }
-                  />
-                  Vender el grupo completo
-                </label>
+                <VenuePriceModeControl
+                  id={selectedElement.id}
+                  value={
+                    selectedElement.priceMode ??
+                    venuePriceModeFromSellMode(selectedElement.sellMode)
+                  }
+                  onChange={(next) => patchElement(selectedElement.id, next)}
+                />
               ) : null}
               {selectedElement.groupId ? (
                 <Button

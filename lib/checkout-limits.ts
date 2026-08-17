@@ -41,8 +41,10 @@ export function ticketLimitMessage(maxTickets = MAX_TICKETS_PER_PURCHASE): strin
 }
 
 export function storefrontLimitMessage(
-  _reason?: StorefrontLimitReason,
+  reason?: StorefrontLimitReason,
 ): string {
+  if (reason === "table_limit") return tableLimitMessage()
+  if (reason === "ticket_limit") return ticketLimitMessage()
   return PURCHASE_LIMIT_REACHED_MESSAGE
 }
 

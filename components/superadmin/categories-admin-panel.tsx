@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, useTransition } from "react"
+import { createElement, useMemo, useState, useTransition } from "react"
 import { Check, LoaderCircle, Plus, Power } from "lucide-react"
 
 import {
@@ -21,6 +21,17 @@ import {
 } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
 import type { EventCategory } from "@/types/database"
+
+function CategoryIconPreview({
+  iconName,
+}: {
+  iconName: string
+}) {
+  return createElement(resolveCategoryIcon(iconName), {
+    className: "size-5",
+    "aria-hidden": true,
+  })
+}
 
 export function CategoriesAdminPanel({
   initialCategories,
@@ -113,8 +124,6 @@ export function CategoriesAdminPanel({
     })
   }
 
-  const PreviewIcon = resolveCategoryIcon(iconName)
-
   return (
     <div className="space-y-6">
       <form
@@ -132,7 +141,7 @@ export function CategoriesAdminPanel({
             </p>
           </div>
           <span className="grid size-10 place-items-center rounded-xl border border-border bg-muted text-foreground">
-            <PreviewIcon className="size-5" aria-hidden />
+            <CategoryIconPreview iconName={iconName} />
           </span>
         </div>
 

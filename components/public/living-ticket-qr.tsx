@@ -96,15 +96,27 @@ export function LivingTicketQR({
           )}
         >
           {token ? (
-            <QRCodeSVG
-              value={token}
-              size={size}
-              level="M"
-              includeMargin={false}
-              bgColor="#ffffff"
-              fgColor="#09090b"
-              className={cn("mx-auto", isScan && "h-auto w-full")}
-            />
+            <div className="relative overflow-hidden rounded-[inherit]">
+              <QRCodeSVG
+                value={token}
+                size={size}
+                level="M"
+                includeMargin={false}
+                bgColor="#ffffff"
+                fgColor="#09090b"
+                className={cn("mx-auto", isScan && "h-auto w-full")}
+              />
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]"
+              >
+                <span className="living-qr-scan-beam absolute inset-x-0 top-0 h-[28%] bg-gradient-to-b from-transparent via-emerald-400/80 to-transparent" />
+              </span>
+              <span
+                aria-hidden="true"
+                className="living-qr-live-ring pointer-events-none absolute inset-0 rounded-[inherit] ring-2 ring-emerald-400/50"
+              />
+            </div>
           ) : (
             <div
               className={cn(

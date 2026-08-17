@@ -1,5 +1,7 @@
 /**
  * Decode / resolve de payloads Living QR v2 + legacy + estáticos.
+ * El lease de admisión offline (nonce device_id+ticket_id+timestamp)
+ * vive en `lib/scanner/admission-lease.ts` y se persiste en IndexedDB.
  */
 
 import {
@@ -105,12 +107,17 @@ export function isLivingWindowAccepted(
 export function resolveScanSecret(
   rawPayload: string,
   qrType: QrType,
+  options?: { nowMs?: number },
 ): ResolvedScan | null {
   const cleaned = rawPayload.trim()
   if (!cleaned) return null
 
   const living = decodeLivingPayload(cleaned)
-  const currentBlock = getTotpWindow()
+  const currentBlock = getTotpWindow(options?.nowMs)
+
+  if (living?.version === 1) {
+    return null
+  }
 
   if (qrType === "static") {
     if (living?.version === 2) {
@@ -119,14 +126,6 @@ export function resolveScanSecret(
         ticketId: living.ticketId,
         timestampBlock: living.timestampBlock,
         mac: living.mac,
-        expired: false,
-        enforceFreshness: false,
-      }
-    }
-    if (living?.version === 1) {
-      return {
-        mode: "secret",
-        totpSecret: living.totpSecret,
         expired: false,
         enforceFreshness: false,
       }
@@ -166,12 +165,7 @@ export function resolveScanSecret(
     }
   }
 
-  return {
-    mode: "secret",
-    totpSecret: living.totpSecret,
-    expired,
-    enforceFreshness: true,
-  }
+  return null
 }
 
 export async function assertLivingMac(
@@ -187,3 +181,4 @@ export async function assertLivingMac(
 }
 
 export { LIVING_QR_PERIOD_MS, LIVING_QR_GRACE_BLOCKS }
+export { buildAdmissionLeaseHash } from "@/lib/scanner/admission-lease"

@@ -2,6 +2,7 @@
 
 export function isAdminFocusedFlow(pathname: string): boolean {
   if (pathname.startsWith("/admin/pos")) return true
+  if (pathname.startsWith("/dashboard/pos")) return true
   if (pathname.startsWith("/admin/scanner")) return true
   if (pathname.startsWith("/admin/validator")) return true
   if (pathname.startsWith("/admin/store-scanner")) return true
@@ -29,6 +30,8 @@ export function isPublicEventStorefrontPath(pathname: string): boolean {
 export function isPublicFocusedFlow(pathname: string): boolean {
   if (isAccountFocusedFlow(pathname)) return true
   if (pathname.startsWith("/checkout")) return true
+  if (/^\/event\/[^/]+\/queue\/?$/.test(pathname)) return true
+  if (pathname.startsWith("/waiting-room")) return true
   if (/^\/tickets\/[^/]+\/print\/?$/.test(pathname)) return true
   return false
 }

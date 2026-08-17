@@ -155,6 +155,27 @@ select:-webkit-autofill {
   }
 }
 
+@keyframes queue-slide {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(420%);
+  }
+}
+
+.queue-slide-bar {
+  animation: queue-slide 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .queue-slide-bar {
+    animation: none;
+    transform: none;
+    width: 100%;
+  }
+}
+
 .tokepass-marquee-track {
   animation: tokepass-marquee 42s linear infinite;
 }
@@ -477,9 +498,29 @@ select:-webkit-autofill {
   animation: tokepass-pulse-subtle 1.35s ease-in-out infinite;
 }
 
+@keyframes living-qr-scan-beam {
+  0% {
+    transform: translate3d(0, -100%, 0);
+  }
+  100% {
+    transform: translate3d(0, 360%, 0);
+  }
+}
+
+.living-qr-scan-beam {
+  animation: living-qr-scan-beam 2.6s linear infinite;
+  will-change: transform;
+}
+
+.living-qr-live-ring {
+  animation: tokepass-pulse-subtle 1.8s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-in,
-  .animate-pulse-subtle {
+  .animate-pulse-subtle,
+  .living-qr-scan-beam,
+  .living-qr-live-ring {
     animation: none;
   }
 }

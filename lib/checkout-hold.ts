@@ -12,6 +12,8 @@ export const GA_CHECKOUT_HOLD_INTERVAL = `${GA_CHECKOUT_HOLD_MINUTES} minutes` a
 
 export const GA_CHECKOUT_HOLD_MS = GA_CHECKOUT_HOLD_MINUTES * 60 * 1000
 
+export const HOLD_EXPIRED_MESSAGE = "Tu reserva ha expirado por tiempo"
+
 /** El más próximo de dos `reserved_until` ISO del servidor. */
 export function minReservedUntil(
   left?: string | null,

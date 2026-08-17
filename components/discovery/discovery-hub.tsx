@@ -84,17 +84,20 @@ export function DiscoveryHub({
     const nextCategory = params.get("category")?.trim() || "all"
     const nextArtist = params.get("artist")?.trim() || ""
     const nextWhen = parseDatePreset(params.get("when") ?? "all")
-    if (nextQuery && !initialQuery) setQuery(nextQuery)
-    if (nextLocation !== "todas" && initialLocation === "todas") {
-      setCity(nextLocation)
-    }
-    if (nextCategory !== "all" && initialCategoryId === "all") {
-      setCategoryId(nextCategory)
-    }
-    if (nextArtist && !initialArtistId) setArtistId(nextArtist)
-    if (nextWhen !== "all" && parseDatePreset(initialDatePreset) === "all") {
-      setDatePreset(nextWhen)
-    }
+    const timer = window.setTimeout(() => {
+      if (nextQuery && !initialQuery) setQuery(nextQuery)
+      if (nextLocation !== "todas" && initialLocation === "todas") {
+        setCity(nextLocation)
+      }
+      if (nextCategory !== "all" && initialCategoryId === "all") {
+        setCategoryId(nextCategory)
+      }
+      if (nextArtist && !initialArtistId) setArtistId(nextArtist)
+      if (nextWhen !== "all" && parseDatePreset(initialDatePreset) === "all") {
+        setDatePreset(nextWhen)
+      }
+    }, 0)
+    return () => window.clearTimeout(timer)
     // Hydrate shared search URLs after the static shell. Run once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

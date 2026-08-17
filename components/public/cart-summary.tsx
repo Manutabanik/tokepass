@@ -4,6 +4,7 @@ import { Trash2, X } from "lucide-react"
 
 import {
   CART_TICKET_LINE_PREFIX,
+  cartLineDisplayName,
   cartTicketLineId,
   parseCartTicketLineId,
 } from "@/lib/checkout/cart-lines"
@@ -21,11 +22,13 @@ export function CartSummary({
   className,
   heading = "Tu Selección",
   showClear = true,
+  compact = false,
 }: {
   items: StorefrontCartLine[]
   className?: string
   heading?: string
   showClear?: boolean
+  compact?: boolean
 }) {
   const removeItem = useCheckoutStore((state) => state.removeItem)
   const clearCart = useCheckoutStore((state) => state.clearCart)
@@ -34,7 +37,7 @@ export function CartSummary({
 
   return (
     <div className={cn("flex min-h-0 flex-col", className)}>
-      <div className="mb-3 flex items-center justify-between gap-3">
+      <div className="mb-2 flex shrink-0 items-center justify-between gap-3">
         <h4 className="text-sm font-bold text-foreground">{heading}</h4>
         {showClear ? (
           <button
@@ -50,47 +53,78 @@ export function CartSummary({
           </button>
         ) : null}
       </div>
-      <ul className="no-scrollbar flex min-h-0 flex-col gap-2 overflow-y-auto">
-        {items.map((item) => (
-          <li
-            key={item.id}
-            className="flex items-start justify-between gap-3 rounded-xl border border-border/60 bg-muted/30 px-3 py-3"
-          >
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-foreground">
-                {item.name}
-              </p>
-              <span className="mt-0.5 block text-xs text-muted-foreground">
-                Válido para: {item.dateLabel || "Todos los días"}
-              </span>
-              {item.detail ? (
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {item.detail}
+      <ul
+        className={cn(
+          "flex min-h-0 flex-col",
+          compact
+            ? "min-h-0 flex-1 gap-0 overflow-y-auto pr-2"
+            : "no-scrollbar gap-2 overflow-y-auto",
+        )}
+      >
+        {items.map((item) => {
+          const displayName = cartLineDisplayName(item)
+          const qtyLabel = `${item.quantity}x ${displayName}`
+          return (
+            <li
+              key={item.id}
+              className={
+                compact
+                  ? "flex items-center justify-between gap-3 py-1.5"
+                  : "flex items-start justify-between gap-3 rounded-xl border border-border/60 bg-muted/30 px-3 py-3"
+              }
+            >
+              {compact ? (
+                <p className="min-w-0 truncate text-xs text-muted-foreground">
+                  {qtyLabel}
                 </p>
-              ) : item.quantity > 1 ? (
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {item.quantity} unidades
-                </p>
-              ) : null}
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <span className="text-sm font-bold tabular-nums text-foreground">
-                {formatCurrency(item.price)}
-              </span>
-              <button
-                type="button"
-                onClick={() => removeItem(item.id)}
-                className={cn(
-                  tapFeedbackClass,
-                  "grid size-8 place-items-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive",
-                )}
-                aria-label={`Quitar ${item.name}`}
-              >
-                <X className="size-4" aria-hidden="true" />
-              </button>
-            </div>
-          </li>
-        ))}
+              ) : (
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-foreground">
+                    {displayName}
+                  </p>
+                  {item.detail ? (
+                    <p className="mt-0.5 text-xs font-medium text-foreground/80">
+                      {item.detail}
+                    </p>
+                  ) : item.quantity > 1 ? (
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {item.quantity} unidades
+                    </p>
+                  ) : null}
+                </div>
+              )}
+              <div className="flex shrink-0 items-center gap-1.5">
+                <span
+                  className={cn(
+                    "tabular-nums",
+                    compact
+                      ? "text-xs font-semibold text-foreground"
+                      : "text-sm font-bold text-foreground",
+                  )}
+                >
+                  {formatCurrency(item.price)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removeItem(item.id)}
+                  className={cn(
+                    tapFeedbackClass,
+                    compact
+                      ? "grid size-7 place-items-center rounded-md text-muted-foreground/70 hover:bg-destructive/10 hover:text-destructive"
+                      : "grid size-8 place-items-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive",
+                  )}
+                  aria-label={`Quitar ${displayName}`}
+                >
+                  {compact ? (
+                    <Trash2 className="size-3.5" aria-hidden="true" />
+                  ) : (
+                    <X className="size-4" aria-hidden="true" />
+                  )}
+                </button>
+              </div>
+            </li>
+          )
+        })}
       </ul>
     </div>
   )

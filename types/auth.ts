@@ -12,32 +12,77 @@ export const EVENT_STAFF_ROLES = [
 
 export type EventStaffRole = (typeof EVENT_STAFF_ROLES)[number]
 
-export const STAFF_ROUTE_ALLOWLIST = [
+export const DOOR_STAFF_ROUTES = [
   "/admin/scanner",
+  "/admin/validator",
+] as const
+
+export const BAR_STAFF_ROUTES = [
   "/admin/bar-scanner",
   "/admin/store-scanner",
-  "/admin/pos",
+] as const
+
+export const CASHIER_POS_ROUTES = ["/admin/pos", "/dashboard/pos"] as const
+
+export const STAFF_ROUTE_ALLOWLIST = [
+  ...DOOR_STAFF_ROUTES,
+  ...BAR_STAFF_ROUTES,
+  ...CASHIER_POS_ROUTES,
 ] as const
 
 export type StaffRoute = (typeof STAFF_ROUTE_ALLOWLIST)[number]
 
-export function isStaffOpsPath(pathname: string): boolean {
-  return STAFF_ROUTE_ALLOWLIST.some(
+function pathMatches(
+  pathname: string,
+  routes: readonly string[],
+): boolean {
+  return routes.some(
     (route) => pathname === route || pathname.startsWith(`${route}/`),
   )
+}
+
+export function isStaffOpsPath(pathname: string): boolean {
+  return pathMatches(pathname, STAFF_ROUTE_ALLOWLIST)
+}
+
+export function isPosOpsPath(pathname: string): boolean {
+  return pathMatches(pathname, CASHIER_POS_ROUTES)
+}
+
+export function staffCanAccessPath(
+  pathname: string,
+  roles: readonly string[],
+): boolean {
+  const set = new Set(roles.map((role) => String(role).trim()))
+  if (set.has("door_staff") && pathMatches(pathname, DOOR_STAFF_ROUTES)) {
+    return true
+  }
+  if (set.has("bar_staff") && pathMatches(pathname, BAR_STAFF_ROUTES)) {
+    return true
+  }
+  if (
+    (set.has("cashier") || set.has("box_office_cashier")) &&
+    pathMatches(pathname, CASHIER_POS_ROUTES)
+  ) {
+    return true
+  }
+  return false
 }
 
 export function staffHomeForRoles(roles: EventStaffRole[]): string {
   if (roles.includes("door_staff")) return "/admin/scanner"
   if (roles.includes("bar_staff")) return "/admin/store-scanner"
-  if (roles.includes("cashier")) return "/admin/pos"
+  if (roles.includes("cashier")) return "/dashboard/pos"
   return "/admin/scanner"
 }
 
 export function navAllowedForStaffRoles(roles: EventStaffRole[]): string[] {
   const hrefs: string[] = []
-  if (roles.includes("door_staff")) hrefs.push("/admin/scanner")
+  if (roles.includes("door_staff")) {
+    hrefs.push("/admin/scanner")
+    hrefs.push("/admin/validator")
+  }
   if (roles.includes("bar_staff")) hrefs.push("/admin/store-scanner")
-  if (roles.includes("cashier")) hrefs.push("/admin/pos")
+  if (roles.includes("cashier")) hrefs.push("/dashboard/pos")
   return hrefs
 }

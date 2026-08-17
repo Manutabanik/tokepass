@@ -17,8 +17,15 @@ import { EventStoreUpsell } from "@/components/public/event-store-upsell"
 import { LivingStoreCard } from "@/components/public/living-store-card"
 import { LivingTicketCard } from "@/components/public/living-ticket-card"
 import { Button } from "@/components/ui/button"
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { formatEventDay, formatEventTime } from "@/lib/format"
+import { ticketOrdinalInGroup } from "@/lib/ticket-wallet"
 
 export type StoreOfferBlock = {
   eventId: string
@@ -162,6 +169,7 @@ function EventGroupHeader({
   location,
   flyerUrl,
   countLabel,
+  showEventLink = true,
 }: {
   eventId: string
   title: string
@@ -169,9 +177,10 @@ function EventGroupHeader({
   location?: string
   flyerUrl?: string | null
   countLabel: string
+  showEventLink?: boolean
 }) {
   return (
-    <div className="mb-5 flex flex-wrap items-center gap-3">
+    <div className="flex w-full flex-wrap items-center gap-3">
       <div className="relative size-14 shrink-0 overflow-hidden rounded-xl bg-muted ring-1 ring-border">
         {flyerUrl ? (
           <Image
@@ -200,13 +209,15 @@ function EventGroupHeader({
         <span className="rounded-full bg-muted px-2.5 py-1 font-mono text-[11px] font-semibold text-muted-foreground ring-1 ring-inset ring-border">
           {countLabel}
         </span>
-        <Link
-          href={`/events/${eventId}`}
-          className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-600 dark:text-emerald-400 dark:hover:text-emerald-300"
-        >
-          Ver evento
-          <ArrowUpRight className="size-3.5" aria-hidden="true" />
-        </Link>
+        {showEventLink ? (
+          <Link
+            href={`/events/${eventId}`}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-600 dark:text-emerald-400 dark:hover:text-emerald-300"
+          >
+            Ver evento
+            <ArrowUpRight className="size-3.5" aria-hidden="true" />
+          </Link>
+        ) : null}
       </div>
     </div>
   )
@@ -346,41 +357,62 @@ export function TicketWallet({
 
       <TabsContent value="upcoming" className="mt-0 outline-none">
         {upcomingGroups.length > 0 ? (
-          <div className="space-y-8">
+          <Accordion
+            multiple
+            defaultValue={upcomingGroups.map((group) => group.eventId)}
+            className="space-y-4"
+          >
             {upcomingGroups.map((group) => (
-              <section key={group.eventId}>
-                <EventGroupHeader
-                  eventId={group.eventId}
-                  title={group.eventTitle}
-                  date={group.eventDate}
-                  location={group.eventLocation}
-                  flyerUrl={group.flyerUrl}
-                  countLabel={
-                    group.tickets.length === 1
-                      ? "1 entrada activa"
-                      : `${group.tickets.length} entradas activas`
-                  }
-                />
-                <div className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:mx-0 lg:grid lg:grid-cols-2 lg:overflow-visible lg:px-0 xl:grid-cols-3">
-                  {group.tickets.map((ticket) => (
-                    <div
-                      key={ticket.id}
-                      className="w-[min(85vw,22rem)] shrink-0 snap-center lg:w-auto"
+              <AccordionItem
+                key={group.eventId}
+                value={group.eventId}
+                className="overflow-hidden rounded-3xl border border-border/80 bg-card/80 shadow-lg shadow-black/10 backdrop-blur-md not-last:border-b-0"
+              >
+                <AccordionTrigger className="px-4 py-4 hover:no-underline sm:px-5">
+                  <EventGroupHeader
+                    eventId={group.eventId}
+                    title={group.eventTitle}
+                    date={group.eventDate}
+                    location={group.eventLocation}
+                    flyerUrl={group.flyerUrl}
+                    countLabel={
+                      group.tickets.length === 1
+                        ? "1 entrada activa"
+                        : `${group.tickets.length} entradas activas`
+                    }
+                    showEventLink={false}
+                  />
+                </AccordionTrigger>
+                <AccordionContent className="px-4 pb-5 sm:px-5">
+                  <div className="mb-4 flex justify-end">
+                    <Link
+                      href={`/events/${group.eventId}`}
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-600 dark:text-emerald-400 dark:hover:text-emerald-300"
                     >
+                      Ver evento
+                      <ArrowUpRight className="size-3.5" aria-hidden="true" />
+                    </Link>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2 md:items-start xl:grid-cols-3">
+                    {group.tickets.map((ticket) => (
                       <LivingTicketCard
+                        key={ticket.id}
                         ticket={ticket}
                         userId={userId}
-                        showQr
+                        showQr={!ticket.pendingTransfer}
                         offline={offline}
                         appleWalletEnabled={appleWalletEnabled}
                         googleWalletEnabled={googleWalletEnabled}
+                        sequenceLabel={
+                          ticketOrdinalInGroup(group.tickets, ticket).label
+                        }
                       />
-                    </div>
-                  ))}
-                </div>
-              </section>
+                    ))}
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
             ))}
-          </div>
+          </Accordion>
         ) : (
           <EmptyState
             title="Sin entradas activas"
@@ -499,7 +531,7 @@ export function TicketWallet({
         {pastGroups.length > 0 ? (
           <div className="space-y-8">
             {pastGroups.map((group) => (
-              <section key={group.eventId}>
+              <section key={group.eventId} className="space-y-5">
                 <EventGroupHeader
                   eventId={group.eventId}
                   title={group.eventTitle}

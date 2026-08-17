@@ -20,6 +20,11 @@ export function safeInternalNextPath(raw: unknown): string | null {
   return path
 }
 
+export function loginUrlWithNext(nextPath: string): string {
+  const safe = safeInternalNextPath(nextPath) ?? "/cuenta"
+  return `/login?next=${encodeURIComponent(safe)}`
+}
+
 /**
  * Reads authorization state directly from Postgres through the service role.
  * The access token is used only to identify the authenticated user; JWT claims

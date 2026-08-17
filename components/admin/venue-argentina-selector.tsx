@@ -143,10 +143,28 @@ export function VenueArgentinaSelector({
   const [hasPinned, setHasPinned] = useState(() =>
     Boolean(value?.coordinates || value?.address),
   )
+  const [seenValue, setSeenValue] = useState(value)
+  if (value && value !== seenValue) {
+    setSeenValue(value)
+    const next = normalizeValue({ ...state, ...value })
+    const same =
+      state.venueName === next.venueName &&
+      state.address === next.address &&
+      state.capacity === next.capacity &&
+      state.province?.id === next.province?.id &&
+      state.department?.id === next.department?.id &&
+      state.coordinates?.lat === next.coordinates?.lat &&
+      state.coordinates?.lng === next.coordinates?.lng
+    if (!same) setState(next)
+    if (value.address != null) setQuery(value.address)
+    if (value.coordinates || value.address) setHasPinned(true)
+  }
 
   const abortRef = useRef<AbortController | null>(null)
   const stateRef = useRef(state)
-  stateRef.current = state
+  useEffect(() => {
+    stateRef.current = state
+  }, [state])
 
   const emit = useCallback(
     (next: VenueArgentinaValue) => {
@@ -157,27 +175,7 @@ export function VenueArgentinaSelector({
   )
 
   useEffect(() => {
-    if (!value) return
-    setState((current) => {
-      const next = normalizeValue({ ...current, ...value })
-      const same =
-        current.venueName === next.venueName &&
-        current.address === next.address &&
-        current.capacity === next.capacity &&
-        current.province?.id === next.province?.id &&
-        current.department?.id === next.department?.id &&
-        current.coordinates?.lat === next.coordinates?.lat &&
-        current.coordinates?.lng === next.coordinates?.lng
-      return same ? current : next
-    })
-    if (value.address != null) setQuery(value.address)
-    if (value.coordinates || value.address) setHasPinned(true)
-  }, [value])
-
-  useEffect(() => {
     let cancelled = false
-    setLoadingProvinces(true)
-    setGeorefError(null)
     void fetchArgentinaProvinces()
       .then((rows) => {
         if (!cancelled) setProvinces(rows)
@@ -197,14 +195,17 @@ export function VenueArgentinaSelector({
     }
   }, [])
 
+  const provinceId = state.province?.id
+  const [deptProvinceId, setDeptProvinceId] = useState(provinceId)
+  if (provinceId !== deptProvinceId) {
+    setDeptProvinceId(provinceId)
+    setDepartments([])
+    if (provinceId) setLoadingDepartments(true)
+  }
+
   useEffect(() => {
-    const provinceId = state.province?.id
-    if (!provinceId) {
-      setDepartments([])
-      return
-    }
+    if (!provinceId) return
     let cancelled = false
-    setLoadingDepartments(true)
     void fetchArgentinaDepartments(provinceId)
       .then((rows) => {
         if (!cancelled) setDepartments(rows)
@@ -221,7 +222,7 @@ export function VenueArgentinaSelector({
     return () => {
       cancelled = true
     }
-  }, [state.province?.id])
+  }, [provinceId])
 
   useEffect(() => {
     const current = state.province
@@ -234,8 +235,11 @@ export function VenueArgentinaSelector({
       )
     if (!match) return
     if (match.id === current.id && match.name === current.name) return
-    emit({ ...stateRef.current, province: { id: match.id, name: match.name } })
-  }, [emit, provinces, state.province?.id, state.province?.name])
+    const timer = window.setTimeout(() => {
+      emit({ ...stateRef.current, province: { id: match.id, name: match.name } })
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [emit, provinces, state.province])
 
   useEffect(() => {
     const current = state.department
@@ -248,24 +252,26 @@ export function VenueArgentinaSelector({
       )
     if (!match) return
     if (match.id === current.id && match.name === current.name) return
-    emit({ ...stateRef.current, department: { id: match.id, name: match.name } })
-  }, [departments, emit, state.department?.id, state.department?.name])
+    const timer = window.setTimeout(() => {
+      emit({ ...stateRef.current, department: { id: match.id, name: match.name } })
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [departments, emit, state.department])
 
   // Nominatim con debounce 500ms + cancelación.
+  const trimmedQuery = query.trim()
+  const searchBlocked =
+    trimmedQuery.length < 3 ||
+    disabled ||
+    (trimmedQuery === state.address.trim() && hasPinned)
+  if (searchBlocked) {
+    if (results.length > 0) setResults([])
+    if (searching) setSearching(false)
+  }
+
   useEffect(() => {
+    if (searchBlocked) return
     const trimmed = query.trim()
-    if (trimmed.length < 3 || disabled) {
-      setResults([])
-      setSearching(false)
-      return
-    }
-
-    // No re-buscar si ya eligió exactamente ese display_name.
-    if (trimmed === state.address.trim() && hasPinned) {
-      setResults([])
-      return
-    }
-
     const timer = window.setTimeout(() => {
       abortRef.current?.abort()
       const controller = new AbortController()
@@ -303,6 +309,7 @@ export function VenueArgentinaSelector({
     disabled,
     hasPinned,
     query,
+    searchBlocked,
     state.address,
     state.department?.name,
     state.province?.name,
@@ -586,7 +593,11 @@ export function VenueArgentinaSelector({
             className="absolute left-0 right-0 top-[calc(100%+0.35rem)] z-50 max-h-56 overflow-auto rounded-md border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 py-1 shadow-lg"
           >
             {results.map((result) => (
-              <li key={result.placeId} role="option">
+              <li
+                key={result.placeId}
+                role="option"
+                aria-selected={false}
+              >
                 <button
                   type="button"
                   className="block w-full px-3 py-2.5 text-left text-xs leading-relaxed text-foreground transition hover:bg-slate-300 dark:hover:bg-zinc-700 hover:text-foreground"

@@ -61,9 +61,17 @@ import {
 import type { Database, Event, EventStatus, Json, Venue } from "@/types/database"
 import { computeEventCapacityFromForm } from "@/lib/inventory/capacity-budget"
 import { parseVenueMap, serializeVenueMap } from "@/types/venue-map"
+import {
+  venueMapHasInventory,
+  venueMapToSeatingLayout,
+} from "@/lib/seating/venue-map-geometry"
 import { composeVenuePlace } from "@/lib/venues/compose-location"
 import { logger } from "@/lib/logger"
 import { toUserFacingError } from "@/lib/errors/user-facing-error"
+import {
+  formatVenueMapSkuErrors,
+  validateVenueMapSkuConsistency,
+} from "@/lib/seating/venue-map-sku-consistency"
 import {
   collectLiveSeatingSectorIds,
   isRelationalIntegrityError,
@@ -435,8 +443,13 @@ async function persistEventVenueFields(
   const province = data.venue.province?.trim() || null
   const department = data.venue.department?.trim() || null
   const location = place.display || data.venue.venueName
-  const venueMap = serializeVenueMap(parseVenueMap(data.venue.venueMap)) as unknown as Json
-  const seatingLayout = (data.venue.seatingLayout ?? []) as unknown as Json
+  const parsedMap = parseVenueMap(data.venue.venueMap)
+  const venueMap = serializeVenueMap(parsedMap) as unknown as Json
+  const seatingLayout = (
+    venueMapHasInventory(parsedMap)
+      ? venueMapToSeatingLayout(parsedMap)
+      : (data.venue.seatingLayout ?? [])
+  ) as unknown as Json
   const now = new Date().toISOString()
 
   let venueId =
@@ -511,7 +524,8 @@ async function persistEventVenueFields(
       created.error &&
       /max_capacity|schema cache|PGRST204|42703/i.test(created.error.message)
     ) {
-      const { max_capacity: _max, ...withoutMax } = insertPayload
+      const withoutMax = { ...insertPayload }
+      delete (withoutMax as { max_capacity?: number }).max_capacity
       created = await client
         .from("venues")
         .insert(withoutMax as never)
@@ -670,6 +684,17 @@ function persistFailure(error: unknown): { success: false; error: string } {
   return { success: false, error: toUserFacingError(error) }
 }
 
+function venueMapSkuGuard(
+  data: EventFormValues,
+): { success: false; error: string } | null {
+  const result = validateVenueMapSkuConsistency({
+    map: parseVenueMap(data.venue.venueMap),
+    tickets: data.tickets,
+  })
+  if (result.ok) return null
+  return { success: false, error: formatVenueMapSkuErrors(result.errors) }
+}
+
 function stripRpcSeatingSectorIds(
   payload: CreateCompleteEventRpcPayload,
 ): CreateCompleteEventRpcPayload {
@@ -749,6 +774,13 @@ async function materializeEventSeatingUnits(
     error,
   })
   return error.message.replace(/^materialize_event_seating_units:\s*/i, "")
+}
+
+async function resyncEventSeatingUnitsAfterMapSave(
+  client: SupabaseClient<Database>,
+  eventId: string,
+): Promise<string | null> {
+  return materializeEventSeatingUnits(client, eventId)
 }
 
 async function syncTierAdmitCounts(
@@ -875,11 +907,14 @@ async function syncTicketTierPhases(
         parentCapacity,
         Math.max(1, Number(phase.capacityLimit) || 1),
       )
+      const endMs = phase.endTime ? Date.parse(phase.endTime) : Number.NaN
+      const expired =
+        Number.isFinite(endMs) && endMs <= Date.now()
       const status =
-        index === 0
-          ? ("active" as const)
-          : phase.status === "sold_out"
-            ? ("sold_out" as const)
+        phase.status === "sold_out" || expired
+          ? ("sold_out" as const)
+          : phase.status === "active"
+            ? ("active" as const)
             : ("scheduled" as const)
       const patch = {
         name,
@@ -922,6 +957,10 @@ async function syncTicketTierPhases(
         stale.map((row) => row.id),
       )
   }
+
+  await admin.rpc("heal_ticket_tier_phases", {
+    p_event_id: eventId,
+  })
 }
 
 function parseAgeRestriction(raw: unknown): AgeRestriction {
@@ -1511,6 +1550,9 @@ export async function createCompleteEvent(
     tickets: sanitizeTicketTiersForPersist(drafted.tickets, { mode: "create" }),
   })
 
+  const skuError = venueMapSkuGuard(formValues)
+  if (skuError) return skuError
+
   let supabase: Awaited<ReturnType<typeof createClient>>
   let userId: string
 
@@ -1661,21 +1703,15 @@ export async function createCompleteEvent(
     formValues,
   )
 
+  const materializeError = await resyncEventSeatingUnitsAfterMapSave(
+    rpcClient,
+    String(eventId),
+  )
+  if (materializeError && !isRelationalIntegrityError(materializeError)) {
+    return persistFailure(materializeError)
+  }
+
   if (!draftMode) {
-    const { data: created } = await rpcClient
-      .from("events")
-      .select("status")
-      .eq("id", String(eventId))
-      .maybeSingle()
-    if (created?.status === "published" || created?.status === "paused") {
-      const materializeError = await materializeEventSeatingUnits(
-        rpcClient,
-        String(eventId),
-      )
-      if (materializeError && !isRelationalIntegrityError(materializeError)) {
-        return persistFailure(materializeError)
-      }
-    }
     revalidatePath("/admin")
     revalidatePath("/admin/events")
     revalidatePath(`/admin/events/${String(eventId)}`)
@@ -1789,6 +1825,9 @@ export async function updateCompleteEvent(
     (existingTiers ?? []).map((row) => row.id),
   )
 
+  const skuError = venueMapSkuGuard(formValues)
+  if (skuError) return skuError
+
   const venueId = await persistEventVenueFields(
     mutationClient,
     eventId,
@@ -1896,21 +1935,15 @@ export async function updateCompleteEvent(
     schedule_days: event.schedule_days,
   })
 
+  const materializeError = await resyncEventSeatingUnitsAfterMapSave(
+    mutationClient,
+    eventId,
+  )
+  if (materializeError && !isRelationalIntegrityError(materializeError)) {
+    return persistFailure(materializeError)
+  }
+
   if (!draftMode) {
-    const { data: live } = await mutationClient
-      .from("events")
-      .select("status")
-      .eq("id", eventId)
-      .maybeSingle()
-    if (live?.status === "published" || live?.status === "paused") {
-      const materializeError = await materializeEventSeatingUnits(
-        mutationClient,
-        eventId,
-      )
-      if (materializeError && !isRelationalIntegrityError(materializeError)) {
-        return persistFailure(materializeError)
-      }
-    }
     revalidatePath("/admin")
     revalidatePath("/admin/events")
     revalidatePath(`/admin/events/${eventId}`)

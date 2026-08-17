@@ -7,13 +7,18 @@ import { headers } from "next/headers"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { normalizeReferralCode } from "@/lib/referral"
+import { computePromoterCommission } from "@/lib/rrpp"
+
+export type PromoterCommissionKind = "percent" | "fixed"
 
 export type PromoterRow = {
   id: string
   name: string
   referralCode: string
   commissionRate: number
-  /** Visitas / clics registrados con ?ref= */
+  commissionType: PromoterCommissionKind
+  commissionFixedAmount: number
+  /** Visitas / clics registrados con ?rrpp= o ?ref= */
   clickCount: number
   ticketsSold: number
   revenueGenerated: number
@@ -26,11 +31,14 @@ export type PromoterMetrics = {
   name: string
   referralCode: string
   commissionRate: number
+  commissionType: PromoterCommissionKind
+  commissionFixedAmount: number
   clickCount: number
   ticketsSold: number
   revenueGenerated: number
   estimatedCommission: number
   featuredEventId: string | null
+  featuredEventSlug: string | null
 }
 
 type ActionResult =
@@ -79,7 +87,10 @@ async function requireOrganizer() {
 export async function createPromoter(input: {
   name: string
   /** Porcentaje UI: 10 = 10% → se guarda como 0.10 */
-  commissionPercent: number
+  commissionPercent?: number
+  commissionType?: PromoterCommissionKind
+  /** Monto fijo por entrada cuando commissionType = fixed */
+  commissionFixedAmount?: number
 }): Promise<ActionResult> {
   try {
     const { supabase, userId } = await requireOrganizer()
@@ -89,18 +100,33 @@ export async function createPromoter(input: {
       return { success: false, error: "El nombre debe tener al menos 2 caracteres." }
     }
 
-    if (
-      !Number.isFinite(input.commissionPercent) ||
-      input.commissionPercent < 0 ||
-      input.commissionPercent > 100
+    const commissionType: PromoterCommissionKind =
+      input.commissionType === "fixed" ? "fixed" : "percent"
+    const commissionPercent = Number(input.commissionPercent ?? 0)
+    const commissionFixedAmount = Number(input.commissionFixedAmount ?? 0)
+
+    if (commissionType === "percent") {
+      if (
+        !Number.isFinite(commissionPercent) ||
+        commissionPercent < 0 ||
+        commissionPercent > 100
+      ) {
+        return {
+          success: false,
+          error: "La comisión porcentual debe estar entre 0 y 100%.",
+        }
+      }
+    } else if (
+      !Number.isFinite(commissionFixedAmount) ||
+      commissionFixedAmount < 0
     ) {
       return {
         success: false,
-        error: "La comisión debe estar entre 0 y 100%.",
+        error: "El monto fijo por entrada debe ser mayor o igual a 0.",
       }
     }
 
-    const commissionRate = Number((input.commissionPercent / 100).toFixed(4))
+    const commissionRate = Number((commissionPercent / 100).toFixed(4))
     const baseCode = slugifyReferralCode(name)
 
     let referralCode = baseCode
@@ -124,13 +150,28 @@ export async function createPromoter(input: {
       referralCode = candidate
     }
 
-    const { error } = await supabase.from("promoters").insert({
+    const payload = {
       organizer_id: userId,
       user_id: null,
       name,
-      commission_rate: commissionRate,
+      commission_rate: commissionType === "percent" ? commissionRate : 0,
+      commission_type: commissionType,
+      commission_fixed_amount:
+        commissionType === "fixed" ? commissionFixedAmount : null,
       referral_code: referralCode,
-    })
+    }
+
+    let { error } = await supabase.from("promoters").insert(payload)
+    if (error && /commission_type|commission_fixed/i.test(error.message)) {
+      const fallback = await supabase.from("promoters").insert({
+        organizer_id: userId,
+        user_id: null,
+        name,
+        commission_rate: commissionType === "percent" ? commissionRate : 0,
+        referral_code: referralCode,
+      })
+      error = fallback.error
+    }
 
     if (error) {
       if (error.code === "23505") {
@@ -147,6 +188,7 @@ export async function createPromoter(input: {
 
     revalidatePath("/admin/promoters")
     revalidatePath("/admin/team")
+    revalidatePath("/rrpp")
 
     return { success: true, referralCode }
   } catch (error) {
@@ -167,13 +209,26 @@ export async function createPromoter(input: {
 export async function getOrganizerPromoters(): Promise<PromoterRow[]> {
   const { supabase, userId } = await requireOrganizer()
 
-  const { data: promoters, error } = await supabase
+  const { data: promotersRaw, error } = await supabase
     .from("promoters")
-    .select("id, name, referral_code, commission_rate, user_id")
+    .select(
+      "id, name, referral_code, commission_rate, commission_type, commission_fixed_amount, user_id",
+    )
     .eq("organizer_id", userId)
     .order("created_at", { ascending: false })
 
-  if (error) {
+  const promoters =
+    error && /commission_type|commission_fixed/i.test(error.message)
+      ? (
+          await supabase
+            .from("promoters")
+            .select("id, name, referral_code, commission_rate, user_id")
+            .eq("organizer_id", userId)
+            .order("created_at", { ascending: false })
+        ).data
+      : promotersRaw
+
+  if (error && !promoters) {
     throw new Error(error.message)
   }
 
@@ -185,7 +240,9 @@ export async function getOrganizerPromoters(): Promise<PromoterRow[]> {
   const [{ data: orders }, { data: visitRows }] = await Promise.all([
     admin
       .from("orders")
-      .select("id, promoter_id, total_amount, subtotal, status")
+      .select(
+        "id, promoter_id, total_amount, subtotal, status, promoter_commission_amount",
+      )
       .in("promoter_id", promoterIds)
       .eq("status", "paid"),
     admin
@@ -222,19 +279,53 @@ export async function getOrganizerPromoters(): Promise<PromoterRow[]> {
 
   const stats = new Map<
     string,
-    { ticketsSold: number; revenueGenerated: number }
+    { ticketsSold: number; revenueGenerated: number; commission: number }
   >()
+
+  const promoterById = new Map(
+    promoters.map((row) => [
+      row.id,
+      {
+        type:
+          (row as { commission_type?: string }).commission_type === "fixed"
+            ? ("fixed" as const)
+            : ("percent" as const),
+        rate: Number(row.commission_rate),
+        fixed: Number(
+          (row as { commission_fixed_amount?: number | null })
+            .commission_fixed_amount ?? 0,
+        ),
+      },
+    ]),
+  )
 
   for (const order of orders ?? []) {
     if (!order.promoter_id) continue
     const current = stats.get(order.promoter_id) ?? {
       ticketsSold: 0,
       revenueGenerated: 0,
+      commission: 0,
     }
-    current.revenueGenerated += Number(
-      order.subtotal ?? order.total_amount,
+    const tickets = ticketsByOrder.get(order.id) ?? 0
+    const revenue = Number(order.subtotal ?? order.total_amount)
+    current.revenueGenerated += revenue
+    current.ticketsSold += tickets
+    const snap = Number(
+      (order as { promoter_commission_amount?: number | null })
+        .promoter_commission_amount,
     )
-    current.ticketsSold += ticketsByOrder.get(order.id) ?? 0
+    if (Number.isFinite(snap) && snap >= 0) {
+      current.commission += snap
+    } else {
+      const rule = promoterById.get(order.promoter_id)
+      current.commission += computePromoterCommission({
+        type: rule?.type ?? "percent",
+        rate: rule?.rate ?? 0,
+        fixedAmount: rule?.fixed ?? 0,
+        subtotal: revenue,
+        ticketCount: tickets,
+      })
+    }
     stats.set(order.promoter_id, current)
   }
 
@@ -242,18 +333,29 @@ export async function getOrganizerPromoters(): Promise<PromoterRow[]> {
     const metric = stats.get(promoter.id) ?? {
       ticketsSold: 0,
       revenueGenerated: 0,
+      commission: 0,
     }
     const rate = Number(promoter.commission_rate)
+    const type =
+      (promoter as { commission_type?: string }).commission_type === "fixed"
+        ? ("fixed" as const)
+        : ("percent" as const)
+    const fixed = Number(
+      (promoter as { commission_fixed_amount?: number | null })
+        .commission_fixed_amount ?? 0,
+    )
 
     return {
       id: promoter.id,
       name: promoter.name,
       referralCode: promoter.referral_code,
       commissionRate: rate,
+      commissionType: type,
+      commissionFixedAmount: fixed,
       clickCount: clickByPromoter.get(promoter.id) ?? 0,
       ticketsSold: metric.ticketsSold,
       revenueGenerated: metric.revenueGenerated,
-      estimatedCommission: metric.revenueGenerated * rate,
+      estimatedCommission: metric.commission,
       userId: promoter.user_id,
     }
   })
@@ -274,7 +376,9 @@ export async function getPromoterMetrics(
 
   let query = supabase
     .from("promoters")
-    .select("id, name, referral_code, commission_rate, organizer_id, user_id")
+    .select(
+      "id, name, referral_code, commission_rate, commission_type, commission_fixed_amount, organizer_id, user_id",
+    )
     .limit(1)
 
   if (promoterId) {
@@ -285,18 +389,49 @@ export async function getPromoterMetrics(
 
   const { data: promoter, error } = await query.maybeSingle()
 
+  if (error && /commission_type|commission_fixed/i.test(error.message)) {
+    let fallback = supabase
+      .from("promoters")
+      .select("id, name, referral_code, commission_rate, organizer_id, user_id")
+      .limit(1)
+    fallback = promoterId
+      ? fallback.eq("id", promoterId)
+      : fallback.eq("user_id", user.id)
+    const retry = await fallback.maybeSingle()
+    if (retry.error) throw new Error(retry.error.message)
+    if (!retry.data) return null
+    return getPromoterMetricsFromRow(retry.data, user.id)
+  }
+
   if (error) {
     throw new Error(error.message)
   }
 
   if (!promoter) return null
 
-  // Solo el promotor vinculado o su organizador pueden ver métricas.
-  if (promoter.user_id !== user.id && promoter.organizer_id !== user.id) {
+  return getPromoterMetricsFromRow(promoter, user.id)
+}
+
+async function getPromoterMetricsFromRow(
+  promoter: {
+    id: string
+    name: string
+    referral_code: string
+    commission_rate: number
+    organizer_id: string
+    user_id: string | null
+    commission_type?: string | null
+    commission_fixed_amount?: number | null
+  },
+  userId: string,
+): Promise<PromoterMetrics | null> {
+  const supabase = await createClient()
+
+  if (promoter.user_id !== userId && promoter.organizer_id !== userId) {
     const { data: profile } = await supabase
       .from("profiles")
       .select("role")
-      .eq("id", user.id)
+      .eq("id", userId)
       .maybeSingle()
 
     if (profile?.role !== "super_admin") {
@@ -309,7 +444,7 @@ export async function getPromoterMetrics(
   const [{ data: orders }, { count: clickCount }] = await Promise.all([
     admin
       .from("orders")
-      .select("id, total_amount, subtotal")
+      .select("id, total_amount, subtotal, promoter_commission_amount")
       .eq("promoter_id", promoter.id)
       .eq("status", "paid"),
     admin
@@ -335,10 +470,34 @@ export async function getPromoterMetrics(
     0,
   )
   const commissionRate = Number(promoter.commission_rate)
+  const commissionType =
+    (promoter as { commission_type?: string }).commission_type === "fixed"
+      ? ("fixed" as const)
+      : ("percent" as const)
+  const commissionFixedAmount = Number(
+    (promoter as { commission_fixed_amount?: number | null })
+      .commission_fixed_amount ?? 0,
+  )
+
+  const snapshots = (orders ?? []).map((order) =>
+    (order as { promoter_commission_amount?: number | null })
+      .promoter_commission_amount,
+  )
+  const allSnapped =
+    snapshots.length > 0 && snapshots.every((value) => value != null)
+  const estimatedCommission = allSnapped
+    ? snapshots.reduce((sum, value) => sum + Number(value), 0)
+    : computePromoterCommission({
+        type: commissionType,
+        rate: commissionRate,
+        fixedAmount: commissionFixedAmount,
+        subtotal: revenueGenerated,
+        ticketCount: ticketsSold,
+      })
 
   const { data: featuredEvent } = await admin
     .from("events")
-    .select("id")
+    .select("id, slug")
     .eq("organizer_id", promoter.organizer_id)
     .eq("status", "published")
     .order("date", { ascending: true })
@@ -350,11 +509,14 @@ export async function getPromoterMetrics(
     name: promoter.name,
     referralCode: promoter.referral_code,
     commissionRate,
+    commissionType,
+    commissionFixedAmount,
     clickCount: clickCount ?? 0,
     ticketsSold,
     revenueGenerated,
-    estimatedCommission: revenueGenerated * commissionRate,
+    estimatedCommission,
     featuredEventId: featuredEvent?.id ?? null,
+    featuredEventSlug: featuredEvent?.slug ?? null,
   }
 }
 

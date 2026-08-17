@@ -21,7 +21,8 @@ const TABS = [
     href: "/cuenta/entradas",
     label: "Entradas",
     icon: Ticket,
-    match: (path: string) => path.startsWith("/cuenta/entradas"),
+    match: (path: string) =>
+      path.startsWith("/cuenta/entradas") || path.startsWith("/profile/tickets"),
     badge: "entradas" as const,
   },
   {

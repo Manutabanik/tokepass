@@ -1,7 +1,7 @@
 import { resolveSectorAssignMeta, type SectorAssignMeta } from "@/lib/seating/assign-best-seats"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import {
-  flattenVenueMapSeats,
+  flattenSeatsForAvailability,
   type FlattenedVenueSeat,
 } from "@/lib/seating/venue-map-geometry"
 import { resolveLiveVenueSeatStatus } from "@/lib/seating/venue-map-occupancy"
@@ -49,7 +49,7 @@ export function buildAccessibleSeatTree(input: {
   const selected = new Set(input.selectedSeatIds ?? [])
   const soldOut = new Set(input.unavailableZoneIds ?? [])
   const occupancy = input.occupancyBySeatId ?? {}
-  const seats = flattenVenueMapSeats(input.map)
+  const seats = flattenSeatsForAvailability(input.map)
   const seatsBySector = new Map<string, FlattenedVenueSeat[]>()
   for (const seat of seats) {
     const list = seatsBySector.get(seat.sectorId) ?? []

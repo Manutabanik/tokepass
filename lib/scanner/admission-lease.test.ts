@@ -1,0 +1,119 @@
+import assert from "node:assert/strict"
+import { describe, it } from "node:test"
+
+import {
+  buildAdmissionLeaseHash,
+  decideOfflineAdmission,
+  isGroupAdmissionTicket,
+  ticketBelongsToDeviceSlot,
+  ticketDeviceSlot,
+} from "@/lib/scanner/admission-lease"
+
+describe("offline admission lease", () => {
+  it("assigns the same ticket to a stable device slot", () => {
+    const ticketId = "9dfcc6ca-8d97-4d9c-951d-ffabc21e6210"
+    const slot = ticketDeviceSlot(ticketId, 4)
+    assert.equal(ticketDeviceSlot(ticketId, 4), slot)
+    assert.equal(ticketBelongsToDeviceSlot(ticketId, slot, 4), true)
+    assert.equal(ticketBelongsToDeviceSlot(ticketId, (slot + 1) % 4, 4), false)
+    assert.equal(ticketBelongsToDeviceSlot(ticketId, 0, 1), true)
+  })
+
+  it("blocks a second local read when the lease already covers the ticket", () => {
+    const decision = decideOfflineAdmission({
+      status: "valid",
+      admissionsUsed: 1,
+      maxAdmissions: 1,
+      groupId: null,
+      ticketId: "ticket-a",
+      deviceSlotIndex: 0,
+      deviceSlotCount: 1,
+      online: false,
+      hasLivePeers: false,
+      localLeaseCount: 1,
+      scannedAt: 1_725_000_000_000,
+    })
+    assert.equal(decision.action, "duplicate")
+    assert.equal(decision.reason, "lease_exists")
+  })
+
+  it("sends grouped tickets to main gate when several pistols are offline without peers", () => {
+    assert.equal(
+      isGroupAdmissionTicket({ group_id: "mesa-12", max_admissions: 1 }),
+      true,
+    )
+    const ticketId = "ticket-group"
+    const ownerSlot = ticketDeviceSlot(ticketId, 2)
+    const decision = decideOfflineAdmission({
+      status: "valid",
+      admissionsUsed: 0,
+      maxAdmissions: 4,
+      groupId: "mesa-12",
+      ticketId,
+      deviceSlotIndex: ownerSlot,
+      deviceSlotCount: 2,
+      online: false,
+      hasLivePeers: false,
+      localLeaseCount: 0,
+      scannedAt: null,
+    })
+    assert.equal(decision.action, "main_gate_review")
+    assert.equal(decision.reason, "group_no_peers")
+  })
+
+  it("admits a grouped ticket on a single pistol with a local lease", () => {
+    const decision = decideOfflineAdmission({
+      status: "valid",
+      admissionsUsed: 0,
+      maxAdmissions: 4,
+      groupId: "mesa-12",
+      ticketId: "ticket-group",
+      deviceSlotIndex: 0,
+      deviceSlotCount: 1,
+      online: false,
+      hasLivePeers: false,
+      localLeaseCount: 0,
+      scannedAt: null,
+    })
+    assert.equal(decision.action, "admit")
+  })
+
+  it("rejects tickets outside the assigned pistol range", () => {
+    const ticketId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    const owner = ticketDeviceSlot(ticketId, 2)
+    const other = owner === 0 ? 1 : 0
+    const decision = decideOfflineAdmission({
+      status: "valid",
+      admissionsUsed: 0,
+      maxAdmissions: 1,
+      groupId: null,
+      ticketId,
+      deviceSlotIndex: other,
+      deviceSlotCount: 2,
+      online: false,
+      hasLivePeers: false,
+      localLeaseCount: 0,
+      scannedAt: null,
+    })
+    assert.equal(decision.action, "main_gate_review")
+    assert.equal(decision.reason, "range_mismatch")
+  })
+
+  it("builds a deterministic lease hash for the same admission tuple", async () => {
+    const parts = {
+      deviceId: "device-1",
+      ticketId: "ticket-1",
+      timestamp: 1_725_000_000_000,
+      admissionCounter: 1,
+    }
+    const first = await buildAdmissionLeaseHash(parts)
+    const second = await buildAdmissionLeaseHash(parts)
+    assert.equal(first, second)
+    assert.equal(first.length, 64)
+    const other = await buildAdmissionLeaseHash({
+      ...parts,
+      deviceId: "device-2",
+    })
+    assert.notEqual(first, other)
+  })
+})

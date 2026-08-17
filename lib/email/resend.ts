@@ -5,6 +5,17 @@ import { Resend } from "resend"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 import { TicketReceiptEmail } from "@/components/emails/TicketReceiptEmail"
+import {
+  OrderConfirmationEmail,
+  type OrderEmailProps,
+} from "@/emails/OrderConfirmationEmail"
+import {
+  buildOrderEmailTickets,
+  expandIndividualAccessTickets,
+  formatOrderNumber,
+  httpImageUrl,
+  type OrderEmailData,
+} from "@/lib/email/order-ticket-payload"
 import { formatCurrency, formatEventDate } from "@/lib/format"
 import { logger } from "@/lib/logger"
 import { getSiteUrl } from "@/lib/mercadopago"
@@ -28,6 +39,71 @@ function getResendClient(): Resend | null {
   const apiKey = process.env.RESEND_API_KEY?.trim()
   resendClient = apiKey ? new Resend(apiKey) : null
   return resendClient
+}
+
+function resendFromAddress(): string {
+  return (
+    process.env.RESEND_FROM_EMAIL?.trim() ||
+    "Tokepass <entradas@tokepass.com>"
+  )
+}
+
+export async function sendOrderTicketsEmail(
+  payload: OrderEmailData,
+): Promise<{ messageId: string }> {
+  const email = payload.to.trim().toLowerCase()
+  if (!email || !email.includes("@")) {
+    throw new Error("invalid_recipient")
+  }
+
+  const client = getResendClient()
+  if (!client) {
+    throw new Error("RESEND_API_KEY no configurada")
+  }
+
+  const accountUrl =
+    payload.accountUrl?.trim() || `${getEmailAppUrl()}/cuenta/entradas`
+  const emailProps: OrderEmailProps = {
+    customerName: payload.customerName,
+    orderNumber: payload.orderNumber,
+    eventName: payload.eventName,
+    eventDate: payload.eventDate,
+    eventVenue: payload.eventVenue,
+    eventBannerUrl: payload.eventBannerUrl,
+    totalAmount:
+      typeof payload.totalAmount === "number"
+        ? formatCurrency(payload.totalAmount)
+        : payload.totalAmount,
+    tickets: payload.tickets,
+    accountUrl,
+  }
+
+  const html = await render(OrderConfirmationEmail(emailProps))
+  const text = [
+    `Tus entradas para ${payload.eventName} ya estan listas.`,
+    `Hola ${payload.customerName},`,
+    `Orden: ${payload.orderNumber}`,
+    `Evento: ${payload.eventName}`,
+    `Fecha: ${payload.eventDate}`,
+    `Lugar: ${payload.eventVenue}`,
+    `Total: ${emailProps.totalAmount}`,
+    ...payload.tickets.map((ticket) => `${ticket.label}: ${ticket.codeText}`),
+    `Ver entradas: ${accountUrl}`,
+  ].join("\n")
+
+  const { data, error } = await client.emails.send({
+    from: resendFromAddress(),
+    to: [email],
+    subject: `Tus entradas para ${payload.eventName}`,
+    html,
+    text,
+  })
+
+  if (error || !data?.id) {
+    throw new Error(error?.message || "Resend rejected the email")
+  }
+
+  return { messageId: data.id }
 }
 
 export function getEmailAppUrl(): string {
@@ -84,8 +160,7 @@ export async function sendTicketConfirmationEmail({
   const ticketCount = Math.max(1, orderDetails.ticketCount)
   const eventDateLabel = formatEventDate(eventDetails.date)
   const totalPaidLabel = formatCurrency(orderDetails.totalPaid)
-  const from =
-    process.env.RESEND_FROM_EMAIL?.trim() || "Tokepass <onboarding@resend.dev>"
+  const from = resendFromAddress()
 
   const html = await render(
     TicketReceiptEmail({
@@ -175,11 +250,25 @@ export async function sendPaidOrderReceiptEmail(
     return
   }
 
+  try {
+    await expandIndividualAccessTickets(admin, orderId)
+  } catch (error) {
+    logger.error({
+      context: "email/resend",
+      message: "expand_access_tickets_failed",
+      order_id: orderId,
+      error,
+    })
+  }
+
   const [{ data: tickets }, { data: profile }] = await Promise.all([
     admin
       .from("tickets")
-      .select("id, event_id, holder_email, holder_name")
-      .eq("order_id", orderId),
+      .select(
+        "id, event_id, qr_code, holder_email, holder_name, group_id, group_slot, ticket_tiers(name), event_seating_units(label, sector_name)",
+      )
+      .eq("order_id", orderId)
+      .order("group_slot", { ascending: true, nullsFirst: true }),
     admin
       .from("profiles")
       .select("full_name, email")
@@ -200,7 +289,7 @@ export async function sendPaidOrderReceiptEmail(
 
   const { data: event } = await admin
     .from("events")
-    .select("title, date, location, venues(name, location)")
+    .select("title, date, location, flyer_url, image_url, venues(name, location)")
     .eq("id", eventId)
     .maybeSingle()
 
@@ -222,7 +311,7 @@ export async function sendPaidOrderReceiptEmail(
   const buyerName =
     ticketRows.find((row) => row.holder_name?.trim())?.holder_name?.trim() ||
     profile?.full_name?.trim() ||
-    undefined
+    ""
 
   let walletUrl: string | undefined = access?.magicUrl
   let otpCode: string | undefined = access?.otp?.trim() || undefined
@@ -235,20 +324,71 @@ export async function sendPaidOrderReceiptEmail(
     otpCode = issued?.otp?.trim() || undefined
   }
 
-  await sendTicketConfirmationEmail({
-    to,
-    buyerName,
-    walletUrl,
-    otpCode,
-    orderDetails: {
-      orderId: order.id,
-      ticketCount: ticketRows.length || 1,
-      totalPaid: Number(order.total_amount) || 0,
-    },
-    eventDetails: {
-      title: event?.title?.trim() || "Evento Tokepass",
-      date: event?.date || new Date().toISOString(),
-      location,
-    },
+  const eventName = event?.title?.trim() || "Evento Tokepass"
+  const eventDate = event?.date
+    ? formatEventDate(event.date)
+    : "Fecha a confirmar"
+  const bannerUrl =
+    httpImageUrl(event?.flyer_url) || httpImageUrl(event?.image_url)
+  const appUrl = getEmailAppUrl()
+  const emailTickets = buildOrderEmailTickets({
+    appUrl,
+    tickets: ticketRows,
   })
+
+  if (!to) {
+    logger.warn({
+      context: "email/resend",
+      message: "skip_invalid_recipient",
+      order_id: order.id,
+    })
+    return
+  }
+
+  try {
+    await sendOrderTicketsEmail({
+      to,
+      customerName: buyerName,
+      orderNumber: formatOrderNumber(order.id),
+      eventName,
+      eventDate,
+      eventVenue: location,
+      eventBannerUrl: bannerUrl,
+      totalAmount: Number(order.total_amount) || 0,
+      tickets: emailTickets,
+      accountUrl: walletUrl || `${appUrl}/cuenta/entradas`,
+    })
+  } catch (error) {
+    logger.error({
+      context: "email/resend",
+      message: "order_tickets_email_failed",
+      order_id: order.id,
+      error,
+    })
+    try {
+      await sendTicketConfirmationEmail({
+        to,
+        buyerName,
+        walletUrl,
+        otpCode,
+        orderDetails: {
+          orderId: order.id,
+          ticketCount: ticketRows.length || 1,
+          totalPaid: Number(order.total_amount) || 0,
+        },
+        eventDetails: {
+          title: eventName,
+          date: event?.date || new Date().toISOString(),
+          location,
+        },
+      })
+    } catch (fallbackError) {
+      logger.error({
+        context: "email/resend",
+        message: "receipt_fallback_email_failed",
+        order_id: order.id,
+        error: fallbackError,
+      })
+    }
+  }
 }

@@ -26,7 +26,8 @@ describe("venue templates", () => {
         continue
       }
       assert.equal(venueMapHasInventory(first), true)
-      first.elements[0] && (first.elements[0].price = 99)
+      const mutated = first.elements[0]
+      if (mutated) mutated.price = 99
       assert.notEqual(second.elements[0]?.price, 99)
     }
   })

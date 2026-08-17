@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowRight, ChevronUp, LoaderCircle, Trash2, X } from "lucide-react"
+import { ArrowRight, ChevronUp, LoaderCircle, Map, Trash2, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 
 import { CartSummary } from "@/components/public/cart-summary"
@@ -22,11 +22,12 @@ export function CheckoutFloatingBar({
   hidden = false,
   disabled = false,
   actionLabel,
+  pendingLabel = "Procesando",
   showArrow = false,
   totalAmount,
   itemsCount,
   onPay,
-  variant = "page",
+  onEditMap,
   pulseCta = false,
   prominentCta = false,
 }: {
@@ -35,10 +36,12 @@ export function CheckoutFloatingBar({
   hidden?: boolean
   disabled?: boolean
   actionLabel: string
+  pendingLabel?: string
   showArrow?: boolean
   totalAmount?: number | null
   itemsCount?: number
   onPay: () => void
+  onEditMap?: () => void
   variant?: "page" | "panel"
   pulseCta?: boolean
   prominentCta?: boolean
@@ -52,7 +55,9 @@ export function CheckoutFloatingBar({
   const resolvedCount = Math.max(cartCount, itemsCount ?? 0)
   const showTotal = resolvedTotal > 0 || resolvedCount > 0 || passedTotal >= 0
   const [totalBump, setTotalBump] = useState(false)
-  const [isSummaryOpen, setIsSummaryOpen] = useState(false)
+  const canShowSummary = resolvedCount > 0 && cartLines.length > 0
+  const [summaryOpen, setSummaryOpen] = useState(false)
+  const isSummaryOpen = canShowSummary && summaryOpen
   const lastTotal = useRef(resolvedTotal)
   const canContinue = (resolvedTotal > 0 || resolvedCount > 0) && !disabled
 
@@ -64,43 +69,46 @@ export function CheckoutFloatingBar({
     return () => window.clearTimeout(timer)
   }, [hidden, resolvedTotal, showTotal])
 
-  useEffect(() => {
-    if (resolvedCount === 0 || cartLines.length === 0) {
-      setIsSummaryOpen(false)
-    }
-  }, [cartLines.length, resolvedCount])
-
   if (hidden) return null
 
-  function handleContinueFromSummary() {
-    setIsSummaryOpen(false)
+  function handlePay() {
+    if (pending || locked || !canContinue) return
     onPay()
+  }
+
+  function handleContinueFromSummary() {
+    if (pending || locked || !canContinue) return
+    setSummaryOpen(false)
+    onPay()
+  }
+
+  function handleEditMap() {
+    if (!onEditMap) return
+    setSummaryOpen(false)
+    window.setTimeout(() => onEditMap(), 180)
   }
 
   return (
     <>
       <div
         className={cn(
-          "w-full shrink-0 border-t backdrop-blur-xl",
-          variant === "panel"
-            ? "fixed inset-x-0 bottom-0 z-[90] border-t border-border/50 bg-slate-900/95 px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-[0_-10px_40px_rgba(0,0,0,0.5)] lg:static lg:inset-auto lg:bottom-auto lg:z-50 lg:border-border/40 lg:bg-card/95 lg:px-8 lg:py-4 lg:pb-4 lg:shadow-none lg:backdrop-blur-md"
-            : "fixed inset-x-0 bottom-0 z-50 border-border/50 bg-background/90 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl lg:pb-4",
+          "fixed right-4 bottom-4 left-4 z-50 flex items-center justify-between rounded-2xl border border-border/50 bg-background/95 p-3 shadow-[0_8px_30px_rgba(0,0,0,0.12)] backdrop-blur-xl transition-all duration-300 lg:hidden dark:shadow-[0_8px_30px_rgba(0,0,0,0.4)]",
         )}
       >
         <div
           className={cn(
-            "flex gap-4",
-            prominentCta ? "flex-col" : "items-center justify-between",
+            "flex w-full items-center justify-between gap-3",
+            prominentCta && "lg:flex-col lg:gap-4",
           )}
         >
           {showTotal ? (
             <button
               type="button"
               disabled={resolvedCount === 0}
-              onClick={() => setIsSummaryOpen(true)}
+              onClick={() => setSummaryOpen(true)}
               className="flex min-w-0 cursor-pointer flex-col text-left disabled:cursor-default lg:pointer-events-none"
             >
-              <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground max-lg:text-zinc-200">
+              <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
                 {resolvedCount > 0
                   ? `${resolvedCount} ${resolvedCount === 1 ? "seleccionado" : "seleccionados"}`
                   : "Total"}
@@ -113,7 +121,7 @@ export function CheckoutFloatingBar({
               </span>
               <span
                 className={cn(
-                  "text-xl font-black tabular-nums tracking-tight text-foreground transition-all max-lg:text-white lg:text-2xl",
+                  "text-xl font-black tabular-nums tracking-tight text-foreground transition-all lg:text-2xl",
                   totalBump && "scale-105 text-primary",
                 )}
               >
@@ -124,14 +132,12 @@ export function CheckoutFloatingBar({
           <Button
             type="button"
             disabled={pending || locked || !canContinue}
-            onClick={onPay}
+            aria-busy={pending}
+            onClick={handlePay}
             className={cn(
               tapFeedbackClass,
-              "rounded-2xl bg-primary px-6 text-lg font-bold text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90",
-              showTotal && !prominentCta
-                ? "h-14 min-w-0 md:h-16"
-                : "h-14 w-full md:h-16",
-              prominentCta && "h-14 w-full text-lg font-bold md:h-16",
+              "h-14 min-w-0 shrink-0 rounded-2xl bg-primary px-6 text-lg font-bold text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 md:h-16",
+              prominentCta && "lg:w-full",
               !canContinue && "cursor-not-allowed opacity-50",
               pulseCta && canContinue && "animate-pulse",
             )}
@@ -139,7 +145,7 @@ export function CheckoutFloatingBar({
             {pending ? (
               <>
                 <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-                Preparando pago
+                {pendingLabel}
               </>
             ) : (
               <>
@@ -153,7 +159,7 @@ export function CheckoutFloatingBar({
         </div>
       </div>
 
-      <Sheet open={isSummaryOpen} onOpenChange={setIsSummaryOpen}>
+      <Sheet open={isSummaryOpen} onOpenChange={setSummaryOpen}>
         <SheetContent
           side="bottom"
           showCloseButton={false}
@@ -186,7 +192,7 @@ export function CheckoutFloatingBar({
                 ) : null}
                 <button
                   type="button"
-                  onClick={() => setIsSummaryOpen(false)}
+                  onClick={() => setSummaryOpen(false)}
                   className="grid size-9 place-items-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground"
                   aria-label="Cerrar"
                 >
@@ -194,6 +200,16 @@ export function CheckoutFloatingBar({
                 </button>
               </div>
             </div>
+            {onEditMap ? (
+              <button
+                type="button"
+                onClick={handleEditMap}
+                className="mt-1 flex min-h-11 items-center gap-2 py-2 text-sm font-medium text-primary transition-all duration-200 hover:text-primary/80"
+              >
+                <Map className="size-4" aria-hidden="true" />
+                Editar en mapa
+              </button>
+            ) : null}
           </SheetHeader>
           <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-3">
             <CartSummary items={cartLines} heading="Ítems" showClear={false} />
@@ -210,13 +226,21 @@ export function CheckoutFloatingBar({
             <Button
               type="button"
               disabled={pending || locked || !canContinue}
+              aria-busy={pending}
               onClick={handleContinueFromSummary}
               className={cn(
                 tapFeedbackClass,
-                "h-auto w-full rounded-2xl bg-emerald-600 py-3.5 text-base font-bold text-white hover:bg-emerald-500",
+                "h-auto w-full rounded-2xl bg-primary py-3.5 text-base font-bold text-primary-foreground hover:bg-primary/90",
               )}
             >
-              Continuar a pago
+              {pending ? (
+                <>
+                  <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+                  {pendingLabel}
+                </>
+              ) : (
+                "Continuar a pago"
+              )}
             </Button>
           </div>
         </SheetContent>

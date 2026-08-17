@@ -17,7 +17,7 @@ import {
   type CatalogEventArtist,
   type FeaturedDiscoveryArtist,
 } from "@/lib/discovery-artists"
-import { parseScheduleDays } from "@/lib/event-schedule"
+import { parseScheduleDays, scheduleDaysFromEvent } from "@/lib/event-schedule"
 import {
   eventArtistsToLineup,
   hasEventLineup,
@@ -41,6 +41,10 @@ import {
   type PublicTicketPhase,
 } from "@/lib/inventory/active-phase"
 import { parseBundleItems, serializeBundleItems } from "@/lib/inventory/unified-inventory"
+import {
+  publicCatalogTicketsLeft,
+  publicTierAvailable,
+} from "@/lib/inventory/public-stock-cap"
 import type { Event, TicketTier, Venue } from "@/types/database"
 import type { ScheduleDay } from "@/types/events"
 import type { EventSeatingUnit, SeatingSectorSummary, VenueSeatingLayout } from "@/types/venues"
@@ -59,6 +63,7 @@ import {
   seatingLayoutToVenueMap,
 } from "@/lib/seating/venue-map-geometry"
 import { parseVenueMap, type InteractiveVenueMap } from "@/types/venue-map"
+import { effectiveSeatingUnitStatus } from "@/lib/seating/venue-map-occupancy"
 import type { EventPixelConfig } from "@/lib/analytics/pixels"
 import type { PublicSponsor } from "@/lib/sponsors"
 
@@ -120,6 +125,7 @@ export type EventDetails = {
         | "address"
         | "city"
         | "capacity"
+        | "max_capacity"
         | "seating_background_url"
         | "latitude"
         | "longitude"
@@ -197,7 +203,7 @@ type EventListRow = {
   featured_until: string | null
   is_sponsored_by_tokepass: boolean | null
   category_id: string | null
-  venues: { name: string; location: string } | null
+  venues: { name: string; location: string; capacity?: number | null } | null
   ticket_tiers: {
     price: number
     capacity: number
@@ -251,6 +257,7 @@ type EventDetailRow = {
         | "address"
         | "city"
         | "capacity"
+        | "max_capacity"
         | "seating_background_url"
         | "latitude"
         | "longitude"
@@ -290,24 +297,15 @@ function computeStartingPrice(tiers: { price: number }[] | null): number | null 
 
 function computeInventory(
   tiers: { capacity: number; sold: number; visibility?: string | null }[] | null,
+  venueCapacity?: number | null,
 ): {
   soldRatio: number | null
   ticketsLeft: number | null
 } {
-  const publicTiers = (tiers ?? []).filter(
-    (tier) => (tier.visibility ?? "public") !== "private",
-  )
-  if (!publicTiers.length) return { soldRatio: null, ticketsLeft: null }
-  const capacity = publicTiers.reduce(
-    (sum, tier) => sum + Number(tier.capacity),
-    0,
-  )
-  const sold = publicTiers.reduce((sum, tier) => sum + Number(tier.sold), 0)
-  if (capacity <= 0) return { soldRatio: null, ticketsLeft: null }
-  return {
-    soldRatio: Math.min(1, Math.max(0, sold / capacity)),
-    ticketsLeft: Math.max(0, capacity - sold),
-  }
+  return publicCatalogTicketsLeft({
+    tiers,
+    venueCapacity,
+  })
 }
 
 function startOfTodayIso(): string {
@@ -317,7 +315,7 @@ function startOfTodayIso(): string {
 }
 
 const EVENT_LIST_SELECT =
-  "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location), ticket_tiers(price, capacity, sold, visibility), profiles!events_organizer_id_fkey(full_name)"
+  "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location, capacity), ticket_tiers(price, capacity, sold, visibility), profiles!events_organizer_id_fkey(full_name)"
 
 const EVENT_ARTISTS_EMBED =
   "event_artists(artist_id, artists(id, name, image_url))"
@@ -504,7 +502,10 @@ export async function getFeaturedDiscoveryArtists(
 }
 
 function mapEventListRow(event: EventListRow): CatalogEvent {
-  const inventory = computeInventory(event.ticket_tiers)
+  const inventory = computeInventory(
+    event.ticket_tiers,
+    event.venues?.capacity,
+  )
   const featuredUntil = event.featured_until
   const stillActive =
     Boolean(event.is_featured) &&
@@ -555,7 +556,7 @@ export async function getFeaturedEvents(options?: {
   const { data, error } = await supabase
     .from("events")
     .select(
-      "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location), ticket_tiers(price, capacity, sold, visibility), profiles!events_organizer_id_fkey(full_name)",
+      "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location, capacity), ticket_tiers(price, capacity, sold, visibility), profiles!events_organizer_id_fkey(full_name)",
     )
     .eq("status", "published")
     .eq("visibility", "public")
@@ -810,10 +811,14 @@ async function loadEventDetails(
   const resolvedId = await resolveEventRecordId(supabase, eventId)
   if (!resolvedId) return null
 
+  await supabase.rpc("purge_expired_checkout_holds", {
+    p_event_id: resolvedId,
+  })
+
   const eventSelectWithPicker =
-    "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, lineup, default_ticket_tab, venue_id, venue_map, venues(id, name, location, address, city, capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, bundle_items, bundle_type, description, highlight_badge), profiles!events_organizer_id_fkey(full_name)"
+    "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, lineup, default_ticket_tab, venue_id, venue_map, venues(id, name, location, address, city, capacity, max_capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, bundle_items, bundle_type, description, highlight_badge), profiles!events_organizer_id_fkey(full_name)"
   const eventSelectCore =
-    "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, venue_id, venue_map, venues(id, name, location, address, city, capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, bundle_items, bundle_type), profiles!events_organizer_id_fkey(full_name)"
+    "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, venue_id, venue_map, venues(id, name, location, address, city, capacity, max_capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, bundle_items, bundle_type), profiles!events_organizer_id_fkey(full_name)"
 
   let query = supabase
     .from("events")
@@ -828,7 +833,7 @@ async function loadEventDetails(
 
   if (
     error &&
-    /default_ticket_tab|highlight_badge|ticket_tiers.*description|venue_map|lineup|schema cache|PGRST204|42703/i.test(
+    /default_ticket_tab|highlight_badge|ticket_tiers.*description|venue_map|lineup|max_capacity|schema cache|PGRST204|42703/i.test(
       error.message,
     )
   ) {
@@ -905,7 +910,25 @@ async function loadEventDetails(
     .eq("event_id", resolvedId)
 
   const event = row
-  const scheduleDays = parseScheduleDays(event.schedule_days)
+  const { data: scheduleRows } = await supabase
+    .from("event_schedules")
+    .select("id, title, start_time, end_time")
+    .eq("event_id", resolvedId)
+    .order("start_time", { ascending: true })
+  const scheduleDays = scheduleDaysFromEvent({
+    relational: scheduleRows,
+    json: event.schedule_days,
+  })
+  const { data: liveStockRows } = await supabase.rpc("get_event_tier_live_stock", {
+    p_event_id: resolvedId,
+  })
+  const liveAvailableByTier = new Map<string, { available: number; sold: number }>()
+  for (const stock of liveStockRows ?? []) {
+    liveAvailableByTier.set(stock.tier_id, {
+      available: Number(stock.available) || 0,
+      sold: Number(stock.sold) || 0,
+    })
+  }
   const tiers = [...(event.ticket_tiers ?? [])]
     .filter((tier) => tier.visibility !== "private")
     .sort((a, b) => Number(a.price) - Number(b.price))
@@ -1030,6 +1053,10 @@ async function loadEventDetails(
           address: event.venues.address ?? null,
           city: event.venues.city ?? null,
           capacity: event.venues.capacity,
+          max_capacity:
+            Number(event.venues.max_capacity) ||
+            Number(event.venues.capacity) ||
+            0,
           seating_background_url: event.venues.seating_background_url,
           latitude: event.venues.latitude,
           longitude: event.venues.longitude,
@@ -1044,6 +1071,7 @@ async function loadEventDetails(
             address: null,
             city: null,
             capacity: 0,
+            max_capacity: 0,
             seating_background_url: null,
             latitude: null,
             longitude: null,
@@ -1091,17 +1119,55 @@ async function loadEventDetails(
       }
       return map
     })(),
-    tiers: tiers.map((tier) => {
+    tiers: (() => {
+      const venueCap = Math.max(
+        Number(event.venues?.max_capacity) || 0,
+        Number(event.venues?.capacity) || 0,
+      )
+      const stockTiers = tiers.map((tier) => {
+        const live = liveAvailableByTier.get(tier.id)
+        return {
+          id: tier.id,
+          capacity: Number(tier.capacity),
+          sold: live?.sold ?? Number(tier.sold),
+          day_id: tier.day_id,
+          visibility: tier.visibility,
+          tier_type:
+            (tier as { tier_type?: TicketTier["tier_type"] }).tier_type ??
+            "general",
+          layout_type: tier.layout_type ?? null,
+          capacity_per_unit: Number(tier.capacity_per_unit) || 1,
+        }
+      })
+      return tiers.map((tier) => {
       const phases = phasesByTier.get(tier.id) ?? []
+      const live = liveAvailableByTier.get(tier.id)
+      const stockTier = stockTiers.find((row) => row.id === tier.id) ?? {
+        id: tier.id,
+        capacity: Number(tier.capacity),
+        sold: live?.sold ?? Number(tier.sold),
+        day_id: tier.day_id,
+        visibility: tier.visibility,
+        tier_type: "general" as const,
+        layout_type: tier.layout_type ?? null,
+        capacity_per_unit: Number(tier.capacity_per_unit) || 1,
+      }
+      const cappedAvailable = publicTierAvailable({
+        tier: stockTier,
+        tiers: stockTiers,
+        venueCapacity: venueCap,
+        skuAvailable: live?.available ?? Math.max(0, tier.capacity - tier.sold),
+      })
       const priced = applyActivePhaseToTier(
         {
           price: Number(tier.price),
-          available: Math.max(0, tier.capacity - tier.sold),
+          available: cappedAvailable,
         },
         phases,
       )
       return {
         ...tier,
+        sold: live?.sold ?? Number(tier.sold),
         category: tier.category ?? "standard",
         list_price: tier.list_price == null ? null : Number(tier.list_price),
         price: priced.price,
@@ -1132,7 +1198,8 @@ async function loadEventDetails(
           (tier as { highlight_badge?: string | null }).highlight_badge,
         ),
       }
-    }),
+    })
+    })(),
     defaultTicketTab: parseDefaultTicketTab(
       (event as { default_ticket_tab?: string | null }).default_ticket_tab,
     ),
@@ -1270,12 +1337,17 @@ function mapAvailabilityUnit(unit: {
     layoutType:
       unit.layout_type === "table_combo" ? "table_combo" : "numbered_seat",
     capacityPerUnit: Number(unit.capacity_per_unit),
-    status:
-      unit.status === "reserved" ||
-      unit.status === "sold" ||
-      unit.status === "blocked"
-        ? unit.status
-        : "available",
+    status: (() => {
+      const live = effectiveSeatingUnitStatus(unit.status, unit.reserved_until)
+      if (
+        live === "reserved" ||
+        live === "sold" ||
+        live === "blocked"
+      ) {
+        return live
+      }
+      return "available"
+    })(),
     reservedUntil: unit.reserved_until,
   }
 }
@@ -1352,7 +1424,7 @@ export async function getRelatedEvents(input: {
   const { data, error } = await supabase
     .from("events")
     .select(
-      "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location), ticket_tiers(price, capacity, sold, visibility), profiles!events_organizer_id_fkey(full_name)",
+      "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location, capacity), ticket_tiers(price, capacity, sold, visibility), profiles!events_organizer_id_fkey(full_name)",
     )
     .eq("status", "published")
     .eq("visibility", "public")

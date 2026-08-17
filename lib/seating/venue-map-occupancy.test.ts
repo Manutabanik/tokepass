@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import {
+  effectiveSeatingUnitStatus,
   hexToRgba,
   occupancyFromSeatingUnits,
   resolveLiveVenueSeatStatus,
@@ -19,14 +20,14 @@ describe("venue-map-occupancy", () => {
     )
   })
 
-  it("marks occupied seats over selection", () => {
+  it("keeps the buyer selection painted when occupancy is their own hold", () => {
     assert.equal(
       resolveLiveVenueSeatStatus({
         mapStatus: "available",
         occupancy: "occupied",
         selected: true,
       }),
-      "occupied",
+      "selected",
     )
   })
 
@@ -53,5 +54,27 @@ describe("venue-map-occupancy", () => {
     )
     assert.equal(occupancy["a-1"], "available")
     assert.equal(occupancy["a-2"], "occupied")
+  })
+
+  it("treats expired reserved units as available", () => {
+    assert.equal(
+      effectiveSeatingUnitStatus(
+        "reserved",
+        "2020-01-01T00:00:00.000Z",
+        Date.parse("2026-08-16T00:00:00.000Z"),
+      ),
+      "available",
+    )
+    const occupancy = occupancyFromSeatingUnits(
+      [
+        {
+          layoutItemId: "a-1",
+          status: "reserved",
+          reservedUntil: "2020-01-01T00:00:00.000Z",
+        },
+      ],
+      ["a-1"],
+    )
+    assert.equal(occupancy["a-1"], "available")
   })
 })

@@ -24,13 +24,18 @@ export function guestAccessCookieAttrs() {
   }
 }
 
+let localDevGuestSecret: Uint8Array | null = null
+
 function getSecretKey(): Uint8Array {
-  const raw =
-    process.env.GUEST_TICKET_SECRET?.trim() ||
-    process.env.CRON_SECRET?.trim() ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ||
-    "tokepass-guest-dev-secret"
-  return new TextEncoder().encode(raw)
+  const raw = process.env.GUEST_TICKET_SECRET?.trim() || ""
+  if (raw) return new TextEncoder().encode(raw)
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("GUEST_TICKET_SECRET is required in production")
+  }
+  if (!localDevGuestSecret) {
+    localDevGuestSecret = crypto.getRandomValues(new Uint8Array(32))
+  }
+  return localDevGuestSecret
 }
 
 export function hashGuestSecret(value: string, salt: string): string {

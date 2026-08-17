@@ -30,6 +30,16 @@ import {
 import { PaymentGatewayFactory } from "@/lib/payments/core/factory"
 import type { SupportedPaymentProvider } from "@/lib/payments/core/interfaces"
 import { buildCheckoutBackUrls } from "@/lib/payments/mercadopago"
+import {
+  expireCheckoutPreferenceOnOrder,
+  invalidateStaleCheckoutPreferences,
+} from "@/lib/payments/stale-preferences"
+import { issueCheckoutFulfillmentCookie } from "@/lib/checkout/fulfillment-cookie"
+import {
+  HIGH_DEMAND_LOCK_TIMEOUT,
+  isHighDemandLockError,
+  reserveRpcErrorText,
+} from "@/lib/checkout/lock-timeout"
 import { consumeRateLimit } from "@/lib/rate-limit"
 import { getCheckoutRequestContext } from "@/lib/checkout/request-context"
 import {
@@ -88,6 +98,10 @@ type ReserveTxRow = {
 }
 
 function mapReserveRpcError(message: string): CheckoutResult | null {
+  if (isHighDemandLockError(message)) {
+    return { success: false, error: HIGH_DEMAND_LOCK_TIMEOUT }
+  }
+
   const normalized = message.toLowerCase()
 
   if (normalized.includes("finalizado")) {
@@ -106,7 +120,18 @@ function mapReserveRpcError(message: string): CheckoutResult | null {
     return { success: false, error: "not_materialized" }
   }
 
-  if (normalized.includes("seating_unit_unavailable")) {
+  if (
+    normalized.includes("seating_unit_unavailable") ||
+    normalized.includes("409") ||
+    normalized.includes("conflict")
+  ) {
+    return { success: false, error: "out_of_stock" }
+  }
+
+  if (
+    normalized.includes("bundle_child_unavailable") ||
+    normalized.includes("bundle_child_invalid_or_exhausted")
+  ) {
     return { success: false, error: "out_of_stock" }
   }
 
@@ -118,6 +143,9 @@ function mapReserveRpcError(message: string): CheckoutResult | null {
     normalized.includes("sold out") ||
     normalized.includes("stock") ||
     normalized.includes("capacity") ||
+    normalized.includes("recinto") ||
+    normalized.includes("física") ||
+    normalized.includes("fisica") ||
     normalized.includes("not published") ||
     normalized.includes("not found")
   ) {
@@ -399,7 +427,7 @@ export async function holdSeatingUnitForCart(
   })
 
   if (error) {
-    const mapped = mapReserveRpcError(error.message)
+    const mapped = mapReserveRpcError(reserveRpcErrorText(error))
     if (mapped) {
       return mapped.success
         ? { success: false, error: "out_of_stock" }
@@ -475,7 +503,7 @@ export async function holdSeatingUnitForCartByLayoutItem(
   )
 
   if (error) {
-    const mapped = mapReserveRpcError(error.message)
+    const mapped = mapReserveRpcError(reserveRpcErrorText(error))
     if (mapped) {
       return mapped.success
         ? { success: false, error: "out_of_stock" }
@@ -619,7 +647,7 @@ export async function lockTickets(
   })
 
   if (error) {
-    const mapped = mapReserveRpcError(error.message)
+    const mapped = mapReserveRpcError(reserveRpcErrorText(error))
     if (mapped) {
       return mapped.success
         ? { success: false, error: "out_of_stock" }
@@ -672,6 +700,49 @@ export async function releaseGaCartHolds(
     return { success: false, error: error.message }
   }
   return { success: true }
+}
+
+export type CartHoldListRow = {
+  hold_kind: string
+  tier_id: string
+  quantity: number
+  seating_unit_id: string | null
+  layout_item_id: string | null
+  label: string | null
+  reserved_until: string
+}
+
+export async function listCartHolds(
+  eventId: string,
+): Promise<
+  | { success: true; holds: CartHoldListRow[] }
+  | { success: false; error: "auth_required" | string }
+> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+  if (authError || !user) {
+    return { success: false, error: "auth_required" }
+  }
+
+  const { data, error } = await supabase.rpc("list_cart_holds", {
+    p_event_id: eventId,
+    p_owner_id: user.id,
+  })
+  if (error) {
+    const missing = /could not find|schema cache|does not exist/i.test(
+      error.message,
+    )
+    if (missing) {
+      return { success: false, error: "unavailable" }
+    }
+    return { success: false, error: error.message }
+  }
+
+  const rows = (Array.isArray(data) ? data : data ? [data] : []) as CartHoldListRow[]
+  return { success: true, holds: rows }
 }
 
 export async function getGaCartHold(
@@ -1027,7 +1098,7 @@ export async function startCheckoutWithPayment(
     })
     .eq("id", user.id)
 
-  // Nunca confiar en promoter_id del cliente: solo resolver ?ref=CODE en servidor.
+  // Nunca confiar en promoter_id del cliente: solo resolver ?rrpp= / ?ref= en servidor.
   let promoterId: string | null = null
   const cleanRef = payload.referralCode
   if (cleanRef) {
@@ -1052,62 +1123,34 @@ export async function startCheckoutWithPayment(
     (tierMeta ?? []).map((row) => [row.id, row.seating_sector_id]),
   )
 
-  const rpcItems = cartItems.map((item) => ({
-    tier_id: item.tierId,
-    quantity: item.quantity,
-    sector_key: item.sectorKey ?? sectorByTier.get(item.tierId) ?? null,
-    table_number: item.tableNumber ?? null,
-    zone_id: item.zoneId ?? null,
-    seating_unit_id:
-      item.seatingUnitId ?? item.seatingIds?.[0] ?? null,
-  }))
+  const quantityItemsForPhases = cartItems.filter(
+    (item) => !(item.seatingUnitId || (item.seatingIds?.length ?? 0) > 0),
+  )
+  const phasesByTier = await loadCheckoutTierPhases(
+    supabase,
+    quantityItemsForPhases.map((item) => item.tierId),
+  )
+
+  const rpcItems = cartItems.map((item) => {
+    const decision = decidePhaseCart(
+      phasesByTier.get(item.tierId) ?? [],
+      item.quantity,
+    )
+    return {
+      tier_id: item.tierId,
+      quantity: item.quantity,
+      sector_key: item.sectorKey ?? sectorByTier.get(item.tierId) ?? null,
+      table_number: item.tableNumber ?? null,
+      zone_id: item.zoneId ?? null,
+      seating_unit_id: item.seatingUnitId ?? item.seatingIds?.[0] ?? null,
+      phase_id: decision.kind === "ok" ? decision.phase.id : null,
+    }
+  })
 
   let pendingOrderId: string | null = null
 
   try {
-    // Libera holds pending abandonados del comprador (si la migración P22 está aplicada).
-    try {
-      await supabase.rpc("expire_buyer_pending_event_orders", {
-        p_owner_id: user.id,
-        p_event_id: payload.eventId,
-      })
-    } catch {
-      // RPC ausente en entornos sin P22 todavía — reserve_tickets_tx cubre el caso.
-    }
-
-    const { error: claimGaError } = await supabase.rpc(
-      "claim_ga_cart_holds_for_checkout",
-      {
-        p_event_id: payload.eventId,
-        p_owner_id: user.id,
-      },
-    )
-    if (claimGaError) {
-      const missing = /could not find|schema cache|does not exist/i.test(
-        claimGaError.message,
-      )
-      if (!missing) {
-        logger.error({
-          context: "checkout/ga-hold",
-          message: "claim_ga_cart_holds_for_checkout_failed",
-          eventId: payload.eventId,
-          error: claimGaError.message,
-        })
-        return {
-          success: false,
-          error: "No se pudo confirmar el stock reservado. Probá de nuevo.",
-        }
-      }
-    }
-
-    const seatingItem = seatingItems[0]
-    const seatingUnitId =
-      seatingItem?.seatingUnitId ??
-      seatingItem?.seatingIds?.[0] ??
-      payload.seatingIds?.[0]
-    const hasExtras = cartItems.some(
-      (item) => !(item.seatingUnitId || (item.seatingIds?.length ?? 0) > 0),
-    )
+    const hasSeating = seatingItems.length > 0
     const hasBundle = (tierMeta ?? []).some(
       (row) => row.tier_type === "bundle" || row.category === "bundle",
     )
@@ -1115,7 +1158,7 @@ export async function startCheckoutWithPayment(
       (item) => !(item.seatingUnitId || (item.seatingIds?.length ?? 0) > 0),
     )
     const canUseAtomic =
-      !seatingUnitId &&
+      !hasSeating &&
       !hasBundle &&
       quantityItems.length === 1 &&
       cartItems.length === 1
@@ -1129,61 +1172,67 @@ export async function startCheckoutWithPayment(
 
     let reservation: {
       data: ReserveTxRow[] | AtomicReserveRow[] | null
-      error: { message: string } | null
+      error: { message: string; code?: string } | null
     }
 
-    if (canUseAtomic) {
-      const item = quantityItems[0]
-      const phasesByTier = await loadCheckoutTierPhases(supabase, [item.tierId])
-      const decision = decidePhaseCart(
-        phasesByTier.get(item.tierId) ?? [],
-        item.quantity,
-      )
-      const phaseId = decision.kind === "ok" ? decision.phase.id : null
-      const atomic = await reserveGeneralAdmissionAtomic(supabase, {
-        eventId: payload.eventId,
-        ownerId: user.id,
-        tierId: item.tierId,
-        quantity: item.quantity,
-        phaseId,
-        promoterId,
+    const isGaOnly = !hasSeating && !hasBundle
+
+    if (isGaOnly) {
+      const claimed = await supabase.rpc("claim_and_reserve_ga_cart_tx", {
+        p_event_id: payload.eventId,
+        p_owner_id: user.id,
+        p_items: rpcItems,
+        p_promoter_id: promoterId,
       })
-      if (atomic.missing) {
+      const missingClaim = Boolean(
+        claimed.error &&
+          /could not find|schema cache|does not exist/i.test(
+            claimed.error.message,
+          ),
+      )
+      if (!missingClaim) {
+        reservation = claimed
+      } else if (canUseAtomic) {
+        const item = quantityItems[0]
+        const decision = decidePhaseCart(
+          phasesByTier.get(item.tierId) ?? [],
+          item.quantity,
+        )
+        const phaseId = decision.kind === "ok" ? decision.phase.id : null
+        const atomic = await reserveGeneralAdmissionAtomic(supabase, {
+          eventId: payload.eventId,
+          ownerId: user.id,
+          tierId: item.tierId,
+          quantity: item.quantity,
+          phaseId,
+          promoterId,
+        })
+        reservation = atomic.missing
+          ? await supabase.rpc("reserve_tickets_tx", {
+              p_event_id: payload.eventId,
+              p_owner_id: user.id,
+              p_items: rpcItems,
+              p_promoter_id: promoterId,
+            })
+          : (atomic.reservation ?? {
+              data: null,
+              error: { message: "No se pudo completar la reserva atómica." },
+            })
+      } else {
         reservation = await supabase.rpc("reserve_tickets_tx", {
           p_event_id: payload.eventId,
           p_owner_id: user.id,
           p_items: rpcItems,
           p_promoter_id: promoterId,
         })
-      } else {
-        reservation = atomic.reservation ?? {
-          data: null,
-          error: { message: "No se pudo completar la reserva atómica." },
-        }
       }
     } else {
-      reservation =
-        (seatingUnitId && hasExtras) || hasBundle
-          ? await supabase.rpc("reserve_unified_cart_tx", {
-              p_event_id: payload.eventId,
-              p_owner_id: user.id,
-              p_items: rpcItems,
-              p_promoter_id: promoterId,
-            })
-          : seatingUnitId
-            ? await supabase.rpc("reserve_seating_unit_tx", {
-                p_event_id: payload.eventId,
-                p_owner_id: user.id,
-                p_tier_id: seatingItem?.tierId ?? cartItems[0]?.tierId,
-                p_seating_unit_id: seatingUnitId,
-                p_promoter_id: promoterId,
-              })
-            : await supabase.rpc("reserve_tickets_tx", {
-                p_event_id: payload.eventId,
-                p_owner_id: user.id,
-                p_items: rpcItems,
-                p_promoter_id: promoterId,
-              })
+      reservation = await supabase.rpc("reserve_unified_cart_tx", {
+        p_event_id: payload.eventId,
+        p_owner_id: user.id,
+        p_items: rpcItems,
+        p_promoter_id: promoterId,
+      })
     }
     const { data, error } = reservation
 
@@ -1195,7 +1244,7 @@ export async function startCheckoutWithPayment(
           cartItems,
         )
       }
-      const mapped = mapReserveRpcError(error.message)
+      const mapped = mapReserveRpcError(reserveRpcErrorText(error))
       if (mapped) return mapped
 
       logger.error({
@@ -1237,6 +1286,7 @@ export async function startCheckoutWithPayment(
       phone: buyer.buyerPhone,
     })
     await persistOrderGuestToken(orderId)
+    await issueCheckoutFulfillmentCookie(orderId)
     await persistCheckoutSecurityEvent({
       orderId,
       eventId: payload.eventId,
@@ -1262,9 +1312,10 @@ export async function startCheckoutWithPayment(
       if (addonsError) {
         await cleanupPendingOrder(orderId)
 
-        if (mapReserveRpcError(addonsError.message)) {
-          return { success: false, error: "out_of_stock" }
-        }
+        const mappedAddons = mapReserveRpcError(
+          reserveRpcErrorText(addonsError),
+        )
+        if (mappedAddons) return mappedAddons
 
         return {
           success: false,
@@ -1323,6 +1374,8 @@ export async function startCheckoutWithPayment(
 
     let initPoint: string
     const useSandbox = Boolean(payload.sandbox)
+    const reservedUntil = rows[0]?.reserved_until
+    const checkoutExpiresAt = resolveCheckoutExpiresAt(reservedUntil).toISOString()
 
     if (useSandbox) {
       const allowed = await assertSandboxCheckoutAllowed(payload.eventId, user.id)
@@ -1429,6 +1482,23 @@ export async function startCheckoutWithPayment(
           : `${siteUrl.replace(/\/$/, "")}/api/webhooks/${provider}`
 
       try {
+        await expireCheckoutPreferenceOnOrder(orderId)
+        await invalidateStaleCheckoutPreferences({
+          buyerId: user.id,
+          eventId: payload.eventId,
+          exceptOrderId: orderId,
+        })
+      } catch (error) {
+        logger.error({
+          context: "checkout/payment",
+          message: "stale_preference_invalidate_failed",
+          orderId,
+          eventId: payload.eventId,
+          error,
+        })
+      }
+
+      try {
         const session = await adapter.createCheckoutSession({
           orderId,
           amount: finalTotal,
@@ -1455,6 +1525,7 @@ export async function startCheckoutWithPayment(
             pending: urls.pending,
           },
           webhookUrl,
+          expiresAt: checkoutExpiresAt,
         })
 
         const admin = createAdminClient()
@@ -1527,16 +1598,13 @@ export async function startCheckoutWithPayment(
     revalidatePath("/superadmin")
     revalidatePath("/super-admin")
 
-    const reservedUntil = rows[0]?.reserved_until
-    const expiresAt = resolveCheckoutExpiresAt(reservedUntil).toISOString()
-
     return {
       success: true,
       tickets: reservedTickets,
       orderId,
       initPoint,
       paymentUrl: initPoint,
-      expiresAt,
+      expiresAt: checkoutExpiresAt,
       ...(reservedUntil ? { reservedUntil } : {}),
     }
   } catch (error) {
@@ -1548,6 +1616,8 @@ export async function startCheckoutWithPayment(
     if (isPhaseStockError(message)) {
       return resolvePhaseRolloverAfterError(supabase, payload.eventId, cartItems)
     }
+    const mappedUnexpected = mapReserveRpcError(message)
+    if (mappedUnexpected) return mappedUnexpected
 
     captureCriticalException(error, "checkout/start", {
       eventId: payload.eventId,

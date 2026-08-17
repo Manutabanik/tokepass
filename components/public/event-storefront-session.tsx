@@ -7,6 +7,7 @@ import { canUserSandboxCheckout } from "@/app/actions/checkout"
 import type { EventDetails } from "@/app/actions/public-events"
 import type { ResaleListingPublic } from "@/app/actions/resale"
 import { EventStorefront } from "@/components/public/event-storefront"
+import { extractAffiliateCode } from "@/lib/rrpp"
 import { createClient } from "@/lib/supabase/client"
 
 type BuyerPrefill = {
@@ -30,7 +31,7 @@ export function EventStorefrontSession({
   showBackLink?: boolean
 }) {
   const searchParams = useSearchParams()
-  const referralCode = searchParams.get("ref")
+  const referralCode = extractAffiliateCode(searchParams)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [initialBuyer, setInitialBuyer] = useState<BuyerPrefill | null>(null)
   const [sandboxEligible, setSandboxEligible] = useState(false)

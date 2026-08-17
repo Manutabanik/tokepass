@@ -33,12 +33,12 @@ export function BuyersPanel({ buyers }: { buyers: BuyerRow[] }) {
     orders: BuyerOrderRow[]
   } | null>(null)
   const [pending, startTransition] = useTransition()
+  if (!selectedId && detail) {
+    setDetail(null)
+  }
 
   useEffect(() => {
-    if (!selectedId) {
-      setDetail(null)
-      return
-    }
+    if (!selectedId) return
     startTransition(async () => {
       const result = await getBuyerPurchaseHistory(selectedId)
       if (!result.buyer) {

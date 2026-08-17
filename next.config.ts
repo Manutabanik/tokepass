@@ -141,6 +141,26 @@ const nextConfig: NextConfig = {
       },
     ]
   },
+  async rewrites() {
+    return [
+      {
+        source: "/events/:id/queue",
+        destination: "/event/:id/queue",
+      },
+      {
+        source: "/eventos/:id/queue",
+        destination: "/event/:id/queue",
+      },
+      {
+        source: "/events/:id/checkout",
+        destination: "/event/:id/checkout",
+      },
+      {
+        source: "/eventos/:id/checkout",
+        destination: "/event/:id/checkout",
+      },
+    ]
+  },
   async headers() {
     return [
       {

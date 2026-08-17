@@ -1,7 +1,7 @@
 "use client"
 
 import { Loader2, Plus, Tag } from "lucide-react"
-import { useMemo, useState, useTransition } from "react"
+import { useEffect, useMemo, useState, useTransition } from "react"
 import { toast } from "sonner"
 
 import {
@@ -71,6 +71,15 @@ export function EventCouponsManager({
     () => coupons.filter((item) => item.is_active).length,
     [coupons],
   )
+  const [nowMs, setNowMs] = useState(0)
+  useEffect(() => {
+    const start = window.setTimeout(() => setNowMs(Date.now()), 0)
+    const id = window.setInterval(() => setNowMs(Date.now()), 60_000)
+    return () => {
+      window.clearTimeout(start)
+      window.clearInterval(id)
+    }
+  }, [])
 
   function resetForm() {
     setCode("")
@@ -170,8 +179,9 @@ export function EventCouponsManager({
                 const exhausted =
                   row.max_uses != null && row.current_uses >= row.max_uses
                 const expired =
+                  nowMs > 0 &&
                   row.valid_until != null &&
-                  new Date(row.valid_until).getTime() < Date.now()
+                  new Date(row.valid_until).getTime() < nowMs
                 return (
                   <TableRow key={row.id}>
                     <TableCell className="font-mono font-semibold tracking-wide">

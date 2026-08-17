@@ -11,7 +11,6 @@ import { logger } from "@/lib/logger"
 import {
   OMNI_SEARCH_LIMIT,
   OMNI_SEARCH_MIN_CHARS,
-  type OmniArtistHit,
   type OmniEventHit,
   type OmniSearchResult,
 } from "@/lib/omni-search"

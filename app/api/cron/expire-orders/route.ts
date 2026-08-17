@@ -24,7 +24,9 @@ function authorizeCron(request: NextRequest): boolean {
 }
 
 /**
- * Libera stock de checkouts abandonados.
+ * Libera stock de checkouts abandonados (barrido). El self-heal en
+ * get_event_seating_* / get_event_tier_live_stock / assert_cascade_stock_available
+ * ya libera holds expirados al consultar disponibilidad.
  * - GA / pending: TTL = GA_CHECKOUT_HOLD_INTERVAL, batch 2500 en RPC.
  * - Seating: reserved_until vía expire_seating_orders.
  * - Cart holds (sin orden): expire_seating_cart_holds.

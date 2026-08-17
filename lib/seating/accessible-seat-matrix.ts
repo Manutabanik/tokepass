@@ -67,3 +67,54 @@ export function groupSeatsForMatrix(rows: AccessibleRowNode[]): SeatMatrixGroup[
       }),
     }))
 }
+
+function unpaddedToken(seat: AccessibleSeatNode): string {
+  const token = compactSeatToken(seat.label, seat.number)
+  return token.replace(/^0+(?=\d)/, "") || token
+}
+
+export function formatSeatChunkTitle(
+  base: string,
+  seats: AccessibleSeatNode[],
+): string {
+  const heading = base.trim() || "Lugares"
+  if (seats.length === 0) return heading
+  const first = unpaddedToken(seats[0]!)
+  const last = unpaddedToken(seats[seats.length - 1]!)
+  if (/^fila\b/i.test(heading)) {
+    if (first === last) return `${heading} · ${first}`
+    return `${heading} · ${first} a ${last}`
+  }
+  if (first === last) return `${heading} ${first}`.trim()
+  return `${heading} ${first} a ${last}`
+}
+
+const DEFAULT_CHUNK_SIZE = 10
+
+export function selectableSeats(
+  seats: AccessibleSeatNode[],
+): AccessibleSeatNode[] {
+  return seats.filter(
+    (seat) => seat.status === "available" || seat.status === "selected",
+  )
+}
+
+export function chunkSeatMatrixGroups(
+  groups: SeatMatrixGroup[],
+  size = DEFAULT_CHUNK_SIZE,
+): SeatMatrixGroup[] {
+  const chunkSize = Math.max(1, Math.floor(size) || DEFAULT_CHUNK_SIZE)
+  const chunks: SeatMatrixGroup[] = []
+  for (const group of groups) {
+    const seats = selectableSeats(group.seats)
+    if (seats.length === 0) continue
+    for (let index = 0; index < seats.length; index += chunkSize) {
+      const slice = seats.slice(index, index + chunkSize)
+      chunks.push({
+        title: formatSeatChunkTitle(group.title, slice),
+        seats: slice,
+      })
+    }
+  }
+  return chunks
+}

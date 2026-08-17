@@ -47,8 +47,9 @@ begin
         and e.organizer_id = p_organizer_id
     );
 
-  -- Fallback MVP: si aún no hay órdenes pagadas (checkout actual solo
-  -- reserva tickets), estimamos GMV desde tiers × tickets emitidos.
+  -- DEPRECATED (P86): este fallback a precio de lista se elimina en
+  -- 20261109500000_p86_organizer_metrics_paid_ledger.sql. El GMV vive
+  -- solo en SUM(orders.total_amount) WHERE status = 'paid'.
   if v_total_revenue = 0 then
     select coalesce(sum(tt.price), 0)
       into v_ticket_gmv

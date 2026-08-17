@@ -2,11 +2,15 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import {
+  defaultInventoryDayId,
+  formatInventoryDayOption,
   isFullPassDayId,
   isTicketValidForNow,
+  newScheduleDayId,
   normalizeDayId,
   parseScheduleDays,
   resolveEventAnchorDate,
+  scheduleDaysFromEvent,
 } from "@/lib/event-schedule"
 
 describe("event-schedule", () => {
@@ -25,6 +29,12 @@ describe("event-schedule", () => {
     },
   ]
 
+  it("labels inventory day options and defaults new SKUs to the first jornada", () => {
+    assert.equal(defaultInventoryDayId(days), "d1")
+    assert.equal(defaultInventoryDayId(days.slice(0, 1)), null)
+    assert.match(formatInventoryDayOption(days[0]!, 0), /Día 1/)
+  })
+
   it("normalizes abono day ids", () => {
     assert.equal(isFullPassDayId(null), true)
     assert.equal(isFullPassDayId("all"), true)
@@ -32,9 +42,38 @@ describe("event-schedule", () => {
     assert.equal(normalizeDayId("d1"), "d1")
   })
 
+  it("generates uuid jornada ids", () => {
+    const id = newScheduleDayId()
+    assert.match(
+      id,
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    )
+  })
+
   it("parses schedule days", () => {
     assert.equal(parseScheduleDays(days).length, 2)
     assert.equal(parseScheduleDays(null).length, 0)
+  })
+
+  it("prefers relational jornadas over JSONB mirror", () => {
+    const relational = [
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        title: "Relacional",
+        start_time: "2026-11-14T20:00:00.000Z",
+        end_time: "2026-11-15T04:00:00.000Z",
+      },
+    ]
+    const parsed = scheduleDaysFromEvent({
+      relational,
+      json: days,
+    })
+    assert.equal(parsed.length, 1)
+    assert.equal(parsed[0]?.title, "Relacional")
+    assert.equal(
+      scheduleDaysFromEvent({ relational: [], json: days }).length,
+      2,
+    )
   })
 
   it("parses camelCase form days and JSON strings", () => {

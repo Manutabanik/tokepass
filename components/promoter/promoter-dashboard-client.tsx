@@ -18,14 +18,20 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { formatCurrency, formatPercent } from "@/lib/format"
+import { buildRrppShareUrl } from "@/lib/rrpp"
 
-function buildShareUrl(eventId: string | null, referralCode: string) {
+function buildShareUrl(eventId: string | null, eventSlug: string | null, referralCode: string) {
   const origin =
     typeof window !== "undefined" ? window.location.origin : "https://tokepass.app"
   if (eventId) {
-    return `${origin}/events/${eventId}?ref=${encodeURIComponent(referralCode)}`
+    return buildRrppShareUrl({
+      origin,
+      id: eventId,
+      slug: eventSlug,
+      referralCode,
+    })
   }
-  return `${origin}/events?ref=${encodeURIComponent(referralCode)}`
+  return `${origin}/events?rrpp=${encodeURIComponent(referralCode)}`
 }
 
 export function PromoterDashboardClient({
@@ -39,7 +45,11 @@ export function PromoterDashboardClient({
 
   const shareUrl = useMemo(() => {
     if (!metrics) return ""
-    return buildShareUrl(metrics.featuredEventId, metrics.referralCode)
+    return buildShareUrl(
+      metrics.featuredEventId,
+      metrics.featuredEventSlug,
+      metrics.referralCode,
+    )
   }, [metrics])
 
   async function handleCopy() {
@@ -124,8 +134,9 @@ export function PromoterDashboardClient({
           Hola, {metrics.name}
         </h1>
         <p className="mt-1 text-sm text-zinc-400">
-          Comisión {formatPercent(metrics.commissionRate * 100, 0)} sobre ventas
-          pagadas.
+          {metrics.commissionType === "fixed"
+            ? `Comisión ${formatCurrency(metrics.commissionFixedAmount)} por entrada pagada.`
+            : `Comisión ${formatPercent(metrics.commissionRate * 100, 0)} sobre ventas pagadas.`}
         </p>
       </header>
 
@@ -158,7 +169,7 @@ export function PromoterDashboardClient({
         </Button>
         <p className="mt-3 flex items-center justify-center gap-1.5 text-[11px] text-zinc-500">
           <Link2 className="size-3.5" aria-hidden="true" />
-          Incluye ?ref={metrics.referralCode}
+          Incluye ?rrpp={metrics.referralCode}
         </p>
       </section>
 
@@ -174,7 +185,7 @@ export function PromoterDashboardClient({
           </CardHeader>
           <CardContent className="px-5 pb-5">
             <p className="text-sm text-zinc-500">
-              Visitas únicas (1h) con tu ?ref=
+              Visitas unicas (1h) con tu ?rrpp=
             </p>
           </CardContent>
         </Card>

@@ -54,6 +54,90 @@ describe("buildAccessibleSeatTree", () => {
     assert.equal(tree[0]?.kind, "ga")
     assert.equal(tree[0]?.name, "Campo")
   })
+
+  it("incluye mesas agrupadas en una zona", () => {
+    const map = emptyVenueMap()
+    map.zones = [
+      {
+        id: "mesas",
+        name: "Mesas",
+        color: "#22c55e",
+        price: 50000,
+        polygon: [
+          { x: 0, y: 0 },
+          { x: 10, y: 0 },
+          { x: 10, y: 10 },
+        ],
+        layoutType: "table_combo",
+        sellMode: "group",
+        rows: 1,
+        itemsPerRow: 2,
+        capacityPerUnit: 4,
+        capacity: 8,
+        labelPrefix: "Mesa ",
+      },
+    ]
+    map.elements = [
+      {
+        id: "t-1",
+        type: "round_table",
+        label: "Mesa 1",
+        category: "commercial",
+        sectorName: "Mesas",
+        groupName: "Mesas",
+        groupId: "mesas",
+        x: 10,
+        y: 10,
+        width: 24,
+        height: 24,
+        rotation: 0,
+        price: 50000,
+        color: "#22c55e",
+        opacity: 1,
+        chairCount: 4,
+        sideA: 2,
+        sideB: 2,
+        sellMode: "group",
+        capacity: 4,
+        seats: [],
+      },
+      {
+        id: "t-2",
+        type: "round_table",
+        label: "Mesa 2",
+        category: "commercial",
+        sectorName: "Mesas",
+        groupName: "Mesas",
+        groupId: "mesas",
+        x: 40,
+        y: 10,
+        width: 24,
+        height: 24,
+        rotation: 0,
+        price: 50000,
+        color: "#22c55e",
+        opacity: 1,
+        chairCount: 4,
+        sideA: 2,
+        sideB: 2,
+        sellMode: "group",
+        capacity: 4,
+        seats: [],
+      },
+    ]
+    const tree = buildAccessibleSeatTree({
+      map,
+      selectedSeatIds: ["t-2"],
+    })
+    const sector = tree.find((item) => item.id === "mesas")
+    assert.equal(sector?.kind, "numbered")
+    assert.equal(sector?.rows.flatMap((row) => row.seats).length, 2)
+    assert.equal(
+      sector?.rows.flatMap((row) => row.seats).find((seat) => seat.id === "t-2")
+        ?.status,
+      "selected",
+    )
+  })
 })
 
 describe("assignContiguousSeats", () => {

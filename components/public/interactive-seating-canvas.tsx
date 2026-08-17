@@ -3,10 +3,11 @@
 import {
   ArrowLeft,
   ArrowRight,
+  Locate,
   Minus,
   Plus,
-  RotateCcw,
   Trash2,
+  X,
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
@@ -28,6 +29,7 @@ import { toast } from "sonner"
 
 import { useSeatingOccupancyRealtime } from "@/hooks/use-seating-occupancy-realtime"
 import { storefrontLimitMessage } from "@/lib/checkout-limits"
+import { storefrontLineTotal } from "@/lib/checkout/charge-unit"
 import { formatCurrency } from "@/lib/format"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import { flattenVenueMapSeats, type FlattenedVenueSeat } from "@/lib/seating/venue-map-geometry"
@@ -48,6 +50,7 @@ import { VenueMapElementLayer } from "@/components/venue/venue-map-element-layer
 import { VenueMapZoneLayer } from "@/components/venue/venue-map-zone-layer"
 import { TheatreSeatSymbol } from "@/components/admin/venue-svg-symbols"
 import {
+  storefrontSelectionTotal,
   useStorefrontSeatStore,
   type StorefrontSelectedItem,
 } from "@/lib/stores/storefront-seat-store"
@@ -121,8 +124,10 @@ export function InteractiveSeatingCanvas({
   selectedZoneId = null,
   onSelectZone,
   unavailableZoneIds = [],
-  silentHover: _silentHover = false,
   hideChrome = false,
+  hideToolbar = false,
+  toolbarTitle = null,
+  onCloseMap,
   readOnly = false,
   maxSelectable,
   heldSeatIds = [],
@@ -144,6 +149,9 @@ export function InteractiveSeatingCanvas({
   unavailableZoneIds?: string[]
   silentHover?: boolean
   hideChrome?: boolean
+  hideToolbar?: boolean
+  toolbarTitle?: string | null
+  onCloseMap?: () => void
   readOnly?: boolean
   maxSelectable?: number
   heldSeatIds?: string[]
@@ -185,6 +193,11 @@ export function InteractiveSeatingCanvas({
   const [liveOccupancy, setLiveOccupancy] = useState<Record<string, SeatStatus>>(
     {},
   )
+  const [occupancyEventId, setOccupancyEventId] = useState(eventId)
+  if (eventId !== occupancyEventId) {
+    setOccupancyEventId(eventId)
+    setLiveOccupancy({})
+  }
   const applyOccupancyPatch = useCallback((patch: Record<string, SeatStatus>) => {
     setLiveOccupancy((current) => ({ ...current, ...patch }))
   }, [])
@@ -193,9 +206,6 @@ export function InteractiveSeatingCanvas({
     applyOccupancyPatch,
     "canvas",
   )
-  useEffect(() => {
-    setLiveOccupancy({})
-  }, [eventId])
   const occupancy = useMemo(
     () => ({ ...occupancyBySeatId, ...liveOccupancy }),
     [liveOccupancy, occupancyBySeatId],
@@ -250,10 +260,7 @@ export function InteractiveSeatingCanvas({
     (sum, item) => sum + Math.max(1, Math.floor(item.capacity) || 1),
     0,
   )
-  const subtotal = liveSelectedItems.reduce(
-    (sum, item) => sum + item.price * Math.max(1, Math.floor(item.capacity) || 1),
-    0,
-  )
+  const subtotal = storefrontSelectionTotal(liveSelectedItems)
   const stageLabel = map.stage?.label?.trim() || "ESCENARIO"
   const pxPerUnit = (wrapWidth / VIEW.width) * zoom
   const hitRadius = Math.max(8, MIN_HIT_PX / 2 / Math.max(pxPerUnit, 0.05))
@@ -322,16 +329,24 @@ export function InteractiveSeatingCanvas({
     )
   }
 
+  const applyContextCameraRef = useRef(applyContextCamera)
+  useEffect(() => {
+    applyContextCameraRef.current = applyContextCamera
+  })
+
   useEffect(() => {
     if (focusTick <= 0) return
-    applyContextCamera(focusedMapIds)
+    applyContextCameraRef.current(focusedMapIds)
   }, [focusTick, focusedMapIds])
 
   const assignedFocusKey = liveSelectedItems.map((item) => item.id).join("|")
 
   useEffect(() => {
     const ids = assignedFocusKey ? assignedFocusKey.split("|") : []
-    const timer = window.setTimeout(() => applyContextCamera(ids), 40)
+    const timer = window.setTimeout(
+      () => applyContextCameraRef.current(ids),
+      40,
+    )
     return () => window.clearTimeout(timer)
   }, [assignedFocusKey, wrapWidth, wrapHeight])
 
@@ -521,21 +536,22 @@ export function InteractiveSeatingCanvas({
       ? `Continuar con ${selectionCount} ${selectionCount === 1 ? "lugar" : "lugares"}`
       : "Continuar"
   const canContinue = selectionCount > 0 && !pending
+  const showModalActionFooter = Boolean(onCloseMap) && hideChrome
   const focusItem = liveSelectedItems[liveSelectedItems.length - 1] ?? null
   const focusCard = focusItem
     ? storefrontFocusCard(focusItem, map)
     : null
 
   const panel = (
-    <aside className="hidden h-full w-[30%] shrink-0 flex-col border-l border-white/10 bg-zinc-950/80 p-5 md:flex">
-      <p className="text-sm font-bold text-white">Resumen de tu lugar</p>
-      <p className="mt-1 text-sm leading-relaxed text-zinc-400">
+    <aside className="hidden h-full w-[30%] shrink-0 flex-col border-l border-border bg-card/80 p-5 md:flex">
+      <p className="text-sm font-bold text-foreground">Resumen de tu lugar</p>
+      <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
         Al continuar, la butaca queda reservada {HOLD_MINUTES} minutos para que
         completes el pago.
       </p>
       <ul className="mt-5 space-y-3">
         {map.sectors.map((sector) => (
-          <li key={sector.id} className="flex items-center gap-3 text-base text-zinc-100">
+          <li key={sector.id} className="flex items-center gap-3 text-base text-foreground">
             <span
               className="size-4 rounded-full"
               style={{
@@ -544,7 +560,7 @@ export function InteractiveSeatingCanvas({
               }}
             />
             <span className="min-w-0 flex-1 truncate">{sector.name}</span>
-            <span className="text-sm text-zinc-400">
+            <span className="text-sm text-muted-foreground">
               {formatCurrency(seatPrice(sector.id, sector.price))}
             </span>
           </li>
@@ -557,12 +573,12 @@ export function InteractiveSeatingCanvas({
         </div>
       ) : null}
 
-      <p className="mt-8 text-sm font-bold text-white">
+      <p className="mt-8 text-sm font-bold text-foreground">
         Lugares seleccionados ({selectionCount})
       </p>
       <div className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto">
         {liveSelectedItems.length === 0 ? (
-          <p className="text-base leading-relaxed text-zinc-400">
+          <p className="text-base leading-relaxed text-muted-foreground">
             Tocá mesas, zonas o butacas para armar tu lista. Un segundo toque
             las saca.
           </p>
@@ -570,28 +586,28 @@ export function InteractiveSeatingCanvas({
           liveSelectedItems.map((item) => (
             <div
               key={item.id}
-              className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-3"
+              className="flex items-center gap-2 rounded-xl border border-border bg-secondary/40 px-3 py-3"
             >
               <span
                 className="size-3 rounded-full"
                 style={{ backgroundColor: item.color ?? "#34d399" }}
               />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-base font-semibold text-white">
+                <p className="truncate text-base font-semibold text-foreground">
                   {item.name}
                 </p>
                 {item.capacity > 1 ? (
-                  <p className="text-sm text-zinc-300">{item.capacity} lugares</p>
+                  <p className="text-sm text-muted-foreground">{item.capacity} lugares</p>
                 ) : null}
               </div>
-              <p className="text-sm font-semibold text-emerald-300">
-                {formatCurrency(item.price * Math.max(1, item.capacity))}
+              <p className="text-sm font-semibold text-primary">
+                {formatCurrency(storefrontLineTotal(item))}
               </p>
               <Button
                 type="button"
                 size="icon"
                 variant="ghost"
-                className="size-11 text-zinc-400 hover:text-white"
+                className="size-11 text-muted-foreground hover:text-foreground"
                 onClick={() => {
                   vibrateTap()
                   removeSelectedItem(item.id)
@@ -606,10 +622,10 @@ export function InteractiveSeatingCanvas({
         )}
       </div>
 
-      <div className="mt-4 space-y-3 border-t border-white/10 pt-4">
+      <div className="mt-4 space-y-3 border-t border-border pt-4">
         <div className="flex items-baseline justify-between">
-          <span className="text-base text-zinc-400">Subtotal</span>
-          <span className="text-2xl font-black text-white">
+          <span className="text-base text-muted-foreground">Subtotal</span>
+          <span className="text-2xl font-black text-foreground">
             {formatCurrency(subtotal)}
           </span>
         </div>
@@ -618,7 +634,7 @@ export function InteractiveSeatingCanvas({
           size="lg"
           disabled={!canContinue}
           onClick={() => onContinue(selectedSeats)}
-          className="h-12 w-full rounded-2xl bg-emerald-500 py-6 text-base font-black text-black shadow-[0_0_25px_rgba(16,185,129,0.4)] hover:bg-emerald-400"
+          className="h-12 w-full rounded-2xl bg-primary py-6 text-base font-black text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90"
         >
           {continueLabel}
           <ArrowRight className="size-4" aria-hidden="true" />
@@ -627,7 +643,7 @@ export function InteractiveSeatingCanvas({
           <Button
             type="button"
             variant="ghost"
-            className="h-11 w-full text-zinc-400"
+            className="h-11 w-full text-muted-foreground"
             onClick={onBack}
           >
             Volver
@@ -641,9 +657,11 @@ export function InteractiveSeatingCanvas({
       <div
         className={cn(
           "relative min-h-0 min-w-0 flex-1 overflow-hidden",
-          hideChrome ? "h-full w-full md:w-full" : "md:w-[70%]",
+          hideChrome ? "h-full w-full bg-muted md:w-full" : "md:w-[70%]",
         hideChrome
-          ? "pb-0"
+          ? showModalActionFooter
+            ? "pb-[max(5.75rem,calc(4.75rem+env(safe-area-inset-bottom)))]"
+            : "pb-0"
           : fillParent
             ? selectedZoneId
               ? "pb-2 md:pb-14"
@@ -695,16 +713,26 @@ export function InteractiveSeatingCanvas({
         ref={wrapRef}
         className={cn(
           "h-full w-full",
+          hideChrome ? "bg-muted" : "bg-background",
           readOnly ? "pointer-events-none touch-pan-y" : "touch-none",
         )}
       >
         <TransformComponent
-          wrapperClass="!h-full !w-full !overflow-hidden"
-          contentClass="!h-full !w-full"
+          wrapperClass={
+            hideChrome
+              ? "!h-full !w-full !overflow-hidden !bg-muted"
+              : "!h-full !w-full !overflow-hidden !bg-background"
+          }
+          contentClass={
+            hideChrome ? "!h-full !w-full !bg-muted" : "!h-full !w-full !bg-background"
+          }
         >
         <svg
           viewBox={`0 ${-VIEW_TOP_PAD} ${VIEW.width} ${VIEW.height + VIEW_TOP_PAD}`}
-          className="h-full w-full select-none"
+          className={cn(
+            "h-full w-full select-none",
+            hideChrome ? "bg-muted" : "bg-background",
+          )}
           role="group"
           aria-label={
             readOnly
@@ -717,7 +745,7 @@ export function InteractiveSeatingCanvas({
             y={-VIEW_TOP_PAD}
             width={VIEW.width}
             height={VIEW.height + VIEW_TOP_PAD}
-            className="fill-zinc-950"
+            className={hideChrome ? "fill-muted" : "fill-background"}
           />
           <g>
             <rect
@@ -733,7 +761,7 @@ export function InteractiveSeatingCanvas({
               y={-19}
               textAnchor="middle"
               dominantBaseline="central"
-              className="pointer-events-none fill-violet-200 text-[11px] font-bold tracking-[0.28em]"
+              className="pointer-events-none fill-violet-700 text-[11px] font-bold tracking-[0.28em] dark:fill-violet-200"
             >
               {stageLabel}
             </text>
@@ -746,7 +774,7 @@ export function InteractiveSeatingCanvas({
                 width={aisle.width}
                 height={aisle.height}
                 rx={8}
-                className="pointer-events-none fill-zinc-900 stroke-white/5"
+                className="pointer-events-none fill-foreground/10 stroke-border"
               />
             ))}
             {map.stage ? (
@@ -849,9 +877,10 @@ export function InteractiveSeatingCanvas({
                 <g
                   key={seat.id}
                   id={`venue-sel-${seat.id}`}
-                  className={
-                    selected || highlighted ? "animate-pulse-subtle" : undefined
-                  }
+                  className={cn(
+                    !readOnly && seatVisible && "cursor-pointer",
+                    (selected || highlighted) && "animate-pulse-subtle",
+                  )}
                   style={{
                     opacity: seatVisible ? (dimmed ? 0.7 : 1) : 0,
                     pointerEvents: readOnly || !seatVisible ? "none" : "auto",
@@ -936,23 +965,42 @@ export function InteractiveSeatingCanvas({
       className={cn(
         "flex w-full flex-col",
         fillParent ? "h-full min-h-0" : "h-auto",
+        hideChrome && "relative bg-muted",
       )}
     >
-      {readOnly ? null : (
+      {readOnly || hideToolbar ? null : (
+      <div
+        className={cn(
+          hideChrome &&
+            !onCloseMap &&
+            "absolute inset-x-0 top-0 z-20 px-3 pt-2",
+        )}
+      >
       <ExternalMapToolbar
+        title={toolbarTitle}
         showLodBack={lodEnabled && viewMode === "micro"}
+        selectionCount={liveSelectedItems.length}
+        showClear={!readOnly}
         onExitLod={exitLodView}
         onZoomIn={handleZoomIn}
         onZoomOut={handleZoomOut}
         onResetView={handleResetView}
+        onClearSelection={() => {
+          useStorefrontSeatStore.getState().clearSelectedItems()
+        }}
+        onClose={onCloseMap}
       />
+      </div>
       )}
       <div
         className={cn(
-          "relative flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-zinc-950 md:flex-row",
-          fillParent
-            ? "rounded-2xl border border-border"
-            : "h-[600px] rounded-3xl border border-white/10 shadow-2xl md:h-[650px]",
+          "relative flex min-h-0 w-full flex-1 flex-col overflow-hidden md:flex-row",
+          hideChrome ? "bg-muted" : "bg-background",
+          hideChrome
+            ? "rounded-none border-0 shadow-none"
+            : fillParent
+              ? "rounded-2xl border border-border"
+              : "h-[600px] rounded-3xl border border-border shadow-2xl md:h-[650px]",
         )}
       >
       {mapArea}
@@ -961,18 +1009,18 @@ export function InteractiveSeatingCanvas({
       {hideChrome ? null : (
       <div
         className={cn(
-          "absolute inset-x-0 bottom-0 z-30 border-t border-white/10 bg-black/90 px-3 py-2.5 backdrop-blur-xl md:hidden pb-[max(0.65rem,env(safe-area-inset-bottom))]",
+          "absolute inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 px-3 py-2.5 backdrop-blur-xl md:hidden pb-[max(0.65rem,env(safe-area-inset-bottom))]",
           selectedZoneId && "hidden",
         )}
       >
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-extrabold text-white">
+            <p className="truncate text-sm font-extrabold text-foreground">
               {liveSelectedItems.length === 0
                 ? "Elegí tus lugares"
                 : formatCurrency(subtotal)}
             </p>
-            <p className="truncate text-xs text-zinc-400">
+            <p className="truncate text-xs text-muted-foreground">
               {selectionCount > 0
                 ? `${selectionCount} ${selectionCount === 1 ? "lugar" : "lugares"}`
                 : "Un toque suma · otro toque saca"}
@@ -983,7 +1031,7 @@ export function InteractiveSeatingCanvas({
             size="lg"
             disabled={!canContinue}
             onClick={() => onContinue(selectedSeats)}
-            className="h-11 shrink-0 rounded-2xl bg-emerald-500 px-4 text-sm font-black text-black hover:bg-emerald-400"
+            className="h-11 shrink-0 rounded-2xl bg-primary px-4 text-sm font-black text-primary-foreground hover:bg-primary/90"
           >
             <ArrowRight className="size-4" aria-hidden="true" />
             {continueLabel}
@@ -992,6 +1040,12 @@ export function InteractiveSeatingCanvas({
       </div>
       )}
       </div>
+      {showModalActionFooter && onCloseMap ? (
+        <MapModalActionFooter
+          selectionCount={selectionCount}
+          onClose={onCloseMap}
+        />
+      ) : null}
     </div>
   )
 
@@ -1005,22 +1059,22 @@ export function InteractiveSeatingCanvas({
           if (!open) markActivity()
         }}
       >
-        <DialogContent className="border-white/10 bg-zinc-950 text-white sm:max-w-md">
+        <DialogContent className="border-border bg-card text-card-foreground sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-xl font-bold">
+            <DialogTitle className="text-xl font-bold text-foreground">
               Tu butaca sigue elegida
             </DialogTitle>
-            <DialogDescription className="text-base leading-relaxed text-zinc-300">
+            <DialogDescription className="text-base leading-relaxed text-muted-foreground">
               Pasaron 5 minutos sin movimiento. Si continuás ahora, la butaca
               queda reservada {HOLD_MINUTES} minutos. Si esperás más, otra
               persona podría tomarla.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="border-white/10 bg-transparent">
+          <DialogFooter className="border-border bg-transparent">
             <Button
               type="button"
               variant="outline"
-              className="h-11 border-white/15 text-white"
+              className="h-11"
               onClick={() => {
                 markActivity()
                 setIdleOpen(false)
@@ -1031,7 +1085,7 @@ export function InteractiveSeatingCanvas({
             <Button
               type="button"
               disabled={!canContinue}
-              className="h-11 bg-emerald-500 font-bold text-black hover:bg-emerald-400"
+              className="h-11 bg-primary font-bold text-primary-foreground hover:bg-primary/90"
               onClick={() => {
                 markActivity()
                 setIdleOpen(false)
@@ -1047,64 +1101,134 @@ export function InteractiveSeatingCanvas({
   )
 }
 
+function MapModalActionFooter({
+  selectionCount,
+  onClose,
+}: {
+  selectionCount: number
+  onClose: () => void
+}) {
+  const hasSelection = selectionCount > 0
+  const label = hasSelection
+    ? `Confirmar ${selectionCount} ${selectionCount === 1 ? "lugar" : "lugares"}`
+    : "Volver al resumen"
+
+  return (
+    <div className="absolute bottom-0 left-0 z-50 flex w-full justify-center border-t border-border bg-background/80 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-lg">
+      <button
+        type="button"
+        onClick={onClose}
+        className={cn(
+          "w-full max-w-md rounded-xl py-3.5 text-lg font-bold transition-all duration-200",
+          hasSelection
+            ? "bg-primary text-primary-foreground shadow-[0_0_15px_color-mix(in_srgb,var(--primary)_30%,transparent)] hover:-translate-y-0.5 hover:bg-primary/90 hover:shadow-[0_0_25px_color-mix(in_srgb,var(--primary)_45%,transparent)]"
+            : "border border-border bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground",
+        )}
+      >
+        {label}
+      </button>
+    </div>
+  )
+}
+
 function ExternalMapToolbar({
+  title,
   showLodBack,
+  selectionCount,
+  showClear,
   onExitLod,
   onZoomIn,
   onZoomOut,
   onResetView,
+  onClearSelection,
+  onClose,
 }: {
+  title?: string | null
   showLodBack: boolean
+  selectionCount: number
+  showClear: boolean
   onExitLod: () => void
   onZoomIn: () => void
   onZoomOut: () => void
   onResetView: () => void
+  onClearSelection: () => void
+  onClose?: () => void
 }) {
+  const hasSelection = showClear && selectionCount > 0
+  const heading = showLodBack ? "Volver al plano general" : title?.trim()
   const toolClass =
-    "rounded-lg bg-secondary p-1.5 text-xs font-bold transition-all hover:bg-secondary/80"
+    "grid size-10 place-items-center rounded-md text-foreground transition-all duration-200 hover:bg-background/80"
 
   return (
-    <div className="mb-3 flex items-center justify-between px-1">
-      {showLodBack ? (
-        <button
-          type="button"
-          onClick={onExitLod}
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground transition-all hover:text-foreground"
-        >
-          <ArrowLeft className="size-3.5" aria-hidden="true" />
-          Volver al plano general
-        </button>
-      ) : (
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Plano Interactivo del Recinto
-        </span>
-      )}
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={onZoomIn}
-          aria-label="Acercar"
-          className={toolClass}
-        >
-          <Plus className="size-3.5" aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          onClick={onZoomOut}
-          aria-label="Alejar"
-          className={toolClass}
-        >
-          <Minus className="size-3.5" aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          onClick={onResetView}
-          aria-label="Restablecer vista"
-          className="flex items-center gap-1.5 rounded-lg bg-secondary px-3 py-1.5 text-xs font-bold transition-all hover:bg-secondary/80"
-        >
-          <RotateCcw className="size-3.5" aria-hidden="true" />
-          Restablecer Vista
-        </button>
+    <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-4 p-4">
+      <div className="min-w-0 flex-1">
+        {showLodBack ? (
+          <button
+            type="button"
+            onClick={onExitLod}
+            className="inline-flex min-h-11 max-w-full items-center gap-1.5 text-sm font-semibold text-muted-foreground transition-all duration-200 hover:text-foreground"
+          >
+            <ArrowLeft className="size-4 shrink-0" aria-hidden="true" />
+            <span className="truncate">{heading}</span>
+          </button>
+        ) : heading ? (
+          <p className="truncate text-sm font-bold text-foreground">{heading}</p>
+        ) : (
+          <span className="sr-only">Mapa del recinto</span>
+        )}
+      </div>
+
+      <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+        {hasSelection ? (
+          <button
+            type="button"
+            onClick={onClearSelection}
+            className="flex min-h-11 items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium text-destructive transition-all duration-200 hover:bg-destructive/10"
+          >
+            <Trash2 className="size-3.5" aria-hidden="true" />
+            Desmarcar todo
+          </button>
+        ) : null}
+        {hasSelection ? (
+          <span className="mx-2 h-5 w-px shrink-0 bg-border" aria-hidden="true" />
+        ) : null}
+        <div className="flex items-center gap-1 rounded-lg bg-secondary/80 p-1">
+          <button
+            type="button"
+            onClick={onZoomIn}
+            aria-label="Acercar"
+            className={toolClass}
+          >
+            <Plus className="size-4" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={onZoomOut}
+            aria-label="Alejar"
+            className={toolClass}
+          >
+            <Minus className="size-4" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={onResetView}
+            aria-label="Centrar mapa"
+            className={toolClass}
+          >
+            <Locate className="size-4" aria-hidden="true" />
+          </button>
+        </div>
+        {onClose ? (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Cerrar"
+            className="ml-1 inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-secondary px-3 text-sm font-bold text-foreground transition-all duration-200 hover:bg-secondary/80"
+          >
+            <X className="size-4" aria-hidden="true" />
+            <span className="hidden sm:inline">Cerrar</span>
+          </button>
+        ) : null}
       </div>
     </div>
   )

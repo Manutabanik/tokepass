@@ -1,7 +1,6 @@
 "use client"
 
 import {
-  ArrowLeft,
   BadgeCheck,
   Flame,
   Music2,
@@ -15,6 +14,8 @@ import type { EventDetails } from "@/app/actions/public-events"
 import type { ResaleListingPublic } from "@/app/actions/resale"
 import { EventDateSelector } from "@/components/public/event-date-selector"
 import { EventActionBar } from "@/components/public/event-action-bar"
+import { EventStorefrontBuyBox } from "@/components/public/event-storefront-buy-box"
+import { EventStorefrontPurchaseDock } from "@/components/public/event-storefront-purchase-dock"
 import { AnalyticsTracker } from "@/components/public/analytics-tracker"
 import { EventAboutExpandable } from "@/components/public/event-about-expandable"
 import { EventExperienceGallery } from "@/components/public/event-experience-gallery"
@@ -54,7 +55,6 @@ import { useCheckoutStore } from "@/lib/stores/checkout-store"
 import { useStorefrontChromeStore } from "@/lib/stores/storefront-chrome-store"
 import { useStorefrontSeatStore } from "@/lib/stores/storefront-seat-store"
 import {
-  formatCurrency,
   formatEventDay,
   formatEventDayMonthNumeric,
   formatEventWeekdayShort,
@@ -175,7 +175,16 @@ export function EventStorefront({
     window.scrollTo(0, 0)
   }, [viewMode])
 
-  const showInfoCta = !finished && !soldOut && viewMode === "info"
+  const totalStock = useMemo(
+    () =>
+      event.tiers.reduce(
+        (sum, tier) => sum + Math.max(0, tier.available),
+        0,
+      ),
+    [event.tiers],
+  )
+  const isAvailable = totalStock > 0
+  const showInfoCta = !finished && viewMode === "info"
   const showCheckout = !finished && !soldOut && viewMode === "checkout"
 
   useLockBodyScroll(showCheckout)
@@ -186,6 +195,15 @@ export function EventStorefront({
       useStorefrontChromeStore.getState().setCheckoutTunnel(false)
     }
   }, [showCheckout])
+
+  useEffect(() => {
+    const bind = () => useStorefrontSeatStore.getState().bindEvent(event.id)
+    if (useStorefrontSeatStore.persist.hasHydrated()) {
+      bind()
+      return
+    }
+    return useStorefrontSeatStore.persist.onFinishHydration(bind)
+  }, [event.id])
 
   function hasActiveCheckoutCart() {
     const checkout = useCheckoutStore.getState()
@@ -232,44 +250,21 @@ export function EventStorefront({
     return Math.min(...priced)
   }, [event.tiers, selectedDate])
 
-  function renderPurchaseCta(variant: "aside" | "dock") {
-    const content = (
-      <>
-        <h3 className="mb-1 text-center text-xl font-black text-foreground">
-          Asegurá tu lugar
-        </h3>
-        {teaserPrice != null ? (
-          <p className="mb-4 text-center text-sm font-medium text-primary">
-            Entradas desde {formatCurrency(teaserPrice)}
-          </p>
-        ) : (
-          <p className="mb-4 text-center text-sm text-muted-foreground">
-            Iniciá el proceso de compra para elegir tus entradas o lugares en el
-            mapa.
-          </p>
-        )}
-        <button
-          type="button"
-          onClick={enterCheckout}
-          className="w-full rounded-2xl bg-primary py-3.5 text-lg font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:bg-primary/90"
-        >
-          Adquirir Entradas
-        </button>
-      </>
-    )
-
-    if (variant === "dock") {
-      return (
-        <div className="fixed inset-x-0 bottom-0 z-[100] rounded-t-3xl border-t border-border bg-card px-6 pt-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] shadow-[0_-10px_40px_rgba(0,0,0,0.8)] lg:hidden">
-          {content}
-        </div>
-      )
-    }
+  function renderPurchaseAside() {
+    const dateLabel =
+      availableDates.find((day) => day.id === selectedDate)?.label ||
+      formatEventDay(event.date)
+    const city = event.venue?.city?.trim() || ""
+    const venueLabel = [venueName, city].filter(Boolean).join(" · ")
 
     return (
-      <div className="rounded-3xl border border-border bg-card p-6 text-center">
-        {content}
-      </div>
+      <EventStorefrontBuyBox
+        price={teaserPrice}
+        dateLabel={dateLabel}
+        venueLabel={venueLabel}
+        limited={Boolean(demand)}
+        onAcquire={enterCheckout}
+      />
     )
   }
 
@@ -306,7 +301,7 @@ export function EventStorefront({
   function renderDiscoveryColumn() {
     return (
       <motion.div
-        className="min-w-0 overflow-x-clip lg:col-span-7 xl:col-span-8"
+        className="min-w-0 overflow-x-clip lg:col-span-8"
         variants={reduceMotion ? undefined : storefrontStagger}
       >
         <div className="flex flex-col gap-8 md:gap-10">
@@ -402,7 +397,7 @@ export function EventStorefront({
   function renderDetailsColumn() {
     return (
       <motion.div
-        className="min-w-0 space-y-8 overflow-x-clip px-4 pb-6 md:px-0 lg:col-span-7 lg:col-start-1 xl:col-span-8"
+        className="min-w-0 space-y-8 overflow-x-clip px-4 pb-6 md:px-0 lg:col-span-8 lg:col-start-1"
         variants={reduceMotion ? undefined : storefrontFade}
       >
         <EventResaleListings
@@ -510,7 +505,7 @@ export function EventStorefront({
   }
 
   const asideClassName =
-    "min-w-0 scroll-mt-24 px-4 pb-[100px] md:px-0 lg:sticky lg:top-24 lg:z-30 lg:col-span-5 lg:col-start-8 lg:row-span-full lg:row-start-1 lg:flex lg:max-h-[calc(100vh-6rem)] lg:flex-col lg:self-start lg:pb-0 xl:col-span-4 xl:col-start-9"
+    "min-w-0 scroll-mt-24 px-4 pb-6 md:px-0 lg:sticky lg:top-24 lg:z-30 lg:col-span-4 lg:col-start-9 lg:row-span-full lg:row-start-1 lg:flex lg:max-h-[calc(100vh-6rem)] lg:flex-col lg:self-start lg:pb-0"
 
   if (showCheckout) {
     return (
@@ -522,16 +517,6 @@ export function EventStorefront({
           contentIds={[event.id]}
           value={startingPrice ?? undefined}
         />
-        <div className="flex-none border-b border-border/70 bg-background/95 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-sm">
-          <button
-            type="button"
-            onClick={requestLeaveCheckout}
-            className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="size-4" aria-hidden="true" />
-            Volver
-          </button>
-        </div>
         <div className="min-h-0 flex-1 overflow-hidden">
           <TicketSelector
             eventId={event.id}
@@ -561,6 +546,7 @@ export function EventStorefront({
             maxTicketsPerUser={event.maxTicketsPerUser}
             fillViewport
             onReservationExpired={leaveCheckout}
+            onLeaveCheckout={requestLeaveCheckout}
             renderLayout={({ panel }) => panel}
           />
         </div>
@@ -602,8 +588,8 @@ export function EventStorefront({
   return (
     <div
       className={cn(
-        "relative min-h-screen overflow-x-visible bg-background pb-8 text-foreground lg:pb-12",
-        showInfoCta && "max-lg:pb-[160px]",
+        "relative min-h-screen overflow-x-visible bg-background text-foreground",
+        showInfoCta ? "pb-32 lg:pb-12" : "pb-8 lg:pb-12",
       )}
     >
       <AnalyticsTracker
@@ -626,7 +612,7 @@ export function EventStorefront({
       ) : null}
 
       <motion.div
-        className="relative mx-auto grid max-w-7xl grid-cols-1 items-start gap-8 px-0 md:px-4 lg:grid-cols-12 lg:gap-12 lg:py-8"
+        className="relative mx-auto grid max-w-6xl grid-cols-1 items-start gap-8 px-0 md:px-4 lg:grid-cols-12 lg:gap-12 lg:px-8 lg:py-8"
         variants={reduceMotion ? undefined : storefrontStagger}
         initial={reduceMotion ? false : "hidden"}
         animate="show"
@@ -654,7 +640,7 @@ export function EventStorefront({
               id="tickets"
               className={cn(asideClassName, "hidden lg:flex")}
             >
-              {renderPurchaseCta("aside")}
+              {renderPurchaseAside()}
             </aside>
             {renderDetailsColumn()}
           </>
@@ -662,7 +648,7 @@ export function EventStorefront({
       </motion.div>
 
       {viewMode === "info" && (event.sponsors?.length ?? 0) > 0 ? (
-        <div className="mx-auto max-w-7xl px-4 pb-8">
+        <div className="mx-auto max-w-6xl px-4 pb-8">
           <SponsorGrid
             heading="Auspician este evento:"
             sponsors={event.sponsors ?? []}
@@ -671,7 +657,13 @@ export function EventStorefront({
         </div>
       ) : null}
 
-      {showInfoCta ? renderPurchaseCta("dock") : null}
+      {showInfoCta ? (
+        <EventStorefrontPurchaseDock
+          price={teaserPrice}
+          isAvailable={isAvailable}
+          onAcquire={enterCheckout}
+        />
+      ) : null}
     </div>
   )
 }

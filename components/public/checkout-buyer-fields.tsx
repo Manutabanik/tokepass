@@ -22,7 +22,7 @@ type CheckoutBuyerFieldsProps = {
 }
 
 const fieldInputClass =
-  "h-12 w-full min-w-0 rounded-xl border border-border bg-secondary/30 px-4 text-base text-foreground placeholder:text-muted-foreground transition-all focus-visible:ring-2 focus-visible:ring-primary/50 md:h-14"
+  "h-12 w-full min-w-0 rounded-xl border border-border bg-secondary/30 px-4 text-[16px] text-foreground placeholder:text-muted-foreground transition-all focus-visible:ring-2 focus-visible:ring-primary/50 md:h-14 md:text-base"
 
 function fieldMessage(
   errors: CheckoutBuyerFieldsProps["errors"],
@@ -80,7 +80,7 @@ export function CheckoutBuyerFields({
     return cn(
       fieldInputClass,
       invalid &&
-        "border-amber-500/60 bg-amber-500/5 text-foreground focus-visible:ring-amber-400/40",
+        "border-destructive/60 bg-destructive/5 text-foreground focus-visible:ring-destructive/40",
       invalid && firstInvalid && shakeClass,
     )
   }
@@ -249,7 +249,7 @@ export function CheckoutBuyerFields({
 function FieldHint({ id, message }: { id: string; message?: string }) {
   if (!message) return null
   return (
-    <p id={id} role="status" className="text-sm font-medium text-amber-600 dark:text-amber-300">
+    <p id={id} role="status" className="text-sm font-medium text-destructive">
       {message}
     </p>
   )

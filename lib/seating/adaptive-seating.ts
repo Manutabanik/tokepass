@@ -112,14 +112,46 @@ export function expandParametricZone(
   }
 }
 
+/** People aforo for fire-code / venue budget. Not the SKU sellable count. */
 export function parametricZoneCapacity(zone: VenueMapZone): number {
   if (zone.layoutType === "general") {
     return Math.max(0, Math.floor(zone.capacity) || 0)
   }
   const rows = Math.max(1, Math.floor(zone.rows) || 1)
   const cols = Math.max(1, Math.floor(zone.itemsPerRow) || 1)
-  if (zone.layoutType === "numbered_seat") return rows * cols
+  if (zone.layoutType === "numbered_seat" && zone.sellMode !== "group") {
+    return rows * cols
+  }
   return rows * cols * Math.min(100, Math.max(1, Math.floor(zone.capacityPerUnit) || 1))
+}
+
+export function parametricZoneIsGroupSku(zone: VenueMapZone): boolean {
+  if (zone.layoutType === "general") return false
+  return zone.layoutType === "table_combo" || zone.sellMode === "group"
+}
+
+/**
+ * Sellable SKU units: mesas/palcos when group/table_combo, seats when
+ * numbered, people when general. Never chairs multiplied by tables.
+ */
+export function parametricZoneSkuUnitCount(zone: VenueMapZone): number {
+  if (zone.layoutType === "general") {
+    return Math.max(0, Math.floor(zone.capacity) || 0)
+  }
+  return expectedParametricUnitCount(zone)
+}
+
+export function parametricZoneSkuUnitLabel(
+  zone: VenueMapZone,
+  count: number,
+): string {
+  if (zone.layoutType === "numbered_seat" && zone.sellMode !== "group") {
+    return count === 1 ? "butaca" : "butacas"
+  }
+  if (parametricZoneIsGroupSku(zone)) {
+    return count === 1 ? "mesa" : "mesas"
+  }
+  return count === 1 ? "lugar" : "lugares"
 }
 
 export function hasParametricZones(map: InteractiveVenueMap | null | undefined): boolean {
@@ -320,6 +352,7 @@ export function createVenueZone(
     polygon: normalizePolygonToPercent(polygon),
     layoutType: "table_combo",
     sellMode: "group",
+    priceMode: "closed_unit",
     rows: 4,
     itemsPerRow: 10,
     capacityPerUnit: 8,

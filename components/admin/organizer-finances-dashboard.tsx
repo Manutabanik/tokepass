@@ -3,6 +3,8 @@
 import {
   ArrowRightLeft,
   Banknote,
+  Download,
+  FileText,
   Landmark,
   LoaderCircle,
   Lock,
@@ -13,6 +15,7 @@ import { useMemo, useState, useTransition } from "react"
 import { toast } from "sonner"
 
 import {
+  exportOrganizerFinanceLedger,
   requestPayout,
   type FinancePayoutRequest,
   type OrganizerFinanceSummary,
@@ -80,6 +83,7 @@ export function OrganizerFinancesDashboard({
   const [amount, setAmount] = useState("")
   const [cbu, setCbu] = useState(summary.defaultCbu ?? "")
   const [pending, startTransition] = useTransition()
+  const [exporting, startExport] = useTransition()
 
   const available = summary.availableToSettle
   const canRequest = available >= 1
@@ -105,6 +109,37 @@ export function OrganizerFinancesDashboard({
       a.sortAt < b.sortAt ? 1 : -1,
     )
   }, [summary.payoutRequests, summary.settlements])
+
+  function exportLedger(kind: "csv" | "pdf") {
+    startExport(async () => {
+      const result = await exportOrganizerFinanceLedger()
+      if (!result.success) {
+        toast.error(result.error)
+        return
+      }
+      if (kind === "csv") {
+        const blob = new Blob([result.data.csv], {
+          type: "text/csv;charset=utf-8;",
+        })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement("a")
+        link.href = url
+        link.download = `${result.data.filename}.csv`
+        link.click()
+        URL.revokeObjectURL(url)
+        return
+      }
+      const popup = window.open("", "_blank")
+      if (!popup) {
+        toast.error("Permití ventanas emergentes para generar el PDF.")
+        return
+      }
+      popup.document.write(result.data.html)
+      popup.document.close()
+      popup.focus()
+      popup.print()
+    })
+  }
 
   function openModal() {
     setAmount(available > 0 ? String(Math.floor(available)) : "")
@@ -160,30 +195,61 @@ export function OrganizerFinancesDashboard({
             el evento.
           </p>
         </div>
-        <Button
-          type="button"
-          disabled={!canRequest}
-          onClick={openModal}
-          className="h-11 rounded-full bg-violet-600 text-white hover:bg-violet-500 disabled:opacity-40"
-        >
-          <ArrowRightLeft className="size-4" aria-hidden="true" />
-          Solicitar Retiro
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={exporting}
+            onClick={() => exportLedger("csv")}
+            className="h-11 rounded-full"
+          >
+            <Download className="size-4" aria-hidden="true" />
+            Exportar CSV
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={exporting}
+            onClick={() => exportLedger("pdf")}
+            className="h-11 rounded-full"
+          >
+            <FileText className="size-4" aria-hidden="true" />
+            Exportar PDF
+          </Button>
+          <Button
+            type="button"
+            disabled={!canRequest}
+            onClick={openModal}
+            className="h-11 rounded-full bg-violet-600 text-white hover:bg-violet-500 disabled:opacity-40"
+          >
+            <ArrowRightLeft className="size-4" aria-hidden="true" />
+            Solicitar Retiro
+          </Button>
+        </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-3">
         <StatCard
           label="Recaudación Bruta"
           value={formatCurrency(summary.grossRevenue)}
-          hint={`Online ${formatCurrency(summary.mercadopagoGross)} · Puerta ${formatCurrency(summary.posGross)}`}
+          hint={`Online ${formatCurrency(summary.mercadopagoGross)} · Puerta ${formatCurrency(summary.posGross)} · Solo órdenes pagadas`}
           icon={Banknote}
         />
         <StatCard
           label="Comisión Tokepass"
-          value={formatCurrency(summary.platformFees)}
+          value={formatCurrency(summary.tokepassServiceCharge)}
           hint="Descontada de tu ganancia"
           icon={Landmark}
         />
+        <StatCard
+          label="Neto organizador"
+          value={formatCurrency(summary.organizerNetPayout)}
+          hint="Bruto menos comisión de la plataforma"
+          icon={Wallet}
+        />
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
         <StatCard
           label="Saldo Retenido"
           value={formatCurrency(summary.retainedHeld)}

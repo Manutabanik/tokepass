@@ -220,6 +220,7 @@ function mapGuestTicketRow(row: GuestTicketDetailRow, revealQr: boolean): MyTick
     tierPrice: Number(tier?.price ?? 0),
     isSponsoredByTokepass: false,
     activeResaleListingId: null,
+    pendingTransfer: null,
   }
 }
 

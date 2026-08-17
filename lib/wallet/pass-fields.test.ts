@@ -46,6 +46,7 @@ function sampleTicket(overrides: Partial<MyTicket> = {}): MyTicket {
     tierPrice: 25000,
     isSponsoredByTokepass: false,
     activeResaleListingId: null,
+    pendingTransfer: null,
     ...overrides,
   }
 }

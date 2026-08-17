@@ -42,7 +42,7 @@ function buildTabs(mode: "organizer" | "staff", staffRoles: EventStaffRole[]): T
     const tabs: TabDef[] = []
     const scanner = items.find((item) => item.href === "/admin/scanner")
     const store = items.find((item) => item.href === "/admin/store-scanner")
-    const pos = items.find((item) => item.href === "/admin/pos")
+    const pos = items.find((item) => item.href === "/dashboard/pos")
     if (scanner) {
       tabs.push({
         id: "scan",
@@ -67,7 +67,8 @@ function buildTabs(mode: "organizer" | "staff", staffRoles: EventStaffRole[]): T
         label: "Cobrar",
         href: pos.href,
         icon: Store,
-        match: (path) => path.startsWith("/admin/pos"),
+        match: (path) =>
+          path.startsWith("/admin/pos") || path.startsWith("/dashboard/pos"),
       })
     }
     tabs.push({

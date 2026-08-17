@@ -146,7 +146,7 @@ function FlyToCoordinates({
     })
     observer.observe(map.getContainer())
     return () => observer.disconnect()
-  }, [coordinates.latitude, coordinates.longitude, map, zoom])
+  }, [coordinates, map, zoom])
 
   return null
 }

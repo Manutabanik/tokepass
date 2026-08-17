@@ -120,6 +120,7 @@ export function synthesizeLodZones(map: InteractiveVenueMap): VenueMapZone[] {
         polygon: aabbToPercentPolygon(box),
         layoutType: "table_combo" as const,
         sellMode: "group" as const,
+        priceMode: "closed_unit" as const,
         rows: 1,
         itemsPerRow: members.length,
         capacityPerUnit: 1,

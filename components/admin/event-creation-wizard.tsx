@@ -110,7 +110,7 @@ import {
   publishEventSchema,
   type EventFormValues,
 } from "@/lib/validations/event-form"
-import { seedTwoScheduleDays } from "@/lib/event-schedule"
+import { defaultInventoryDayId, seedTwoScheduleDays } from "@/lib/event-schedule"
 import { cn } from "@/lib/utils"
 
 const steps = [
@@ -274,7 +274,11 @@ export function EventCreationWizard({
     setVenuePricingMap(pricing)
     useEventFormStore.getState().setVenuePricingMap(pricing)
     const current = form.getValues("tickets") ?? []
-    const next = syncMapBackedTickets(current, map)
+    const next = syncMapBackedTickets(current, map, {
+      defaultDayId: defaultInventoryDayId(
+        form.getValues("basics.scheduleDays"),
+      ),
+    })
     if (!mapBackedTicketsUnchanged(current, next)) {
       form.setValue("tickets", next, { shouldDirty: true })
     }

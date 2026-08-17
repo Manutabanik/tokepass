@@ -23,6 +23,10 @@ export function AddPromoterDialog() {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
   const [commissionPercent, setCommissionPercent] = useState("10")
+  const [commissionType, setCommissionType] = useState<"percent" | "fixed">(
+    "percent",
+  )
+  const [commissionFixed, setCommissionFixed] = useState("500")
   const [isPending, startTransition] = useTransition()
 
   function handleSubmit(event: React.FormEvent) {
@@ -31,7 +35,9 @@ export function AddPromoterDialog() {
     startTransition(async () => {
       const result = await createPromoter({
         name,
+        commissionType,
         commissionPercent: Number(commissionPercent),
+        commissionFixedAmount: Number(commissionFixed),
       })
 
       if (!result.success) {
@@ -44,6 +50,8 @@ export function AddPromoterDialog() {
       })
       setName("")
       setCommissionPercent("10")
+      setCommissionType("percent")
+      setCommissionFixed("500")
       setOpen(false)
       router.refresh()
     })
@@ -82,22 +90,59 @@ export function AddPromoterDialog() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="promoter-commission">Comisión (%)</Label>
-              <Input
-                id="promoter-commission"
-                type="number"
-                min={0}
-                max={100}
-                step={0.5}
-                value={commissionPercent}
-                onChange={(event) => setCommissionPercent(event.target.value)}
-                required
-                className="border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-950"
-              />
-              <p className="text-xs text-muted-foreground">
-                Ej: 10 = 10% sobre el total de órdenes pagadas.
-              </p>
+              <Label htmlFor="promoter-commission-type">Tipo de comisión</Label>
+              <select
+                id="promoter-commission-type"
+                value={commissionType}
+                onChange={(event) =>
+                  setCommissionType(
+                    event.target.value === "fixed" ? "fixed" : "percent",
+                  )
+                }
+                className="flex h-11 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm dark:border-white/10 dark:bg-zinc-950"
+              >
+                <option value="percent">Porcentaje sobre subtotal</option>
+                <option value="fixed">Monto fijo por entrada</option>
+              </select>
             </div>
+            {commissionType === "percent" ? (
+              <div className="space-y-2">
+                <Label htmlFor="promoter-commission">Comisión (%)</Label>
+                <Input
+                  id="promoter-commission"
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.5}
+                  value={commissionPercent}
+                  onChange={(event) => setCommissionPercent(event.target.value)}
+                  required
+                  className="border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-950"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Ej: 10 = 10% sobre el subtotal de órdenes pagadas.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="promoter-commission-fixed">
+                  Monto fijo por entrada
+                </Label>
+                <Input
+                  id="promoter-commission-fixed"
+                  type="number"
+                  min={0}
+                  step={50}
+                  value={commissionFixed}
+                  onChange={(event) => setCommissionFixed(event.target.value)}
+                  required
+                  className="border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-950"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Se acredita al confirmar cada compra pagada.
+                </p>
+              </div>
+            )}
           </div>
 
           <DialogFooter className="mt-6">

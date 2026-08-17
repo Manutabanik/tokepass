@@ -1,9 +1,11 @@
 "use client"
 
 import { Minus, Plus, X } from "lucide-react"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { toast } from "sonner"
 
-import { AdaptiveSeatingFlow } from "@/components/public/adaptive-seating-flow"
+import { AccessiblePlaceGrid } from "@/components/public/accessible-place-grid"
+import { SeatSelectionSplitMap } from "@/components/public/seat-selection-split-map"
 import { Button } from "@/components/ui/button"
 import {
   Sheet,
@@ -12,18 +14,25 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useLockBodyScroll } from "@/hooks/use-lock-body-scroll"
-import { resolvePurchaseLimit } from "@/lib/checkout-limits"
+import {
+  resolvePurchaseLimit,
+  storefrontLimitMessage,
+} from "@/lib/checkout-limits"
 import { formatCurrency } from "@/lib/format"
 import { buildAccessibleSeatTree } from "@/lib/seating/accessible-seat-tree"
-import { suggestAssignmentForPeople } from "@/lib/seating/assign-best-seats"
+import { resolveSectorAssignMeta } from "@/lib/seating/assign-best-seats"
+import {
+  formatStorefrontSelectionGroups,
+  storefrontItemFromElement,
+  storefrontItemFromZone,
+} from "@/lib/seating/storefront-selection"
 import type {
   UniversalSeatSelection,
   UniversalSector,
   SeatStatus,
 } from "@/lib/seating/universal-seat-types"
-import { flattenVenueMapSeats } from "@/lib/seating/venue-map-geometry"
+import { flattenSeatsForAvailability } from "@/lib/seating/venue-map-geometry"
 import {
   storefrontSelectionCount,
   storefrontSelectionTotal,
@@ -86,58 +95,39 @@ export function SeatSelectionSheet({
   context: SeatSelectionContext
 }) {
   const selectedItems = useStorefrontSeatStore((state) => state.selectedItems)
-  const layoutSeats = useStorefrontSeatStore((state) => state.layoutSeats)
-  const selectedSeatIds = useMemo(
-    () => layoutSeats.map((seat) => seat.id),
-    [layoutSeats],
+  const selectedUnitIds = useMemo(
+    () => selectedItems.map((item) => item.id),
+    [selectedItems],
   )
-  const [tab, setTab] = useState<"list" | "map">("list")
-  const [quantity, setQuantity] = useState(2)
-  const [assignError, setAssignError] = useState<string | null>(null)
-  const [justAssigned, setJustAssigned] = useState(false)
-  const preserveSelectionRef = useRef<number | null>(null)
+  const [mapExpanded, setMapExpanded] = useState(false)
+  if (!open && mapExpanded) {
+    setMapExpanded(false)
+  }
+  const [peopleCount, setPeopleCount] = useState(1)
 
   useLockBodyScroll(open)
 
-  useEffect(() => {
-    if (!open) return
-    setTab("list")
-    setAssignError(null)
-    const existing = storefrontSelectionCount(
-      useStorefrontSeatStore.getState().selectedItems,
-    )
-    if (existing > 0) {
-      setQuantity(existing)
-      setJustAssigned(true)
-      preserveSelectionRef.current = existing
-    } else {
-      setJustAssigned(false)
-      preserveSelectionRef.current = null
-    }
-    useStorefrontSeatStore.getState().setView("list")
-  }, [open])
-
-  const purchaseCap = resolvePurchaseLimit(maxTicketsPerUser) ?? 20
-  const placeCount = storefrontSelectionCount(selectedItems)
-  const placeTotal = storefrontSelectionTotal(selectedItems)
-  const canConfirm = placeCount > 0
+  const mapSeats = useMemo(
+    () => (context.map ? flattenSeatsForAvailability(context.map) : []),
+    [context.map],
+  )
 
   const sectors = useMemo(() => {
     if (!context.map) return []
     return buildAccessibleSeatTree({
       map: context.map,
       occupancyBySeatId: context.occupancyBySeatId,
-      selectedSeatIds,
+      selectedSeatIds: selectedUnitIds,
       unavailableZoneIds: context.unavailableZoneIds,
     })
   }, [
     context.map,
     context.occupancyBySeatId,
     context.unavailableZoneIds,
-    selectedSeatIds,
+    selectedUnitIds,
   ])
 
-  function resolveTargetSector() {
+  const targetSector = useMemo(() => {
     const preferred = sectorId
       ? sectors.find((sector) => sector.id === sectorId)
       : null
@@ -148,78 +138,100 @@ export function SeatSelectionSheet({
       sectors[0] ??
       null
     )
-  }
+  }, [sectorId, sectors])
 
-  function handleAssignBest() {
-    if (pending || !context.map || quantity < 1) return
-    const sector = resolveTargetSector()
-
-    if (!sector) {
-      setAssignError("No hay sectores disponibles para asignar.")
-      return
+  const assignMeta = useMemo(() => {
+    if (!context.map || !targetSector) {
+      return {
+        isTableSector: false,
+        capacityPerUnit: 1,
+        sellMode: "per_seat" as const,
+        unitNoun: "mesa" as const,
+      }
     }
-
-    if (sector.kind === "ga") {
-      context.onAssignZoneQuantity(sector.id, quantity)
-      setAssignError(null)
-      setJustAssigned(true)
-      return
-    }
-
-    const suggestion = suggestAssignmentForPeople({
-      map: context.map,
-      seats: flattenVenueMapSeats(context.map),
-      sectorId: sector.id,
-      sectorName: sector.name,
-      people: quantity,
-      isTableSector: sector.isTableSector,
-      capacityPerUnit: sector.capacityPerUnit,
-      occupancyBySeatId: context.occupancyBySeatId,
-    })
-
-    if (suggestion.kind === "tables") {
-      context.onAssignTables(suggestion.tables)
-      useStorefrontSeatStore
-        .getState()
-        .pulseFocus(suggestion.tables.map((table) => table.id))
-      setAssignError(null)
-      setJustAssigned(true)
-      return
-    }
-
-    if (suggestion.kind === "seats") {
-      context.onAssignSeats(
-        suggestion.seats.map((seat) => ({
-          id: seat.id,
-          row: seat.row,
-          number: seat.number,
-          sectorId: seat.sectorId,
-          sectorName: seat.sectorName,
-          price: seat.price,
-          color: seat.color,
-          label: seat.label,
-        })),
-      )
-      useStorefrontSeatStore
-        .getState()
-        .pulseFocus(suggestion.seats.map((seat) => seat.id))
-      setAssignError(null)
-      setJustAssigned(true)
-      return
-    }
-
-    setAssignError(
-      "No hay lugares juntos disponibles. Probá otra cantidad o elegí en el mapa.",
+    return resolveSectorAssignMeta(
+      context.map,
+      targetSector.id,
+      mapSeats,
+      targetSector.name,
     )
-  }
+  }, [context.map, mapSeats, targetSector])
+
+  const isTableSector = assignMeta.isTableSector
+  const isGeneralAdmission = targetSector?.kind === "ga"
+  const placeCount = storefrontSelectionCount(selectedItems)
+  const placeTotal = storefrontSelectionTotal(selectedItems)
+  const canConfirm = placeCount > 0
+  const assistantLine = formatAssistantLine(selectedItems, placeTotal)
+  const emptyPrompt = isTableSector
+    ? "Seleccioná una mesa en la lista o en el mapa."
+    : "Seleccioná un lugar en la lista o en el mapa."
 
   useEffect(() => {
-    if (!open || tab !== "list" || pending || !context.map || quantity < 1) {
+    if (!open) return
+    const timer = window.setTimeout(() => {
+      const store = useStorefrontSeatStore.getState()
+      const existing = storefrontSelectionCount(store.selectedItems)
+      setPeopleCount(Math.max(1, existing || 1))
+      const ids = store.selectedItems.map((item) => item.id)
+      if (ids.length > 0) store.pulseFocus(ids)
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [open])
+
+  function handleTogglePlace(seatId: string) {
+    if (pending || !context.map) return
+    const store = useStorefrontSeatStore.getState()
+    const element = (context.map.elements ?? []).find((item) => item.id === seatId)
+    if (
+      element &&
+      (element.sellMode === "group" || element.type === "standing_zone")
+    ) {
+      const item = storefrontItemFromElement(element, context.priceBySectorId)
+      if (!item) return
+      const result = store.toggleSelectedItem(item, maxTicketsPerUser)
+      if (!result.ok) {
+        toast.error(storefrontLimitMessage(result.reason))
+        return
+      }
+      store.pulseFocus([element.id])
       return
     }
-    if (preserveSelectionRef.current === quantity) return
-    handleAssignBest()
-  }, [open, tab, quantity, sectorId, pending, context.map])
+
+    const zone = (context.map.zones ?? []).find((item) => item.id === seatId)
+    if (zone) {
+      const item = storefrontItemFromZone(zone, context.priceBySectorId)
+      if (!item) return
+      const result = store.toggleSelectedItem(item, maxTicketsPerUser)
+      if (!result.ok) {
+        toast.error(storefrontLimitMessage(result.reason))
+        return
+      }
+      store.pulseFocus([zone.id])
+      return
+    }
+
+    const source = mapSeats.find((item) => item.id === seatId)
+    if (!source) return
+    const result = store.toggleLayoutSeat(
+      {
+        id: source.id,
+        row: source.row,
+        number: source.number,
+        sectorId: source.sectorId,
+        sectorName: source.sectorName,
+        price: source.price,
+        color: source.color,
+        label: source.label,
+      },
+      maxTicketsPerUser,
+    )
+    if (!result.ok) {
+      toast.error(storefrontLimitMessage(result.reason))
+      return
+    }
+    store.pulseFocus([source.id])
+  }
 
   function handleConfirm() {
     if (!canConfirm) return
@@ -228,30 +240,39 @@ export function SeatSelectionSheet({
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet
+      open={open}
+      onOpenChange={(next) => {
+        if (!next && mapExpanded) {
+          setMapExpanded(false)
+          return
+        }
+        onOpenChange(next)
+      }}
+    >
       <SheetContent
         side="bottom"
         showCloseButton={false}
         overlayClassName="z-[100]"
         className={cn(
-          "z-[100] h-[92dvh] max-h-[92dvh] gap-0 overflow-hidden p-0",
+          "z-[100] flex h-[100dvh] max-h-[100dvh] flex-col gap-0 overflow-hidden rounded-none p-0",
           "lg:inset-x-auto lg:bottom-auto lg:left-1/2 lg:top-1/2 lg:h-[min(88dvh,840px)] lg:max-h-[88dvh] lg:w-[min(56rem,94vw)] lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-3xl",
         )}
       >
-        <SheetHeader className="flex-none border-b border-border px-4 py-3 text-left">
+        <SheetHeader className="shrink-0 border-b border-border px-4 py-3 text-left">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <SheetTitle className="text-lg font-bold tracking-tight">
                 {title}
               </SheetTitle>
               <SheetDescription className="mt-0.5 text-sm text-muted-foreground">
-                Indicá cuántas personas son y te armamos la mejor combinación.
+                El mapa de arriba muestra dónde queda el lugar que elijas abajo.
               </SheetDescription>
             </div>
             <button
               type="button"
               onClick={() => onOpenChange(false)}
-              className="grid size-10 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              className="grid size-10 shrink-0 place-items-center rounded-full text-muted-foreground transition-all duration-200 hover:bg-secondary hover:text-foreground"
               aria-label="Cerrar"
             >
               <X className="size-5" aria-hidden="true" />
@@ -259,168 +280,163 @@ export function SeatSelectionSheet({
           </div>
         </SheetHeader>
 
-        <Tabs
-          value={tab}
-          onValueChange={(value) => {
-            const next = value === "map" ? "map" : "list"
-            setTab(next)
-            useStorefrontSeatStore.getState().setView(next)
-          }}
-          className="flex min-h-0 flex-1 flex-col gap-0"
-        >
-          <div className="flex-none px-4 pt-3">
-            <TabsList className="h-11 w-full rounded-full bg-secondary/70 p-1 group-data-horizontal/tabs:h-11">
-              <TabsTrigger
-                value="list"
-                className="rounded-full px-3 text-sm font-semibold data-active:bg-background data-active:text-foreground"
-              >
-                Búsqueda Rápida
-              </TabsTrigger>
-              <TabsTrigger
-                value="map"
-                className="rounded-full px-3 text-sm font-semibold data-active:bg-background data-active:text-foreground"
-              >
-                Elegir en el Mapa
-              </TabsTrigger>
-            </TabsList>
-          </div>
+        <div className="flex min-h-0 flex-1 flex-col">
+          <SeatSelectionSplitMap
+            map={context.map}
+            eventId={context.eventId}
+            eventTitle={context.eventTitle}
+            pending={pending}
+            maxSelectable={maxTicketsPerUser}
+            selectedZoneId={context.selectedZoneId}
+            unavailableZoneIds={context.unavailableZoneIds}
+            occupancyBySeatId={context.occupancyBySeatId}
+            heldSeatIds={context.heldSeatIds}
+            priceBySectorId={context.priceBySectorId}
+            sectors={context.sectors}
+            expanded={mapExpanded}
+            onExpandedChange={setMapExpanded}
+            onSelectZone={context.onSelectZone}
+            onContinue={context.onUniversalContinue}
+          />
 
-          <TabsContent
-            value="list"
-            className="no-scrollbar mt-0 flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-5"
-          >
-            <p className="text-center text-base font-semibold text-foreground">
-              ¿Cuántas personas son?
-            </p>
-            <div className="mt-4 flex items-center justify-center">
-              <div className="flex items-center gap-3 rounded-full bg-secondary/50 px-1 py-1">
-                <button
-                  type="button"
-                  disabled={pending || quantity <= 1}
-                  onClick={() => {
-                    preserveSelectionRef.current = null
-                    setQuantity((current) => Math.max(1, current - 1))
-                    setAssignError(null)
-                  }}
-                  className={cn(
-                    tapFeedbackClass,
-                    "flex size-10 items-center justify-center rounded-full hover:bg-background disabled:opacity-40",
-                  )}
-                  aria-label="Quitar"
-                >
-                  <Minus className="size-4" />
-                </button>
-                <span className="w-8 text-center text-2xl font-black tabular-nums">
-                  {quantity}
-                </span>
-                <button
-                  type="button"
-                  disabled={pending || quantity >= purchaseCap}
-                  onClick={() => {
-                    preserveSelectionRef.current = null
-                    setQuantity((current) => Math.min(purchaseCap, current + 1))
-                    setAssignError(null)
-                  }}
-                  className={cn(
-                    tapFeedbackClass,
-                    "flex size-10 items-center justify-center rounded-full hover:bg-background disabled:opacity-40",
-                  )}
-                  aria-label="Agregar"
-                >
-                  <Plus className="size-4" />
-                </button>
-              </div>
-            </div>
-            <p className="mt-4 text-center text-sm text-muted-foreground">
-              {justAssigned
-                ? `Combinación sugerida para ${quantity} ${quantity === 1 ? "persona" : "personas"}.`
-                : "Buscamos mesas o sillas juntas para tu grupo."}
-            </p>
-            <Button
-              type="button"
-              disabled={pending || !context.map}
-              onClick={handleAssignBest}
-              className={cn(
-                tapFeedbackClass,
-                "mt-4 h-auto w-full rounded-2xl py-3.5 text-base font-bold",
-              )}
-            >
-              Recalcular mejor combinación
-            </Button>
-            {assignError ? (
-              <p className="mt-3 text-center text-sm text-destructive">
-                {assignError}
-              </p>
-            ) : null}
-
-            {tab === "list" && justAssigned && context.map ? (
-              <div className="mt-5 min-h-[200px] flex-1 overflow-hidden rounded-2xl border border-primary/20 bg-zinc-950">
-                <AdaptiveSeatingFlow
-                  immersive
-                  readOnly
-                  pending={pending}
-                  maxSelectable={maxTicketsPerUser}
-                  eventId={context.eventId}
-                  eventTitle={context.eventTitle}
-                  venueMap={context.map}
-                  selectedZoneId={context.selectedZoneId}
-                  unavailableZoneIds={context.unavailableZoneIds}
-                  occupancyBySeatId={context.occupancyBySeatId}
-                  heldSeatIds={context.heldSeatIds}
-                  priceBySectorId={context.priceBySectorId}
-                  sectors={context.sectors}
-                />
-              </div>
-            ) : null}
-          </TabsContent>
-
-          <TabsContent
-            value="map"
-            className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden"
-          >
-            {tab === "map" && context.map ? (
-              <div className="min-h-0 flex-1">
-                <AdaptiveSeatingFlow
-                  immersive
-                  pending={pending}
-                  maxSelectable={maxTicketsPerUser}
-                  eventId={context.eventId}
-                  eventTitle={context.eventTitle}
-                  venueMap={context.map}
-                  selectedZoneId={context.selectedZoneId}
-                  unavailableZoneIds={context.unavailableZoneIds}
-                  occupancyBySeatId={context.occupancyBySeatId}
-                  heldSeatIds={context.heldSeatIds}
-                  priceBySectorId={context.priceBySectorId}
-                  sectors={context.sectors}
-                  onSelectZone={context.onSelectZone}
-                  onContinue={context.onUniversalContinue}
-                />
-              </div>
+          <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+            {isGeneralAdmission ? (
+              <GeneralAdmissionPicker
+                pending={pending}
+                peopleCount={peopleCount}
+                maxPeople={resolvePurchaseLimit(maxTicketsPerUser) ?? 20}
+                selected={Boolean(
+                  targetSector &&
+                    selectedItems.some((item) => item.id === targetSector.id),
+                )}
+                sectorName={targetSector?.name ?? title}
+                onChange={(next) => {
+                  setPeopleCount(next)
+                  if (targetSector) {
+                    context.onAssignZoneQuantity(targetSector.id, next)
+                  }
+                }}
+              />
             ) : (
-              <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-                El plano no está disponible.
-              </p>
+              <AccessiblePlaceGrid
+                pending={pending}
+                rows={targetSector?.rows ?? []}
+                onToggle={(seat) => handleTogglePlace(seat.id)}
+              />
             )}
-          </TabsContent>
-        </Tabs>
+          </div>
+        </div>
 
-        <div className="flex-none border-t border-border bg-card px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+        <div className="sticky bottom-0 z-10 mt-auto shrink-0 border-t border-border bg-card px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+          {canConfirm ? (
+            <p className="mb-3 text-center text-lg font-bold leading-snug text-foreground">
+              {assistantLine}
+            </p>
+          ) : (
+            <p className="mb-3 text-center text-sm text-muted-foreground">
+              {emptyPrompt}
+            </p>
+          )}
           <Button
             type="button"
             disabled={!canConfirm || pending}
             onClick={handleConfirm}
             className={cn(
               tapFeedbackClass,
-              "h-auto w-full rounded-2xl py-3.5 text-base font-bold",
+              "h-auto w-full rounded-2xl py-3.5 text-base font-bold transition-all duration-200",
             )}
           >
             {canConfirm
-              ? `Confirmar selección de ${placeCount} ${placeCount === 1 ? "lugar" : "lugares"} · ${formatCurrency(placeTotal)}`
+              ? `Confirmar ${placeCount} ${placeCount === 1 ? "lugar" : "lugares"} · ${formatCurrency(placeTotal)}`
               : "Confirmá al menos un lugar"}
           </Button>
         </div>
       </SheetContent>
     </Sheet>
+  )
+}
+
+function formatAssistantLine(
+  items: StorefrontSelectedItem[],
+  total: number,
+): string {
+  const groups = formatStorefrontSelectionGroups(items)
+  const names = groups
+    .map((group) => group.placeLabel || group.label)
+    .filter((name) => name.trim().length > 0)
+  const accesses = items.reduce(
+    (sum, item) => sum + Math.max(1, Math.floor(item.capacity) || 1),
+    0,
+  )
+  const accessLabel = accesses === 1 ? "1 acceso" : `${accesses} accesos`
+  const heading = names.join(" · ") || "Selección"
+  return `${heading} · ${accessLabel} · ${formatCurrency(total)}`
+}
+
+function GeneralAdmissionPicker({
+  sectorName,
+  peopleCount,
+  maxPeople,
+  selected,
+  pending,
+  onChange,
+}: {
+  sectorName: string
+  peopleCount: number
+  maxPeople: number
+  selected: boolean
+  pending: boolean
+  onChange: (next: number) => void
+}) {
+  return (
+    <div className="flex flex-col items-center gap-4 py-6">
+      <button
+        type="button"
+        disabled={pending}
+        aria-pressed={selected}
+        onClick={() => onChange(peopleCount)}
+        className={cn(
+          "flex min-h-12 w-full items-center justify-center rounded-xl border-2 p-3 font-semibold select-none touch-manipulation transition-all duration-200",
+          "focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+          selected
+            ? "border-primary bg-primary text-primary-foreground shadow-[0_0_15px_color-mix(in_srgb,var(--primary)_40%,transparent)]"
+            : "border-border bg-card text-foreground hover:border-primary",
+        )}
+      >
+        {sectorName}
+      </button>
+      <p className="text-center text-sm text-muted-foreground">
+        Acceso general. Indicá cuántas personas son.
+      </p>
+      <div className="flex items-center gap-3 rounded-full bg-secondary/50 px-1 py-1">
+        <button
+          type="button"
+          disabled={pending || peopleCount <= 1}
+          onClick={() => onChange(Math.max(1, peopleCount - 1))}
+          className={cn(
+            tapFeedbackClass,
+            "flex size-12 items-center justify-center rounded-full hover:bg-background disabled:opacity-40",
+          )}
+          aria-label="Quitar"
+        >
+          <Minus className="size-4" />
+        </button>
+        <span className="min-w-16 text-center text-lg font-black tabular-nums">
+          {peopleCount} {peopleCount === 1 ? "persona" : "personas"}
+        </span>
+        <button
+          type="button"
+          disabled={pending || peopleCount >= maxPeople}
+          onClick={() => onChange(Math.min(maxPeople, peopleCount + 1))}
+          className={cn(
+            tapFeedbackClass,
+            "flex size-12 items-center justify-center rounded-full hover:bg-background disabled:opacity-40",
+          )}
+          aria-label="Agregar"
+        >
+          <Plus className="size-4" />
+        </button>
+      </div>
+    </div>
   )
 }

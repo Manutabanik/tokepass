@@ -65,14 +65,6 @@ export function EventHeroMediaGallery({
 
   const videoActive = hasVideo && selected === 1
 
-  const goToSlide = useCallback(
-    (index: number) => {
-      if (index !== 1) setWantsPlay(false)
-      emblaApi?.scrollTo(index)
-    },
-    [emblaApi],
-  )
-
   const goPrev = useCallback(() => {
     setWantsPlay(false)
     emblaApi?.scrollPrev()
@@ -84,17 +76,17 @@ export function EventHeroMediaGallery({
   }, [emblaApi, selected])
 
   const arrowClassName =
-    "pointer-events-auto absolute top-1/2 z-[50] -translate-y-1/2 rounded-full border border-white/20 bg-black/50 p-3 text-white shadow-xl backdrop-blur-md transition-all hover:bg-black/80 opacity-70 group-hover:opacity-100 sm:opacity-100"
+    "pointer-events-auto absolute top-1/2 z-20 hidden size-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-black/50 text-white shadow-xl backdrop-blur-md opacity-0 transition-opacity duration-300 group-hover:opacity-100 md:flex"
 
   return (
     <section aria-label="Galería multimedia del evento">
       <div className="group relative aspect-video w-full overflow-hidden rounded-none bg-zinc-950 md:rounded-2xl">
         <div
-          className="h-full overflow-hidden touch-pan-y select-none"
+          className="no-scrollbar h-full snap-x snap-mandatory overflow-x-auto touch-pan-x select-none"
           ref={emblaRef}
         >
           <div className="flex h-full transform-gpu will-change-transform">
-            <div className="min-w-0 shrink-0 grow-0 basis-full">
+            <div className="min-w-0 shrink-0 grow-0 basis-full snap-start">
               <EventFlyer
                 eventId={eventId}
                 title={title}
@@ -105,7 +97,7 @@ export function EventHeroMediaGallery({
               />
             </div>
             {hasVideo ? (
-              <div className="relative h-full min-w-0 w-full shrink-0 grow-0 basis-full overflow-hidden bg-black">
+              <div className="relative h-full min-w-0 w-full shrink-0 grow-0 basis-full snap-start overflow-hidden bg-black">
                 {wantsPlay ? (
                   <PromoVideoPlayer
                     url={promoVideoUrl}
@@ -144,7 +136,7 @@ export function EventHeroMediaGallery({
               type="button"
               onClick={goPrev}
               aria-label="Diapositiva anterior"
-              className={cn(arrowClassName, "left-4 hidden md:flex")}
+              className={cn(arrowClassName, "left-4")}
             >
               <ChevronLeft className="size-5" aria-hidden="true" />
             </button>
@@ -152,39 +144,17 @@ export function EventHeroMediaGallery({
               type="button"
               onClick={goNext}
               aria-label="Diapositiva siguiente"
-              className={cn(arrowClassName, "right-4 hidden md:flex")}
+              className={cn(arrowClassName, "right-4")}
             >
               <ChevronRight className="size-5" aria-hidden="true" />
             </button>
-            <div className="pointer-events-none absolute inset-x-0 bottom-3 z-[50] hidden justify-center md:flex">
-              <div
-                className="pointer-events-auto flex items-center gap-2 rounded-full border border-white/15 bg-black/45 px-2.5 py-1.5 shadow-sm backdrop-blur-md"
-                role="tablist"
-                aria-label="Slides de la galería"
-              >
-                {Array.from({ length: slideCount }, (_, index) => {
-                  const current = selected === index
-                  return (
-                    <button
-                      key={index}
-                      type="button"
-                      role="tab"
-                      aria-label={`Ver media ${index + 1} de ${slideCount}`}
-                      aria-selected={current}
-                      onClick={() => goToSlide(index)}
-                      className={cn(
-                        "h-1.5 rounded-full transition-all",
-                        current
-                          ? "w-4 bg-white"
-                          : "w-1.5 bg-white/40 hover:bg-white/70",
-                      )}
-                    />
-                  )
-                })}
-                <span className="pl-0.5 text-[10px] font-semibold tabular-nums text-white/90">
-                  {selected + 1}/{slideCount}
-                </span>
-              </div>
+            <div
+              className="pointer-events-none absolute right-4 bottom-4 z-20 flex items-center justify-center rounded-full border border-white/10 bg-black/60 px-3 py-1.5 shadow-lg backdrop-blur-md"
+              aria-live="polite"
+            >
+              <span className="text-[11px] font-bold tracking-widest text-white tabular-nums">
+                {selected + 1} / {slideCount}
+              </span>
             </div>
           </>
         ) : null}

@@ -44,4 +44,18 @@ describe("checkout buyer field errors", () => {
       buyerEmail: "ana@tokepass.com",
     }), {})
   })
+
+  it("blocks an empty form and focuses mail first", () => {
+    const errors = getCheckoutBuyerFieldErrors({
+      buyerName: "",
+      buyerDni: "",
+      buyerPhone: "",
+      buyerEmail: "",
+    })
+    assert.equal(firstCheckoutBuyerErrorField(errors), "buyerEmail")
+    assert.ok(errors.buyerEmail)
+    assert.ok(errors.buyerName)
+    assert.ok(errors.buyerDni)
+    assert.ok(errors.buyerPhone)
+  })
 })

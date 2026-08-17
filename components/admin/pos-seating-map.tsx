@@ -44,6 +44,14 @@ export function PosSeatingMap({
     Record<string, "available" | "occupied" | "blocked">
   >({})
   const [loading, setLoading] = useState(true)
+  const [loadedEventId, setLoadedEventId] = useState(event.id)
+
+  if (event.id !== loadedEventId) {
+    setLoadedEventId(event.id)
+    setMap(null)
+    setOccupancy({})
+    setLoading(true)
+  }
 
   const priceBySectorId = useMemo(() => {
     const prices: Record<string, number> = {}
@@ -57,8 +65,6 @@ export function PosSeatingMap({
 
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
-    setMap(null)
     void Promise.all([
       getPublicEventVenueMap(event.id),
       getEventSeatingAvailability(event.id),

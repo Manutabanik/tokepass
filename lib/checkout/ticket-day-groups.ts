@@ -1,5 +1,11 @@
 import { isFullPassDayId, normalizeDayId } from "@/lib/event-schedule"
-import { formatEventDay } from "@/lib/format"
+import {
+  formatEventCartDate,
+  formatEventDay,
+  formatEventDayNumber,
+  formatEventMonthShort,
+  formatEventWeekdayShort,
+} from "@/lib/format"
 import type { TicketSelectorTier } from "@/components/public/ticket-tier-selector"
 import type { ScheduleDay } from "@/types/events"
 
@@ -42,7 +48,101 @@ export function ticketDateLabel(
   return meta.dateId ?? "Fecha específica"
 }
 
+/** Etiqueta corta para carrito y checkout: "Jue 12 Nov". */
+export function ticketDateCartLabel(
+  tier: {
+    dayId?: string | null
+    dateId?: string | null
+    isFullPass?: boolean
+  },
+  scheduleDays: ScheduleDay[] = [],
+): string {
+  const meta = resolveTicketDateMeta(tier)
+  if (meta.isFullPass) return "Todos los días"
+  const day = scheduleDays.find((item) => item.id === meta.dateId)
+  if (day) return formatEventCartDate(day.start_time)
+  return ticketDateLabel(tier, scheduleDays)
+}
+
+export function scheduleDayCartLabel(
+  dateId: string | null | undefined,
+  scheduleDays: ScheduleDay[] = [],
+): string {
+  if (!dateId) return ""
+  const day = scheduleDays.find((item) => item.id === dateId)
+  return day ? formatEventCartDate(day.start_time) : ""
+}
+
 export const FULL_PASS_TAB_ID = "full_pass"
+
+export type CheckoutKindTab = "days" | "passes"
+
+export type CheckoutDateCard = {
+  dateId: string
+  weekday: string
+  dayNumber: string
+  month: string
+}
+
+export function checkoutDateCardParts(
+  startTime: string | Date,
+): Omit<CheckoutDateCard, "dateId"> {
+  return {
+    weekday: formatEventWeekdayShort(startTime),
+    dayNumber: formatEventDayNumber(startTime),
+    month: formatEventMonthShort(startTime),
+  }
+}
+
+export function listCheckoutDateCards(
+  scheduleDays: ScheduleDay[] = [],
+  tiers: TicketSelectorTier[] = [],
+): CheckoutDateCard[] {
+  return listCheckoutDayTabs(scheduleDays, tiers).map((tab) => {
+    const day = scheduleDays.find((item) => item.id === tab.dateId)
+    const parts = day
+      ? checkoutDateCardParts(day.start_time)
+      : { weekday: "", dayNumber: "", month: "" }
+    return {
+      dateId: tab.dateId,
+      weekday: parts.weekday,
+      dayNumber: parts.dayNumber || tab.dateLabel,
+      month: parts.month,
+    }
+  })
+}
+
+export function hasDaySpecificTickets(tiers: TicketSelectorTier[] = []): boolean {
+  return tiers.some((tier) => !resolveTicketDateMeta(tier).isFullPass)
+}
+
+export function hasFullPassTickets(tiers: TicketSelectorTier[] = []): boolean {
+  return tiers.some((tier) => resolveTicketDateMeta(tier).isFullPass)
+}
+
+export function shouldShowCheckoutKindTabs(
+  tiers: TicketSelectorTier[] = [],
+  scheduleDays: ScheduleDay[] = [],
+): boolean {
+  const dayTabs = listCheckoutDayTabs(scheduleDays, tiers)
+  return hasFullPassTickets(tiers) && hasDaySpecificTickets(tiers) && dayTabs.length >= 1
+}
+
+export function defaultCheckoutKindTab(
+  tiers: TicketSelectorTier[] = [],
+): CheckoutKindTab {
+  return hasDaySpecificTickets(tiers) ? "days" : "passes"
+}
+
+export function defaultCheckoutDateId(
+  cards: CheckoutDateCard[],
+  tiers: TicketSelectorTier[] = [],
+): string | null {
+  const withTickets = cards.find((card) =>
+    tiers.some((tier) => ticketMatchesTab(tier, card.dateId)),
+  )
+  return withTickets?.dateId ?? cards[0]?.dateId ?? null
+}
 
 export function ticketMatchesTab(
   tier: TicketSelectorTier,

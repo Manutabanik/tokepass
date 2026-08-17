@@ -1,6 +1,9 @@
-import type { InteractiveVenueMap, VenueMapElement } from "@/types/venue-map"
-import { isSellableElement } from "@/types/venue-map"
-import { parametricZoneCapacity } from "@/lib/seating/adaptive-seating"
+import type { InteractiveVenueMap, VenueMapElement, VenueMapZone } from "@/types/venue-map"
+import { isSellableElement, venueUnitPriceLabel } from "@/types/venue-map"
+import {
+  parametricZoneSkuUnitCount,
+  parametricZoneSkuUnitLabel,
+} from "@/lib/seating/adaptive-seating"
 
 export type VenuePriceGroup = {
   key: string
@@ -9,11 +12,30 @@ export type VenuePriceGroup = {
   count: number
   unit: string
   price: number
+  priceHint: string
   match:
     | { kind: "sector"; id: string }
     | { kind: "group"; groupId: string }
     | { kind: "ids"; ids: string[] }
     | { kind: "zone"; id: string }
+}
+
+function zonePriceHint(zone: VenueMapZone): string {
+  return venueUnitPriceLabel({
+    layoutType: zone.layoutType,
+    sellMode: zone.sellMode,
+    priceMode: zone.priceMode,
+  })
+}
+
+function furniturePriceHint(elements: VenueMapElement[]): string {
+  const head = elements[0]
+  if (!head) return "Precio"
+  return venueUnitPriceLabel({
+    type: head.type,
+    sellMode: head.sellMode,
+    priceMode: head.priceMode,
+  })
 }
 
 function furnitureUnit(elements: VenueMapElement[]): { count: number; unit: string } {
@@ -66,30 +88,21 @@ export function listVenuePriceGroups(
       count,
       unit: count === 1 ? "butaca" : "butacas",
       price: sector.price,
+      priceHint: "Precio por butaca",
       match: { kind: "sector", id: sector.id },
     })
   }
 
   for (const zone of map.zones ?? []) {
-    const count = parametricZoneCapacity(zone)
+    const count = parametricZoneSkuUnitCount(zone)
     groups.push({
       key: `zone:${zone.id}`,
       name: zone.name,
       color: zone.color,
       count,
-      unit:
-        zone.layoutType === "numbered_seat"
-          ? count === 1
-            ? "butaca"
-            : "butacas"
-          : zone.layoutType === "table_combo"
-            ? count === 1
-              ? "lugar"
-              : "lugares"
-            : count === 1
-              ? "lugar"
-              : "lugares",
+      unit: parametricZoneSkuUnitLabel(zone, count),
       price: zone.price,
+      priceHint: zonePriceHint(zone),
       match: { kind: "zone", id: zone.id },
     })
   }
@@ -119,6 +132,7 @@ export function listVenuePriceGroups(
       count,
       unit,
       price: head.price,
+      priceHint: furniturePriceHint(members),
       match: grouped
         ? { kind: "group", groupId: grouped }
         : { kind: "ids", ids: members.map((item) => item.id) },

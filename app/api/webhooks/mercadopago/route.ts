@@ -10,10 +10,12 @@ import { NextResponse, type NextRequest } from "next/server"
 import { getBoostPlan, parseBoostExternalRef } from "@/lib/boost-plans"
 import { parsePaymentExternalReference } from "@/lib/checkout-buyer"
 import { logger } from "@/lib/logger"
+import { moneyAmountsEqual } from "@/lib/money/cents"
 import { captureCriticalException } from "@/lib/sentry/capture"
 import { getMercadoPagoClient, getMercadoPagoWebhookSecret } from "@/lib/mercadopago"
 import { processPaidOrderNotification } from "@/lib/payments/core/confirm-order"
 import { PaymentGatewayFactory } from "@/lib/payments/core/factory"
+import { webhookRetry } from "@/lib/payments/core/handle-webhook"
 import { parseResaleExternalRef } from "@/lib/resale"
 import { notifyGobiOrderPaid } from "@/lib/services/notify-gobi-order-paid"
 import { sendPaidOrderReceiptEmail } from "@/lib/email/resend"
@@ -368,9 +370,7 @@ async function activateResaleFromPayment(
     const paid = Number(input.transactionAmount)
     const expected = Number(listing.price)
     if (
-      !Number.isFinite(paid) ||
-      !Number.isFinite(expected) ||
-      Math.round(paid * 100) !== Math.round(expected * 100) ||
+      !moneyAmountsEqual(paid, expected) ||
       input.currencyId !== "ARS"
     ) {
       logger.error({
@@ -527,7 +527,19 @@ export async function POST(request: NextRequest) {
             payment_id: verified.transactionId,
             error: refundError,
           })
+          return webhookRetry({
+            provider: "mercadopago",
+            ...result,
+            refund: "failed",
+          })
         }
+      }
+
+      if (!result.ok && !result.needsRefund) {
+        return webhookRetry({
+          provider: "mercadopago",
+          ...result,
+        })
       }
 
       return webhookOk({
@@ -705,9 +717,7 @@ async function processMercadoPagoWebhook(
       const expected = Number(order.total_amount)
       const currency = firstString(payment.currency_id)
       if (
-        !Number.isFinite(paid) ||
-        !Number.isFinite(expected) ||
-        Math.round(paid * 100) !== Math.round(expected * 100) ||
+        !moneyAmountsEqual(paid, expected) ||
         currency !== "ARS"
       ) {
         logger.error({
@@ -950,6 +960,30 @@ async function processMercadoPagoWebhook(
           tickets_activated: finalize.tickets_activated ?? null,
         },
       })
+
+      try {
+        const { error: leftoverError } = await admin.rpc(
+          "release_leftover_cart_holds_for_order",
+          { p_order_id: orderId },
+        )
+        if (leftoverError) {
+          logger.error({
+            context: "webhooks/mercadopago",
+            message: "leftover_holds_release_failed",
+            order_id: orderId,
+            payment_id: mpPaymentId,
+            error: leftoverError.message,
+          })
+        }
+      } catch (leftoverErr) {
+        logger.error({
+          context: "webhooks/mercadopago",
+          message: "leftover_holds_release_failed",
+          order_id: orderId,
+          payment_id: mpPaymentId,
+          error: leftoverErr,
+        })
+      }
 
       if (!finalize.idempotent) {
         let access: { magicUrl: string; otp: string } | null = null

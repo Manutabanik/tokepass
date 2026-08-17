@@ -67,7 +67,7 @@ const VenueElementShape = memo(function VenueElementShape({
       opacity={opacity}
       className={
         interactive
-          ? "transition-all duration-200 ease-in-out"
+          ? "cursor-pointer transition-all duration-200 ease-in-out"
           : "pointer-events-none transition-all duration-200 ease-in-out"
       }
       onPointerDown={

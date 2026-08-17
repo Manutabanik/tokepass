@@ -1,11 +1,14 @@
 "use client"
 
-import { LoaderCircle, Send } from "lucide-react"
+import { LoaderCircle, Send, Undo2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useState, useTransition } from "react"
 import { toast } from "sonner"
 
-import { transferTicketAction } from "@/app/actions/transfer"
+import {
+  cancelTicketTransferAction,
+  transferTicketAction,
+} from "@/app/actions/transfer"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -17,13 +20,12 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { removeTicketOffline } from "@/lib/offline-store"
 
 export function TransferTicketDialog({
   ticketId,
   eventTitle,
   disabled = false,
-  triggerLabel = "Enviar / Regalar a un amigo",
+  triggerLabel = "Transferir a un amigo",
   triggerClassName,
 }: {
   ticketId: string
@@ -52,10 +54,9 @@ export function TransferTicketDialog({
           return
         }
 
-        toast.success(result.message, {
-          description: `Se avisó a ${result.receiverEmail}`,
+        toast.success("Transferencia iniciada", {
+          description: `Pendiente de reclamo por ${result.receiverEmail}. El Living QR quedó oculto.`,
         })
-        await removeTicketOffline(ticketId).catch(() => {})
         setOpen(false)
         setEmail("")
         router.refresh()
@@ -86,25 +87,22 @@ export function TransferTicketDialog({
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="border-border bg-card/90 shadow-2xl shadow-black/20 backdrop-blur-xl sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Transferir entrada</DialogTitle>
+            <DialogTitle>Transferir a un amigo</DialogTitle>
             <DialogDescription>
-              Vas a regalar tu acceso a{" "}
+              Vas a ceder la titularidad de tu acceso a{" "}
               <span className="font-medium text-foreground">{eventTitle}</span>.
+              Solo necesitamos el email de la cuenta Tokepass destinataria.
             </DialogDescription>
           </DialogHeader>
 
           <div
-            role="alert"
-            className="rounded-2xl border border-red-500/30 bg-red-500/10 px-3.5 py-3 text-sm leading-5 text-red-800 dark:text-red-100"
+            role="status"
+            className="rounded-2xl border border-border bg-muted/50 px-3.5 py-3 text-sm leading-5 text-muted-foreground"
           >
-            Al transferir esta entrada, el código QR de tu teléfono quedará{" "}
-            <strong className="font-semibold">
-              ANULADO de forma permanente
-            </strong>{" "}
-            y se emitirá uno nuevo para el destinatario. Esta acción no se puede
-            deshacer.
+            El Living QR se oculta en tu teléfono hasta que tu amigo reclame la
+            entrada. Podés cancelar mientras el estado sea pendiente.
           </div>
 
           <div className="space-y-2">
@@ -136,7 +134,7 @@ export function TransferTicketDialog({
               {isPending ? (
                 <>
                   <LoaderCircle className="animate-spin" aria-hidden="true" />
-                  Transfiriendo…
+                  Enviando…
                 </>
               ) : (
                 "Confirmar transferencia"
@@ -146,5 +144,57 @@ export function TransferTicketDialog({
         </DialogContent>
       </Dialog>
     </>
+  )
+}
+
+export function CancelTicketTransferButton({
+  transferId,
+  receiverEmail,
+  className,
+}: {
+  transferId: string
+  receiverEmail?: string
+  className?: string
+}) {
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
+
+  function handleCancel() {
+    if (isPending) return
+
+    startTransition(async () => {
+      const result = await cancelTicketTransferAction(transferId)
+      if (!result.success) {
+        toast.error(result.error)
+        return
+      }
+      toast.success("Transferencia cancelada", {
+        description: "El Living QR volvió a tu entrada.",
+      })
+      router.refresh()
+    })
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      disabled={isPending}
+      onClick={handleCancel}
+      className={
+        className ??
+        "h-11 w-full rounded-full border-border bg-background text-sm font-semibold text-foreground hover:bg-muted"
+      }
+    >
+      {isPending ? (
+        <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+      ) : (
+        <Undo2 className="size-4" aria-hidden="true" />
+      )}
+      {isPending ? "Cancelando…" : "Cancelar transferencia"}
+      {receiverEmail ? (
+        <span className="sr-only"> enviada a {receiverEmail}</span>
+      ) : null}
+    </Button>
   )
 }

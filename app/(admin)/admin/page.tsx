@@ -1,11 +1,12 @@
 import type { Metadata } from "next"
 import {
-  Calendar,
   CalendarPlus,
   DollarSign,
+  Landmark,
   Plus,
   Sparkles,
   Ticket,
+  Wallet,
 } from "lucide-react"
 import Link from "next/link"
 
@@ -56,31 +57,34 @@ export default async function AdminDashboardPage() {
 
   const kpis = [
     {
-      label: "Plata recaudada",
-      value: formatCurrency(metrics.totalRevenue),
+      label: "Recaudación bruta",
+      value: formatCurrency(metrics.grossRevenue),
       helper:
-        metrics.totalRevenue > 0
-          ? "Ventas acumuladas de tus eventos"
-          : "Todavía no tenés ventas",
+        metrics.grossRevenue > 0
+          ? "Solo órdenes pagadas (libro mayor)"
+          : "Las órdenes pendientes no suman",
       icon: DollarSign,
+    },
+    {
+      label: "Comisión Tokepass",
+      value: formatCurrency(metrics.tokepassServiceCharge),
+      helper: "Service charge descontado del bruto",
+      icon: Landmark,
+    },
+    {
+      label: "Neto organizador",
+      value: formatCurrency(metrics.organizerNetPayout),
+      helper: "Bruto menos comisión de la plataforma",
+      icon: Wallet,
     },
     {
       label: "Entradas vendidas",
       value: String(metrics.ticketsSold),
       helper:
-        metrics.ticketsSold > 0
-          ? "Entradas válidas + ya ingresadas"
-          : "Todavía no vendiste entradas",
-      icon: Ticket,
-    },
-    {
-      label: "Eventos activos",
-      value: String(metrics.activeEvents),
-      helper:
         metrics.activeEvents > 0
-          ? "Publicados y a la venta"
-          : "Publicá un evento para empezar a vender",
-      icon: Calendar,
+          ? `${metrics.activeEvents} evento${metrics.activeEvents === 1 ? "" : "s"} activo${metrics.activeEvents === 1 ? "" : "s"}`
+          : "Tickets de órdenes pagadas",
+      icon: Ticket,
     },
   ] as const
 
@@ -96,13 +100,13 @@ export default async function AdminDashboardPage() {
             Buen día.
           </h1>
           <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-            Acá ves cuánta plata entró, cuántas entradas vendiste y las últimas
-            compras.
+            La recaudación sale del libro mayor: solo órdenes con estado pagado.
+            Una orden pendiente no aparece en los gráficos hasta liquidarse.
           </p>
         </div>
       </div>
 
-      <div className="mt-8 grid gap-4 md:grid-cols-3">
+      <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {kpis.map(({ label, value, helper, icon: Icon }) => (
           <Card
             key={label}
@@ -131,7 +135,7 @@ export default async function AdminDashboardPage() {
               Últimas compras
             </CardTitle>
             <CardDescription className="text-muted-foreground">
-              Las ventas más recientes de tus eventos.
+              Últimas órdenes pagadas. Las pendientes no se listan.
             </CardDescription>
           </CardHeader>
 

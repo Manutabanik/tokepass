@@ -1,7 +1,7 @@
 "use client"
 
 import { LayoutGrid, LoaderCircle } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 
 import {
   ParametricSelectionStrip,
@@ -82,11 +82,12 @@ export function ParametricZonePanel({
   const [selectedRowId, setSelectedRowId] = useState<string | null>(
     rowsMeta.length === 1 ? (rowsMeta[0]?.rowId ?? null) : null,
   )
-
-  useEffect(() => {
+  const [rowZoneId, setRowZoneId] = useState(zone.id)
+  if (zone.id !== rowZoneId) {
+    setRowZoneId(zone.id)
     const meta = listParametricZoneRowMeta(zone)
     setSelectedRowId(meta.length === 1 ? (meta[0]?.rowId ?? null) : null)
-  }, [zone.id])
+  }
 
   const activeRow = rowsMeta.find((row) => row.rowId === selectedRowId) ?? null
 

@@ -45,6 +45,11 @@ export type MyTicket = {
   isSponsoredByTokepass: boolean
   /** Listado activo en marketplace de reventa (si existe). */
   activeResaleListingId: string | null
+  /** Gift asíncrono iniciado por el titular actual. */
+  pendingTransfer: {
+    id: string
+    receiverEmail: string
+  } | null
 }
 
 type TicketRow = {
@@ -88,7 +93,9 @@ type TicketRow = {
   } | null
 }
 
-export async function getMyTickets(): Promise<MyTicket[]> {
+export async function getMyTickets(options?: {
+  orderId?: string
+}): Promise<MyTicket[]> {
   const supabase = await createClient()
   const {
     data: { user },
@@ -111,8 +118,9 @@ export async function getMyTickets(): Promise<MyTicket[]> {
 
   const holderName = profile?.full_name?.trim() || "Titular"
   const holderDni = profile?.dni ?? null
+  const orderId = options?.orderId?.trim() || ""
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("tickets")
     .select(
       "id, status, order_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ticket_tiers(name, bonus_reward, day_id, price), events(id, title, date, location, flyer_url, image_url, qr_type, schedule_days, is_sponsored_by_tokepass, organizer_id, social_share_image_url, venues(name)), orders(status)",
@@ -120,6 +128,12 @@ export async function getMyTickets(): Promise<MyTicket[]> {
     .eq("owner_id", user.id)
     .in("status", ["valid", "used", "scanned", "transferred"])
     .order("created_at", { ascending: false })
+
+  if (orderId) {
+    query = query.eq("order_id", orderId)
+  }
+
+  const { data, error } = await query
 
   if (error) {
     throw new Error(`No se pudieron cargar tus entradas: ${error.message}`)
@@ -208,6 +222,7 @@ export async function getMyTickets(): Promise<MyTicket[]> {
           ticket.events.is_sponsored_by_tokepass,
         ),
         activeResaleListingId: null,
+        pendingTransfer: null,
       }
       return [mapped]
     })
@@ -225,6 +240,28 @@ export async function getMyTickets(): Promise<MyTicket[]> {
     )
     for (const ticket of tickets) {
       ticket.activeResaleListingId = byTicket.get(ticket.id) ?? null
+    }
+  }
+
+  if (ticketIds.length > 0) {
+    const { data: pendingRows } = await supabase
+      .from("ticket_transfers")
+      .select("id, original_ticket_id, receiver_email")
+      .in("original_ticket_id", ticketIds)
+      .eq("status", "pending")
+      .eq("sender_id", user.id)
+
+    const pendingByTicket = new Map(
+      (pendingRows ?? []).map((row) => [row.original_ticket_id, row]),
+    )
+    for (const ticket of tickets) {
+      const pending = pendingByTicket.get(ticket.id)
+      if (!pending) continue
+      ticket.pendingTransfer = {
+        id: pending.id,
+        receiverEmail: pending.receiver_email,
+      }
+      ticket.totpSecret = ""
     }
   }
 

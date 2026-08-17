@@ -15,6 +15,10 @@ export function webhookAck(data?: Record<string, unknown>) {
   return NextResponse.json({ received: true, ...(data ?? {}) }, { status: 200 })
 }
 
+export function webhookRetry(data?: Record<string, unknown>) {
+  return NextResponse.json({ received: false, ...(data ?? {}) }, { status: 500 })
+}
+
 export async function handlePaymentProviderWebhook(
   provider: SupportedPaymentProvider,
   req: Request,
@@ -49,6 +53,13 @@ export async function handlePaymentProviderWebhook(
       amount: verified.amount,
       rawPayload: verified.rawPayload,
     })
+
+    if (!result.ok && !result.needsRefund) {
+      return webhookRetry({
+        provider,
+        ...result,
+      })
+    }
 
     return webhookAck({
       provider,

@@ -101,7 +101,7 @@ export function PromoCodeInput({
             disabled={disabled || pending}
             autoCapitalize="characters"
             className={cn(
-              "h-12 min-w-0 flex-1 rounded-xl border border-border bg-secondary/30 px-4 font-mono text-base uppercase text-foreground md:h-14",
+              "h-12 min-w-0 flex-1 rounded-xl border border-border bg-secondary/30 px-4 font-mono text-[16px] uppercase text-foreground md:h-14 md:text-base",
               "placeholder:normal-case placeholder:text-muted-foreground",
             )}
             onKeyDown={(event) => {

@@ -1,12 +1,30 @@
 /**
  * IndexedDB del Zero-Offline Scanner (puerta).
- * Manifiesto de tickets por evento + cola de sincronización.
+ * Manifiesto cifrado por PIN + cola de sync + scan leases.
  */
+
+import {
+  type AdmissionLeaseRecord,
+  buildAdmissionLeaseHash,
+} from "@/lib/scanner/admission-lease"
+import { deviceClockOffsetMs } from "@/lib/totp-offline"
+import {
+  decryptTotpSecret,
+  encryptTotpSecret,
+  isScannerVaultUnlocked,
+  lockScannerVault,
+  parseEncryptedSecret,
+  serializeEncryptedSecret,
+  totpSecretLookupHash,
+  type ScannerVaultRecord,
+} from "@/lib/scanner/manifest-crypto"
 
 export type ScannerManifestTicket = {
   id: string
   event_id: string
   totp_secret: string
+  totp_secret_enc?: string | null
+  secret_lookup?: string | null
   status:
     | "pending_payment"
     | "valid"
@@ -36,6 +54,10 @@ export type ScannerManifestTicket = {
   group_slot: number | null
   batch_id: string | null
   ticket_type?: string | null
+  /** Cesion en curso: no admite en puerta hasta claim o cancel. */
+  pending_transfer?: boolean
+  /** FK a event_schedules / abono si es null. */
+  day_id?: string | null
 }
 
 export type ScannerManifestMeta = {
@@ -46,6 +68,15 @@ export type ScannerManifestMeta = {
   qrType: "dynamic" | "static"
   eventTitle: string
   eventStatus: string
+  scheduleDays?: Array<{
+    id: string
+    title: string
+    start_time: string
+    end_time: string
+  }>
+  eventDate?: string | null
+  /** Date.now() del dispositivo menos server_timestamp al descargar. */
+  clockOffsetMs?: number
 }
 
 export type SyncQueueItem = {
@@ -54,13 +85,19 @@ export type SyncQueueItem = {
   scanned_at_local: number
   queued_at: number
   admissions_count: number
+  admission_lease_hash?: string
+  device_id?: string
 }
 
+export type { AdmissionLeaseRecord }
+
 const DB_NAME = "tokepass-scanner-offline"
-const DB_VERSION = 1
+const DB_VERSION = 2
 const MANIFESTS = "manifests"
 const TICKETS = "tickets"
 const SYNC_QUEUE = "sync_queue"
+const LEASES = "leases"
+const CRYPTO = "crypto"
 
 function isBrowser(): boolean {
   return typeof window !== "undefined" && typeof indexedDB !== "undefined"
@@ -99,15 +136,22 @@ function openDb(): Promise<IDBDatabase> {
 
     request.onupgradeneeded = () => {
       const db = request.result
+      const tx = request.transaction
 
       if (!db.objectStoreNames.contains(MANIFESTS)) {
         db.createObjectStore(MANIFESTS, { keyPath: "eventId" })
       }
 
+      let ticketStore: IDBObjectStore
       if (!db.objectStoreNames.contains(TICKETS)) {
-        const store = db.createObjectStore(TICKETS, { keyPath: "id" })
-        store.createIndex("by_event", "event_id", { unique: false })
-        store.createIndex("by_secret", "totp_secret", { unique: false })
+        ticketStore = db.createObjectStore(TICKETS, { keyPath: "id" })
+        ticketStore.createIndex("by_event", "event_id", { unique: false })
+        ticketStore.createIndex("by_secret", "totp_secret", { unique: false })
+      } else {
+        ticketStore = tx!.objectStore(TICKETS)
+      }
+      if (!ticketStore.indexNames.contains("by_lookup")) {
+        ticketStore.createIndex("by_lookup", "secret_lookup", { unique: false })
       }
 
       if (!db.objectStoreNames.contains(SYNC_QUEUE)) {
@@ -116,15 +160,77 @@ function openDb(): Promise<IDBDatabase> {
         })
         queue.createIndex("by_event", "event_id", { unique: false })
       }
+
+      if (!db.objectStoreNames.contains(LEASES)) {
+        const leases = db.createObjectStore(LEASES, { keyPath: "id" })
+        leases.createIndex("by_ticket", "ticket_id", { unique: false })
+        leases.createIndex("by_event", "event_id", { unique: false })
+        leases.createIndex("by_hash", "lease_hash", { unique: false })
+      }
+
+      if (!db.objectStoreNames.contains(CRYPTO)) {
+        db.createObjectStore(CRYPTO, { keyPath: "id" })
+      }
     }
   })
 }
 
+function persistedTicket(ticket: ScannerManifestTicket): ScannerManifestTicket {
+  return {
+    ...ticket,
+    totp_secret: "",
+    totp_secret_enc: ticket.totp_secret_enc ?? null,
+    secret_lookup: ticket.secret_lookup ?? null,
+    is_test: Boolean(ticket.is_test),
+    is_sandbox: Boolean(ticket.is_sandbox),
+    pending_transfer: Boolean(ticket.pending_transfer),
+    day_id: ticket.day_id ?? null,
+  }
+}
+
+async function hydrateTicketSecret(
+  row: ScannerManifestTicket,
+): Promise<ScannerManifestTicket> {
+  const blob = parseEncryptedSecret(row.totp_secret_enc)
+  if (blob && isScannerVaultUnlocked()) {
+    const secret = await decryptTotpSecret(blob)
+    return { ...row, totp_secret: secret }
+  }
+  return row
+}
+
+async function sealTicket(
+  ticket: ScannerManifestTicket,
+): Promise<ScannerManifestTicket> {
+  const plaintext = ticket.totp_secret?.trim() ?? ""
+  if (!plaintext) {
+    return persistedTicket(ticket)
+  }
+  if (!isScannerVaultUnlocked()) {
+    throw new Error("Desbloquea el manifiesto con el PIN de validador")
+  }
+  const blob = await encryptTotpSecret(plaintext)
+  const lookup = await totpSecretLookupHash(plaintext)
+  return persistedTicket({
+    ...ticket,
+    totp_secret_enc: serializeEncryptedSecret(blob),
+    secret_lookup: lookup,
+  })
+}
+
 export async function hashManifest(
-  tickets: Array<Pick<ScannerManifestTicket, "id" | "status" | "totp_secret">>,
+  tickets: Array<
+    Pick<
+      ScannerManifestTicket,
+      "id" | "status" | "totp_secret" | "secret_lookup" | "pending_transfer" | "day_id"
+    >
+  >,
 ): Promise<string> {
   const payload = tickets
-    .map((t) => `${t.id}:${t.status}:${t.totp_secret}`)
+    .map(
+      (t) =>
+        `${t.id}:${t.status}:${t.secret_lookup || t.totp_secret || ""}:${t.pending_transfer ? 1 : 0}:${t.day_id ?? ""}`,
+    )
     .sort()
     .join("|")
 
@@ -136,7 +242,6 @@ export async function hashManifest(
       .join("")
   }
 
-  // Fallback no-criptográfico (entornos sin subtle)
   let hash = 0x811c9dc5
   for (let i = 0; i < payload.length; i += 1) {
     hash ^= payload.charCodeAt(i)
@@ -145,22 +250,51 @@ export async function hashManifest(
   return (hash >>> 0).toString(16)
 }
 
+export async function getScannerVault(): Promise<ScannerVaultRecord | null> {
+  if (!isBrowser()) return null
+  const db = await openDb()
+  const tx = db.transaction(CRYPTO, "readonly")
+  const row = (await requestToPromise(
+    tx.objectStore(CRYPTO).get("vault"),
+  )) as ScannerVaultRecord | undefined
+  await txDone(tx)
+  db.close()
+  return row ?? null
+}
+
+export async function saveScannerVault(record: ScannerVaultRecord): Promise<void> {
+  const db = await openDb()
+  const tx = db.transaction(CRYPTO, "readwrite")
+  tx.objectStore(CRYPTO).put(record)
+  await txDone(tx)
+  db.close()
+}
+
 export async function saveEventManifest(input: {
   eventId: string
   eventTitle: string
   eventStatus?: string
   qrType: "dynamic" | "static"
   tickets: ScannerManifestTicket[]
+  scheduleDays?: ScannerManifestMeta["scheduleDays"]
+  eventDate?: string | null
+  clockOffsetMs?: number
 }): Promise<ScannerManifestMeta> {
-  const hash = await hashManifest(input.tickets)
+  const sealed = await Promise.all(input.tickets.map((ticket) => sealTicket(ticket)))
+  const hash = await hashManifest(sealed)
   const meta: ScannerManifestMeta = {
     eventId: input.eventId,
     hash,
     downloadedAt: Date.now(),
-    ticketCount: input.tickets.length,
+    ticketCount: sealed.length,
     qrType: input.qrType,
     eventTitle: input.eventTitle,
     eventStatus: input.eventStatus ?? "published",
+    scheduleDays: input.scheduleDays ?? [],
+    eventDate: input.eventDate ?? null,
+    clockOffsetMs: Number.isFinite(Number(input.clockOffsetMs))
+      ? Number(input.clockOffsetMs)
+      : 0,
   }
 
   const db = await openDb()
@@ -176,12 +310,8 @@ export async function saveEventManifest(input: {
     ticketStore.delete(row.id)
   }
 
-  for (const ticket of input.tickets) {
-    ticketStore.put({
-      ...ticket,
-      is_test: Boolean(ticket.is_test),
-      is_sandbox: Boolean(ticket.is_sandbox),
-    })
+  for (const ticket of sealed) {
+    ticketStore.put(ticket)
   }
 
   tx.objectStore(MANIFESTS).put(meta)
@@ -209,16 +339,30 @@ export async function getTicketBySecret(
   eventId: string,
   totpSecret: string,
 ): Promise<ScannerManifestTicket | null> {
+  const lookup = isScannerVaultUnlocked()
+    ? await totpSecretLookupHash(totpSecret)
+    : null
+
   const db = await openDb()
   const tx = db.transaction(TICKETS, "readonly")
-  const index = tx.objectStore(TICKETS).index("by_secret")
-  const rows = (await requestToPromise(
-    index.getAll(totpSecret),
-  )) as ScannerManifestTicket[]
+  const store = tx.objectStore(TICKETS)
+
+  let rows: ScannerManifestTicket[] = []
+  if (lookup) {
+    rows = (await requestToPromise(
+      store.index("by_lookup").getAll(lookup),
+    )) as ScannerManifestTicket[]
+  }
+  if (rows.length === 0) {
+    rows = (await requestToPromise(
+      store.index("by_secret").getAll(totpSecret),
+    )) as ScannerManifestTicket[]
+  }
   await txDone(tx)
   db.close()
 
-  return rows.find((row) => row.event_id === eventId) ?? null
+  const match = rows.find((row) => row.event_id === eventId)
+  return match ? hydrateTicketSecret(match) : null
 }
 
 export async function getTicketById(
@@ -231,15 +375,38 @@ export async function getTicketById(
   )) as ScannerManifestTicket | undefined
   await txDone(tx)
   db.close()
-  return row ?? null
+  return row ? hydrateTicketSecret(row) : null
+}
+
+export async function countAdmissionLeases(ticketId: string): Promise<number> {
+  if (!ticketId) return 0
+  const db = await openDb()
+  const tx = db.transaction(LEASES, "readonly")
+  const count = await requestToPromise(
+    tx.objectStore(LEASES).index("by_ticket").count(ticketId),
+  )
+  await txDone(tx)
+  db.close()
+  return count
+}
+
+export async function putAdmissionLease(
+  record: AdmissionLeaseRecord,
+): Promise<void> {
+  const db = await openDb()
+  const tx = db.transaction(LEASES, "readwrite")
+  tx.objectStore(LEASES).put(record)
+  await txDone(tx)
+  db.close()
 }
 
 export async function markTicketUsedLocally(
   ticketId: string,
   scannedAtLocal: number = Date.now(),
+  lease?: Pick<AdmissionLeaseRecord, "device_id" | "lease_hash">,
 ): Promise<ScannerManifestTicket | null> {
   const db = await openDb()
-  const tx = db.transaction([TICKETS, SYNC_QUEUE], "readwrite")
+  const tx = db.transaction([TICKETS, SYNC_QUEUE, LEASES], "readwrite")
   const ticketStore = tx.objectStore(TICKETS)
   const current = (await requestToPromise(
     ticketStore.get(ticketId),
@@ -271,18 +438,36 @@ export async function markTicketUsedLocally(
     scanned_at: new Date(scannedAtLocal).toISOString(),
   }
 
-  ticketStore.put(updated)
+  ticketStore.put({
+    ...updated,
+    totp_secret: updated.totp_secret_enc ? "" : updated.totp_secret,
+  })
   queueStore.put({
     ticket_id: ticketId,
     event_id: current.event_id,
     scanned_at_local: scannedAtLocal,
     queued_at: Date.now(),
     admissions_count: (queued?.admissions_count ?? 0) + 1,
+    admission_lease_hash: lease?.lease_hash,
+    device_id: lease?.device_id,
   } satisfies SyncQueueItem)
+
+  if (lease?.lease_hash) {
+    tx.objectStore(LEASES).put({
+      id: `${ticketId}:${nextAdmissions}`,
+      ticket_id: ticketId,
+      event_id: current.event_id,
+      device_id: lease.device_id,
+      admission_counter: nextAdmissions,
+      timestamp: scannedAtLocal,
+      lease_hash: lease.lease_hash,
+      source: "local",
+    } satisfies AdmissionLeaseRecord)
+  }
 
   await txDone(tx)
   db.close()
-  return updated
+  return hydrateTicketSecret(updated)
 }
 
 export async function getSyncQueue(): Promise<SyncQueueItem[]> {
@@ -358,6 +543,7 @@ export async function searchManifestTickets(
       const tier = row.ticket_tier.toLowerCase()
       return name.includes(q) || dni.includes(q) || tier.includes(q)
     })
+    .map((row) => ({ ...row, totp_secret: "" }))
     .slice(0, limit)
 }
 
@@ -377,11 +563,12 @@ export async function getManifestTicketsByGroup(
 
   return rows
     .filter((row) => row.group_id === groupId)
+    .map((row) => ({ ...row, totp_secret: "" }))
     .sort((a, b) => (a.group_slot ?? 0) - (b.group_slot ?? 0))
 }
 
 /**
- * Descarga el manifiesto del servidor y lo persiste en IndexedDB.
+ * Descarga el manifiesto del servidor y lo persiste cifrado en IndexedDB.
  * `fetcher` = server action `fetchEventTicketManifest`.
  */
 export async function downloadEventManifest(
@@ -393,11 +580,18 @@ export async function downloadEventManifest(
     qrType: "dynamic" | "static"
     hash: string
     tickets: ScannerManifestTicket[]
+    scheduleDays?: ScannerManifestMeta["scheduleDays"]
+    eventDate?: string | null
+    server_timestamp?: number
   }>,
 ): Promise<ScannerManifestMeta> {
+  const receivedAt = Date.now()
   const payload = await fetcher(eventId)
+  const clockOffsetMs = deviceClockOffsetMs(
+    Number(payload.server_timestamp),
+    receivedAt,
+  )
 
-  // Preservar usos locales pendientes de sync (no pisar con valid del server).
   const queue = await getSyncQueue()
   const pendingIds = new Set(
     queue.filter((item) => item.event_id === eventId).map((item) => item.ticket_id),
@@ -427,11 +621,15 @@ export async function downloadEventManifest(
     eventStatus: payload.eventStatus,
     qrType: payload.qrType,
     tickets,
+    scheduleDays: payload.scheduleDays,
+    eventDate: payload.eventDate,
+    clockOffsetMs,
   })
 }
 
-/** Limpia manifiestos y cola de sync del escáner (llamar en logout). */
+/** Limpia manifiestos, leases y cola de sync del escáner (llamar en logout). */
 export async function clearOfflineScannerStore(): Promise<void> {
+  lockScannerVault()
   if (!isBrowser()) return
   await new Promise<void>((resolve, reject) => {
     const request = indexedDB.deleteDatabase(DB_NAME)
@@ -441,3 +639,5 @@ export async function clearOfflineScannerStore(): Promise<void> {
     request.onblocked = () => resolve()
   })
 }
+
+export { buildAdmissionLeaseHash }

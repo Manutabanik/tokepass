@@ -92,7 +92,9 @@ export function VenueManagerModal({
   const [pending, startTransition] = useTransition()
   const [pendingId, setPendingId] = useState<string | null>(null)
   const onCatalogChangeRef = useRef(onCatalogChange)
-  onCatalogChangeRef.current = onCatalogChange
+  useEffect(() => {
+    onCatalogChangeRef.current = onCatalogChange
+  }, [onCatalogChange])
 
   async function refreshCatalog() {
     const next = await listOrganizerVenues({ includeArchived: true })
@@ -101,12 +103,15 @@ export function VenueManagerModal({
     return next
   }
 
+  const [openSeen, setOpenSeen] = useState(open)
+  if (open !== openSeen) {
+    setOpenSeen(open)
+    if (!open) setDraft(null)
+    else setLoading(true)
+  }
+
   useEffect(() => {
-    if (!open) {
-      setDraft(null)
-      return
-    }
-    setLoading(true)
+    if (!open) return
     void listOrganizerVenues({ includeArchived: true })
       .then((next) => {
         setVenues(next)

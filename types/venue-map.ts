@@ -69,6 +69,70 @@ export type VenueInfraSubtype =
 
 export type VenueSellMode = "per_seat" | "group"
 
+/** How `price` is interpreted on a SKU/map unit. Kept in lockstep with `sellMode`. */
+export type VenuePriceMode = "closed_unit" | "per_person"
+
+export function venuePriceModeFromSellMode(sellMode: VenueSellMode): VenuePriceMode {
+  return sellMode === "group" ? "closed_unit" : "per_person"
+}
+
+export function venueSellModeFromPriceMode(priceMode: VenuePriceMode): VenueSellMode {
+  return priceMode === "closed_unit" ? "group" : "per_seat"
+}
+
+export function resolveVenuePricing(input: {
+  sellMode?: unknown
+  priceMode?: unknown
+  fallback?: VenueSellMode
+}): { sellMode: VenueSellMode; priceMode: VenuePriceMode } {
+  const priceRaw = String(input.priceMode ?? "")
+  if (priceRaw === "closed_unit" || priceRaw === "per_person") {
+    return {
+      priceMode: priceRaw,
+      sellMode: venueSellModeFromPriceMode(priceRaw),
+    }
+  }
+  const sellRaw = String(input.sellMode ?? "")
+  if (sellRaw === "group" || sellRaw === "per_seat") {
+    return {
+      sellMode: sellRaw,
+      priceMode: venuePriceModeFromSellMode(sellRaw),
+    }
+  }
+  const fallback = input.fallback === "group" ? "group" : "per_seat"
+  return {
+    sellMode: fallback,
+    priceMode: venuePriceModeFromSellMode(fallback),
+  }
+}
+
+export function venueUnitPriceLabel(input: {
+  type?: string | null
+  layoutType?: string | null
+  sellMode?: VenueSellMode | null
+  priceMode?: VenuePriceMode | null
+}): string {
+  const closed =
+    input.priceMode === "closed_unit" || input.sellMode === "group"
+  if (input.layoutType === "numbered_seat" || input.type === "vip_chair") {
+    return "Precio por butaca"
+  }
+  if (input.layoutType === "general" || input.type === "standing_zone") {
+    return "Precio por persona"
+  }
+  if (input.type === "vip_box") {
+    return closed ? "Precio total del palco" : "Precio por silla"
+  }
+  if (
+    input.type === "round_table" ||
+    input.type === "long_table" ||
+    input.layoutType === "table_combo"
+  ) {
+    return closed ? "Precio total de la mesa" : "Precio por silla"
+  }
+  return closed ? "Precio total de la unidad" : "Precio por persona"
+}
+
 export type VenueShapeType =
   | "theatre_seat"
   | "round_table"
@@ -115,6 +179,8 @@ export type VenueMapElement = {
   sideA: number
   sideB: number
   sellMode: VenueSellMode
+  /** Explicit price semantics. `closed_unit` <=> `sellMode: "group"`. */
+  priceMode?: VenuePriceMode
   capacity: number
   seats: VenueMapElementSeat[]
   groupId?: string
@@ -135,6 +201,8 @@ export type VenueMapZone = {
   polygon: VenueMapPoint[]
   layoutType: VenueZoneLayoutType
   sellMode: VenueSellMode
+  /** Explicit price semantics. `closed_unit` <=> `sellMode: "group"`. */
+  priceMode?: VenuePriceMode
   rows: number
   itemsPerRow: number
   capacityPerUnit: number
@@ -326,12 +394,13 @@ function parseElement(raw: unknown): VenueMapElement | null {
     chairCount: asNumber(item.chairCount, 8),
     sideA: asNumber(item.sideA, 4),
     sideB: asNumber(item.sideB, 4),
-    sellMode:
-      layer === "infrastructure"
-        ? "per_seat"
-        : item.sellMode === "group" || item.sell_mode === "group"
-          ? "group"
-          : "per_seat",
+    ...(layer === "infrastructure"
+      ? { sellMode: "per_seat" as const, priceMode: "per_person" as const }
+      : resolveVenuePricing({
+          sellMode: item.sellMode ?? item.sell_mode,
+          priceMode: item.priceMode ?? item.price_mode,
+          fallback: "per_seat",
+        })),
     capacity:
       layer === "infrastructure" ? 0 : Math.max(0, asNumber(item.capacity, 0)),
     seats,
@@ -413,6 +482,14 @@ function parseVenueZone(raw: unknown): VenueMapZone | null {
       : "table_combo"
   const rows = Math.min(80, Math.max(1, asNumber(item.rows, 4)))
   const itemsPerRow = Math.min(80, Math.max(1, asNumber(item.itemsPerRow ?? item.items_per_row, 10)))
+  const pricing =
+    layoutType === "numbered_seat"
+      ? { sellMode: "per_seat" as const, priceMode: "per_person" as const }
+      : resolveVenuePricing({
+          sellMode: item.sellMode ?? item.sell_mode,
+          priceMode: item.priceMode ?? item.price_mode,
+          fallback: layoutType === "table_combo" ? "group" : "group",
+        })
   return {
     id: String(item.id ?? `zone-${Math.random().toString(36).slice(2, 8)}`),
     name: String(item.name ?? "Zona").slice(0, 80),
@@ -420,7 +497,8 @@ function parseVenueZone(raw: unknown): VenueMapZone | null {
     price: Math.max(0, asNumber(item.price, 0)),
     polygon: polygonToPercent(polygon),
     layoutType,
-    sellMode: item.sellMode === "per_seat" || item.sell_mode === "per_seat" ? "per_seat" : "group",
+    sellMode: pricing.sellMode,
+    priceMode: pricing.priceMode,
     rows,
     itemsPerRow,
     capacityPerUnit: Math.min(100, Math.max(1, asNumber(item.capacityPerUnit ?? item.capacity_per_unit, 1))),
@@ -633,6 +711,7 @@ export function serializeVenueMap(map: InteractiveVenueMap): InteractiveVenueMap
       sideA: 0,
       sideB: 0,
       sellMode: "per_seat" as const,
+      priceMode: "per_person" as const,
       capacity: 0,
       seats: [] as VenueMapElement["seats"],
     }

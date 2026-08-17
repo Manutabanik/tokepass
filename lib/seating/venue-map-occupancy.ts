@@ -12,15 +12,38 @@ export function resolveLiveVenueSeatStatus(input: {
   if (input.mapStatus === "blocked" || input.occupancy === "blocked") {
     return "blocked"
   }
-  if (input.held) return "selected"
+  if (input.selected || input.held) return "selected"
   if (input.occupancy === "occupied") return "occupied"
-  if (input.selected) return "selected"
   return "available"
+}
+
+export function isCheckoutHoldExpired(
+  reservedUntil: string | null | undefined,
+  nowMs: number = Date.now(),
+): boolean {
+  if (!reservedUntil) return false
+  const ts = new Date(reservedUntil).getTime()
+  return Number.isFinite(ts) && ts <= nowMs
+}
+
+export function effectiveSeatingUnitStatus(
+  status: string,
+  reservedUntil?: string | null,
+  nowMs: number = Date.now(),
+): string {
+  if (status === "reserved" && isCheckoutHoldExpired(reservedUntil, nowMs)) {
+    return "available"
+  }
+  return status
 }
 
 /** After a live occupancy fetch, unknown ids are occupied — never optimistic-available. */
 export function occupancyFromSeatingUnits(
-  units: Array<{ layoutItemId: string; status: string }>,
+  units: Array<{
+    layoutItemId: string
+    status: string
+    reservedUntil?: string | null
+  }>,
   knownLayoutItemIds: Iterable<string> = [],
 ): Record<string, SeatStatus> {
   const occupancy: Record<string, SeatStatus> = {}
@@ -28,10 +51,11 @@ export function occupancyFromSeatingUnits(
     occupancy[id] = "occupied"
   }
   for (const unit of units) {
+    const status = effectiveSeatingUnitStatus(unit.status, unit.reservedUntil)
     occupancy[unit.layoutItemId] =
-      unit.status === "available"
+      status === "available"
         ? "available"
-        : unit.status === "blocked"
+        : status === "blocked"
           ? "blocked"
           : "occupied"
   }

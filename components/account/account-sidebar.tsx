@@ -46,6 +46,9 @@ function isActivePath(
   href: string,
   exact: boolean,
 ): boolean {
+  if (href === "/cuenta/entradas" && pathname.startsWith("/profile/tickets")) {
+    return true
+  }
   return exact
     ? pathname === href
     : pathname === href || pathname.startsWith(`${href}/`)

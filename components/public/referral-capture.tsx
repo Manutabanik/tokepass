@@ -6,8 +6,8 @@ import { usePathname, useSearchParams } from "next/navigation"
 import { trackReferralVisit } from "@/app/actions/promoters"
 import {
   getStoredReferralCode,
-  normalizeReferralCode,
   persistReferralCode,
+  readAffiliateQueryCode,
   REFERRAL_STORAGE_KEY,
 } from "@/lib/referral"
 
@@ -27,7 +27,7 @@ function visitorKey(): string {
 }
 
 /**
- * Captura ?ref= en cualquier ruta B2C: sessionStorage + cookie + visita.
+ * Captura ?rrpp= o ?ref= en cualquier ruta B2C: sessionStorage + cookie + visita.
  * También rehidrata sessionStorage desde la cookie si el usuario vuelve.
  */
 export function ReferralCapture() {
@@ -36,7 +36,7 @@ export function ReferralCapture() {
   const lastTracked = useRef<string | null>(null)
 
   useEffect(() => {
-    const fromQuery = normalizeReferralCode(searchParams.get("ref"))
+    const fromQuery = readAffiliateQueryCode(searchParams)
     const stored = getStoredReferralCode()
     const code = fromQuery ?? stored
     if (!code) return
@@ -48,7 +48,7 @@ export function ReferralCapture() {
     if (lastTracked.current === trackKey) return
     lastTracked.current = trackKey
 
-    // Solo contamos visita cuando llega un ?ref= fresco (nuevo clic).
+    // Solo contamos visita cuando llega un ?rrpp= o ?ref= fresco (nuevo clic).
     if (!fromQuery) return
 
     void trackReferralVisit({

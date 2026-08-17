@@ -6,6 +6,7 @@ import {
   Camera,
   FlaskConical,
   Gift,
+  Hourglass,
   MoreHorizontal,
   ShieldCheck,
   Sparkles,
@@ -21,7 +22,7 @@ import { LivingTicketQR } from "@/components/public/living-ticket-qr"
 import { QrEnlargeTrigger, QrScanLightbox } from "@/components/public/qr-scan-lightbox"
 import { ResaleTicketDialog } from "@/components/public/resale-ticket-dialog"
 import { StoryFlyerTrigger } from "@/components/public/story-flyer-modal"
-import { TransferTicketDialog } from "@/components/public/transfer-ticket-dialog"
+import { TransferTicketDialog, CancelTicketTransferButton } from "@/components/public/transfer-ticket-dialog"
 import { WalletPassButtons } from "@/components/account/wallet-pass-buttons"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -68,6 +69,7 @@ function TicketManageSheet({
   googleWalletEnabled,
   canTransfer,
   canResale,
+  pendingTransfer,
   open,
   onOpenChange,
 }: {
@@ -77,6 +79,7 @@ function TicketManageSheet({
   googleWalletEnabled: boolean
   canTransfer: boolean
   canResale: boolean
+  pendingTransfer: MyTicket["pendingTransfer"]
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
@@ -98,7 +101,7 @@ function TicketManageSheet({
         </SheetHeader>
 
         <div className="flex flex-col">
-          {ticket.status === "valid" ? (
+          {ticket.status === "valid" && !pendingTransfer ? (
             <div className="space-y-3">
               <StoryFlyerTrigger
                 data={{
@@ -132,7 +135,17 @@ function TicketManageSheet({
             </div>
           ) : null}
 
-          {canTransfer || (canResale && !ticket.activeResaleListingId) ? (
+          {pendingTransfer ? (
+            <div className="mt-4 space-y-3">
+              <p className="text-center text-sm text-muted-foreground">
+                Transferencia pendiente a {pendingTransfer.receiverEmail}
+              </p>
+              <CancelTicketTransferButton
+                transferId={pendingTransfer.id}
+                receiverEmail={pendingTransfer.receiverEmail}
+              />
+            </div>
+          ) : canTransfer || (canResale && !ticket.activeResaleListingId) ? (
             <div
               className={cn(
                 "mt-4 grid gap-3",
@@ -145,7 +158,7 @@ function TicketManageSheet({
                 <TransferTicketDialog
                   ticketId={ticket.id}
                   eventTitle={ticket.eventTitle}
-                  triggerLabel="Enviar / Regalar"
+                  triggerLabel="Transferir a un amigo"
                   triggerClassName="h-auto min-h-[5.75rem] w-full flex-col gap-2 whitespace-normal rounded-2xl border border-border bg-muted/30 px-3 py-4 text-center text-sm font-semibold leading-5 text-foreground hover:bg-muted/55"
                 />
               ) : null}
@@ -206,7 +219,7 @@ function TicketManageSheet({
             </div>
           ) : null}
 
-          {ticket.status === "valid" ? (
+          {ticket.status === "valid" && !pendingTransfer ? (
             <p className="mt-4 flex items-start gap-2 text-[12px] leading-5 text-muted-foreground">
               <ShieldCheck
                 className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400"
@@ -242,11 +255,11 @@ function TicketManageSheet({
 
 export function LivingTicketCard({
   ticket,
-  userId,
   showQr = true,
   offline = false,
   appleWalletEnabled = false,
   googleWalletEnabled = false,
+  sequenceLabel,
 }: {
   ticket: MyTicket
   userId: string
@@ -254,18 +267,24 @@ export function LivingTicketCard({
   offline?: boolean
   appleWalletEnabled?: boolean
   googleWalletEnabled?: boolean
+  sequenceLabel?: string
 }) {
   const [manageOpen, setManageOpen] = useState(false)
   const [scanOpen, setScanOpen] = useState(false)
   const vip = isVipTier(ticket.tierName)
   const isFree = Number(ticket.tierPrice) === 0
-  const canShowLiveQr = showQr && ticket.status === "valid"
+  const pendingTransfer = ticket.pendingTransfer
+  const canShowLiveQr =
+    showQr &&
+    ticket.status === "valid" &&
+    !pendingTransfer
   const isStatic = ticket.qrType === "static"
   const canTransfer =
     ticket.status === "valid" &&
     ticket.transferCount < ticket.maxTransfersAllowed &&
     !offline &&
-    !ticket.activeResaleListingId
+    !ticket.activeResaleListingId &&
+    !pendingTransfer
 
   const canResale =
     ticket.status === "valid" &&
@@ -273,7 +292,8 @@ export function LivingTicketCard({
     !ticket.isTest &&
     ticket.admissionsUsed === 0 &&
     ticket.transferCount < ticket.maxTransfersAllowed &&
-    !offline
+    !offline &&
+    !pendingTransfer
 
   const seatingLine = ticket.seatingLabel
     ? [
@@ -298,6 +318,7 @@ export function LivingTicketCard({
           : "border-border/80",
         ticket.isTest && "border-amber-400/60",
         isFree && !ticket.isTest && "border-rose-500/40",
+        pendingTransfer && "bg-muted/80 opacity-70",
       )}
     >
       {ticket.isTest ? (
@@ -336,7 +357,7 @@ export function LivingTicketCard({
               : "text-muted-foreground",
           )}
         >
-          {ticket.tierName}
+          {sequenceLabel ?? ticket.tierName}
           {vip ? " · VIP" : null}
         </p>
         {ticket.dayValidityLabel ? (
@@ -358,7 +379,15 @@ export function LivingTicketCard({
             DNI {ticket.holderDni}
           </p>
         ) : null}
-        {isUsedStatus(ticket.status) || ticket.status === "transferred" ? (
+        {pendingTransfer ? (
+          <Badge
+            variant="outline"
+            className="mx-auto mt-1 rounded-full border-amber-500/40 bg-amber-500/10 text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200"
+          >
+            <Hourglass className="size-3" aria-hidden="true" />
+            Transferencia pendiente
+          </Badge>
+        ) : isUsedStatus(ticket.status) || ticket.status === "transferred" ? (
           <Badge
             variant="outline"
             className="mx-auto mt-1 rounded-full text-[10px] font-semibold uppercase tracking-wide"
@@ -424,12 +453,31 @@ export function LivingTicketCard({
           </div>
         ) : (
           <p className="px-2 text-center text-sm text-muted-foreground">
-            {ticket.status === "transferred"
-              ? "Esta entrada fue transferida. El QR quedó anulado."
-              : "Esta entrada ya no muestra QR vivo en puerta."}
+            {pendingTransfer
+              ? `Transferencia pendiente a ${pendingTransfer.receiverEmail}. El Living QR está oculto hasta que reclamen o canceles.`
+              : ticket.status === "transferred"
+                ? "Esta entrada fue transferida. El QR quedó anulado."
+                : "Esta entrada ya no muestra QR vivo en puerta."}
           </p>
         )}
       </div>
+
+      {pendingTransfer && !offline ? (
+        <div className="mb-3">
+          <CancelTicketTransferButton
+            transferId={pendingTransfer.id}
+            receiverEmail={pendingTransfer.receiverEmail}
+          />
+        </div>
+      ) : canTransfer ? (
+        <div className="mb-3">
+          <TransferTicketDialog
+            ticketId={ticket.id}
+            eventTitle={ticket.eventTitle}
+            triggerLabel="Transferir a un amigo"
+          />
+        </div>
+      ) : null}
 
       <Button
         type="button"
@@ -448,6 +496,7 @@ export function LivingTicketCard({
         googleWalletEnabled={googleWalletEnabled}
         canTransfer={canTransfer}
         canResale={canResale}
+        pendingTransfer={pendingTransfer}
         open={manageOpen}
         onOpenChange={setManageOpen}
       />

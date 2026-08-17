@@ -1,13 +1,13 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react"
 
 import {
   getBuyerNotifications,
   type BuyerNotification,
 } from "@/app/actions/buyer-notifications"
 import {
-  getReadNotificationIds,
+  getReadNotificationSnapshot,
   markNotificationRead,
   markNotificationsRead,
   subscribeNotificationReads,
@@ -32,26 +32,25 @@ export type UserNotificationsState = {
 
 export function useUserNotifications(): UserNotificationsState {
   const [notifications, setNotifications] = useState<BuyerNotification[]>([])
-  const [readIds, setReadIds] = useState<Set<string>>(() => new Set())
+  const readIds = useSyncExternalStore(
+    subscribeNotificationReads,
+    getReadNotificationSnapshot,
+    getReadNotificationSnapshot,
+  )
   const [loading, setLoading] = useState(true)
   const [tick, setTick] = useState(0)
-
-  const refreshReads = useCallback(() => {
-    setReadIds(getReadNotificationIds())
-  }, [])
+  const [loadTick, setLoadTick] = useState(tick)
+  if (tick !== loadTick) {
+    setLoadTick(tick)
+    setLoading(true)
+  }
 
   const refresh = useCallback(() => {
     setTick((value) => value + 1)
   }, [])
 
   useEffect(() => {
-    refreshReads()
-    return subscribeNotificationReads(refreshReads)
-  }, [refreshReads])
-
-  useEffect(() => {
     let cancelled = false
-    setLoading(true)
 
     void getBuyerNotifications()
       .then((items) => {
@@ -98,12 +97,10 @@ export function useUserNotifications(): UserNotificationsState {
 
   const markRead = useCallback((id: string) => {
     markNotificationRead(id)
-    setReadIds(getReadNotificationIds())
   }, [])
 
   const markAllRead = useCallback(() => {
     markNotificationsRead(notifications.map((item) => item.id))
-    setReadIds(getReadNotificationIds())
   }, [notifications])
 
   return {

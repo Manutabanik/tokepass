@@ -6,10 +6,12 @@ export type TicketTransferNotifyPayload = {
   receiverEmail: string
   eventTitle: string
   senderUserId: string
+  claimUrl?: string
 }
 
 export type PosTicketNotifyPayload = {
-  phone: string
+  phone?: string | null
+  email?: string | null
   eventTitle: string
   ticketIds: string[]
   quantity: number
@@ -37,7 +39,9 @@ async function postWebhook(
 export async function notifyTicketTransfer(
   payload: TicketTransferNotifyPayload,
 ): Promise<void> {
-  const message = `¡Te han enviado una entrada para ${payload.eventTitle}! Reclamala en Tokepass → Mis entradas.`
+  const message = payload.claimUrl
+    ? `Te enviaron una entrada para ${payload.eventTitle}. Reclamala en Tokepass: ${payload.claimUrl}`
+    : `Te han enviado una entrada para ${payload.eventTitle}. Reclamala en Tokepass, Mis entradas.`
 
   try {
     if (
@@ -171,8 +175,9 @@ export async function notifyPosTicketIssued(
   try {
     if (
       await postWebhook("pos_ticket_issued", {
-        to: payload.phone,
+        to: payload.phone || payload.email,
         phone: payload.phone,
+        email: payload.email,
         message,
         eventTitle: payload.eventTitle,
         ticketIds: payload.ticketIds,
@@ -186,6 +191,7 @@ export async function notifyPosTicketIssued(
 
   console.info("[notifyPosTicketIssued]", {
     phone: payload.phone,
+    email: payload.email,
     message,
   })
 }

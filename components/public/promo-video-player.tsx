@@ -67,6 +67,7 @@ export function PromoVideoPlayer({
   )
   const canPlay = Boolean(embed.type && embed.embedUrl)
   const [armed, setArmed] = useState(!deferUntilActive || active)
+  if (active && !armed) setArmed(true)
   const videoRef = useRef<HTMLVideoElement>(null)
   const frameClass = cn(
     fill || gallery
@@ -74,10 +75,6 @@ export function PromoVideoPlayer({
       : FRAME_CLASS,
     className,
   )
-
-  useEffect(() => {
-    if (active) setArmed(true)
-  }, [active])
 
   useEffect(() => {
     const node = videoRef.current

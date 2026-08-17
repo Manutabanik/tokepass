@@ -10,7 +10,7 @@ import {
 } from "lucide-react"
 import dynamic from "next/dynamic"
 import Image from "next/image"
-import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react"
+import { useMemo, useState, useTransition, type ReactNode } from "react"
 import type { UseFormReturn } from "react-hook-form"
 import { toast } from "sonner"
 
@@ -143,17 +143,17 @@ export function EventVenueStep({
   const [backgroundUrl, setBackgroundUrl] = useState<string | null>(
     form.getValues("venue.seatingBackgroundUrl") || null,
   )
+  const watchedVenueMap = form.watch("venue.venueMap")
+  const parsedVenueMap = parseVenueMap(watchedVenueMap)
+  const parsedVenueMapKey = JSON.stringify(parsedVenueMap)
   const [venueMap, setVenueMap] = useState(() =>
     parseVenueMap(form.getValues("venue.venueMap")),
   )
-  const watchedVenueMap = form.watch("venue.venueMap")
-
-  useEffect(() => {
-    const next = parseVenueMap(watchedVenueMap)
-    setVenueMap((current) =>
-      JSON.stringify(current) === JSON.stringify(next) ? current : next,
-    )
-  }, [watchedVenueMap])
+  const [venueMapKey, setVenueMapKey] = useState(parsedVenueMapKey)
+  if (parsedVenueMapKey !== venueMapKey) {
+    setVenueMapKey(parsedVenueMapKey)
+    setVenueMap(parsedVenueMap)
+  }
   const [studioOpen, setStudioOpen] = useState(false)
   const [pendingSave, startSaveTransition] = useTransition()
   const [pendingUpload, startUploadTransition] = useTransition()
@@ -188,47 +188,54 @@ export function EventVenueStep({
     setStudioOpen(true)
   }
 
+  const geoVenueName = form.watch("venue.venueName")
+  const geoVenueLocation = form.watch("venue.venueLocation")
+  const geoVenueCity = form.watch("venue.venueCity")
+  const geoProvince = form.watch("venue.province")
+  const geoDepartment = form.watch("venue.department")
+  const geoProvinceId = form.watch("venue.provinceId")
+  const geoDepartmentId = form.watch("venue.departmentId")
+  const geoCapacity = form.watch("venue.capacity")
+  const geoLatitude = form.watch("venue.latitude")
+  const geoLongitude = form.watch("venue.longitude")
   const geoValue = useMemo<Partial<VenueArgentinaValue>>(() => {
-    const watchedCity = form.watch("venue.venueCity")
-    const parsed = parsePlaceParts(watchedCity)
-    const provinceName = form.watch("venue.province") || parsed.province
-    const departmentName = form.watch("venue.department") || parsed.department
-    const provinceId = form.watch("venue.provinceId")
-    const departmentId = form.watch("venue.departmentId")
+    const parsed = parsePlaceParts(geoVenueCity)
+    const provinceName = geoProvince || parsed.province
+    const departmentName = geoDepartment || parsed.department
     return {
-      venueName: form.watch("venue.venueName"),
-      address: form.watch("venue.venueLocation") ?? "",
-      capacity: form.watch("venue.capacity") ?? 0,
+      venueName: geoVenueName,
+      address: geoVenueLocation ?? "",
+      capacity: geoCapacity ?? 0,
       province:
         provinceName
-          ? { id: provinceId || provinceName, name: provinceName }
+          ? { id: geoProvinceId || provinceName, name: provinceName }
           : null,
       department:
         departmentName
-          ? { id: departmentId || departmentName, name: departmentName }
+          ? { id: geoDepartmentId || departmentName, name: departmentName }
           : null,
       coordinates:
-        form.watch("venue.latitude") != null &&
-        form.watch("venue.longitude") != null &&
-        Number.isFinite(form.watch("venue.latitude")) &&
-        Number.isFinite(form.watch("venue.longitude"))
+        geoLatitude != null &&
+        geoLongitude != null &&
+        Number.isFinite(geoLatitude) &&
+        Number.isFinite(geoLongitude)
           ? {
-              lat: form.watch("venue.latitude")!,
-              lng: form.watch("venue.longitude")!,
+              lat: geoLatitude,
+              lng: geoLongitude,
             }
           : null,
     }
   }, [
-    form.watch("venue.venueName"),
-    form.watch("venue.venueLocation"),
-    form.watch("venue.venueCity"),
-    form.watch("venue.province"),
-    form.watch("venue.department"),
-    form.watch("venue.provinceId"),
-    form.watch("venue.departmentId"),
-    form.watch("venue.capacity"),
-    form.watch("venue.latitude"),
-    form.watch("venue.longitude"),
+    geoVenueName,
+    geoVenueLocation,
+    geoVenueCity,
+    geoProvince,
+    geoDepartment,
+    geoProvinceId,
+    geoDepartmentId,
+    geoCapacity,
+    geoLatitude,
+    geoLongitude,
   ])
 
   function syncZonesToForm(nextZones: VenueZoneDraft[], nextStructured: boolean) {
@@ -897,6 +904,7 @@ function MapStudioFields({
           form.watch("venue.venueName") || selectedVenueName || undefined
         }
         value={venueMap}
+        tickets={form.watch("tickets")}
         onClose={onCloseStudio}
         onSave={(next) => {
           onPersistMap(next, { syncDrafts: true })

@@ -10,7 +10,7 @@ export type TicketAccessBinding = {
 
 /**
  * `null` / `"all"` = abono completo (todas las jornadas) o evento de fecha única.
- * Cualquier otro string debe coincidir con `events.schedule_days[].id`.
+ * Cualquier otro string debe coincidir con `event_schedules.id`.
  */
 export type TicketDayId = string | null
 

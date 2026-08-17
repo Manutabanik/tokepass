@@ -31,11 +31,16 @@ export function PublishEventConfirmDialog({
   const [testCount, setTestCount] = useState(0)
   const [loadingCount, setLoadingCount] = useState(false)
   const [pending, startTransition] = useTransition()
+  const [loadKey, setLoadKey] = useState(`${eventId}:${open}`)
+  const nextLoadKey = `${eventId}:${open}`
+  if (nextLoadKey !== loadKey) {
+    setLoadKey(nextLoadKey)
+    if (open) setLoadingCount(true)
+  }
 
   useEffect(() => {
     if (!open) return
     let cancelled = false
-    setLoadingCount(true)
     void countEventTestTickets(eventId)
       .then((count) => {
         if (!cancelled) setTestCount(count)

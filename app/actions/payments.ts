@@ -18,6 +18,10 @@ import {
   buildCheckoutBackUrls,
   buildPreferencePayer,
 } from "@/lib/payments/mercadopago"
+import {
+  expireCheckoutPreferenceOnOrder,
+  invalidateStaleCheckoutPreferences,
+} from "@/lib/payments/stale-preferences"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
@@ -106,11 +110,12 @@ export async function createPaymentPreference(
   const isStoreOnlyOrder = rows.length === 0
 
   let eventTitle = rows[0]?.events?.title ?? "Evento Tokepass"
+  let eventId = rows[0]?.events?.id ?? ""
 
   if (isStoreOnlyOrder) {
     const { data: storeRows, error: storeError } = await supabase
       .from("item_redemptions")
-      .select("id, event_items(name, events(title))")
+      .select("id, event_items(name, events(id, title))")
       .eq("order_id", orderId)
       .limit(5)
 
@@ -124,13 +129,14 @@ export async function createPaymentPreference(
     type StoreJoin = {
       event_items: {
         name: string
-        events: { title: string } | null
+        events: { id: string; title: string } | null
       } | null
     }
     const first = storeRows[0] as unknown as StoreJoin
     eventTitle =
       first.event_items?.events?.title ??
       "Tokepass — Tienda de Extras"
+    eventId = first.event_items?.events?.id ?? eventId
   }
 
   const frozenSubtotal = Number(order.subtotal)
@@ -240,6 +246,25 @@ export async function createPaymentPreference(
   })
   // UUID plano: más compatible con MP que JSON en external_reference.
   const externalReference = orderId
+
+  try {
+    await expireCheckoutPreferenceOnOrder(orderId)
+    if (eventId) {
+      await invalidateStaleCheckoutPreferences({
+        buyerId: user.id,
+        eventId,
+        exceptOrderId: orderId,
+      })
+    }
+  } catch (error) {
+    logger.error({
+      context: "payments/preference",
+      message: "stale_preference_invalidate_failed",
+      orderId,
+      eventId,
+      error,
+    })
+  }
 
   try {
     const client = getMercadoPagoClient()

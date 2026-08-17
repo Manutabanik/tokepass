@@ -76,8 +76,10 @@ export function UniversalSeatSelectionFlow({
   const mapHydrated = useRef(false)
   const loadSectorUnitsRef = useRef(onLoadSectorUnits)
   const loadAllUnitsRef = useRef(onLoadAllUnits)
-  loadSectorUnitsRef.current = onLoadSectorUnits
-  loadAllUnitsRef.current = onLoadAllUnits
+  useEffect(() => {
+    loadSectorUnitsRef.current = onLoadSectorUnits
+    loadAllUnitsRef.current = onLoadAllUnits
+  }, [onLoadAllUnits, onLoadSectorUnits])
 
   const hasInteractiveMap = venueMapHasInventory(venueMap)
 

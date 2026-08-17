@@ -1,7 +1,9 @@
 import "server-only"
 
+import { expandIndividualAccessTickets } from "@/lib/email/order-ticket-payload"
 import { sendPaidOrderReceiptEmail } from "@/lib/email/resend"
 import { logger } from "@/lib/logger"
+import { moneyAmountsEqual } from "@/lib/money/cents"
 import type { SupportedPaymentProvider } from "@/lib/payments/core/interfaces"
 import { notifyGobiOrderPaid } from "@/lib/services/notify-gobi-order-paid"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -88,11 +90,7 @@ export async function processPaidOrderNotification(
 
   const expected = Number(order.total_amount)
   const paid = Number(input.amount)
-  if (
-    !Number.isFinite(paid) ||
-    !Number.isFinite(expected) ||
-    Math.round(paid * 100) !== Math.round(expected * 100)
-  ) {
+  if (!moneyAmountsEqual(paid, expected)) {
     logger.error({
       context: "payments/confirm-order",
       message: "amount_mismatch",
@@ -106,12 +104,13 @@ export async function processPaidOrderNotification(
   }
 
   const { data: finalizeRaw, error: finalizeError } = await admin.rpc(
-    "finalize_paid_order",
+    "claim_and_finalize_paid_order",
     {
       p_order_id: orderId,
       p_provider: provider,
       p_transaction_id: transactionId,
-      p_metadata: toJson(input.rawPayload),
+      p_event_type: "payment.approved",
+      p_payload: toJson(input.rawPayload),
     },
   )
 
@@ -134,24 +133,33 @@ export async function processPaidOrderNotification(
       ok: false,
       code: finalize.code ?? "finalize_rejected",
       needsRefund: Boolean(finalize.needs_refund),
+      idempotent: Boolean(finalize.idempotent),
     }
   }
 
-  const { error: ledgerError } = await admin.from("payment_webhook_events").insert({
-    provider,
-    external_event_id: transactionId,
-    event_type: "payment.approved",
-    payload: toJson(input.rawPayload),
-  })
-
-  if (ledgerError && ledgerError.code !== "23505") {
+  try {
+    const { error: leftoverError } = await admin.rpc(
+      "release_leftover_cart_holds_for_order",
+      { p_order_id: orderId },
+    )
+    if (leftoverError) {
+      logger.error({
+        context: "payments/confirm-order",
+        message: "leftover_holds_release_failed",
+        orderId,
+        provider,
+        transactionId,
+        error: leftoverError.message,
+      })
+    }
+  } catch (error) {
     logger.error({
       context: "payments/confirm-order",
-      message: "webhook_ledger_insert_failed",
+      message: "leftover_holds_release_failed",
       orderId,
       provider,
       transactionId,
-      error: ledgerError.message,
+      error,
     })
   }
 
@@ -177,6 +185,19 @@ export async function processPaidOrderNotification(
       logger.error({
         context: "payments/confirm-order",
         message: "gobi_dispatch_failed",
+        orderId,
+        provider,
+        transactionId,
+        error,
+      })
+    }
+
+    try {
+      await expandIndividualAccessTickets(admin, orderId)
+    } catch (error) {
+      logger.error({
+        context: "payments/confirm-order",
+        message: "expand_access_tickets_failed",
         orderId,
         provider,
         transactionId,

@@ -48,10 +48,11 @@ export function FeaturedHeroSection({
 
   useEffect(() => {
     if (!emblaApi) return
-    onSelect()
+    const start = window.setTimeout(() => onSelect(), 0)
     emblaApi.on("select", onSelect)
     emblaApi.on("reInit", onSelect)
     return () => {
+      window.clearTimeout(start)
       emblaApi.off("select", onSelect)
       emblaApi.off("reInit", onSelect)
     }

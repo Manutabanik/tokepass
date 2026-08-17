@@ -2,31 +2,44 @@
 
 import { IdCard, Smartphone, X } from "lucide-react"
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useSyncExternalStore } from "react"
 
 import { Button } from "@/components/ui/button"
 
 const PWA_BANNER_KEY = "tokepass_pwa_banner_dismissed_v1"
+const PWA_BANNER_EVENT = "tokepass-pwa-banner"
+
+function subscribePwaBanner(onChange: () => void) {
+  window.addEventListener("storage", onChange)
+  window.addEventListener(PWA_BANNER_EVENT, onChange)
+  return () => {
+    window.removeEventListener("storage", onChange)
+    window.removeEventListener(PWA_BANNER_EVENT, onChange)
+  }
+}
+
+function readShowPwa() {
+  try {
+    return window.localStorage.getItem(PWA_BANNER_KEY) !== "1"
+  } catch {
+    return true
+  }
+}
 
 export function OnboardingBanner({ hasDni }: { hasDni: boolean }) {
-  const [showPwa, setShowPwa] = useState(false)
-
-  useEffect(() => {
-    try {
-      const dismissed = window.localStorage.getItem(PWA_BANNER_KEY)
-      setShowPwa(dismissed !== "1")
-    } catch {
-      setShowPwa(true)
-    }
-  }, [])
+  const showPwa = useSyncExternalStore(
+    subscribePwaBanner,
+    readShowPwa,
+    () => false,
+  )
 
   function dismissPwa() {
     try {
       window.localStorage.setItem(PWA_BANNER_KEY, "1")
+      window.dispatchEvent(new Event(PWA_BANNER_EVENT))
     } catch {
       // ignore
     }
-    setShowPwa(false)
   }
 
   if (hasDni && !showPwa) return null

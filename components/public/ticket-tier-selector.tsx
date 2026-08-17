@@ -415,7 +415,7 @@ function TierList({
                       onQuantityChange(tier.id, quantity + 1, maxSelectable)
                     }
                     aria-label={`Agregar ${tier.name}`}
-                    className="inline-flex size-12 items-center justify-center rounded-2xl border border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40 dark:border-emerald-400 dark:bg-emerald-400 dark:text-zinc-950"
+                    className="inline-flex size-12 items-center justify-center rounded-2xl border border-primary bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
                   >
                     <Plus className="size-5" aria-hidden />
                   </button>

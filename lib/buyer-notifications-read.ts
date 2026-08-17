@@ -60,3 +60,15 @@ export function subscribeNotificationReads(listener: () => void) {
     window.removeEventListener("storage", onStorage)
   }
 }
+
+let readIdsSnapshot = new Set<string>()
+let readIdsSnapshotKey = ""
+
+export function getReadNotificationSnapshot(): Set<string> {
+  const ids = getReadNotificationIds()
+  const key = [...ids].sort().join("\0")
+  if (key === readIdsSnapshotKey) return readIdsSnapshot
+  readIdsSnapshotKey = key
+  readIdsSnapshot = ids
+  return readIdsSnapshot
+}

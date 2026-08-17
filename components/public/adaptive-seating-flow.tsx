@@ -62,6 +62,9 @@ type AdaptiveSeatingFlowProps = {
   preview?: boolean
   takeover?: boolean
   immersive?: boolean
+  compact?: boolean
+  toolbarTitle?: string | null
+  onCloseMap?: () => void
   readOnly?: boolean
   selectedZoneId?: string | null
   unavailableZoneIds?: string[]
@@ -87,6 +90,9 @@ export function AdaptiveSeatingFlow({
   preview = false,
   takeover = false,
   immersive = false,
+  compact = false,
+  toolbarTitle = null,
+  onCloseMap,
   readOnly = false,
   selectedZoneId = null,
   unavailableZoneIds = [],
@@ -110,6 +116,9 @@ export function AdaptiveSeatingFlow({
           disableIdlePrompt
           silentHover
           hideChrome
+          hideToolbar={compact}
+          toolbarTitle={toolbarTitle}
+          onCloseMap={onCloseMap}
           readOnly={readOnly}
           maxSelectable={maxSelectable ?? undefined}
           selectedZoneId={selectedZoneId}
@@ -466,12 +475,12 @@ function MacroSeatingFlow({
   return (
     <div
       className={cn(
-        "relative text-zinc-100",
+        "relative text-foreground",
         takeover
-          ? "flex h-full min-h-0 flex-col overflow-hidden bg-zinc-950"
+          ? "flex h-full min-h-0 flex-col overflow-hidden bg-background"
           : embedded
             ? "space-y-6"
-            : "min-h-screen bg-zinc-950 pb-8",
+            : "min-h-screen bg-background pb-8",
       )}
     >
       <div
@@ -489,20 +498,20 @@ function MacroSeatingFlow({
         >
           <div className="min-w-0">
             {takeover ? null : (
-              <p className="text-[11px] font-bold tracking-[0.18em] text-zinc-500 uppercase">
+              <p className="text-[11px] font-bold tracking-[0.18em] text-muted-foreground uppercase">
                 Elegí tu zona
               </p>
             )}
             <h1
               className={cn(
-                "font-black tracking-tight text-white",
+                "font-black tracking-tight text-foreground",
                 takeover ? "truncate text-base" : "text-2xl",
               )}
             >
               {eventTitle}
             </h1>
             {takeover ? null : (
-              <p className="text-sm text-zinc-500">
+              <p className="text-sm text-muted-foreground">
                 {showMicro
                   ? "Tocá una butaca del plano o un polígono de zona."
                   : "Tocá un polígono. Después fila y mesa en la tira de abajo."}
@@ -517,7 +526,7 @@ function MacroSeatingFlow({
                   size="icon"
                   variant="outline"
                   aria-label="Acercar el plano"
-                  className="size-10 border-white/10 bg-zinc-950 text-zinc-100"
+                  className="size-10"
                   onClick={() => {
                     const next = Math.min(3.2, zoom + 0.25)
                     gesture.current.zoom = next
@@ -531,7 +540,7 @@ function MacroSeatingFlow({
                   size="icon"
                   variant="outline"
                   aria-label="Alejar el plano"
-                  className="size-10 border-white/10 bg-zinc-950 text-zinc-100"
+                  className="size-10"
                   onClick={() => {
                     const next = Math.max(0.7, zoom - 0.25)
                     gesture.current.zoom = next
@@ -551,7 +560,7 @@ function MacroSeatingFlow({
                 onClick={onBack}
                 aria-label={takeover ? "Cerrar el plano" : undefined}
                 className={cn(
-                  "shrink-0 border-white/10 bg-zinc-950 text-zinc-300 hover:bg-zinc-800",
+                  "shrink-0",
                   takeover ? "size-10" : "rounded-full",
                 )}
               >
@@ -572,13 +581,13 @@ function MacroSeatingFlow({
             mapHydrating && !preview ? (
               <div
                 className={cn(
-                  "flex items-center justify-center border border-white/10 bg-zinc-950",
+                  "flex items-center justify-center border border-border bg-muted",
                   takeover
                     ? "h-full min-h-0 flex-1"
                     : "h-[min(62dvh,560px)] rounded-3xl",
                 )}
               >
-                <LoaderCircle className="size-6 animate-spin text-cyan-300" />
+                <LoaderCircle className="size-6 animate-spin text-primary" />
               </div>
             ) : (
               <InteractiveSeatingCanvas
@@ -599,12 +608,12 @@ function MacroSeatingFlow({
             <svg
               viewBox={`0 0 ${VIEW.width} ${VIEW.height}`}
               className={cn(
-                "w-full touch-none bg-zinc-950",
+                "w-full touch-none bg-muted",
                 takeover
                   ? "min-h-0 flex-1"
                   : embedded
-                    ? "h-[min(52vh,420px)] rounded-3xl border border-white/10"
-                    : "h-[min(62dvh,560px)] rounded-3xl border border-white/10",
+                    ? "h-[min(52vh,420px)] rounded-3xl border border-border"
+                    : "h-[min(62dvh,560px)] rounded-3xl border border-border",
               )}
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
@@ -626,10 +635,10 @@ function MacroSeatingFlow({
           {panelOpen && zone ? (
             <div
               className={cn(
-                "z-40 flex flex-col border-t border-white/10 bg-zinc-950/95 shadow-[0_-12px_40px_rgba(0,0,0,0.45)] backdrop-blur-md",
+                "z-40 flex flex-col border-t border-border bg-background/95 shadow-[0_-12px_40px_rgba(0,0,0,0.12)] backdrop-blur-md dark:shadow-[0_-12px_40px_rgba(0,0,0,0.45)]",
                 takeover
                   ? "absolute inset-x-0 bottom-0 rounded-t-3xl pb-[max(0.6rem,env(safe-area-inset-bottom))]"
-                  : "mt-3 rounded-3xl border border-white/10",
+                  : "mt-3 rounded-3xl border border-border",
               )}
             >
               <div className="flex shrink-0 items-center justify-between gap-2 px-4 pt-3">
@@ -641,7 +650,7 @@ function MacroSeatingFlow({
                   type="button"
                   size="icon"
                   variant="ghost"
-                  className="size-9 text-zinc-400"
+                  className="size-9 text-muted-foreground"
                   onClick={() => {
                     setZoneId(null)
                     setSelectedItem(null)
@@ -653,9 +662,9 @@ function MacroSeatingFlow({
               </div>
               <div className="flex shrink-0 flex-col px-4 pb-3 pt-2">
                 {zone.layoutType === "general" ? (
-                  <div className="rounded-2xl border border-white/10 bg-zinc-900/80 p-4">
-                    <p className="flex items-center gap-2 text-sm font-semibold">
-                      <Ticket className="size-4 text-cyan-300" />
+                  <div className="rounded-2xl border border-border bg-card p-4">
+                    <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                      <Ticket className="size-4 text-primary" />
                       Acceso a {zone.name}
                     </p>
                     <div className="mt-3">

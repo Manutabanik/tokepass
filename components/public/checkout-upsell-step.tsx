@@ -56,7 +56,7 @@ export function CheckoutUpsellStep({
           type="button"
           disabled={isPending}
           onClick={onContinueWithExtras}
-          className="w-full rounded-2xl py-6 text-lg font-bold"
+          className="w-full rounded-2xl py-6 text-lg font-bold lg:hidden"
         >
           Sumar al pedido y continuar
         </Button>

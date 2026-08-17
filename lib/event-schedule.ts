@@ -1,3 +1,4 @@
+import { formatEventDayNumber, formatEventWeekdayShort } from "@/lib/format"
 import type { ScheduleDay } from "@/types/events"
 import { TICKET_DAY_ALL, type TicketDayId } from "@/types/tickets"
 
@@ -66,7 +67,8 @@ export function newScheduleDayId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID()
   }
-  return `day-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const hex = Math.random().toString(16).slice(2).padEnd(32, "0").slice(0, 32)
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`
 }
 
 function readScheduleDayField(
@@ -78,6 +80,20 @@ function readScheduleDayField(
     if (typeof value === "string" && value.trim()) return value.trim()
   }
   return ""
+}
+
+export function scheduleDaysFromEvent(input: {
+  relational?: Array<{
+    id: string
+    title: string
+    start_time: string
+    end_time: string
+  }> | null
+  json?: unknown
+}): ScheduleDay[] {
+  const fromRows = parseScheduleDays(input.relational)
+  if (fromRows.length > 0) return fromRows
+  return parseScheduleDays(input.json)
 }
 
 export function parseScheduleDays(raw: unknown): ScheduleDay[] {
@@ -167,6 +183,30 @@ export function seedTwoScheduleDays(startLocal: string): ScheduleDayFormValue[] 
 
 export function isMultiDaySchedule(days: ScheduleDay[]): boolean {
   return days.length >= 2
+}
+
+export function formatInventoryDayOption(
+  day: {
+    id?: string
+    title?: string | null
+    startTime?: string | null
+    start_time?: string | null
+  },
+  index: number,
+): string {
+  const start = day.startTime?.trim() || day.start_time?.trim() || ""
+  const weekday = start ? formatEventWeekdayShort(start) : ""
+  const dayNumber = start ? formatEventDayNumber(start) : ""
+  const when = [weekday, dayNumber].filter(Boolean).join(" ")
+  const title = day.title?.trim() || `Jornada ${index + 1}`
+  return when ? `${title}: ${when}` : title
+}
+
+export function defaultInventoryDayId(
+  days: readonly { id: string }[] | null | undefined,
+): string | null {
+  if (!days || days.length < 2) return null
+  return days[0]?.id ?? null
 }
 
 export function resolveEventAnchorDate(

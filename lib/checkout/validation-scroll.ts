@@ -8,10 +8,10 @@ export const CHECKOUT_BUYER_FIELD_IDS = {
 export type CheckoutBuyerField = keyof typeof CHECKOUT_BUYER_FIELD_IDS
 
 const FIELD_ORDER: CheckoutBuyerField[] = [
+  "buyerEmail",
   "buyerName",
   "buyerDni",
   "buyerPhone",
-  "buyerEmail",
 ]
 
 export function firstCheckoutBuyerErrorField(

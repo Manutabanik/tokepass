@@ -46,6 +46,29 @@ export function isMapBackedTicket(tier: {
   )
 }
 
+function groupElements(
+  group: VenuePriceGroup,
+  map: InteractiveVenueMap,
+) {
+  const ids = group.match.kind === "ids" ? group.match.ids : []
+  const groupId = group.match.kind === "group" ? group.match.groupId : null
+  return (map.elements ?? []).filter((item) =>
+    groupId ? item.groupId === groupId : ids.includes(item.id),
+  )
+}
+
+function furnitureChairCount(element: NonNullable<InteractiveVenueMap["elements"]>[number]): number {
+  const active = element.seats.filter((seat) => seat.status !== "blocked")
+  if (active.length > 0) return active.length
+  if (element.type === "long_table") {
+    return Math.max(
+      1,
+      (element.sideA || 0) + (element.sideB || 0) || element.chairCount || 1,
+    )
+  }
+  return Math.max(1, element.chairCount || element.capacity || 1)
+}
+
 function layoutTypeFromGroup(
   group: VenuePriceGroup,
   map: InteractiveVenueMap,
@@ -53,26 +76,57 @@ function layoutTypeFromGroup(
   if (group.match.kind === "zone") {
     const zoneId = group.match.id
     const zone = (map.zones ?? []).find((item) => item.id === zoneId)
-    return zone?.layoutType ?? "numbered_seat"
+    if (!zone || zone.layoutType === "general") return "general"
+    return zone.sellMode === "group" || zone.layoutType === "table_combo"
+      ? "table_combo"
+      : "numbered_seat"
   }
   if (group.match.kind === "sector") return "numbered_seat"
-  const ids = group.match.kind === "ids" ? group.match.ids : []
-  const groupId = group.match.kind === "group" ? group.match.groupId : null
-  const element = (map.elements ?? []).find((item) =>
-    groupId ? item.groupId === groupId : ids.includes(item.id),
+  const members = groupElements(group, map)
+  if (members.length > 0 && members.every((item) => item.type === "standing_zone")) {
+    return "general"
+  }
+  const furniture = members.filter(
+    (item) =>
+      item.type === "round_table" ||
+      item.type === "long_table" ||
+      item.type === "vip_box",
   )
-  if (element?.type === "standing_zone") return "general"
-  if (
-    element?.type === "round_table" ||
-    element?.type === "long_table" ||
-    element?.type === "vip_box"
-  ) {
+  if (furniture.length > 0 && furniture.every((item) => item.sellMode === "group")) {
     return "table_combo"
   }
   return "numbered_seat"
 }
 
-function blankMapTicket(): EventFormValues["tickets"][number] {
+function capacityPerUnitFromGroup(
+  group: VenuePriceGroup,
+  map: InteractiveVenueMap,
+): number {
+  if (group.match.kind === "zone") {
+    const zoneId = group.match.id
+    const zone = (map.zones ?? []).find((item) => item.id === zoneId)
+    if (!zone || zone.layoutType === "general") return 1
+    if (zone.sellMode === "group" || zone.layoutType === "table_combo") {
+      return Math.max(1, zone.capacityPerUnit || 1)
+    }
+    return 1
+  }
+  if (group.match.kind === "sector") return 1
+  const furniture = groupElements(group, map).filter(
+    (item) =>
+      item.type === "round_table" ||
+      item.type === "long_table" ||
+      item.type === "vip_box",
+  )
+  if (furniture.length > 0 && furniture.every((item) => item.sellMode === "group")) {
+    return furnitureChairCount(furniture[0]!)
+  }
+  return 1
+}
+
+function blankMapTicket(
+  dayId: string | null = null,
+): EventFormValues["tickets"][number] {
   return {
     isNew: true,
     name: "Ubicación",
@@ -80,7 +134,7 @@ function blankMapTicket(): EventFormValues["tickets"][number] {
     capacity: 1,
     timeLimit: "",
     bonusReward: "",
-    dayId: null,
+    dayId,
     visibility: "public",
     layoutType: "numbered_seat",
     seatingSectorId: null,
@@ -98,23 +152,21 @@ function blankMapTicket(): EventFormValues["tickets"][number] {
 export function syncMapBackedTickets(
   tickets: EventFormValues["tickets"],
   map: InteractiveVenueMap,
+  options?: { defaultDayId?: string | null },
 ): EventFormValues["tickets"] {
   const groups = listVenuePriceGroups(map)
   const liveSectorIds = new Set(groups.map((group) => priceGroupSectorId(group)))
   const commercial = tickets.filter((tier) => !isMapBackedTicket(tier))
   const existingMap = tickets.filter((tier) => isMapBackedTicket(tier))
+  const defaultDayId = options?.defaultDayId ?? null
   const nextMap = groups.map((group) => {
     const sectorId = priceGroupSectorId(group)
     const existing = existingMap.find(
       (tier) => tier.seatingSectorId === sectorId,
     )
-    const zoneId = group.match.kind === "zone" ? group.match.id : null
-    const zone = zoneId
-      ? (map.zones ?? []).find((item) => item.id === zoneId)
-      : undefined
     const inheritedId =
       existing?.id && existing.isNew !== true ? existing.id : undefined
-    const base = existing ?? blankMapTicket()
+    const base = existing ?? blankMapTicket(defaultDayId)
     return {
       ...base,
       id: inheritedId,
@@ -125,8 +177,7 @@ export function syncMapBackedTickets(
       seatingSectorId: sectorId,
       layoutType: layoutTypeFromGroup(group, map),
       tierType: "seated" as const,
-      capacityPerUnit:
-        zone?.capacityPerUnit ?? existing?.capacityPerUnit ?? 1,
+      capacityPerUnit: capacityPerUnitFromGroup(group, map),
     }
   })
 
@@ -155,7 +206,8 @@ export function mapBackedTicketsUnchanged(
       tier.name === other.name &&
       tier.price === other.price &&
       tier.capacity === other.capacity &&
-      tier.layoutType === other.layoutType
+      tier.layoutType === other.layoutType &&
+      tier.capacityPerUnit === other.capacityPerUnit
     )
   })
 }

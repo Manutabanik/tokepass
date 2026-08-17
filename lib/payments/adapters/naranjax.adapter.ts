@@ -11,6 +11,7 @@ import type {
   IPaymentGatewayAdapter,
   WebhookVerificationResult,
 } from "@/lib/payments/core/interfaces"
+import { verifyWebhookSignature } from "@/lib/payments/core/webhook-secret"
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (typeof value !== "object" || value === null) return null
@@ -116,10 +117,9 @@ export class NaranjaXAdapter implements IPaymentGatewayAdapter {
       return invalidWebhookResult({ reason: "naranjax_not_configured" })
     }
 
-    const expectedSecret = process.env.NARANJAX_WEBHOOK_SECRET?.trim()
     const provided = req.headers.get("x-naranjax-signature") ?? ""
-    if (expectedSecret && provided !== expectedSecret) {
-      return invalidWebhookResult({ reason: "invalid_signature" })
+    if (!verifyWebhookSignature(provided, process.env.NARANJAX_WEBHOOK_SECRET)) {
+      return invalidWebhookResult({ reason: "invalid_or_missing_webhook_secret" })
     }
 
     try {

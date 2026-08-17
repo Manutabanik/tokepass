@@ -1,6 +1,5 @@
 "use client"
 
-import { CartSummary } from "@/components/public/cart-summary"
 import {
   EventCheckoutSelector,
   type SelectedNumberedSeat,
@@ -27,6 +26,8 @@ export function CheckoutTicketList({
   onPurchaseIntent,
   onClearSeat,
   seatSelection,
+  selectedDateId,
+  onSelectedDateIdChange,
 }: {
   tiers: TicketSelectorTier[]
   isPending: boolean
@@ -44,14 +45,15 @@ export function CheckoutTicketList({
   onPurchaseIntent: () => void
   onClearSeat: () => void
   seatSelection: SeatSelectionContext | null
+  selectedDateId?: string | null
+  onSelectedDateIdChange?: (dateId: string) => void
 }) {
   const quantities = useCheckoutStore((state) => state.quantities)
   const selectedSeat = useCheckoutStore((state) => state.selectedSeat)
-  const cartLines = useCheckoutStore((state) => state.lines)
   const seatSheetOpen = useCheckoutStore((state) => state.seatSheetOpen)
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-2xl flex-col">
+    <div className="mx-auto flex h-full w-full flex-col">
       <EventCheckoutSelector
         tiers={tiers}
         quantities={quantities}
@@ -75,10 +77,9 @@ export function CheckoutTicketList({
         onSeatSheetOpenChange={(open) =>
           useCheckoutStore.getState().setSeatSheetOpen(open)
         }
+        selectedDateId={selectedDateId}
+        onSelectedDateIdChange={onSelectedDateIdChange}
       />
-      {cartLines.length > 0 ? (
-        <CartSummary className="mt-4 hidden lg:block" items={cartLines} />
-      ) : null}
     </div>
   )
 }

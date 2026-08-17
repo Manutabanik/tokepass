@@ -10,7 +10,7 @@ export function SiteFooterSafeSpace() {
 
   return (
     <div
-      className="h-[160px] bg-background lg:hidden"
+      className="h-32 bg-background lg:hidden"
       aria-hidden="true"
     />
   )

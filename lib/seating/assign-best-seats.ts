@@ -363,6 +363,47 @@ export function previewFastAssign(input: {
   }
 }
 
+export function suggestAssignmentForFullTables(input: {
+  map: InteractiveVenueMap
+  seats: FlattenedVenueSeat[]
+  sectorId: string
+  sectorName?: string
+  tableCount: number
+  occupancyBySeatId?: Record<string, SeatStatus>
+  selectedSeatIds?: Iterable<string>
+}):
+  | { kind: "seats"; seats: FlattenedVenueSeat[] }
+  | { kind: "tables"; tables: VenueMapElement[] }
+  | { kind: "none" } {
+  const tableCount = Math.max(1, Math.floor(input.tableCount) || 1)
+  const tables = assignBestTableElements({
+    map: input.map,
+    sectorId: input.sectorId,
+    sectorName: input.sectorName,
+    count: tableCount,
+    occupancyBySeatId: input.occupancyBySeatId,
+    selectedIds: input.selectedSeatIds,
+  })
+  if (tables.length >= tableCount) {
+    return { kind: "tables", tables: tables.slice(0, tableCount) }
+  }
+
+  const seats = assignBestSeats({
+    seats: input.seats,
+    sectorId: input.sectorId,
+    count: tableCount,
+    mode: "FULL_TABLES",
+    isTableSector: true,
+    occupancyBySeatId: input.occupancyBySeatId,
+    selectedSeatIds: input.selectedSeatIds,
+  })
+  if (seats.length > 0) {
+    return { kind: "seats", seats }
+  }
+
+  return { kind: "none" }
+}
+
 export function suggestAssignmentForPeople(input: {
   map: InteractiveVenueMap
   seats: FlattenedVenueSeat[]

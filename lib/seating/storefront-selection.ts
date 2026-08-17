@@ -7,6 +7,8 @@ import type {
   VenueMapElement,
   VenueMapZone,
 } from "@/types/venue-map"
+import { venuePriceModeFromSellMode } from "@/types/venue-map"
+import { storefrontLineTotal } from "@/lib/checkout/charge-unit"
 
 export function venueElementSelectionName(
   element: Pick<
@@ -62,6 +64,8 @@ export function storefrontItemFromElement(
     capacity: buyerElementCapacity(element),
     sectorId: element.groupId?.trim() || element.id,
     color: element.color,
+    sellMode: element.sellMode,
+    priceMode: element.priceMode ?? venuePriceModeFromSellMode(element.sellMode),
   }
 }
 
@@ -79,6 +83,8 @@ export function storefrontItemFromZone(
     capacity: 1,
     sectorId: zone.id,
     color: zone.color,
+    sellMode: zone.sellMode,
+    priceMode: zone.priceMode ?? venuePriceModeFromSellMode(zone.sellMode),
   }
 }
 
@@ -111,6 +117,8 @@ export function resolveStorefrontItemFromMap(
       color: sector.color,
       row,
       number: seat.number,
+      sellMode: "per_seat",
+      priceMode: "per_person",
     }
   }
   return null
@@ -136,6 +144,8 @@ export function hydrateStorefrontItemsFromMap(
       sectorId: live.sectorId ?? item.sectorId,
       row: live.row ?? item.row,
       number: live.number ?? item.number,
+      sellMode: live.sellMode ?? item.sellMode,
+      priceMode: live.priceMode ?? item.priceMode,
     }
   })
 }
@@ -231,7 +241,7 @@ export function formatStorefrontSelectionGroups(
   const others: StorefrontSelectionGroup[] = []
 
   for (const item of unique) {
-    const linePrice = item.price * Math.max(1, Math.floor(item.capacity) || 1)
+    const linePrice = storefrontLineTotal(item)
     if (isNumberedSeat(item) && item.row && item.number != null) {
       const sector = sectorLabelFromItem(item)
       const row = item.row.trim()

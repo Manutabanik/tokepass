@@ -112,7 +112,10 @@ export class MercadoPagoAdapter implements IPaymentGatewayAdapter {
       sandboxBuyerEmail: getMercadoPagoSandboxBuyerEmail(),
     })
 
-    const expiresAt = resolveCheckoutExpiresAt().toISOString()
+    const parsed = input.expiresAt ? new Date(input.expiresAt).getTime() : Number.NaN
+    const expiresAt = Number.isFinite(parsed)
+      ? new Date(parsed).toISOString()
+      : resolveCheckoutExpiresAt().toISOString()
 
     try {
       const client = getMercadoPagoClient()

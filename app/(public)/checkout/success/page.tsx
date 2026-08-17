@@ -1,19 +1,19 @@
-import { ArrowRight, CheckCircle2, Ticket } from "lucide-react"
 import type { Metadata } from "next"
-import Link from "next/link"
 
+import { getCheckoutOrderFulfillment } from "@/app/actions/checkout-fulfillment"
 import { getEventItems, userHasEventTicket } from "@/app/actions/addons"
 import { getPurchaseAnalyticsForOrder } from "@/app/actions/event-marketing"
+import { CheckoutSuccessView } from "@/components/checkout/checkout-success-view"
 import { EventStoreUpsell } from "@/components/public/event-store-upsell"
 import { PurchaseAnalyticsTracker } from "@/components/public/purchase-analytics-tracker"
 import { StoryFlyerSuccessCard } from "@/components/public/story-flyer-modal"
 import { CheckoutWalletPrecache } from "@/components/pwa/checkout-wallet-precache"
-import { Button } from "@/components/ui/button"
 import { hasActivePixels } from "@/lib/analytics/pixels"
+import { getWalletUiFlags } from "@/lib/wallet-cache"
 
 export const metadata: Metadata = {
-  title: "Pago iniciado",
-  description: "Tu pago con Mercado Pago fue procesado.",
+  title: "Confirmando tu compra",
+  description: "Estamos acreditando tu pago y preparando tus entradas.",
 }
 
 export default async function CheckoutSuccessPage({
@@ -28,11 +28,26 @@ export default async function CheckoutSuccessPage({
   }>
 }) {
   const { order_id, free, sandbox } = await searchParams
+  const orderId = order_id?.trim() ?? ""
   const isFree = free === "1"
   const isSandbox = sandbox === "1"
+  const skipPolling = isFree || isSandbox
+  const walletFlags = getWalletUiFlags()
 
-  const purchaseAnalytics = order_id
-    ? await getPurchaseAnalyticsForOrder(order_id)
+  const fulfillment = orderId
+    ? await getCheckoutOrderFulfillment(orderId)
+    : {
+        orderId: "",
+        status: "not_found" as const,
+        tickets: [],
+        userId: "",
+        eventTitle: null,
+        totalAmount: 0,
+        holdExpiresAt: null,
+      }
+
+  const purchaseAnalytics = orderId
+    ? await getPurchaseAnalyticsForOrder(orderId)
     : null
 
   const eventId = purchaseAnalytics?.eventId?.trim() || ""
@@ -43,26 +58,12 @@ export default async function CheckoutSuccessPage({
       ])
     : [[], false]
 
-  const eyebrow = isSandbox
-    ? "Modo Sandbox"
-    : isFree
-      ? "Entrada gratuita"
-      : "Mercado Pago"
-  const headline = isSandbox
-    ? "¡Compra de prueba lista!"
-    : isFree
-      ? "¡Entrada emitida!"
-      : "¡Pago recibido!"
-  const body = isSandbox
-    ? "Las entradas de prueba ya están en tu billetera. Podés escanear el Living QR en puerta (marcadas TEST)"
-    : isFree
-      ? "Tu entrada ya está disponible en tu billetera"
-      : "Estamos confirmando la transacción con el webhook de Mercado Pago. En segundos tus entradas quedarán disponibles en tu billetera"
-
   return (
     <section className="relative isolate overflow-hidden">
       <CheckoutWalletPrecache />
-      {purchaseAnalytics && hasActivePixels(purchaseAnalytics.pixels) ? (
+      {purchaseAnalytics &&
+      fulfillment.status === "paid" &&
+      hasActivePixels(purchaseAnalytics.pixels) ? (
         <PurchaseAnalyticsTracker
           pixels={purchaseAnalytics.pixels}
           eventTitle={purchaseAnalytics.eventTitle}
@@ -73,33 +74,16 @@ export default async function CheckoutSuccessPage({
       ) : null}
       <div className="absolute inset-x-0 top-0 -z-10 h-[480px] bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.18),transparent_42%),radial-gradient(circle_at_top_right,rgba(124,58,237,0.1),transparent_40%)]" />
 
-      <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-lg flex-col items-center px-4 py-20 text-center sm:px-6">
-        <div className="relative">
-          <div className="absolute -inset-6 rounded-full bg-emerald-400/20 blur-2xl" />
-          <span className="relative grid size-24 place-items-center rounded-full bg-emerald-500 text-white shadow-2xl shadow-emerald-500/30">
-            <CheckCircle2 className="size-14" strokeWidth={2.25} aria-hidden="true" />
-          </span>
-        </div>
+      <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-lg flex-col items-center px-4 py-20 sm:px-6">
+        <CheckoutSuccessView
+          orderId={orderId}
+          initial={fulfillment}
+          skipPolling={skipPolling && fulfillment.status === "paid"}
+          appleWalletEnabled={walletFlags.appleWalletEnabled}
+          googleWalletEnabled={walletFlags.googleWalletEnabled}
+        />
 
-        <p className="mt-10 text-sm font-semibold uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400">
-          {eyebrow}
-        </p>
-        <h1 className="mt-3 text-3xl font-black tracking-[-0.04em] text-zinc-950 dark:text-white sm:text-4xl">
-          {headline}
-        </h1>
-        <p className="mt-4 text-base leading-7 text-zinc-600 dark:text-zinc-400">
-          {body}
-          {order_id ? (
-            <>
-              {" "}
-              (orden{" "}
-              <code className="font-mono text-xs">{order_id.slice(0, 8)}</code>)
-            </>
-          ) : null}
-          .
-        </p>
-
-        {purchaseAnalytics ? (
+        {fulfillment.status === "paid" && purchaseAnalytics ? (
           <div className="mt-8 w-full">
             <StoryFlyerSuccessCard
               data={{
@@ -108,7 +92,7 @@ export default async function CheckoutSuccessPage({
                   purchaseAnalytics.eventDate || new Date().toISOString(),
                 eventLocation:
                   purchaseAnalytics.eventLocation ||
-                  "Ver ubicación en Tokepass",
+                  "Ver ubicacion en Tokepass",
                 imageUrl: purchaseAnalytics.eventImageUrl,
                 customStoryUrl: purchaseAnalytics.socialShareImageUrl,
                 mode: "buyer",
@@ -120,29 +104,7 @@ export default async function CheckoutSuccessPage({
           </div>
         ) : null}
 
-        <div className="mt-6 flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center">
-          <Button
-            size="lg"
-            className="h-12 rounded-full bg-violet-600 px-6 text-white hover:bg-violet-700"
-            nativeButton={false}
-            render={<Link href="/cuenta/entradas" />}
-          >
-            <Ticket aria-hidden="true" />
-            Ir a mis entradas
-          </Button>
-          <Button
-            size="lg"
-            variant="outline"
-            className="h-12 rounded-full px-6"
-            nativeButton={false}
-            render={<Link href="/events" />}
-          >
-            Seguir explorando
-            <ArrowRight aria-hidden="true" />
-          </Button>
-        </div>
-
-        {eventId && storeItems.length > 0 ? (
+        {fulfillment.status === "paid" && eventId && storeItems.length > 0 ? (
           <div className="mt-12 w-full text-left">
             <EventStoreUpsell
               eventId={eventId}

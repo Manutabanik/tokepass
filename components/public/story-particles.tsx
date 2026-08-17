@@ -22,7 +22,9 @@ export function StoryParticles({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const pausedRef = useRef(paused)
   const reduceMotion = useReducedMotion()
-  pausedRef.current = paused
+  useEffect(() => {
+    pausedRef.current = paused
+  }, [paused])
 
   useEffect(() => {
     const canvas = canvasRef.current

@@ -7,7 +7,27 @@
  */
 
 export const LIVING_QR_PERIOD_MS = 15_000
-export const LIVING_QR_GRACE_BLOCKS = 1
+/** ±3 bloques de 15s = ±45s de clock drift en puerta. */
+export const LIVING_QR_GRACE_BLOCKS = 3
+
+export function deviceClockOffsetMs(
+  serverTimestampMs: number,
+  deviceNowMs: number = Date.now(),
+): number {
+  const server = Number(serverTimestampMs)
+  const device = Number(deviceNowMs)
+  if (!Number.isFinite(server) || !Number.isFinite(device)) return 0
+  return device - server
+}
+
+export function serverAlignedNowMs(
+  clockOffsetMs: number | null | undefined,
+  deviceNowMs: number = Date.now(),
+): number {
+  const offset = Number(clockOffsetMs)
+  if (!Number.isFinite(offset)) return deviceNowMs
+  return deviceNowMs - offset
+}
 
 export function getTotpWindow(nowMs: number = Date.now()): number {
   return Math.floor(nowMs / LIVING_QR_PERIOD_MS)

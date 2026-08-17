@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { PriceInput } from "@/components/ui/price-input"
 import { defaultBulkPrefix } from "@/lib/seating/studio-bulk-edit"
-import type { VenueMapElement } from "@/types/venue-map"
+import { venueUnitPriceLabel, type VenueMapElement } from "@/types/venue-map"
 
 function Field({
   label,
@@ -63,7 +63,17 @@ export function VenueBulkEditPanel({
         Los cambios se aplican a todo el grupo en una sola operación.
       </p>
 
-      <Field label="Precio Global ($)">
+      <Field
+        label={venueUnitPriceLabel({
+          type: elements[0]?.type,
+          sellMode: elements.every((item) => item.sellMode === elements[0]?.sellMode)
+            ? elements[0]?.sellMode
+            : undefined,
+          priceMode: elements.every((item) => item.priceMode === elements[0]?.priceMode)
+            ? elements[0]?.priceMode
+            : undefined,
+        })}
+      >
         <PriceInput
           value={
             elements.every((item) => item.price === elements[0]?.price)

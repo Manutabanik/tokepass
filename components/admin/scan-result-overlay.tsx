@@ -23,6 +23,17 @@ export type ScanOverlayState =
       kind: "wrong_sector"
       correctGateName: string
     }
+  | {
+      kind: "main_gate_review"
+      reason: "group_no_peers" | "range_mismatch"
+    }
+  | {
+      kind: "transfer_pending"
+    }
+  | {
+      kind: "wrong_schedule"
+      message: string
+    }
 
 const OVERLAY: Record<
   ScanOverlayState["kind"],
@@ -32,6 +43,9 @@ const OVERLAY: Record<
   duplicate: { bg: "#EF4444", title: "ENTRADA YA REGISTRADA" },
   invalid: { bg: "#F59E0B", title: "CODIGO NO RECONOCIDO EN SISTEMA" },
   wrong_sector: { bg: "#3B82F6", title: "SECTOR INCORRECTO" },
+  main_gate_review: { bg: "#F59E0B", title: "REVISION EN PUERTA PRINCIPAL" },
+  transfer_pending: { bg: "#F59E0B", title: "TRANSFERENCIA PENDIENTE" },
+  wrong_schedule: { bg: "#F59E0B", title: "FUERA DE JORNADA" },
 }
 
 export function ScanResultOverlay({ state }: { state: ScanOverlayState }) {
@@ -76,6 +90,26 @@ export function ScanResultOverlay({ state }: { state: ScanOverlayState }) {
       {state.kind === "wrong_sector" ? (
         <p className="mt-8 max-w-xl text-2xl font-black leading-tight">
           Dirigirse a {state.correctGateName}
+        </p>
+      ) : null}
+
+      {state.kind === "main_gate_review" ? (
+        <p className="mt-8 max-w-xl text-lg font-semibold leading-7 text-white/95">
+          {state.reason === "range_mismatch"
+            ? "Esta entrada esta asignada a otra pistola de la gatera. Validar en Puerta Principal."
+            : "Entrada grupal o multi-acceso. Sin red local entre pistolas: validar en Puerta Principal."}
+        </p>
+      ) : null}
+
+      {state.kind === "transfer_pending" ? (
+        <p className="mt-8 max-w-xl text-lg font-semibold leading-7 text-white/95">
+          Esta entrada esta en cesion. El QR se habilita cuando el destinatario la reclama o se cancela la transferencia.
+        </p>
+      ) : null}
+
+      {state.kind === "wrong_schedule" ? (
+        <p className="mt-8 max-w-xl text-lg font-semibold leading-7 text-white/95">
+          {state.message}
         </p>
       ) : null}
     </div>

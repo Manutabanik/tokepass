@@ -40,6 +40,10 @@ export type OfflineEventData = {
   isTest?: boolean
   tierPrice?: number
   isSponsoredByTokepass?: boolean
+  pendingTransfer?: {
+    id: string
+    receiverEmail: string
+  } | null
 }
 
 export type OfflineTicketRecord = {
@@ -248,7 +252,7 @@ export function ticketToOfflineRecord(
   return {
     ticket_id: ticket.id,
     user_id: userId,
-    totp_secret: ticket.totpSecret || ticket.id,
+    totp_secret: ticket.pendingTransfer ? "" : ticket.totpSecret || ticket.id,
     event_data: {
       eventId: ticket.eventId,
       eventTitle: ticket.eventTitle,
@@ -275,6 +279,7 @@ export function ticketToOfflineRecord(
       isTest: ticket.isTest,
       tierPrice: ticket.tierPrice,
       isSponsoredByTokepass: ticket.isSponsoredByTokepass,
+      pendingTransfer: ticket.pendingTransfer,
     },
     status: ticket.status,
     qr_code: ticket.qrCode,
@@ -291,7 +296,9 @@ export function offlineRecordToTicket(record: OfflineTicketRecord): MyTicket {
     id: record.ticket_id,
     status: record.status,
     qrCode: record.qr_code,
-    totpSecret: record.totp_secret,
+    totpSecret: record.event_data.pendingTransfer
+      ? ""
+      : record.totp_secret,
     transferCount: record.transfer_count ?? 0,
     maxTransfersAllowed: record.max_transfers_allowed ?? 1,
     createdAt: record.created_at,
@@ -323,6 +330,7 @@ export function offlineRecordToTicket(record: OfflineTicketRecord): MyTicket {
       record.event_data.isSponsoredByTokepass,
     ),
     activeResaleListingId: null,
+    pendingTransfer: record.event_data.pendingTransfer ?? null,
   }
 }
 

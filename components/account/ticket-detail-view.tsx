@@ -20,7 +20,7 @@ import { WalletPassButtons } from "@/components/account/wallet-pass-buttons"
 import { SaveTicketButton } from "@/components/public/save-ticket-button"
 import { SponsorGrid } from "@/components/public/sponsor-grid"
 import { StoryFlyerWalletButton } from "@/components/public/story-flyer-modal"
-import { TransferTicketDialog } from "@/components/public/transfer-ticket-dialog"
+import { TransferTicketDialog, CancelTicketTransferButton } from "@/components/public/transfer-ticket-dialog"
 import { useOnlineStatus } from "@/components/pwa/use-online-status"
 import { Button } from "@/components/ui/button"
 import { formatEventDay, formatEventTime } from "@/lib/format"
@@ -66,13 +66,15 @@ export function TicketDetailView({
     }
   }, [online, userId, initialTicket.id])
 
-  const canShowQr = ticket.status === "valid" && otpUnlocked
+  const canShowQr =
+    ticket.status === "valid" && otpUnlocked && !ticket.pendingTransfer
   const isStatic = ticket.qrType === "static"
   const canTransfer =
     ticket.status === "valid" &&
     ticket.transferCount < ticket.maxTransfersAllowed &&
     online &&
-    !ticket.activeResaleListingId
+    !ticket.activeResaleListingId &&
+    !ticket.pendingTransfer
 
   const mapsHref = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
     ticket.venueName
@@ -213,22 +215,30 @@ export function TicketDetailView({
         </div>
       ) : (
         <div className="rounded-3xl border border-dashed border-border bg-muted/40 px-5 py-10 text-center text-sm text-muted-foreground">
-          Esta entrada ya no muestra QR vivo
-          {ticket.status === "transferred" ? " (fue transferida)" : ""}.
+          {ticket.pendingTransfer
+            ? `Transferencia pendiente a ${ticket.pendingTransfer.receiverEmail}. El Living QR está oculto.`
+            : `Esta entrada ya no muestra QR vivo${ticket.status === "transferred" ? " (fue transferida)" : ""}.`}
         </div>
       )}
 
       <div className="grid gap-3">
+        {ticket.pendingTransfer && online ? (
+          <CancelTicketTransferButton
+            transferId={ticket.pendingTransfer.id}
+            receiverEmail={ticket.pendingTransfer.receiverEmail}
+            className="min-h-12 w-full rounded-2xl"
+          />
+        ) : null}
         {canTransfer ? (
           <TransferTicketDialog
             ticketId={ticket.id}
             eventTitle={ticket.eventTitle}
-            triggerLabel="Regalar a un amigo"
+            triggerLabel="Transferir a un amigo"
             triggerClassName="min-h-12 w-full rounded-2xl"
           />
         ) : null}
 
-        {ticket.status === "valid" ? (
+        {ticket.status === "valid" && !ticket.pendingTransfer ? (
           <>
             <WalletPassButtons
               ticketId={ticket.id}

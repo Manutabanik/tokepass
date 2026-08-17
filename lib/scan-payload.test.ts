@@ -6,22 +6,23 @@ import {
   isLivingWindowAccepted,
   resolveScanSecret,
 } from "./scan-payload"
-import { generateLivingQrPayload, getTotpRemainingSeconds, getTotpWindow } from "./totp-offline"
+import { deviceClockOffsetMs, generateLivingQrPayload, getTotpRemainingSeconds, getTotpWindow, serverAlignedNowMs } from "./totp-offline"
 
 describe("Living QR time window", () => {
-  it("accepts the current and adjacent 15-second windows", () => {
+  it("accepts current window plus three grace blocks (±45s)", () => {
     const current = getTotpWindow(1_725_000_000_000)
 
     assert.equal(isLivingWindowAccepted(current, current), true)
     assert.equal(isLivingWindowAccepted(current - 1, current), true)
-    assert.equal(isLivingWindowAccepted(current + 1, current), true)
+    assert.equal(isLivingWindowAccepted(current + 3, current), true)
+    assert.equal(isLivingWindowAccepted(current - 3, current), true)
   })
 
-  it("rejects expired and future manipulated windows", () => {
+  it("rejects windows beyond the ±45s grace", () => {
     const current = getTotpWindow(1_725_000_000_000)
 
-    assert.equal(isLivingWindowAccepted(current - 2, current), false)
-    assert.equal(isLivingWindowAccepted(current + 2, current), false)
+    assert.equal(isLivingWindowAccepted(current - 4, current), false)
+    assert.equal(isLivingWindowAccepted(current + 4, current), false)
   })
 
   it("creates an opaque v2 payload without embedding the secret", async () => {
@@ -61,8 +62,29 @@ describe("Living QR time window", () => {
     })
   })
 
+  it("rejects deprecated Living QR v1 payloads that embed the totp secret", () => {
+    const secret = "legacy-replay-secret"
+    const windowIndex = getTotpWindow(1_725_000_000_000)
+    const v1 = Buffer.from(`${secret}-${windowIndex}`).toString("base64")
+    assert.equal(resolveScanSecret(v1, "dynamic"), null)
+    assert.equal(resolveScanSecret(v1, "static"), null)
+    assert.deepEqual(decodeLivingPayload(v1), {
+      version: 1,
+      totpSecret: secret,
+      timestampBlock: windowIndex,
+    })
+  })
+
   it("counts remaining seconds inside the 15-second Living QR window", () => {
     assert.equal(getTotpRemainingSeconds(1_725_000_000_000), 15)
     assert.equal(getTotpRemainingSeconds(1_725_000_000_000 + 14_250), 1)
+  })
+
+  it("aligns device now using the stored clock offset", () => {
+    const serverTs = 1_725_000_000_000
+    const deviceTs = serverTs + 30_000
+    const offset = deviceClockOffsetMs(serverTs, deviceTs)
+    assert.equal(offset, deviceTs - serverTs)
+    assert.equal(serverAlignedNowMs(offset, deviceTs), serverTs)
   })
 })

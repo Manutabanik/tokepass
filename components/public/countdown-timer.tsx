@@ -10,21 +10,21 @@ export function CountdownTimer({
   initialMinutes = 10,
   onExpire,
   className,
+  compact = false,
 }: {
   expiresAt?: string | null
   initialMinutes?: number
   onExpire?: () => void
   className?: string
+  compact?: boolean
 }) {
-  const deadline = expiresAt
-    ? new Date(expiresAt).getTime()
-    : Date.now() + initialMinutes * 60 * 1000
   const expiredRef = useRef(false)
   const onExpireRef = useRef(onExpire)
-  onExpireRef.current = onExpire
-  const [remainingSeconds, setRemainingSeconds] = useState(() =>
-    Math.max(0, Math.ceil((deadline - Date.now()) / 1000)),
-  )
+  const [remainingSeconds, setRemainingSeconds] = useState(0)
+
+  useEffect(() => {
+    onExpireRef.current = onExpire
+  }, [onExpire])
 
   useEffect(() => {
     expiredRef.current = false
@@ -51,7 +51,10 @@ export function CountdownTimer({
     <span
       className={cn(
         "font-mono tabular-nums",
-        urgent && "underline decoration-2 underline-offset-4",
+        urgent &&
+          (compact
+            ? "text-destructive"
+            : "underline decoration-2 underline-offset-4"),
         className,
       )}
     >

@@ -13,6 +13,7 @@ describe("focused-flows", () => {
     assert.equal(isAdminFocusedFlow("/admin/events/create"), true)
     assert.equal(isAdminFocusedFlow("/admin/events/abc/edit"), true)
     assert.equal(isAdminFocusedFlow("/admin/pos"), true)
+    assert.equal(isAdminFocusedFlow("/dashboard/pos"), true)
     assert.equal(isAdminFocusedFlow("/admin/scanner"), true)
     assert.equal(isAdminFocusedFlow("/admin/validator"), true)
     assert.equal(isAdminFocusedFlow("/admin/events"), false)
@@ -28,6 +29,8 @@ describe("focused-flows", () => {
 
   it("oculta la bottom nav publica en checkout y detalle", () => {
     assert.equal(isPublicFocusedFlow("/checkout/success"), true)
+    assert.equal(isPublicFocusedFlow("/event/fiesta/queue"), true)
+    assert.equal(isPublicFocusedFlow("/waiting-room"), true)
     assert.equal(isPublicFocusedFlow("/tickets/abc/print"), true)
     assert.equal(isPublicFocusedFlow("/cuenta/entradas/abc"), true)
     assert.equal(isPublicFocusedFlow("/"), false)

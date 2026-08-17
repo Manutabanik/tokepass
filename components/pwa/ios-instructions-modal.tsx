@@ -1,6 +1,7 @@
 "use client"
 
 import { Share, Smartphone } from "lucide-react"
+import Image from "next/image"
 
 import {
   Dialog,
@@ -88,7 +89,7 @@ export function IosInstructionsModal({
               <span className="text-zinc-600">→</span>
               <div className="flex flex-col items-center gap-1">
                 <span className="size-10 overflow-hidden rounded-xl bg-black ring-1 ring-violet-400/40">
-                  <img
+                  <Image
                     src="/brand/tokepass-mark.png"
                     alt=""
                     width={40}

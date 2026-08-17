@@ -2,6 +2,7 @@
 
 import { Radio, Sparkles } from "lucide-react"
 import { motion } from "motion/react"
+import Image from "next/image"
 
 import type { CatalogEvent } from "@/app/actions/public-events"
 import { EventCard } from "@/components/discovery/event-card"
@@ -32,7 +33,7 @@ export function EmptyState({
             aria-hidden="true"
           />
           <span className="relative size-14 overflow-hidden rounded-2xl bg-black shadow-[0_0_28px_rgba(167,139,250,0.45)] ring-1 ring-white/15">
-            <img
+            <Image
               src="/brand/tokepass-mark.png"
               alt=""
               width={56}

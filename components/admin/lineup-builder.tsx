@@ -65,6 +65,7 @@ export function LineupBuilder({
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const persistRef = useRef<number | null>(null)
+  const commitRef = useRef<(next: LineupDraftItem[]) => void>(() => {})
   const rootRef = useRef<HTMLElement | null>(null)
   const previewSyncKeyRef = useRef("")
 
@@ -173,6 +174,10 @@ export function LineupBuilder({
   }
 
   useEffect(() => {
+    commitRef.current = commit
+  })
+
+  useEffect(() => {
     const missing = value.filter(
       (item) =>
         item.artistId &&
@@ -189,7 +194,7 @@ export function LineupBuilder({
       void syncArtistAudioPreviews({ artistIds: ids }).then((result) => {
         if (!result.success || result.data.updated === 0) return
         const previews = result.data.previews
-        commit(
+        commitRef.current(
           value.map((item) => {
             const hit = item.artistId ? previews[item.artistId] : null
             if (!hit?.previewUrl) return item

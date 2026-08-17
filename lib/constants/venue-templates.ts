@@ -107,6 +107,9 @@ function place(
     type === "vip_box"
   ) {
     next.sellMode = patch.sellMode ?? "group"
+    next.priceMode =
+      patch.priceMode ?? (next.sellMode === "group" ? "closed_unit" : "per_person")
+    next.priceMode = patch.priceMode ?? (next.sellMode === "group" ? "closed_unit" : "per_person")
   }
   next.seats = rebuildElementSeats(next)
   return next

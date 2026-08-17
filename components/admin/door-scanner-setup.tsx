@@ -16,9 +16,16 @@ export function DoorScannerSetup({
   accessMode,
   loadError,
   isStarting,
+  sessionPin,
+  vaultExists,
+  deviceSlotCount,
+  deviceSlotIndex,
   onEventChange,
   onGateChange,
   onModeChange,
+  onSessionPinChange,
+  onDeviceSlotCountChange,
+  onDeviceSlotIndexChange,
   onStart,
 }: {
   events: ScannerEventOption[]
@@ -28,12 +35,20 @@ export function DoorScannerSetup({
   accessMode: ScannerAccessMode
   loadError: string | null
   isStarting: boolean
+  sessionPin: string
+  vaultExists: boolean
+  deviceSlotCount: number
+  deviceSlotIndex: number
   onEventChange: (id: string) => void
   onGateChange: (id: string) => void
   onModeChange: (mode: ScannerAccessMode) => void
+  onSessionPinChange: (pin: string) => void
+  onDeviceSlotCountChange: (count: number) => void
+  onDeviceSlotIndexChange: (index: number) => void
   onStart: () => void
 }) {
-  const canStart = Boolean(eventId && gateId) && !isStarting
+  const pinOk = /^\d{4,8}$/.test(sessionPin.trim())
+  const canStart = Boolean(eventId && gateId) && pinOk && !isStarting
 
   return (
     <div className="fixed inset-0 z-[80] flex flex-col bg-[#05050a] text-white">
@@ -123,6 +138,65 @@ export function DoorScannerSetup({
               </option>
             ))}
           </select>
+
+          <label className="block text-[11px] font-bold uppercase tracking-[0.16em] text-white/45">
+            PIN de validador
+          </label>
+          <input
+            type="password"
+            inputMode="numeric"
+            autoComplete="off"
+            maxLength={8}
+            value={sessionPin}
+            onChange={(event) =>
+              onSessionPinChange(event.target.value.replace(/\D/g, "").slice(0, 8))
+            }
+            placeholder={vaultExists ? "PIN de este dispositivo" : "Crear PIN de 4 a 8 digitos"}
+            className="h-14 w-full rounded-xl border border-white/15 bg-white/10 px-4 text-base tracking-[0.24em] text-white placeholder:tracking-normal placeholder:text-white/35"
+          />
+          <p className="text-[11px] leading-5 text-white/40">
+            Cifra las semillas LivingQR en este aparato. No se guarda el PIN.
+          </p>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-[0.16em] text-white/45">
+                Pistolas en gatera
+              </label>
+              <select
+                value={String(deviceSlotCount)}
+                onChange={(event) =>
+                  onDeviceSlotCountChange(Number(event.target.value))
+                }
+                className="mt-1 h-14 w-full appearance-none rounded-xl border border-white/15 bg-white/10 px-4 text-base text-white"
+              >
+                {[1, 2, 3, 4, 5, 6, 7, 8].map((count) => (
+                  <option key={count} value={count} className="text-zinc-950">
+                    {count}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-[0.16em] text-white/45">
+                Esta pistola
+              </label>
+              <select
+                value={String(deviceSlotIndex)}
+                onChange={(event) =>
+                  onDeviceSlotIndexChange(Number(event.target.value))
+                }
+                disabled={deviceSlotCount <= 1}
+                className="mt-1 h-14 w-full appearance-none rounded-xl border border-white/15 bg-white/10 px-4 text-base text-white disabled:opacity-40"
+              >
+                {Array.from({ length: deviceSlotCount }, (_, index) => (
+                  <option key={index} value={index} className="text-zinc-950">
+                    {index + 1} de {deviceSlotCount}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
 
         {loadError ? (

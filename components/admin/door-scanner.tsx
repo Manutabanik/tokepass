@@ -13,6 +13,7 @@ import {
   useRef,
   useState,
   useTransition,
+  useSyncExternalStore,
 } from "react"
 
 import { DoorScannerSessionChrome } from "@/components/admin/door-scanner-session"
@@ -57,20 +58,45 @@ import { useHardwareSignal } from "@/hooks/use-hardware-signal"
 import {
   clearSyncQueueItems,
   countAdmittedTickets,
+  countAdmissionLeases,
   downloadEventManifest,
   getManifestMeta,
+  getScannerVault,
   getSyncQueue,
   getSyncQueueCount,
   getTicketById,
   getTicketBySecret,
   markTicketUsedLocally,
+  putAdmissionLease,
+  saveScannerVault,
   type ScannerManifestMeta,
   type ScannerManifestTicket,
 } from "@/lib/offline-scanner-store"
 import {
+  buildAdmissionLeaseHash,
+  decideOfflineAdmission,
+  readScannerDeviceId,
+  readScannerDeviceSlot,
+  writeScannerDeviceSlot,
+} from "@/lib/scanner/admission-lease"
+import { selectOfflineScansReadyToFlush } from "@/lib/scanner/flush-offline-queue"
+import { evaluateOfflineManifestGate } from "@/lib/scanner/offline-manifest-gate"
+import {
+  hasLiveLeasePeers,
+  publishAdmissionLease,
+  startLeaseGossip,
+  stopLeaseGossip,
+} from "@/lib/scanner/lease-gossip"
+import {
+  isScannerVaultUnlocked,
+  ScannerVaultError,
+  unlockOrCreateScannerVault,
+} from "@/lib/scanner/manifest-crypto"
+import {
   assertLivingMac,
   resolveScanSecret,
 } from "@/lib/scan-payload"
+import { serverAlignedNowMs } from "@/lib/totp-offline"
 import { cn } from "@/lib/utils"
 
 const Scanner = dynamic(() => import("@/components/admin/qr-camera-scanner"), {
@@ -105,6 +131,22 @@ const FALLBACK_GATES: ScannerGate[] = [
   },
 ]
 
+function subscribeScannerAccessMode(onChange: () => void) {
+  window.addEventListener("tokepass-scanner-access-mode", onChange)
+  window.addEventListener("storage", onChange)
+  return () => {
+    window.removeEventListener("tokepass-scanner-access-mode", onChange)
+    window.removeEventListener("storage", onChange)
+  }
+}
+
+function subscribeScannerDeviceSlot(onChange: () => void) {
+  window.addEventListener("tokepass-scanner-device-slot", onChange)
+  return () => {
+    window.removeEventListener("tokepass-scanner-device-slot", onChange)
+  }
+}
+
 function getLiveVideoTrack(): MediaStreamTrack | null {
   const video = document.querySelector(
     "[data-gate-scanner] video",
@@ -117,7 +159,11 @@ function getLiveVideoTrack(): MediaStreamTrack | null {
 export function DoorScanner() {
   const online = useOnlineStatus()
   const { sendSignal } = useHardwareSignal()
-  const [accessMode, setAccessMode] = useState<ScannerAccessMode>("guard")
+  const accessMode = useSyncExternalStore(
+    subscribeScannerAccessMode,
+    readScannerAccessMode,
+    () => "guard" as const,
+  )
   const isTotemMode = accessMode === "totem"
   const [sessionActive, setSessionActive] = useState(false)
   const [isStarting, setIsStarting] = useState(false)
@@ -141,18 +187,41 @@ export function DoorScanner() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [admittedCount, setAdmittedCount] = useState(0)
   const [torchOn, setTorchOn] = useState(false)
-  const [torchAvailable, setTorchAvailable] = useState(false)
+  const [detectedTorch, setDetectedTorch] = useState(false)
+  const [sessionPin, setSessionPin] = useState("")
+  const [vaultExists, setVaultExists] = useState(false)
+  const [gatesEventId, setGatesEventId] = useState("")
   const cooldownRef = useRef(false)
   const resetTimerRef = useRef<number | null>(null)
   const isTotemModeRef = useRef(isTotemMode)
-  isTotemModeRef.current = isTotemMode
+
+  const deviceSlotJson = useSyncExternalStore(
+    subscribeScannerDeviceSlot,
+    () => JSON.stringify(readScannerDeviceSlot(eventId, gateId)),
+    () => JSON.stringify({ index: 0, count: 1 }),
+  )
+  const deviceSlot = JSON.parse(deviceSlotJson) as {
+    index: number
+    count: number
+  }
+  const deviceSlotIndex = deviceSlot.index
+  const deviceSlotCount = deviceSlot.count
+  const torchAvailable = sessionActive && !isTotemMode && detectedTorch
 
   useEffect(() => {
-    setAccessMode(readScannerAccessMode())
+    isTotemModeRef.current = isTotemMode
+  }, [isTotemMode])
+
+  useEffect(() => {
+    void getScannerVault()
+      .then((vault) => setVaultExists(Boolean(vault)))
+      .catch(() => setVaultExists(false))
+    return () => {
+      stopLeaseGossip()
+    }
   }, [])
 
   const setAccessModeAndPersist = useCallback((mode: ScannerAccessMode) => {
-    setAccessMode(mode)
     writeScannerAccessMode(mode)
     setCameraError(null)
     setFacingMode(mode === "totem" ? "user" : "environment")
@@ -196,8 +265,26 @@ export function DoorScanner() {
         await refreshQueueCount()
         return
       }
+
+      const eventIds = [
+        ...new Set(queue.map((item) => item.event_id).filter(Boolean)),
+      ]
+      for (const id of eventIds) {
+        const meta = await downloadEventManifest(id, fetchEventTicketManifest)
+        if (id === eventId) setManifestMeta(meta)
+      }
+
+      const tickets = await Promise.all(
+        queue.map((item) => getTicketById(item.ticket_id)),
+      )
+      const ready = selectOfflineScansReadyToFlush(queue, tickets)
+      if (ready.length === 0) {
+        await refreshQueueCount()
+        return
+      }
+
       const result = await syncOfflineScansBatch(
-        queue.map((item) => ({
+        ready.map((item) => ({
           ticketId: item.ticket_id,
           scannedAtLocal: item.scanned_at_local,
           admissionsCount: item.admissions_count,
@@ -215,7 +302,7 @@ export function DoorScanner() {
     } finally {
       setIsSyncing(false)
     }
-  }, [isSyncing, refreshQueueCount])
+  }, [eventId, isSyncing, refreshQueueCount])
 
   useEffect(() => {
     let cancelled = false
@@ -250,12 +337,14 @@ export function DoorScanner() {
     return () => window.clearTimeout(timer)
   }, [eventId, refreshManifestMeta, refreshQueueCount])
 
+  if (eventId !== gatesEventId) {
+    setGatesEventId(eventId)
+    setGates([])
+    setGateId("")
+  }
+
   useEffect(() => {
-    if (!eventId) {
-      setGates([])
-      setGateId("")
-      return
-    }
+    if (!eventId) return
     let cancelled = false
     const stored =
       typeof window !== "undefined"
@@ -329,7 +418,10 @@ export function DoorScanner() {
       const tone =
         next.kind === "valid"
           ? "success"
-          : next.kind === "wrong_sector"
+          : next.kind === "wrong_sector" ||
+              next.kind === "main_gate_review" ||
+              next.kind === "transfer_pending" ||
+              next.kind === "wrong_schedule"
             ? "warning"
             : "error"
       playGateTone(tone)
@@ -337,7 +429,10 @@ export function DoorScanner() {
       void sendSignal(
         next.kind === "valid"
           ? "LED_GREEN"
-          : next.kind === "wrong_sector"
+          : next.kind === "wrong_sector" ||
+              next.kind === "main_gate_review" ||
+              next.kind === "transfer_pending" ||
+              next.kind === "wrong_schedule"
             ? "LED_OFF"
             : "LED_RED",
       )
@@ -401,6 +496,17 @@ export function DoorScanner() {
         })
         return
       }
+      if (result.status === "transfer_pending") {
+        showOverlay({ kind: "transfer_pending" })
+        return
+      }
+      if (result.status === "wrong_day") {
+        showOverlay({
+          kind: "wrong_schedule",
+          message: result.message,
+        })
+        return
+      }
       showOverlay({ kind: "invalid" })
     },
     [showAlreadyUsed, showOverlay],
@@ -427,6 +533,25 @@ export function DoorScanner() {
         return
       }
 
+      const manifestGate = evaluateOfflineManifestGate({
+        pendingTransfer: ticket.pending_transfer,
+        dayId: ticket.day_id,
+        scheduleDays: manifestMeta?.scheduleDays,
+        eventDate: manifestMeta?.eventDate,
+        now: new Date(serverAlignedNowMs(manifestMeta?.clockOffsetMs)),
+      })
+      if (!manifestGate.ok) {
+        if (manifestGate.reason === "transfer_pending") {
+          showOverlay({ kind: "transfer_pending" })
+          return
+        }
+        showOverlay({
+          kind: "wrong_schedule",
+          message: manifestGate.message,
+        })
+        return
+      }
+
       const ticketGate = resolveTicketSectorKey({
         seatingSectorId: ticket.seating_sector_id,
         seatingSectorName: ticket.seating_sector_name,
@@ -447,16 +572,70 @@ export function DoorScanner() {
         return
       }
 
-      const updated = await markTicketUsedLocally(ticket.id)
+      const leaseCount = await countAdmissionLeases(ticket.id)
+      const decision = decideOfflineAdmission({
+        status: ticket.status,
+        admissionsUsed: ticket.admissions_used ?? 0,
+        maxAdmissions: ticket.max_admissions ?? 1,
+        groupId: ticket.group_id,
+        ticketId: ticket.id,
+        deviceSlotIndex,
+        deviceSlotCount,
+        online: navigator.onLine,
+        hasLivePeers: hasLiveLeasePeers(),
+        localLeaseCount: leaseCount,
+        scannedAt: ticket.scanned_at_local ?? null,
+      })
+      if (decision.action === "duplicate") {
+        showAlreadyUsed(decision.scannedAt ?? ticket.scanned_at_local ?? ticket.scanned_at)
+        return
+      }
+      if (decision.action === "reject") {
+        showOverlay({ kind: "invalid" })
+        return
+      }
+      if (decision.action === "main_gate_review") {
+        showOverlay({
+          kind: "main_gate_review",
+          reason: decision.reason === "range_mismatch" ? "range_mismatch" : "group_no_peers",
+        })
+        return
+      }
+
+      const scannedAtLocal = Date.now()
+      const deviceId = readScannerDeviceId()
+      const admissionCounter = (ticket.admissions_used ?? 0) + 1
+      const leaseHash = await buildAdmissionLeaseHash({
+        deviceId,
+        ticketId: ticket.id,
+        timestamp: scannedAtLocal,
+        admissionCounter,
+      })
+      const updated = await markTicketUsedLocally(ticket.id, scannedAtLocal, {
+        device_id: deviceId,
+        lease_hash: leaseHash,
+      })
       void refreshQueueCount()
       if (updated) {
+        publishAdmissionLease({
+          id: `${ticket.id}:${admissionCounter}`,
+          ticket_id: ticket.id,
+          event_id: ticket.event_id,
+          device_id: deviceId,
+          admission_counter: admissionCounter,
+          timestamp: scannedAtLocal,
+          lease_hash: leaseHash,
+          source: "local",
+        })
         showLocalSuccess(updated)
         if (navigator.onLine) void syncQueueToServer()
       }
     },
     [
       gateId,
-      manifestMeta?.eventStatus,
+      deviceSlotCount,
+      deviceSlotIndex,
+      manifestMeta,
       refreshQueueCount,
       selectedEvent?.status,
       showAlreadyUsed,
@@ -480,7 +659,9 @@ export function DoorScanner() {
         try {
           const meta = manifestMeta ?? (await getManifestMeta(eventId))
           if (meta) {
-            const resolved = resolveScanSecret(raw, qrType)
+            const resolved = resolveScanSecret(raw, qrType, {
+              nowMs: serverAlignedNowMs(meta.clockOffsetMs),
+            })
             if (!resolved) {
               showOverlay({ kind: "invalid" })
               return
@@ -565,6 +746,13 @@ export function DoorScanner() {
     setIsStarting(true)
     setLoadError(null)
     try {
+      const existingVault = await getScannerVault()
+      const unlocked = await unlockOrCreateScannerVault(sessionPin, existingVault)
+      if (unlocked.created) {
+        await saveScannerVault(unlocked.record)
+      }
+      setVaultExists(true)
+
       if (navigator.onLine) {
         const meta = await downloadEventManifest(
           eventId,
@@ -583,15 +771,33 @@ export function DoorScanner() {
       }
       setAdmittedCount(await countAdmittedTickets(eventId))
       await refreshQueueCount()
+      startLeaseGossip({
+        eventId,
+        deviceId: readScannerDeviceId(),
+        onRemoteLease: (lease) => {
+          void putAdmissionLease({ ...lease, source: "peer" })
+        },
+      })
       setFacingMode(isTotemMode ? "user" : "environment")
       setCameraError(null)
       setTorchOn(false)
       setSessionActive(true)
     } catch (error) {
+      if (error instanceof ScannerVaultError) {
+        setLoadError(error.message)
+        return
+      }
       const local = await getManifestMeta(eventId)
-      if (local) {
+      if (local && isScannerVaultUnlocked()) {
         setManifestMeta(local)
         setAdmittedCount(await countAdmittedTickets(eventId))
+        startLeaseGossip({
+          eventId,
+          deviceId: readScannerDeviceId(),
+          onRemoteLease: (lease) => {
+            void putAdmissionLease({ ...lease, source: "peer" })
+          },
+        })
         setFacingMode(isTotemMode ? "user" : "environment")
         setSessionActive(true)
         return
@@ -613,7 +819,7 @@ export function DoorScanner() {
       | (MediaTrackCapabilities & { torch?: boolean })
       | undefined
     if (!capabilities?.torch) {
-      setTorchAvailable(false)
+      setDetectedTorch(false)
       return
     }
     const next = !torchOn
@@ -622,9 +828,9 @@ export function DoorScanner() {
         advanced: [{ torch: next } as MediaTrackConstraintSet],
       })
       setTorchOn(next)
-      setTorchAvailable(true)
+      setDetectedTorch(true)
     } catch {
-      setTorchAvailable(false)
+      setDetectedTorch(false)
     }
   }
 
@@ -638,16 +844,13 @@ export function DoorScanner() {
   }
 
   useEffect(() => {
-    if (!sessionActive || isTotemMode) {
-      setTorchAvailable(false)
-      return
-    }
+    if (!sessionActive || isTotemMode) return
     const timer = window.setInterval(() => {
       const track = getLiveVideoTrack()
       const capabilities = track?.getCapabilities?.() as
         | (MediaTrackCapabilities & { torch?: boolean })
         | undefined
-      setTorchAvailable(Boolean(capabilities?.torch))
+      setDetectedTorch(Boolean(capabilities?.torch))
     }, 800)
     return () => window.clearInterval(timer)
   }, [sessionActive, isTotemMode])
@@ -662,9 +865,27 @@ export function DoorScanner() {
         accessMode={accessMode}
         loadError={loadError}
         isStarting={isStarting}
+        sessionPin={sessionPin}
+        vaultExists={vaultExists}
+        deviceSlotCount={deviceSlotCount}
+        deviceSlotIndex={deviceSlotIndex}
         onEventChange={setEventId}
         onGateChange={setGateId}
         onModeChange={setAccessModeAndPersist}
+        onSessionPinChange={setSessionPin}
+        onDeviceSlotCountChange={(count) => {
+          const nextIndex = Math.min(count - 1, deviceSlotIndex)
+          writeScannerDeviceSlot(eventId, gateId, {
+            index: nextIndex,
+            count,
+          })
+        }}
+        onDeviceSlotIndexChange={(index) => {
+          writeScannerDeviceSlot(eventId, gateId, {
+            index,
+            count: deviceSlotCount,
+          })
+        }}
         onStart={() => void startControl()}
       />
     )
@@ -685,6 +906,7 @@ export function DoorScanner() {
         torchOn={torchOn}
         torchAvailable={torchAvailable}
         onChangeGate={() => {
+          stopLeaseGossip()
           setSessionActive(false)
           setCameraError(null)
           setTorchOn(false)

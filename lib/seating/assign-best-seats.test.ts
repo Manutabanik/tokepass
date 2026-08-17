@@ -10,6 +10,7 @@ import {
   previewFastAssign,
   resolveSectorAssignMeta,
   shouldSuggestFullTables,
+  suggestAssignmentForFullTables,
   suggestAssignmentForPeople,
 } from "./assign-best-seats"
 
@@ -217,6 +218,30 @@ describe("assignBestTableElements", () => {
       count: 1,
     })
     assert.equal(found[0]?.id, "t-17")
+  })
+})
+
+describe("suggestAssignmentForFullTables", () => {
+  it("picks whole free tables from flattened seats", () => {
+    const map = emptyVenueMap()
+    const seats = [
+      ...table("Mesa 1", ["m1a", "m1b", "m1c", "m1d"]),
+      ...table("Mesa 2", ["m2a", "m2b", "m2c", "m2d"]),
+    ]
+    const suggestion = suggestAssignmentForFullTables({
+      map,
+      seats,
+      sectorId: "mesas",
+      tableCount: 1,
+      occupancyBySeatId: { m1a: "occupied" },
+    })
+    assert.equal(suggestion.kind, "seats")
+    if (suggestion.kind === "seats") {
+      assert.deepEqual(
+        suggestion.seats.map((item) => item.row),
+        ["Mesa 2", "Mesa 2", "Mesa 2", "Mesa 2"],
+      )
+    }
   })
 })
 

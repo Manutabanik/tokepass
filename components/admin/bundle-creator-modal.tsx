@@ -12,7 +12,7 @@ import {
   Ticket,
   Trash2,
 } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -96,17 +96,20 @@ export function BundleCreatorModal({
   const [items, setItems] = useState<BundleComponent[]>([])
   const [includesSeating, setIncludesSeating] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!open) return
-    setName(initial?.name ?? "")
-    setBundleType(initial?.bundleType ?? "cross_sell_pack")
-    setPrice(String(initial?.price ?? 0))
-    setCapacity(String(initial?.capacity ?? 50))
-    setItems(initial?.items ?? [])
-    setIncludesSeating(Boolean(initial?.includesSeating))
-    setError(null)
-  }, [initial, open])
+  const seedKey = open ? JSON.stringify(initial ?? null) : "closed"
+  const [appliedSeed, setAppliedSeed] = useState(seedKey)
+  if (seedKey !== appliedSeed) {
+    setAppliedSeed(seedKey)
+    if (open) {
+      setName(initial?.name ?? "")
+      setBundleType(initial?.bundleType ?? "cross_sell_pack")
+      setPrice(String(initial?.price ?? 0))
+      setCapacity(String(initial?.capacity ?? 50))
+      setItems(initial?.items ?? [])
+      setIncludesSeating(Boolean(initial?.includesSeating))
+      setError(null)
+    }
+  }
 
   const selectable = options.filter((option) => {
     if (option.tierType === "bundle") return false
@@ -162,7 +165,6 @@ export function BundleCreatorModal({
       selectable.find((option) => option.tierType === "general") ?? selectable[0]
     if (!first) return
     setItems([{ tierId: first.id, quantity: buy }])
-    const regular = first.price * buy
     const pay = Math.max(0, (buy - 1) * first.price)
     setPrice(String(pay))
     setName((current) => current.trim() || `Pack ${buy}x${buy - 1} ${first.name}`)

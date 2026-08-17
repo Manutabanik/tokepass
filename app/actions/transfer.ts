@@ -2,9 +2,12 @@
 
 import { revalidatePath } from "next/cache"
 
+import { loginUrlWithNext } from "@/lib/auth/post-login"
 import { logger } from "@/lib/logger"
 import { notifyTicketTransfer } from "@/lib/notifications"
+import { getSeoOrigin } from "@/lib/seo/site"
 import { createClient } from "@/lib/supabase/server"
+import type { TicketTransferStatus } from "@/types/database"
 
 export type TransferTicketInput = {
   ticketId: string
@@ -16,7 +19,6 @@ export type TransferTicketResult =
       success: true
       message: string
       transferId: string
-      newTicketId: string
       eventTitle: string
       receiverEmail: string
     }
@@ -31,15 +33,24 @@ export type TransferTicketResult =
         | "not_transferable"
         | "self_transfer"
         | "not_found"
+        | "pending"
+        | "listed"
         | "unknown"
     }
 
-type TransferRpcRow = {
+type InitiateRpcRow = {
   transfer_id: string
-  new_ticket_id: string
+  claim_token: string
   event_title: string
   receiver_email: string
-  receiver_user_id: string | null
+}
+
+function revalidateWalletPaths() {
+  revalidatePath("/cuenta/entradas")
+  revalidatePath("/profile/tickets")
+  revalidatePath("/cuenta")
+  revalidatePath("/claim")
+  revalidatePath("/admin/scanner")
 }
 
 function mapTransferError(message: string): TransferTicketResult {
@@ -66,7 +77,7 @@ function mapTransferError(message: string): TransferTicketResult {
       code: "transfer_limit",
     }
   }
-  if (normalized.includes("NOT_TICKET_OWNER")) {
+  if (normalized.includes("NOT_TICKET_OWNER") || normalized.includes("NOT_TRANSFER_SENDER")) {
     return {
       success: false,
       error: "Solo el titular puede transferir esta entrada.",
@@ -87,11 +98,25 @@ function mapTransferError(message: string): TransferTicketResult {
       code: "self_transfer",
     }
   }
-  if (normalized.includes("TICKET_NOT_FOUND")) {
+  if (normalized.includes("TICKET_NOT_FOUND") || normalized.includes("TRANSFER_NOT_FOUND")) {
     return {
       success: false,
       error: "Entrada no encontrada.",
       code: "not_found",
+    }
+  }
+  if (normalized.includes("TICKET_TRANSFER_PENDING") || normalized.includes("TRANSFER_NOT_PENDING")) {
+    return {
+      success: false,
+      error: "Esta entrada ya tiene una transferencia pendiente.",
+      code: "pending",
+    }
+  }
+  if (normalized.includes("TICKET_LISTED_FOR_RESALE")) {
+    return {
+      success: false,
+      error: "Cancelá el aviso de reventa antes de transferir.",
+      code: "listed",
     }
   }
 
@@ -131,17 +156,16 @@ export async function transferTicketAction(
       }
     }
 
-    const { data, error } = await supabase.rpc("execute_safe_transfer", {
+    const { data, error } = await supabase.rpc("initiate_ticket_transfer", {
       p_ticket_id: ticketId,
       p_receiver_email: receiverEmail,
-      p_acting_seller_id: null,
     })
 
     if (error) {
       return mapTransferError(error.message)
     }
 
-    const rows = (data ?? []) as TransferRpcRow[]
+    const rows = (data ?? []) as InitiateRpcRow[]
     const row = rows[0]
 
     if (!row) {
@@ -152,11 +176,13 @@ export async function transferTicketAction(
       }
     }
 
-    // Notificación en background (no bloquea ni revierte la TX atómica ya committed).
+    const claimUrl = `${getSeoOrigin()}/claim?token=${encodeURIComponent(row.claim_token)}`
+
     void notifyTicketTransfer({
       receiverEmail: row.receiver_email,
       eventTitle: row.event_title,
       senderUserId: user.id,
+      claimUrl,
     }).catch((notifyError: unknown) => {
       logger.error({
         context: "transfer",
@@ -165,15 +191,12 @@ export async function transferTicketAction(
       })
     })
 
-    revalidatePath("/cuenta/entradas")
-    revalidatePath("/cuenta")
-    revalidatePath("/admin/scanner")
+    revalidateWalletPaths()
 
     return {
       success: true,
-      message: "Entrada enviada con éxito",
+      message: "Transferencia pendiente: el QR quedó bloqueado hasta que tu amigo la reclame.",
       transferId: row.transfer_id,
-      newTicketId: row.new_ticket_id,
       eventTitle: row.event_title,
       receiverEmail: row.receiver_email,
     }
@@ -184,7 +207,203 @@ export async function transferTicketAction(
   }
 }
 
-/** Asigna tickets transferidos pendientes al email del usuario actual. */
+export type CancelTransferResult =
+  | { success: true }
+  | { success: false; error: string }
+
+export async function cancelTicketTransferAction(
+  transferId: string,
+): Promise<CancelTransferResult> {
+  const id = transferId?.trim()
+  if (!id) {
+    return { success: false, error: "Transferencia no encontrada." }
+  }
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { success: false, error: "Debés iniciar sesión." }
+  }
+
+  const { error } = await supabase.rpc("cancel_ticket_transfer", {
+    p_transfer_id: id,
+  })
+
+  if (error) {
+    const normalized = error.message.toUpperCase()
+    if (normalized.includes("TRANSFER_NOT_PENDING")) {
+      return {
+        success: false,
+        error: "Ya no se puede cancelar: la entrada fue reclamada.",
+      }
+    }
+    const mapped = mapTransferError(error.message)
+    return {
+      success: false,
+      error: mapped.success ? error.message : mapped.error,
+    }
+  }
+
+  revalidateWalletPaths()
+  return { success: true }
+}
+
+export type ClaimTransferPreview =
+  | {
+      ok: true
+      transferId: string
+      status: TicketTransferStatus
+      eventTitle: string
+      eventDate: string | null
+      flyerUrl: string | null
+      receiverEmail: string
+      emailMatches: boolean
+      alreadyOwner: boolean
+    }
+  | { ok: false; error: string; loginUrl?: string }
+
+export async function peekTicketTransferClaimAction(
+  token: string,
+): Promise<ClaimTransferPreview> {
+  const raw = token?.trim()
+  if (!raw) {
+    return { ok: false, error: "Falta el enlace de reclamo." }
+  }
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return {
+      ok: false,
+      error: "Iniciá sesión para reclamar esta entrada.",
+      loginUrl: loginUrlWithNext(`/claim?token=${raw}`),
+    }
+  }
+
+  const { data, error } = await supabase.rpc("peek_ticket_transfer_claim", {
+    p_token: raw,
+  })
+
+  if (error) {
+    if (error.message.toUpperCase().includes("AUTH_REQUIRED")) {
+      return {
+        ok: false,
+        error: "Iniciá sesión para reclamar esta entrada.",
+        loginUrl: loginUrlWithNext(`/claim?token=${raw}`),
+      }
+    }
+    return { ok: false, error: "No se pudo validar el enlace." }
+  }
+
+  const row = (data ?? [])[0]
+  if (!row) {
+    return {
+      ok: false,
+      error: "Este enlace es inválido o la transferencia ya no está disponible.",
+    }
+  }
+
+  return {
+    ok: true,
+    transferId: row.transfer_id,
+    status: row.status,
+    eventTitle: row.event_title,
+    eventDate: row.event_date,
+    flyerUrl: row.flyer_url,
+    receiverEmail: row.receiver_email,
+    emailMatches: row.email_matches,
+    alreadyOwner: row.already_owner,
+  }
+}
+
+export type ClaimTicketResult =
+  | { success: true; ticketId: string; eventTitle: string }
+  | { success: false; error: string; loginUrl?: string }
+
+export async function claimTicketTransferAction(
+  token: string,
+): Promise<ClaimTicketResult> {
+  const raw = token?.trim()
+  if (!raw) {
+    return { success: false, error: "Falta el enlace de reclamo." }
+  }
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return {
+      success: false,
+      error: "Iniciá sesión para reclamar esta entrada.",
+      loginUrl: loginUrlWithNext(`/claim?token=${raw}`),
+    }
+  }
+
+  const { data, error } = await supabase.rpc("claim_ticket_transfer_by_token", {
+    p_token: raw,
+  })
+
+  if (error) {
+    const normalized = error.message.toUpperCase()
+    if (normalized.includes("AUTH_REQUIRED")) {
+      return {
+        success: false,
+        error: "Iniciá sesión para reclamar esta entrada.",
+        loginUrl: loginUrlWithNext(`/claim?token=${raw}`),
+      }
+    }
+    if (normalized.includes("EMAIL_MISMATCH")) {
+      return {
+        success: false,
+        error: "Esta entrada fue enviada a otro email. Ingresá con la cuenta destinataria.",
+      }
+    }
+    if (normalized.includes("TRANSFER_CANCELLED")) {
+      return {
+        success: false,
+        error: "El envío fue cancelado por quien te la transfirió.",
+      }
+    }
+    if (normalized.includes("TRANSFER_NOT_FOUND") || normalized.includes("INVALID_CLAIM_TOKEN")) {
+      return {
+        success: false,
+        error: "Este enlace es inválido o ya no está disponible.",
+      }
+    }
+    if (normalized.includes("MAX_TICKETS_PER_USER")) {
+      return {
+        success: false,
+        error: "Alcanzaste el máximo de entradas para este evento.",
+      }
+    }
+    return {
+      success: false,
+      error: "No se pudo reclamar la entrada. Probá de nuevo.",
+    }
+  }
+
+  const row = (data ?? [])[0]
+  if (!row) {
+    return { success: false, error: "No se pudo reclamar la entrada." }
+  }
+
+  revalidateWalletPaths()
+  return {
+    success: true,
+    ticketId: row.ticket_id,
+    eventTitle: row.event_title,
+  }
+}
+
+/** Asigna tickets transferidos pendientes al email del usuario actual (modelo legado / reventa). */
 export async function claimPendingTransfersAction(): Promise<number> {
   const supabase = await createClient()
   const {
@@ -208,8 +427,7 @@ export async function claimPendingTransfersAction(): Promise<number> {
 
   const count = typeof data === "number" ? data : 0
   if (count > 0) {
-    revalidatePath("/cuenta/entradas")
-    revalidatePath("/cuenta")
+    revalidateWalletPaths()
   }
   return count
 }

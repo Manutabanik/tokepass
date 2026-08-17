@@ -170,9 +170,12 @@ export function LiveOpsDashboard({ eventId, initial }: Props) {
   const [nowMs, setNowMs] = useState<number | null>(null)
 
   useEffect(() => {
-    setNowMs(Date.now())
+    const start = window.setTimeout(() => setNowMs(Date.now()), 0)
     const id = window.setInterval(() => setNowMs(Date.now()), 1000)
-    return () => window.clearInterval(id)
+    return () => {
+      window.clearTimeout(start)
+      window.clearInterval(id)
+    }
   }, [])
 
   return (

@@ -224,6 +224,11 @@ export function NavbarSearch() {
   const [open, setOpen] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const searchOpenTick = usePublicSearchUiStore((state) => state.openTick)
+  const [seenSearchTick, setSeenSearchTick] = useState(searchOpenTick)
+  if (searchOpenTick !== seenSearchTick) {
+    setSeenSearchTick(searchOpenTick)
+    if (searchOpenTick > 0) setMobileOpen(true)
+  }
   const [results, setResults] = useState<OmniSearchResult>(EMPTY_RESULTS)
   const [fetchedFor, setFetchedFor] = useState("")
 
@@ -297,10 +302,6 @@ export function NavbarSearch() {
     if (!mobileOpen) return
     mobileInputRef.current?.focus()
   }, [mobileOpen])
-
-  useEffect(() => {
-    if (searchOpenTick > 0) setMobileOpen(true)
-  }, [searchOpenTick])
 
   function submitExplore(event: FormEvent) {
     event.preventDefault()

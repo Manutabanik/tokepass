@@ -66,12 +66,18 @@ import {
   ticketPhasesExceedParent,
 } from "@/lib/inventory/capacity-budget"
 import { formatNumber } from "@/lib/format"
+import {
+  defaultInventoryDayId,
+  formatInventoryDayOption,
+} from "@/lib/event-schedule"
 import { cn } from "@/lib/utils"
 import { isMapBackedTicket } from "@/lib/seating/venue-map-pricing"
+import { TICKET_DAY_ALL } from "@/types/tickets"
 import type { EventFormValues } from "@/lib/validations/event-form"
 
 export function createInventoryTicket(
   tierType: InventoryTierType,
+  options?: { dayId?: string | null },
 ): EventFormValues["tickets"][number] {
   const names: Record<InventoryTierType, string> = {
     seated: "Ubicación numerada",
@@ -86,7 +92,7 @@ export function createInventoryTicket(
     capacity: tierType === "bundle" ? 50 : 100,
     timeLimit: "",
     bonusReward: "",
-    dayId: null,
+    dayId: options?.dayId ?? null,
     visibility: "public",
     layoutType: layoutTypeForInventory(tierType),
     seatingSectorId: null,
@@ -109,6 +115,7 @@ type Props = {
 export function UnifiedInventoryPanel({ form }: Props) {
   const tickets = form.watch("tickets") ?? []
   const scheduleDays = form.watch("basics.scheduleDays") ?? []
+  const isMultiDay = Boolean(form.watch("basics.isMultiDay")) || scheduleDays.length >= 2
   const capacity = useEventCapacity(form)
   const [bundleOpen, setBundleOpen] = useState(false)
   const [editingBundleIndex, setEditingBundleIndex] = useState<number | null>(
@@ -270,7 +277,9 @@ export function UnifiedInventoryPanel({ form }: Props) {
         actionLabel="Agregar sector general"
         onAdd={() =>
           append({
-            ...createInventoryTicket("general"),
+            ...createInventoryTicket("general", {
+              dayId: defaultInventoryDayId(scheduleDays),
+            }),
             capacity: Math.max(1, Math.min(100, capacity.remaining || 1)),
           })
         }
@@ -284,6 +293,7 @@ export function UnifiedInventoryPanel({ form }: Props) {
               form={form}
               index={item.index}
               capacityLabel="Capacidad máxima"
+              scheduleDays={isMultiDay ? scheduleDays : []}
               venueRemaining={generalRemainingForTicket(
                 capacity,
                 tickets[item.index],
@@ -302,7 +312,13 @@ export function UnifiedInventoryPanel({ form }: Props) {
         description="Estacionamiento, consumiciones, vaso oficial u otros extras con stock propio."
         icon={Car}
         actionLabel="Agregar adicional"
-        onAdd={() => append(createInventoryTicket("addon"))}
+        onAdd={() =>
+          append({
+            ...createInventoryTicket("addon", {
+              dayId: defaultInventoryDayId(scheduleDays),
+            }),
+          })
+        }
       >
         {addons.length === 0 ? (
           <EmptyHint text="Los adicionales aparecen como upsell antes del pago." />
@@ -313,6 +329,7 @@ export function UnifiedInventoryPanel({ form }: Props) {
               form={form}
               index={item.index}
               capacityLabel="Stock disponible"
+              scheduleDays={isMultiDay ? scheduleDays : []}
               onRemove={() => remove(item.index)}
             />
           ))
@@ -338,6 +355,7 @@ export function UnifiedInventoryPanel({ form }: Props) {
                 form={form}
                 index={item.index}
                 capacityLabel="Stock del combo"
+                scheduleDays={isMultiDay ? scheduleDays : []}
                 showListPrice
                 onRemove={() => remove(item.index)}
               />
@@ -405,7 +423,10 @@ export function UnifiedInventoryPanel({ form }: Props) {
             capacity: value.capacity,
             bundleItems: value.items,
             bundleType: value.bundleType,
-            dayId: null,
+            dayId:
+              value.bundleType === "multi_day_pass"
+                ? null
+                : defaultInventoryDayId(scheduleDays),
           }
           if (editingBundleIndex == null) {
             form.setValue("tickets", [...tickets, nextTicket], {
@@ -482,6 +503,7 @@ function InventoryRow({
   capacityLabel,
   showListPrice = false,
   showPhases = false,
+  scheduleDays = [],
   venueRemaining,
   capacityExceeded = false,
   onRemove,
@@ -491,10 +513,18 @@ function InventoryRow({
   capacityLabel: string
   showListPrice?: boolean
   showPhases?: boolean
+  scheduleDays?: EventFormValues["basics"]["scheduleDays"]
   venueRemaining?: number
   capacityExceeded?: boolean
   onRemove: () => void
 }) {
+  const layoutType = form.watch(`tickets.${index}.layoutType`)
+  const priceLabel =
+    layoutType === "table_combo"
+      ? "Precio total de la mesa"
+      : layoutType === "numbered_seat"
+        ? "Precio por butaca"
+        : "Precio"
   const phases = form.watch(`tickets.${index}.phases`) ?? []
   const parentCapacity = asPositiveInt(form.watch(`tickets.${index}.capacity`))
   const parentPrice = Number(form.watch(`tickets.${index}.price`)) || 0
@@ -504,6 +534,16 @@ function InventoryRow({
     capacity: parentCapacity,
     phases,
   })
+  const dayItems = [
+    {
+      value: TICKET_DAY_ALL,
+      label: "Pase Completo / Todos los dias",
+    },
+    ...scheduleDays.map((day, dayIndex) => ({
+      value: day.id,
+      label: formatInventoryDayOption(day, dayIndex),
+    })),
+  ]
 
   return (
     <div className="relative space-y-3 rounded-xl border border-border bg-card p-3 pr-12">
@@ -583,7 +623,7 @@ function InventoryRow({
           name={`tickets.${index}.price`}
           render={({ field, fieldState }) => (
             <FormItem className="md:col-span-3">
-              <FormLabel>Precio</FormLabel>
+              <FormLabel>{priceLabel}</FormLabel>
               <PriceInput
                 value={field.value}
                 onValueChange={(value) => field.onChange(value ?? undefined)}
@@ -594,6 +634,45 @@ function InventoryRow({
           )}
         />
       </div>
+      {scheduleDays.length >= 2 ? (
+        <FormField
+          control={form.control}
+          name={`tickets.${index}.dayId`}
+          render={({ field, fieldState }) => {
+            const selected = field.value?.trim() || TICKET_DAY_ALL
+            return (
+              <FormItem>
+                <FormLabel>Jornada</FormLabel>
+                <Select
+                  value={selected}
+                  onValueChange={(value) =>
+                    field.onChange(value === TICKET_DAY_ALL ? null : value)
+                  }
+                  items={dayItems}
+                >
+                  <SelectTrigger className="h-11 w-full max-w-md">
+                    <SelectValue placeholder="Elegi la jornada">
+                      {dayItems.find((item) => item.value === selected)?.label}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {dayItems.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormDescription>
+                  Obligatorio en eventos de varias jornadas. Pase completo vale
+                  todos los dias; una jornada vende solo ese dia.
+                </FormDescription>
+                <FormMessage>{fieldState.error?.message}</FormMessage>
+              </FormItem>
+            )
+          }}
+        />
+      ) : null}
       <FormField
         control={form.control}
         name={`tickets.${index}.description`}

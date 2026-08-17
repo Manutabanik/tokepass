@@ -24,7 +24,7 @@ export type AdminNavItem = {
 export const ORGANIZER_NAV: AdminNavItem[] = [
   { label: "Resumen de Ventas", href: "/admin", icon: Home },
   { label: "Mis Eventos", href: "/admin/events", icon: CalendarDays },
-  { label: "Cobrar en Puerta", href: "/admin/pos", icon: Store },
+  { label: "Boletería POS", href: "/dashboard/pos", icon: Store },
   {
     label: "Recaudación y Retiros",
     href: "/admin/finances",
@@ -45,8 +45,9 @@ export const ORGANIZER_NAV: AdminNavItem[] = [
 
 const STAFF_NAV_META: AdminNavItem[] = [
   { label: "Control de Puerta (Escáner)", href: "/admin/scanner", icon: QrCode },
+  { label: "Validador de acceso", href: "/admin/validator", icon: QrCode },
   { label: "Escáner de Tienda", href: "/admin/store-scanner", icon: ShoppingBag },
-  { label: "Cobrar en Puerta", href: "/admin/pos", icon: Store },
+  { label: "Boletería POS", href: "/dashboard/pos", icon: Store },
 ]
 
 export function getAdminNavItems(input: {

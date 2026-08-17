@@ -10,8 +10,11 @@ import {
   listParametricZoneRowMeta,
   listParametricZoneRows,
   mergeParametricOccupancy,
+  parametricZoneCapacity,
   parametricZoneItemId,
   parametricZoneItemShortLabel,
+  parametricZoneSkuUnitCount,
+  parametricZoneSkuUnitLabel,
   parseParametricZoneItemId,
   resolveVenueRenderMode,
 } from "./adaptive-seating"
@@ -58,6 +61,14 @@ describe("adaptive seating engine", () => {
     assert.equal(sector.rows[1]?.items[2]?.id, "zona-vip-R2-I3")
     assert.equal(sector.rows[0]?.items[0]?.label, "Mesa 1")
     assert.equal(sector.capacity_per_unit, 8)
+  })
+
+  it("keeps table_combo SKU capacity in physical units, not chairs", () => {
+    const tableZone = zone()
+    assert.equal(parametricZoneSkuUnitCount(tableZone), 6)
+    assert.equal(parametricZoneSkuUnitLabel(tableZone, 6), "mesas")
+    assert.equal(parametricZoneCapacity(tableZone), 48)
+    assert.equal(expectedParametricUnitCount(tableZone), 6)
   })
 
   it("projects zones and elements together into seating_layout", () => {

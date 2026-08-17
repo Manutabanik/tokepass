@@ -6,6 +6,14 @@ import { createClient } from "@/lib/supabase/server"
 import type { Json } from "@/types/database"
 import { composeVenuePlace } from "@/lib/venues/compose-location"
 import { parseVenueMap, serializeVenueMap, type InteractiveVenueMap } from "@/types/venue-map"
+import {
+  venueMapHasInventory,
+  venueMapToSeatingLayout,
+} from "@/lib/seating/venue-map-geometry"
+import {
+  formatVenueMapSkuErrors,
+  validateVenueMapSkuConsistency,
+} from "@/lib/seating/venue-map-sku-consistency"
 import type {
   VenueSeatingLayout,
   VenueSeatingRow,
@@ -82,6 +90,25 @@ async function requireOrganizer() {
   }
 
   return { supabase, userId: user.id }
+}
+
+async function rematerializeEventsForVenue(
+  supabase: Awaited<ReturnType<typeof requireOrganizer>>["supabase"],
+  venueId: string,
+) {
+  const { data: events } = await supabase
+    .from("events")
+    .select("id")
+    .eq("venue_id", venueId)
+  for (const row of events ?? []) {
+    const { error } = await supabase.rpc("materialize_event_seating_units", {
+      p_event_id: row.id,
+    })
+    if (error) {
+      return error.message.replace(/^materialize_event_seating_units:\s*/i, "")
+    }
+  }
+  return null
 }
 
 function normalizeSeatingLayout(
@@ -369,9 +396,16 @@ function normalizeVenueInput(input: VenueMutationInput):
   const capacity = Number(input.capacity)
   const latitude = input.latitude == null ? null : Number(input.latitude)
   const longitude = input.longitude == null ? null : Number(input.longitude)
-  const seating = normalizeSeatingLayout(input.seatingLayout)
-  if (!seating.success) return seating
   const seatingBackgroundUrl = input.seatingBackgroundUrl?.trim() || null
+  const venueMap = serializeVenueMap(parseVenueMap(input.venueMap))
+  const skuCheck = validateVenueMapSkuConsistency({ map: venueMap })
+  if (!skuCheck.ok) {
+    return { success: false, error: formatVenueMapSkuErrors(skuCheck.errors) }
+  }
+  const seating = venueMapHasInventory(venueMap)
+    ? { success: true as const, data: venueMapToSeatingLayout(venueMap) }
+    : normalizeSeatingLayout(input.seatingLayout)
+  if (!seating.success) return seating
 
   if (!name || !location) {
     return { success: false, error: "Nombre y dirección son obligatorios." }
@@ -443,7 +477,7 @@ function normalizeVenueInput(input: VenueMutationInput):
       capacity,
       zones,
       seatingLayout: seating.data,
-      venueMap: serializeVenueMap(parseVenueMap(input.venueMap)),
+      venueMap,
       seatingBackgroundUrl,
     },
   }
@@ -648,12 +682,24 @@ export async function createVenue(
           error: retry.error?.message ?? "No se pudo crear.",
         }
       }
+      const materializeError = await rematerializeEventsForVenue(
+        supabase,
+        retry.data.id,
+      )
+      if (materializeError) {
+        return { success: false, error: materializeError }
+      }
       revalidateVenuePaths()
       return { success: true, data: { id: retry.data.id } }
     }
 
     if (error || !data) {
       return { success: false, error: error?.message ?? "No se pudo crear." }
+    }
+
+    const materializeError = await rematerializeEventsForVenue(supabase, data.id)
+    if (materializeError) {
+      return { success: false, error: materializeError }
     }
 
     revalidateVenuePaths()
@@ -708,6 +754,11 @@ export async function updateVenue(input: {
 
     if (error) return { success: false, error: error.message }
     if (!data) return { success: false, error: "No encontramos ese lugar." }
+
+    const materializeError = await rematerializeEventsForVenue(supabase, data.id)
+    if (materializeError) {
+      return { success: false, error: materializeError }
+    }
 
     revalidateVenuePaths()
     return { success: true, data: undefined }

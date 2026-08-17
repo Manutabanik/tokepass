@@ -1,11 +1,13 @@
 "use client"
 
 import { create } from "zustand"
+import { createJSONStorage, persist } from "zustand/middleware"
 
 import {
   evaluateStorefrontSelectionLimit,
   type StorefrontLimitReason,
 } from "@/lib/checkout-limits"
+import { storefrontLineTotal } from "@/lib/checkout/charge-unit"
 
 export type StorefrontViewMode = "map" | "list"
 
@@ -21,6 +23,8 @@ export type StorefrontSelectedItem = {
   color?: string
   row?: string
   number?: number
+  sellMode?: "per_seat" | "group"
+  priceMode?: "closed_unit" | "per_person"
 }
 
 export type StorefrontLayoutSeat = {
@@ -69,6 +73,7 @@ type StorefrontSeatState = {
     maxCount?: number | null,
   ) => StorefrontToggleResult
   clearLayoutSeats: () => void
+  replaceSelectedItems: (items: StorefrontSelectedItem[]) => void
 }
 
 function itemCapacity(item: StorefrontSelectedItem) {
@@ -95,6 +100,8 @@ function layoutSeatToItem(seat: StorefrontLayoutSeat): StorefrontSelectedItem {
     color: seat.color,
     row: seat.row,
     number: seat.number,
+    sellMode: "per_seat",
+    priceMode: "per_person",
   }
 }
 
@@ -132,7 +139,9 @@ function withDerived(items: StorefrontSelectedItem[]) {
   }
 }
 
-export const useStorefrontSeatStore = create<StorefrontSeatState>((set, get) => ({
+export const useStorefrontSeatStore = create<StorefrontSeatState>()(
+  persist(
+    (set, get) => ({
   eventId: null,
   view: "map",
   selectedItems: [],
@@ -141,13 +150,14 @@ export const useStorefrontSeatStore = create<StorefrontSeatState>((set, get) => 
   focusTick: 0,
 
   bindEvent: (eventId) => {
-    if (get().eventId === eventId) return
+    const current = get().eventId
+    if (current === eventId) return
     set({
       eventId,
       view: "map",
       focusedMapIds: [],
       focusTick: 0,
-      ...withDerived([]),
+      ...(current && current !== eventId ? withDerived([]) : {}),
     })
   },
 
@@ -269,12 +279,35 @@ export const useStorefrontSeatStore = create<StorefrontSeatState>((set, get) => 
     if (next.length === current.length) return
     set(withDerived(next))
   },
-}))
+
+  replaceSelectedItems: (items) => {
+    set(withDerived(items))
+  },
+}),
+    {
+      name: "tokepass.seat-intent.v1",
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        eventId: state.eventId,
+        selectedItems: state.selectedItems,
+      }),
+      merge: (persisted, current) => {
+        const stored = (persisted ?? {}) as Partial<StorefrontSeatState>
+        const items = stored.selectedItems ?? current.selectedItems
+        return {
+          ...current,
+          ...stored,
+          ...withDerived(items),
+        }
+      },
+    },
+  ),
+)
 
 export function storefrontSelectionCount(items: StorefrontSelectedItem[]) {
   return selectionCount(items)
 }
 
 export function storefrontSelectionTotal(items: StorefrontSelectedItem[]) {
-  return items.reduce((sum, item) => sum + item.price * itemCapacity(item), 0)
+  return items.reduce((sum, item) => sum + storefrontLineTotal(item), 0)
 }

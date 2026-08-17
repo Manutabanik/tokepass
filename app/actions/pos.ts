@@ -3,9 +3,14 @@
 import { revalidatePath } from "next/cache"
 
 import { findScheduleDay, parseScheduleDays } from "@/lib/event-schedule"
-import { listOperableEvents } from "@/lib/event-ops-access"
+import { assertEventOpsAccess, listOperableEvents } from "@/lib/event-ops-access"
 import { logger } from "@/lib/logger"
 import { notifyPosTicketIssued } from "@/lib/notifications"
+import {
+  POS_STAFF_ROLES,
+  isPosStaffRole,
+  normalizePosPaymentMethod,
+} from "@/lib/pos-checkout"
 import { createClient } from "@/lib/supabase/server"
 import type { PaymentMethod, QrType } from "@/types/database"
 
@@ -159,8 +164,45 @@ function mapShift(row: {
   }
 }
 
+async function requirePosSession(): Promise<
+  { success: true; userId: string } | { success: false; error: string }
+> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: "Sesión requerida." }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle()
+
+  if (profile?.role === "admin" || profile?.role === "super_admin") {
+    return { success: true, userId: user.id }
+  }
+
+  const { data: assignments } = await supabase
+    .from("event_staff_assignments")
+    .select("role")
+    .eq("user_id", user.id)
+    .eq("is_active", true)
+    .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
+
+  const allowed = (assignments ?? []).some((row) => isPosStaffRole(row.role))
+  if (!allowed) {
+    return {
+      success: false,
+      error: "No tenés permiso para operar la boletería POS.",
+    }
+  }
+
+  return { success: true, userId: user.id }
+}
+
 export async function getPosEvents(): Promise<PosEventOption[]> {
-  const rows = await listOperableEvents({ roles: ["cashier"] })
+  const rows = await listOperableEvents({ roles: [...POS_STAFF_ROLES] })
 
   const supabase = await createClient()
   const eventIds = rows.map((event) => event.id)
@@ -245,6 +287,22 @@ export async function openCashierShift(input: {
     } = await supabase.auth.getUser()
     if (!user) return { success: false, error: "Sesión requerida." }
 
+    const access = await requirePosSession()
+    if (!access.success) return access
+
+    const eventAccess = await assertEventOpsAccess(input.eventId, [
+      ...POS_STAFF_ROLES,
+    ])
+    if (!eventAccess.ok) {
+      return {
+        success: false,
+        error:
+          eventAccess.reason === "auth_required"
+            ? "Sesión requerida."
+            : "No tenés permiso para abrir caja en este evento.",
+      }
+    }
+
     const amount = Number(input.startAmount)
     if (!Number.isFinite(amount) || amount < 0) {
       return { success: false, error: "Ingresá un fondo inicial válido." }
@@ -263,6 +321,7 @@ export async function openCashierShift(input: {
     }
 
     revalidatePath("/admin/pos")
+    revalidatePath("/dashboard/pos")
     return {
       success: true,
       shift: mapShift(data as Parameters<typeof mapShift>[0]),
@@ -289,6 +348,9 @@ export async function closeCashierShift(input: {
     } = await supabase.auth.getUser()
     if (!user) return { success: false, error: "Sesión requerida." }
 
+    const access = await requirePosSession()
+    if (!access.success) return access
+
     const { data, error } = await supabase.rpc("close_cashier_shift", {
       p_shift_id: input.shiftId,
       p_counted_amount:
@@ -308,6 +370,7 @@ export async function closeCashierShift(input: {
     const zReport = await buildTicketZReport(shift)
 
     revalidatePath("/admin/pos")
+    revalidatePath("/dashboard/pos")
     return {
       success: true,
       shift,
@@ -428,12 +491,15 @@ export async function createPosSale(input: {
   eventId: string
   tierId: string
   quantity: number
-  paymentMethod: "cash_pos" | "transfer_pos" | "card_pos"
+  paymentMethod: "cash" | "card" | "transfer" | "cash_pos" | "transfer_pos" | "card_pos"
   customerPhone?: string | null
+  customerEmail?: string | null
   customerDni?: string | null
   customerName?: string | null
   shiftId: string
   supervisorPin?: string | null
+  seatingLayoutItemId?: string | null
+  seatingUnitId?: string | null
 }): Promise<PosSaleResult> {
   try {
     const supabase = await createClient()
@@ -443,6 +509,27 @@ export async function createPosSale(input: {
 
     if (!user) {
       return { success: false, error: "Sesión requerida." }
+    }
+
+    const access = await requirePosSession()
+    if (!access.success) return access
+
+    const eventAccess = await assertEventOpsAccess(input.eventId, [
+      ...POS_STAFF_ROLES,
+    ])
+    if (!eventAccess.ok) {
+      return {
+        success: false,
+        error:
+          eventAccess.reason === "auth_required"
+            ? "Sesión requerida."
+            : "No tenés permiso para cobrar en este evento.",
+      }
+    }
+
+    const paymentMethod = normalizePosPaymentMethod(input.paymentMethod)
+    if (!paymentMethod) {
+      return { success: false, error: "Método de pago presencial inválido." }
     }
 
     const rawDni = input.customerDni?.replace(/\D/g, "") ?? ""
@@ -459,18 +546,45 @@ export async function createPosSale(input: {
       return { success: false, error: "Datos de venta incompletos." }
     }
 
-    const { data, error } = await supabase.rpc("create_pos_sale_tx", {
+    const seatingLayoutItemId = input.seatingLayoutItemId?.trim() || null
+    const seatingUnitId = input.seatingUnitId?.trim() || null
+
+    const checkoutArgs = {
       p_event_id: input.eventId,
       p_tier_id: input.tierId,
       p_quantity: input.quantity,
-      p_payment_method: input.paymentMethod,
-      p_staff_id: user.id,
+      p_payment_method: paymentMethod,
+      p_cashier_user_id: user.id,
       p_customer_phone: input.customerPhone?.trim() || null,
       p_customer_dni: dni,
       p_customer_name: input.customerName?.trim() || null,
       p_shift_id: input.shiftId,
       p_supervisor_pin: input.supervisorPin?.trim() || null,
-    })
+      p_seating_unit_id: seatingUnitId,
+      p_seating_layout_item_id: seatingLayoutItemId,
+    }
+
+    let data: unknown = null
+    let error: { message: string } | null = null
+    const checkout = await supabase.rpc("process_pos_checkout_tx", checkoutArgs)
+    data = checkout.data
+    error = checkout.error
+    if (error && /process_pos_checkout_tx|PGRST202|schema cache/i.test(error.message)) {
+      const fallback = await supabase.rpc("create_pos_sale_tx", {
+        p_event_id: input.eventId,
+        p_tier_id: input.tierId,
+        p_quantity: input.quantity,
+        p_payment_method: paymentMethod,
+        p_staff_id: user.id,
+        p_customer_phone: input.customerPhone?.trim() || null,
+        p_customer_dni: dni,
+        p_customer_name: input.customerName?.trim() || null,
+        p_shift_id: input.shiftId,
+        p_supervisor_pin: input.supervisorPin?.trim() || null,
+      })
+      data = fallback.data
+      error = fallback.error
+    }
 
     if (error) {
       const msg = error.message || "No se pudo completar la venta."
@@ -494,6 +608,12 @@ export async function createPosSale(input: {
         return {
           success: false,
           error: "PIN de Autorización inválido o no configurado.",
+        }
+      }
+      if (lower.includes("seating_not_found") || lower.includes("seating_tier")) {
+        return {
+          success: false,
+          error: "Esa ubicación ya no está disponible. Recargá el mapa.",
         }
       }
       return { success: false, error: msg }
@@ -522,9 +642,11 @@ export async function createPosSale(input: {
       .maybeSingle()
 
     const phone = input.customerPhone?.trim()
-    if (phone) {
+    const email = input.customerEmail?.trim()
+    if (phone || email) {
       void notifyPosTicketIssued({
-        phone,
+        phone: phone || "",
+        email: email || null,
         eventTitle: event?.title ?? "Evento Tokepass",
         ticketIds: rows.map((row) => row.ticket_id),
         quantity: rows.length,
@@ -538,6 +660,7 @@ export async function createPosSale(input: {
     }
 
     revalidatePath("/admin/pos")
+    revalidatePath("/dashboard/pos")
     revalidatePath("/admin/scanner")
     revalidatePath("/cuenta/entradas")
 
@@ -545,7 +668,7 @@ export async function createPosSale(input: {
       success: true,
       orderId: rows[0].order_id,
       totalAmount: Number(rows[0].total_amount),
-      paymentMethod: input.paymentMethod,
+      paymentMethod,
       tickets: rows.map((row) => ({
         id: row.ticket_id,
         totpSecret: row.totp_secret,
@@ -560,6 +683,38 @@ export async function createPosSale(input: {
       success: false,
       error:
         error instanceof Error ? error.message : "Error inesperado en POS.",
+    }
+  }
+}
+
+export async function deliverPosTickets(input: {
+  eventTitle: string
+  ticketIds: string[]
+  phone?: string | null
+  email?: string | null
+}): Promise<{ success: true } | { success: false; error: string }> {
+  const ticketIds = input.ticketIds.filter(Boolean)
+  if (ticketIds.length === 0) {
+    return { success: false, error: "No hay entradas para enviar." }
+  }
+  const phone = input.phone?.trim() || null
+  const email = input.email?.trim() || null
+  if (!phone && !email) {
+    return { success: false, error: "Ingresá WhatsApp, SMS o email." }
+  }
+  try {
+    await notifyPosTicketIssued({
+      phone,
+      email,
+      eventTitle: input.eventTitle,
+      ticketIds,
+      quantity: ticketIds.length,
+    })
+    return { success: true }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "No se pudo enviar.",
     }
   }
 }
@@ -595,6 +750,7 @@ export async function setPosSupervisorPin(input: {
     }
 
     revalidatePath("/admin/pos")
+    revalidatePath("/dashboard/pos")
     revalidatePath("/admin/settings/users")
     return { success: true }
   } catch (error) {
@@ -868,6 +1024,9 @@ export async function voidPosOrder(input: {
       return { success: false, error: "Ingresá el PIN de Autorización." }
     }
 
+    const access = await requirePosSession()
+    if (!access.success) return access
+
     const supabase = await createClient()
     const { error } = await supabase.rpc("void_pos_order", {
       p_order_id: input.orderId,
@@ -895,6 +1054,7 @@ export async function voidPosOrder(input: {
     }
 
     revalidatePath("/admin/pos")
+    revalidatePath("/dashboard/pos")
     revalidatePath("/admin/scanner")
     return { success: true }
   } catch (error) {
@@ -987,13 +1147,13 @@ export async function getPrintableTicket(
     profile?.role === "super_admin"
 
   if (!allowed) {
-    // Staff cajero / puerta del evento
+    // Staff cajero del evento (POS). Puerta no imprime desde boletería.
     const { data: staffOk } = await supabase.rpc(
       "user_is_event_organizer_or_staff",
       {
         p_event_id: row.events.id,
         p_user_id: user.id,
-        p_roles: ["cashier", "door_staff"],
+        p_roles: ["cashier"],
       },
     )
     if (!staffOk) return null

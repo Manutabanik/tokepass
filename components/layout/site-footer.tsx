@@ -1,4 +1,5 @@
 import Link from "next/link"
+import Image from "next/image"
 
 import { BrandLogo } from "@/components/shared/brand-logo"
 import {
@@ -40,11 +41,12 @@ export function SiteFooter() {
           className="w-fit shrink-0"
           aria-label="Data Fiscal AFIP (se abre en una pestaña nueva)"
         >
-          <img
+          <Image
             src="/brand/data-fiscal.svg"
             alt="Data Fiscal AFIP"
             width={40}
             height={53}
+            unoptimized
             className="h-auto w-10 grayscale transition-all hover:grayscale-0"
           />
         </a>

@@ -32,9 +32,9 @@ export async function checkoutFailuresBlocked(
 }
 
 export async function recordCheckoutFailure(
-  _ctx: CheckoutRequestContext,
+  ctx: CheckoutRequestContext,
 ): Promise<void> {
-  // The in-memory IP limiter already counted this purchase attempt.
+  void ctx.ip
 }
 
 export async function assertGuestTicketCap(input: {

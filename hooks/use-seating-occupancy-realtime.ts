@@ -34,14 +34,16 @@ export function useSeatingOccupancyRealtime(
   channelKey = "map",
 ) {
   const onPatchRef = useRef(onPatch)
-  onPatchRef.current = onPatch
+  useEffect(() => {
+    onPatchRef.current = onPatch
+  }, [onPatch])
 
   useEffect(() => {
     const cleanEventId = eventId?.trim()
     if (!cleanEventId) return
 
     const supabase = createClient()
-    const topic = `public:event_seating_units:${cleanEventId}:${channelKey}:${++occupancyChannelSeq}`
+    const topic = `public:event_seating_occupancy:${cleanEventId}:${channelKey}:${++occupancyChannelSeq}`
     let cancelled = false
 
     const channel = supabase
@@ -51,7 +53,7 @@ export function useSeatingOccupancyRealtime(
         {
           event: "*",
           schema: "public",
-          table: "event_seating_units",
+          table: "event_seating_occupancy",
           filter: `event_id=eq.${cleanEventId}`,
         },
         (payload) => {

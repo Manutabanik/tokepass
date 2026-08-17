@@ -6,9 +6,14 @@ import { Hash, Rows3, Table2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { PriceInput } from "@/components/ui/price-input"
+import { VenuePriceModeControl } from "@/components/admin/venue-price-mode-control"
 import { parametricZoneCapacity } from "@/lib/seating/adaptive-seating"
 import { formatCurrency } from "@/lib/format"
-import type { VenueMapZone } from "@/types/venue-map"
+import {
+  venuePriceModeFromSellMode,
+  venueUnitPriceLabel,
+  type VenueMapZone,
+} from "@/types/venue-map"
 
 export function VenueParametricRulesPanel({
   zone,
@@ -61,7 +66,13 @@ export function VenueParametricRulesPanel({
             className="h-10 w-full cursor-pointer rounded-md border border-input bg-transparent"
           />
         </Field>
-        <Field label="Precio (ARS)">
+        <Field
+          label={venueUnitPriceLabel({
+            layoutType: zone.layoutType,
+            sellMode: zone.sellMode,
+            priceMode: zone.priceMode,
+          })}
+        >
           <PriceInput
             value={zone.price}
             onValueChange={(value) => {
@@ -79,6 +90,18 @@ export function VenueParametricRulesPanel({
             const layoutType = event.target.value as VenueMapZone["layoutType"]
             onChange({
               layoutType,
+              sellMode:
+                layoutType === "table_combo"
+                  ? "group"
+                  : layoutType === "numbered_seat"
+                    ? "per_seat"
+                    : zone.sellMode,
+              priceMode:
+                layoutType === "table_combo"
+                  ? "closed_unit"
+                  : layoutType === "numbered_seat"
+                    ? "per_person"
+                    : zone.priceMode ?? venuePriceModeFromSellMode(zone.sellMode),
               labelPrefix:
                 layoutType === "numbered_seat"
                   ? "Butaca "
@@ -94,6 +117,14 @@ export function VenueParametricRulesPanel({
           <option value="general">Campo general (cupo)</option>
         </select>
       </Field>
+
+      {zone.layoutType === "table_combo" ? (
+        <VenuePriceModeControl
+          id={zone.id}
+          value={zone.priceMode ?? venuePriceModeFromSellMode(zone.sellMode)}
+          onChange={(next) => onChange(next)}
+        />
+      ) : null}
 
       {zone.layoutType === "general" ? (
         <Field label="Capacidad">

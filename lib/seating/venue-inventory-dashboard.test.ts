@@ -54,4 +54,38 @@ describe("venue-inventory-dashboard", () => {
     assert.equal(vip.revenue, 160000)
     assert.equal(summary.projectedRevenue, 200000)
   })
+
+  it("cuenta mesas paramétricas como unidades SKU, no como sillas", () => {
+    const map = emptyVenueMap()
+    map.zones = [
+      {
+        id: "zona-vip",
+        name: "VIP Festival",
+        color: "#22d3ee",
+        price: 80000,
+        polygon: [
+          { x: 40, y: 40 },
+          { x: 220, y: 40 },
+          { x: 220, y: 180 },
+          { x: 40, y: 180 },
+        ],
+        layoutType: "table_combo",
+        sellMode: "group",
+        rows: 2,
+        itemsPerRow: 3,
+        capacityPerUnit: 8,
+        capacity: 48,
+        labelPrefix: "Mesa ",
+      },
+    ]
+
+    const summary = summarizeVenueInventory(map)
+    const vip = summary.sectors.find((row) => row.id === "zone:zona-vip")
+    assert.ok(vip)
+    assert.equal(vip.unitCount, 6)
+    assert.equal(vip.unitLabel, "mesas")
+    assert.equal(vip.people, 48)
+    assert.equal(vip.mode, "tables")
+    assert.equal(vip.revenue, 480000)
+  })
 })

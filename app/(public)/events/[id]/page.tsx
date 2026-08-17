@@ -10,6 +10,7 @@ import {
   buildEventMetadata,
   eventSeoFromDetails,
 } from "@/lib/seo/event-metadata"
+import { extractAffiliateCode } from "@/lib/rrpp"
 import { publicEventPath } from "@/lib/seo/site"
 
 export async function generateMetadata({
@@ -32,10 +33,10 @@ export default async function LegacyEventDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ ref?: string }>
+  searchParams: Promise<{ ref?: string; rrpp?: string }>
 }) {
   const { id } = await params
-  const { ref } = await searchParams
+  const query = await searchParams
   const event = await getEventDetails(id).catch(() => null)
 
   if (!event) {
@@ -54,6 +55,12 @@ export default async function LegacyEventDetailPage({
   }
 
   const path = publicEventPath(event)
-  const suffix = ref ? `?ref=${encodeURIComponent(ref)}` : ""
+  const code = extractAffiliateCode(
+    new URLSearchParams({
+      ...(query.rrpp ? { rrpp: query.rrpp } : {}),
+      ...(query.ref ? { ref: query.ref } : {}),
+    }),
+  )
+  const suffix = code ? `?rrpp=${encodeURIComponent(code)}` : ""
   permanentRedirect(`${path}${suffix}`)
 }

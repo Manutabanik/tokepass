@@ -1,9 +1,11 @@
 /**
- * Captura y persistencia del código de referido RRPP (?ref=).
- * Cookie + sessionStorage, ventana de atribución 30 días.
+ * Captura y persistencia del codigo de referido RRPP (?rrpp= o ?ref=).
+ * Cookie + sessionStorage, ventana de atribucion 30 dias.
  */
 
 export const REFERRAL_COOKIE_NAME = "tokepass_ref"
+/** Cookie canonica del parametro ?rrpp= (alias de tokepass_ref). */
+export const RRPP_COOKIE_NAME = "rrpp_code"
 export const REFERRAL_STORAGE_KEY = "tokepass_ref"
 /** 30 días en segundos. */
 export const REFERRAL_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
@@ -28,17 +30,20 @@ export function buildReferralCookieOptions() {
   }
 }
 
-/** Lee el código desde document.cookie (cliente). */
-export function readReferralCookie(): string | null {
+function readNamedCookie(name: string): string | null {
   if (typeof document === "undefined") return null
+  const prefix = `${name}=`
   const parts = document.cookie.split(";").map((part) => part.trim())
   for (const part of parts) {
-    if (!part.startsWith(`${REFERRAL_COOKIE_NAME}=`)) continue
-    return normalizeReferralCode(
-      decodeURIComponent(part.slice(REFERRAL_COOKIE_NAME.length + 1)),
-    )
+    if (!part.startsWith(prefix)) continue
+    return normalizeReferralCode(decodeURIComponent(part.slice(prefix.length)))
   }
   return null
+}
+
+/** Lee el código desde document.cookie (cliente). */
+export function readReferralCookie(): string | null {
+  return readNamedCookie(RRPP_COOKIE_NAME) || readNamedCookie(REFERRAL_COOKIE_NAME)
 }
 
 export function writeReferralCookie(code: string): void {
@@ -49,7 +54,9 @@ export function writeReferralCookie(code: string): void {
     typeof window !== "undefined" && window.location.protocol === "https:"
       ? "; Secure"
       : ""
-  document.cookie = `${REFERRAL_COOKIE_NAME}=${encodeURIComponent(normalized)}; Path=/; Max-Age=${REFERRAL_MAX_AGE_SECONDS}; SameSite=Lax${secure}`
+  const payload = `${encodeURIComponent(normalized)}; Path=/; Max-Age=${REFERRAL_MAX_AGE_SECONDS}; SameSite=Lax${secure}`
+  document.cookie = `${REFERRAL_COOKIE_NAME}=${payload}`
+  document.cookie = `${RRPP_COOKIE_NAME}=${payload}`
 }
 
 export function writeReferralSession(code: string): void {
@@ -75,4 +82,13 @@ export function persistReferralCode(code: string): string | null {
   writeReferralSession(normalized)
   writeReferralCookie(normalized)
   return normalized
+}
+
+export function readAffiliateQueryCode(
+  searchParams: { get(name: string): string | null },
+): string | null {
+  return (
+    normalizeReferralCode(searchParams.get("rrpp")) ??
+    normalizeReferralCode(searchParams.get("ref"))
+  )
 }

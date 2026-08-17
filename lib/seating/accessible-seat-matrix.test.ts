@@ -2,7 +2,9 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import {
+  chunkSeatMatrixGroups,
   compactSeatToken,
+  formatSeatChunkTitle,
   groupSeatsForMatrix,
   seatGroupKey,
 } from "./accessible-seat-matrix"
@@ -51,5 +53,45 @@ describe("accessible-seat-matrix", () => {
     assert.equal(groups.length, 1)
     assert.equal(groups[0]?.title, "Mesa")
     assert.equal(groups[0]?.seats.length, 2)
+  })
+
+  it("oculta ocupados y arma titulos Mesa 1 a 10", () => {
+    const seats = Array.from({ length: 12 }, (_, index) => ({
+      id: `m${index + 1}`,
+      number: index + 1,
+      label: `Mesa ${index + 1}`,
+      price: 10,
+      status:
+        index === 11
+          ? ("occupied" as const)
+          : ("available" as const),
+    }))
+    const chunks = chunkSeatMatrixGroups([{ title: "Mesa", seats }])
+    assert.equal(chunks.length, 2)
+    assert.equal(chunks[0]?.title, "Mesa 1 a 10")
+    assert.equal(chunks[0]?.seats.length, 10)
+    assert.equal(chunks[1]?.title, "Mesa 11")
+  })
+
+  it("formatea rangos de fila sin mostrar ocupados", () => {
+    assert.equal(
+      formatSeatChunkTitle("Fila 3", [
+        {
+          id: "a",
+          number: 1,
+          label: "1",
+          price: 10,
+          status: "available",
+        },
+        {
+          id: "b",
+          number: 4,
+          label: "4",
+          price: 10,
+          status: "available",
+        },
+      ]),
+      "Fila 3 · 1 a 4",
+    )
   })
 })

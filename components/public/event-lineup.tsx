@@ -1,6 +1,6 @@
 "use client"
 
-import { LoaderCircle } from "lucide-react"
+import { LoaderCircle, Play } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
@@ -116,22 +116,37 @@ function ArtistGridAvatar({
       disabled={resolving}
       className={cn(
         tapFeedbackClass,
-        "relative block cursor-pointer rounded-full transition-transform hover:scale-105",
+        "group relative block cursor-pointer rounded-full transition-transform hover:scale-105",
       )}
       aria-pressed={active}
       aria-busy={resolving}
       aria-label={label}
     >
-      <ArtistAvatar
-        name={name}
-        imageUrl={artist.imageUrl}
-        size={size}
-        className={cn(
-          resolving && "animate-pulse opacity-70",
-          active &&
-            "ring-2 ring-primary ring-offset-2 ring-offset-background animate-pulse",
+      <div className="relative inline-block">
+        <ArtistAvatar
+          name={name}
+          imageUrl={artist.imageUrl}
+          size={size}
+          className={cn(
+            resolving && "animate-pulse opacity-70",
+            active &&
+              "ring-2 ring-primary ring-offset-2 ring-offset-background",
+          )}
+        />
+        {resolving ? null : (
+          <span
+            className={cn(
+              "absolute right-0 bottom-0 rounded-full border-2 border-background bg-primary text-primary-foreground shadow-md transition-transform group-hover:scale-110",
+              size === "xs" ? "p-0.5" : "p-1",
+            )}
+            aria-hidden="true"
+          >
+            <Play
+              className={cn(size === "xs" ? "size-2" : "size-3", "fill-current")}
+            />
+          </span>
         )}
-      />
+      </div>
       {resolving ? (
         <span className="absolute inset-0 grid place-items-center rounded-full bg-black/35">
           <LoaderCircle
@@ -294,10 +309,11 @@ export function EventLineup({
 }) {
   const reduceMotion = useReducedMotion()
   const [artists, setArtists] = useState(data?.artists ?? [])
-
-  useEffect(() => {
+  const [seenLineup, setSeenLineup] = useState(data)
+  if (data !== seenLineup) {
+    setSeenLineup(data)
     setArtists(data?.artists ?? [])
-  }, [data])
+  }
 
   useEffect(() => {
     return () => {
@@ -324,9 +340,12 @@ export function EventLineup({
     <section aria-label="Grilla de artistas y cronograma" className={cn("space-y-2", className)}>
       {hasArtists ? (
         <div>
-          <h2 className="mb-3 text-xl font-bold tracking-tight text-foreground">
+          <h2 className="mb-1 text-xl font-bold tracking-tight text-foreground">
             Grilla de artistas
           </h2>
+          <p className="mb-4 text-xs text-muted-foreground">
+            Tocá un artista para escuchar su música
+          </p>
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={dayKey}

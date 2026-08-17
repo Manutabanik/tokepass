@@ -3,6 +3,15 @@
 import { revalidatePath } from "next/cache"
 
 import { createClient } from "@/lib/supabase/server"
+import {
+  buildOrganizerFinanceCsv,
+  buildOrganizerFinancePdfHtml,
+  organizerFinanceExportFilename,
+  paidLedgerFromRpc,
+  roundLedger,
+  withUtf8Bom,
+  type OrganizerPaidLedger,
+} from "@/lib/finance/organizer-ledger"
 import type { PayoutRequestStatus } from "@/types/database"
 
 export type FinanceSettlement = {
@@ -29,8 +38,7 @@ export type FinancePayoutRequest = {
   reviewedAt: string | null
 }
 
-export type OrganizerFinanceSummary = {
-  grossRevenue: number
+export type OrganizerFinanceSummary = OrganizerPaidLedger & {
   platformFees: number
   mpPlatformFees: number
   posPlatformFees: number
@@ -81,13 +89,20 @@ function mapFinanceSummary(data: unknown): Omit<OrganizerFinanceSummary, "defaul
   const row = (data ?? {}) as Record<string, unknown>
   const settlementsRaw = Array.isArray(row.settlements) ? row.settlements : []
   const payoutsRaw = Array.isArray(row.payoutRequests) ? row.payoutRequests : []
+  const ledger =
+    paidLedgerFromRpc(row) ??
+    roundLedger({
+      grossRevenue: Number(row.grossRevenue ?? 0),
+      tokepassServiceCharge: Number(row.platformFees ?? 0),
+      organizerNetPayout: 0,
+    })
 
   return {
-    grossRevenue: Number(row.grossRevenue ?? 0),
-    platformFees: Number(row.platformFees ?? 0),
+    ...ledger,
+    platformFees: ledger.tokepassServiceCharge,
     mpPlatformFees: Number(row.mpPlatformFees ?? 0),
     posPlatformFees: Number(row.posPlatformFees ?? 0),
-    netRevenue: Number(row.netRevenue ?? 0),
+    netRevenue: ledger.organizerNetPayout,
     mercadopagoGross: Number(row.mercadopagoGross ?? 0),
     posGross: Number(row.posGross ?? 0),
     settledNet: Number(row.settledNet ?? 0),
@@ -148,6 +163,49 @@ export async function getOrganizerFinanceSummary(): Promise<OrganizerFinanceSumm
   return {
     ...mapFinanceSummary(data),
     defaultCbu: application?.cbu_alias?.trim() || null,
+  }
+}
+
+export async function exportOrganizerFinanceLedger(): Promise<
+  | {
+      success: true
+      data: { csv: string; html: string; filename: string }
+    }
+  | { success: false; error: string }
+> {
+  try {
+    const summary = await getOrganizerFinanceSummary()
+    const ledger = roundLedger({
+      grossRevenue: summary.grossRevenue,
+      tokepassServiceCharge: summary.tokepassServiceCharge,
+      organizerNetPayout: summary.organizerNetPayout,
+    })
+    const filename = organizerFinanceExportFilename()
+    const extras = [
+      { label: "Online (Mercado Pago)", value: summary.mercadopagoGross },
+      { label: "Puerta (POS)", value: summary.posGross },
+      { label: "Saldo retenido", value: summary.retainedHeld },
+      { label: "Saldo disponible", value: summary.availableToSettle },
+    ]
+    return {
+      success: true,
+      data: {
+        csv: withUtf8Bom(buildOrganizerFinanceCsv({ ledger, extraRows: extras })),
+        html: buildOrganizerFinancePdfHtml({
+          ledger,
+          extraRows: extras,
+        }),
+        filename,
+      },
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo exportar el reporte financiero.",
+    }
   }
 }
 

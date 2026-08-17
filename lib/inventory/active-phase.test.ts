@@ -28,6 +28,31 @@ function phase(
 const now = Date.parse("2026-08-14T20:00:00.000Z")
 
 describe("active-phase", () => {
+  it("rota una fase active vencida y activa la siguiente en ventana", () => {
+    const resolved = resolveSalePhases(
+      [
+        phase({
+          id: "early",
+          name: "Early Bird",
+          status: "active",
+          price: 8000,
+          endTime: "2026-08-14T19:00:00.000Z",
+        }),
+        phase({
+          id: "p1",
+          name: "Preventa 1",
+          status: "scheduled",
+          price: 12000,
+          startTime: "2026-08-14T19:00:00.000Z",
+        }),
+      ],
+      now,
+    )
+    assert.equal(resolved.current?.id, "p1")
+    assert.equal(resolved.current?.price, 12000)
+    assert.equal(resolved.displayActive?.id, "p1")
+  })
+
   it("elige la primera fase active con cupo", () => {
     const resolved = resolveSalePhases(
       [
@@ -49,7 +74,7 @@ describe("active-phase", () => {
       ],
       now,
     )
-    assert.equal(resolved.displayActive, null)
+    assert.equal(resolved.displayActive?.id, "p2")
     assert.equal(resolved.sellable?.id, "p2")
     assert.equal(resolved.current?.price, 15000)
   })
