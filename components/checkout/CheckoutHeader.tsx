@@ -31,8 +31,13 @@ export function CheckoutHeader({
 
   return (
     <header className="sticky top-0 z-50 w-full flex-none border-b border-border/50 bg-background/98 backdrop-blur-xl">
-      {/* Vista Mobile con padding amplio garantizado para no taparse en ningún celular */}
-      <div className="flex min-h-16 h-auto w-full items-center justify-between gap-2 px-4 pt-[calc(1.5rem+env(safe-area-inset-top,0px))] pb-3 md:hidden">
+      {/* Vista Mobile: Se aumenta el padding superior a pt-12 (~48px + Safe Area) para evitar la barra del navegador */}
+      <div 
+        className="flex w-full items-center justify-between gap-2 px-4 pb-3 md:hidden"
+        style={{
+          paddingTop: "calc(env(safe-area-inset-top, 0px) + 3.25rem)",
+        }}
+      >
         <button
           type="button"
           onClick={onBack}
@@ -63,7 +68,7 @@ export function CheckoutHeader({
         </div>
       </div>
 
-      {/* Vista Desktop (Intacta) */}
+      {/* Vista Desktop */}
       <div className="mx-auto hidden h-16 max-w-7xl items-center justify-between gap-4 px-4 py-3 md:flex md:h-20 md:px-8">
         <div className="flex min-w-0 flex-1 justify-start">
           <button
