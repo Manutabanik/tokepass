@@ -73,9 +73,9 @@ export function CartSummary({
       >
         {items.map((item) => {
           const displayName = cartLineDisplayName(item)
-          const qtyLabel = item.detail
-            ? `${item.quantity}x ${displayName} · ${item.detail}`
-            : `${item.quantity}x ${displayName}`
+          // Título simplificado sin concatenaciones extensas
+          const qtyLabel = `${item.quantity}x ${displayName}`
+
           return (
             <li
               key={item.id}
@@ -86,7 +86,7 @@ export function CartSummary({
               }
             >
               {compact ? (
-                <p className="min-w-0 truncate text-xs text-foreground">
+                <p className="min-w-0 truncate text-xs font-medium text-foreground">
                   {qtyLabel}
                 </p>
               ) : (
@@ -94,11 +94,7 @@ export function CartSummary({
                   <p className="truncate text-sm font-semibold text-foreground">
                     {displayName}
                   </p>
-                  {item.detail ? (
-                    <p className="mt-0.5 text-xs font-medium text-foreground/80">
-                      {item.detail}
-                    </p>
-                  ) : item.quantity > 1 ? (
+                  {item.quantity > 1 ? (
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       {item.quantity} unidades
                     </p>
