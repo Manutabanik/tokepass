@@ -1623,6 +1623,7 @@ export function CheckoutTunnel({
             buyerCheck.buyer,
             appliedPromo?.promoCodeId ?? null,
             previewKey,
+            acceptedTerms,
           )
         : await startCheckoutWithPayment(
             eventId,
@@ -1636,6 +1637,7 @@ export function CheckoutTunnel({
               previewKey,
               deviceHash: getOrCreateDeviceHash(),
               dwellMs: getCheckoutDwellMs(),
+              termsAccepted: acceptedTerms,
             },
           )
 

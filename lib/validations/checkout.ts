@@ -268,6 +268,7 @@ export const CheckoutPayloadSchema = z
         return value
       }),
     sandbox: z.boolean().optional(),
+    termsAccepted: z.boolean().optional(),
     previewKey: z
       .string()
       .uuid(UUID_ERROR)

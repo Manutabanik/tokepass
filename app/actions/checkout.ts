@@ -51,6 +51,11 @@ import {
   persistOrderGuestToken,
   recordCheckoutFailure,
 } from "@/lib/checkout/server-guards"
+import { isValidCuit, normalizeCuit } from "@/lib/legal/argentina"
+import {
+  EVENT_LEGAL_TERMS_VERSION,
+  LEGAL_CONSENT_REQUIRED_ERROR,
+} from "@/lib/legal/terms"
 import { normalizePreviewKey } from "@/lib/preview/sandbox"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
@@ -130,6 +135,10 @@ function mapReserveRpcError(message: string): CheckoutResult | null {
       error:
         "Alcanzaste el máximo de entradas por persona para este evento.",
     }
+  }
+
+  if (normalized.includes("legal_consent")) {
+    return { success: false, error: LEGAL_CONSENT_REQUIRED_ERROR }
   }
 
   if (normalized.includes("seating_unit_not_materialized")) {
@@ -1058,6 +1067,153 @@ export async function getGaCartHold(
   return { success: true, reservedUntil: row.reserved_until }
 }
 
+async function persistOrderLegalGate(input: {
+  orderId: string
+  eventId: string
+  buyerId: string
+  sandbox: boolean
+  termsAccepted: boolean
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!input.termsAccepted) {
+    return { ok: false, error: LEGAL_CONSENT_REQUIRED_ERROR }
+  }
+
+  const admin = createAdminClient()
+  const { data: event } = await admin
+    .from("events")
+    .select("organizer_id")
+    .eq("id", input.eventId)
+    .maybeSingle()
+
+  const organizerId = event?.organizer_id ?? null
+  let profile: {
+    full_name: string | null
+    public_name: string | null
+    legal_name?: string | null
+    tax_id?: string | null
+  } | null = null
+  let application: {
+    company_name: string | null
+    cuit_cuil: string | null
+  } | null = null
+
+  if (organizerId) {
+    const [profileFull, applicationResult] = await Promise.all([
+      admin
+        .from("profiles")
+        .select("full_name, public_name, legal_name, tax_id")
+        .eq("id", organizerId)
+        .maybeSingle(),
+      admin
+        .from("organizer_applications")
+        .select("company_name, cuit_cuil")
+        .eq("id", organizerId)
+        .maybeSingle(),
+    ])
+    application = applicationResult.data
+    if (profileFull.error && /legal_name|tax_id|column/i.test(profileFull.error.message)) {
+      const fallback = await admin
+        .from("profiles")
+        .select("full_name, public_name")
+        .eq("id", organizerId)
+        .maybeSingle()
+      profile = fallback.data
+    } else {
+      profile = profileFull.data
+    }
+  }
+
+  const rawTaxId = profile?.tax_id ?? application?.cuit_cuil ?? ""
+  const taxId = isValidCuit(rawTaxId) ? normalizeCuit(rawTaxId) : null
+  const legalName =
+    profile?.legal_name?.trim() ||
+    application?.company_name?.trim() ||
+    profile?.public_name?.trim() ||
+    profile?.full_name?.trim() ||
+    null
+
+  const canRecord = Boolean(legalName && taxId)
+  const patch = input.sandbox
+    ? {
+        is_test: true,
+        legal_consent_required: false,
+        ...(canRecord
+          ? {
+              terms_accepted: true,
+              terms_accepted_at: new Date().toISOString(),
+              legal_terms_version: EVENT_LEGAL_TERMS_VERSION,
+              organizer_legal_name_snapshot: legalName,
+              organizer_tax_id_snapshot: taxId,
+            }
+          : {}),
+      }
+    : canRecord
+      ? {
+          legal_consent_required: true,
+          terms_accepted: true,
+          terms_accepted_at: new Date().toISOString(),
+          legal_terms_version: EVENT_LEGAL_TERMS_VERSION,
+          organizer_legal_name_snapshot: legalName,
+          organizer_tax_id_snapshot: taxId,
+        }
+      : { legal_consent_required: false }
+
+  if (!input.sandbox && !canRecord) {
+    logger.warn({
+      context: "checkout/legal",
+      message: "legal_identity_incomplete",
+      orderId: input.orderId,
+      eventId: input.eventId,
+    })
+  }
+
+  const { error } = await admin
+    .from("orders")
+    .update(patch)
+    .eq("id", input.orderId)
+    .eq("buyer_id", input.buyerId)
+
+  if (!error) return { ok: true }
+
+  if (input.sandbox) {
+    const fallback = await admin
+      .from("orders")
+      .update({ is_test: true })
+      .eq("id", input.orderId)
+      .eq("buyer_id", input.buyerId)
+    if (fallback.error) {
+      logger.error({
+        context: "checkout/legal",
+        message: "sandbox_legal_fallback_failed",
+        orderId: input.orderId,
+        error: fallback.error.message,
+      })
+    }
+    return { ok: true }
+  }
+
+  if (/legal_|terms_accepted|column/i.test(error.message)) {
+    logger.warn({
+      context: "checkout/legal",
+      message: "legal_columns_missing",
+      orderId: input.orderId,
+      error: error.message,
+    })
+    return { ok: true }
+  }
+
+  logger.error({
+    context: "checkout/legal",
+    message: "legal_consent_persist_failed",
+    orderId: input.orderId,
+    error: error.message,
+  })
+  return {
+    ok: false,
+    error: "No se pudo registrar la aceptación de términos.",
+  }
+}
+
 async function applyHolderIdentityToOrder(input: {
   orderId: string
   buyer: NormalizedCheckoutBuyer
@@ -1304,6 +1460,7 @@ export async function startCheckoutWithPayment(
     captchaToken?: string | null
     deviceHash?: string | null
     dwellMs?: number | null
+    termsAccepted?: boolean
   },
 ): Promise<CheckoutResult> {
   const ctx = await getCheckoutRequestContext()
@@ -1324,6 +1481,7 @@ export async function startCheckoutWithPayment(
     referralCode,
     promoCodeId,
     sandbox: options?.sandbox,
+    termsAccepted: options?.termsAccepted,
     previewKey: options?.previewKey,
     paymentProvider: options?.paymentProvider,
   })
@@ -1770,13 +1928,20 @@ export async function startCheckoutWithPayment(
     const reservedUntil = rows[0]?.reserved_until
     const checkoutExpiresAt = resolveCheckoutExpiresAt(reservedUntil).toISOString()
 
+    const legalGate = await persistOrderLegalGate({
+      orderId,
+      eventId: payload.eventId,
+      buyerId: user.id,
+      sandbox: useSandbox,
+      termsAccepted: payload.termsAccepted !== false,
+    })
+    if (!legalGate.ok) {
+      await cleanupPendingOrder(orderId)
+      return { success: false, error: legalGate.error }
+    }
+
     if (useSandbox) {
       const admin = createAdminClient()
-      await admin
-        .from("orders")
-        .update({ is_test: true })
-        .eq("id", orderId)
-        .eq("buyer_id", user.id)
       const { data: finalized, error: finalizeError } = await admin.rpc(
         "finalize_paid_order",
         {
@@ -1788,16 +1953,19 @@ export async function startCheckoutWithPayment(
 
       if (finalizeError || !result.ok) {
         await cleanupPendingOrder(orderId)
+        const finalizeMessage =
+          finalizeError?.message ?? result.code ?? "unknown"
         logger.error({
           context: "checkout/sandbox",
           message: "sandbox_finalize_failed",
           orderId,
           userId: user.id,
-          error: finalizeError?.message ?? result.code ?? "unknown",
+          error: finalizeMessage,
         })
+        const mapped = mapReserveRpcError(finalizeMessage)
         return {
           success: false,
-          error: "No se pudo completar la compra de prueba.",
+          error: mapped?.error ?? "No se pudo completar la compra de prueba.",
         }
       }
 
@@ -2082,6 +2250,7 @@ export async function startSandboxCheckout(
   buyerInfo?: CheckoutBuyerInfo | null,
   promoCodeId?: string | null,
   previewKey?: string | null,
+  termsAccepted = true,
 ): Promise<CheckoutResult> {
   const parsed = CheckoutPayloadSchema.safeParse({
     eventId,
@@ -2091,6 +2260,7 @@ export async function startSandboxCheckout(
     referralCode,
     promoCodeId,
     sandbox: true,
+    termsAccepted,
     previewKey: normalizePreviewKey(previewKey),
   })
   if (!parsed.success) {
@@ -2104,7 +2274,11 @@ export async function startSandboxCheckout(
     parsed.data.addons,
     buyerToHolderFields(parsed.data.buyer),
     parsed.data.promoCodeId,
-    { sandbox: true, previewKey: parsed.data.previewKey },
+    {
+      sandbox: true,
+      previewKey: parsed.data.previewKey,
+      termsAccepted: parsed.data.termsAccepted !== false,
+    },
   )
 }
 

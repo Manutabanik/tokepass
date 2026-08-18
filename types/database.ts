@@ -99,6 +99,10 @@ export type Profile = {
   /** Logo / foto público. */
   avatar_url: string | null
   dni: string | null
+  /** Razón social / nombre fiscal del organizador. */
+  legal_name: string | null
+  /** CUIT argentino (11 dígitos). */
+  tax_id: string | null
   /** Teléfono / WhatsApp (progressive profiling). */
   phone: string | null
   role: UserRole
@@ -733,6 +737,12 @@ export type Order = {
   updated_at: string
   /** Orden de prueba (preview). Los tickets asociados no valen en puerta. */
   is_test: boolean
+  legal_consent_required: boolean
+  terms_accepted: boolean
+  terms_accepted_at: string | null
+  legal_terms_version: string | null
+  organizer_legal_name_snapshot: string | null
+  organizer_tax_id_snapshot: string | null
 }
 
 export type UserFavorite = {
@@ -877,6 +887,8 @@ type ProfileInsert = Omit<
   | "updated_at"
   | "service_charge_rate"
   | "dni"
+  | "legal_name"
+  | "tax_id"
   | "phone"
   | "organizer_approval_status"
   | "risk_tier"
@@ -885,6 +897,8 @@ type ProfileInsert = Omit<
   role?: UserRole
   service_charge_rate?: number
   dni?: string | null
+  legal_name?: string | null
+  tax_id?: string | null
   phone?: string | null
   organizer_approval_status?: OrganizerApprovalStatus
   risk_tier?: OrganizerRiskTier
@@ -1194,6 +1208,12 @@ type OrderInsert = Omit<
   | "cashier_shift_id"
   | "cashier_user_id"
   | "is_test"
+  | "legal_consent_required"
+  | "terms_accepted"
+  | "terms_accepted_at"
+  | "legal_terms_version"
+  | "organizer_legal_name_snapshot"
+  | "organizer_tax_id_snapshot"
   | "created_at"
   | "updated_at"
 > & {
@@ -1219,6 +1239,12 @@ type OrderInsert = Omit<
   cashier_shift_id?: string | null
   cashier_user_id?: string | null
   is_test?: boolean
+  legal_consent_required?: boolean
+  terms_accepted?: boolean
+  terms_accepted_at?: string | null
+  legal_terms_version?: string | null
+  organizer_legal_name_snapshot?: string | null
+  organizer_tax_id_snapshot?: string | null
   created_at?: string
   updated_at?: string
 }
