@@ -131,6 +131,7 @@ import {
   venueMapHasInventory,
   venueMapToSeatingLayout,
 } from "@/lib/seating/venue-map-geometry"
+import { applyMapCapacityToTickets } from "@/lib/seating/venue-map-pricing"
 import {
   formatVenueMapSkuErrors,
   validateVenueMapSkuConsistency,
@@ -1750,9 +1751,10 @@ export function InteractiveVenueMapEditor({
             disabled={saving}
             onClick={() => {
               if (!onSave) return
+              const healedTickets = applyMapCapacityToTickets(tickets ?? [], map)
               const result = validateVenueMapSkuConsistency({
                 map,
-                tickets,
+                tickets: healedTickets,
               })
               if (!result.ok) {
                 toast.error("No se puede guardar el mapa", {

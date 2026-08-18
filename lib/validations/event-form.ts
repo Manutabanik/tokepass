@@ -5,6 +5,10 @@ import {
   eventCapacityOverflowMessage,
 } from "@/lib/inventory/capacity-budget"
 import {
+  findLogicalSector,
+  listGeneralLogicalSectors,
+} from "@/lib/inventory/logical-sectors"
+import {
   DEFAULT_TICKET_TABS,
   TICKET_DESCRIPTION_MAX,
   TICKET_HIGHLIGHT_BADGES,
@@ -189,6 +193,7 @@ const eventFormObject = z
       zones: z
         .array(
           z.object({
+            id: z.string().trim().min(1).optional(),
             name: z.string().trim().min(1),
             type: z.enum(["general_admission", "reserved_seating"]),
             capacity: z.number().int().positive(),
@@ -218,6 +223,7 @@ const eventFormObject = z
       tierNames.add(normalizedName)
 
       const usesMap = Boolean(data.venue.includesSeatingMap)
+      const generalSectors = listGeneralLogicalSectors(data.venue.zones)
       if (
         tier.layoutType !== "general" &&
         !tier.seatingSectorId &&
@@ -227,6 +233,18 @@ const eventFormObject = z
           code: "custom",
           path: ["tickets", index, "seatingSectorId"],
           message: "Seleccioná la zona numerada de esta entrada.",
+        })
+      }
+      if (
+        tier.layoutType === "general" &&
+        (tier.tierType ?? "general") === "general" &&
+        generalSectors.length > 0 &&
+        !tier.seatingSectorId
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["tickets", index, "seatingSectorId"],
+          message: "Elegí el sector general de esta entrada.",
         })
       }
     }
@@ -291,8 +309,7 @@ const eventFormObject = z
     const capacitySnap = computeEventCapacity({
       tickets: data.tickets,
       venueMap: data.venue.venueMap,
-      baseVenueCapacity: data.venue.capacity,
-      customMaxCapacity: data.venue.customMaxCapacity,
+      zones: data.venue.zones,
     })
     if (capacitySnap.exceeded) {
       context.addIssue({
@@ -316,26 +333,27 @@ const eventFormObject = z
             "La suma de los lotes no puede superar la capacidad de esta entrada.",
         })
       }
-    }
 
-    const ticketCapacity = data.tickets.reduce(
-      (sum, tier) => sum + (Number(tier.capacity) || 0),
-      0,
-    )
-
-    if (!hasBlueprintZones && !usesSeatingMap) {
-      if (
-        data.venue.zoneType === "general_admission" &&
-        !data.venue.capacity &&
-        ticketCapacity < 1
-      ) {
+      if (tier.layoutType !== "general") continue
+      const sector = findLogicalSector(data.venue.zones, tier.seatingSectorId)
+      if (!sector) continue
+      if ((Number(tier.capacity) || 0) > sector.capacity) {
         context.addIssue({
           code: "custom",
-          path: ["venue", "capacity"],
-          message: "Definí cuántas personas entran al espacio.",
+          path: ["tickets", index, "capacity"],
+          message: `El stock no puede superar la capacidad de ${sector.name} (${sector.capacity}).`,
         })
       }
+      if (phases.length > 0 && phaseSum > sector.capacity) {
+        context.addIssue({
+          code: "custom",
+          path: ["tickets", index, "phases"],
+          message: `La suma de los lotes no puede superar la capacidad de ${sector.name}.`,
+        })
+      }
+    }
 
+    if (!hasBlueprintZones && !usesSeatingMap) {
       if (data.venue.zoneType === "reserved_seating") {
         if (!data.venue.rows) {
           context.addIssue({
@@ -598,6 +616,7 @@ export function coerceDraftEventForm(
           (!item.rows || !item.seatsPerRow)
         ) {
           return {
+            id: item.id,
             name: item.name || "General",
             type: "general_admission" as const,
             capacity: item.capacity > 0 ? item.capacity : 1,

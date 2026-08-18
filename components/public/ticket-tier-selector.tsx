@@ -15,7 +15,8 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { isFullPassDayId } from "@/lib/event-schedule"
 import { formatCurrency, formatEventDay } from "@/lib/format"
-import { purchaseCapForLayout } from "@/lib/checkout-limits"
+import { generalTicketMaxQuantity } from "@/lib/checkout/general-ticket-quantity"
+import { isLogicalGeneralSectorId } from "@/lib/seating/venue-map-pricing"
 import type { TicketHighlightBadge } from "@/lib/checkout/ticket-picker"
 import type { PublicTicketPhase } from "@/lib/inventory/active-phase"
 import type { InventoryTierType } from "@/lib/inventory/unified-inventory"
@@ -49,6 +50,10 @@ export type TicketSelectorTier = {
   highlightBadge?: TicketHighlightBadge | null
   sold?: number
   phases?: PublicTicketPhase[]
+  showRemainingStock?: boolean | null
+  showAccessCount?: boolean | null
+  badgeText?: string | null
+  includesAccess?: boolean | null
 }
 
 type DayFilter = "all" | string
@@ -308,10 +313,16 @@ function TierList({
     <div className="space-y-3">
       {tiers.map((tier) => {
         const quantity = quantities[tier.id] ?? 0
-        const maxSelectable = Math.min(
-          purchaseCapForLayout(tier.layoutType, maxTicketsPerUser),
-          tier.available,
-        )
+        const maxSelectable = generalTicketMaxQuantity({
+          tier,
+          siblings: tiers,
+          quantities,
+          selectedCount: Object.values(quantities).reduce(
+            (sum, value) => sum + Math.max(0, value),
+            0,
+          ),
+          maxTicketsPerUser,
+        })
         const soldOut = tier.available <= 0
         const lowStock = !soldOut && tier.available <= 8
         const day = scheduleDays.find((item) => item.id === tier.dayId)
@@ -388,7 +399,8 @@ function TierList({
               </div>
             </div>
 
-            {tier.layoutType === "general" ? (
+            {tier.layoutType === "general" ||
+            isLogicalGeneralSectorId(tier.seatingSectorId) ? (
               <div className="mt-4 flex items-center justify-between gap-3">
                 <span className="text-sm font-medium text-muted-foreground">
                   Cantidad

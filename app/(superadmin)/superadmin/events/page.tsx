@@ -1,4 +1,9 @@
-import { CalendarDays, ChevronRight, MapPin } from "lucide-react"
+import {
+  CalendarDays,
+  ChevronRight,
+  MapPin,
+  Settings2,
+} from "lucide-react"
 import type { Metadata } from "next"
 import Link from "next/link"
 
@@ -93,6 +98,15 @@ export default async function SuperAdminEventsPage() {
                     </TableCell>
                     <TableCell className="pr-6 text-right">
                       <EventStatusBadge status={event.status} />
+                    </TableCell>
+                    <TableCell className="pr-6 text-right">
+                      <Link
+                        href={`/admin/events/${event.id}/edit`}
+                        className="inline-flex h-10 min-h-10 items-center gap-1.5 rounded-full border border-border px-3 text-xs font-semibold text-foreground transition hover:bg-muted"
+                      >
+                        <Settings2 className="size-3.5" aria-hidden="true" />
+                        Configurar
+                      </Link>
                     </TableCell>
                   </TableRow>
                 ))}

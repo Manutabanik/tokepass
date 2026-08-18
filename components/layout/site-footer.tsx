@@ -20,6 +20,24 @@ export function SiteFooter() {
         </div>
 
         <nav
+          aria-label="Producto"
+          className="flex flex-wrap items-center gap-x-5 gap-y-2"
+        >
+          <Link
+            href="/beneficios"
+            className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Beneficios
+          </Link>
+          <Link
+            href="/organizadores"
+            className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Organizadores
+          </Link>
+        </nav>
+
+        <nav
           aria-label="Información legal"
           className="flex flex-wrap items-center gap-x-5 gap-y-2"
         >

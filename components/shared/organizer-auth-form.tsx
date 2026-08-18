@@ -5,11 +5,7 @@ import Link from "next/link"
 import { useActionState } from "react"
 import { useFormStatus } from "react-dom"
 
-import {
-  signInWithEmail,
-  signUpOrganizer,
-  type AuthActionState,
-} from "@/app/actions/auth"
+import { signInWithEmail, type AuthActionState } from "@/app/actions/auth"
 import { BrandLogo } from "@/components/shared/brand-logo"
 import { Button } from "@/components/ui/button"
 import {
@@ -27,7 +23,7 @@ const initialState: AuthActionState = {
   success: null,
 }
 
-function SubmitButton({ mode }: { mode: "login" | "register" }) {
+function SubmitButton() {
   const { pending } = useFormStatus()
 
   return (
@@ -37,37 +33,22 @@ function SubmitButton({ mode }: { mode: "login" | "register" }) {
       className="h-11 w-full bg-violet-600 text-white hover:bg-violet-500"
     >
       {pending && <LoaderCircle className="animate-spin" aria-hidden="true" />}
-      {pending
-        ? "Procesando..."
-        : mode === "login"
-          ? "Entrar a Tu Panel"
-          : "Crear cuenta de organizador"}
+      {pending ? "Procesando..." : "Entrar a Tu Panel"}
     </Button>
   )
 }
 
 export function OrganizerAuthForm({
-  mode,
   initialError,
   nextPath,
 }: {
-  mode: "login" | "register"
   initialError?: string
   nextPath?: string | null
 }) {
-  const [loginState, loginAction] = useActionState(
-    signInWithEmail,
-    initialState,
-  )
-  const [registerState, registerAction] = useActionState(
-    signUpOrganizer,
-    initialState,
-  )
-  const state = mode === "login" ? loginState : registerState
+  const [state, loginAction] = useActionState(signInWithEmail, initialState)
   const visibleError = state.error || initialError
-  const safeNext = nextPath?.startsWith("/") && !nextPath.startsWith("//")
-    ? nextPath
-    : null
+  const safeNext =
+    nextPath?.startsWith("/") && !nextPath.startsWith("//") ? nextPath : null
 
   return (
     <Card className="w-full border border-border bg-card py-0 text-card-foreground shadow-2xl shadow-zinc-200/50 dark:shadow-black/30">
@@ -81,46 +62,20 @@ export function OrganizerAuthForm({
           />
         </div>
         <CardTitle className="text-2xl font-bold tracking-tight text-foreground">
-          {mode === "login"
-            ? "Acceso para organizadores"
-            : "Creá tu organización"}
+          Acceso para organizadores
         </CardTitle>
         <CardDescription className="mx-auto max-w-sm leading-6 text-muted-foreground">
-          {mode === "login"
-            ? "Gestioná eventos, ventas, accesos y equipos desde un solo lugar."
-            : "Creá la cuenta y después completá la postulación KYB en Postular productora."}
+          Gestioná eventos, ventas, accesos y equipos desde un solo lugar.
         </CardDescription>
       </CardHeader>
 
       <CardContent className="px-7 py-7">
-        <form
-          action={mode === "login" ? loginAction : registerAction}
-          className="space-y-4"
-        >
-          {mode === "login" ? (
-            <input type="hidden" name="loginSource" value="organizer" />
-          ) : null}
+        <form action={loginAction} className="space-y-4">
+          <input type="hidden" name="loginSource" value="organizer" />
           {safeNext ? <input type="hidden" name="next" value={safeNext} /> : null}
-          {mode === "register" && (
-            <div className="grid gap-2">
-              <Label htmlFor="organizer-name">
-                Nombre completo
-              </Label>
-              <Input
-                id="organizer-name"
-                name="fullName"
-                autoComplete="name"
-                placeholder="Tu nombre"
-                required
-                className="h-11"
-              />
-            </div>
-          )}
 
           <div className="grid gap-2">
-            <Label htmlFor="organizer-email">
-              Email profesional
-            </Label>
+            <Label htmlFor="organizer-email">Email profesional</Label>
             <Input
               id="organizer-email"
               name="email"
@@ -133,38 +88,18 @@ export function OrganizerAuthForm({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="organizer-password">
-              Contraseña
-            </Label>
+            <Label htmlFor="organizer-password">Contraseña</Label>
             <Input
               id="organizer-password"
               name="password"
               type="password"
-              autoComplete={
-                mode === "login" ? "current-password" : "new-password"
-              }
+              autoComplete="current-password"
               minLength={8}
               placeholder="Mínimo 8 caracteres"
               required
               className="h-11"
             />
           </div>
-
-          {mode === "register" ? (
-            <div className="grid gap-2">
-              <Label htmlFor="organizer-invite">
-                Código de invitación{" "}
-                <span className="text-muted-foreground">(si aplica)</span>
-              </Label>
-              <Input
-                id="organizer-invite"
-                name="inviteCode"
-                autoComplete="off"
-                placeholder="Solo si el registro es invite-only"
-                className="h-11"
-              />
-            </div>
-          ) : null}
 
           {visibleError && (
             <p role="alert" className="text-sm text-red-400">
@@ -173,43 +108,28 @@ export function OrganizerAuthForm({
           )}
 
           {state.success && (
-            <div
-              role="status"
-              className="space-y-2 rounded-xl bg-emerald-500/10 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-300"
-            >
-              <p>{state.success}</p>
-              {mode === "register" ? (
-                <Link
-                  href="/postular-productora"
-                  className="inline-flex font-semibold text-emerald-700 underline underline-offset-2 hover:text-emerald-900 dark:text-emerald-200 dark:hover:text-white"
-                >
-                  Ir a postular productora
-                </Link>
-              ) : null}
-            </div>
+            <p role="status" className="text-sm text-emerald-800 dark:text-emerald-300">
+              {state.success}
+            </p>
           )}
 
-          <SubmitButton mode={mode} />
+          <SubmitButton />
         </form>
 
-        <div className="mt-5 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-          {mode === "login" ? "¿Primera vez en Tokepass?" : "¿Ya tenés cuenta?"}
+        <div className="mt-5 flex flex-col items-center justify-center gap-1 text-center text-sm text-muted-foreground sm:flex-row sm:gap-2">
+          <span>¿Todavía no tenés cuenta?</span>
           <Link
-            href={
-              mode === "login"
-                ? "/register-organizador"
-                : "/login-organizador"
-            }
+            href="/organizadores#solicitud"
             className="font-medium text-violet-700 hover:text-violet-600 dark:text-violet-400 dark:hover:text-violet-300"
           >
-            {mode === "login" ? "Crear cuenta" : "Ingresar"}
+            Solicitar acceso
           </Link>
         </div>
 
         <div className="mt-6 flex items-start gap-3 rounded-xl bg-muted/60 p-3 text-xs leading-5 text-muted-foreground">
           <ShieldCheck className="mt-0.5 size-4 shrink-0 text-violet-600 dark:text-violet-400" />
-          El acceso al panel se valida en el servidor y requiere un perfil de
-          organizador activo.
+          El alta de productoras es asistida. No hay registro libre: Tokepass
+          valida cada cuenta antes de habilitar cobros.
         </div>
       </CardContent>
     </Card>

@@ -102,7 +102,7 @@ export function resolveChargeUnit(input: {
       unitType: "full_table",
       capacity,
       noun,
-      badge: `PRECIO CERRADO · INCLUYE ${capacity} ACCESOS`,
+      badge: `INCLUYE ${capacity} ACCESOS`,
       sellMode: "group",
       priceMode: "closed_unit",
     }

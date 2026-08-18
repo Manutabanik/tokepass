@@ -131,6 +131,16 @@ export type OrganizerApplication = {
   updated_at: string
 }
 
+export type OrganizerLead = {
+  id: string
+  full_name: string
+  email: string
+  phone: string
+  event_name: string
+  estimated_attendance: number
+  created_at: string
+}
+
 export type OrganizerMpConnect = {
   organizer_id: string
   mp_user_id: string | null
@@ -1280,6 +1290,26 @@ export type Database = {
         }>
         Relationships: []
       }
+      organizer_leads: {
+        Row: OrganizerLead
+        Insert: {
+          id?: string
+          full_name: string
+          email: string
+          phone: string
+          event_name: string
+          estimated_attendance: number
+          created_at?: string
+        }
+        Update: Partial<{
+          full_name: string
+          email: string
+          phone: string
+          event_name: string
+          estimated_attendance: number
+        }>
+        Relationships: []
+      }
       events: {
         Row: Event
         Insert: EventInsert
@@ -1961,6 +1991,21 @@ export type Database = {
           p_zone_id?: string | null
         }
         Returns: number
+      }
+      reserve_hybrid_cart_tx: {
+        Args: {
+          p_event_id: string
+          p_owner_id: string
+          p_items: Json
+          p_promoter_id?: string | null
+        }
+        Returns: {
+          order_id: string
+          ticket_id: string
+          subtotal: number
+          service_charge: number
+          total_amount: number
+        }[]
       }
       reserve_unified_cart_tx: {
         Args: {

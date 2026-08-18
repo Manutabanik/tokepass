@@ -62,6 +62,7 @@ import {
   hasInteractiveVenueMap,
   seatingLayoutToVenueMap,
 } from "@/lib/seating/venue-map-geometry"
+import { eventNeedsInteractiveCanvas } from "@/lib/seating/venue-map-pricing"
 import { parseVenueMap, type InteractiveVenueMap } from "@/types/venue-map"
 import { effectiveSeatingUnitStatus } from "@/lib/seating/venue-map-occupancy"
 import type { EventPixelConfig } from "@/lib/analytics/pixels"
@@ -1013,10 +1014,7 @@ async function loadEventDetails(
     ? parsePublicSeatingLayout(event.venues.seating_layout)
     : []
   const venueMap = await resolvePublicVenueMap(supabase, event, seatingLayout)
-  const hasInteractiveMap =
-    hasInteractiveVenueMap(venueMap) ||
-    Boolean(event.venues?.seating_background_url?.trim()) ||
-    seatingLayout.length > 0
+  const hasInteractiveMap = eventNeedsInteractiveCanvas(venueMap, tiers)
 
   return {
     id: event.id,

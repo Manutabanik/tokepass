@@ -92,7 +92,17 @@ export function SeatingSelector({
     startTransition(async () => {
       const result = await startCheckoutWithPayment(
         eventId,
-        [{ tierId: tier.id, quantity: 1, seatingUnitId: selected.id }],
+        [
+          {
+            type: "mapped",
+            ticket_tier_id: tier.id,
+            ticketTierId: tier.id,
+            tierId: tier.id,
+            quantity: 1,
+            seatingUnitId: selected.id,
+            seat_id: selected.id,
+          },
+        ],
         referralCode,
       )
 

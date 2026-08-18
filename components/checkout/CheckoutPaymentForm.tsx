@@ -11,10 +11,11 @@ import {
   type CheckoutPaymentProvider,
 } from "@/components/public/payment-method-selector"
 import { PromoCodeInput } from "@/components/public/promo-code-input"
+import { CheckoutLegalClickwrap } from "@/components/checkout/checkout-legal-clickwrap"
 import { Button } from "@/components/ui/button"
 import type { CheckoutBuyerInfo } from "@/lib/checkout-buyer"
 import { formatCurrency } from "@/lib/format"
-import { cartLineDisplayName } from "@/lib/checkout/cart-lines"
+import { cartLineAmount, cartLineDisplayName } from "@/lib/checkout/cart-lines"
 import {
   useCheckoutStore,
   type StorefrontCartLine,
@@ -47,6 +48,8 @@ export function CheckoutPaymentForm({
   onConfirmPay,
   confirmPending = false,
   confirmLocked = false,
+  acceptedTerms = false,
+  onAcceptedTermsChange,
 }: {
   step: "details" | "payment"
   eventId: string
@@ -71,6 +74,8 @@ export function CheckoutPaymentForm({
   onConfirmPay?: () => void
   confirmPending?: boolean
   confirmLocked?: boolean
+  acceptedTerms?: boolean
+  onAcceptedTermsChange?: (accepted: boolean) => void
 }) {
   const buyer = useCheckoutStore((state) => state.buyer)
   const cartLines = useCheckoutStore((state) => state.lines)
@@ -136,9 +141,17 @@ export function CheckoutPaymentForm({
         inicia solo cuando la reserva queda confirmada.
       </p>
 
+      <CheckoutLegalClickwrap
+        className="lg:hidden"
+        checked={acceptedTerms}
+        onCheckedChange={onAcceptedTermsChange ?? (() => {})}
+        disabled={controlsLocked}
+      />
+
       <Button
         type="button"
         disabled={
+          !acceptedTerms ||
           confirmPending ||
           confirmLocked ||
           controlsLocked ||
@@ -148,7 +161,7 @@ export function CheckoutPaymentForm({
         onClick={onConfirmPay}
         className={cn(
           tapFeedbackClass,
-          "mt-6 h-auto w-full rounded-xl bg-primary py-4 text-center text-lg font-bold text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90",
+          "mt-6 h-auto w-full rounded-xl bg-primary py-4 text-center text-lg font-bold text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50",
         )}
       >
         {confirmPending ? (
@@ -165,7 +178,7 @@ export function CheckoutPaymentForm({
         <Button
           type="button"
           variant="outline"
-          disabled={controlsLocked}
+          disabled={controlsLocked || !acceptedTerms}
           onClick={onSandboxReserve}
           className="w-full border-dashed text-muted-foreground hover:text-foreground"
         >
@@ -307,7 +320,7 @@ function PaymentTicketRow({ item }: { item: StorefrontCartLine }) {
         </p>
       </div>
       <span className="shrink-0 text-sm font-bold tabular-nums text-card-foreground">
-        {formatCurrency(item.price)}
+        {formatCurrency(cartLineAmount(item))}
       </span>
     </li>
   )

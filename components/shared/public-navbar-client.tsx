@@ -63,7 +63,13 @@ export function PublicNavbarClient({
             </Link>
           ) : null}
           <Link
-            href="/login-organizador"
+            href="/beneficios"
+            className={navLinkClass}
+          >
+            Beneficios
+          </Link>
+          <Link
+            href="/organizadores"
             className={cn(
               navLinkClass,
               "border border-violet-300/70 text-violet-700 hover:bg-violet-50 dark:border-violet-400/40 dark:text-violet-200 dark:hover:bg-violet-500/10",

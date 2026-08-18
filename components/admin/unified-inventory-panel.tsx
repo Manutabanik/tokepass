@@ -72,6 +72,10 @@ import {
 } from "@/lib/event-schedule"
 import { cn } from "@/lib/utils"
 import { isMapBackedTicket } from "@/lib/seating/venue-map-pricing"
+import {
+  findLogicalSector,
+  listGeneralLogicalSectors,
+} from "@/lib/inventory/logical-sectors"
 import { TICKET_DAY_ALL } from "@/types/tickets"
 import type { EventFormValues } from "@/lib/validations/event-form"
 
@@ -114,6 +118,7 @@ type Props = {
 
 export function UnifiedInventoryPanel({ form }: Props) {
   const tickets = form.watch("tickets") ?? []
+  const logicalSectors = listGeneralLogicalSectors(form.watch("venue.zones"))
   const scheduleDays = form.watch("basics.scheduleDays") ?? []
   const isMultiDay = Boolean(form.watch("basics.isMultiDay")) || scheduleDays.length >= 2
   const capacity = useEventCapacity(form)
@@ -208,7 +213,13 @@ export function UnifiedInventoryPanel({ form }: Props) {
     <div className="space-y-5">
       <CapacityBudgetBar form={form} />
       {capacity.mapAllocatedCapacity > 0 ? (
-        <div className="flex items-start gap-2 rounded-xl border border-border bg-muted/50 px-3 py-2.5 text-sm text-muted-foreground">
+        <div
+          className="flex items-start gap-2 rounded-xl border border-border bg-muted/50 px-3 py-2.5 text-sm text-muted-foreground"
+          data-conflict-sector={
+            tickets.find((tier) => tier.seatingSectorId)?.seatingSectorId ??
+            undefined
+          }
+        >
           <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
           <p>
             <span className="font-medium text-foreground">
@@ -280,7 +291,11 @@ export function UnifiedInventoryPanel({ form }: Props) {
             ...createInventoryTicket("general", {
               dayId: defaultInventoryDayId(scheduleDays),
             }),
-            capacity: Math.max(1, Math.min(100, capacity.remaining || 1)),
+            seatingSectorId: logicalSectors[0]?.id ?? null,
+            capacity: Math.max(
+              1,
+              Math.min(logicalSectors[0]?.capacity ?? 100, 100),
+            ),
           })
         }
       >
@@ -298,8 +313,13 @@ export function UnifiedInventoryPanel({ form }: Props) {
                 capacity,
                 tickets[item.index],
                 tickets,
+                findLogicalSector(
+                  form.getValues("venue.zones"),
+                  tickets[item.index]?.seatingSectorId,
+                )?.capacity,
               )}
               capacityExceeded={capacity.exceeded}
+              logicalSectors={logicalSectors}
               showPhases
               onRemove={() => remove(item.index)}
             />
@@ -506,6 +526,7 @@ function InventoryRow({
   scheduleDays = [],
   venueRemaining,
   capacityExceeded = false,
+  logicalSectors = [],
   onRemove,
 }: {
   form: UseFormReturn<EventFormValues>
@@ -516,6 +537,7 @@ function InventoryRow({
   scheduleDays?: EventFormValues["basics"]["scheduleDays"]
   venueRemaining?: number
   capacityExceeded?: boolean
+  logicalSectors?: ReturnType<typeof listGeneralLogicalSectors>
   onRemove: () => void
 }) {
   const layoutType = form.watch(`tickets.${index}.layoutType`)
@@ -609,8 +631,8 @@ function InventoryRow({
               />
               {overflow ? (
                 <p className="text-xs text-destructive" role="alert">
-                  Superás el aforo oficial. Bajá el número o ajustá el aforo
-                  total.
+                  Superás la capacidad del sector. Bajá el stock o ampliá el
+                  sector en Mapa y Sectores.
                 </p>
               ) : null}
               <FormMessage>{fieldState.error?.message}</FormMessage>
@@ -634,6 +656,58 @@ function InventoryRow({
           )}
         />
       </div>
+      {logicalSectors.length > 0 ? (
+        <FormField
+          control={form.control}
+          name={`tickets.${index}.seatingSectorId`}
+          render={({ field, fieldState }) => {
+            const items = logicalSectors.map((sector) => ({
+              value: sector.id,
+              label: `${sector.name} (${sector.capacity})`,
+            }))
+            const selected = field.value?.trim() || ""
+            return (
+              <FormItem>
+                <FormLabel>Sector</FormLabel>
+                <Select
+                  value={selected}
+                  onValueChange={(value) => {
+                    field.onChange(value)
+                    const sector = logicalSectors.find((item) => item.id === value)
+                    if (!sector) return
+                    const current = asPositiveInt(
+                      form.getValues(`tickets.${index}.capacity`),
+                    )
+                    if (current > sector.capacity) {
+                      form.setValue(`tickets.${index}.capacity`, sector.capacity, {
+                        shouldDirty: true,
+                      })
+                    }
+                  }}
+                  items={items}
+                >
+                  <SelectTrigger className="h-11 w-full max-w-md">
+                    <SelectValue placeholder="Elegí el sector">
+                      {items.find((item) => item.value === selected)?.label}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {items.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormDescription>
+                  El stock y los lotes no pueden superar este cupo.
+                </FormDescription>
+                <FormMessage>{fieldState.error?.message}</FormMessage>
+              </FormItem>
+            )
+          }}
+        />
+      ) : null}
       {scheduleDays.length >= 2 ? (
         <FormField
           control={form.control}

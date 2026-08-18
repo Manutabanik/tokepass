@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react"
 import type { UseFormReturn } from "react-hook-form"
 
 import { autosaveEventDraft } from "@/app/actions/event-autosave"
+import { eventInventoryFingerprint } from "@/lib/events/event-inventory-fingerprint"
 import {
   useEventFormStore,
   type ZoneTierPriceDraft,
@@ -53,6 +54,7 @@ export function useEventFormAutosave(input: {
   onZoneTierPricingChange?: (rows: ZoneTierPriceDraft[]) => void
   targetOrganizerId?: string | null
   enabled?: boolean
+  serverUpdatedAt?: number | null
 }) {
   const {
     form,
@@ -65,6 +67,7 @@ export function useEventFormAutosave(input: {
     onZoneTierPricingChange,
     targetOrganizerId = null,
     enabled = true,
+    serverUpdatedAt = null,
   } = input
 
   const hydrateSession = useEventFormStore((s) => s.hydrateSession)
@@ -78,6 +81,9 @@ export function useEventFormAutosave(input: {
   const readyRef = useRef(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const savingRef = useRef(false)
+  const inventoryFingerprintRef = useRef(
+    eventInventoryFingerprint(initialValues),
+  )
   const scheduleSaveRef = useRef<() => void>(() => {})
   const flushAutosaveRef = useRef<() => void>(() => {})
   const latestRef = useRef({
@@ -115,6 +121,7 @@ export function useEventFormAutosave(input: {
         values: initialValues,
         venuePricingMap,
         zoneTierPricing,
+        serverUpdatedAt,
       })
       const persisted = useEventFormStore.getState()
       if (persisted.values && persisted.draftKey === draftKey) {
@@ -129,6 +136,9 @@ export function useEventFormAutosave(input: {
         zoneTierPricing: useEventFormStore.getState().zoneTierPricing,
         eventId: eventId ?? useEventFormStore.getState().eventId,
       }
+      inventoryFingerprintRef.current = eventInventoryFingerprint(
+        latestRef.current.values,
+      )
       readyRef.current = true
     }
 
@@ -154,6 +164,9 @@ export function useEventFormAutosave(input: {
     if (savingRef.current) return
     const snapshot = latestRef.current
     const values = sanitizeFormValues(snapshot.values)
+    const identityOnly =
+      !snapshot.eventId ||
+      eventInventoryFingerprint(values) === inventoryFingerprintRef.current
     savingRef.current = true
     setAutosaveStatus("saving")
     try {
@@ -162,6 +175,7 @@ export function useEventFormAutosave(input: {
         values,
         zoneTierPricing: snapshot.zoneTierPricing,
         targetOrganizerId: snapshot.targetOrganizerId,
+        identityOnly,
       })
       if (!result.ok) {
         setAutosaveStatus("error", result.error)
@@ -191,6 +205,9 @@ export function useEventFormAutosave(input: {
         })
       }
       setAutosaveStatus("saved")
+      if (!identityOnly) {
+        inventoryFingerprintRef.current = eventInventoryFingerprint(values)
+      }
     } catch (error) {
       setAutosaveStatus(
         "error",

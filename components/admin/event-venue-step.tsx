@@ -25,6 +25,7 @@ import {
   type VenueArgentinaValue,
 } from "@/components/admin/venue-argentina-selector"
 import { InteractiveVenueMapStudio } from "@/components/admin/interactive-venue-map-studio"
+import { LogicalSectorsPanel } from "@/components/admin/logical-sectors-panel"
 import { VenueManagerModal } from "@/components/admin/venue-manager-modal"
 import { VenueMapStudioSummary } from "@/components/admin/venue-map-studio-summary"
 import { useEventFormStore } from "@/lib/stores/event-form-store"
@@ -41,7 +42,6 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
   Select,
@@ -109,6 +109,7 @@ type EventVenueStepProps = {
   /** Parte del wizard: ubicación vs. zonas, o todo junto. */
   focus?: "location" | "zones" | "all"
   onMapInventoryChange?: (map: ReturnType<typeof parseVenueMap>) => void
+  catalogOrganizerId?: string | null
 }
 
 export function EventVenueStep({
@@ -119,6 +120,7 @@ export function EventVenueStep({
   pricingSlot,
   focus = "all",
   onMapInventoryChange,
+  catalogOrganizerId = null,
 }: EventVenueStepProps) {
   const showLocation = focus !== "zones"
   const showZones = focus !== "location"
@@ -488,7 +490,14 @@ export function EventVenueStep({
     venueMode === "new" || venueOptions.length === 0 || editingSaved
 
   return (
-    <div className="space-y-7">
+    <div
+      className="space-y-7"
+      id="event-wizard-map"
+      data-conflict-sector={
+        form.watch("tickets")?.find((tier) => tier.seatingSectorId)?.seatingSectorId ??
+        undefined
+      }
+    >
       {showLocation ? (
       <div className="space-y-2">
       <div className="flex items-center justify-end">
@@ -717,6 +726,7 @@ export function EventVenueStep({
 
           {showZones ? (
             <>
+          <LogicalSectorsPanel form={form} />
           <MapStudioFields
             form={form}
             venueMap={venueMap}
@@ -763,33 +773,6 @@ export function EventVenueStep({
             </label>
           </div>
 
-          <FormField
-            control={form.control}
-            name="venue.capacity"
-            render={({ field, fieldState }) => (
-              <FormItem>
-                <FormLabel>Capacidad de referencia del lugar</FormLabel>
-                <Input
-                  type="number"
-                  min={1}
-                  value={field.value ?? ""}
-                  onChange={(event) =>
-                    field.onChange(
-                      event.target.value === ""
-                        ? undefined
-                        : Number(event.target.value),
-                    )
-                  }
-                  className="h-11 border-zinc-200 dark:border-white/10 bg-zinc-100 dark:bg-black/20"
-                />
-                <FormDescription>
-                  Orientativa. El stock real sale de asientos del mapa, sectores
-                  generales y adicionales.
-                </FormDescription>
-                <FormMessage>{fieldState.error?.message}</FormMessage>
-              </FormItem>
-            )}
-          />
             </>
           ) : null}
 
@@ -864,6 +847,7 @@ export function EventVenueStep({
         open={managerOpen}
         onOpenChange={setManagerOpen}
         onCatalogChange={handleCatalogChange}
+        catalogOrganizerId={catalogOrganizerId}
       />
     </div>
   )

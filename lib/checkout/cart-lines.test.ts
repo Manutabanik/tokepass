@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
-import { cartLineDisplayName, cartTicketLineId } from "./cart-lines"
+import { cartLineAmount, cartLineDisplayName, cartTicketLineId } from "./cart-lines"
 
 describe("cartLineDisplayName", () => {
   it("appends the compact date in parentheses", () => {
@@ -36,5 +36,12 @@ describe("cartTicketLineId", () => {
   it("keeps date identity in the line id", () => {
     assert.equal(cartTicketLineId("tier-1", "d1"), "ticket:tier-1__d1")
     assert.equal(cartTicketLineId("tier-1"), "ticket:tier-1__all")
+  })
+})
+
+describe("cartLineAmount", () => {
+  it("multiplies unit price by quantity", () => {
+    assert.equal(cartLineAmount({ price: 15000, quantity: 3 }), 45000)
+    assert.equal(cartLineAmount({ price: 15000, quantity: 0 }), 0)
   })
 })

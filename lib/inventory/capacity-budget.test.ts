@@ -55,10 +55,23 @@ function standingMap(capacity: number) {
 }
 
 describe("capacity-budget", () => {
-  it("resta generales del aforo y deja afuera adicionales", () => {
-    const general = ticket({ tierType: "general", capacity: 80 })
+  it("suma bottom-up sectores generales y deja afuera adicionales", () => {
+    const general = ticket({
+      tierType: "general",
+      capacity: 80,
+      seatingSectorId: "general:pista",
+    })
     const addon = ticket({ tierType: "addon", capacity: 40 })
-    const budget = venueCapacityBudget(100, [general, addon])
+    const budget = venueCapacityBudget(0, [general, addon], undefined, {
+      zones: [
+        {
+          id: "general:pista",
+          name: "Pista",
+          type: "general_admission",
+          capacity: 100,
+        },
+      ],
+    })
     assert.equal(budget.allocated, 80)
     assert.equal(budget.remaining, 20)
     assert.equal(occupiesVenueBudget(addon), false)
@@ -71,46 +84,50 @@ describe("capacity-budget", () => {
       seatingSectorId: "zona-vip",
       capacity: 300,
     })
-    const general = ticket({ tierType: "general", capacity: 171 })
+    const general = ticket({
+      tierType: "general",
+      capacity: 171,
+      seatingSectorId: "general:pista",
+    })
     const snap = computeEventCapacity({
       tickets: [mapTicket, general],
       venueMap: standingMap(376),
-      baseVenueCapacity: 376,
-      customMaxCapacity: null,
+      zones: [
+        {
+          id: "general:pista",
+          name: "Pista",
+          type: "general_admission",
+          capacity: 171,
+        },
+      ],
     })
     assert.equal(snap.mapAllocatedCapacity, 376)
+    assert.equal(snap.generalSectorCapacity, 171)
     assert.equal(snap.generalAllocatedCapacity, 171)
+    assert.equal(snap.totalCapacity, 547)
     assert.equal(snap.totalAllocated, 547)
-    assert.equal(snap.effectiveMaxCapacity, 376)
-    assert.equal(snap.exceeded, true)
-    assert.equal(snap.overflow, 171)
-    assert.equal(snap.remaining, 0)
+    assert.equal(snap.exceeded, false)
   })
 
-  it("customMaxCapacity permite predio mixto asientos + campo", () => {
-    const general = ticket({ tierType: "general", capacity: 1000 })
+  it("marca overflow si el stock del sector supera su cupo", () => {
+    const general = ticket({
+      tierType: "general",
+      capacity: 200,
+      seatingSectorId: "general:pista",
+    })
     const snap = computeEventCapacity({
       tickets: [general],
-      venueMap: standingMap(300),
-      baseVenueCapacity: 300,
-      customMaxCapacity: 1300,
+      zones: [
+        {
+          id: "general:pista",
+          name: "Pista",
+          type: "general_admission",
+          capacity: 100,
+        },
+      ],
     })
-    assert.equal(snap.mapAllocatedCapacity, 300)
-    assert.equal(snap.generalAllocatedCapacity, 1000)
-    assert.equal(snap.totalAllocated, 1300)
-    assert.equal(snap.effectiveMaxCapacity, 1300)
-    assert.equal(snap.exceeded, false)
-    assert.equal(snap.remaining, 0)
-  })
-
-  it("effectiveMaxCapacity usa el mayor entre aforo oficial y el expandido", () => {
-    const snap = computeEventCapacity({
-      tickets: [],
-      venueMap: standingMap(300),
-      baseVenueCapacity: 300,
-      customMaxCapacity: 200,
-    })
-    assert.equal(snap.effectiveMaxCapacity, 300)
+    assert.equal(snap.exceeded, true)
+    assert.equal(snap.overflow > 0, true)
   })
 
   it("parsea enteros vacios como UI vacia y NaN invalido", () => {
@@ -124,10 +141,10 @@ describe("capacity-budget", () => {
     const snap = computeEventCapacity({
       tickets: [{ ...general, capacity: undefined }],
       venueMap: standingMap(100),
-      baseVenueCapacity: 100,
     })
     assert.equal(snap.generalAllocatedCapacity, 0)
     assert.equal(snap.totalAllocated, 100)
+    assert.equal(snap.totalCapacity, 100)
   })
 
   it("marca overflow si los lotes superan la capacidad padre", () => {

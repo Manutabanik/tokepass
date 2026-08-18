@@ -55,11 +55,21 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import type { PaymentProvider } from "@/types/database"
 import {
+  amountsMatch,
+  checkoutItemElementId,
+  checkoutItemSeatId,
+  checkoutItemTierId,
+  isMappedCheckoutItem,
+  quoteHybridCartTotal,
+  toReserveRpcItem,
+} from "@/lib/checkout/hybrid-cart"
+import {
   CheckoutPayloadSchema,
   buyerToHolderFields,
   formatCheckoutPayloadError,
   type CheckoutAddonItem,
   type CheckoutCartItem,
+  type CheckoutCartItemInput,
 } from "@/lib/validations/checkout"
 
 const EVENT_FINISHED_ERROR = "El evento ya ha finalizado"
@@ -122,6 +132,7 @@ function mapReserveRpcError(message: string): CheckoutResult | null {
 
   if (
     normalized.includes("seating_unit_unavailable") ||
+    normalized.includes("inventory_conflict_409") ||
     normalized.includes("409") ||
     normalized.includes("conflict")
   ) {
@@ -225,12 +236,10 @@ async function evaluateCartPhaseRollover(
   eventId: string,
   items: CheckoutCartItem[],
 ): Promise<CheckoutResult | null> {
-  const quantityItems = items.filter(
-    (item) => !(item.seatingUnitId || (item.seatingIds?.length ?? 0) > 0),
-  )
+  const quantityItems = items.filter((item) => !isMappedCheckoutItem(item))
   if (quantityItems.length === 0) return null
 
-  const tierIds = [...new Set(quantityItems.map((item) => item.tierId))]
+  const tierIds = [...new Set(quantityItems.map((item) => checkoutItemTierId(item)))]
   const [{ data: tierRows }, phasesByTier] = await Promise.all([
     supabase
       .from("ticket_tiers")
@@ -243,10 +252,11 @@ async function evaluateCartPhaseRollover(
   const tierById = new Map((tierRows ?? []).map((row) => [row.id, row]))
 
   for (const item of quantityItems) {
-    const phases = phasesByTier.get(item.tierId) ?? []
+    const tierId = checkoutItemTierId(item)
+    const phases = phasesByTier.get(tierId) ?? []
     if (phases.length === 0) continue
 
-    const tier = tierById.get(item.tierId)
+    const tier = tierById.get(tierId)
     const tierAvailable = Math.max(
       0,
       Number(tier?.capacity ?? 0) - Number(tier?.sold ?? 0),
@@ -265,7 +275,7 @@ async function evaluateCartPhaseRollover(
         [decision.phase],
       )
       return phaseRolloverResult(
-        item.tierId,
+        tierId,
         decision.phase,
         priced.available,
         PHASE_STOCK_CLAMP_MESSAGE,
@@ -283,7 +293,7 @@ async function evaluateCartPhaseRollover(
       ),
     )
     return phaseRolloverResult(
-      item.tierId,
+      tierId,
       decision.phase,
       priced.available,
       PHASE_ROLLOVER_MESSAGE,
@@ -352,6 +362,88 @@ async function reserveGeneralAdmissionAtomic(
   }
 
   return { missing: false as const, reservation }
+}
+
+async function resolveMappedSeatingUnits(
+  supabase: CheckoutSupabase,
+  eventId: string,
+  items: CheckoutCartItem[],
+): Promise<
+  | { ok: true; items: CheckoutCartItem[] }
+  | { ok: false; error: "out_of_stock" }
+> {
+  const next = items.map((item) => ({ ...item }))
+  for (const item of next) {
+    if (!isMappedCheckoutItem(item)) continue
+    const existingSeat = checkoutItemSeatId(item)
+    if (existingSeat) {
+      item.seatingUnitId = existingSeat
+      item.seatId = existingSeat
+      item.seat_id = existingSeat
+      continue
+    }
+    const elementId = checkoutItemElementId(item)
+    if (!elementId) return { ok: false, error: "out_of_stock" }
+    const { data } = await supabase
+      .from("event_seating_units")
+      .select("id")
+      .eq("event_id", eventId)
+      .eq("layout_item_id", elementId)
+      .maybeSingle()
+    if (!data?.id) return { ok: false, error: "out_of_stock" }
+    item.seatingUnitId = data.id
+    item.seatId = data.id
+    item.seat_id = data.id
+    item.elementId = elementId
+    item.element_id = elementId
+  }
+  return { ok: true, items: next }
+}
+
+async function quoteCheckoutFromDatabase(
+  supabase: CheckoutSupabase,
+  eventId: string,
+  items: CheckoutCartItem[],
+  phasesByTier: Map<string, PublicTicketPhase[]>,
+): Promise<{ ok: true; total: number } | { ok: false; error: string }> {
+  const tierIds = [...new Set(items.map((item) => checkoutItemTierId(item)))]
+  const unitPriceByTier = new Map<string, number>()
+
+  for (const item of items) {
+    const tierId = checkoutItemTierId(item)
+    const { data, error } = await supabase.rpc("resolve_zone_tier_unit_price", {
+      p_event_id: eventId,
+      p_ticket_tier_id: tierId,
+      p_sector_key: item.sectorKey ?? null,
+      p_table_number: item.tableNumber ?? null,
+      p_zone_id: item.zoneId ?? null,
+    })
+    if (error || data == null || !Number.isFinite(Number(data))) {
+      const { data: tierRow } = await supabase
+        .from("ticket_tiers")
+        .select("price")
+        .eq("id", tierId)
+        .eq("event_id", eventId)
+        .maybeSingle()
+      const fallback = Number(tierRow?.price)
+      if (!Number.isFinite(fallback) || fallback < 0) {
+        return { ok: false, error: "No se pudo cotizar el precio vigente." }
+      }
+      unitPriceByTier.set(tierId, fallback)
+      continue
+    }
+    unitPriceByTier.set(tierId, Number(data))
+  }
+
+  if (unitPriceByTier.size < tierIds.length) {
+    return { ok: false, error: "No se pudo cotizar el precio vigente." }
+  }
+
+  return quoteHybridCartTotal({
+    items,
+    unitPriceByTier,
+    phasesByTier,
+  })
 }
 
 async function cleanupPendingOrder(orderId: string): Promise<void> {
@@ -595,6 +687,9 @@ export async function getSeatingUnitCartHold(
 }
 
 export type LockTicketsItem = {
+  type?: "general" | "mapped"
+  ticket_tier_id?: string
+  ticketTierId?: string
   tierId: string
   quantity: number
 }
@@ -630,10 +725,20 @@ export async function lockTickets(
   }
 
   const payload = items
-    .map((item) => ({
-      tier_id: item.tierId.trim(),
-      quantity: Math.max(0, Math.floor(item.quantity)),
-    }))
+    .filter((item) => item.type !== "mapped")
+    .map((item) => {
+      const tierId = (
+        item.ticket_tier_id ||
+        item.ticketTierId ||
+        item.tierId
+      ).trim()
+      return {
+        type: "general" as const,
+        ticket_tier_id: tierId,
+        tier_id: tierId,
+        quantity: Math.max(0, Math.floor(item.quantity)),
+      }
+    })
     .filter((item) => item.tier_id.length > 0 && item.quantity > 0)
 
   if (payload.length === 0) {
@@ -826,7 +931,15 @@ export async function processCheckout(
 
   return startCheckoutWithPayment(
     parsed.data.eventId,
-    parsed.data.items ?? [{ tierId, quantity }],
+    parsed.data.items ?? [
+      {
+        type: "general",
+        ticket_tier_id: tierId,
+        ticketTierId: tierId,
+        tierId,
+        quantity,
+      },
+    ],
     parsed.data.referralCode,
     parsed.data.addons,
     buyerToHolderFields(parsed.data.buyer),
@@ -978,7 +1091,7 @@ export async function createComboReservation(
 
 export async function startCheckoutWithPayment(
   eventId: string,
-  items: CheckoutCartItem[],
+  items: CheckoutCartItemInput[],
   referralCode?: string | null,
   addons: CheckoutAddonItem[] = [],
   buyerInfo?: CheckoutBuyerInfo | null,
@@ -1017,14 +1130,22 @@ export async function startCheckoutWithPayment(
   }
 
   const payload = parsed.data
-  const cartItems = payload.items ?? items
   const buyer = buyerToHolderFields(payload.buyer) satisfies NormalizedCheckoutBuyer
-  const seatingItems = cartItems.filter(
-    (item) => item.seatingUnitId || (item.seatingIds?.length ?? 0) > 0,
-  )
-  const cartQuantity = cartItems.reduce((sum, item) => sum + item.quantity, 0)
 
   const supabase = await createClient()
+  const resolvedCart = await resolveMappedSeatingUnits(
+    supabase,
+    payload.eventId,
+    payload.items ?? items,
+  )
+  if (!resolvedCart.ok) {
+    await recordCheckoutFailure(ctx)
+    return { success: false, error: "out_of_stock" }
+  }
+  const cartItems = resolvedCart.items
+  const seatingItems = cartItems.filter((item) => isMappedCheckoutItem(item))
+  const cartQuantity = cartItems.reduce((sum, item) => sum + item.quantity, 0)
+
   const {
     data: { user },
     error: authError,
@@ -1112,7 +1233,7 @@ export async function startCheckoutWithPayment(
     promoterId = resolved ?? null
   }
 
-  const tierIds = [...new Set(cartItems.map((item) => item.tierId))]
+  const tierIds = [...new Set(cartItems.map((item) => checkoutItemTierId(item)))]
   const { data: tierMeta } = await supabase
     .from("ticket_tiers")
     .select("id, seating_sector_id, tier_type, category")
@@ -1124,27 +1245,34 @@ export async function startCheckoutWithPayment(
   )
 
   const quantityItemsForPhases = cartItems.filter(
-    (item) => !(item.seatingUnitId || (item.seatingIds?.length ?? 0) > 0),
+    (item) => !isMappedCheckoutItem(item),
   )
   const phasesByTier = await loadCheckoutTierPhases(
     supabase,
-    quantityItemsForPhases.map((item) => item.tierId),
+    quantityItemsForPhases.map((item) => checkoutItemTierId(item)),
   )
 
+  const quoted = await quoteCheckoutFromDatabase(
+    supabase,
+    payload.eventId,
+    cartItems,
+    phasesByTier,
+  )
+  if (!quoted.ok) {
+    await recordCheckoutFailure(ctx)
+    return { success: false, error: quoted.error }
+  }
+
   const rpcItems = cartItems.map((item) => {
+    const tierId = checkoutItemTierId(item)
     const decision = decidePhaseCart(
-      phasesByTier.get(item.tierId) ?? [],
+      phasesByTier.get(tierId) ?? [],
       item.quantity,
     )
-    return {
-      tier_id: item.tierId,
-      quantity: item.quantity,
-      sector_key: item.sectorKey ?? sectorByTier.get(item.tierId) ?? null,
-      table_number: item.tableNumber ?? null,
-      zone_id: item.zoneId ?? null,
-      seating_unit_id: item.seatingUnitId ?? item.seatingIds?.[0] ?? null,
-      phase_id: decision.kind === "ok" ? decision.phase.id : null,
-    }
+    return toReserveRpcItem(item, {
+      sectorKey: item.sectorKey ?? sectorByTier.get(tierId) ?? null,
+      phaseId: decision.kind === "ok" ? decision.phase.id : null,
+    })
   })
 
   let pendingOrderId: string | null = null
@@ -1155,7 +1283,7 @@ export async function startCheckoutWithPayment(
       (row) => row.tier_type === "bundle" || row.category === "bundle",
     )
     const quantityItems = cartItems.filter(
-      (item) => !(item.seatingUnitId || (item.seatingIds?.length ?? 0) > 0),
+      (item) => !isMappedCheckoutItem(item),
     )
     const canUseAtomic =
       !hasSeating &&
@@ -1195,14 +1323,14 @@ export async function startCheckoutWithPayment(
       } else if (canUseAtomic) {
         const item = quantityItems[0]
         const decision = decidePhaseCart(
-          phasesByTier.get(item.tierId) ?? [],
+          phasesByTier.get(checkoutItemTierId(item)) ?? [],
           item.quantity,
         )
         const phaseId = decision.kind === "ok" ? decision.phase.id : null
         const atomic = await reserveGeneralAdmissionAtomic(supabase, {
           eventId: payload.eventId,
           ownerId: user.id,
-          tierId: item.tierId,
+          tierId: checkoutItemTierId(item),
           quantity: item.quantity,
           phaseId,
           promoterId,
@@ -1227,12 +1355,26 @@ export async function startCheckoutWithPayment(
         })
       }
     } else {
-      reservation = await supabase.rpc("reserve_unified_cart_tx", {
+      const hybrid = await supabase.rpc("reserve_hybrid_cart_tx", {
         p_event_id: payload.eventId,
         p_owner_id: user.id,
         p_items: rpcItems,
         p_promoter_id: promoterId,
       })
+      const missingHybrid = Boolean(
+        hybrid.error &&
+          /could not find|schema cache|does not exist/i.test(
+            hybrid.error.message,
+          ),
+      )
+      reservation = missingHybrid
+        ? await supabase.rpc("reserve_unified_cart_tx", {
+            p_event_id: payload.eventId,
+            p_owner_id: user.id,
+            p_items: rpcItems,
+            p_promoter_id: promoterId,
+          })
+        : hybrid
     }
     const { data, error } = reservation
 
@@ -1267,6 +1409,28 @@ export async function startCheckoutWithPayment(
 
     const orderId = rows[0].order_id
     pendingOrderId = orderId
+    const reservedRow = rows[0] as ReserveTxRow & Partial<AtomicReserveRow>
+    const reservedMerchandise = Number(
+      reservedRow.total_amount ??
+        (reservedRow.unit_price ?? 0) * (reservedRow.quantity ?? 0),
+    )
+    if (
+      !Number.isFinite(reservedMerchandise) ||
+      !amountsMatch(reservedMerchandise, quoted.total)
+    ) {
+      await cleanupPendingOrder(orderId)
+      logger.error({
+        context: "checkout/reservation",
+        message: "server_price_mismatch",
+        eventId: payload.eventId,
+        quoted: quoted.total,
+        reserved: reservedMerchandise,
+      })
+      return {
+        success: false,
+        error: "El total de la orden no coincide con el precio vigente.",
+      }
+    }
     const reservedTickets: ReservedTicket[] = rows.map((row) => ({
       ticket_id: row.ticket_id,
     }))
@@ -1701,7 +1865,7 @@ export async function canUserSandboxCheckout(
  */
 export async function startSandboxCheckout(
   eventId: string,
-  items: CheckoutCartItem[],
+  items: CheckoutCartItemInput[],
   referralCode?: string | null,
   addons: CheckoutAddonItem[] = [],
   buyerInfo?: CheckoutBuyerInfo | null,

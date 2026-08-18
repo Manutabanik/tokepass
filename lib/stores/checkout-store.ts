@@ -4,8 +4,13 @@ import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
 import { useShallow } from "zustand/react/shallow"
 
+import { ABSOLUTE_MAX_ITEMS_PER_PURCHASE } from "@/lib/checkout-limits"
 import { cartItemCount } from "@/lib/checkout/cart"
-import { parseCartTicketLineId } from "@/lib/checkout/cart-lines"
+import {
+  cartLineAmount,
+  cartTicketLineId,
+  parseCartTicketLineId,
+} from "@/lib/checkout/cart-lines"
 import type { CheckoutBuyerInfo } from "@/lib/checkout-buyer"
 import {
   isCheckoutGuest,
@@ -29,13 +34,31 @@ export type CheckoutSavedSeat = {
 
 export type StorefrontCartLine = {
   id: string
+  ticketTierId?: string | null
   name: string
   detail?: string
   dateId?: string | null
   dateLabel?: string
   quantity: number
+  /** Precio unitario. El total de linea es `price * quantity`. */
   price: number
+  seatId?: string | null
+  elementId?: string | null
 }
+
+export type AddToCartInput = {
+  ticketTierId: string
+  name: string
+  price: number
+  quantity?: number
+  maxQuantity?: number
+  seatId?: string | null
+  elementId?: string | null
+}
+
+export type AddToCartResult =
+  | { ok: true; quantity: number }
+  | { ok: false; reason: "limit" }
 
 export const EMPTY_CHECKOUT_BUYER: CheckoutBuyerInfo = {
   buyerName: "",
@@ -96,6 +119,8 @@ type CheckoutState = {
   ) => void
   setCartTotals: (input: { totalAmount: number; itemsCount: number }) => void
   setCartLines: (lines: StorefrontCartLine[]) => void
+  addToCart: (input: AddToCartInput) => AddToCartResult
+  setGeneralQuantity: (input: AddToCartInput & { quantity: number }) => AddToCartResult
   resetCartTotals: () => void
   removeItem: (id: string) => void
   clearCart: () => void
@@ -134,9 +159,55 @@ function sameLines(left: StorefrontCartLine[], right: StorefrontCartLine[]) {
       line.dateId === other.dateId &&
       line.dateLabel === other.dateLabel &&
       line.quantity === other.quantity &&
-      line.price === other.price
+      line.price === other.price &&
+      line.ticketTierId === other.ticketTierId &&
+      line.seatId === other.seatId &&
+      line.elementId === other.elementId
     )
   })
+}
+
+function isMapCartLine(line: StorefrontCartLine) {
+  return Boolean(line.seatId?.trim() || line.elementId?.trim())
+}
+
+function generalLineTierId(line: StorefrontCartLine) {
+  return line.ticketTierId?.trim() || parseCartTicketLineId(line.id)
+}
+
+function cartTotalsFromLines(lines: StorefrontCartLine[]) {
+  const totalAmount = lines.reduce((sum, line) => sum + cartLineAmount(line), 0)
+  const itemsCount = lines.reduce(
+    (sum, line) => sum + Math.max(0, Math.floor(line.quantity) || 0),
+    0,
+  )
+  return { totalAmount, itemsCount, subtotal: totalAmount }
+}
+
+function upsertGeneralLine(
+  lines: StorefrontCartLine[],
+  input: {
+    ticketTierId: string
+    name: string
+    price: number
+    quantity: number
+  },
+): StorefrontCartLine[] {
+  const others = lines.filter((line) => {
+    if (isMapCartLine(line)) return true
+    return generalLineTierId(line) !== input.ticketTierId
+  })
+  if (input.quantity <= 0) return others
+  return [
+    ...others,
+    {
+      id: cartTicketLineId(input.ticketTierId),
+      ticketTierId: input.ticketTierId,
+      name: input.name,
+      quantity: input.quantity,
+      price: input.price,
+    },
+  ]
 }
 
 function sameSeat(
@@ -319,6 +390,77 @@ export const useCheckoutStore = create<CheckoutState>()(
       setCartLines: (lines) => {
         if (sameLines(get().lines, lines)) return
         set({ lines })
+      },
+
+      addToCart: (input) => {
+        const seatId = input.seatId?.trim() || null
+        const elementId = input.elementId?.trim() || null
+        const maxQuantity = Math.max(
+          0,
+          Math.floor(input.maxQuantity ?? ABSOLUTE_MAX_ITEMS_PER_PURCHASE) || 0,
+        )
+        if (seatId || elementId) {
+          const id = seatId || elementId!
+          const others = get().lines.filter((line) => line.id !== id)
+          const line: StorefrontCartLine = {
+            id,
+            ticketTierId: input.ticketTierId,
+            name: input.name,
+            quantity: 1,
+            price: input.price,
+            seatId,
+            elementId,
+          }
+          const lines = [...others, line]
+          set({
+            lines,
+            ...cartTotalsFromLines(lines),
+            selectedSeat: seatId
+              ? {
+                  tierId: input.ticketTierId,
+                  seatingUnitId: seatId,
+                  sectorKey: null,
+                  tableNumber: null,
+                  label: input.name,
+                  price: input.price,
+                }
+              : get().selectedSeat,
+          })
+          return { ok: true, quantity: 1 }
+        }
+
+        const currentQty = get().quantities[input.ticketTierId] ?? 0
+        const delta = input.quantity == null ? 1 : Math.floor(input.quantity)
+        const nextQty = Math.max(0, currentQty + delta)
+        if (nextQty > maxQuantity) return { ok: false, reason: "limit" }
+        const quantities = { ...get().quantities, [input.ticketTierId]: nextQty }
+        const lines = upsertGeneralLine(get().lines, {
+          ticketTierId: input.ticketTierId,
+          name: input.name,
+          price: input.price,
+          quantity: nextQty,
+        })
+        set({ quantities, lines, ...cartTotalsFromLines(lines) })
+        return { ok: true, quantity: nextQty }
+      },
+
+      setGeneralQuantity: (input) => {
+        const maxQuantity = Math.max(
+          0,
+          Math.floor(input.maxQuantity ?? ABSOLUTE_MAX_ITEMS_PER_PURCHASE) || 0,
+        )
+        const requested = Math.floor(input.quantity)
+        if (requested > maxQuantity) return { ok: false, reason: "limit" }
+        const nextQty = Math.min(Math.max(0, requested), maxQuantity)
+        const quantities = { ...get().quantities, [input.ticketTierId]: nextQty }
+        const lines = upsertGeneralLine(get().lines, {
+          ticketTierId: input.ticketTierId,
+          name: input.name,
+          price: input.price,
+          quantity: nextQty,
+        })
+        set({ quantities, lines, ...cartTotalsFromLines(lines) })
+        return { ok: true, quantity: nextQty }
       },
 
       resetCartTotals: () => {

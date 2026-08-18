@@ -33,12 +33,14 @@ import {
   type EditableEventData,
 } from "@/app/actions/events"
 import { EventAutosaveIndicator } from "@/components/admin/event-autosave-indicator"
+import { EventCapacityHeader } from "@/components/admin/event-capacity-header"
 import { PublishEventConfirmDialog } from "@/components/admin/publish-event-confirm-dialog"
 import type { OrganizerVenue } from "@/app/actions/venues"
 import { createVenue } from "@/app/actions/venues"
 import { EventSponsorsManager } from "@/components/admin/event-sponsors-manager"
 import { LineupBuilder } from "@/components/admin/lineup-builder"
 import { EventVenueStep } from "@/components/admin/event-venue-step"
+import { WizardConflictBanner } from "@/components/admin/wizard-conflict-banner"
 import {
   createInventoryTicket,
   UnifiedInventoryPanel,
@@ -81,22 +83,25 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import type { VenuePricingMap } from "@/lib/seating/venue-adapter"
 import {
+  applyMapCapacityToTickets,
   mapBackedTicketsUnchanged,
   migrateLegacyWizardStep,
   syncMapBackedTickets,
   venueMapToPricingMap,
 } from "@/lib/seating/venue-map-pricing"
-import {
-  seatingLayoutToVenueMap,
-  venueMapCapacity,
-} from "@/lib/seating/venue-map-geometry"
+import { seatingLayoutToVenueMap } from "@/lib/seating/venue-map-geometry"
 import {
   computeEventCapacityFromForm,
   eventCapacityOverflowMessage,
   ticketsHavePhaseOverflow,
 } from "@/lib/inventory/capacity-budget"
+import { logicalSectorIds } from "@/lib/inventory/logical-sectors"
 import { useEventCapacity } from "@/hooks/use-event-capacity"
 import { toUserFacingError } from "@/lib/errors/user-facing-error"
+import {
+  conflictFromPersistError,
+  type WizardConflict,
+} from "@/lib/seating/venue-map-sku-consistency"
 import {
   collectLiveSeatingSectorIds,
   sanitizeEventSubmitPayload,
@@ -121,7 +126,7 @@ const steps = [
   },
   {
     title: "Mapa y Sectores",
-    description: "Lugar, inventario visual y precios",
+    description: "Sectores generales y mapa enumerado",
     icon: MapPin,
   },
   {
@@ -179,7 +184,7 @@ const defaultValues: EventFormValues = {
     seatingLayout: undefined,
     includesSeatingMap: false,
     saveVenueForReuse: true,
-    zones: undefined,
+    zones: [],
   },
   tickets: [blankTicket()],
   ticketsDefaultTab: "auto",
@@ -207,6 +212,7 @@ export function EventCreationWizard({
   const [resultMessage, setResultMessage] = useState<{
     type: "success" | "error"
     text: string
+    conflict?: WizardConflict
   } | null>(null)
   const [publishConfirm, setPublishConfirm] = useState<{
     open: boolean
@@ -248,6 +254,9 @@ export function EventCreationWizard({
     zoneTierPricing,
     onZoneTierPricingChange: setZoneTierPricing,
     targetOrganizerId,
+    serverUpdatedAt: initialData?.updatedAt
+      ? Date.parse(initialData.updatedAt)
+      : null,
   })
 
   const clearDraft = useEventFormStore((s) => s.clearDraft)
@@ -282,10 +291,9 @@ export function EventCreationWizard({
     if (!mapBackedTicketsUnchanged(current, next)) {
       form.setValue("tickets", next, { shouldDirty: true })
     }
-    const mapCap = venueMapCapacity(map)
-    const official = Number(form.getValues("venue.capacity")) || 0
-    if (mapCap > official) {
-      form.setValue("venue.capacity", mapCap, { shouldDirty: true })
+    const derived = computeEventCapacityFromForm(form.getValues()).totalCapacity
+    if (derived > 0) {
+      form.setValue("venue.capacity", derived, { shouldDirty: true })
     }
   }
 
@@ -321,11 +329,129 @@ export function EventCreationWizard({
     setWizardStep(nextStep)
   }
 
+  function goToWizardStep(step: number, sectorId?: string) {
+    if (step < 0 || step >= steps.length) return
+    setActiveStep(step)
+    setWizardStep(step)
+    window.setTimeout(() => {
+      const panel = document.getElementById(`event-wizard-step-${step}`)
+      panel?.scrollIntoView({ behavior: "smooth", block: "start" })
+      if (!sectorId) return
+      const target = document.querySelector(
+        `[data-conflict-sector="${CSS.escape(sectorId)}"]`,
+      )
+      if (target instanceof HTMLElement) {
+        target.scrollIntoView({ behavior: "smooth", block: "center" })
+      }
+    }, 50)
+  }
+
+  function showWizardConflict(conflict: WizardConflict, title: string) {
+    setResultMessage({
+      type: "error",
+      text: conflict.summary,
+      conflict,
+    })
+    toast.error(title, {
+      duration: 14000,
+      description: (
+        <div className="space-y-2">
+          <p>{conflict.summary}</p>
+          <div className="flex flex-col gap-1">
+            {conflict.actions.map((action) => (
+              <button
+                key={`${action.step}-${action.label}`}
+                type="button"
+                className="h-10 min-h-10 rounded-full border border-white/20 px-3 text-left text-xs font-semibold text-zinc-100"
+                onClick={() => goToWizardStep(action.step, conflict.sectorId)}
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ),
+    })
+  }
+
+  function reportPersistError(
+    raw: string,
+    title: string,
+    wizardConflict?: WizardConflict,
+  ) {
+    const conflict =
+      wizardConflict ?? conflictFromPersistError(toUserFacingError(raw))
+    if (conflict) {
+      showWizardConflict(conflict, title)
+      return
+    }
+    const safeError = toUserFacingError(raw)
+    setResultMessage({ type: "error", text: safeError })
+    toast.error(title, { description: safeError })
+  }
+
+  async function onSaveIdentity(data: EventFormValues) {
+    setResultMessage(null)
+    const titleOk = await form.trigger("basics.title")
+    if (!titleOk || data.basics.title.trim().length < 3) {
+      toast.error("Revisá el título del evento")
+      setActiveStep(0)
+      return
+    }
+    if (flyerFile && flyerFile.size > MAX_EVENT_FLYER_BYTES) {
+      const message =
+        "El flyer supera los 5MB. Comprimilo o elegí otra imagen."
+      setFlyerError(message)
+      form.setError("basics.flyerName", { type: "manual", message })
+      setActiveStep(0)
+      return
+    }
+
+    const formData = new FormData()
+    formData.set("payload", JSON.stringify(data))
+    formData.set("draftMode", "1")
+    formData.set("identityOnly", "1")
+    if (flyerFile) formData.set("flyer", flyerFile)
+    if (targetOrganizerId) formData.set("targetOrganizerId", targetOrganizerId)
+
+    const editingId = initialData?.id ?? persistedEventId
+    const result = editingId
+      ? await updateCompleteEvent(
+          (() => {
+            formData.set("eventId", editingId)
+            return formData
+          })(),
+        )
+      : await createCompleteEvent(formData)
+
+    if (!result.success) {
+      reportPersistError(
+        result.error,
+        "No se pudo guardar la identidad",
+        result.wizardConflict,
+      )
+      return
+    }
+
+    if (result.eventId) {
+      useEventFormStore.getState().setEventId(result.eventId)
+    }
+    setResultMessage({ type: "success", text: "Identidad guardada." })
+    toast.success("Identidad guardada", {
+      description: "El título y los datos del evento quedaron actualizados.",
+    })
+  }
+
   async function onSubmit(
     data: EventFormValues,
     intent: "draft" | "publish" = "draft",
   ) {
     setResultMessage(null)
+
+    if (intent === "draft" && activeStep === 0) {
+      await onSaveIdentity(data)
+      return
+    }
 
     const capacity = computeEventCapacityFromForm(data)
     if (capacity.exceeded) {
@@ -333,8 +459,7 @@ export function EventCreationWizard({
       form.setError("tickets", { type: "manual", message })
       toast.error("El aforo está excedido", { description: message })
       setResultMessage({ type: "error", text: message })
-      setActiveStep(2)
-      setWizardStep(2)
+      goToWizardStep(2)
       return
     }
 
@@ -388,9 +513,7 @@ export function EventCreationWizard({
           : undefined,
       })
       if (!persist.success) {
-        const persistError = toUserFacingError(persist.error)
-        toast.error(persistError)
-        setResultMessage({ type: "error", text: persistError })
+        reportPersistError(persist.error, "No se pudo guardar el lugar")
         return
       }
       payloadData = {
@@ -410,6 +533,7 @@ export function EventCreationWizard({
     const liveSectorIds = collectLiveSeatingSectorIds({
       venueMap: payloadData.venue.venueMap,
       seatingLayout: payloadData.venue.seatingLayout,
+      extraIds: logicalSectorIds(payloadData.venue.zones),
     })
     payloadData = sanitizeEventSubmitPayload(payloadData, {
       mode: editingId ? "update" : "create",
@@ -418,6 +542,14 @@ export function EventCreationWizard({
         .filter((id): id is string => Boolean(id)),
       liveSectorIds,
     })
+    payloadData = {
+      ...payloadData,
+      tickets: applyMapCapacityToTickets(
+        payloadData.tickets,
+        parseVenueMap(payloadData.venue.venueMap),
+      ),
+    }
+    form.setValue("tickets", payloadData.tickets, { shouldDirty: false })
 
     const formData = new FormData()
     formData.set("payload", JSON.stringify(payloadData))
@@ -440,15 +572,12 @@ export function EventCreationWizard({
       : await createCompleteEvent(formData)
 
     if (!result.success) {
-      const safeError = toUserFacingError(result.error)
-      setResultMessage({ type: "error", text: safeError })
-      toast.error(
+      reportPersistError(
+        result.error,
         isEditing || editingId
           ? "No se pudieron guardar los cambios"
           : "No se pudo crear el evento",
-        {
-          description: safeError,
-        },
+        result.wizardConflict,
       )
       return
     }
@@ -464,9 +593,12 @@ export function EventCreationWizard({
       })
     }
 
-    clearDraft(draftKey)
+    if (result.eventId) {
+      useEventFormStore.getState().setEventId(result.eventId)
+    }
 
     if (intent === "publish") {
+      clearDraft(draftKey)
       toast.success(
         isEditing ? "Cambios guardados" : "Borrador listo",
         {
@@ -478,13 +610,11 @@ export function EventCreationWizard({
       return
     }
 
-    toast.success(isEditing ? "Cambios guardados" : "Borrador guardado", {
+    toast.success("Cambios guardados", {
       description: flyerFile
         ? "Borrador con flyer listo. Completá barra y multimedia cuando quieras."
-        : "Podés potenciar el evento desde el panel.",
+        : "Podés seguir editando en esta pestaña.",
     })
-    router.push(`/admin/events/${result.eventId}`)
-    router.refresh()
   }
 
   return (
@@ -494,12 +624,16 @@ export function EventCreationWizard({
         onSubmit={form.handleSubmit(
           (data) => onSubmit(data, "draft"),
           () => {
+            if (activeStep === 0) {
+              toast.error("Revisá el nombre, las fechas o el flyer.")
+              setActiveStep(0)
+              return
+            }
             const capacity = computeEventCapacityFromForm(form.getValues())
             if (capacity.exceeded) {
               const message = eventCapacityOverflowMessage(capacity)
               toast.error("El aforo está excedido", { description: message })
-              setActiveStep(2)
-              setWizardStep(2)
+              goToWizardStep(2)
             }
           },
         )}
@@ -510,6 +644,7 @@ export function EventCreationWizard({
           className="flex flex-col gap-8"
         >
           <div className="flex flex-wrap items-center justify-end gap-2">
+            <EventCapacityHeader form={form} />
             <EventAutosaveIndicator />
           </div>
           <TabsList className="flex w-full items-stretch gap-2 overflow-x-auto rounded-2xl border border-zinc-200 bg-white p-2 shadow-lg shadow-zinc-200/70 backdrop-blur-md group-data-horizontal/tabs:h-auto max-sm:snap-x max-sm:snap-mandatory dark:border-zinc-800 dark:bg-zinc-900/80 dark:shadow-black/20 sm:grid sm:grid-cols-2 sm:overflow-visible lg:grid-cols-4">
@@ -556,6 +691,7 @@ export function EventCreationWizard({
             <TabsContent
               keepMounted
               value="0"
+              id="event-wizard-step-0"
               className="animate-in fade-in slide-in-from-right-2 duration-300"
             >
               <CardHeader className="px-4 pt-6 sm:px-10 sm:pt-10">
@@ -930,6 +1066,7 @@ export function EventCreationWizard({
             <TabsContent
               keepMounted
               value="1"
+              id="event-wizard-step-1"
               className="animate-in fade-in slide-in-from-right-2 duration-300"
             >
               <CardHeader className="border-b border-zinc-200 px-4 py-6 dark:border-white/8 lg:px-8">
@@ -937,8 +1074,9 @@ export function EventCreationWizard({
                   Mapa y sectores
                 </CardTitle>
                 <CardDescription className="text-muted-foreground">
-                  Ubicación del predio e inventario visual. Precio y capacidad
-                  de cada zona se definen en el estudio, al trazar el polígono.
+                  Sectores generales por cupo (pista, VIP de pie) y, si hace
+                  falta, el mapa visual de mesas y butacas. La capacidad total
+                  se calcula sola.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-7 px-4 py-7 lg:px-8">
@@ -948,6 +1086,9 @@ export function EventCreationWizard({
                   onVenuesChange={setLocalVenues}
                   onAppliedVenue={handleApplySavedVenue}
                   onMapInventoryChange={applyMapInventory}
+                  catalogOrganizerId={
+                    targetOrganizerId ?? initialData?.organizerId ?? null
+                  }
                   focus="all"
                 />
               </CardContent>
@@ -956,6 +1097,7 @@ export function EventCreationWizard({
             <TabsContent
               keepMounted
               value="2"
+              id="event-wizard-step-2"
               className="animate-in fade-in slide-in-from-right-2 duration-300"
             >
               <CardHeader className="border-b border-zinc-200 px-4 py-6 dark:border-white/8 lg:px-8">
@@ -963,9 +1105,9 @@ export function EventCreationWizard({
                   Entradas y combos
                 </CardTitle>
                 <CardDescription className="text-muted-foreground">
-                  Entradas generales, adicionales y combos. El aforo del
-                  recinto limita el stock. Las preventas van como lotes de
-                  una misma entrada, no como tipos duplicados.
+                  Cada entrada se liga a un sector. Los lotes de preventa no
+                  pueden superar el cupo de ese sector. El mapa hereda su
+                  capacidad sola.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 px-4 py-7 lg:px-8">
@@ -979,6 +1121,7 @@ export function EventCreationWizard({
             <TabsContent
               keepMounted
               value="3"
+              id="event-wizard-step-3"
               className="animate-in fade-in slide-in-from-right-2 duration-300"
             >
               <CardHeader className="border-b border-zinc-200 px-4 py-6 dark:border-white/8 lg:px-8">
@@ -1078,23 +1221,34 @@ export function EventCreationWizard({
                   )}
                 />
 
-                {resultMessage ? (
+                {resultMessage?.type === "success" ? (
                   <p
                     role="status"
-                    className={cn(
-                      "rounded-xl px-4 py-3 text-sm",
-                      resultMessage.type === "success"
-                        ? "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
-                        : "bg-red-500/10 text-red-300",
-                    )}
+                    className="rounded-xl bg-emerald-500/10 px-4 py-3 text-sm text-emerald-800 dark:text-emerald-300"
                   >
-                    {resultMessage.type === "error"
-                      ? toUserFacingError(resultMessage.text)
-                      : resultMessage.text}
+                    {resultMessage.text}
                   </p>
                 ) : null}
               </CardContent>
             </TabsContent>
+
+            {resultMessage?.type === "error" ? (
+              <div className="px-4 pb-2 lg:px-8">
+                {resultMessage.conflict ? (
+                  <WizardConflictBanner
+                    conflict={resultMessage.conflict}
+                    onGoToStep={goToWizardStep}
+                  />
+                ) : (
+                  <p
+                    role="alert"
+                    className="rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-800 dark:text-red-200"
+                  >
+                    {toUserFacingError(resultMessage.text)}
+                  </p>
+                )}
+              </div>
+            ) : null}
 
             <div
               className={cn(

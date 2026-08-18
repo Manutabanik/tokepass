@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/discovery/empty-state"
 import { EventCard } from "@/components/discovery/event-card"
 import { FeaturedHeroSection } from "@/components/public/featured-hero-section"
 import { HeroSection } from "@/components/discovery/hero-section"
+import { BuyerBenefitsStrip } from "@/components/public/buyer-benefits-strip"
 import { OrganizerCtaBanner } from "@/components/discovery/organizer-cta-banner"
 import { publishDiscoveryControls } from "@/components/discovery/discovery-controls-store"
 import { useArgentinaProvinces } from "@/hooks/use-argentina-provinces"
@@ -379,6 +380,7 @@ export function DiscoveryHub({
         {resultsGrid}
       </section>
 
+      <BuyerBenefitsStrip />
       <OrganizerCtaBanner />
     </div>
   )

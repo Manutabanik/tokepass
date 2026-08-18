@@ -30,12 +30,17 @@ async function getAuthCallbackUrl() {
   return `${siteUrl}/auth/callback`
 }
 
-function mapAuthErrorMessage(message: string): string {
+function isInvalidLoginCredentials(message: string): boolean {
   const normalized = message.toLowerCase()
-  if (
+  return (
     normalized.includes("invalid login credentials") ||
     normalized.includes("invalid_credentials")
-  ) {
+  )
+}
+
+function mapAuthErrorMessage(message: string): string {
+  const normalized = message.toLowerCase()
+  if (isInvalidLoginCredentials(message)) {
     return "Email o contraseña incorrectos."
   }
   if (normalized.includes("email not confirmed")) {
@@ -177,122 +182,9 @@ export async function signUpWithEmail(
 
 export async function signUpOrganizer(
   _previousState: AuthActionState,
-  formData: FormData,
+  _formData: FormData,
 ): Promise<AuthActionState> {
-  const credentials = readCredentials(formData)
-
-  if (!credentials.ok) {
-    return { error: credentials.error, success: null }
-  }
-
-  if (credentials.password.length < 8) {
-    return {
-      error: "La contraseña debe tener al menos 8 caracteres.",
-      success: null,
-    }
-  }
-
-  // Validate invite BEFORE creating the Auth user (avoid orphan accounts).
-  const inviteOnly =
-    process.env.ORGANIZER_INVITE_ONLY === "true" ||
-    process.env.ORGANIZER_INVITE_ONLY === "1"
-  const inviteCode = process.env.ORGANIZER_INVITE_CODE?.trim()
-  const submittedInvite = formData.get("inviteCode")
-  const inviteValue =
-    typeof submittedInvite === "string" ? submittedInvite.trim() : ""
-
-  if (inviteOnly) {
-    if (!inviteCode || inviteValue !== inviteCode) {
-      return {
-        error:
-          "Registro de organizadores solo por invitación. Código inválido o ausente.",
-        success: null,
-      }
-    }
-  }
-
-  const fullNameValue = formData.get("fullName")
-  const fullName =
-    typeof fullNameValue === "string" && fullNameValue.trim()
-      ? fullNameValue.trim()
-      : null
-  const emailRedirectTo = await getAuthCallbackUrl()
-  const supabase = await createClient()
-  const { data, error } = await supabase.auth.signUp({
-    email: credentials.email,
-    password: credentials.password,
-    options: {
-      data: {
-        full_name: fullName,
-        registration_type: "organizer",
-      },
-      emailRedirectTo,
-    },
-  })
-
-  if (error || !data.user) {
-    return {
-      error: mapAuthErrorMessage(
-        error?.message ?? "No se pudo crear la cuenta de organizador.",
-      ),
-      success: null,
-    }
-  }
-
-  if (!data.user.identities?.length) {
-    return {
-      error:
-        "Este email ya está registrado. Iniciá sesión o utilizá otra cuenta.",
-      success: null,
-    }
-  }
-
-  try {
-    const admin = createAdminClient()
-    // Never grant admin immediately — Platform OS must approve.
-    const { error: profileError } = await admin.from("profiles").upsert(
-      {
-        id: data.user.id,
-        email: credentials.email,
-        full_name: fullName,
-        role: "customer",
-        organizer_approval_status: "none",
-      } as never,
-      { onConflict: "id" },
-    )
-
-    if (profileError) {
-      await admin.auth.admin.deleteUser(data.user.id)
-      return {
-        error: `No se pudo registrar la solicitud: ${profileError.message}`,
-        success: null,
-      }
-    }
-  } catch (setupError) {
-    logger.error({
-      context: "auth/register-organizer",
-      message: "organizer_profile_setup_failed",
-      userId: data.user.id,
-      error: setupError,
-    })
-    try {
-      const admin = createAdminClient()
-      await admin.auth.admin.deleteUser(data.user.id)
-    } catch {
-      // best-effort cleanup
-    }
-    return {
-      error:
-        "El registro de organizadores requiere configuración de servidor (SERVICE_ROLE). Intentá más tarde.",
-      success: null,
-    }
-  }
-
-  return {
-    error: null,
-    success:
-      "Cuenta creada. Completá la postulación KYB en /postular-productora para que validemos tu productora.",
-  }
+  redirect("/organizadores#solicitud")
 }
 
 export async function signInWithEmail(
@@ -305,6 +197,7 @@ export async function signInWithEmail(
     return { error: credentials.error, success: null }
   }
 
+  const loginSource = formData.get("loginSource")
   const supabase = await createClient()
   const { error } = await supabase.auth.signInWithPassword({
     email: credentials.email,
@@ -312,6 +205,33 @@ export async function signInWithEmail(
   })
 
   if (error) {
+    if (
+      loginSource === "organizer" &&
+      isInvalidLoginCredentials(error.message)
+    ) {
+      let hasOrganizerAccount = true
+      try {
+        const admin = createAdminClient()
+        const { data: existing, error: lookupError } = await admin
+          .from("profiles")
+          .select("role")
+          .eq("email", credentials.email)
+          .maybeSingle()
+        if (!lookupError) {
+          hasOrganizerAccount =
+            existing?.role === "admin" || existing?.role === "super_admin"
+        }
+      } catch (lookupError) {
+        logger.error({
+          context: "auth/login",
+          message: "organizer_account_lookup_failed",
+          error: lookupError,
+        })
+      }
+      if (!hasOrganizerAccount) {
+        redirect("/organizadores#solicitud")
+      }
+    }
     return { error: mapAuthErrorMessage(error.message), success: null }
   }
 
@@ -386,7 +306,6 @@ export async function signInWithEmail(
 
   // Pending organizer applicants (still role=customer) logging into the
   // organizer portal should see a clear message instead of a silent / redirect.
-  const loginSource = formData.get("loginSource")
   if (
     loginSource === "organizer" &&
     profile?.organizerApprovalStatus === "pending" &&
@@ -399,6 +318,15 @@ export async function signInWithEmail(
         "Tu solicitud de organizador sigue pendiente de aprobación. Te avisamos cuando esté activa.",
       success: null,
     }
+  }
+
+  if (
+    loginSource === "organizer" &&
+    profile?.role !== "admin" &&
+    profile?.role !== "super_admin"
+  ) {
+    await supabase.auth.signOut()
+    redirect("/organizadores#solicitud")
   }
 
   const fallback = postLoginDestination(profile?.role)

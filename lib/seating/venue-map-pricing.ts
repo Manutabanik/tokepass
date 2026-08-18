@@ -1,5 +1,6 @@
 import { inferInventoryTierType } from "@/lib/inventory/unified-inventory"
 import type { VenuePricingMap } from "@/lib/seating/venue-adapter"
+import { venueMapHasInventory } from "@/lib/seating/venue-map-geometry"
 import {
   listVenuePriceGroups,
   type VenuePriceGroup,
@@ -30,20 +31,45 @@ export function venueMapToPricingMap(
   return pricing
 }
 
+export function isLogicalGeneralSectorId(sectorId?: string | null): boolean {
+  return (sectorId ?? "").trim().startsWith("general:")
+}
+
 export function isMapBackedTicket(tier: {
   seatingSectorId?: string | null
+  seating_sector_id?: string | null
   tierType?: string | null
+  tier_type?: string | null
   layoutType?: string | null
+  layout_type?: string | null
+  category?: string | null
   bundleItems?: EventFormValues["tickets"][number]["bundleItems"]
 }): boolean {
-  if (tier.seatingSectorId?.trim()) return true
+  const sectorId = (tier.seatingSectorId ?? tier.seating_sector_id ?? "").trim()
+  if (isLogicalGeneralSectorId(sectorId)) return false
+  if (sectorId) return true
   return (
     inferInventoryTierType({
-      tierType: tier.tierType,
-      layoutType: tier.layoutType,
+      tierType: tier.tierType ?? tier.tier_type,
+      layoutType: tier.layoutType ?? tier.layout_type,
+      category: tier.category,
       bundleItems: tier.bundleItems,
     }) === "seated"
   )
+}
+
+export function ticketRequiresInteractiveMap(
+  tier: Parameters<typeof isMapBackedTicket>[0],
+): boolean {
+  return isMapBackedTicket(tier)
+}
+
+export function eventNeedsInteractiveCanvas(
+  venueMap: InteractiveVenueMap | null | undefined,
+  tickets: ReadonlyArray<Parameters<typeof isMapBackedTicket>[0]>,
+): boolean {
+  if (!venueMapHasInventory(venueMap)) return false
+  return tickets.some(ticketRequiresInteractiveMap)
 }
 
 function groupElements(
@@ -189,6 +215,38 @@ export function syncMapBackedTickets(
   )
 
   return [...nextMap, ...orphanSold, ...commercial]
+}
+
+export function applyMapCapacityToTickets<
+  T extends {
+    seatingSectorId?: string | null
+    seating_sector_id?: string | null
+    layoutType?: string | null
+    layout_type?: string | null
+    capacityPerUnit?: number | null
+    capacity_per_unit?: number | null
+  },
+>(tickets: T[], map: InteractiveVenueMap): T[] {
+  const groups = listVenuePriceGroups(map)
+  const bySector = new Map(
+    groups.map((group) => [priceGroupSectorId(group), group]),
+  )
+  return tickets.map((tier) => {
+    const sectorId = (tier.seatingSectorId ?? tier.seating_sector_id ?? "").trim()
+    if (!sectorId) return tier
+    const group = bySector.get(sectorId)
+    if (!group) return tier
+    const layoutType = layoutTypeFromGroup(group, map)
+    const capacityPerUnit = capacityPerUnitFromGroup(group, map)
+    return {
+      ...tier,
+      seatingSectorId: sectorId,
+      layoutType,
+      layout_type: layoutType,
+      capacityPerUnit,
+      capacity_per_unit: capacityPerUnit,
+    }
+  })
 }
 
 export function mapBackedTicketsUnchanged(

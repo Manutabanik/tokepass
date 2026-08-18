@@ -14,17 +14,15 @@ export function useEventCapacity(
 ): EventCapacitySnapshot {
   const tickets = form.watch("tickets")
   const venueMap = form.watch("venue.venueMap")
-  const baseVenueCapacity = form.watch("venue.capacity")
-  const customMaxCapacity = form.watch("venue.customMaxCapacity")
+  const zones = form.watch("venue.zones")
 
   return useMemo(
     () =>
       computeEventCapacity({
         tickets,
         venueMap,
-        baseVenueCapacity,
-        customMaxCapacity,
+        zones,
       }),
-    [tickets, venueMap, baseVenueCapacity, customMaxCapacity],
+    [tickets, venueMap, zones],
   )
 }

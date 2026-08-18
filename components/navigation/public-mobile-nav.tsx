@@ -59,11 +59,13 @@ const ITEMS = [
     guestHref: "/login?next=/perfil",
   },
   {
-    href: "/login-organizador",
+    href: "/organizadores",
     label: "Organizar Eventos",
     icon: CalendarPlus,
     match: (path: string) =>
-      path.startsWith("/login-organizador") || path.startsWith("/admin"),
+      path.startsWith("/organizadores") ||
+      path.startsWith("/login-organizador") ||
+      path.startsWith("/admin"),
   },
 ] as const
 

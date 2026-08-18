@@ -2,6 +2,7 @@ import {
   ArrowLeft,
   Building2,
   MapPin,
+  Settings2,
   Ticket,
 } from "lucide-react"
 import type { Metadata } from "next"
@@ -55,6 +56,28 @@ export default async function SuperAdminEventDetailPage({
         description={`${preview.organizerName} · ${formatDateTime(preview.eventDate)}`}
         actions={<EventStatusBadge status={preview.eventStatus} />}
       />
+
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+        <Link
+          href={`/admin/events/${id}/edit`}
+          className="inline-flex h-12 min-h-12 items-center justify-center gap-2 rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+        >
+          <Settings2 className="size-4" aria-hidden="true" />
+          Configurar evento
+        </Link>
+        <Link
+          href={`/admin/events/${id}`}
+          className="inline-flex h-12 min-h-12 items-center justify-center rounded-full border border-border px-5 text-sm font-semibold text-foreground transition hover:bg-muted"
+        >
+          Centro de mando
+        </Link>
+        <Link
+          href={`/admin/events/create?organizerId=${preview.organizerId}`}
+          className="inline-flex h-12 min-h-12 items-center justify-center rounded-full border border-border px-5 text-sm font-semibold text-foreground transition hover:bg-muted"
+        >
+          Nuevo evento de esta productora
+        </Link>
+      </div>
 
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
         <Card className="border border-border bg-card py-0 text-card-foreground">

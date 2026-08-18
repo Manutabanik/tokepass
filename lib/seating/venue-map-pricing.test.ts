@@ -2,9 +2,12 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import {
+  applyMapCapacityToTickets,
+  eventNeedsInteractiveCanvas,
   isMapBackedTicket,
   migrateLegacyWizardStep,
   syncMapBackedTickets,
+  ticketRequiresInteractiveMap,
   venueMapToPricingMap,
 } from "@/lib/seating/venue-map-pricing"
 import { emptyVenueMap } from "@/types/venue-map"
@@ -298,6 +301,52 @@ describe("venue-map-pricing", () => {
     assert.equal(seatSku?.capacityPerUnit, 1)
   })
 
+  it("hereda sillas del mapa al vincular un ticket a un sector", () => {
+    const map = emptyVenueMap()
+    map.elements = [
+      {
+        id: "mesa-1",
+        type: "round_table",
+        label: "Mesa 1",
+        category: "commercial",
+        sectorName: "VIP",
+        x: 10,
+        y: 10,
+        width: 28,
+        height: 28,
+        rotation: 0,
+        price: 50000,
+        color: "#f97316",
+        opacity: 1,
+        chairCount: 8,
+        sideA: 0,
+        sideB: 0,
+        sellMode: "group",
+        capacity: 8,
+        seats: Array.from({ length: 8 }, (_, index) => ({
+          id: `s${index + 1}`,
+          number: index + 1,
+          x: index,
+          y: 0,
+          status: "available" as const,
+        })),
+      },
+    ]
+    const next = applyMapCapacityToTickets(
+      [
+        {
+          name: "Mesa VIP",
+          seatingSectorId: "mesa-1",
+          layoutType: "numbered_seat" as const,
+          capacityPerUnit: 1,
+        },
+      ],
+      map,
+    )
+    assert.equal(next[0]?.layoutType, "table_combo")
+    assert.equal(next[0]?.capacityPerUnit, 8)
+  })
+
   it("migra el paso persistido del wizard de 5 a 4", () => {
     assert.equal(migrateLegacyWizardStep(0), 0)
     assert.equal(migrateLegacyWizardStep(1), 1)
@@ -305,5 +354,66 @@ describe("venue-map-pricing", () => {
     assert.equal(migrateLegacyWizardStep(3), 2)
     assert.equal(migrateLegacyWizardStep(4), 3)
     assert.equal(migrateLegacyWizardStep(9), 3)
+  })
+
+  it("nunca trata un sector general: como map-backed", () => {
+    assert.equal(
+      isMapBackedTicket({
+        seatingSectorId: "general:pista",
+        layoutType: "numbered_seat",
+        tierType: "seated",
+      }),
+      false,
+    )
+    assert.equal(
+      ticketRequiresInteractiveMap({
+        seating_sector_id: "general:campo",
+        layout_type: "general",
+        tier_type: "general",
+      }),
+      false,
+    )
+  })
+
+  it("no enciende el canvas si no hay tickets ligados al mapa", () => {
+    const map = emptyVenueMap()
+    map.zones = [
+      {
+        id: "zone-campo",
+        name: "Campo",
+        color: "#22d3ee",
+        price: 8000,
+        polygon: [
+          { x: 0, y: 0 },
+          { x: 10, y: 0 },
+          { x: 10, y: 10 },
+        ],
+        layoutType: "general",
+        sellMode: "group",
+        rows: 1,
+        itemsPerRow: 1,
+        capacityPerUnit: 1,
+        capacity: 400,
+        labelPrefix: "Campo ",
+      },
+    ]
+    assert.equal(
+      eventNeedsInteractiveCanvas(map, [
+        { seating_sector_id: "general:pista", layout_type: "general" },
+      ]),
+      false,
+    )
+    assert.equal(
+      eventNeedsInteractiveCanvas(map, [
+        { seatingSectorId: "zona-vip", layoutType: "numbered_seat" },
+      ]),
+      true,
+    )
+    assert.equal(
+      eventNeedsInteractiveCanvas(null, [
+        { seatingSectorId: "zona-vip", layoutType: "numbered_seat" },
+      ]),
+      false,
+    )
   })
 })

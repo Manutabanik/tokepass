@@ -4,6 +4,7 @@ import { Trash2, X } from "lucide-react"
 
 import {
   CART_TICKET_LINE_PREFIX,
+  cartLineAmount,
   cartLineDisplayName,
   cartTicketLineId,
   parseCartTicketLineId,
@@ -37,8 +38,17 @@ export function CartSummary({
 
   return (
     <div className={cn("flex min-h-0 flex-col", className)}>
-      <div className="mb-2 flex shrink-0 items-center justify-between gap-3">
-        <h4 className="text-sm font-bold text-foreground">{heading}</h4>
+      <div
+        className={cn(
+          "flex shrink-0 items-center justify-between gap-3",
+          compact ? "mb-1" : "mb-2",
+        )}
+      >
+        {heading ? (
+          <h4 className="text-sm font-bold text-foreground">{heading}</h4>
+        ) : (
+          <span />
+        )}
         {showClear ? (
           <button
             type="button"
@@ -63,18 +73,20 @@ export function CartSummary({
       >
         {items.map((item) => {
           const displayName = cartLineDisplayName(item)
-          const qtyLabel = `${item.quantity}x ${displayName}`
+          const qtyLabel = item.detail
+            ? `${item.quantity}x ${displayName} · ${item.detail}`
+            : `${item.quantity}x ${displayName}`
           return (
             <li
               key={item.id}
               className={
                 compact
-                  ? "flex items-center justify-between gap-3 py-1.5"
+                  ? "flex items-center justify-between gap-3 border-b border-border py-2 last:border-b-0"
                   : "flex items-start justify-between gap-3 rounded-xl border border-border/60 bg-muted/30 px-3 py-3"
               }
             >
               {compact ? (
-                <p className="min-w-0 truncate text-xs text-muted-foreground">
+                <p className="min-w-0 truncate text-xs text-foreground">
                   {qtyLabel}
                 </p>
               ) : (
@@ -102,7 +114,7 @@ export function CartSummary({
                       : "text-sm font-bold text-foreground",
                   )}
                 >
-                  {formatCurrency(item.price)}
+                  {formatCurrency(cartLineAmount(item))}
                 </span>
                 <button
                   type="button"

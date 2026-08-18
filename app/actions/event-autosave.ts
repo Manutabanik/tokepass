@@ -62,6 +62,7 @@ export async function autosaveEventDraft(input: {
   values: EventFormValues
   zoneTierPricing?: ZoneTierPriceDraft[]
   targetOrganizerId?: string | null
+  identityOnly?: boolean
 }): Promise<AutosaveEventDraftResult> {
   const values = sanitizeAutosaveValues(input.values, input.eventId)
   if (!hasMinimumDraftContent(values)) {
@@ -78,6 +79,9 @@ export async function autosaveEventDraft(input: {
   formData.set("draftMode", "1")
   if (input.targetOrganizerId) {
     formData.set("targetOrganizerId", input.targetOrganizerId)
+  }
+  if (input.identityOnly) {
+    formData.set("identityOnly", "1")
   }
 
   let eventId = input.eventId

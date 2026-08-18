@@ -32,7 +32,7 @@ describe("resolveChargeUnit", () => {
       name: "Palco Norte",
     })
     assert.equal(unit.unitType, "full_table")
-    assert.equal(unit.badge, "PRECIO CERRADO · INCLUYE 6 ACCESOS")
+    assert.equal(unit.badge, "INCLUYE 6 ACCESOS")
     assert.equal(unit.noun, "palco")
     assert.equal(unit.priceMode, "closed_unit")
   })

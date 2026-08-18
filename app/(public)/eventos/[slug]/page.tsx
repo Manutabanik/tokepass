@@ -28,7 +28,16 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>
 }): Promise<Metadata> {
   const { slug: rawSlug } = await params
-  const event = await cachedEventDetails(decodeEventParam(rawSlug))
+  const fullSlug = decodeURIComponent(rawSlug)
+  
+  // Intenta por slug completo primero, luego por decodeEventParam
+  let event = await cachedEventDetails(fullSlug).catch(() => null)
+  if (!event) {
+    const decodedSlug = decodeEventParam(rawSlug)
+    if (decodedSlug !== fullSlug) {
+      event = await cachedEventDetails(decodedSlug).catch(() => null)
+    }
+  }
 
   if (!event) {
     return { title: "Evento no encontrado" }
@@ -43,11 +52,28 @@ export default async function PublicEventPage({
   params: Promise<{ slug: string }>
 }) {
   const { slug: rawSlug } = await params
-  const slug = decodeEventParam(rawSlug)
-  const event = await cachedEventDetails(slug).catch(() => null)
+  
+  // 1. Decodificar el URI original directamente desde la URL
+  const fullSlug = decodeURIComponent(rawSlug)
 
+  // 2. Intentar buscar por el slug exacto
+  let event = await cachedEventDetails(fullSlug).catch(() => null)
+  let targetSlug = fullSlug
+
+  // 3. Fallback: Si no lo encuentra, intentar decodificar el parámetro por si es un ID o slug procesado
   if (!event) {
-    const gate = await cachedEventAccessGate(slug)
+    const decodedSlug = decodeEventParam(rawSlug)
+    if (decodedSlug !== fullSlug) {
+      event = await cachedEventDetails(decodedSlug).catch(() => null)
+      if (event) {
+        targetSlug = decodedSlug
+      }
+    }
+  }
+
+  // 4. Si sigue sin encontrarlo, verificar si el evento está pausado/cancelado/borrador
+  if (!event) {
+    const gate = await cachedEventAccessGate(targetSlug)
     if (
       gate &&
       (gate.status === "paused" ||

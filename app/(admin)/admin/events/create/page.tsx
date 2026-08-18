@@ -55,7 +55,9 @@ export default async function CreateEventPage({
     }
   }
 
-  const venues = await listOrganizerVenues().catch(() => [])
+  const venues = await listOrganizerVenues(
+    impersonation ? { organizerId: impersonation.id } : {},
+  ).catch(() => [])
   const categories = await getActiveEventCategories().catch(() => [])
   const organizerServiceRate = DEFAULT_PLATFORM_FEE_PERCENTAGE / 100
 

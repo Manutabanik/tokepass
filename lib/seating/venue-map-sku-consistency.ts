@@ -129,7 +129,7 @@ export function validateVenueMapSkuConsistency(input: {
           expectedCapacityPerUnit:
             expectedLayout === "table_combo" ? Math.max(1, zone.capacityPerUnit || 1) : 1,
           actualCapacityPerUnit: zone.capacityPerUnit,
-          message: `La zona "${zone.name || zone.id}" vende en modo ${zone.sellMode} y su tipo de inventario debe ser ${expectedLayout}.`,
+            message: `La zona "${zone.name || zone.id}" está dibujada de un modo y se vende de otro. Revisá el mapa.`,
         }),
       )
     }
@@ -150,7 +150,10 @@ export function validateVenueMapSkuConsistency(input: {
             actualLayoutType: actualLayout,
             expectedCapacityPerUnit: expectedCapacity,
             actualCapacityPerUnit: actualCapacity,
-            message: `El ticket "${ticket.name || zone.name}" esta vinculado a una zona ${zone.sellMode} y debe ser ${expectedLayout}.`,
+            message:
+              expectedLayout === "table_combo"
+                ? `El mapa vende "${ticket.name || zone.name}" como mesa o palco completo, pero la entrada está configurada por silla.`
+                : `El mapa vende "${ticket.name || zone.name}" por silla, pero la entrada está configurada como mesa completa.`,
           }),
         )
       } else if (
@@ -168,7 +171,7 @@ export function validateVenueMapSkuConsistency(input: {
             actualLayoutType: actualLayout,
             expectedCapacityPerUnit: expectedCapacity,
             actualCapacityPerUnit: actualCapacity,
-            message: `El ticket "${ticket.name || zone.name}" debe admitir ${expectedCapacity} personas por unidad (capacidad de la mesa/zona).`,
+            message: `La capacidad del ticket no coincide con la cantidad de sillas del mapa (${ticket.name || zone.name}: ${expectedCapacity} sillas).`,
           }),
         )
       }
@@ -194,7 +197,7 @@ export function validateVenueMapSkuConsistency(input: {
           actualLayoutType: null,
           expectedCapacityPerUnit: null,
           actualCapacityPerUnit: null,
-          message: `El grupo "${group.name}" mezcla venta por mesa completa y por silla. Unifica el modo de venta.`,
+          message: `El grupo "${group.name}" mezcla venta por mesa completa y por silla. Unificá el modo de venta en el mapa.`,
         }),
       )
       continue
@@ -214,7 +217,7 @@ export function validateVenueMapSkuConsistency(input: {
           actualLayoutType: null,
           expectedCapacityPerUnit: null,
           actualCapacityPerUnit: null,
-          message: `Las mesas de "${group.name}" tienen distinta cantidad de sillas y no pueden compartir un SKU de mesa completa.`,
+          message: `Las mesas de "${group.name}" tienen distinta cantidad de sillas. Igualalas en el mapa o separalas en grupos distintos.`,
         }),
       )
       continue
@@ -239,8 +242,8 @@ export function validateVenueMapSkuConsistency(input: {
             actualCapacityPerUnit: actualCapacity,
             message:
               sellMode === "group"
-                ? `El mapa vende "${group.name}" como mesa/palco completo (group) pero el SKU es ${actualLayout || "desconocido"}. Debe ser table_combo.`
-                : `El mapa vende "${group.name}" por silla (per_seat) pero el SKU es ${actualLayout || "desconocido"}. Debe ser numbered_seat.`,
+                ? `El mapa vende "${group.name}" como mesa o palco completo, pero la entrada está configurada por silla.`
+                : `El mapa vende "${group.name}" por silla, pero la entrada está configurada como mesa completa.`,
           }),
         )
       } else if (
@@ -258,7 +261,7 @@ export function validateVenueMapSkuConsistency(input: {
             actualLayoutType: actualLayout,
             expectedCapacityPerUnit: expectedCapacity,
             actualCapacityPerUnit: actualCapacity,
-            message: `El SKU de "${group.name}" debe tener capacity_per_unit = ${expectedCapacity} (sillas del elemento).`,
+            message: `La capacidad del ticket no coincide con la cantidad de sillas del mapa (${group.name}: ${expectedCapacity} sillas).`,
           }),
         )
       }
@@ -270,9 +273,104 @@ export function validateVenueMapSkuConsistency(input: {
 }
 
 export function formatVenueMapSkuErrors(errors: VenueMapSkuMismatch[]): string {
-  const lines = errors.map((error) => error.message)
-  return [
-    "No se puede guardar: el mapa y los tickets no coinciden.",
-    ...lines,
-  ].join(" ")
+  return summarizeVenueMapSkuConflicts(errors).summary
+}
+
+export type WizardConflictAction = {
+  step: 1 | 2
+  label: string
+}
+
+export type WizardConflict = {
+  summary: string
+  actions: WizardConflictAction[]
+  sectorId?: string
+}
+
+const MAP_ACTION: WizardConflictAction = {
+  step: 1,
+  label: "Ir al Paso 2: Mapa y Sectores",
+}
+
+const TICKETS_ACTION: WizardConflictAction = {
+  step: 2,
+  label: "Ir al Paso 3: Entradas",
+}
+
+function isCapacityMismatch(error: VenueMapSkuMismatch): boolean {
+  return (
+    error.expectedCapacityPerUnit != null &&
+    error.actualCapacityPerUnit != null &&
+    error.expectedCapacityPerUnit !== error.actualCapacityPerUnit
+  )
+}
+
+function needsMapStep(error: VenueMapSkuMismatch): boolean {
+  if (error.actualLayoutType == null) return true
+  return /distinta cantidad|mezcla venta|Revisá el mapa/i.test(error.message)
+}
+
+function needsTicketsStep(error: VenueMapSkuMismatch): boolean {
+  return (
+    error.actualCapacityPerUnit != null ||
+    Boolean(error.actualLayoutType)
+  )
+}
+
+export function summarizeVenueMapSkuConflicts(
+  errors: VenueMapSkuMismatch[],
+): WizardConflict {
+  const capacityErrors = errors.filter(isCapacityMismatch)
+  const uniqueCapacity = new Map<string, number>()
+  for (const error of capacityErrors) {
+    uniqueCapacity.set(
+      error.label,
+      error.expectedCapacityPerUnit as number,
+    )
+  }
+
+  let summary: string
+  if (uniqueCapacity.size > 0) {
+    const parts = [...uniqueCapacity.entries()].map(([label, chairs]) => {
+      const noun = chairs === 1 ? "silla" : "sillas"
+      return `${label}: ${chairs} ${noun}`
+    })
+    summary = `La capacidad del ticket no coincide con la cantidad de sillas del mapa (${parts.join(", ")}).`
+  } else {
+    const lines = errors.map((error) => error.message)
+    summary = [
+      "El mapa y las entradas no coinciden.",
+      ...lines,
+    ].join(" ")
+  }
+
+  const actions: WizardConflictAction[] = []
+  if (errors.some(needsMapStep)) actions.push(MAP_ACTION)
+  if (errors.some(needsTicketsStep)) actions.push(TICKETS_ACTION)
+  if (actions.length === 0) {
+    actions.push(MAP_ACTION, TICKETS_ACTION)
+  }
+
+  return {
+    summary,
+    actions,
+    sectorId: errors[0]?.sectorId,
+  }
+}
+
+export function conflictFromPersistError(
+  message: string,
+): WizardConflict | null {
+  const text = message.trim()
+  if (
+    !/mapa y las entradas no coinciden|mapa y los tickets no coinciden|sillas del mapa|mesa o palco|por silla|Revisá el mapa/i.test(
+      text,
+    )
+  ) {
+    return null
+  }
+  return {
+    summary: text,
+    actions: [MAP_ACTION, TICKETS_ACTION],
+  }
 }

@@ -21,3 +21,13 @@ export function parseCartTicketLineId(id: string): string | null {
   const sep = rest.indexOf("__")
   return sep === -1 ? rest : rest.slice(0, sep)
 }
+
+export function cartLineAmount(line: {
+  price: number
+  quantity: number
+}): number {
+  const unit = Number(line.price)
+  const quantity = Math.max(0, Math.floor(Number(line.quantity)) || 0)
+  if (!Number.isFinite(unit) || unit <= 0 || quantity <= 0) return 0
+  return unit * quantity
+}

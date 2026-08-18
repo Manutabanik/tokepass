@@ -23,13 +23,14 @@ export const cachedPublishedEvents = cache((limit = CATALOG_PAGE_SIZE) =>
   unstable_cache(
     () => getPublishedEvents(undefined, { limit }),
     ["catalog-published-events", String(limit)],
-    { revalidate: 60 },
+    { revalidate: 60, tags: ["catalog-published-events"] },
   )(),
 )
 
 export const cachedFeaturedEvents = cache(() =>
   unstable_cache(() => getFeaturedEvents(), ["catalog-featured-events"], {
     revalidate: 60,
+    tags: ["catalog-featured-events"],
   })(),
 )
 
@@ -37,7 +38,7 @@ export const cachedFeaturedDiscoveryArtists = cache(() =>
   unstable_cache(
     () => getFeaturedDiscoveryArtists(DISCOVERY_FILTER_ARTISTS_LIMIT),
     ["catalog-featured-artists", String(DISCOVERY_FILTER_ARTISTS_LIMIT)],
-    { revalidate: 60 },
+    { revalidate: 60, tags: ["catalog-featured-artists"] },
   )(),
 )
 
@@ -45,7 +46,7 @@ export const cachedActiveEventCategories = cache(() =>
   unstable_cache(
     () => getActiveEventCategories(),
     ["catalog-event-categories"],
-    { revalidate: 60 },
+    { revalidate: 60, tags: ["catalog-event-categories"] },
   )(),
 )
 
@@ -53,7 +54,7 @@ export const cachedActivePlatformSponsors = cache(() =>
   unstable_cache(
     () => getActivePlatformSponsors(),
     ["catalog-platform-sponsors"],
-    { revalidate: 60 },
+    { revalidate: 60, tags: ["catalog-platform-sponsors"] },
   )(),
 )
 
@@ -61,7 +62,10 @@ export const cachedEventDetails = cache((slug: string) =>
   unstable_cache(
     () => getEventDetails(slug),
     ["event-details", slug],
-    { revalidate: 30 },
+    { 
+      revalidate: 30,
+      tags: ["catalog-events", `event-${slug}`],
+    },
   )(),
 )
 
@@ -69,7 +73,10 @@ export const cachedEventAccessGate = cache((slug: string) =>
   unstable_cache(
     () => getEventAccessGate(slug),
     ["event-access-gate", slug],
-    { revalidate: 30 },
+    { 
+      revalidate: 30,
+      tags: ["catalog-events", `event-gate-${slug}`],
+    },
   )(),
 )
 
@@ -90,7 +97,7 @@ export const cachedRelatedEvents = cache(
         province,
         String(limit),
       ],
-      { revalidate: 30 },
+      { revalidate: 30, tags: ["catalog-events", `related-${currentEventId}`] },
     )(),
 )
 
@@ -98,6 +105,6 @@ export const cachedResaleListings = cache((eventId: string) =>
   unstable_cache(
     () => getActiveResaleListingsForEvent(eventId),
     ["event-resale", eventId],
-    { revalidate: 30 },
+    { revalidate: 30, tags: ["catalog-events", `resale-${eventId}`] },
   )(),
 )

@@ -48,6 +48,7 @@ type EventFormStore = EventFormPersistedState & {
     values: EventFormValues
     venuePricingMap?: VenuePricingMap
     zoneTierPricing?: ZoneTierPriceDraft[]
+    serverUpdatedAt?: number | null
   }) => void
   setFormValues: (values: EventFormValues) => void
   setVenuePricingMap: (map: VenuePricingMap) => void
@@ -79,11 +80,19 @@ export const useEventFormStore = create<EventFormStore>()(
         values,
         venuePricingMap,
         zoneTierPricing,
+        serverUpdatedAt,
       }) => {
         const current = get()
         const sameSession = current.draftKey === draftKey
+        const serverMs =
+          typeof serverUpdatedAt === "number" && Number.isFinite(serverUpdatedAt)
+            ? serverUpdatedAt
+            : 0
         const preferLocal =
-          sameSession && current.values != null && current.updatedAt > 0
+          sameSession &&
+          current.values != null &&
+          current.updatedAt > 0 &&
+          (serverMs <= 0 || current.updatedAt > serverMs)
 
         set({
           draftKey,
@@ -97,7 +106,11 @@ export const useEventFormStore = create<EventFormStore>()(
             preferLocal && current.zoneTierPricing.length > 0
               ? current.zoneTierPricing
               : (zoneTierPricing ?? []),
-          updatedAt: preferLocal ? current.updatedAt : Date.now(),
+          updatedAt: preferLocal
+            ? current.updatedAt
+            : serverMs > 0
+              ? serverMs
+              : Date.now(),
           autosaveStatus: preferLocal ? "saved" : "idle",
           autosaveError: null,
         })

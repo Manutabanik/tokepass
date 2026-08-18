@@ -98,7 +98,62 @@ export const CheckoutBuyerInputSchema = z.union([
   CheckoutLegacyBuyerSchema,
 ])
 
-export const CheckoutCartItemSchema = z.object({
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function asTrimmedString(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : undefined
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    const parsed = asTrimmedString(value)
+    if (parsed) return parsed
+  }
+  return undefined
+}
+
+function normalizeIncomingCartItem(raw: unknown) {
+  if (!raw || typeof raw !== "object") return raw
+  const item = raw as Record<string, unknown>
+  const tierId = firstString(item.ticket_tier_id, item.ticketTierId, item.tierId)
+  const seatId = firstString(
+    item.seat_id,
+    item.seatId,
+    item.seatingUnitId,
+    Array.isArray(item.seatingIds) ? item.seatingIds[0] : undefined,
+  )
+  const elementId = firstString(item.element_id, item.elementId)
+  const explicitType = asTrimmedString(item.type)
+  const isMapped =
+    explicitType === "mapped" ||
+    Boolean(seatId) ||
+    Boolean(elementId)
+  const quantityRaw = Number(item.quantity)
+  return {
+    type: isMapped ? "mapped" : "general",
+    ticketTierId: tierId,
+    ticket_tier_id: tierId,
+    tierId,
+    quantity: Number.isFinite(quantityRaw) ? quantityRaw : isMapped ? 1 : quantityRaw,
+    seatingUnitId: seatId && UUID_RE.test(seatId) ? seatId : undefined,
+    seatId: seatId && UUID_RE.test(seatId) ? seatId : undefined,
+    seat_id: seatId && UUID_RE.test(seatId) ? seatId : undefined,
+    elementId,
+    element_id: elementId,
+    seatingIds: item.seatingIds,
+    sectorKey: item.sectorKey,
+    tableNumber: item.tableNumber,
+    zoneId: item.zoneId,
+  }
+}
+
+export const CheckoutGeneralItemSchema = z.object({
+  type: z.literal("general"),
+  ticket_tier_id: z.string().uuid(UUID_ERROR),
+  ticketTierId: z.string().uuid(UUID_ERROR),
   tierId: z.string().uuid(UUID_ERROR),
   quantity: z
     .number()
@@ -110,7 +165,52 @@ export const CheckoutCartItemSchema = z.object({
   sectorKey: z.string().trim().max(120).nullable().optional(),
   tableNumber: z.number().int().positive().max(9999).nullable().optional(),
   zoneId: z.string().uuid(UUID_ERROR).nullable().optional(),
+  seatId: z.string().uuid(UUID_ERROR).optional(),
+  seat_id: z.string().uuid(UUID_ERROR).optional(),
+  elementId: z.string().trim().max(200).optional(),
+  element_id: z.string().trim().max(200).optional(),
 })
+
+export const CheckoutMappedItemSchema = z
+  .object({
+    type: z.literal("mapped"),
+    ticket_tier_id: z.string().uuid(UUID_ERROR),
+    ticketTierId: z.string().uuid(UUID_ERROR),
+    tierId: z.string().uuid(UUID_ERROR),
+    quantity: z.literal(1),
+    seatingUnitId: z.string().uuid(UUID_ERROR).optional(),
+    seatingIds: z.array(z.string().uuid(UUID_ERROR)).max(1).optional(),
+    sectorKey: z.string().trim().max(120).nullable().optional(),
+    tableNumber: z.number().int().positive().max(9999).nullable().optional(),
+    zoneId: z.string().uuid(UUID_ERROR).nullable().optional(),
+    seatId: z.string().uuid(UUID_ERROR).optional(),
+    seat_id: z.string().uuid(UUID_ERROR).optional(),
+    elementId: z.string().trim().min(1).max(200).optional(),
+    element_id: z.string().trim().min(1).max(200).optional(),
+  })
+  .superRefine((item, ctx) => {
+    const seat =
+      item.seatingUnitId ||
+      item.seatId ||
+      item.seat_id ||
+      item.seatingIds?.[0]
+    const element = item.elementId || item.element_id
+    if (!seat && !element) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["seat_id"],
+        message: "Cada ubicación numerada requiere seat_id o element_id.",
+      })
+    }
+  })
+
+export const CheckoutCartItemSchema = z.preprocess(
+  normalizeIncomingCartItem,
+  z.discriminatedUnion("type", [
+    CheckoutGeneralItemSchema,
+    CheckoutMappedItemSchema,
+  ]),
+)
 
 export const CheckoutAddonItemSchema = z.object({
   itemId: z.string().uuid(UUID_ERROR),
@@ -183,7 +283,12 @@ export const CheckoutPayloadSchema = z
     }
 
     const seatingLineItems = items.filter(
-      (item) => item.seatingUnitId || (item.seatingIds?.length ?? 0) > 0,
+      (item) =>
+        item.type === "mapped" ||
+        Boolean(item.seatingUnitId) ||
+        Boolean(item.seatId) ||
+        Boolean(item.elementId) ||
+        (item.seatingIds?.length ?? 0) > 0,
     )
     const seatingUnitIds = seatingLineItems.flatMap((item) => {
       const ids = [...(item.seatingIds ?? [])]
@@ -208,9 +313,7 @@ export const CheckoutPayloadSchema = z
       })
     }
 
-    if (
-      seatingLineItems.some((item) => item.quantity !== 1)
-    ) {
+    if (seatingLineItems.some((item) => item.quantity !== 1)) {
       ctx.addIssue({
         code: "custom",
         path: ["items"],
@@ -222,6 +325,22 @@ export const CheckoutPayloadSchema = z
 export type CheckoutBuyer = z.infer<typeof CheckoutBuyerSchema>
 export type CheckoutPayload = z.infer<typeof CheckoutPayloadSchema>
 export type CheckoutCartItem = NonNullable<CheckoutPayload["items"]>[number]
+export type CheckoutCartItemInput = {
+  type?: "general" | "mapped"
+  ticket_tier_id?: string
+  ticketTierId?: string
+  tierId?: string
+  quantity: number
+  seatingUnitId?: string
+  seatingIds?: string[]
+  sectorKey?: string | null
+  tableNumber?: number | null
+  zoneId?: string | null
+  seatId?: string
+  seat_id?: string
+  elementId?: string
+  element_id?: string
+}
 export type CheckoutAddonItem = CheckoutPayload["addons"][number]
 
 export const CHECKOUT_INVALID_PAYLOAD_ERROR = "Datos de compra inválidos."

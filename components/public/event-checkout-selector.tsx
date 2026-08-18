@@ -51,6 +51,8 @@ import {
   type CheckoutKindTab,
 } from "@/lib/checkout/ticket-day-groups"
 import { flattenSeatsForAvailability } from "@/lib/seating/venue-map-geometry"
+import { ticketRequiresInteractiveMap } from "@/lib/seating/venue-map-pricing"
+import { TicketTierList } from "@/components/public/ticket-tier-list"
 import { cn, tapFeedbackClass } from "@/lib/utils"
 import type { ScheduleDay } from "@/types/events"
 
@@ -91,17 +93,16 @@ type Props = {
 const SYNTHETIC_MAP_TIER_ID = "__interactive-map__"
 
 function tierRequiresMap(tier: TicketSelectorTier): boolean {
-  return (
-    inferInventoryTierType({
-      tierType: tier.tierType,
-      layoutType: tier.layoutType,
-      category: tier.category,
-      bundleItems: (tier.comboItems ?? []).map((item, index) => ({
-        tierId: `${tier.id}-${index}`,
-        quantity: item.quantity,
-      })),
-    }) === "seated"
-  )
+  return ticketRequiresInteractiveMap({
+    seatingSectorId: tier.seatingSectorId,
+    layoutType: tier.layoutType,
+    tierType: tier.tierType,
+    category: tier.category,
+    bundleItems: (tier.comboItems ?? []).map((item, index) => ({
+      tierId: `${tier.id}-${index}`,
+      quantity: item.quantity,
+    })),
+  })
 }
 
 export function EventCheckoutSelector({
@@ -153,8 +154,7 @@ export function EventCheckoutSelector({
     return type !== "bundle"
   })
   const hasSeatedRow = listTiers.some(tierRequiresMap)
-  const showSyntheticMapRow =
-    (hasInteractiveMap || hasSeatingFlow) && !hasSeatedRow
+  const showSyntheticMapRow = hasInteractiveMap && !hasSeatedRow
   const hasInventory =
     listTiers.length > 0 ||
     grouped.bundle.length > 0 ||
@@ -446,49 +446,52 @@ function TicketSelectionList({
   }
 
   const syntheticRow = showSyntheticMapRow ? (
-    <div className="relative rounded-2xl border border-border/50 bg-card/50 p-5 backdrop-blur-sm transition-all hover:border-primary/50 hover:bg-card/80">
-      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <h4 className="text-lg font-black text-foreground">
-              Asientos numerados
-            </h4>
-            {includesGeneralAccess ? <InclusionBadge /> : null}
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Elegí mesas o butacas exactas en el plano.
-          </p>
-        </div>
-        {selectedPlacesForCategory(selectedItems).length === 0 ? (
-          <div className="flex-shrink-0">
-            <button
-              type="button"
-              disabled={isPending || mapLoading}
-              onClick={() =>
-                onOpenSeatSelection({
-                  id: SYNTHETIC_MAP_TIER_ID,
-                  name: "Asientos numerados",
-                })
-              }
-              className={cn(
-                tapFeedbackClass,
-                "whitespace-nowrap rounded-full bg-primary/20 px-4 py-2 text-sm font-bold text-primary transition-colors hover:bg-primary hover:text-primary-foreground disabled:opacity-50",
-              )}
-            >
-              {mapLoading ? "Cargando mapa…" : "Seleccionar lugares"}
-            </button>
-          </div>
-        ) : null}
+    <div className="flex items-center justify-between gap-3 overflow-hidden rounded-2xl border border-border bg-card/80 p-3.5 backdrop-blur-sm transition-all hover:border-primary/50 hover:bg-card">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <h4 className="truncate text-base font-semibold text-foreground">
+          Asientos numerados
+        </h4>
+        <p className="text-xs text-muted-foreground">
+          Elegí mesas o butacas exactas en el plano.
+        </p>
+        {includesGeneralAccess ? <InclusionBadge /> : null}
+        <SelectedPlacesSummary
+          labels={selectedPlacesForCategory(selectedItems)}
+          onModify={() =>
+            onOpenSeatSelection({
+              id: SYNTHETIC_MAP_TIER_ID,
+              name: "Asientos numerados",
+            })
+          }
+        />
       </div>
-      <SelectedPlacesSummary
-        labels={selectedPlacesForCategory(selectedItems)}
-        onModify={() =>
-          onOpenSeatSelection({
-            id: SYNTHETIC_MAP_TIER_ID,
-            name: "Asientos numerados",
-          })
-        }
-      />
+      {selectedPlacesForCategory(selectedItems).length === 0 ? (
+        <div className="flex shrink-0 items-center">
+          <button
+            type="button"
+            disabled={isPending || mapLoading}
+            onClick={() =>
+              onOpenSeatSelection({
+                id: SYNTHETIC_MAP_TIER_ID,
+                name: "Asientos numerados",
+              })
+            }
+            className={cn(
+              tapFeedbackClass,
+              "h-10 whitespace-nowrap rounded-xl bg-primary/20 px-3 text-xs font-bold text-primary transition-colors hover:bg-primary hover:text-primary-foreground disabled:opacity-50 sm:px-4 sm:text-sm",
+            )}
+          >
+            {mapLoading
+              ? "Cargando mapa…"
+              : (
+                <>
+                  <span className="sm:hidden">Elegir lugar</span>
+                  <span className="hidden sm:inline">Seleccionar en Mapa</span>
+                </>
+              )}
+          </button>
+        </div>
+      ) : null}
     </div>
   ) : null
 
@@ -582,16 +585,43 @@ function TicketSelectionList({
           animate={{ opacity: 1 }}
           exit={reduceMotion ? undefined : { opacity: 0 }}
           transition={{ duration: 0.3, ease: "easeInOut" }}
-          className="relative z-0 flex flex-col gap-4 pb-8"
+          className="z-0 flex flex-col gap-2.5 pb-8"
         >
           {displayedTickets.length > 0 ? (
-            displayedTickets.map(renderTierCard)
+            (() => {
+              const mapTickets = displayedTickets.filter(tierRequiresMap)
+              const generalTickets = displayedTickets.filter(
+                (tier) => !tierRequiresMap(tier),
+              )
+              return (
+                <div className="flex flex-col gap-2.5">
+                  {mapTickets.length > 0 || syntheticRow ? (
+                    <div className="flex flex-col gap-2.5">
+                      {mapTickets.map(renderTierCard)}
+                      {kindTab === "days" || !showKindTabs
+                        ? syntheticRow
+                        : null}
+                    </div>
+                  ) : null}
+                  {generalTickets.length > 0 ? (
+                    <TicketTierList
+                      tiers={generalTickets}
+                      siblingTiers={listTiers}
+                      quantities={quantities}
+                      selectedCount={selectedCount}
+                      maxTicketsPerUser={maxTicketsPerUser}
+                      isPending={isPending}
+                      onQuantityChange={onQuantityChange}
+                    />
+                  ) : null}
+                </div>
+              )
+            })()
           ) : (
             <p className="text-sm text-muted-foreground">
               No hay entradas para esta selección.
             </p>
           )}
-          {kindTab === "days" || !showKindTabs ? syntheticRow : null}
         </motion.div>
       </AnimatePresence>
     </div>
@@ -607,22 +637,56 @@ function SelectedPlacesSummary({
 }) {
   if (labels.length === 0) return null
   return (
-    <div className="mt-2 flex items-center justify-between rounded-xl border border-primary/30 bg-primary/10 p-3">
-      <div className="min-w-0">
-        <span className="text-xs font-bold text-primary">
-          LUGARES SELECCIONADOS
-        </span>
-        <p className="text-sm font-medium text-foreground">{labels.join(", ")}</p>
-      </div>
-      <button
-        type="button"
-        onClick={onModify}
-        className="shrink-0 text-xs text-muted-foreground underline"
-      >
-        Modificar
-      </button>
+    <div className="flex min-w-0 flex-wrap items-center gap-2 pt-1">
+      {labels.map((label) => (
+        <button
+          key={label}
+          type="button"
+          onClick={onModify}
+          className="group inline-flex items-center gap-2.5 rounded-xl border border-emerald-500/60 bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-300 shadow-sm transition-all hover:border-emerald-400 hover:bg-emerald-500 hover:text-neutral-950 active:scale-95 cursor-pointer"
+        >
+          <span className="truncate">{label}</span>
+          <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-400 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-neutral-950 shadow-sm transition-colors group-hover:bg-neutral-950 group-hover:text-emerald-400">
+            Cambiar
+          </span>
+        </button>
+      ))}
     </div>
   )
+}
+
+function ticketCardBadges({
+  chargeBadge,
+  includesGeneralAccess,
+  highlight,
+  tier,
+}: {
+  chargeBadge: string | null
+  includesGeneralAccess: boolean
+  highlight: ReturnType<typeof resolveTicketHighlightBadge>
+  tier: TicketSelectorTier
+}) {
+  const badges: Array<{ key: string; label: string; tone: "charge" | "access" | "highlight" | "custom" }> =
+    []
+  const showAccessCount = tier.showAccessCount !== false
+  if (showAccessCount && chargeBadge) {
+    badges.push({ key: "charge", label: chargeBadge, tone: "charge" })
+  }
+  const chargeImpliesAccess = /incluye/i.test(chargeBadge ?? "")
+  const organizerWantsAccess =
+    tier.includesAccess === true ||
+    (tier.includesAccess !== false && includesGeneralAccess)
+  if (organizerWantsAccess && !chargeImpliesAccess) {
+    badges.push({ key: "access", label: "Incluye acceso", tone: "access" })
+  }
+  if (highlight === "bestseller") {
+    badges.push({ key: "highlight", label: "Más vendida", tone: "highlight" })
+  }
+  const custom = tier.badgeText?.trim() || tier.bonusReward?.trim() || ""
+  if (custom) {
+    badges.push({ key: "custom", label: custom, tone: "custom" })
+  }
+  return badges
 }
 
 function UnifiedTicketCard({
@@ -671,10 +735,8 @@ function UnifiedTicketCard({
   const remaining =
     limit == null ? Number.POSITIVE_INFINITY : Math.max(0, limit - otherSelected)
   const max = Math.min(Math.max(0, tier.available), remaining)
-  const description = tier.description?.trim() || ""
   const highlight = resolveTicketHighlightBadge(tier, siblingTiers)
   const unitPrice = current?.price ?? tier.price
-  const phaseName = current?.name
   const sectorMeta =
     requiresMap && venueMap && tier.seatingSectorId
       ? resolveSectorAssignMeta(
@@ -711,11 +773,18 @@ function UnifiedTicketCard({
     mapReady,
   })
   const isSoldOut = availability.isSoldOut
+  const badges = ticketCardBadges({
+    chargeBadge: charge.badge,
+    includesGeneralAccess,
+    highlight,
+    tier,
+  })
+  const showStock = tier.showRemainingStock !== false
 
   return (
     <div
       className={cn(
-        "relative rounded-2xl border border-border bg-card p-5 backdrop-blur-sm transition-all",
+        "flex items-center justify-between gap-3 overflow-hidden rounded-2xl border border-border bg-card/80 p-3.5 backdrop-blur-sm transition-all",
         isSoldOut
           ? "cursor-not-allowed border-border bg-muted/50 opacity-70"
           : "hover:border-primary/50 hover:bg-card",
@@ -724,150 +793,110 @@ function UnifiedTicketCard({
         selectedPlaces.length > 0 && !isSoldOut && "border-primary/30",
       )}
     >
-      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex min-w-0 flex-col gap-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h4 className="text-lg font-black text-foreground">{tier.name}</h4>
-            {includesGeneralAccess ? <InclusionBadge /> : null}
-            {highlight === "bestseller" && !isSoldOut ? (
-              <Badge
-                variant="secondary"
-                className="h-5 gap-1 border border-amber-500/20 bg-amber-500/10 text-[10px] font-bold uppercase tracking-wide text-amber-400"
-              >
-                <Sparkles className="size-3" aria-hidden="true" />
-                Más vendida
-              </Badge>
-            ) : null}
-          </div>
-          <div className="mt-1 flex flex-wrap items-baseline gap-2 lg:hidden">
-            <span className="text-xl font-black tabular-nums text-foreground">
-              {formatCurrency(shownPrice)}
-            </span>
-            {charge.badge ? (
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <h4 className="truncate text-base font-semibold text-foreground">
+          {tier.name}
+        </h4>
+        <p className="text-lg font-bold tabular-nums text-foreground">
+          {formatCurrency(shownPrice)}
+        </p>
+        {badges.length > 0 ? (
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            {badges.map((badge) => (
               <span
+                key={badge.key}
                 className={cn(
-                  "rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
-                  charge.unitType === "full_table"
+                  "max-w-full truncate rounded-full border px-2 py-0.5 text-xs font-medium uppercase tracking-wide",
+                  badge.tone === "charge" && charge.unitType === "full_table"
                     ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-                    : "border-sky-500/35 bg-sky-500/15 text-sky-700 dark:text-sky-300",
+                    : badge.tone === "charge"
+                      ? "border-sky-500/35 bg-sky-500/15 text-sky-700 dark:text-sky-300"
+                      : badge.tone === "highlight"
+                        ? "border-amber-500/20 bg-amber-500/10 text-amber-400"
+                        : badge.tone === "access"
+                          ? "border-amber-500/20 bg-amber-500/10 text-amber-400"
+                          : "border-border bg-muted/60 text-muted-foreground",
                 )}
               >
-                {charge.badge}
-              </span>
-            ) : null}
-          </div>
-          {isSoldOut ? (
-            <span className="mt-1 flex items-center gap-1 text-xs font-bold text-destructive">
-              <AlertCircle className="size-3" aria-hidden="true" />
-              Agotado
-            </span>
-          ) : availability.available > 0 ? (
-            <StockHint
-              available={availability.available}
-              capacity={tier.capacity}
-              sold={tier.sold}
-            />
-          ) : (
-            <span className="mt-1 text-xs font-semibold text-emerald-500">
-              Disponible
-            </span>
-          )}
-          {phaseName ? (
-            <p className="text-xs text-muted-foreground">{phaseName}</p>
-          ) : null}
-          {description ? (
-            <p className="text-xs leading-5 text-muted-foreground">
-              {description}
-            </p>
-          ) : null}
-        </div>
-        <div className="flex shrink-0 items-center justify-between gap-4 lg:flex-col lg:items-end">
-          <div className="hidden flex-wrap items-baseline justify-end gap-2 lg:flex">
-            <span className="text-xl font-black tabular-nums text-foreground">
-              {formatCurrency(shownPrice)}
-            </span>
-            {charge.badge ? (
-              <span
-                className={cn(
-                  "rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
-                  charge.unitType === "full_table"
-                    ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-                    : "border-sky-500/35 bg-sky-500/15 text-sky-700 dark:text-sky-300",
+                {badge.tone === "highlight" ? (
+                  <span className="inline-flex items-center gap-1">
+                    <Sparkles className="size-3" aria-hidden="true" />
+                    {badge.label}
+                  </span>
+                ) : (
+                  badge.label
                 )}
-              >
-                {charge.badge}
               </span>
-            ) : null}
+            ))}
           </div>
-          <div className="flex-shrink-0">
-          {isSoldOut ? (
+        ) : null}
+        {isSoldOut ? (
+          <span className="flex items-center gap-1 text-xs font-bold text-destructive">
+            <AlertCircle className="size-3" aria-hidden="true" />
+            Agotado
+          </span>
+        ) : showStock ? (
+          <StockHint
+            available={availability.available}
+            capacity={tier.capacity}
+            sold={tier.sold}
+          />
+        ) : null}
+        {requiresMap && !isSoldOut ? (
+          <SelectedPlacesSummary
+            labels={selectedPlaces}
+            onModify={onOpenSeatSelection}
+          />
+        ) : null}
+      </div>
+      <div className="flex shrink-0 items-center self-center">
+        {isSoldOut ? (
+          <button
+            type="button"
+            disabled
+            className="pointer-events-none h-10 cursor-not-allowed rounded-xl bg-secondary px-4 text-xs font-bold text-muted-foreground"
+          >
+            Agotado
+          </button>
+        ) : requiresMap ? (
+          selectedPlaces.length === 0 ? (
             <button
               type="button"
-              disabled
-              className="pointer-events-none h-12 cursor-not-allowed rounded-xl bg-secondary px-6 text-sm font-bold text-muted-foreground"
-            >
-              Agotado
-            </button>
-          ) : requiresMap ? (
-            selectedPlaces.length === 0 ? (
-              <button
-                type="button"
-                disabled={isPending || mapLoading}
-                onClick={(event) => {
-                  if (isSoldOut) {
-                    event.preventDefault()
-                    return
-                  }
-                  onOpenSeatSelection()
-                }}
-                className={cn(
-                  tapFeedbackClass,
-                  "h-12 whitespace-nowrap rounded-xl bg-primary/20 px-6 text-sm font-bold text-primary transition-all hover:bg-primary hover:text-primary-foreground disabled:pointer-events-none disabled:opacity-50",
-                )}
-              >
-                {mapLoading ? "Cargando mapa…" : "Seleccionar lugares"}
-              </button>
-            ) : null
-          ) : (
-            <Stepper
-              value={quantity}
-              max={max}
-              disabled={isPending || isSoldOut || max === 0}
-              onChange={(next) => {
-                if (isSoldOut || availability.available <= 0) return
-                onQuantityChange(tier.id, next, max)
+              disabled={isPending || mapLoading}
+              onClick={(event) => {
+                if (isSoldOut) {
+                  event.preventDefault()
+                  return
+                }
+                onOpenSeatSelection()
               }}
-            />
-          )}
-          </div>
-        </div>
-      </div>
-      {sale.upcoming.length > 0 ? (
-        <ul className="mt-2 space-y-1 border-t border-border/70 pt-2">
-          {sale.upcoming.map((phase) => (
-            <li
-              key={phase.id}
-              className="flex items-center justify-between gap-2 text-xs text-muted-foreground"
+              className={cn(
+                tapFeedbackClass,
+                "h-10 max-w-[9.5rem] whitespace-normal rounded-xl bg-primary/20 px-3 text-center text-xs font-bold leading-tight text-primary transition-all hover:bg-primary hover:text-primary-foreground disabled:pointer-events-none disabled:opacity-50 sm:max-w-none sm:whitespace-nowrap sm:px-4 sm:text-sm",
+              )}
             >
-              <span className="flex min-w-0 items-center gap-1.5">
-                <Clock className="size-3 shrink-0" aria-hidden="true" />
-                <span className="truncate">
-                  {phase.name} - {formatCurrency(phase.price)}
-                </span>
-              </span>
-              <span className="shrink-0 font-medium uppercase tracking-wide">
-                Próximamente
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {requiresMap && !isSoldOut ? (
-        <SelectedPlacesSummary
-          labels={selectedPlaces}
-          onModify={onOpenSeatSelection}
-        />
-      ) : null}
+              {mapLoading
+                ? "Cargando mapa…"
+                : (
+                  <>
+                    <span className="sm:hidden">Elegir lugar</span>
+                    <span className="hidden sm:inline">Seleccionar en Mapa</span>
+                  </>
+                )}
+            </button>
+          ) : null
+        ) : (
+          <Stepper
+            value={quantity}
+            max={max}
+            disabled={isPending || isSoldOut || max === 0}
+            onChange={(next) => {
+              if (isSoldOut || availability.available <= 0) return
+              onQuantityChange(tier.id, next, max)
+            }}
+          />
+        )}
+      </div>
     </div>
   )
 }
@@ -924,8 +953,7 @@ function InclusionWarning({ visible }: { visible: boolean }) {
               aria-hidden="true"
             />
             <p>
-              Tus lugares reservados ya incluyen acceso. Solo sumá entradas si
-              vienen invitados extra.
+            Las entradas seleccionadas se reservan de forma temporal durante el proceso de pago.
             </p>
           </div>
         </motion.div>
@@ -1074,15 +1102,11 @@ function StockHint({
     )
   }
   if (scarcity.kind === "available") {
-    return (
-      <p className="mt-0.5 text-xs font-semibold text-emerald-500">
-        Disponible
-      </p>
-    )
+    return null
   }
   return (
     <p className="mt-0.5 text-xs font-semibold text-destructive motion-safe:animate-pulse">
-      Últimos lugares disponibles
+       
     </p>
   )
 }

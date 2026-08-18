@@ -56,6 +56,7 @@ import {
   draftEventSchema,
   publishEventSchema,
   type AgeRestriction,
+  type DraftEventFormValues,
   type EventFormValues,
 } from "@/lib/validations/event-form"
 import type { Database, Event, EventStatus, Json, Venue } from "@/types/database"
@@ -66,11 +67,17 @@ import {
   venueMapToSeatingLayout,
 } from "@/lib/seating/venue-map-geometry"
 import { composeVenuePlace } from "@/lib/venues/compose-location"
+import { applyMapCapacityToTickets } from "@/lib/seating/venue-map-pricing"
+import {
+  logicalSectorId,
+  normalizeLogicalSectors,
+} from "@/lib/inventory/logical-sectors"
 import { logger } from "@/lib/logger"
 import { toUserFacingError } from "@/lib/errors/user-facing-error"
 import {
-  formatVenueMapSkuErrors,
+  summarizeVenueMapSkuConflicts,
   validateVenueMapSkuConsistency,
+  type WizardConflict,
 } from "@/lib/seating/venue-map-sku-consistency"
 import {
   collectLiveSeatingSectorIds,
@@ -256,54 +263,29 @@ function mapEventFormToRpcPayload(
     schedule_days?: unknown
   },
 ): CreateCompleteEventRpcPayload {
-  const blueprintZones = data.venue.zones ?? []
+  const logicalZones = normalizeLogicalSectors(data.venue.zones)
   const includesMap = Boolean(data.venue.includesSeatingMap)
   const capacitySnap = computeEventCapacityFromForm(data)
-  const ticketCapacity = capacitySnap.totalAllocated
   const isGeneralAdmission =
     !includesMap && data.venue.zoneType === "general_admission"
-  const capacity = isGeneralAdmission
-    ? (capacitySnap.effectiveMaxCapacity || ticketCapacity)
-    : includesMap
-      ? Math.max(capacitySnap.effectiveMaxCapacity, 1)
-      : (data.venue.rows ?? 0) * (data.venue.seatsPerRow ?? 0)
 
   const zones =
-    blueprintZones.length > 0
-      ? blueprintZones.map((zone) => {
-          if (zone.type === "reserved_seating" && !includesMap) {
-            const rows = zone.rows ?? null
-            const seatsPerRow = zone.seatsPerRow ?? null
-            if (
-              !rows ||
-              !seatsPerRow ||
-              rows * seatsPerRow !== zone.capacity
-            ) {
-              throw new Error(
-                `La zona "${zone.name}" requiere filas y asientos por fila que coincidan con la capacidad (sin inventar √capacidad).`,
-              )
-            }
-            return {
-              name: zone.name,
-              type: zone.type,
-              capacity: zone.capacity,
-              rows,
-              seats_per_row: seatsPerRow,
-            }
-          }
-          return {
-            name: zone.name,
-            type: zone.type,
-            capacity: zone.capacity,
-            rows: zone.rows ?? null,
-            seats_per_row: zone.seatsPerRow ?? null,
-          }
-        })
+    logicalZones.length > 0
+      ? logicalZones.map((zone) => ({
+          name: zone.name,
+          type: zone.type,
+          capacity: zone.capacity,
+          rows: zone.type === "reserved_seating" ? zone.rows ?? null : null,
+          seats_per_row:
+            zone.type === "reserved_seating" ? zone.seatsPerRow ?? null : null,
+        }))
       : [
           {
             name: isGeneralAdmission ? "General" : "Platea",
-            type: includesMap ? "reserved_seating" : data.venue.zoneType,
-            capacity: Math.max(capacity, 1),
+            type: includesMap
+              ? ("reserved_seating" as const)
+              : data.venue.zoneType,
+            capacity: Math.max(capacitySnap.totalCapacity, 1),
             rows: isGeneralAdmission ? null : (data.venue.rows ?? null),
             seats_per_row: isGeneralAdmission
               ? null
@@ -311,13 +293,7 @@ function mapEventFormToRpcPayload(
           },
         ]
 
-  const venueCapacity =
-    Math.max(
-      zones.reduce((sum, zone) => sum + zone.capacity, 0),
-      capacitySnap.effectiveMaxCapacity,
-      capacity,
-      1,
-    )
+  const venueCapacity = Math.max(capacitySnap.totalCapacity, 1)
 
   const place = composeVenuePlace({
     street: data.venue.venueLocation,
@@ -403,12 +379,19 @@ function mapEventFormToRpcPayload(
         capacity: tier.capacity,
         time_limit: tier.timeLimit?.trim() ? tier.timeLimit : null,
         bonus_reward: tier.bonusReward?.trim() ? tier.bonusReward : null,
-        zone_index: 0,
+        zone_index: Math.max(
+          0,
+          logicalZones.findIndex(
+            (zone) =>
+              zone.id === (tier.seatingSectorId ?? "").trim() ||
+              zone.name.trim().toLocaleLowerCase("es") ===
+                (tier.name ?? "").trim().toLocaleLowerCase("es"),
+          ),
+        ),
         day_id: dayId,
         visibility: tier.visibility ?? "public",
         layout_type: layoutType,
-        seating_sector_id:
-          layoutType === "general" ? null : tier.seatingSectorId ?? null,
+        seating_sector_id: tier.seatingSectorId?.trim() || null,
         capacity_per_unit:
           layoutType === "general" ? 1 : tier.capacityPerUnit,
         admit_count:
@@ -686,13 +669,281 @@ function persistFailure(error: unknown): { success: false; error: string } {
 
 function venueMapSkuGuard(
   data: EventFormValues,
-): { success: false; error: string } | null {
+): { success: false; error: string; wizardConflict: WizardConflict } | null {
+  const healedTickets = applyMapCapacityToTickets(
+    data.tickets,
+    parseVenueMap(data.venue.venueMap),
+  )
   const result = validateVenueMapSkuConsistency({
     map: parseVenueMap(data.venue.venueMap),
-    tickets: data.tickets,
+    tickets: healedTickets,
   })
   if (result.ok) return null
-  return { success: false, error: formatVenueMapSkuErrors(result.errors) }
+  const conflict = summarizeVenueMapSkuConflicts(result.errors)
+  return {
+    success: false,
+    error: conflict.summary,
+    wizardConflict: conflict,
+  }
+}
+
+function withHealedMapTickets(data: EventFormValues): EventFormValues {
+  return {
+    ...data,
+    tickets: applyMapCapacityToTickets(
+      data.tickets,
+      parseVenueMap(data.venue.venueMap),
+    ),
+  }
+}
+
+const EVENT_IDENTITY_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function identityCategoryId(value: string | null | undefined): string | null {
+  const trimmed = value?.trim() ?? ""
+  return EVENT_IDENTITY_UUID_RE.test(trimmed) ? trimmed : null
+}
+
+function identityAgeRestriction(
+  value: string | null | undefined,
+): AgeRestriction | null {
+  return AGE_RESTRICTION_VALUES.includes(value as AgeRestriction)
+    ? (value as AgeRestriction)
+    : null
+}
+
+async function persistEventIdentityOnly(input: {
+  formData: FormData
+  formValues: EventFormValues | DraftEventFormValues
+  eventId: string
+  organizerId: string
+  existingFlyerUrl: string | null
+  existing: { date?: string | null; ends_at?: string | null; schedule_days?: unknown }
+  mutationClient: SupabaseClient<Database>
+  venueId: string | null
+}): Promise<CreateCompleteEventResult> {
+  const flyerEntry = input.formData.get("flyer")
+  let flyerUrl = input.existingFlyerUrl
+
+  if (flyerEntry instanceof File && flyerEntry.size > 0) {
+    const uploaded = await uploadEventFlyer(
+      input.mutationClient,
+      input.organizerId,
+      flyerEntry,
+    )
+    if ("error" in uploaded) return { success: false, error: uploaded.error }
+    flyerUrl = uploaded.url
+  }
+
+  const title = input.formValues.basics.title.trim()
+  if (title.length < 3) {
+    return {
+      success: false,
+      error: "El título debe tener al menos 3 caracteres.",
+    }
+  }
+
+  const categoryId = identityCategoryId(input.formValues.basics.categoryId)
+  const ageRestriction = identityAgeRestriction(
+    input.formValues.basics.ageRestriction,
+  )
+
+  const { error: updateError } = await input.mutationClient
+    .from("events")
+    .update({
+      title,
+      description: input.formValues.basics.description,
+      visibility: input.formValues.basics.visibility,
+      category_id: categoryId,
+      ...(ageRestriction ? { age_restriction: ageRestriction } : {}),
+      image_url: flyerUrl,
+      flyer_url: flyerUrl,
+      updated_at: new Date().toISOString(),
+    } as never)
+    .eq("id", input.eventId)
+
+  if (updateError) {
+    return persistFailure(updateError.message)
+  }
+
+  await persistEventSchedule(
+    input.mutationClient,
+    input.eventId,
+    input.formValues as EventFormValues,
+    input.existing,
+  )
+  await persistEventLineupSnapshot(
+    input.eventId,
+    input.formValues.lineup ?? [],
+  ).catch(() => undefined)
+
+  revalidatePath(`/admin/events/${input.eventId}`)
+  revalidatePath(`/admin/events/${input.eventId}/edit`)
+
+  return {
+    success: true,
+    eventId: input.eventId,
+    venueId: input.venueId,
+  }
+}
+
+/**
+ * Alta solo de identidad: titulo, copy, visibilidad, categoria, edad
+ * (si el usuario la eligio) y flyer. No inventa fechas, no fuerza ATP
+ * y no crea tickets ni mapa.
+ */
+async function persistNewEventIdentityOnly(
+  formData: FormData,
+  raw: DraftEventFormValues | EventFormValues,
+): Promise<CreateCompleteEventResult> {
+  const title = raw.basics.title.trim()
+  if (title.length < 3) {
+    return {
+      success: false,
+      error: "El título debe tener al menos 3 caracteres.",
+    }
+  }
+
+  let supabase: Awaited<ReturnType<typeof createClient>>
+  let userId: string
+  try {
+    const session = await requireAuthenticatedUser()
+    supabase = session.supabase
+    userId = session.user.id
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Debes iniciar sesión para crear un evento.",
+    }
+  }
+
+  const { data: actorProfile } = await supabase
+    .from("profiles")
+    .select("role, organizer_approval_status")
+    .eq("id", userId)
+    .maybeSingle()
+
+  const actorRole = actorProfile?.role ?? null
+  const actorCanCreate =
+    actorRole === "super_admin" ||
+    (actorRole === "admin" &&
+      actorProfile?.organizer_approval_status === "approved")
+  if (!actorCanCreate) {
+    return {
+      success: false,
+      error: "Tu cuenta de organizador no está habilitada para crear eventos.",
+    }
+  }
+
+  let organizerId = userId
+  const targetRaw = formData.get("targetOrganizerId")
+  const targetOrganizerId =
+    typeof targetRaw === "string" && targetRaw.trim() ? targetRaw.trim() : null
+
+  if (targetOrganizerId && actorRole === "super_admin") {
+    const admin = createAdminClient()
+    const { data: targetProfile, error: targetError } = await admin
+      .from("profiles")
+      .select("id, role, organizer_approval_status")
+      .eq("id", targetOrganizerId)
+      .maybeSingle()
+
+    if (
+      targetError ||
+      !targetProfile ||
+      targetProfile.role !== "admin" ||
+      targetProfile.organizer_approval_status !== "approved"
+    ) {
+      return {
+        success: false,
+        error: "La productora destino no existe o no es un organizador válido.",
+      }
+    }
+
+    organizerId = targetProfile.id
+  }
+
+  const mutationClient =
+    organizerId !== userId ? createAdminClient() : supabase
+
+  const flyerEntry = formData.get("flyer")
+  let flyerUrl: string | null = null
+  if (flyerEntry instanceof File && flyerEntry.size > 0) {
+    const uploaded = await uploadEventFlyer(mutationClient, organizerId, flyerEntry)
+    if ("error" in uploaded) {
+      return { success: false, error: uploaded.error }
+    }
+    flyerUrl = uploaded.url
+  }
+
+  const userStart = parseDateTimeLocal(raw.basics.date ?? "")
+  const userEnd = parseDateTimeLocal(raw.basics.endDate ?? "")
+  const incomingDays = raw.basics.isMultiDay
+    ? normalizeScheduleDaysFromForm(raw.basics.scheduleDays ?? [])
+    : []
+  const hasUserSchedule = userStart != null || incomingDays.length > 0
+  const categoryId = identityCategoryId(raw.basics.categoryId)
+  const ageRestriction = identityAgeRestriction(raw.basics.ageRestriction)
+
+  const insertPayload = {
+    organizer_id: organizerId,
+    title,
+    description: raw.basics.description ?? "",
+    visibility: raw.basics.visibility ?? "public",
+    status: "draft" as const,
+    location: "",
+    // `events.date` es NOT NULL. Solo se escribe una fecha real si el
+    // usuario la cargo; si no, se usa now() como ancla de columna y no
+    // se persiste schedule ni ends_at inventados.
+    date: hasUserSchedule
+      ? (incomingDays[0]?.start_time ??
+        userStart?.toISOString() ??
+        new Date().toISOString())
+      : new Date().toISOString(),
+    ...(userEnd ? { ends_at: userEnd.toISOString() } : {}),
+    ...(categoryId ? { category_id: categoryId } : {}),
+    ...(ageRestriction ? { age_restriction: ageRestriction } : {}),
+    ...(flyerUrl ? { image_url: flyerUrl, flyer_url: flyerUrl } : {}),
+  }
+
+  const { data: created, error: insertError } = await mutationClient
+    .from("events")
+    .insert(insertPayload as never)
+    .select("id")
+    .maybeSingle()
+
+  if (insertError || !created?.id) {
+    if (flyerUrl) {
+      const path = flyerUrl.split("/event-flyers/")[1]
+      if (path) {
+        await mutationClient.storage.from("event-flyers").remove([path])
+      }
+    }
+    return persistFailure(
+      insertError?.message ?? "La base de datos no devolvió el ID del evento.",
+    )
+  }
+
+  const eventId = String(created.id)
+
+  if (hasUserSchedule) {
+    await persistEventSchedule(mutationClient, eventId, raw as EventFormValues)
+  }
+
+  if ((raw.lineup ?? []).length > 0) {
+    await persistEventLineupSnapshot(eventId, raw.lineup ?? []).catch(
+      () => undefined,
+    )
+  }
+
+  revalidatePath(`/admin/events/${eventId}`)
+  revalidatePath(`/admin/events/${eventId}/edit`)
+
+  return { success: true, eventId, venueId: null }
 }
 
 function stripRpcSeatingSectorIds(
@@ -1034,13 +1285,14 @@ async function uploadEventFlyer(
 
 export type CreateCompleteEventResult =
   | { success: true; eventId: string; venueId: string | null }
-  | { success: false; error: string }
+  | { success: false; error: string; wizardConflict?: WizardConflict }
 
 export type EditableEventData = {
   id: string
   organizerId: string
   title: string
   flyerUrl: string | null
+  updatedAt: string
   values: EventFormValues
   zoneTierPricing: Array<{
     id: string
@@ -1066,8 +1318,10 @@ function parseVenueZones(raw: unknown): EventFormValues["venue"]["zones"] {
     const capacity = Number(zone.capacity ?? 0)
     if (!name || !Number.isFinite(capacity) || capacity < 1) return []
     const reserved = zone.type === "reserved_seating"
+    const rawId = typeof zone.id === "string" ? zone.id : null
     return [
       {
+        id: logicalSectorId(name, rawId),
         name,
         type: reserved
           ? ("reserved_seating" as const)
@@ -1081,6 +1335,51 @@ function parseVenueZones(raw: unknown): EventFormValues["venue"]["zones"] {
     ]
   })
   return zones.length > 0 ? zones : undefined
+}
+
+async function persistLogicalEventZones(
+  client: SupabaseClient<Database>,
+  eventId: string,
+  data: EventFormValues,
+): Promise<void> {
+  const zones = normalizeLogicalSectors(data.venue.zones).filter(
+    (zone) => zone.type === "general_admission",
+  )
+  if (zones.length === 0) return
+
+  const { data: existing } = await client
+    .from("event_zones")
+    .select("id, name")
+    .eq("event_id", eventId)
+
+  const byName = new Map(
+    (existing ?? []).map((row) => [
+      String(row.name).trim().toLocaleLowerCase("es"),
+      row.id,
+    ]),
+  )
+
+  for (const zone of zones) {
+    const key = zone.name.trim().toLocaleLowerCase("es")
+    const currentId = byName.get(key)
+    if (currentId) {
+      await client
+        .from("event_zones")
+        .update({
+          capacity: zone.capacity,
+          type: zone.type,
+          updated_at: new Date().toISOString(),
+        } as never)
+        .eq("id", currentId)
+      continue
+    }
+    await client.from("event_zones").insert({
+      event_id: eventId,
+      name: zone.name,
+      type: zone.type,
+      capacity: zone.capacity,
+    } as never)
+  }
 }
 
 async function loadEditableLineup(
@@ -1151,14 +1450,17 @@ export async function getEventForEditing(
       .eq("id", user.id)
       .maybeSingle()
 
-    const eventSelectWithPicker =
-      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup"
-    const eventSelectWithPlace =
-      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, province, department, venue_map"
-    const eventSelectCore =
-      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, venue_map"
+    const isSuperAdmin = profile?.role === "super_admin"
+    const reader = isSuperAdmin ? createAdminClient() : supabase
 
-    let eventQuery = await supabase
+    const eventSelectWithPicker =
+      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, updated_at"
+    const eventSelectWithPlace =
+      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, province, department, venue_map, updated_at"
+    const eventSelectCore =
+      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, venue_map, updated_at"
+
+    let eventQuery = await reader
       .from("events")
       .select(eventSelectWithPicker)
       .eq("id", eventId)
@@ -1170,7 +1472,7 @@ export async function getEventForEditing(
         eventQuery.error.message,
       )
     ) {
-      eventQuery = await supabase
+      eventQuery = await reader
         .from("events")
         .select(eventSelectWithPlace)
         .eq("id", eventId)
@@ -1183,7 +1485,7 @@ export async function getEventForEditing(
         eventQuery.error.message,
       )
     ) {
-      eventQuery = await supabase
+      eventQuery = await reader
         .from("events")
         .select(eventSelectCore)
         .eq("id", eventId)
@@ -1204,7 +1506,7 @@ export async function getEventForEditing(
 
     const [{ data: tiers, error: tiersError }, venueResult] = await Promise.all([
       (async () => {
-        const rich = await supabase
+        const rich = await reader
           .from("ticket_tiers")
           .select(ticketSelectWithCopy)
           .eq("event_id", eventId)
@@ -1215,7 +1517,7 @@ export async function getEventForEditing(
             rich.error.message,
           )
         ) {
-          return supabase
+          return reader
             .from("ticket_tiers")
             .select(ticketSelectCore)
             .eq("event_id", eventId)
@@ -1224,7 +1526,7 @@ export async function getEventForEditing(
         return rich
       })(),
       event.venue_id
-        ? supabase
+        ? reader
             .from("venues")
             .select(
               "id, name, location, address, city, capacity, max_capacity, zone_blueprint, latitude, longitude, seating_background_url, seating_layout, venue_map",
@@ -1234,11 +1536,11 @@ export async function getEventForEditing(
         : Promise.resolve({ data: null, error: null }),
     ])
 
-    if (tiersError || !tiers?.length) return null
+    if (tiersError) return null
 
     let venue = venueResult.data
     if (event.venue_id && (venueResult.error || !venue)) {
-      const fallback = await supabase
+      const fallback = await reader
         .from("venues")
         .select("id, name, location, address, city, capacity, zone_blueprint, seating_layout, venue_map")
         .eq("id", event.venue_id)
@@ -1255,7 +1557,21 @@ export async function getEventForEditing(
         : null
     }
 
-    const venueZones = parseVenueZones(venue?.zone_blueprint)
+    const { data: eventZoneRows } = await reader
+      .from("event_zones")
+      .select("id, name, type, capacity")
+      .eq("event_id", eventId)
+      .order("created_at")
+
+    const venueZones =
+      parseVenueZones(
+        (eventZoneRows ?? []).map((row) => ({
+          id: logicalSectorId(String(row.name ?? ""), null),
+          name: row.name,
+          type: row.type,
+          capacity: row.capacity,
+        })),
+      ) ?? parseVenueZones(venue?.zone_blueprint)
     const firstZone = venueZones?.[0]
     const venueCapacity = Number(venue?.capacity ?? 0) || 1
     const venueMaxCapacity = Number(
@@ -1278,7 +1594,7 @@ export async function getEventForEditing(
         ? null
         : Number(venue.longitude)
 
-    const ticketValues: EventFormValues["tickets"] = tiers.map((tier) => ({
+    const ticketValues: EventFormValues["tickets"] = (tiers ?? []).map((tier) => ({
       id: tier.id,
       name: String(tier.name ?? "Entrada"),
       price: Number(tier.price) || 0,
@@ -1335,7 +1651,7 @@ export async function getEventForEditing(
 
     const tierIds = tiers.map((tier) => tier.id)
     if (tierIds.length > 0) {
-      const phasesQuery = await supabase
+      const phasesQuery = await reader
         .from("ticket_tier_phases")
         .select(
           "id, tier_id, name, price, capacity_limit, start_time, end_time, status, sold, created_at",
@@ -1366,7 +1682,7 @@ export async function getEventForEditing(
       }
     }
 
-    const { data: pricingRows } = await supabase
+    const { data: pricingRows } = await reader
       .from("zone_tier_pricing")
       .select(
         "id, sector_key, ticket_tier_id, price, table_number_start, table_number_end",
@@ -1397,6 +1713,10 @@ export async function getEventForEditing(
       organizerId: event.organizer_id,
       title: event.title,
       flyerUrl: event.flyer_url ?? event.image_url,
+      updatedAt:
+        typeof event.updated_at === "string" && event.updated_at
+          ? event.updated_at
+          : new Date().toISOString(),
       values: {
         basics: {
           title: event.title,
@@ -1482,7 +1802,7 @@ export async function getEventForEditing(
           (event as { default_ticket_tab?: string | null }).default_ticket_tab,
         ),
         lineup: await loadEditableLineup(
-          supabase,
+          reader,
           eventId,
           (event as { lineup?: unknown }).lineup,
         ),
@@ -1531,9 +1851,11 @@ export async function createCompleteEvent(
   }
 
   const draftMode = formData.get("draftMode") === "1"
-  const parsed = draftMode
-    ? draftEventSchema.safeParse(parsedJson)
-    : publishEventSchema.safeParse(parsedJson)
+  const identityOnly = formData.get("identityOnly") === "1"
+  const parsed =
+    draftMode || identityOnly
+      ? draftEventSchema.safeParse(parsedJson)
+      : publishEventSchema.safeParse(parsedJson)
 
   if (!parsed.success) {
     return {
@@ -1544,11 +1866,22 @@ export async function createCompleteEvent(
     }
   }
 
+  if (identityOnly) {
+    return persistNewEventIdentityOnly(formData, parsed.data)
+  }
+
   const drafted = coerceDraftEventForm(parsed.data)
-  const formValues = applyFormSeatingSectorSanitizer({
-    ...drafted,
-    tickets: sanitizeTicketTiersForPersist(drafted.tickets, { mode: "create" }),
-  })
+  const formValues = withHealedMapTickets(
+    applyFormSeatingSectorSanitizer(
+      {
+        ...drafted,
+        tickets: sanitizeTicketTiersForPersist(drafted.tickets, {
+          mode: "create",
+        }),
+      },
+      normalizeLogicalSectors(drafted.venue.zones).map((zone) => zone.id),
+    ),
+  )
 
   const skuError = venueMapSkuGuard(formValues)
   if (skuError) return skuError
@@ -1750,9 +2083,11 @@ export async function updateCompleteEvent(
   }
 
   const draftMode = formData.get("draftMode") === "1"
-  const parsed = draftMode
-    ? draftEventSchema.safeParse(parsedJson)
-    : publishEventSchema.safeParse(parsedJson)
+  const identityOnly = formData.get("identityOnly") === "1"
+  const parsed =
+    draftMode || identityOnly
+      ? draftEventSchema.safeParse(parsedJson)
+      : publishEventSchema.safeParse(parsedJson)
   if (!parsed.success) {
     return {
       success: false,
@@ -1762,9 +2097,9 @@ export async function updateCompleteEvent(
     }
   }
 
-  const formValues = {
-    ...coerceDraftEventForm(parsed.data),
-  }
+  const formValues = identityOnly
+    ? (parsed.data as EventFormValues)
+    : { ...coerceDraftEventForm(parsed.data) }
 
   let supabase: Awaited<ReturnType<typeof createClient>>
   let userId: string
@@ -1782,9 +2117,12 @@ export async function updateCompleteEvent(
     .eq("id", userId)
     .maybeSingle()
 
-  const { data: event, error: eventError } = await supabase
+  const isSuperAdmin = profile?.role === "super_admin"
+  const reader = isSuperAdmin ? createAdminClient() : supabase
+
+  const { data: event, error: eventError } = await reader
     .from("events")
-    .select("id, organizer_id, image_url, flyer_url, date, ends_at, schedule_days")
+    .select("id, organizer_id, image_url, flyer_url, date, ends_at, schedule_days, venue_id")
     .eq("id", eventId)
     .maybeSingle()
 
@@ -1792,7 +2130,6 @@ export async function updateCompleteEvent(
     return { success: false, error: "Evento no encontrado." }
   }
 
-  const isSuperAdmin = profile?.role === "super_admin"
   const isApprovedOrganizer =
     profile?.role === "admin" &&
     profile.organizer_approval_status === "approved"
@@ -1810,6 +2147,23 @@ export async function updateCompleteEvent(
   const mutationClient =
     event.organizer_id !== userId ? createAdminClient() : supabase
 
+  if (identityOnly) {
+    return persistEventIdentityOnly({
+      formData,
+      formValues,
+      eventId,
+      organizerId: event.organizer_id,
+      existingFlyerUrl: event.flyer_url ?? event.image_url,
+      existing: {
+        date: event.date,
+        ends_at: event.ends_at,
+        schedule_days: event.schedule_days,
+      },
+      mutationClient,
+      venueId: event.venue_id,
+    })
+  }
+
   const { data: existingTiers, error: existingTiersError } =
     await mutationClient
       .from("ticket_tiers")
@@ -1824,6 +2178,7 @@ export async function updateCompleteEvent(
     formValues.tickets,
     (existingTiers ?? []).map((row) => row.id),
   )
+  Object.assign(formValues, withHealedMapTickets(formValues))
 
   const skuError = venueMapSkuGuard(formValues)
   if (skuError) return skuError
@@ -1833,14 +2188,20 @@ export async function updateCompleteEvent(
     eventId,
     formValues,
   )
+  await persistLogicalEventZones(mutationClient, eventId, formValues)
+  if (formValues.tickets.length === 0) {
+    revalidatePath(`/admin/events/${eventId}`)
+    revalidatePath(`/admin/events/${eventId}/edit`)
+    return { success: true, eventId, venueId }
+  }
   const persistedSectors = await loadPersistedSeatingSectorIds(
     mutationClient,
     eventId,
   )
-  const sanitized = applyFormSeatingSectorSanitizer(
-    formValues,
-    persistedSectors,
-  )
+  const sanitized = applyFormSeatingSectorSanitizer(formValues, [
+    ...persistedSectors,
+    ...normalizeLogicalSectors(formValues.venue.zones).map((zone) => zone.id),
+  ])
   formValues.tickets = sanitized.tickets
 
   const flyerEntry = formData.get("flyer")
@@ -1986,9 +2347,9 @@ export async function publishEvent(
 
   const approval = (profile as { organizer_approval_status?: string } | null)
     ?.organizer_approval_status
+  const isSuperAdmin = profile?.role === "super_admin"
   const isApprovedOrganizer =
-    profile?.role === "super_admin" ||
-    (profile?.role === "admin" && approval === "approved")
+    isSuperAdmin || (profile?.role === "admin" && approval === "approved")
 
   if (!isApprovedOrganizer) {
     return {
@@ -1997,7 +2358,8 @@ export async function publishEvent(
     }
   }
 
-  const { data: event, error: eventError } = await supabase
+  const reader = isSuperAdmin ? createAdminClient() : supabase
+  const { data: event, error: eventError } = await reader
     .from("events")
     .select(
       "id, organizer_id, status, date, location, venue_id, venues(id, name, location)",
@@ -2009,7 +2371,7 @@ export async function publishEvent(
     return persistFailure(eventError.message)
   }
 
-  if (!event || event.organizer_id !== user.id) {
+  if (!event || (event.organizer_id !== user.id && !isSuperAdmin)) {
     return { success: false, error: "No tenés permiso para publicar este evento." }
   }
 
@@ -2044,7 +2406,10 @@ export async function publishEvent(
     }
   }
 
-  const { data: tiers, error: tiersError } = await supabase
+  const mutationClient =
+    event.organizer_id !== user.id ? createAdminClient() : supabase
+
+  const { data: tiers, error: tiersError } = await mutationClient
     .from("ticket_tiers")
     .select("id, name, price, capacity")
     .eq("event_id", eventId)
@@ -2063,7 +2428,7 @@ export async function publishEvent(
 
   let purgedTestTickets = 0
   if (options.purgeTestTickets !== false) {
-    const { data: purged, error: purgeError } = await supabase.rpc(
+    const { data: purged, error: purgeError } = await mutationClient.rpc(
       "purge_event_test_tickets",
       { p_event_id: eventId },
     )
@@ -2073,11 +2438,11 @@ export async function publishEvent(
     purgedTestTickets = Number(purged ?? 0)
   }
 
-  const { data: updated, error: updateError } = await supabase
+  const { data: updated, error: updateError } = await mutationClient
     .from("events")
     .update({ status: "published", updated_at: new Date().toISOString() })
     .eq("id", eventId)
-    .eq("organizer_id", user.id)
+    .eq("organizer_id", event.organizer_id)
     .eq("status", "draft")
     .select("id")
     .maybeSingle()
@@ -2093,7 +2458,10 @@ export async function publishEvent(
     }
   }
 
-  const materializeError = await materializeEventSeatingUnits(supabase, eventId)
+  const materializeError = await materializeEventSeatingUnits(
+    mutationClient,
+    eventId,
+  )
   if (materializeError) {
     return {
       success: false,
@@ -2137,7 +2505,9 @@ export async function updateEventSalesStatus(
     .eq("id", user.id)
     .maybeSingle()
 
-  const { data: event, error: eventError } = await supabase
+  const isSuper = profile?.role === "super_admin"
+  const reader = isSuper ? createAdminClient() : supabase
+  const { data: event, error: eventError } = await reader
     .from("events")
     .select("id, organizer_id, status")
     .eq("id", eventId)
@@ -2147,11 +2517,11 @@ export async function updateEventSalesStatus(
   if (!event) return { success: false, error: "Evento no encontrado." }
 
   const isOwner = event.organizer_id === user.id
-  const isSuper = profile?.role === "super_admin"
   if (!isOwner && !isSuper) {
     return { success: false, error: "No tenés permiso para cambiar el estado." }
   }
 
+  const mutationClient = isOwner ? supabase : createAdminClient()
   const current = event.status as EventStatus
 
   if (nextStatus === "published") {
@@ -2159,7 +2529,7 @@ export async function updateEventSalesStatus(
       return { success: true, status: "published" }
     }
     if (current === "paused") {
-      const { error } = await supabase
+      const { error } = await mutationClient
         .from("events")
         .update({ status: "published", updated_at: new Date().toISOString() })
         .eq("id", eventId)
@@ -2180,7 +2550,7 @@ export async function updateEventSalesStatus(
         error: "Solo podés pausar un evento publicado.",
       }
     }
-    const { error } = await supabase
+    const { error } = await mutationClient
       .from("events")
       .update({ status: "paused", updated_at: new Date().toISOString() })
       .eq("id", eventId)
@@ -2196,7 +2566,7 @@ export async function updateEventSalesStatus(
       error: "No se puede pasar este evento a borrador.",
     }
   }
-  const { error } = await supabase
+  const { error } = await mutationClient
     .from("events")
     .update({ status: "draft", updated_at: new Date().toISOString() })
     .eq("id", eventId)

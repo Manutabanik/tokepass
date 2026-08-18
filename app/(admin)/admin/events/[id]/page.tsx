@@ -23,6 +23,7 @@ import { notFound, redirect } from "next/navigation"
 
 import { EventCommandHeader } from "@/components/admin/event-command-header"
 import { SponsorshipRequestBanner } from "@/components/admin/sponsorship-request-banner"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { formatCurrency, formatEventDate, formatNumber } from "@/lib/format"
 
@@ -49,7 +50,7 @@ export default async function ManageEventPage({
 
   if (!user) redirect(`/login-organizador?next=/admin/events/${id}`)
 
-  const [{ data: profile }, { data: event }] = await Promise.all([
+  const [{ data: profile }, ownedEvent] = await Promise.all([
     supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
     supabase
       .from("events")
@@ -60,12 +61,27 @@ export default async function ManageEventPage({
       .maybeSingle(),
   ])
 
+  let event = ownedEvent.data
+  if (!event && profile?.role === "super_admin") {
+    const admin = createAdminClient()
+    const assisted = await admin
+      .from("events")
+      .select(
+        "id, title, date, location, status, organizer_id, is_sponsored_by_tokepass",
+      )
+      .eq("id", id)
+      .maybeSingle()
+    event = assisted.data
+  }
+
   if (!event) notFound()
   if (event.organizer_id !== user.id && profile?.role !== "super_admin") {
     redirect("/admin/events")
   }
 
-  const { data: tiers } = await supabase
+  const reader =
+    event.organizer_id !== user.id ? createAdminClient() : supabase
+  const { data: tiers } = await reader
     .from("ticket_tiers")
     .select("capacity, sold, price")
     .eq("event_id", id)
@@ -181,15 +197,28 @@ export default async function ManageEventPage({
   const showSponsorshipCta =
     event.organizer_id === user.id && !event.is_sponsored_by_tokepass
 
+  const isAssisting =
+    profile?.role === "super_admin" && event.organizer_id !== user.id
+
   return (
     <main className="mx-auto w-full max-w-5xl space-y-8 px-4 py-8 sm:px-6">
       <Link
-        href="/admin/events"
+        href={isAssisting ? `/superadmin/events/${id}` : "/admin/events"}
         className="inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-foreground"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
-        Volver a Mis Eventos
+        {isAssisting ? "Volver al control de plataforma" : "Volver a Mis Eventos"}
       </Link>
+
+      {isAssisting ? (
+        <div
+          role="status"
+          className="rounded-2xl border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-100"
+        >
+          Asistencia delegada: estás operando este evento sin cambiar de
+          credenciales. Los cambios quedan en la productora dueña.
+        </div>
+      ) : null}
 
       <EventCommandHeader
         eventId={event.id}

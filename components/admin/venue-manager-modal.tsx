@@ -81,10 +81,12 @@ export function VenueManagerModal({
   open,
   onOpenChange,
   onCatalogChange,
+  catalogOrganizerId = null,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   onCatalogChange: (venues: OrganizerVenue[]) => void
+  catalogOrganizerId?: string | null
 }) {
   const [venues, setVenues] = useState<OrganizerVenue[]>([])
   const [loading, setLoading] = useState(false)
@@ -97,7 +99,10 @@ export function VenueManagerModal({
   }, [onCatalogChange])
 
   async function refreshCatalog() {
-    const next = await listOrganizerVenues({ includeArchived: true })
+    const next = await listOrganizerVenues({
+      includeArchived: true,
+      organizerId: catalogOrganizerId ?? undefined,
+    })
     setVenues(next)
     onCatalogChangeRef.current(next)
     return next
@@ -112,7 +117,10 @@ export function VenueManagerModal({
 
   useEffect(() => {
     if (!open) return
-    void listOrganizerVenues({ includeArchived: true })
+    void listOrganizerVenues({
+      includeArchived: true,
+      organizerId: catalogOrganizerId ?? undefined,
+    })
       .then((next) => {
         setVenues(next)
         onCatalogChangeRef.current(next)
@@ -125,7 +133,7 @@ export function VenueManagerModal({
         )
       })
       .finally(() => setLoading(false))
-  }, [open])
+  }, [open, catalogOrganizerId])
 
   const sorted = useMemo(
     () =>

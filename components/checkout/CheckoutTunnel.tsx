@@ -142,6 +142,10 @@ import {
   seatingLayoutToVenueMap,
   venueMapToSeatingLayout,
 } from "@/lib/seating/venue-map-geometry"
+import {
+  eventNeedsInteractiveCanvas,
+  ticketRequiresInteractiveMap,
+} from "@/lib/seating/venue-map-pricing"
 import { isCategorySoldOut } from "@/lib/checkout/category-stock"
 import { mapIncludesGeneralAccess, venuePriceModeFromSellMode, type VenueMapElement } from "@/types/venue-map"
 import {
@@ -306,6 +310,7 @@ export function CheckoutTunnel({
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [ctaBusy, setCtaBusy] = useState(false)
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
   const ctaBusyRef = useRef(false)
   const checkoutBusy = isPending || ctaBusy
   const controlsLocked = checkoutBusy || purchaseLocked
@@ -679,6 +684,10 @@ export function CheckoutTunnel({
           }
           setShowSeatFlow(true)
         })
+      } else if (action === "pay" || action === "continue") {
+        queueMicrotask(() => {
+          setCheckoutStep("details")
+        })
       }
     }
 
@@ -736,21 +745,30 @@ export function CheckoutTunnel({
     })
   }
 
-  function requestIdentity(action: "open_map" | "pay") {
+  function requestIdentity(action: "open_map" | "pay" | "continue") {
     persistCheckoutCart()
     useCheckoutStore.getState().setPendingAction(action)
     useCheckoutStore.getState().setIdentityOpen(true)
   }
 
-  async function ensureGuestAuthForHold(): Promise<boolean> {
+  async function ensureGuestAuthForHold(forcedIntent?: "open_map" | "continue"): Promise<boolean> {
     const mode = useCheckoutStore.getState().mode
+
     if (!hasCheckoutIdentity(currentUserId, mode)) {
-      requestIdentity("open_map")
-      toast.error(
-        "Elegí ingresar o continuar como invitado para reservar.",
+      // 1. Verificar si alguna entrada en el carrito requiere selección en mapa
+      const lines = useCheckoutStore.getState().lines
+      const hasMappedTickets = lines.some(
+        (line) => line.seatingSectorId && !line.seatingSectorId.startsWith("general:")
       )
+
+      // 2. Si se especificó una intención o si hay entradas de mapa, usa "open_map"; de lo contrario, "continue"
+      const resolvedIntent = forcedIntent ?? (hasMappedTickets ? "open_map" : "continue")
+
+      requestIdentity(resolvedIntent)
+      toast.error("Elegí ingresar o continuar como invitado para reservar.")
       return false
     }
+
     return true
   }
 
@@ -774,26 +792,25 @@ export function CheckoutTunnel({
     persistCheckoutCart()
     const action = useCheckoutStore.getState().consumePendingAction()
     useCheckoutStore.getState().setIdentityOpen(false)
+
     if (action === "open_map") {
       if (hasInteractiveMap) {
         useCheckoutStore.getState().setSeatSheetOpen(true)
       } else {
         setShowSeatFlow(true)
       }
-    } else if (action === "pay") {
+    } else if (action === "pay" || action === "continue") {
       setCheckoutStep("details")
     }
   }
 
   const hasInteractiveMap =
-    hasInteractiveMapProp || hasInteractiveVenueMap(liveMap)
+    eventNeedsInteractiveCanvas(liveMap, funnelTiers) ||
+    (hasInteractiveMapProp &&
+      funnelTiers.some(ticketRequiresInteractiveMap))
   useLockBodyScroll(showSeatFlow)
 
-  const hasSeatingFlow =
-    seatingSectorSummaries.length > 0 ||
-    seatingUnits.length > 0 ||
-    seatingLayout.length > 0 ||
-    tiers.some((tier) => tier.layoutType !== "general")
+  const hasSeatingFlow = hasInteractiveMap
 
   const checkoutGroups = useMemo(
     () => groupCheckoutTiers(funnelTiers),
@@ -1130,6 +1147,7 @@ export function CheckoutTunnel({
         : scheduleDayCartLabel(dateId, scheduleDays)
       return {
         id: item.id,
+        ticketTierId: dateSource?.id ?? null,
         name: item.name,
         detail: formatSelectionChargeDetail({
           type: item.type,
@@ -1142,22 +1160,28 @@ export function CheckoutTunnel({
         }),
         dateId,
         dateLabel,
-        quantity: storefrontLineSkuQuantity(item),
+        quantity: 1,
         price: storefrontLineTotal(item),
+        seatId: item.type === "seat" ? item.id : null,
+        elementId: item.type === "seat" ? null : item.id,
       }
     })
     const ticketLines = selection
       .filter((tier) => !mapTierIds.has(tier.id))
       .map((tier) => {
         const meta = resolveTicketDateMeta(tier)
+        const quantity = Math.max(0, tier.quantity)
+        const unitPrice =
+          quantity > 0 ? tier.subtotal / quantity : tier.price
         return {
           id: cartTicketLineId(tier.id, meta.dateId),
+          ticketTierId: tier.id,
           name: tier.name,
-          detail: `${tier.quantity} ${tier.quantity === 1 ? "entrada" : "entradas"}`,
+          detail: `${quantity} ${quantity === 1 ? "entrada" : "entradas"}`,
           dateId: meta.dateId,
           dateLabel: ticketDateCartLabel(tier, scheduleDays),
-          quantity: tier.quantity,
-          price: tier.subtotal,
+          quantity,
+          price: unitPrice,
         }
       })
     return [...seatLines, ...ticketLines]
@@ -1278,10 +1302,18 @@ export function CheckoutTunnel({
         return
       }
     }
-    setQuantities((current) => ({
-      ...current,
-      [tierId]: clamped,
-    }))
+    const tier = displayTiers.find((item) => item.id === tierId)
+    const result = useCheckoutStore.getState().setGeneralQuantity({
+      ticketTierId: tierId,
+      name: tier?.name ?? "",
+      price: tier?.price ?? 0,
+      quantity: clamped,
+      maxQuantity: max,
+    })
+    if (!result.ok) {
+      toast.error(storefrontLimitMessage())
+      return
+    }
     const related = selectedItems.filter(
       (item) => item.type !== "seat" && resolveItemTierId(item) === tierId,
     )
@@ -1341,10 +1373,15 @@ export function CheckoutTunnel({
     },
   ) {
     const tableMatch = String(unit.label ?? "").match(/(\d+)/)
+    const tierId = fallback?.tierId ?? unit.tierId
     return {
-      tierId: fallback?.tierId ?? unit.tierId,
-      quantity: 1,
+      type: "mapped" as const,
+      ticket_tier_id: tierId,
+      ticketTierId: tierId,
+      tierId,
+      quantity: 1 as const,
       seatingUnitId: unit.id,
+      seat_id: unit.id,
       sectorKey: fallback?.sectorKey ?? unit.sectorId,
       tableNumber:
         fallback?.tableNumber ?? (tableMatch ? Number(tableMatch[1]) : null),
@@ -1355,23 +1392,41 @@ export function CheckoutTunnel({
     const seatedById = new Map<
       string,
       {
+        type: "mapped"
+        ticket_tier_id: string
+        ticketTierId: string
         tierId: string
-        quantity: number
+        quantity: 1
         seatingUnitId: string
+        seat_id: string
         sectorKey?: string | null
         tableNumber?: number | null
       }
     >()
 
     function addSeatedLine(line: {
+      type?: "mapped"
+      ticket_tier_id?: string
+      ticketTierId?: string
       tierId: string
       quantity: number
       seatingUnitId: string
+      seat_id?: string
       sectorKey?: string | null
       tableNumber?: number | null
     }) {
       if (seatedById.has(line.seatingUnitId)) return
-      seatedById.set(line.seatingUnitId, line)
+      seatedById.set(line.seatingUnitId, {
+        type: "mapped",
+        ticket_tier_id: line.ticket_tier_id ?? line.tierId,
+        ticketTierId: line.ticketTierId ?? line.tierId,
+        tierId: line.tierId,
+        quantity: 1,
+        seatingUnitId: line.seatingUnitId,
+        seat_id: line.seat_id ?? line.seatingUnitId,
+        sectorKey: line.sectorKey,
+        tableNumber: line.tableNumber,
+      })
     }
 
     if (selectedSeat) {
@@ -1382,9 +1437,13 @@ export function CheckoutTunnel({
         unit
           ? seatingLineFromUnit(unit, selectedSeat)
           : {
+              type: "mapped" as const,
+              ticket_tier_id: selectedSeat.tierId,
+              ticketTierId: selectedSeat.tierId,
               tierId: selectedSeat.tierId,
-              quantity: 1,
+              quantity: 1 as const,
               seatingUnitId: selectedSeat.seatingUnitId,
+              seat_id: selectedSeat.seatingUnitId,
               sectorKey: selectedSeat.sectorKey,
               tableNumber: selectedSeat.tableNumber,
             },
@@ -1408,9 +1467,13 @@ export function CheckoutTunnel({
         )
       ) {
         addSeatedLine({
+          type: "mapped",
+          ticket_tier_id: resolvedTierId,
+          ticketTierId: resolvedTierId,
           tierId: resolvedTierId,
           quantity: 1,
           seatingUnitId: item.id,
+          seat_id: item.id,
           sectorKey: item.sectorId ?? null,
           tableNumber: item.number ?? null,
         })
@@ -1428,6 +1491,9 @@ export function CheckoutTunnel({
     const items = [
       ...seatedById.values(),
       ...selection.map((tier) => ({
+        type: "general" as const,
+        ticket_tier_id: tier.id,
+        ticketTierId: tier.id,
         tierId: tier.id,
         quantity: tier.quantity,
       })),
@@ -1442,12 +1508,26 @@ export function CheckoutTunnel({
         (mapCounts[tierId] ?? 0) + Math.max(1, Math.floor(item.capacity) || 1)
     }
     for (const [tierId, quantity] of Object.entries(mapCounts)) {
-      items.push({ tierId, quantity })
+      items.push({
+        type: "general",
+        ticket_tier_id: tierId,
+        ticketTierId: tierId,
+        tierId,
+        quantity,
+      })
     }
     if (extraAddonId) {
       const existing = items.find((item) => item.tierId === extraAddonId)
       if (existing) existing.quantity += 1
-      else items.push({ tierId: extraAddonId, quantity: 1 })
+      else {
+        items.push({
+          type: "general",
+          ticket_tier_id: extraAddonId,
+          ticketTierId: extraAddonId,
+          tierId: extraAddonId,
+          quantity: 1,
+        })
+      }
     }
     return items
   }
@@ -1814,11 +1894,12 @@ export function CheckoutTunnel({
       goToPaymentMethods()
       return
     }
+    if (!acceptedTerms) return
     handleConfirmPay()
   }
 
   function handleConfirmPay() {
-    if (!canProceedFromCart || purchaseLocked) return
+    if (!acceptedTerms || !canProceedFromCart || purchaseLocked) return
     if (!identityReady) {
       requestIdentity("pay")
       return
@@ -1840,7 +1921,12 @@ export function CheckoutTunnel({
   }
 
   function handleSandboxReserve() {
-    if (!sandboxEligible || !canProceedFromCart || purchaseLocked) {
+    if (
+      !acceptedTerms ||
+      !sandboxEligible ||
+      !canProceedFromCart ||
+      purchaseLocked
+    ) {
       return
     }
     if (!identityReady) {
@@ -2253,7 +2339,7 @@ export function CheckoutTunnel({
             </h2>
           ) : null}
           <div className="grid grid-cols-1 lg:grid-cols-12 lg:gap-8">
-            <div className="min-w-0 lg:col-span-7">
+            <div className="flex min-w-0 flex-col gap-4 lg:col-span-7">
         <AnimatePresence mode="wait" initial={false}>
           {visibleStep === "tickets" ? (
             <motion.div
@@ -2410,6 +2496,8 @@ export function CheckoutTunnel({
                 onConfirmPay={handlePrimaryCta}
                 confirmPending={checkoutBusy}
                 confirmLocked={purchaseLocked}
+                acceptedTerms={acceptedTerms}
+                onAcceptedTermsChange={setAcceptedTerms}
               />
             </motion.div>
           )}
@@ -2425,11 +2513,22 @@ export function CheckoutTunnel({
               pending: checkoutBusy,
               pendingLabel:
                 visibleStep === "payment" ? "Preparando pago" : "Procesando",
-              disabled: visibleStep === "tickets" && !canProceedFromCart,
+              disabled:
+                (visibleStep === "tickets" && !canProceedFromCart) ||
+                (visibleStep === "payment" && !acceptedTerms),
               locked: purchaseLocked,
               pulse: highlightContinue,
               onClick: handlePrimaryCta,
             }}
+            legalConsent={
+              visibleStep === "payment"
+                ? {
+                    checked: acceptedTerms,
+                    onCheckedChange: setAcceptedTerms,
+                    disabled: controlsLocked,
+                  }
+                : null
+            }
           />
         </div>
         </div>

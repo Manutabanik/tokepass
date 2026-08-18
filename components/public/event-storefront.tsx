@@ -28,7 +28,7 @@ import { EventSaleStatusNotice } from "@/components/public/event-sale-status-not
 import { SponsorGrid } from "@/components/public/sponsor-grid"
 import { OrganizerAvatar } from "@/components/public/organizer-avatar"
 import { TicketSelector } from "@/components/public/ticket-selector"
-import { hasInteractiveVenueMap } from "@/lib/seating/venue-map-geometry"
+import { eventNeedsInteractiveCanvas } from "@/lib/seating/venue-map-pricing"
 import {
   Accordion,
   AccordionContent,
@@ -132,8 +132,7 @@ export function EventStorefront({
   const soldOut = saleState === "sold_out"
   const hasInteractiveMap =
     !finished &&
-    (Boolean(event.hasInteractiveMap) ||
-      hasInteractiveVenueMap(event.venue?.venue_map))
+    eventNeedsInteractiveCanvas(event.venue?.venue_map, event.tiers)
   const demand = finished || soldOut ? null : demandLabel(event.tiers)
   const venueName = event.venue?.name ?? event.location
   const address = event.venue?.location ?? event.location
@@ -301,7 +300,7 @@ export function EventStorefront({
   function renderDiscoveryColumn() {
     return (
       <motion.div
-        className="min-w-0 overflow-x-clip lg:col-span-8"
+        className="min-w-0 overflow-x-clip lg:col-span-7"
         variants={reduceMotion ? undefined : storefrontStagger}
       >
         <div className="flex flex-col gap-8 md:gap-10">
@@ -317,7 +316,7 @@ export function EventStorefront({
 
           <motion.div
             variants={reduceMotion ? undefined : storefrontFade}
-            className="space-y-3"
+            className="space-y-1"
           >
             <EventActionBar
               eventId={event.id}
@@ -327,33 +326,34 @@ export function EventStorefront({
               location={address}
               details={event.description}
             />
-            <div className="flex flex-wrap items-center gap-1.5 px-4 md:px-0">
-              {finished ? (
-                <span className="inline-flex items-center rounded-full border border-border bg-muted/50 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
-                  Finalizado
-                </span>
-              ) : soldOut ? (
-                <span className="inline-flex items-center rounded-full border border-rose-500/25 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold text-rose-700 dark:text-rose-300">
-                  Agotado
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/50 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
-                  <Music2 className="size-3" aria-hidden="true" />
-                  Evento en vivo
-                </span>
-              )}
-              {demand ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-500/20 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold text-rose-700 dark:text-rose-300">
-                  <Flame className="size-3" aria-hidden="true" />
-                  {demand}
-                </span>
-              ) : null}
-              {event.status === "draft" ? (
-                <span className="inline-flex items-center rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-800 dark:text-amber-200">
-                  Borrador
-                </span>
-              ) : null}
-            </div>
+            
+            {/* Badges de estado (Solo se muestran si son estados especiales) */}
+            {(finished || soldOut || demand || event.status === "draft") ? (
+              <div className="flex flex-wrap items-center gap-1.5 px-4 md:px-0 pt-1">
+                {finished ? (
+                  <span className="inline-flex items-center rounded-full border border-border bg-muted/50 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
+                    Finalizado
+                  </span>
+                ) : soldOut ? (
+                  <span className="inline-flex items-center rounded-full border border-rose-500/25 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold text-rose-700 dark:text-rose-300">
+                    Agotado
+                  </span>
+                ) : null}
+
+                {demand ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-500/20 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold text-rose-700 dark:text-rose-300">
+                    <Flame className="size-3" aria-hidden="true" />
+                    {demand}
+                  </span>
+                ) : null}
+
+                {event.status === "draft" ? (
+                  <span className="inline-flex items-center rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-800 dark:text-amber-200">
+                    Borrador
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
           </motion.div>
 
           <motion.div variants={reduceMotion ? undefined : storefrontFade}>
@@ -397,7 +397,7 @@ export function EventStorefront({
   function renderDetailsColumn() {
     return (
       <motion.div
-        className="min-w-0 space-y-8 overflow-x-clip px-4 pb-6 md:px-0 lg:col-span-8 lg:col-start-1"
+        className="min-w-0 space-y-8 overflow-x-clip px-4 pb-6 md:px-0 lg:col-span-7 lg:col-start-1"
         variants={reduceMotion ? undefined : storefrontFade}
       >
         <EventResaleListings
@@ -505,7 +505,7 @@ export function EventStorefront({
   }
 
   const asideClassName =
-    "min-w-0 scroll-mt-24 px-4 pb-6 md:px-0 lg:sticky lg:top-24 lg:z-30 lg:col-span-4 lg:col-start-9 lg:row-span-full lg:row-start-1 lg:flex lg:max-h-[calc(100vh-6rem)] lg:flex-col lg:self-start lg:pb-0"
+    "min-w-0 scroll-mt-24 px-4 pb-6 md:px-0 lg:sticky lg:top-24 lg:z-30 lg:col-span-5 lg:col-start-8 lg:row-span-full lg:row-start-1 lg:flex lg:max-h-[calc(100vh-6rem)] lg:flex-col lg:self-start lg:pb-0"
 
   if (showCheckout) {
     return (
@@ -532,7 +532,7 @@ export function EventStorefront({
             seatingSectorSummaries={event.seatingSectorSummaries}
             seatingBackgroundUrl={event.venue?.seating_background_url}
             venueMap={event.venue?.venue_map ?? null}
-            hasInteractiveMap={event.hasInteractiveMap || hasInteractiveMap}
+            hasInteractiveMap={hasInteractiveMap}
             seatingLayout={event.venue?.seating_layout ?? []}
             venueId={event.venue?.id}
             venueName={event.venue?.name}
@@ -612,7 +612,7 @@ export function EventStorefront({
       ) : null}
 
       <motion.div
-        className="relative mx-auto grid max-w-6xl grid-cols-1 items-start gap-8 px-0 md:px-4 lg:grid-cols-12 lg:gap-12 lg:px-8 lg:py-8"
+        className="relative mx-auto grid max-w-6xl grid-cols-1 items-start gap-8 px-0 md:px-4 lg:grid-cols-12 lg:px-8 lg:py-8"
         variants={reduceMotion ? undefined : storefrontStagger}
         initial={reduceMotion ? false : "hidden"}
         animate="show"

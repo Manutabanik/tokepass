@@ -7,7 +7,9 @@ import { createPortal } from "react-dom"
 import { AdaptiveSeatingFlow } from "@/components/public/adaptive-seating-flow"
 import { CartSummary } from "@/components/public/cart-summary"
 import type { SeatSelectionContext } from "@/components/public/seat-selection-sheet"
+import { CheckoutLegalClickwrap } from "@/components/checkout/checkout-legal-clickwrap"
 import { Button } from "@/components/ui/button"
+import { cartLineAmount } from "@/lib/checkout/cart-lines"
 import { formatCurrency } from "@/lib/format"
 import { useCheckoutStore } from "@/lib/stores/checkout-store"
 import {
@@ -73,17 +75,23 @@ export function CheckoutSelectionSidebar({
   className,
   cta,
   maxSelectable = null,
+  legalConsent = null,
 }: {
   seatSelection: SeatSelectionContext | null
   className?: string
   cta?: CheckoutSidebarCta | null
+  legalConsent?: {
+    checked: boolean
+    onCheckedChange: (checked: boolean) => void
+    disabled?: boolean
+  } | null
   maxSelectable?: number | null
 }) {
   const cartLines = useCheckoutStore((state) => state.lines)
   const selectedItems = useStorefrontSeatStore((state) => state.selectedItems)
   const placeCount = storefrontSelectionCount(selectedItems)
   const placeTotal = storefrontSelectionTotal(selectedItems)
-  const cartTotal = cartLines.reduce((sum, line) => sum + line.price, 0)
+  const cartTotal = cartLines.reduce((sum, line) => sum + cartLineAmount(line), 0)
   const total = Math.max(placeTotal, cartTotal)
   const [isMapZoomed, setIsMapZoomed] = useState(false)
   const portalReady = useSyncExternalStore(
@@ -175,6 +183,14 @@ export function CheckoutSelectionSidebar({
 
         {cta ? (
           <div className="mt-4 hidden lg:block">
+            {legalConsent ? (
+              <CheckoutLegalClickwrap
+                checked={legalConsent.checked}
+                onCheckedChange={legalConsent.onCheckedChange}
+                disabled={legalConsent.disabled}
+                className="mb-3"
+              />
+            ) : null}
             <Button
               type="button"
               disabled={
@@ -189,7 +205,7 @@ export function CheckoutSelectionSidebar({
               }}
               className={cn(
                 tapFeedbackClass,
-                "h-14 w-full rounded-2xl bg-primary px-6 text-base font-bold text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90",
+                "h-14 w-full rounded-2xl bg-primary px-6 text-base font-bold text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50",
                 cta.disabled && "cursor-not-allowed opacity-50",
                 cta.pulse &&
                   !cta.disabled &&

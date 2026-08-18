@@ -19,7 +19,6 @@ export default async function OrganizerLoginPage({
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,rgba(124,58,237,0.18),transparent_42%)]" />
       <div className="w-full max-w-md">
         <OrganizerAuthForm
-          mode="login"
           initialError={error}
           nextPath={safeInternalNextPath(next)}
         />

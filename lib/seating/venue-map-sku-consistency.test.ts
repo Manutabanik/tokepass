@@ -61,7 +61,8 @@ describe("validateVenueMapSkuConsistency", () => {
       ],
     })
     assert.equal(result.ok, false)
-    assert.match(formatVenueMapSkuErrors(result.errors), /table_combo/)
+    assert.match(formatVenueMapSkuErrors(result.errors), /8 sillas|mesa o palco|por silla/)
+    assert.doesNotMatch(formatVenueMapSkuErrors(result.errors), /table_combo|SKU|capacity_per_unit/)
   })
 
   it("exige capacity_per_unit igual a las sillas cuando sellMode es group", () => {
@@ -79,7 +80,8 @@ describe("validateVenueMapSkuConsistency", () => {
       ],
     })
     assert.equal(result.ok, false)
-    assert.match(formatVenueMapSkuErrors(result.errors), /capacity_per_unit = 8/)
+    assert.match(formatVenueMapSkuErrors(result.errors), /8 sillas/)
+    assert.doesNotMatch(formatVenueMapSkuErrors(result.errors), /capacity_per_unit|SKU/)
   })
 
   it("exige numbered_seat cuando el mapa vende por silla", () => {
@@ -92,12 +94,13 @@ describe("validateVenueMapSkuConsistency", () => {
           name: "Silla",
           seatingSectorId: "mesa-1",
           layoutType: "table_combo",
-          capacityPerUnit: 8,
+          capacityPerUnit: 1,
         },
       ],
     })
     assert.equal(result.ok, false)
-    assert.match(formatVenueMapSkuErrors(result.errors), /numbered_seat/)
+    assert.match(formatVenueMapSkuErrors(result.errors), /por silla|mesa completa/)
+    assert.doesNotMatch(formatVenueMapSkuErrors(result.errors), /numbered_seat|SKU/)
   })
 
   it("acepta mesa group + table_combo con la misma capacidad", () => {
@@ -141,6 +144,41 @@ describe("validateVenueMapSkuConsistency", () => {
     ]
     const result = validateVenueMapSkuConsistency({ map, tickets: [] })
     assert.equal(result.ok, false)
-    assert.match(formatVenueMapSkuErrors(result.errors), /table_combo/)
+    assert.match(formatVenueMapSkuErrors(result.errors), /Revisá el mapa|dibujada/)
+  })
+
+  it("resume varias gradas en un mensaje accionable", () => {
+    const map = emptyVenueMap()
+    map.elements = [
+      table("naranja", { sectorName: "Grada Naranja", chairCount: 4, seats: [
+        { id: "n-1", number: 1, x: 0, y: 0, status: "available" },
+        { id: "n-2", number: 2, x: 1, y: 0, status: "available" },
+        { id: "n-3", number: 3, x: 2, y: 0, status: "available" },
+        { id: "n-4", number: 4, x: 3, y: 0, status: "available" },
+      ] }),
+      table("amarilla", { sectorName: "Grada Amarilla" }),
+    ]
+    const result = validateVenueMapSkuConsistency({
+      map,
+      tickets: [
+        {
+          name: "Grada Naranja",
+          seatingSectorId: "naranja",
+          layoutType: "table_combo",
+          capacityPerUnit: 2,
+        },
+        {
+          name: "Grada Amarilla",
+          seatingSectorId: "amarilla",
+          layoutType: "table_combo",
+          capacityPerUnit: 3,
+        },
+      ],
+    })
+    assert.equal(result.ok, false)
+    const formatted = formatVenueMapSkuErrors(result.errors)
+    assert.match(formatted, /Grada Naranja: 4 sillas/)
+    assert.match(formatted, /Grada Amarilla: 8 sillas/)
+    assert.doesNotMatch(formatted, /capacity_per_unit|SKU/)
   })
 })

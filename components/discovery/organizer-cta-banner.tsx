@@ -18,10 +18,10 @@ export function OrganizerCtaBanner() {
           La plataforma de boletería digital más rápida, segura e intuitiva.
         </p>
         <Link
-          href="/login-organizador"
+          href="/organizadores#solicitud"
           className="mt-8 inline-flex items-center gap-2 rounded-full bg-zinc-950 px-6 py-3 text-sm font-semibold text-white transition hover:scale-[1.02] hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100"
         >
-          Crear mi evento gratis
+          Solicitar acceso de organizador
           <ArrowRight className="size-4" aria-hidden="true" />
         </Link>
       </div>

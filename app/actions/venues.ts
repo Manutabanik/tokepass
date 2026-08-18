@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 
+import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import type { Json } from "@/types/database"
 import { composeVenuePlace } from "@/lib/venues/compose-location"
@@ -50,6 +51,7 @@ export type OrganizerVenue = {
 export type ListOrganizerVenuesOptions = {
   includeArchived?: boolean
   includeIds?: string[]
+  organizerId?: string
 }
 
 type ActionResult<T = undefined> =
@@ -89,7 +91,7 @@ async function requireOrganizer() {
     throw new Error("forbidden")
   }
 
-  return { supabase, userId: user.id }
+  return { supabase, userId: user.id, role: profile.role }
 }
 
 async function rematerializeEventsForVenue(
@@ -577,22 +579,28 @@ function parseCoordinate(
 export async function listOrganizerVenues(
   options: ListOrganizerVenuesOptions = {},
 ): Promise<OrganizerVenue[]> {
-  const { supabase, userId } = await requireOrganizer()
+  const { supabase, userId, role } = await requireOrganizer()
   const includeArchived = Boolean(options.includeArchived)
   const includeIds = new Set(
     (options.includeIds ?? []).map((id) => id.trim()).filter(Boolean),
   )
+  const requestedOwner = options.organizerId?.trim() || ""
+  if (requestedOwner && requestedOwner !== userId && role !== "super_admin") {
+    throw new Error("forbidden")
+  }
+  const ownerId = requestedOwner || userId
+  const client = ownerId !== userId ? createAdminClient() : supabase
 
   const [{ data, error }, { data: eventRows }] = await Promise.all([
-    supabase
+    client
       .from("venues")
       .select("*")
-      .eq("organizer_id", userId)
+      .eq("organizer_id", ownerId)
       .order("name", { ascending: true }),
-    supabase
+    client
       .from("events")
       .select("venue_id")
-      .eq("organizer_id", userId)
+      .eq("organizer_id", ownerId)
       .not("venue_id", "is", null),
   ])
 

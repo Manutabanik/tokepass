@@ -92,6 +92,47 @@ describe("CheckoutPayloadSchema mixed inventory", () => {
     assert.equal(parsed.success, false)
   })
 
+  it("accepts the discriminated general and mapped payload", () => {
+    const parsed = CheckoutPayloadSchema.safeParse({
+      eventId,
+      buyer,
+      items: [
+        {
+          type: "general",
+          ticket_tier_id: generalId,
+          quantity: 3,
+        },
+        {
+          type: "mapped",
+          ticket_tier_id: seatedTierId,
+          seat_id: seatId,
+          quantity: 1,
+        },
+      ],
+    })
+    assert.equal(parsed.success, true)
+    if (!parsed.success) return
+    assert.equal(parsed.data.items?.[0]?.type, "general")
+    assert.equal(parsed.data.items?.[0]?.ticketTierId, generalId)
+    assert.equal(parsed.data.items?.[1]?.type, "mapped")
+    assert.equal(parsed.data.items?.[1]?.seatingUnitId, seatId)
+  })
+
+  it("rejects a mapped item without seat_id or element_id", () => {
+    const parsed = CheckoutPayloadSchema.safeParse({
+      eventId,
+      buyer,
+      items: [
+        {
+          type: "mapped",
+          ticket_tier_id: seatedTierId,
+          quantity: 1,
+        },
+      ],
+    })
+    assert.equal(parsed.success, false)
+  })
+
   it("rejects a 9-digit DNI and a missing phone", () => {
     const withoutPhone = CheckoutPayloadSchema.safeParse({
       eventId,

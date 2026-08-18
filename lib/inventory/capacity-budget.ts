@@ -1,4 +1,8 @@
 import { bundleIncludesSeating } from "@/lib/inventory/flexible-bundles"
+import {
+  generalLogicalSectorCapacity,
+  listGeneralLogicalSectors,
+} from "@/lib/inventory/logical-sectors"
 import { inferInventoryTierType } from "@/lib/inventory/unified-inventory"
 import { venueMapCapacity } from "@/lib/seating/venue-map-geometry"
 import { isMapBackedTicket } from "@/lib/seating/venue-map-pricing"
@@ -28,6 +32,7 @@ type CapacityTicket = {
 export type EventCapacityInput = {
   tickets?: readonly CapacityTicket[] | null
   venueMap?: unknown
+  zones?: EventFormValues["venue"]["zones"] | null
   baseVenueCapacity?: number | null
   customMaxCapacity?: number | null
   exceptTicketIndex?: number
@@ -35,8 +40,10 @@ export type EventCapacityInput = {
 
 export type EventCapacitySnapshot = {
   mapAllocatedCapacity: number
+  generalSectorCapacity: number
   generalAllocatedCapacity: number
   totalAllocated: number
+  totalCapacity: number
   baseVenueCapacity: number
   customMaxCapacity: number | null
   effectiveMaxCapacity: number
@@ -128,6 +135,8 @@ export function computeEventCapacity(
 ): EventCapacitySnapshot {
   const tickets: readonly CapacityTicket[] = input.tickets ?? []
   const mapAllocatedCapacity = venueMapCapacity(parseVenueMap(input.venueMap))
+  const declaredSectors = listGeneralLogicalSectors(input.zones)
+  const declaredSectorCapacity = generalLogicalSectorCapacity(input.zones)
   const generalAllocatedCapacity = tickets.reduce((sum, tier, index) => {
     if (input.exceptTicketIndex != null && index === input.exceptTicketIndex) {
       return sum
@@ -135,36 +144,51 @@ export function computeEventCapacity(
     if (!occupiesGeneralCapacity(tier, tickets)) return sum
     return sum + asPositiveInt(tier.capacity)
   }, 0)
+
+  const sectorOverflow = declaredSectors.reduce((sum, sector) => {
+    const allocated = tickets.reduce((inner, tier, index) => {
+      if (input.exceptTicketIndex != null && index === input.exceptTicketIndex) {
+        return inner
+      }
+      if (!occupiesGeneralCapacity(tier, tickets)) return inner
+      if ((tier.seatingSectorId ?? "").trim() !== sector.id) return inner
+      return inner + asPositiveInt(tier.capacity)
+    }, 0)
+    return sum + Math.max(0, allocated - sector.capacity)
+  }, 0)
+
+  const unboundGeneral = tickets.reduce((sum, tier, index) => {
+    if (input.exceptTicketIndex != null && index === input.exceptTicketIndex) {
+      return sum
+    }
+    if (!occupiesGeneralCapacity(tier, tickets)) return sum
+    if ((tier.seatingSectorId ?? "").trim()) return sum
+    return sum + asPositiveInt(tier.capacity)
+  }, 0)
+
+  const generalSectorCapacity =
+    declaredSectorCapacity > 0 ? declaredSectorCapacity : unboundGeneral
+  const totalCapacity = generalSectorCapacity + mapAllocatedCapacity
   const totalAllocated = mapAllocatedCapacity + generalAllocatedCapacity
-  const baseVenueCapacity = asPositiveInt(input.baseVenueCapacity)
-  const customRaw = input.customMaxCapacity
-  const customMaxCapacity =
-    customRaw == null || customRaw === undefined
-      ? null
-      : asPositiveInt(customRaw)
-  const effectiveMaxCapacity = Math.max(
-    baseVenueCapacity,
-    customMaxCapacity ?? 0,
-  )
   const overflow =
-    effectiveMaxCapacity > 0
-      ? Math.max(0, totalAllocated - effectiveMaxCapacity)
+    declaredSectorCapacity > 0
+      ? sectorOverflow +
+        Math.max(0, generalAllocatedCapacity - declaredSectorCapacity)
       : 0
-  const remaining =
-    effectiveMaxCapacity > 0
-      ? Math.max(0, effectiveMaxCapacity - totalAllocated)
-      : 0
+  const remaining = Math.max(0, totalCapacity - totalAllocated)
 
   return {
     mapAllocatedCapacity,
+    generalSectorCapacity,
     generalAllocatedCapacity,
     totalAllocated,
-    baseVenueCapacity,
-    customMaxCapacity,
-    effectiveMaxCapacity,
+    totalCapacity,
+    baseVenueCapacity: totalCapacity,
+    customMaxCapacity: null,
+    effectiveMaxCapacity: totalCapacity,
     remaining,
     overflow,
-    exceeded: effectiveMaxCapacity > 0 && totalAllocated > effectiveMaxCapacity,
+    exceeded: overflow > 0,
   }
 }
 
@@ -178,26 +202,37 @@ export function computeEventCapacityFromForm(
   return computeEventCapacity({
     tickets: values?.tickets,
     venueMap: values?.venue?.venueMap,
-    baseVenueCapacity: values?.venue?.capacity,
-    customMaxCapacity: values?.venue?.customMaxCapacity,
+    zones: values?.venue?.zones,
   })
 }
 
 export function eventCapacityOverflowMessage(
   snapshot: EventCapacitySnapshot,
 ): string {
-  return `El stock asignado (${snapshot.totalAllocated}) supera el aforo del recinto (${snapshot.effectiveMaxCapacity}). Excedido por ${snapshot.overflow} lugares.`
+  return `El stock de entradas supera la capacidad de los sectores (${snapshot.overflow} lugares). Bajá el stock o ampliá el sector.`
 }
 
 export function generalRemainingForTicket(
   snapshot: EventCapacitySnapshot,
   tier: CapacityTicket | undefined,
   tickets: readonly CapacityTicket[],
+  sectorCapacity?: number | null,
 ): number {
   if (!tier || !occupiesGeneralCapacity(tier, tickets)) {
     return snapshot.remaining
   }
   const stock = asPositiveInt(tier.capacity)
+  if (sectorCapacity != null && sectorCapacity > 0) {
+    const others = tickets.reduce((sum, current) => {
+      if (current === tier) return sum
+      if (!occupiesGeneralCapacity(current, tickets)) return sum
+      if ((current.seatingSectorId ?? "") !== (tier.seatingSectorId ?? "")) {
+        return sum
+      }
+      return sum + asPositiveInt(current.capacity)
+    }, 0)
+    return Math.max(0, sectorCapacity - others)
+  }
   return Math.max(
     0,
     snapshot.effectiveMaxCapacity - (snapshot.totalAllocated - stock),
@@ -205,19 +240,19 @@ export function generalRemainingForTicket(
 }
 
 export function venueCapacityBudget(
-  venueCapacity: number | undefined,
+  _venueCapacity: number | undefined,
   tickets: readonly CapacityTicket[],
   exceptIndex?: number,
   extras?: {
     venueMap?: unknown
     customMaxCapacity?: number | null
+    zones?: EventFormValues["venue"]["zones"]
   },
 ) {
   const snapshot = computeEventCapacity({
     tickets,
     venueMap: extras?.venueMap,
-    baseVenueCapacity: venueCapacity,
-    customMaxCapacity: extras?.customMaxCapacity,
+    zones: extras?.zones,
     exceptTicketIndex: exceptIndex,
   })
   return {
