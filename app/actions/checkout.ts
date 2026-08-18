@@ -118,7 +118,9 @@ type ReserveTxRow = {
   reserved_until?: string
 }
 
-function mapReserveRpcError(message: string): CheckoutResult | null {
+function mapReserveRpcError(
+  message: string,
+): Extract<CheckoutResult, { success: false }> | null {
   if (isHighDemandLockError(message)) {
     return { success: false, error: HIGH_DEMAND_LOCK_TIMEOUT }
   }
