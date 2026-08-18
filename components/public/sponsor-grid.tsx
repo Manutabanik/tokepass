@@ -1,5 +1,16 @@
+import Image from "next/image"
+
 import type { PublicSponsor } from "@/lib/sponsors"
+import { storyImageSrc } from "@/lib/story-image"
 import { cn } from "@/lib/utils"
+
+function isRasterLogo(url: string): boolean {
+  try {
+    return /\.(?:png|jpe?g|webp|avif)$/i.test(new URL(url).pathname)
+  } catch {
+    return false
+  }
+}
 
 function SponsorLogo({
   sponsor,
@@ -10,6 +21,12 @@ function SponsorLogo({
   size: "sm" | "md"
   grayscale: boolean
 }) {
+  const width = size === "sm" ? 72 : 112
+  const height = size === "sm" ? 24 : 36
+  const logoClassName = cn(
+    "w-auto object-contain",
+    size === "sm" ? "max-h-6" : "max-h-9",
+  )
   const inner = (
     <span
       className={cn(
@@ -20,15 +37,23 @@ function SponsorLogo({
           "grayscale transition-[filter] duration-200 hover:grayscale-0",
       )}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element -- SVG de usuario; next/image no sirve */}
-      <img
-        src={sponsor.logoUrl}
-        alt={sponsor.name}
-        className={cn(
-          "w-auto object-contain",
-          size === "sm" ? "max-h-6" : "max-h-9",
-        )}
-      />
+      {isRasterLogo(sponsor.logoUrl) ? (
+        <Image
+          src={sponsor.logoUrl}
+          alt={sponsor.name}
+          width={width}
+          height={height}
+          className={logoClassName}
+        />
+      ) : (
+        // SVG u otros: mismo origen para que el SW viejo no los marque 502 Opaque.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={storyImageSrc(sponsor.logoUrl) ?? sponsor.logoUrl}
+          alt={sponsor.name}
+          className={logoClassName}
+        />
+      )}
     </span>
   )
 

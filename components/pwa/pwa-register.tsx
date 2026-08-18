@@ -2,9 +2,12 @@
 
 import { useEffect } from "react"
 
+const SW_RESET_KEY = "tokepass-sw-reset-v11"
+
 /**
  * Registra el Service Worker de la billetera PWA.
  * En desarrollo: desregistra SW residuales para no romper HMR/Turbopack.
+ * En producción: una vez, limpia workers v10 que devolvían 502 Opaque.
  */
 export function PwaRegister() {
   useEffect(() => {
@@ -46,9 +49,45 @@ export function PwaRegister() {
       onControllerChange,
     )
 
-    void navigator.serviceWorker
-      .register("/sw.js", { scope: "/", updateViaCache: "none" })
-      .then((registration) => {
+    async function resetLegacyWorkers(): Promise<boolean> {
+      try {
+        if (window.localStorage.getItem(SW_RESET_KEY) === "1") return false
+      } catch {
+        // private mode
+      }
+
+      const regs = await navigator.serviceWorker.getRegistrations()
+      await Promise.all(regs.map((reg) => reg.unregister()))
+      if ("caches" in window) {
+        const keys = await caches.keys()
+        await Promise.all(
+          keys
+            .filter((key) => key.startsWith("tokepass-wallet-"))
+            .map((key) => caches.delete(key)),
+        )
+      }
+      try {
+        window.localStorage.setItem(SW_RESET_KEY, "1")
+      } catch {
+        // ignore
+      }
+      return regs.length > 0
+    }
+
+    void (async () => {
+      const hadLegacy = await resetLegacyWorkers()
+      if (cancelled) return
+      if (hadLegacy && !reloading) {
+        reloading = true
+        window.location.reload()
+        return
+      }
+
+      try {
+        const registration = await navigator.serviceWorker.register("/sw.js", {
+          scope: "/",
+          updateViaCache: "none",
+        })
         if (cancelled) return
         registration.update().catch(() => {})
         if (registration.waiting) {
@@ -58,7 +97,10 @@ export function PwaRegister() {
           const worker = registration.installing
           if (!worker) return
           worker.addEventListener("statechange", () => {
-            if (worker.state === "installed" && navigator.serviceWorker.controller) {
+            if (
+              worker.state === "installed" &&
+              navigator.serviceWorker.controller
+            ) {
               worker.postMessage("SKIP_WAITING")
             }
           })
@@ -67,10 +109,10 @@ export function PwaRegister() {
           type: "CACHE_TICKET_ASSETS",
           urls: ["/offline/billetera"],
         })
-      })
-      .catch((error: unknown) => {
+      } catch (error: unknown) {
         console.warn("[pwa] SW register failed", error)
-      })
+      }
+    })()
 
     return () => {
       cancelled = true
