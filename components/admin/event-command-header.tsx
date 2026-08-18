@@ -1,12 +1,15 @@
 "use client"
 
-import { Eye, LoaderCircle, Pause, Rocket, FilePenLine } from "lucide-react"
+import { Eye, Link2, LoaderCircle, Pause, Rocket, FilePenLine } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState, useTransition } from "react"
 import { toast } from "sonner"
 
-import { updateEventSalesStatus } from "@/app/actions/events"
+import {
+  getOrganizerPreviewShareUrl,
+  updateEventSalesStatus,
+} from "@/app/actions/events"
 import { PublishEventConfirmDialog } from "@/components/admin/publish-event-confirm-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -76,6 +79,7 @@ export function EventCommandHeader({
   const router = useRouter()
   const [publishOpen, setPublishOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const [copyingLink, setCopyingLink] = useState(false)
   const statusUi = statusPresentation(status)
   const isDraft = status === "draft"
   const isPublished = status === "published"
@@ -84,6 +88,23 @@ export function EventCommandHeader({
     isDraft || isPaused
       ? `/events/preview/${eventId}`
       : `/eventos/${eventId}`
+
+  async function copyPreviewLink() {
+    setCopyingLink(true)
+    try {
+      const result = await getOrganizerPreviewShareUrl(eventId)
+      if (!result.success) {
+        toast.error(result.error)
+        return
+      }
+      await navigator.clipboard.writeText(result.url)
+      toast.success("Enlace de prueba copiado")
+    } catch {
+      toast.error("No se pudo copiar el enlace de prueba.")
+    } finally {
+      setCopyingLink(false)
+    }
+  }
 
   function changeStatus(next: "published" | "paused" | "draft") {
     startTransition(async () => {
@@ -139,6 +160,23 @@ export function EventCommandHeader({
               <Eye className="size-4" aria-hidden="true" />
               Vista Previa
             </Button>
+
+            {isDraft ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-12 rounded-xl border-amber-500/40 bg-amber-500/10 px-5 text-amber-900 hover:bg-amber-500/20 dark:text-amber-100"
+                onClick={() => void copyPreviewLink()}
+                disabled={copyingLink}
+              >
+                {copyingLink ? (
+                  <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Link2 className="size-4" aria-hidden="true" />
+                )}
+                Copiar enlace de prueba
+              </Button>
+            ) : null}
 
             {isDraft ? (
               <Button

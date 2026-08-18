@@ -1,3 +1,4 @@
+import { assignableLogicalSectorIds } from "@/lib/inventory/logical-sectors"
 import { listVenuePriceGroups } from "@/lib/seating/venue-price-groups"
 import type { EventFormValues } from "@/lib/validations/event-form"
 import { parseVenueMap } from "@/types/venue-map"
@@ -206,14 +207,30 @@ export function sanitizeEventSubmitPayload(
     liveSectorIds?: Iterable<string>
   },
 ): EventFormValues {
+  const assignableIds = new Set(
+    assignableLogicalSectorIds(data.venue.zones, data.venue.venueMap),
+  )
   const live =
     options.liveSectorIds ??
     collectLiveSeatingSectorIds({
       venueMap: data.venue.venueMap,
       seatingLayout: data.venue.seatingLayout,
+      extraIds: assignableIds,
     })
   const prepared = data.basics.hasSeatingPlan
-    ? data.tickets ?? []
+    ? (data.tickets ?? []).map((tier) => {
+        const sectorId = tier.seatingSectorId?.trim() || null
+        if (!sectorId) return { ...tier, seatingSectorId: null }
+        const isSeated =
+          tier.layoutType === "numbered_seat" ||
+          tier.layoutType === "table_combo" ||
+          tier.tierType === "seated"
+        if (isSeated) return tier
+        return {
+          ...tier,
+          seatingSectorId: assignableIds.has(sectorId) ? sectorId : null,
+        }
+      })
     : detachTicketsFromSeatingPlan(data.tickets ?? [])
   const tickets = sanitizeSeatingSectorIds(
     sanitizeTicketTiersForPersist(prepared, options),

@@ -185,7 +185,12 @@ function draftZonesToBlueprint(
 ): VenueZoneBlueprint[] {
   return zones.map((zone) => ({
     name: zone.name.trim(),
-    type: zone.layoutType === "general" ? zone.type : "general_admission",
+    type:
+      zone.layoutType === "numbered_seat" || zone.layoutType === "table_combo"
+        ? "reserved_seating"
+        : zone.type === "reserved_seating"
+          ? "reserved_seating"
+          : "general_admission",
     capacity: draftZoneCapacity(zone, structured),
     rows: null,
     seatsPerRow: null,

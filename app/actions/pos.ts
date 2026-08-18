@@ -143,6 +143,7 @@ export type PrintableTicket = {
   doorsOpenAt: string
   sectorLabel: string | null
   seatingLabel: string | null
+  isTest: boolean
 }
 
 function mapShift(row: {
@@ -1056,7 +1057,7 @@ export async function getPrintableTicket(
   const rich = await supabase
     .from("tickets")
     .select(
-      "id, status, totp_secret, scanned_at, is_dynamic_qr, owner_id, holder_name, holder_dni, event_seating_units(label, sector_name, row_label, layout_type), ticket_tiers(name, price, day_id), events(id, title, date, location, qr_type, organizer_id, flyer_url, image_url, schedule_days)",
+      "id, status, totp_secret, scanned_at, is_dynamic_qr, is_test, owner_id, holder_name, holder_dni, event_seating_units(label, sector_name, row_label, layout_type), ticket_tiers(name, price, day_id), events(id, title, date, location, qr_type, organizer_id, flyer_url, image_url, schedule_days)",
     )
     .eq("id", ticketId)
     .maybeSingle()
@@ -1069,7 +1070,7 @@ export async function getPrintableTicket(
       ? await supabase
           .from("tickets")
           .select(
-            "id, status, totp_secret, scanned_at, is_dynamic_qr, owner_id, holder_name, holder_dni, ticket_tiers(name, price), events(id, title, date, location, qr_type, organizer_id)",
+            "id, status, totp_secret, scanned_at, is_dynamic_qr, is_test, owner_id, holder_name, holder_dni, ticket_tiers(name, price), events(id, title, date, location, qr_type, organizer_id)",
           )
           .eq("id", ticketId)
           .maybeSingle()
@@ -1085,6 +1086,7 @@ export async function getPrintableTicket(
     totp_secret: string
     scanned_at: string | null
     is_dynamic_qr: boolean
+    is_test?: boolean | null
     owner_id: string | null
     holder_name: string | null
     holder_dni: string | null
@@ -1189,5 +1191,6 @@ export async function getPrintableTicket(
     doorsOpenAt: dayBound?.start_time || row.events.date,
     sectorLabel: seatingParts[0] ?? null,
     seatingLabel: seatingParts.length > 0 ? seatingParts.join(" · ") : null,
+    isTest: Boolean(row.is_test),
   }
 }

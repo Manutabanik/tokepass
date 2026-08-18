@@ -4,6 +4,7 @@ import { QRCodeSVG } from "qrcode.react"
 
 import type { PrintableTicket } from "@/app/actions/pos"
 import { ThermalAdmissionTicket } from "@/components/print/thermal-admission-ticket"
+import { TestTicketWatermark } from "@/components/public/test-ticket-watermark"
 import { BrandMarkSvg } from "@/components/shared/brand-logo"
 import { formatCurrency, formatEventDay, formatEventTime } from "@/lib/format"
 import { ticketBackupCode } from "@/lib/ticket-print"
@@ -24,6 +25,7 @@ function ThermalTicket({ ticket }: { ticket: PrintableTicket }) {
       holderDni={ticket.holderDni}
       seatLabel={ticket.sectorLabel}
       priceLabel={priceLabel}
+      isTest={ticket.isTest}
     />
   )
 }
@@ -34,7 +36,8 @@ function PremiumPassTicket({ ticket }: { ticket: PrintableTicket }) {
   const doorsAt = ticket.doorsOpenAt || ticket.eventDate
 
   return (
-    <div className="print-ticket-pass mx-auto w-full max-w-[28rem] overflow-hidden rounded-3xl border border-zinc-200 bg-white text-zinc-950 shadow-xl print:max-w-none print:rounded-none print:border-zinc-300 print:shadow-none">
+    <div className="relative print-ticket-pass mx-auto w-full max-w-[28rem] overflow-hidden rounded-3xl border border-zinc-200 bg-white text-zinc-950 shadow-xl print:max-w-none print:rounded-none print:border-zinc-300 print:shadow-none">
+      {ticket.isTest ? <TestTicketWatermark /> : null}
       <header className="relative isolate h-40 overflow-hidden bg-zinc-950 sm:h-48">
         {ticket.flyerUrl ? (
           // External event flyers may live outside the Next image allowlist.

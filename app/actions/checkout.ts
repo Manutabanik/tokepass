@@ -51,6 +51,7 @@ import {
   persistOrderGuestToken,
   recordCheckoutFailure,
 } from "@/lib/checkout/server-guards"
+import { normalizePreviewKey } from "@/lib/preview/sandbox"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import type { PaymentProvider } from "@/types/database"
@@ -172,6 +173,77 @@ function mapReserveRpcError(message: string): CheckoutResult | null {
 }
 
 type CheckoutSupabase = Awaited<ReturnType<typeof createClient>>
+
+type CheckoutEventAccess =
+  | { ok: true; useSandbox: boolean; db: CheckoutSupabase }
+  | { ok: false; error: string }
+
+async function resolveCheckoutEventAccess(input: {
+  eventId: string
+  userId: string
+  previewKey?: string | null
+}): Promise<CheckoutEventAccess> {
+  const userClient = await createClient()
+  const admin = createAdminClient() as CheckoutSupabase
+  const { data: event } = await admin
+    .from("events")
+    .select("id, organizer_id, status")
+    .eq("id", input.eventId)
+    .maybeSingle()
+
+  if (!event) {
+    return { ok: false, error: "Evento no encontrado." }
+  }
+
+  if (event.status === "published") {
+    return { ok: true, useSandbox: false, db: userClient }
+  }
+
+  if (event.status === "paused") {
+    const { data: profile } = await userClient
+      .from("profiles")
+      .select("role")
+      .eq("id", input.userId)
+      .maybeSingle()
+    const isStaff =
+      event.organizer_id === input.userId || profile?.role === "super_admin"
+    if (!isStaff) {
+      return { ok: false, error: "Este evento no está en venta." }
+    }
+    return { ok: true, useSandbox: false, db: userClient }
+  }
+
+  if (event.status !== "draft") {
+    return {
+      ok: false,
+      error: "Este evento no admite compras de prueba en su estado actual.",
+    }
+  }
+
+  const key = normalizePreviewKey(input.previewKey)
+  if (key) {
+    const { data: matches } = await admin.rpc("event_preview_key_matches", {
+      p_event_id: input.eventId,
+      p_key: key,
+    })
+    if (matches) {
+      return { ok: true, useSandbox: true, db: admin }
+    }
+  }
+
+  const { data: profile } = await userClient
+    .from("profiles")
+    .select("role")
+    .eq("id", input.userId)
+    .maybeSingle()
+  const isStaff =
+    event.organizer_id === input.userId || profile?.role === "super_admin"
+  if (!isStaff) {
+    return { ok: false, error: "Este evento no es público." }
+  }
+
+  return { ok: true, useSandbox: true, db: admin }
+}
 
 type AtomicReserveRow = {
   reservation_id: string
@@ -484,6 +556,7 @@ export type CartSeatingHoldResult =
 export async function holdSeatingUnitForCart(
   eventId: string,
   seatingUnitId: string,
+  previewKey?: string | null,
 ): Promise<CartSeatingHoldResult> {
   const parsed = CheckoutSeatHoldSchema.safeParse({ eventId, seatingUnitId })
   if (!parsed.success) {
@@ -502,6 +575,16 @@ export async function holdSeatingUnitForCart(
     return { success: false, error: "auth_required" }
   }
 
+  const access = await resolveCheckoutEventAccess({
+    eventId,
+    userId: user.id,
+    previewKey,
+  })
+  if (!access.ok) {
+    return { success: false, error: access.error }
+  }
+  const db = access.db
+
   const allowed = await consumeRateLimit({
     bucketKey: `cart-hold:user:${user.id}`,
     limit: 20,
@@ -514,7 +597,7 @@ export async function holdSeatingUnitForCart(
     }
   }
 
-  const { data: unitRow } = await supabase
+  const { data: unitRow } = await db
     .from("event_seating_units")
     .select("status")
     .eq("id", seatingUnitId)
@@ -524,7 +607,7 @@ export async function holdSeatingUnitForCart(
     return { success: false, error: "out_of_stock" }
   }
 
-  const { data, error } = await supabase.rpc("hold_seating_unit_for_cart", {
+  const { data, error } = await db.rpc("hold_seating_unit_for_cart", {
     p_event_id: eventId,
     p_owner_id: user.id,
     p_seating_unit_id: seatingUnitId,
@@ -563,6 +646,7 @@ export async function holdSeatingUnitForCartByLayoutItem(
   eventId: string,
   sectorId: string,
   layoutItemId: string,
+  previewKey?: string | null,
 ): Promise<CartSeatingHoldResult & { seatingUnitId?: string }> {
   const parsed = CheckoutLayoutHoldSchema.safeParse({
     eventId,
@@ -586,6 +670,16 @@ export async function holdSeatingUnitForCartByLayoutItem(
     return { success: false, error: "auth_required" }
   }
 
+  const access = await resolveCheckoutEventAccess({
+    eventId,
+    userId: user.id,
+    previewKey,
+  })
+  if (!access.ok) {
+    return { success: false, error: access.error }
+  }
+  const db = access.db
+
   const allowed = await consumeRateLimit({
     bucketKey: `cart-hold:user:${user.id}`,
     limit: 20,
@@ -598,7 +692,7 @@ export async function holdSeatingUnitForCartByLayoutItem(
     }
   }
 
-  const { data: unitRow } = await supabase
+  const { data: unitRow } = await db
     .from("event_seating_units")
     .select("status")
     .eq("event_id", eventId)
@@ -608,7 +702,7 @@ export async function holdSeatingUnitForCartByLayoutItem(
     return { success: false, error: "out_of_stock" }
   }
 
-  const { data, error } = await supabase.rpc(
+  const { data, error } = await db.rpc(
     "hold_seating_unit_for_cart_by_layout" as never,
     {
       p_event_id: eventId,
@@ -745,6 +839,7 @@ export type LockTicketsResult =
 export async function lockTickets(
   eventId: string,
   items: LockTicketsItem[],
+  previewKey?: string | null,
 ): Promise<LockTicketsResult> {
   const parsed = CheckoutLockTicketsSchema.safeParse({ eventId, items })
   if (!parsed.success) {
@@ -761,6 +856,15 @@ export async function lockTickets(
 
   if (authError || !user) {
     return { success: false, error: "auth_required" }
+  }
+
+  const access = await resolveCheckoutEventAccess({
+    eventId,
+    userId: user.id,
+    previewKey,
+  })
+  if (!access.ok) {
+    return { success: false, error: access.error }
   }
 
   const allowed = await consumeRateLimit({
@@ -796,7 +900,7 @@ export async function lockTickets(
     return { success: false, error: "out_of_stock" }
   }
 
-  const { data, error } = await supabase.rpc("hold_ga_tickets_for_cart", {
+  const { data, error } = await access.db.rpc("hold_ga_tickets_for_cart", {
     p_event_id: eventId,
     p_owner_id: user.id,
     p_items: payload,
@@ -1129,6 +1233,7 @@ export async function createComboReservation(
   promoCodeId?: string | null,
   options?: {
     sandbox?: boolean
+    previewKey?: string | null
     paymentProvider?: SupportedPaymentProvider
   },
 ): Promise<CheckoutResult> {
@@ -1139,6 +1244,7 @@ export async function createComboReservation(
     referralCode,
     promoCodeId,
     sandbox: options?.sandbox,
+    previewKey: options?.previewKey,
     paymentProvider: options?.paymentProvider,
   })
   if (!parsed.success) {
@@ -1193,6 +1299,7 @@ export async function startCheckoutWithPayment(
   promoCodeId?: string | null,
   options?: {
     sandbox?: boolean
+    previewKey?: string | null
     paymentProvider?: SupportedPaymentProvider
     captchaToken?: string | null
     deviceHash?: string | null
@@ -1217,6 +1324,7 @@ export async function startCheckoutWithPayment(
     referralCode,
     promoCodeId,
     sandbox: options?.sandbox,
+    previewKey: options?.previewKey,
     paymentProvider: options?.paymentProvider,
   })
   if (!parsed.success) {
@@ -1228,6 +1336,31 @@ export async function startCheckoutWithPayment(
   const buyer = buyerToHolderFields(payload.buyer) satisfies NormalizedCheckoutBuyer
 
   const supabase = await createClient()
+  const {
+    data: { user: earlyUser },
+    error: earlyAuthError,
+  } = await supabase.auth.getUser()
+
+  if (earlyAuthError || !earlyUser) {
+    return { success: false, error: "auth_required" }
+  }
+
+  const access = await resolveCheckoutEventAccess({
+    eventId: payload.eventId,
+    userId: earlyUser.id,
+    previewKey: payload.previewKey ?? options?.previewKey,
+  })
+  if (!access.ok) {
+    return { success: false, error: access.error }
+  }
+  if (payload.sandbox && !access.useSandbox) {
+    return {
+      success: false,
+      error:
+        "Las compras de prueba solo están disponibles en eventos en borrador.",
+    }
+  }
+  const db = access.db
 
   // Saneamos los items garantizando que 'type' siempre tenga valor ("mapped" o "general")
   const rawItems = payload.items ?? items
@@ -1237,7 +1370,7 @@ export async function startCheckoutWithPayment(
   })) as Parameters<typeof resolveMappedSeatingUnits>[2]
 
   const resolvedCart = await resolveMappedSeatingUnits(
-    supabase,
+    db,
     payload.eventId,
     sanitizedItems,
   )
@@ -1249,14 +1382,7 @@ export async function startCheckoutWithPayment(
   const seatingItems = cartItems.filter((item) => isMappedCheckoutItem(item))
   const cartQuantity = cartItems.reduce((sum, item) => sum + item.quantity, 0)
 
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
-
-  if (authError || !user) {
-    return { success: false, error: "auth_required" }
-  }
+  const user = earlyUser
 
   const checkoutAllowed = await consumeRateLimit({
     bucketKey: `checkout:user:${user.id}`,
@@ -1273,12 +1399,12 @@ export async function startCheckoutWithPayment(
   }
 
   const [{ data: eventRow }, { data: eventTiers }] = await Promise.all([
-    supabase
+    db
       .from("events")
       .select("date, ends_at, schedule_days, title, max_tickets_per_user")
       .eq("id", payload.eventId)
       .maybeSingle(),
-    supabase
+    db
       .from("ticket_tiers")
       .select("capacity, sold, visibility")
       .eq("event_id", payload.eventId),
@@ -1337,7 +1463,7 @@ export async function startCheckoutWithPayment(
   }
 
   const tierIds = [...new Set(cartItems.map((item) => checkoutItemTierId(item)))]
-  const { data: tierMeta } = await supabase
+  const { data: tierMeta } = await db
     .from("ticket_tiers")
     .select("id, seating_sector_id, tier_type, category")
     .eq("event_id", payload.eventId)
@@ -1351,12 +1477,12 @@ export async function startCheckoutWithPayment(
     (item) => !isMappedCheckoutItem(item),
   )
   const phasesByTier = await loadCheckoutTierPhases(
-    supabase,
+    db,
     quantityItemsForPhases.map((item) => checkoutItemTierId(item)),
   )
 
   const quoted = await quoteCheckoutFromDatabase(
-    supabase,
+    db,
     payload.eventId,
     cartItems,
     phasesByTier,
@@ -1395,7 +1521,7 @@ export async function startCheckoutWithPayment(
       cartItems.length === 1
 
     const phaseGate = await evaluateCartPhaseRollover(
-      supabase,
+      db,
       payload.eventId,
       cartItems,
     )
@@ -1409,7 +1535,7 @@ export async function startCheckoutWithPayment(
     const isGaOnly = !hasSeating && !hasBundle
 
     if (isGaOnly) {
-      const claimed = await supabase.rpc("claim_and_reserve_ga_cart_tx", {
+      const claimed = await db.rpc("claim_and_reserve_ga_cart_tx", {
         p_event_id: payload.eventId,
         p_owner_id: user.id,
         p_items: rpcItems,
@@ -1430,7 +1556,7 @@ export async function startCheckoutWithPayment(
           item.quantity,
         )
         const phaseId = decision.kind === "ok" ? decision.phase.id : null
-        const atomic = await reserveGeneralAdmissionAtomic(supabase, {
+        const atomic = await reserveGeneralAdmissionAtomic(db, {
           eventId: payload.eventId,
           ownerId: user.id,
           tierId: checkoutItemTierId(item),
@@ -1439,7 +1565,7 @@ export async function startCheckoutWithPayment(
           promoterId,
         })
         reservation = atomic.missing
-          ? await supabase.rpc("reserve_tickets_tx", {
+          ? await db.rpc("reserve_tickets_tx", {
               p_event_id: payload.eventId,
               p_owner_id: user.id,
               p_items: rpcItems,
@@ -1450,7 +1576,7 @@ export async function startCheckoutWithPayment(
               error: { message: "No se pudo completar la reserva atómica." },
             })
       } else {
-        reservation = await supabase.rpc("reserve_tickets_tx", {
+        reservation = await db.rpc("reserve_tickets_tx", {
           p_event_id: payload.eventId,
           p_owner_id: user.id,
           p_items: rpcItems,
@@ -1458,7 +1584,7 @@ export async function startCheckoutWithPayment(
         })
       }
     } else {
-      const hybrid = await supabase.rpc("reserve_hybrid_cart_tx", {
+      const hybrid = await db.rpc("reserve_hybrid_cart_tx", {
         p_event_id: payload.eventId,
         p_owner_id: user.id,
         p_items: rpcItems,
@@ -1471,7 +1597,7 @@ export async function startCheckoutWithPayment(
           ),
       )
       reservation = missingHybrid
-        ? await supabase.rpc("reserve_unified_cart_tx", {
+        ? await db.rpc("reserve_unified_cart_tx", {
             p_event_id: payload.eventId,
             p_owner_id: user.id,
             p_items: rpcItems,
@@ -1484,7 +1610,7 @@ export async function startCheckoutWithPayment(
     if (error) {
       if (isPhaseStockError(error.message)) {
         return resolvePhaseRolloverAfterError(
-          supabase,
+          db,
           payload.eventId,
           cartItems,
         )
@@ -1564,7 +1690,7 @@ export async function startCheckoutWithPayment(
     })
 
     if (payload.addons.length > 0) {
-      const { error: addonsError } = await supabase.rpc(
+      const { error: addonsError } = await db.rpc(
         "attach_event_items_to_order",
         {
           p_order_id: orderId,
@@ -1593,7 +1719,7 @@ export async function startCheckoutWithPayment(
 
     const cleanPromoId = payload.promoCodeId
     if (cleanPromoId) {
-      const { data: promoRows, error: promoError } = await supabase.rpc(
+      const { data: promoRows, error: promoError } = await db.rpc(
         "apply_promo_code_to_order",
         {
           p_order_id: orderId,
@@ -1618,7 +1744,7 @@ export async function startCheckoutWithPayment(
       }
     }
 
-    const { data: pricedOrder, error: pricedOrderError } = await supabase
+    const { data: pricedOrder, error: pricedOrderError } = await db
       .from("orders")
       .select("total_amount")
       .eq("id", orderId)
@@ -1640,18 +1766,17 @@ export async function startCheckoutWithPayment(
     }
 
     let initPoint: string
-    const useSandbox = Boolean(payload.sandbox)
+    const useSandbox = access.useSandbox
     const reservedUntil = rows[0]?.reserved_until
     const checkoutExpiresAt = resolveCheckoutExpiresAt(reservedUntil).toISOString()
 
     if (useSandbox) {
-      const allowed = await assertSandboxCheckoutAllowed(payload.eventId, user.id)
-      if (!allowed.ok) {
-        await cleanupPendingOrder(orderId)
-        return { success: false, error: allowed.error }
-      }
-
       const admin = createAdminClient()
+      await admin
+        .from("orders")
+        .update({ is_test: true })
+        .eq("id", orderId)
+        .eq("buyer_id", user.id)
       const { data: finalized, error: finalizeError } = await admin.rpc(
         "finalize_paid_order",
         {
@@ -1909,49 +2034,28 @@ export async function startCheckoutWithPayment(
 async function assertSandboxCheckoutAllowed(
   eventId: string,
   userId: string,
+  previewKey?: string | null,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const supabase = await createClient()
-  const [{ data: event }, { data: profile }] = await Promise.all([
-    supabase
-      .from("events")
-      .select("id, organizer_id, status")
-      .eq("id", eventId)
-      .maybeSingle(),
-    supabase.from("profiles").select("role").eq("id", userId).maybeSingle(),
-  ])
-
-  if (!event) {
-    return { ok: false, error: "Evento no encontrado." }
-  }
-
-  const role = profile?.role
-  const isStaff =
-    event.organizer_id === userId || role === "super_admin"
-
-  if (!isStaff) {
+  const access = await resolveCheckoutEventAccess({
+    eventId,
+    userId,
+    previewKey,
+  })
+  if (!access.ok) return access
+  if (!access.useSandbox) {
     return {
       ok: false,
-      error: "La compra de prueba solo está disponible para el organizador.",
+      error:
+        "Las compras de prueba solo están disponibles en eventos en borrador.",
     }
   }
-
-  if (
-    event.status !== "published" &&
-    event.status !== "draft" &&
-    event.status !== "paused"
-  ) {
-    return {
-      ok: false,
-      error: "Este evento no admite compras de prueba en su estado actual.",
-    }
-  }
-
   return { ok: true }
 }
 
-/** ¿El usuario autenticado puede ver el botón Sandbox en este evento? */
+/** ¿El usuario autenticado puede simular el pago de este borrador? */
 export async function canUserSandboxCheckout(
   eventId: string,
+  previewKey?: string | null,
 ): Promise<boolean> {
   if (!eventId) return false
   const supabase = await createClient()
@@ -1959,7 +2063,11 @@ export async function canUserSandboxCheckout(
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) return false
-  const allowed = await assertSandboxCheckoutAllowed(eventId, user.id)
+  const allowed = await assertSandboxCheckoutAllowed(
+    eventId,
+    user.id,
+    previewKey,
+  )
   return allowed.ok
 }
 
@@ -1973,6 +2081,7 @@ export async function startSandboxCheckout(
   addons: CheckoutAddonItem[] = [],
   buyerInfo?: CheckoutBuyerInfo | null,
   promoCodeId?: string | null,
+  previewKey?: string | null,
 ): Promise<CheckoutResult> {
   const parsed = CheckoutPayloadSchema.safeParse({
     eventId,
@@ -1982,6 +2091,7 @@ export async function startSandboxCheckout(
     referralCode,
     promoCodeId,
     sandbox: true,
+    previewKey: normalizePreviewKey(previewKey),
   })
   if (!parsed.success) {
     return { success: false, error: formatCheckoutPayloadError(parsed.error) }
@@ -1994,7 +2104,7 @@ export async function startSandboxCheckout(
     parsed.data.addons,
     buyerToHolderFields(parsed.data.buyer),
     parsed.data.promoCodeId,
-    { sandbox: true },
+    { sandbox: true, previewKey: parsed.data.previewKey },
   )
 }
 

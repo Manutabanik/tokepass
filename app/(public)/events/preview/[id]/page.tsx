@@ -72,7 +72,7 @@ export default async function EventPreviewPage({
           buyerEmail: profile?.email ?? user.email ?? "",
           buyerPhone: profile?.phone ?? "",
         }}
-        sandboxEligible={sandboxEligible}
+        sandboxEligible={event.isDraftPreview || sandboxEligible}
       />
     </div>
   )

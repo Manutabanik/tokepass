@@ -1,6 +1,6 @@
 "use client"
 
-import { ChevronDown, LoaderCircle } from "lucide-react"
+import { ChevronDown, FlaskConical, LoaderCircle } from "lucide-react"
 import { useMemo, useState, type FormEvent } from "react"
 import type { FieldErrors } from "react-hook-form"
 
@@ -34,7 +34,7 @@ export function CheckoutPaymentForm({
   totalTickets,
   appliedPromo,
   selectedProvider,
-  sandboxEligible,
+  isDraftPreview,
   controlsLocked,
   canProceedFromCart,
   fieldShake,
@@ -61,6 +61,7 @@ export function CheckoutPaymentForm({
   appliedPromo: ValidatedPromo | null
   selectedProvider: CheckoutPaymentProvider
   sandboxEligible: boolean
+  isDraftPreview?: boolean
   controlsLocked: boolean
   canProceedFromCart: boolean
   fieldShake: number
@@ -130,16 +131,25 @@ export function CheckoutPaymentForm({
         disabled={controlsLocked || !canProceedFromCart}
       />
 
-      <PaymentMethodSelector
-        selectedProvider={selectedProvider}
-        onSelectProvider={onSelectProvider}
-        disabled={controlsLocked}
-      />
+      {isDraftPreview ? (
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          Este evento está en modo de prueba. El pago es simulado y las
+          entradas no valen en puerta.
+        </p>
+      ) : (
+        <>
+          <PaymentMethodSelector
+            selectedProvider={selectedProvider}
+            onSelectProvider={onSelectProvider}
+            disabled={controlsLocked}
+          />
 
-      <p className="text-sm leading-relaxed text-muted-foreground">
-        Al confirmar, te redirigimos a la pasarela para pagar. El cobro se
-        inicia solo cuando la reserva queda confirmada.
-      </p>
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            Al confirmar, te redirigimos a la pasarela para pagar. El cobro se
+            inicia solo cuando la reserva queda confirmada.
+          </p>
+        </>
+      )}
 
       <CheckoutLegalClickwrap
         className="lg:hidden"
@@ -148,43 +158,62 @@ export function CheckoutPaymentForm({
         disabled={controlsLocked}
       />
 
-      <Button
-        type="button"
-        disabled={
-          !acceptedTerms ||
-          confirmPending ||
-          confirmLocked ||
-          controlsLocked ||
-          !canProceedFromCart
-        }
-        aria-busy={confirmPending}
-        onClick={onConfirmPay}
-        className={cn(
-          tapFeedbackClass,
-          "mt-6 h-auto w-full rounded-xl bg-primary py-4 text-center text-lg font-bold text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50",
-        )}
-      >
-        {confirmPending ? (
-          <>
-            <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-            Preparando pago
-          </>
-        ) : (
-          `Confirmar y Pagar ${formatCurrency(finalTotal)}`
-        )}
-      </Button>
-
-      {sandboxEligible ? (
+      {isDraftPreview ? (
         <Button
           type="button"
-          variant="outline"
-          disabled={controlsLocked || !acceptedTerms}
+          disabled={
+            !acceptedTerms ||
+            confirmPending ||
+            confirmLocked ||
+            controlsLocked ||
+            !canProceedFromCart
+          }
+          aria-busy={confirmPending}
           onClick={onSandboxReserve}
-          className="w-full border-dashed text-muted-foreground hover:text-foreground"
+          className={cn(
+            tapFeedbackClass,
+            "mt-6 h-auto w-full rounded-xl bg-amber-500 py-4 text-center text-lg font-bold text-amber-950 shadow-lg shadow-amber-500/25 hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50",
+          )}
         >
-          Compra de prueba
+          {confirmPending ? (
+            <>
+              <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+              Simulando pago
+            </>
+          ) : (
+            <>
+              <FlaskConical className="size-5" aria-hidden="true" />
+              Simular Pago (Modo Prueba)
+            </>
+          )}
         </Button>
-      ) : null}
+      ) : (
+        <Button
+          type="button"
+          disabled={
+            !acceptedTerms ||
+            confirmPending ||
+            confirmLocked ||
+            controlsLocked ||
+            !canProceedFromCart
+          }
+          aria-busy={confirmPending}
+          onClick={onConfirmPay}
+          className={cn(
+            tapFeedbackClass,
+            "mt-6 h-auto w-full rounded-xl bg-primary py-4 text-center text-lg font-bold text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50",
+          )}
+        >
+          {confirmPending ? (
+            <>
+              <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+              Preparando pago
+            </>
+          ) : (
+            `Confirmar y Pagar ${formatCurrency(finalTotal)}`
+          )}
+        </Button>
+      )}
     </div>
   )
 }

@@ -268,6 +268,11 @@ export const CheckoutPayloadSchema = z
         return value
       }),
     sandbox: z.boolean().optional(),
+    previewKey: z
+      .string()
+      .uuid(UUID_ERROR)
+      .optional()
+      .nullable(),
     paymentProvider: z
       .enum(["mercadopago", "payway", "naranjax", "modo"])
       .default("mercadopago"),

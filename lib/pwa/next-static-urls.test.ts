@@ -1,7 +1,10 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
-import { extractNextStaticUrls } from "@/lib/pwa/next-static-urls"
+import {
+  extractNextStaticUrls,
+  isCompleteNextStaticUrl,
+} from "@/lib/pwa/next-static-urls"
 
 describe("extractNextStaticUrls", () => {
   it("keeps the full chunks path instead of stopping at the letter s", () => {
@@ -20,5 +23,30 @@ describe("extractNextStaticUrls", () => {
     const urls = extractNextStaticUrls(html)
     assert.equal(urls.includes("/_next/static/chunk"), false)
     assert.equal(urls[0], "/_next/static/chunks/turbopack-foo.js")
+  })
+
+  it("keeps Next font files that contain -s. in the hash", () => {
+    const html = `url(/_next/static/media/797e433ab948586e-s.p.woff2)`
+    const urls = extractNextStaticUrls(html)
+    assert.deepEqual(urls, [
+      "/_next/static/media/797e433ab948586e-s.p.woff2",
+    ])
+    assert.equal(urls.includes("/_next/static/media/797e433ab948586e-"), false)
+  })
+
+  it("rejects incomplete media hashes and the bare chunk path", () => {
+    assert.equal(isCompleteNextStaticUrl("/_next/static/chunk"), false)
+    assert.equal(
+      isCompleteNextStaticUrl("/_next/static/media/797e433ab948586e-"),
+      false,
+    )
+    assert.equal(
+      isCompleteNextStaticUrl("/_next/static/media/caa3a2e1cccd8315-"),
+      false,
+    )
+    assert.equal(
+      isCompleteNextStaticUrl("/_next/static/chunks/194n8162zr6p_.js"),
+      true,
+    )
   })
 })

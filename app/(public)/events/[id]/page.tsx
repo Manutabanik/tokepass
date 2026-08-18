@@ -4,8 +4,10 @@ import { notFound, permanentRedirect } from "next/navigation"
 import {
   getEventAccessGate,
   getEventDetails,
+  getEventDetailsForPreviewKey,
 } from "@/app/actions/public-events"
 import { EventUnavailableNotice } from "@/components/public/event-unavailable-notice"
+import { normalizePreviewKey, withPreviewKey } from "@/lib/preview/sandbox"
 import {
   buildEventMetadata,
   eventSeoFromDetails,
@@ -33,20 +35,26 @@ export default async function LegacyEventDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ ref?: string; rrpp?: string }>
+  searchParams: Promise<{ ref?: string; rrpp?: string; preview_key?: string | string[] }>
 }) {
   const { id } = await params
   const query = await searchParams
-  const event = await getEventDetails(id).catch(() => null)
+  const previewKey = normalizePreviewKey(query.preview_key)
+  let event = await getEventDetails(id).catch(() => null)
+
+  if (!event && previewKey) {
+    event = await getEventDetailsForPreviewKey(id, previewKey)
+    if (!event) {
+      notFound()
+    }
+  }
 
   if (!event) {
     const gate = await getEventAccessGate(id)
-    if (
-      gate &&
-      (gate.status === "paused" ||
-        gate.status === "draft" ||
-        gate.status === "cancelled")
-    ) {
+    if (gate?.status === "draft") {
+      notFound()
+    }
+    if (gate && (gate.status === "paused" || gate.status === "cancelled")) {
       return (
         <EventUnavailableNotice title={gate.title} status={gate.status} />
       )
@@ -62,5 +70,5 @@ export default async function LegacyEventDetailPage({
     }),
   )
   const suffix = code ? `?rrpp=${encodeURIComponent(code)}` : ""
-  permanentRedirect(`${path}${suffix}`)
+  permanentRedirect(withPreviewKey(`${path}${suffix}`, previewKey))
 }

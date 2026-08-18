@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
+import { publicEventPreviewPath } from "@/lib/preview/sandbox"
+import { getSeoOrigin } from "@/lib/seo/site"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { isPlatformOwnerRole } from "@/lib/auth/platform-owner"
@@ -78,8 +80,10 @@ import {
 } from "@/lib/venues/venue-identity"
 import { applyMapCapacityToTickets } from "@/lib/seating/venue-map-pricing"
 import {
+  listAssignableGeneralSectors,
   logicalSectorId,
   normalizeLogicalSectors,
+  zoneIndexForSectorId,
 } from "@/lib/inventory/logical-sectors"
 import { logger } from "@/lib/logger"
 import { mapUnknownError } from "@/lib/errors/error-handler"
@@ -218,6 +222,8 @@ export type CreateCompleteEventRpcPayload = {
     visibility: "public" | "private"
     layout_type: "general" | "table_combo" | "numbered_seat"
     seating_sector_id: string | null
+    /** Alias de seating_sector_id. NULL = SKU flotante. */
+    sector_id?: string | null
     capacity_per_unit: number
     admit_count?: number
     total_capacity?: number
@@ -274,11 +280,19 @@ function mapEventFormToRpcPayload(
   },
 ): CreateCompleteEventRpcPayload {
   const logicalZones = normalizeLogicalSectors(data.venue.zones)
+  const assignableSectorIds = new Set(
+    listAssignableGeneralSectors(data.venue.zones, data.venue.venueMap).map(
+      (sector) => sector.id,
+    ),
+  )
   const includesMap = Boolean(data.venue.includesSeatingMap)
   const capacitySnap = computeEventCapacityFromForm(data)
-  const isGeneralAdmission =
-    !includesMap && data.venue.zoneType === "general_admission"
 
+  const keepReservedBlueprint =
+    !includesMap &&
+    data.venue.zoneType === "reserved_seating" &&
+    (data.venue.rows ?? 0) > 0 &&
+    (data.venue.seatsPerRow ?? 0) > 0
   const zones =
     logicalZones.length > 0
       ? logicalZones.map((zone) => ({
@@ -289,19 +303,17 @@ function mapEventFormToRpcPayload(
           seats_per_row:
             zone.type === "reserved_seating" ? zone.seatsPerRow ?? null : null,
         }))
-      : [
-          {
-            name: isGeneralAdmission ? "General" : "Platea",
-            type: includesMap
-              ? ("reserved_seating" as const)
-              : data.venue.zoneType,
-            capacity: Math.max(capacitySnap.totalCapacity, 1),
-            rows: isGeneralAdmission ? null : (data.venue.rows ?? null),
-            seats_per_row: isGeneralAdmission
-              ? null
-              : (data.venue.seatsPerRow ?? null),
-          },
-        ]
+      : keepReservedBlueprint
+        ? [
+            {
+              name: "Platea",
+              type: "reserved_seating" as const,
+              capacity: Math.max(capacitySnap.totalCapacity, 1),
+              rows: data.venue.rows ?? null,
+              seats_per_row: data.venue.seatsPerRow ?? null,
+            },
+          ]
+        : []
 
   const venueCapacity = Math.max(capacitySnap.totalCapacity, 1)
 
@@ -402,6 +414,15 @@ function mapEventFormToRpcPayload(
         eventFixedFee(feeConfig),
       )
       const layoutType = layoutTypeForInventory(tierType, tier.layoutType)
+      const requestedSectorId = data.basics.hasSeatingPlan
+        ? tier.seatingSectorId?.trim() || null
+        : null
+      const seatingSectorId =
+        !requestedSectorId
+          ? null
+          : layoutType === "general" && !assignableSectorIds.has(requestedSectorId)
+            ? null
+            : requestedSectorId
       return {
         ...(tier.id ? { id: tier.id } : {}),
         name: tier.name,
@@ -411,21 +432,12 @@ function mapEventFormToRpcPayload(
         capacity: tier.capacity,
         time_limit: tier.timeLimit?.trim() ? tier.timeLimit : null,
         bonus_reward: tier.bonusReward?.trim() ? tier.bonusReward : null,
-        zone_index: Math.max(
-          0,
-          logicalZones.findIndex(
-            (zone) =>
-              zone.id === (tier.seatingSectorId ?? "").trim() ||
-              zone.name.trim().toLocaleLowerCase("es") ===
-                (tier.name ?? "").trim().toLocaleLowerCase("es"),
-          ),
-        ),
+        zone_index: zoneIndexForSectorId(logicalZones, seatingSectorId),
         day_id: dayId,
         visibility: tier.visibility ?? "public",
         layout_type: layoutType,
-        seating_sector_id: data.basics.hasSeatingPlan
-          ? tier.seatingSectorId?.trim() || null
-          : null,
+        seating_sector_id: seatingSectorId,
+        sector_id: seatingSectorId,
         capacity_per_unit:
           layoutType === "general" ? 1 : tier.capacityPerUnit,
         admit_count:
@@ -2991,6 +3003,47 @@ export async function countEventTestTickets(
 
   if (error) return 0
   return count ?? 0
+}
+
+export async function getOrganizerPreviewShareUrl(
+  eventId: string,
+): Promise<
+  { success: true; url: string } | { success: false; error: string }
+> {
+  if (!eventId?.trim()) {
+    return { success: false, error: "Evento inválido." }
+  }
+
+  const { supabase, user } = await requireAuthenticatedUser()
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle()
+  const isSuper = profile?.role === "super_admin"
+  const reader = isSuper ? createAdminClient() : supabase
+
+  const { data: event, error } = await reader
+    .from("events")
+    .select("id, slug, organizer_id, status, preview_key")
+    .eq("id", eventId)
+    .maybeSingle()
+
+  if (error || !event) {
+    return { success: false, error: "Evento no encontrado." }
+  }
+  if (event.organizer_id !== user.id && !isSuper) {
+    return { success: false, error: "No tenés permiso para copiar este enlace." }
+  }
+  if (event.status !== "draft") {
+    return {
+      success: false,
+      error: "El enlace de prueba solo está disponible en borrador.",
+    }
+  }
+
+  const path = publicEventPreviewPath(event, event.preview_key)
+  return { success: true, url: `${getSeoOrigin()}${path}` }
 }
 
 export type DeleteOrArchiveEventResult =

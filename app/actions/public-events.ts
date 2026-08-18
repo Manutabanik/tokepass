@@ -2,11 +2,13 @@
 
 import { listEventSponsors } from "@/app/actions/event-sponsors"
 import { logger } from "@/lib/logger"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import {
   createPublicClient,
   type PublicSupabase,
 } from "@/lib/supabase/public"
+import { normalizePreviewKey } from "@/lib/preview/sandbox"
 import {
   buildCatalogSearchOr,
   FEATURED_DISCOVERY_ARTISTS_LIMIT,
@@ -184,6 +186,8 @@ export type EventDetails = {
   sponsors: PublicSponsor[]
   categoryId: string | null
   createdAt: string | null
+  /** Borrador abierto con enlace de preview. Nunca incluye preview_key. */
+  isDraftPreview: boolean
 }
 
 type EventListRow = {
@@ -641,8 +645,42 @@ export async function getPreviewEventDetails(
   return loadEventDetails(eventId, { mode: "preview" })
 }
 
+/**
+ * Storefront de borrador para quien tiene el `preview_key`.
+ * No usa el cache público ni revela la clave.
+ */
+export async function getEventDetailsForPreviewKey(
+  slugOrId: string,
+  previewKey: string,
+): Promise<EventDetails | null> {
+  const key = normalizePreviewKey(previewKey)
+  if (!key) return null
+
+  const admin = createAdminClient()
+  const resolvedId = await resolveEventRecordId(admin, slugOrId)
+  if (!resolvedId) return null
+
+  const { data: matches, error } = await admin.rpc(
+    "event_preview_key_matches",
+    {
+      p_event_id: resolvedId,
+      p_key: key,
+    },
+  )
+  if (error || !matches) return null
+
+  return loadEventDetails(resolvedId, { mode: "preview_share" })
+}
+
+type EventReadClient =
+  | PublicSupabase
+  | Awaited<ReturnType<typeof createClient>>
+  | ReturnType<typeof createAdminClient>
+
+type EventLoadMode = "public" | "preview" | "preview_share"
+
 async function resolveEventRecordId(
-  supabase: PublicSupabase | Awaited<ReturnType<typeof createClient>>,
+  supabase: EventReadClient,
   slugOrId: string,
 ): Promise<string | null> {
   const value = decodeEventParam(slugOrId)
@@ -775,9 +813,9 @@ async function loadPublicTicketPhases(
 }
 
 async function loadEventCoreRow(
-  supabase: PublicSupabase | Awaited<ReturnType<typeof createClient>>,
+  supabase: EventReadClient,
   eventId: string,
-  mode: "public" | "preview",
+  mode: EventLoadMode,
 ) {
   let query = supabase
     .from("events")
@@ -805,10 +843,14 @@ async function loadEventCoreRow(
 
 async function loadEventDetails(
   eventId: string,
-  options: { mode: "public" | "preview" },
+  options: { mode: EventLoadMode },
 ): Promise<EventDetails | null> {
   const supabase =
-    options.mode === "preview" ? await createClient() : createPublicClient()
+    options.mode === "preview"
+      ? await createClient()
+      : options.mode === "preview_share"
+        ? createAdminClient()
+        : createPublicClient()
   const resolvedId = await resolveEventRecordId(supabase, eventId)
   if (!resolvedId) return null
 
@@ -1222,11 +1264,14 @@ async function loadEventDetails(
     sponsors,
     categoryId: event.category_id ?? null,
     createdAt: event.created_at ?? null,
+    isDraftPreview:
+      options.mode === "preview_share" ||
+      (options.mode === "preview" && event.status === "draft"),
   }
 }
 
 async function loadEventArtistsLineup(
-  supabase: PublicSupabase | Awaited<ReturnType<typeof createClient>>,
+  supabase: EventReadClient,
   eventId: string,
 ): Promise<EventLineupData> {
   const empty: EventLineupData = { artists: [], slots: [] }

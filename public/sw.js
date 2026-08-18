@@ -1,6 +1,6 @@
 /* Tokepass PWA Service Worker — Offline-First billetera /cuenta/entradas */
 
-const CACHE_VERSION = "tokepass-wallet-v8"
+const CACHE_VERSION = "tokepass-wallet-v10"
 const ASSET_CACHE = `${CACHE_VERSION}-assets`
 
 const PRECACHE_URLS = [
@@ -14,14 +14,28 @@ const PRECACHE_URLS = [
 
 const OFFLINE_WALLET_HTML = `<!doctype html><html lang="es"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Tokepass Offline</title><style>body{margin:0;background:#090014;color:#fff;font-family:system-ui;display:grid;min-height:100vh;place-items:center;padding:24px;text-align:center}a{color:#e879f9}p{color:#a1a1aa;line-height:1.5}</style></head><body><div><h1>Modo sin conexion</h1><p>Las entradas viven en este dispositivo. Abri la billetera offline para mostrar el QR.</p><p><a href="/offline/billetera">Abrir entradas</a></p></div></body></html>`
 
-function isLocalhost() {
+function isImagePath(url) {
+  return /\.(?:png|jpe?g|webp|gif|svg|avif)$/i.test(url.pathname)
+}
+
+function isSupabaseHost(url) {
+  return url.hostname.includes("supabase")
+}
+
+function isPublicStorageImage(url) {
   return (
-    self.location.hostname === "localhost" ||
-    self.location.hostname === "127.0.0.1"
+    isSupabaseHost(url) &&
+    url.pathname.includes("/storage/v1/object/public/") &&
+    isImagePath(url)
   )
 }
 
+function isSameOrigin(url) {
+  return url.origin === self.location.origin
+}
+
 function isStaticAsset(url) {
+  if (!isSameOrigin(url)) return false
   if (url.pathname.startsWith("/_next/")) return false
 
   return (
@@ -29,11 +43,7 @@ function isStaticAsset(url) {
     url.pathname.startsWith("/brand/") ||
     url.pathname.endsWith(".css") ||
     url.pathname.endsWith(".woff2") ||
-    url.pathname.endsWith(".svg") ||
-    url.pathname.endsWith(".png") ||
-    url.pathname.endsWith(".webp") ||
-    url.pathname.endsWith(".jpg") ||
-    url.pathname.endsWith(".jpeg")
+    isImagePath(url)
   )
 }
 
@@ -60,23 +70,35 @@ function shouldSkipDocumentCache(url) {
   )
 }
 
-/**
- * Extrae assets reales de Next. El character class NO puede incluir `\\s`
- * como si fuera whitespace: en un regex literal `\\s` excluye la letra "s"
- * y corta `/_next/static/chunks/...` en `/_next/static/chunk`.
- */
-const NEXT_STATIC_ASSET_RE =
-  /\/_next\/static\/[a-zA-Z0-9/_.,%-]+\.(?:js|css|woff2|woff|png|svg|webp)(?:\?[^"' \t\n\r>]*)?/g
-
-function extractNextStaticUrls(html) {
-  return [...new Set(html.match(NEXT_STATIC_ASSET_RE) ?? [])]
+function isIncompleteNextStatic(url) {
+  const path = url.pathname
+  if (!path.startsWith("/_next/")) return false
+  if (path === "/_next/static/chunk" || path.endsWith("/chunk")) return true
+  if (path.endsWith("-") || path.endsWith("/")) return true
+  return !/\.(?:js|css|woff2|woff|png|svg|webp)$/i.test(path)
 }
 
-function isCacheableNextStatic(url) {
-  return (
-    url.pathname.startsWith("/_next/static/") &&
-    /\.(?:js|css|woff2|woff|png|svg|webp)$/i.test(url.pathname)
-  )
+function shouldBypass(request, url) {
+  if (request.method !== "GET") return true
+  if (url.searchParams.has("_rsc")) return true
+  if (request.headers.get("RSC") === "1") return true
+  if (url.pathname.startsWith("/api/")) return true
+  if (url.pathname.startsWith("/auth/")) return true
+  if (url.pathname === "/sw.js") return true
+
+  // Next internals and RSC payloads must hit the network untouched.
+  if (url.pathname.startsWith("/_next/")) return true
+
+  // Auth / REST / Realtime break if the SW answers with an opaque response.
+  if (isSupabaseHost(url) && !isPublicStorageImage(url)) return true
+
+  if (isIncompleteNextStatic(url)) return true
+
+  return false
+}
+
+function usableResponse(response) {
+  return Boolean(response && response.ok && response.type !== "opaque")
 }
 
 function offlineHtmlResponse() {
@@ -97,19 +119,8 @@ self.addEventListener("install", (event) => {
         PRECACHE_URLS.map(async (url) => {
           try {
             const response = await fetch(url, { credentials: "same-origin" })
-            if (response.ok && !response.redirected) {
+            if (usableResponse(response) && !response.redirected) {
               await cache.put(url, response.clone())
-              if (url === "/offline/billetera") {
-                const html = await response.text()
-                await Promise.allSettled(
-                  extractNextStaticUrls(html).map(async (asset) => {
-                    const assetRes = await fetch(asset, {
-                      credentials: "same-origin",
-                    })
-                    if (assetRes.ok) await cache.put(asset, assetRes.clone())
-                  }),
-                )
-              }
             }
           } catch {
             // Precache best-effort
@@ -142,40 +153,18 @@ self.addEventListener("activate", (event) => {
 async function cacheFirstAsset(request) {
   const cache = await caches.open(ASSET_CACHE)
   const cached = await cache.match(request)
-  if (cached) return cached
+  if (cached && cached.type !== "opaque") return cached
 
-  const url = new URL(request.url)
-  const sameOrigin = url.origin === self.location.origin
-
-  try {
-    const fresh = sameOrigin
-      ? await fetch(request)
-      : await fetch(request, { mode: "no-cors" }).catch(() => fetch(request))
-    if (fresh && (fresh.ok || (!sameOrigin && fresh.type === "opaque"))) {
-      await cache.put(request, fresh.clone())
-    }
-    return fresh
-  } catch {
-    return (
-      cached ||
-      new Response("", {
-        status: 503,
-        statusText: "Offline",
-      })
-    )
-  }
-}
-
-async function networkFirstSameOrigin(request) {
-  const cache = await caches.open(ASSET_CACHE)
   try {
     const fresh = await fetch(request)
-    if (fresh.ok) {
+    if (usableResponse(fresh)) {
       await cache.put(request, fresh.clone())
+    }
+    if (fresh && fresh.type === "opaque") {
+      return cached || new Response("", { status: 502, statusText: "Opaque" })
     }
     return fresh
   } catch {
-    const cached = await cache.match(request)
     return (
       cached ||
       new Response("", {
@@ -190,7 +179,7 @@ async function networkFirstOfflineShell(request) {
   const cache = await caches.open(ASSET_CACHE)
   try {
     const fresh = await fetch(request)
-    if (fresh.ok) {
+    if (usableResponse(fresh)) {
       await cache.put("/offline/billetera", fresh.clone())
       return fresh
     }
@@ -222,52 +211,35 @@ async function cacheUrls(urls) {
     urls.map(async (raw) => {
       try {
         const url = new URL(raw, self.location.origin)
-        const sameOrigin = url.origin === self.location.origin
+        const sameOrigin = isSameOrigin(url)
 
-        if (sameOrigin && shouldSkipDocumentCache(url)) {
-          return
-        }
+        if (isIncompleteNextStatic(url)) return
+        if (url.pathname.startsWith("/_next/")) return
+        if (isSupabaseHost(url) && !isPublicStorageImage(url)) return
+
+        if (sameOrigin && shouldSkipDocumentCache(url)) return
 
         if (
           sameOrigin &&
           !url.pathname.startsWith("/offline/") &&
-          !isStaticAsset(url) &&
-          !isCacheableNextStatic(url)
+          !isStaticAsset(url)
         ) {
           return
         }
 
-        let response
-        try {
-          response = await fetch(url.href, {
-            credentials: sameOrigin ? "same-origin" : "omit",
-            mode: sameOrigin ? "same-origin" : "cors",
-          })
-        } catch {
-          if (!sameOrigin) {
-            response = await fetch(url.href, { mode: "no-cors" })
-          } else {
-            return
-          }
-        }
+        if (!sameOrigin && !isPublicStorageImage(url)) return
 
-        if (!response) return
-        if (!response.ok && response.type !== "opaque") return
+        const response = await fetch(url.href, {
+          credentials: sameOrigin ? "same-origin" : "omit",
+          mode: sameOrigin ? "same-origin" : "cors",
+        })
+
+        if (!usableResponse(response)) return
         if (response.redirected && sameOrigin) return
 
         await assets.put(url.href, response.clone())
-
-        if (sameOrigin && url.pathname.startsWith("/offline/")) {
-          const html = await response.text()
-          await Promise.allSettled(
-            extractNextStaticUrls(html).map(async (asset) => {
-              const assetRes = await fetch(asset, { credentials: "same-origin" })
-              if (assetRes.ok) await assets.put(asset, assetRes.clone())
-            }),
-          )
-        }
       } catch {
-        // best-effort
+        // best-effort — never fall back to no-cors
       }
     }),
   )
@@ -275,32 +247,14 @@ async function cacheUrls(urls) {
 
 self.addEventListener("fetch", (event) => {
   const request = event.request
-  if (request.method !== "GET") return
-
   const url = new URL(request.url)
 
-  if (url.origin === self.location.origin && url.pathname.startsWith("/_next/")) {
-    if (
-      !isLocalhost() &&
-      isCacheableNextStatic(url)
-    ) {
-      event.respondWith(networkFirstSameOrigin(request))
-    }
-    return
-  }
+  if (shouldBypass(request, url)) return
 
-  if (url.origin !== self.location.origin) {
-    if (
-      isStaticAsset(url) ||
-      url.hostname.includes("supabase") ||
-      url.pathname.includes("event-flyers")
-    ) {
+  if (!isSameOrigin(url)) {
+    if (isPublicStorageImage(url)) {
       event.respondWith(cacheFirstAsset(request))
     }
-    return
-  }
-
-  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/")) {
     return
   }
 

@@ -114,6 +114,70 @@ describe("capacity-budget", () => {
     assert.equal(snap.exceeded, false)
   })
 
+  it("no bloquea entradas sin sector contra un sector padre", () => {
+    const unbound = ticket({
+      tierType: "general",
+      capacity: 200,
+      seatingSectorId: null,
+    })
+    const snap = computeEventCapacity({
+      tickets: [unbound],
+      zones: [
+        {
+          id: "general:pista",
+          name: "Pista",
+          type: "general_admission",
+          capacity: 100,
+        },
+      ],
+    })
+    assert.equal(snap.unboundGeneralCapacity, 200)
+    assert.equal(snap.generalSectorCapacity, 100)
+    assert.equal(snap.totalCapacity, 300)
+    assert.equal(snap.totalAllocated, 200)
+    assert.equal(snap.exceeded, false)
+  })
+
+  it("permite un evento solo con entradas generales, sin sectores ni mapa", () => {
+    const general = ticket({
+      tierType: "general",
+      capacity: 500,
+      seatingSectorId: null,
+    })
+    const snap = computeEventCapacity({
+      tickets: [general],
+    })
+    assert.equal(snap.totalCapacity, 500)
+    assert.equal(snap.totalAllocated, 500)
+    assert.equal(snap.exceeded, false)
+  })
+
+  it("suma mapa + sectores + entradas libres sin doble conteo", () => {
+    const unbound = ticket({
+      tierType: "general",
+      capacity: 80,
+      seatingSectorId: null,
+    })
+    const snap = computeEventCapacity({
+      tickets: [unbound],
+      venueMap: standingMap(376),
+      zones: [
+        {
+          id: "general:pista",
+          name: "Pista",
+          type: "general_admission",
+          capacity: 171,
+        },
+      ],
+    })
+    assert.equal(snap.mapAllocatedCapacity, 376)
+    assert.equal(snap.generalSectorCapacity, 171)
+    assert.equal(snap.unboundGeneralCapacity, 80)
+    assert.equal(snap.totalCapacity, 627)
+    assert.equal(snap.totalAllocated, 456)
+    assert.equal(snap.exceeded, false)
+  })
+
   it("marca overflow si el stock del sector supera su cupo", () => {
     const general = ticket({
       tierType: "general",

@@ -14,6 +14,7 @@ import { useEffect, useState } from "react"
 
 import type { MyTicket } from "@/app/actions/tickets"
 import { GuestOtpGate } from "@/components/account/guest-otp-gate"
+import { TestTicketWatermark } from "@/components/public/test-ticket-watermark"
 import { LivingTicketQR } from "@/components/public/living-ticket-qr"
 import { StaticSignedQR } from "@/components/public/static-signed-qr"
 import { QrEnlargeTrigger, QrScanLightbox } from "@/components/public/qr-scan-lightbox"
@@ -100,7 +101,8 @@ export function TicketDetailView({
         Volver a mis entradas
       </Link>
 
-      <header className="overflow-hidden rounded-3xl border border-border bg-card">
+      <header className="relative overflow-hidden rounded-3xl border border-border bg-card">
+        {ticket.isTest ? <TestTicketWatermark /> : null}
         <div className="relative aspect-[16/9] w-full bg-muted">
           {ticket.flyerUrl ? (
             <Image

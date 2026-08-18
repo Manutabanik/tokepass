@@ -262,6 +262,74 @@ describe("sanitizeEventSubmitPayload", () => {
     assert.equal(next.tickets[1]?.seatingSectorId, null)
   })
 
+  it("desacopla una entrada general de un sector del mapa", () => {
+    const map = emptyVenueMap()
+    map.sectors = [
+      {
+        id: "platea-vip",
+        name: "Platea VIP",
+        color: "#f97316",
+        price: 0,
+        x: 10,
+        y: 10,
+        rows: 1,
+        seatsPerRow: 1,
+        curvature: 0,
+        aisle: false,
+        seats: [],
+      },
+    ]
+    const next = sanitizeEventSubmitPayload(
+      {
+        basics: {
+          title: "Hibrido",
+          date: "",
+          endDate: "",
+          description: "",
+          flyerName: null,
+          visibility: "public",
+          isMultiDay: false,
+          scheduleDays: [],
+          categoryId: "",
+          ageRestriction: "atp",
+          hasSeatingPlan: true,
+        },
+        venue: {
+          mode: "new",
+          existingVenueId: null,
+          zoneType: "general_admission",
+          venueName: "Predio",
+          saveVenueForReuse: true,
+          venueMap: map,
+          includesSeatingMap: true,
+          zones: [
+            {
+              id: "general:pista",
+              name: "Pista",
+              type: "general_admission",
+              capacity: 200,
+            },
+          ],
+        },
+        tickets: [
+          ticket({
+            seatingSectorId: "platea-vip",
+            layoutType: "general",
+          }),
+          ticket({
+            seatingSectorId: "general:pista",
+            layoutType: "general",
+            name: "Campo",
+          }),
+        ],
+        ticketsDefaultTab: "auto",
+      } as EventFormValues,
+      { mode: "create" },
+    )
+    assert.equal(next.tickets[0]?.seatingSectorId, null)
+    assert.equal(next.tickets[1]?.seatingSectorId, "general:pista")
+  })
+
   it("deja seatingSectorId en null si el evento no tiene mapa", () => {
     const next = sanitizeEventSubmitPayload(
       {

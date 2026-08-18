@@ -1,7 +1,7 @@
 import { bundleIncludesSeating } from "@/lib/inventory/flexible-bundles"
 import {
-  generalLogicalSectorCapacity,
-  listGeneralLogicalSectors,
+  assignableGeneralSectorCapacity,
+  listAssignableGeneralSectors,
 } from "@/lib/inventory/logical-sectors"
 import { inferInventoryTierType } from "@/lib/inventory/unified-inventory"
 import { venueMapCapacity } from "@/lib/seating/venue-map-geometry"
@@ -41,6 +41,7 @@ export type EventCapacityInput = {
 export type EventCapacitySnapshot = {
   mapAllocatedCapacity: number
   generalSectorCapacity: number
+  unboundGeneralCapacity: number
   generalAllocatedCapacity: number
   totalAllocated: number
   totalCapacity: number
@@ -130,13 +131,22 @@ export function occupiesVenueBudget(
   return occupiesGeneralCapacity(tier, tickets)
 }
 
+/** Master Manifest: mapa + SKUs sin sector + sectores GA. Espejo de `event_manifest_capacity`. */
 export function computeEventCapacity(
   input: EventCapacityInput,
 ): EventCapacitySnapshot {
   const tickets: readonly CapacityTicket[] = input.tickets ?? []
   const mapAllocatedCapacity = venueMapCapacity(parseVenueMap(input.venueMap))
-  const declaredSectors = listGeneralLogicalSectors(input.zones)
-  const declaredSectorCapacity = generalLogicalSectorCapacity(input.zones)
+  const declaredSectors = listAssignableGeneralSectors(
+    input.zones,
+    input.venueMap,
+  )
+  const declaredSectorCapacity = assignableGeneralSectorCapacity(
+    input.zones,
+    input.venueMap,
+  )
+  const declaredIds = new Set(declaredSectors.map((sector) => sector.id))
+
   const generalAllocatedCapacity = tickets.reduce((sum, tier, index) => {
     if (input.exceptTicketIndex != null && index === input.exceptTicketIndex) {
       return sum
@@ -162,24 +172,22 @@ export function computeEventCapacity(
       return sum
     }
     if (!occupiesGeneralCapacity(tier, tickets)) return sum
-    if ((tier.seatingSectorId ?? "").trim()) return sum
+    const sectorId = (tier.seatingSectorId ?? "").trim()
+    if (sectorId && declaredIds.has(sectorId)) return sum
     return sum + asPositiveInt(tier.capacity)
   }, 0)
 
-  const generalSectorCapacity =
-    declaredSectorCapacity > 0 ? declaredSectorCapacity : unboundGeneral
-  const totalCapacity = generalSectorCapacity + mapAllocatedCapacity
+  const generalSectorCapacity = declaredSectorCapacity
+  const totalCapacity =
+    mapAllocatedCapacity + declaredSectorCapacity + unboundGeneral
   const totalAllocated = mapAllocatedCapacity + generalAllocatedCapacity
-  const overflow =
-    declaredSectorCapacity > 0
-      ? sectorOverflow +
-        Math.max(0, generalAllocatedCapacity - declaredSectorCapacity)
-      : 0
+  const overflow = sectorOverflow
   const remaining = Math.max(0, totalCapacity - totalAllocated)
 
   return {
     mapAllocatedCapacity,
     generalSectorCapacity,
+    unboundGeneralCapacity: unboundGeneral,
     generalAllocatedCapacity,
     totalAllocated,
     totalCapacity,
@@ -209,7 +217,7 @@ export function computeEventCapacityFromForm(
 export function eventCapacityOverflowMessage(
   snapshot: EventCapacitySnapshot,
 ): string {
-  return `El stock de entradas supera la capacidad de los sectores (${snapshot.overflow} lugares). Bajá el stock o ampliá el sector.`
+  return `El stock de un sector supera su cupo (${snapshot.overflow} lugares). Bajá el stock o ampliá ese sector.`
 }
 
 export function generalRemainingForTicket(

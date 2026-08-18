@@ -26,6 +26,7 @@ import { EventResaleListings } from "@/components/public/event-resale-listings"
 import { EventSaleStatusNotice } from "@/components/public/event-sale-status-notice"
 import { SponsorGrid } from "@/components/public/sponsor-grid"
 import { OrganizerAvatar } from "@/components/public/organizer-avatar"
+import { SandboxBanner } from "@/components/public/sandbox-banner"
 import { TicketSelector } from "@/components/public/ticket-selector"
 import { eventNeedsInteractiveCanvas } from "@/lib/seating/venue-map-pricing"
 import {
@@ -91,6 +92,7 @@ type EventStorefrontProps = {
   resaleListings?: ResaleListingPublic[]
   showBackLink?: boolean
   sandboxEligible?: boolean
+  previewKey?: string | null
 }
 
 function demandLabel(tiers: EventDetails["tiers"]): string | null {
@@ -116,6 +118,7 @@ export function EventStorefront({
   resaleListings = [],
   showBackLink = true,
   sandboxEligible = false,
+  previewKey = null,
 }: EventStorefrontProps) {
   const startingPrice =
     event.tiers.length > 0
@@ -509,6 +512,7 @@ export function EventStorefront({
   if (showCheckout) {
     return (
       <div className="flex h-[100dvh] flex-col overflow-hidden bg-background text-foreground">
+        {event.isDraftPreview ? <SandboxBanner /> : null}
         <AnalyticsTracker
           config={event.pixels}
           trackPageView
@@ -524,7 +528,9 @@ export function EventStorefront({
             currentUserId={currentUserId}
             initialBuyer={initialBuyer}
             referralCode={referralCode}
-            sandboxEligible={sandboxEligible}
+            sandboxEligible={sandboxEligible || event.isDraftPreview}
+            isDraftPreview={event.isDraftPreview}
+            previewKey={previewKey}
             serviceChargeRate={event.serviceChargeRate}
             scheduleDays={event.scheduleDays ?? []}
             seatingUnits={event.seatingUnits}
@@ -591,6 +597,7 @@ export function EventStorefront({
         showInfoCta ? "pb-32 lg:pb-12" : "pb-8 lg:pb-12",
       )}
     >
+      {event.isDraftPreview ? <SandboxBanner /> : null}
       <AnalyticsTracker
         config={event.pixels}
         trackPageView

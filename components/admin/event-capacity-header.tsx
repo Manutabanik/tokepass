@@ -33,7 +33,8 @@ export function EventCapacityHeader({
         </span>
       </span>
       <span className="hidden text-muted-foreground sm:inline">
-        {formatNumber(capacity.generalSectorCapacity)} generales +{" "}
+        {formatNumber(capacity.generalSectorCapacity)} sectores +{" "}
+        {formatNumber(capacity.unboundGeneralCapacity)} libres +{" "}
         {formatNumber(capacity.mapAllocatedCapacity)} mapa
       </span>
     </div>

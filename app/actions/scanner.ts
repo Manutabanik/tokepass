@@ -77,6 +77,7 @@ export type ScanTicketResult =
         | "update_failed"
         | "unpaid"
         | "test_ticket_live"
+        | "test_ticket"
         | "wrong_sector"
         | "transfer_pending"
       message: string
@@ -128,13 +129,6 @@ type TicketScanRow = {
     | { payment_method?: string | null }
     | Array<{ payment_method?: string | null }>
     | null
-}
-
-function ticketOrderPaymentMethod(row: TicketScanRow): string | null {
-  const orders = row.orders
-  if (!orders) return null
-  const one = Array.isArray(orders) ? orders[0] : orders
-  return one?.payment_method ?? null
 }
 
 function isFreePassTier(
@@ -597,15 +591,13 @@ export async function scanAndValidateTicket(
     }
   }
 
-  const eventStatus = row.events?.status ?? null
   const isTestTicket = Boolean(row.is_test)
-  const isSandbox = ticketOrderPaymentMethod(row) === "test_sandbox"
 
-  if (isTestTicket && eventStatus !== "draft" && !isSandbox) {
+  if (isTestTicket) {
     return {
       success: false,
-      status: "test_ticket_live",
-      message: "ENTRADA DE PRUEBA / INVÁLIDA PARA EVENTO EN VIVO",
+      status: "test_ticket",
+      message: "TICKET DE PRUEBA - ACCESO DENEGADO",
     }
   }
 
@@ -678,11 +670,14 @@ export async function scanAndValidateTicket(
   }
 
   if (updateError || !admission.ok) {
-    if (admission.code === "test_ticket_live") {
+    if (
+      admission.code === "test_ticket" ||
+      admission.code === "test_ticket_live"
+    ) {
       return {
         success: false,
-        status: "test_ticket_live",
-        message: "ENTRADA DE PRUEBA / INVÁLIDA PARA EVENTO EN VIVO",
+        status: "test_ticket",
+        message: "TICKET DE PRUEBA - ACCESO DENEGADO",
       }
     }
     return {
@@ -719,17 +714,10 @@ export async function scanAndValidateTicket(
   return {
     success: true,
     status: "granted",
-    isTestScan:
-      Boolean(admission.is_test_scan) ||
-      (isTestTicket && eventStatus === "draft") ||
-      isSandbox,
-    message: isSandbox
-      ? "ACCESO PERMITIDO · COMPRA DE PRUEBA (SANDBOX)"
-      : isTestTicket && eventStatus === "draft"
-        ? "LECTURA DE PRUEBA OK (EVENTO EN BORRADOR)"
-        : (admission.remaining ?? 0) > 0
-          ? `ACCESO PERMITIDO · QUEDAN ${admission.remaining} INGRESOS`
-          : "ACCESO PERMITIDO · CUPO COMPLETO",
+    message:
+      (admission.remaining ?? 0) > 0
+        ? `ACCESO PERMITIDO · QUEDAN ${admission.remaining} INGRESOS`
+        : "ACCESO PERMITIDO · CUPO COMPLETO",
     ticket: {
       id: row.id,
       tierName: isFreePass
@@ -784,7 +772,7 @@ export type EventTicketManifestPayload = {
     seating_row_label: string | null
     seating_sector_id: string | null
     is_test: boolean
-    /** Compra sandbox (test_sandbox): válida en puerta para E2E. */
+    /** Compra sandbox (test_sandbox). is_test se rechaza siempre en puerta. */
     is_sandbox: boolean
     tier_price: number
     group_id: string | null
@@ -963,20 +951,9 @@ export async function fetchEventTicketManifest(
     }
   }
 
-  const tickets = rows
-    .filter((row) => {
-      const isSandbox = orderPaymentMethod(row) === "test_sandbox"
-      // Borradores de prueba fuera de sandbox no van a puerta en vivo.
-      if (
-        event.status === "published" &&
-        Boolean(row.is_test) &&
-        !isSandbox
-      ) {
-        return false
-      }
-      return true
-    })
-    .map((row) => {
+  // Los tickets de prueba viajan en el manifiesto para probar la UI,
+  // pero el escaneo local y el RPC los rechazan siempre.
+  const tickets = rows.map((row) => {
     const owner = row.owner_id ? ownerMap.get(row.owner_id) : null
     const isSandbox = orderPaymentMethod(row) === "test_sandbox"
     return {

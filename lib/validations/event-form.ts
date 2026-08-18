@@ -4,10 +4,7 @@ import {
   computeEventCapacity,
   eventCapacityOverflowMessage,
 } from "@/lib/inventory/capacity-budget"
-import {
-  findLogicalSector,
-  listGeneralLogicalSectors,
-} from "@/lib/inventory/logical-sectors"
+import { findLogicalSector } from "@/lib/inventory/logical-sectors"
 import {
   DEFAULT_TICKET_TABS,
   TICKET_DESCRIPTION_MAX,
@@ -29,6 +26,10 @@ import {
   optionalSectorKey,
   optionalUuid,
 } from "@/lib/validations/relation-id"
+import {
+  normalizeTicketSectorInput,
+  resolveTicketSectorId,
+} from "@/lib/validations/ticket-sku"
 import { EVENT_VISIBILITY_VALUES } from "@/types/events"
 import { TICKET_TIER_VISIBILITY_VALUES } from "@/types/tickets"
 
@@ -98,8 +99,10 @@ export const ticketPhaseSchema = z.object({
   sold: z.number().int().min(0).optional(),
 })
 
-export const ticketTierSchema = z.object({
-  id: z.preprocess(
+export const ticketTierSchema = z.preprocess(
+  normalizeTicketSectorInput,
+  z.object({
+    id: z.preprocess(
     (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
     z.string().uuid().optional(),
   ),
@@ -155,7 +158,8 @@ export const ticketTierSchema = z.object({
   promoRequiredQty: z.number().int().min(1).max(50).optional().default(1),
   promoPayQty: z.number().int().min(0).max(50).optional().default(1),
   phases: z.array(ticketPhaseSchema).optional().default([]),
-})
+  }),
+)
 
 const eventFormObject = z
   .object({
@@ -243,9 +247,6 @@ const eventFormObject = z
       const usesMap =
         Boolean(data.basics.hasSeatingPlan) &&
         Boolean(data.venue.includesSeatingMap)
-      const generalSectors = data.basics.hasSeatingPlan
-        ? listGeneralLogicalSectors(data.venue.zones)
-        : []
       if (
         data.basics.hasSeatingPlan &&
         tier.layoutType !== "general" &&
@@ -256,19 +257,6 @@ const eventFormObject = z
           code: "custom",
           path: ["tickets", index, "seatingSectorId"],
           message: "Seleccioná la zona numerada de esta entrada.",
-        })
-      }
-      if (
-        data.basics.hasSeatingPlan &&
-        tier.layoutType === "general" &&
-        (tier.tierType ?? "general") === "general" &&
-        generalSectors.length > 0 &&
-        !tier.seatingSectorId
-      ) {
-        context.addIssue({
-          code: "custom",
-          path: ["tickets", index, "seatingSectorId"],
-          message: "Elegí el sector general de esta entrada.",
         })
       }
     }
@@ -431,8 +419,10 @@ const eventFormObject = z
 export const publishEventSchema = eventFormObject
 export const eventFormSchema = publishEventSchema
 
-const draftTicketSchema = z.object({
-  id: z.preprocess(
+const draftTicketSchema = z.preprocess(
+  normalizeTicketSectorInput,
+  z.object({
+    id: z.preprocess(
     (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
     z.string().uuid().optional(),
   ),
@@ -475,7 +465,8 @@ const draftTicketSchema = z.object({
   promoRequiredQty: z.number().int().min(1).max(50).optional().default(1),
   promoPayQty: z.number().int().min(0).max(50).optional().default(1),
   phases: z.array(ticketPhaseSchema).optional().default([]),
-})
+  }),
+)
 
 /** Autoguardado de borrador: no exige descripción, precio ni venue completo. */
 export const draftEventSchema = z.object({
@@ -624,7 +615,7 @@ export function coerceDraftEventForm(
       visibility: tier.visibility ?? "public",
       capacityPerUnit: tier.capacityPerUnit ?? 1,
       admitCount: tier.admitCount ?? 1,
-      seatingSectorId: tier.seatingSectorId?.trim() || null,
+      seatingSectorId: resolveTicketSectorId(tier),
       tierType: tier.tierType ?? "general",
       listPrice: tier.listPrice ?? null,
       bundleItems: tier.bundleItems ?? [],

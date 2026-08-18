@@ -47,7 +47,7 @@ export function PwaRegister() {
     )
 
     void navigator.serviceWorker
-      .register("/sw.js", { scope: "/" })
+      .register("/sw.js", { scope: "/", updateViaCache: "none" })
       .then((registration) => {
         if (cancelled) return
         registration.update().catch(() => {})

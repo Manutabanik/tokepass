@@ -88,7 +88,7 @@ test.describe("Checkout evento masivo — sillas numeradas", () => {
     await page.getByRole("button", { name: /Continuar al pago/i }).click()
 
     const sandbox = page.getByRole("button", {
-      name: /Compra de prueba/i,
+      name: /Simular Pago \(Modo Prueba\)|Compra de prueba/i,
     })
     if (await sandbox.count()) {
       await sandbox.first().click()

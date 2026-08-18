@@ -11,7 +11,6 @@ import {
   Sparkles,
   Ticket,
   Trash2,
-  Lock,
 } from "lucide-react"
 import type { ReactNode } from "react"
 import { useEffect, useMemo, useState } from "react"
@@ -62,6 +61,7 @@ import {
   type InventoryTierType,
 } from "@/lib/inventory/unified-inventory"
 import { CapacityBudgetBar } from "@/components/admin/capacity-budget-bar"
+import { MasterManifestTable } from "@/components/admin/master-manifest-table"
 import { useEventCapacity } from "@/hooks/use-event-capacity"
 import {
   asPositiveInt,
@@ -71,7 +71,7 @@ import {
   phaseLimitSum,
   ticketPhasesExceedParent,
 } from "@/lib/inventory/capacity-budget"
-import { formatCurrency, formatNumber } from "@/lib/format"
+import { formatCurrency } from "@/lib/format"
 import {
   defaultInventoryDayId,
   formatInventoryDayOption,
@@ -79,9 +79,18 @@ import {
 import { cn } from "@/lib/utils"
 import { isMapBackedTicket } from "@/lib/seating/venue-map-pricing"
 import {
-  findLogicalSector,
+  collectVenueMapSectorKeys,
+  isMapOwnedLogicalSector,
+  listAssignableGeneralSectors,
   listGeneralLogicalSectors,
+  normalizeLogicalSectors,
+  UNASSIGNED_SECTOR_LABEL,
+  UNASSIGNED_SECTOR_VALUE,
 } from "@/lib/inventory/logical-sectors"
+import {
+  buildMasterManifestRows,
+  excludeMapOwnedSectors,
+} from "@/lib/inventory/master-manifest"
 import { TICKET_DAY_ALL } from "@/types/tickets"
 import type { EventFormValues } from "@/lib/validations/event-form"
 
@@ -153,9 +162,14 @@ function mergeEventSectors(
 }
 
 export function UnifiedInventoryPanel({ form, eventId = null }: Props) {
-  const tickets = form.watch("tickets") ?? []
+  const watchedTickets = form.watch("tickets")
+  const tickets = useMemo(() => watchedTickets ?? [], [watchedTickets])
   const hasSeatingPlan = Boolean(form.watch("basics.hasSeatingPlan"))
-  const draftSectors = listGeneralLogicalSectors(form.watch("venue.zones"))
+  const venueMap = form.watch("venue.venueMap")
+  const draftSectors = listAssignableGeneralSectors(
+    form.watch("venue.zones"),
+    venueMap,
+  )
   const canLoadSectors = Boolean(eventId && hasSeatingPlan)
   const [loadedSectors, setLoadedSectors] = useState<EventGeneralSector[]>([])
   const [loadedSectorError, setLoadedSectorError] = useState<string | null>(
@@ -164,14 +178,15 @@ export function UnifiedInventoryPanel({ form, eventId = null }: Props) {
   const sectorLoadError = canLoadSectors ? loadedSectorError : null
   const logicalSectors = useMemo(() => {
     const persisted = eventId && hasSeatingPlan ? loadedSectors : []
-    return eventId
+    const merged = eventId
       ? mergeEventSectors(draftSectors, persisted)
       : draftSectors
-  }, [draftSectors, eventId, hasSeatingPlan, loadedSectors])
+    return listAssignableGeneralSectors(merged, venueMap)
+  }, [draftSectors, eventId, hasSeatingPlan, loadedSectors, venueMap])
 
   useEffect(() => {
+    const current = form.getValues("tickets") ?? []
     if (!hasSeatingPlan) {
-      const current = form.getValues("tickets") ?? []
       if (current.some((tier) => tier.seatingSectorId)) {
         form.setValue(
           "tickets",
@@ -179,6 +194,30 @@ export function UnifiedInventoryPanel({ form, eventId = null }: Props) {
           { shouldDirty: true },
         )
       }
+      return
+    }
+
+    const mapKeys = collectVenueMapSectorKeys(form.getValues("venue.venueMap"))
+    const draftZones = normalizeLogicalSectors(form.getValues("venue.zones"))
+    let changed = false
+    const next = current.map((tier) => {
+      const sectorId = tier.seatingSectorId?.trim()
+      const seated =
+        tier.layoutType === "numbered_seat" ||
+        tier.layoutType === "table_combo" ||
+        tier.tierType === "seated"
+      if (!sectorId || seated) return tier
+      const zone = draftZones.find((item) => item.id === sectorId)
+      const ownedByMap =
+        mapKeys.ids.has(sectorId) ||
+        (zone != null &&
+          isMapOwnedLogicalSector(zone, form.getValues("venue.venueMap")))
+      if (!ownedByMap) return tier
+      changed = true
+      return { ...tier, seatingSectorId: null }
+    })
+    if (changed) {
+      form.setValue("tickets", next, { shouldDirty: true })
     }
   }, [form, hasSeatingPlan])
 
@@ -202,6 +241,18 @@ export function UnifiedInventoryPanel({ form, eventId = null }: Props) {
   const scheduleDays = form.watch("basics.scheduleDays") ?? []
   const isMultiDay = Boolean(form.watch("basics.isMultiDay")) || scheduleDays.length >= 2
   const capacity = useEventCapacity(form)
+  const manifestRows = useMemo(
+    () =>
+      buildMasterManifestRows({
+        tickets,
+        venueMap,
+      }),
+    [tickets, venueMap],
+  )
+  const dropdownSectors = useMemo(
+    () => excludeMapOwnedSectors(logicalSectors, venueMap),
+    [logicalSectors, venueMap],
+  )
   const [bundleOpen, setBundleOpen] = useState(false)
   const [editingBundleIndex, setEditingBundleIndex] = useState<number | null>(
     null,
@@ -291,25 +342,8 @@ export function UnifiedInventoryPanel({ form, eventId = null }: Props) {
 
   return (
     <div className="space-y-5">
+      <MasterManifestTable rows={manifestRows} capacity={capacity} />
       <CapacityBudgetBar form={form} />
-      {hasSeatingPlan && capacity.mapAllocatedCapacity > 0 ? (
-        <div
-          className="flex items-start gap-2 rounded-xl border border-border bg-muted/50 px-3 py-2.5 text-sm text-muted-foreground"
-          data-conflict-sector={
-            tickets.find((tier) => tier.seatingSectorId)?.seatingSectorId ??
-            undefined
-          }
-        >
-          <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-          <p>
-            <span className="font-medium text-foreground">
-              Bloqueados por el Mapa.{" "}
-            </span>
-            {formatNumber(capacity.mapAllocatedCapacity)} lugares ya están
-            asignados a tu mapa interactivo. No pueden editarse aquí.
-          </p>
-        </div>
-      ) : null}
       {typeof form.formState.errors.tickets?.message === "string" ? (
         <p className="text-sm text-destructive" role="alert">
           {form.formState.errors.tickets.message}
@@ -321,8 +355,8 @@ export function UnifiedInventoryPanel({ form, eventId = null }: Props) {
         </p>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">
           {hasSeatingPlan
-            ? "Campo, extras y combos. Las mesas y butacas del mapa no se tocan acá: ya quedaron bloqueadas en el paso anterior."
-            : "Nombre, capacidad y precio. Este evento no usa mapa, así que no hace falta elegir un sector."}
+            ? "Campo, extras y combos. El mapa ya reservó su aforo; una general puede quedar libre o ligarse a un sector que no sea del mapa."
+            : "Nombre, capacidad y precio. Esta entrada es inventario libre: no depende de un sector."}
         </p>
       </div>
 
@@ -386,15 +420,8 @@ export function UnifiedInventoryPanel({ form, eventId = null }: Props) {
             ...createInventoryTicket("general", {
               dayId: defaultInventoryDayId(scheduleDays),
             }),
-            seatingSectorId: hasSeatingPlan
-              ? logicalSectors[0]?.id ?? null
-              : null,
-            capacity: hasSeatingPlan
-              ? Math.max(
-                  1,
-                  Math.min(logicalSectors[0]?.capacity ?? 100, 100),
-                )
-              : 100,
+            seatingSectorId: null,
+            capacity: 100,
           })
         }
       >
@@ -414,21 +441,20 @@ export function UnifiedInventoryPanel({ form, eventId = null }: Props) {
               index={item.index}
               capacityLabel="Capacidad máxima"
               scheduleDays={isMultiDay ? scheduleDays : []}
-              venueRemaining={
-                hasSeatingPlan
-                  ? generalRemainingForTicket(
-                      capacity,
-                      tickets[item.index],
-                      tickets,
-                      findLogicalSector(
-                        form.getValues("venue.zones"),
-                        tickets[item.index]?.seatingSectorId,
-                      )?.capacity,
-                    )
+              venueRemaining={(() => {
+                const sectorId = tickets[item.index]?.seatingSectorId?.trim()
+                const sector = sectorId
+                  ? dropdownSectors.find((row) => row.id === sectorId)
                   : undefined
-              }
-              capacityExceeded={capacity.exceeded}
-              logicalSectors={hasSeatingPlan ? logicalSectors : []}
+                if (!sector) return undefined
+                return generalRemainingForTicket(
+                  capacity,
+                  tickets[item.index],
+                  tickets,
+                  sector.capacity,
+                )
+              })()}
+              logicalSectors={hasSeatingPlan ? dropdownSectors : []}
               showSectorSelect={hasSeatingPlan}
               showPhases
               onRemove={() => remove(item.index)}
@@ -815,23 +841,32 @@ function InventoryRow({
           />
         )}
       </div>
-      {showSectorSelect && logicalSectors.length > 0 ? (
+      {showSectorSelect ? (
         <FormField
           control={form.control}
           name={`tickets.${index}.seatingSectorId`}
           render={({ field, fieldState }) => {
-            const items = logicalSectors.map((sector) => ({
-              value: sector.id,
-              label: `${sector.name} (${sector.capacity})`,
-            }))
-            const selected = field.value?.trim() || ""
+            const items = [
+              {
+                value: UNASSIGNED_SECTOR_VALUE,
+                label: UNASSIGNED_SECTOR_LABEL,
+              },
+              ...logicalSectors.map((sector) => ({
+                value: sector.id,
+                label: `${sector.name} (${sector.capacity})`,
+              })),
+            ]
+            const selected = field.value?.trim() || UNASSIGNED_SECTOR_VALUE
             return (
               <FormItem>
-                <FormLabel>Sector</FormLabel>
+                <FormLabel>Elegí el sector</FormLabel>
                 <Select
-                  value={selected || undefined}
+                  value={selected}
                   onValueChange={(value) => {
-                    const next = value?.trim() ? value : null
+                    const next =
+                      !value || value === UNASSIGNED_SECTOR_VALUE
+                        ? null
+                        : value.trim()
                     field.onChange(next)
                     if (!next) return
                     const sector = logicalSectors.find((item) => item.id === next)
@@ -848,7 +883,7 @@ function InventoryRow({
                   items={items}
                 >
                   <SelectTrigger className="h-11 w-full max-w-md">
-                    <SelectValue placeholder="Elegí el sector">
+                    <SelectValue placeholder={UNASSIGNED_SECTOR_LABEL}>
                       {items.find((item) => item.value === selected)?.label}
                     </SelectValue>
                   </SelectTrigger>
@@ -861,7 +896,9 @@ function InventoryRow({
                   </SelectContent>
                 </Select>
                 <FormDescription>
-                  El stock y los lotes no pueden superar este cupo.
+                  {selected === UNASSIGNED_SECTOR_VALUE
+                    ? "Inventario libre: el cupo de esta entrada suma al aforo sin depender de un sector."
+                    : "El stock y los lotes no pueden superar el cupo de este sector. No uses sectores del mapa."}
                 </FormDescription>
                 <FormMessage>{fieldState.error?.message}</FormMessage>
               </FormItem>

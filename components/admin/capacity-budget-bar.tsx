@@ -40,12 +40,10 @@ export function CapacityBudgetBar({
           </p>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
             {capacity.totalCapacity > 0
-              ? hasSeatingPlan
-                ? `${formatNumber(capacity.totalAllocated)} de ${formatNumber(capacity.totalCapacity)} lugares (sectores generales + mapa)`
-                : `${formatNumber(capacity.totalAllocated)} lugares en entradas`
+              ? `Mapa ${formatNumber(capacity.mapAllocatedCapacity)} + sectores ${formatNumber(capacity.generalSectorCapacity)} + entradas libres ${formatNumber(capacity.unboundGeneralCapacity)} = ${formatNumber(capacity.totalCapacity)}`
               : hasSeatingPlan
-                ? "Agregá un sector general o dibujá el mapa para calcular el aforo."
-                : "Agregá entradas con capacidad para ver el aforo."}
+                ? "El aforo suma el mapa, los sectores generales y cada entrada sin sector. No hace falta inflar un sector ficticio."
+                : "Creá una entrada general: su cupo es el aforo. No requiere un sector."}
           </p>
         </div>
       </div>
@@ -71,11 +69,13 @@ export function CapacityBudgetBar({
       </div>
       {capacity.exceeded ? (
         <p className="mt-2 text-xs text-destructive" role="alert">
-          Excedido por {formatNumber(capacity.overflow)} lugares
+          Un sector asignado supera su cupo por {formatNumber(capacity.overflow)}{" "}
+          lugares. Las entradas libres no se cruzan con el mapa.
         </p>
       ) : capacity.totalCapacity > 0 && capacity.remaining > 0 ? (
         <p className="mt-2 text-xs text-muted-foreground">
-          Quedan {formatNumber(capacity.remaining)}.
+          {formatNumber(capacity.remaining)} lugares de sectores generales
+          todavía sin asignar a una entrada.
         </p>
       ) : null}
     </div>

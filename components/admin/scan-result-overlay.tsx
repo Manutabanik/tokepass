@@ -20,6 +20,9 @@ export type ScanOverlayState =
       kind: "invalid"
     }
   | {
+      kind: "test_ticket"
+    }
+  | {
       kind: "wrong_sector"
       correctGateName: string
     }
@@ -42,6 +45,7 @@ const OVERLAY: Record<
   valid: { bg: "#10B981", title: "ACCESO PERMITIDO" },
   duplicate: { bg: "#EF4444", title: "ENTRADA YA REGISTRADA" },
   invalid: { bg: "#F59E0B", title: "CODIGO NO RECONOCIDO EN SISTEMA" },
+  test_ticket: { bg: "#F59E0B", title: "TICKET DE PRUEBA - ACCESO DENEGADO" },
   wrong_sector: { bg: "#3B82F6", title: "SECTOR INCORRECTO" },
   main_gate_review: { bg: "#F59E0B", title: "REVISION EN PUERTA PRINCIPAL" },
   transfer_pending: { bg: "#F59E0B", title: "TRANSFERENCIA PENDIENTE" },

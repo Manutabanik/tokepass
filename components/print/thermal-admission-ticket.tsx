@@ -1,5 +1,6 @@
 import { QRCodeSVG } from "qrcode.react"
 
+import { TestTicketWatermark } from "@/components/public/test-ticket-watermark"
 import { formatEventDay, formatEventTime } from "@/lib/format"
 
 export type ThermalAdmissionTicketProps = {
@@ -13,6 +14,7 @@ export type ThermalAdmissionTicketProps = {
   holderDni?: string | null
   seatLabel?: string | null
   priceLabel?: string | null
+  isTest?: boolean
 }
 
 /**
@@ -30,6 +32,7 @@ export function ThermalAdmissionTicket({
   holderDni,
   seatLabel,
   priceLabel,
+  isTest = false,
 }: ThermalAdmissionTicketProps) {
   const dateLabel = eventDate
     ? `${formatEventDay(eventDate)} ${formatEventTime(eventDate)}`
@@ -38,7 +41,8 @@ export function ThermalAdmissionTicket({
   const code = ticketCode.replace(/[^a-zA-Z0-9]/g, "").slice(0, 8).toUpperCase()
 
   return (
-    <article className="print-ticket print-ticket-admission">
+    <article className="relative print-ticket print-ticket-admission">
+      {isTest ? <TestTicketWatermark compact /> : null}
       <p className="print-ticket-brand">Tokepass</p>
 
       <p className="print-ticket-tier">{tierName}</p>

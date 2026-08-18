@@ -45,7 +45,7 @@ export type ScannerManifestTicket = {
   seating_row_label: string | null
   seating_sector_id?: string | null
   is_test: boolean
-  /** Compra sandbox (test_sandbox): válida en puerta para E2E. */
+  /** Compra sandbox (test_sandbox). is_test siempre se rechaza en puerta. */
   is_sandbox?: boolean
   /** Precio público del tier; 0 = gratuita. */
   tier_price: number

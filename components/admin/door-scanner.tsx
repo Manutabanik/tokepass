@@ -510,6 +510,13 @@ export function DoorScanner() {
         })
         return
       }
+      if (
+        result.status === "test_ticket" ||
+        result.status === "test_ticket_live"
+      ) {
+        showOverlay({ kind: "test_ticket" })
+        return
+      }
       showOverlay({ kind: "invalid" })
     },
     [showAlreadyUsed, showOverlay],
@@ -517,10 +524,8 @@ export function DoorScanner() {
 
   const validateLocalTicket = useCallback(
     async (ticket: ScannerManifestTicket) => {
-      const eventStatus =
-        selectedEvent?.status ?? manifestMeta?.eventStatus ?? null
-      if (ticket.is_test && !ticket.is_sandbox && eventStatus !== "draft") {
-        showOverlay({ kind: "invalid" })
+      if (ticket.is_test) {
+        showOverlay({ kind: "test_ticket" })
         return
       }
       if (ticket.status === "used" || ticket.status === "scanned") {
@@ -640,7 +645,6 @@ export function DoorScanner() {
       deviceSlotIndex,
       manifestMeta,
       refreshQueueCount,
-      selectedEvent?.status,
       showAlreadyUsed,
       showLocalSuccess,
       showOverlay,

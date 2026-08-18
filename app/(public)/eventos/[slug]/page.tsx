@@ -2,6 +2,10 @@ import type { Metadata } from "next"
 import { Suspense } from "react"
 import { notFound } from "next/navigation"
 
+import {
+  getEventDetailsForPreviewKey,
+  type EventDetails,
+} from "@/app/actions/public-events"
 import { StorefrontChromeGate } from "@/components/layout/public-shell"
 import { EventSchemaScript } from "@/components/public/event-schema-script"
 import { EventStorefrontSession } from "@/components/public/event-storefront-session"
@@ -13,6 +17,7 @@ import {
   cachedRelatedEvents,
   cachedResaleListings,
 } from "@/lib/catalog/cached-public-reads"
+import { normalizePreviewKey } from "@/lib/preview/sandbox"
 import {
   buildEventMetadata,
   eventSeoFromDetails,
@@ -22,64 +27,94 @@ import { decodeEventParam } from "@/lib/seo/event-slug"
 export const revalidate = 30
 export const dynamicParams = true
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ slug: string }>
-}): Promise<Metadata> {
-  const { slug: rawSlug } = await params
-  const fullSlug = decodeURIComponent(rawSlug)
-  
-  // Intenta por slug completo primero, luego por decodeEventParam
-  let event = await cachedEventDetails(fullSlug).catch(() => null)
-  if (!event) {
-    const decodedSlug = decodeEventParam(rawSlug)
-    if (decodedSlug !== fullSlug) {
-      event = await cachedEventDetails(decodedSlug).catch(() => null)
-    }
-  }
-
-  if (!event) {
-    return { title: "Evento no encontrado" }
-  }
-
-  return buildEventMetadata(eventSeoFromDetails(event))
+type EventPageSearch = {
+  preview_key?: string | string[]
 }
 
-export default async function PublicEventPage({
+async function loadPublishedEvent(rawSlug: string): Promise<EventDetails | null> {
+  const fullSlug = decodeURIComponent(rawSlug)
+  let event = await cachedEventDetails(fullSlug).catch(() => null)
+  if (event) return event
+  const decodedSlug = decodeEventParam(rawSlug)
+  if (decodedSlug !== fullSlug) {
+    event = await cachedEventDetails(decodedSlug).catch(() => null)
+  }
+  return event
+}
+
+async function loadPreviewEvent(
+  rawSlug: string,
+  previewKey: string,
+): Promise<EventDetails | null> {
+  const fullSlug = decodeURIComponent(rawSlug)
+  let event = await getEventDetailsForPreviewKey(fullSlug, previewKey)
+  if (event) return event
+  const decodedSlug = decodeEventParam(rawSlug)
+  if (decodedSlug !== fullSlug) {
+    event = await getEventDetailsForPreviewKey(decodedSlug, previewKey)
+  }
+  return event
+}
+
+export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>
-}) {
+  searchParams: Promise<EventPageSearch>
+}): Promise<Metadata> {
   const { slug: rawSlug } = await params
-  
-  // 1. Decodificar el URI original directamente desde la URL
-  const fullSlug = decodeURIComponent(rawSlug)
+  const query = await searchParams
+  const previewKey = normalizePreviewKey(query.preview_key)
 
-  // 2. Intentar buscar por el slug exacto
-  let event = await cachedEventDetails(fullSlug).catch(() => null)
-  let targetSlug = fullSlug
+  const published = await loadPublishedEvent(rawSlug)
+  if (published) {
+    return buildEventMetadata(eventSeoFromDetails(published))
+  }
 
-  // 3. Fallback: Si no lo encuentra, intentar decodificar el parámetro por si es un ID o slug procesado
-  if (!event) {
-    const decodedSlug = decodeEventParam(rawSlug)
-    if (decodedSlug !== fullSlug) {
-      event = await cachedEventDetails(decodedSlug).catch(() => null)
-      if (event) {
-        targetSlug = decodedSlug
+  if (previewKey) {
+    const preview = await loadPreviewEvent(rawSlug, previewKey)
+    if (preview) {
+      return {
+        ...buildEventMetadata(eventSeoFromDetails(preview)),
+        robots: { index: false, follow: false },
       }
     }
   }
 
-  // 4. Si sigue sin encontrarlo, verificar si el evento está pausado/cancelado/borrador
+  return { title: "Evento no encontrado", robots: { index: false, follow: false } }
+}
+
+export default async function PublicEventPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>
+  searchParams: Promise<EventPageSearch>
+}) {
+  const { slug: rawSlug } = await params
+  const query = await searchParams
+  const previewKey = normalizePreviewKey(query.preview_key)
+  const fullSlug = decodeURIComponent(rawSlug)
+
+  let event = await loadPublishedEvent(rawSlug)
+
+  if (!event && previewKey) {
+    event = await loadPreviewEvent(rawSlug, previewKey)
+    if (!event) {
+      notFound()
+    }
+  }
+
   if (!event) {
-    const gate = await cachedEventAccessGate(targetSlug)
-    if (
-      gate &&
-      (gate.status === "paused" ||
-        gate.status === "draft" ||
-        gate.status === "cancelled")
-    ) {
+    const decodedSlug = decodeEventParam(rawSlug)
+    const gate = await cachedEventAccessGate(
+      decodedSlug !== fullSlug ? decodedSlug : fullSlug,
+    )
+    if (gate?.status === "draft") {
+      notFound()
+    }
+    if (gate && (gate.status === "paused" || gate.status === "cancelled")) {
       return (
         <EventUnavailableNotice title={gate.title} status={gate.status} />
       )
@@ -87,33 +122,41 @@ export default async function PublicEventPage({
     notFound()
   }
 
+  const isDraftPreview = Boolean(event.isDraftPreview)
   const locationText = event.venue?.location ?? event.location ?? ""
   const province = locationText.split(",")[0]?.trim() ?? ""
 
   const [resaleListings, relatedEvents] = await Promise.all([
-    cachedResaleListings(event.id).catch(() => []),
-    cachedRelatedEvents(
-      event.id,
-      event.categoryId ?? "",
-      province,
-      4,
-    ).catch(() => []),
+    isDraftPreview
+      ? Promise.resolve([])
+      : cachedResaleListings(event.id).catch(() => []),
+    isDraftPreview
+      ? Promise.resolve([])
+      : cachedRelatedEvents(
+          event.id,
+          event.categoryId ?? "",
+          province,
+          4,
+        ).catch(() => []),
   ])
 
   const seo = eventSeoFromDetails(event)
 
   return (
     <div className="relative">
-      <EventSchemaScript {...seo} />
+      {isDraftPreview ? null : <EventSchemaScript {...seo} />}
       <Suspense fallback={null}>
         <EventStorefrontSession
           event={event}
           resaleListings={resaleListings}
+          previewKey={previewKey}
         />
       </Suspense>
-      <StorefrontChromeGate>
-        <RelatedEventsSection events={relatedEvents} />
-      </StorefrontChromeGate>
+      {isDraftPreview ? null : (
+        <StorefrontChromeGate>
+          <RelatedEventsSection events={relatedEvents} />
+        </StorefrontChromeGate>
+      )}
     </div>
   )
 }

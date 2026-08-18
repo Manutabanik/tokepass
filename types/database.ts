@@ -280,6 +280,8 @@ export type Event = {
   agenda_blocks?: AgendaBlock[]
   created_at: string
   updated_at: string
+  /** Enlace de preview del borrador (?preview_key=). No exponer en EventDetails público. */
+  preview_key: string
 }
 
 export type EventSchedule = {
@@ -388,6 +390,10 @@ export type TicketTier = {
   day_id: string | null
   visibility: "public" | "private"
   layout_type: "general" | "table_combo" | "numbered_seat"
+  /**
+   * sector_id opcional del SKU. NULL = inventario comercial flotante
+   * (Master Manifest): la entrada vive con su propio max_capacity.
+   */
   seating_sector_id: string | null
   capacity_per_unit: number
   /** QRs independientes por unidad vendida (mesa/agrupación). */
@@ -725,6 +731,8 @@ export type Order = {
   cashier_user_id: string | null
   created_at: string
   updated_at: string
+  /** Orden de prueba (preview). Los tickets asociados no valen en puerta. */
+  is_test: boolean
 }
 
 export type UserFavorite = {
@@ -925,6 +933,7 @@ type EventInsert = Omit<
   | "event_artists"
   | "agenda_blocks"
   | "has_schedule"
+  | "preview_key"
   | "created_at"
   | "updated_at"
 > & {
@@ -965,6 +974,7 @@ type EventInsert = Omit<
   venue_map?: Json
   province?: string | null
   department?: string | null
+  preview_key?: string
   created_at?: string
   updated_at?: string
 }
@@ -1183,6 +1193,7 @@ type OrderInsert = Omit<
   | "guest_token"
   | "cashier_shift_id"
   | "cashier_user_id"
+  | "is_test"
   | "created_at"
   | "updated_at"
 > & {
@@ -1207,6 +1218,7 @@ type OrderInsert = Omit<
   guest_token?: string | null
   cashier_shift_id?: string | null
   cashier_user_id?: string | null
+  is_test?: boolean
   created_at?: string
   updated_at?: string
 }
@@ -2364,6 +2376,17 @@ export type Database = {
           venue_remaining: number | null
         }[]
       }
+      event_manifest_capacity: {
+        Args: {
+          p_event_id: string
+        }
+        Returns: {
+          map_capacity: number
+          floating_capacity: number
+          general_sector_capacity: number
+          total_capacity: number
+        }[]
+      }
       event_schedules_as_jsonb: {
         Args: {
           p_event_id: string
@@ -2478,6 +2501,13 @@ export type Database = {
           p_event_id: string
         }
         Returns: Json
+      }
+      event_preview_key_matches: {
+        Args: {
+          p_event_id: string
+          p_key: string
+        }
+        Returns: boolean
       }
       scan_ticket_admission: {
         Args: {

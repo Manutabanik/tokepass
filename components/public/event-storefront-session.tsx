@@ -7,6 +7,7 @@ import { canUserSandboxCheckout } from "@/app/actions/checkout"
 import type { EventDetails } from "@/app/actions/public-events"
 import type { ResaleListingPublic } from "@/app/actions/resale"
 import { EventStorefront } from "@/components/public/event-storefront"
+import { normalizePreviewKey } from "@/lib/preview/sandbox"
 import { extractAffiliateCode } from "@/lib/rrpp"
 import { createClient } from "@/lib/supabase/client"
 
@@ -25,16 +26,22 @@ export function EventStorefrontSession({
   event,
   resaleListings = [],
   showBackLink = true,
+  previewKey: previewKeyProp = null,
 }: {
   event: EventDetails
   resaleListings?: ResaleListingPublic[]
   showBackLink?: boolean
+  previewKey?: string | null
 }) {
   const searchParams = useSearchParams()
   const referralCode = extractAffiliateCode(searchParams)
+  const previewKey =
+    previewKeyProp ?? normalizePreviewKey(searchParams.get("preview_key"))
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [initialBuyer, setInitialBuyer] = useState<BuyerPrefill | null>(null)
-  const [sandboxEligible, setSandboxEligible] = useState(false)
+  const [sandboxEligible, setSandboxEligible] = useState(
+    Boolean(event.isDraftPreview),
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -48,7 +55,7 @@ export function EventStorefrontSession({
       if (!user) {
         setCurrentUserId(null)
         setInitialBuyer(null)
-        setSandboxEligible(false)
+        setSandboxEligible(Boolean(event.isDraftPreview))
         return
       }
 
@@ -59,7 +66,9 @@ export function EventStorefrontSession({
           .select("full_name, dni, email, phone")
           .eq("id", user.id)
           .maybeSingle(),
-        canUserSandboxCheckout(event.id),
+        event.isDraftPreview
+          ? Promise.resolve(true)
+          : canUserSandboxCheckout(event.id, previewKey),
       ])
       if (cancelled) return
       setInitialBuyer({
@@ -68,14 +77,14 @@ export function EventStorefrontSession({
         buyerEmail: profile?.email ?? user.email ?? "",
         buyerPhone: profile?.phone ?? "",
       })
-      setSandboxEligible(sandbox)
+      setSandboxEligible(Boolean(event.isDraftPreview) || sandbox)
     }
 
     void loadSession()
     return () => {
       cancelled = true
     }
-  }, [event.id])
+  }, [event.id, event.isDraftPreview, previewKey])
 
   return (
     <EventStorefront
@@ -86,6 +95,7 @@ export function EventStorefrontSession({
       resaleListings={resaleListings}
       showBackLink={showBackLink}
       sandboxEligible={sandboxEligible}
+      previewKey={previewKey}
     />
   )
 }

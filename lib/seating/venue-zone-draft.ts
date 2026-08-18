@@ -25,13 +25,24 @@ export function draftZoneCapacity(
   )
 }
 
+export function blueprintZoneType(
+  zone: Pick<VenueZoneDraft, "layoutType" | "type">,
+): VenueZoneBlueprint["type"] {
+  if (zone.layoutType === "numbered_seat" || zone.layoutType === "table_combo") {
+    return "reserved_seating"
+  }
+  return zone.type === "reserved_seating"
+    ? "reserved_seating"
+    : "general_admission"
+}
+
 export function draftZonesToBlueprint(
   zones: VenueZoneDraft[],
   structured: boolean,
 ): VenueZoneBlueprint[] {
   return zones.map((zone) => ({
     name: zone.name.trim(),
-    type: zone.layoutType === "general" ? zone.type : "general_admission",
+    type: blueprintZoneType(zone),
     capacity: draftZoneCapacity(zone, structured),
     rows: null,
     seatsPerRow: null,

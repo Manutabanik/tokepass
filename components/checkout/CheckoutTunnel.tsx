@@ -226,6 +226,8 @@ type TicketSelectorProps = {
   eventSlug?: string | null
   pixels?: EventPixelConfig
   sandboxEligible?: boolean
+  isDraftPreview?: boolean
+  previewKey?: string | null
   zoneTierPricing?: Array<{
     sectorKey: string
     ticketTierId: string
@@ -297,6 +299,8 @@ export function CheckoutTunnel({
   venueCapacity = null,
   eventSlug = null,
   sandboxEligible = false,
+  isDraftPreview = false,
+  previewKey = null,
   zoneTierPricing = [],
   purchaseLocked = false,
   selectedDayId = null,
@@ -1618,6 +1622,7 @@ export function CheckoutTunnel({
             [],
             buyerCheck.buyer,
             appliedPromo?.promoCodeId ?? null,
+            previewKey,
           )
         : await startCheckoutWithPayment(
             eventId,
@@ -1628,6 +1633,7 @@ export function CheckoutTunnel({
             appliedPromo?.promoCodeId ?? null,
             {
               paymentProvider: selectedProvider,
+              previewKey,
               deviceHash: getOrCreateDeviceHash(),
               dwellMs: getCheckoutDwellMs(),
             },
@@ -1936,7 +1942,7 @@ export function CheckoutTunnel({
   function handleSandboxReserve() {
     if (
       !acceptedTerms ||
-      !sandboxEligible ||
+      !(isDraftPreview || sandboxEligible) ||
       !canProceedFromCart ||
       purchaseLocked
     ) {
@@ -2006,7 +2012,7 @@ export function CheckoutTunnel({
     if (!(await ensureGuestAuthForHold())) return false
     if (!(await hasCheckoutAuthSession())) return true
     try {
-      const result = await lockTickets(eventId, items)
+      const result = await lockTickets(eventId, items, previewKey)
       if (!result.success) {
         if (result.error === "auth_required") {
           requestIdentity("open_map")
@@ -2096,7 +2102,7 @@ export function CheckoutTunnel({
         router.refresh()
         return false
       }
-      const hold = await holdSeatingUnitForCart(eventId, unit.id)
+      const hold = await holdSeatingUnitForCart(eventId, unit.id, previewKey)
       if (!hold.success && hold.error !== "auth_required") {
         if (hold.error === HIGH_DEMAND_LOCK_TIMEOUT) {
           toast.error(HIGH_DEMAND_LOCK_MESSAGE)
@@ -2152,6 +2158,7 @@ export function CheckoutTunnel({
           eventId,
           selectionPayload.sectorId,
           seat.id,
+          previewKey,
         )
         if (!hold.success) {
           if (hold.error === HIGH_DEMAND_LOCK_TIMEOUT) {
@@ -2444,6 +2451,7 @@ export function CheckoutTunnel({
                 appliedPromo={appliedPromo}
                 selectedProvider={selectedProvider}
                 sandboxEligible={sandboxEligible}
+                isDraftPreview={isDraftPreview}
                 controlsLocked={controlsLocked}
                 canProceedFromCart={canProceedFromCart}
                 fieldShake={fieldShake}
@@ -2486,6 +2494,7 @@ export function CheckoutTunnel({
                 appliedPromo={appliedPromo}
                 selectedProvider={selectedProvider}
                 sandboxEligible={sandboxEligible}
+                isDraftPreview={isDraftPreview}
                 controlsLocked={controlsLocked}
                 canProceedFromCart={canProceedFromCart}
                 fieldShake={fieldShake}

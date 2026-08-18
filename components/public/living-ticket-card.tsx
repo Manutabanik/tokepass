@@ -4,7 +4,7 @@ import {
   Armchair,
   Ban,
   Camera,
-  FlaskConical,
+  AlertTriangle,
   Gift,
   Hourglass,
   MoreHorizontal,
@@ -17,6 +17,7 @@ import Link from "next/link"
 import { useState } from "react"
 
 import type { MyTicket } from "@/app/actions/tickets"
+import { TestTicketWatermark } from "@/components/public/test-ticket-watermark"
 import { LivingTicketQR } from "@/components/public/living-ticket-qr"
 import { StaticSignedQR } from "@/components/public/static-signed-qr"
 import { QrEnlargeTrigger, QrScanLightbox } from "@/components/public/qr-scan-lightbox"
@@ -323,20 +324,10 @@ export function LivingTicketCard({
     >
       {ticket.isTest ? (
         <>
-          <div
-            className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
-            aria-hidden="true"
-          >
-            <span className="-rotate-12 rounded-xl border-2 border-amber-300/80 bg-amber-500/25 px-4 py-2 text-center text-[11px] font-black uppercase tracking-[0.16em] text-amber-950 shadow-[0_0_24px_rgba(245,158,11,0.35)] backdrop-blur-[2px] dark:text-amber-100">
-              Test / Borrador
-              <span className="mt-0.5 block text-[10px] font-bold tracking-[0.12em] text-amber-900/90 dark:text-amber-50/90">
-                No válido en puerta
-              </span>
-            </span>
-          </div>
-          <Badge className="absolute left-3 top-3 z-30 rounded-full border-0 bg-amber-500 text-[10px] font-bold uppercase tracking-wide text-black">
-            <FlaskConical className="size-3" aria-hidden="true" />
-            Sandbox
+          <TestTicketWatermark />
+          <Badge className="absolute left-3 top-3 z-30 rounded-full border-0 bg-amber-500 text-[10px] font-bold uppercase tracking-wide text-amber-950">
+            <AlertTriangle className="size-3" aria-hidden="true" />
+            Prueba
           </Badge>
         </>
       ) : null}

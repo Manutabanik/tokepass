@@ -95,7 +95,7 @@ import {
   eventCapacityOverflowMessage,
   ticketsHavePhaseOverflow,
 } from "@/lib/inventory/capacity-budget"
-import { logicalSectorIds } from "@/lib/inventory/logical-sectors"
+import { assignableLogicalSectorIds } from "@/lib/inventory/logical-sectors"
 import { useEventCapacity } from "@/hooks/use-event-capacity"
 import {
   GUIDED_ERROR_EVENT,
@@ -628,7 +628,10 @@ export function EventCreationWizard({
     const liveSectorIds = collectLiveSeatingSectorIds({
       venueMap: payloadData.venue.venueMap,
       seatingLayout: payloadData.venue.seatingLayout,
-      extraIds: logicalSectorIds(payloadData.venue.zones),
+      extraIds: assignableLogicalSectorIds(
+        payloadData.venue.zones,
+        payloadData.venue.venueMap,
+      ),
     })
     payloadData = sanitizeEventSubmitPayload(payloadData, {
       mode: editingId ? "update" : "create",
@@ -1300,9 +1303,8 @@ export function EventCreationWizard({
                   Entradas y combos
                 </CardTitle>
                 <CardDescription className="text-muted-foreground">
-                  Cada entrada se liga a un sector. Los lotes de preventa no
-                  pueden superar el cupo de ese sector. El mapa hereda su
-                  capacidad sola.
+                  El mapa y las entradas generales suman al aforo por separado.
+                  Una general puede quedar como inventario libre, sin sector.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 px-4 py-7 lg:px-8">
