@@ -747,7 +747,9 @@ export function CheckoutTunnel({
 
   function requestIdentity(action: "open_map" | "pay" | "continue") {
     persistCheckoutCart()
-    useCheckoutStore.getState().setPendingAction(action)
+    // Mapeamos "continue" a "pay" para mantener compatibilidad con CheckoutPendingAction
+    const pendingAction = action === "continue" ? "pay" : action
+    useCheckoutStore.getState().setPendingAction(pendingAction)
     useCheckoutStore.getState().setIdentityOpen(true)
   }
 
@@ -755,11 +757,22 @@ export function CheckoutTunnel({
     const mode = useCheckoutStore.getState().mode
 
     if (!hasCheckoutIdentity(currentUserId, mode)) {
-      // 1. Verificar si alguna entrada en el carrito requiere selección en mapa
+      // 1. Verificar de forma segura si alguna entrada en el carrito requiere selección en mapa
       const lines = useCheckoutStore.getState().lines
-      const hasMappedTickets = lines.some(
-        (line) => line.seatingSectorId && !line.seatingSectorId.startsWith("general:")
-      )
+      const hasMappedTickets = lines.some((line) => {
+        const l = line as unknown as {
+          type?: string
+          seatingUnitId?: string
+          seatingIds?: string[]
+          seatingSectorId?: string
+        }
+
+        if (l.type === "mapped") return true
+        if (l.seatingUnitId || (l.seatingIds && l.seatingIds.length > 0)) return true
+        if (l.seatingSectorId && !l.seatingSectorId.startsWith("general:")) return true
+
+        return false
+      })
 
       // 2. Si se especificó una intención o si hay entradas de mapa, usa "open_map"; de lo contrario, "continue"
       const resolvedIntent = forcedIntent ?? (hasMappedTickets ? "open_map" : "continue")
