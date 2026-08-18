@@ -15,6 +15,10 @@ import {
   formatVenueMapSkuErrors,
   validateVenueMapSkuConsistency,
 } from "@/lib/seating/venue-map-sku-consistency"
+import {
+  canPersistCatalogVenueName,
+  normalizeExactVenueName,
+} from "@/lib/venues/venue-identity"
 import type {
   VenueSeatingLayout,
   VenueSeatingRow,
@@ -59,6 +63,7 @@ type ActionResult<T = undefined> =
   | { success: false; error: string }
 
 type VenueMutationInput = {
+  id?: string | null
   name: string
   location: string
   city?: string
@@ -392,7 +397,7 @@ function normalizeVenueInput(input: VenueMutationInput):
       }
     }
   | { success: false; error: string } {
-  const name = input.name.trim()
+  const name = normalizeExactVenueName(input.name)
   const location = input.location.trim()
   const city = input.city?.trim() || null
   const capacity = Number(input.capacity)
@@ -409,7 +414,7 @@ function normalizeVenueInput(input: VenueMutationInput):
     : normalizeSeatingLayout(input.seatingLayout)
   if (!seating.success) return seating
 
-  if (!name || !location) {
+  if (!canPersistCatalogVenueName(name) || !location) {
     return { success: false, error: "Nombre y dirección son obligatorios." }
   }
   if (!Number.isInteger(capacity) || capacity < 1) {
@@ -626,156 +631,210 @@ export async function listOrganizerVenues(
   )
 }
 
-export async function createVenue(
+function isUniqueVenueNameError(message: string) {
+  return /venues_organizer_exact_name|duplicate key|unique constraint/i.test(
+    message,
+  )
+}
+
+async function findOwnedVenueId(
+  supabase: Awaited<ReturnType<typeof requireOrganizer>>["supabase"],
+  organizerId: string,
+  venueId: string | null | undefined,
+): Promise<string | null> {
+  const id = venueId?.trim() || ""
+  if (!id) return null
+  const { data } = await supabase
+    .from("venues")
+    .select("id")
+    .eq("id", id)
+    .eq("organizer_id", organizerId)
+    .limit(1)
+  return data?.[0]?.id ?? null
+}
+
+async function findVenueIdByExactName(
+  supabase: Awaited<ReturnType<typeof requireOrganizer>>["supabase"],
+  organizerId: string,
+  name: string,
+  excludeId?: string | null,
+): Promise<string | null> {
+  const normalized = normalizeExactVenueName(name)
+  if (!normalized) return null
+  let query = supabase
+    .from("venues")
+    .select("id")
+    .eq("organizer_id", organizerId)
+    .eq("name", normalized)
+    .order("created_at", { ascending: true })
+    .limit(1)
+  const exclude = excludeId?.trim()
+  if (exclude) {
+    query = query.neq("id", exclude)
+  }
+  const { data } = await query
+  return data?.[0]?.id ?? null
+}
+
+async function writeVenueRow(
+  supabase: Awaited<ReturnType<typeof requireOrganizer>>["supabase"],
+  organizerId: string,
+  venueId: string | null,
+  fields: {
+    name: string
+    location: string
+    city: string | null
+    latitude: number | null
+    longitude: number | null
+    capacity: number
+    zones: VenueZoneBlueprint[]
+    seatingLayout: VenueSeatingLayout
+    venueMap: InteractiveVenueMap
+    seatingBackgroundUrl: string | null
+  },
+): Promise<ActionResult<{ id: string }>> {
+  const patch = {
+    name: fields.name,
+    location: fields.location,
+    address: fields.location,
+    city: fields.city,
+    latitude: fields.latitude,
+    longitude: fields.longitude,
+    capacity: fields.capacity,
+    zone_blueprint: fields.zones as unknown as Json,
+    seating_layout: fields.seatingLayout as unknown as Json,
+    venue_map: serializeVenueMap(fields.venueMap) as unknown as Json,
+    seating_background_url: fields.seatingBackgroundUrl,
+    updated_at: new Date().toISOString(),
+  }
+
+  if (venueId) {
+    const { data, error } = await supabase
+      .from("venues")
+      .update(patch as never)
+      .eq("id", venueId)
+      .eq("organizer_id", organizerId)
+      .select("id")
+      .maybeSingle()
+    if (error) {
+      if (isUniqueVenueNameError(error.message)) {
+        return {
+          success: false,
+          error: "Ya tenés un recinto con ese nombre exacto.",
+        }
+      }
+      return { success: false, error: error.message }
+    }
+    if (!data) return { success: false, error: "No encontramos ese lugar." }
+    return { success: true, data: { id: data.id } }
+  }
+
+  const insertPayload = {
+    organizer_id: organizerId,
+    ...patch,
+    is_archived: false,
+  }
+  let created = await supabase
+    .from("venues")
+    .insert(insertPayload as never)
+    .select("id")
+    .maybeSingle()
+
+  if (created.error && missingArchivedColumn(created.error.message)) {
+    const withoutArchived = { ...insertPayload }
+    delete (withoutArchived as { is_archived?: boolean }).is_archived
+    created = await supabase
+      .from("venues")
+      .insert(withoutArchived as never)
+      .select("id")
+      .maybeSingle()
+  }
+
+  if (created.error && isUniqueVenueNameError(created.error.message)) {
+    const existingId = await findVenueIdByExactName(
+      supabase,
+      organizerId,
+      fields.name,
+    )
+    if (existingId) {
+      return writeVenueRow(supabase, organizerId, existingId, fields)
+    }
+    return {
+      success: false,
+      error: "Ya tenés un recinto con ese nombre exacto.",
+    }
+  }
+
+  if (created.error || !created.data) {
+    return {
+      success: false,
+      error: created.error?.message ?? "No se pudo crear.",
+    }
+  }
+  return { success: true, data: { id: created.data.id } }
+}
+
+export async function upsertVenue(
   input: VenueMutationInput,
 ): Promise<ActionResult<{ id: string }>> {
   try {
     const { supabase, userId } = await requireOrganizer()
     const normalized = normalizeVenueInput(input)
     if (!normalized.success) return normalized
-    const {
-      name,
-      location,
-      city,
-      latitude,
-      longitude,
-      capacity,
-      zones,
-      seatingLayout,
-      venueMap,
-      seatingBackgroundUrl,
-    } = normalized.data
-    const { data, error } = await supabase
-      .from("venues")
-      .insert({
-        organizer_id: userId,
-        name,
-        location,
-        address: location,
-        city,
-        latitude,
-        longitude,
-        capacity,
-        zone_blueprint: zones as unknown as Json,
-        seating_layout: seatingLayout as unknown as Json,
-        venue_map: serializeVenueMap(venueMap) as unknown as Json,
-        seating_background_url: seatingBackgroundUrl,
-        is_archived: false,
-      } as never)
-      .select("id")
-      .single()
 
-    if (error && missingArchivedColumn(error.message)) {
-      const retry = await supabase
-        .from("venues")
-        .insert({
-          organizer_id: userId,
-          name,
-          location,
-          address: location,
-          city,
-          latitude,
-          longitude,
-          capacity,
-          zone_blueprint: zones as unknown as Json,
-          seating_layout: seatingLayout as unknown as Json,
-          venue_map: serializeVenueMap(venueMap) as unknown as Json,
-          seating_background_url: seatingBackgroundUrl,
-        } as never)
-        .select("id")
-        .single()
-      if (retry.error || !retry.data) {
-        return {
-          success: false,
-          error: retry.error?.message ?? "No se pudo crear.",
-        }
+    const requestedId = input.id?.trim() || null
+    const ownedId = await findOwnedVenueId(supabase, userId, requestedId)
+    const sameNameId = await findVenueIdByExactName(
+      supabase,
+      userId,
+      normalized.data.name,
+      ownedId,
+    )
+
+    if (ownedId && sameNameId && sameNameId !== ownedId) {
+      return {
+        success: false,
+        error: "Ya tenés un recinto con ese nombre exacto.",
       }
-      const materializeError = await rematerializeEventsForVenue(
-        supabase,
-        retry.data.id,
-      )
-      if (materializeError) {
-        return { success: false, error: materializeError }
-      }
-      revalidateVenuePaths()
-      return { success: true, data: { id: retry.data.id } }
     }
 
-    if (error || !data) {
-      return { success: false, error: error?.message ?? "No se pudo crear." }
-    }
+    const targetId = ownedId ?? sameNameId
+    const written = await writeVenueRow(
+      supabase,
+      userId,
+      targetId,
+      normalized.data,
+    )
+    if (!written.success) return written
 
-    const materializeError = await rematerializeEventsForVenue(supabase, data.id)
+    const materializeError = await rematerializeEventsForVenue(
+      supabase,
+      written.data.id,
+    )
     if (materializeError) {
       return { success: false, error: materializeError }
     }
 
     revalidateVenuePaths()
-    return { success: true, data: { id: data.id } }
+    return written
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "No pudimos crear el lugar.",
+      error: error instanceof Error ? error.message : "No pudimos guardar el lugar.",
     }
   }
 }
 
+export async function createVenue(
+  input: VenueMutationInput,
+): Promise<ActionResult<{ id: string }>> {
+  return upsertVenue(input)
+}
+
 export async function updateVenue(input: {
   id: string
-} & VenueMutationInput): Promise<ActionResult> {
-  try {
-    const { supabase, userId } = await requireOrganizer()
-    const normalized = normalizeVenueInput(input)
-    if (!normalized.success) return normalized
-    const {
-      name,
-      location,
-      city,
-      latitude,
-      longitude,
-      capacity,
-      zones,
-      seatingLayout,
-      venueMap,
-      seatingBackgroundUrl,
-    } = normalized.data
-    const { data, error } = await supabase
-      .from("venues")
-      .update({
-        name,
-        location,
-        address: location,
-        city,
-        latitude,
-        longitude,
-        capacity,
-        zone_blueprint: zones as unknown as Json,
-        seating_layout: seatingLayout as unknown as Json,
-        venue_map: serializeVenueMap(venueMap) as unknown as Json,
-        seating_background_url: seatingBackgroundUrl,
-        updated_at: new Date().toISOString(),
-      } as never)
-      .eq("id", input.id)
-      .eq("organizer_id", userId)
-      .select("id")
-      .maybeSingle()
-
-    if (error) return { success: false, error: error.message }
-    if (!data) return { success: false, error: "No encontramos ese lugar." }
-
-    const materializeError = await rematerializeEventsForVenue(supabase, data.id)
-    if (materializeError) {
-      return { success: false, error: materializeError }
-    }
-
-    revalidateVenuePaths()
-    return { success: true, data: undefined }
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "No pudimos actualizar el lugar.",
-    }
-  }
+} & VenueMutationInput): Promise<ActionResult<{ id: string }>> {
+  return upsertVenue(input)
 }
 
 export async function updateVenueIdentity(input: {
@@ -788,14 +847,21 @@ export async function updateVenueIdentity(input: {
 }): Promise<ActionResult> {
   try {
     const { supabase, userId } = await requireOrganizer()
-    const name = input.name.trim()
+    const name = normalizeExactVenueName(input.name)
     const address = input.address.trim()
     const city = input.city?.trim() || null
     const latitude = parseCoordinate(input.latitude, -90, 90)
     const longitude = parseCoordinate(input.longitude, -180, 180)
 
-    if (!name || !address) {
+    if (!canPersistCatalogVenueName(name) || !address) {
       return { success: false, error: "Nombre y dirección son obligatorios." }
+    }
+    const takenId = await findVenueIdByExactName(supabase, userId, name, input.id)
+    if (takenId) {
+      return {
+        success: false,
+        error: "Ya tenés un recinto con ese nombre exacto.",
+      }
     }
     if ((latitude == null) !== (longitude == null)) {
       return { success: false, error: "Las coordenadas del lugar son inválidas." }
@@ -823,7 +889,15 @@ export async function updateVenueIdentity(input: {
       .select("id")
       .maybeSingle()
 
-    if (error) return { success: false, error: error.message }
+    if (error) {
+      if (isUniqueVenueNameError(error.message)) {
+        return {
+          success: false,
+          error: "Ya tenés un recinto con ese nombre exacto.",
+        }
+      }
+      return { success: false, error: error.message }
+    }
     if (!data) return { success: false, error: "No encontramos ese lugar." }
 
     revalidateVenuePaths()

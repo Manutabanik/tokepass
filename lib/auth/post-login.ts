@@ -1,5 +1,11 @@
 import "server-only"
 
+import {
+  loginUrlWithNext,
+  postLoginDestination,
+  resolveAuthCallbackDestination,
+  safeInternalNextPath,
+} from "@/lib/auth/next-path"
 import { createAdminClient } from "@/lib/supabase/admin"
 import type {
   OrganizerApprovalStatus,
@@ -11,18 +17,11 @@ export type FreshLoginProfile = {
   organizerApprovalStatus: OrganizerApprovalStatus
 }
 
-/** Only same-origin relative paths (open-redirect safe). */
-export function safeInternalNextPath(raw: unknown): string | null {
-  if (typeof raw !== "string") return null
-  const path = raw.trim()
-  if (!path.startsWith("/") || path.startsWith("//")) return null
-  if (path.includes("://") || path.includes("\\")) return null
-  return path
-}
-
-export function loginUrlWithNext(nextPath: string): string {
-  const safe = safeInternalNextPath(nextPath) ?? "/cuenta"
-  return `/login?next=${encodeURIComponent(safe)}`
+export {
+  loginUrlWithNext,
+  postLoginDestination,
+  resolveAuthCallbackDestination,
+  safeInternalNextPath,
 }
 
 /**
@@ -50,12 +49,4 @@ export async function getFreshLoginProfile(
     role: data.role,
     organizerApprovalStatus: data.organizer_approval_status,
   }
-}
-
-export function postLoginDestination(
-  role: UserRole | null | undefined,
-): "/superadmin" | "/admin" | "/cuenta" {
-  if (role === "super_admin") return "/superadmin"
-  if (role === "admin") return "/admin"
-  return "/cuenta"
 }

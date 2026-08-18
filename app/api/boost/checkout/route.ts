@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: insertError?.message ?? "No se pudo crear la suscripción.",
+          error: "No se pudo crear la suscripción.",
         },
         { status: 500 },
       )
@@ -160,10 +160,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Error al iniciar el pago del boost.",
+        error: "No se pudo iniciar el pago del boost.",
       },
       { status: 500 },
     )

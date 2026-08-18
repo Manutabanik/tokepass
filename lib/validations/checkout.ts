@@ -217,6 +217,29 @@ export const CheckoutAddonItemSchema = z.object({
   quantity: z.number().int().positive().max(20),
 })
 
+export const CheckoutSeatHoldSchema = z.object({
+  eventId: z.string().uuid(UUID_ERROR),
+  seatingUnitId: z.string().uuid(UUID_ERROR),
+})
+
+export const CheckoutLayoutHoldSchema = z.object({
+  eventId: z.string().uuid(UUID_ERROR),
+  sectorId: z.string().trim().min(1, UUID_ERROR).max(120),
+  layoutItemId: z.string().trim().min(1, UUID_ERROR).max(200),
+})
+
+export const CheckoutLockTicketsSchema = z.object({
+  eventId: z.string().uuid(UUID_ERROR),
+  items: z
+    .array(CheckoutCartItemSchema)
+    .min(1, "Datos de compra incompletos.")
+    .max(ABSOLUTE_MAX_ITEMS_PER_PURCHASE, QTY_ERROR),
+})
+
+export const CheckoutEventIdSchema = z.object({
+  eventId: z.string().uuid(UUID_ERROR),
+})
+
 export const CheckoutPayloadSchema = z
   .object({
     eventId: z.string().uuid(UUID_ERROR),

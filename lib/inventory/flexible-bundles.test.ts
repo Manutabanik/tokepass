@@ -2,8 +2,11 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import {
+  PROMO_TEMPLATE_2X1,
+  PROMO_TEMPLATE_SECOND_HALF,
   bundleSavings,
   inferBundleType,
+  promotionalBundlePrice,
   regularBundlePrice,
   validateBundleDraft,
 } from "@/lib/inventory/flexible-bundles"
@@ -38,6 +41,58 @@ describe("flexible bundles", () => {
     )
   })
 
+  it("calculates 2x1 from X_POR_Y", () => {
+    assert.equal(
+      promotionalBundlePrice({
+        items: [{ tierId: "g", quantity: 2 }],
+        unitPriceByTierId: { g: 10000 },
+        rule: PROMO_TEMPLATE_2X1,
+      }),
+      10000,
+    )
+  })
+
+  it("calculates 50% on the second unit", () => {
+    assert.equal(
+      promotionalBundlePrice({
+        items: [{ tierId: "g", quantity: 2 }],
+        unitPriceByTierId: { g: 10000 },
+        rule: PROMO_TEMPLATE_SECOND_HALF,
+      }),
+      15000,
+    )
+  })
+
+  it("applies a fixed amount off the pack", () => {
+    assert.equal(
+      promotionalBundlePrice({
+        items: [
+          { tierId: "a", quantity: 1 },
+          { tierId: "b", quantity: 1 },
+        ],
+        unitPriceByTierId: { a: 20000, b: 8000 },
+        rule: {
+          tipoDescuento: "MONTO_FIJO",
+          valorDescuento: 5000,
+          cantidadRequerida: 1,
+          cantidadPaga: 1,
+        },
+      }),
+      23000,
+    )
+  })
+
+  it("applies 2x1 per complete group and leftover units", () => {
+    assert.equal(
+      promotionalBundlePrice({
+        items: [{ tierId: "g", quantity: 3 }],
+        unitPriceByTierId: { g: 10000 },
+        rule: PROMO_TEMPLATE_2X1,
+      }),
+      20000,
+    )
+  })
+
   it("rejects drafts without components", () => {
     assert.equal(
       validateBundleDraft({
@@ -46,7 +101,7 @@ describe("flexible bundles", () => {
         price: 1000,
         capacity: 10,
       }),
-      "Elegí al menos un ítem incluido.",
+      "Elegí al menos una entrada incluida.",
     )
   })
 })

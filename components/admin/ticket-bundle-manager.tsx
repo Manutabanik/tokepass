@@ -23,6 +23,7 @@ import { formatCurrency } from "@/lib/format"
 import {
   BUNDLE_TYPE_LABELS,
   inferBundleType,
+  inferPromoRule,
   type BundleType,
 } from "@/lib/inventory/flexible-bundles"
 import { inferInventoryTierType } from "@/lib/inventory/unified-inventory"
@@ -103,6 +104,7 @@ export function TicketBundleManager({
         comboItems: [],
         bundleType: value.bundleType,
         bundleItems: value.items,
+        promoRule: value.promoRule,
       })
       if (!result.success) {
         toast.error(result.error)
@@ -219,6 +221,20 @@ export function TicketBundleManager({
                 originalPrice: editing.listPrice ?? 0,
                 capacity: editing.capacity,
                 items: editing.bundleItems,
+                promoRule: inferPromoRule({
+                  rule: editing.promoDiscountType
+                    ? {
+                        tipoDescuento: editing.promoDiscountType,
+                        valorDescuento: editing.promoDiscountValue,
+                        cantidadRequerida: editing.promoRequiredQty,
+                        cantidadPaga: editing.promoPayQty,
+                      }
+                    : null,
+                  bundleType: editing.bundleType,
+                  items: editing.bundleItems,
+                  salePrice: editing.price,
+                  regularPrice: editing.listPrice ?? 0,
+                }),
                 includesSeating: editing.bundleItems.some((item) => {
                   const child = tiers.find((row) => row.id === item.tierId)
                   return child?.tierType === "seated"

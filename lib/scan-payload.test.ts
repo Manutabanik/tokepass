@@ -6,7 +6,15 @@ import {
   isLivingWindowAccepted,
   resolveScanSecret,
 } from "./scan-payload"
-import { deviceClockOffsetMs, generateLivingQrPayload, getTotpRemainingSeconds, getTotpWindow, serverAlignedNowMs } from "./totp-offline"
+import {
+  deviceClockOffsetMs,
+  generateLivingQrPayload,
+  generateStaticQrPayload,
+  getTotpRemainingSeconds,
+  getTotpWindow,
+  serverAlignedNowMs,
+  verifyLivingQrMac,
+} from "./totp-offline"
 
 describe("Living QR time window", () => {
   it("accepts current window plus three grace blocks (±45s)", () => {
@@ -73,6 +81,37 @@ describe("Living QR time window", () => {
       totpSecret: secret,
       timestampBlock: windowIndex,
     })
+  })
+
+  it("signs static paper/wallet QRs without embedding the totp secret", async () => {
+    const ticketId = "9dfcc6ca-8d97-4d9c-951d-ffabc21e6210"
+    const secret = "a".repeat(48)
+    const payload = await generateStaticQrPayload(ticketId, secret)
+    assert.equal(payload.includes(secret), false)
+    assert.equal(payload.startsWith("TPS."), true)
+    assert.deepEqual(resolveScanSecret(payload, "dynamic"), {
+      mode: "tps",
+      ticketId,
+      mac: payload.split(".")[2],
+      expired: false,
+      enforceFreshness: false,
+    })
+  })
+
+  it("accepts legacy 16-hex Living MACs and current 32-hex MACs", async () => {
+    const ticketId = "9dfcc6ca-8d97-4d9c-951d-ffabc21e6210"
+    const secret = "server-issued-secret"
+    const now = 1_725_000_000_000
+    const windowIndex = getTotpWindow(now)
+    const payload = await generateLivingQrPayload(ticketId, secret, now)
+    const mac32 = payload.split(".")[3]
+    assert.equal(mac32.length, 32)
+    assert.equal(await verifyLivingQrMac(secret, ticketId, windowIndex, mac32), true)
+    assert.equal(
+      await verifyLivingQrMac(secret, ticketId, windowIndex, mac32.slice(0, 16)),
+      true,
+    )
+    assert.equal(await verifyLivingQrMac(secret, ticketId, windowIndex, "ab"), false)
   })
 
   it("counts remaining seconds inside the 15-second Living QR window", () => {

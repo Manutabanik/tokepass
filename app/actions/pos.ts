@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 
 import { findScheduleDay, parseScheduleDays } from "@/lib/event-schedule"
 import { assertEventOpsAccess, listOperableEvents } from "@/lib/event-ops-access"
+import { toPosUserError } from "@/lib/errors/commerce-errors"
 import { logger } from "@/lib/logger"
 import { notifyPosTicketIssued } from "@/lib/notifications"
 import {
@@ -11,7 +12,19 @@ import {
   isPosStaffRole,
   normalizePosPaymentMethod,
 } from "@/lib/pos-checkout"
+import { signedDoorQrOrFallback } from "@/lib/totp-offline"
 import { createClient } from "@/lib/supabase/server"
+import {
+  BootstrapPosCashierPinSchema,
+  CloseCashierShiftSchema,
+  DeliverPosTicketsSchema,
+  OpenCashierShiftSchema,
+  PosCashierPinSchema,
+  PosSaleInputSchema,
+  PosSupervisorPinSchema,
+  VoidPosOrderSchema,
+  formatPosValidationError,
+} from "@/lib/validations/pos"
 import type { PaymentMethod, QrType } from "@/types/database"
 
 export type TicketZReport = {
@@ -34,6 +47,7 @@ export type PosEventOption = {
   id: string
   title: string
   date: string
+  location: string
   qrType: QrType
   hasSupervisorPin: boolean
   tiers: Array<{
@@ -102,6 +116,7 @@ export type PosSaleResult =
       tickets: Array<{
         id: string
         totpSecret: string
+        signedQr: string
         qrCode: string
         printPath: string
         holderName: string
@@ -226,6 +241,7 @@ export async function getPosEvents(): Promise<PosEventOption[]> {
       id: event.id,
       title: event.title,
       date: event.date,
+      location: event.location?.trim() || "",
       qrType: event.qr_type === "static" ? "static" : "dynamic",
       hasSupervisorPin,
       tiers: (event.ticket_tiers ?? []).map((tier) => {
@@ -281,6 +297,11 @@ export async function openCashierShift(input: {
   startAmount: number
 }): Promise<{ success: true; shift: CashierShiftRow } | { success: false; error: string }> {
   try {
+    const parsed = OpenCashierShiftSchema.safeParse(input)
+    if (!parsed.success) {
+      return { success: false, error: formatPosValidationError(parsed.error) }
+    }
+
     const supabase = await createClient()
     const {
       data: { user },
@@ -290,7 +311,7 @@ export async function openCashierShift(input: {
     const access = await requirePosSession()
     if (!access.success) return access
 
-    const eventAccess = await assertEventOpsAccess(input.eventId, [
+    const eventAccess = await assertEventOpsAccess(parsed.data.eventId, [
       ...POS_STAFF_ROLES,
     ])
     if (!eventAccess.ok) {
@@ -303,20 +324,15 @@ export async function openCashierShift(input: {
       }
     }
 
-    const amount = Number(input.startAmount)
-    if (!Number.isFinite(amount) || amount < 0) {
-      return { success: false, error: "Ingresá un fondo inicial válido." }
-    }
-
     const { data, error } = await supabase.rpc("open_cashier_shift", {
-      p_event_id: input.eventId,
-      p_start_amount: amount,
+      p_event_id: parsed.data.eventId,
+      p_start_amount: parsed.data.startAmount,
     })
 
     if (error || !data) {
       return {
         success: false,
-        error: error?.message ?? "No se pudo abrir la caja.",
+        error: toPosUserError(error, "No se pudo abrir la caja."),
       }
     }
 
@@ -329,7 +345,7 @@ export async function openCashierShift(input: {
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Error al abrir caja.",
+      error: toPosUserError(error, "No se pudo abrir la caja."),
     }
   }
 }
@@ -342,6 +358,11 @@ export async function closeCashierShift(input: {
   | { success: false; error: string }
 > {
   try {
+    const parsed = CloseCashierShiftSchema.safeParse(input)
+    if (!parsed.success) {
+      return { success: false, error: formatPosValidationError(parsed.error) }
+    }
+
     const supabase = await createClient()
     const {
       data: { user },
@@ -352,17 +373,17 @@ export async function closeCashierShift(input: {
     if (!access.success) return access
 
     const { data, error } = await supabase.rpc("close_cashier_shift", {
-      p_shift_id: input.shiftId,
+      p_shift_id: parsed.data.shiftId,
       p_counted_amount:
-        input.countedAmount == null || input.countedAmount === undefined
+        parsed.data.countedAmount == null || parsed.data.countedAmount === undefined
           ? null
-          : Number(input.countedAmount),
+          : parsed.data.countedAmount,
     })
 
     if (error || !data) {
       return {
         success: false,
-        error: error?.message ?? "No se pudo cerrar el turno.",
+        error: toPosUserError(error, "No se pudo cerrar el turno."),
       }
     }
 
@@ -379,7 +400,7 @@ export async function closeCashierShift(input: {
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Error al cerrar turno.",
+      error: toPosUserError(error, "No se pudo cerrar el turno."),
     }
   }
 }
@@ -502,6 +523,12 @@ export async function createPosSale(input: {
   seatingUnitId?: string | null
 }): Promise<PosSaleResult> {
   try {
+    const parsed = PosSaleInputSchema.safeParse(input)
+    if (!parsed.success) {
+      return { success: false, error: formatPosValidationError(parsed.error) }
+    }
+
+    const sale = parsed.data
     const supabase = await createClient()
     const {
       data: { user },
@@ -514,7 +541,7 @@ export async function createPosSale(input: {
     const access = await requirePosSession()
     if (!access.success) return access
 
-    const eventAccess = await assertEventOpsAccess(input.eventId, [
+    const eventAccess = await assertEventOpsAccess(sale.eventId, [
       ...POS_STAFF_ROLES,
     ])
     if (!eventAccess.ok) {
@@ -527,39 +554,29 @@ export async function createPosSale(input: {
       }
     }
 
-    const paymentMethod = normalizePosPaymentMethod(input.paymentMethod)
+    const paymentMethod = normalizePosPaymentMethod(sale.paymentMethod)
     if (!paymentMethod) {
       return { success: false, error: "Método de pago presencial inválido." }
     }
 
-    const rawDni = input.customerDni?.replace(/\D/g, "") ?? ""
+    const rawDni = sale.customerDni?.replace(/\D/g, "") ?? ""
     const dni =
       rawDni.length >= 7 && rawDni.length <= 11 ? rawDni : "00000000"
 
-    if (
-      !input.eventId ||
-      !input.tierId ||
-      !input.shiftId ||
-      !Number.isInteger(input.quantity) ||
-      input.quantity < 1
-    ) {
-      return { success: false, error: "Datos de venta incompletos." }
-    }
-
-    const seatingLayoutItemId = input.seatingLayoutItemId?.trim() || null
-    const seatingUnitId = input.seatingUnitId?.trim() || null
+    const seatingLayoutItemId = sale.seatingLayoutItemId
+    const seatingUnitId = sale.seatingUnitId
 
     const checkoutArgs = {
-      p_event_id: input.eventId,
-      p_tier_id: input.tierId,
-      p_quantity: input.quantity,
+      p_event_id: sale.eventId,
+      p_tier_id: sale.tierId,
+      p_quantity: sale.quantity,
       p_payment_method: paymentMethod,
       p_cashier_user_id: user.id,
-      p_customer_phone: input.customerPhone?.trim() || null,
+      p_customer_phone: sale.customerPhone,
       p_customer_dni: dni,
-      p_customer_name: input.customerName?.trim() || null,
-      p_shift_id: input.shiftId,
-      p_supervisor_pin: input.supervisorPin?.trim() || null,
+      p_customer_name: sale.customerName,
+      p_shift_id: sale.shiftId,
+      p_supervisor_pin: sale.supervisorPin,
       p_seating_unit_id: seatingUnitId,
       p_seating_layout_item_id: seatingLayoutItemId,
     }
@@ -570,53 +587,30 @@ export async function createPosSale(input: {
     data = checkout.data
     error = checkout.error
     if (error && /process_pos_checkout_tx|PGRST202|schema cache/i.test(error.message)) {
+      if (seatingUnitId || seatingLayoutItemId) {
+        return {
+          success: false,
+          error: "No se pudo reservar el asiento. Reintentá o actualizá la caja.",
+        }
+      }
       const fallback = await supabase.rpc("create_pos_sale_tx", {
-        p_event_id: input.eventId,
-        p_tier_id: input.tierId,
-        p_quantity: input.quantity,
+        p_event_id: sale.eventId,
+        p_tier_id: sale.tierId,
+        p_quantity: sale.quantity,
         p_payment_method: paymentMethod,
         p_staff_id: user.id,
-        p_customer_phone: input.customerPhone?.trim() || null,
+        p_customer_phone: sale.customerPhone,
         p_customer_dni: dni,
-        p_customer_name: input.customerName?.trim() || null,
-        p_shift_id: input.shiftId,
-        p_supervisor_pin: input.supervisorPin?.trim() || null,
+        p_customer_name: sale.customerName,
+        p_shift_id: sale.shiftId,
+        p_supervisor_pin: sale.supervisorPin,
       })
       data = fallback.data
       error = fallback.error
     }
 
     if (error) {
-      const msg = error.message || "No se pudo completar la venta."
-      const lower = msg.toLowerCase()
-      if (lower.includes("sold out")) {
-        return { success: false, error: "Sin stock para ese tipo de entrada." }
-      }
-      if (lower.includes("shift_required") || lower.includes("shift_invalid")) {
-        return {
-          success: false,
-          error: "Tenés que abrir la caja antes de cobrar.",
-        }
-      }
-      if (lower.includes("dni_required")) {
-        return {
-          success: false,
-          error: "Ingresá el DNI del comprador para el respaldo en puerta.",
-        }
-      }
-      if (lower.includes("supervisor_pin")) {
-        return {
-          success: false,
-          error: "PIN de Autorización inválido o no configurado.",
-        }
-      }
-      if (lower.includes("seating_not_found") || lower.includes("seating_tier")) {
-        return {
-          success: false,
-          error: "Esa ubicación ya no está disponible. Recargá el mapa.",
-        }
-      }
-      return { success: false, error: msg }
+      return { success: false, error: toPosUserError(error) }
     }
 
     type Row = {
@@ -633,16 +627,16 @@ export async function createPosSale(input: {
       return { success: false, error: "La venta no generó tickets." }
     }
 
-    const holderName = input.customerName?.trim() || "Consumidor Final"
+    const holderName = sale.customerName?.trim() || "Consumidor Final"
 
     const { data: event } = await supabase
       .from("events")
       .select("title")
-      .eq("id", input.eventId)
+      .eq("id", sale.eventId)
       .maybeSingle()
 
-    const phone = input.customerPhone?.trim()
-    const email = input.customerEmail?.trim()
+    const phone = sale.customerPhone
+    const email = sale.customerEmail
     if (phone || email) {
       void notifyPosTicketIssued({
         phone: phone || "",
@@ -672,6 +666,7 @@ export async function createPosSale(input: {
       tickets: rows.map((row) => ({
         id: row.ticket_id,
         totpSecret: row.totp_secret,
+        signedQr: signedDoorQrOrFallback(row.ticket_id, row.totp_secret),
         qrCode: row.qr_code,
         printPath: `/tickets/${row.ticket_id}/print`,
         holderName,
@@ -681,8 +676,7 @@ export async function createPosSale(input: {
   } catch (error) {
     return {
       success: false,
-      error:
-        error instanceof Error ? error.message : "Error inesperado en POS.",
+      error: toPosUserError(error, "No se pudo completar la venta."),
     }
   }
 }
@@ -693,12 +687,13 @@ export async function deliverPosTickets(input: {
   phone?: string | null
   email?: string | null
 }): Promise<{ success: true } | { success: false; error: string }> {
-  const ticketIds = input.ticketIds.filter(Boolean)
-  if (ticketIds.length === 0) {
-    return { success: false, error: "No hay entradas para enviar." }
+  const parsed = DeliverPosTicketsSchema.safeParse(input)
+  if (!parsed.success) {
+    return { success: false, error: formatPosValidationError(parsed.error) }
   }
-  const phone = input.phone?.trim() || null
-  const email = input.email?.trim() || null
+  const ticketIds = parsed.data.ticketIds
+  const phone = parsed.data.phone
+  const email = parsed.data.email
   if (!phone && !email) {
     return { success: false, error: "Ingresá WhatsApp, SMS o email." }
   }
@@ -706,7 +701,7 @@ export async function deliverPosTickets(input: {
     await notifyPosTicketIssued({
       phone,
       email,
-      eventTitle: input.eventTitle,
+      eventTitle: parsed.data.eventTitle,
       ticketIds,
       quantity: ticketIds.length,
     })
@@ -714,7 +709,7 @@ export async function deliverPosTickets(input: {
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "No se pudo enviar.",
+      error: toPosUserError(error, "No se pudo enviar."),
     }
   }
 }
@@ -724,29 +719,25 @@ export async function setPosSupervisorPin(input: {
   pin: string
 }): Promise<{ success: true } | { success: false; error: string }> {
   try {
-    const pin = input.pin.trim()
-    if (pin.length < 4 || pin.length > 12) {
-      return {
-        success: false,
-        error: "El PIN tiene que tener entre 4 y 12 caracteres.",
-      }
+    const parsed = PosSupervisorPinSchema.safeParse(input)
+    if (!parsed.success) {
+      return { success: false, error: formatPosValidationError(parsed.error) }
     }
 
     const supabase = await createClient()
     const { error } = await supabase.rpc("set_pos_supervisor_pin", {
-      p_event_id: input.eventId,
-      p_pin: pin,
+      p_event_id: parsed.data.eventId,
+      p_pin: parsed.data.pin,
     })
 
     if (error) {
-      const lower = error.message.toLowerCase()
-      if (lower.includes("forbidden")) {
-        return {
-          success: false,
-          error: "Solo el organizador o un admin puede configurar el PIN.",
-        }
+      return {
+        success: false,
+        error: toPosUserError(
+          error,
+          "Solo el organizador o un admin puede configurar el PIN.",
+        ),
       }
-      return { success: false, error: error.message }
     }
 
     revalidatePath("/admin/pos")
@@ -756,7 +747,7 @@ export async function setPosSupervisorPin(input: {
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "No se pudo guardar el PIN.",
+      error: toPosUserError(error, "No se pudo guardar el PIN."),
     }
   }
 }
@@ -811,19 +802,21 @@ export async function verifyPosCashierPin(input: {
   eventId: string
   pin: string
 }): Promise<{ success: true } | { success: false; error: string }> {
-  const pin = input.pin.trim()
-  if (!/^\d{4}$/.test(pin)) {
-    return { success: false, error: "Ingresa el PIN de 4 digitos." }
+  const parsed = PosCashierPinSchema.safeParse(input)
+  if (!parsed.success) {
+    return { success: false, error: formatPosValidationError(parsed.error) }
   }
 
   const supabase = await createClient()
   const { data, error } = await supabase.rpc("verify_pos_cashier_pin", {
-    p_event_id: input.eventId,
-    p_pin: pin,
+    p_event_id: parsed.data.eventId,
+    p_pin: parsed.data.pin,
   })
 
-  if (error) return { success: false, error: error.message }
-  if (!data) return { success: false, error: "PIN de cajero invalido." }
+  if (error) {
+    return { success: false, error: toPosUserError(error, "PIN de cajero inválido.") }
+  }
+  if (!data) return { success: false, error: "PIN de cajero inválido." }
   return { success: true }
 }
 
@@ -832,30 +825,26 @@ export async function bootstrapPosCashierPin(input: {
   newPin: string
   adminPin?: string | null
 }): Promise<{ success: true } | { success: false; error: string }> {
-  const newPin = input.newPin.trim()
-  if (!/^\d{4}$/.test(newPin)) {
-    return { success: false, error: "El PIN de caja debe tener 4 digitos." }
+  const parsed = BootstrapPosCashierPinSchema.safeParse(input)
+  if (!parsed.success) {
+    return { success: false, error: formatPosValidationError(parsed.error) }
   }
 
   const supabase = await createClient()
   const { error } = await supabase.rpc("bootstrap_pos_cashier_pin", {
-    p_event_id: input.eventId,
-    p_new_pin: newPin,
-    p_admin_pin: input.adminPin?.trim() || "",
+    p_event_id: parsed.data.eventId,
+    p_new_pin: parsed.data.newPin,
+    p_admin_pin: parsed.data.adminPin || "",
   })
 
   if (error) {
-    const lower = error.message.toLowerCase()
-    if (lower.includes("supervisor_pin") || lower.includes("forbidden")) {
-      return {
-        success: false,
-        error: "Se necesita autorizacion de un administrador.",
-      }
+    return {
+      success: false,
+      error: toPosUserError(
+        error,
+        "Se necesita autorización de un administrador.",
+      ),
     }
-    if (lower.includes("pin_invalid") || lower.includes("22023")) {
-      return { success: false, error: "El PIN de caja debe tener 4 digitos." }
-    }
-    return { success: false, error: error.message }
   }
 
   revalidatePath("/admin/pos")
@@ -987,7 +976,10 @@ export async function listShiftReprintReceipts(
     } | null
     const receipt: PosThermalReceipt = {
       ticketId: row.id as string,
-      qrPayload: (row.totp_secret as string) ?? "",
+      qrPayload: signedDoorQrOrFallback(
+        row.id as string,
+        row.totp_secret as string | null,
+      ),
       eventTitle: event?.title ?? "Evento",
       eventDate: event?.date ?? "",
       eventLocation: event?.location ?? "",
@@ -1019,9 +1011,9 @@ export async function voidPosOrder(input: {
   supervisorPin: string
 }): Promise<{ success: true } | { success: false; error: string }> {
   try {
-    const pin = input.supervisorPin.trim()
-    if (pin.length < 4) {
-      return { success: false, error: "Ingresá el PIN de Autorización." }
+    const parsed = VoidPosOrderSchema.safeParse(input)
+    if (!parsed.success) {
+      return { success: false, error: formatPosValidationError(parsed.error) }
     }
 
     const access = await requirePosSession()
@@ -1029,28 +1021,12 @@ export async function voidPosOrder(input: {
 
     const supabase = await createClient()
     const { error } = await supabase.rpc("void_pos_order", {
-      p_order_id: input.orderId,
-      p_supervisor_pin: pin,
+      p_order_id: parsed.data.orderId,
+      p_supervisor_pin: parsed.data.supervisorPin,
     })
 
     if (error) {
-      const lower = error.message.toLowerCase()
-      if (lower.includes("supervisor_pin")) {
-        return { success: false, error: "PIN de Autorización inválido." }
-      }
-      if (lower.includes("void_tickets_used")) {
-        return {
-          success: false,
-          error: "No se puede anular: alguna entrada ya se usó en puerta.",
-        }
-      }
-      if (lower.includes("shift_invalid")) {
-        return {
-          success: false,
-          error: "Solo se pueden anular ventas del turno abierto.",
-        }
-      }
-      return { success: false, error: error.message }
+      return { success: false, error: toPosUserError(error, "No se pudo anular la venta.") }
     }
 
     revalidatePath("/admin/pos")
@@ -1060,7 +1036,7 @@ export async function voidPosOrder(input: {
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "No se pudo anular la venta.",
+      error: toPosUserError(error, "No se pudo anular la venta."),
     }
   }
 }
@@ -1197,7 +1173,7 @@ export async function getPrintableTicket(
   return {
     id: row.id,
     totpSecret: row.totp_secret,
-    qrPayload: row.totp_secret,
+    qrPayload: signedDoorQrOrFallback(row.id, row.totp_secret),
     status: row.status,
     tierName: row.ticket_tiers?.name ?? "Entrada",
     holderName,

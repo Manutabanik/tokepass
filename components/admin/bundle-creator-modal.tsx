@@ -2,11 +2,9 @@
 
 import {
   Armchair,
-  CalendarDays,
   Car,
-  Gift,
-  Layers,
   LoaderCircle,
+  Percent,
   Plus,
   Sparkles,
   Ticket,
@@ -25,16 +23,22 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
 import { formatCurrency } from "@/lib/format"
 import {
-  BUNDLE_TYPE_HINTS,
-  BUNDLE_TYPE_LABELS,
+  PROMO_DISCOUNT_LABELS,
+  PROMO_DISCOUNT_TYPES,
+  PROMO_TEMPLATE_2X1,
+  PROMO_TEMPLATE_SECOND_HALF,
   bundleSavings,
+  inferBundleType,
+  inferPromoRule,
+  normalizePromoRule,
+  promotionalBundlePrice,
   regularBundlePrice,
   validateBundleDraft,
   type BundleComponent,
   type BundleType,
+  type PromoRule,
 } from "@/lib/inventory/flexible-bundles"
 import type { InventoryTierType } from "@/lib/inventory/unified-inventory"
 import { cn } from "@/lib/utils"
@@ -60,6 +64,7 @@ export type BundleCreatorValue = {
   capacity: number
   items: BundleComponent[]
   includesSeating: boolean
+  promoRule: PromoRule
 }
 
 type Props = {
@@ -73,28 +78,19 @@ type Props = {
   onSave: (value: BundleCreatorValue) => void
 }
 
-const TYPE_ICONS: Record<BundleType, typeof Gift> = {
-  multi_day_pass: CalendarDays,
-  cross_sell_pack: Gift,
-  volume_discount: Layers,
-}
-
 export function BundleCreatorModal({
   open,
   onOpenChange,
-  title = "Crear combo / abono",
-  scheduleDays = [],
+  title = "Crear combo promocional",
   options,
   initial,
   pending = false,
   onSave,
 }: Props) {
   const [name, setName] = useState("")
-  const [bundleType, setBundleType] = useState<BundleType>("cross_sell_pack")
-  const [price, setPrice] = useState("0")
   const [capacity, setCapacity] = useState("50")
   const [items, setItems] = useState<BundleComponent[]>([])
-  const [includesSeating, setIncludesSeating] = useState(false)
+  const [rule, setRule] = useState<PromoRule>(normalizePromoRule(null))
   const [error, setError] = useState<string | null>(null)
   const seedKey = open ? JSON.stringify(initial ?? null) : "closed"
   const [appliedSeed, setAppliedSeed] = useState(seedKey)
@@ -102,29 +98,58 @@ export function BundleCreatorModal({
     setAppliedSeed(seedKey)
     if (open) {
       setName(initial?.name ?? "")
-      setBundleType(initial?.bundleType ?? "cross_sell_pack")
-      setPrice(String(initial?.price ?? 0))
       setCapacity(String(initial?.capacity ?? 50))
       setItems(initial?.items ?? [])
-      setIncludesSeating(Boolean(initial?.includesSeating))
+      setRule(
+        inferPromoRule({
+          rule: initial?.promoRule?.tipoDescuento
+            ? initial.promoRule
+            : null,
+          bundleType: initial?.bundleType,
+          items: initial?.items,
+          salePrice: initial?.price,
+          regularPrice: initial?.originalPrice,
+        }),
+      )
       setError(null)
     }
   }
 
-  const selectable = options.filter((option) => {
-    if (option.tierType === "bundle") return false
-    if (!includesSeating && option.tierType === "seated") return false
-    return true
+  const selectable = options.filter((option) => option.tierType !== "bundle")
+  const priceById = useMemo(
+    () => Object.fromEntries(options.map((option) => [option.id, option.price])),
+    [options],
+  )
+  const originalPrice = regularBundlePrice(items, priceById)
+  const sale = promotionalBundlePrice({
+    items,
+    unitPriceByTierId: priceById,
+    rule,
+  })
+  const savings = bundleSavings(originalPrice, sale)
+  const bundleType = inferBundleType({
+    bundleType: rule.tipoDescuento === "X_POR_Y" ? "volume_discount" : undefined,
+    items,
+    componentTierTypes: Object.fromEntries(
+      options.map((option) => [option.id, option.tierType]),
+    ),
   })
 
-  const priceById = useMemo(
-    () => Object.fromEntries(selectable.concat(options).map((o) => [o.id, o.price])),
-    [options, selectable],
-  )
+  function updateRule(patch: Partial<PromoRule>) {
+    setRule((current) => normalizePromoRule({ ...current, ...patch }))
+  }
 
-  const originalPrice = regularBundlePrice(items, priceById)
-  const sale = Math.max(0, Number(price) || 0)
-  const savings = bundleSavings(originalPrice, sale)
+  function applyTemplate(next: PromoRule, label: string) {
+    const normalized = normalizePromoRule(next)
+    setRule(normalized)
+    const first =
+      selectable.find((option) => option.tierType === "general") ?? selectable[0]
+    if (first) {
+      setItems([{ tierId: first.id, quantity: normalized.cantidadRequerida }])
+      setName((current) => current.trim() || `${label} · ${first.name}`)
+    }
+    setError(null)
+  }
 
   function addItem(tierId?: string) {
     const option =
@@ -143,33 +168,6 @@ export function BundleCreatorModal({
     })
   }
 
-  function includeOnePerDay() {
-    const generals = selectable.filter((option) => option.tierType === "general")
-    if (scheduleDays.length > 1) {
-      const byDay = scheduleDays
-        .map((day) => generals.find((option) => option.dayId === day.id))
-        .filter((option): option is BundleComponentOption => Boolean(option))
-      if (byDay.length > 0) {
-        setItems(byDay.map((option) => ({ tierId: option.id, quantity: 1 })))
-        return
-      }
-    }
-    const first = generals[0]
-    if (first) {
-      setItems([{ tierId: first.id, quantity: Math.max(2, scheduleDays.length) }])
-    }
-  }
-
-  function applyVolumePreset(buy: number) {
-    const first =
-      selectable.find((option) => option.tierType === "general") ?? selectable[0]
-    if (!first) return
-    setItems([{ tierId: first.id, quantity: buy }])
-    const pay = Math.max(0, (buy - 1) * first.price)
-    setPrice(String(pay))
-    setName((current) => current.trim() || `Pack ${buy}x${buy - 1} ${first.name}`)
-  }
-
   function submit() {
     const draft: BundleCreatorValue = {
       name: name.trim(),
@@ -178,9 +176,13 @@ export function BundleCreatorModal({
       originalPrice,
       capacity: Math.max(1, Math.floor(Number(capacity) || 1)),
       items,
-      includesSeating,
+      includesSeating: items.some((item) => {
+        const option = options.find((row) => row.id === item.tierId)
+        return option?.tierType === "seated"
+      }),
+      promoRule: rule,
     }
-    const invalid = validateBundleDraft(draft)
+    const invalid = validateBundleDraft({ ...draft, rule })
     if (invalid) {
       setError(invalid)
       return
@@ -194,110 +196,180 @@ export function BundleCreatorModal({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
-            En menos de 2 minutos: tipo, qué incluye, precio promocional y cupo.
-            El stock de cada ítem se reserva 8 minutos al comprar.
+            Elegí una plantilla o una regla. El precio promocional se calcula
+            solo a partir de las entradas incluidas.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="bundle-name">Nombre del combo / abono</Label>
+            <Label htmlFor="bundle-name">Nombre del combo</Label>
             <Input
               id="bundle-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="Abono 3 Días + Estacionamiento VIP"
+              placeholder="2x1 General · Viernes"
               className="h-11"
             />
           </div>
 
-          <div className="grid gap-2">
-            {(Object.keys(BUNDLE_TYPE_LABELS) as BundleType[]).map((type) => {
-              const Icon = TYPE_ICONS[type]
-              const selected = bundleType === type
-              return (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => setBundleType(type)}
-                  className={cn(
-                    "flex gap-3 rounded-2xl border p-3 text-left transition",
-                    selected
-                      ? "border-emerald-500/40 bg-emerald-500/10"
-                      : "border-border bg-muted/40 hover:border-emerald-500/25",
-                  )}
-                >
-                  <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-800 dark:text-emerald-300">
-                    <Icon className="size-4" />
+          <div className="space-y-2">
+            <Label>Plantillas rápidas</Label>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-auto justify-start px-3 py-3 text-left"
+                onClick={() => applyTemplate(PROMO_TEMPLATE_2X1, "2x1")}
+              >
+                <span>
+                  <span className="block text-sm font-semibold">Crear 2x1</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Llevá 2, pagá 1
                   </span>
-                  <span>
-                    <span className="block text-sm font-semibold text-foreground">
-                      {BUNDLE_TYPE_LABELS[type]}
-                    </span>
-                    <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
-                      {BUNDLE_TYPE_HINTS[type]}
-                    </span>
+                </span>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-auto justify-start px-3 py-3 text-left"
+                onClick={() =>
+                  applyTemplate(PROMO_TEMPLATE_SECOND_HALF, "50% 2ª unidad")
+                }
+              >
+                <span>
+                  <span className="block text-sm font-semibold">
+                    50% en la 2ª unidad
                   </span>
-                </button>
-              )
-            })}
-          </div>
-
-          <div className="flex items-start justify-between gap-3 rounded-2xl border border-border px-3 py-3">
-            <div>
-              <p className="text-sm font-medium text-foreground">
-                Incluye mapa / mesas numeradas
-              </p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Descuenta cupo de mesas o butacas. El comprador no elige asiento
-                en el mapa: es un pack de capacidad.
-              </p>
+                  <span className="block text-xs text-muted-foreground">
+                    La segunda entra a mitad de precio
+                  </span>
+                </span>
+              </Button>
             </div>
-            <Switch
-              checked={includesSeating}
-              onCheckedChange={setIncludesSeating}
-              className="data-checked:bg-emerald-500"
-            />
           </div>
 
           <div className="space-y-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <Label>Qué incluye</Label>
-              <div className="flex flex-wrap gap-2">
-                {bundleType === "multi_day_pass" ? (
-                  <Button
+            <Label>Tipo de promoción</Label>
+            <div className="grid gap-2">
+              {PROMO_DISCOUNT_TYPES.map((type) => {
+                const selected = rule.tipoDescuento === type
+                return (
+                  <button
+                    key={type}
                     type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={includeOnePerDay}
+                    onClick={() => updateRule({ tipoDescuento: type })}
+                    className={cn(
+                      "rounded-2xl border p-3 text-left text-sm font-semibold transition",
+                      selected
+                        ? "border-emerald-500/40 bg-emerald-500/10"
+                        : "border-border bg-muted/40 hover:border-emerald-500/25",
+                    )}
                   >
-                    <CalendarDays className="size-3.5" />
-                    Un general por jornada
-                  </Button>
-                ) : null}
-                {bundleType === "volume_discount" ? (
-                  <>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => applyVolumePreset(2)}
-                    >
-                      2x1
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => applyVolumePreset(4)}
-                    >
-                      4x3
-                    </Button>
-                  </>
-                ) : null}
+                    {PROMO_DISCOUNT_LABELS[type]}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {rule.tipoDescuento === "PORCENTAJE" ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="promo-percent">Descuento (%)</Label>
+                <Input
+                  id="promo-percent"
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={rule.valorDescuento}
+                  onChange={(event) =>
+                    updateRule({
+                      valorDescuento: Number(event.target.value) || 0,
+                    })
+                  }
+                  className="h-11"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="promo-nth">Aplicar en la unidad N</Label>
+                <Input
+                  id="promo-nth"
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={rule.cantidadRequerida}
+                  onChange={(event) =>
+                    updateRule({
+                      cantidadRequerida: Number(event.target.value) || 1,
+                    })
+                  }
+                  className="h-11"
+                />
+                <p className="text-xs text-muted-foreground">
+                  1 = todo el pack. 2 = solo la 2ª unidad.
+                </p>
               </div>
             </div>
+          ) : null}
 
+          {rule.tipoDescuento === "MONTO_FIJO" ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="promo-fixed">Monto a descontar</Label>
+              <Input
+                id="promo-fixed"
+                type="number"
+                min={0}
+                value={rule.valorDescuento}
+                onChange={(event) =>
+                  updateRule({
+                    valorDescuento: Number(event.target.value) || 0,
+                  })
+                }
+                className="h-11"
+              />
+            </div>
+          ) : null}
+
+          {rule.tipoDescuento === "X_POR_Y" ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="promo-buy">Cantidad requerida (X)</Label>
+                <Input
+                  id="promo-buy"
+                  type="number"
+                  min={2}
+                  max={50}
+                  value={rule.cantidadRequerida}
+                  onChange={(event) =>
+                    updateRule({
+                      cantidadRequerida: Number(event.target.value) || 2,
+                    })
+                  }
+                  className="h-11"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="promo-pay">Cantidad que paga (Y)</Label>
+                <Input
+                  id="promo-pay"
+                  type="number"
+                  min={1}
+                  max={49}
+                  value={rule.cantidadPaga}
+                  onChange={(event) =>
+                    updateRule({
+                      cantidadPaga: Number(event.target.value) || 1,
+                    })
+                  }
+                  className="h-11"
+                />
+              </div>
+            </div>
+          ) : null}
+
+          <div className="space-y-2">
+            <Label>Entradas incluidas</Label>
             {items.map((item) => {
               const option = options.find((row) => row.id === item.tierId)
               return (
@@ -376,7 +448,6 @@ export function BundleCreatorModal({
                 </div>
               )
             })}
-
             <Button
               type="button"
               variant="outline"
@@ -385,52 +456,46 @@ export function BundleCreatorModal({
               onClick={() => addItem()}
             >
               <Plus className="size-3.5" />
-              Agregar componente
+              Agregar entrada
             </Button>
             {selectable.length === 0 ? (
               <p className="text-xs text-muted-foreground">
-                Creá primero entradas generales o adicionales para armar el combo.
+                Creá primero una entrada general para armar la promoción.
               </p>
             ) : null}
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="bundle-price">Precio promocional</Label>
-              <Input
-                id="bundle-price"
-                type="number"
-                min={0}
-                value={price}
-                onChange={(event) => setPrice(event.target.value)}
-                className="h-11"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="bundle-stock">Límite de stock</Label>
-              <Input
-                id="bundle-stock"
-                type="number"
-                min={1}
-                value={capacity}
-                onChange={(event) => setCapacity(event.target.value)}
-                className="h-11"
-              />
-            </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="bundle-stock">Límite de stock</Label>
+            <Input
+              id="bundle-stock"
+              type="number"
+              min={1}
+              value={capacity}
+              onChange={(event) => setCapacity(event.target.value)}
+              className="h-11"
+            />
           </div>
 
-          <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-3 text-sm">
-            <p className="flex items-center gap-2 font-medium text-foreground">
+          <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-3">
+            <p className="flex items-center gap-2 text-sm font-medium text-foreground">
               <Sparkles className="size-4 text-emerald-600 dark:text-emerald-300" />
-              Precio regular {formatCurrency(originalPrice)}
-              {savings.amount > 0
-                ? ` · Ahorrás ${formatCurrency(savings.amount)} (${savings.percent}%)`
-                : ""}
+              Precio calculado
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              El comprador paga el precio promocional. Al confirmar el pago se
-              emiten los QR de cada ítem incluido.
-            </p>
+            <div className="mt-2 flex flex-wrap items-baseline gap-3">
+              <span className="text-sm text-muted-foreground line-through">
+                {formatCurrency(originalPrice)}
+              </span>
+              <span className="text-2xl font-black tabular-nums text-foreground">
+                {formatCurrency(sale)}
+              </span>
+              {savings.amount > 0 ? (
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                  <Percent className="size-3" />
+                  Ahorro {formatCurrency(savings.amount)} ({savings.percent}%)
+                </span>
+              ) : null}
+            </div>
           </div>
 
           {error ? (

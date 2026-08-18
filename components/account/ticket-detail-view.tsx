@@ -15,6 +15,7 @@ import { useEffect, useState } from "react"
 import type { MyTicket } from "@/app/actions/tickets"
 import { GuestOtpGate } from "@/components/account/guest-otp-gate"
 import { LivingTicketQR } from "@/components/public/living-ticket-qr"
+import { StaticSignedQR } from "@/components/public/static-signed-qr"
 import { QrEnlargeTrigger, QrScanLightbox } from "@/components/public/qr-scan-lightbox"
 import { WalletPassButtons } from "@/components/account/wallet-pass-buttons"
 import { SaveTicketButton } from "@/components/public/save-ticket-button"
@@ -27,7 +28,6 @@ import { formatEventDay, formatEventTime } from "@/lib/format"
 import { storyCategoryLabel } from "@/lib/story-canvas"
 import { getTicketsOffline } from "@/lib/offline-store"
 import type { PublicSponsor } from "@/lib/sponsors"
-import { QRCodeSVG } from "qrcode.react"
 
 export function TicketDetailView({
   ticket: initialTicket,
@@ -161,14 +161,11 @@ export function TicketDetailView({
           <div className="mx-auto mt-4 w-full max-w-[220px] rounded-2xl bg-white p-2">
             <QrEnlargeTrigger onOpen={() => setScanOpen(true)} className="w-full">
               {isStatic ? (
-                <QRCodeSVG
-                  value={ticket.totpSecret}
+                <StaticSignedQR
+                  ticketId={ticket.id}
+                  totpSecret={ticket.totpSecret}
                   size={200}
-                  level="H"
-                  includeMargin
-                  bgColor="#ffffff"
-                  fgColor="#09090b"
-                  className="h-auto w-full"
+                  className="w-full max-w-none p-0 shadow-none"
                 />
               ) : (
                 <LivingTicketQR

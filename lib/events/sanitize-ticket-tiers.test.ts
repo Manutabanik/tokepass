@@ -31,6 +31,11 @@ function ticket(
     tierType: "general",
     listPrice: null,
     bundleItems: [],
+    bundleType: null,
+    promoDiscountType: null,
+    promoDiscountValue: 0,
+    promoRequiredQty: 1,
+    promoPayQty: 1,
     description: "",
     highlightBadge: null,
     phases: [],
@@ -228,6 +233,7 @@ describe("sanitizeEventSubmitPayload", () => {
           scheduleDays: [],
           categoryId: "",
           ageRestriction: "atp",
+          hasSeatingPlan: true,
         },
         venue: {
           mode: "new",
@@ -254,6 +260,43 @@ describe("sanitizeEventSubmitPayload", () => {
     )
     assert.equal(next.tickets[0]?.seatingSectorId, "campo")
     assert.equal(next.tickets[1]?.seatingSectorId, null)
+  })
+
+  it("deja seatingSectorId en null si el evento no tiene mapa", () => {
+    const next = sanitizeEventSubmitPayload(
+      {
+        basics: {
+          title: "Fiesta simple",
+          date: "",
+          endDate: "",
+          description: "",
+          flyerName: null,
+          visibility: "public",
+          isMultiDay: false,
+          scheduleDays: [],
+          categoryId: "",
+          ageRestriction: "atp",
+          hasSeatingPlan: false,
+        },
+        venue: {
+          mode: "new",
+          existingVenueId: null,
+          zoneType: "general_admission",
+          venueName: "Club",
+          saveVenueForReuse: true,
+          includesSeatingMap: false,
+        },
+        tickets: [
+          ticket({
+            seatingSectorId: "general:pista",
+            layoutType: "general",
+          }),
+        ],
+        ticketsDefaultTab: "auto",
+      } as EventFormValues,
+      { mode: "create" },
+    )
+    assert.equal(next.tickets[0]?.seatingSectorId, null)
   })
 })
 

@@ -627,6 +627,66 @@ export async function downloadEventManifest(
   })
 }
 
+/** Aplica ingresos remotos sin re-bajar secretos. No pisa cola local pendiente. */
+export async function applyAdmissionSnapshot(
+  eventId: string,
+  rows: Array<{
+    id: string
+    status: ScannerManifestTicket["status"]
+    admissions_used: number
+    scanned_at: string | null
+  }>,
+): Promise<number> {
+  if (!eventId || rows.length === 0) return 0
+
+  const queue = await getSyncQueue()
+  const pending = new Set(
+    queue
+      .filter((item) => item.event_id === eventId)
+      .map((item) => item.ticket_id),
+  )
+
+  const db = await openDb()
+  const tx = db.transaction(TICKETS, "readwrite")
+  const store = tx.objectStore(TICKETS)
+  let applied = 0
+
+  for (const row of rows) {
+    if (pending.has(row.id)) continue
+    const current = (await requestToPromise(
+      store.get(row.id),
+    )) as ScannerManifestTicket | undefined
+    if (!current || current.event_id !== eventId) continue
+
+    const used = Math.max(0, Math.floor(Number(row.admissions_used) || 0))
+    if (
+      current.status === row.status &&
+      (current.admissions_used ?? 0) === used
+    ) {
+      continue
+    }
+
+    const scannedAtLocal = row.scanned_at
+      ? new Date(row.scanned_at).getTime()
+      : current.scanned_at_local
+
+    store.put({
+      ...current,
+      status: row.status,
+      admissions_used: used,
+      scanned_at: row.scanned_at,
+      scanned_at_local: Number.isFinite(scannedAtLocal)
+        ? scannedAtLocal
+        : current.scanned_at_local,
+    })
+    applied += 1
+  }
+
+  await txDone(tx)
+  db.close()
+  return applied
+}
+
 /** Limpia manifiestos, leases y cola de sync del escáner (llamar en logout). */
 export async function clearOfflineScannerStore(): Promise<void> {
   lockScannerVault()

@@ -15,10 +15,9 @@ import { useState, useTransition } from "react"
 import { toast } from "sonner"
 
 import {
-  createVenue,
+  upsertVenue,
   deleteVenue,
   uploadVenueSeatingBackground,
-  updateVenue,
   type OrganizerVenue,
   type VenueZoneBlueprint,
 } from "@/app/actions/venues"
@@ -313,9 +312,10 @@ export function OrganizerVenuesManager({
                 seatingBackgroundUrl: draft.seatingBackgroundUrl,
                 venueMap: draft.venueMap,
               }
-              const result = draft.id
-                ? await updateVenue({ id: draft.id, ...payload })
-                : await createVenue(payload)
+              const result = await upsertVenue({
+                id: draft.id,
+                ...payload,
+              })
 
               if (!result.success) {
                 toast.error(result.error)
@@ -586,7 +586,7 @@ export function OrganizerVenuesManager({
               disabled={pending}
               className="h-12 rounded-xl bg-emerald-500 px-6 font-bold text-zinc-950 shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:bg-emerald-400"
             >
-              {pending ? "Guardando…" : "Guardar lugar"}
+              {pending ? "Guardando…" : "Guardar recinto"}
             </Button>
             <Button
               type="button"

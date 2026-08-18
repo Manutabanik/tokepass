@@ -62,7 +62,7 @@ function FormMessage({
     <p
       role="alert"
       data-slot="form-message"
-      className={cn("text-xs font-medium text-red-400", className)}
+      className={cn("text-xs font-medium text-red-600 dark:text-red-400", className)}
       {...props}
     >
       {children}

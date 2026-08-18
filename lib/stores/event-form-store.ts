@@ -14,7 +14,7 @@ import type { VenuePricingMap } from "@/lib/seating/venue-adapter"
 
 export type { TicketPhaseDraft }
 
-export const EVENT_WIZARD_STEP_COUNT = 4
+export const EVENT_WIZARD_STEP_COUNT = 5
 
 export type AutosaveStatus = "idle" | "dirty" | "saving" | "saved" | "error"
 

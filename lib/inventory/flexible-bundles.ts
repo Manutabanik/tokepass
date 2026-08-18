@@ -70,14 +70,183 @@ export function inferBundleType(input: {
   return "cross_sell_pack"
 }
 
+export const PROMO_DISCOUNT_TYPES = [
+  "PORCENTAJE",
+  "MONTO_FIJO",
+  "X_POR_Y",
+] as const
+
+export type PromoDiscountType = (typeof PROMO_DISCOUNT_TYPES)[number]
+
+export const PROMO_DISCOUNT_LABELS: Record<PromoDiscountType, string> = {
+  PORCENTAJE: "Porcentaje de descuento",
+  MONTO_FIJO: "Monto fijo de descuento",
+  X_POR_Y: "Llevá X, pagá Y",
+}
+
+export type PromoRule = {
+  tipoDescuento: PromoDiscountType
+  valorDescuento: number
+  cantidadRequerida: number
+  cantidadPaga: number
+}
+
+export const PROMO_TEMPLATE_2X1: PromoRule = {
+  tipoDescuento: "X_POR_Y",
+  valorDescuento: 0,
+  cantidadRequerida: 2,
+  cantidadPaga: 1,
+}
+
+export const PROMO_TEMPLATE_SECOND_HALF: PromoRule = {
+  tipoDescuento: "PORCENTAJE",
+  valorDescuento: 50,
+  cantidadRequerida: 2,
+  cantidadPaga: 2,
+}
+
+export function defaultPromoRule(): PromoRule {
+  return {
+    tipoDescuento: "PORCENTAJE",
+    valorDescuento: 0,
+    cantidadRequerida: 1,
+    cantidadPaga: 1,
+  }
+}
+
+export function parsePromoDiscountType(raw: unknown): PromoDiscountType | null {
+  const value = String(raw ?? "").trim().toUpperCase()
+  if ((PROMO_DISCOUNT_TYPES as readonly string[]).includes(value)) {
+    return value as PromoDiscountType
+  }
+  return null
+}
+
+export function normalizePromoRule(
+  raw?: {
+    tipoDescuento?: PromoDiscountType | null
+    valorDescuento?: number | null
+    cantidadRequerida?: number | null
+    cantidadPaga?: number | null
+  } | null,
+): PromoRule {
+  const parsed = parsePromoDiscountType(raw?.tipoDescuento)
+  const tipo = parsed ?? "PORCENTAJE"
+  const required = Math.max(1, Math.floor(Number(raw?.cantidadRequerida) || 1))
+  const pay = Math.max(0, Math.floor(Number(raw?.cantidadPaga) || 0))
+  return {
+    tipoDescuento: tipo,
+    valorDescuento: Math.max(0, Number(raw?.valorDescuento) || 0),
+    cantidadRequerida: Math.min(50, required),
+    cantidadPaga: Math.min(50, tipo === "X_POR_Y" ? Math.min(pay, required) : pay),
+  }
+}
+
+function money(value: number): number {
+  return Math.max(0, Math.round((Number(value) || 0) * 100) / 100)
+}
+
 export function regularBundlePrice(
   items: BundleComponent[],
   unitPriceByTierId: Record<string, number>,
 ): number {
-  return items.reduce((sum, item) => {
-    const unit = Number(unitPriceByTierId[item.tierId] ?? 0)
-    return sum + unit * Math.max(0, item.quantity)
-  }, 0)
+  return money(
+    items.reduce((sum, item) => {
+      const unit = Number(unitPriceByTierId[item.tierId] ?? 0)
+      return sum + unit * Math.max(0, item.quantity)
+    }, 0),
+  )
+}
+
+export function promotionalBundlePrice(input: {
+  items: BundleComponent[]
+  unitPriceByTierId: Record<string, number>
+  rule: PromoRule
+}): number {
+  const rule = normalizePromoRule(input.rule)
+  const regular = regularBundlePrice(input.items, input.unitPriceByTierId)
+
+  if (rule.tipoDescuento === "MONTO_FIJO") {
+    return money(regular - rule.valorDescuento)
+  }
+
+  if (rule.tipoDescuento === "X_POR_Y") {
+    const buy = rule.cantidadRequerida
+    const pay = Math.min(rule.cantidadPaga, buy)
+    return money(
+      input.items.reduce((sum, item) => {
+        const unit = Number(input.unitPriceByTierId[item.tierId] ?? 0)
+        const qty = Math.max(0, Math.floor(item.quantity) || 0)
+        const groups = Math.floor(qty / buy)
+        const remainder = qty % buy
+        return sum + unit * (groups * pay + remainder)
+      }, 0),
+    )
+  }
+
+  const percent = Math.min(100, rule.valorDescuento)
+  const nth = rule.cantidadRequerida
+  if (nth <= 1) {
+    return money(regular * (1 - percent / 100))
+  }
+
+  return money(
+    input.items.reduce((sum, item) => {
+      const unit = Number(input.unitPriceByTierId[item.tierId] ?? 0)
+      const qty = Math.max(0, Math.floor(item.quantity) || 0)
+      let line = 0
+      for (let index = 1; index <= qty; index += 1) {
+        line += index % nth === 0 ? unit * (1 - percent / 100) : unit
+      }
+      return sum + line
+    }, 0),
+  )
+}
+
+export function inferPromoRule(input: {
+  rule?: {
+    tipoDescuento?: PromoDiscountType | null
+    valorDescuento?: number | null
+    cantidadRequerida?: number | null
+    cantidadPaga?: number | null
+  } | null
+  bundleType?: BundleType | null
+  items?: BundleComponent[]
+  salePrice?: number
+  regularPrice?: number
+}): PromoRule {
+  if (input.rule?.tipoDescuento) {
+    return normalizePromoRule(input.rule)
+  }
+  const items = input.items ?? []
+  const qty = items[0]?.quantity ?? 0
+  const sale = Number(input.salePrice)
+  const regular = Number(input.regularPrice)
+  if (
+    input.bundleType === "volume_discount" &&
+    items.length === 1 &&
+    qty === 2 &&
+    Number.isFinite(sale) &&
+    Number.isFinite(regular) &&
+    regular > 0 &&
+    Math.abs(sale - regular / 2) < 1
+  ) {
+    return { ...PROMO_TEMPLATE_2X1 }
+  }
+  if (
+    Number.isFinite(sale) &&
+    Number.isFinite(regular) &&
+    regular > sale &&
+    regular > 0
+  ) {
+    return normalizePromoRule({
+      tipoDescuento: "PORCENTAJE",
+      valorDescuento: Math.round(((regular - sale) / regular) * 100),
+      cantidadRequerida: 1,
+      cantidadPaga: 1,
+    })
+  }
+  return defaultPromoRule()
 }
 
 export function bundleSavings(originalPrice: number, salePrice: number): {
@@ -97,15 +266,25 @@ export function validateBundleDraft(draft: {
   items: BundleComponent[]
   price: number
   capacity: number
+  rule?: PromoRule | null
 }): string | null {
   if (draft.name.trim().length < 2) {
     return "Nombrá el combo o abono."
   }
   if (draft.items.length < 1) {
-    return "Elegí al menos un ítem incluido."
+    return "Elegí al menos una entrada incluida."
+  }
+  if (draft.rule) {
+    const rule = normalizePromoRule(draft.rule)
+    if (rule.tipoDescuento === "PORCENTAJE" && rule.valorDescuento > 100) {
+      return "El descuento no puede superar el 100%."
+    }
+    if (rule.tipoDescuento === "X_POR_Y" && rule.cantidadPaga >= rule.cantidadRequerida) {
+      return "En un X por Y, la cantidad que se paga debe ser menor a la que se lleva."
+    }
   }
   if (!Number.isFinite(draft.price) || draft.price < 0) {
-    return "Indicá el precio promocional."
+    return "La regla promocional no produjo un precio válido."
   }
   if (!Number.isInteger(draft.capacity) || draft.capacity < 1) {
     return "Definí cuántos combos hay a la venta."

@@ -61,7 +61,7 @@ test.describe("Wizard de creación — 4 pasos y localStorage", () => {
     expect(parsed.state.wizardStep).toBe(1)
   })
 
-  test("los 4 pasos persisten título y pestaña al recargar /admin/events/create", async ({
+  test("el stepper progresivo persiste título y pestaña al recargar /admin/events/create", async ({
     page,
   }) => {
     test.skip(
@@ -73,18 +73,39 @@ test.describe("Wizard de creación — 4 pasos y localStorage", () => {
     await page.goto("/admin/events/create")
 
     await expect(page.getByRole("tab", { name: /Identidad/i })).toBeVisible()
-    await expect(page.getByRole("tab", { name: /Mapa y Sectores/i })).toBeVisible()
+    await expect(page.getByRole("tab", { name: /Mapa y Sectores/i })).toHaveCount(
+      0,
+    )
+    await expect(
+      page.getByRole("tab", { name: /Cronograma \/ Artistas/i }),
+    ).toHaveCount(0)
     await expect(
       page.getByRole("tab", { name: /Entradas y combos/i }),
     ).toBeVisible()
     await expect(
       page.getByRole("tab", { name: /Configuración Final/i }),
     ).toBeVisible()
+
+    await page.getByRole("tab", { name: /Identidad/i }).click()
+    await page
+      .getByRole("switch", {
+        name: /habilitar cronograma \/ agenda del evento/i,
+      })
+      .click()
+    await expect(
+      page.getByRole("tab", { name: /Cronograma \/ Artistas/i }),
+    ).toBeVisible()
+
+    await page
+      .getByRole("switch", {
+        name: /mapa de ubicaciones o butacas numeradas/i,
+      })
+      .click()
+    await expect(page.getByRole("tab", { name: /Mapa y Sectores/i })).toBeVisible()
     await expect(
       page.getByRole("tab", { name: /Zonas y Sectores/i }),
     ).toHaveCount(0)
 
-    await page.getByRole("tab", { name: /Identidad/i }).click()
     await page.locator("#event-title").fill(DRAFT_TITLE)
     await expect(page.locator("#event-title")).toHaveValue(DRAFT_TITLE)
 

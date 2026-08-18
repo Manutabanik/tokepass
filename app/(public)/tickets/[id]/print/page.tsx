@@ -36,7 +36,7 @@ export default async function TicketPrintPage({
   if (!ticket) notFound()
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-zinc-100 px-4 py-8 text-zinc-950">
+    <div className="min-h-[calc(100vh-4rem)] bg-zinc-100 px-4 py-8 text-zinc-950 print:min-h-0 print:bg-white print:p-0">
       <div
         className={`no-print mx-auto mb-6 flex items-center justify-between gap-3 ${
           autoPrint ? "max-w-[300px]" : "max-w-[28rem]"

@@ -1,0 +1,20 @@
+"use client"
+
+import { SegmentErrorFallback } from "@/components/errors/segment-error-fallback"
+
+export default function EventError({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string }
+  reset: () => void
+}) {
+  return (
+    <SegmentErrorFallback
+      error={error}
+      reset={reset}
+      logContext="app/event/error"
+      homeHref="/"
+    />
+  )
+}

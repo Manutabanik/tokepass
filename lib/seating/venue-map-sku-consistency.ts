@@ -1,3 +1,4 @@
+import { mapUnknownError } from "@/lib/errors/error-handler"
 import { priceGroupSectorId } from "@/lib/seating/venue-map-pricing"
 import { listVenuePriceGroups } from "@/lib/seating/venue-price-groups"
 import {
@@ -277,7 +278,7 @@ export function formatVenueMapSkuErrors(errors: VenueMapSkuMismatch[]): string {
 }
 
 export type WizardConflictAction = {
-  step: 1 | 2
+  step: 0 | 1 | 2 | 3 | 4
   label: string
 }
 
@@ -361,6 +362,13 @@ export function summarizeVenueMapSkuConflicts(
 export function conflictFromPersistError(
   message: string,
 ): WizardConflict | null {
+  const mapped = mapUnknownError(message)
+  if (mapped.action) {
+    return {
+      summary: mapped.message,
+      actions: [mapped.action],
+    }
+  }
   const text = message.trim()
   if (
     !/mapa y las entradas no coinciden|mapa y los tickets no coinciden|sillas del mapa|mesa o palco|por silla|Revisá el mapa/i.test(

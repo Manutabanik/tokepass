@@ -18,7 +18,7 @@ export interface AuthActionState {
   success: string | null
 }
 
-async function getAuthCallbackUrl() {
+async function getAuthCallbackUrl(next?: string | null) {
   const requestHeaders = await headers()
   const origin = requestHeaders.get("origin")
   const siteUrl = (
@@ -27,7 +27,10 @@ async function getAuthCallbackUrl() {
     "http://localhost:3000"
   ).replace(/\/$/, "")
 
-  return `${siteUrl}/auth/callback`
+  const base = `${siteUrl}/auth/callback`
+  const safeNext = safeInternalNextPath(next)
+  if (!safeNext) return base
+  return `${base}?next=${encodeURIComponent(safeNext)}`
 }
 
 function isInvalidLoginCredentials(message: string): boolean {
@@ -63,6 +66,9 @@ function mapAuthErrorMessage(message: string): string {
   }
   if (normalized.includes("is invalid") && normalized.includes("email")) {
     return "Ingresá un email válido."
+  }
+  if (normalized.includes("otp") || normalized.includes("magic")) {
+    return "No pudimos enviar el enlace. Revisá el email e intentá de nuevo."
   }
   return message
 }
@@ -180,10 +186,7 @@ export async function signUpWithEmail(
   }
 }
 
-export async function signUpOrganizer(
-  _previousState: AuthActionState,
-  _formData: FormData,
-): Promise<AuthActionState> {
+export async function signUpOrganizer(): Promise<AuthActionState> {
   redirect("/organizadores#solicitud")
 }
 
@@ -333,9 +336,40 @@ export async function signInWithEmail(
   redirect(credentials.next || fallback)
 }
 
-export async function signInWithGoogle(): Promise<void> {
+export async function signInWithMagicLink(
+  _previousState: AuthActionState,
+  formData: FormData,
+): Promise<AuthActionState> {
+  const emailRaw = formData.get("email")
+  if (typeof emailRaw !== "string" || !emailRaw.trim()) {
+    return { error: "El correo electrónico es obligatorio.", success: null }
+  }
+
+  const email = emailRaw.trim().toLowerCase()
+  const next = safeInternalNextPath(formData.get("next"))
   const supabase = await createClient()
-  const redirectTo = await getAuthCallbackUrl()
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: {
+      shouldCreateUser: true,
+      emailRedirectTo: await getAuthCallbackUrl(next),
+    },
+  })
+
+  if (error) {
+    return { error: mapAuthErrorMessage(error.message), success: null }
+  }
+
+  return {
+    error: null,
+    success: "Te enviamos un enlace. Abrilo desde este dispositivo para entrar.",
+  }
+}
+
+export async function signInWithGoogle(formData?: FormData): Promise<void> {
+  const supabase = await createClient()
+  const next = safeInternalNextPath(formData?.get("next"))
+  const redirectTo = await getAuthCallbackUrl(next)
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {

@@ -1,6 +1,7 @@
 import type { MyTicket } from "@/app/actions/tickets"
 import { formatEventDay, formatEventTime } from "@/lib/format"
 import { getSeoOrigin, toArgentinaIso8601 } from "@/lib/seo/site"
+import { signedDoorQrOrFallback } from "@/lib/totp-offline"
 
 export const WALLET_BG = "#090014"
 export const WALLET_FG = "#fafafa"
@@ -30,11 +31,18 @@ export type WalletPassFields = {
 }
 
 export function walletBarcodeValue(ticket: Pick<MyTicket, "totpSecret" | "qrCode" | "id">): string {
-  const secret = ticket.totpSecret?.trim()
-  if (secret) return secret
-  const code = ticket.qrCode?.trim()
-  if (code) return code
-  return ticket.id
+  const id = ticket.id?.trim() ?? ""
+  const stored = ticket.qrCode?.trim() ?? ""
+  if (
+    stored.startsWith("TPS.") ||
+    stored.startsWith("TP2.")
+  ) {
+    return stored
+  }
+  const signed = signedDoorQrOrFallback(id, ticket.totpSecret)
+  if (signed && signed !== id) return signed
+  if (stored) return stored
+  return id
 }
 
 export function walletSeatingLabel(ticket: Pick<

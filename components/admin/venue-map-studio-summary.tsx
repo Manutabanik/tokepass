@@ -12,9 +12,13 @@ import type { InteractiveVenueMap } from "@/types/venue-map"
 export function VenueMapStudioSummary({
   map,
   onOpen,
+  disabled = false,
+  disabledReason,
 }: {
   map: InteractiveVenueMap
   onOpen: () => void
+  disabled?: boolean
+  disabledReason?: string
 }) {
   const inventory = summarizeVenueInventory(map)
   const segments = inventory.sectors.filter((row) => row.share > 0)
@@ -121,16 +125,25 @@ export function VenueMapStudioSummary({
         </article>
       </div>
 
-      <Button
-        type="button"
-        onClick={onOpen}
-        className={cn(
-          "bg-primary hover:bg-primary/90 text-primary-foreground font-bold h-12 rounded-xl w-full mt-4",
-        )}
-      >
-        <Map className="size-4" aria-hidden="true" />
-        DISEÑAR MAPA EN PANTALLA COMPLETA
-      </Button>
+      <div className="mt-4 w-full" title={disabled ? disabledReason : undefined}>
+        <Button
+          type="button"
+          onClick={onOpen}
+          disabled={disabled}
+          aria-disabled={disabled}
+          className={cn(
+            "bg-primary hover:bg-primary/90 text-primary-foreground font-bold h-12 rounded-xl w-full",
+          )}
+        >
+          <Map className="size-4" aria-hidden="true" />
+          DISEÑAR MAPA EN PANTALLA COMPLETA
+        </Button>
+        {disabled && disabledReason ? (
+          <p className="mt-2 text-center text-xs text-red-600 dark:text-red-400">
+            {disabledReason}
+          </p>
+        ) : null}
+      </div>
     </div>
   )
 }

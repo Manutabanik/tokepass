@@ -12,7 +12,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { toast } from "sonner"
 
 import {
-  createVenue,
+  upsertVenue,
   deleteVenue,
   listOrganizerVenues,
   setVenueArchived,
@@ -167,7 +167,7 @@ export function VenueManagerModal({
       }
       const result = draft.id
         ? await updateVenueIdentity({ id: draft.id, ...payload })
-        : await createVenue({
+        : await upsertVenue({
             name: payload.name,
             location: payload.address,
             city: payload.city,
@@ -308,7 +308,7 @@ export function VenueManagerModal({
                 Cancelar
               </Button>
               <Button type="button" onClick={saveDraft} disabled={pending}>
-                {draft.id ? "Guardar cambios" : "Crear lugar"}
+                Guardar recinto
               </Button>
             </div>
           </div>

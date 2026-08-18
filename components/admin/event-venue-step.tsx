@@ -10,13 +10,12 @@ import {
 } from "lucide-react"
 import dynamic from "next/dynamic"
 import Image from "next/image"
-import { useMemo, useState, useTransition, type ReactNode } from "react"
+import { useState, useTransition, type ReactNode } from "react"
 import type { UseFormReturn } from "react-hook-form"
 import { toast } from "sonner"
 
 import {
-  createVenue,
-  updateVenue,
+  upsertVenue,
   uploadVenueSeatingBackground,
   type OrganizerVenue,
 } from "@/app/actions/venues"
@@ -67,6 +66,7 @@ import {
 } from "@/lib/seating/venue-map-geometry"
 import { composeVenuePlace } from "@/lib/venues/compose-location"
 import type { EventFormValues } from "@/lib/validations/event-form"
+import { RELATION_UUID_RE } from "@/lib/validations/relation-id"
 import { cn } from "@/lib/utils"
 import { emptyVenueMap, parseVenueMap } from "@/types/venue-map"
 
@@ -110,6 +110,7 @@ type EventVenueStepProps = {
   focus?: "location" | "zones" | "all"
   onMapInventoryChange?: (map: ReturnType<typeof parseVenueMap>) => void
   catalogOrganizerId?: string | null
+  eventId?: string | null
 }
 
 export function EventVenueStep({
@@ -121,6 +122,7 @@ export function EventVenueStep({
   focus = "all",
   onMapInventoryChange,
   catalogOrganizerId = null,
+  eventId = null,
 }: EventVenueStepProps) {
   const showLocation = focus !== "zones"
   const showZones = focus !== "location"
@@ -184,12 +186,6 @@ export function EventVenueStep({
     emitMapInventory(next)
   }
 
-  function openStudio() {
-    form.setValue("venue.includesSeatingMap", true, { shouldDirty: true })
-    form.setValue("venue.zoneType", "reserved_seating", { shouldDirty: true })
-    setStudioOpen(true)
-  }
-
   const geoVenueName = form.watch("venue.venueName")
   const geoVenueLocation = form.watch("venue.venueLocation")
   const geoVenueCity = form.watch("venue.venueCity")
@@ -200,45 +196,52 @@ export function EventVenueStep({
   const geoCapacity = form.watch("venue.capacity")
   const geoLatitude = form.watch("venue.latitude")
   const geoLongitude = form.watch("venue.longitude")
-  const geoValue = useMemo<Partial<VenueArgentinaValue>>(() => {
-    const parsed = parsePlaceParts(geoVenueCity)
-    const provinceName = geoProvince || parsed.province
-    const departmentName = geoDepartment || parsed.department
-    return {
-      venueName: geoVenueName,
-      address: geoVenueLocation ?? "",
-      capacity: geoCapacity ?? 0,
-      province:
-        provinceName
-          ? { id: geoProvinceId || provinceName, name: provinceName }
-          : null,
-      department:
-        departmentName
-          ? { id: geoDepartmentId || departmentName, name: departmentName }
-          : null,
-      coordinates:
-        geoLatitude != null &&
-        geoLongitude != null &&
-        Number.isFinite(geoLatitude) &&
-        Number.isFinite(geoLongitude)
-          ? {
-              lat: geoLatitude,
-              lng: geoLongitude,
-            }
-          : null,
+  const hasSavedPlace = Boolean(existingVenueId || selectedVenue)
+  const hasNewPlace = Boolean(geoVenueName?.trim())
+  const canDesignMap =
+    venueMode === "existing" && !editingSaved ? hasSavedPlace : hasNewPlace
+  const mapBlockedReason = canDesignMap
+    ? undefined
+    : venueMode === "existing" && !editingSaved
+      ? "Primero seleccioná un lugar."
+      : "Primero ingresá el nombre del lugar."
+
+  function openStudio() {
+    if (!canDesignMap) {
+      toast.error(mapBlockedReason ?? "Primero seleccioná un lugar.")
+      return
     }
-  }, [
-    geoVenueName,
-    geoVenueLocation,
-    geoVenueCity,
-    geoProvince,
-    geoDepartment,
-    geoProvinceId,
-    geoDepartmentId,
-    geoCapacity,
-    geoLatitude,
-    geoLongitude,
-  ])
+    form.setValue("venue.includesSeatingMap", true, { shouldDirty: true })
+    form.setValue("venue.zoneType", "reserved_seating", { shouldDirty: true })
+    setStudioOpen(true)
+  }
+
+  const parsedPlace = parsePlaceParts(geoVenueCity)
+  const provinceName = geoProvince || parsedPlace.province
+  const departmentName = geoDepartment || parsedPlace.department
+  const geoValue: Partial<VenueArgentinaValue> = {
+    venueName: geoVenueName,
+    address: geoVenueLocation ?? "",
+    capacity: geoCapacity ?? 0,
+    province:
+      provinceName
+        ? { id: geoProvinceId || provinceName, name: provinceName }
+        : null,
+    department:
+      departmentName
+        ? { id: geoDepartmentId || departmentName, name: departmentName }
+        : null,
+    coordinates:
+      geoLatitude != null &&
+      geoLongitude != null &&
+      Number.isFinite(geoLatitude) &&
+      Number.isFinite(geoLongitude)
+        ? {
+            lat: geoLatitude,
+            lng: geoLongitude,
+          }
+        : null,
+  }
 
   function syncZonesToForm(nextZones: VenueZoneDraft[], nextStructured: boolean) {
     setZoneDrafts(nextZones)
@@ -286,16 +289,22 @@ export function EventVenueStep({
       nextStructured ? "reserved_seating" : "general_admission",
     )
     form.setValue("venue.includesSeatingMap", nextStructured)
-    form.setValue(
-      "venue.zones",
-      venue.zoneBlueprint.map((zone) => ({
-        name: zone.name,
-        type: zone.type,
-        capacity: zone.capacity,
-        rows: zone.rows ?? null,
-        seatsPerRow: zone.seatsPerRow ?? null,
-      })),
-    )
+    const currentZones = form.getValues("venue.zones") ?? []
+    const keepEventZones =
+      Boolean(eventId) &&
+      currentZones.some((zone) => RELATION_UUID_RE.test(zone.id ?? ""))
+    if (!keepEventZones) {
+      form.setValue(
+        "venue.zones",
+        venue.zoneBlueprint.map((zone) => ({
+          name: zone.name,
+          type: zone.type,
+          capacity: zone.capacity,
+          rows: zone.rows ?? null,
+          seatsPerRow: zone.seatsPerRow ?? null,
+        })),
+      )
+    }
     form.setValue("venue.saveVenueForReuse", false)
     setBackgroundUrl(venue.seatingBackgroundUrl)
     const nextMap = seatingLayoutToVenueMap(
@@ -379,20 +388,17 @@ export function EventVenueStep({
       }
 
       const editingId = values.existingVenueId?.trim() || null
-      const result = editingId
-        ? await updateVenue({ id: editingId, ...payload })
-        : await createVenue(payload)
+      const result = await upsertVenue({
+        id: editingId,
+        ...payload,
+      })
 
       if (!result.success) {
         toast.error(result.error)
         return
       }
 
-      const savedId =
-        editingId ??
-        ("data" in result && result.data && "id" in result.data
-          ? result.data.id
-          : null)
+      const savedId = result.data.id
       if (!savedId) {
         toast.error("No pudimos identificar el lugar guardado.")
         return
@@ -514,6 +520,11 @@ export function EventVenueStep({
         <button
           type="button"
           disabled={venueOptions.length === 0}
+          title={
+            venueOptions.length === 0
+              ? "Todavía no hay lugares guardados. Creá uno nuevo."
+              : undefined
+          }
           onClick={() => {
             form.setValue("venue.mode", "existing")
             setEditingSaved(false)
@@ -545,6 +556,21 @@ export function EventVenueStep({
         </button>
       </div>
       </div>
+      ) : null}
+
+      {venueMode === "existing" && !editingSaved && !selectedVenue ? (
+        <FormField
+          control={form.control}
+          name="venue.existingVenueId"
+          render={({ fieldState }) => (
+            <FormMessage>
+              {fieldState.error?.message ??
+                (venueOptions.length === 0
+                  ? "Todavía no hay lugares. Creá uno nuevo."
+                  : null)}
+            </FormMessage>
+          )}
+        />
       ) : null}
 
       {venueMode === "existing" && !editingSaved && selectedVenue ? (
@@ -661,6 +687,8 @@ export function EventVenueStep({
               onOpenStudio={openStudio}
               onCloseStudio={() => setStudioOpen(false)}
               onPersistMap={persistMapToForm}
+              canOpenStudio={canDesignMap}
+              blockedReason={mapBlockedReason}
             />
           ) : null}
 
@@ -717,11 +745,27 @@ export function EventVenueStep({
           ) : null}
 
           {showLocation ? (
+            <>
           <VenueArgentinaSelector
             value={geoValue}
             onChange={onGeoChange}
             showIdentityFields
           />
+          <FormField
+            control={form.control}
+            name="venue.venueName"
+            render={({ fieldState }) => (
+              <FormMessage>{fieldState.error?.message}</FormMessage>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="venue.venueLocation"
+            render={({ fieldState }) => (
+              <FormMessage>{fieldState.error?.message}</FormMessage>
+            )}
+          />
+            </>
           ) : null}
 
           {showZones ? (
@@ -735,6 +779,8 @@ export function EventVenueStep({
             onOpenStudio={openStudio}
             onCloseStudio={() => setStudioOpen(false)}
             onPersistMap={persistMapToForm}
+            canOpenStudio={canDesignMap}
+            blockedReason={mapBlockedReason}
           />
           <div className="space-y-3 rounded-2xl border border-border bg-muted/60 p-4">
             <div className="flex items-center gap-2">
@@ -788,8 +834,8 @@ export function EventVenueStep({
                     Guardar este lugar para futuros eventos
                   </FormLabel>
                   <FormDescription className="text-xs text-muted-foreground">
-                    Si está activo, al guardar el evento queda disponible en
-                    “Elegir un lugar guardado”.
+                    El recinto nuevo solo se crea con “Guardar recinto”. El
+                    autoguardado del evento no genera lugares duplicados.
                   </FormDescription>
                 </div>
                 <Switch
@@ -801,7 +847,7 @@ export function EventVenueStep({
             )}
           />
 
-          {(editingSaved || form.watch("venue.saveVenueForReuse")) && (
+          {(editingSaved || venueMode === "new" || !existingVenueId) && (
             <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
@@ -813,9 +859,7 @@ export function EventVenueStep({
                 {pendingSave ? (
                   <LoaderCircle className="size-4 animate-spin" />
                 ) : null}
-                {editingSaved
-                  ? "Guardar cambios del lugar"
-                  : "Guardar lugar ahora"}
+                Guardar recinto
               </Button>
               {editingSaved ? (
                 <Button
@@ -861,6 +905,8 @@ function MapStudioFields({
   onOpenStudio,
   onCloseStudio,
   onPersistMap,
+  canOpenStudio = true,
+  blockedReason,
 }: {
   form: UseFormReturn<EventFormValues>
   venueMap: ReturnType<typeof parseVenueMap>
@@ -872,10 +918,17 @@ function MapStudioFields({
     next: ReturnType<typeof parseVenueMap>,
     options?: { syncDrafts?: boolean },
   ) => void
+  canOpenStudio?: boolean
+  blockedReason?: string
 }) {
   return (
     <div className="space-y-3">
-      <VenueMapStudioSummary map={venueMap} onOpen={onOpenStudio} />
+      <VenueMapStudioSummary
+        map={venueMap}
+        onOpen={onOpenStudio}
+        disabled={!canOpenStudio}
+        disabledReason={blockedReason}
+      />
       <InteractiveVenueMapStudio
         open={studioOpen}
         eventTitle={form.watch("basics.title") || "Evento"}

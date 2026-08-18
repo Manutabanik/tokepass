@@ -15,10 +15,10 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { useState } from "react"
-import { QRCodeSVG } from "qrcode.react"
 
 import type { MyTicket } from "@/app/actions/tickets"
 import { LivingTicketQR } from "@/components/public/living-ticket-qr"
+import { StaticSignedQR } from "@/components/public/static-signed-qr"
 import { QrEnlargeTrigger, QrScanLightbox } from "@/components/public/qr-scan-lightbox"
 import { ResaleTicketDialog } from "@/components/public/resale-ticket-dialog"
 import { StoryFlyerTrigger } from "@/components/public/story-flyer-modal"
@@ -405,15 +405,11 @@ export function LivingTicketCard({
           >
             <QrEnlargeTrigger onOpen={() => setScanOpen(true)} className="mx-auto w-fit">
               {isStatic ? (
-                <div className="pointer-events-none mx-auto w-fit select-none rounded-[1.35rem] bg-white p-3.5 shadow-sm">
-                  <QRCodeSVG
-                    value={ticket.totpSecret}
-                    size={220}
-                    level="H"
-                    bgColor="#ffffff"
-                    fgColor="#09090b"
-                  />
-                </div>
+                <StaticSignedQR
+                  ticketId={ticket.id}
+                  totpSecret={ticket.totpSecret}
+                  size={220}
+                />
               ) : (
                 <LivingTicketQR
                   ticketId={ticket.id}

@@ -14,6 +14,7 @@ export function CapacityBudgetBar({
   form: UseFormReturn<EventFormValues>
 }) {
   const capacity = useEventCapacity(form)
+  const hasSeatingPlan = Boolean(form.watch("basics.hasSeatingPlan"))
   const usedRatio =
     capacity.totalCapacity > 0
       ? Math.min(1, capacity.totalAllocated / capacity.totalCapacity)
@@ -39,8 +40,12 @@ export function CapacityBudgetBar({
           </p>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
             {capacity.totalCapacity > 0
-              ? `${formatNumber(capacity.totalAllocated)} de ${formatNumber(capacity.totalCapacity)} lugares (sectores generales + mapa)`
-              : "Agregá un sector general o dibujá el mapa para calcular el aforo."}
+              ? hasSeatingPlan
+                ? `${formatNumber(capacity.totalAllocated)} de ${formatNumber(capacity.totalCapacity)} lugares (sectores generales + mapa)`
+                : `${formatNumber(capacity.totalAllocated)} lugares en entradas`
+              : hasSeatingPlan
+                ? "Agregá un sector general o dibujá el mapa para calcular el aforo."
+                : "Agregá entradas con capacidad para ver el aforo."}
           </p>
         </div>
       </div>

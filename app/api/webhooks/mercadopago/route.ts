@@ -611,7 +611,7 @@ async function processMercadoPagoWebhook(
         payment_id: paymentId,
         error,
       })
-      return webhookOk({ handled: "payment_fetch_failed" })
+      return webhookRetry({ handled: "payment_fetch_failed" })
     }
 
     const externalReference = firstString(payment.external_reference)
@@ -630,7 +630,7 @@ async function processMercadoPagoWebhook(
         message: "admin_client_unavailable",
         error,
       })
-      return webhookOk({ handled: "admin_client_unavailable" })
+      return webhookRetry({ handled: "admin_client_unavailable" })
     }
 
     const mpPaymentId = String(payment.id ?? paymentId)
@@ -867,10 +867,10 @@ async function processMercadoPagoWebhook(
           payment_id: mpPaymentId,
           error: finalizeError.message,
         })
-        return NextResponse.json(
-          { success: false, error: finalizeError.message },
-          { status: 200 },
-        )
+        return webhookRetry({
+          error: finalizeError.message,
+          order_id: orderId,
+        })
       }
 
       const finalize = (finalizeRaw ?? {}) as FinalizePaidResult

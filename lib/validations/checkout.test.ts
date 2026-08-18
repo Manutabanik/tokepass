@@ -1,7 +1,10 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
-import { CheckoutPayloadSchema } from "@/lib/validations/checkout"
+import {
+  CheckoutPayloadSchema,
+  CheckoutSeatHoldSchema,
+} from "@/lib/validations/checkout"
 
 const buyer = {
   firstName: "Ana",
@@ -147,5 +150,23 @@ describe("CheckoutPayloadSchema mixed inventory", () => {
       items: [{ tierId: generalId, quantity: 1 }],
     })
     assert.equal(longDni.success, false)
+  })
+})
+
+describe("CheckoutSeatHoldSchema", () => {
+  it("rejects a non-uuid seat before any database call", () => {
+    const parsed = CheckoutSeatHoldSchema.safeParse({
+      eventId,
+      seatingUnitId: "asiento-1",
+    })
+    assert.equal(parsed.success, false)
+  })
+
+  it("accepts a numbered seat hold payload", () => {
+    const parsed = CheckoutSeatHoldSchema.safeParse({
+      eventId,
+      seatingUnitId: seatId,
+    })
+    assert.equal(parsed.success, true)
   })
 })

@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 
 import { OrganizerAuthForm } from "@/components/shared/organizer-auth-form"
-import { safeInternalNextPath } from "@/lib/auth/post-login"
+import { safeInternalNextPath } from "@/lib/auth/next-path"
 
 export const metadata: Metadata = {
   title: "Acceso para organizadores",

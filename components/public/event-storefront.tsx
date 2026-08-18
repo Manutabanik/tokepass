@@ -3,7 +3,6 @@
 import {
   BadgeCheck,
   Flame,
-  Music2,
   ShieldCheck,
   Sparkles,
 } from "lucide-react"

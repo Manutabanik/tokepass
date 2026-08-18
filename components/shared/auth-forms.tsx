@@ -1,20 +1,19 @@
 "use client"
 
-import { LoaderCircle } from "lucide-react"
-import { useActionState, useState } from "react"
+import { LoaderCircle, Mail } from "lucide-react"
+import Link from "next/link"
+import { useActionState } from "react"
 import { useFormStatus } from "react-dom"
 
 import {
-  signInWithEmail,
   signInWithGoogle,
-  signUpWithEmail,
+  signInWithMagicLink,
   type AuthActionState,
 } from "@/app/actions/auth"
 import { BrandLogo } from "@/components/shared/brand-logo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-import { cn } from "@/lib/utils"
 
 const initialState: AuthActionState = {
   error: null,
@@ -24,13 +23,7 @@ const initialState: AuthActionState = {
 const AUTH_INPUT_CLASS =
   "h-12 min-h-12 rounded-xl border-border bg-background px-4 py-3.5 text-base text-foreground placeholder:text-muted-foreground focus-visible:border-violet-500/80 focus-visible:ring-2 focus-visible:ring-violet-500/20"
 
-function SubmitButton({
-  label,
-  pendingLabel,
-}: {
-  label: string
-  pendingLabel: string
-}) {
+function MagicLinkSubmit() {
   const { pending } = useFormStatus()
 
   return (
@@ -39,8 +32,8 @@ function SubmitButton({
       disabled={pending}
       className="h-12 w-full cursor-pointer rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 px-4 py-3.5 text-sm font-bold text-white shadow-[0_0_25px_rgba(147,51,234,0.18)] transition-all hover:from-purple-500 hover:to-indigo-500 disabled:cursor-not-allowed"
     >
-      {pending && <LoaderCircle className="animate-spin" aria-hidden="true" />}
-      {pending ? pendingLabel : label}
+      {pending ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <Mail className="size-4" />}
+      {pending ? "Enviando enlace..." : "Enviar enlace de acceso"}
     </Button>
   )
 }
@@ -57,11 +50,7 @@ function GoogleSubmitButton() {
       {pending ? (
         <LoaderCircle className="animate-spin" aria-hidden="true" />
       ) : (
-        <svg
-          viewBox="0 0 24 24"
-          className="size-5"
-          aria-hidden="true"
-        >
+        <svg viewBox="0 0 24 24" className="size-5" aria-hidden="true">
           <path
             fill="#4285F4"
             d="M21.6 12.23c0-.71-.06-1.4-.18-2.07H12v3.92h5.38a4.6 4.6 0 0 1-2 3.02v2.54h3.24c1.9-1.75 2.98-4.33 2.98-7.41Z"
@@ -113,31 +102,22 @@ function ActionMessage({ state }: { state: AuthActionState }) {
 
 export function AuthForms({
   initialError,
-  initialMode = "login",
   nextPath,
 }: {
   initialError?: string
   initialMode?: "login" | "register"
   nextPath?: string | null
 }) {
-  const [mode, setMode] = useState<"login" | "register">(initialMode)
-  const [loginState, loginAction] = useActionState(
-    signInWithEmail,
+  const [magicState, magicAction] = useActionState(
+    signInWithMagicLink,
     initialState,
   )
-  const [registerState, registerAction] = useActionState(
-    signUpWithEmail,
-    initialState,
-  )
-
-  const isLogin = mode === "login"
-  const visibleLoginState =
-    loginState.error || loginState.success
-      ? loginState
+  const visibleState =
+    magicState.error || magicState.success
+      ? magicState
       : { error: initialError ?? null, success: null }
-  const safeNext = nextPath?.startsWith("/") && !nextPath.startsWith("//")
-    ? nextPath
-    : null
+  const safeNext =
+    nextPath?.startsWith("/") && !nextPath.startsWith("//") ? nextPath : null
 
   return (
     <div className="relative z-10 w-full max-w-md rounded-3xl border border-border bg-card/95 p-8 text-card-foreground shadow-2xl shadow-zinc-200/60 backdrop-blur-xl dark:shadow-black/40 sm:p-10">
@@ -145,164 +125,69 @@ export function AuthForms({
         <BrandLogo href="/" size="lg" />
       </div>
       <span className="mb-2 block text-center font-mono text-xs font-bold uppercase tracking-widest text-violet-700 dark:text-purple-400">
-        Bienvenido
+        Acceso rápido
       </span>
       <h1 className="mb-1.5 text-center text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
-        {isLogin ? "Ingresá a tu cuenta" : "Creá tu cuenta"}
+        Entrá para comprar
       </h1>
       <p className="mb-8 text-center text-sm text-muted-foreground">
-        {isLogin
-          ? "Tus entradas, beneficios y experiencias en un solo lugar."
-          : "Registrate para descubrir eventos y guardar tus entradas."}
+        Google o un enlace al mail. Sin contraseña. Tus entradas quedan en tu
+        cuenta.
       </p>
 
-      <div className="mb-6 grid grid-cols-2 rounded-2xl border border-border bg-muted/60 p-1.5">
-        {(["login", "register"] as const).map((item) => (
-          <button
-            key={item}
-            type="button"
-            onClick={() => setMode(item)}
-            className={cn(
-              "cursor-pointer rounded-xl border py-2.5 text-center text-sm transition-all",
-              mode === item
-                ? "border-border bg-background font-semibold text-foreground shadow-md"
-                : "border-transparent font-medium text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {item === "login" ? "Ingresar" : "Registrarme"}
-          </button>
-        ))}
-      </div>
-
       <form action={signInWithGoogle}>
+        {safeNext ? <input type="hidden" name="next" value={safeNext} /> : null}
         <GoogleSubmitButton />
       </form>
 
       <div className="my-6 flex items-center gap-3">
         <Separator className="flex-1 bg-border" />
         <span className="shrink-0 px-3 font-mono text-xs uppercase text-muted-foreground">
-          O continúa con email
+          O con email
         </span>
         <Separator className="flex-1 bg-border" />
       </div>
 
-      {isLogin ? (
-        <form action={loginAction}>
-          {safeNext ? <input type="hidden" name="next" value={safeNext} /> : null}
-          <div className="mb-6 space-y-4">
-            <div>
-              <label
-                htmlFor="login-email"
-                className="mb-1.5 block font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-              >
-                Correo electrónico
-              </label>
-              <Input
-                id="login-email"
-                type="email"
-                name="email"
-                inputMode="email"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                placeholder="Tu Email"
-                autoComplete="email"
-                required
-                className={AUTH_INPUT_CLASS}
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="login-password"
-                className="mb-1.5 block font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-              >
-                Contraseña
-              </label>
-              <Input
-                id="login-password"
-                type="password"
-                name="password"
-                placeholder="Ingresá tu contraseña"
-                autoComplete="current-password"
-                required
-                className={AUTH_INPUT_CLASS}
-              />
-            </div>
-          </div>
-          <div className="space-y-4">
-            <ActionMessage state={visibleLoginState} />
-            <SubmitButton label="Ingresar" pendingLabel="Ingresando..." />
-          </div>
-        </form>
-      ) : (
-        <form action={registerAction}>
-          {safeNext ? <input type="hidden" name="next" value={safeNext} /> : null}
-          <div className="mb-6 space-y-4">
-            <div>
-              <label
-                htmlFor="register-name"
-                className="mb-1.5 block font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-              >
-                Nombre completo
-              </label>
-              <Input
-                id="register-name"
-                type="text"
-                name="fullName"
-                placeholder="Tu nombre"
-                autoComplete="name"
-                className={AUTH_INPUT_CLASS}
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="register-email"
-                className="mb-1.5 block font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-              >
-                Correo electrónico
-              </label>
-              <Input
-                id="register-email"
-                type="email"
-                name="email"
-                inputMode="email"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                placeholder="Tu Email"
-                autoComplete="email"
-                required
-                className={AUTH_INPUT_CLASS}
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="register-password"
-                className="mb-1.5 block font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-              >
-                Contraseña
-              </label>
-              <Input
-                id="register-password"
-                type="password"
-                name="password"
-                placeholder="Mínimo 8 caracteres"
-                autoComplete="new-password"
-                minLength={8}
-                required
-                className={AUTH_INPUT_CLASS}
-              />
-            </div>
-          </div>
-          <div className="space-y-4">
-            <ActionMessage state={registerState} />
-            <SubmitButton
-              label="Crear cuenta"
-              pendingLabel="Creando cuenta..."
+      <form action={magicAction}>
+        {safeNext ? <input type="hidden" name="next" value={safeNext} /> : null}
+        <div className="mb-6 space-y-4">
+          <div>
+            <label
+              htmlFor="login-email"
+              className="mb-1.5 block font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+            >
+              Correo electrónico
+            </label>
+            <Input
+              id="login-email"
+              type="email"
+              name="email"
+              inputMode="email"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              placeholder="tu@email.com"
+              autoComplete="email"
+              required
+              className={AUTH_INPUT_CLASS}
             />
           </div>
-        </form>
-      )}
+        </div>
+        <div className="space-y-4">
+          <ActionMessage state={visibleState} />
+          <MagicLinkSubmit />
+        </div>
+      </form>
+
+      <p className="mt-6 text-center text-xs text-muted-foreground">
+        ¿Organizás eventos?{" "}
+        <Link
+          href="/login-organizador"
+          className="font-semibold text-foreground underline-offset-4 hover:underline"
+        >
+          Entrar al panel
+        </Link>
+      </p>
     </div>
   )
 }

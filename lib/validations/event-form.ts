@@ -13,13 +13,22 @@ import {
   TICKET_DESCRIPTION_MAX,
   TICKET_HIGHLIGHT_BADGES,
 } from "@/lib/checkout/ticket-picker"
-import { BUNDLE_TYPES } from "@/lib/inventory/flexible-bundles"
+import {
+  BUNDLE_TYPES,
+  PROMO_DISCOUNT_TYPES,
+} from "@/lib/inventory/flexible-bundles"
 import { INVENTORY_TIER_TYPES } from "@/lib/inventory/unified-inventory"
 import {
   normalizeScheduleDaysFromForm,
   parseDateTimeLocal,
   scheduleDaysToFormValues,
 } from "@/lib/event-schedule"
+import {
+  asUuidOrNull,
+  optionalDayId,
+  optionalSectorKey,
+  optionalUuid,
+} from "@/lib/validations/relation-id"
 import { EVENT_VISIBILITY_VALUES } from "@/types/events"
 import { TICKET_TIER_VISIBILITY_VALUES } from "@/types/tickets"
 
@@ -90,7 +99,10 @@ export const ticketPhaseSchema = z.object({
 })
 
 export const ticketTierSchema = z.object({
-  id: z.string().uuid().optional(),
+  id: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().uuid().optional(),
+  ),
   /** Solo cliente: el persist lo elimina para forzar INSERT. */
   isNew: z.boolean().optional(),
   name: z.string().trim().min(2, "Ingresá un nombre para el tipo de entrada."),
@@ -118,11 +130,11 @@ export const ticketTierSchema = z.object({
     .nullable()
     .optional()
     .default(null),
-  /** null / "all" / "" = abono completo */
-  dayId: z.string().nullable().optional(),
+  /** null / "all" / "" = abono completo. Nunca persistir cadena vacía. */
+  dayId: optionalDayId,
   visibility: z.enum(TICKET_TIER_VISIBILITY_VALUES),
   layoutType: z.enum(["general", "table_combo", "numbered_seat"]),
-  seatingSectorId: z.string().trim().nullable().optional(),
+  seatingSectorId: optionalSectorKey,
   capacityPerUnit: z.number().int().min(1).max(100),
   /** QRs independientes por unidad (mesa). */
   admitCount: z.number().int().min(1).max(50),
@@ -138,6 +150,10 @@ export const ticketTierSchema = z.object({
     .optional()
     .default([]),
   bundleType: z.enum(BUNDLE_TYPES).nullable().optional(),
+  promoDiscountType: z.enum(PROMO_DISCOUNT_TYPES).nullable().optional(),
+  promoDiscountValue: z.number().min(0).optional().default(0),
+  promoRequiredQty: z.number().int().min(1).max(50).optional().default(1),
+  promoPayQty: z.number().int().min(0).max(50).optional().default(1),
   phases: z.array(ticketPhaseSchema).optional().default([]),
 })
 
@@ -160,19 +176,21 @@ const eventFormObject = z
       visibility: z.enum(EVENT_VISIBILITY_VALUES),
       isMultiDay: z.boolean(),
       scheduleDays: z.array(scheduleDaySchema),
-      categoryId: z.string().uuid("Seleccioná una categoría de la lista."),
+      categoryId: z.preprocess(
+        (value) => (typeof value === "string" && value.trim() === "" ? null : value),
+        z.string().uuid("Seleccioná una categoría de la lista."),
+      ),
       ageRestriction: z.enum(AGE_RESTRICTION_VALUES, {
         error: "Seleccioná la restricción de edad.",
       }),
+      hasSeatingPlan: z.boolean().optional().default(false),
+      hasSchedule: z.boolean().optional().default(false),
     }),
     venue: z.object({
       mode: z.enum(["existing", "new"]),
-      existingVenueId: z.string().uuid().optional().nullable(),
+      existingVenueId: optionalUuid,
       zoneType: z.enum(["general_admission", "reserved_seating"]),
-      venueName: z
-        .string()
-        .trim()
-        .min(2, "Ingresá el nombre del lugar."),
+      venueName: z.string().trim(),
       venueLocation: z.string().trim().optional(),
       venueCity: z.string().trim().optional(),
       province: z.string().trim().optional(),
@@ -222,9 +240,14 @@ const eventFormObject = z
       }
       tierNames.add(normalizedName)
 
-      const usesMap = Boolean(data.venue.includesSeatingMap)
-      const generalSectors = listGeneralLogicalSectors(data.venue.zones)
+      const usesMap =
+        Boolean(data.basics.hasSeatingPlan) &&
+        Boolean(data.venue.includesSeatingMap)
+      const generalSectors = data.basics.hasSeatingPlan
+        ? listGeneralLogicalSectors(data.venue.zones)
+        : []
       if (
+        data.basics.hasSeatingPlan &&
         tier.layoutType !== "general" &&
         !tier.seatingSectorId &&
         !usesMap
@@ -236,6 +259,7 @@ const eventFormObject = z
         })
       }
       if (
+        data.basics.hasSeatingPlan &&
         tier.layoutType === "general" &&
         (tier.tierType ?? "general") === "general" &&
         generalSectors.length > 0 &&
@@ -296,16 +320,27 @@ const eventFormObject = z
       }
     }
 
-    if (data.venue.mode === "existing" && !data.venue.existingVenueId) {
-      context.addIssue({
-        code: "custom",
-        path: ["venue", "existingVenueId"],
-        message: "Seleccioná un lugar guardado.",
-      })
+    if (data.basics.hasSeatingPlan) {
+      if (data.venue.venueName.trim().length < 2) {
+        context.addIssue({
+          code: "custom",
+          path: ["venue", "venueName"],
+          message: "Ingresá el nombre del lugar.",
+        })
+      }
+      if (data.venue.mode === "existing" && !data.venue.existingVenueId) {
+        context.addIssue({
+          code: "custom",
+          path: ["venue", "existingVenueId"],
+          message: "Seleccioná un lugar guardado.",
+        })
+      }
     }
 
     const hasBlueprintZones = (data.venue.zones?.length ?? 0) > 0
-    const usesSeatingMap = Boolean(data.venue.includesSeatingMap)
+    const usesSeatingMap =
+      Boolean(data.basics.hasSeatingPlan) &&
+      Boolean(data.venue.includesSeatingMap)
     const capacitySnap = computeEventCapacity({
       tickets: data.tickets,
       venueMap: data.venue.venueMap,
@@ -353,7 +388,11 @@ const eventFormObject = z
       }
     }
 
-    if (!hasBlueprintZones && !usesSeatingMap) {
+    if (
+      data.basics.hasSeatingPlan &&
+      !hasBlueprintZones &&
+      !usesSeatingMap
+    ) {
       if (data.venue.zoneType === "reserved_seating") {
         if (!data.venue.rows) {
           context.addIssue({
@@ -393,7 +432,10 @@ export const publishEventSchema = eventFormObject
 export const eventFormSchema = publishEventSchema
 
 const draftTicketSchema = z.object({
-  id: z.string().uuid().optional(),
+  id: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().uuid().optional(),
+  ),
   isNew: z.boolean().optional(),
   name: z.string().optional().default(""),
   price: z.number().optional(),
@@ -407,13 +449,13 @@ const draftTicketSchema = z.object({
     .nullable()
     .optional()
     .default(null),
-  dayId: z.string().nullable().optional(),
+  dayId: optionalDayId,
   visibility: z.enum(TICKET_TIER_VISIBILITY_VALUES).optional().default("public"),
   layoutType: z
     .enum(["general", "table_combo", "numbered_seat"])
     .optional()
     .default("general"),
-  seatingSectorId: z.string().trim().nullable().optional(),
+  seatingSectorId: optionalSectorKey,
   capacityPerUnit: z.number().int().min(1).max(100).optional().default(1),
   admitCount: z.number().int().min(1).max(50).optional().default(1),
   tierType: z.enum(INVENTORY_TIER_TYPES).optional().default("general"),
@@ -428,6 +470,10 @@ const draftTicketSchema = z.object({
     .optional()
     .default([]),
   bundleType: z.enum(BUNDLE_TYPES).nullable().optional(),
+  promoDiscountType: z.enum(PROMO_DISCOUNT_TYPES).nullable().optional(),
+  promoDiscountValue: z.number().min(0).optional().default(0),
+  promoRequiredQty: z.number().int().min(1).max(50).optional().default(1),
+  promoPayQty: z.number().int().min(0).max(50).optional().default(1),
   phases: z.array(ticketPhaseSchema).optional().default([]),
 })
 
@@ -450,6 +496,8 @@ export const draftEventSchema = z.object({
       .union([z.enum(AGE_RESTRICTION_VALUES), z.literal("")])
       .optional()
       .default(""),
+    hasSeatingPlan: z.boolean().optional().default(false),
+    hasSchedule: z.boolean().optional().default(false),
   }),
   venue: z
     .object({
@@ -527,6 +575,10 @@ function blankDraftTicket(): EventFormValues["tickets"][number] {
     listPrice: null,
     bundleItems: [],
     bundleType: null,
+    promoDiscountType: null,
+    promoDiscountValue: 0,
+    promoRequiredQty: 1,
+    promoPayQty: 1,
     phases: [],
   }
 }
@@ -572,18 +624,21 @@ export function coerceDraftEventForm(
       visibility: tier.visibility ?? "public",
       capacityPerUnit: tier.capacityPerUnit ?? 1,
       admitCount: tier.admitCount ?? 1,
-      seatingSectorId:
-        (tier.layoutType === "table_combo" ||
-          tier.layoutType === "numbered_seat") &&
-        tier.seatingSectorId
-          ? tier.seatingSectorId
-          : null,
+      seatingSectorId: tier.seatingSectorId?.trim() || null,
       tierType: tier.tierType ?? "general",
       listPrice: tier.listPrice ?? null,
       bundleItems: tier.bundleItems ?? [],
       bundleType: tier.bundleType ?? null,
+      promoDiscountType: tier.promoDiscountType ?? null,
+      promoDiscountValue: Number(tier.promoDiscountValue) || 0,
+      promoRequiredQty: Math.max(
+        1,
+        Math.floor(Number(tier.promoRequiredQty) || 1),
+      ),
+      promoPayQty: Math.max(0, Math.floor(Number(tier.promoPayQty) || 1)),
       description: (tier.description ?? "").trim().slice(0, TICKET_DESCRIPTION_MAX),
       highlightBadge: tier.highlightBadge === "bestseller" ? "bestseller" : null,
+      dayId: asUuidOrNull(tier.dayId, ["all"]),
       phases: tier.phases ?? [],
     }))
 
@@ -646,6 +701,8 @@ export function coerceDraftEventForm(
         ? raw.basics.categoryId
         : "",
       ageRestriction: age,
+      hasSeatingPlan: Boolean(raw.basics.hasSeatingPlan),
+      hasSchedule: Boolean(raw.basics.hasSchedule),
     },
     venue: {
       mode:

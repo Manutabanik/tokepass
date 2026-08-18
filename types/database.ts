@@ -181,6 +181,34 @@ export type EventArtist = {
   updated_at: string
 }
 
+/** Bloque de agenda (horario + título). El participante es opcional. */
+export type AgendaBlock = {
+  id: string
+  event_id: string
+  day_id: string | null
+  title: string
+  start_time: string
+  end_time: string
+  /** Orden de grilla. Equivale a AgendaBlock.order. */
+  sort_order: number
+  agenda_participants?: AgendaParticipant[]
+  created_at: string
+  updated_at: string
+}
+
+/** Participante opcional de un bloque (0..N, p. ej. panel). */
+export type AgendaParticipant = {
+  id: string
+  agenda_block_id: string
+  name: string
+  role_tag: string
+  image_url: string | null
+  external_link: string | null
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
 export type Event = {
   id: string
   title: string
@@ -236,6 +264,10 @@ export type Event = {
   slug: string
   /** Plano visual del recinto (editor SVG). */
   venue_map: Json
+  /** Si el evento usa el paso de mapa y sectores numerados. */
+  has_seating_plan: boolean
+  /** Si el evento publica una agenda de bloques de actividad. */
+  has_schedule: boolean
   province: string | null
   department: string | null
   /** Tab inicial del picker B2C. auto = el de más stock restante. */
@@ -244,6 +276,8 @@ export type Event = {
   lineup?: Json | null
   /** Relación inversa EventArtist[] (join event_artists). */
   event_artists?: EventArtist[]
+  /** Relación inversa AgendaBlock[] (agenda universal). */
+  agenda_blocks?: AgendaBlock[]
   created_at: string
   updated_at: string
 }
@@ -368,6 +402,10 @@ export type TicketTier = {
   bundle_items: Json
   /** multi_day_pass | cross_sell_pack | volume_discount */
   bundle_type: "multi_day_pass" | "cross_sell_pack" | "volume_discount" | null
+  promo_discount_type: "PORCENTAJE" | "MONTO_FIJO" | "X_POR_Y" | null
+  promo_discount_value: number
+  promo_required_qty: number
+  promo_pay_qty: number
   /** Copia corta para el picker B2C. */
   description: string | null
   /** Badge opcional. bestseller = Más vendida. */
@@ -885,11 +923,14 @@ type EventInsert = Omit<
   | "default_ticket_tab"
   | "lineup"
   | "event_artists"
+  | "agenda_blocks"
+  | "has_schedule"
   | "created_at"
   | "updated_at"
 > & {
   id?: string
   default_ticket_tab?: Event["default_ticket_tab"]
+  has_schedule?: boolean
   lineup?: Json | null
   description?: string | null
   image_url?: string | null
@@ -967,6 +1008,10 @@ type TicketTierInsert = Omit<
   | "tier_type"
   | "bundle_items"
   | "bundle_type"
+  | "promo_discount_type"
+  | "promo_discount_value"
+  | "promo_required_qty"
+  | "promo_pay_qty"
   | "description"
   | "highlight_badge"
   | "total_capacity"
@@ -994,6 +1039,10 @@ type TicketTierInsert = Omit<
   tier_type?: TicketTier["tier_type"]
   bundle_items?: Json
   bundle_type?: TicketTier["bundle_type"]
+  promo_discount_type?: TicketTier["promo_discount_type"]
+  promo_discount_value?: number
+  promo_required_qty?: number
+  promo_pay_qty?: number
   created_at?: string
   updated_at?: string
 }
@@ -1336,6 +1385,13 @@ export type Database = {
             referencedRelation: "event_artists"
             referencedColumns: ["event_id"]
           },
+          {
+            foreignKeyName: "agenda_blocks_event_id_fkey"
+            columns: ["id"]
+            isOneToOne: false
+            referencedRelation: "agenda_blocks"
+            referencedColumns: ["event_id"]
+          },
         ]
       }
       event_schedules: {
@@ -1499,6 +1555,77 @@ export type Database = {
             columns: ["artist_id"]
             isOneToOne: false
             referencedRelation: "artists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agenda_blocks: {
+        Row: AgendaBlock
+        Insert: {
+          id?: string
+          event_id: string
+          day_id?: string | null
+          title: string
+          start_time: string
+          end_time: string
+          sort_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<{
+          event_id: string
+          day_id: string | null
+          title: string
+          start_time: string
+          end_time: string
+          sort_order: number
+          updated_at: string
+        }>
+        Relationships: [
+          {
+            foreignKeyName: "agenda_blocks_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agenda_blocks_day_id_fkey"
+            columns: ["day_id"]
+            isOneToOne: false
+            referencedRelation: "event_schedules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agenda_participants: {
+        Row: AgendaParticipant
+        Insert: {
+          id?: string
+          agenda_block_id: string
+          name: string
+          role_tag?: string
+          image_url?: string | null
+          external_link?: string | null
+          sort_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<{
+          agenda_block_id: string
+          name: string
+          role_tag: string
+          image_url: string | null
+          external_link: string | null
+          sort_order: number
+          updated_at: string
+        }>
+        Relationships: [
+          {
+            foreignKeyName: "agenda_participants_agenda_block_id_fkey"
+            columns: ["agenda_block_id"]
+            isOneToOne: false
+            referencedRelation: "agenda_blocks"
             referencedColumns: ["id"]
           },
         ]

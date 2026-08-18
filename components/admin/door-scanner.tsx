@@ -21,6 +21,7 @@ import { DoorScannerSetup } from "@/components/admin/door-scanner-setup"
 import { EmergencyTicketSearch } from "@/components/admin/emergency-ticket-search"
 import { TotemRestOverlay } from "@/components/admin/totem-validator-view"
 import {
+  fetchEventAdmissionSnapshot,
   fetchEventTicketManifest,
   getScannerEvents,
   getScannerGates,
@@ -56,6 +57,7 @@ import {
 import { useOnlineStatus } from "@/components/pwa/use-online-status"
 import { useHardwareSignal } from "@/hooks/use-hardware-signal"
 import {
+  applyAdmissionSnapshot,
   clearSyncQueueItems,
   countAdmittedTickets,
   countAdmissionLeases,
@@ -94,6 +96,7 @@ import {
 } from "@/lib/scanner/manifest-crypto"
 import {
   assertLivingMac,
+  assertStaticMac,
   resolveScanSecret,
 } from "@/lib/scan-payload"
 import { serverAlignedNowMs } from "@/lib/totp-offline"
@@ -672,10 +675,13 @@ export function DoorScanner() {
             }
 
             let local: ScannerManifestTicket | null = null
-            if (resolved.mode === "v2") {
+            if (resolved.mode === "v2" || resolved.mode === "tps") {
               local = await getTicketById(resolved.ticketId)
               if (local && local.event_id === eventId) {
-                const ok = await assertLivingMac(local.totp_secret, resolved)
+                const ok =
+                  resolved.mode === "v2"
+                    ? await assertLivingMac(local.totp_secret, resolved)
+                    : await assertStaticMac(local.totp_secret, resolved)
                 if (!ok) {
                   showOverlay({ kind: "invalid" })
                   return
@@ -842,6 +848,36 @@ export function DoorScanner() {
     }
     setCameraError(scannerCameraErrorMessage(error))
   }
+
+  useEffect(() => {
+    if (!sessionActive || !eventId) return
+    let cancelled = false
+
+    async function pullAdmissions() {
+      if (!navigator.onLine) return
+      try {
+        const snap = await fetchEventAdmissionSnapshot(eventId)
+        if (cancelled) return
+        await applyAdmissionSnapshot(eventId, snap.tickets)
+        setAdmittedCount(await countAdmittedTickets(eventId))
+      } catch (error) {
+        logger.error({
+          context: "door-scanner",
+          message: "admission_snapshot_failed",
+          error,
+        })
+      }
+    }
+
+    void pullAdmissions()
+    const timer = window.setInterval(() => {
+      void pullAdmissions()
+    }, 20_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [sessionActive, eventId])
 
   useEffect(() => {
     if (!sessionActive || isTotemMode) return

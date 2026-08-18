@@ -1,7 +1,7 @@
 ﻿import type { Metadata } from "next"
 
 import { AuthForms } from "@/components/shared/auth-forms"
-import { safeInternalNextPath } from "@/lib/auth/post-login"
+import { safeInternalNextPath } from "@/lib/auth/next-path"
 
 export const metadata: Metadata = {
   title: "Ingresar",

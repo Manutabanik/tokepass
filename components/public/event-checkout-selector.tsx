@@ -109,7 +109,6 @@ export function EventCheckoutSelector({
   tiers,
   quantities,
   isPending,
-  hasSeatingFlow,
   hasInteractiveMap = false,
   mapLoading = false,
   focusedTierId = null,

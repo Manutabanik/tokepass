@@ -52,9 +52,13 @@ function sampleTicket(overrides: Partial<MyTicket> = {}): MyTicket {
 }
 
 describe("wallet pass fields", () => {
-  it("uses the totp secret as the static wallet barcode", () => {
+  it("signs the wallet barcode instead of embedding the totp secret", () => {
     const secret = "b".repeat(32)
-    assert.equal(walletBarcodeValue(sampleTicket({ totpSecret: secret })), secret)
+    const ticket = sampleTicket({ totpSecret: secret })
+    const barcode = walletBarcodeValue(ticket)
+    assert.equal(barcode.includes(secret), false)
+    assert.equal(barcode.startsWith("TPS."), true)
+    assert.equal(barcode.split(".")[1], ticket.id)
   })
 
   it("falls back to qrCode then ticket id", () => {
@@ -80,7 +84,8 @@ describe("wallet pass fields", () => {
     assert.equal(pass.eventTicket.primaryFields[0]?.value, "Noche Neon")
     assert.equal(pass.eventTicket.secondaryFields[0]?.value, "Ana Perez")
     assert.equal(pass.barcodes[0]?.format, "PKBarcodeFormatQR")
-    assert.equal(pass.barcodes[0]?.message, "a".repeat(48))
+    assert.equal(pass.barcodes[0]?.message?.startsWith("TPS."), true)
+    assert.equal(pass.barcodes[0]?.message?.includes("a".repeat(48)), false)
     assert.match(pass.eventTicket.auxiliaryFields[0]?.value ?? "", /Niceto/)
   })
 

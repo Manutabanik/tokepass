@@ -63,8 +63,13 @@ import {
   quoteHybridCartTotal,
   toReserveRpcItem,
 } from "@/lib/checkout/hybrid-cart"
+import { toCheckoutUserError } from "@/lib/errors/commerce-errors"
 import {
+  CheckoutEventIdSchema,
+  CheckoutLayoutHoldSchema,
+  CheckoutLockTicketsSchema,
   CheckoutPayloadSchema,
+  CheckoutSeatHoldSchema,
   buyerToHolderFields,
   formatCheckoutPayloadError,
   type CheckoutAddonItem,
@@ -480,6 +485,13 @@ export async function holdSeatingUnitForCart(
   eventId: string,
   seatingUnitId: string,
 ): Promise<CartSeatingHoldResult> {
+  const parsed = CheckoutSeatHoldSchema.safeParse({ eventId, seatingUnitId })
+  if (!parsed.success) {
+    return { success: false, error: formatCheckoutPayloadError(parsed.error) }
+  }
+  eventId = parsed.data.eventId
+  seatingUnitId = parsed.data.seatingUnitId
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -552,6 +564,18 @@ export async function holdSeatingUnitForCartByLayoutItem(
   sectorId: string,
   layoutItemId: string,
 ): Promise<CartSeatingHoldResult & { seatingUnitId?: string }> {
+  const parsed = CheckoutLayoutHoldSchema.safeParse({
+    eventId,
+    sectorId,
+    layoutItemId,
+  })
+  if (!parsed.success) {
+    return { success: false, error: formatCheckoutPayloadError(parsed.error) }
+  }
+  eventId = parsed.data.eventId
+  sectorId = parsed.data.sectorId
+  layoutItemId = parsed.data.layoutItemId
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -631,6 +655,13 @@ export async function releaseSeatingUnitCartHold(
   eventId: string,
   seatingUnitId: string,
 ): Promise<{ success: true } | { success: false; error: string }> {
+  const parsed = CheckoutSeatHoldSchema.safeParse({ eventId, seatingUnitId })
+  if (!parsed.success) {
+    return { success: false, error: formatCheckoutPayloadError(parsed.error) }
+  }
+  eventId = parsed.data.eventId
+  seatingUnitId = parsed.data.seatingUnitId
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -653,7 +684,10 @@ export async function releaseSeatingUnitCartHold(
       seatingUnitId,
       error: error.message,
     })
-    return { success: false, error: error.message }
+    return {
+      success: false,
+      error: toCheckoutUserError(error, "No se pudo liberar esa ubicación."),
+    }
   }
   return { success: true }
 }
@@ -662,6 +696,13 @@ export async function getSeatingUnitCartHold(
   eventId: string,
   seatingUnitId: string,
 ): Promise<CartSeatingHoldResult> {
+  const parsed = CheckoutSeatHoldSchema.safeParse({ eventId, seatingUnitId })
+  if (!parsed.success) {
+    return { success: false, error: formatCheckoutPayloadError(parsed.error) }
+  }
+  eventId = parsed.data.eventId
+  seatingUnitId = parsed.data.seatingUnitId
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -677,7 +718,10 @@ export async function getSeatingUnitCartHold(
     p_seating_unit_id: seatingUnitId,
   })
   if (error) {
-    return { success: false, error: error.message }
+    return {
+      success: false,
+      error: toCheckoutUserError(error, "No se pudo consultar esa reserva."),
+    }
   }
   const row = Array.isArray(data) ? data[0] : data
   if (!row?.reserved_until) {
@@ -702,6 +746,13 @@ export async function lockTickets(
   eventId: string,
   items: LockTicketsItem[],
 ): Promise<LockTicketsResult> {
+  const parsed = CheckoutLockTicketsSchema.safeParse({ eventId, items })
+  if (!parsed.success) {
+    return { success: false, error: formatCheckoutPayloadError(parsed.error) }
+  }
+  eventId = parsed.data.eventId
+  items = parsed.data.items
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -782,6 +833,12 @@ export async function lockTickets(
 export async function releaseGaCartHolds(
   eventId: string,
 ): Promise<{ success: true } | { success: false; error: string }> {
+  const parsed = CheckoutEventIdSchema.safeParse({ eventId })
+  if (!parsed.success) {
+    return { success: false, error: formatCheckoutPayloadError(parsed.error) }
+  }
+  eventId = parsed.data.eventId
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -802,7 +859,10 @@ export async function releaseGaCartHolds(
       eventId,
       error: error.message,
     })
-    return { success: false, error: error.message }
+    return {
+      success: false,
+      error: toCheckoutUserError(error, "No se pudo liberar el carrito."),
+    }
   }
   return { success: true }
 }
@@ -823,6 +883,12 @@ export async function listCartHolds(
   | { success: true; holds: CartHoldListRow[] }
   | { success: false; error: "auth_required" | string }
 > {
+  const parsed = CheckoutEventIdSchema.safeParse({ eventId })
+  if (!parsed.success) {
+    return { success: false, error: formatCheckoutPayloadError(parsed.error) }
+  }
+  eventId = parsed.data.eventId
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -843,7 +909,10 @@ export async function listCartHolds(
     if (missing) {
       return { success: false, error: "unavailable" }
     }
-    return { success: false, error: error.message }
+    return {
+      success: false,
+      error: toCheckoutUserError(error, "No se pudo leer el carrito."),
+    }
   }
 
   const rows = (Array.isArray(data) ? data : data ? [data] : []) as CartHoldListRow[]
@@ -853,6 +922,12 @@ export async function listCartHolds(
 export async function getGaCartHold(
   eventId: string,
 ): Promise<LockTicketsResult> {
+  const parsed = CheckoutEventIdSchema.safeParse({ eventId })
+  if (!parsed.success) {
+    return { success: false, error: formatCheckoutPayloadError(parsed.error) }
+  }
+  eventId = parsed.data.eventId
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -867,7 +942,10 @@ export async function getGaCartHold(
     p_owner_id: user.id,
   })
   if (error) {
-    return { success: false, error: error.message }
+    return {
+      success: false,
+      error: toCheckoutUserError(error, "No se pudo consultar el carrito."),
+    }
   }
   const row = Array.isArray(data) ? data[0] : data
   if (!row?.reserved_until) {
@@ -1054,7 +1132,24 @@ export async function createComboReservation(
     paymentProvider?: SupportedPaymentProvider
   },
 ): Promise<CheckoutResult> {
-  const qty = Math.max(1, Math.floor(quantity) || 1)
+  const parsed = CheckoutPayloadSchema.safeParse({
+    eventId,
+    items: [{ tierId: bundleTierId, quantity }],
+    buyer: buyerInfo,
+    referralCode,
+    promoCodeId,
+    sandbox: options?.sandbox,
+    paymentProvider: options?.paymentProvider,
+  })
+  if (!parsed.success) {
+    return { success: false, error: formatCheckoutPayloadError(parsed.error) }
+  }
+  const qty = parsed.data.items?.[0]?.quantity ?? Math.max(1, Math.floor(quantity) || 1)
+  eventId = parsed.data.eventId
+  bundleTierId = parsed.data.items?.[0]?.tierId ?? bundleTierId
+  referralCode = parsed.data.referralCode
+  promoCodeId = parsed.data.promoCodeId
+  buyerInfo = buyerToHolderFields(parsed.data.buyer)
   const supabase = await createClient()
   const { data: bundle } = await supabase
     .from("ticket_tiers")

@@ -13,14 +13,22 @@ import {
 } from "@/lib/pricing/event-fees"
 import {
   inferBundleType,
+  normalizePromoRule,
   parseBundleType,
+  parsePromoDiscountType,
+  promotionalBundlePrice,
+  regularBundlePrice,
   type BundleType,
+  type PromoDiscountType,
+  type PromoRule,
 } from "@/lib/inventory/flexible-bundles"
 import { parseBundleItems } from "@/lib/inventory/unified-inventory"
 import {
   parseTicketTierCategory,
   type TicketTierCategory,
 } from "@/lib/ticket-tier-category"
+import { toUserFacingError } from "@/lib/errors/user-facing-error"
+import { asUuidOrNull } from "@/lib/validations/relation-id"
 
 export type BundleStoreItem = {
   id: string
@@ -49,6 +57,10 @@ export type ManagedTicketTier = {
   bundleType: BundleType | null
   bundleItems: Array<{ tierId: string; quantity: number }>
   tierType: string
+  promoDiscountType: PromoDiscountType | null
+  promoDiscountValue: number
+  promoRequiredQty: number
+  promoPayQty: number
 }
 
 async function assertOrganizer(eventId: string) {
@@ -82,12 +94,22 @@ export async function getEventBundleWorkspace(eventId: string): Promise<{
   const gate = await assertOrganizer(eventId)
   if (!gate.ok) return { tiers: [], storeItems: [] }
 
+  const richTiers = await gate.supabase
+    .from("ticket_tiers")
+    .select("id, name, price, list_price, capacity, sold, category, day_id, tier_type, bundle_type, bundle_items, promo_discount_type, promo_discount_value, promo_required_qty, promo_pay_qty")
+    .eq("event_id", eventId)
+    .order("created_at")
+  const tiersQuery =
+    richTiers.error && /promo_discount|schema cache|PGRST204|42703/i.test(richTiers.error.message)
+      ? await gate.supabase
+          .from("ticket_tiers")
+          .select("id, name, price, list_price, capacity, sold, category, day_id, tier_type, bundle_type, bundle_items")
+          .eq("event_id", eventId)
+          .order("created_at")
+      : richTiers
+
   const [{ data: tiers }, { data: items }] = await Promise.all([
-    gate.supabase
-      .from("ticket_tiers")
-      .select("id, name, price, list_price, capacity, sold, category, day_id, tier_type, bundle_type, bundle_items")
-      .eq("event_id", eventId)
-      .order("created_at"),
+    Promise.resolve(tiersQuery),
     gate.supabase
       .from("event_items")
       .select("id, name, price, category")
@@ -141,6 +163,20 @@ export async function getEventBundleWorkspace(eventId: string): Promise<{
         bundleType: parseBundleType(tier.bundle_type),
         bundleItems,
         tierType: String(tier.tier_type ?? "general"),
+        promoDiscountType: parsePromoDiscountType(
+          (tier as { promo_discount_type?: string | null }).promo_discount_type,
+        ),
+        promoDiscountValue: Number(
+          (tier as { promo_discount_value?: number }).promo_discount_value ?? 0,
+        ),
+        promoRequiredQty: Math.max(
+          1,
+          Number((tier as { promo_required_qty?: number }).promo_required_qty ?? 1) || 1,
+        ),
+        promoPayQty: Math.max(
+          0,
+          Number((tier as { promo_pay_qty?: number }).promo_pay_qty ?? 1) || 0,
+        ),
       }
     }),
     storeItems: (items ?? []).map((item) => ({
@@ -164,6 +200,7 @@ export async function upsertTicketBundle(input: {
   comboItems: Array<{ eventItemId: string; quantity: number }>
   bundleType?: BundleType | null
   bundleItems?: Array<{ tierId: string; quantity: number }>
+  promoRule?: PromoRule | null
 }): Promise<{ success: true; tierId: string } | { success: false; error: string }> {
   const gate = await assertOrganizer(input.eventId)
   if (!gate.ok) return { success: false, error: gate.error }
@@ -173,9 +210,34 @@ export async function upsertTicketBundle(input: {
     return { success: false, error: "Nombrá el combo o la tarifa." }
   }
 
-  const salePrice = Math.max(0, Number(input.salePrice) || 0)
-  const listPrice = Math.max(0, Number(input.listPrice) || 0)
   const capacity = Math.max(1, Math.floor(Number(input.capacity) || 1))
+  const rule = normalizePromoRule(input.promoRule)
+  const childIds = (input.bundleItems ?? [])
+    .map((item) => item.tierId)
+    .filter(Boolean)
+  const { data: childTiers } =
+    childIds.length > 0
+      ? await gate.supabase
+          .from("ticket_tiers")
+          .select("id, price")
+          .eq("event_id", input.eventId)
+          .in("id", childIds)
+      : { data: [] }
+  const unitPriceByTierId = Object.fromEntries(
+    (childTiers ?? []).map((row) => [row.id, Number(row.price) || 0]),
+  )
+  const resolvedItems = (input.bundleItems ?? []).filter(
+    (item) => item.tierId && item.quantity > 0 && unitPriceByTierId[item.tierId] != null,
+  )
+  if (input.category === "bundle" && resolvedItems.length === 0) {
+    return { success: false, error: "Elegí al menos una entrada incluida." }
+  }
+  const listPrice = regularBundlePrice(resolvedItems, unitPriceByTierId)
+  const salePrice = promotionalBundlePrice({
+    items: resolvedItems,
+    unitPriceByTierId,
+    rule,
+  })
   const feeConfig = defaultEventFeeConfig()
   const breakdown = allInBreakdown(
     salePrice,
@@ -191,9 +253,7 @@ export async function upsertTicketBundle(input: {
     }),
   )
 
-  const bundleItems = (input.bundleItems ?? []).filter(
-    (item) => item.tierId && item.quantity > 0,
-  )
+  const bundleItems = resolvedItems
   const bundleType =
     input.category === "bundle"
       ? inferBundleType({
@@ -212,12 +272,16 @@ export async function upsertTicketBundle(input: {
     capacity,
     category: input.category,
     list_price: listPrice > 0 ? listPrice : null,
-    day_id: input.dayId,
+    day_id: asUuidOrNull(input.dayId, ["all"]),
     visibility: "public" as const,
     layout_type: "general" as const,
     admit_count: 1,
     tier_type: input.category === "bundle" ? ("bundle" as const) : ("general" as const),
     bundle_type: bundleType,
+    promo_discount_type: input.category === "bundle" ? rule.tipoDescuento : null,
+    promo_discount_value: rule.valorDescuento,
+    promo_required_qty: rule.cantidadRequerida,
+    promo_pay_qty: rule.cantidadPaga,
     bundle_items: bundleItems.map((item) => ({
       tier_id: item.tierId,
       quantity: Math.max(1, Math.min(50, Math.floor(item.quantity) || 1)),
@@ -233,17 +297,71 @@ export async function upsertTicketBundle(input: {
       .update(payload)
       .eq("id", tierId)
       .eq("event_id", input.eventId)
-    if (error) return { success: false, error: error.message }
+    if (error && /promo_discount|schema cache|PGRST204|42703/i.test(error.message)) {
+      const {
+        promo_discount_type: _promoType,
+        promo_discount_value: _promoValue,
+        promo_required_qty: _promoRequired,
+        promo_pay_qty: _promoPay,
+        ...safe
+      } = payload
+      void _promoType
+      void _promoValue
+      void _promoRequired
+      void _promoPay
+      const retry = await admin
+        .from("ticket_tiers")
+        .update(safe)
+        .eq("id", tierId)
+        .eq("event_id", input.eventId)
+      if (retry.error) {
+        return { success: false, error: toUserFacingError(retry.error.message) }
+      }
+    } else if (error) {
+      return { success: false, error: toUserFacingError(error.message) }
+    }
   } else {
     const { data, error } = await admin
       .from("ticket_tiers")
       .insert(payload)
       .select("id")
       .maybeSingle()
-    if (error || !data) {
-      return { success: false, error: error?.message ?? "No se pudo crear la tarifa." }
+    if ((error && /promo_discount|schema cache|PGRST204|42703/i.test(error.message))) {
+      const {
+        promo_discount_type: _promoType,
+        promo_discount_value: _promoValue,
+        promo_required_qty: _promoRequired,
+        promo_pay_qty: _promoPay,
+        ...safe
+      } = payload
+      void _promoType
+      void _promoValue
+      void _promoRequired
+      void _promoPay
+      const retry = await admin
+        .from("ticket_tiers")
+        .insert(safe)
+        .select("id")
+        .maybeSingle()
+      if (retry.error || !retry.data) {
+        return {
+          success: false,
+          error: toUserFacingError(
+            retry.error?.message ?? "No se pudo crear la tarifa.",
+          ),
+        }
+      }
+      tierId = retry.data.id
+    } else if (error || !data) {
+      return {
+        success: false,
+        error: toUserFacingError(
+          error?.message ?? "No se pudo crear la tarifa.",
+        ),
+      }
+    } else {
+      tierId = data.id
     }
-    tierId = data.id
   }
 
   await gate.supabase.from("ticket_tier_combo_items").delete().eq("tier_id", tierId)
@@ -260,7 +378,7 @@ export async function upsertTicketBundle(input: {
     const { error } = await gate.supabase
       .from("ticket_tier_combo_items")
       .insert(lines)
-    if (error) return { success: false, error: error.message }
+    if (error) return { success: false, error: toUserFacingError(error.message) }
   }
 
   revalidatePath(`/admin/events/${input.eventId}`)
@@ -297,7 +415,7 @@ export async function deleteTicketBundle(input: {
     .eq("id", input.tierId)
     .eq("event_id", input.eventId)
 
-  if (error) return { success: false, error: error.message }
+  if (error) return { success: false, error: toUserFacingError(error.message) }
   revalidatePath(`/admin/events/${input.eventId}/tiers`)
   return { success: true }
 }

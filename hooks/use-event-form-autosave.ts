@@ -12,6 +12,7 @@ import {
 import type { EventFormValues } from "@/lib/validations/event-form"
 import type { VenuePricingMap } from "@/lib/seating/venue-adapter"
 
+/** Autoguardado de edición: mínimo 1000ms para no disparar POSTs en cada tecla. */
 const DEBOUNCE_MS = 1500
 
 function sanitizeFormValues(values: EventFormValues): EventFormValues {
@@ -81,6 +82,8 @@ export function useEventFormAutosave(input: {
   const readyRef = useRef(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const savingRef = useRef(false)
+  const skipWatchRef = useRef(false)
+  const lastSavedKeyRef = useRef<string | null>(null)
   const inventoryFingerprintRef = useRef(
     eventInventoryFingerprint(initialValues),
   )
@@ -164,6 +167,14 @@ export function useEventFormAutosave(input: {
     if (savingRef.current) return
     const snapshot = latestRef.current
     const values = sanitizeFormValues(snapshot.values)
+    const payloadKey = JSON.stringify(values)
+    if (
+      snapshot.eventId &&
+      lastSavedKeyRef.current === payloadKey
+    ) {
+      setAutosaveStatus("saved")
+      return
+    }
     const identityOnly =
       !snapshot.eventId ||
       eventInventoryFingerprint(values) === inventoryFingerprintRef.current
@@ -189,7 +200,7 @@ export function useEventFormAutosave(input: {
         setEventId(result.eventId)
         latestRef.current.eventId = result.eventId
       }
-      if (result.venueId) {
+      if (result.venueId && result.venueId !== values.venue.existingVenueId) {
         const current = latestRef.current.values
         latestRef.current.values = {
           ...current,
@@ -198,12 +209,16 @@ export function useEventFormAutosave(input: {
             existingVenueId: result.venueId,
           },
         }
+        skipWatchRef.current = true
         form.setValue("venue.existingVenueId", result.venueId, {
           shouldDirty: false,
           shouldTouch: false,
           shouldValidate: false,
         })
       }
+      lastSavedKeyRef.current = JSON.stringify(
+        sanitizeFormValues(latestRef.current.values),
+      )
       setAutosaveStatus("saved")
       if (!identityOnly) {
         inventoryFingerprintRef.current = eventInventoryFingerprint(values)
@@ -248,6 +263,10 @@ export function useEventFormAutosave(input: {
       latestRef.current.values = next
       if (!readyRef.current) return
       setFormValues(next)
+      if (skipWatchRef.current) {
+        skipWatchRef.current = false
+        return
+      }
       scheduleSaveRef.current()
     })
     return () => subscription.unsubscribe()

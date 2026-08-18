@@ -16,14 +16,10 @@ export function e2eOrganizerConfigured(): boolean {
 
 export async function loginBuyer(page: Page): Promise<void> {
   const email = process.env.E2E_BUYER_EMAIL ?? ""
-  const password = process.env.E2E_BUYER_PASSWORD ?? ""
   await page.goto("/login")
   await page.locator("#login-email").fill(email)
-  await page.locator("#login-password").fill(password)
-  await page.locator("form").locator('button[type="submit"]').click()
-  await page.waitForURL((url) => !url.pathname.startsWith("/login"), {
-    timeout: 20_000,
-  })
+  await page.getByRole("button", { name: /enviar enlace/i }).click()
+  await page.getByRole("status").waitFor({ timeout: 20_000 })
 }
 
 export async function loginOrganizer(page: Page): Promise<void> {

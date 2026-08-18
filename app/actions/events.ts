@@ -32,7 +32,11 @@ import {
 } from "@/lib/checkout/ticket-picker"
 import {
   inferBundleType,
+  normalizePromoRule,
   parseBundleType,
+  parsePromoDiscountType,
+  promotionalBundlePrice,
+  regularBundlePrice,
 } from "@/lib/inventory/flexible-bundles"
 import {
   inferInventoryTierType,
@@ -59,6 +63,7 @@ import {
   type DraftEventFormValues,
   type EventFormValues,
 } from "@/lib/validations/event-form"
+import { asUuidOrNull } from "@/lib/validations/relation-id"
 import type { Database, Event, EventStatus, Json, Venue } from "@/types/database"
 import { computeEventCapacityFromForm } from "@/lib/inventory/capacity-budget"
 import { parseVenueMap, serializeVenueMap } from "@/types/venue-map"
@@ -67,13 +72,18 @@ import {
   venueMapToSeatingLayout,
 } from "@/lib/seating/venue-map-geometry"
 import { composeVenuePlace } from "@/lib/venues/compose-location"
+import {
+  canPersistCatalogVenueName,
+  normalizeExactVenueName,
+} from "@/lib/venues/venue-identity"
 import { applyMapCapacityToTickets } from "@/lib/seating/venue-map-pricing"
 import {
   logicalSectorId,
   normalizeLogicalSectors,
 } from "@/lib/inventory/logical-sectors"
 import { logger } from "@/lib/logger"
-import { toUserFacingError } from "@/lib/errors/user-facing-error"
+import { mapUnknownError } from "@/lib/errors/error-handler"
+import type { AppErrorCode } from "@/lib/errors/app-error"
 import {
   summarizeVenueMapSkuConflicts,
   validateVenueMapSkuConsistency,
@@ -352,23 +362,45 @@ function mapEventFormToRpcPayload(
     zones,
     tiers: data.tickets.map((tier) => {
       // Form `price` is the public All-In price. Split uses event fee config.
-      const breakdown = allInBreakdown(
-        tier.price,
-        eventFeeRate(feeConfig),
-        eventFixedFee(feeConfig),
-      )
-      const dayIdRaw = tier.dayId?.trim()
       const dayId =
-        !data.basics.isMultiDay ||
-        !dayIdRaw ||
-        dayIdRaw === "all"
+        !data.basics.isMultiDay
           ? null
-          : dayIdRaw
+          : asUuidOrNull(tier.dayId, ["all"])
       const tierType = inferInventoryTierType({
         tierType: tier.tierType,
         layoutType: tier.layoutType,
         bundleItems: tier.bundleItems,
       })
+      const bundleRule =
+        tierType === "bundle"
+          ? normalizePromoRule({
+              tipoDescuento: tier.promoDiscountType,
+              valorDescuento: tier.promoDiscountValue,
+              cantidadRequerida: tier.promoRequiredQty,
+              cantidadPaga: tier.promoPayQty,
+            })
+          : null
+      const unitPriceByTierId: Record<string, number> = {}
+      data.tickets.forEach((ticket, ticketIndex) => {
+        const unit = Number(ticket.price) || 0
+        unitPriceByTierId[`index:${ticketIndex}`] = unit
+        if (ticket.id) unitPriceByTierId[ticket.id] = unit
+        const named = ticket.name.trim()
+        if (named) unitPriceByTierId[named] = unit
+      })
+      const computedSale =
+        bundleRule != null
+          ? promotionalBundlePrice({
+              items: tier.bundleItems ?? [],
+              unitPriceByTierId,
+              rule: bundleRule,
+            })
+          : tier.price
+      const breakdown = allInBreakdown(
+        computedSale,
+        eventFeeRate(feeConfig),
+        eventFixedFee(feeConfig),
+      )
       const layoutType = layoutTypeForInventory(tierType, tier.layoutType)
       return {
         ...(tier.id ? { id: tier.id } : {}),
@@ -391,7 +423,9 @@ function mapEventFormToRpcPayload(
         day_id: dayId,
         visibility: tier.visibility ?? "public",
         layout_type: layoutType,
-        seating_sector_id: tier.seatingSectorId?.trim() || null,
+        seating_sector_id: data.basics.hasSeatingPlan
+          ? tier.seatingSectorId?.trim() || null
+          : null,
         capacity_per_unit:
           layoutType === "general" ? 1 : tier.capacityPerUnit,
         admit_count:
@@ -406,10 +440,44 @@ function mapEventFormToRpcPayload(
   }
 }
 
+async function findOwnedVenueId(
+  client: SupabaseClient<Database>,
+  organizerId: string,
+  venueId: string | null | undefined,
+): Promise<string | null> {
+  const id = venueId?.trim() || ""
+  if (!id) return null
+  const { data } = await client
+    .from("venues")
+    .select("id")
+    .eq("id", id)
+    .eq("organizer_id", organizerId)
+    .limit(1)
+  return data?.[0]?.id ?? null
+}
+
+async function findVenueIdByExactName(
+  client: SupabaseClient<Database>,
+  organizerId: string,
+  name: string,
+): Promise<string | null> {
+  const normalized = normalizeExactVenueName(name)
+  if (!canPersistCatalogVenueName(normalized)) return null
+  const { data } = await client
+    .from("venues")
+    .select("id")
+    .eq("organizer_id", organizerId)
+    .eq("name", normalized)
+    .order("created_at", { ascending: true })
+    .limit(1)
+  return data?.[0]?.id ?? null
+}
+
 async function persistEventVenueFields(
   client: SupabaseClient<Database>,
   eventId: string,
   data: EventFormValues,
+  options?: { allowCreate?: boolean },
 ): Promise<string | null> {
   const { data: eventRow } = await client
     .from("events")
@@ -425,7 +493,8 @@ async function persistEventVenueFields(
   })
   const province = data.venue.province?.trim() || null
   const department = data.venue.department?.trim() || null
-  const location = place.display || data.venue.venueName
+  const venueName = normalizeExactVenueName(data.venue.venueName)
+  const location = place.display || venueName
   const parsedMap = parseVenueMap(data.venue.venueMap)
   const venueMap = serializeVenueMap(parsedMap) as unknown as Json
   const seatingLayout = (
@@ -434,12 +503,24 @@ async function persistEventVenueFields(
       : (data.venue.seatingLayout ?? [])
   ) as unknown as Json
   const now = new Date().toISOString()
+  const organizerId = eventRow?.organizer_id ?? ""
+  const creatingNewCatalogVenue =
+    data.venue.mode === "new" && !data.venue.existingVenueId?.trim()
 
-  let venueId =
-    data.venue.existingVenueId?.trim() || eventRow?.venue_id || null
+  let venueId: string | null = null
+  if (!creatingNewCatalogVenue && organizerId) {
+    venueId =
+      (await findOwnedVenueId(
+        client,
+        organizerId,
+        data.venue.existingVenueId,
+      )) ||
+      (await findOwnedVenueId(client, organizerId, eventRow?.venue_id)) ||
+      (await findVenueIdByExactName(client, organizerId, venueName))
+  }
 
   const venuePatch = {
-    name: data.venue.venueName.trim() || undefined,
+    name: venueName || undefined,
     location: place.street || location,
     address: place.street || location,
     city: place.city,
@@ -449,15 +530,6 @@ async function persistEventVenueFields(
     seating_layout: seatingLayout,
     seating_background_url: data.venue.seatingBackgroundUrl ?? null,
     updated_at: now,
-  }
-
-  if (venueId) {
-    const { data: owned } = await client
-      .from("venues")
-      .select("id")
-      .eq("id", venueId)
-      .maybeSingle()
-    if (!owned) venueId = eventRow?.venue_id ?? null
   }
 
   const capacitySnap = computeEventCapacityFromForm(data)
@@ -483,10 +555,15 @@ async function persistEventVenueFields(
         .update({ ...venuePatch, capacity: officialCapacity } as never)
         .eq("id", venueId)
     }
-  } else if (data.venue.venueName.trim() && eventRow?.organizer_id) {
+  } else if (
+    !creatingNewCatalogVenue &&
+    options?.allowCreate &&
+    canPersistCatalogVenueName(venueName) &&
+    organizerId
+  ) {
     const insertPayload = {
-      organizer_id: eventRow.organizer_id,
-      name: data.venue.venueName.trim(),
+      organizer_id: organizerId,
+      name: venueName,
       location: place.street || location,
       address: place.street || location,
       city: place.city,
@@ -515,11 +592,22 @@ async function persistEventVenueFields(
         .select("id")
         .maybeSingle()
     }
-    venueId = created.data?.id ?? null
+    if (
+      created.error &&
+      /venues_organizer_exact_name|duplicate key|unique constraint/i.test(
+        created.error.message,
+      )
+    ) {
+      venueId = await findVenueIdByExactName(client, organizerId, venueName)
+    } else {
+      venueId = created.data?.id ?? null
+    }
   }
 
   const eventCore = {
-    venue_id: venueId,
+    venue_id: creatingNewCatalogVenue
+      ? (eventRow?.venue_id ?? null)
+      : venueId,
     location,
     venue_map: venueMap,
     updated_at: now,
@@ -620,17 +708,15 @@ async function loadPersistedSeatingSectorIds(
   })
   for (const id of fromForm) ids.add(id)
 
-  if (eventRow?.venue_id) {
-    const { data: venue } = await client
-      .from("venues")
-      .select("seating_layout, venue_map")
-      .eq("id", eventRow.venue_id)
-      .maybeSingle()
-    const fromVenue = collectLiveSeatingSectorIds({
-      venueMap: venue?.venue_map,
-      seatingLayout: venue?.seating_layout,
-    })
-    for (const id of fromVenue) ids.add(id)
+  const { data: eventZones } = await client
+    .from("event_zones")
+    .select("id, name")
+    .eq("event_id", eventId)
+  for (const row of eventZones ?? []) {
+    const zoneId = String(row.id ?? "").trim()
+    const name = String(row.name ?? "").trim()
+    if (zoneId) ids.add(zoneId)
+    if (name) ids.add(logicalSectorId(name, zoneId || null))
   }
 
   const { data: units } = await client
@@ -649,6 +735,15 @@ function applyFormSeatingSectorSanitizer(
   data: EventFormValues,
   extraIds: Iterable<string> = [],
 ): EventFormValues {
+  if (!data.basics.hasSeatingPlan) {
+    return {
+      ...data,
+      tickets: data.tickets.map((tier) => ({
+        ...tier,
+        seatingSectorId: null,
+      })),
+    }
+  }
   const live = collectLiveSeatingSectorIds({
     venueMap: data.venue.venueMap,
     seatingLayout: data.venue.seatingLayout,
@@ -663,13 +758,32 @@ function applyFormSeatingSectorSanitizer(
   )
 }
 
-function persistFailure(error: unknown): { success: false; error: string } {
-  return { success: false, error: toUserFacingError(error) }
+function persistFailure(error: unknown): {
+  success: false
+  error: string
+  code: AppErrorCode
+  wizardConflict?: WizardConflict
+} {
+  const mapped = mapUnknownError(error)
+  return {
+    success: false,
+    error: mapped.message,
+    code: mapped.code,
+    ...(mapped.action
+      ? {
+          wizardConflict: {
+            summary: mapped.message,
+            actions: [mapped.action],
+          },
+        }
+      : {}),
+  }
 }
 
 function venueMapSkuGuard(
   data: EventFormValues,
 ): { success: false; error: string; wizardConflict: WizardConflict } | null {
+  if (!data.basics.hasSeatingPlan) return null
   const healedTickets = applyMapCapacityToTickets(
     data.tickets,
     parseVenueMap(data.venue.venueMap),
@@ -713,6 +827,16 @@ function identityAgeRestriction(
     : null
 }
 
+const OPTIONAL_EVENT_FLAG_COLUMNS_RE =
+  /has_seating_plan|has_schedule|schema cache|PGRST204|42703/i
+
+function stripOptionalEventFlags<T extends Record<string, unknown>>(payload: T): T {
+  const next = { ...payload }
+  delete (next as { has_seating_plan?: boolean }).has_seating_plan
+  delete (next as { has_schedule?: boolean }).has_schedule
+  return next
+}
+
 async function persistEventIdentityOnly(input: {
   formData: FormData
   formValues: EventFormValues | DraftEventFormValues
@@ -749,21 +873,32 @@ async function persistEventIdentityOnly(input: {
     input.formValues.basics.ageRestriction,
   )
 
+  const identityPatch = {
+    title,
+    description: input.formValues.basics.description,
+    visibility: input.formValues.basics.visibility,
+    category_id: categoryId,
+    ...(ageRestriction ? { age_restriction: ageRestriction } : {}),
+    image_url: flyerUrl,
+    flyer_url: flyerUrl,
+    has_seating_plan: Boolean(input.formValues.basics.hasSeatingPlan),
+    has_schedule: Boolean(input.formValues.basics.hasSchedule),
+    updated_at: new Date().toISOString(),
+  }
   const { error: updateError } = await input.mutationClient
     .from("events")
-    .update({
-      title,
-      description: input.formValues.basics.description,
-      visibility: input.formValues.basics.visibility,
-      category_id: categoryId,
-      ...(ageRestriction ? { age_restriction: ageRestriction } : {}),
-      image_url: flyerUrl,
-      flyer_url: flyerUrl,
-      updated_at: new Date().toISOString(),
-    } as never)
+    .update(identityPatch as never)
     .eq("id", input.eventId)
 
-  if (updateError) {
+  if (updateError && OPTIONAL_EVENT_FLAG_COLUMNS_RE.test(updateError.message)) {
+    const retry = await input.mutationClient
+      .from("events")
+      .update(stripOptionalEventFlags(identityPatch) as never)
+      .eq("id", input.eventId)
+    if (retry.error) {
+      return persistFailure(retry.error.message)
+    }
+  } else if (updateError) {
     return persistFailure(updateError.message)
   }
 
@@ -908,15 +1043,27 @@ async function persistNewEventIdentityOnly(
     ...(categoryId ? { category_id: categoryId } : {}),
     ...(ageRestriction ? { age_restriction: ageRestriction } : {}),
     ...(flyerUrl ? { image_url: flyerUrl, flyer_url: flyerUrl } : {}),
+    has_seating_plan: Boolean(raw.basics.hasSeatingPlan),
+    has_schedule: Boolean(raw.basics.hasSchedule),
   }
 
-  const { data: created, error: insertError } = await mutationClient
+  let created = await mutationClient
     .from("events")
     .insert(insertPayload as never)
     .select("id")
     .maybeSingle()
+  let insertError = created.error
 
-  if (insertError || !created?.id) {
+  if (insertError && OPTIONAL_EVENT_FLAG_COLUMNS_RE.test(insertError.message)) {
+    created = await mutationClient
+      .from("events")
+      .insert(stripOptionalEventFlags(insertPayload) as never)
+      .select("id")
+      .maybeSingle()
+    insertError = created.error
+  }
+
+  if (insertError || !created.data?.id) {
     if (flyerUrl) {
       const path = flyerUrl.split("/event-flyers/")[1]
       if (path) {
@@ -928,7 +1075,7 @@ async function persistNewEventIdentityOnly(
     )
   }
 
-  const eventId = String(created.id)
+  const eventId = String(created.data.id)
 
   if (hasUserSchedule) {
     await persistEventSchedule(mutationClient, eventId, raw as EventFormValues)
@@ -1062,15 +1209,26 @@ async function syncTierAdmitCounts(
         : 1
     const resolvedBundle = (match.bundleItems ?? [])
       .map((item) => {
+        const indexMatch = /^index:(\d+)$/.exec(item.tierId)
+        const byIndex =
+          indexMatch != null ? tickets[Number(indexMatch[1])] : undefined
         const target =
           tickets.find((candidate) => candidate.id === item.tierId) ??
+          byIndex ??
           tickets.find((candidate) => candidate.name.trim() === item.tierId)
+        const persistedId =
+          target?.id ??
+          (target
+            ? tiers.find((row) => row.name.trim() === target.name.trim())?.id
+            : undefined)
         return {
-          tierId: target?.id ?? item.tierId,
+          tierId: persistedId ?? item.tierId,
           quantity: item.quantity,
         }
       })
-      .filter((item) => item.tierId.length > 0)
+      .filter(
+        (item) => item.tierId.length > 0 && !item.tierId.startsWith("index:"),
+      )
     const patch = {
       admit_count: admit,
       tier_type: tierType,
@@ -1090,6 +1248,51 @@ async function syncTierAdmitCounts(
           : null,
       updated_at: new Date().toISOString(),
     }
+    if (tierType === "bundle") {
+      const unitPriceByTierId: Record<string, number> = {}
+      tickets.forEach((ticket, ticketIndex) => {
+        const unit = Number(ticket.price) || 0
+        unitPriceByTierId[`index:${ticketIndex}`] = unit
+        if (ticket.id) unitPriceByTierId[ticket.id] = unit
+        const named = ticket.name.trim()
+        if (named) unitPriceByTierId[named] = unit
+      })
+      const pricedItems = resolvedBundle.map((item) => ({
+        tierId:
+          unitPriceByTierId[item.tierId] != null
+            ? item.tierId
+            : tickets.find((row) => row.name.trim() === item.tierId)?.id ??
+              item.tierId,
+        quantity: item.quantity,
+      }))
+      const rule = normalizePromoRule({
+        tipoDescuento: match.promoDiscountType,
+        valorDescuento: match.promoDiscountValue,
+        cantidadRequerida: match.promoRequiredQty,
+        cantidadPaga: match.promoPayQty,
+      })
+      const livePrices: Record<string, number> = {}
+      for (const item of pricedItems) {
+        livePrices[item.tierId] =
+          unitPriceByTierId[item.tierId] ??
+          unitPriceByTierId[
+            tickets.find((row) => row.id === item.tierId)?.name.trim() ?? ""
+          ] ??
+          0
+      }
+      Object.assign(patch, {
+        price: promotionalBundlePrice({
+          items: pricedItems,
+          unitPriceByTierId: livePrices,
+          rule,
+        }),
+        list_price: regularBundlePrice(pricedItems, livePrices),
+        promo_discount_type: rule.tipoDescuento,
+        promo_discount_value: rule.valorDescuento,
+        promo_required_qty: rule.cantidadRequerida,
+        promo_pay_qty: rule.cantidadPaga,
+      })
+    }
     const description =
       match.description?.trim().slice(0, TICKET_DESCRIPTION_MAX) || null
     const highlightBadge =
@@ -1104,11 +1307,27 @@ async function syncTierAdmitCounts(
       .eq("id", tier.id)
     if (
       withCopy.error &&
-      /description|highlight_badge|schema cache|PGRST204|42703/i.test(
+      /description|highlight_badge|promo_discount|schema cache|PGRST204|42703/i.test(
         withCopy.error.message,
       )
     ) {
-      await admin.from("ticket_tiers").update(patch).eq("id", tier.id)
+      const {
+        promo_discount_type: omittedType,
+        promo_discount_value: omittedValue,
+        promo_required_qty: omittedRequired,
+        promo_pay_qty: omittedPay,
+        ...safePatch
+      } = patch as typeof patch & {
+        promo_discount_type?: string | null
+        promo_discount_value?: number
+        promo_required_qty?: number
+        promo_pay_qty?: number
+      }
+      void omittedType
+      void omittedValue
+      void omittedRequired
+      void omittedPay
+      await admin.from("ticket_tiers").update(safePatch).eq("id", tier.id)
     }
   }
 }
@@ -1285,7 +1504,12 @@ async function uploadEventFlyer(
 
 export type CreateCompleteEventResult =
   | { success: true; eventId: string; venueId: string | null }
-  | { success: false; error: string; wizardConflict?: WizardConflict }
+  | {
+      success: false
+      error: string
+      code?: AppErrorCode
+      wizardConflict?: WizardConflict
+    }
 
 export type EditableEventData = {
   id: string
@@ -1308,6 +1532,111 @@ export type EditableEventData = {
 
 function toLocalDateTimeInput(value: string): string {
   return toDatetimeLocalInput(value)
+}
+
+function resolveEventSectorId(
+  raw: string | null | undefined,
+  zones: EventFormValues["venue"]["zones"],
+): string | null {
+  const id = raw?.trim() || null
+  if (!id) return null
+  const list = zones ?? []
+  if (list.some((zone) => zone.id === id)) return id
+  const bySlug = list.find(
+    (zone) => logicalSectorId(zone.name, null) === id,
+  )
+  return bySlug?.id ?? null
+}
+
+export type EventGeneralSector = {
+  id: string
+  name: string
+  capacity: number
+}
+
+export async function listEventGeneralSectors(
+  eventId: string,
+): Promise<
+  | { ok: true; sectors: EventGeneralSector[] }
+  | { ok: false; error: string }
+> {
+  const scopedEventId = asUuidOrNull(eventId, [])
+  if (!scopedEventId) {
+    return {
+      ok: false,
+      error: "Error al cargar sectores. Intente nuevamente.",
+    }
+  }
+
+  try {
+    const { supabase, user } = await requireAuthenticatedUser()
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle()
+
+    const { data: event } = await supabase
+      .from("events")
+      .select("id, organizer_id")
+      .eq("id", scopedEventId)
+      .maybeSingle()
+
+    if (
+      !event ||
+      (event.organizer_id !== user.id && profile?.role !== "super_admin")
+    ) {
+      return {
+        ok: false,
+        error: "Error al cargar sectores. Intente nuevamente.",
+      }
+    }
+
+    const { data, error } = await supabase
+      .from("event_zones")
+      .select("id, name, capacity, type")
+      .eq("event_id", scopedEventId)
+      .eq("type", "general_admission")
+      .order("created_at")
+
+    if (error) {
+      logger.error({
+        context: "list_event_general_sectors",
+        event_id: scopedEventId,
+        error,
+      })
+      return {
+        ok: false,
+        error: "Error al cargar sectores. Intente nuevamente.",
+      }
+    }
+
+    return {
+      ok: true,
+      sectors: (data ?? []).flatMap((row) => {
+        const name = String(row.name ?? "").trim()
+        const capacity = Math.max(0, Number(row.capacity) || 0)
+        if (!name || capacity < 1) return []
+        return [
+          {
+            id: logicalSectorId(name, String(row.id ?? "")),
+            name,
+            capacity,
+          },
+        ]
+      }),
+    }
+  } catch (error) {
+    logger.error({
+      context: "list_event_general_sectors",
+      event_id: scopedEventId,
+      error,
+    })
+    return {
+      ok: false,
+      error: "Error al cargar sectores. Intente nuevamente.",
+    }
+  }
 }
 
 function parseVenueZones(raw: unknown): EventFormValues["venue"]["zones"] {
@@ -1345,18 +1674,35 @@ async function persistLogicalEventZones(
   const zones = normalizeLogicalSectors(data.venue.zones).filter(
     (zone) => zone.type === "general_admission",
   )
-  if (zones.length === 0) return
 
   const { data: existing } = await client
     .from("event_zones")
-    .select("id, name")
+    .select("id, name, type")
     .eq("event_id", eventId)
 
+  const keepNames = new Set(
+    zones.map((zone) => zone.name.trim().toLocaleLowerCase("es")),
+  )
+  for (const row of existing ?? []) {
+    if (row.type && row.type !== "general_admission") continue
+    const key = String(row.name).trim().toLocaleLowerCase("es")
+    if (keepNames.has(key)) continue
+    await client
+      .from("event_zones")
+      .delete()
+      .eq("id", row.id)
+      .eq("event_id", eventId)
+  }
+
+  if (zones.length === 0) return
+
   const byName = new Map(
-    (existing ?? []).map((row) => [
-      String(row.name).trim().toLocaleLowerCase("es"),
-      row.id,
-    ]),
+    (existing ?? [])
+      .filter((row) => keepNames.has(String(row.name).trim().toLocaleLowerCase("es")))
+      .map((row) => [
+        String(row.name).trim().toLocaleLowerCase("es"),
+        row.id,
+      ]),
   )
 
   for (const zone of zones) {
@@ -1371,6 +1717,7 @@ async function persistLogicalEventZones(
           updated_at: new Date().toISOString(),
         } as never)
         .eq("id", currentId)
+        .eq("event_id", eventId)
       continue
     }
     await client.from("event_zones").insert({
@@ -1453,8 +1800,10 @@ export async function getEventForEditing(
     const isSuperAdmin = profile?.role === "super_admin"
     const reader = isSuperAdmin ? createAdminClient() : supabase
 
+    const eventSelectWithAgenda =
+      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, has_schedule, updated_at"
     const eventSelectWithPicker =
-      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, updated_at"
+      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, updated_at"
     const eventSelectWithPlace =
       "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, province, department, venue_map, updated_at"
     const eventSelectCore =
@@ -1462,13 +1811,24 @@ export async function getEventForEditing(
 
     let eventQuery = await reader
       .from("events")
-      .select(eventSelectWithPicker)
+      .select(eventSelectWithAgenda)
       .eq("id", eventId)
       .maybeSingle()
 
     if (
       eventQuery.error &&
-      /default_ticket_tab|lineup|schema cache|PGRST204|42703/i.test(
+      /has_schedule|schema cache|PGRST204|42703/i.test(eventQuery.error.message)
+    ) {
+      eventQuery = await reader
+        .from("events")
+        .select(eventSelectWithPicker)
+        .eq("id", eventId)
+        .maybeSingle()
+    }
+
+    if (
+      eventQuery.error &&
+      /has_seating_plan|default_ticket_tab|lineup|schema cache|PGRST204|42703/i.test(
         eventQuery.error.message,
       )
     ) {
@@ -1500,7 +1860,7 @@ export async function getEventForEditing(
     }
 
     const ticketSelectWithCopy =
-      "id, name, price, base_price, platform_fee, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, admit_count, category, list_price, tier_type, bundle_items, bundle_type, description, highlight_badge"
+      "id, name, price, base_price, platform_fee, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, admit_count, category, list_price, tier_type, bundle_items, bundle_type, promo_discount_type, promo_discount_value, promo_required_qty, promo_pay_qty, description, highlight_badge"
     const ticketSelectCore =
       "id, name, price, base_price, platform_fee, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, admit_count, category, list_price, tier_type, bundle_items, bundle_type"
 
@@ -1513,7 +1873,7 @@ export async function getEventForEditing(
           .order("created_at")
         if (
           rich.error &&
-          /description|highlight_badge|schema cache|PGRST204|42703/i.test(
+          /description|highlight_badge|promo_discount|schema cache|PGRST204|42703/i.test(
             rich.error.message,
           )
         ) {
@@ -1563,15 +1923,14 @@ export async function getEventForEditing(
       .eq("event_id", eventId)
       .order("created_at")
 
-    const venueZones =
-      parseVenueZones(
-        (eventZoneRows ?? []).map((row) => ({
-          id: logicalSectorId(String(row.name ?? ""), null),
-          name: row.name,
-          type: row.type,
-          capacity: row.capacity,
-        })),
-      ) ?? parseVenueZones(venue?.zone_blueprint)
+    const venueZones = parseVenueZones(
+      (eventZoneRows ?? []).map((row) => ({
+        id: logicalSectorId(String(row.name ?? ""), String(row.id ?? "")),
+        name: row.name,
+        type: row.type,
+        capacity: row.capacity,
+      })),
+    )
     const firstZone = venueZones?.[0]
     const venueCapacity = Number(venue?.capacity ?? 0) || 1
     const venueMaxCapacity = Number(
@@ -1612,7 +1971,7 @@ export async function getEventForEditing(
       highlightBadge: parseTicketHighlightBadge(
         (tier as { highlight_badge?: string | null }).highlight_badge,
       ),
-      dayId: tier.day_id ?? null,
+      dayId: asUuidOrNull(tier.day_id, ["all"]),
       visibility:
         tier.visibility === "private"
           ? ("private" as const)
@@ -1622,7 +1981,10 @@ export async function getEventForEditing(
         tier.layout_type === "numbered_seat"
           ? tier.layout_type
           : ("general" as const),
-      seatingSectorId: tier.seating_sector_id ?? null,
+      seatingSectorId: resolveEventSectorId(
+        tier.seating_sector_id,
+        venueZones,
+      ),
       capacityPerUnit: Math.max(1, Number(tier.capacity_per_unit ?? 1) || 1),
       admitCount: Math.max(
         1,
@@ -1645,6 +2007,20 @@ export async function getEventForEditing(
       ),
       bundleType: parseBundleType(
         (tier as { bundle_type?: string | null }).bundle_type,
+      ),
+      promoDiscountType: parsePromoDiscountType(
+        (tier as { promo_discount_type?: string | null }).promo_discount_type,
+      ),
+      promoDiscountValue: Number(
+        (tier as { promo_discount_value?: number }).promo_discount_value ?? 0,
+      ),
+      promoRequiredQty: Math.max(
+        1,
+        Number((tier as { promo_required_qty?: number }).promo_required_qty ?? 1) || 1,
+      ),
+      promoPayQty: Math.max(
+        0,
+        Number((tier as { promo_pay_qty?: number }).promo_pay_qty ?? 1) || 0,
       ),
       phases: [],
     }))
@@ -1729,6 +2105,17 @@ export async function getEventForEditing(
           scheduleDays,
           categoryId: event.category_id ?? "",
           ageRestriction: parseAgeRestriction(event.age_restriction),
+          hasSeatingPlan: (() => {
+            const stored = (event as { has_seating_plan?: boolean | null })
+              .has_seating_plan
+            if (stored == null) {
+              return Boolean(event.venue_id || event.venue_map)
+            }
+            return Boolean(stored)
+          })(),
+          hasSchedule: Boolean(
+            (event as { has_schedule?: boolean | null }).has_schedule,
+          ),
         },
         venue: {
           mode: event.venue_id ? "existing" : "new",
@@ -2034,6 +2421,7 @@ export async function createCompleteEvent(
     rpcClient,
     String(eventId),
     formValues,
+    { allowCreate: !draftMode },
   )
 
   const materializeError = await resyncEventSeatingUnitsAfterMapSave(
@@ -2187,7 +2575,11 @@ export async function updateCompleteEvent(
     mutationClient,
     eventId,
     formValues,
+    { allowCreate: !draftMode },
   )
+  if (venueId) {
+    formValues.venue.existingVenueId = venueId
+  }
   await persistLogicalEventZones(mutationClient, eventId, formValues)
   if (formValues.tickets.length === 0) {
     revalidatePath(`/admin/events/${eventId}`)
@@ -2323,7 +2715,7 @@ export async function updateCompleteEvent(
 
 export type PublishEventResult =
   | { success: true; purgedTestTickets?: number }
-  | { success: false; error: string }
+  | { success: false; error: string; code?: AppErrorCode }
 
 /**
  * Publica un borrador del organizador cuando cumple requisitos mínimos.
@@ -2388,10 +2780,7 @@ export async function publishEvent(
 
   const startsAt = new Date(event.date)
   if (Number.isNaN(startsAt.getTime()) || startsAt.getTime() <= Date.now()) {
-    return {
-      success: false,
-      error: "La fecha de inicio debe ser futura.",
-    }
+    return persistFailure({ code: "INVALID_EVENT_DATE" })
   }
 
   const venue = event.venues as { id: string; name: string; location: string } | null
@@ -2400,10 +2789,7 @@ export async function publishEvent(
     Boolean(event.location?.trim() && event.location.trim().length >= 3)
 
   if (!hasVenue) {
-    return {
-      success: false,
-      error: "Completá los datos del lugar / ubicación antes de publicar.",
-    }
+    return persistFailure({ code: "ERROR_FALTA_UBICACION" })
   }
 
   const mutationClient =
@@ -2420,10 +2806,7 @@ export async function publishEvent(
 
   const sellable = (tiers ?? []).filter((tier) => Number(tier.capacity) > 0)
   if (sellable.length === 0) {
-    return {
-      success: false,
-      error: "Configurá al menos un tipo de entrada (paga o gratis) con stock > 0.",
-    }
+    return persistFailure({ code: "MISSING_TICKETS" })
   }
 
   let purgedTestTickets = 0
@@ -2513,7 +2896,7 @@ export async function updateEventSalesStatus(
     .eq("id", eventId)
     .maybeSingle()
 
-  if (eventError) return { success: false, error: eventError.message }
+  if (eventError) return persistFailure(eventError.message)
   if (!event) return { success: false, error: "Evento no encontrado." }
 
   const isOwner = event.organizer_id === user.id
@@ -2533,7 +2916,7 @@ export async function updateEventSalesStatus(
         .from("events")
         .update({ status: "published", updated_at: new Date().toISOString() })
         .eq("id", eventId)
-      if (error) return { success: false, error: error.message }
+      if (error) return persistFailure(error.message)
       revalidateEventSalesPaths(eventId)
       return { success: true, status: "published" }
     }
@@ -2554,7 +2937,7 @@ export async function updateEventSalesStatus(
       .from("events")
       .update({ status: "paused", updated_at: new Date().toISOString() })
       .eq("id", eventId)
-    if (error) return { success: false, error: error.message }
+    if (error) return persistFailure(error.message)
     revalidateEventSalesPaths(eventId)
     return { success: true, status: "paused" }
   }
@@ -2570,7 +2953,7 @@ export async function updateEventSalesStatus(
     .from("events")
     .update({ status: "draft", updated_at: new Date().toISOString() })
     .eq("id", eventId)
-  if (error) return { success: false, error: error.message }
+  if (error) return persistFailure(error.message)
   revalidateEventSalesPaths(eventId)
   return { success: true, status: "draft" }
 }
@@ -2635,7 +3018,7 @@ export async function deleteOrArchiveEvent(
     .maybeSingle()
 
   if (eventError) {
-    return { success: false, error: eventError.message }
+    return persistFailure(eventError.message)
   }
   if (!event || event.organizer_id !== user.id) {
     return { success: false, error: "No tenés permiso sobre este evento." }
@@ -2652,7 +3035,7 @@ export async function deleteOrArchiveEvent(
     .in("status", ["valid", "used", "scanned", "pending_payment"])
 
   if (countError) {
-    return { success: false, error: countError.message }
+    return persistFailure(countError.message)
   }
 
   const ticketsSold = count ?? 0
@@ -2688,7 +3071,7 @@ export async function deleteOrArchiveEvent(
     .maybeSingle()
 
   if (updateError) {
-    return { success: false, error: updateError.message }
+    return persistFailure(updateError.message)
   }
   if (!updated) {
     return {
@@ -2724,7 +3107,7 @@ export async function archiveEvent(
     .maybeSingle()
 
   if (eventError) {
-    return { success: false, error: eventError.message }
+    return persistFailure(eventError.message)
   }
   if (!event || event.organizer_id !== user.id) {
     return { success: false, error: "No tenés permiso sobre este evento." }
@@ -2748,7 +3131,7 @@ export async function archiveEvent(
     .in("status", ["valid", "used", "scanned", "pending_payment"])
 
   if (countError) {
-    return { success: false, error: countError.message }
+    return persistFailure(countError.message)
   }
 
   if ((count ?? 0) > 0 && event.status === "published") {
@@ -2771,7 +3154,7 @@ export async function archiveEvent(
     .maybeSingle()
 
   if (updateError) {
-    return { success: false, error: updateError.message }
+    return persistFailure(updateError.message)
   }
   if (!updated) {
     return { success: false, error: "No se pudo archivar el evento." }
@@ -2901,7 +3284,7 @@ export async function updateEventCommercialSettings(
     .eq("id", eventId)
 
   if (updateError) {
-    return { success: false, error: updateError.message }
+    return persistFailure(updateError.message)
   }
 
   const { data: tiers, error: tiersError } = await admin
@@ -2910,7 +3293,7 @@ export async function updateEventCommercialSettings(
     .eq("event_id", eventId)
 
   if (tiersError) {
-    return { success: false, error: tiersError.message }
+    return persistFailure(tiersError.message)
   }
 
   let recalculatedTiers = 0

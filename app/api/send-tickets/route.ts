@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : "send_tickets_error",
+        error: "No se pudieron enviar las entradas.",
       },
       { status: 500 },
     )

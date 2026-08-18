@@ -14,8 +14,13 @@ import {
   Lock,
 } from "lucide-react"
 import type { ReactNode } from "react"
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import type { UseFormReturn } from "react-hook-form"
+
+import {
+  listEventGeneralSectors,
+  type EventGeneralSector,
+} from "@/app/actions/events"
 
 import {
   BundleCreatorModal,
@@ -48,6 +53,7 @@ import {
 } from "@/lib/checkout/ticket-picker"
 import {
   inferBundleType,
+  inferPromoRule,
   bundleIncludesSeating,
 } from "@/lib/inventory/flexible-bundles"
 import {
@@ -65,7 +71,7 @@ import {
   phaseLimitSum,
   ticketPhasesExceedParent,
 } from "@/lib/inventory/capacity-budget"
-import { formatNumber } from "@/lib/format"
+import { formatCurrency, formatNumber } from "@/lib/format"
 import {
   defaultInventoryDayId,
   formatInventoryDayOption,
@@ -106,6 +112,10 @@ export function createInventoryTicket(
     listPrice: tierType === "bundle" ? 0 : null,
     bundleItems: [],
     bundleType: tierType === "bundle" ? "cross_sell_pack" : null,
+    promoDiscountType: tierType === "bundle" ? "PORCENTAJE" : null,
+    promoDiscountValue: 0,
+    promoRequiredQty: 1,
+    promoPayQty: 1,
     description: "",
     highlightBadge: null,
     phases: [],
@@ -114,11 +124,81 @@ export function createInventoryTicket(
 
 type Props = {
   form: UseFormReturn<EventFormValues>
+  eventId?: string | null
 }
 
-export function UnifiedInventoryPanel({ form }: Props) {
+function mergeEventSectors(
+  draft: ReturnType<typeof listGeneralLogicalSectors>,
+  persisted: EventGeneralSector[],
+) {
+  const merged = new Map<string, (typeof draft)[number]>()
+  for (const sector of persisted) {
+    merged.set(sector.id, {
+      id: sector.id,
+      name: sector.name,
+      type: "general_admission",
+      capacity: sector.capacity,
+    })
+  }
+  for (const sector of draft) {
+    const duplicate = [...merged.values()].some(
+      (item) =>
+        item.id === sector.id ||
+        item.name.trim().toLocaleLowerCase("es") ===
+          sector.name.trim().toLocaleLowerCase("es"),
+    )
+    if (!duplicate) merged.set(sector.id, sector)
+  }
+  return [...merged.values()]
+}
+
+export function UnifiedInventoryPanel({ form, eventId = null }: Props) {
   const tickets = form.watch("tickets") ?? []
-  const logicalSectors = listGeneralLogicalSectors(form.watch("venue.zones"))
+  const hasSeatingPlan = Boolean(form.watch("basics.hasSeatingPlan"))
+  const draftSectors = listGeneralLogicalSectors(form.watch("venue.zones"))
+  const canLoadSectors = Boolean(eventId && hasSeatingPlan)
+  const [loadedSectors, setLoadedSectors] = useState<EventGeneralSector[]>([])
+  const [loadedSectorError, setLoadedSectorError] = useState<string | null>(
+    null,
+  )
+  const sectorLoadError = canLoadSectors ? loadedSectorError : null
+  const logicalSectors = useMemo(() => {
+    const persisted = eventId && hasSeatingPlan ? loadedSectors : []
+    return eventId
+      ? mergeEventSectors(draftSectors, persisted)
+      : draftSectors
+  }, [draftSectors, eventId, hasSeatingPlan, loadedSectors])
+
+  useEffect(() => {
+    if (!hasSeatingPlan) {
+      const current = form.getValues("tickets") ?? []
+      if (current.some((tier) => tier.seatingSectorId)) {
+        form.setValue(
+          "tickets",
+          current.map((tier) => ({ ...tier, seatingSectorId: null })),
+          { shouldDirty: true },
+        )
+      }
+    }
+  }, [form, hasSeatingPlan])
+
+  useEffect(() => {
+    if (!eventId || !hasSeatingPlan) return
+    let cancelled = false
+    void listEventGeneralSectors(eventId).then((result) => {
+      if (cancelled) return
+      if (!result.ok) {
+        setLoadedSectors([])
+        setLoadedSectorError("Error al cargar sectores. Intente nuevamente.")
+        return
+      }
+      setLoadedSectors(result.sectors)
+      setLoadedSectorError(null)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [eventId, hasSeatingPlan])
   const scheduleDays = form.watch("basics.scheduleDays") ?? []
   const isMultiDay = Boolean(form.watch("basics.isMultiDay")) || scheduleDays.length >= 2
   const capacity = useEventCapacity(form)
@@ -212,7 +292,7 @@ export function UnifiedInventoryPanel({ form }: Props) {
   return (
     <div className="space-y-5">
       <CapacityBudgetBar form={form} />
-      {capacity.mapAllocatedCapacity > 0 ? (
+      {hasSeatingPlan && capacity.mapAllocatedCapacity > 0 ? (
         <div
           className="flex items-start gap-2 rounded-xl border border-border bg-muted/50 px-3 py-2.5 text-sm text-muted-foreground"
           data-conflict-sector={
@@ -240,8 +320,9 @@ export function UnifiedInventoryPanel({ form }: Props) {
           Inventario general (editable)
         </p>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          Campo, extras y combos. Las mesas y butacas del mapa no se tocan
-          acá: ya quedaron bloqueadas en el paso anterior.
+          {hasSeatingPlan
+            ? "Campo, extras y combos. Las mesas y butacas del mapa no se tocan acá: ya quedaron bloqueadas en el paso anterior."
+            : "Nombre, capacidad y precio. Este evento no usa mapa, así que no hace falta elegir un sector."}
         </p>
       </div>
 
@@ -275,32 +356,56 @@ export function UnifiedInventoryPanel({ form }: Props) {
               </SelectContent>
             </Select>
             <FormDescription>
-              Si el 80% vende Campo, abrí Campo aunque haya mapa de ubicaciones.
+              {hasSeatingPlan
+                ? "Si el 80% vende Campo, abrí Campo aunque haya mapa de ubicaciones."
+                : "Elegí qué tipo de entrada se ve primero en la compra."}
             </FormDescription>
           </FormItem>
         )}
       />
 
+      {hasSeatingPlan && sectorLoadError ? (
+        <p className="text-sm text-destructive" role="alert">
+          {sectorLoadError}
+        </p>
+      ) : null}
+
       <InventoryBlock
         title="Entradas generales y capacidad de campo"
-        description="Zonas sin asiento numerado: predio, campo de pie o platea libre."
+        description={
+          hasSeatingPlan
+            ? "Zonas sin asiento numerado: predio, campo de pie o platea libre."
+            : "Entradas simples: nombre, cupo y precio. Sin sector ni mapa."
+        }
         icon={Ticket}
-        actionLabel="Agregar sector general"
+        actionLabel={
+          hasSeatingPlan ? "Agregar sector general" : "Agregar entrada general"
+        }
         onAdd={() =>
           append({
             ...createInventoryTicket("general", {
               dayId: defaultInventoryDayId(scheduleDays),
             }),
-            seatingSectorId: logicalSectors[0]?.id ?? null,
-            capacity: Math.max(
-              1,
-              Math.min(logicalSectors[0]?.capacity ?? 100, 100),
-            ),
+            seatingSectorId: hasSeatingPlan
+              ? logicalSectors[0]?.id ?? null
+              : null,
+            capacity: hasSeatingPlan
+              ? Math.max(
+                  1,
+                  Math.min(logicalSectors[0]?.capacity ?? 100, 100),
+                )
+              : 100,
           })
         }
       >
         {generals.length === 0 ? (
-          <EmptyHint text="Opcional. Sumá una general de predio si no alcanza con las zonas del mapa." />
+          <EmptyHint
+            text={
+              hasSeatingPlan
+                ? "Opcional. Sumá una general de predio si no alcanza con las zonas del mapa."
+                : "Sumá una entrada con nombre, capacidad y precio."
+            }
+          />
         ) : (
           generals.map((item) => (
             <InventoryRow
@@ -309,17 +414,22 @@ export function UnifiedInventoryPanel({ form }: Props) {
               index={item.index}
               capacityLabel="Capacidad máxima"
               scheduleDays={isMultiDay ? scheduleDays : []}
-              venueRemaining={generalRemainingForTicket(
-                capacity,
-                tickets[item.index],
-                tickets,
-                findLogicalSector(
-                  form.getValues("venue.zones"),
-                  tickets[item.index]?.seatingSectorId,
-                )?.capacity,
-              )}
+              venueRemaining={
+                hasSeatingPlan
+                  ? generalRemainingForTicket(
+                      capacity,
+                      tickets[item.index],
+                      tickets,
+                      findLogicalSector(
+                        form.getValues("venue.zones"),
+                        tickets[item.index]?.seatingSectorId,
+                      )?.capacity,
+                    )
+                  : undefined
+              }
               capacityExceeded={capacity.exceeded}
-              logicalSectors={logicalSectors}
+              logicalSectors={hasSeatingPlan ? logicalSectors : []}
+              showSectorSelect={hasSeatingPlan}
               showPhases
               onRemove={() => remove(item.index)}
             />
@@ -376,7 +486,6 @@ export function UnifiedInventoryPanel({ form }: Props) {
                 index={item.index}
                 capacityLabel="Stock del combo"
                 scheduleDays={isMultiDay ? scheduleDays : []}
-                showListPrice
                 onRemove={() => remove(item.index)}
               />
               <Button
@@ -418,6 +527,24 @@ export function UnifiedInventoryPanel({ form }: Props) {
                 originalPrice: tickets[editingBundleIndex]?.listPrice ?? 0,
                 capacity: tickets[editingBundleIndex]?.capacity ?? 50,
                 items: tickets[editingBundleIndex]?.bundleItems ?? [],
+                promoRule: inferPromoRule({
+                  rule: tickets[editingBundleIndex]?.promoDiscountType
+                    ? {
+                        tipoDescuento:
+                          tickets[editingBundleIndex].promoDiscountType,
+                        valorDescuento:
+                          tickets[editingBundleIndex]?.promoDiscountValue ?? 0,
+                        cantidadRequerida:
+                          tickets[editingBundleIndex]?.promoRequiredQty ?? 1,
+                        cantidadPaga:
+                          tickets[editingBundleIndex]?.promoPayQty ?? 1,
+                      }
+                    : null,
+                  bundleType: tickets[editingBundleIndex]?.bundleType,
+                  items: tickets[editingBundleIndex]?.bundleItems,
+                  salePrice: tickets[editingBundleIndex]?.price ?? 0,
+                  regularPrice: tickets[editingBundleIndex]?.listPrice ?? 0,
+                }),
                 includesSeating: bundleIncludesSeating(
                   tickets[editingBundleIndex]?.bundleItems ?? [],
                   Object.fromEntries(
@@ -443,6 +570,10 @@ export function UnifiedInventoryPanel({ form }: Props) {
             capacity: value.capacity,
             bundleItems: value.items,
             bundleType: value.bundleType,
+            promoDiscountType: value.promoRule.tipoDescuento,
+            promoDiscountValue: value.promoRule.valorDescuento,
+            promoRequiredQty: value.promoRule.cantidadRequerida,
+            promoPayQty: value.promoRule.cantidadPaga,
             dayId:
               value.bundleType === "multi_day_pass"
                 ? null
@@ -527,6 +658,7 @@ function InventoryRow({
   venueRemaining,
   capacityExceeded = false,
   logicalSectors = [],
+  showSectorSelect = true,
   onRemove,
 }: {
   form: UseFormReturn<EventFormValues>
@@ -538,9 +670,19 @@ function InventoryRow({
   venueRemaining?: number
   capacityExceeded?: boolean
   logicalSectors?: ReturnType<typeof listGeneralLogicalSectors>
+  showSectorSelect?: boolean
   onRemove: () => void
 }) {
   const layoutType = form.watch(`tickets.${index}.layoutType`)
+  const watchedTierType = form.watch(`tickets.${index}.tierType`)
+  const watchedBundleItems = form.watch(`tickets.${index}.bundleItems`)
+  const watchedListPrice = form.watch(`tickets.${index}.listPrice`)
+  const isBundle =
+    inferInventoryTierType({
+      tierType: watchedTierType,
+      layoutType,
+      bundleItems: watchedBundleItems,
+    }) === "bundle"
   const priceLabel =
     layoutType === "table_combo"
       ? "Precio total de la mesa"
@@ -631,8 +773,9 @@ function InventoryRow({
               />
               {overflow ? (
                 <p className="text-xs text-destructive" role="alert">
-                  Superás la capacidad del sector. Bajá el stock o ampliá el
-                  sector en Mapa y Sectores.
+                  {showSectorSelect
+                    ? "Superás la capacidad del sector. Bajá el stock o ampliá el sector en Mapa y Sectores."
+                    : "El stock supera la capacidad disponible. Bajá la cantidad de esta entrada."}
                 </p>
               ) : null}
               <FormMessage>{fieldState.error?.message}</FormMessage>
@@ -640,23 +783,39 @@ function InventoryRow({
             )
           }}
         />
-        <FormField
-          control={form.control}
-          name={`tickets.${index}.price`}
-          render={({ field, fieldState }) => (
-            <FormItem className="md:col-span-3">
-              <FormLabel>{priceLabel}</FormLabel>
-              <PriceInput
-                value={field.value}
-                onValueChange={(value) => field.onChange(value ?? undefined)}
-                className="h-11"
-              />
-              <FormMessage>{fieldState.error?.message}</FormMessage>
-            </FormItem>
-          )}
-        />
+        {isBundle ? (
+          <div className="md:col-span-3">
+            <p className="mb-1.5 text-sm font-medium">Precio promocional</p>
+            <div className="flex h-11 items-baseline gap-2 rounded-md border border-border bg-muted/40 px-3">
+              {Number(watchedListPrice) > 0 ? (
+                <span className="text-xs text-muted-foreground line-through">
+                  {formatCurrency(Number(watchedListPrice) || 0)}
+                </span>
+              ) : null}
+              <span className="text-sm font-semibold tabular-nums">
+                {formatCurrency(parentPrice)}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <FormField
+            control={form.control}
+            name={`tickets.${index}.price`}
+            render={({ field, fieldState }) => (
+              <FormItem className="md:col-span-3">
+                <FormLabel>{priceLabel}</FormLabel>
+                <PriceInput
+                  value={field.value}
+                  onValueChange={(value) => field.onChange(value ?? undefined)}
+                  className="h-11"
+                />
+                <FormMessage>{fieldState.error?.message}</FormMessage>
+              </FormItem>
+            )}
+          />
+        )}
       </div>
-      {logicalSectors.length > 0 ? (
+      {showSectorSelect && logicalSectors.length > 0 ? (
         <FormField
           control={form.control}
           name={`tickets.${index}.seatingSectorId`}
@@ -670,10 +829,12 @@ function InventoryRow({
               <FormItem>
                 <FormLabel>Sector</FormLabel>
                 <Select
-                  value={selected}
+                  value={selected || undefined}
                   onValueChange={(value) => {
-                    field.onChange(value)
-                    const sector = logicalSectors.find((item) => item.id === value)
+                    const next = value?.trim() ? value : null
+                    field.onChange(next)
+                    if (!next) return
+                    const sector = logicalSectors.find((item) => item.id === next)
                     if (!sector) return
                     const current = asPositiveInt(
                       form.getValues(`tickets.${index}.capacity`),
@@ -787,7 +948,7 @@ function InventoryRow({
           </FormItem>
         )}
       />
-      {showListPrice ? (
+      {showListPrice && !isBundle ? (
         <FormField
           control={form.control}
           name={`tickets.${index}.listPrice`}

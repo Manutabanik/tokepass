@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 
 import {
   assertLivingMac,
+  assertStaticMac,
   resolveScanSecret,
 } from "@/lib/scan-payload"
 import {
@@ -406,7 +407,7 @@ export async function scanAndValidateTicket(
 
   let ticket: unknown = null
 
-  if (resolved.mode === "v2") {
+  if (resolved.mode === "v2" || resolved.mode === "tps") {
     const { data } = await supabase
       .from("tickets")
       .select(TICKET_SCAN_SELECT)
@@ -417,7 +418,10 @@ export async function scanAndValidateTicket(
     if (ticket) {
       const preview = ticket as TicketScanRow
       const secret = preview.totp_secret || preview.id
-      const ok = await assertLivingMac(secret, resolved)
+      const ok =
+        resolved.mode === "v2"
+          ? await assertLivingMac(secret, resolved)
+          : await assertStaticMac(secret, resolved)
       if (!ok) {
         return {
           success: false,
@@ -1034,6 +1038,64 @@ export async function fetchEventTicketManifest(
     scheduleDays: parseScheduleDays(event.schedule_days),
     server_timestamp: Date.now(),
     tickets,
+  }
+}
+
+export type EventAdmissionSnapshotRow = {
+  id: string
+  status: EventTicketManifestPayload["tickets"][number]["status"]
+  admissions_used: number
+  scanned_at: string | null
+}
+
+/** Delta liviano: estados de ingreso, sin secretos. Para pistolas ya cacheadas. */
+export async function fetchEventAdmissionSnapshot(
+  eventId: string,
+): Promise<{
+  eventId: string
+  server_timestamp: number
+  tickets: EventAdmissionSnapshotRow[]
+}> {
+  if (!eventId) {
+    throw new Error("eventId requerido")
+  }
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) {
+    throw new Error("auth_required")
+  }
+
+  const access = await assertEventOpsAccess(eventId, ["door_staff"])
+  if (!access.ok) {
+    throw new Error(
+      access.reason === "auth_required"
+        ? "auth_required"
+        : "Sin permiso para sincronizar este evento",
+    )
+  }
+
+  const { data, error } = await supabase
+    .from("tickets")
+    .select("id, status, admissions_used, scanned_at")
+    .eq("event_id", eventId)
+    .in("status", ["valid", "used", "scanned"])
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return {
+    eventId,
+    server_timestamp: Date.now(),
+    tickets: (data ?? []).map((row) => ({
+      id: String(row.id),
+      status: row.status as EventAdmissionSnapshotRow["status"],
+      admissions_used: Number(row.admissions_used ?? 0),
+      scanned_at: row.scanned_at ?? null,
+    })),
   }
 }
 

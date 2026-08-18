@@ -149,7 +149,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
     () => [],
   )
   const [handoffTickets, setHandoffTickets] = useState<
-    Array<{ id: string; totpSecret: string }>
+    Array<{ id: string; totpSecret: string; signedQr?: string }>
   >([])
   const [seatPicks, setSeatPicks] = useState<PosSeatPick[]>([])
   const [catalogView, setCatalogView] = useState<"quick" | "map">("quick")
@@ -170,6 +170,8 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
   const [zReport, setZReport] = useState<TicketZReport | null>(null)
 
   const clearTimerRef = useRef<number | null>(null)
+  const chargeLockRef = useRef(false)
+  const [chargeLocked, setChargeLocked] = useState(false)
   const keyHandlerRef = useRef<(event: KeyboardEvent) => void>(() => {})
   const dialogsOpen =
     openModal ||
@@ -397,19 +399,37 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
     })
   }
 
+  function beginChargeLock(): boolean {
+    if (chargeLockRef.current) return false
+    chargeLockRef.current = true
+    setChargeLocked(true)
+    return true
+  }
+
+  function endChargeLock() {
+    chargeLockRef.current = false
+    setChargeLocked(false)
+  }
+
   function requestEmit() {
-    if (!eventId || !shift || isPending || lines.length === 0) return
+    if (!eventId || !shift || lines.length === 0) return
+    if (chargeLockRef.current || isPending) return
     armPosSaleBeep()
     if (needsPin) {
       setSupervisorPin("")
       setPinModal({ mode: "courtesy" })
       return
     }
+    if (!beginChargeLock()) return
     runSale(null)
   }
 
   function runSale(pin: string | null) {
-    if (!eventId || !shift || lines.length === 0) return
+    if (!eventId || !shift || lines.length === 0) {
+      endChargeLock()
+      return
+    }
+    if (!chargeLockRef.current && !beginChargeLock()) return
     const buyer = resolvePosBuyer({
       express: expressSale,
       dni,
@@ -422,10 +442,12 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
     }))
 
     startTransition(async () => {
-      const issued: Array<{ id: string; totpSecret: string }> = []
+      const issued: Array<{ id: string; totpSecret: string; signedQr?: string }> = []
       let billed = 0
       const remaining: PosCart = {}
       let failed = false
+      const soldBump: Record<string, number> = {}
+      try {
 
       for (let index = 0; index < snapshot.length; index++) {
         const line = snapshot[index]
@@ -472,19 +494,27 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
 
           leftover -= unit.quantity
           billed += sale.totalAmount
+          soldBump[line.tierId] = (soldBump[line.tierId] ?? 0) + unit.quantity
           issued.push(
             ...sale.tickets.map((ticket) => ({
               id: ticket.id,
               totpSecret: ticket.totpSecret,
+              signedQr: ticket.signedQr,
             })),
           )
-          setSoldDelta((current) => ({
-            ...current,
-            [line.tierId]: (current[line.tierId] ?? 0) + unit.quantity,
-          }))
         }
 
         if (failed) break
+      }
+
+      if (Object.keys(soldBump).length > 0) {
+        setSoldDelta((current) => {
+          const next = { ...current }
+          for (const [tierId, qty] of Object.entries(soldBump)) {
+            next[tierId] = (next[tierId] ?? 0) + qty
+          }
+          return next
+        })
       }
 
       const issuedIds = issued.map((ticket) => ticket.id)
@@ -499,10 +529,10 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
           )
           return {
             ticketId: ticket.id,
-            qrPayload: ticket.totpSecret,
+            qrPayload: ticket.signedQr || ticket.totpSecret,
             eventTitle: selectedEvent?.title ?? "Evento",
             eventDate: selectedEvent?.date ?? "",
-            eventLocation: "",
+            eventLocation: selectedEvent?.location ?? "",
             tierName: tier?.name ?? "Entrada",
             total: pick?.price ?? line?.price ?? 0,
             holderName: buyer.name,
@@ -554,6 +584,9 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
         setHandoffTickets(issued)
         resetSaleForm()
       }, 100)
+      } finally {
+        endChargeLock()
+      }
     })
   }
 
@@ -692,6 +725,8 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
     }
 
     if (pinModal.mode === "courtesy") {
+      if (!beginChargeLock()) return
+      armPosSaleBeep()
       runSale(supervisorPin.trim())
       return
     }
@@ -730,6 +765,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
       }
 
       if (event.key === "Enter") {
+        if (event.repeat || chargeLockRef.current) return
         event.preventDefault()
         requestEmit()
         return
@@ -780,7 +816,8 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
   }
 
   const cashExpected = (shift?.startAmount ?? 0) + (shift?.cashSalesTotal ?? 0)
-  const canSell = Boolean(shift) && !isPending
+  const busy = chargeLocked || isPending
+  const canSell = Boolean(shift) && !busy
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
@@ -1174,12 +1211,13 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
               type="button"
               disabled={!canSell || lines.length === 0}
               onClick={requestEmit}
+              aria-busy={busy}
               className="inline-flex h-16 w-full items-center justify-center rounded-2xl bg-emerald-500 text-xl font-black text-white hover:bg-emerald-600 disabled:pointer-events-none disabled:opacity-50"
             >
-              {isPending ? (
+              {busy ? (
                 <LoaderCircle className="animate-spin" />
               ) : (
-                "EMITIR E IMPRIMIR TICKET (ENTER)"
+                "COBRAR E IMPRIMIR (ENTER)"
               )}
             </button>
           </div>

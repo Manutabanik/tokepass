@@ -2,10 +2,10 @@
 
 import { CalendarDays, MapPin, ShieldCheck } from "lucide-react"
 import { useState } from "react"
-import { QRCodeSVG } from "qrcode.react"
 
 import type { MyTicket } from "@/app/actions/tickets"
 import { LivingTicketQR } from "@/components/public/living-ticket-qr"
+import { StaticSignedQR } from "@/components/public/static-signed-qr"
 import {
   QrEnlargeTrigger,
   QrScanLightbox,
@@ -42,14 +42,11 @@ function GuestTicketCard({ ticket }: { ticket: MyTicket }) {
           <div className="mx-auto mt-4 w-full max-w-[220px] rounded-2xl bg-white p-2">
             <QrEnlargeTrigger onOpen={() => setScanOpen(true)} className="w-full">
               {isStatic ? (
-                <QRCodeSVG
-                  value={ticket.totpSecret}
+                <StaticSignedQR
+                  ticketId={ticket.id}
+                  totpSecret={ticket.totpSecret}
                   size={200}
-                  level="H"
-                  includeMargin
-                  bgColor="#ffffff"
-                  fgColor="#09090b"
-                  className="h-auto w-full"
+                  className="w-full max-w-none p-0 shadow-none"
                 />
               ) : (
                 <LivingTicketQR

@@ -122,6 +122,13 @@ export function collectLiveSeatingSectorIds(input: {
   return ids
 }
 
+/** Eventos sin mapa: las entradas generales no se atan a un sector. */
+export function detachTicketsFromSeatingPlan(
+  tickets: TicketDraft[],
+): TicketDraft[] {
+  return tickets.map((tier) => ({ ...tier, seatingSectorId: null }))
+}
+
 /** Anula seatingSectorId que no existen en el plano vivo. */
 export function sanitizeSeatingSectorIds(
   tickets: TicketDraft[],
@@ -205,9 +212,12 @@ export function sanitizeEventSubmitPayload(
       venueMap: data.venue.venueMap,
       seatingLayout: data.venue.seatingLayout,
     })
+  const prepared = data.basics.hasSeatingPlan
+    ? data.tickets ?? []
+    : detachTicketsFromSeatingPlan(data.tickets ?? [])
   const tickets = sanitizeSeatingSectorIds(
-    sanitizeTicketTiersForPersist(data.tickets ?? [], options),
-    live,
+    sanitizeTicketTiersForPersist(prepared, options),
+    data.basics.hasSeatingPlan ? live : [],
   )
   return sanitizeDeepSeatingRefs({ ...data, tickets }, live)
 }

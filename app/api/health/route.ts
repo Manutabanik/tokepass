@@ -15,7 +15,6 @@ type ProbeResult = {
 }
 
 function publicProbe(probe: ProbeResult): ProbeResult {
-  if (process.env.NODE_ENV !== "production" || !probe.detail) return probe
   return { status: probe.status, latencyMs: probe.latencyMs }
 }
 

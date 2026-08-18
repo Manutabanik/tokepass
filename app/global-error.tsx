@@ -32,11 +32,11 @@ export default function GlobalError({
               <TriangleAlert className="size-6" aria-hidden="true" />
             </div>
             <h1 className="mt-4 text-2xl font-black tracking-tight">
-              Algo se rompió
+              Algo salió mal
             </h1>
             <p className="mt-3 text-sm leading-6 text-zinc-600 [@media(prefers-color-scheme:dark)]:text-zinc-400">
-              Error crítico de la aplicación. Podés reintentar o volver al
-              inicio.
+              Tuvimos un problema al cargar la aplicación. Podés reintentar o
+              volver al inicio.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
               <button

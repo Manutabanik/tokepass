@@ -60,6 +60,7 @@ export async function listOperableEvents(input: {
     id: string
     title: string
     date: string
+    location: string | null
     status: string
     qr_type: string | null
     ticket_tiers?: Array<{
@@ -86,7 +87,7 @@ export async function listOperableEvents(input: {
     .maybeSingle()
 
   const selectCols =
-    "id, title, date, status, qr_type, ticket_tiers(id, name, price, capacity, sold, admit_count, seating_sector_id)"
+    "id, title, date, location, status, qr_type, ticket_tiers(id, name, price, capacity, sold, admit_count, seating_sector_id)"
 
   if (profile?.role === "admin" || profile?.role === "super_admin") {
     let query = supabase

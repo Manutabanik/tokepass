@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Building2,
+  CalendarClock,
   Check,
   CreditCard,
   Globe2,
@@ -36,9 +37,9 @@ import { EventAutosaveIndicator } from "@/components/admin/event-autosave-indica
 import { EventCapacityHeader } from "@/components/admin/event-capacity-header"
 import { PublishEventConfirmDialog } from "@/components/admin/publish-event-confirm-dialog"
 import type { OrganizerVenue } from "@/app/actions/venues"
-import { createVenue } from "@/app/actions/venues"
+import { upsertVenue } from "@/app/actions/venues"
 import { EventSponsorsManager } from "@/components/admin/event-sponsors-manager"
-import { LineupBuilder } from "@/components/admin/lineup-builder"
+import { AgendaBuilder } from "@/components/admin/agenda-builder"
 import { EventVenueStep } from "@/components/admin/event-venue-step"
 import { WizardConflictBanner } from "@/components/admin/wizard-conflict-banner"
 import {
@@ -85,7 +86,6 @@ import type { VenuePricingMap } from "@/lib/seating/venue-adapter"
 import {
   applyMapCapacityToTickets,
   mapBackedTicketsUnchanged,
-  migrateLegacyWizardStep,
   syncMapBackedTickets,
   venueMapToPricingMap,
 } from "@/lib/seating/venue-map-pricing"
@@ -97,6 +97,12 @@ import {
 } from "@/lib/inventory/capacity-budget"
 import { logicalSectorIds } from "@/lib/inventory/logical-sectors"
 import { useEventCapacity } from "@/hooks/use-event-capacity"
+import {
+  GUIDED_ERROR_EVENT,
+  mapUnknownError,
+  wizardStepFromPath,
+  type GuidedErrorAction,
+} from "@/lib/errors/error-handler"
 import { toUserFacingError } from "@/lib/errors/user-facing-error"
 import {
   conflictFromPersistError,
@@ -116,30 +122,49 @@ import {
   type EventFormValues,
 } from "@/lib/validations/event-form"
 import { defaultInventoryDayId, seedTwoScheduleDays } from "@/lib/event-schedule"
+import {
+  clampWizardStep,
+  isLastVisibleWizardStep,
+  nextWizardStep,
+  prevWizardStep,
+  visibleWizardSteps,
+  WIZARD_STEP_AGENDA,
+  WIZARD_STEP_CONFIG,
+  WIZARD_STEP_COUNT,
+  WIZARD_STEP_IDENTITY,
+  WIZARD_STEP_MAP,
+  WIZARD_STEP_TICKETS,
+  type WizardVisibility,
+} from "@/lib/events/wizard-steps"
 import { cn } from "@/lib/utils"
 
-const steps = [
-  {
+const STEP_META = {
+  [WIZARD_STEP_IDENTITY]: {
     title: "Identidad",
     description: "Nombre, fechas y banner",
     icon: Sparkles,
   },
-  {
+  [WIZARD_STEP_AGENDA]: {
+    title: "Cronograma / Artistas",
+    description: "Horarios, charlas y lineup",
+    icon: CalendarClock,
+  },
+  [WIZARD_STEP_MAP]: {
     title: "Mapa y Sectores",
     description: "Sectores generales y mapa enumerado",
     icon: MapPin,
   },
-  {
+  [WIZARD_STEP_TICKETS]: {
     title: "Entradas y combos",
     description: "Generales, extras y promociones",
     icon: Ticket,
   },
-  {
+  [WIZARD_STEP_CONFIG]: {
     title: "Configuración Final",
     description: "Cobros, privacidad y publicar",
     icon: CreditCard,
   },
-] as const
+} as const
 
 const blankTicket = (): EventFormValues["tickets"][number] => ({
   ...createInventoryTicket("general"),
@@ -161,6 +186,8 @@ const defaultValues: EventFormValues = {
     scheduleDays: [],
     categoryId: "",
     ageRestriction: "" as unknown as EventFormValues["basics"]["ageRestriction"],
+    hasSeatingPlan: false,
+    hasSchedule: false,
   },
   venue: {
     mode: "new",
@@ -228,6 +255,7 @@ export function EventCreationWizard({
   const form = useForm<EventFormValues>({
     resolver: zodResolver(draftEventSchema) as Resolver<EventFormValues>,
     mode: "onTouched",
+    reValidateMode: "onChange",
     shouldUnregister: false,
     defaultValues: initialData?.values ?? defaultValues,
   })
@@ -235,13 +263,25 @@ export function EventCreationWizard({
   const capacitySnapshot = useEventCapacity(form)
   const watchedTickets = useWatch({ control: form.control, name: "tickets" })
   const inventoryBlocked =
-    activeStep === 2 &&
+    activeStep === WIZARD_STEP_TICKETS &&
     (capacitySnapshot.exceeded || ticketsHavePhaseOverflow(watchedTickets ?? []))
   const flyerName = useWatch({ control: form.control, name: "basics.flyerName" })
   const isMultiDay = useWatch({
     control: form.control,
     name: "basics.isMultiDay",
   })
+  const hasSeatingPlan = Boolean(
+    useWatch({ control: form.control, name: "basics.hasSeatingPlan" }),
+  )
+  const hasSchedule = Boolean(
+    useWatch({ control: form.control, name: "basics.hasSchedule" }),
+  )
+  const wizardFlags: WizardVisibility = { hasSeatingPlan, hasSchedule }
+  const visibleStepIndexes = visibleWizardSteps(wizardFlags)
+  const visibleSteps = visibleStepIndexes.map((index) => ({
+    index,
+    ...STEP_META[index as keyof typeof STEP_META],
+  }))
 
   const draftKey = initialData ? `edit:${initialData.id}` : "create"
   const { persistedEventId, flushAutosave } = useEventFormAutosave({
@@ -264,19 +304,39 @@ export function EventCreationWizard({
 
   useEffect(() => {
     const apply = () => {
-      const persisted = migrateLegacyWizardStep(
-        useEventFormStore.getState().wizardStep,
-      )
-      if (persisted >= 0 && persisted < steps.length) {
-        setActiveStep(persisted)
-        setWizardStep(persisted)
+      const store = useEventFormStore.getState()
+      const persisted =
+        typeof store.wizardStep === "number" && Number.isFinite(store.wizardStep)
+          ? store.wizardStep
+          : 0
+      const flags: WizardVisibility = {
+        hasSeatingPlan: Boolean(
+          store.values?.basics.hasSeatingPlan ??
+            form.getValues("basics.hasSeatingPlan"),
+        ),
+        hasSchedule: Boolean(
+          store.values?.basics.hasSchedule ??
+            form.getValues("basics.hasSchedule"),
+        ),
+      }
+      if (persisted >= 0 && persisted < WIZARD_STEP_COUNT) {
+        const resolved = clampWizardStep(persisted, flags)
+        setActiveStep(resolved)
+        setWizardStep(resolved)
       }
     }
     apply()
     const persistApi = useEventFormStore.persist
     if (persistApi.hasHydrated()) return
     return persistApi.onFinishHydration(apply)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate once; el toggle se clampea abajo
   }, [setWizardStep])
+
+  const resolvedStep = clampWizardStep(activeStep, wizardFlags)
+  if (resolvedStep !== activeStep) {
+    setActiveStep(resolvedStep)
+    setWizardStep(resolvedStep)
+  }
 
   function applyMapInventory(map: ReturnType<typeof parseVenueMap>) {
     const pricing = venueMapToPricingMap(map)
@@ -307,8 +367,10 @@ export function EventCreationWizard({
   }
 
   async function moveToStep(nextStep: number) {
-    if (nextStep < 0 || nextStep >= steps.length) return
-    if (nextStep > activeStep && activeStep === 2) {
+    const target = clampWizardStep(nextStep, wizardFlags)
+    if (target === activeStep) return
+    if (target < 0 || target >= WIZARD_STEP_COUNT) return
+    if (activeStep === WIZARD_STEP_TICKETS && target !== WIZARD_STEP_TICKETS) {
       const capacity = computeEventCapacityFromForm(form.getValues())
       if (capacity.exceeded) {
         const message = eventCapacityOverflowMessage(capacity)
@@ -325,16 +387,20 @@ export function EventCreationWizard({
       }
     }
     flushAutosave()
-    setActiveStep(nextStep)
-    setWizardStep(nextStep)
+    setActiveStep(target)
+    setWizardStep(target)
   }
 
   function goToWizardStep(step: number, sectorId?: string) {
-    if (step < 0 || step >= steps.length) return
-    setActiveStep(step)
-    setWizardStep(step)
+    const resolved = clampWizardStep(step, {
+      hasSeatingPlan,
+      hasSchedule,
+    })
+    if (resolved < 0 || resolved >= WIZARD_STEP_COUNT) return
+    setActiveStep(resolved)
+    setWizardStep(resolved)
     window.setTimeout(() => {
-      const panel = document.getElementById(`event-wizard-step-${step}`)
+      const panel = document.getElementById(`event-wizard-step-${resolved}`)
       panel?.scrollIntoView({ behavior: "smooth", block: "start" })
       if (!sectorId) return
       const target = document.querySelector(
@@ -345,6 +411,22 @@ export function EventCreationWizard({
       }
     }, 50)
   }
+
+  useEffect(() => {
+    function onGuided(event: Event) {
+      const action = (event as CustomEvent<GuidedErrorAction>).detail
+      if (action == null || typeof action.step !== "number") return
+      const resolved = clampWizardStep(action.step, {
+        hasSeatingPlan,
+        hasSchedule,
+      })
+      if (resolved < 0 || resolved >= WIZARD_STEP_COUNT) return
+      setActiveStep(resolved)
+      setWizardStep(resolved)
+    }
+    window.addEventListener(GUIDED_ERROR_EVENT, onGuided)
+    return () => window.removeEventListener(GUIDED_ERROR_EVENT, onGuided)
+  }, [hasSeatingPlan, hasSchedule, setWizardStep])
 
   function showWizardConflict(conflict: WizardConflict, title: string) {
     setResultMessage({
@@ -378,16 +460,21 @@ export function EventCreationWizard({
     raw: string,
     title: string,
     wizardConflict?: WizardConflict,
+    code?: string,
   ) {
+    const mapped = mapUnknownError(code ?? raw)
     const conflict =
-      wizardConflict ?? conflictFromPersistError(toUserFacingError(raw))
+      wizardConflict ??
+      conflictFromPersistError(mapped.message) ??
+      (mapped.action
+        ? { summary: mapped.message, actions: [mapped.action] }
+        : null)
     if (conflict) {
       showWizardConflict(conflict, title)
       return
     }
-    const safeError = toUserFacingError(raw)
-    setResultMessage({ type: "error", text: safeError })
-    toast.error(title, { description: safeError })
+    setResultMessage({ type: "error", text: mapped.message })
+    toast.error(title, { description: mapped.message })
   }
 
   async function onSaveIdentity(data: EventFormValues) {
@@ -429,6 +516,7 @@ export function EventCreationWizard({
         result.error,
         "No se pudo guardar la identidad",
         result.wizardConflict,
+        result.code,
       )
       return
     }
@@ -466,12 +554,19 @@ export function EventCreationWizard({
     if (intent === "publish") {
       const strict = publishEventSchema.safeParse(data)
       if (!strict.success) {
+        const first = strict.error.issues[0]
         const message =
-          strict.error.issues[0]?.message ??
+          first?.message ??
           "Completá los datos obligatorios para publicar."
-        toast.error("Todavía no se puede publicar", { description: message })
-        setResultMessage({ type: "error", text: message })
+        const mapped = mapUnknownError(message)
+        toast.error("Todavía no se puede publicar", {
+          description: mapped.message,
+        })
+        setResultMessage({ type: "error", text: mapped.message })
         void form.trigger()
+        goToWizardStep(
+          mapped.action?.step ?? wizardStepFromPath(first?.path ?? []),
+        )
         return
       }
     }
@@ -489,10 +584,10 @@ export function EventCreationWizard({
     const canPersistVenue =
       data.venue.mode === "new" &&
       data.venue.saveVenueForReuse &&
-      !data.venue.existingVenueId &&
       data.venue.venueName.trim().length >= 2
     if (canPersistVenue) {
-      const persist = await createVenue({
+      const persist = await upsertVenue({
+        id: data.venue.existingVenueId,
         name: data.venue.venueName.trim(),
         location:
           [data.venue.venueLocation, data.venue.venueCity]
@@ -578,6 +673,7 @@ export function EventCreationWizard({
           ? "No se pudieron guardar los cambios"
           : "No se pudo crear el evento",
         result.wizardConflict,
+        result.code,
       )
       return
     }
@@ -633,7 +729,7 @@ export function EventCreationWizard({
             if (capacity.exceeded) {
               const message = eventCapacityOverflowMessage(capacity)
               toast.error("El aforo está excedido", { description: message })
-              goToWizardStep(2)
+              goToWizardStep(WIZARD_STEP_TICKETS)
             }
           },
         )}
@@ -647,9 +743,19 @@ export function EventCreationWizard({
             <EventCapacityHeader form={form} />
             <EventAutosaveIndicator />
           </div>
-          <TabsList className="flex w-full items-stretch gap-2 overflow-x-auto rounded-2xl border border-zinc-200 bg-white p-2 shadow-lg shadow-zinc-200/70 backdrop-blur-md group-data-horizontal/tabs:h-auto max-sm:snap-x max-sm:snap-mandatory dark:border-zinc-800 dark:bg-zinc-900/80 dark:shadow-black/20 sm:grid sm:grid-cols-2 sm:overflow-visible lg:grid-cols-4">
-            {steps.map(({ title, description }, index) => {
-              const completed = index < activeStep
+          <TabsList
+            className={cn(
+              "flex w-full items-stretch gap-2 overflow-x-auto rounded-2xl border border-zinc-200 bg-white p-2 shadow-lg shadow-zinc-200/70 backdrop-blur-md group-data-horizontal/tabs:h-auto max-sm:snap-x max-sm:snap-mandatory dark:border-zinc-800 dark:bg-zinc-900/80 dark:shadow-black/20 sm:grid sm:grid-cols-2 sm:overflow-visible",
+              visibleSteps.length >= 5
+                ? "lg:grid-cols-5"
+                : visibleSteps.length === 4
+                  ? "lg:grid-cols-4"
+                  : "lg:grid-cols-3",
+            )}
+          >
+            {visibleSteps.map(({ index, title, description }, visibleIndex) => {
+              const activePos = visibleStepIndexes.indexOf(activeStep)
+              const completed = visibleIndex < activePos
               const available = true
 
               return (
@@ -671,7 +777,7 @@ export function EventCreationWizard({
                     {completed ? (
                       <Check className="size-4" />
                     ) : (
-                      index + 1
+                      visibleIndex + 1
                     )}
                   </span>
                   <span className="min-w-0">
@@ -961,6 +1067,87 @@ export function EventCreationWizard({
                       </FormItem>
                     )}
                   />
+
+                  <FormField
+                    control={form.control}
+                    name="basics.hasSeatingPlan"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between gap-4 rounded-2xl border border-emerald-500/25 bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent px-4 py-4">
+                        <div className="flex min-w-0 items-start gap-3">
+                          <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+                            <MapPin className="size-4" aria-hidden="true" />
+                          </span>
+                          <div className="space-y-1">
+                            <FormLabel className="text-sm font-semibold leading-snug text-foreground">
+                              ¿Tu evento tiene mapa de ubicaciones o butacas
+                              numeradas?
+                            </FormLabel>
+                            <FormDescription className="text-xs text-muted-foreground">
+                              Si lo activás, aparece el paso Mapa y Sectores.
+                            </FormDescription>
+                          </div>
+                        </div>
+                        <Switch
+                          checked={Boolean(field.value)}
+                          onCheckedChange={(checked) => {
+                            field.onChange(checked)
+                            if (!checked) {
+                              form.setValue("venue.includesSeatingMap", false, {
+                                shouldDirty: true,
+                              })
+                              const currentTickets =
+                                form.getValues("tickets") ?? []
+                              if (
+                                currentTickets.some((tier) => tier.seatingSectorId)
+                              ) {
+                                form.setValue(
+                                  "tickets",
+                                  currentTickets.map((tier) => ({
+                                    ...tier,
+                                    seatingSectorId: null,
+                                  })),
+                                  { shouldDirty: true },
+                                )
+                              }
+                            }
+                          }}
+                          className="data-checked:bg-emerald-500"
+                          aria-label="¿Tu evento tiene mapa de ubicaciones o butacas numeradas?"
+                        />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="basics.hasSchedule"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between gap-4 rounded-2xl border border-violet-500/25 bg-gradient-to-r from-violet-500/10 via-violet-500/5 to-transparent px-4 py-4">
+                        <div className="flex min-w-0 items-start gap-3">
+                          <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-violet-500/20 bg-violet-500/15 text-violet-700 dark:text-violet-300">
+                            <CalendarClock className="size-4" aria-hidden="true" />
+                          </span>
+                          <div className="space-y-1">
+                            <FormLabel className="text-sm font-semibold leading-snug text-foreground">
+                              ¿Habilitar cronograma / agenda del evento?
+                            </FormLabel>
+                            <FormDescription className="text-xs text-muted-foreground">
+                              Activa esto si tu evento tiene charlas, shows o un
+                              itinerario por horarios.
+                            </FormDescription>
+                          </div>
+                        </div>
+                        <Switch
+                          checked={Boolean(field.value)}
+                          onCheckedChange={(checked) => {
+                            field.onChange(checked)
+                          }}
+                          className="data-checked:bg-violet-500"
+                          aria-label="¿Habilitar cronograma / agenda del evento?"
+                        />
+                      </FormItem>
+                    )}
+                  />
                 </div>
 
                 <FormItem className="flex flex-col gap-4 rounded-2xl border border-zinc-200 dark:border-zinc-800/80 bg-zinc-50 dark:bg-zinc-950/50 p-6 lg:col-span-5 lg:self-stretch">
@@ -1043,23 +1230,30 @@ export function EventCreationWizard({
                   )}
                 </FormItem>
                 <div className="lg:col-span-12">
-                  <FormField
-                    control={form.control}
-                    name="lineup"
-                    render={({ field }) => (
-                      <LineupBuilder
-                        eventId={initialData?.id ?? persistedEventId}
-                        value={field.value ?? []}
-                        onChange={field.onChange}
-                      />
-                    )}
-                  />
-                </div>
-                <div className="lg:col-span-12">
                   <EventSponsorsManager
                     eventId={initialData?.id ?? persistedEventId}
                   />
                 </div>
+              </CardContent>
+            </TabsContent>
+
+            <TabsContent
+              keepMounted
+              value={String(WIZARD_STEP_AGENDA)}
+              id={`event-wizard-step-${WIZARD_STEP_AGENDA}`}
+              className="animate-in fade-in slide-in-from-right-2 duration-300"
+            >
+              <CardHeader className="border-b border-zinc-200 px-4 py-6 dark:border-white/8 lg:px-8">
+                <CardTitle className="text-xl text-foreground">
+                  Cronograma / Artistas
+                </CardTitle>
+                <CardDescription className="text-muted-foreground">
+                  Armá el itinerario por horarios. Un bloque puede ser solo un
+                  título, o incluir una persona o talento de forma opcional.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-7 px-4 py-7 lg:px-8">
+                <AgendaBuilder eventId={initialData?.id ?? persistedEventId} />
               </CardContent>
             </TabsContent>
 
@@ -1082,6 +1276,7 @@ export function EventCreationWizard({
               <CardContent className="space-y-7 px-4 py-7 lg:px-8">
                 <EventVenueStep
                   form={form}
+                  eventId={initialData?.id ?? persistedEventId}
                   venues={venueCatalog}
                   onVenuesChange={setLocalVenues}
                   onAppliedVenue={handleApplySavedVenue}
@@ -1111,9 +1306,13 @@ export function EventCreationWizard({
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 px-4 py-7 lg:px-8">
-                <UnifiedInventoryPanel form={form} />
+                <UnifiedInventoryPanel
+                  form={form}
+                  eventId={initialData?.id ?? persistedEventId}
+                />
                 <FormMessage>
-                  {form.formState.errors.tickets?.root?.message}
+                  {form.formState.errors.tickets?.message ??
+                    form.formState.errors.tickets?.root?.message}
                 </FormMessage>
               </CardContent>
             </TabsContent>
@@ -1262,8 +1461,13 @@ export function EventCreationWizard({
                 <Button
                   type="button"
                   variant="ghost"
-                  disabled={activeStep === 0 || form.formState.isSubmitting}
-                  onClick={() => void moveToStep(activeStep - 1)}
+                  disabled={
+                    activeStep === WIZARD_STEP_IDENTITY ||
+                    form.formState.isSubmitting
+                  }
+                  onClick={() =>
+                    void moveToStep(prevWizardStep(activeStep, wizardFlags))
+                  }
                   className="min-h-11 min-w-11 text-muted-foreground hover:bg-zinc-100 hover:text-foreground dark:hover:bg-white/5"
                 >
                   <ArrowLeft />
@@ -1284,7 +1488,7 @@ export function EventCreationWizard({
                 </Button>
               </div>
 
-              {activeStep < steps.length - 1 ? (
+              {!isLastVisibleWizardStep(activeStep, wizardFlags) ? (
                 <div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:items-center">
                   <Button
                     key="draft-mid"
@@ -1304,7 +1508,9 @@ export function EventCreationWizard({
                     key="next"
                     type="button"
                     disabled={inventoryBlocked}
-                    onClick={() => void moveToStep(activeStep + 1)}
+                    onClick={() =>
+                      void moveToStep(nextWizardStep(activeStep, wizardFlags))
+                    }
                     className="min-h-11 w-full bg-violet-600 text-base text-white hover:bg-violet-500 lg:w-auto"
                   >
                     Siguiente

@@ -8,7 +8,9 @@ import {
   getTotpWindow,
   LIVING_QR_GRACE_BLOCKS,
   LIVING_QR_PERIOD_MS,
+  STATIC_QR_PREFIX,
   verifyLivingQrMac,
+  verifyStaticQrMac,
 } from "@/lib/totp-offline"
 import type { QrType } from "@/types/database"
 
@@ -16,6 +18,12 @@ export type DecodedLivingV2 = {
   version: 2
   ticketId: string
   timestampBlock: number
+  mac: string
+}
+
+export type DecodedStaticSigned = {
+  version: "tps"
+  ticketId: string
   mac: string
 }
 
@@ -27,11 +35,24 @@ export type DecodedLivingLegacy = {
 
 export type DecodedLiving = DecodedLivingV2 | DecodedLivingLegacy
 
+export function decodeStaticSignedPayload(
+  rawPayload: string,
+): DecodedStaticSigned | null {
+  const cleaned = rawPayload.trim()
+  if (!cleaned.startsWith(`${STATIC_QR_PREFIX}.`)) return null
+  const parts = cleaned.split(".")
+  if (parts.length !== 3) return null
+  const ticketId = parts[1]
+  const mac = parts[2]
+  if (!ticketId || !mac) return null
+  return { version: "tps", ticketId, mac }
+}
+
 export function decodeLivingPayload(rawPayload: string): DecodedLiving | null {
   const cleaned = rawPayload.trim()
   if (!cleaned) return null
 
-  // v2: TP2.<uuid>.<window>.<mac16>
+  // v2: TP2.<uuid>.<window>.<mac>
   if (cleaned.startsWith("TP2.")) {
     const parts = cleaned.split(".")
     if (parts.length !== 4) return null
@@ -88,6 +109,13 @@ export type ResolvedScan =
       enforceFreshness: boolean
     }
   | {
+      mode: "tps"
+      ticketId: string
+      mac: string
+      expired: boolean
+      enforceFreshness: boolean
+    }
+  | {
       mode: "secret"
       totpSecret: string
       expired: boolean
@@ -111,6 +139,17 @@ export function resolveScanSecret(
 ): ResolvedScan | null {
   const cleaned = rawPayload.trim()
   if (!cleaned) return null
+
+  const signed = decodeStaticSignedPayload(cleaned)
+  if (signed) {
+    return {
+      mode: "tps",
+      ticketId: signed.ticketId,
+      mac: signed.mac,
+      expired: false,
+      enforceFreshness: false,
+    }
+  }
 
   const living = decodeLivingPayload(cleaned)
   const currentBlock = getTotpWindow(options?.nowMs)
@@ -178,6 +217,13 @@ export async function assertLivingMac(
     resolved.timestampBlock,
     resolved.mac,
   )
+}
+
+export async function assertStaticMac(
+  totpSecret: string,
+  resolved: Extract<ResolvedScan, { mode: "tps" }>,
+): Promise<boolean> {
+  return verifyStaticQrMac(totpSecret, resolved.ticketId, resolved.mac)
 }
 
 export { LIVING_QR_PERIOD_MS, LIVING_QR_GRACE_BLOCKS }

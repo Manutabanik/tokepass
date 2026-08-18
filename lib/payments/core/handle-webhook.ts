@@ -73,6 +73,6 @@ export async function handlePaymentProviderWebhook(
       provider,
       error,
     })
-    return webhookAck({ recovered: true })
+    return webhookRetry({ recovered: false })
   }
 }

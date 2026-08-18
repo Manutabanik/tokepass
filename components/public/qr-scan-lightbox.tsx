@@ -1,10 +1,10 @@
 "use client"
 
 import { Expand, X } from "lucide-react"
-import { QRCodeSVG } from "qrcode.react"
 import type { ReactNode } from "react"
 
 import { LivingTicketQR } from "@/components/public/living-ticket-qr"
+import { StaticSignedQR } from "@/components/public/static-signed-qr"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -61,17 +61,12 @@ export function QrScanLightbox({
           <div className="flex w-full flex-col items-center rounded-3xl bg-white p-4 shadow-2xl shadow-primary/20 sm:p-8">
             <div className="w-[min(18rem,calc(100vw-6.5rem),calc(100dvh-22rem))] sm:w-96">
               {isStatic ? (
-                <div className="aspect-square w-full">
-                  <QRCodeSVG
-                    value={totpSecret}
-                    size={384}
-                    level="H"
-                    includeMargin={false}
-                    bgColor="#ffffff"
-                    fgColor="#09090b"
-                    className="h-auto w-full"
-                  />
-                </div>
+                <StaticSignedQR
+                  ticketId={ticketId}
+                  totpSecret={totpSecret}
+                  size={384}
+                  className="aspect-square w-full max-w-none p-0 shadow-none"
+                />
               ) : (
                 <LivingTicketQR
                   ticketId={ticketId}
