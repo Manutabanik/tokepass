@@ -1133,10 +1133,18 @@ export async function startCheckoutWithPayment(
   const buyer = buyerToHolderFields(payload.buyer) satisfies NormalizedCheckoutBuyer
 
   const supabase = await createClient()
+
+  // Saneamos los items garantizando que 'type' siempre tenga valor ("mapped" o "general")
+  const rawItems = payload.items ?? items
+  const sanitizedItems = rawItems.map((item) => ({
+    ...item,
+    type: item.type ?? (item.seatingUnitId || (item.seatingIds && item.seatingIds.length > 0) ? "mapped" : "general"),
+  })) as Parameters<typeof resolveMappedSeatingUnits>[2]
+
   const resolvedCart = await resolveMappedSeatingUnits(
     supabase,
     payload.eventId,
-    payload.items ?? items,
+    sanitizedItems,
   )
   if (!resolvedCart.ok) {
     await recordCheckoutFailure(ctx)
