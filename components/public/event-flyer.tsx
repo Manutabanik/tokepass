@@ -27,6 +27,7 @@ export function EventFlyer({
   children,
   priority = false,
   objectFit = "cover",
+  sizes = "(max-width: 768px) 100vw, 1200px",
 }: {
   eventId: string
   title: string
@@ -35,6 +36,7 @@ export function EventFlyer({
   children?: ReactNode
   priority?: boolean
   objectFit?: "cover" | "contain"
+  sizes?: string
 }) {
   if (imageUrl) {
     return (
@@ -50,7 +52,7 @@ export function EventFlyer({
           alt={title}
           fill
           priority={priority}
-          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+          sizes={sizes}
           className={objectFit === "contain" ? "object-contain" : "object-cover"}
         />
       </div>

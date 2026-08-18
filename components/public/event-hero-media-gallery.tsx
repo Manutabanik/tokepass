@@ -92,6 +92,7 @@ export function EventHeroMediaGallery({
                 title={title}
                 imageUrl={imageUrl}
                 priority
+                sizes="100vw"
                 objectFit="cover"
                 className={finished ? "grayscale-[50%]" : undefined}
               />
@@ -113,6 +114,7 @@ export function EventHeroMediaGallery({
                       eventId={`${eventId}-spot`}
                       title={title}
                       imageUrl={imageUrl}
+                      sizes="100vw"
                       objectFit="cover"
                     />
                     <button

@@ -1,6 +1,6 @@
 /* Tokepass PWA Service Worker — Offline-First billetera /cuenta/entradas */
 
-const CACHE_VERSION = "tokepass-wallet-v10"
+const CACHE_VERSION = "tokepass-wallet-v11"
 const ASSET_CACHE = `${CACHE_VERSION}-assets`
 
 const PRECACHE_URLS = [
@@ -89,8 +89,11 @@ function shouldBypass(request, url) {
   // Next internals and RSC payloads must hit the network untouched.
   if (url.pathname.startsWith("/_next/")) return true
 
-  // Auth / REST / Realtime break if the SW answers with an opaque response.
-  if (isSupabaseHost(url) && !isPublicStorageImage(url)) return true
+  // <img> / preload use no-cors. Rewriting those as 502 Opaque breaks flyers.
+  if (request.mode === "no-cors") return true
+
+  // Auth / REST / Realtime / Storage: never synthesize a response.
+  if (isSupabaseHost(url)) return true
 
   if (isIncompleteNextStatic(url)) return true
 
@@ -160,10 +163,14 @@ async function cacheFirstAsset(request) {
     if (usableResponse(fresh)) {
       await cache.put(request, fresh.clone())
     }
-    if (fresh && fresh.type === "opaque") {
-      return cached || new Response("", { status: 502, statusText: "Opaque" })
-    }
-    return fresh
+    if (fresh) return fresh
+    return (
+      cached ||
+      new Response("", {
+        status: 503,
+        statusText: "Offline",
+      })
+    )
   } catch {
     return (
       cached ||
@@ -252,9 +259,6 @@ self.addEventListener("fetch", (event) => {
   if (shouldBypass(request, url)) return
 
   if (!isSameOrigin(url)) {
-    if (isPublicStorageImage(url)) {
-      event.respondWith(cacheFirstAsset(request))
-    }
     return
   }
 
