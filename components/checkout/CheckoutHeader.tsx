@@ -31,23 +31,23 @@ export function CheckoutHeader({
 
   return (
     <header className="sticky top-0 z-50 w-full flex-none border-b border-border/50 bg-background/98 backdrop-blur-xl">
-      {/* Vista Mobile: Se aumenta el padding superior a pt-12 (~48px + Safe Area) para evitar la barra del navegador */}
+      {/* Vista Mobile: Padding equilibrado para no solapar con la barra del navegador */}
       <div 
-        className="flex w-full items-center justify-between gap-2 px-4 pb-3 md:hidden"
+        className="flex w-full items-center justify-between gap-2 px-4 pb-2.5 md:hidden"
         style={{
-          paddingTop: "calc(env(safe-area-inset-top, 0px) + 3.25rem)",
+          paddingTop: "calc(env(safe-area-inset-top, 0px) + 1.25rem)",
         }}
       >
         <button
           type="button"
           onClick={onBack}
-          className="flex min-h-10 items-center gap-1.5 rounded-xl bg-secondary px-3.5 py-2 text-xs font-bold text-secondary-foreground shadow-sm transition-all active:scale-95 shrink-0"
+          className="flex min-h-9 items-center gap-1.5 rounded-xl bg-secondary px-3 py-1.5 text-xs font-bold text-secondary-foreground shadow-sm transition-all active:scale-95 shrink-0"
         >
           <ArrowLeft className="size-4 text-primary" aria-hidden="true" />
           <span>Volver</span>
         </button>
 
-        <div className="flex items-center gap-1.5 rounded-full border border-border/40 bg-secondary px-3 py-1.5 shrink-0">
+        <div className="flex items-center gap-1.5 rounded-full border border-border/40 bg-secondary px-3 py-1 shrink-0">
           <span className="size-2 rounded-full bg-primary motion-safe:animate-pulse" />
           <span className="text-[11px] font-bold tracking-wider text-secondary-foreground uppercase">
             {meta.stepNumber}. {meta.label}
