@@ -2760,6 +2760,10 @@ export type Database = {
         Args: { p_order_id: string }
         Returns: boolean
       }
+      finalize_sandbox_paid_order: {
+        Args: { p_order_id: string }
+        Returns: Json
+      }
       get_event_public_access_gate: {
         Args: { p_event_id: string }
         Returns: {

@@ -1928,6 +1928,8 @@ export function CheckoutTunnel({
     handleConfirmPay()
   }
 
+  const simulatePayment = isDraftPreview || sandboxEligible
+
   function handleConfirmPay() {
     if (!acceptedTerms || !canProceedFromCart || purchaseLocked) return
     if (!identityReady) {
@@ -1940,7 +1942,9 @@ export function CheckoutTunnel({
     }
     void buyerForm.handleSubmit(
       (values) => {
-        void runCheckoutBusy(() => submitCheckout(undefined, false, values))
+        void runCheckoutBusy(() =>
+          submitCheckout(undefined, simulatePayment, values),
+        )
       },
       (formErrors) => {
         setFieldShake((current) => current + 1)
@@ -2298,7 +2302,9 @@ export function CheckoutTunnel({
         ? "Sumar al pedido y continuar"
         : visibleStep === "details"
           ? "Continuar al pago"
-          : `Confirmar y Pagar ${formatCurrency(finalTotal)}`
+          : simulatePayment
+            ? "Simular Pago (Modo Prueba)"
+            : `Confirmar y Pagar ${formatCurrency(finalTotal)}`
 
   const seatSelection = hasInteractiveMap
     ? {
@@ -2546,7 +2552,11 @@ export function CheckoutTunnel({
               showArrow: visibleStep !== "payment",
               pending: checkoutBusy,
               pendingLabel:
-                visibleStep === "payment" ? "Preparando pago" : "Procesando",
+                visibleStep === "payment"
+                  ? simulatePayment
+                    ? "Simulando pago"
+                    : "Preparando pago"
+                  : "Procesando",
               disabled:
                 (visibleStep === "tickets" && !canProceedFromCart) ||
                 (visibleStep === "payment" && !acceptedTerms),

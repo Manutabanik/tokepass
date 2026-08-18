@@ -1135,47 +1135,57 @@ async function persistOrderLegalGate(input: {
   const canRecord = Boolean(legalName && taxId)
 
   if (input.sandbox) {
-    const flagged = await admin
+    const gate = await admin
       .from("orders")
-      .update({ is_test: true })
-      .eq("id", input.orderId)
-      .eq("buyer_id", input.buyerId)
-    if (flagged.error) {
-      logger.error({
-        context: "checkout/legal",
-        message: "sandbox_is_test_failed",
-        orderId: input.orderId,
-        error: flagged.error.message,
-      })
-    }
-  }
-
-  const patch = input.sandbox
-    ? {
+      .update({
         is_test: true,
         legal_consent_required: false,
-        ...(canRecord
-          ? {
-              terms_accepted: true,
-              terms_accepted_at: new Date().toISOString(),
-              legal_terms_version: EVENT_LEGAL_TERMS_VERSION,
-              organizer_legal_name_snapshot: legalName,
-              organizer_tax_id_snapshot: taxId,
-            }
-          : {}),
-      }
-    : canRecord
-      ? {
-          legal_consent_required: true,
-          terms_accepted: true,
-          terms_accepted_at: new Date().toISOString(),
-          legal_terms_version: EVENT_LEGAL_TERMS_VERSION,
-          organizer_legal_name_snapshot: legalName,
-          organizer_tax_id_snapshot: taxId,
-        }
-      : { legal_consent_required: false }
+      })
+      .eq("id", input.orderId)
+      .eq("buyer_id", input.buyerId)
 
-  if (!input.sandbox && !canRecord) {
+    if (gate.error) {
+      logger.warn({
+        context: "checkout/legal",
+        message: "sandbox_legal_gate_update_failed",
+        orderId: input.orderId,
+        error: gate.error.message,
+      })
+      await admin
+        .from("orders")
+        .update({ is_test: true })
+        .eq("id", input.orderId)
+        .eq("buyer_id", input.buyerId)
+      const legalOnly = await admin
+        .from("orders")
+        .update({ legal_consent_required: false })
+        .eq("id", input.orderId)
+        .eq("buyer_id", input.buyerId)
+      if (legalOnly.error) {
+        logger.error({
+          context: "checkout/legal",
+          message: "sandbox_legal_flag_failed",
+          orderId: input.orderId,
+          error: legalOnly.error.message,
+        })
+      }
+    }
+
+    return { ok: true }
+  }
+
+  const patch = canRecord
+    ? {
+        legal_consent_required: true,
+        terms_accepted: true,
+        terms_accepted_at: new Date().toISOString(),
+        legal_terms_version: EVENT_LEGAL_TERMS_VERSION,
+        organizer_legal_name_snapshot: legalName,
+        organizer_tax_id_snapshot: taxId,
+      }
+    : { legal_consent_required: false }
+
+  if (!canRecord) {
     logger.warn({
       context: "checkout/legal",
       message: "legal_identity_incomplete",
@@ -1191,23 +1201,6 @@ async function persistOrderLegalGate(input: {
     .eq("buyer_id", input.buyerId)
 
   if (!error) return { ok: true }
-
-  if (input.sandbox) {
-    const fallback = await admin
-      .from("orders")
-      .update({ is_test: true })
-      .eq("id", input.orderId)
-      .eq("buyer_id", input.buyerId)
-    if (fallback.error) {
-      logger.error({
-        context: "checkout/legal",
-        message: "sandbox_legal_fallback_failed",
-        orderId: input.orderId,
-        error: fallback.error.message,
-      })
-    }
-    return { ok: true }
-  }
 
   if (/legal_|terms_accepted|column/i.test(error.message)) {
     logger.warn({
@@ -1959,14 +1952,49 @@ export async function startCheckoutWithPayment(
 
     if (useSandbox) {
       const admin = createAdminClient()
-      const { data: finalized, error: finalizeError } = await admin.rpc(
-        "finalize_paid_order",
-        {
+      const sandboxRpc = await admin.rpc("finalize_sandbox_paid_order", {
+        p_order_id: orderId,
+      })
+      const missingSandboxRpc = Boolean(
+        sandboxRpc.error &&
+          /could not find|schema cache|does not exist/i.test(
+            sandboxRpc.error.message,
+          ),
+      )
+
+      let finalizeError = sandboxRpc.error
+      let result = (sandboxRpc.data ?? {}) as { ok?: boolean; code?: string }
+
+      if (missingSandboxRpc) {
+        await admin
+          .from("orders")
+          .update({
+            is_test: true,
+            legal_consent_required: false,
+          })
+          .eq("id", orderId)
+          .eq("buyer_id", user.id)
+        const classic = await admin.rpc("finalize_paid_order", {
           p_order_id: orderId,
           p_mp_payment_id: `sandbox:${orderId}`,
-        },
-      )
-      const result = (finalized ?? {}) as { ok?: boolean; code?: string }
+        })
+        finalizeError = classic.error
+        result = (classic.data ?? {}) as { ok?: boolean; code?: string }
+        if (!finalizeError && result.ok) {
+          const { error: markError } = await admin.rpc(
+            "mark_order_test_sandbox",
+            { p_order_id: orderId },
+          )
+          if (markError) {
+            logger.error({
+              context: "checkout/sandbox",
+              message: "sandbox_mark_failed",
+              orderId,
+              error: markError.message,
+            })
+          }
+        }
+      }
 
       if (finalizeError || !result.ok) {
         await cleanupPendingOrder(orderId)
@@ -1984,18 +2012,6 @@ export async function startCheckoutWithPayment(
           success: false,
           error: mapped?.error ?? "No se pudo completar la compra de prueba.",
         }
-      }
-
-      const { error: markError } = await admin.rpc("mark_order_test_sandbox", {
-        p_order_id: orderId,
-      })
-      if (markError) {
-        logger.error({
-          context: "checkout/sandbox",
-          message: "sandbox_mark_failed",
-          orderId,
-          error: markError.message,
-        })
       }
 
       initPoint = `/checkout/success?order_id=${orderId}&sandbox=1`
