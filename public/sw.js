@@ -1,6 +1,6 @@
 /* Tokepass PWA Service Worker — Offline-First billetera /cuenta/entradas */
 
-const CACHE_VERSION = "tokepass-wallet-v7"
+const CACHE_VERSION = "tokepass-wallet-v8"
 const ASSET_CACHE = `${CACHE_VERSION}-assets`
 
 const PRECACHE_URLS = [
@@ -60,8 +60,23 @@ function shouldSkipDocumentCache(url) {
   )
 }
 
+/**
+ * Extrae assets reales de Next. El character class NO puede incluir `\\s`
+ * como si fuera whitespace: en un regex literal `\\s` excluye la letra "s"
+ * y corta `/_next/static/chunks/...` en `/_next/static/chunk`.
+ */
+const NEXT_STATIC_ASSET_RE =
+  /\/_next\/static\/[a-zA-Z0-9/_.,%-]+\.(?:js|css|woff2|woff|png|svg|webp)(?:\?[^"' \t\n\r>]*)?/g
+
 function extractNextStaticUrls(html) {
-  return [...html.matchAll(/\/_next\/static\/[^"'\\s>]+/g)].map((match) => match[0])
+  return [...new Set(html.match(NEXT_STATIC_ASSET_RE) ?? [])]
+}
+
+function isCacheableNextStatic(url) {
+  return (
+    url.pathname.startsWith("/_next/static/") &&
+    /\.(?:js|css|woff2|woff|png|svg|webp)$/i.test(url.pathname)
+  )
 }
 
 function offlineHtmlResponse() {
@@ -129,15 +144,38 @@ async function cacheFirstAsset(request) {
   const cached = await cache.match(request)
   if (cached) return cached
 
+  const url = new URL(request.url)
+  const sameOrigin = url.origin === self.location.origin
+
   try {
-    const fresh = await fetch(request, { mode: "no-cors" }).catch(() =>
-      fetch(request),
-    )
-    if (fresh && (fresh.ok || fresh.type === "opaque")) {
+    const fresh = sameOrigin
+      ? await fetch(request)
+      : await fetch(request, { mode: "no-cors" }).catch(() => fetch(request))
+    if (fresh && (fresh.ok || (!sameOrigin && fresh.type === "opaque"))) {
       await cache.put(request, fresh.clone())
     }
     return fresh
   } catch {
+    return (
+      cached ||
+      new Response("", {
+        status: 503,
+        statusText: "Offline",
+      })
+    )
+  }
+}
+
+async function networkFirstSameOrigin(request) {
+  const cache = await caches.open(ASSET_CACHE)
+  try {
+    const fresh = await fetch(request)
+    if (fresh.ok) {
+      await cache.put(request, fresh.clone())
+    }
+    return fresh
+  } catch {
+    const cached = await cache.match(request)
     return (
       cached ||
       new Response("", {
@@ -193,7 +231,8 @@ async function cacheUrls(urls) {
         if (
           sameOrigin &&
           !url.pathname.startsWith("/offline/") &&
-          !isStaticAsset(url)
+          !isStaticAsset(url) &&
+          !isCacheableNextStatic(url)
         ) {
           return
         }
@@ -241,8 +280,11 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url)
 
   if (url.origin === self.location.origin && url.pathname.startsWith("/_next/")) {
-    if (!isLocalhost() && url.pathname.startsWith("/_next/static/")) {
-      event.respondWith(cacheFirstAsset(request))
+    if (
+      !isLocalhost() &&
+      isCacheableNextStatic(url)
+    ) {
+      event.respondWith(networkFirstSameOrigin(request))
     }
     return
   }

@@ -34,15 +34,38 @@ export function PwaRegister() {
     }
 
     let cancelled = false
+    let reloading = false
+
+    const onControllerChange = () => {
+      if (reloading || cancelled) return
+      reloading = true
+      window.location.reload()
+    }
+    navigator.serviceWorker.addEventListener(
+      "controllerchange",
+      onControllerChange,
+    )
 
     void navigator.serviceWorker
       .register("/sw.js", { scope: "/" })
       .then((registration) => {
         if (cancelled) return
         registration.update().catch(() => {})
+        if (registration.waiting) {
+          registration.waiting.postMessage("SKIP_WAITING")
+        }
+        registration.addEventListener("updatefound", () => {
+          const worker = registration.installing
+          if (!worker) return
+          worker.addEventListener("statechange", () => {
+            if (worker.state === "installed" && navigator.serviceWorker.controller) {
+              worker.postMessage("SKIP_WAITING")
+            }
+          })
+        })
         registration.active?.postMessage({
           type: "CACHE_TICKET_ASSETS",
-          urls: ["/offline/billetera", "/cuenta/entradas"],
+          urls: ["/offline/billetera"],
         })
       })
       .catch((error: unknown) => {
@@ -51,6 +74,10 @@ export function PwaRegister() {
 
     return () => {
       cancelled = true
+      navigator.serviceWorker.removeEventListener(
+        "controllerchange",
+        onControllerChange,
+      )
     }
   }, [])
 
