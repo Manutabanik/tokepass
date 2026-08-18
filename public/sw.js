@@ -1,6 +1,6 @@
 /* Tokepass PWA Service Worker — Offline-First billetera /cuenta/entradas */
 
-const CACHE_VERSION = "tokepass-wallet-v11"
+const CACHE_VERSION = "tokepass-wallet-v12"
 const ASSET_CACHE = `${CACHE_VERSION}-assets`
 
 const PRECACHE_URLS = [
@@ -218,27 +218,22 @@ async function cacheUrls(urls) {
     urls.map(async (raw) => {
       try {
         const url = new URL(raw, self.location.origin)
-        const sameOrigin = isSameOrigin(url)
-
+        if (!isSameOrigin(url)) return
+        if (url.searchParams.has("_rsc")) return
         if (isIncompleteNextStatic(url)) return
         if (url.pathname.startsWith("/_next/")) return
-        if (isSupabaseHost(url) && !isPublicStorageImage(url)) return
-
-        if (sameOrigin && shouldSkipDocumentCache(url)) return
+        if (shouldSkipDocumentCache(url)) return
 
         if (
-          sameOrigin &&
           !url.pathname.startsWith("/offline/") &&
           !isStaticAsset(url)
         ) {
           return
         }
 
-        if (!sameOrigin && !isPublicStorageImage(url)) return
-
         const response = await fetch(url.href, {
-          credentials: sameOrigin ? "same-origin" : "omit",
-          mode: sameOrigin ? "same-origin" : "cors",
+          credentials: "same-origin",
+          mode: "same-origin",
         })
 
         if (!usableResponse(response)) return

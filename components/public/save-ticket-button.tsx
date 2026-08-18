@@ -49,12 +49,7 @@ export function SaveTicketButton({
 
   function persistBeforePrint() {
     void upsertTicketsOffline(userId, [ticket]).catch(() => {})
-    requestTicketAssetCache([
-      ticket.flyerUrl,
-      `/tickets/${ticket.id}/print`,
-      "/cuenta/entradas",
-      "/offline/billetera",
-    ])
+    requestTicketAssetCache(["/offline/billetera"])
   }
 
   return (

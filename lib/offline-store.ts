@@ -408,16 +408,11 @@ async function putTicketsAndMeta(
   return active
 }
 
-function precacheTicketAssets(tickets: MyTicket[]) {
+function precacheTicketAssets(_tickets: MyTicket[]) {
   requestTicketAssetCache([
     "/brand/tokepass-mark.png",
     "/icons/icon-192.png",
     "/offline/billetera",
-    "/cuenta/entradas",
-    ...tickets.flatMap((ticket) => [
-      ticket.flyerUrl,
-      `/cuenta/entradas/${ticket.id}`,
-    ]),
   ])
   try {
     window.localStorage.setItem(

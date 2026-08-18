@@ -7,7 +7,8 @@ const SW_RESET_KEY = "tokepass-sw-reset-v11"
 /**
  * Registra el Service Worker de la billetera PWA.
  * En desarrollo: desregistra SW residuales para no romper HMR/Turbopack.
- * En producción: una vez, limpia workers v10 que devolvían 502 Opaque.
+ * En producción: no recarga el documento al tomar control — eso aborta
+ * prefetch RSC y server actions (POST del checkout).
  */
 export function PwaRegister() {
   useEffect(() => {
@@ -37,17 +38,6 @@ export function PwaRegister() {
     }
 
     let cancelled = false
-    let reloading = false
-
-    const onControllerChange = () => {
-      if (reloading || cancelled) return
-      reloading = true
-      window.location.reload()
-    }
-    navigator.serviceWorker.addEventListener(
-      "controllerchange",
-      onControllerChange,
-    )
 
     async function resetLegacyWorkers(): Promise<boolean> {
       try {
@@ -77,8 +67,7 @@ export function PwaRegister() {
     void (async () => {
       const hadLegacy = await resetLegacyWorkers()
       if (cancelled) return
-      if (hadLegacy && !reloading) {
-        reloading = true
+      if (hadLegacy) {
         window.location.reload()
         return
       }
@@ -97,11 +86,8 @@ export function PwaRegister() {
           const worker = registration.installing
           if (!worker) return
           worker.addEventListener("statechange", () => {
-            if (
-              worker.state === "installed" &&
-              navigator.serviceWorker.controller
-            ) {
-              worker.postMessage("SKIP_WAITING")
+            if (worker.state === "installed" && registration.waiting) {
+              registration.waiting.postMessage("SKIP_WAITING")
             }
           })
         })
@@ -116,10 +102,6 @@ export function PwaRegister() {
 
     return () => {
       cancelled = true
-      navigator.serviceWorker.removeEventListener(
-        "controllerchange",
-        onControllerChange,
-      )
     }
   }, [])
 
