@@ -16,12 +16,15 @@ export function CheckoutHeader({
   maxTicketsPerUser = null,
   onBack,
   backLabel,
+  safeAreaTop = true,
 }: {
   step: CheckoutFlowStep
   holdExpiresAt?: string | null
   maxTicketsPerUser?: number | null
   onBack: () => void
   backLabel: string
+  /** False when a banner already consumes the notch (draft preview). */
+  safeAreaTop?: boolean
 }) {
   const showLimit = step === "tickets" && (maxTicketsPerUser ?? 0) > 0 && !holdExpiresAt
   const meta = checkoutStepMeta(step)
@@ -35,7 +38,9 @@ export function CheckoutHeader({
       <div 
         className="flex w-full items-center justify-between gap-2 px-4 pb-2.5 md:hidden"
         style={{
-          paddingTop: "calc(env(safe-area-inset-top, 0px) + 1.25rem)",
+          paddingTop: safeAreaTop
+            ? "calc(env(safe-area-inset-top, 0px) + 1.25rem)"
+            : "0.75rem",
         }}
       >
         <button

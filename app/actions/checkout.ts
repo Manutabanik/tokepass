@@ -1133,6 +1133,23 @@ async function persistOrderLegalGate(input: {
     null
 
   const canRecord = Boolean(legalName && taxId)
+
+  if (input.sandbox) {
+    const flagged = await admin
+      .from("orders")
+      .update({ is_test: true })
+      .eq("id", input.orderId)
+      .eq("buyer_id", input.buyerId)
+    if (flagged.error) {
+      logger.error({
+        context: "checkout/legal",
+        message: "sandbox_is_test_failed",
+        orderId: input.orderId,
+        error: flagged.error.message,
+      })
+    }
+  }
+
   const patch = input.sandbox
     ? {
         is_test: true,

@@ -24,15 +24,24 @@ export function Toaster({ className, ...props }: ToasterProps) {
         : mappedTitle.action
           ? mappedTitle
           : null
+      const titleText =
+        typeof maskToastMessage(message) === "string"
+          ? String(maskToastMessage(message))
+          : mappedTitle.message
+      const descriptionText =
+        mappedDescription?.message ??
+        (data && typeof data === "object" && typeof data.description === "string"
+          ? data.description
+          : undefined)
+      const sameCopy =
+        typeof descriptionText === "string" &&
+        descriptionText.trim().replace(/\.+$/, "").toLocaleLowerCase("es-AR") ===
+          titleText.trim().replace(/\.+$/, "").toLocaleLowerCase("es-AR")
       const nextData =
         data && typeof data === "object"
           ? {
               ...data,
-              description:
-                mappedDescription?.message ??
-                (typeof data.description === "string"
-                  ? data.description
-                  : data.description),
+              description: sameCopy ? undefined : descriptionText,
               action:
                 data.action ??
                 (guided?.action
@@ -50,10 +59,7 @@ export function Toaster({ className, ...props }: ToasterProps) {
                 },
               }
             : data
-      return originalError(
-        maskToastMessage(message) as never,
-        nextData as never,
-      )
+      return originalError(titleText as never, nextData as never)
     }) as typeof toast.error
     return () => {
       toast.error = originalError

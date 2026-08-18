@@ -145,6 +145,12 @@ export function mapUnknownError(
 
   const text = textFromUnknown(raw)
   if (!text) return fallback
+  if (/legal_consent|LEGAL_CONSENT_REQUIRED/i.test(text)) {
+    return {
+      code: "UNKNOWN",
+      message: "Debés aceptar los términos y condiciones para continuar.",
+    }
+  }
   if (isAppErrorCode(text) && text !== "UNKNOWN") return APP_ERRORS[text]
 
   for (const rule of ERROR_RULES) {

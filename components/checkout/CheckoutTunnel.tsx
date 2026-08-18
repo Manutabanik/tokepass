@@ -252,6 +252,10 @@ function roundMoney(value: number): number {
   return Math.round(value * 100) / 100
 }
 
+function normalizeToastCopy(value: string) {
+  return value.trim().replace(/\.+$/, "").toLocaleLowerCase("es-AR")
+}
+
 function toastCheckoutError(error: string, fallbackTitle: string) {
   const technical =
     /invalid token|hydrat|undefined|cannot read|failed to fetch|networkerror|internal server/i.test(
@@ -278,7 +282,12 @@ function toastCheckoutError(error: string, fallbackTitle: string) {
     toast.error(error)
     return
   }
-  toast.error(fallbackTitle, { description: error })
+  const detail = error.trim()
+  if (!detail || normalizeToastCopy(detail) === normalizeToastCopy(fallbackTitle)) {
+    toast.error(fallbackTitle)
+    return
+  }
+  toast.error(fallbackTitle, { description: detail })
 }
 
 export function CheckoutTunnel({
@@ -1600,7 +1609,7 @@ export function CheckoutTunnel({
     })
 
     const fallbackTitle = sandbox
-      ? "No se pudo completar la compra de prueba"
+      ? "Error en la compra de prueba"
       : "No se pudo iniciar el pago"
 
     try {
@@ -2338,6 +2347,7 @@ export function CheckoutTunnel({
           step={visibleStep}
           holdExpiresAt={showReservationTimer ? holdExpiresAt : null}
           maxTicketsPerUser={maxTicketsPerUser}
+          safeAreaTop={!isDraftPreview}
           onBack={
             visibleStep === "tickets" && onLeaveCheckout
               ? onLeaveCheckout
