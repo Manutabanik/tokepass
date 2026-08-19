@@ -112,10 +112,6 @@ export function PublicNavbarClient({
           </div>
         </div>
       </header>
-      <div
-        className="h-16 w-full shrink-0 pt-[max(env(safe-area-inset-top),1rem)]"
-        aria-hidden="true"
-      />
     </>
   )
 }

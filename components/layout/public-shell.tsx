@@ -44,7 +44,7 @@ export function PublicShell({
           "relative z-20 flex-1",
           checkoutTunnel
             ? "min-h-0 overflow-hidden"
-            : "pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0",
+            : "pt-[calc(4rem+env(safe-area-inset-top)+1rem)] pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0",
         )}
       >
         {children}
