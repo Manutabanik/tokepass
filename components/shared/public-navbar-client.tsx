@@ -37,7 +37,7 @@ export function PublicNavbarClient({
         className={cn(
           "navbar no-print fixed top-0 z-50 w-full border-b border-border/50",
           "bg-background/80 backdrop-blur-md",
-          "pt-[env(safe-area-inset-top)]",
+          "pt-[max(env(safe-area-inset-top),1rem)]",
         )}
       >
         <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-3 px-4 lg:px-8">
@@ -113,7 +113,7 @@ export function PublicNavbarClient({
         </div>
       </header>
       <div
-        className="h-16 w-full shrink-0 pt-[env(safe-area-inset-top)]"
+        className="h-16 w-full shrink-0 pt-[max(env(safe-area-inset-top),1rem)]"
         aria-hidden="true"
       />
     </>

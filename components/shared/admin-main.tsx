@@ -3,7 +3,6 @@
 import { usePathname } from "next/navigation"
 import type { ReactNode } from "react"
 
-import { ADMIN_BOTTOM_NAV_SPACE } from "@/components/shared/admin-bottom-nav"
 import { isAdminFocusedFlow } from "@/lib/navigation/focused-flows"
 import { cn } from "@/lib/utils"
 
@@ -14,10 +13,11 @@ export function AdminMain({ children }: { children: ReactNode }) {
   return (
     <main
       className={cn(
-        "mx-auto min-h-0 w-full max-w-[1600px] flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain p-4 sm:p-8 lg:p-10",
+        "mx-auto min-h-0 w-full max-w-[1600px] flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain",
+        "px-4 pt-4 sm:px-8 sm:pt-8 lg:px-10 lg:pt-10",
         focused
-          ? "flex min-h-0 flex-col pb-[env(safe-area-inset-bottom)]"
-          : ADMIN_BOTTOM_NAV_SPACE,
+          ? "flex min-h-0 flex-col pb-[max(1rem,env(safe-area-inset-bottom))]"
+          : "pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-10",
       )}
     >
       {children}

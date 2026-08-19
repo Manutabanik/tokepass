@@ -16,7 +16,7 @@ export function AccountShell({ children }: { children: ReactNode }) {
         "min-w-0",
         focused
           ? "pb-[max(1rem,env(safe-area-inset-bottom))]"
-          : "pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-4 lg:pb-0",
+          : "pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-4 lg:pb-0",
       )}
     >
       {children}

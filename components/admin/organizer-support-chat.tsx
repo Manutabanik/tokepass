@@ -135,7 +135,7 @@ export function OrganizerSupportChat() {
   }
 
   return (
-    <div className="pointer-events-none fixed inset-x-4 bottom-[calc(6.75rem+env(safe-area-inset-bottom))] z-50 flex flex-col items-end gap-3 lg:bottom-6 lg:right-6 lg:left-auto">
+    <div className="pointer-events-none fixed inset-x-4 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-50 flex flex-col items-end gap-3 lg:bottom-6 lg:right-6 lg:left-auto">
       {open ? (
         <div className="pointer-events-auto flex h-[min(32rem,70vh)] w-full max-w-md flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
           <header className="flex items-center justify-between border-b border-border px-4 py-3">

@@ -142,13 +142,13 @@ export function AdminBottomNav({
       <nav
         aria-label="Navegación rápida"
         className={cn(
-          "pointer-events-none fixed inset-x-0 z-50 flex justify-center px-4 lg:hidden",
-          "bottom-[calc(1.5rem+env(safe-area-inset-bottom))]",
+          "pointer-events-none fixed inset-x-0 z-40 flex justify-center px-4 lg:hidden",
+          "bottom-[max(env(safe-area-inset-bottom),1rem)]",
         )}
       >
         <ul
           className={cn(
-            "pointer-events-auto grid w-full max-w-md items-center gap-1 rounded-full border border-white/10 bg-black/80 px-4 py-3 shadow-2xl backdrop-blur-xl",
+            "pointer-events-auto grid w-full max-w-md items-center gap-1 rounded-full border border-white/10 bg-black/80 px-4 py-3 shadow-2xl backdrop-blur-md",
             tabs.length <= 2 && "grid-cols-2",
             tabs.length === 3 && "grid-cols-3",
             tabs.length >= 4 && "grid-cols-4",
@@ -259,7 +259,3 @@ export function AdminBottomNav({
     </>
   )
 }
-
-/** Espacio para la píldora flotante (alto + 1.5rem + safe area). */
-export const ADMIN_BOTTOM_NAV_SPACE =
-  "pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-0"

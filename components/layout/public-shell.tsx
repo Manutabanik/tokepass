@@ -42,7 +42,9 @@ export function PublicShell({
       <main
         className={cn(
           "relative z-20 flex-1",
-          checkoutTunnel && "min-h-0 overflow-hidden",
+          checkoutTunnel
+            ? "min-h-0 overflow-hidden"
+            : "pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0",
         )}
       >
         {children}

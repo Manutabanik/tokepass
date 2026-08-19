@@ -114,52 +114,54 @@ export default async function AdminLayout({
       <div className="flex min-h-0 flex-1">
         <AdminSidebar mode={mode} staffRoles={staffRoles} />
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between border-b border-border bg-background/85 px-4 backdrop-blur-xl sm:h-16 sm:px-8">
-            <div className="flex min-w-0 items-center gap-2 lg:hidden">
-              <BrandLogo />
-            </div>
-            <div className="hidden lg:block">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                {isOrganizer ? "Tu panel" : "Acceso staff"}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {isOrganizer
-                  ? "Gestioná tus ventas y eventos"
-                  : "Acceso limitado a puerta / barra / caja"}
-              </p>
-            </div>
-            <div className="flex items-center gap-2 sm:gap-3">
-              <ThemeToggle />
-              <Link
-                href="/admin/scanner"
-                className="hidden min-h-11 items-center gap-2 rounded-full border border-border px-3 py-2 text-xs text-muted-foreground sm:inline-flex"
-              >
-                <ShieldCheck className="size-4" aria-hidden="true" />
-                Escáner
-              </Link>
-              <div className="hidden text-right sm:block">
-                <p className="max-w-48 truncate text-sm font-medium text-foreground">
-                  {userLabel}
+          <header className="sticky top-0 z-40 shrink-0 border-b border-border bg-background/85 pt-[max(env(safe-area-inset-top),1rem)] backdrop-blur-xl">
+            <div className="flex h-16 items-center justify-between px-4 sm:px-8">
+              <div className="flex min-w-0 items-center gap-2 lg:hidden">
+                <BrandLogo />
+              </div>
+              <div className="hidden lg:block">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  {isOrganizer ? "Tu panel" : "Acceso staff"}
                 </p>
-                <p className="max-w-48 truncate text-xs text-muted-foreground">
-                  {resolvedProfile.email}
+                <p className="text-sm text-muted-foreground">
+                  {isOrganizer
+                    ? "Gestioná tus ventas y eventos"
+                    : "Acceso limitado a puerta / barra / caja"}
                 </p>
               </div>
-              <Avatar>
-                {resolvedProfile.avatar_url ? (
-                  <AvatarImage
-                    src={resolvedProfile.avatar_url}
-                    alt={userLabel}
-                  />
-                ) : null}
-                <AvatarFallback className="bg-violet-500/15 text-violet-700 dark:text-violet-300">
-                  {initials || "AD"}
-                </AvatarFallback>
-              </Avatar>
-              <SignOutButton
-                showLabel={false}
-                className="hidden size-11 place-items-center rounded-xl border border-border text-muted-foreground transition hover:bg-muted hover:text-foreground sm:grid"
-              />
+              <div className="flex items-center gap-2 sm:gap-3">
+                <ThemeToggle />
+                <Link
+                  href="/admin/scanner"
+                  className="hidden min-h-11 items-center justify-center gap-2 rounded-full border border-border px-3 py-2 text-xs text-muted-foreground sm:inline-flex"
+                >
+                  <ShieldCheck className="size-4" aria-hidden="true" />
+                  Escáner
+                </Link>
+                <div className="hidden text-right sm:block">
+                  <p className="max-w-48 truncate text-sm font-medium text-foreground">
+                    {userLabel}
+                  </p>
+                  <p className="max-w-48 truncate text-xs text-muted-foreground">
+                    {resolvedProfile.email}
+                  </p>
+                </div>
+                <Avatar>
+                  {resolvedProfile.avatar_url ? (
+                    <AvatarImage
+                      src={resolvedProfile.avatar_url}
+                      alt={userLabel}
+                    />
+                  ) : null}
+                  <AvatarFallback className="bg-violet-500/15 text-violet-700 dark:text-violet-300">
+                    {initials || "AD"}
+                  </AvatarFallback>
+                </Avatar>
+                <SignOutButton
+                  showLabel={false}
+                  className="hidden size-11 place-items-center rounded-xl border border-border text-muted-foreground transition hover:bg-muted hover:text-foreground sm:grid"
+                />
+              </div>
             </div>
           </header>
           <AdminMain>{children}</AdminMain>
