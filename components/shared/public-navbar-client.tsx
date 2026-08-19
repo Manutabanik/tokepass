@@ -52,9 +52,6 @@ export function PublicNavbarClient({
             <Link href={exploreHref} className={navLinkClass}>
               Explorar
             </Link>
-            <Link href="/buscar" className={navLinkClass}>
-              Buscar
-            </Link>
             {!isAuthenticated ? (
               <Link
                 href="/login?next=/cuenta/entradas"

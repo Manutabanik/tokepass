@@ -4,7 +4,6 @@ import {
   CalendarPlus,
   Compass,
   Menu,
-  Search,
   Ticket,
   User,
 } from "lucide-react"
@@ -32,13 +31,6 @@ type PublicMobileNavProps = {
 
 const ITEMS = [
   { href: "/", label: "Inicio", icon: Compass, match: (path: string) => path === "/" },
-  {
-    href: "/buscar",
-    label: "Buscar",
-    icon: Search,
-    match: (path: string) =>
-      path === "/buscar" || path.startsWith("/buscar/"),
-  },
   {
     href: "/mis-entradas",
     label: "Mis Entradas",
