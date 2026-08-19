@@ -35,9 +35,10 @@ export function PublicNavbarClient({
     <header
       className={cn(
         "navbar no-print sticky top-0 z-50 w-full border-b border-border/50 bg-background/80 backdrop-blur-md",
+        "pt-[max(env(safe-area-inset-top),1rem)]",
       )}
     >
-      <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-2 px-4 sm:h-[4.25rem] sm:gap-3 lg:px-8">
+      <div className="mx-auto flex min-h-16 w-full max-w-7xl items-center justify-between gap-2 px-4 sm:min-h-[4.25rem] sm:gap-3 lg:px-8">
         <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
           <BrandLogo size="header" className="min-w-0 truncate" />
         </div>
