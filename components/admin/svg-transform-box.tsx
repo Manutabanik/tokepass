@@ -1,5 +1,6 @@
 "use client"
 
+import { transformHandleWorldSize } from "@/lib/seating/venue-touch"
 import type { BoundsRect, ResizeHandle } from "@/lib/seating/venue-transform"
 
 const HANDLE: ResizeHandle[] = ["nw", "ne", "sw", "se"]
@@ -21,6 +22,7 @@ export function SvgTransformBox({
   bounds,
   zoom,
   grabbing = false,
+  fatFinger = false,
   children,
   onMoveStart,
   onResizeStart,
@@ -29,11 +31,13 @@ export function SvgTransformBox({
   bounds: BoundsRect
   zoom: number
   grabbing?: boolean
+  fatFinger?: boolean
   children?: React.ReactNode
   onMoveStart: (event: React.PointerEvent) => void
   onResizeStart: (handle: ResizeHandle, event: React.PointerEvent) => void
   onRotateStart: (event: React.PointerEvent) => void
 }) {
+  const stroke = 1 / Math.max(0.25, zoom)
   const pad = 6 / Math.max(0.25, zoom)
   const box = {
     x: bounds.x - pad,
@@ -41,8 +45,11 @@ export function SvgTransformBox({
     width: bounds.width + pad * 2,
     height: bounds.height + pad * 2,
   }
-  const handleSize = 8 / Math.max(0.25, zoom)
-  const rotateLift = 20 / Math.max(0.25, zoom)
+  const { visual: handleSize, hit: hitSize } = transformHandleWorldSize(
+    zoom,
+    fatFinger,
+  )
+  const rotateLift = 22 / Math.max(0.25, zoom)
   const topCx = box.x + box.width / 2
   const rotateY = box.y - rotateLift
 
@@ -56,8 +63,8 @@ export function SvgTransformBox({
         fill="transparent"
         className={grabbing ? "cursor-grabbing" : "cursor-grab"}
         onPointerDown={(event) => {
-          event.stopPropagation()
           if (event.button !== 0) return
+          event.stopPropagation()
           onMoveStart(event)
         }}
       />
@@ -68,8 +75,8 @@ export function SvgTransformBox({
         width={box.width}
         height={box.height}
         fill="none"
-        className="stroke-emerald-400"
-        strokeWidth={1.25 / Math.max(0.25, zoom)}
+        className="stroke-sky-500"
+        strokeWidth={stroke}
         pointerEvents="none"
       />
       <line
@@ -77,40 +84,54 @@ export function SvgTransformBox({
         y1={box.y}
         x2={topCx}
         y2={rotateY}
-        className="stroke-emerald-400"
-        strokeWidth={1.25 / Math.max(0.25, zoom)}
+        className="stroke-sky-500"
+        strokeWidth={stroke}
         pointerEvents="none"
       />
       <circle
         cx={topCx}
         cy={rotateY}
-        r={handleSize / 1.6}
-        className="fill-emerald-400 stroke-white cursor-grab"
-        strokeWidth={1 / Math.max(0.25, zoom)}
+        r={hitSize / 2}
+        className="fill-transparent cursor-grab"
         onPointerDown={(event) => {
-          event.stopPropagation()
           if (event.button !== 0) return
+          event.stopPropagation()
           onRotateStart(event)
         }}
+      />
+      <circle
+        cx={topCx}
+        cy={rotateY}
+        r={handleSize / 1.55}
+        className="fill-sky-500 stroke-white pointer-events-none"
+        strokeWidth={stroke}
       />
       {HANDLE.map((handle) => {
         const point = handlePoint(box, handle)
         return (
-          <rect
-            key={handle}
-            x={point.x - handleSize / 2}
-            y={point.y - handleSize / 2}
-            width={handleSize}
-            height={handleSize}
-            rx={1.2 / Math.max(0.25, zoom)}
-            className={`fill-white stroke-emerald-500 ${handleCursor(handle)}`}
-            strokeWidth={1.2 / Math.max(0.25, zoom)}
-            onPointerDown={(event) => {
-              event.stopPropagation()
-              if (event.button !== 0) return
-              onResizeStart(handle, event)
-            }}
-          />
+          <g key={handle}>
+            <rect
+              x={point.x - hitSize / 2}
+              y={point.y - hitSize / 2}
+              width={hitSize}
+              height={hitSize}
+              className={`fill-transparent ${handleCursor(handle)}`}
+              onPointerDown={(event) => {
+                if (event.button !== 0) return
+                event.stopPropagation()
+                onResizeStart(handle, event)
+              }}
+            />
+            <rect
+              x={point.x - handleSize / 2}
+              y={point.y - handleSize / 2}
+              width={handleSize}
+              height={handleSize}
+              rx={1.2 / Math.max(0.25, zoom)}
+              className="pointer-events-none fill-white stroke-sky-500"
+              strokeWidth={stroke}
+            />
+          </g>
         )
       })}
     </g>

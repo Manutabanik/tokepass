@@ -64,4 +64,23 @@ describe("venue-element-geometry", () => {
     assert.equal(map.elements[0]?.width, 12)
     assert.equal(map.elements[0]?.height, 12)
   })
+
+  it("preserves a locked seating label through parse", () => {
+    const map = parseVenueMap({
+      version: 1,
+      sectors: [],
+      elements: [
+        {
+          id: "c1",
+          type: "vip_chair",
+          label: "Silla de Ruedas",
+          x: 10,
+          y: 10,
+          labelLocked: true,
+        },
+      ],
+    })
+    assert.equal(map.elements[0]?.label, "Silla de Ruedas")
+    assert.equal(map.elements[0]?.labelLocked, true)
+  })
 })

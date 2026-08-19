@@ -18,6 +18,7 @@ export function InteractiveVenueMapStudio({
   value,
   onSave,
   onChange,
+  onAutoSave,
   onClose,
   saving = false,
   tickets,
@@ -29,6 +30,7 @@ export function InteractiveVenueMapStudio({
   value: InteractiveVenueMap
   onSave: (map: InteractiveVenueMap, layout: VenueSeatingLayout) => void
   onChange?: (map: InteractiveVenueMap) => void
+  onAutoSave?: (map: InteractiveVenueMap) => void | Promise<void>
   onClose: () => void
   saving?: boolean
   tickets?: VenueMapSkuTicketRef[] | null
@@ -52,16 +54,19 @@ export function InteractiveVenueMapStudio({
   useEffect(() => {
     if (!open) return
     const previous = document.body.style.overflow
+    const previousOverscroll = document.body.style.overscrollBehavior
     document.body.style.overflow = "hidden"
+    document.body.style.overscrollBehavior = "none"
     return () => {
       document.body.style.overflow = previous
+      document.body.style.overscrollBehavior = previousOverscroll
     }
-  }, [open, value])
+  }, [open])
 
   if (!open || !mounted) return null
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex h-[100dvh] w-full flex-col overflow-hidden bg-background">
+    <div className="fixed inset-0 z-50 flex h-[100dvh] w-full flex-col overflow-hidden overscroll-none bg-background">
       <InteractiveVenueMapEditor
         variant="studio"
         eventTitle={eventTitle}
@@ -71,6 +76,14 @@ export function InteractiveVenueMapStudio({
         onChange={(next) => {
           setDraft(next)
           onChange?.(next)
+        }}
+        onAutoSave={async (map) => {
+          setDraft(map)
+          if (onAutoSave) {
+            await onAutoSave(map)
+            return
+          }
+          onChange?.(map)
         }}
         onPreview={() => setPreview(true)}
         onSave={(map) => onSave(map, venueMapToSeatingLayout(map))}

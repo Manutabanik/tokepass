@@ -439,6 +439,15 @@ export function OrganizerVenuesManager({
                     }
                     value={draft.venueMap}
                     onClose={() => setStudioOpen(false)}
+                    onChange={(next) => {
+                      setDraft((current) => ({
+                        ...current,
+                        venueMap: next,
+                        capacity: String(
+                          Math.max(1, venueMapCapacity(next)),
+                        ),
+                      }))
+                    }}
                     onSave={(next) => {
                       const numbered = venueMapToZoneDrafts(next)
                       setDraft({

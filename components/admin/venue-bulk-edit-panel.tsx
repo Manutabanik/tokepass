@@ -1,13 +1,12 @@
 "use client"
 
-import { Hash, Palette } from "lucide-react"
-import { useMemo, useState } from "react"
+import { Palette } from "lucide-react"
+import { useMemo } from "react"
 
-import { Button } from "@/components/ui/button"
+import { AutoNumberingPanel } from "@/components/admin/auto-numbering-panel"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { PriceInput } from "@/components/ui/price-input"
-import { defaultBulkPrefix } from "@/lib/seating/studio-bulk-edit"
 import { venueUnitPriceLabel, type VenueMapElement } from "@/types/venue-map"
 
 function Field({
@@ -27,16 +26,22 @@ function Field({
 
 export function VenueBulkEditPanel({
   elements,
+  allElements,
+  selectedIds,
   onPrice,
   onColor,
   onCapacity,
-  onNumber,
+  onApplyElements,
+  showNumbering = true,
 }: {
   elements: VenueMapElement[]
+  allElements: VenueMapElement[]
+  selectedIds: string[]
   onPrice: (price: number) => void
   onColor: (color: string) => void
   onCapacity: (capacity: number) => void
-  onNumber: (prefix: string, start: number) => void
+  onApplyElements: (next: VenueMapElement[]) => void
+  showNumbering?: boolean
 }) {
   const sharedColor = elements.every((item) => item.color === elements[0]?.color)
     ? (elements[0]?.color ?? "#888888")
@@ -51,8 +56,6 @@ export function VenueBulkEditPanel({
     )
     return values.every((value) => value === values[0]) ? values[0] : undefined
   }, [elements])
-  const [prefix, setPrefix] = useState(() => defaultBulkPrefix(elements))
-  const [start, setStart] = useState(1)
 
   return (
     <div className="space-y-4">
@@ -114,38 +117,13 @@ export function VenueBulkEditPanel({
         />
       </Field>
 
-      <div className="space-y-3 rounded-xl border border-border bg-background p-3">
-        <div className="flex items-center gap-2">
-          <Hash className="size-4 text-primary" aria-hidden="true" />
-          <p className="text-sm font-semibold text-foreground">
-            Numeración Inteligente
-          </p>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <Field label="Prefijo">
-            <Input
-              value={prefix}
-              onChange={(event) => setPrefix(event.target.value)}
-              placeholder="Mesa"
-            />
-          </Field>
-          <Field label="Comenzar desde">
-            <Input
-              type="number"
-              min={0}
-              value={start}
-              onChange={(event) => setStart(Number(event.target.value) || 1)}
-            />
-          </Field>
-        </div>
-        <Button
-          type="button"
-          className="min-h-[44px] w-full"
-          onClick={() => onNumber(prefix, start)}
-        >
-          Aplicar Numeración Correlativa
-        </Button>
-      </div>
+      {showNumbering ? (
+        <AutoNumberingPanel
+          elements={allElements}
+          selectedIds={selectedIds}
+          onApply={onApplyElements}
+        />
+      ) : null}
     </div>
   )
 }

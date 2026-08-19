@@ -155,6 +155,82 @@ export function clampScale(value: number) {
   return Math.min(8, Math.max(0.2, value))
 }
 
+export const VENUE_GRID_SIZE = 20
+export const VENUE_ROTATE_SNAP_DEG = 15
+export const VENUE_ZOOM_MIN = 0.25
+export const VENUE_ZOOM_MAX = 3
+
+export function clampVenueZoom(zoom: number) {
+  if (!Number.isFinite(zoom)) return 1
+  return Math.min(VENUE_ZOOM_MAX, Math.max(VENUE_ZOOM_MIN, zoom))
+}
+
+export function snapToGrid(value: number, grid = VENUE_GRID_SIZE) {
+  const size = grid > 0 ? grid : VENUE_GRID_SIZE
+  if (!Number.isFinite(value)) return 0
+  return Math.round(value / size) * size
+}
+
+export function snapAngle(deg: number, step = VENUE_ROTATE_SNAP_DEG) {
+  const size = step > 0 ? step : VENUE_ROTATE_SNAP_DEG
+  if (!Number.isFinite(deg)) return 0
+  return Math.round(deg / size) * size
+}
+
+export function applyMoveSnap(
+  dx: number,
+  dy: number,
+  snap: boolean,
+  grid = VENUE_GRID_SIZE,
+): { dx: number; dy: number } {
+  if (!snap) return { dx, dy }
+  return { dx: snapToGrid(dx, grid), dy: snapToGrid(dy, grid) }
+}
+
+/** Snap the group's origin (bounding-box top-left) onto the grid. */
+export function applyMoveSnapFromOrigin(
+  rawDx: number,
+  rawDy: number,
+  origin: { x: number; y: number },
+  snap: boolean,
+  grid = VENUE_GRID_SIZE,
+): { dx: number; dy: number } {
+  if (!snap) return { dx: rawDx, dy: rawDy }
+  return {
+    dx: snapToGrid(origin.x + rawDx, grid) - origin.x,
+    dy: snapToGrid(origin.y + rawDy, grid) - origin.y,
+  }
+}
+
+export function applyRotateSnap(deg: number, snap: boolean) {
+  return snap ? snapAngle(deg) : deg
+}
+
+/** Keep the world point under `cursor` (SVG viewBox units) fixed while zooming. */
+export function zoomTowardCursor({
+  pan,
+  zoom,
+  nextZoom,
+  cursor,
+}: {
+  pan: { x: number; y: number }
+  zoom: number
+  nextZoom: number
+  cursor: { x: number; y: number }
+}): { pan: { x: number; y: number }; zoom: number } {
+  const safeZoom = clampVenueZoom(zoom)
+  const safeNext = clampVenueZoom(nextZoom)
+  const worldX = (cursor.x - pan.x) / safeZoom
+  const worldY = (cursor.y - pan.y) / safeZoom
+  return {
+    zoom: safeNext,
+    pan: {
+      x: cursor.x - worldX * safeNext,
+      y: cursor.y - worldY * safeNext,
+    },
+  }
+}
+
 export function translateElements(
   elements: VenueMapElement[],
   dx: number,

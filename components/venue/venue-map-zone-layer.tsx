@@ -24,11 +24,13 @@ export function VenueMapZoneLayer({
   cursor = null,
   onSelect,
   onContextMenu,
+  onPointerDown,
   selectOnPointerUp = false,
   unavailableIds = [],
   lodMode = null,
   focusedZoneId = null,
   highlightedIds = [],
+  emphasizeSelected = true,
 }: {
   zones: VenueMapZone[]
   selectedId?: string | null
@@ -38,11 +40,13 @@ export function VenueMapZoneLayer({
   cursor?: VenueMapPoint | null
   onSelect?: (zone: VenueMapZone) => void
   onContextMenu?: (event: React.MouseEvent, zone: VenueMapZone) => void
+  onPointerDown?: (event: React.PointerEvent, zone: VenueMapZone) => void
   selectOnPointerUp?: boolean
   unavailableIds?: string[]
   lodMode?: "macro" | "micro" | null
   focusedZoneId?: string | null
   highlightedIds?: string[]
+  emphasizeSelected?: boolean
 }) {
   const glowId = useId().replace(/:/g, "")
   const press = useRef<{ x: number; y: number } | null>(null)
@@ -129,6 +133,7 @@ export function VenueMapZoneLayer({
         const lodSolid = lodMode === "macro"
         const zoneInteractive = interactive && !lodHidden
         const lit = selected || highlighted
+        const pop = emphasizeSelected && lit && !lodSolid
 
         return (
           <g
@@ -138,21 +143,21 @@ export function VenueMapZoneLayer({
             data-lod-zone={zone.id}
             data-lod-focused={focusedZoneId === zone.id ? "true" : undefined}
             transform={
-              lit && !lodSolid
+              pop
                 ? `translate(${center.x} ${center.y}) scale(1.15) translate(${-center.x} ${-center.y})`
                 : undefined
             }
             className={cn(
               interactive && !lodHidden ? "cursor-pointer" : undefined,
               soldOut && "pointer-events-none",
-              lit && !lodHidden && "animate-pulse-subtle",
+              pop && "animate-pulse-subtle",
             )}
             style={{
               opacity: lodHidden ? 0 : dimmed && !lodSolid ? 0.7 : soldOut ? 0.5 : 1,
               pointerEvents: zoneInteractive ? "auto" : "none",
               transition: "opacity 0.3s ease",
               filter:
-                lit && !lodHidden
+                pop
                   ? "drop-shadow(0px 0px 12px rgba(255, 255, 255, 0.8))"
                   : undefined,
             }}
@@ -161,6 +166,10 @@ export function VenueMapZoneLayer({
               if (!zoneInteractive) return
               press.current = { x: event.clientX, y: event.clientY }
               if (selectOnPointerUp) return
+              if (onPointerDown) {
+                onPointerDown(event, zone)
+                return
+              }
               if (event.button !== 0) return
               handleZoneClick(event)
             }}

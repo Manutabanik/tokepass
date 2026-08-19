@@ -2,15 +2,23 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import { createVenueElement } from "./venue-element-geometry"
+import { zoneCanvasAabb } from "./venue-map-lod"
 import {
   ALIGN_MIN_GAP,
   aabbIntersects,
+  aabbToRect,
   alignElementsWithGap,
+  applyMoveSnap,
+  applyMoveSnapFromOrigin,
+  applyRotateSnap,
   bakeLiveTransform,
   elementAabb,
   scaleElements,
   selectionBounds,
+  snapAngle,
+  snapToGrid,
   translateElements,
+  zoomTowardCursor,
 } from "./venue-transform"
 
 describe("venue-transform", () => {
@@ -85,6 +93,33 @@ describe("venue-transform", () => {
     assert.equal(miss, false)
   })
 
+  it("detects marquee intersection against parametric zones", () => {
+    const box = zoneCanvasAabb({
+      polygon: [
+        { x: 10, y: 10 },
+        { x: 40, y: 10 },
+        { x: 40, y: 40 },
+        { x: 10, y: 40 },
+      ],
+    })
+    assert.ok(box)
+    const hit = aabbIntersects(box, {
+      minX: 70,
+      minY: 50,
+      maxX: 120,
+      maxY: 90,
+    })
+    const miss = aabbIntersects(box, {
+      minX: 400,
+      minY: 400,
+      maxX: 420,
+      maxY: 420,
+    })
+    assert.equal(hit, true)
+    assert.equal(miss, false)
+    assert.equal(aabbToRect(box).width > 0, true)
+  })
+
   it("alinea al centro sin superponer, con gap minimo", () => {
     const a = createVenueElement("round_table", 0, { x: 100, y: 100 })
     const b = createVenueElement("round_table", 1, { x: 108, y: 102 })
@@ -115,5 +150,33 @@ describe("venue-transform", () => {
     const ordered = [boxA, boxB].sort((left, right) => left.minX - right.minX)
     assert.equal(ordered[1]!.minX - ordered[0]!.maxX >= ALIGN_MIN_GAP - 0.2, true)
     assert.equal(Math.abs(next[0]!.y - next[1]!.y) < 1, true)
+  })
+
+  it("snaps translation to the canvas grid and rotation to 15 degrees", () => {
+    assert.equal(snapToGrid(27), 20)
+    assert.equal(snapToGrid(31), 40)
+    assert.equal(snapAngle(22), 15)
+    assert.equal(snapAngle(23), 30)
+    assert.deepEqual(applyMoveSnap(27, 11, true), { dx: 20, dy: 20 })
+    assert.deepEqual(applyMoveSnap(27, 11, false), { dx: 27, dy: 11 })
+    assert.deepEqual(
+      applyMoveSnapFromOrigin(12, 8, { x: 10, y: 10 }, true),
+      { dx: 10, dy: 10 },
+    )
+    assert.equal(applyRotateSnap(22, true), 15)
+    assert.equal(applyRotateSnap(22, false), 22)
+  })
+
+  it("keeps the world point under the cursor stable when zooming", () => {
+    const pan = { x: 10, y: 20 }
+    const zoom = 1
+    const cursor = { x: 100, y: 80 }
+    const next = zoomTowardCursor({ pan, zoom, nextZoom: 2, cursor })
+    const worldBeforeX = (cursor.x - pan.x) / zoom
+    const worldBeforeY = (cursor.y - pan.y) / zoom
+    const worldAfterX = (cursor.x - next.pan.x) / next.zoom
+    const worldAfterY = (cursor.y - next.pan.y) / next.zoom
+    assert.equal(Math.abs(worldBeforeX - worldAfterX) < 1e-9, true)
+    assert.equal(Math.abs(worldBeforeY - worldAfterY) < 1e-9, true)
   })
 })

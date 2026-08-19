@@ -6,6 +6,7 @@ import {
   CircleDot,
   DoorOpen,
   GlassWater,
+  Grid3x3,
   Layers,
   LayoutGrid,
   LogIn,
@@ -25,6 +26,7 @@ import type { VenueElementType, VenueInfraSubtype } from "@/types/venue-map"
 
 export type PalettePlacement =
   | { kind: "seat_block" }
+  | { kind: "grid_array" }
   | { kind: "rings" }
   | { kind: "zone_polygon" }
   | { kind: "element"; type: VenueElementType; subtype?: VenueInfraSubtype }
@@ -86,6 +88,13 @@ const COMMERCIAL_GROUPS: Array<{
         shortLabel: "Butacas",
         hint: "Filas numeradas para vender asientos.",
         icon: LayoutGrid,
+      },
+      {
+        placement: { kind: "grid_array" },
+        label: "Matriz filas × columnas",
+        shortLabel: "Matriz",
+        hint: "Genera un bloque de sillas o mesas con filas, columnas y separación.",
+        icon: Grid3x3,
       },
       {
         placement: { kind: "rings" },
@@ -346,9 +355,19 @@ function PaletteButton({
       type="button"
       title={item.hint}
       aria-label={`${item.label}. ${item.hint}`}
-      draggable={item.placement.kind !== "rings" && item.placement.kind !== "zone_polygon"}
+      draggable={
+        item.placement.kind !== "rings" &&
+        item.placement.kind !== "zone_polygon" &&
+        item.placement.kind !== "grid_array"
+      }
       onDragStart={(event) => {
-        if (item.placement.kind === "rings" || item.placement.kind === "zone_polygon") return
+        if (
+          item.placement.kind === "rings" ||
+          item.placement.kind === "zone_polygon" ||
+          item.placement.kind === "grid_array"
+        ) {
+          return
+        }
         event.dataTransfer.setData(
           "application/x-tokepass-venue",
           JSON.stringify(item.placement),
@@ -394,6 +413,7 @@ function PaletteButton({
 function placementKey(placement: PalettePlacement | null): string {
   if (!placement) return ""
   if (placement.kind === "seat_block") return "seat_block"
+  if (placement.kind === "grid_array") return "grid_array"
   if (placement.kind === "rings") return "rings"
   if (placement.kind === "zone_polygon") return "zone_polygon"
   return `${placement.type}:${placement.subtype ?? ""}`

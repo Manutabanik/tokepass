@@ -948,6 +948,7 @@ function MapStudioFields({
           onCloseStudio()
         }}
         onChange={(next) => onPersistMap(next)}
+        onAutoSave={(next) => onPersistMap(next)}
       />
     </div>
   )

@@ -186,6 +186,8 @@ export type VenueMapElement = {
   groupId?: string
   groupName?: string
   ringIndex?: number
+  /** When true, bulk numbering leaves this label untouched. */
+  labelLocked?: boolean
 }
 
 export type VenueMapPoint = { x: number; y: number }
@@ -416,6 +418,9 @@ function parseElement(raw: unknown): VenueMapElement | null {
       layer === "infrastructure"
         ? undefined
         : parseOptionalInt(item.ringIndex ?? item.ring_index),
+    ...(parseOptionalBoolean(item.labelLocked ?? item.label_locked)
+      ? { labelLocked: true as const }
+      : {}),
   }
 }
 

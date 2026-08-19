@@ -142,18 +142,72 @@ export function listVenuePriceGroups(
   return groups
 }
 
-export function applyVenuePriceGroup(
+export function matchPriceGroupFromSelection(
+  map: InteractiveVenueMap,
+  input: {
+    sectorId?: string | null
+    zoneId?: string | null
+    elementIds: string[]
+  },
+): VenuePriceGroup | null {
+  const groups = listVenuePriceGroups(map)
+  if (input.sectorId) {
+    return (
+      groups.find(
+        (group) => group.match.kind === "sector" && group.match.id === input.sectorId,
+      ) ?? null
+    )
+  }
+  if (input.zoneId) {
+    return (
+      groups.find(
+        (group) => group.match.kind === "zone" && group.match.id === input.zoneId,
+      ) ?? null
+    )
+  }
+  const ids = new Set(input.elementIds)
+  if (ids.size === 0) return null
+  return (
+    groups.find((group) => {
+      const match = group.match
+      if (match.kind === "group") {
+        return (map.elements ?? []).some(
+          (element) =>
+            ids.has(element.id) && element.groupId === match.groupId,
+        )
+      }
+      if (match.kind === "ids") {
+        return match.ids.some((id) => ids.has(id))
+      }
+      return false
+    }) ?? null
+  )
+}
+
+export function applyVenuePriceGroupPatch(
   map: InteractiveVenueMap,
   group: VenuePriceGroup,
-  price: number,
+  patch: { price?: number; color?: string },
 ): InteractiveVenueMap {
-  const nextPrice = Math.max(0, Number.isFinite(price) ? price : 0)
+  const nextPrice =
+    patch.price != null
+      ? Math.max(0, Number.isFinite(patch.price) ? patch.price : 0)
+      : null
+  const nextColor = patch.color?.trim() || null
+  if (nextPrice == null && !nextColor) return map
+
   if (group.match.kind === "sector") {
     const sectorId = group.match.id
     return {
       ...map,
       sectors: map.sectors.map((sector) =>
-        sector.id === sectorId ? { ...sector, price: nextPrice } : sector,
+        sector.id === sectorId
+          ? {
+              ...sector,
+              ...(nextPrice != null ? { price: nextPrice } : {}),
+              ...(nextColor ? { color: nextColor } : {}),
+            }
+          : sector,
       ),
     }
   }
@@ -163,7 +217,13 @@ export function applyVenuePriceGroup(
     return {
       ...map,
       zones: (map.zones ?? []).map((zone) =>
-        zone.id === zoneId ? { ...zone, price: nextPrice } : zone,
+        zone.id === zoneId
+          ? {
+              ...zone,
+              ...(nextPrice != null ? { price: nextPrice } : {}),
+              ...(nextColor ? { color: nextColor } : {}),
+            }
+          : zone,
       ),
     }
   }
@@ -180,7 +240,20 @@ export function applyVenuePriceGroup(
       const hit = groupId
         ? element.groupId === groupId
         : ids?.has(element.id)
-      return hit ? { ...element, price: nextPrice } : element
+      if (!hit) return element
+      return {
+        ...element,
+        ...(nextPrice != null ? { price: nextPrice } : {}),
+        ...(nextColor ? { color: nextColor } : {}),
+      }
     }),
   }
+}
+
+export function applyVenuePriceGroup(
+  map: InteractiveVenueMap,
+  group: VenuePriceGroup,
+  price: number,
+): InteractiveVenueMap {
+  return applyVenuePriceGroupPatch(map, group, { price })
 }

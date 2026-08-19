@@ -1,3 +1,5 @@
+import { rotatePoint } from "@/lib/seating/venue-element-geometry"
+import type { LiveTransform } from "@/lib/seating/venue-transform"
 import type { VenueMapPoint, VenueMapZone } from "@/types/venue-map"
 
 export const VENUE_MAP_CANVAS = { width: 800, height: 560 } as const
@@ -54,6 +56,25 @@ export function translatePercentPolygon(
   return polygonToCanvas(points).map((point) =>
     canvasPointToPercent({ x: point.x + dx, y: point.y + dy }),
   )
+}
+
+export function transformPercentPolygon(
+  points: VenueMapPoint[],
+  live: LiveTransform,
+): VenueMapPoint[] {
+  const canvas = polygonToCanvas(points)
+  const next =
+    live.type === "move"
+      ? canvas.map((point) => ({ x: point.x + live.dx, y: point.y + live.dy }))
+      : live.type === "scale"
+        ? canvas.map((point) => ({
+            x: live.ox + (point.x - live.ox) * live.scale,
+            y: live.oy + (point.y - live.oy) * live.scale,
+          }))
+        : canvas.map((point) =>
+            rotatePoint(point.x, point.y, live.cx, live.cy, live.deg),
+          )
+  return next.map(canvasPointToPercent)
 }
 
 export function isCloseToFirstVertex(

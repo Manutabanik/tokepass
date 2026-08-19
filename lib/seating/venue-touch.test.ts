@@ -1,0 +1,89 @@
+import assert from "node:assert/strict"
+import { describe, it } from "node:test"
+
+import {
+  applyTwoFingerViewport,
+  emptyCanvasDragAction,
+  touchDistance,
+  touchMidpoint,
+  transformHandleWorldSize,
+  type PinchOrigin,
+} from "./venue-touch"
+
+function origin(partial?: Partial<PinchOrigin>): PinchOrigin {
+  return {
+    originDistance: 100,
+    originZoom: 1,
+    originPan: { x: 0, y: 0 },
+    originCursor: { x: 100, y: 80 },
+    ...partial,
+  }
+}
+
+describe("venue-touch", () => {
+  it("measures the span and midpoint between two contacts", () => {
+    assert.equal(touchDistance({ x: 0, y: 0 }, { x: 3, y: 4 }), 5)
+    assert.deepEqual(touchMidpoint({ x: 10, y: 20 }, { x: 30, y: 40 }), {
+      x: 20,
+      y: 30,
+    })
+  })
+
+  it("scales the canvas from the pinch center when the span changes", () => {
+    const start = origin()
+    const next = applyTwoFingerViewport({
+      origin: start,
+      currentDistance: 200,
+      currentCursor: start.originCursor,
+    })
+    assert.equal(next.zoom, 2)
+    const worldBeforeX = (start.originCursor.x - start.originPan.x) / start.originZoom
+    const worldAfterX = (start.originCursor.x - next.pan.x) / next.zoom
+    assert.equal(Math.abs(worldBeforeX - worldAfterX) < 1e-9, true)
+  })
+
+  it("pans when two fingers move without changing span", () => {
+    const start = origin()
+    const next = applyTwoFingerViewport({
+      origin: start,
+      currentDistance: start.originDistance,
+      currentCursor: { x: 130, y: 50 },
+    })
+    assert.equal(next.zoom, 1)
+    assert.equal(next.pan.x, 30)
+    assert.equal(next.pan.y, -30)
+  })
+
+  it("ignores a collapsed pinch span so only the pan remains", () => {
+    const start = origin({ originDistance: 2, originZoom: 1.4 })
+    const next = applyTwoFingerViewport({
+      origin: start,
+      currentDistance: 80,
+      currentCursor: { x: 110, y: 80 },
+    })
+    assert.equal(next.zoom, 1.4)
+    assert.equal(next.pan.x, 10)
+  })
+
+  it("keeps marquee on desktop and requires lasso on compact chrome", () => {
+    assert.equal(
+      emptyCanvasDragAction({ compactChrome: false, lassoMode: false }),
+      "marquee",
+    )
+    assert.equal(
+      emptyCanvasDragAction({ compactChrome: true, lassoMode: false }),
+      "ignore",
+    )
+    assert.equal(
+      emptyCanvasDragAction({ compactChrome: true, lassoMode: true }),
+      "marquee",
+    )
+  })
+
+  it("builds fat-finger hits at least 3× the visible knob", () => {
+    const { visual, hit } = transformHandleWorldSize(1, true)
+    assert.equal(hit / visual >= 3, true)
+    const tight = transformHandleWorldSize(2.5, true)
+    assert.equal(tight.hit / tight.visual >= 3, true)
+  })
+})

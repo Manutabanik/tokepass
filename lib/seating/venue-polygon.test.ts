@@ -9,6 +9,7 @@ import {
   polygonLooksLikePixels,
   polygonToCanvas,
   percentPointToCanvas,
+  transformPercentPolygon,
 } from "./venue-polygon"
 import { emptyVenueMap, parseVenueMap } from "@/types/venue-map"
 
@@ -89,5 +90,18 @@ describe("parametric zone polygons", () => {
     assert.equal(isCloseToFirstVertex(draft, { x: 104, y: 82 }), true)
     assert.equal(isCloseToFirstVertex(draft, { x: 180, y: 140 }), false)
     assert.equal(isCloseToFirstVertex(draft.slice(0, 2), { x: 100, y: 80 }), false)
+  })
+
+  it("translates a percent polygon in canvas pixels via a live move", () => {
+    const moved = transformPercentPolygon(
+      [
+        { x: 10, y: 10 },
+        { x: 40, y: 10 },
+        { x: 40, y: 40 },
+      ],
+      { type: "move", dx: 80, dy: 0 },
+    )
+    assert.equal(moved[0]?.x, 20)
+    assert.equal(moved[0]?.y, 10)
   })
 })
