@@ -25,7 +25,7 @@ export function DoorScannerSessionChrome({
   online,
   admittedCount,
   torchOn,
-  torchAvailable,
+  torchSupported,
   wakeLockHeld = false,
   camera,
   overlay,
@@ -38,7 +38,8 @@ export function DoorScannerSessionChrome({
   online: boolean
   admittedCount: number
   torchOn: boolean
-  torchAvailable: boolean
+  /** False only after hardware proves torch is unavailable. */
+  torchSupported: boolean
   wakeLockHeld?: boolean
   camera: ReactNode
   overlay?: ReactNode
@@ -47,9 +48,20 @@ export function DoorScannerSessionChrome({
   onToggleTorch: () => void
 }) {
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <header className="shrink-0 space-y-2 px-4 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))]">
-        <div className="flex items-center justify-between gap-3">
+    <div className="relative flex h-full min-h-0 flex-col">
+      {/* Live camera as full-bleed background — never unmounted by chrome. */}
+      <div
+        data-gate-scanner
+        className="absolute inset-0 overflow-hidden bg-zinc-950"
+      >
+        {camera}
+        {!isTotem ? <NeonFocusFrame /> : null}
+        {overlay}
+      </div>
+
+      {/* Top controls stay above the scan-result flash (camera-local overlay). */}
+      <header className="relative z-30 shrink-0 space-y-2 px-4 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))]">
+        <div className="flex items-center justify-between gap-3 rounded-2xl bg-black/50 px-3 py-2 backdrop-blur-md">
           <div className="flex min-w-0 items-center gap-2">
             <span
               className={cn(
@@ -81,35 +93,40 @@ export function DoorScannerSessionChrome({
             </button>
           ) : null}
         </div>
+
         {!isTotem ? (
           <button
             type="button"
             onClick={onSearch}
-            className="flex min-h-12 w-full items-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 text-left text-sm font-semibold text-white/80"
+            className="flex min-h-12 w-full items-center gap-2 rounded-2xl border border-white/15 bg-black/50 px-4 text-left text-sm font-semibold text-white shadow-lg backdrop-blur-md"
           >
-            <Search className="size-4 shrink-0" aria-hidden="true" />
-            Buscar por DNI o Nombre
+            <Search className="size-4 shrink-0 text-white/80" aria-hidden="true" />
+            Buscar por DNI, nombre o codigo
           </button>
         ) : null}
       </header>
 
-      <div
-        data-gate-scanner
-        className="relative mx-3 min-h-0 flex-[0.85] overflow-hidden rounded-[1.6rem] bg-zinc-950"
-      >
-        {camera}
-        {!isTotem ? <NeonFocusFrame /> : null}
-        {overlay}
-      </div>
+      <div className="relative z-0 min-h-0 flex-1" aria-hidden="true" />
 
       {!isTotem ? (
-        <div className="flex shrink-0 items-center justify-between gap-3 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+        <div className="relative z-30 flex shrink-0 items-center justify-between gap-3 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
           <button
             type="button"
             onClick={onToggleTorch}
-            disabled={!torchAvailable}
-            aria-label={torchOn ? "Apagar linterna" : "Encender linterna"}
-            className="grid size-14 place-items-center rounded-full bg-white/10 text-white ring-1 ring-white/15 disabled:opacity-35"
+            disabled={!torchSupported}
+            aria-label={
+              !torchSupported
+                ? "Linterna no disponible en este dispositivo"
+                : torchOn
+                  ? "Apagar linterna"
+                  : "Encender linterna"
+            }
+            title={
+              !torchSupported
+                ? "Este dispositivo no soporta linterna"
+                : undefined
+            }
+            className="grid size-14 place-items-center rounded-full bg-black/50 text-white ring-1 ring-white/15 backdrop-blur-md disabled:opacity-35"
           >
             {torchOn ? (
               <Flashlight className="size-6" aria-hidden="true" />
@@ -117,7 +134,7 @@ export function DoorScannerSessionChrome({
               <FlashlightOff className="size-6" aria-hidden="true" />
             )}
           </button>
-          <p className="font-mono text-2xl font-black tabular-nums tracking-tight">
+          <p className="rounded-full bg-black/50 px-4 py-2 font-mono text-2xl font-black tabular-nums tracking-tight backdrop-blur-md">
             {admittedCount}
             <span className="ml-2 text-sm font-semibold uppercase tracking-[0.14em] text-white/50">
               Ingresados
@@ -126,15 +143,15 @@ export function DoorScannerSessionChrome({
           <button
             type="button"
             onClick={onSearch}
-            aria-label="Buscar por DNI o nombre"
-            className="grid size-14 place-items-center rounded-full bg-white/10 text-white ring-1 ring-white/15"
+            aria-label="Buscar por DNI, nombre o codigo"
+            className="grid size-14 place-items-center rounded-full bg-black/50 text-white ring-1 ring-white/15 backdrop-blur-md"
           >
             <Search className="size-6" aria-hidden="true" />
           </button>
         </div>
       ) : (
-        <div className="flex shrink-0 justify-center px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
-          <p className="font-mono text-lg font-black tabular-nums text-white/70">
+        <div className="relative z-30 flex shrink-0 justify-center px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+          <p className="rounded-full bg-black/50 px-4 py-2 font-mono text-lg font-black tabular-nums text-white/70 backdrop-blur-md">
             {admittedCount} ingresados
           </p>
         </div>

@@ -90,7 +90,7 @@ export function ScanResultOverlay({ state }: { state: ScanOverlayState }) {
 
   return (
     <div
-      className="fixed inset-0 z-[90] flex flex-col items-center justify-center px-6 text-center text-white"
+      className="absolute inset-0 z-20 flex flex-col items-center justify-center px-6 text-center text-white"
       style={{ backgroundColor: skin.bg }}
       role="alert"
     >

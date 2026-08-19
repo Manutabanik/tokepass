@@ -50,7 +50,7 @@ export function EmergencyTicketSearch({
 
   const emptyHint = useMemo(() => {
     if (query.trim().length < 2) {
-      return "Escribí al menos 2 caracteres (nombre o DNI)."
+      return "Escribi al menos 2 caracteres (nombre, DNI o codigo)."
     }
     if (!isPending && results.length === 0) {
       return "No encontramos coincidencias en la lista local."
@@ -76,10 +76,10 @@ export function EmergencyTicketSearch({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85dvh] overflow-hidden border-zinc-200 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Buscar por DNI / Nombre</DialogTitle>
+          <DialogTitle>Busqueda manual</DialogTitle>
           <DialogDescription className="text-muted-foreground">
-            Buscá por nombre o DNI. Si es una mesa, podés validar un acceso o
-            todos juntos.
+            Busca por nombre, DNI o codigo de entrada. Si es una mesa, podes
+            validar un acceso o todos juntos. La camara sigue activa.
           </DialogDescription>
         </DialogHeader>
 
@@ -88,7 +88,7 @@ export function EmergencyTicketSearch({
           <Input
             value={query}
             onChange={(event) => handleQuery(event.target.value)}
-            placeholder="Nombre, apellido o DNI"
+            placeholder="Nombre, DNI o codigo"
             autoFocus
             className="h-14 rounded-2xl border-zinc-300 bg-black pl-10 text-base text-zinc-900 dark:border-zinc-700 dark:text-white"
           />

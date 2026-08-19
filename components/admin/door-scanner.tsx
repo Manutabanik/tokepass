@@ -194,7 +194,7 @@ export function DoorScanner({
   const [operatorName, setOperatorName] = useState(
     guestEvent ? "Staff de puerta" : "Operador",
   )
-  const [isPending, startTransition] = useTransition()
+  const [, startTransition] = useTransition()
   const [manifestMeta, setManifestMeta] = useState<ScannerManifestMeta | null>(
     null,
   )
@@ -203,7 +203,8 @@ export function DoorScanner({
   const [searchOpen, setSearchOpen] = useState(false)
   const [admittedCount, setAdmittedCount] = useState(0)
   const [torchOn, setTorchOn] = useState(false)
-  const [detectedTorch, setDetectedTorch] = useState(false)
+  /** Optimistic until hardware proves torch is missing / unsupported. */
+  const [torchSupported, setTorchSupported] = useState(true)
   const [sessionPin, setSessionPin] = useState("")
   const [vaultExists, setVaultExists] = useState(false)
   const [gatesEventId, setGatesEventId] = useState("")
@@ -222,7 +223,7 @@ export function DoorScanner({
   }
   const deviceSlotIndex = deviceSlot.index
   const deviceSlotCount = deviceSlot.count
-  const torchAvailable = sessionActive && !isTotemMode && detectedTorch
+  const torchButtonEnabled = sessionActive && !isTotemMode && torchSupported
 
   useEffect(() => {
     isTotemModeRef.current = isTotemMode
@@ -241,6 +242,8 @@ export function DoorScanner({
     writeScannerAccessMode(mode)
     setCameraError(null)
     setFacingMode(mode === "totem" ? "user" : "environment")
+    setTorchOn(false)
+    setTorchSupported(true)
   }, [])
 
   const selectedEvent = useMemo(
@@ -869,24 +872,31 @@ export function DoorScanner({
   }
 
   async function toggleTorch() {
-    const track = getLiveVideoTrack()
-    if (!track?.applyConstraints) return
-    const capabilities = track.getCapabilities?.() as
-      | (MediaTrackCapabilities & { torch?: boolean })
-      | undefined
-    if (!capabilities?.torch) {
-      setDetectedTorch(false)
-      return
-    }
-    const next = !torchOn
     try {
+      const track = getLiveVideoTrack()
+      if (!track?.applyConstraints) {
+        setTorchSupported(false)
+        setTorchOn(false)
+        return
+      }
+      const capabilities = track.getCapabilities?.() as
+        | (MediaTrackCapabilities & { torch?: boolean })
+        | undefined
+      if (!capabilities?.torch) {
+        setTorchSupported(false)
+        setTorchOn(false)
+        return
+      }
+      const next = !torchOn
       await track.applyConstraints({
         advanced: [{ torch: next } as MediaTrackConstraintSet],
       })
       setTorchOn(next)
-      setDetectedTorch(true)
+      setTorchSupported(true)
     } catch {
-      setDetectedTorch(false)
+      // iPads / front cameras often reject torch constraints — keep scanner alive.
+      setTorchSupported(false)
+      setTorchOn(false)
     }
   }
 
@@ -931,13 +941,20 @@ export function DoorScanner({
 
   useEffect(() => {
     if (!sessionActive || isTotemMode) return
+    // Soft probe: never hide the button until a real capability miss / reject.
     const timer = window.setInterval(() => {
       const track = getLiveVideoTrack()
-      const capabilities = track?.getCapabilities?.() as
-        | (MediaTrackCapabilities & { torch?: boolean })
-        | undefined
-      setDetectedTorch(Boolean(capabilities?.torch))
-    }, 800)
+      if (!track?.getCapabilities) return
+      const capabilities = track.getCapabilities() as MediaTrackCapabilities & {
+        torch?: boolean
+      }
+      if (capabilities.torch === false) {
+        setTorchSupported(false)
+        setTorchOn(false)
+      } else if (capabilities.torch === true) {
+        setTorchSupported(true)
+      }
+    }, 1200)
     return () => window.clearInterval(timer)
   }, [sessionActive, isTotemMode])
 
@@ -991,20 +1008,24 @@ export function DoorScanner({
         online={online}
         admittedCount={admittedCount}
         torchOn={torchOn}
-        torchAvailable={torchAvailable}
+        torchSupported={torchButtonEnabled}
         wakeLockHeld={wakeLockHeld}
         onChangeGate={() => {
           stopLeaseGossip()
           setSessionActive(false)
           setCameraError(null)
           setTorchOn(false)
+          setTorchSupported(true)
         }}
         onSearch={() => setSearchOpen(true)}
         onToggleTorch={() => void toggleTorch()}
         overlay={
-          isTotemMode ? (
-            <TotemRestOverlay enabled onScan={validateTicketToken} />
-          ) : null
+          <>
+            {isTotemMode ? (
+              <TotemRestOverlay enabled onScan={validateTicketToken} />
+            ) : null}
+            {overlay ? <ScanResultOverlay state={overlay} /> : null}
+          </>
         }
         camera={
           cameraError ? (
@@ -1033,7 +1054,9 @@ export function DoorScanner({
               sound={false}
               scanDelay={150}
               allowMultiple={false}
-              paused={isPending || overlay != null}
+              // Keep MediaStream alive so torch + manual search stay usable.
+              // Scan callbacks are gated by cooldown/overlay in validateTicketToken.
+              paused={false}
               styles={{
                 container: { width: "100%", height: "100%" },
                 video: { objectFit: "cover" },
@@ -1064,7 +1087,6 @@ export function DoorScanner({
           }}
         />
       ) : null}
-      {overlay ? <ScanResultOverlay state={overlay} /> : null}
     </div>
   )
 }
