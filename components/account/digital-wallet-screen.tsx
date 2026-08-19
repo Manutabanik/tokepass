@@ -6,6 +6,8 @@ import {
   getMyStoreRedemptions,
 } from "@/app/actions/addons"
 import { getMyTickets } from "@/app/actions/tickets"
+import { listIncomingPendingGiftsAction } from "@/app/actions/transfer"
+import { IncomingPendingGifts } from "@/components/account/incoming-pending-gifts"
 import type { StoreOfferBlock } from "@/components/public/ticket-wallet"
 import { OfflineTicketWallet } from "@/components/pwa/offline-ticket-wallet"
 import { loginUrlWithNext } from "@/lib/auth/post-login"
@@ -21,15 +23,20 @@ export async function DigitalWalletScreen({
 }) {
   let initialTickets: Awaited<ReturnType<typeof getMyTickets>> = []
   let storeRedemptions: Awaited<ReturnType<typeof getMyStoreRedemptions>> = []
+  let incomingGifts: Awaited<
+    ReturnType<typeof listIncomingPendingGiftsAction>
+  > = []
   let loadError: string | null = null
 
   try {
-    const [tickets, redemptions] = await Promise.all([
+    const [tickets, redemptions, gifts] = await Promise.all([
       getMyTickets(),
       getMyStoreRedemptions(),
+      listIncomingPendingGiftsAction(),
     ])
     initialTickets = tickets
     storeRedemptions = redemptions
+    incomingGifts = gifts
   } catch (error) {
     if (error instanceof Error && error.message === "auth_required") {
       redirect(loginUrlWithNext(loginNext))
@@ -97,15 +104,18 @@ export async function DigitalWalletScreen({
           </div>
         }
       >
-        <OfflineTicketWallet
-          userId={userId}
-          initialTickets={initialTickets}
-          barRedemptions={storeRedemptions}
-          storeOffers={storeBlocks}
-          loadError={loadError}
-          appleWalletEnabled={walletFlags.appleWalletEnabled}
-          googleWalletEnabled={walletFlags.googleWalletEnabled}
-        />
+        <div className="space-y-8">
+          <IncomingPendingGifts gifts={incomingGifts} />
+          <OfflineTicketWallet
+            userId={userId}
+            initialTickets={initialTickets}
+            barRedemptions={storeRedemptions}
+            storeOffers={storeBlocks}
+            loadError={loadError}
+            appleWalletEnabled={walletFlags.appleWalletEnabled}
+            googleWalletEnabled={walletFlags.googleWalletEnabled}
+          />
+        </div>
       </Suspense>
     </section>
   )

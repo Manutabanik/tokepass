@@ -3434,6 +3434,33 @@ export type Database = {
           event_title: string
         }[]
       }
+      list_incoming_pending_ticket_transfers: {
+        Args: Record<string, never>
+        Returns: {
+          transfer_id: string
+          ticket_id: string
+          receiver_email: string
+          event_id: string | null
+          event_title: string
+          event_date: string | null
+          event_location: string
+          flyer_url: string | null
+          tier_name: string
+          created_at: string
+        }[]
+      }
+      claim_ticket_transfer_as_receiver: {
+        Args: { p_transfer_id: string }
+        Returns: {
+          transfer_id: string
+          ticket_id: string
+          event_title: string
+        }[]
+      }
+      reject_ticket_transfer_as_receiver: {
+        Args: { p_transfer_id: string }
+        Returns: boolean
+      }
       complete_ticket_resale_purchase: {
         Args: {
           p_listing_id: string
