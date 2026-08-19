@@ -9,6 +9,8 @@ import {
   newScheduleDayId,
   normalizeDayId,
   parseScheduleDays,
+  remapBoundDayId,
+  remapDayIdsByOrder,
   resolveEventAnchorDate,
   scheduleDaysFromEvent,
 } from "@/lib/event-schedule"
@@ -127,5 +129,17 @@ describe("event-schedule", () => {
       now: new Date("2026-11-15T22:00:00.000Z"),
     })
     assert.equal(result.ok, true)
+  })
+
+  it("remaps stale day ids after the event dates change", () => {
+    assert.equal(remapBoundDayId("d1", ["d1", "d2"]), "d1")
+    assert.equal(remapBoundDayId("old", ["d1", "d2"]), null)
+    assert.equal(remapBoundDayId("all", ["d1", "d2"]), null)
+    assert.equal(remapBoundDayId("old", ["d1", "d2"], "first"), "d1")
+    assert.equal(remapBoundDayId(null, [], "first"), null)
+
+    const remap = remapDayIdsByOrder(["old-a", "old-b"], ["new-a", "new-b"])
+    assert.equal(remap.get("old-a"), "new-a")
+    assert.equal(remap.get("old-b"), "new-b")
   })
 })

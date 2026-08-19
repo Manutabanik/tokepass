@@ -502,21 +502,10 @@ export async function searchSpotifyArtists(
     }
 
     if (!isSpotifyConfigured()) {
-      return {
-        success: false,
-        error: "Spotify no está configurado.",
-        data: [],
-      }
+      return { success: true, data: [] }
     }
 
-    const result = await searchSpotifyCatalog(needle)
-    if (!result.ok) {
-      return {
-        success: false,
-        error: "No se pudo buscar en Spotify.",
-        data: [],
-      }
-    }
+    const result = await searchSpotifyCatalog(needle, { limit: 5 })
     return { success: true, data: result.items }
   } catch (error) {
     logger.error({
@@ -525,8 +514,7 @@ export async function searchSpotifyArtists(
       error,
     })
     return {
-      success: false,
-      error: "No se pudo buscar en Spotify.",
+      success: true,
       data: [],
     }
   }

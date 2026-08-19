@@ -21,7 +21,14 @@ import {
   type AgendaParticipantDto,
 } from "@/lib/agenda"
 import { asUuidOrNull } from "@/lib/validations/relation-id"
+import {
+  normalizeScheduleDaysFromForm,
+  parseScheduleDays,
+  remapBoundDayId,
+} from "@/lib/event-schedule"
+import { logger } from "@/lib/logger"
 import { createClient } from "@/lib/supabase/server"
+import type { ScheduleDay } from "@/types/events"
 
 type ActionResult<T> =
   | { success: true; data: T }
@@ -48,7 +55,7 @@ async function requireEventOrganizer(eventId: string) {
     supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
     supabase
       .from("events")
-      .select("id, organizer_id, slug, date, has_schedule")
+      .select("id, organizer_id, slug, date, ends_at, has_schedule, schedule_days")
       .eq("id", eventId)
       .maybeSingle(),
   ])
@@ -61,7 +68,7 @@ async function requireEventOrganizer(eventId: string) {
   ) {
     const fallback = await supabase
       .from("events")
-      .select("id, organizer_id, slug, date")
+      .select("id, organizer_id, slug, date, ends_at, schedule_days")
       .eq("id", eventId)
       .maybeSingle()
     if (fallback.data) {
@@ -82,7 +89,9 @@ function authorizeEvent(
     organizer_id: string
     slug?: string | null
     date?: string | null
+    ends_at?: string | null
     has_schedule?: boolean | null
+    schedule_days?: unknown
   },
 ) {
   if (event.organizer_id !== userId && role !== "super_admin") {
@@ -97,25 +106,72 @@ function revalidateAgenda(eventId: string, slug?: string | null) {
   if (slug) revalidatePath(`/eventos/${slug}`)
 }
 
+async function syncOfficialScheduleDays(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  eventId: string,
+  incoming: ScheduleDay[],
+): Promise<void> {
+  if (incoming.length === 0) return
+  const { error } = await supabase
+    .from("events")
+    .update({
+      schedule_days: incoming,
+      date: incoming[0]?.start_time,
+      ends_at: incoming[incoming.length - 1]?.end_time ?? null,
+      updated_at: new Date().toISOString(),
+    } as never)
+    .eq("id", eventId)
+  if (error) {
+    logger.error({
+      context: "agenda",
+      message: "sync_schedule_days_failed",
+      event_id: eventId,
+      error,
+    })
+  }
+}
+
+async function loadOfficialDays(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  eventId: string,
+  jsonFallback?: unknown,
+): Promise<Array<{ id: string; start_time: string }>> {
+  const { data, error } = await supabase
+    .from("event_schedules")
+    .select("id, start_time")
+    .eq("event_id", eventId)
+    .order("start_time", { ascending: true })
+
+  if (!error && data && data.length > 0) {
+    return data.map((row) => ({ id: row.id, start_time: row.start_time }))
+  }
+
+  return parseScheduleDays(jsonFallback).map((day) => ({
+    id: day.id,
+    start_time: day.start_time,
+  }))
+}
+
 async function loadDayAnchor(
   supabase: Awaited<ReturnType<typeof createClient>>,
   eventId: string,
   dayId: string | null,
   eventDate: string | null | undefined,
+  jsonFallback?: unknown,
 ): Promise<
   | { ok: true; anchorIso: string; dayId: string | null }
   | { ok: false; error: string }
 > {
-  if (dayId) {
-    const { data, error } = await supabase
-      .from("event_schedules")
-      .select("id, event_id, start_time")
-      .eq("id", dayId)
-      .maybeSingle()
-    if (error || !data || data.event_id !== eventId) {
-      return { ok: false, error: "La jornada no pertenece a este evento." }
+  const official = await loadOfficialDays(supabase, eventId, jsonFallback)
+  const validIds = official.map((day) => day.id)
+  const resolved = remapBoundDayId(dayId, validIds, "first")
+  if (resolved) {
+    const row = official.find((day) => day.id === resolved)
+    return {
+      ok: true,
+      anchorIso: row?.start_time || eventDate || new Date().toISOString(),
+      dayId: resolved,
     }
-    return { ok: true, anchorIso: data.start_time, dayId: data.id }
   }
   return {
     ok: true,
@@ -296,6 +352,7 @@ export async function listPublishedEventAgenda(
 export async function createAgendaBlock(
   eventId: string,
   input: unknown,
+  scheduleSnapshot?: unknown,
 ): Promise<ActionResult<AgendaBlockDto>> {
   const access = await requireEventOrganizer(eventId)
   if (!access.ok) return { success: false, error: access.error }
@@ -303,11 +360,19 @@ export async function createAgendaBlock(
   const parsed = parseAgendaBlockDraft(input)
   if (!parsed.success) return parsed
 
+  const incomingDays = normalizeScheduleDaysFromForm(
+    Array.isArray(scheduleSnapshot) ? scheduleSnapshot : [],
+  )
+  if (incomingDays.length > 0) {
+    await syncOfficialScheduleDays(access.supabase, eventId, incomingDays)
+  }
+
   const day = await loadDayAnchor(
     access.supabase,
     eventId,
     parsed.data.dayId ?? null,
     access.event.date,
+    incomingDays.length > 0 ? incomingDays : access.event.schedule_days,
   )
   if (!day.ok) return { success: false, error: day.error }
 
@@ -363,6 +428,7 @@ export async function updateAgendaBlock(
   eventId: string,
   blockId: string,
   input: unknown,
+  scheduleSnapshot?: unknown,
 ): Promise<ActionResult<AgendaBlockDto>> {
   const access = await requireEventOrganizer(eventId)
   if (!access.ok) return { success: false, error: access.error }
@@ -373,6 +439,13 @@ export async function updateAgendaBlock(
       success: false,
       error: parsed.error.issues[0]?.message ?? "El bloque no es válido.",
     }
+  }
+
+  const incomingDays = normalizeScheduleDaysFromForm(
+    Array.isArray(scheduleSnapshot) ? scheduleSnapshot : [],
+  )
+  if (incomingDays.length > 0) {
+    await syncOfficialScheduleDays(access.supabase, eventId, incomingDays)
   }
 
   const existing = await fetchAgendaBlock(access.supabase, eventId, blockId)
@@ -387,6 +460,7 @@ export async function updateAgendaBlock(
     eventId,
     nextDayId,
     access.event.date,
+    incomingDays.length > 0 ? incomingDays : access.event.schedule_days,
   )
   if (!day.ok) return { success: false, error: day.error }
 

@@ -27,6 +27,41 @@ describe("agenda universal", () => {
     assert.equal(parsed.data.participants, undefined)
   })
 
+  it("acepta un day_id uuid y trata all como jornada única", () => {
+    const withDay = parseAgendaBlockDraft({
+      title: "Show",
+      startTime: "09:00",
+      endTime: "10:00",
+      dayId: "11111111-1111-4111-8111-111111111111",
+    })
+    assert.equal(withDay.success, true)
+    if (withDay.success) {
+      assert.equal(withDay.data.dayId, "11111111-1111-4111-8111-111111111111")
+    }
+
+    const fullPass = parseAgendaBlockDraft({
+      title: "Show",
+      startTime: "09:00",
+      endTime: "10:00",
+      dayId: "all",
+    })
+    assert.equal(fullPass.success, true)
+    if (fullPass.success) {
+      assert.equal(fullPass.data.dayId, null)
+    }
+
+    const index = parseAgendaBlockDraft({
+      title: "Show",
+      startTime: "09:00",
+      endTime: "10:00",
+      dayId: "0",
+    })
+    assert.equal(index.success, true)
+    if (index.success) {
+      assert.equal(index.data.dayId, null)
+    }
+  })
+
   it("acepta un participante opcional o una lista vacía", () => {
     const withOne = parseAgendaBlockDraft({
       title: "Keynote",

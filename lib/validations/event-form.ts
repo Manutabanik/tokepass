@@ -18,6 +18,7 @@ import { INVENTORY_TIER_TYPES } from "@/lib/inventory/unified-inventory"
 import {
   normalizeScheduleDaysFromForm,
   parseDateTimeLocal,
+  remapBoundDayId,
   scheduleDaysToFormValues,
 } from "@/lib/event-schedule"
 import {
@@ -400,19 +401,8 @@ const eventFormObject = z
       }
     }
 
-    if (data.basics.isMultiDay) {
-      const dayIds = new Set(data.basics.scheduleDays.map((day) => day.id))
-      for (const [index, tier] of data.tickets.entries()) {
-        const dayId = tier.dayId?.trim()
-        if (dayId && dayId !== "all" && !dayIds.has(dayId)) {
-          context.addIssue({
-            code: "custom",
-            path: ["tickets", index, "dayId"],
-            message: "Elegí una jornada válida o Abono completo.",
-          })
-        }
-      }
-    }
+    // Jornadas stale (el evento cambió de fecha) se re-ligan en
+    // coerceDraftEventForm / mapEventFormToRpcPayload. No bloquear el guardado.
   })
 
 /** Validación estricta: solo al publicar. */
@@ -596,6 +586,26 @@ export function coerceDraftEventForm(
     ? (raw.basics.ageRestriction as AgeRestriction)
     : "atp"
 
+  const venue = raw.venue ?? {
+    mode: "new" as const,
+    zoneType: "general_admission" as const,
+    venueName: "",
+    saveVenueForReuse: true,
+  }
+
+  const reservedIncomplete =
+    venue.zoneType === "reserved_seating" &&
+    !(venue.zones && venue.zones.length > 0) &&
+    (!venue.rows || !venue.seatsPerRow)
+
+  const scheduleDays = scheduleDaysToFormValues(
+    normalizeScheduleDaysFromForm(
+      (raw.basics.scheduleDays ?? []) as EventFormValues["basics"]["scheduleDays"],
+    ),
+  )
+  const isMultiDay = Boolean(raw.basics.isMultiDay)
+  const validDayIds = scheduleDays.map((day) => day.id)
+
   const incomingTickets = (raw.tickets ?? []) as EventFormValues["tickets"]
   const tickets = incomingTickets
     .filter((tier) => (tier.name ?? "").trim().length >= 2)
@@ -629,28 +639,11 @@ export function coerceDraftEventForm(
       promoPayQty: Math.max(0, Math.floor(Number(tier.promoPayQty) || 1)),
       description: (tier.description ?? "").trim().slice(0, TICKET_DESCRIPTION_MAX),
       highlightBadge: tier.highlightBadge === "bestseller" ? "bestseller" : null,
-      dayId: asUuidOrNull(tier.dayId, ["all"]),
+      dayId: isMultiDay
+        ? remapBoundDayId(asUuidOrNull(tier.dayId, ["all"]), validDayIds)
+        : null,
       phases: tier.phases ?? [],
     }))
-
-  const venue = raw.venue ?? {
-    mode: "new" as const,
-    zoneType: "general_admission" as const,
-    venueName: "",
-    saveVenueForReuse: true,
-  }
-
-  const reservedIncomplete =
-    venue.zoneType === "reserved_seating" &&
-    !(venue.zones && venue.zones.length > 0) &&
-    (!venue.rows || !venue.seatsPerRow)
-
-  const scheduleDays = scheduleDaysToFormValues(
-    normalizeScheduleDaysFromForm(
-      (raw.basics.scheduleDays ?? []) as EventFormValues["basics"]["scheduleDays"],
-    ),
-  )
-  const isMultiDay = Boolean(raw.basics.isMultiDay)
 
   const zones = Array.isArray(venue.zones)
     ? venue.zones.map((zone) => {

@@ -13,6 +13,39 @@ export function normalizeDayId(
   return String(dayId).trim() || null
 }
 
+/**
+ * Rebinds a ticket/agenda day id to the official jornadas.
+ * Stale ids (after the event dates changed) become null, or the first
+ * remaining day when `fallback` is `"first"` (agenda blocks).
+ */
+export function remapBoundDayId(
+  dayId: TicketDayId | undefined,
+  validIds: readonly string[],
+  fallback: "none" | "first" = "none",
+): string | null {
+  const normalized = normalizeDayId(dayId)
+  if (normalized && validIds.includes(normalized)) return normalized
+  if (fallback === "first") return validIds[0] ?? null
+  return null
+}
+
+export function remapDayIdsByOrder(
+  previousIds: readonly string[],
+  nextIds: readonly string[],
+): Map<string, string | null> {
+  const remap = new Map<string, string | null>()
+  const seen = new Set<string>()
+  let index = 0
+  for (const previous of previousIds) {
+    const id = previous.trim()
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    remap.set(id, nextIds[index] ?? nextIds[0] ?? null)
+    index += 1
+  }
+  return remap
+}
+
 const DATETIME_LOCAL_RE =
   /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/
 

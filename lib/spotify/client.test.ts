@@ -23,14 +23,23 @@ describe("spotify artist mapping", () => {
       name: "Bizarrap",
       genres: ["argentine hip hop", "pop argentino"],
       images: [{ url: "https://i.scdn.co/bzrp.jpg", width: 320 }],
+      external_urls: { spotify: "https://open.spotify.com/artist/0eHQ9o50hj6ZXyrqmx1rJg" },
     })
     assert.deepEqual(mapped, {
       spotifyId: "0eHQ9o50hj6ZXyrqmx1rJg",
       name: "Bizarrap",
       imageUrl: "https://i.scdn.co/bzrp.jpg",
+      spotifyUrl: "https://open.spotify.com/artist/0eHQ9o50hj6ZXyrqmx1rJg",
       genres: ["argentine hip hop", "pop argentino"],
     })
     assert.equal(mapSpotifyArtist({ name: "Sin ID" }), null)
+    assert.equal(
+      mapSpotifyArtist({
+        id: "0eHQ9o50hj6ZXyrqmx1rJg",
+        name: "Bizarrap",
+      })?.spotifyUrl,
+      "https://open.spotify.com/artist/0eHQ9o50hj6ZXyrqmx1rJg",
+    )
   })
 
   it("accepts only 200 and 201 as successful Spotify HTTP statuses", () => {

@@ -25,6 +25,7 @@ import {
   updateAgendaBlock,
 } from "@/app/actions/agenda"
 import { ArtistAvatar } from "@/components/shared/artist-avatar"
+import { SpotifyArtistTypeahead } from "@/components/admin/spotify-artist-typeahead"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -43,7 +44,11 @@ import {
   normalizeAgendaName,
   type AgendaBlockDto,
 } from "@/lib/agenda"
-import { formatInventoryDayOption } from "@/lib/event-schedule"
+import {
+  formatInventoryDayOption,
+  remapBoundDayId,
+  remapDayIdsByOrder,
+} from "@/lib/event-schedule"
 import type { EventFormValues } from "@/lib/validations/event-form"
 import { cn } from "@/lib/utils"
 
@@ -146,10 +151,18 @@ export function AgendaBuilder({ eventId }: { eventId?: string | null }) {
   const saving = useRef(new Set<string>())
   const hydratedFor = useRef<string | null>(null)
   const cardsRef = useRef(cards)
+  const previousDayIds = useRef<string[] | null>(null)
+  const scheduleRef = useRef(isMultiDay ? (watchedScheduleDays ?? []) : [])
+  const dayIdsRef = useRef(dayTabs.map((day) => day.id))
 
   useEffect(() => {
     cardsRef.current = cards
   }, [cards])
+
+  useEffect(() => {
+    scheduleRef.current = isMultiDay ? (watchedScheduleDays ?? []) : []
+    dayIdsRef.current = dayTabs.map((day) => day.id)
+  }, [isMultiDay, watchedScheduleDays, dayTabs])
 
   const resolvedActiveDay = !isMultiDay
     ? SINGLE_DAY
@@ -158,6 +171,49 @@ export function AgendaBuilder({ eventId }: { eventId?: string | null }) {
       : (dayTabs[0]?.id ?? SINGLE_DAY)
   const activeDayId = isMultiDay ? resolvedActiveDay : null
   const visibleCards = cardsForDay(cards, activeDayId, isMultiDay)
+  const officialDayIds = dayTabs.map((day) => day.id)
+
+  useEffect(() => {
+    const nextIds = officialDayIds
+    if (previousDayIds.current == null) {
+      previousDayIds.current = nextIds
+      return
+    }
+    const previous = previousDayIds.current
+    previousDayIds.current = nextIds
+    if (previous.join("|") === nextIds.join("|") && isMultiDay) return
+
+    setCards((current) => {
+      const remap = remapDayIdsByOrder(previous, nextIds)
+      const valid = new Set(nextIds)
+      let changed = false
+      const next = current.map((card) => {
+        if (!isMultiDay) {
+          if (card.dayId == null) return card
+          changed = true
+          return { ...card, dayId: null }
+        }
+        if (card.dayId && valid.has(card.dayId)) return card
+        const remapped =
+          (card.dayId ? remap.get(card.dayId) : null) ?? nextIds[0] ?? null
+        if (remapped === card.dayId) return card
+        changed = true
+        return { ...card, dayId: remapped }
+      })
+      if (changed) {
+        queueMicrotask(() => {
+          for (const card of next) {
+            if (card.id && canPersistAgendaBlock(card)) {
+              scheduleSave(card.clientId)
+            }
+          }
+        })
+      }
+      return changed ? next : current
+    })
+    // scheduleSave is stable via refs
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [officialDayIds.join("|"), isMultiDay])
 
   useEffect(() => {
     if (!eventId) return
@@ -213,7 +269,9 @@ export function AgendaBuilder({ eventId }: { eventId?: string | null }) {
       title: string
       participant?: ReturnType<typeof persistableParticipant>
     } = {
-      dayId: isMultiDay ? latest.dayId : null,
+      dayId: isMultiDay
+        ? remapBoundDayId(latest.dayId, dayIdsRef.current, "first")
+        : null,
       startTime: latest.startTime,
       endTime: latest.endTime,
       title: latest.title,
@@ -225,8 +283,13 @@ export function AgendaBuilder({ eventId }: { eventId?: string | null }) {
     }
 
     const result = latest.id
-      ? await updateAgendaBlock(eventId, latest.id, payload)
-      : await createAgendaBlock(eventId, payload)
+      ? await updateAgendaBlock(
+          eventId,
+          latest.id,
+          payload,
+          scheduleRef.current,
+        )
+      : await createAgendaBlock(eventId, payload, scheduleRef.current)
 
     saving.current.delete(card.clientId)
     if (!result.success) {
@@ -694,16 +757,16 @@ function AgendaBlockCard({
                   >
                     Nombre
                   </Label>
-                  <Input
-                    id={`agenda-person-${card.clientId}`}
+                  <SpotifyArtistTypeahead
+                    inputId={`agenda-person-${card.clientId}`}
                     value={participant?.name ?? ""}
-                    onChange={(event) =>
+                    onNameChange={(name) =>
                       onPatch(
                         card.clientId,
                         {
                           participant: {
                             id: participant?.id ?? null,
-                            name: event.target.value,
+                            name,
                             roleTag: participant?.roleTag ?? "",
                             imageUrl: participant?.imageUrl ?? "",
                             externalLink: participant?.externalLink ?? "",
@@ -712,9 +775,30 @@ function AgendaBlockCard({
                         true,
                       )
                     }
-                    placeholder="Ana Pérez"
-                    className="h-10 rounded-xl"
+                    onSelect={(artist) =>
+                      onPatch(
+                        card.clientId,
+                        {
+                          participant: {
+                            id: participant?.id ?? null,
+                            name: artist.name,
+                            roleTag: participant?.roleTag ?? "",
+                            imageUrl:
+                              artist.imageUrl ?? participant?.imageUrl ?? "",
+                            externalLink:
+                              artist.spotifyUrl ||
+                              participant?.externalLink ||
+                              "",
+                          },
+                        },
+                        true,
+                      )
+                    }
                   />
+                  <p className="text-[11px] text-muted-foreground">
+                    Elegí un resultado para completar foto y enlace, o escribí
+                    el nombre a mano.
+                  </p>
                 </div>
                 <div className="space-y-1.5">
                   <Label

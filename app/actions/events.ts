@@ -24,6 +24,7 @@ import {
   normalizeScheduleDaysFromForm,
   parseDateTimeLocal,
   parseScheduleDays,
+  remapBoundDayId,
   scheduleDaysToFormValues,
   toDatetimeLocalInput,
 } from "@/lib/event-schedule"
@@ -436,10 +437,12 @@ function mapEventFormToRpcPayload(
     zones,
     tiers: data.tickets.map((tier) => {
       // Form `price` is the public All-In price. Split uses event fee config.
-      const dayId =
-        !data.basics.isMultiDay
-          ? null
-          : asUuidOrNull(tier.dayId, ["all"])
+      const dayId = !data.basics.isMultiDay
+        ? null
+        : remapBoundDayId(
+            asUuidOrNull(tier.dayId, ["all"]),
+            scheduleDays.map((day) => day.id),
+          )
       const tierType = inferInventoryTierType({
         tierType: tier.tierType,
         layoutType: tier.layoutType,

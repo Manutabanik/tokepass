@@ -2,6 +2,7 @@ export type SpotifyArtistHit = {
   spotifyId: string
   name: string
   imageUrl: string | null
+  spotifyUrl: string
   genres: string[]
 }
 
@@ -39,6 +40,25 @@ export type SpotifyArtistItem = {
   name?: unknown
   images?: unknown
   genres?: unknown
+  external_urls?: unknown
+}
+
+export function spotifyArtistOpenUrl(spotifyId: string): string {
+  return `https://open.spotify.com/artist/${encodeURIComponent(spotifyId.trim())}`
+}
+
+function readSpotifyArtistUrl(item: SpotifyArtistItem, spotifyId: string): string {
+  const urls = item.external_urls
+  if (urls && typeof urls === "object" && !Array.isArray(urls)) {
+    const spotify = (urls as { spotify?: unknown }).spotify
+    if (typeof spotify === "string") {
+      const trimmed = spotify.trim()
+      if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+        return trimmed
+      }
+    }
+  }
+  return spotifyArtistOpenUrl(spotifyId)
 }
 
 export function pickSpotifyArtistImage(images: unknown): string | null {
@@ -79,6 +99,7 @@ export function mapSpotifyArtist(item: SpotifyArtistItem): SpotifyArtistHit | nu
     spotifyId,
     name,
     imageUrl: pickSpotifyArtistImage(item.images),
+    spotifyUrl: readSpotifyArtistUrl(item, spotifyId),
     genres,
   }
 }
