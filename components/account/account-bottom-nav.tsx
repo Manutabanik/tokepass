@@ -65,10 +65,13 @@ export function AccountBottomNav() {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl md:hidden"
+      className={cn(
+        "pointer-events-none fixed inset-x-0 z-40 flex justify-center px-4 md:hidden",
+        "bottom-[calc(1.5rem+env(safe-area-inset-bottom))]",
+      )}
       aria-label="Portal de cuenta"
     >
-      <ul className="mx-auto flex max-w-lg items-stretch justify-around px-1">
+      <ul className="pointer-events-auto flex w-full max-w-md items-center justify-around rounded-full border border-white/10 bg-black/80 px-4 py-3 shadow-2xl backdrop-blur-xl">
         {TABS.map(({ href, label, icon: Icon, match, badge }) => {
           const active = match(pathname)
           return (
@@ -76,17 +79,17 @@ export function AccountBottomNav() {
               <Link
                 href={href}
                 className={cn(
-                  "relative flex min-h-11 min-w-11 flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[11px] font-medium transition",
+                  "relative flex min-h-11 min-w-11 flex-col items-center justify-center gap-0.5 rounded-full px-1 text-[10px] font-medium whitespace-nowrap transition",
                   active
-                    ? "text-emerald-700 dark:text-emerald-300"
-                    : "text-muted-foreground hover:text-foreground",
+                    ? "text-emerald-300"
+                    : "text-zinc-400 hover:text-white",
                 )}
               >
                 <span className="relative">
                   <Icon className="size-5" aria-hidden="true" />
                   <NotificationDot
                     show={showDot(badge)}
-                    className="-right-1 -top-0.5 size-2 ring-1 ring-background"
+                    className="-right-1 -top-0.5 size-2 ring-1 ring-black"
                   />
                 </span>
                 {label}

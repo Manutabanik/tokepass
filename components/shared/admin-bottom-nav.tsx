@@ -142,12 +142,18 @@ export function AdminBottomNav({
       <nav
         aria-label="Navegación rápida"
         className={cn(
-          "fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background/95 backdrop-blur-xl",
-          "pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1",
-          "lg:hidden",
+          "pointer-events-none fixed inset-x-0 z-50 flex justify-center px-4 lg:hidden",
+          "bottom-[calc(1.5rem+env(safe-area-inset-bottom))]",
         )}
       >
-        <ul className="mx-auto grid max-w-lg grid-cols-4 gap-0.5 px-1">
+        <ul
+          className={cn(
+            "pointer-events-auto grid w-full max-w-md items-center gap-1 rounded-full border border-white/10 bg-black/80 px-4 py-3 shadow-2xl backdrop-blur-xl",
+            tabs.length <= 2 && "grid-cols-2",
+            tabs.length === 3 && "grid-cols-3",
+            tabs.length >= 4 && "grid-cols-4",
+          )}
+        >
           {tabs.map((tab) => {
             const Icon = tab.icon
             const active = tab.openMenu
@@ -156,10 +162,8 @@ export function AdminBottomNav({
                 ? tab.match(pathname)
                 : false
             const className = cn(
-              "flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[10px] font-semibold transition",
-              active
-                ? "text-violet-600 dark:text-violet-300"
-                : "text-muted-foreground hover:text-foreground",
+              "flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-full px-1 text-[10px] font-semibold whitespace-nowrap transition",
+              active ? "text-violet-300" : "text-zinc-400 hover:text-white",
             )
 
             if (tab.openMenu) {
@@ -171,7 +175,7 @@ export function AdminBottomNav({
                     className={cn(className, "w-full")}
                     aria-label="Abrir menú"
                   >
-                    <Icon className="size-6" strokeWidth={2.25} aria-hidden />
+                    <Icon className="size-5" strokeWidth={2.25} aria-hidden />
                     {tab.label}
                   </button>
                 </li>
@@ -181,7 +185,7 @@ export function AdminBottomNav({
             return (
               <li key={tab.id}>
                 <Link href={tab.href!} className={className}>
-                  <Icon className="size-6" strokeWidth={2.25} aria-hidden />
+                  <Icon className="size-5" strokeWidth={2.25} aria-hidden />
                   {tab.label}
                 </Link>
               </li>
@@ -256,6 +260,6 @@ export function AdminBottomNav({
   )
 }
 
-/** Altura aproximada de la bottom bar (para paddings sticky). */
+/** Espacio para la píldora flotante (alto + 1.5rem + safe area). */
 export const ADMIN_BOTTOM_NAV_SPACE =
-  "pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:pb-0"
+  "pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-0"
