@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react"
 
+import { FloatingBottomNav } from "@/components/layout/floating-bottom-nav"
 import { useStorefrontChromeStore } from "@/lib/stores/storefront-chrome-store"
 import { cn } from "@/lib/utils"
 
@@ -47,6 +48,7 @@ export function PublicShell({
         {children}
       </main>
       {checkoutTunnel ? null : footer}
+      {checkoutTunnel ? null : <FloatingBottomNav />}
     </div>
   )
 }
