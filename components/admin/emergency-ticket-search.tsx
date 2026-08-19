@@ -1,7 +1,7 @@
 "use client"
 
 import { LoaderCircle, Search, UserCheck, Users } from "lucide-react"
-import { useMemo, useState, useTransition } from "react"
+import { useMemo, useTransition } from "react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -18,34 +18,47 @@ import {
   searchManifestTickets,
 } from "@/lib/offline-scanner-store"
 import { cn } from "@/lib/utils"
+import { useEffect, useState } from "react"
 
 export function EmergencyTicketSearch({
   eventId,
   open,
+  query,
   onOpenChange,
+  onQueryChange,
   onValidate,
   onValidateMany,
 }: {
   eventId: string
   open: boolean
+  query: string
   onOpenChange: (open: boolean) => void
+  onQueryChange: (value: string) => void
   onValidate: (ticket: ScannerManifestTicket) => void
   onValidateMany?: (tickets: ScannerManifestTicket[]) => void
 }) {
-  const [query, setQuery] = useState("")
   const [results, setResults] = useState<ScannerManifestTicket[]>([])
   const [isPending, startTransition] = useTransition()
 
-  function handleQuery(value: string) {
-    setQuery(value)
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    const value = query
     startTransition(async () => {
       if (!eventId || value.trim().length < 2) {
-        setResults([])
+        if (!cancelled) setResults([])
         return
       }
       const matches = await searchManifestTickets(eventId, value)
-      setResults(matches)
+      if (!cancelled) setResults(matches)
     })
+    return () => {
+      cancelled = true
+    }
+  }, [open, query, eventId])
+
+  function handleQuery(value: string) {
+    onQueryChange(value)
   }
 
   const emptyHint = useMemo(() => {
@@ -67,9 +80,9 @@ export function EmergencyTicketSearch({
     const validOnes = group.filter((t) => t.status === "valid")
     if (validOnes.length <= 1) {
       onValidate(ticket)
-      return
+    } else {
+      onValidateMany(validOnes)
     }
-    onValidateMany(validOnes)
   }
 
   return (
@@ -84,7 +97,7 @@ export function EmergencyTicketSearch({
         </DialogHeader>
 
         <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
             onChange={(event) => handleQuery(event.target.value)}
@@ -103,7 +116,9 @@ export function EmergencyTicketSearch({
           ) : null}
 
           {emptyHint ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">{emptyHint}</p>
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              {emptyHint}
+            </p>
           ) : null}
 
           {results.map((ticket) => (

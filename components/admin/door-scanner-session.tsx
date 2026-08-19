@@ -27,10 +27,13 @@ export function DoorScannerSessionChrome({
   torchOn,
   torchSupported,
   wakeLockHeld = false,
+  searchQuery,
   camera,
   overlay,
   onChangeGate,
-  onSearch,
+  onSearchQueryChange,
+  onSearchFocus,
+  onSearchSubmit,
   onToggleTorch,
 }: {
   isTotem: boolean
@@ -41,15 +44,17 @@ export function DoorScannerSessionChrome({
   /** False only after hardware proves torch is unavailable. */
   torchSupported: boolean
   wakeLockHeld?: boolean
+  searchQuery: string
   camera: ReactNode
   overlay?: ReactNode
   onChangeGate: () => void
-  onSearch: () => void
+  onSearchQueryChange: (value: string) => void
+  onSearchFocus: () => void
+  onSearchSubmit: () => void
   onToggleTorch: () => void
 }) {
   return (
     <div className="relative flex h-full min-h-0 flex-col">
-      {/* Live camera as full-bleed background — never unmounted by chrome. */}
       <div
         data-gate-scanner
         className="absolute inset-0 overflow-hidden bg-zinc-950"
@@ -59,8 +64,7 @@ export function DoorScannerSessionChrome({
         {overlay}
       </div>
 
-      {/* Top controls stay above the scan-result flash (camera-local overlay). */}
-      <header className="relative z-30 shrink-0 space-y-2 px-4 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))]">
+      <header className="relative z-50 shrink-0 space-y-2 px-4 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <div className="flex items-center justify-between gap-3 rounded-2xl bg-black/50 px-3 py-2 backdrop-blur-md">
           <div className="flex min-w-0 items-center gap-2">
             <span
@@ -83,33 +87,78 @@ export function DoorScannerSessionChrome({
               </span>
             ) : null}
           </div>
-          {!isTotem ? (
-            <button
-              type="button"
-              onClick={onChangeGate}
-              className="shrink-0 text-[11px] font-bold uppercase tracking-[0.12em] text-fuchsia-300"
-            >
-              Cambiar gatera
-            </button>
-          ) : null}
+          <div className="flex shrink-0 items-center gap-2">
+            {!isTotem ? (
+              <button
+                type="button"
+                onClick={onToggleTorch}
+                disabled={!torchSupported}
+                aria-label={
+                  !torchSupported
+                    ? "Linterna no disponible en este dispositivo"
+                    : torchOn
+                      ? "Apagar linterna"
+                      : "Encender linterna"
+                }
+                title={
+                  !torchSupported
+                    ? "Este dispositivo no soporta linterna"
+                    : undefined
+                }
+                className="grid size-10 place-items-center rounded-full bg-white/10 text-white ring-1 ring-white/15 disabled:opacity-35"
+              >
+                {torchOn ? (
+                  <Flashlight className="size-5" aria-hidden="true" />
+                ) : (
+                  <FlashlightOff className="size-5" aria-hidden="true" />
+                )}
+              </button>
+            ) : null}
+            {!isTotem ? (
+              <button
+                type="button"
+                onClick={onChangeGate}
+                className="text-[11px] font-bold uppercase tracking-[0.12em] text-fuchsia-300"
+              >
+                Cambiar gatera
+              </button>
+            ) : null}
+          </div>
         </div>
 
         {!isTotem ? (
-          <button
-            type="button"
-            onClick={onSearch}
-            className="flex min-h-12 w-full items-center gap-2 rounded-2xl border border-white/15 bg-black/50 px-4 text-left text-sm font-semibold text-white shadow-lg backdrop-blur-md"
+          <form
+            className="relative"
+            onSubmit={(event) => {
+              event.preventDefault()
+              onSearchSubmit()
+            }}
           >
-            <Search className="size-4 shrink-0 text-white/80" aria-hidden="true" />
-            Buscar por DNI, nombre o codigo
-          </button>
+            <Search
+              className="pointer-events-none absolute top-1/2 left-3 z-10 size-4 -translate-y-1/2 text-white/70"
+              aria-hidden="true"
+            />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(event) => onSearchQueryChange(event.target.value)}
+              onFocus={onSearchFocus}
+              enterKeyHint="search"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              placeholder="Busqueda manual: DNI, nombre o codigo"
+              aria-label="Busqueda manual por DNI, nombre o codigo"
+              className="h-12 w-full rounded-2xl border border-white/15 bg-black/50 py-3 pr-4 pl-10 text-sm font-semibold text-white shadow-lg backdrop-blur-md outline-none placeholder:text-white/55 focus:border-fuchsia-400/50 focus:ring-2 focus:ring-fuchsia-400/30"
+            />
+          </form>
         ) : null}
       </header>
 
       <div className="relative z-0 min-h-0 flex-1" aria-hidden="true" />
 
       {!isTotem ? (
-        <div className="relative z-30 flex shrink-0 items-center justify-between gap-3 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+        <div className="relative z-50 flex shrink-0 items-center justify-between gap-3 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
           <button
             type="button"
             onClick={onToggleTorch}
@@ -120,11 +169,6 @@ export function DoorScannerSessionChrome({
                 : torchOn
                   ? "Apagar linterna"
                   : "Encender linterna"
-            }
-            title={
-              !torchSupported
-                ? "Este dispositivo no soporta linterna"
-                : undefined
             }
             className="grid size-14 place-items-center rounded-full bg-black/50 text-white ring-1 ring-white/15 backdrop-blur-md disabled:opacity-35"
           >
@@ -142,15 +186,15 @@ export function DoorScannerSessionChrome({
           </p>
           <button
             type="button"
-            onClick={onSearch}
-            aria-label="Buscar por DNI, nombre o codigo"
+            onClick={onSearchSubmit}
+            aria-label="Abrir resultados de busqueda manual"
             className="grid size-14 place-items-center rounded-full bg-black/50 text-white ring-1 ring-white/15 backdrop-blur-md"
           >
             <Search className="size-6" aria-hidden="true" />
           </button>
         </div>
       ) : (
-        <div className="relative z-30 flex shrink-0 justify-center px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+        <div className="relative z-50 flex shrink-0 justify-center px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
           <p className="rounded-full bg-black/50 px-4 py-2 font-mono text-lg font-black tabular-nums text-white/70 backdrop-blur-md">
             {admittedCount} ingresados
           </p>

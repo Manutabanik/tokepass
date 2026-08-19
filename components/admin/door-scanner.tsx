@@ -201,6 +201,7 @@ export function DoorScanner({
   const [queueCount, setQueueCount] = useState(0)
   const [isSyncing, setIsSyncing] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
   const [admittedCount, setAdmittedCount] = useState(0)
   const [torchOn, setTorchOn] = useState(false)
   /** Optimistic until hardware proves torch is missing / unsupported. */
@@ -1010,14 +1011,21 @@ export function DoorScanner({
         torchOn={torchOn}
         torchSupported={torchButtonEnabled}
         wakeLockHeld={wakeLockHeld}
+        searchQuery={searchQuery}
         onChangeGate={() => {
           stopLeaseGossip()
           setSessionActive(false)
           setCameraError(null)
           setTorchOn(false)
           setTorchSupported(true)
+          setSearchQuery("")
         }}
-        onSearch={() => setSearchOpen(true)}
+        onSearchQueryChange={(value) => {
+          setSearchQuery(value)
+          if (value.trim().length >= 2) setSearchOpen(true)
+        }}
+        onSearchFocus={() => setSearchOpen(true)}
+        onSearchSubmit={() => setSearchOpen(true)}
         onToggleTorch={() => void toggleTorch()}
         overlay={
           <>
@@ -1070,7 +1078,9 @@ export function DoorScanner({
         <EmergencyTicketSearch
           eventId={eventId}
           open={searchOpen}
+          query={searchQuery}
           onOpenChange={setSearchOpen}
+          onQueryChange={setSearchQuery}
           onValidate={(ticket) => {
             setSearchOpen(false)
             cooldownRef.current = true
