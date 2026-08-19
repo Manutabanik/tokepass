@@ -42,6 +42,7 @@ const STATUS_OPTIONS: Array<{ value: "all" | OrderStatus; label: string }> = [
   { value: "failed", label: "Fallida" },
   { value: "expired", label: "Expirada" },
   { value: "refunded", label: "Reembolsada" },
+  { value: "refund_processing", label: "Devolución en proceso" },
 ]
 
 function paymentMethodLabel(method: string): string {
@@ -90,7 +91,7 @@ export function PlatformOrdersLedger({
     {
       label: "Comisión de la ticketera",
       value: formatCurrency(totals.platformFee),
-      helper: "Lo que se queda Tokepass con estos filtros",
+      helper: "Lo que se queda TokePass con estos filtros",
       icon: Sparkles,
       accent: "text-emerald-700 dark:text-emerald-300",
       wrap: "bg-emerald-500/15 ring-emerald-500/25",

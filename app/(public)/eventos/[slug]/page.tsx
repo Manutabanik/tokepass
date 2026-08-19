@@ -111,7 +111,12 @@ export default async function PublicEventPage({
     const gate = await cachedEventAccessGate(
       decodedSlug !== fullSlug ? decodedSlug : fullSlug,
     )
-    if (gate?.status === "draft") {
+    if (
+      gate?.status === "draft" ||
+      gate?.status === "pending_approval" ||
+      gate?.status === "needs_revision" ||
+      gate?.status === "rejected"
+    ) {
       notFound()
     }
     if (gate && (gate.status === "paused" || gate.status === "cancelled")) {

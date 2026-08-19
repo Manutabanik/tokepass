@@ -1,5 +1,13 @@
 "use client"
 
+import {
+  AlertTriangle,
+  ArrowRightLeft,
+  Smartphone,
+  XCircle,
+} from "lucide-react"
+import type { LucideIcon } from "lucide-react"
+
 import { formatScanClock } from "@/lib/scanner/scan-copy"
 
 export type ScanOverlayState =
@@ -37,10 +45,22 @@ export type ScanOverlayState =
       kind: "wrong_schedule"
       message: string
     }
+  | {
+      kind: "cancelled"
+    }
+  | {
+      kind: "unpaid"
+    }
+  | {
+      kind: "transferred"
+    }
+  | {
+      kind: "expired_qr"
+    }
 
 const OVERLAY: Record<
   ScanOverlayState["kind"],
-  { bg: string; title: string }
+  { bg: string; title: string; Icon?: LucideIcon }
 > = {
   valid: { bg: "#10B981", title: "ACCESO PERMITIDO" },
   duplicate: { bg: "#EF4444", title: "ENTRADA YA REGISTRADA" },
@@ -50,10 +70,23 @@ const OVERLAY: Record<
   main_gate_review: { bg: "#F59E0B", title: "REVISION EN PUERTA PRINCIPAL" },
   transfer_pending: { bg: "#F59E0B", title: "TRANSFERENCIA PENDIENTE" },
   wrong_schedule: { bg: "#F59E0B", title: "FUERA DE JORNADA" },
+  cancelled: { bg: "#EF4444", title: "ENTRADA CANCELADA", Icon: XCircle },
+  unpaid: { bg: "#F97316", title: "PAGO PENDIENTE", Icon: AlertTriangle },
+  transferred: {
+    bg: "#F97316",
+    title: "ENTRADA TRANSFERIDA",
+    Icon: ArrowRightLeft,
+  },
+  expired_qr: {
+    bg: "#EF4444",
+    title: "CODIGO VENCIDO / CAPTURA DE PANTALLA",
+    Icon: Smartphone,
+  },
 }
 
 export function ScanResultOverlay({ state }: { state: ScanOverlayState }) {
   const skin = OVERLAY[state.kind]
+  const Icon = skin.Icon
 
   return (
     <div
@@ -64,6 +97,9 @@ export function ScanResultOverlay({ state }: { state: ScanOverlayState }) {
       <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-white/80">
         Control de acceso
       </p>
+      {Icon ? (
+        <Icon className="mt-6 size-16 sm:size-20" aria-hidden="true" />
+      ) : null}
       <h2 className="mt-3 max-w-4xl text-4xl font-black leading-[0.95] tracking-tight sm:text-6xl">
         {skin.title}
       </h2>
@@ -114,6 +150,30 @@ export function ScanResultOverlay({ state }: { state: ScanOverlayState }) {
       {state.kind === "wrong_schedule" ? (
         <p className="mt-8 max-w-xl text-lg font-semibold leading-7 text-white/95">
           {state.message}
+        </p>
+      ) : null}
+
+      {state.kind === "cancelled" ? (
+        <p className="mt-8 max-w-xl text-xl font-black uppercase leading-tight">
+          Esta entrada fue anulada. No permitir el ingreso.
+        </p>
+      ) : null}
+
+      {state.kind === "unpaid" ? (
+        <p className="mt-8 max-w-xl text-xl font-black uppercase leading-tight">
+          El pago no esta confirmado. No permitir el ingreso.
+        </p>
+      ) : null}
+
+      {state.kind === "transferred" ? (
+        <p className="mt-8 max-w-xl text-xl font-black uppercase leading-tight">
+          Debe mostrar el QR nuevo en la app. Este codigo ya no es valido.
+        </p>
+      ) : null}
+
+      {state.kind === "expired_qr" ? (
+        <p className="mt-8 max-w-xl text-xl font-black uppercase leading-tight">
+          Pedile que abra la app web TokePass. Una captura de pantalla no sirve.
         </p>
       ) : null}
     </div>

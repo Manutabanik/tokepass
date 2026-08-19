@@ -7,6 +7,9 @@ export type OrganizerApprovalStatus =
   | "suspended"
 export type EventStatus =
   | "draft"
+  | "pending_approval"
+  | "needs_revision"
+  | "rejected"
   | "published"
   | "paused"
   | "cancelled"
@@ -49,6 +52,8 @@ export type OrderStatus =
   | "failed"
   | "expired"
   | "refunded"
+  | "refund_processing"
+export type RefundRequestStatus = "pending" | "approved" | "rejected"
 export type OrganizerRiskTier =
   | "TIER_1_CUSTODY"
   | "TIER_2_INSTANT_SPLIT"
@@ -71,6 +76,18 @@ export type EventStaffAssignment = {
   is_active: boolean
   expires_at: string | null
   pos_security_pin_hash: string | null
+}
+
+export type EventDoorAccessPin = {
+  id: string
+  event_id: string
+  pin_hash: string
+  pin_lookup: string
+  expires_at: string
+  created_by: string | null
+  created_at: string
+  revoked_at: string | null
+  last_redeemed_at: string | null
 }
 
 export type GuestListEntryStatus = "pending" | "claimed" | "checked_in"
@@ -107,7 +124,7 @@ export type Profile = {
   phone: string | null
   role: UserRole
   /**
-   * Comisión Tokepass (custom_commission_rate canónica).
+   * Comisión TokePass (custom_commission_rate canónica).
    * Fracción decimal: 0.15 = 15% sobre precio público All-In.
    */
   service_charge_rate: number
@@ -233,13 +250,13 @@ export type Event = {
   is_featured: boolean
   featured_tier: "silver" | "gold" | "platinum" | null
   featured_until: string | null
-  /** Comisión % Tokepass (ej. 8.00 = 8%). */
+  /** Comisión % TokePass (ej. 8.00 = 8%). */
   platform_fee_percentage: number
   /** Cargo fijo ARS por entrada paga (split All-In). */
   platform_fixed_fee: number
   /** Tope de capacidad total en tiers a $0. */
   max_free_tickets: number
-  /** Auspicio Tokepass: fees a 0 + branding. */
+  /** Auspicio TokePass: fees a 0 + branding. */
   is_sponsored_by_tokepass: boolean
   /** SHA-256 hex del PIN de supervisor POS (cortesías / anulaciones). */
   pos_supervisor_pin_hash: string | null
@@ -286,6 +303,34 @@ export type Event = {
   updated_at: string
   /** Enlace de preview del borrador (?preview_key=). No exponer en EventDetails público. */
   preview_key: string
+  /** Nota de auditoría (cambios pedidos). */
+  review_note: string | null
+  reviewed_at: string | null
+  reviewed_by: string | null
+}
+
+export type SupportThreadStatus = "open" | "resolved" | "pending_admin"
+
+export type SupportThread = {
+  id: string
+  organizer_id: string
+  event_id: string | null
+  status: SupportThreadStatus
+  last_message_preview: string | null
+  last_message_is_admin: boolean
+  last_admin_read_at: string | null
+  last_organizer_read_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type SupportMessage = {
+  id: string
+  thread_id: string
+  sender_id: string
+  is_admin: boolean
+  content: string
+  created_at: string
 }
 
 export type EventSchedule = {
@@ -381,7 +426,7 @@ export type TicketTier = {
   price: number
   /** Ingreso neto del organizador por entrada. */
   base_price: number
-  /** Comisión unitaria Tokepass absorbida en `price`. */
+  /** Comisión unitaria TokePass absorbida en `price`. */
   platform_fee: number
   capacity: number
   /** Cupo total del SKU; se mantiene alineado a capacity. */
@@ -534,6 +579,55 @@ export type PayoutRequest = {
   admin_notes: string | null
   reviewed_by: string | null
   reviewed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type OrganizerBankVerificationStatus =
+  | "unverified"
+  | "pending_review"
+  | "verified"
+  | "rejected"
+
+export type OrganizerBankProfile = {
+  id: string
+  user_id: string
+  full_name_or_company: string
+  tax_id: string
+  bank_cbu_cvu: string | null
+  bank_alias: string | null
+  bank_name: string | null
+  verification_status: OrganizerBankVerificationStatus
+  review_notes: string | null
+  reviewed_by: string | null
+  reviewed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type EventPayoutStatus =
+  | "hold"
+  | "pending_approval"
+  | "processing"
+  | "completed"
+  | "cancelled"
+
+export type EventPayout = {
+  id: string
+  event_id: string
+  organizer_id: string
+  gross_amount: number
+  service_fee_amount: number
+  net_amount: number
+  payout_status: EventPayoutStatus
+  scheduled_payout_date: string | null
+  hold_reason: string | null
+  transferred_at: string | null
+  reviewed_by: string | null
+  bank_holder_snapshot: string | null
+  bank_tax_id_snapshot: string | null
+  bank_cbu_snapshot: string | null
+  bank_alias_snapshot: string | null
   created_at: string
   updated_at: string
 }
@@ -702,8 +796,21 @@ export type PromoCode = {
   current_uses: number
   valid_until: string | null
   is_active: boolean
+  /** RRPP dueño del cupón. Si está set, el checkout atribuye la venta a este promotor. */
+  promoter_id: string | null
   created_at: string
   updated_at: string
+}
+
+export type PromoterSettlement = {
+  id: string
+  organizer_id: string
+  promoter_id: string
+  amount: number
+  settled_at: string
+  created_by: string | null
+  notes: string | null
+  created_at: string
 }
 
 export type Order = {
@@ -743,6 +850,15 @@ export type Order = {
   legal_terms_version: string | null
   organizer_legal_name_snapshot: string | null
   organizer_tax_id_snapshot: string | null
+}
+
+export type RefundRequest = {
+  id: string
+  order_id: string
+  user_id: string | null
+  reason: string | null
+  status: RefundRequestStatus
+  created_at: string
 }
 
 export type UserFavorite = {
@@ -948,6 +1064,9 @@ type EventInsert = Omit<
   | "agenda_blocks"
   | "has_schedule"
   | "preview_key"
+  | "review_note"
+  | "reviewed_at"
+  | "reviewed_by"
   | "created_at"
   | "updated_at"
 > & {
@@ -989,6 +1108,9 @@ type EventInsert = Omit<
   province?: string | null
   department?: string | null
   preview_key?: string
+  review_note?: string | null
+  reviewed_at?: string | null
+  reviewed_by?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -1250,15 +1372,32 @@ type OrderInsert = Omit<
 }
 type PromoCodeInsert = Omit<
   PromoCode,
-  "id" | "current_uses" | "is_active" | "created_at" | "updated_at"
+  | "id"
+  | "current_uses"
+  | "is_active"
+  | "promoter_id"
+  | "created_at"
+  | "updated_at"
 > & {
   id?: string
   current_uses?: number
   is_active?: boolean
   max_uses?: number | null
   valid_until?: string | null
+  promoter_id?: string | null
   created_at?: string
   updated_at?: string
+}
+type PromoterSettlementInsert = Omit<
+  PromoterSettlement,
+  "id" | "settled_at" | "notes" | "created_at"
+> & {
+  id?: string
+  amount: number
+  settled_at?: string
+  created_by?: string | null
+  notes?: string | null
+  created_at?: string
 }
 type OrganizerSettlementInsert = Omit<
   OrganizerSettlement,
@@ -1403,6 +1542,13 @@ export type Database = {
         Update: Partial<EventInsert>
         Relationships: [
           {
+            foreignKeyName: "events_organizer_id_fkey"
+            columns: ["organizer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "events_venue_id_fkey"
             columns: ["venue_id"]
             isOneToOne: false
@@ -1429,6 +1575,80 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "agenda_blocks"
             referencedColumns: ["event_id"]
+          },
+        ]
+      }
+      support_threads: {
+        Row: SupportThread
+        Insert: {
+          id?: string
+          organizer_id: string
+          event_id?: string | null
+          status?: SupportThreadStatus
+          last_message_preview?: string | null
+          last_message_is_admin?: boolean
+          last_admin_read_at?: string | null
+          last_organizer_read_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<{
+          organizer_id: string
+          event_id: string | null
+          status: SupportThreadStatus
+          last_message_preview: string | null
+          last_message_is_admin: boolean
+          last_admin_read_at: string | null
+          last_organizer_read_at: string | null
+          updated_at: string
+        }>
+        Relationships: [
+          {
+            foreignKeyName: "support_threads_organizer_id_fkey"
+            columns: ["organizer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_threads_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_messages: {
+        Row: SupportMessage
+        Insert: {
+          id?: string
+          thread_id: string
+          sender_id: string
+          is_admin?: boolean
+          content: string
+          created_at?: string
+        }
+        Update: Partial<{
+          thread_id: string
+          sender_id: string
+          is_admin: boolean
+          content: string
+        }>
+        Relationships: [
+          {
+            foreignKeyName: "support_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "support_threads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -1812,6 +2032,12 @@ export type Database = {
         Update: Partial<PromoterReferralVisitInsert>
         Relationships: []
       }
+      promoter_settlements: {
+        Row: PromoterSettlement
+        Insert: PromoterSettlementInsert
+        Update: Partial<PromoterSettlementInsert>
+        Relationships: []
+      }
       promo_codes: {
         Row: PromoCode
         Insert: PromoCodeInsert
@@ -1822,6 +2048,24 @@ export type Database = {
         Row: Order
         Insert: OrderInsert
         Update: Partial<OrderInsert>
+        Relationships: []
+      }
+      refund_requests: {
+        Row: RefundRequest
+        Insert: {
+          id?: string
+          order_id: string
+          user_id?: string | null
+          reason?: string | null
+          status?: RefundRequestStatus
+          created_at?: string
+        }
+        Update: Partial<{
+          order_id: string
+          user_id: string | null
+          reason: string | null
+          status: RefundRequestStatus
+        }>
         Relationships: []
       }
       cashier_shifts: {
@@ -1974,6 +2218,22 @@ export type Database = {
         Update: Partial<EventStaffAssignment>
         Relationships: []
       }
+      event_door_access_pins: {
+        Row: EventDoorAccessPin
+        Insert: {
+          id?: string
+          event_id: string
+          pin_hash: string
+          pin_lookup: string
+          expires_at: string
+          created_by?: string | null
+          created_at?: string
+          revoked_at?: string | null
+          last_redeemed_at?: string | null
+        }
+        Update: Partial<EventDoorAccessPin>
+        Relationships: []
+      }
       event_items: {
         Row: EventItem
         Insert: EventItemInsert
@@ -2094,6 +2354,75 @@ export type Database = {
         }>
         Relationships: []
       }
+      organizer_profiles: {
+        Row: OrganizerBankProfile
+        Insert: {
+          id?: string
+          user_id: string
+          full_name_or_company: string
+          tax_id: string
+          bank_cbu_cvu?: string | null
+          bank_alias?: string | null
+          bank_name?: string | null
+          verification_status?: OrganizerBankVerificationStatus
+          review_notes?: string | null
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<{
+          full_name_or_company: string
+          tax_id: string
+          bank_cbu_cvu: string | null
+          bank_alias: string | null
+          bank_name: string | null
+          verification_status: OrganizerBankVerificationStatus
+          review_notes: string | null
+          reviewed_by: string | null
+          reviewed_at: string | null
+          updated_at: string
+        }>
+        Relationships: []
+      }
+      event_payouts: {
+        Row: EventPayout
+        Insert: {
+          id?: string
+          event_id: string
+          organizer_id: string
+          gross_amount?: number
+          service_fee_amount?: number
+          net_amount?: number
+          payout_status?: EventPayoutStatus
+          scheduled_payout_date?: string | null
+          hold_reason?: string | null
+          transferred_at?: string | null
+          reviewed_by?: string | null
+          bank_holder_snapshot?: string | null
+          bank_tax_id_snapshot?: string | null
+          bank_cbu_snapshot?: string | null
+          bank_alias_snapshot?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<{
+          gross_amount: number
+          service_fee_amount: number
+          net_amount: number
+          payout_status: EventPayoutStatus
+          scheduled_payout_date: string | null
+          hold_reason: string | null
+          transferred_at: string | null
+          reviewed_by: string | null
+          bank_holder_snapshot: string | null
+          bank_tax_id_snapshot: string | null
+          bank_cbu_snapshot: string | null
+          bank_alias_snapshot: string | null
+          updated_at: string
+        }>
+        Relationships: []
+      }
       mp_webhook_events: {
         Row: MpWebhookEvent
         Insert: {
@@ -2132,6 +2461,10 @@ export type Database = {
           avatar_url: string | null
           full_name: string | null
         }[]
+      }
+      sync_event_payouts: {
+        Args: Record<string, never>
+        Returns: number
       }
       expire_buyer_pending_event_orders: {
         Args: {
@@ -2778,6 +3111,13 @@ export type Database = {
         }
         Returns: number
       }
+      apply_order_refund_state: {
+        Args: {
+          p_order_id: string
+          p_order_status?: string
+        }
+        Returns: number
+      }
       is_ticket_admission_eligible: {
         Args: {
           p_ticket_id: string
@@ -3265,6 +3605,7 @@ export type Database = {
       organizer_risk_tier: OrganizerRiskTier
       organizer_guarantee_status: OrganizerGuaranteeStatus
       event_status: EventStatus
+      support_thread_status: SupportThreadStatus
       ticket_status: TicketStatus
       zone_type: ZoneType
       seat_status: SeatStatus
@@ -3273,6 +3614,8 @@ export type Database = {
       ticket_transfer_status: TicketTransferStatus
       payout_pending_status: PayoutPendingStatus
       payout_request_status: PayoutRequestStatus
+      organizer_bank_verification_status: OrganizerBankVerificationStatus
+      event_payout_status: EventPayoutStatus
     }
     CompositeTypes: Record<string, never>
   }

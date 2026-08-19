@@ -7,7 +7,7 @@ import { headers } from "next/headers"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { normalizeReferralCode } from "@/lib/referral"
-import { computePromoterCommission } from "@/lib/rrpp"
+import { computePromoterCommission, pendingPromoterBalance } from "@/lib/rrpp"
 
 export type PromoterCommissionKind = "percent" | "fixed"
 
@@ -23,7 +23,21 @@ export type PromoterRow = {
   ticketsSold: number
   revenueGenerated: number
   estimatedCommission: number
+  settledCommission: number
+  pendingCommission: number
+  lastSettledAt: string | null
   userId: string | null
+}
+
+export type PromoterOption = {
+  id: string
+  name: string
+  referralCode: string
+}
+
+export type CheckoutPromoterPreview = {
+  name: string
+  referralCode: string
 }
 
 export type PromoterMetrics = {
@@ -43,6 +57,14 @@ export type PromoterMetrics = {
 
 type ActionResult =
   | { success: true; referralCode: string }
+  | { success: false; error: string }
+
+type SettleResult =
+  | { success: true; amount: number; settledAt: string }
+  | { success: false; error: string }
+
+type PreviewResult =
+  | { success: true; data: CheckoutPromoterPreview }
   | { success: false; error: string }
 
 function slugifyReferralCode(name: string): string {
@@ -206,6 +228,99 @@ export async function createPromoter(input: {
   }
 }
 
+export async function listOrganizerPromoterOptions(
+  organizerId?: string,
+): Promise<PromoterOption[]> {
+  try {
+    const { supabase, userId } = await requireOrganizer()
+    let target = userId
+    if (organizerId && organizerId !== userId) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", userId)
+        .maybeSingle()
+      if (profile?.role === "super_admin") target = organizerId
+    }
+    const { data, error } = await supabase
+      .from("promoters")
+      .select("id, name, referral_code")
+      .eq("organizer_id", target)
+      .order("name", { ascending: true })
+
+    if (error || !data) return []
+
+    return data.map((row) => ({
+      id: row.id,
+      name: row.name,
+      referralCode: row.referral_code,
+    }))
+  } catch {
+    return []
+  }
+}
+
+export async function validateCheckoutPromoterCode(
+  code: string,
+  eventId: string,
+): Promise<PreviewResult> {
+  try {
+    const referralCode = normalizeReferralCode(code)
+    if (!referralCode || !eventId) {
+      return { success: false, error: "Ingresá un código de promotor válido." }
+    }
+
+    const supabase = await createClient()
+    const { data: resolved, error } = await supabase.rpc(
+      "resolve_promoter_for_checkout",
+      {
+        p_referral_code: referralCode,
+        p_event_id: eventId,
+      },
+    )
+
+    if (error) {
+      return { success: false, error: "No se pudo validar el código." }
+    }
+    if (!resolved) {
+      return {
+        success: false,
+        error: "Código de promotor no válido para este evento.",
+      }
+    }
+
+    const admin = createAdminClient()
+    const { data: promoter } = await admin
+      .from("promoters")
+      .select("name, referral_code")
+      .eq("id", resolved)
+      .maybeSingle()
+
+    if (!promoter) {
+      return {
+        success: false,
+        error: "Código de promotor no válido para este evento.",
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        name: promoter.name,
+        referralCode: promoter.referral_code,
+      },
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo validar el código de promotor.",
+    }
+  }
+}
+
 export async function getOrganizerPromoters(): Promise<PromoterRow[]> {
   const { supabase, userId } = await requireOrganizer()
 
@@ -237,19 +352,32 @@ export async function getOrganizerPromoters(): Promise<PromoterRow[]> {
   const admin = createAdminClient()
   const promoterIds = promoters.map((row) => row.id)
 
-  const [{ data: orders }, { data: visitRows }] = await Promise.all([
-    admin
-      .from("orders")
-      .select(
-        "id, promoter_id, total_amount, subtotal, status, promoter_commission_amount",
-      )
-      .in("promoter_id", promoterIds)
-      .eq("status", "paid"),
-    admin
-      .from("promoter_referral_visits")
-      .select("promoter_id")
-      .in("promoter_id", promoterIds),
-  ])
+  const [{ data: orders }, { data: visitRows }, settlementsResult] =
+    await Promise.all([
+      admin
+        .from("orders")
+        .select(
+          "id, promoter_id, total_amount, subtotal, status, promoter_commission_amount",
+        )
+        .in("promoter_id", promoterIds)
+        .eq("status", "paid"),
+      admin
+        .from("promoter_referral_visits")
+        .select("promoter_id")
+        .in("promoter_id", promoterIds),
+      admin
+        .from("promoter_settlements")
+        .select("promoter_id, amount, settled_at")
+        .in("promoter_id", promoterIds),
+    ])
+
+  const settlements =
+    settlementsResult.error &&
+    /promoter_settlements|schema cache|does not exist/i.test(
+      settlementsResult.error.message,
+    )
+      ? []
+      : (settlementsResult.data ?? [])
 
   const clickByPromoter = new Map<string, number>()
   for (const visit of visitRows ?? []) {
@@ -329,6 +457,22 @@ export async function getOrganizerPromoters(): Promise<PromoterRow[]> {
     stats.set(order.promoter_id, current)
   }
 
+  const settledByPromoter = new Map<
+    string,
+    { amount: number; lastAt: string | null }
+  >()
+  for (const row of settlements) {
+    const current = settledByPromoter.get(row.promoter_id) ?? {
+      amount: 0,
+      lastAt: null as string | null,
+    }
+    current.amount += Number(row.amount) || 0
+    if (!current.lastAt || row.settled_at > current.lastAt) {
+      current.lastAt = row.settled_at
+    }
+    settledByPromoter.set(row.promoter_id, current)
+  }
+
   return promoters.map((promoter) => {
     const metric = stats.get(promoter.id) ?? {
       ticketsSold: 0,
@@ -344,6 +488,8 @@ export async function getOrganizerPromoters(): Promise<PromoterRow[]> {
       (promoter as { commission_fixed_amount?: number | null })
         .commission_fixed_amount ?? 0,
     )
+    const settled = settledByPromoter.get(promoter.id)
+    const settledCommission = Number(settled?.amount ?? 0)
 
     return {
       id: promoter.id,
@@ -356,6 +502,12 @@ export async function getOrganizerPromoters(): Promise<PromoterRow[]> {
       ticketsSold: metric.ticketsSold,
       revenueGenerated: metric.revenueGenerated,
       estimatedCommission: metric.commission,
+      settledCommission,
+      pendingCommission: pendingPromoterBalance(
+        metric.commission,
+        settledCommission,
+      ),
+      lastSettledAt: settled?.lastAt ?? null,
       userId: promoter.user_id,
     }
   })
@@ -614,4 +766,74 @@ export async function claimPromoterByCode(
   revalidatePath("/promoter/dashboard")
 
   return { success: true, referralCode: String(data ?? code).toUpperCase() }
+}
+
+export async function settlePromoterCommissions(
+  promoterId: string,
+): Promise<SettleResult> {
+  try {
+    const { supabase, userId } = await requireOrganizer()
+    const id = promoterId.trim()
+    if (!id) {
+      return { success: false, error: "Promotor inválido." }
+    }
+
+    const { data: promoter, error: promoterError } = await supabase
+      .from("promoters")
+      .select("id, organizer_id, name")
+      .eq("id", id)
+      .eq("organizer_id", userId)
+      .maybeSingle()
+
+    if (promoterError || !promoter) {
+      return { success: false, error: "Promotor no encontrado." }
+    }
+
+    const rows = await getOrganizerPromoters()
+    const row = rows.find((item) => item.id === promoter.id)
+    const amount = Number(row?.pendingCommission ?? 0)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return { success: false, error: "No hay saldo pendiente para liquidar." }
+    }
+
+    const { data, error } = await supabase
+      .from("promoter_settlements")
+      .insert({
+        organizer_id: userId,
+        promoter_id: promoter.id,
+        amount,
+        created_by: userId,
+      })
+      .select("amount, settled_at")
+      .single()
+
+    if (error || !data) {
+      return {
+        success: false,
+        error:
+          error && /promoter_settlements|schema cache|does not exist/i.test(error.message)
+            ? "Aplicá la migración P109 para liquidar comisiones."
+            : (error?.message ?? "No se pudo registrar la liquidación."),
+      }
+    }
+
+    revalidatePath("/admin/promoters")
+    return {
+      success: true,
+      amount: Number(data.amount),
+      settledAt: data.settled_at,
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message === "auth_required"
+            ? "Debés iniciar sesión."
+            : error.message === "forbidden"
+              ? "No tenés permiso para liquidar comisiones."
+              : error.message
+          : "No se pudo liquidar el saldo.",
+    }
+  }
 }

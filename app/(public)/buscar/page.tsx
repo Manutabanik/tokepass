@@ -16,7 +16,7 @@ export const revalidate = 60
 export const metadata: Metadata = {
   title: "Buscar eventos",
   description:
-    "Buscá por artista, evento o lugar. Filtrá la cartelera de Tokepass y encontrá tu próxima noche.",
+    "Buscá por artista, evento o lugar. Filtrá la cartelera de TokePass y encontrá tu próxima noche.",
 }
 
 export default async function SearchEventsPage() {

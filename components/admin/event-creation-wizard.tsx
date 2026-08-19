@@ -262,9 +262,6 @@ export function EventCreationWizard({
 
   const capacitySnapshot = useEventCapacity(form)
   const watchedTickets = useWatch({ control: form.control, name: "tickets" })
-  const inventoryBlocked =
-    activeStep === WIZARD_STEP_TICKETS &&
-    (capacitySnapshot.exceeded || ticketsHavePhaseOverflow(watchedTickets ?? []))
   const flyerName = useWatch({ control: form.control, name: "basics.flyerName" })
   const isMultiDay = useWatch({
     control: form.control,
@@ -325,18 +322,23 @@ export function EventCreationWizard({
         setWizardStep(resolved)
       }
     }
-    apply()
     const persistApi = useEventFormStore.persist
-    if (persistApi.hasHydrated()) return
+    if (persistApi.hasHydrated()) {
+      queueMicrotask(apply)
+      return
+    }
     return persistApi.onFinishHydration(apply)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate once; el toggle se clampea abajo
   }, [setWizardStep])
 
   const resolvedStep = clampWizardStep(activeStep, wizardFlags)
-  if (resolvedStep !== activeStep) {
+  if (activeStep !== resolvedStep) {
     setActiveStep(resolvedStep)
     setWizardStep(resolvedStep)
   }
+  const inventoryBlocked =
+    resolvedStep === WIZARD_STEP_TICKETS &&
+    (capacitySnapshot.exceeded || ticketsHavePhaseOverflow(watchedTickets ?? []))
 
   function applyMapInventory(map: ReturnType<typeof parseVenueMap>) {
     const pricing = venueMapToPricingMap(map)
@@ -368,9 +370,9 @@ export function EventCreationWizard({
 
   async function moveToStep(nextStep: number) {
     const target = clampWizardStep(nextStep, wizardFlags)
-    if (target === activeStep) return
+    if (target === activeStep || target === resolvedStep) return
     if (target < 0 || target >= WIZARD_STEP_COUNT) return
-    if (activeStep === WIZARD_STEP_TICKETS && target !== WIZARD_STEP_TICKETS) {
+    if (resolvedStep === WIZARD_STEP_TICKETS && target !== WIZARD_STEP_TICKETS) {
       const capacity = computeEventCapacityFromForm(form.getValues())
       if (capacity.exceeded) {
         const message = eventCapacityOverflowMessage(capacity)
@@ -701,8 +703,7 @@ export function EventCreationWizard({
       toast.success(
         isEditing ? "Cambios guardados" : "Borrador listo",
         {
-          description:
-            "Confirmá la publicación y si querés purgar las entradas de prueba.",
+          description: "Confirmá el envío a revisión de TokePass.",
         },
       )
       setPublishConfirm({ open: true, eventId: result.eventId })
@@ -738,8 +739,12 @@ export function EventCreationWizard({
         )}
       >
         <Tabs
-          value={String(activeStep)}
-          onValueChange={(value) => void moveToStep(Number(value))}
+          value={String(resolvedStep)}
+          onValueChange={(value) => {
+            const next = Number(value)
+            if (!Number.isFinite(next) || next === resolvedStep) return
+            void moveToStep(next)
+          }}
           className="flex flex-col gap-8"
         >
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -757,7 +762,7 @@ export function EventCreationWizard({
             )}
           >
             {visibleSteps.map(({ index, title, description }, visibleIndex) => {
-              const activePos = visibleStepIndexes.indexOf(activeStep)
+              const activePos = visibleStepIndexes.indexOf(resolvedStep)
               const completed = visibleIndex < activePos
               const available = true
 
@@ -773,7 +778,7 @@ export function EventCreationWizard({
                       "flex size-8 shrink-0 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800 font-mono text-sm font-bold text-muted-foreground",
                       completed &&
                         "border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-                      activeStep === index &&
+                      resolvedStep === index &&
                         "border border-emerald-500/30 bg-emerald-500/20 text-emerald-700 dark:text-emerald-400",
                     )}
                   >
@@ -884,7 +889,7 @@ export function EventCreationWizard({
                           </SelectContent>
                         </Select>
                         <p className="text-xs text-muted-foreground">
-                          Lista definida por Tokepass. No se pueden crear etiquetas libres.
+                          Lista definida por TokePass. No se pueden crear etiquetas libres.
                         </p>
                         <FormMessage>{fieldState.error?.message}</FormMessage>
                       </FormItem>
@@ -1372,7 +1377,7 @@ export function EventCreationWizard({
                             {
                               value: "public" as const,
                               label: "Evento público",
-                              hint: "Visible en portada Tokepass",
+                              hint: "Visible en portada TokePass",
                               icon: Globe2,
                             },
                             {
@@ -1464,11 +1469,11 @@ export function EventCreationWizard({
                   type="button"
                   variant="ghost"
                   disabled={
-                    activeStep === WIZARD_STEP_IDENTITY ||
+                    resolvedStep === WIZARD_STEP_IDENTITY ||
                     form.formState.isSubmitting
                   }
                   onClick={() =>
-                    void moveToStep(prevWizardStep(activeStep, wizardFlags))
+                    void moveToStep(prevWizardStep(resolvedStep, wizardFlags))
                   }
                   className="min-h-11 min-w-11 text-muted-foreground hover:bg-zinc-100 hover:text-foreground dark:hover:bg-white/5"
                 >
@@ -1490,7 +1495,7 @@ export function EventCreationWizard({
                 </Button>
               </div>
 
-              {!isLastVisibleWizardStep(activeStep, wizardFlags) ? (
+              {!isLastVisibleWizardStep(resolvedStep, wizardFlags) ? (
                 <div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:items-center">
                   <Button
                     key="draft-mid"
@@ -1511,7 +1516,7 @@ export function EventCreationWizard({
                     type="button"
                     disabled={inventoryBlocked}
                     onClick={() =>
-                      void moveToStep(nextWizardStep(activeStep, wizardFlags))
+                      void moveToStep(nextWizardStep(resolvedStep, wizardFlags))
                     }
                     className="min-h-11 w-full bg-violet-600 text-base text-white hover:bg-violet-500 lg:w-auto"
                   >
@@ -1547,7 +1552,7 @@ export function EventCreationWizard({
                     ) : (
                       <Rocket />
                     )}
-                    {form.formState.isSubmitting ? "Publicando…" : "Publicar"}
+                    {form.formState.isSubmitting ? "Guardando…" : "Publicar Evento"}
                   </Button>
                 </div>
               )}

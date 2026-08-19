@@ -12,6 +12,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useMemo, useState } from "react"
 
+import { PwaInstallNavButton } from "@/components/pwa/pwa-install-nav-button"
 import { getAdminNavItems } from "@/components/shared/admin-nav"
 import { BrandLogo } from "@/components/shared/brand-logo"
 import { SignOutButton } from "@/components/shared/sign-out-button"
@@ -234,6 +235,10 @@ export function AdminBottomNav({
                 </Link>
               )
             })}
+            <PwaInstallNavButton
+              variant="sidebar"
+              onAction={() => setMenuOpen(false)}
+            />
           </nav>
 
           <SheetFooter className="gap-3">

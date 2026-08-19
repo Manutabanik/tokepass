@@ -18,6 +18,7 @@ export type OfflineEventData = {
   eventId: string
   eventTitle: string
   eventDate: string
+  doorsOpenAt?: string
   eventLocation: string
   flyerUrl: string | null
   socialShareImageUrl?: string | null
@@ -39,7 +40,7 @@ export type OfflineEventData = {
   holderDni: string | null
   isTest?: boolean
   tierPrice?: number
-  isSponsoredByTokepass?: boolean
+  isSponsoredByTokePass?: boolean
   pendingTransfer?: {
     id: string
     receiverEmail: string
@@ -257,6 +258,7 @@ export function ticketToOfflineRecord(
       eventId: ticket.eventId,
       eventTitle: ticket.eventTitle,
       eventDate: ticket.eventDate,
+      doorsOpenAt: ticket.doorsOpenAt,
       eventLocation: ticket.eventLocation,
       flyerUrl: ticket.flyerUrl,
       socialShareImageUrl: ticket.socialShareImageUrl,
@@ -278,7 +280,7 @@ export function ticketToOfflineRecord(
       holderDni: ticket.holderDni,
       isTest: ticket.isTest,
       tierPrice: ticket.tierPrice,
-      isSponsoredByTokepass: ticket.isSponsoredByTokepass,
+      isSponsoredByTokePass: ticket.isSponsoredByTokePass,
       pendingTransfer: ticket.pendingTransfer,
     },
     status: ticket.status,
@@ -315,6 +317,7 @@ export function offlineRecordToTicket(record: OfflineTicketRecord): MyTicket {
     eventId: record.event_data.eventId,
     eventTitle: record.event_data.eventTitle,
     eventDate: record.event_data.eventDate,
+    doorsOpenAt: record.event_data.doorsOpenAt ?? record.event_data.eventDate,
     eventLocation: record.event_data.eventLocation,
     flyerUrl: record.event_data.flyerUrl,
     socialShareImageUrl: record.event_data.socialShareImageUrl ?? null,
@@ -326,8 +329,8 @@ export function offlineRecordToTicket(record: OfflineTicketRecord): MyTicket {
     holderDni: record.event_data.holderDni ?? null,
     isTest: Boolean(record.is_test ?? record.event_data.isTest),
     tierPrice: Number(record.event_data.tierPrice ?? 0),
-    isSponsoredByTokepass: Boolean(
-      record.event_data.isSponsoredByTokepass,
+    isSponsoredByTokePass: Boolean(
+      record.event_data.isSponsoredByTokePass,
     ),
     activeResaleListingId: null,
     pendingTransfer: record.event_data.pendingTransfer ?? null,
@@ -408,11 +411,12 @@ async function putTicketsAndMeta(
   return active
 }
 
-function precacheTicketAssets(_tickets: MyTicket[]) {
+function precacheTicketAssets(tickets: MyTicket[]) {
   requestTicketAssetCache([
     "/brand/tokepass-mark.png",
-    "/icons/icon-192.png",
+    "/icons/icon-192x192.png",
     "/offline/billetera",
+    ...tickets.map((ticket) => ticket.flyerUrl),
   ])
   try {
     window.localStorage.setItem(

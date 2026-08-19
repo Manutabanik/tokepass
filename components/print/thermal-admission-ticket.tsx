@@ -43,7 +43,7 @@ export function ThermalAdmissionTicket({
   return (
     <article className="relative print-ticket print-ticket-admission">
       {isTest ? <TestTicketWatermark compact /> : null}
-      <p className="print-ticket-brand">Tokepass</p>
+      <p className="print-ticket-brand">TokePass</p>
 
       <p className="print-ticket-tier">{tierName}</p>
       {seatLabel ? <p className="print-ticket-seat">{seatLabel}</p> : null}

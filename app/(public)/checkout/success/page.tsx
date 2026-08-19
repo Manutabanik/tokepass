@@ -92,7 +92,7 @@ export default async function CheckoutSuccessPage({
                   purchaseAnalytics.eventDate || new Date().toISOString(),
                 eventLocation:
                   purchaseAnalytics.eventLocation ||
-                  "Ver ubicacion en Tokepass",
+                  "Ver ubicacion en TokePass",
                 imageUrl: purchaseAnalytics.eventImageUrl,
                 customStoryUrl: purchaseAnalytics.socialShareImageUrl,
                 mode: "buyer",

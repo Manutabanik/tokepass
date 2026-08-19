@@ -119,17 +119,17 @@ export function OrganizerAuthForm({
         <div className="mt-5 flex flex-col items-center justify-center gap-1 text-center text-sm text-muted-foreground sm:flex-row sm:gap-2">
           <span>¿Todavía no tenés cuenta?</span>
           <Link
-            href="/organizadores#solicitud"
+            href="/register-organizador"
             className="font-medium text-violet-700 hover:text-violet-600 dark:text-violet-400 dark:hover:text-violet-300"
           >
-            Solicitar acceso
+            Crear cuenta de Organizador
           </Link>
         </div>
 
         <div className="mt-6 flex items-start gap-3 rounded-xl bg-muted/60 p-3 text-xs leading-5 text-muted-foreground">
           <ShieldCheck className="mt-0.5 size-4 shrink-0 text-violet-600 dark:text-violet-400" />
-          El alta de productoras es asistida. No hay registro libre: Tokepass
-          valida cada cuenta antes de habilitar cobros.
+          Podés crear la cuenta y armar el evento. La venta al público se
+          habilita después de la auditoría de TokePass.
         </div>
       </CardContent>
     </Card>

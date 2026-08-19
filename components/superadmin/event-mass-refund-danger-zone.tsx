@@ -65,7 +65,11 @@ export function EventMassRefundDangerZone({
       }
 
       toast.success("Devolución masiva ejecutada", {
-        description: `${formatNumber(result.data.ordersRefunded)} compras · ${formatNumber(result.data.ticketsCancelled)} entradas anuladas`,
+        description: `${formatNumber(result.data.ordersRefunded)} compras reembolsadas · ${formatNumber(result.data.ticketsCancelled)} entradas anuladas${
+          result.data.mpFailed > 0
+            ? ` · ${formatNumber(result.data.mpFailed)} sin confirmar en la pasarela`
+            : ""
+        }`,
       })
       setOpen(false)
       setArmed(false)
@@ -86,8 +90,9 @@ export function EventMassRefundDangerZone({
             Cancelar evento y devolver la plata
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-rose-900/70 dark:text-rose-100/70">
-            Usá esto solo en caso de fuerza mayor. Anula todas las entradas y
-            dispara la devolución del dinero a los compradores.
+            Usá esto solo en caso de fuerza mayor. Primero se pide el
+            reembolso a Mercado Pago. Solo si la pasarela confirma el
+            éxito se anulan esa compra y sus códigos QR.
           </p>
         </div>
         <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-right">

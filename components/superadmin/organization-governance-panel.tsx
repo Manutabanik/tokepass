@@ -252,7 +252,7 @@ export function OrganizationGovernancePanel({
               Comisión de la ticketera
             </CardTitle>
             <CardDescription className="text-muted-foreground">
-              Definí qué porcentaje se queda Tokepass sobre el precio que ve el
+              Definí qué porcentaje se queda TokePass sobre el precio que ve el
               comprador. Se aplica a los eventos nuevos de esta productora.
             </CardDescription>
           </CardHeader>

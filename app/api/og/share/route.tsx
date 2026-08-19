@@ -8,7 +8,7 @@ const HEIGHT = 1920
 const MAX_TITLE_LEN = 72
 
 function sanitizeTitle(raw: string | null): string {
-  if (!raw) return "Evento Tokepass"
+  if (!raw) return "Evento TokePass"
   let decoded = raw
   try {
     decoded = decodeURIComponent(raw)
@@ -19,7 +19,7 @@ function sanitizeTitle(raw: string | null): string {
     .replace(/[\u0000-\u001F\u007F]/g, "")
     .replace(/\s+/g, " ")
     .trim()
-  if (!clean) return "Evento Tokepass"
+  if (!clean) return "Evento TokePass"
   return clean.length > MAX_TITLE_LEN
     ? `${clean.slice(0, MAX_TITLE_LEN - 1)}…`
     : clean
@@ -259,7 +259,7 @@ function AutoHypeCard({
                 fontWeight: 700,
               }}
             >
-              Tokepass
+              TokePass
             </div>
           )}
         </div>
@@ -303,7 +303,7 @@ function AutoHypeCard({
               textTransform: "uppercase",
             }}
           >
-            Adquirida en Tokepass
+            Adquirida en TokePass
           </div>
         </div>
       </div>

@@ -1,14 +1,16 @@
 "use client"
 
-import { Loader2, Plus, Tag } from "lucide-react"
+import { Loader2, Pencil, Plus, Tag, Users } from "lucide-react"
 import { useEffect, useMemo, useState, useTransition } from "react"
 import { toast } from "sonner"
 
 import {
   createPromoCode,
   setPromoCodeActive,
+  updatePromoCode,
   type PromoCodeRow,
 } from "@/app/actions/coupons"
+import type { PromoterOption } from "@/app/actions/promoters"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -40,6 +42,8 @@ import { formatCurrency, formatDateTime } from "@/lib/format"
 import type { PromoDiscountType } from "@/types/database"
 import { cn } from "@/lib/utils"
 
+const NONE_PROMOTER = "__none__"
+
 function discountLabel(row: PromoCodeRow) {
   if (row.discount_type === "percentage") {
     return `${Number(row.discount_value)}%`
@@ -47,17 +51,30 @@ function discountLabel(row: PromoCodeRow) {
   return formatCurrency(Number(row.discount_value))
 }
 
+function promoterLabel(
+  promoterId: string | null | undefined,
+  promoters: PromoterOption[],
+) {
+  if (!promoterId) return "Sin RRPP"
+  return (
+    promoters.find((item) => item.id === promoterId)?.name ?? "RRPP vinculado"
+  )
+}
+
 export function EventCouponsManager({
   eventId,
   eventTitle,
   initialCoupons,
+  promoters,
 }: {
   eventId: string
   eventTitle: string
   initialCoupons: PromoCodeRow[]
+  promoters: PromoterOption[]
 }) {
   const [coupons, setCoupons] = useState(initialCoupons)
   const [open, setOpen] = useState(false)
+  const [editing, setEditing] = useState<PromoCodeRow | null>(null)
   const [pending, startTransition] = useTransition()
 
   const [code, setCode] = useState("")
@@ -66,6 +83,8 @@ export function EventCouponsManager({
   const [discountValue, setDiscountValue] = useState("10")
   const [maxUses, setMaxUses] = useState("")
   const [validUntil, setValidUntil] = useState("")
+  const [promoterId, setPromoterId] = useState(NONE_PROMOTER)
+  const [editPromoterId, setEditPromoterId] = useState(NONE_PROMOTER)
 
   const activeCount = useMemo(
     () => coupons.filter((item) => item.is_active).length,
@@ -87,6 +106,7 @@ export function EventCouponsManager({
     setDiscountValue("10")
     setMaxUses("")
     setValidUntil("")
+    setPromoterId(NONE_PROMOTER)
   }
 
   function submitCreate() {
@@ -100,6 +120,7 @@ export function EventCouponsManager({
         validUntil: validUntil.trim()
           ? new Date(validUntil).toISOString()
           : null,
+        promoterId: promoterId === NONE_PROMOTER ? null : promoterId,
       })
       if (!result.success) {
         toast.error(result.error)
@@ -109,6 +130,26 @@ export function EventCouponsManager({
       toast.success(`Cupón ${result.data.code} creado.`)
       resetForm()
       setOpen(false)
+    })
+  }
+
+  function submitEdit() {
+    if (!editing) return
+    startTransition(async () => {
+      const result = await updatePromoCode({
+        eventId,
+        promoCodeId: editing.id,
+        promoterId: editPromoterId === NONE_PROMOTER ? null : editPromoterId,
+      })
+      if (!result.success) {
+        toast.error(result.error)
+        return
+      }
+      setCoupons((current) =>
+        current.map((item) => (item.id === result.data.id ? result.data : item)),
+      )
+      toast.success(`Cupón ${result.data.code} actualizado.`)
+      setEditing(null)
     })
   }
 
@@ -158,6 +199,7 @@ export function EventCouponsManager({
             <TableRow>
               <TableHead>Código</TableHead>
               <TableHead>Descuento</TableHead>
+              <TableHead>RRPP</TableHead>
               <TableHead>Usos</TableHead>
               <TableHead>Vence</TableHead>
               <TableHead>Estado</TableHead>
@@ -168,7 +210,7 @@ export function EventCouponsManager({
             {coupons.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={7}
                   className="py-10 text-center text-sm text-muted-foreground"
                 >
                   Todavía no hay cupones. Creá el primero para campañas B2C.
@@ -191,6 +233,12 @@ export function EventCouponsManager({
                       </span>
                     </TableCell>
                     <TableCell>{discountLabel(row)}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      <span className="inline-flex items-center gap-1.5">
+                        <Users className="size-3.5" aria-hidden />
+                        {promoterLabel(row.promoter_id, promoters)}
+                      </span>
+                    </TableCell>
                     <TableCell className="tabular-nums">
                       {row.current_uses}
                       {row.max_uses != null ? ` / ${row.max_uses}` : " · ilimitado"}
@@ -222,16 +270,32 @@ export function EventCouponsManager({
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={pending}
-                        onClick={() => toggleActive(row)}
-                        className="rounded-full"
-                      >
-                        {row.is_active ? "Desactivar" : "Activar"}
-                      </Button>
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={pending}
+                          onClick={() => {
+                            setEditing(row)
+                            setEditPromoterId(row.promoter_id ?? NONE_PROMOTER)
+                          }}
+                          className="rounded-full"
+                        >
+                          <Pencil className="size-3.5" aria-hidden />
+                          Editar
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={pending}
+                          onClick={() => toggleActive(row)}
+                          className="rounded-full"
+                        >
+                          {row.is_active ? "Desactivar" : "Activar"}
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 )
@@ -325,6 +389,41 @@ export function EventCouponsManager({
                 />
               </div>
             </div>
+
+            <div className="space-y-2">
+              <Label>RRPP dueño del cupón</Label>
+              <Select
+                value={promoterId}
+                onValueChange={(value) => value && setPromoterId(value)}
+                items={[
+                  { value: NONE_PROMOTER, label: "Sin RRPP" },
+                  ...promoters.map((item) => ({
+                    value: item.id,
+                    label: `${item.name} · ${item.referralCode}`,
+                  })),
+                ]}
+              >
+                <SelectTrigger className="w-full max-w-full overflow-hidden">
+                  <SelectValue>
+                    {promoterId === NONE_PROMOTER
+                      ? "Sin RRPP"
+                      : promoterLabel(promoterId, promoters)}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE_PROMOTER}>Sin RRPP</SelectItem>
+                  {promoters.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>
+                      {item.name} · {item.referralCode}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Si lo vinculás, el cupón atribuye la venta a ese promotor aunque
+                el comprador no tenga cookie de referido.
+              </p>
+            </div>
           </div>
 
           <DialogFooter>
@@ -344,6 +443,74 @@ export function EventCouponsManager({
                 </>
               ) : (
                 "Crear cupón"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(editing)}
+        onOpenChange={(next) => {
+          if (!next) setEditing(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar cupón</DialogTitle>
+            <DialogDescription>
+              {editing
+                ? `Asigná el RRPP dueño de ${editing.code}. El cupón manda sobre la cookie de referido.`
+                : "Asigná el RRPP dueño de este cupón."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label>RRPP dueño del cupón</Label>
+            <Select
+              value={editPromoterId}
+              onValueChange={(value) => value && setEditPromoterId(value)}
+              items={[
+                { value: NONE_PROMOTER, label: "Sin RRPP" },
+                ...promoters.map((item) => ({
+                  value: item.id,
+                  label: `${item.name} · ${item.referralCode}`,
+                })),
+              ]}
+            >
+              <SelectTrigger className="w-full max-w-full overflow-hidden">
+                <SelectValue>
+                  {editPromoterId === NONE_PROMOTER
+                    ? "Sin RRPP"
+                    : promoterLabel(editPromoterId, promoters)}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NONE_PROMOTER}>Sin RRPP</SelectItem>
+                {promoters.map((item) => (
+                  <SelectItem key={item.id} value={item.id}>
+                    {item.name} · {item.referralCode}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setEditing(null)}
+              disabled={pending}
+            >
+              Cancelar
+            </Button>
+            <Button type="button" onClick={submitEdit} disabled={pending}>
+              {pending ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                  Guardando…
+                </>
+              ) : (
+                "Guardar"
               )}
             </Button>
           </DialogFooter>

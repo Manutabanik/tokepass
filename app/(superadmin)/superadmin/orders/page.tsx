@@ -17,6 +17,7 @@ const ORDER_STATUSES = new Set([
   "failed",
   "expired",
   "refunded",
+  "refund_processing",
 ])
 
 export default async function SuperAdminOrdersPage({
@@ -62,7 +63,7 @@ export default async function SuperAdminOrdersPage({
         <PageHeading
           eyebrow="Dinero en movimiento"
           title="Compras de la plataforma"
-          description="Acá ves cuánto se cobró, cuánto se queda Tokepass y cuánto le corresponde a cada productora."
+          description="Acá ves cuánto se cobró, cuánto se queda TokePass y cuánto le corresponde a cada productora."
         />
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-8 text-amber-50">
           <h2 className="text-lg font-bold">No pudimos cargar las compras</h2>
@@ -83,7 +84,7 @@ export default async function SuperAdminOrdersPage({
       <PageHeading
         eyebrow="Dinero en movimiento"
         title="Compras de la plataforma"
-        description="Acá ves cuánto se cobró, cuánto se queda Tokepass y cuánto le corresponde a cada productora."
+        description="Acá ves cuánto se cobró, cuánto se queda TokePass y cuánto le corresponde a cada productora."
       />
 
       <PlatformOrdersLedger

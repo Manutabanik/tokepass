@@ -54,7 +54,7 @@ export function PosTicketHandoffDialog({
     const links = tickets
       .map((ticket) => `${siteOrigin}/tickets/${ticket.id}/print`)
       .join("\n")
-    const text = `Tu entrada Tokepass para ${eventTitle}. Abrí el QR:\n${links}`
+    const text = `Tu entrada TokePass para ${eventTitle}. Abrí el QR:\n${links}`
     return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`
   }, [eventTitle, phone, siteOrigin, tickets])
 

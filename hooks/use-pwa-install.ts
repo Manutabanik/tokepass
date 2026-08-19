@@ -2,18 +2,20 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react"
 
+import {
+  detectPwaPlatform,
+  ensurePwaInstallCapture,
+  isIosDevice,
+  isPwaStandalone,
+  type BeforeInstallPromptEvent,
+  type PwaPlatform,
+} from "@/lib/pwa/runtime"
+import { usePwaRuntimeStore } from "@/lib/stores/pwa-runtime-store"
+
 const DISMISS_KEY = "tokepass-pwa-install-dismissed-at"
 const DISMISS_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
-/** Chromium `beforeinstallprompt` (no tipado aún en lib.dom). */
-export type BeforeInstallPromptEvent = Event & {
-  readonly platforms: string[]
-  readonly userChoice: Promise<{
-    outcome: "accepted" | "dismissed"
-    platform: string
-  }>
-  prompt: () => Promise<void>
-}
+export type { BeforeInstallPromptEvent, PwaPlatform }
 
 function readDismissedRecently(): boolean {
   if (typeof window === "undefined") return true
@@ -26,37 +28,6 @@ function readDismissedRecently(): boolean {
   } catch {
     return false
   }
-}
-
-export function isPwaStandalone(): boolean {
-  if (typeof window === "undefined") return false
-
-  const displayStandalone = window.matchMedia(
-    "(display-mode: standalone)",
-  ).matches
-  const displayMinimal = window.matchMedia(
-    "(display-mode: minimal-ui)",
-  ).matches
-  const iosStandalone =
-    "standalone" in window.navigator &&
-    Boolean(
-      (window.navigator as Navigator & { standalone?: boolean }).standalone,
-    )
-
-  return displayStandalone || displayMinimal || iosStandalone
-}
-
-export function isIosDevice(): boolean {
-  if (typeof navigator === "undefined") return false
-
-  const ua = navigator.userAgent
-  if (/iPhone|iPad|iPod/i.test(ua)) return true
-
-  return (
-    navigator.platform === "MacIntel" &&
-    typeof navigator.maxTouchPoints === "number" &&
-    navigator.maxTouchPoints > 1
-  )
 }
 
 function subscribeStandalone(onStoreChange: () => void) {
@@ -80,7 +51,19 @@ function subscribeStandalone(onStoreChange: () => void) {
   }
 }
 
+export {
+  detectPwaPlatform,
+  isIosDevice,
+  isPwaStandalone,
+} from "@/lib/pwa/runtime"
+
 export function usePwaInstall() {
+  const deferredPrompt = usePwaRuntimeStore((state) => state.deferredPrompt)
+  const setDeferredPrompt = usePwaRuntimeStore(
+    (state) => state.setDeferredPrompt,
+  )
+  const setIosGuideOpen = usePwaRuntimeStore((state) => state.setIosGuideOpen)
+
   const isStandalone = useSyncExternalStore(
     subscribeStandalone,
     isPwaStandalone,
@@ -91,35 +74,21 @@ export function usePwaInstall() {
     isIosDevice,
     () => false,
   )
+  const platform = useSyncExternalStore(
+    () => () => {},
+    detectPwaPlatform,
+    () => "desktop" as PwaPlatform,
+  )
   const [dismissed, setDismissed] = useState(true)
   const [clientReady, setClientReady] = useState(false)
-  const [deferredPrompt, setDeferredPrompt] =
-    useState<BeforeInstallPromptEvent | null>(null)
 
   useEffect(() => {
+    ensurePwaInstallCapture()
     const readyTimer = window.setTimeout(() => {
       setDismissed(readDismissedRecently())
       setClientReady(true)
     }, 0)
-
-    function onBeforeInstall(event: Event) {
-      const enableInDev = process.env.NEXT_PUBLIC_PWA === "1"
-      if (process.env.NODE_ENV !== "production" && !enableInDev) {
-        return
-      }
-      if (isPwaStandalone() || readDismissedRecently()) {
-        return
-      }
-      event.preventDefault()
-      setDeferredPrompt(event as BeforeInstallPromptEvent)
-    }
-
-    window.addEventListener("beforeinstallprompt", onBeforeInstall)
-
-    return () => {
-      window.clearTimeout(readyTimer)
-      window.removeEventListener("beforeinstallprompt", onBeforeInstall)
-    }
+    return () => window.clearTimeout(readyTimer)
   }, [])
 
   const dismiss = useCallback(() => {
@@ -131,10 +100,17 @@ export function usePwaInstall() {
     setDismissed(true)
   }, [])
 
+  const openIosGuide = useCallback(() => {
+    setIosGuideOpen(true)
+  }, [setIosGuideOpen])
+
   const promptInstall = useCallback(async (): Promise<
     "accepted" | "dismissed" | "unavailable" | "ios"
   > => {
-    if (isIos) return "ios"
+    if (isIos || platform === "ios") {
+      openIosGuide()
+      return "ios"
+    }
     if (!deferredPrompt) return "unavailable"
 
     try {
@@ -145,24 +121,26 @@ export function usePwaInstall() {
     } catch {
       return "unavailable"
     }
-  }, [deferredPrompt, isIos])
+  }, [deferredPrompt, isIos, openIosGuide, platform, setDeferredPrompt])
 
   const canNativeInstall = Boolean(deferredPrompt) && !isIos
+  const canShowInstallCta = !isStandalone && (canNativeInstall || isIos)
   const canShowBanner =
-    clientReady &&
-    !isStandalone &&
-    !dismissed &&
-    (canNativeInstall || isIos)
+    clientReady && !dismissed && canShowInstallCta
 
   return {
     deferredPrompt,
     isStandalone,
     isIos,
+    isAndroid: platform === "android",
+    platform,
     dismissed,
     ready: clientReady,
     canNativeInstall,
+    canShowInstallCta,
     canShowBanner,
     dismiss,
     promptInstall,
+    openIosGuide,
   }
 }

@@ -1035,12 +1035,66 @@ async function processMercadoPagoWebhook(
       })
     }
 
-    if (
-      status === "rejected" ||
-      status === "cancelled" ||
-      status === "refunded" ||
-      status === "charged_back"
-    ) {
+    if (status === "refunded" || status === "charged_back") {
+      const ledgerStatus = String(status)
+      if (await alreadyProcessed(admin, mpPaymentId, ledgerStatus)) {
+        return NextResponse.json(
+          { success: true, data: { idempotent: true, status: ledgerStatus } },
+          { status: 200 },
+        )
+      }
+
+      if (order.status === "paid" || order.status === "refund_processing") {
+        await admin
+          .from("orders")
+          .update({ mp_payment_id: mpPaymentId })
+          .eq("id", orderId)
+
+        const { error: refundError } = await admin.rpc(
+          "apply_order_refund_state",
+          {
+            p_order_id: orderId,
+            p_order_status: "refunded",
+          },
+        )
+        const { error: cancelError } = await admin.rpc(
+          "cancel_paid_order_tickets",
+          { p_order_id: orderId },
+        )
+        if (refundError || cancelError) {
+          logger.error({
+            context: "webhooks/mercadopago",
+            message: "refunded_ticket_cancel_failed",
+            order_id: orderId,
+            payment_id: mpPaymentId,
+            error: refundError?.message ?? cancelError?.message,
+          })
+          if (refundError) {
+            await admin
+              .from("orders")
+              .update({ status: "refunded", mp_payment_id: mpPaymentId })
+              .eq("id", orderId)
+          }
+          if (cancelError) {
+            return NextResponse.json(
+              { success: false, error: cancelError.message },
+              { status: 200 },
+            )
+          }
+        }
+      }
+
+      await recordWebhookEvent(admin, {
+        paymentId: mpPaymentId,
+        orderId,
+        status: ledgerStatus,
+        rawSummary: null,
+      })
+
+      return NextResponse.json({ success: true }, { status: 200 })
+    }
+
+    if (status === "rejected" || status === "cancelled") {
       const ledgerStatus = String(status)
       if (await alreadyProcessed(admin, mpPaymentId, ledgerStatus)) {
         return NextResponse.json(
@@ -1088,34 +1142,6 @@ async function processMercadoPagoWebhook(
           })
           return NextResponse.json(
             { success: false, error: "order_status_update_failed" },
-            { status: 200 },
-          )
-        }
-      }
-
-      if (
-        (status === "refunded" || status === "charged_back") &&
-        (order.status === "paid" || order.mp_payment_id === mpPaymentId)
-      ) {
-        await admin
-          .from("orders")
-          .update({ status: "failed", mp_payment_id: mpPaymentId })
-          .eq("id", orderId)
-
-        const { error: cancelError } = await admin.rpc(
-          "cancel_paid_order_tickets",
-          { p_order_id: orderId },
-        )
-        if (cancelError) {
-          logger.error({
-            context: "webhooks/mercadopago",
-            message: "cancel_paid_tickets_failed",
-            order_id: orderId,
-            payment_id: mpPaymentId,
-            error: cancelError.message,
-          })
-          return NextResponse.json(
-            { success: false, error: cancelError.message },
             { status: 200 },
           )
         }

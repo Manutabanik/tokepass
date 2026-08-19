@@ -140,13 +140,14 @@ export const useEventFormStore = create<EventFormStore>()(
 
       setEventId: (eventId) => set({ eventId, draftKey: `edit:${eventId}` }),
 
-      setWizardStep: (step) =>
-        set({
-          wizardStep: Math.min(
-            EVENT_WIZARD_STEP_COUNT - 1,
-            Math.max(0, step),
-          ),
-        }),
+      setWizardStep: (step) => {
+        const wizardStep = Math.min(
+          EVENT_WIZARD_STEP_COUNT - 1,
+          Math.max(0, step),
+        )
+        if (get().wizardStep === wizardStep) return
+        set({ wizardStep })
+      },
 
       setAutosaveStatus: (status, error = null) =>
         set({ autosaveStatus: status, autosaveError: error }),

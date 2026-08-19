@@ -4,7 +4,7 @@ import { AccountNotificationsPanel } from "@/components/account/account-notifica
 
 export const metadata: Metadata = {
   title: "Notificaciones",
-  description: "Novedades de tu cuenta Tokepass.",
+  description: "Novedades de tu cuenta TokePass.",
 }
 
 export default function CuentaNotificacionesPage() {

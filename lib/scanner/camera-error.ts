@@ -7,7 +7,7 @@ export function scannerCameraErrorMessage(
 
   switch (kind) {
     case "permission-denied":
-      return "No pudimos usar la cámara. En el navegador, permití el acceso a la cámara para Tokepass y volvé a intentar."
+      return "No pudimos usar la cámara. En el navegador, permití el acceso a la cámara para TokePass y volvé a intentar."
     case "no-camera":
       return "Este dispositivo no tiene una cámara disponible."
     case "in-use":
@@ -24,7 +24,7 @@ export function scannerCameraErrorMessage(
 
   const message = "message" in error ? error.message?.trim() : ""
   if (message && /denied|permission|notallowed/i.test(message)) {
-    return "No pudimos usar la cámara. En el navegador, permití el acceso a la cámara para Tokepass y volvé a intentar."
+    return "No pudimos usar la cámara. En el navegador, permití el acceso a la cámara para TokePass y volvé a intentar."
   }
   return message || "El navegador no pudo iniciar la cámara."
 }

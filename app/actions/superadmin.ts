@@ -108,7 +108,12 @@ export async function getAllOrganizers(): Promise<OrganizerPlatformRow[]> {
 
   for (const event of events ?? []) {
     eventOrganizer.set(event.id, event.organizer_id)
-    if (event.status === "published" || event.status === "draft") {
+    if (
+      event.status === "published" ||
+      event.status === "draft" ||
+      event.status === "pending_approval" ||
+      event.status === "needs_revision"
+    ) {
       activeEventsByOrganizer.set(
         event.organizer_id,
         (activeEventsByOrganizer.get(event.organizer_id) ?? 0) + 1,
@@ -756,9 +761,14 @@ export async function getPlatformMoneyLedger(
     .map((row) => ({
       orderId: row.order_id,
       createdAt: row.created_at,
-      status: (["pending", "paid", "failed", "expired", "refunded"].includes(
-        row.status,
-      )
+      status: ([
+        "pending",
+        "paid",
+        "failed",
+        "expired",
+        "refunded",
+        "refund_processing",
+      ].includes(row.status)
         ? row.status
         : "pending") as OrderStatus,
       paymentMethod: row.mp_payment_id?.startsWith("free:")

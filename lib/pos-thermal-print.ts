@@ -42,7 +42,7 @@ export async function printOneTicketViaHiddenIframe(
 
   const iframe = document.createElement("iframe")
   iframe.setAttribute("aria-hidden", "true")
-  iframe.title = "Impresión térmica Tokepass"
+  iframe.title = "Impresión térmica TokePass"
   iframe.style.cssText =
     "position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;pointer-events:none;"
   iframe.src = `/tickets/${ticketId}/print?autoprint=1`
@@ -60,7 +60,7 @@ export async function printUrlViaHiddenIframe(url: string): Promise<void> {
 
   const iframe = document.createElement("iframe")
   iframe.setAttribute("aria-hidden", "true")
-  iframe.title = "Impresión térmica Tokepass"
+  iframe.title = "Impresión térmica TokePass"
   iframe.style.cssText =
     "position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;pointer-events:none;"
   iframe.src = url.includes("?") ? `${url}&autoprint=1` : `${url}?autoprint=1`

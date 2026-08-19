@@ -33,6 +33,7 @@ import {
 import { fisherYatesShuffle, FEATURED_CAROUSEL_LIMIT } from "@/lib/featured-rotation"
 import type { FeaturedRotationResult } from "@/lib/featured-rotation"
 import { isPastEvent } from "@/lib/event-status"
+import { isSandboxEventStatus } from "@/lib/events/review-status"
 import { isHomePriority, sortCatalogForHome } from "@/lib/services/events-service"
 import { isEventUuid } from "@/lib/seo/site"
 import { decodeEventParam, eventSlugSuffix, uuidPrefixFromSlugSuffix } from "@/lib/seo/event-slug"
@@ -91,7 +92,7 @@ export type CatalogEvent = {
   isFeatured: boolean
   featuredTier: "silver" | "gold" | "platinum" | null
   featuredUntil: string | null
-  isSponsoredByTokepass: boolean
+  isSponsoredByTokePass: boolean
   /** FK event_categories — taxonomía centralizada. */
   categoryId: string | null
   /** Lineup público (`event_artists` o JSON `events.lineup`). */
@@ -110,11 +111,11 @@ export type EventDetails = {
   status: Event["status"]
   visibility: Event["visibility"]
   scheduleDays: ScheduleDay[]
-  /** Fracción decimal del cargo Tokepass (ej. 0.15) */
+  /** Fracción decimal del cargo TokePass (ej. 0.15) */
   serviceChargeRate: number
   /** Cargo fijo ARS por entrada paga (split All-In). */
   platformFixedFee: number
-  isSponsoredByTokepass: boolean
+  isSponsoredByTokePass: boolean
   maxFreeTickets: number
   organizerName: string | null
   organizerBio: string | null
@@ -538,7 +539,7 @@ function mapEventListRow(event: EventListRow): CatalogEvent {
     isFeatured: stillActive,
     featuredTier: stillActive ? event.featured_tier : null,
     featuredUntil: stillActive ? featuredUntil : null,
-    isSponsoredByTokepass: Boolean(event.is_sponsored_by_tokepass),
+    isSponsoredByTokePass: Boolean(event.is_sponsored_by_tokepass),
     categoryId: event.category_id ?? null,
     artists: mapCatalogEventArtists({
       eventArtists: event.event_artists,
@@ -549,7 +550,7 @@ function mapEventListRow(event: EventListRow): CatalogEvent {
 
 /**
  * Eventos para el Hero / Destacados.
- * Incluye auspicio Tokepass y boosts activos; Fisher–Yates + tope 6.
+ * Incluye auspicio TokePass y boosts activos; Fisher–Yates + tope 6.
  * Un solo elegible también entra al carrusel.
  */
 export async function getFeaturedEvents(options?: {
@@ -1016,8 +1017,8 @@ async function loadEventDetails(
     platformFixedFee = Number(fixedFeeRpc)
   }
 
-  const isSponsoredByTokepass = Boolean(event.is_sponsored_by_tokepass)
-  if (isSponsoredByTokepass) {
+  const isSponsoredByTokePass = Boolean(event.is_sponsored_by_tokepass)
+  if (isSponsoredByTokePass) {
     serviceChargeRate = 0
     platformFixedFee = 0
   }
@@ -1075,7 +1076,7 @@ async function loadEventDetails(
     scheduleDays,
     serviceChargeRate,
     platformFixedFee,
-    isSponsoredByTokepass,
+    isSponsoredByTokePass,
     maxFreeTickets: Number(event.max_free_tickets ?? 100),
     maxTicketsPerUser: (() => {
       const raw = Number(event.max_tickets_per_user)
@@ -1266,7 +1267,7 @@ async function loadEventDetails(
     createdAt: event.created_at ?? null,
     isDraftPreview:
       options.mode === "preview_share" ||
-      (options.mode === "preview" && event.status === "draft"),
+      (options.mode === "preview" && isSandboxEventStatus(event.status)),
   }
 }
 

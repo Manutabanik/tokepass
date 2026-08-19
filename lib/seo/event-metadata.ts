@@ -60,14 +60,14 @@ export function buildEventMetadata(event: EventSeoInput): Metadata {
   const place = venueLine(event)
   const dateLabel = formatEventDay(event.date)
   const description =
-    `Conseguí tus entradas para ${event.title} en ${place}. Fecha: ${dateLabel}. Compra directa y segura sin filas en Tokepass.`
-  const title = `${event.title} - Entradas Oficiales | Tokepass`
+    `Conseguí tus entradas para ${event.title} en ${place}. Fecha: ${dateLabel}. Compra directa y segura sin filas en TokePass.`
+  const title = `${event.title} - Entradas Oficiales | TokePass`
   const keywords = [
     event.title,
     "entradas",
     "boletos",
     locality(event),
-    "Tokepass",
+    "TokePass",
   ].filter((item, index, all) => all.indexOf(item) === index)
   const images = event.imageUrl
     ? [
@@ -89,7 +89,7 @@ export function buildEventMetadata(event: EventSeoInput): Metadata {
       title,
       description,
       url: canonical,
-      siteName: "Tokepass",
+      siteName: "TokePass",
       locale: "es_AR",
       type: "website",
       images,
@@ -138,7 +138,7 @@ export function buildEventJsonLd(event: EventSeoInput): Record<string, unknown> 
     image: event.imageUrl || undefined,
     description:
       event.description?.trim() ||
-      `Entradas oficiales para ${event.title} en Tokepass.`,
+      `Entradas oficiales para ${event.title} en TokePass.`,
     offers: {
       "@type": "AggregateOffer",
       url,
@@ -151,7 +151,7 @@ export function buildEventJsonLd(event: EventSeoInput): Record<string, unknown> 
       validFrom,
       seller: {
         "@type": "Organization",
-        name: "Tokepass",
+        name: "TokePass",
       },
     },
   }

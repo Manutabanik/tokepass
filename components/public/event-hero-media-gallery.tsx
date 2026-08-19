@@ -75,8 +75,16 @@ export function EventHeroMediaGallery({
     emblaApi?.scrollNext()
   }, [emblaApi, selected])
 
+  const goTo = useCallback(
+    (index: number) => {
+      if (index !== 1) setWantsPlay(false)
+      emblaApi?.scrollTo(index)
+    },
+    [emblaApi],
+  )
+
   const arrowClassName =
-    "pointer-events-auto absolute top-1/2 z-20 hidden size-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-black/50 text-white shadow-xl backdrop-blur-md opacity-0 transition-opacity duration-300 group-hover:opacity-100 md:flex"
+    "pointer-events-auto absolute top-1/2 z-50 flex size-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/25 bg-black/60 text-white shadow-xl backdrop-blur-md"
 
   return (
     <section aria-label="Galería multimedia del evento">
@@ -100,14 +108,24 @@ export function EventHeroMediaGallery({
             {hasVideo ? (
               <div className="relative h-full min-w-0 w-full shrink-0 grow-0 basis-full snap-start overflow-hidden bg-black">
                 {wantsPlay ? (
-                  <PromoVideoPlayer
-                    url={promoVideoUrl}
-                    fallbackImageUrl={imageUrl}
-                    title={`Spot · ${title}`}
-                    active={videoActive}
-                    gallery
-                    fill
-                  />
+                  <>
+                    <PromoVideoPlayer
+                      url={promoVideoUrl}
+                      fallbackImageUrl={imageUrl}
+                      title={`Spot · ${title}`}
+                      active={videoActive}
+                      gallery
+                      fill
+                    />
+                    <div
+                      aria-hidden="true"
+                      className="absolute inset-y-0 left-0 z-30 w-[15%] touch-pan-x"
+                    />
+                    <div
+                      aria-hidden="true"
+                      className="absolute inset-y-0 right-0 z-30 w-[15%] touch-pan-x"
+                    />
+                  </>
                 ) : (
                   <>
                     <EventFlyer
@@ -138,7 +156,7 @@ export function EventHeroMediaGallery({
               type="button"
               onClick={goPrev}
               aria-label="Diapositiva anterior"
-              className={cn(arrowClassName, "left-4")}
+              className={cn(arrowClassName, "left-3")}
             >
               <ChevronLeft className="size-5" aria-hidden="true" />
             </button>
@@ -146,17 +164,26 @@ export function EventHeroMediaGallery({
               type="button"
               onClick={goNext}
               aria-label="Diapositiva siguiente"
-              className={cn(arrowClassName, "right-4")}
+              className={cn(arrowClassName, "right-3")}
             >
               <ChevronRight className="size-5" aria-hidden="true" />
             </button>
-            <div
-              className="pointer-events-none absolute right-4 bottom-4 z-20 flex items-center justify-center rounded-full border border-white/10 bg-black/60 px-3 py-1.5 shadow-lg backdrop-blur-md"
-              aria-live="polite"
-            >
-              <span className="text-[11px] font-bold tracking-widest text-white tabular-nums">
-                {selected + 1} / {slideCount}
-              </span>
+            <div className="pointer-events-auto absolute inset-x-0 bottom-3 z-50 flex items-center justify-center gap-2">
+              {Array.from({ length: slideCount }, (_, index) => (
+                <button
+                  key={index}
+                  type="button"
+                  aria-label={`Ir a la diapositiva ${index + 1}`}
+                  aria-current={selected === index}
+                  onClick={() => goTo(index)}
+                  className={cn(
+                    "size-2.5 rounded-full border border-white/40 transition",
+                    selected === index
+                      ? "bg-white"
+                      : "bg-white/35 hover:bg-white/70",
+                  )}
+                />
+              ))}
             </div>
           </>
         ) : null}

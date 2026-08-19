@@ -1,5 +1,5 @@
 /**
- * Política de holds de checkout / stock (Tokepass).
+ * Política de holds de checkout / stock (TokePass).
  *
  * GA, tienda y asientos numerados: 10 minutos.
  * - GA / pending: desde `orders.created_at` (`expire_abandoned_orders` + preferencia MP).

@@ -35,6 +35,7 @@ import {
   releaseSeatingUnitCartHold,
 } from "@/app/actions/checkout"
 import type { ValidatedPromo } from "@/app/actions/coupons"
+import type { CheckoutPromoterPreview } from "@/app/actions/promoters"
 import { validatePromoCode } from "@/app/actions/coupons"
 import {
   getEventSeatingAvailability,
@@ -434,6 +435,13 @@ export function CheckoutTunnel({
   }
   const funnelTiers = displayTiers
   const [appliedPromo, setAppliedPromo] = useState<ValidatedPromo | null>(null)
+  const [manualReferralCode, setManualReferralCode] = useState<string | null>(
+    null,
+  )
+  const [referralCleared, setReferralCleared] = useState(false)
+  const [appliedPromoter, setAppliedPromoter] = useState<
+    (CheckoutPromoterPreview & { source: "coupon" | "manual" | "link" }) | null
+  >(null)
   const [selectedProvider, setSelectedProvider] =
     useState<CheckoutPaymentProvider>("mercadopago")
   const storedRef = useSyncExternalStore(
@@ -741,7 +749,40 @@ export function CheckoutTunnel({
     redirectToCheckoutPaymentOrToast(paymentUrl)
   }
 
-  const resolvedRef = referralCode?.trim() || storedRef
+  const resolvedRef = referralCleared
+    ? manualReferralCode?.trim() || null
+    : manualReferralCode?.trim() || referralCode?.trim() || storedRef
+
+  function applyPromoterAttribution(
+    preview: CheckoutPromoterPreview,
+    source: "coupon" | "manual" | "link",
+  ) {
+    const persisted = persistReferralCode(preview.referralCode)
+    const code = persisted ?? preview.referralCode
+    setReferralCleared(false)
+    setManualReferralCode(code)
+    setAppliedPromoter({ ...preview, referralCode: code, source })
+  }
+
+  function handleAppliedPromo(promo: ValidatedPromo) {
+    setAppliedPromo(promo)
+    if (promo.promoterName && promo.promoterReferralCode) {
+      applyPromoterAttribution(
+        {
+          name: promo.promoterName,
+          referralCode: promo.promoterReferralCode,
+        },
+        "coupon",
+      )
+    }
+  }
+
+  function handleClearedPromo() {
+    setAppliedPromo(null)
+    setAppliedPromoter((current) =>
+      current?.source === "coupon" ? null : current,
+    )
+  }
   const loginHref = publicEventLoginPath({ id: eventId, slug: eventSlug })
   const identityReady = hasCheckoutIdentity(currentUserId, checkoutMode)
   const panelBodyRef = useRef<HTMLDivElement>(null)
@@ -1138,7 +1179,7 @@ export function CheckoutTunnel({
   ) + extraQuantityCount + numberedExtraCount
   const hasMapSelection =
     selectedItems.length > 0 || liveSelectedItems.length > 0
-  // All-In: tier.price already includes Tokepass fee.
+  // All-In: tier.price already includes TokePass fee.
   const cartSubtotal = ticketsSubtotal
   const discountAmount = appliedPromo
     ? Math.min(appliedPromo.discountAmount, cartSubtotal)
@@ -1271,6 +1312,15 @@ export function CheckoutTunnel({
         }
         return result.data
       })
+      if (result.data.promoterName && result.data.promoterReferralCode) {
+        applyPromoterAttribution(
+          {
+            name: result.data.promoterName,
+            referralCode: result.data.promoterReferralCode,
+          },
+          "coupon",
+        )
+      }
     })
     return () => {
       cancelled = true
@@ -2467,6 +2517,9 @@ export function CheckoutTunnel({
                 finalTotal={finalTotal}
                 totalTickets={totalTickets}
                 appliedPromo={appliedPromo}
+                appliedPromoter={appliedPromoter}
+                attributionLocked={Boolean(appliedPromo?.promoterId)}
+                initialPromoterCode={resolvedRef}
                 selectedProvider={selectedProvider}
                 sandboxEligible={sandboxEligible}
                 isDraftPreview={isDraftPreview}
@@ -2485,8 +2538,16 @@ export function CheckoutTunnel({
                     void buyerForm.trigger()
                   }
                 }}
-                onAppliedPromo={setAppliedPromo}
-                onClearedPromo={() => setAppliedPromo(null)}
+                onAppliedPromo={handleAppliedPromo}
+                onClearedPromo={handleClearedPromo}
+                onAppliedPromoter={(preview) =>
+                  applyPromoterAttribution(preview, "manual")
+                }
+                onClearedPromoter={() => {
+                  setReferralCleared(true)
+                  setManualReferralCode(null)
+                  setAppliedPromoter(null)
+                }}
                 onSelectProvider={setSelectedProvider}
                 onSandboxReserve={handleSandboxReserve}
                 onDetailsSubmit={goToPaymentMethods}
@@ -2510,6 +2571,9 @@ export function CheckoutTunnel({
                 finalTotal={finalTotal}
                 totalTickets={totalTickets}
                 appliedPromo={appliedPromo}
+                appliedPromoter={appliedPromoter}
+                attributionLocked={Boolean(appliedPromo?.promoterId)}
+                initialPromoterCode={resolvedRef}
                 selectedProvider={selectedProvider}
                 sandboxEligible={sandboxEligible}
                 isDraftPreview={isDraftPreview}
@@ -2528,8 +2592,16 @@ export function CheckoutTunnel({
                     void buyerForm.trigger()
                   }
                 }}
-                onAppliedPromo={setAppliedPromo}
-                onClearedPromo={() => setAppliedPromo(null)}
+                onAppliedPromo={handleAppliedPromo}
+                onClearedPromo={handleClearedPromo}
+                onAppliedPromoter={(preview) =>
+                  applyPromoterAttribution(preview, "manual")
+                }
+                onClearedPromoter={() => {
+                  setReferralCleared(true)
+                  setManualReferralCode(null)
+                  setAppliedPromoter(null)
+                }}
                 onSelectProvider={setSelectedProvider}
                 onSandboxReserve={handleSandboxReserve}
                 onDetailsSubmit={goToPaymentMethods}

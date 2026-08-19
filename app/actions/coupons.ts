@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 
+import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import type { PromoCode, PromoDiscountType } from "@/types/database"
 
@@ -17,6 +18,9 @@ export type ValidatedPromo = {
   discountType: PromoDiscountType
   discountValue: number
   discountAmount: number
+  promoterId?: string | null
+  promoterName?: string | null
+  promoterReferralCode?: string | null
 }
 
 async function requireEventOrganizer(eventId: string) {
@@ -47,6 +51,30 @@ function normalizeCode(raw: string): string {
   return raw.trim().toUpperCase().replace(/\s+/g, "")
 }
 
+async function resolveOwnedPromoterId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  organizerId: string,
+  promoterId: string | null | undefined,
+): Promise<string | null | { error: string }> {
+  if (!promoterId) return null
+  const { data, error } = await supabase
+    .from("promoters")
+    .select("id, organizer_id")
+    .eq("id", promoterId)
+    .maybeSingle()
+  if (error || !data) {
+    return { error: "Promotor no encontrado." }
+  }
+  if (data.organizer_id !== organizerId) {
+    return { error: "Ese RRPP no pertenece a la productora del evento." }
+  }
+  return data.id
+}
+
+function isMissingPromoterColumn(message: string | undefined) {
+  return Boolean(message && /promoter_id|schema cache|does not exist/i.test(message))
+}
+
 export async function listEventPromoCodes(
   eventId: string,
 ): Promise<PromoCodeRow[]> {
@@ -74,6 +102,7 @@ export async function createPromoCode(input: {
   discountValue: number
   maxUses?: number | null
   validUntil?: string | null
+  promoterId?: string | null
 }): Promise<ActionResult<PromoCodeRow>> {
   try {
     const access = await requireEventOrganizer(input.eventId)
@@ -114,19 +143,49 @@ export async function createPromoCode(input: {
       return { success: false, error: "Fecha de vencimiento inválida." }
     }
 
-    const { data, error } = await access.supabase
+    const promoter = await resolveOwnedPromoterId(
+      access.supabase,
+      access.event.organizer_id,
+      input.promoterId,
+    )
+    if (promoter && typeof promoter === "object" && "error" in promoter) {
+      return { success: false, error: promoter.error }
+    }
+
+    const insertPayload = {
+      event_id: input.eventId,
+      code,
+      discount_type: input.discountType,
+      discount_value: value,
+      max_uses: maxUses,
+      valid_until: validUntil,
+      is_active: true,
+      promoter_id: promoter,
+    }
+
+    let { data, error } = await access.supabase
       .from("promo_codes")
-      .insert({
-        event_id: input.eventId,
-        code,
-        discount_type: input.discountType,
-        discount_value: value,
-        max_uses: maxUses,
-        valid_until: validUntil,
-        is_active: true,
-      })
+      .insert(insertPayload)
       .select("*")
       .single()
+
+    if (error && isMissingPromoterColumn(error.message)) {
+      const retry = await access.supabase
+        .from("promo_codes")
+        .insert({
+          event_id: input.eventId,
+          code,
+          discount_type: input.discountType,
+          discount_value: value,
+          max_uses: maxUses,
+          valid_until: validUntil,
+          is_active: true,
+        })
+        .select("*")
+        .single()
+      data = retry.data
+      error = retry.error
+    }
 
     if (error) {
       if (error.code === "23505") {
@@ -144,6 +203,54 @@ export async function createPromoCode(input: {
       success: false,
       error:
         error instanceof Error ? error.message : "No se pudo crear el cupón.",
+    }
+  }
+}
+
+export async function updatePromoCode(input: {
+  eventId: string
+  promoCodeId: string
+  promoterId?: string | null
+}): Promise<ActionResult<PromoCodeRow>> {
+  try {
+    const access = await requireEventOrganizer(input.eventId)
+    if (!access.ok) return { success: false, error: access.error }
+
+    const promoter = await resolveOwnedPromoterId(
+      access.supabase,
+      access.event.organizer_id,
+      input.promoterId,
+    )
+    if (promoter && typeof promoter === "object" && "error" in promoter) {
+      return { success: false, error: promoter.error }
+    }
+
+    const { data, error } = await access.supabase
+      .from("promo_codes")
+      .update({ promoter_id: promoter })
+      .eq("id", input.promoCodeId)
+      .eq("event_id", input.eventId)
+      .select("*")
+      .single()
+
+    if (error || !data) {
+      return {
+        success: false,
+        error: isMissingPromoterColumn(error?.message)
+          ? "Aplicá la migración P109 para vincular cupones a RRPP."
+          : (error?.message ?? "Cupón no encontrado."),
+      }
+    }
+
+    revalidatePath(`/admin/events/${input.eventId}/coupons`)
+    return { success: true, data: data as PromoCodeRow }
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo actualizar el cupón.",
     }
   }
 }
@@ -217,6 +324,43 @@ export async function validatePromoCode(
       }
     }
 
+    let promoterId: string | null = null
+    let promoterName: string | null = null
+    let promoterReferralCode: string | null = null
+    try {
+      const admin = createAdminClient()
+      const { data: promo, error: promoError } = await admin
+        .from("promo_codes")
+        .select("promoter_id")
+        .eq("id", row.promo_code_id)
+        .maybeSingle()
+      if (!promoError && promo?.promoter_id) {
+        const [{ data: promoter }, { data: event }] = await Promise.all([
+          admin
+            .from("promoters")
+            .select("id, name, referral_code, organizer_id")
+            .eq("id", promo.promoter_id)
+            .maybeSingle(),
+          admin
+            .from("events")
+            .select("organizer_id")
+            .eq("id", eventId)
+            .maybeSingle(),
+        ])
+        if (
+          promoter &&
+          event &&
+          promoter.organizer_id === event.organizer_id
+        ) {
+          promoterId = promoter.id
+          promoterName = promoter.name
+          promoterReferralCode = promoter.referral_code
+        }
+      }
+    } catch {
+      // Columna o lookup opcional: el descuento ya es válido.
+    }
+
     return {
       success: true,
       data: {
@@ -225,6 +369,9 @@ export async function validatePromoCode(
         discountType: (row.discount_type ?? "fixed_amount") as PromoDiscountType,
         discountValue: Number(row.discount_value ?? 0),
         discountAmount: Number(row.discount_amount ?? 0),
+        promoterId,
+        promoterName,
+        promoterReferralCode,
       },
     }
   } catch (error) {

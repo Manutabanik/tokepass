@@ -60,15 +60,15 @@ export class MercadoPagoRefundService {
     if (input.forceMock) {
       logger.error({
         context: "mercadopago/refund-service",
-        message: "organizer_token_missing_mock",
+        message: "organizer_token_missing_refused",
         paymentId,
         reason: input.reason ?? null,
       })
       return {
-        success: true,
+        success: false,
         paymentId,
         mode: "mock",
-        refundId: `mock:${paymentId}`,
+        error: "organizer_token_missing",
       }
     }
 
@@ -88,11 +88,29 @@ export class MercadoPagoRefundService {
         payment_id: paymentId,
       })
 
+      const envelope = response as {
+        id?: string | number
+        api_response?: { status?: number }
+      }
+      const httpStatus = envelope.api_response?.status
+      if (
+        typeof httpStatus === "number" &&
+        httpStatus !== 200 &&
+        httpStatus !== 201
+      ) {
+        return {
+          success: false,
+          paymentId,
+          mode,
+          error: `mp_refund_http_${httpStatus}`,
+        }
+      }
+
       return {
         success: true,
         paymentId,
         mode,
-        refundId: response?.id != null ? String(response.id) : null,
+        refundId: envelope.id != null ? String(envelope.id) : null,
       }
     } catch (error) {
       const message =

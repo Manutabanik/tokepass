@@ -1,6 +1,6 @@
 "use client"
 
-import { Expand, X } from "lucide-react"
+import { Maximize2, X } from "lucide-react"
 import type { ReactNode } from "react"
 
 import { LivingTicketQR } from "@/components/public/living-ticket-qr"
@@ -22,6 +22,8 @@ export function QrScanLightbox({
   isStatic,
   ticketId,
   totpSecret,
+  holderName,
+  holderDni,
   caption = "Acercá este código al escáner de ingreso",
 }: {
   open: boolean
@@ -29,6 +31,8 @@ export function QrScanLightbox({
   isStatic: boolean
   ticketId: string
   totpSecret: string
+  holderName?: string | null
+  holderDni?: string | null
   caption?: string
 }) {
   const backup = ticketBackupCode(ticketId)
@@ -37,7 +41,7 @@ export function QrScanLightbox({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
-        overlayClassName="bg-black/95 backdrop-blur-xl"
+        overlayClassName="bg-zinc-950/96 backdrop-blur-xl"
         className="pointer-events-none fixed inset-0 top-0 left-0 z-50 flex h-dvh max-h-dvh w-full max-w-none translate-x-0 translate-y-0 flex-col items-center justify-center overflow-y-auto overscroll-contain rounded-none bg-transparent p-4 shadow-none ring-0 sm:max-w-none sm:p-6"
       >
         <DialogClose
@@ -58,28 +62,38 @@ export function QrScanLightbox({
         <DialogDescription className="sr-only">{caption}</DialogDescription>
 
         <div className="pointer-events-auto flex w-full max-w-md flex-col items-center justify-center py-8">
-          <div className="flex w-full flex-col items-center rounded-3xl bg-white p-4 shadow-2xl shadow-primary/20 sm:p-8">
-            <div className="w-[min(18rem,calc(100vw-6.5rem),calc(100dvh-22rem))] sm:w-96">
+          <div className="flex w-full flex-col items-center rounded-3xl bg-white p-5 text-zinc-950 sm:p-8">
+            <div className="size-[min(20rem,calc(100vw-5rem))]">
               {isStatic ? (
                 <StaticSignedQR
                   ticketId={ticketId}
                   totpSecret={totpSecret}
-                  size={384}
-                  className="aspect-square w-full max-w-none p-0 shadow-none"
+                  size={320}
+                  className="aspect-square size-full max-w-none p-0 shadow-none"
                 />
               ) : (
                 <LivingTicketQR
                   ticketId={ticketId}
                   totpSecret={totpSecret}
-                  size={384}
+                  size={320}
                   variant="scan"
-                  className="max-w-none"
+                  className="size-full max-w-none"
                 />
               )}
             </div>
-            <p className="mt-4 font-mono text-xs tracking-[0.22em] text-zinc-500">
+            <p className="mt-5 font-mono text-sm font-semibold tracking-[0.22em] text-zinc-800">
               {backup}
             </p>
+            {holderName ? (
+              <p className="mt-3 text-center text-base font-bold text-zinc-950">
+                {holderName}
+              </p>
+            ) : null}
+            {holderDni ? (
+              <p className="mt-0.5 text-sm font-semibold tabular-nums text-zinc-600">
+                DNI {holderDni}
+              </p>
+            ) : null}
           </div>
           <p className="mt-5 max-w-xs text-center text-sm font-semibold text-white">
             {caption}
@@ -104,22 +118,34 @@ export function QrEnlargeTrigger({
   if (disabled) return children
 
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      title="Tocar para agrandar"
-      aria-label="Tocar para agrandar el código QR"
-      className={cn(
-        tapFeedbackClass,
-        "flex cursor-pointer flex-col items-center rounded-[1.35rem] transition-transform hover:scale-105",
-        className,
-      )}
-    >
-      {children}
-      <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-muted/80 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
-        <Expand className="size-3" aria-hidden="true" />
-        Tocar para agrandar
-      </span>
-    </button>
+    <div className={cn("flex flex-col items-center", className)}>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onOpen}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault()
+            onOpen()
+          }
+        }}
+        title="Tocar para agrandar QR"
+        aria-label="Tocar para agrandar QR"
+        className={cn(
+          tapFeedbackClass,
+          "cursor-pointer rounded-[1.35rem] outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        )}
+      >
+        {children}
+      </div>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="no-print mt-2.5 inline-flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground"
+      >
+        <Maximize2 className="size-3.5" aria-hidden="true" />
+        Tocar para agrandar QR
+      </button>
+    </div>
   )
 }

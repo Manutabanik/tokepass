@@ -35,7 +35,7 @@ export function PublicNavbarClient({
   return (
     <header
       className={cn(
-        "sticky top-0 z-50 w-full border-b border-border/50 bg-background/80 backdrop-blur-md",
+        "navbar no-print sticky top-0 z-50 w-full border-b border-border/50 bg-background/80 backdrop-blur-md",
       )}
     >
       <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-2 px-4 sm:h-[4.25rem] sm:gap-3 lg:px-8">
@@ -63,13 +63,7 @@ export function PublicNavbarClient({
             </Link>
           ) : null}
           <Link
-            href="/beneficios"
-            className={navLinkClass}
-          >
-            Beneficios
-          </Link>
-          <Link
-            href="/organizadores"
+            href="/organizar-eventos"
             className={cn(
               navLinkClass,
               "border border-violet-300/70 text-violet-700 hover:bg-violet-50 dark:border-violet-400/40 dark:text-violet-200 dark:hover:bg-violet-500/10",

@@ -26,7 +26,7 @@ import { specularFromTilt } from "@/lib/story-tilt"
 const FONT =
   "var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
 
-function WhiteTokepassMark({ size = 72 }: { size?: number }) {
+function WhiteTokePassMark({ size = 72 }: { size?: number }) {
   return (
     <svg
       width={size}
@@ -83,7 +83,7 @@ export function StoryCanvas({
   const eventImage = storySafeImageSrc(data.imageUrl)
   const artistName = publicStoryName(data.artistName, "")
   const artistImage = storySafeImageSrc(data.artistImageUrl)
-  const organizerName = publicStoryName(data.organizerName, "Tokepass")
+  const organizerName = publicStoryName(data.organizerName, "TokePass")
   const organizerAvatar = storySafeImageSrc(data.organizerAvatarUrl)
   const lineup = (data.lineupArtists ?? [])
     .map((artist) => ({
@@ -489,7 +489,7 @@ export function StoryCanvas({
               minWidth: 0,
             }}
           >
-            <WhiteTokepassMark size={40} />
+            <WhiteTokePassMark size={40} />
             {organizerAvatar ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img

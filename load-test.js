@@ -1,5 +1,5 @@
 /**
- * Tokepass — pruebas de carga / concurrencia (k6)
+ * TokePass — pruebas de carga / concurrencia (k6)
  *
  * Objetivo:
  *   - Smoke: health de Next + (opcional) RPC de reserva.
@@ -240,7 +240,7 @@ export function handleSummary(data) {
   const conflict = (data.metrics.tokepass_reserve_conflict || {}).values || {}
   const errors = (data.metrics.tokepass_reserve_error || {}).values || {}
   console.log(
-    `\nTokepass reserve summary [${scenario}]\n` +
+    `\nTokePass reserve summary [${scenario}]\n` +
       `  ok=${ok.count || 0}  conflict=${conflict.count || 0}  error=${errors.count || 0}\n` +
       `  (collision: ok debe ser 0 o 1 si todos apuntan a la misma unidad)\n`,
   )

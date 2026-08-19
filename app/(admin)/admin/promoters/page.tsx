@@ -1,9 +1,8 @@
 import type { Metadata } from "next"
-import { Users } from "lucide-react"
 
 import { getOrganizerPromoters } from "@/app/actions/promoters"
 import { AddPromoterDialog } from "@/components/admin/add-promoter-dialog"
-import { Badge } from "@/components/ui/badge"
+import { PromotersTeamTable } from "@/components/admin/promoters-team-table"
 import {
   Card,
   CardContent,
@@ -11,15 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { formatCurrency, formatNumber, formatPercent } from "@/lib/format"
+import { formatCurrency, formatNumber } from "@/lib/format"
 
 export const metadata: Metadata = {
   title: "Promotores y RRPP",
@@ -49,6 +40,10 @@ export default async function AdminPromotersPage() {
     (sum, row) => sum + row.estimatedCommission,
     0,
   )
+  const totalPending = promoters.reduce(
+    (sum, row) => sum + row.pendingCommission,
+    0,
+  )
 
   return (
     <div className="space-y-8">
@@ -65,13 +60,13 @@ export default async function AdminPromotersPage() {
             <code className="rounded bg-zinc-100 px-1.5 py-0.5 text-violet-700 dark:bg-white/5 dark:text-violet-200">
               ?rrpp=CODIGO
             </code>{" "}
-            (válido en toda Tokepass, alias ?ref=) y medí clics, ventas y comisiones.
+            (válido en toda TokePass, alias ?ref=) y medí clics, ventas y comisiones.
           </p>
         </div>
         <AddPromoterDialog />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Card className="border-zinc-200 bg-white dark:border-white/8 dark:bg-white/[0.03]">
           <CardHeader className="pb-2">
             <CardDescription>Promotores activos</CardDescription>
@@ -104,6 +99,14 @@ export default async function AdminPromotersPage() {
             </CardTitle>
           </CardHeader>
         </Card>
+        <Card className="border-zinc-200 bg-white dark:border-white/8 dark:bg-white/[0.03]">
+          <CardHeader className="pb-2">
+            <CardDescription>Pendiente de liquidar</CardDescription>
+            <CardTitle className="text-3xl text-foreground">
+              {formatCurrency(totalPending)}
+            </CardTitle>
+          </CardHeader>
+        </Card>
       </div>
 
       <Card className="border-zinc-200 bg-white dark:border-white/8 dark:bg-white/[0.03]">
@@ -117,7 +120,7 @@ export default async function AdminPromotersPage() {
             <span className="text-emerald-600 dark:text-emerald-300">
               pagadas
             </span>
-            .
+            . Liquidá el saldo pendiente cuando le pagues al RRPP.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -125,80 +128,8 @@ export default async function AdminPromotersPage() {
             <p className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-6 text-sm text-red-700 dark:text-red-200">
               {loadError}
             </p>
-          ) : promoters.length === 0 ? (
-            <div className="grid place-items-center rounded-2xl border border-dashed border-zinc-200 px-4 py-14 text-center dark:border-white/10">
-              <Users className="size-8 text-muted-foreground" aria-hidden="true" />
-              <p className="mt-4 text-base font-semibold text-foreground">
-                Todavía no tenés promotores
-              </p>
-              <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-                Agregá el primero y compartí su link en Instagram / WhatsApp.
-              </p>
-            </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="border-zinc-200 hover:bg-transparent dark:border-white/8">
-                  <TableHead className="text-muted-foreground">Nombre</TableHead>
-                  <TableHead className="text-muted-foreground">Código</TableHead>
-                  <TableHead className="text-muted-foreground">Comisión</TableHead>
-                  <TableHead className="text-right text-muted-foreground">
-                    Clics
-                  </TableHead>
-                  <TableHead className="text-right text-muted-foreground">
-                    Entradas
-                  </TableHead>
-                  <TableHead className="text-right text-muted-foreground">
-                    Recaudación
-                  </TableHead>
-                  <TableHead className="text-right text-muted-foreground">
-                    A pagar
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {promoters.map((promoter) => (
-                  <TableRow
-                    key={promoter.id}
-                    className="border-zinc-200 hover:bg-zinc-50 dark:border-white/8 dark:hover:bg-white/[0.02]"
-                  >
-                    <TableCell className="font-medium text-foreground">
-                      {promoter.name}
-                      {!promoter.userId && (
-                        <Badge
-                          variant="outline"
-                          className="ml-2 rounded-full border-amber-500/30 bg-amber-500/10 text-[10px] text-amber-700 dark:text-amber-300"
-                        >
-                          Sin reclamar
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <code className="rounded-lg bg-zinc-100 px-2 py-1 text-xs font-semibold tracking-wide text-violet-700 ring-1 ring-zinc-200 dark:bg-zinc-950 dark:text-violet-300 dark:ring-white/10">
-                        {promoter.referralCode}
-                      </code>
-                    </TableCell>
-                    <TableCell className="text-foreground">
-                      {promoter.commissionType === "fixed"
-                        ? `${formatCurrency(promoter.commissionFixedAmount)} / entrada`
-                        : formatPercent(promoter.commissionRate * 100, 0)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums text-foreground">
-                      {formatNumber(promoter.clickCount)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums text-foreground">
-                      {formatNumber(promoter.ticketsSold)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums text-foreground">
-                      {formatCurrency(promoter.revenueGenerated)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums font-semibold text-emerald-600 dark:text-emerald-300">
-                      {formatCurrency(promoter.estimatedCommission)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <PromotersTeamTable initialPromoters={promoters} />
           )}
         </CardContent>
       </Card>

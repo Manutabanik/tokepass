@@ -223,7 +223,7 @@ export async function getPurchaseAnalyticsForOrder(
     return {
       pixels: emptyPixelConfig(),
       eventId: "",
-      eventTitle: "Evento Tokepass",
+      eventTitle: "Evento TokePass",
       eventDate: null,
       eventLocation: null,
       organizerName: null,
@@ -273,7 +273,7 @@ export async function getPurchaseAnalyticsForOrder(
   return {
     pixels: hasAnyConfigured(pixels) ? pixels : emptyPixelConfig(),
     eventId,
-    eventTitle: event?.title ?? "Evento Tokepass",
+    eventTitle: event?.title ?? "Evento TokePass",
     eventDate: event?.date ?? null,
     eventLocation,
     organizerName: organizer?.name ?? null,

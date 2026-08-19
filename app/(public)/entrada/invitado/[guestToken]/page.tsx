@@ -7,7 +7,7 @@ import { isGuestOrderToken } from "@/lib/checkout/guest-token"
 
 export const metadata: Metadata = {
   title: "Tus entradas",
-  description: "Entradas de invitado Tokepass.",
+  description: "Entradas de invitado TokePass.",
   robots: { index: false, follow: false },
 }
 

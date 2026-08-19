@@ -35,7 +35,7 @@ const DEFAULT_ACCOUNT_URL = "https://www.tokepass.com.ar/cuenta/entradas"
 export const PreviewProps: OrderEmailProps = {
   customerName: "Ana Perez",
   orderNumber: "TP-10482",
-  eventName: "Noche en Club Tokepass",
+  eventName: "Noche en Club TokePass",
   eventDate: "Sabado 22 nov 2026 · 23:30",
   eventVenue: "CABA · Salón Central",
   eventBannerUrl: "https://www.tokepass.com.ar/brand/tokepass-mark.png",
@@ -81,7 +81,7 @@ export function OrderConfirmationEmail({
       <Preview>{preview}</Preview>
       <Body style={styles.body}>
         <Container style={styles.container}>
-          <Text style={styles.brand}>Tokepass</Text>
+          <Text style={styles.brand}>TokePass</Text>
           <Text style={styles.kicker}>Compra confirmada</Text>
           <Text style={styles.title}>Tus entradas ya estan listas</Text>
           <Text style={styles.lead}>
@@ -133,17 +133,17 @@ export function OrderConfirmationEmail({
 
           <Section style={styles.ctaWrap}>
             <Button href={accountUrl} style={styles.button}>
-              Ver mis entradas en Tokepass
+              Ver mis entradas en TokePass
             </Button>
           </Section>
 
           <Text style={styles.note}>
             El QR Living en tu cuenta se actualiza en tiempo real. Llevalo en
-            la app o en la web de Tokepass al ingresar.
+            la app o en la web de TokePass al ingresar.
           </Text>
           <Hr style={styles.footerRule} />
           <Text style={styles.footer}>
-            Tokepass · Entradas digitales para vivir el evento
+            TokePass · Entradas digitales para vivir el evento
           </Text>
         </Container>
       </Body>

@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 
 export const metadata: Metadata = {
   title: "Billetera offline",
-  description: "Tus entradas Tokepass disponibles sin conexión.",
+  description: "Tus entradas TokePass disponibles sin conexión.",
   robots: { index: false, follow: false },
 }
 

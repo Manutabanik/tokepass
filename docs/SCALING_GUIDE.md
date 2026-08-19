@@ -1,6 +1,6 @@
 # Guía de escala — día de evento masivo
 
-Tokepass concentra el pico en **reservas atómicas** (`reserve_tickets_tx` / `reserve_seating_unit_tx`), no en Mercado Pago. El checkout Pro ocurre *después* del hold. El día del show, mirá primero cola de Postgres y Server Actions de Next, no el widget de MP.
+TokePass concentra el pico en **reservas atómicas** (`reserve_tickets_tx` / `reserve_seating_unit_tx`), no en Mercado Pago. El checkout Pro ocurre *después* del hold. El día del show, mirá primero cola de Postgres y Server Actions de Next, no el widget de MP.
 
 ## Antes del pico
 
@@ -37,7 +37,7 @@ Pooler: los clientes de Next (server actions) deben usar el **transaction mode**
 
 Alertas: p95 action > 3s, 5xx > 1%, cola de funciones > 0 durante >2 min.
 
-## Aplicación Tokepass
+## Aplicación TokePass
 
 - **Hold de asiento**: reserved vs sold. Si el cron falla, el cupo “fantasma” dispara sold out falso.
 - **Realtime Live Ops**: suscribirse a `UPDATE` de tickets, no a dumps de units.

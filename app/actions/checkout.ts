@@ -20,6 +20,7 @@ import {
   type PublicTicketPhase,
 } from "@/lib/inventory/active-phase"
 import { isPastEvent, isSoldOut } from "@/lib/event-status"
+import { isSandboxEventStatus } from "@/lib/events/review-status"
 import { logger } from "@/lib/logger"
 import { captureCriticalException } from "@/lib/sentry/capture"
 import { getSiteUrl } from "@/lib/mercadopago"
@@ -185,6 +186,85 @@ function mapReserveRpcError(
 
 type CheckoutSupabase = Awaited<ReturnType<typeof createClient>>
 
+/** Cookie / ?rrpp= primero; si el cupón tiene RRPP, el cupón manda. */
+async function resolveCheckoutPromoterId(input: {
+  supabase: CheckoutSupabase
+  eventId: string
+  referralCode?: string | null
+  promoCodeId?: string | null
+}): Promise<string | null> {
+  let promoterId: string | null = null
+  const cleanRef = input.referralCode?.trim()
+  if (cleanRef) {
+    const { data: resolved } = await input.supabase.rpc(
+      "resolve_promoter_for_checkout",
+      {
+        p_referral_code: cleanRef,
+        p_event_id: input.eventId,
+      },
+    )
+    promoterId = resolved ?? null
+  }
+
+  const promoCodeId = input.promoCodeId?.trim()
+  if (!promoCodeId) return promoterId
+
+  try {
+    const admin = createAdminClient()
+    const { data: promo, error } = await admin
+      .from("promo_codes")
+      .select("promoter_id, event_id")
+      .eq("id", promoCodeId)
+      .eq("event_id", input.eventId)
+      .maybeSingle()
+
+    if (error || !promo?.promoter_id) return promoterId
+
+    const [{ data: promoter }, { data: event }] = await Promise.all([
+      admin
+        .from("promoters")
+        .select("id, organizer_id")
+        .eq("id", promo.promoter_id)
+        .maybeSingle(),
+      admin
+        .from("events")
+        .select("organizer_id")
+        .eq("id", input.eventId)
+        .maybeSingle(),
+    ])
+
+    if (promoter && event && promoter.organizer_id === event.organizer_id) {
+      return promoter.id
+    }
+  } catch {
+    return promoterId
+  }
+
+  return promoterId
+}
+
+async function attachPromoterToPendingOrder(input: {
+  orderId: string
+  buyerId: string
+  promoterId: string
+}) {
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from("orders")
+    .update({ promoter_id: input.promoterId })
+    .eq("id", input.orderId)
+    .eq("buyer_id", input.buyerId)
+    .eq("status", "pending")
+  if (error) {
+    logger.error({
+      context: "checkout/reservation",
+      message: "promoter_attach_failed",
+      orderId: input.orderId,
+      error: error.message,
+    })
+  }
+}
+
 type CheckoutEventAccess =
   | { ok: true; useSandbox: boolean; db: CheckoutSupabase }
   | { ok: false; error: string }
@@ -224,7 +304,7 @@ async function resolveCheckoutEventAccess(input: {
     return { ok: true, useSandbox: false, db: userClient }
   }
 
-  if (event.status !== "draft") {
+  if (!isSandboxEventStatus(event.status)) {
     return {
       ok: false,
       error: "Este evento no admite compras de prueba en su estado actual.",
@@ -1527,7 +1607,7 @@ export async function startCheckoutWithPayment(
     return {
       success: false,
       error:
-        "Las compras de prueba solo están disponibles en eventos en borrador.",
+        "Las compras de prueba solo están disponibles antes de que el evento esté en venta.",
     }
   }
   const db = access.db
@@ -1618,19 +1698,13 @@ export async function startCheckoutWithPayment(
     })
     .eq("id", user.id)
 
-  // Nunca confiar en promoter_id del cliente: solo resolver ?rrpp= / ?ref= en servidor.
-  let promoterId: string | null = null
-  const cleanRef = payload.referralCode
-  if (cleanRef) {
-    const { data: resolved } = await supabase.rpc(
-      "resolve_promoter_for_checkout",
-      {
-        p_referral_code: cleanRef,
-        p_event_id: payload.eventId,
-      },
-    )
-    promoterId = resolved ?? null
-  }
+  // Nunca confiar en promoter_id del cliente. Cupón con RRPP pisa cookie/?rrpp=.
+  const promoterId = await resolveCheckoutPromoterId({
+    supabase,
+    eventId: payload.eventId,
+    referralCode: payload.referralCode,
+    promoCodeId: payload.promoCodeId,
+  })
 
   const tierIds = [...new Set(cartItems.map((item) => checkoutItemTierId(item)))]
   const { data: tierMeta } = await db
@@ -1912,6 +1986,19 @@ export async function startCheckoutWithPayment(
           error: "No se pudo aplicar el cupón.",
         }
       }
+
+      const couponPromoterId = await resolveCheckoutPromoterId({
+        supabase,
+        eventId: payload.eventId,
+        promoCodeId: cleanPromoId,
+      })
+      if (couponPromoterId) {
+        await attachPromoterToPendingOrder({
+          orderId,
+          buyerId: user.id,
+          promoterId: couponPromoterId,
+        })
+      }
     }
 
     const { data: pricedOrder, error: pricedOrderError } = await db
@@ -2098,7 +2185,7 @@ export async function startCheckoutWithPayment(
           orderId,
           amount: finalTotal,
           currency: "ARS",
-          description: `${eventRow?.title ?? "Tokepass"} — entradas`.slice(
+          description: `${eventRow?.title ?? "TokePass"} — entradas`.slice(
             0,
             256,
           ),
@@ -2109,7 +2196,7 @@ export async function startCheckoutWithPayment(
           },
           items: [
             {
-              title: `${eventRow?.title ?? "Tokepass"} — entradas`,
+              title: `${eventRow?.title ?? "TokePass"} — entradas`,
               quantity: 1,
               unitPrice: finalTotal,
             },
@@ -2249,7 +2336,7 @@ async function assertSandboxCheckoutAllowed(
     return {
       ok: false,
       error:
-        "Las compras de prueba solo están disponibles en eventos en borrador.",
+        "Las compras de prueba solo están disponibles antes de que el evento esté en venta.",
     }
   }
   return { ok: true }

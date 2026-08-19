@@ -42,6 +42,6 @@ describe("event json-ld", () => {
     assert.equal(offers.highPrice, 28000)
     assert.equal(offers.availability, "https://schema.org/InStock")
     const seller = offers.seller as Record<string, unknown>
-    assert.equal(seller.name, "Tokepass")
+    assert.equal(seller.name, "TokePass")
   })
 })

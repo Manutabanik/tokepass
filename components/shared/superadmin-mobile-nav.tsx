@@ -3,7 +3,10 @@
 import {
   Building2,
   CalendarDays,
+  Banknote,
+  ClipboardCheck,
   ClipboardList,
+  MessageSquare,
   Handshake,
   LayoutDashboard,
   Menu,
@@ -11,12 +14,12 @@ import {
   Settings,
   Tags,
   Users,
-  Wallet,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
 
+import { PwaInstallNavButton } from "@/components/pwa/pwa-install-nav-button"
 import { BrandLogo } from "@/components/shared/brand-logo"
 import { SignOutButton } from "@/components/shared/sign-out-button"
 import { Button } from "@/components/ui/button"
@@ -45,10 +48,20 @@ export const SUPERADMIN_NAV = [
   },
   { label: "Compradores", href: "/superadmin/buyers", icon: Users },
   { label: "Eventos", href: "/superadmin/events", icon: CalendarDays },
+  {
+    label: "Eventos Pendientes",
+    href: "/superadmin/auditoria",
+    icon: ClipboardCheck,
+  },
+  {
+    label: "Centro de Soporte",
+    href: "/superadmin/soporte",
+    icon: MessageSquare,
+  },
   { label: "Categorías", href: "/superadmin/categories", icon: Tags },
   { label: "Partners", href: "/superadmin/settings/sponsors", icon: Handshake },
   { label: "Compras", href: "/superadmin/orders", icon: Receipt },
-  { label: "Liquidaciones", href: "/superadmin/settlements", icon: Wallet },
+  { label: "Finanzas y Payouts", href: "/superadmin/settlements", icon: Banknote },
   { label: "Ajustes", href: "/superadmin/settings", icon: Settings },
 ] as const
 
@@ -119,6 +132,11 @@ export function SuperAdminMobileNav({
               </Link>
             )
           })}
+          <PwaInstallNavButton
+            variant="nav"
+            className="min-h-14 px-3 py-4 text-base"
+            onAction={() => setOpen(false)}
+          />
         </nav>
 
         <SheetFooter className="gap-3">

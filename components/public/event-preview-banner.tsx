@@ -7,6 +7,11 @@ import { useState } from "react"
 
 import { PublishEventConfirmDialog } from "@/components/admin/publish-event-confirm-dialog"
 import { Button } from "@/components/ui/button"
+import {
+  canSubmitEventForReview,
+  EVENT_SENT_TO_REVIEW_TITLE,
+  isPendingEventReview,
+} from "@/lib/events/review-status"
 
 export function EventPreviewBanner({
   eventId,
@@ -20,6 +25,9 @@ export function EventPreviewBanner({
   const router = useRouter()
   const [publishOpen, setPublishOpen] = useState(false)
   const paused = status === "paused"
+  const awaitingReview = isPendingEventReview(status)
+  const needsRevision = status === "needs_revision"
+  const showPublish = canPublish && canSubmitEventForReview(status)
 
   return (
     <>
@@ -28,7 +36,13 @@ export function EventPreviewBanner({
           <p className="text-sm text-muted-foreground">
             {paused
               ? "El evento está pausado (oculto del catálogo)."
-              : "Vista previa de organizador. El aviso de modo de prueba aparece arriba."}
+              : awaitingReview
+                ? EVENT_SENT_TO_REVIEW_TITLE
+                : needsRevision
+                  ? "TokePass pidió cambios. Editá el evento y volvé a enviarlo a revisión."
+                  : status === "rejected"
+                    ? "Este evento fue rechazado. Editá los datos y volvé a enviarlo a revisión."
+                  : "Vista previa de organizador. El aviso de modo de prueba aparece arriba."}
           </p>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <Button
@@ -39,14 +53,14 @@ export function EventPreviewBanner({
             >
               Volver a mis eventos
             </Button>
-            {canPublish ? (
+            {showPublish ? (
               <Button
                 type="button"
                 className="h-10 rounded-full bg-emerald-500 text-white hover:bg-emerald-400"
                 onClick={() => setPublishOpen(true)}
               >
                 <Rocket className="size-4" aria-hidden="true" />
-                Publicar ahora
+                Publicar Evento
               </Button>
             ) : null}
           </div>
@@ -58,7 +72,6 @@ export function EventPreviewBanner({
         open={publishOpen}
         onOpenChange={setPublishOpen}
         onPublished={() => {
-          router.push(`/events/${eventId}`)
           router.refresh()
         }}
       />

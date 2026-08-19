@@ -2,8 +2,10 @@
 
 import { createClient } from "@/lib/supabase/server"
 import {
+  findScheduleDay,
   formatDayValidityLabel,
   parseScheduleDays,
+  resolveEventAnchorDate,
 } from "@/lib/event-schedule"
 import { fetchPublicOrganizerCards } from "@/lib/public-organizer"
 import type { QrType, TicketStatus } from "@/types/database"
@@ -29,6 +31,8 @@ export type MyTicket = {
   eventId: string
   eventTitle: string
   eventDate: string
+  /** Apertura de puertas (jornada o fecha del evento). */
+  doorsOpenAt: string
   eventLocation: string
   flyerUrl: string | null
   socialShareImageUrl: string | null
@@ -42,7 +46,7 @@ export type MyTicket = {
   isTest: boolean
   /** Precio público All-In del tier (0 = gratuita). */
   tierPrice: number
-  isSponsoredByTokepass: boolean
+  isSponsoredByTokePass: boolean
   /** Listado activo en marketplace de reventa (si existe). */
   activeResaleListingId: string | null
   /** Gift asíncrono iniciado por el titular actual. */
@@ -205,6 +209,9 @@ export async function getMyTickets(options?: {
         eventId: ticket.events.id,
         eventTitle: ticket.events.title,
         eventDate: ticket.events.date,
+        doorsOpenAt:
+          findScheduleDay(scheduleDays, dayId ?? undefined)?.start_time ??
+          resolveEventAnchorDate(scheduleDays, ticket.events.date),
         eventLocation: ticket.events.location,
         flyerUrl: ticket.events.flyer_url ?? ticket.events.image_url,
         socialShareImageUrl:
@@ -218,7 +225,7 @@ export async function getMyTickets(options?: {
         orderId: ticket.order_id,
         isTest: Boolean(ticket.is_test),
         tierPrice: Number(ticket.ticket_tiers?.price ?? 0),
-        isSponsoredByTokepass: Boolean(
+        isSponsoredByTokePass: Boolean(
           ticket.events.is_sponsored_by_tokepass,
         ),
         activeResaleListingId: null,

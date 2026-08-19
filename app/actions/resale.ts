@@ -310,7 +310,7 @@ export async function startResaleCheckoutAction(
 
     const eventRel = ticket.events as { title: string } | null
     const tierRel = ticket.ticket_tiers as { name: string } | null
-    const eventTitle = eventRel?.title ?? "Evento Tokepass"
+    const eventTitle = eventRel?.title ?? "Evento TokePass"
     const tierName = tierRel?.name ?? "Entrada"
     const siteUrl = getSiteUrl()
     const localSite = isLocalSiteUrl(siteUrl)

@@ -66,7 +66,7 @@ export async function shareOrDownloadPngBlob(
     try {
       await navigator.share({
         files: [file],
-        title: "Mi Entrada Tokepass",
+        title: "Mi Entrada TokePass",
       })
       return { ok: true, method: "share" }
     } catch {

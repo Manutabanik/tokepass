@@ -2,10 +2,11 @@
 
 import {
   ArrowLeft,
-  CalendarDays,
+  Calendar,
   MapPin,
   Printer,
   ShieldCheck,
+  User,
 } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
@@ -24,11 +25,14 @@ import { SponsorGrid } from "@/components/public/sponsor-grid"
 import { StoryFlyerWalletButton } from "@/components/public/story-flyer-modal"
 import { TransferTicketDialog, CancelTicketTransferButton } from "@/components/public/transfer-ticket-dialog"
 import { useOnlineStatus } from "@/components/pwa/use-online-status"
+import { BrandMark } from "@/components/shared/brand-logo"
 import { Button } from "@/components/ui/button"
 import { formatEventDay, formatEventTime } from "@/lib/format"
 import { storyCategoryLabel } from "@/lib/story-canvas"
 import { getTicketsOffline } from "@/lib/offline-store"
 import type { PublicSponsor } from "@/lib/sponsors"
+import { ticketSectorLabel, ticketVenueLine } from "@/lib/ticket-stub"
+import { ticketBackupCode } from "@/lib/ticket-print"
 
 export function TicketDetailView({
   ticket: initialTicket,
@@ -84,12 +88,14 @@ export function TicketDetailView({
   )}`
 
   const seatingLabel = [
-    ticket.seatingSectorName,
     ticket.seatingLabel,
     ticket.seatingRowLabel ? `Fila ${ticket.seatingRowLabel}` : null,
   ]
     .filter(Boolean)
     .join(" · ")
+  const doorsAt = ticket.doorsOpenAt || ticket.eventDate
+  const sector = ticketSectorLabel(ticket)
+  const venue = ticketVenueLine(ticket)
 
   return (
     <div className="mx-auto w-full max-w-lg space-y-6 py-6">
@@ -101,9 +107,9 @@ export function TicketDetailView({
         Volver a mis entradas
       </Link>
 
-      <header className="relative overflow-hidden rounded-3xl border border-border bg-card">
+      <article className="relative overflow-hidden rounded-2xl border border-border bg-card">
         {ticket.isTest ? <TestTicketWatermark /> : null}
-        <div className="relative aspect-[16/9] w-full bg-muted">
+        <div className="relative isolate h-44 overflow-hidden bg-zinc-950">
           {ticket.flyerUrl ? (
             <Image
               src={ticket.flyerUrl}
@@ -114,38 +120,51 @@ export function TicketDetailView({
               className="object-cover"
             />
           ) : null}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
-          <div className="absolute inset-x-0 bottom-0 space-y-1 p-4">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-300/90">
-              Detalle de la entrada
-            </p>
-            <h1 className="min-w-0 break-words text-2xl font-black tracking-tight text-white">
-              {ticket.eventTitle}
-            </h1>
-          </div>
+          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-black/15" />
+          <span className="absolute top-3 right-3 z-20">
+            <BrandMark size="sm" className="size-8 rounded-[0.55rem] ring-0" />
+          </span>
         </div>
-        <div className="space-y-2 border-t border-border px-4 py-4 text-sm text-foreground">
-          <p className="flex items-center gap-2">
-            <CalendarDays className="size-4 text-muted-foreground" />
-            {formatEventDay(ticket.eventDate)} · {formatEventTime(ticket.eventDate)}
+        <div className="space-y-3 px-5 pt-4 text-sm text-foreground">
+          <h1 className="min-w-0 break-words text-2xl font-black tracking-tight">
+            {ticket.eventTitle}
+          </h1>
+          <p className="flex items-start gap-2">
+            <Calendar className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+            <span>
+              <span className="block font-semibold capitalize">
+                {formatEventDay(ticket.eventDate)}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                Puertas {formatEventTime(doorsAt)}
+              </span>
+            </span>
           </p>
           <p className="flex items-start gap-2">
             <MapPin className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+            <span className="font-medium leading-snug">{venue}</span>
+          </p>
+          <p className="flex items-start gap-2">
+            <User className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
             <span>
-              {ticket.venueName ?? ticket.eventLocation}
-              {ticket.venueName ? (
-                <span className="mt-0.5 block text-xs text-muted-foreground">
-                  {ticket.eventLocation}
+              <span className="block font-bold">{ticket.holderName}</span>
+              {ticket.holderDni ? (
+                <span className="text-xs font-semibold tabular-nums text-muted-foreground">
+                  DNI {ticket.holderDni}
                 </span>
               ) : null}
             </span>
           </p>
-          <p className="min-w-0 break-words rounded-xl bg-muted px-3 py-2 font-semibold text-foreground">
-            {ticket.tierName}
-            {seatingLabel ? ` · ${seatingLabel}` : ""}
-          </p>
         </div>
-      </header>
+        <div className="mt-4 bg-zinc-950 px-5 py-2.5 text-center text-sm font-black uppercase tracking-[0.16em] text-white dark:bg-white dark:text-zinc-950">
+          {sector}
+          {seatingLabel ? (
+            <span className="mt-1 block text-[10px] font-semibold tracking-normal text-white/70 dark:text-zinc-600">
+              {seatingLabel}
+            </span>
+          ) : null}
+        </div>
+      </article>
 
       {ticket.status === "valid" && requireGuestOtp && !otpUnlocked && ticket.orderId ? (
         <GuestOtpGate
@@ -184,9 +203,11 @@ export function TicketDetailView({
             isStatic={isStatic}
             ticketId={ticket.id}
             totpSecret={ticket.totpSecret}
+            holderName={ticket.holderName}
+            holderDni={ticket.holderDni}
           />
           <p className="mt-3 font-mono text-xs tracking-wider text-muted-foreground">
-            #{ticket.id.slice(0, 8).toUpperCase()}
+            {ticketBackupCode(ticket.id)}
           </p>
           <p className="mt-3 flex items-start justify-center gap-2 text-left text-xs leading-5 text-muted-foreground">
             <ShieldCheck className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
@@ -312,7 +333,7 @@ export function TicketDetailView({
         <ul className="mt-2 list-disc space-y-1.5 pl-4 leading-relaxed">
           <li>El primer escaneo válido en puerta otorga el ingreso.</li>
           <li>
-            La entrada es personal. Transferila solo desde Tokepass.
+            La entrada es personal. Transferila solo desde TokePass.
           </li>
           <li>
             El organizador es responsable del evento y de las condiciones de

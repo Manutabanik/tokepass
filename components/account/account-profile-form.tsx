@@ -282,7 +282,7 @@ export function AccountProfileForm({
               className="min-h-12 border-input bg-muted text-base text-muted-foreground"
             />
             <p className="text-xs text-muted-foreground">
-              Es tu acceso a Tokepass y no se edita acá.
+              Es tu acceso a TokePass y no se edita acá.
             </p>
           </div>
 

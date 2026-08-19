@@ -23,13 +23,12 @@ describe("getEmbedUrl / parsePromoVideoUrl", () => {
     assert.ok(parsed.embedUrl?.includes("playsinline=1"))
   })
 
-  it("builds a tap-to-play YouTube gallery embed without autoplay", () => {
+  it("builds a gallery YouTube embed that autoplays after the custom Play", () => {
     const parsed = getEmbedUrl("https://youtu.be/dQw4w9WgXcQ", { gallery: true })
     assert.equal(
       parsed.embedUrl,
-      "https://www.youtube.com/embed/dQw4w9WgXcQ?rel=0&modestbranding=1&playsinline=1",
+      "https://www.youtube.com/embed/dQw4w9WgXcQ?autoplay=1&mute=0&controls=1&modestbranding=1&rel=0&showinfo=0&playsinline=1",
     )
-    assert.ok(!parsed.embedUrl?.includes("autoplay=1"))
   })
 
   it("classifies YouTube vs native MP4", () => {
@@ -47,10 +46,12 @@ describe("getEmbedUrl / parsePromoVideoUrl", () => {
     )
   })
 
-  it("builds a tap-to-play Vimeo gallery embed without autoplay", () => {
+  it("builds a gallery Vimeo embed that autoplays after the custom Play", () => {
     const parsed = getEmbedUrl("https://vimeo.com/123456789", { gallery: true })
-    assert.equal(parsed.embedUrl, "https://player.vimeo.com/video/123456789")
-    assert.ok(!parsed.embedUrl?.includes("autoplay"))
+    assert.equal(
+      parsed.embedUrl,
+      "https://player.vimeo.com/video/123456789?autoplay=1&muted=0",
+    )
   })
 
   it("only treats YouTube and Vimeo as gallery embeds", () => {

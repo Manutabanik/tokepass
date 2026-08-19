@@ -6,6 +6,7 @@ import { getPreviewEventDetails } from "@/app/actions/public-events"
 import { StorefrontChromeGate } from "@/components/layout/public-shell"
 import { EventPreviewBanner } from "@/components/public/event-preview-banner"
 import { EventStorefront } from "@/components/public/event-storefront"
+import { canSubmitEventForReview } from "@/lib/events/review-status"
 import { createClient } from "@/lib/supabase/server"
 
 export async function generateMetadata({
@@ -58,7 +59,7 @@ export default async function EventPreviewPage({
       <StorefrontChromeGate>
         <EventPreviewBanner
           eventId={event.id}
-          canPublish={event.status === "draft"}
+          canPublish={canSubmitEventForReview(event.status)}
           status={event.status}
         />
       </StorefrontChromeGate>

@@ -13,14 +13,14 @@ import {
 export const metadata: Metadata = {
   title: "Política de privacidad",
   description:
-    "Cómo Tokepass trata datos personales de compradores y organizadores.",
+    "Cómo TokePass trata datos personales de compradores y organizadores.",
 }
 
 export default function PoliticaDePrivacidadPage() {
   return (
     <LegalDocument
       title="Política de privacidad"
-      lead="Política de privacidad y datos personales de Tokepass, en cumplimiento de la Ley N° 25.326 de Protección de Datos Personales de la República Argentina."
+      lead="Política de privacidad y datos personales de TokePass, en cumplimiento de la Ley N° 25.326 de Protección de Datos Personales de la República Argentina."
     >
       <p className="text-xs text-muted-foreground">
         Última actualización: 17 de agosto de 2026.
@@ -33,7 +33,7 @@ export default function PoliticaDePrivacidadPage() {
           </strong>{" "}
           (Legajo N° {LEGAL_ENTITY_LEGAJO}, {LEGAL_ENTITY_ADDRESS}) es
           responsable del tratamiento de los datos personales recabados a
-          través de Tokepass, en estricto cumplimiento de la Ley N° 25.326 de
+          través de TokePass, en estricto cumplimiento de la Ley N° 25.326 de
           Protección de Datos Personales de la República Argentina.
         </p>
       </LegalSection>
@@ -41,7 +41,7 @@ export default function PoliticaDePrivacidadPage() {
       <LegalSection title="2. Datos recopilados y seguridad financiera">
         <p>
           Recopilamos: nombre completo, documento de identidad, correo
-          electrónico y teléfono. Tokepass NO almacena, procesa ni retiene
+          electrónico y teléfono. TokePass NO almacena, procesa ni retiene
           números de tarjetas de crédito o códigos de seguridad (CVV). Todo
           procesamiento de pagos se realiza a través de pasarelas externas
           certificadas bajo normativas PCI-DSS (ej. Mercado Pago).

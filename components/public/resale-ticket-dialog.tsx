@@ -139,7 +139,7 @@ export function ResaleTicketDialog({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              Reventa oficial Tokepass
+              Reventa oficial TokePass
             </DialogTitle>
             <DialogDescription>
               Tu entrada de{" "}
@@ -163,7 +163,7 @@ export function ResaleTicketDialog({
                 </span>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <span className="text-muted-foreground">Fee Tokepass (10%)</span>
+                <span className="text-muted-foreground">Fee TokePass (10%)</span>
                 <span className="text-foreground">
                   {formatCurrency(preview.fee)}
                 </span>

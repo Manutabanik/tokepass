@@ -48,7 +48,7 @@ export function DeviceWalletScreen() {
       <header className="space-y-3">
         <p className="inline-flex items-center gap-2 rounded-full border border-fuchsia-400/30 bg-fuchsia-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-fuchsia-200">
           <Ticket className="size-3.5" aria-hidden="true" />
-          Tokepass
+          TokePass
         </p>
         <h1 className="text-3xl font-black tracking-tight">Mis entradas</h1>
         {!online ? (

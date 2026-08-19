@@ -9,7 +9,7 @@ interface BrandLogoProps {
   className?: string
   /** Dark UI surfaces (admin sidebar / dark header). */
   inverted?: boolean
-  /** Hide the Tokepass wordmark (icon-only). */
+  /** Hide the TokePass wordmark (icon-only). */
   markOnly?: boolean
   /** Optional secondary line under the wordmark. */
   tagline?: string
@@ -68,7 +68,6 @@ export function BrandMark({
       className={cn(
         "relative grid shrink-0 place-items-center overflow-hidden rounded-[0.9rem]",
         "bg-[#050505] ring-1 ring-white/15",
-        "shadow-[0_0_0_1px_rgba(0,0,0,0.5),0_10px_28px_rgba(0,0,0,0.45)]",
         markOnly ? "size-10" : sizeClass[size],
         className,
       )}
@@ -93,11 +92,7 @@ export function BrandLogo({
       <BrandMark
         size={size}
         markOnly={markOnly}
-        className={cn(
-          "transition duration-300",
-          "group-hover:ring-violet-400/50 group-hover:shadow-[0_0_28px_rgba(167,139,250,0.45)]",
-          isHeader && "rounded-[1rem] sm:rounded-[1.1rem]",
-        )}
+        className={cn(isHeader && "rounded-[1rem] sm:rounded-[1.1rem]")}
       />
 
       {!markOnly ? (
@@ -111,7 +106,7 @@ export function BrandLogo({
               inverted ? "text-zinc-950 dark:text-white" : "text-zinc-950 dark:text-white",
             )}
           >
-            Tokepass
+            TokePass
           </span>
           {tagline ? (
             <span
@@ -149,7 +144,7 @@ export function BrandLogo({
   }
 
   return (
-    <Link href={href} className={shellClass} aria-label="Tokepass — Inicio">
+    <Link href={href} className={shellClass} aria-label="TokePass — Inicio">
       {content}
     </Link>
   )

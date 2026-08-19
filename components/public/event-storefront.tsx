@@ -23,6 +23,7 @@ import { EventHeroMediaGallery } from "@/components/public/event-hero-media-gall
 import { EventLineup } from "@/components/public/event-lineup"
 import { EventLocationPanel } from "@/components/public/event-location-panel"
 import { EventResaleListings } from "@/components/public/event-resale-listings"
+import { TokepassGuaranteeBadge } from "@/components/shared/tokepass-guarantee-badge"
 import { EventSaleStatusNotice } from "@/components/public/event-sale-status-notice"
 import { SponsorGrid } from "@/components/public/sponsor-grid"
 import { OrganizerAvatar } from "@/components/public/organizer-avatar"
@@ -141,9 +142,9 @@ export function EventStorefront({
   const description =
     event.description?.trim() ||
     "El organizador todavía no cargó una descripción detallada."
-  const organizerName = event.organizerName?.trim() || "Organizador Tokepass"
+  const organizerName = event.organizerName?.trim() || "Organizador TokePass"
   const organizerBio =
-    event.organizerBio?.trim() || "Productora en Tokepass"
+    event.organizerBio?.trim() || "Productora en TokePass"
 
   const availableDates = useMemo(() => {
     const days = event.scheduleDays ?? []
@@ -330,7 +331,7 @@ export function EventStorefront({
             />
             
             {/* Badges de estado (Solo se muestran si son estados especiales) */}
-            {(finished || soldOut || demand || event.status === "draft") ? (
+            {(finished || soldOut || demand || event.status === "draft" || event.status === "pending_approval" || event.status === "needs_revision" || event.status === "rejected") ? (
               <div className="flex flex-wrap items-center gap-1.5 px-4 md:px-0 pt-1">
                 {finished ? (
                   <span className="inline-flex items-center rounded-full border border-border bg-muted/50 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
@@ -352,6 +353,21 @@ export function EventStorefront({
                 {event.status === "draft" ? (
                   <span className="inline-flex items-center rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-800 dark:text-amber-200">
                     Borrador
+                  </span>
+                ) : null}
+                {event.status === "pending_approval" ? (
+                  <span className="inline-flex items-center rounded-full border border-sky-500/25 bg-sky-500/10 px-2.5 py-1 text-[11px] font-semibold text-sky-800 dark:text-sky-200">
+                    En revisión
+                  </span>
+                ) : null}
+                {event.status === "needs_revision" ? (
+                  <span className="inline-flex items-center rounded-full border border-orange-500/25 bg-orange-500/10 px-2.5 py-1 text-[11px] font-semibold text-orange-800 dark:text-orange-200">
+                    Pide cambios
+                  </span>
+                ) : null}
+                {event.status === "rejected" ? (
+                  <span className="inline-flex items-center rounded-full border border-rose-500/25 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold text-rose-800 dark:text-rose-200">
+                    Rechazado
                   </span>
                 ) : null}
               </div>
@@ -427,7 +443,7 @@ export function EventStorefront({
               </AccordionTrigger>
               <AccordionContent className="text-muted-foreground">
                 Verificá la política de edad del organizador en puerta. Si el
-                evento es +18, deberás presentar DNI vigente. Tokepass no
+                evento es +18, deberás presentar DNI vigente. TokePass no
                 garantiza el ingreso si no cumplís los requisitos del lugar.
               </AccordionContent>
             </AccordionItem>
@@ -438,7 +454,7 @@ export function EventStorefront({
               <AccordionContent className="text-muted-foreground">
                 Llevá tu Living QR en el celular con batería. Evitá capturas
                 de pantalla: los códigos dinámicos vencen. La reventa solo es
-                válida a través del marketplace oficial de Tokepass.
+                válida a través del marketplace oficial de TokePass.
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="refunds">
@@ -447,7 +463,7 @@ export function EventStorefront({
               </AccordionTrigger>
               <AccordionContent className="text-muted-foreground">
                 Las devoluciones dependen de la política del organizador y de
-                la normativa vigente. Si el evento se cancela, Tokepass
+                la normativa vigente. Si el evento se cancela, TokePass
                 gestiona el proceso de reintegro según el estado del pago.
               </AccordionContent>
             </AccordionItem>
@@ -488,20 +504,7 @@ export function EventStorefront({
           </Button>
         </section>
 
-        <div className="flex items-start gap-3 rounded-2xl border border-border bg-muted/40 px-4 py-4 text-sm text-muted-foreground">
-          <ShieldCheck
-            className={cn(
-              "mt-0.5 size-5 shrink-0",
-              event.isSponsoredByTokepass
-                ? "text-amber-600 dark:text-amber-300"
-                : "text-emerald-600 dark:text-emerald-400",
-            )}
-          />
-          <p>
-            Tus entradas digitales quedan asociadas a tu cuenta Tokepass.
-            Presentalas en puerta con Living QR dinámico.
-          </p>
-        </div>
+        <TokepassGuaranteeBadge variant="full" />
       </motion.div>
     )
   }
@@ -605,12 +608,12 @@ export function EventStorefront({
         contentIds={[event.id]}
         value={startingPrice ?? undefined}
       />
-      {event.isSponsoredByTokepass && viewMode === "info" ? (
+      {event.isSponsoredByTokePass && viewMode === "info" ? (
         <div className="border-b border-amber-500/35 bg-gradient-to-r from-amber-500/15 via-background to-amber-500/15">
           <div className="mx-auto flex max-w-3xl items-center justify-center gap-2 px-4 py-2.5 text-center">
             <Sparkles className="size-3.5 text-amber-600 dark:text-amber-300" aria-hidden="true" />
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-800 dark:text-amber-100">
-              Evento auspiciado y protegido por Tokepass
+              Evento auspiciado y protegido por TokePass
             </p>
             <ShieldCheck className="size-3.5 text-emerald-600 dark:text-emerald-300" aria-hidden="true" />
           </div>

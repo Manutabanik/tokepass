@@ -6,6 +6,7 @@ import {
   isPastEvent,
   isSoldOut,
   resolveEventEndAt,
+  resolveEventStartAt,
 } from "@/lib/event-status"
 
 describe("event-status", () => {
@@ -23,6 +24,14 @@ describe("event-status", () => {
       end_time: "2026-08-12T06:00:00.000Z",
     },
   ]
+
+  it("usa el inicio de la primera jornada", () => {
+    const start = resolveEventStartAt({
+      date: "2026-08-10T22:00:00.000Z",
+      scheduleDays: days,
+    })
+    assert.equal(start?.toISOString(), "2026-08-10T22:00:00.000Z")
+  })
 
   it("usa el cierre de la última jornada", () => {
     const end = resolveEventEndAt({

@@ -5,7 +5,7 @@ import { OrganizerEventsManager } from "@/components/admin/organizer-events-mana
 
 export const metadata: Metadata = {
   title: "Mis Eventos",
-  description: "Administrá tu cartelera y destacá eventos con Tokepass Boost.",
+  description: "Administrá tu cartelera y destacá eventos con TokePass Boost.",
 }
 
 export default async function AdminEventsPage({

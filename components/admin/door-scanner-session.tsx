@@ -1,7 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { Flashlight, FlashlightOff, Search } from "lucide-react"
+import { Flashlight, FlashlightOff, Search, Sun } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -26,6 +26,7 @@ export function DoorScannerSessionChrome({
   admittedCount,
   torchOn,
   torchAvailable,
+  wakeLockHeld = false,
   camera,
   overlay,
   onChangeGate,
@@ -38,6 +39,7 @@ export function DoorScannerSessionChrome({
   admittedCount: number
   torchOn: boolean
   torchAvailable: boolean
+  wakeLockHeld?: boolean
   camera: ReactNode
   overlay?: ReactNode
   onChangeGate: () => void
@@ -59,6 +61,15 @@ export function DoorScannerSessionChrome({
             <p className="truncate text-[11px] font-semibold uppercase tracking-[0.16em] text-white/70">
               {gateLabel}
             </p>
+            {wakeLockHeld ? (
+              <span
+                className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-200/80"
+                title="Pantalla encendida"
+              >
+                <Sun className="size-3.5" aria-hidden="true" />
+                <span className="sr-only">Pantalla sin bloqueo</span>
+              </span>
+            ) : null}
           </div>
           {!isTotem ? (
             <button

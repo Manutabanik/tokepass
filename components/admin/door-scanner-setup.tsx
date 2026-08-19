@@ -1,7 +1,8 @@
 "use client"
 
-import { LoaderCircle, Monitor, Smartphone } from "lucide-react"
+import { LoaderCircle, LogOut, Monitor, Smartphone } from "lucide-react"
 
+import { endDoorGuestSession } from "@/app/actions/door-access"
 import type { ScannerEventOption } from "@/app/actions/scanner"
 import { Button } from "@/components/ui/button"
 import type { ScannerAccessMode } from "@/lib/scanner/access-mode"
@@ -9,6 +10,7 @@ import type { ScannerGate } from "@/lib/scanner/gate"
 import { cn } from "@/lib/utils"
 
 export function DoorScannerSetup({
+  guestMode = false,
   events,
   eventId,
   gates,
@@ -28,6 +30,7 @@ export function DoorScannerSetup({
   onDeviceSlotIndexChange,
   onStart,
 }: {
+  guestMode?: boolean
   events: ScannerEventOption[]
   eventId: string
   gates: ScannerGate[]
@@ -105,20 +108,27 @@ export function DoorScannerSetup({
           <label className="block text-[11px] font-bold uppercase tracking-[0.16em] text-white/45">
             Evento
           </label>
-          <select
-            value={eventId}
-            onChange={(event) => onEventChange(event.target.value)}
-            className="h-14 w-full appearance-none rounded-xl border border-white/15 bg-white/10 px-4 text-base text-white"
-          >
-            {events.length === 0 ? (
-              <option value="">Cargando eventos…</option>
-            ) : null}
-            {events.map((event) => (
-              <option key={event.id} value={event.id} className="text-zinc-950">
-                {event.title}
-              </option>
-            ))}
-          </select>
+          {guestMode ? (
+            <div className="flex h-14 items-center rounded-xl border border-white/15 bg-white/10 px-4 text-base text-white">
+              {events.find((event) => event.id === eventId)?.title ||
+                "Evento de este PIN"}
+            </div>
+          ) : (
+            <select
+              value={eventId}
+              onChange={(event) => onEventChange(event.target.value)}
+              className="h-14 w-full appearance-none rounded-xl border border-white/15 bg-white/10 px-4 text-base text-white"
+            >
+              {events.length === 0 ? (
+                <option value="">Cargando eventos…</option>
+              ) : null}
+              {events.map((event) => (
+                <option key={event.id} value={event.id} className="text-zinc-950">
+                  {event.title}
+                </option>
+              ))}
+            </select>
+          )}
 
           <label className="block text-[11px] font-bold uppercase tracking-[0.16em] text-white/45">
             Gatera / sector
@@ -218,6 +228,16 @@ export function DoorScannerSetup({
             "INICIAR CONTROL DE ACCESO"
           )}
         </Button>
+        {guestMode ? (
+          <button
+            type="button"
+            onClick={() => void endDoorGuestSession()}
+            className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 text-sm font-semibold text-white/55 transition hover:text-white"
+          >
+            <LogOut className="size-4" aria-hidden="true" />
+            Salir del PIN de puerta
+          </button>
+        ) : null}
       </div>
     </div>
   )

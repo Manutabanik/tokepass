@@ -39,7 +39,7 @@ function buildGoogleCalendarUrl(input: {
     text: input.title,
     dates: `${stamp(start)}/${stamp(end)}`,
     location: input.location,
-    details: input.details?.trim() || "Entrada emitida con Tokepass",
+    details: input.details?.trim() || "Entrada emitida con TokePass",
   })
   return `https://calendar.google.com/calendar/render?${params.toString()}`
 }

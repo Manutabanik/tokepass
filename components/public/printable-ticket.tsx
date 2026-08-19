@@ -8,6 +8,7 @@ import { TestTicketWatermark } from "@/components/public/test-ticket-watermark"
 import { BrandMarkSvg } from "@/components/shared/brand-logo"
 import { formatCurrency, formatEventDay, formatEventTime } from "@/lib/format"
 import { ticketBackupCode } from "@/lib/ticket-print"
+import { ticketSectorLabel } from "@/lib/ticket-stub"
 
 function ThermalTicket({ ticket }: { ticket: PrintableTicket }) {
   const priceLabel =
@@ -31,14 +32,18 @@ function ThermalTicket({ ticket }: { ticket: PrintableTicket }) {
 }
 
 function PremiumPassTicket({ ticket }: { ticket: PrintableTicket }) {
-  const entryLabel = (ticket.seatingLabel || ticket.tierName).toUpperCase()
+  const sector = ticketSectorLabel({
+    seatingSectorName: ticket.sectorLabel,
+    seatingLabel: ticket.seatingLabel,
+    tierName: ticket.tierName,
+  })
   const backup = ticketBackupCode(ticket.id)
   const doorsAt = ticket.doorsOpenAt || ticket.eventDate
 
   return (
-    <div className="relative print-ticket-pass mx-auto w-full max-w-[28rem] overflow-hidden rounded-3xl border border-zinc-200 bg-white text-zinc-950 shadow-xl print:max-w-none print:rounded-none print:border-zinc-300 print:shadow-none">
+    <div className="ticket-print-card print-ticket-pass relative mx-auto w-full max-w-[440px] overflow-hidden rounded-2xl border border-slate-200 bg-white text-zinc-950">
       {ticket.isTest ? <TestTicketWatermark /> : null}
-      <header className="relative isolate h-40 overflow-hidden bg-zinc-950 sm:h-48">
+      <div className="ticket-print-banner relative isolate h-44 overflow-hidden bg-zinc-950">
         {ticket.flyerUrl ? (
           // External event flyers may live outside the Next image allowlist.
           // eslint-disable-next-line @next/next/no-img-element
@@ -49,32 +54,22 @@ function PremiumPassTicket({ ticket }: { ticket: PrintableTicket }) {
           />
         ) : null}
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/45 to-black/10" />
-        <div className="absolute top-3 right-3 flex items-center gap-2 rounded-full bg-black/70 px-2.5 py-1 ring-1 ring-white/20 backdrop-blur-md">
-          <span className="size-6 overflow-hidden rounded-md">
-            <BrandMarkSvg title="Tokepass" />
-          </span>
-          <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white">
-            Tokepass
-          </span>
+        <div className="absolute top-3 right-3 size-8 overflow-hidden rounded-md">
+          <BrandMarkSvg title="TokePass" />
         </div>
-        <div className="absolute inset-x-0 bottom-0 p-4">
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/70">
-            Entrada oficial
-          </p>
-          <h1 className="mt-1 text-xl font-black leading-tight tracking-tight text-white sm:text-2xl">
-            {ticket.eventTitle}
-          </h1>
-        </div>
-      </header>
+      </div>
 
       <div className="space-y-4 px-5 py-5">
+        <h1 className="text-2xl font-black leading-tight tracking-tight text-zinc-950">
+          {ticket.eventTitle}
+        </h1>
         <dl className="grid grid-cols-2 gap-3 text-sm">
           <div>
             <dt className="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">
               Fecha
             </dt>
             <dd className="mt-0.5 font-semibold capitalize text-zinc-950">
-              {formatEventDay(doorsAt)}
+              {formatEventDay(ticket.eventDate)}
             </dd>
           </div>
           <div>
@@ -85,63 +80,47 @@ function PremiumPassTicket({ ticket }: { ticket: PrintableTicket }) {
               {formatEventTime(doorsAt)}
             </dd>
           </div>
-          <div>
-            <dt className="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">
-              Asistente
-            </dt>
-            <dd className="mt-0.5 font-semibold text-zinc-950">
-              {ticket.holderName}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">
-              Documento
-            </dt>
-            <dd className="mt-0.5 font-semibold tabular-nums text-zinc-950">
-              {ticket.holderDni ? `DNI ${ticket.holderDni}` : "Sin DNI"}
-            </dd>
-          </div>
         </dl>
-
-        <p className="text-xs leading-snug text-zinc-600">{ticket.eventLocation}</p>
-
-        <div className="rounded-2xl bg-primary px-4 py-3 text-center text-primary-foreground">
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-80">
-            Categoría / Sector
+        <p className="text-sm font-medium leading-snug text-zinc-700">
+          {ticket.eventLocation}
+        </p>
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">
+            Asistente
           </p>
-          <p className="mt-1 text-lg font-black tracking-tight">{entryLabel}</p>
-          {ticket.tierName && ticket.seatingLabel ? (
-            <p className="mt-0.5 text-xs font-semibold opacity-90">
-              {ticket.tierName}
+          <p className="mt-0.5 text-sm font-bold text-zinc-950">
+            {ticket.holderName}
+          </p>
+          <p className="text-sm font-bold tabular-nums text-zinc-950">
+            {ticket.holderDni ? `DNI ${ticket.holderDni}` : "Sin DNI"}
+          </p>
+        </div>
+
+        <div className="rounded-none bg-zinc-950 px-4 py-3 text-center text-white">
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/70">
+            Categoría
+          </p>
+          <p className="mt-1 text-lg font-black tracking-tight">{sector}</p>
+          {ticket.seatingLabel ? (
+            <p className="mt-0.5 text-xs font-semibold text-white/80">
+              {ticket.seatingLabel}
             </p>
           ) : null}
         </div>
       </div>
 
-      <div className="relative border-t-2 border-dashed border-muted">
-        <span
-          className="absolute top-0 left-0 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-zinc-100 print:bg-white"
-          aria-hidden="true"
-        />
-        <span
-          className="absolute top-0 right-0 size-5 translate-x-1/2 -translate-y-1/2 rounded-full bg-zinc-100 print:bg-white"
-          aria-hidden="true"
-        />
-      </div>
+      <div className="stub-divider" aria-hidden="true" />
 
       <div className="flex flex-col items-center gap-3 px-5 py-5">
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-500">
-          Zona de escaneo
-        </p>
-        <div className="print-qr-quiet rounded-none border-0 bg-white p-3 shadow-none">
+        <div className="rounded-none border-0 bg-white p-0">
           <QRCodeSVG
             value={ticket.qrPayload}
-            size={240}
+            size={200}
             level="H"
             includeMargin
             bgColor="#ffffff"
             fgColor="#000000"
-            className="print-ticket-qr"
+            className="ticket-stub-qr"
           />
         </div>
         <p className="font-mono text-sm font-semibold tracking-[0.22em] text-zinc-800">
@@ -149,30 +128,11 @@ function PremiumPassTicket({ ticket }: { ticket: PrintableTicket }) {
         </p>
       </div>
 
-      <footer className="space-y-3 border-t border-zinc-200 bg-zinc-50 px-5 py-4 print:bg-white">
-        <p className="text-xs font-medium leading-relaxed text-zinc-700">
-          Presentá este boleto en puerta. El primer escaneo válido otorga el
-          ingreso. Conservalo hasta salir del predio.
+      <div className="ticket-print-footer border-t border-slate-200 px-5 py-4 text-center">
+        <p className="text-[11px] font-semibold tracking-wide text-zinc-600">
+          Entrada Oficial Nominada | TokePass Boletería Digital
         </p>
-        <p className="text-[11px] leading-relaxed text-zinc-500">
-          La entrada es personal. Las transferencias y la reventa solo son
-          válidas a través de Tokepass. El organizador es responsable del evento
-          y de las condiciones de acceso.
-        </p>
-        <div className="flex items-center justify-between gap-3 pt-1">
-          <div className="flex items-center gap-2">
-            <span className="size-7 overflow-hidden rounded-md">
-              <BrandMarkSvg />
-            </span>
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-600">
-              Tokepass Secure Pass
-            </p>
-          </div>
-          <p className="font-mono text-[10px] tracking-wider text-zinc-400">
-            #{ticket.id.slice(0, 8).toUpperCase()}
-          </p>
-        </div>
-      </footer>
+      </div>
     </div>
   )
 }
@@ -194,7 +154,7 @@ export function PrintableTicketView({
       <>
         <style>{`
           @media print {
-            @page { size: A4 portrait; margin: 10mm; }
+            @page { size: A4 portrait; margin: 12mm; }
           }
         `}</style>
         <PremiumPassTicket ticket={ticket} />

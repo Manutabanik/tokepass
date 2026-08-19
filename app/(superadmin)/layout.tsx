@@ -13,7 +13,7 @@ import { getInitials } from "@/lib/format"
 export const metadata: Metadata = {
   title: {
     default: "Panel de control",
-    template: "%s · Tokepass",
+    template: "%s · TokePass",
   },
   robots: { index: false, follow: false },
 }

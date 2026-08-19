@@ -91,7 +91,7 @@ export function OnboardingBanner({ hasDni }: { hasDni: boolean }) {
                 Entradas siempre a mano
               </p>
               <p className="mt-1 text-sm leading-relaxed text-emerald-900/80 dark:text-emerald-100/80">
-                Llevá tus entradas siempre con vos. Agregá Tokepass a tu
+                Llevá tus entradas siempre con vos. Agregá TokePass a tu
                 pantalla de inicio para ver tus QRs sin conexión a internet.
               </p>
             </div>

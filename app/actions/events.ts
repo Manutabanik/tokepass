@@ -85,6 +85,8 @@ import {
   normalizeLogicalSectors,
   zoneIndexForSectorId,
 } from "@/lib/inventory/logical-sectors"
+import { notifyOrganizerEventAudit } from "@/lib/events/notify-event-audit"
+import { isSandboxEventStatus } from "@/lib/events/review-status"
 import { logger } from "@/lib/logger"
 import { mapUnknownError } from "@/lib/errors/error-handler"
 import type { AppErrorCode } from "@/lib/errors/app-error"
@@ -116,9 +118,11 @@ export type OrganizerEvent = Pick<
   | "is_featured"
   | "featured_tier"
   | "featured_until"
+  | "review_note"
 > & {
   venues: Pick<Venue, "id" | "name" | "location"> | null
   ticketsSold: number
+  paidOrderCount: number
 }
 
 async function requireAuthenticatedUser() {
@@ -135,12 +139,67 @@ async function requireAuthenticatedUser() {
   return { supabase, user }
 }
 
+async function countPaidOrdersByEventIds(
+  eventIds: string[],
+): Promise<Map<string, number>> {
+  const paidByEvent = new Map<string, number>()
+  if (eventIds.length === 0) return paidByEvent
+
+  const admin = createAdminClient()
+  const { data: ticketRows, error } = await admin
+    .from("tickets")
+    .select("event_id, order_id")
+    .in("event_id", eventIds)
+    .not("order_id", "is", null)
+
+  if (error) {
+    throw new Error(`No se pudieron leer las ventas pagadas: ${error.message}`)
+  }
+
+  const orderIds = [
+    ...new Set(
+      (ticketRows ?? [])
+        .map((row) => row.order_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ]
+  if (orderIds.length === 0) return paidByEvent
+
+  const { data: paidOrders, error: paidError } = await admin
+    .from("orders")
+    .select("id")
+    .eq("status", "paid")
+    .in("id", orderIds)
+
+  if (paidError) {
+    throw new Error(`No se pudieron leer las órdenes pagadas: ${paidError.message}`)
+  }
+
+  const paidIds = new Set((paidOrders ?? []).map((row) => row.id))
+  const uniquePaid = new Map<string, Set<string>>()
+  for (const row of ticketRows ?? []) {
+    if (!row.order_id || !paidIds.has(row.order_id)) continue
+    const bucket = uniquePaid.get(row.event_id) ?? new Set<string>()
+    bucket.add(row.order_id)
+    uniquePaid.set(row.event_id, bucket)
+  }
+  for (const [eventId, orders] of uniquePaid) {
+    paidByEvent.set(eventId, orders.size)
+  }
+  return paidByEvent
+}
+
+async function countPaidOrdersForEvent(eventId: string): Promise<number> {
+  const counts = await countPaidOrdersByEventIds([eventId])
+  return counts.get(eventId) ?? 0
+}
+
 export async function getOrganizerEvents(): Promise<OrganizerEvent[]> {
   const { supabase, user } = await requireAuthenticatedUser()
   const { data, error } = await supabase
     .from("events")
     .select(
-      "id, title, description, date, location, image_url, status, venue_id, created_at, is_featured, featured_tier, featured_until, venues(id, name, location)",
+      "id, title, description, date, location, image_url, status, venue_id, created_at, is_featured, featured_tier, featured_until, review_note, venues(id, name, location)",
     )
     .eq("organizer_id", user.id)
     .order("date", { ascending: true })
@@ -170,9 +229,12 @@ export async function getOrganizerEvents(): Promise<OrganizerEvent[]> {
     soldByEvent.set(row.event_id, (soldByEvent.get(row.event_id) ?? 0) + 1)
   }
 
+  const paidByEvent = await countPaidOrdersByEventIds(eventIds)
+
   return events.map((event) => ({
     ...event,
     ticketsSold: soldByEvent.get(event.id) ?? 0,
+    paidOrderCount: paidByEvent.get(event.id) ?? 0,
   }))
 }
 
@@ -240,7 +302,7 @@ function assertFreeTicketCapacityAllowed(
   if (isSuperAdmin) return null
   const freeCapacity = sumFreeTicketCapacity(tickets)
   if (freeCapacity <= maxFreeTickets) return null
-  return `El cupo total de entradas gratuitas (${freeCapacity}) supera el máximo permitido (${maxFreeTickets}). Pedile a Tokepass que amplíe el límite o bajá la capacidad de los tiers a $0.`
+  return `El cupo total de entradas gratuitas (${freeCapacity}) supera el máximo permitido (${maxFreeTickets}). Pedile a TokePass que amplíe el límite o bajá la capacidad de los tiers a $0.`
 }
 
 async function loadEventFeeConfig(
@@ -261,7 +323,7 @@ async function loadEventFeeConfig(
     platformFeePercentage: Number(data.platform_fee_percentage ?? 8),
     platformFixedFee: Number(data.platform_fixed_fee ?? 0),
     maxFreeTickets: Number(data.max_free_tickets ?? 100),
-    isSponsoredByTokepass: Boolean(data.is_sponsored_by_tokepass),
+    isSponsoredByTokePass: Boolean(data.is_sponsored_by_tokepass),
   }
 }
 
@@ -1170,7 +1232,7 @@ async function runSeatingRpcWithRetry<T>(input: {
   }
 }
 
-async function materializeEventSeatingUnits(
+export async function materializeEventSeatingUnits(
   client: SupabaseClient<Database>,
   eventId: string,
 ): Promise<string | null> {
@@ -2726,12 +2788,12 @@ export async function updateCompleteEvent(
 }
 
 export type PublishEventResult =
-  | { success: true; purgedTestTickets?: number }
+  | { success: true; purgedTestTickets?: number; status: EventStatus }
   | { success: false; error: string; code?: AppErrorCode }
 
 /**
- * Publica un borrador del organizador cuando cumple requisitos mínimos.
- * Featured/Boost no se toca aquí (solo service_role vía webhook).
+ * El organizador envía el evento a auditoría (`pending_approval`).
+ * No publica ni habilita cobros. Sin CUIT / DNI.
  */
 export async function publishEvent(
   eventId: string,
@@ -2780,13 +2842,21 @@ export async function publishEvent(
   }
 
   if (event.status === "published") {
-    return { success: true, purgedTestTickets: 0 }
+    return { success: true, purgedTestTickets: 0, status: "published" }
   }
 
-  if (event.status !== "draft") {
+  if (event.status === "pending_approval") {
+    return { success: true, purgedTestTickets: 0, status: "pending_approval" }
+  }
+
+  if (
+    event.status !== "draft" &&
+    event.status !== "needs_revision" &&
+    event.status !== "rejected"
+  ) {
     return {
       success: false,
-      error: "Solo se pueden publicar eventos en borrador.",
+      error: "Solo se pueden enviar a revisión los borradores o eventos con cambios pedidos.",
     }
   }
 
@@ -2835,10 +2905,14 @@ export async function publishEvent(
 
   const { data: updated, error: updateError } = await mutationClient
     .from("events")
-    .update({ status: "published", updated_at: new Date().toISOString() })
+    .update({
+      status: "pending_approval",
+      review_note: null,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", eventId)
     .eq("organizer_id", event.organizer_id)
-    .eq("status", "draft")
+    .in("status", ["draft", "needs_revision", "rejected"])
     .select("id")
     .maybeSingle()
 
@@ -2849,31 +2923,25 @@ export async function publishEvent(
   if (!updated) {
     return {
       success: false,
-      error: "No se pudo publicar el evento. Recargá e intentá de nuevo.",
-    }
-  }
-
-  const materializeError = await materializeEventSeatingUnits(
-    mutationClient,
-    eventId,
-  )
-  if (materializeError) {
-    return {
-      success: false,
-      error: `El evento se publicó pero no se pudo generar el inventario de asientos: ${materializeError}`,
+      error: "No se pudo enviar el evento a revisión. Recargá e intentá de nuevo.",
     }
   }
 
   revalidatePath("/admin")
   revalidatePath("/admin/events")
-  revalidatePath("/events")
-  revalidatePath(`/events/${eventId}`)
+  revalidatePath(`/admin/events/${eventId}`)
   revalidatePath(`/events/preview/${eventId}`)
-  revalidatePath("/")
   revalidatePath("/superadmin/events")
-  revalidatePath("/cuenta/entradas")
+  revalidatePath("/superadmin/auditoria")
+  revalidatePath("/superadmin")
+  revalidatePath("/superadmin/soporte")
 
-  return { success: true, purgedTestTickets }
+  void notifyOrganizerEventAudit({
+    eventId,
+    kind: "submitted",
+  })
+
+  return { success: true, purgedTestTickets, status: "pending_approval" }
 }
 
 export type UpdateEventSalesStatusResult =
@@ -2932,10 +3000,9 @@ export async function updateEventSalesStatus(
       revalidateEventSalesPaths(eventId)
       return { success: true, status: "published" }
     }
-    // draft → published: reutilizar validaciones de publishEvent
-    const published = await publishEvent(eventId, { purgeTestTickets: true })
-    if (!published.success) return published
-    return { success: true, status: "published" }
+    const reviewed = await publishEvent(eventId, { purgeTestTickets: true })
+    if (!reviewed.success) return reviewed
+    return { success: true, status: reviewed.status }
   }
 
   if (nextStatus === "paused") {
@@ -3035,10 +3102,10 @@ export async function getOrganizerPreviewShareUrl(
   if (event.organizer_id !== user.id && !isSuper) {
     return { success: false, error: "No tenés permiso para copiar este enlace." }
   }
-  if (event.status !== "draft") {
+  if (!isSandboxEventStatus(event.status)) {
     return {
       success: false,
-      error: "El enlace de prueba solo está disponible en borrador.",
+      error: "El enlace de prueba solo está disponible antes de publicar.",
     }
   }
 
@@ -3052,8 +3119,9 @@ export type DeleteOrArchiveEventResult =
 
 /**
  * Borrado seguro:
+ * - Con órdenes `paid` → bloqueado (el organizador debe pedir cancelación a soporte)
  * - Sin entradas vendidas/comprometidas → DELETE físico
- * - Con ventas → soft delete (`cancelled`) para preservar auditoría
+ * - Con tickets no cobrados → soft delete (`cancelled`) para preservar auditoría
  */
 export async function deleteOrArchiveEvent(
   eventId: string,
@@ -3079,6 +3147,15 @@ export async function deleteOrArchiveEvent(
 
   if (event.status === "cancelled") {
     return { success: false, error: "El evento ya está cancelado." }
+  }
+
+  const paidOrderCount = await countPaidOrdersForEvent(eventId)
+  if (paidOrderCount > 0) {
+    return {
+      success: false,
+      error:
+        "Este evento tiene compras pagadas. Solicitá la cancelación a soporte para iniciar el reembolso.",
+    }
   }
 
   const { count, error: countError } = await supabase
@@ -3187,6 +3264,15 @@ export async function archiveEvent(
     return persistFailure(countError.message)
   }
 
+  const paidOrderCount = await countPaidOrdersForEvent(eventId)
+  if (paidOrderCount > 0) {
+    return {
+      success: false,
+      error:
+        "Este evento tiene compras pagadas. Solicitá la cancelación a soporte.",
+    }
+  }
+
   if ((count ?? 0) > 0 && event.status === "published") {
     return {
       success: false,
@@ -3257,7 +3343,7 @@ export async function getEventCommercialSettings(
     platformFeePercentage: Number(event.platform_fee_percentage ?? 8),
     platformFixedFee: Number(event.platform_fixed_fee ?? 0),
     maxFreeTickets: Number(event.max_free_tickets ?? 100),
-    isSponsoredByTokepass: Boolean(event.is_sponsored_by_tokepass),
+    isSponsoredByTokePass: Boolean(event.is_sponsored_by_tokepass),
   }
 }
 
@@ -3267,7 +3353,7 @@ export type UpdateEventCommercialSettingsResult =
 
 /**
  * Platform owner only (super_admin / PLATFORM_OWNER): fees, free-ticket cap,
- * Tokepass sponsorship. Recomputes tier base_price / platform_fee from public
+ * TokePass sponsorship. Recomputes tier base_price / platform_fee from public
  * All-In price.
  *
  * Auth: misma fuente que `app/(superadmin)/layout.tsx` → `profiles.role === "super_admin"`.
@@ -3280,7 +3366,7 @@ export async function updateEventCommercialSettings(
     platformFeePercentage: number
     platformFixedFee: number
     maxFreeTickets: number
-    isSponsoredByTokepass: boolean
+    isSponsoredByTokePass: boolean
   },
 ): Promise<UpdateEventCommercialSettingsResult> {
   if (!eventId?.trim()) {
@@ -3304,7 +3390,7 @@ export async function updateEventCommercialSettings(
   const percentage = Number(input.platformFeePercentage)
   const fixed = Number(input.platformFixedFee)
   const maxFree = Math.floor(Number(input.maxFreeTickets))
-  const sponsored = Boolean(input.isSponsoredByTokepass)
+  const sponsored = Boolean(input.isSponsoredByTokePass)
 
   if (!Number.isFinite(percentage) || percentage < 0 || percentage > 95) {
     return { success: false, error: "El porcentaje debe estar entre 0 y 95." }
@@ -3320,7 +3406,7 @@ export async function updateEventCommercialSettings(
     platformFeePercentage: percentage,
     platformFixedFee: fixed,
     maxFreeTickets: maxFree,
-    isSponsoredByTokepass: sponsored,
+    isSponsoredByTokePass: sponsored,
   }
 
   const admin = createAdminClient()
@@ -3331,7 +3417,7 @@ export async function updateEventCommercialSettings(
       platform_fee_percentage: feeConfig.platformFeePercentage,
       platform_fixed_fee: feeConfig.platformFixedFee,
       max_free_tickets: feeConfig.maxFreeTickets,
-      is_sponsored_by_tokepass: feeConfig.isSponsoredByTokepass,
+      is_sponsored_by_tokepass: feeConfig.isSponsoredByTokePass,
       updated_at: new Date().toISOString(),
     })
     .eq("id", eventId)

@@ -39,6 +39,14 @@ export default async function SuperAdminEventsPage() {
         eyebrow="Cartelera"
         title="Todos los eventos"
         description="Acá ves todos los eventos de la plataforma, sin importar qué productora los creó."
+        actions={
+          <Link
+            href="/superadmin/auditoria"
+            className="inline-flex h-11 items-center justify-center rounded-full border border-sky-500/30 bg-sky-500/10 px-4 text-sm font-semibold text-sky-800 transition hover:bg-sky-500/20 dark:text-sky-200"
+          >
+            Eventos Pendientes
+          </Link>
+        }
       />
 
       <Card className="border border-border bg-card py-0 text-card-foreground">

@@ -50,10 +50,10 @@ export function TicketReceiptEmail({
               src={logoUrl}
               width="40"
               height="40"
-              alt="Tokepass"
+              alt="TokePass"
               style={styles.logo}
             />
-            <Text style={styles.brand}>Tokepass</Text>
+            <Text style={styles.brand}>TokePass</Text>
           </Section>
 
           <Text style={styles.kicker}>Pago confirmado</Text>
@@ -100,7 +100,7 @@ export function TicketReceiptEmail({
 
           <Hr style={styles.footerRule} />
           <Text style={styles.footer}>
-            Tokepass · Entradas digitales para vivir el evento
+            TokePass · Entradas digitales para vivir el evento
           </Text>
         </Container>
       </Body>

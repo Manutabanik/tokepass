@@ -24,6 +24,7 @@ const STATUS_LABEL: Record<string, string> = {
   failed: "Fallida",
   expired: "Vencida",
   refunded: "Reembolsada",
+  refund_processing: "Devolución en proceso",
 }
 
 export function BuyersPanel({ buyers }: { buyers: BuyerRow[] }) {

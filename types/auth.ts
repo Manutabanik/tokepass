@@ -1,5 +1,5 @@
 /**
- * Auth / staff capability types for Tokepass ops roles.
+ * Auth / staff capability types for TokePass ops roles.
  * Global profiles.role stays customer|admin|super_admin.
  * Per-event capabilities live in event_staff_assignments.
  */

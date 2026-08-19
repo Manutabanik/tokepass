@@ -23,7 +23,7 @@ function event(partial: Partial<CatalogEvent> & Pick<CatalogEvent, "id" | "title
     isFeatured: false,
     featuredTier: null,
     featuredUntil: null,
-    isSponsoredByTokepass: false,
+    isSponsoredByTokePass: false,
     categoryId: null,
     artists: [],
     ...partial,

@@ -13,17 +13,17 @@ import {
 export const metadata: Metadata = {
   title: "Términos y condiciones",
   description:
-    "Condiciones de uso de la plataforma de boletería digital Tokepass.",
+    "Condiciones de uso de la plataforma de boletería digital TokePass.",
 }
 
 export default function TerminosYCondicionesPage() {
   return (
     <LegalDocument
       title="Términos y condiciones"
-      lead="El presente documento establece los Términos y Condiciones que rigen el uso de la plataforma Tokepass y la compra de entradas a través de la misma."
+      lead="El presente documento establece los Términos y Condiciones que rigen el uso de la plataforma TokePass y la compra de entradas a través de la misma."
     >
       <p className="text-xs text-muted-foreground">
-        Última actualización: 17 de agosto de 2026.
+        Última actualización: 18 de agosto de 2026.
       </p>
 
       <LegalSection title="1. Información legal y aceptación">
@@ -42,9 +42,9 @@ export default function TerminosYCondicionesPage() {
 
       <LegalSection title="2. Naturaleza del servicio">
         <p>
-          {LEGAL_ENTITY_NAME}, a través de Tokepass, actúa exclusivamente como
+          {LEGAL_ENTITY_NAME}, a través de TokePass, actúa exclusivamente como
           intermediario tecnológico para la comercialización de entradas y
-          provisión de software. Tokepass NO es el organizador, productor ni
+          provisión de software. TokePass NO es el organizador, productor ni
           promotor de los eventos. La responsabilidad integral sobre el evento
           recae única y exclusivamente sobre el Organizador del mismo.
         </p>
@@ -54,21 +54,24 @@ export default function TerminosYCondicionesPage() {
         <p>
           Las entradas son nominativas, personales e intransferibles, salvo
           habilitación expresa del Organizador. El código QR es de un único
-          uso. Tokepass y el Organizador no se responsabilizan por la copia o
+          uso. TokePass y el Organizador no se responsabilizan por la copia o
           uso indebido del código QR por negligencia del Comprador.
         </p>
       </LegalSection>
 
       <LegalSection title="4. Política de cancelaciones, devoluciones y contracargos">
         <p>
-          Ausencia de derecho de arrepentimiento: Por la naturaleza del
-          servicio, las compras de entradas no admiten devoluciones ni
-          reintegros por arrepentimiento del Comprador.
+          El comprador tiene derecho a revocar la aceptación de la compra
+          dentro de los 10 días computados a partir de la celebración del
+          contrato, conforme a las normativas de Defensa del Consumidor
+          aplicables en la República Argentina. El derecho se ejerce desde
+          el Botón de Arrepentimiento de TokePass, siempre que falten al
+          menos 24 horas para el inicio del evento.
         </p>
         <p>
           Cancelación del Evento: En caso de cancelación o reprogramación, el
           Organizador es el único responsable de procesar reembolsos. El cargo
-          por servicio (Service Charge) de Tokepass NO será reembolsable bajo
+          por servicio (Service Charge) de TokePass NO será reembolsable bajo
           ninguna circunstancia, ya que corresponde al servicio tecnológico
           efectivamente prestado.
         </p>

@@ -9,9 +9,12 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 
+import { getAuditEventDetails } from "@/app/actions/event-audit"
 import { getEventCommercialSettings } from "@/app/actions/events"
 import { getMassRefundPreview } from "@/app/actions/superadmin-refunds"
+import { DoorAccessPinCard } from "@/components/admin/door-access-pin-card"
 import { EventCommercialSettingsForm } from "@/components/admin/event-commercial-settings-form"
+import { EventAuditActions } from "@/components/superadmin/event-audit-actions"
 import { EventStatusBadge } from "@/components/superadmin/badges"
 import { EventMassRefundDangerZone } from "@/components/superadmin/event-mass-refund-danger-zone"
 import { PageHeading } from "@/components/superadmin/page-heading"
@@ -33,9 +36,10 @@ export default async function SuperAdminEventDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const [preview, commercial] = await Promise.all([
+  const [preview, commercial, audit] = await Promise.all([
     getMassRefundPreview(id),
     getEventCommercialSettings(id),
+    getAuditEventDetails(id),
   ])
 
   if (!preview) notFound()
@@ -78,6 +82,35 @@ export default async function SuperAdminEventDetailPage({
           Nuevo evento de esta productora
         </Link>
       </div>
+
+      <div className="mb-6">
+        <DoorAccessPinCard eventId={id} eventTitle={preview.eventTitle} />
+      </div>
+
+      {preview.eventStatus === "pending_approval" ||
+      preview.eventStatus === "needs_revision" ? (
+        <Card className="mb-6 border border-sky-500/25 bg-card py-0 text-card-foreground">
+          <CardHeader className="border-b border-border px-6 py-5">
+            <CardTitle className="text-foreground">Auditoría del evento</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 px-6 py-5">
+            {audit ? (
+              <div className="text-sm text-muted-foreground">
+                <p className="font-medium text-foreground">{audit.organizerName}</p>
+                <p>{audit.organizerEmail}</p>
+                {audit.organizerPhone ? <p>{audit.organizerPhone}</p> : null}
+                <p className="mt-2">{audit.location}</p>
+              </div>
+            ) : null}
+            {audit?.reviewNote ? (
+              <p className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-sm text-orange-950 dark:text-orange-100">
+                {audit.reviewNote}
+              </p>
+            ) : null}
+            <EventAuditActions eventId={id} />
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
         <Card className="border border-border bg-card py-0 text-card-foreground">

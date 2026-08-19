@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test"
 
 /**
- * E2E de Tokepass: UI crítica de eventos masivos.
+ * E2E de TokePass: UI crítica de eventos masivos.
  * No genera pagos reales: ver tests/e2e/helpers/mp-guard.ts
  *
  *   npm run test:e2e

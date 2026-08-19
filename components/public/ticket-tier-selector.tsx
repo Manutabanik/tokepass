@@ -179,7 +179,7 @@ export function TicketTierSelector({
     <>
       <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
         En puerta hay que presentar carnet, CUD u otro comprobante válido.
-        Tokepass no valida el beneficio online.
+        TokePass no valida el beneficio online.
       </p>
       <TierList
         tiers={grouped.special}
@@ -373,7 +373,7 @@ function TierList({
                   </ul>
                 ) : variant === "standard" ? (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Acceso digital con Living QR Tokepass
+                    Acceso digital con Living QR TokePass
                   </p>
                 ) : null}
                 {saveAmt > 0 ? (

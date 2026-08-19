@@ -5,6 +5,7 @@ import {
   buildRrppSharePath,
   computePromoterCommission,
   extractAffiliateCode,
+  pendingPromoterBalance,
   publicEventPathWithRrpp,
 } from "@/lib/rrpp"
 
@@ -62,5 +63,11 @@ describe("rrpp affiliate links", () => {
       }),
       1000,
     )
+  })
+
+  it("resta liquidaciones del saldo pendiente sin ir a negativo", () => {
+    assert.equal(pendingPromoterBalance(1500.2, 500.1), 1000.1)
+    assert.equal(pendingPromoterBalance(200, 200), 0)
+    assert.equal(pendingPromoterBalance(100, 250), 0)
   })
 })

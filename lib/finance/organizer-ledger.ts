@@ -192,7 +192,7 @@ export function buildOrganizerFinanceCsv(
       source,
     ],
     [
-      "Comision Tokepass (tokepass_service_charge)",
+      "Comision TokePass (tokepass_service_charge)",
       formatCentsAsDecimal(cents.tokepassServiceChargeCents),
       source,
     ],
@@ -225,7 +225,7 @@ export function buildOrganizerFinancePdfHtml(
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>Reporte financiero Tokepass</title>
+  <title>Reporte financiero TokePass</title>
   <style>
     body { font-family: Arial, sans-serif; color: #111; margin: 32px; }
     h1 { font-size: 20px; margin: 0 0 8px; }
@@ -246,7 +246,7 @@ export function buildOrganizerFinancePdfHtml(
     </thead>
     <tbody>
       <tr><td>Recaudacion bruta (gross_revenue)</td><td>${escapeHtml(formatCentsAsArs(cents.grossRevenueCents))}</td></tr>
-      <tr><td>Comision Tokepass (tokepass_service_charge)</td><td>${escapeHtml(formatCentsAsArs(cents.tokepassServiceChargeCents))}</td></tr>
+      <tr><td>Comision TokePass (tokepass_service_charge)</td><td>${escapeHtml(formatCentsAsArs(cents.tokepassServiceChargeCents))}</td></tr>
       <tr><td>Neto organizador (organizer_net_payout)</td><td>${escapeHtml(formatCentsAsArs(cents.organizerNetPayoutCents))}</td></tr>
       ${extra}
     </tbody>

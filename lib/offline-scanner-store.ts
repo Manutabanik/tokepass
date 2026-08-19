@@ -18,6 +18,10 @@ import {
   totpSecretLookupHash,
   type ScannerVaultRecord,
 } from "@/lib/scanner/manifest-crypto"
+import {
+  clearPrefetchedManifest,
+  peekPrefetchedManifest,
+} from "@/lib/scanner/prefetch-manifest"
 
 export type ScannerManifestTicket = {
   id: string
@@ -586,7 +590,7 @@ export async function downloadEventManifest(
   }>,
 ): Promise<ScannerManifestMeta> {
   const receivedAt = Date.now()
-  const payload = await fetcher(eventId)
+  const payload = peekPrefetchedManifest(eventId) ?? (await fetcher(eventId))
   const clockOffsetMs = deviceClockOffsetMs(
     Number(payload.server_timestamp),
     receivedAt,
@@ -615,7 +619,7 @@ export async function downloadEventManifest(
     }
   })
 
-  return saveEventManifest({
+  const meta = await saveEventManifest({
     eventId: payload.eventId,
     eventTitle: payload.eventTitle,
     eventStatus: payload.eventStatus,
@@ -625,6 +629,8 @@ export async function downloadEventManifest(
     eventDate: payload.eventDate,
     clockOffsetMs,
   })
+  clearPrefetchedManifest(eventId)
+  return meta
 }
 
 /** Aplica ingresos remotos sin re-bajar secretos. No pisa cola local pendiente. */

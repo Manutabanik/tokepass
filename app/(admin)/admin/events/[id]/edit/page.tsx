@@ -111,7 +111,7 @@ export default async function EditEventPage({
       feeRow?.platform_fixed_fee ?? DEFAULT_PLATFORM_FIXED_FEE,
     ),
     maxFreeTickets: 100,
-    isSponsoredByTokepass: Boolean(feeRow?.is_sponsored_by_tokepass),
+    isSponsoredByTokePass: Boolean(feeRow?.is_sponsored_by_tokepass),
   }
 
   return (

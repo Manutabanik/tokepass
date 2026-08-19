@@ -14,7 +14,7 @@ import { getWalletUiFlags } from "@/lib/wallet-cache"
 
 export const metadata: Metadata = {
   title: "Detalle de la entrada",
-  description: "Living QR y acciones de tu entrada Tokepass.",
+  description: "Living QR y acciones de tu entrada TokePass.",
 }
 
 export default async function CuentaEntradaDetallePage({

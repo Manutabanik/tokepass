@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server"
 
 export const metadata: Metadata = {
   title: "Panel RRPP",
-  description: "Tu link de afiliado, ventas y comisiones en Tokepass.",
+  description: "Tu link de afiliado, ventas y comisiones en TokePass.",
 }
 
 export default async function RrppDashboardPage() {

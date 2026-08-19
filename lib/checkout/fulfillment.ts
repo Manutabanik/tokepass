@@ -15,7 +15,12 @@ export function mapOrderStatusToFulfillment(
   if (status === "paid") return "paid"
   if (status === "pending") return "pending"
   if (status === "expired") return "expired"
-  if (status === "failed" || status === "refunded" || status === "cancelled") {
+  if (
+    status === "failed" ||
+    status === "refunded" ||
+    status === "refund_processing" ||
+    status === "cancelled"
+  ) {
     return "failed"
   }
   return "not_found"

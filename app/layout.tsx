@@ -22,44 +22,51 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  applicationName: "Tokepass",
+  applicationName: "TokePass",
   metadataBase: new URL(
     process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
       "http://localhost:3000",
   ),
   title: {
-    default: "Tokepass — Vive el evento",
-    template: "%s | Tokepass",
+    default: "TokePass — Vive el evento",
+    template: "%s | TokePass",
   },
   description:
-    "Descubre eventos y compra entradas digitales de forma simple y segura.",
+    "Tu entrada en el celular, en segundos y sin filas. Boletería digital 100% segura.",
   openGraph: {
     type: "website",
     locale: "es_AR",
-    siteName: "Tokepass",
-    title: "Tokepass — Vive el evento",
+    siteName: "TokePass",
+    title: "TokePass — Vive el evento",
     description:
-      "Descubre eventos y compra entradas digitales de forma simple y segura.",
+      "Tu entrada en el celular, en segundos y sin filas. Boletería digital 100% segura.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Tokepass — Vive el evento",
+    title: "TokePass — Vive el evento",
     description:
-      "Descubre eventos y compra entradas digitales de forma simple y segura.",
+      "Tu entrada en el celular, en segundos y sin filas. Boletería digital 100% segura.",
   },
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Tokepass",
+    title: "TokePass",
   },
   icons: {
     icon: [
-      { url: "/favicon.png", sizes: "32x32", type: "image/png" },
-      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icons/icon-192x192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512x512.png", sizes: "512x512", type: "image/png" },
     ],
-    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }],
+    apple: [
+      {
+        url: "/icons/apple-touch-icon.png",
+        sizes: "180x180",
+        type: "image/png",
+      },
+    ],
   },
   formatDetection: {
     telephone: false,
@@ -72,10 +79,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f8fafc" },
-    { media: "(prefers-color-scheme: dark)", color: "#09090b" },
-  ],
+  themeColor: "#09090b",
   colorScheme: "dark light",
 };
 
@@ -103,7 +107,9 @@ export default async function RootLayout({
             <ReferralCapture />
           </Suspense>
           {children}
-          <PwaRegister />
+          <Suspense fallback={null}>
+            <PwaRegister />
+          </Suspense>
           <InstallBanner />
           <Toaster position="top-right" richColors closeButton />
         </ThemeProvider>

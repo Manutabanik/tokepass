@@ -476,7 +476,7 @@ async function buildTicketZReport(
     shiftId: shift.id,
     eventTitle: event?.title ?? "Evento",
     cashierName:
-      cashier?.full_name?.trim() || cashier?.email || "Cajero Tokepass",
+      cashier?.full_name?.trim() || cashier?.email || "Cajero TokePass",
     openedAt: shift.openedAt,
     closedAt: shift.closedAt,
     startAmount: shift.startAmount,
@@ -642,7 +642,7 @@ export async function createPosSale(input: {
       void notifyPosTicketIssued({
         phone: phone || "",
         email: email || null,
-        eventTitle: event?.title ?? "Evento Tokepass",
+        eventTitle: event?.title ?? "Evento TokePass",
         ticketIds: rows.map((row) => row.ticket_id),
         quantity: rows.length,
       }).catch((notifyError: unknown) => {
@@ -1057,14 +1057,14 @@ export async function getPrintableTicket(
   const rich = await supabase
     .from("tickets")
     .select(
-      "id, status, totp_secret, scanned_at, is_dynamic_qr, is_test, owner_id, holder_name, holder_dni, event_seating_units(label, sector_name, row_label, layout_type), ticket_tiers(name, price, day_id), events(id, title, date, location, qr_type, organizer_id, flyer_url, image_url, schedule_days)",
+      "id, status, totp_secret, scanned_at, is_dynamic_qr, is_test, owner_id, holder_name, holder_dni, event_seating_units(label, sector_name, row_label, layout_type), ticket_tiers(name, price, day_id), events(id, title, date, location, qr_type, organizer_id, flyer_url, image_url, schedule_days, venues(name))",
     )
     .eq("id", ticketId)
     .maybeSingle()
 
   const query =
     rich.error &&
-    /event_seating_units|flyer_url|schedule_days|day_id|schema cache|PGRST204|42703/i.test(
+    /event_seating_units|flyer_url|schedule_days|day_id|venues|schema cache|PGRST204|42703/i.test(
       rich.error.message,
     )
       ? await supabase
@@ -1107,6 +1107,7 @@ export async function getPrintableTicket(
       flyer_url?: string | null
       image_url?: string | null
       schedule_days?: unknown
+      venues?: { name?: string | null } | { name?: string | null }[] | null
     } | null
   }
 
@@ -1141,7 +1142,7 @@ export async function getPrintableTicket(
     row.holder_name?.trim() ||
     profile?.full_name?.trim() ||
     profile?.email ||
-    "Titular Tokepass"
+    "Titular TokePass"
 
   if (!row.holder_name && row.owner_id && row.owner_id !== user.id) {
     const { data: owner } = await supabase
@@ -1150,7 +1151,7 @@ export async function getPrintableTicket(
       .eq("id", row.owner_id)
       .maybeSingle()
     holderName =
-      owner?.full_name?.trim() || owner?.email || "Titular Tokepass"
+      owner?.full_name?.trim() || owner?.email || "Titular TokePass"
   }
 
   // Papel / POS: siempre payload estático (secreto) para que el escáner lo acepte.
@@ -1172,6 +1173,13 @@ export async function getPrintableTicket(
       : null,
   ].filter((part): part is string => Boolean(part))
 
+  const venueRaw = row.events.venues
+  const venueName = (Array.isArray(venueRaw) ? venueRaw[0] : venueRaw)?.name?.trim()
+  const eventLocation =
+    venueName && venueName !== row.events.location
+      ? `${venueName} · ${row.events.location}`
+      : row.events.location
+
   return {
     id: row.id,
     totpSecret: row.totp_secret,
@@ -1184,7 +1192,7 @@ export async function getPrintableTicket(
       row.ticket_tiers?.price == null ? null : Number(row.ticket_tiers.price),
     eventTitle: row.events.title,
     eventDate: row.events.date,
-    eventLocation: row.events.location,
+    eventLocation,
     qrType,
     scannedAt: row.scanned_at,
     flyerUrl: row.events.flyer_url?.trim() || row.events.image_url?.trim() || null,

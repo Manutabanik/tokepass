@@ -11,7 +11,7 @@ import { createClient } from "@/lib/supabase/server"
 
 export const metadata: Metadata = {
   title: "Reclamar entrada",
-  description: "Aceptá una entrada transferida a tu cuenta Tokepass.",
+  description: "Aceptá una entrada transferida a tu cuenta TokePass.",
 }
 
 export default async function ClaimTicketPage({

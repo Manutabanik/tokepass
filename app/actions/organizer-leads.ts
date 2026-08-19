@@ -85,6 +85,6 @@ export async function submitOrganizerLead(
   return {
     error: null,
     success:
-      "Recibimos tu solicitud. El equipo de Tokepass te contacta para armar el evento.",
+      "Recibimos tu solicitud. El equipo de TokePass te contacta para armar el evento.",
   }
 }

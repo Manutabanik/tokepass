@@ -11,7 +11,7 @@ export type EventFeeConfig = {
   /** Fixed ARS fee per paid ticket inside All-In split */
   platformFixedFee: number
   maxFreeTickets: number
-  isSponsoredByTokepass: boolean
+  isSponsoredByTokePass: boolean
 }
 
 export function defaultEventFeeConfig(): EventFeeConfig {
@@ -19,13 +19,13 @@ export function defaultEventFeeConfig(): EventFeeConfig {
     platformFeePercentage: DEFAULT_PLATFORM_FEE_PERCENTAGE,
     platformFixedFee: DEFAULT_PLATFORM_FIXED_FEE,
     maxFreeTickets: DEFAULT_MAX_FREE_TICKETS,
-    isSponsoredByTokepass: false,
+    isSponsoredByTokePass: false,
   }
 }
 
 /** Decimal rate for allInBreakdown (0.08 = 8%). Sponsored → 0. */
 export function eventFeeRate(config: EventFeeConfig): number {
-  if (config.isSponsoredByTokepass) return 0
+  if (config.isSponsoredByTokePass) return 0
   const pct = Number.isFinite(config.platformFeePercentage)
     ? config.platformFeePercentage
     : DEFAULT_PLATFORM_FEE_PERCENTAGE
@@ -34,7 +34,7 @@ export function eventFeeRate(config: EventFeeConfig): number {
 
 /** Fixed fee applied only on paid tickets. Sponsored → 0. */
 export function eventFixedFee(config: EventFeeConfig): number {
-  if (config.isSponsoredByTokepass) return 0
+  if (config.isSponsoredByTokePass) return 0
   const fixed = Number.isFinite(config.platformFixedFee)
     ? config.platformFixedFee
     : DEFAULT_PLATFORM_FIXED_FEE

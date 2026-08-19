@@ -5,6 +5,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
 
+import { PwaInstallNavButton } from "@/components/pwa/pwa-install-nav-button"
 import { getAdminNavItems } from "@/components/shared/admin-nav"
 import { BrandLogo } from "@/components/shared/brand-logo"
 import { Separator } from "@/components/ui/separator"
@@ -97,14 +98,19 @@ export function AdminSidebar({
       </nav>
 
       <div className="mt-auto">
+        {collapsed ? (
+          <PwaInstallNavButton variant="icon" className="mx-auto mb-3" />
+        ) : (
+          <PwaInstallNavButton variant="sidebar" className="mb-3" />
+        )}
         <Separator className="mb-4 bg-border" />
         <div className={cn("px-2", collapsed && "text-center")}>
           <p className="text-xs font-medium text-muted-foreground">
             {collapsed
               ? "TP"
               : mode === "organizer"
-                ? "Tokepass · Panel del Organizador"
-                : "Tokepass · Staff"}
+                ? "TokePass · Panel del Organizador"
+                : "TokePass · Staff"}
           </p>
         </div>
       </div>

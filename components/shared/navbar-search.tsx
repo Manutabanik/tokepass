@@ -379,7 +379,7 @@ export function NavbarSearch() {
 
   return (
     <>
-      <div ref={rootRef} className="relative hidden min-w-0 w-full max-w-md flex-1 md:block">
+      <div ref={rootRef} className="search-bar relative hidden min-w-0 w-full max-w-md flex-1 md:block">
         <form onSubmit={submitExplore}>
           <label className="sr-only" htmlFor="omni-search-desktop">
             Buscar evento o artista

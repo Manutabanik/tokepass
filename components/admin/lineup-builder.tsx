@@ -387,7 +387,7 @@ export function LineupBuilder({
                         {item.name}
                       </span>
                       <span className="block truncate text-xs text-muted-foreground">
-                        {item.genre || (item.source === "spotify" ? "Spotify" : "Catálogo Tokepass")}
+                        {item.genre || (item.source === "spotify" ? "Spotify" : "Catálogo TokePass")}
                       </span>
                     </span>
                   </button>
@@ -453,7 +453,6 @@ export function LineupBuilder({
             {value.map((item) => (
               <motion.li
                 key={item.id}
-                layout={!reduceMotion}
                 initial={reduceMotion ? false : { opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={reduceMotion ? undefined : { opacity: 0, y: -8 }}

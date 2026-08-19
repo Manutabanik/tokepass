@@ -7,6 +7,12 @@ function roundMoney(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100
 }
 
+export function pendingPromoterBalance(earned: number, settled: number): number {
+  const earnedSafe = Number.isFinite(earned) ? Math.max(0, earned) : 0
+  const settledSafe = Number.isFinite(settled) ? Math.max(0, settled) : 0
+  return roundMoney(Math.max(0, earnedSafe - settledSafe))
+}
+
 export function computePromoterCommission(input: {
   type: PromoterCommissionType | string | null | undefined
   rate: number

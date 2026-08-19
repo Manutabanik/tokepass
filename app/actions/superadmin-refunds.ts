@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import { isGatewayRefundSuccess, isLocallyRefundablePayment } from "@/lib/legal/withdrawal"
 import { mercadoPagoRefundService } from "@/lib/mercadopago/refund-service"
 import { logger } from "@/lib/logger"
 import { SuperAdminForbiddenError } from "@/lib/superadmin-errors"
@@ -70,6 +71,48 @@ export type MassRefundResult =
     }
   | { success: false; error: string }
 
+async function loadPaidEventOrders(
+  admin: ReturnType<typeof createAdminClient>,
+  eventId: string,
+) {
+  const { data: ticketRows, error: ticketRowsError } = await admin
+    .from("tickets")
+    .select("order_id, status")
+    .eq("event_id", eventId)
+
+  if (ticketRowsError) throw new Error(ticketRowsError.message)
+
+  const orderIds = [
+    ...new Set(
+      (ticketRows ?? [])
+        .map((ticket) => ticket.order_id)
+        .filter((orderId): orderId is string => Boolean(orderId)),
+    ),
+  ]
+
+  const validTickets = (ticketRows ?? []).filter((ticket) =>
+    ["valid", "used", "scanned", "pending_payment"].includes(ticket.status),
+  ).length
+
+  if (orderIds.length === 0) {
+    return { validTickets, paidOrders: [] as Array<{
+      id: string
+      total_amount: number
+      mp_payment_id: string | null
+      payment_method: string
+    }> }
+  }
+
+  const { data, error: ordersError } = await admin
+    .from("orders")
+    .select("id, total_amount, mp_payment_id, payment_method")
+    .eq("status", "paid")
+    .in("id", orderIds)
+
+  if (ordersError) throw new Error(ordersError.message)
+  return { validTickets, paidOrders: data ?? [] }
+}
+
 export async function getMassRefundPreview(
   eventId: string,
 ): Promise<MassRefundPreview | null> {
@@ -103,36 +146,7 @@ export async function getMassRefundPreview(
   }
 
   const row = event as unknown as EventRow
-
-  const { data: ticketRows, error: ticketRowsError } = await admin
-    .from("tickets")
-    .select("order_id, status")
-    .eq("event_id", id)
-
-  if (ticketRowsError) throw new Error(ticketRowsError.message)
-
-  const orderIds = [
-    ...new Set(
-      (ticketRows ?? [])
-        .map((ticket) => ticket.order_id)
-        .filter((orderId): orderId is string => Boolean(orderId)),
-    ),
-  ]
-
-  const validTickets = (ticketRows ?? []).filter((ticket) =>
-    ["valid", "used", "scanned", "pending_payment"].includes(ticket.status),
-  ).length
-
-  let paidOrders: Array<{ id: string; total_amount: number }> = []
-  if (orderIds.length > 0) {
-    const { data, error: ordersError } = await admin
-      .from("orders")
-      .select("id, total_amount")
-      .eq("status", "paid")
-      .in("id", orderIds)
-    if (ordersError) throw new Error(ordersError.message)
-    paidOrders = data ?? []
-  }
+  const { validTickets, paidOrders } = await loadPaidEventOrders(admin, id)
 
   return {
     eventId: row.id,
@@ -154,8 +168,8 @@ export async function getMassRefundPreview(
 }
 
 /**
- * Cancela el evento y ejecuta el protocolo atómico de reembolso masivo.
- * Protegido estrictamente para `super_admin`.
+ * Cancela el evento para cortar ventas. Cada orden `paid` solo pasa a
+ * `refunded` si la pasarela confirma el reembolso (HTTP 200/201).
  */
 export async function executeMassEventRefund(
   eventId: string,
@@ -176,42 +190,58 @@ export async function executeMassEventRefund(
       }
     }
 
-    const { data: rows, error } = await admin.rpc(
-      "execute_mass_event_refund_tx",
-      {
-        p_event_id: id,
-        p_actor_id: actorId,
-        p_reason: cleanReason,
-      },
-    )
+    const { data: event, error: eventError } = await admin
+      .from("events")
+      .select(
+        "id, organizer_id, status, profiles!events_organizer_id_fkey(risk_tier)",
+      )
+      .eq("id", id)
+      .maybeSingle()
 
-    if (error) {
-      logger.error({
-        context: "superadmin-refunds",
-        message: "mass_refund_rpc_failed",
-        eventId: id,
-        actorId,
-        error: error.message,
-      })
-      return {
-        success: false,
-        error: `No se pudo ejecutar el reembolso masivo: ${error.message}`,
+    if (eventError || !event) {
+      return { success: false, error: "Evento no encontrado." }
+    }
+
+    type EventRow = {
+      id: string
+      organizer_id: string
+      status: EventStatus
+      profiles: { risk_tier: OrganizerRiskTier | null } | null
+    }
+    const row = event as unknown as EventRow
+    const riskTier = row.profiles?.risk_tier ?? "TIER_1_CUSTODY"
+    const organizerId = row.organizer_id
+
+    const { paidOrders } = await loadPaidEventOrders(admin, id)
+
+    if (row.status !== "cancelled") {
+      const { error: cancelError } = await admin
+        .from("events")
+        .update({
+          status: "cancelled",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+
+      if (cancelError) {
+        return {
+          success: false,
+          error: `No se pudo cancelar el evento: ${cancelError.message}`,
+        }
       }
     }
 
-    type RefundRow = {
-      order_id: string
-      mp_payment_id: string | null
-      total_amount: number
-      risk_tier: string
-      organizer_id: string
-      tickets_cancelled: number
-    }
-
-    const refundRows = (rows ?? []) as RefundRow[]
-    const riskTier = (refundRows[0]?.risk_tier ??
-      "TIER_1_CUSTODY") as OrganizerRiskTier
-    const organizerId = refundRows[0]?.organizer_id ?? null
+    await admin.from("platform_ops_audit").insert({
+      actor_id: actorId,
+      action: "MASS_REFUND_GATEWAY_FIRST",
+      event_id: id,
+      organizer_id: organizerId,
+      reason: cleanReason,
+      metadata: {
+        paid_orders: paidOrders.length,
+        risk_tier: riskTier,
+      },
+    })
 
     let organizerToken: string | null = null
     if (
@@ -230,37 +260,80 @@ export async function executeMassEventRefund(
     let mpAttempts = 0
     let mpSucceeded = 0
     let mpFailed = 0
-    let mpMocked = 0
+    const mpMocked = 0
+    let ordersRefunded = 0
+    let ticketsCancelled = 0
 
-    for (const row of refundRows) {
-      const paymentId = row.mp_payment_id?.trim()
-      if (!paymentId) continue
-
-      mpAttempts += 1
-      const useOrganizerToken =
-        riskTier === "TIER_2_INSTANT_SPLIT" ||
-        riskTier === "TIER_3_ENTERPRISE"
-
-      const result = await mercadoPagoRefundService.refundPayment({
-        paymentId,
-        accessToken: useOrganizerToken ? organizerToken : null,
-        amount: Number(row.total_amount),
-        reason: cleanReason,
-        forceMock: useOrganizerToken && !organizerToken,
+    for (const order of paidOrders) {
+      const paymentId = order.mp_payment_id?.trim() || null
+      const localRefund = isLocallyRefundablePayment({
+        paymentMethod: order.payment_method,
+        mpPaymentId: paymentId,
       })
 
-      if (result.success) {
-        if (result.mode === "mock") mpMocked += 1
-        else mpSucceeded += 1
-      } else {
-        mpFailed += 1
-      }
-    }
+      let gatewayOk = localRefund
+      if (!localRefund) {
+        if (!paymentId) {
+          mpFailed += 1
+          continue
+        }
 
-    const ticketsCancelled = refundRows.reduce(
-      (sum, row) => sum + Number(row.tickets_cancelled ?? 0),
-      0,
-    )
+        const useOrganizerToken =
+          riskTier === "TIER_2_INSTANT_SPLIT" ||
+          riskTier === "TIER_3_ENTERPRISE"
+
+        if (useOrganizerToken && !organizerToken) {
+          logger.error({
+            context: "superadmin-refunds",
+            message: "mass_refund_missing_organizer_token",
+            eventId: id,
+            orderId: order.id,
+          })
+          mpFailed += 1
+          continue
+        }
+
+        mpAttempts += 1
+        const result = await mercadoPagoRefundService.refundPayment({
+          paymentId,
+          accessToken: useOrganizerToken ? organizerToken : null,
+          amount: Number(order.total_amount),
+          reason: cleanReason,
+        })
+
+        if (!isGatewayRefundSuccess(result)) {
+          mpFailed += 1
+          continue
+        }
+        mpSucceeded += 1
+        gatewayOk = true
+      }
+
+      if (!gatewayOk) continue
+
+      const { data: cancelledCount, error: applyError } = await admin.rpc(
+        "apply_order_refund_state",
+        {
+          p_order_id: order.id,
+          p_order_status: "refunded",
+        },
+      )
+
+      if (applyError) {
+        logger.error({
+          context: "superadmin-refunds",
+          message: "mass_refund_db_apply_failed",
+          eventId: id,
+          orderId: order.id,
+          error: applyError.message,
+        })
+        mpFailed += 1
+        continue
+      }
+
+      ordersRefunded += 1
+      ticketsCancelled += Number(cancelledCount ?? 0)
+    }
 
     revalidatePath("/superadmin")
     revalidatePath("/superadmin/events")
@@ -274,7 +347,7 @@ export async function executeMassEventRefund(
       success: true,
       data: {
         eventId: id,
-        ordersRefunded: refundRows.length,
+        ordersRefunded,
         ticketsCancelled,
         mpAttempts,
         mpSucceeded,

@@ -13,6 +13,7 @@ describe("checkout fulfillment polling", () => {
     assert.equal(mapOrderStatusToFulfillment("pending"), "pending")
     assert.equal(mapOrderStatusToFulfillment("expired"), "expired")
     assert.equal(mapOrderStatusToFulfillment("failed"), "failed")
+    assert.equal(mapOrderStatusToFulfillment("refund_processing"), "failed")
     assert.equal(mapOrderStatusToFulfillment("unknown"), "not_found")
   })
 

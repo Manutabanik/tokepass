@@ -411,7 +411,21 @@ select:-webkit-autofill {
   padding-bottom: 2mm;
 }
 
+.stub-divider {
+  border-top: 2px dashed #cbd5e1;
+  margin: 16px 0;
+  position: relative;
+}
+
 @media print {
+  *,
+  *::before,
+  *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
   @page {
     size: 80mm auto;
     margin: 0;
@@ -421,16 +435,59 @@ select:-webkit-autofill {
   body {
     background: #fff !important;
     color: #000 !important;
-    margin: 0 !important;
-    padding: 0 !important;
   }
 
-  header,
   nav,
+  header,
   footer,
   aside,
-  .no-print {
+  .no-print,
+  button,
+  .navbar,
+  .search-bar {
     display: none !important;
+  }
+
+  /* El boleto de colección usa header/footer internos: no ocultarlos. */
+  .ticket-print-card,
+  .ticket-print-card header,
+  .ticket-print-card footer,
+  .ticket-print-banner,
+  .ticket-print-footer {
+    display: block !important;
+  }
+
+  body:has(.ticket-print-card):not(.pos-thermal-printing) {
+    background-color: #ffffff !important;
+    margin: 0 !important;
+    padding: 20px !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: flex-start !important;
+  }
+
+  .ticket-print-card {
+    width: 440px !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 16px !important;
+    overflow: hidden !important;
+    box-shadow: none !important;
+    page-break-inside: avoid !important;
+  }
+
+  .ticket-print-card .print-ticket-qr,
+  .ticket-print-card .ticket-stub-qr {
+    width: 200px !important;
+    height: 200px !important;
+    max-width: none !important;
+  }
+
+  .stub-divider {
+    border-top: 2px dashed #cbd5e1 !important;
+    margin: 20px 0 !important;
+    position: relative !important;
   }
 
   body.pos-thermal-printing * {
@@ -492,7 +549,7 @@ select:-webkit-autofill {
     max-width: none !important;
   }
 
-  .print-ticket-pass {
+  .print-ticket-pass:not(.ticket-print-card) {
     width: 180mm !important;
     max-width: 180mm !important;
     margin: 0 auto !important;
@@ -500,11 +557,6 @@ select:-webkit-autofill {
     box-shadow: none !important;
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
-  }
-
-  .print-ticket-pass .print-ticket-qr {
-    width: 55mm !important;
-    height: 55mm !important;
   }
 }
 

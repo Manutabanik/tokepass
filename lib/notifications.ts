@@ -40,8 +40,8 @@ export async function notifyTicketTransfer(
   payload: TicketTransferNotifyPayload,
 ): Promise<void> {
   const message = payload.claimUrl
-    ? `Te enviaron una entrada para ${payload.eventTitle}. Reclamala en Tokepass: ${payload.claimUrl}`
-    : `Te han enviado una entrada para ${payload.eventTitle}. Reclamala en Tokepass, Mis entradas.`
+    ? `Te enviaron una entrada para ${payload.eventTitle}. Reclamala en TokePass: ${payload.claimUrl}`
+    : `Te han enviado una entrada para ${payload.eventTitle}. Reclamala en TokePass, Mis entradas.`
 
   try {
     if (
@@ -60,7 +60,7 @@ export async function notifyTicketTransfer(
 
   const resendKey = process.env.RESEND_API_KEY?.trim()
   const fromEmail =
-    process.env.RESEND_FROM_EMAIL?.trim() || "Tokepass <onboarding@resend.dev>"
+    process.env.RESEND_FROM_EMAIL?.trim() || "TokePass <onboarding@resend.dev>"
 
   if (resendKey) {
     const response = await fetch("https://api.resend.com/emails", {
@@ -107,7 +107,7 @@ export async function notifyLivingTicketEmail(
   const ticketUrl = `${siteUrl}/tickets/${payload.ticketId}`
   const message = [
     `Hola ${payload.holderName},`,
-    `Tu entrada Tokepass para ${payload.eventTitle} está lista.`,
+    `Tu entrada TokePass para ${payload.eventTitle} está lista.`,
     `Código: #${payload.ticketCode}`,
     `Abrí tu Living QR: ${ticketUrl}`,
   ].join("\n")
@@ -130,7 +130,7 @@ export async function notifyLivingTicketEmail(
 
   const resendKey = process.env.RESEND_API_KEY?.trim()
   const fromEmail =
-    process.env.RESEND_FROM_EMAIL?.trim() || "Tokepass <onboarding@resend.dev>"
+    process.env.RESEND_FROM_EMAIL?.trim() || "TokePass <onboarding@resend.dev>"
 
   if (resendKey) {
     const response = await fetch("https://api.resend.com/emails", {
@@ -142,7 +142,7 @@ export async function notifyLivingTicketEmail(
       body: JSON.stringify({
         from: fromEmail,
         to: [payload.toEmail],
-        subject: `Tu entrada Tokepass — ${payload.eventTitle}`,
+        subject: `Tu entrada TokePass — ${payload.eventTitle}`,
         text: message,
       }),
     })
@@ -170,7 +170,7 @@ export async function notifyPosTicketIssued(
   const links = payload.ticketIds
     .map((id) => `${siteUrl}/tickets/${id}/print`)
     .join("\n")
-  const message = `Tu entrada Tokepass para ${payload.eventTitle} (${payload.quantity}). Abrí el QR:\n${links}`
+  const message = `Tu entrada TokePass para ${payload.eventTitle} (${payload.quantity}). Abrí el QR:\n${links}`
 
   try {
     if (

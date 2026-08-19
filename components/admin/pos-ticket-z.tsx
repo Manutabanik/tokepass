@@ -11,7 +11,7 @@ export function PosTicketZView({ report }: { report: TicketZReport }) {
   return (
     <div className="print-ticket mx-auto max-w-[300px] bg-white p-3 text-left text-black">
       <p className="text-center text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-600">
-        Tokepass · Ticket Z
+        TokePass · Ticket Z
       </p>
       <h1 className="mt-1 text-center text-base font-black leading-tight">
         Cierre de turno

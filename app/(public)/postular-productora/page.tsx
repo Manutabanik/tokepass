@@ -58,7 +58,7 @@ export default async function PostularProductoraPage() {
           </h1>
           <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-muted-foreground">
             Nadie es organizador por defecto. Completá estos datos y el equipo
-            de Tokepass valida tu productora antes de darte acceso a Tu Panel.
+            de TokePass valida tu productora antes de darte acceso a Tu Panel.
           </p>
         </div>
 

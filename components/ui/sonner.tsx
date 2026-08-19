@@ -15,9 +15,11 @@ export function Toaster({ className, ...props }: ToasterProps) {
     const originalError = toast.error.bind(toast)
     toast.error = ((message, data) => {
       const mappedTitle = mapUnknownError(message)
+      const rawDescription =
+        data && typeof data === "object" ? data.description : undefined
       const mappedDescription =
-        data && typeof data === "object" && typeof data.description === "string"
-          ? mapUnknownError(data.description)
+        typeof rawDescription === "string"
+          ? mapUnknownError(rawDescription)
           : null
       const guided = mappedDescription?.action
         ? mappedDescription
@@ -30,18 +32,23 @@ export function Toaster({ className, ...props }: ToasterProps) {
           : mappedTitle.message
       const descriptionText =
         mappedDescription?.message ??
-        (data && typeof data === "object" && typeof data.description === "string"
-          ? data.description
-          : undefined)
+        (typeof rawDescription === "string" ? rawDescription : undefined)
+      const keepDescriptionNode =
+        rawDescription != null && typeof rawDescription !== "string"
       const sameCopy =
         typeof descriptionText === "string" &&
         descriptionText.trim().replace(/\.+$/, "").toLocaleLowerCase("es-AR") ===
           titleText.trim().replace(/\.+$/, "").toLocaleLowerCase("es-AR")
+      const nextDescription = sameCopy
+        ? undefined
+        : keepDescriptionNode
+          ? rawDescription
+          : descriptionText
       const nextData =
         data && typeof data === "object"
           ? {
               ...data,
-              description: sameCopy ? undefined : descriptionText,
+              description: nextDescription,
               action:
                 data.action ??
                 (guided?.action

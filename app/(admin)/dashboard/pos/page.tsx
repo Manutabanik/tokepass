@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server"
 
 export const metadata: Metadata = {
   title: "Boletería POS",
-  description: "Punto de venta táctil Tokepass: cobro a un tap e impresión térmica.",
+  description: "Punto de venta táctil TokePass: cobro a un tap e impresión térmica.",
 }
 
 export default async function DashboardPosPage() {

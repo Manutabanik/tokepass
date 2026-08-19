@@ -78,7 +78,7 @@ export function FeaturedEventsCarousel({
             </h2>
           </div>
           <p className="mt-1.5 text-sm text-zinc-500 dark:text-zinc-400">
-            Eventos con mayor visibilidad en Tokepass
+            Eventos con mayor visibilidad en TokePass
           </p>
         </div>
       </div>

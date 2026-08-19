@@ -63,7 +63,7 @@ export function WalletPassButtons({
   )
 
   function precache() {
-    requestTicketAssetCache(["/offline/billetera"])
+    requestTicketAssetCache(["/offline/billetera", flyerUrl])
   }
 
   async function addToAppleWallet() {

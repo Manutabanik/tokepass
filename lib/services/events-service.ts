@@ -11,13 +11,13 @@ export function isBoostActive(event: {
   return new Date(event.featuredUntil).getTime() > Date.now()
 }
 
-/** Prioridad en home: auspicio Tokepass o boost pago activo. */
+/** Prioridad en home: auspicio TokePass o boost pago activo. */
 export function isHomePriority(event: {
   isFeatured?: boolean | null
   featuredUntil?: string | null
-  isSponsoredByTokepass?: boolean | null
+  isSponsoredByTokePass?: boolean | null
 }): boolean {
-  if (event.isSponsoredByTokepass) return true
+  if (event.isSponsoredByTokePass) return true
   return isBoostActive(event)
 }
 
@@ -28,8 +28,8 @@ export function compareFeaturedThenDate(a: CatalogEvent, b: CatalogEvent): numbe
     return aPast ? 1 : -1
   }
 
-  const aSponsored = Boolean(a.isSponsoredByTokepass)
-  const bSponsored = Boolean(b.isSponsoredByTokepass)
+  const aSponsored = Boolean(a.isSponsoredByTokePass)
+  const bSponsored = Boolean(b.isSponsoredByTokePass)
   if (aSponsored !== bSponsored) {
     return aSponsored ? -1 : 1
   }

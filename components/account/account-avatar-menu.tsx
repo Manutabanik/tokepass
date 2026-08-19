@@ -3,10 +3,12 @@
 import { Menu } from "@base-ui/react/menu"
 import {
   Bell,
+  Download,
   Heart,
   LogOut,
   Receipt,
   ShoppingBag,
+  Smartphone,
   Ticket,
   UserRound,
 } from "lucide-react"
@@ -15,6 +17,7 @@ import { useTransition } from "react"
 import { signOut } from "@/app/actions/auth"
 import { NotificationDot } from "@/components/account/notification-dot"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { usePwaInstall } from "@/hooks/use-pwa-install"
 import { useUserNotifications } from "@/hooks/use-user-notifications"
 import { clearClientSessionArtifacts } from "@/lib/session-cleanup"
 import { cn } from "@/lib/utils"
@@ -32,6 +35,8 @@ export function AccountAvatarMenu({
 }) {
   const [pending, startTransition] = useTransition()
   const { hasUnread } = useUserNotifications()
+  const { canShowInstallCta, isIos, promptInstall } = usePwaInstall()
+  const InstallIcon = isIos ? Smartphone : Download
 
   function handleSignOut() {
     startTransition(async () => {
@@ -83,7 +88,7 @@ export function AccountAvatarMenu({
             <div className="border-b border-border px-3 py-2.5">
               <p className="truncate text-sm font-semibold">{label}</p>
               <p className="truncate text-[11px] text-muted-foreground">
-                {email || "Tu cuenta Tokepass"}
+                {email || "Tu cuenta TokePass"}
               </p>
             </div>
 
@@ -147,6 +152,19 @@ export function AccountAvatarMenu({
               />
               Mi Perfil y Datos
             </Menu.LinkItem>
+
+            {canShowInstallCta ? (
+              <Menu.Item
+                onClick={() => void promptInstall()}
+                className={menuItemClass}
+              >
+                <InstallIcon
+                  className="size-4 shrink-0 opacity-70"
+                  aria-hidden="true"
+                />
+                Instalar App
+              </Menu.Item>
+            ) : null}
 
             <div className="my-1 h-px bg-border" />
 

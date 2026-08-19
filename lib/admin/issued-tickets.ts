@@ -124,8 +124,8 @@ export function custodyChannelLabel(
   channel: CustodyTransferEvent["channel"],
 ): string {
   if (channel === "admin_reassign") return "Reasignado por el organizador"
-  if (channel === "resale") return "Revendido a través de Tokepass"
-  return "Transferido a través de Tokepass"
+  if (channel === "resale") return "Revendido a través de TokePass"
+  return "Transferido a través de TokePass"
 }
 
 export function ticketDisplayCode(ticketId: string): string {

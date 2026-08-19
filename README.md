@@ -1,4 +1,4 @@
-# Tokepass
+# TokePass
 
 Base de una plataforma de boletería digital construida con Next.js App Router,
 TypeScript, Tailwind CSS, Shadcn UI y Supabase.

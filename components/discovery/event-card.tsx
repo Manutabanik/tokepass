@@ -8,6 +8,7 @@ import { useEffect, useState } from "react"
 import type { CatalogEvent } from "@/app/actions/public-events"
 import { listMyFavoriteEventIds } from "@/app/actions/favorites"
 import { FavoriteToggleButton } from "@/components/public/favorite-toggle-button"
+import { TokepassGuaranteeBadge } from "@/components/shared/tokepass-guarantee-badge"
 import {
   eventCityLabel,
   eventSecondaryBadge,
@@ -148,6 +149,7 @@ function EventListCard({
               </span>
             ) : null}
           </div>
+          <TokepassGuaranteeBadge variant="compact" className="mt-2" />
         </div>
       </Link>
     </article>
@@ -170,7 +172,7 @@ export function EventCard({
   const city = eventCityLabel(event)
   const place = event.venueName ?? event.location
   const boosted = isBoostActive(event)
-  const sponsored = Boolean(event.isSponsoredByTokepass)
+  const sponsored = Boolean(event.isSponsoredByTokePass)
   const saleState = deriveEventSaleState(event)
   const finished = saleState === "finished"
   const soldOut = saleState === "sold_out"
@@ -329,6 +331,7 @@ export function EventCard({
                   : "Comprar entradas"}
             </span>
           </div>
+          <TokepassGuaranteeBadge variant="compact" />
         </div>
       </Link>
     </article>

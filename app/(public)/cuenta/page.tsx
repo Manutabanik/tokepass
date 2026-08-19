@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = {
   title: "Mi cuenta",
-  description: "Portal del comprador Tokepass: entradas y perfil.",
+  description: "Portal del comprador TokePass: entradas y perfil.",
 }
 
 export default async function CuentaHomePage() {

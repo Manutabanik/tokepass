@@ -11,6 +11,7 @@ import { BrandLogo } from "@/components/shared/brand-logo"
 import { SignOutButton } from "@/components/shared/sign-out-button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
+import { OrganizerSupportChat } from "@/components/admin/organizer-support-chat"
 import { createClient } from "@/lib/supabase/server"
 
 export const metadata: Metadata = {
@@ -68,10 +69,6 @@ export default async function AdminLayout({
         }
       : null
 
-  if (resolvedProfile?.organizer_approval_status === "pending") {
-    redirect("/register-organizador?pending=1")
-  }
-
   if (
     resolvedProfile?.organizer_approval_status === "rejected" ||
     resolvedProfile?.organizer_approval_status === "suspended"
@@ -105,7 +102,7 @@ export default async function AdminLayout({
   const orgLabel =
     resolvedProfile.public_name?.trim() ||
     resolvedProfile.full_name?.trim() ||
-    (isOrganizer ? "Organización Tokepass" : "Staff Tokepass")
+    (isOrganizer ? "Organización TokePass" : "Staff TokePass")
   const userLabel =
     resolvedProfile.public_name?.trim() ||
     resolvedProfile.full_name ||
@@ -176,6 +173,7 @@ export default async function AdminLayout({
         userLabel={userLabel}
         userEmail={resolvedProfile.email}
       />
+      {isOrganizer ? <OrganizerSupportChat /> : null}
     </div>
   )
 }

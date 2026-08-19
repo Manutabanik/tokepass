@@ -32,7 +32,7 @@ export function EmptyState({
             className="tokepass-radar-slow absolute inset-5 rounded-full border border-violet-400/35"
             aria-hidden="true"
           />
-          <span className="relative size-14 overflow-hidden rounded-2xl bg-black shadow-[0_0_28px_rgba(167,139,250,0.45)] ring-1 ring-white/15">
+          <span className="relative size-14 overflow-hidden rounded-2xl bg-black ring-1 ring-white/15">
             <Image
               src="/brand/tokepass-mark.png"
               alt=""

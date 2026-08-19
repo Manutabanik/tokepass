@@ -569,7 +569,7 @@ export function IssuedTicketsManager({
     if (channel === "whatsapp") {
       const message = [
         `Hola ${activeTicket.holderName},`,
-        `Te reenviamos tu entrada Tokepass para "${eventTitle}".`,
+        `Te reenviamos tu entrada TokePass para "${eventTitle}".`,
         `Código: #${activeTicket.code}`,
         activeTicket.ticketUrl,
       ].join("\n")

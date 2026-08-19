@@ -21,6 +21,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
 
+import { DoorAccessPinCard } from "@/components/admin/door-access-pin-card"
 import { EventCommandHeader } from "@/components/admin/event-command-header"
 import { SponsorshipRequestBanner } from "@/components/admin/sponsorship-request-banner"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -55,7 +56,7 @@ export default async function ManageEventPage({
     supabase
       .from("events")
       .select(
-        "id, title, date, location, status, organizer_id, is_sponsored_by_tokepass",
+        "id, title, date, location, status, organizer_id, is_sponsored_by_tokepass, review_note",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -67,7 +68,7 @@ export default async function ManageEventPage({
     const assisted = await admin
       .from("events")
       .select(
-        "id, title, date, location, status, organizer_id, is_sponsored_by_tokepass",
+        "id, title, date, location, status, organizer_id, is_sponsored_by_tokepass, review_note",
       )
       .eq("id", id)
       .maybeSingle()
@@ -226,6 +227,7 @@ export default async function ManageEventPage({
         subtitle={`${formatEventDate(event.date)} · ${event.location}`}
         status={event.status}
         isSponsored={Boolean(event.is_sponsored_by_tokepass)}
+        reviewNote={event.review_note}
       />
 
       <section className="grid gap-3 sm:grid-cols-3">
@@ -295,6 +297,8 @@ export default async function ManageEventPage({
           )}
         </div>
       </section>
+
+      <DoorAccessPinCard eventId={event.id} eventTitle={event.title} />
 
       <section>
         <h2 className="text-lg font-bold text-foreground">

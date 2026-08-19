@@ -34,6 +34,21 @@ const eventStatusStyles: Record<
     className:
       "border-amber-500/30 bg-amber-500/15 text-amber-800 dark:text-amber-300",
   },
+  pending_approval: {
+    label: "En revisión",
+    className:
+      "border-sky-500/30 bg-sky-500/15 text-sky-800 dark:text-sky-300",
+  },
+  needs_revision: {
+    label: "Pide cambios",
+    className:
+      "border-orange-500/30 bg-orange-500/15 text-orange-800 dark:text-orange-300",
+  },
+  rejected: {
+    label: "Rechazado",
+    className:
+      "border-rose-500/30 bg-rose-500/15 text-rose-700 dark:text-rose-300",
+  },
   published: {
     label: "Publicado",
     className:
@@ -86,6 +101,11 @@ const orderStatusStyles: Record<
     label: "Reembolsada",
     className:
       "border-amber-500/30 bg-amber-500/15 text-amber-800 dark:text-amber-200",
+  },
+  refund_processing: {
+    label: "Devolución en proceso",
+    className:
+      "border-sky-500/30 bg-sky-500/15 text-sky-800 dark:text-sky-200",
   },
 }
 

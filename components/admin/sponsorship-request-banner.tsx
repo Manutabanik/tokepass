@@ -11,7 +11,7 @@ function buildSponsorshipContactHref(eventTitle: string, eventId: string): strin
     "comercial@tokepass.com.ar"
 
   const message = [
-    "Hola Tokepass, quiero solicitar Auspicio Comercial para mi evento.",
+    "Hola TokePass, quiero solicitar Auspicio Comercial para mi evento.",
     `Evento: ${eventTitle}`,
     `ID: ${eventId}`,
   ].join("\n")
@@ -22,7 +22,7 @@ function buildSponsorshipContactHref(eventTitle: string, eventId: string): strin
   }
 
   return `mailto:${email}?subject=${encodeURIComponent(
-    `Solicitud Auspicio Tokepass — ${eventTitle}`,
+    `Solicitud Auspicio TokePass — ${eventTitle}`,
   )}&body=${encodeURIComponent(message)}`
 }
 
@@ -44,7 +44,7 @@ export function SponsorshipRequestBanner({
             Crecimiento
           </p>
           <h2 className="text-lg font-bold tracking-tight text-foreground sm:text-xl">
-            Destacá tu evento con Auspicio Tokepass
+            Destacá tu evento con Auspicio TokePass
           </h2>
           <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
             Aumentá tus ventas promocionando tu evento en los primeros lugares

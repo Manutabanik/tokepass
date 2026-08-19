@@ -25,7 +25,10 @@ export type EmbedUrlResult = {
 export type GalleryVideoType = "youtube" | "mp4"
 
 export type GetEmbedUrlOptions = {
-  /** Hero gallery: YouTube tap-to-play (no autoplay). */
+  /**
+   * Hero gallery: embed montado tras el Play propio.
+   * Incluye autoplay para arrancar sin un segundo clic en YouTube.
+   */
   gallery?: boolean
 }
 
@@ -98,7 +101,7 @@ export function getEmbedUrl(
   if (yt?.[1]) {
     const id = yt[1]
     const embedUrl = options?.gallery
-      ? `https://www.youtube.com/embed/${id}?rel=0&modestbranding=1&playsinline=1`
+      ? `https://www.youtube.com/embed/${id}?autoplay=1&mute=0&controls=1&modestbranding=1&rel=0&showinfo=0&playsinline=1`
       : `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&mute=1&controls=1&playsinline=1&rel=0`
     return {
       type: "youtube",
@@ -116,7 +119,7 @@ export function getEmbedUrl(
       id,
       canonicalUrl: `https://vimeo.com/${id}`,
       embedUrl: options?.gallery
-        ? `https://player.vimeo.com/video/${id}`
+        ? `https://player.vimeo.com/video/${id}?autoplay=1&muted=0`
         : `https://player.vimeo.com/video/${id}?autoplay=1&muted=1&controls=1`,
     }
   }

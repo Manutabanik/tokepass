@@ -31,7 +31,7 @@ export function SocialShareButton({
       data={{
         eventTitle,
         eventDate: eventDate || new Date().toISOString(),
-        eventLocation: eventLocation || "Ver ubicación en Tokepass",
+        eventLocation: eventLocation || "Ver ubicación en TokePass",
         imageUrl: eventImageUrl,
         customStoryUrl,
         mode: "buyer",

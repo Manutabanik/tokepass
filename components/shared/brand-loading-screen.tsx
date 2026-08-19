@@ -14,7 +14,7 @@ export function BrandLoadingScreen() {
       <p className="animate-pulse text-sm font-medium text-muted-foreground">
         Cargando...
       </p>
-      <span className="sr-only">Cargando Tokepass</span>
+      <span className="sr-only">Cargando TokePass</span>
     </div>
   )
 }

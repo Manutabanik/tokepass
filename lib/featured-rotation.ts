@@ -3,7 +3,7 @@ import { isHomePriority } from "@/lib/services/events-service"
 export const FEATURED_CAROUSEL_LIMIT = 6
 
 type FeaturedEligibleItem = {
-  isSponsoredByTokepass: boolean
+  isSponsoredByTokePass: boolean
   isFeatured?: boolean | null
   featuredUntil?: string | null
   venueLocation?: string | null
@@ -50,7 +50,7 @@ export type FeaturedRotationResult<T = FeaturedEligibleItem> = {
 }
 
 /**
- * Motor de rotación: auspicios Tokepass + boosts activos,
+ * Motor de rotación: auspicios TokePass + boosts activos,
  * filtro de provincia, shuffle equitativo y tope de 6.
  */
 export function rotateSponsoredEvents<T extends FeaturedEligibleItem>(

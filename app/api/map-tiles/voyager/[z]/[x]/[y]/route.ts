@@ -34,7 +34,7 @@ async function fetchUpstream(url: string): Promise<Response | null> {
     return await fetch(url, {
       headers: {
         Accept: "image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8",
-        "User-Agent": "TokepassMapProxy/1.0 (+https://www.tokepass.com.ar)",
+        "User-Agent": "TokePassMapProxy/1.0 (+https://www.tokepass.com.ar)",
         Referer: "https://www.tokepass.com.ar/",
       },
       next: { revalidate: 86_400 },

@@ -3,6 +3,7 @@ import Link from "next/link"
 import { Calendar, MapPin, Sparkles, Ticket } from "lucide-react"
 
 import type { CatalogEvent } from "@/app/actions/public-events"
+import { TokepassGuaranteeBadge } from "@/components/shared/tokepass-guarantee-badge"
 import { Button } from "@/components/ui/button"
 import { eventCityLabel } from "@/lib/discovery-filters"
 import { formatDiscoveryDateTime } from "@/lib/format"
@@ -72,6 +73,8 @@ export function FeaturedBannerCard({
             <span className="truncate">{locationLabel}</span>
           </p>
         </div>
+
+        <TokepassGuaranteeBadge variant="full" />
 
         <Button
           size="lg"

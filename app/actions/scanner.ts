@@ -7,15 +7,16 @@ import {
   assertStaticMac,
   resolveScanSecret,
 } from "@/lib/scan-payload"
-import {
-  assertEventOpsAccess,
-  listOperableEvents,
-} from "@/lib/event-ops-access"
+import { listOperableEvents } from "@/lib/event-ops-access"
+import { readValidDoorGuestSession } from "@/lib/scanner/door-guest-session"
+import { isTerminalOfflineSyncConflict } from "@/lib/scanner/offline-sync-conflicts"
+import { resolveScannerActor } from "@/lib/scanner/resolve-scanner-access"
 import {
   isTicketValidForNow,
   parseScheduleDays,
 } from "@/lib/event-schedule"
 import { logger } from "@/lib/logger"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import {
   ALL_SCANNER_GATE_ID,
@@ -164,15 +165,33 @@ function isWithinTimeLimit(timeLimit: string | null): boolean {
 }
 
 export async function getScannerEvents(): Promise<ScannerEventOption[]> {
-  const rows = await listOperableEvents({ roles: ["door_staff"] })
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-  return rows.map((event) => ({
-    id: event.id,
-    title: event.title,
-    date: event.date,
-    status: event.status,
-    qrType: event.qr_type === "static" ? "static" : "dynamic",
-  }))
+  if (user) {
+    const rows = await listOperableEvents({ roles: ["door_staff"] })
+    return rows.map((event) => ({
+      id: event.id,
+      title: event.title,
+      date: event.date,
+      status: event.status,
+      qrType: event.qr_type === "static" ? "static" : "dynamic",
+    }))
+  }
+
+  const guest = await readValidDoorGuestSession()
+  if (!guest) return []
+  return [
+    {
+      id: guest.eventId,
+      title: guest.eventTitle,
+      date: guest.eventDate,
+      status: guest.eventStatus,
+      qrType: guest.qrType,
+    },
+  ]
 }
 
 function prettyScannerGateLabel(name: string, fallbackId: string): string {
@@ -206,7 +225,10 @@ export async function getScannerOperatorLabel(): Promise<string> {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) return "Operador"
+  if (!user) {
+    const guest = await readValidDoorGuestSession()
+    return guest ? "Staff de puerta" : "Operador"
+  }
   const { data } = await supabase
     .from("profiles")
     .select("full_name, email")
@@ -234,10 +256,10 @@ export async function getScannerGates(
   ]
   if (!eventId) return defaults
 
-  const access = await assertEventOpsAccess(eventId, ["door_staff"])
+  const access = await resolveScannerActor(eventId)
   if (!access.ok) return defaults
 
-  const supabase = await createClient()
+  const supabase = access.db
   const gates = new Map<string, ScannerGate>()
   for (const gate of defaults) upsertGate(gates, gate)
 
@@ -344,21 +366,7 @@ export async function scanAndValidateTicket(
     }
   }
 
-  const supabase = await createClient()
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
-
-  if (authError || !user) {
-    return {
-      success: false,
-      status: "auth_required",
-      message: "Sesión requerida",
-    }
-  }
-
-  const access = await assertEventOpsAccess(eventId, ["door_staff"])
+  const access = await resolveScannerActor(eventId)
   if (!access.ok) {
     return {
       success: false,
@@ -369,6 +377,8 @@ export async function scanAndValidateTicket(
           : "No tenés permiso para validar esta entrada",
     }
   }
+
+  const supabase = access.db
 
   const { data: eventMeta } = await supabase
     .from("events")
@@ -657,7 +667,7 @@ export async function scanAndValidateTicket(
     "scan_ticket_admission",
     {
       p_ticket_id: row.id,
-      p_validated_by: access.userId,
+      p_validated_by: access.validatedBy,
     },
   )
   const admission = (admissionResult ?? {}) as {
@@ -680,14 +690,31 @@ export async function scanAndValidateTicket(
         message: "TICKET DE PRUEBA - ACCESO DENEGADO",
       }
     }
+    if (admission.code === "unpaid") {
+      return {
+        success: false,
+        status: "unpaid",
+        message: "Entrada sin orden pagada — acceso denegado",
+      }
+    }
+    if (admission.code === "cancelled") {
+      return {
+        success: false,
+        status: "cancelled",
+        message: "Ticket cancelado / revocado",
+      }
+    }
+    if (admission.code === "transferred") {
+      return {
+        success: false,
+        status: "transferred",
+        message: "ENTRADA INVALIDA: Este ticket fue transferido a otro usuario",
+      }
+    }
     return {
       success: false,
-      status:
-        admission.code === "unpaid" ? "unpaid" : "already_used",
-      message:
-        admission.code === "unpaid"
-          ? "Entrada sin orden pagada — acceso denegado"
-          : "Ticket ya escaneado o sin ingresos disponibles",
+      status: "already_used",
+      message: "Ticket ya escaneado o sin ingresos disponibles",
       scannedAt: row.scanned_at,
     }
   }
@@ -792,16 +819,7 @@ export async function fetchEventTicketManifest(
     throw new Error("eventId requerido")
   }
 
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    throw new Error("auth_required")
-  }
-
-  const access = await assertEventOpsAccess(eventId, ["door_staff"])
+  const access = await resolveScannerActor(eventId)
   if (!access.ok) {
     throw new Error(
       access.reason === "auth_required"
@@ -809,6 +827,8 @@ export async function fetchEventTicketManifest(
         : "Sin permiso para descargar la lista de este evento",
     )
   }
+
+  const supabase = access.db
 
   const { data: event, error: eventError } = await supabase
     .from("events")
@@ -1037,15 +1057,7 @@ export async function fetchEventAdmissionSnapshot(
     throw new Error("eventId requerido")
   }
 
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    throw new Error("auth_required")
-  }
-
-  const access = await assertEventOpsAccess(eventId, ["door_staff"])
+  const access = await resolveScannerActor(eventId)
   if (!access.ok) {
     throw new Error(
       access.reason === "auth_required"
@@ -1053,6 +1065,8 @@ export async function fetchEventAdmissionSnapshot(
         : "Sin permiso para sincronizar este evento",
     )
   }
+
+  const supabase = access.db
 
   const { data, error } = await supabase
     .from("tickets")
@@ -1087,6 +1101,7 @@ export type SyncOfflineResult =
       success: true
       data: {
         syncedIds: string[]
+        evictedIds: string[]
         conflicts: Array<{ ticketId: string; reason: string }>
       }
     }
@@ -1097,22 +1112,52 @@ export async function syncOfflineScansBatch(
   items: OfflineSyncItem[],
 ): Promise<SyncOfflineResult> {
   const syncedIds: string[] = []
+  const evictedIds: string[] = []
   const conflicts: Array<{ ticketId: string; reason: string }> = []
 
   if (items.length === 0) {
-    return { success: true, data: { syncedIds, conflicts } }
+    return { success: true, data: { syncedIds, evictedIds, conflicts } }
   }
 
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    return { success: false, error: "auth_required" }
-  }
+  const userClient = await createClient()
+  const guest = await readValidDoorGuestSession()
+  const admin = guest ? createAdminClient() : null
 
   for (const item of items) {
+    const { data: ticketPreview } = await userClient
+      .from("tickets")
+      .select("event_id")
+      .eq("id", item.ticketId)
+      .maybeSingle()
+
+    let eventId = ticketPreview?.event_id ?? null
+    if (!eventId && admin && guest) {
+      const { data: adminTicket } = await admin
+        .from("tickets")
+        .select("event_id")
+        .eq("id", item.ticketId)
+        .maybeSingle()
+      eventId = adminTicket?.event_id ?? null
+      if (eventId && eventId !== guest.eventId) {
+        evictedIds.push(item.ticketId)
+        continue
+      }
+    }
+
+    if (!eventId) {
+      evictedIds.push(item.ticketId)
+      continue
+    }
+
+    const actor = await resolveScannerActor(eventId)
+    if (!actor.ok) {
+      if (actor.reason === "forbidden") {
+        evictedIds.push(item.ticketId)
+        continue
+      }
+      return { success: false, error: "auth_required" }
+    }
+
     const admissionsCount = Math.max(
       1,
       Math.min(100, Number(item.admissionsCount) || 1),
@@ -1120,9 +1165,9 @@ export async function syncOfflineScansBatch(
     let syncError: string | null = null
 
     for (let admission = 0; admission < admissionsCount; admission += 1) {
-      const { data, error } = await supabase.rpc("scan_ticket_admission", {
+      const { data, error } = await actor.db.rpc("scan_ticket_admission", {
         p_ticket_id: item.ticketId,
-        p_validated_by: user.id,
+        p_validated_by: actor.validatedBy,
       })
       const result = (data ?? {}) as { ok?: boolean; code?: string }
       if (error) {
@@ -1137,6 +1182,10 @@ export async function syncOfflineScansBatch(
     }
 
     if (syncError) {
+      if (isTerminalOfflineSyncConflict(syncError)) {
+        evictedIds.push(item.ticketId)
+        continue
+      }
       conflicts.push({
         ticketId: item.ticketId,
         reason: syncError,
@@ -1145,11 +1194,12 @@ export async function syncOfflineScansBatch(
     }
 
     syncedIds.push(item.ticketId)
-    await supabase.rpc("mark_guest_entry_checked_in", {
+    await actor.db.rpc("mark_guest_entry_checked_in", {
       p_ticket_id: item.ticketId,
     })
   }
 
   revalidatePath("/admin/scanner")
-  return { success: true, data: { syncedIds, conflicts } }
+  revalidatePath("/puerta/escanear")
+  return { success: true, data: { syncedIds, evictedIds, conflicts } }
 }

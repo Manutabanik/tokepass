@@ -1,11 +1,11 @@
 /**
- * Contrato Tokepass → Gobi: despacha `order.paid` con firma HMAC-SHA256.
+ * Contrato TokePass → Gobi: despacha `order.paid` con firma HMAC-SHA256.
  *
  * Env:
  * - GOBI_WEBHOOK_URL
  * - GOBI_WEBHOOK_SECRET / TOKEPASS_WEBHOOK_SECRET
  *
- * Header: X-Tokepass-Signature: sha256=<hex>
+ * Header: X-TokePass-Signature: sha256=<hex>
  * Timeout ACK: 3s. Reintentos solo ante 5xx / red (máx 3).
  */
 
@@ -73,7 +73,7 @@ async function postOnce(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Tokepass-Signature": signature,
+        "X-TokePass-Signature": signature,
       },
       body: rawBody,
       signal: controller.signal,

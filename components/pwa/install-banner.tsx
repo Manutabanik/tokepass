@@ -4,20 +4,24 @@ import { Download, X } from "lucide-react"
 import Image from "next/image"
 import { useEffect, useRef, useState } from "react"
 
-import { IosInstructionsModal } from "@/components/pwa/ios-instructions-modal"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { usePwaInstall } from "@/hooks/use-pwa-install"
+import { usePwaRuntimeStore } from "@/lib/stores/pwa-runtime-store"
+import { useStorefrontChromeStore } from "@/lib/stores/storefront-chrome-store"
 import { cn } from "@/lib/utils"
 
 const SHOW_DELAY_MS = 1400
 
 export function InstallBanner() {
-  const { canShowBanner, isIos, dismiss, promptInstall } = usePwaInstall()
+  const { canShowBanner, dismiss, promptInstall } = usePwaInstall()
+  const checkoutTunnel = useStorefrontChromeStore(
+    (state) => state.checkoutTunnel,
+  )
+  const updateReady = usePwaRuntimeStore((state) => state.updateReady)
 
   const [delayPassed, setDelayPassed] = useState(false)
   const [exiting, setExiting] = useState(false)
-  const [iosOpen, setIosOpen] = useState(false)
   const [installing, setInstalling] = useState(false)
   const dismissTimerRef = useRef<number | null>(null)
 
@@ -54,18 +58,9 @@ export function InstallBanner() {
   }
 
   async function handleInstall() {
-    if (isIos) {
-      setIosOpen(true)
-      return
-    }
-
     setInstalling(true)
     try {
       const outcome = await promptInstall()
-      if (outcome === "ios") {
-        setIosOpen(true)
-        return
-      }
       if (outcome === "accepted") {
         setExiting(true)
         dismiss()
@@ -75,20 +70,19 @@ export function InstallBanner() {
     }
   }
 
-  const showChrome = canShowBanner && delayPassed
+  const showChrome =
+    canShowBanner && delayPassed && !checkoutTunnel && !updateReady
 
-  if (!showChrome && !iosOpen) {
+  if (!showChrome) {
     return null
   }
 
   return (
-    <>
-      {showChrome ? (
         <div
           role="dialog"
-          aria-label="Instalar Tokepass"
+          aria-label="Instalar TokePass"
           className={cn(
-            "pointer-events-none fixed bottom-4 left-4 right-4 z-50 mx-auto max-w-lg",
+            "no-print pointer-events-none fixed bottom-4 left-4 right-4 z-50 mx-auto max-w-lg",
             "transition-all duration-300 ease-out",
             exiting ? "translate-y-4 opacity-0" : "translate-y-0 opacity-100",
           )}
@@ -135,7 +129,7 @@ export function InstallBanner() {
                   PWA Lite (Ocupa &lt; 3 MB)
                 </Badge>
                 <h2 className="text-base font-bold tracking-tight text-white">
-                  Instala la App de Tokepass
+                  Instala la App de TokePass
                 </h2>
                 <p className="text-sm leading-5 text-zinc-400">
                   Abre tus entradas sin señal, escanea en puerta y gestiona tus
@@ -155,9 +149,5 @@ export function InstallBanner() {
             </Button>
           </div>
         </div>
-      ) : null}
-
-      <IosInstructionsModal open={iosOpen} onOpenChange={setIosOpen} />
-    </>
   )
 }

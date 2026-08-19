@@ -6,7 +6,7 @@ const MP_HOST_RE =
 
 /**
  * Bloquea cualquier navegación o XHR hacia la pasarela.
- * Los tests deben usar demo, sandbox Tokepass o aserciones previas al redirect.
+ * Los tests deben usar demo, sandbox TokePass o aserciones previas al redirect.
  */
 export async function blockMercadoPago(page: Page): Promise<void> {
   await page.route("**/*", (route) => {

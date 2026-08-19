@@ -26,7 +26,7 @@ export function EventCommercialSettingsForm({
   )
   const [fixedFee, setFixedFee] = useState(String(initial.platformFixedFee))
   const [maxFree, setMaxFree] = useState(String(initial.maxFreeTickets))
-  const [sponsored, setSponsored] = useState(initial.isSponsoredByTokepass)
+  const [sponsored, setSponsored] = useState(initial.isSponsoredByTokePass)
 
   function onSubmit(event: React.FormEvent) {
     event.preventDefault()
@@ -35,7 +35,7 @@ export function EventCommercialSettingsForm({
         platformFeePercentage: Number(percentage),
         platformFixedFee: Number(fixedFee),
         maxFreeTickets: Number(maxFree),
-        isSponsoredByTokepass: sponsored,
+        isSponsoredByTokePass: sponsored,
       })
       if (!result.success) {
         toast.error(result.error)
@@ -65,7 +65,7 @@ export function EventCommercialSettingsForm({
             Reglas Comerciales
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Acá configurás cuánto le cobramos al comprador por usar Tokepass y si
+            Acá configurás cuánto le cobramos al comprador por usar TokePass y si
             le hacemos algún descuento al organizador. Solo vos, como dueño de la
             plataforma, podés cambiar estos valores.
           </p>
@@ -81,7 +81,7 @@ export function EventCommercialSettingsForm({
             </p>
             <p className="mt-0.5 text-xs text-amber-100/70">
               Si lo activás, el evento aparece primero en Destacados, muestra el
-              sello de Auspiciado y Tokepass no le cobra comisión al comprador
+              sello de Auspiciado y TokePass no le cobra comisión al comprador
               (queda en cero).
             </p>
           </div>

@@ -126,7 +126,7 @@ export function SponsorGrid({
 
 export function SponsorMarquee({
   sponsors,
-  title = "Empresas corporativas que confían en la tecnología Tokepass",
+  title = "Empresas corporativas que confían en la tecnología TokePass",
 }: {
   sponsors: PublicSponsor[]
   title?: string

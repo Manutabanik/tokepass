@@ -617,7 +617,7 @@ export async function resendTicketEmailAdmin(
       | null
     const eventTitle =
       (Array.isArray(eventsJoin) ? eventsJoin[0]?.title : eventsJoin?.title) ||
-      "Evento Tokepass"
+      "Evento TokePass"
 
     await notifyLivingTicketEmail({
       toEmail: email,
@@ -771,7 +771,7 @@ export async function reassignTicketAdmin(
         }[]
       | null
     const eventMeta = Array.isArray(eventsJoin) ? eventsJoin[0] : eventsJoin
-    const eventTitle = eventMeta?.title ?? "Evento Tokepass"
+    const eventTitle = eventMeta?.title ?? "Evento TokePass"
     const rawMax = Number(eventMeta?.max_tickets_per_user)
     const maxPerUser =
       Number.isFinite(rawMax) && rawMax > 0 ? Math.floor(rawMax) : null

@@ -117,7 +117,7 @@ where email = 'tu@email.com';`}</code>
               Partners globales
             </CardTitle>
             <CardDescription className="text-muted-foreground">
-              Empresas que confían en Tokepass. Los logos salen en la landing.
+              Empresas que confían en TokePass. Los logos salen en la landing.
             </CardDescription>
           </CardHeader>
           <CardContent className="px-6 pb-6 pt-2">

@@ -31,6 +31,7 @@ import {
   type ScannerEventOption,
   type ScanTicketResult,
 } from "@/app/actions/scanner"
+import { overlayKindFromDeniedScanStatus } from "@/lib/scanner/offline-sync-conflicts"
 import {
   ScanResultOverlay,
   type ScanOverlayState,
@@ -56,6 +57,9 @@ import {
 } from "@/lib/scanner/scan-copy"
 import { useOnlineStatus } from "@/components/pwa/use-online-status"
 import { useHardwareSignal } from "@/hooks/use-hardware-signal"
+import { useScreenWakeLock } from "@/hooks/use-wake-lock"
+import { requestDoorAssetCache } from "@/lib/pwa/door-cache"
+import { prefetchDoorManifest } from "@/lib/scanner/prefetch-manifest"
 import {
   applyAdmissionSnapshot,
   clearSyncQueueItems,
@@ -159,7 +163,11 @@ function getLiveVideoTrack(): MediaStreamTrack | null {
   return stream.getVideoTracks()[0] ?? null
 }
 
-export function DoorScanner() {
+export function DoorScanner({
+  guestEvent,
+}: {
+  guestEvent?: ScannerEventOption
+} = {}) {
   const online = useOnlineStatus()
   const { sendSignal } = useHardwareSignal()
   const accessMode = useSyncExternalStore(
@@ -169,9 +177,12 @@ export function DoorScanner() {
   )
   const isTotemMode = accessMode === "totem"
   const [sessionActive, setSessionActive] = useState(false)
+  const wakeLockHeld = useScreenWakeLock(sessionActive)
   const [isStarting, setIsStarting] = useState(false)
-  const [events, setEvents] = useState<ScannerEventOption[]>([])
-  const [eventId, setEventId] = useState<string>("")
+  const [events, setEvents] = useState<ScannerEventOption[]>(
+    guestEvent ? [guestEvent] : [],
+  )
+  const [eventId, setEventId] = useState<string>(guestEvent?.id ?? "")
   const [gateId, setGateId] = useState<string>("")
   const [gates, setGates] = useState<ScannerGate[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -180,7 +191,9 @@ export function DoorScanner() {
     "environment",
   )
   const [overlay, setOverlay] = useState<ScanOverlayState | null>(null)
-  const [operatorName, setOperatorName] = useState("Operador")
+  const [operatorName, setOperatorName] = useState(
+    guestEvent ? "Staff de puerta" : "Operador",
+  )
   const [isPending, startTransition] = useTransition()
   const [manifestMeta, setManifestMeta] = useState<ScannerManifestMeta | null>(
     null,
@@ -294,7 +307,10 @@ export function DoorScanner() {
         })),
       )
       if (!result.success) throw new Error(result.error)
-      await clearSyncQueueItems(result.data.syncedIds)
+      await clearSyncQueueItems([
+        ...result.data.syncedIds,
+        ...(result.data.evictedIds ?? []),
+      ])
       await refreshQueueCount()
     } catch (error) {
       logger.error({
@@ -309,6 +325,11 @@ export function DoorScanner() {
 
   useEffect(() => {
     let cancelled = false
+    if (guestEvent) {
+      return () => {
+        if (resetTimerRef.current) window.clearTimeout(resetTimerRef.current)
+      }
+    }
     void getScannerEvents()
       .then((data) => {
         if (cancelled) return
@@ -330,7 +351,14 @@ export function DoorScanner() {
       cancelled = true
       if (resetTimerRef.current) window.clearTimeout(resetTimerRef.current)
     }
-  }, [])
+  }, [guestEvent])
+
+  useEffect(() => {
+    requestDoorAssetCache()
+    if (!eventId || sessionActive) return
+    if (typeof navigator !== "undefined" && !navigator.onLine) return
+    void prefetchDoorManifest(eventId, fetchEventTicketManifest).catch(() => {})
+  }, [eventId, sessionActive])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -424,7 +452,9 @@ export function DoorScanner() {
           : next.kind === "wrong_sector" ||
               next.kind === "main_gate_review" ||
               next.kind === "transfer_pending" ||
-              next.kind === "wrong_schedule"
+              next.kind === "wrong_schedule" ||
+              next.kind === "unpaid" ||
+              next.kind === "transferred"
             ? "warning"
             : "error"
       playGateTone(tone)
@@ -435,7 +465,9 @@ export function DoorScanner() {
           : next.kind === "wrong_sector" ||
               next.kind === "main_gate_review" ||
               next.kind === "transfer_pending" ||
-              next.kind === "wrong_schedule"
+              next.kind === "wrong_schedule" ||
+              next.kind === "unpaid" ||
+              next.kind === "transferred"
             ? "LED_OFF"
             : "LED_RED",
       )
@@ -492,18 +524,23 @@ export function DoorScanner() {
         )
         return
       }
-      if (result.status === "wrong_sector") {
+      const kind = overlayKindFromDeniedScanStatus(result.status)
+      if (kind === "duplicate") {
+        showAlreadyUsed(
+          result.scannedAt ?? null,
+          result.gateName,
+          result.operatorName,
+        )
+        return
+      }
+      if (kind === "wrong_sector") {
         showOverlay({
           kind: "wrong_sector",
           correctGateName: result.redirectSector ?? "otra gatera",
         })
         return
       }
-      if (result.status === "transfer_pending") {
-        showOverlay({ kind: "transfer_pending" })
-        return
-      }
-      if (result.status === "wrong_day") {
+      if (kind === "wrong_schedule") {
         showOverlay({
           kind: "wrong_schedule",
           message: result.message,
@@ -511,10 +548,15 @@ export function DoorScanner() {
         return
       }
       if (
-        result.status === "test_ticket" ||
-        result.status === "test_ticket_live"
+        kind === "cancelled" ||
+        kind === "unpaid" ||
+        kind === "transferred" ||
+        kind === "expired_qr" ||
+        kind === "test_ticket" ||
+        kind === "transfer_pending" ||
+        kind === "invalid"
       ) {
-        showOverlay({ kind: "test_ticket" })
+        showOverlay({ kind })
         return
       }
       showOverlay({ kind: "invalid" })
@@ -532,12 +574,16 @@ export function DoorScanner() {
         showAlreadyUsed(ticket.scanned_at_local ?? ticket.scanned_at)
         return
       }
-      if (ticket.status === "transferred" || ticket.status === "cancelled") {
-        showOverlay({ kind: "invalid" })
+      if (ticket.status === "transferred") {
+        showOverlay({ kind: "transferred" })
+        return
+      }
+      if (ticket.status === "cancelled" || ticket.status === "revoked") {
+        showOverlay({ kind: "cancelled" })
         return
       }
       if (ticket.status === "pending_payment") {
-        showOverlay({ kind: "invalid" })
+        showOverlay({ kind: "unpaid" })
         return
       }
 
@@ -674,7 +720,7 @@ export function DoorScanner() {
               return
             }
             if (resolved.enforceFreshness && resolved.expired) {
-              showOverlay({ kind: "invalid" })
+              showOverlay({ kind: "expired_qr" })
               return
             }
 
@@ -898,6 +944,7 @@ export function DoorScanner() {
   if (!sessionActive) {
     return (
       <DoorScannerSetup
+        guestMode={Boolean(guestEvent)}
         events={events}
         eventId={eventId}
         gates={gates}
@@ -945,6 +992,7 @@ export function DoorScanner() {
         admittedCount={admittedCount}
         torchOn={torchOn}
         torchAvailable={torchAvailable}
+        wakeLockHeld={wakeLockHeld}
         onChangeGate={() => {
           stopLeaseGossip()
           setSessionActive(false)

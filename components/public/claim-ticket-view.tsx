@@ -44,7 +44,7 @@ export function ClaimTicketView({
       }
       setClaimed(true)
       toast.success("Entrada reclamada", {
-        description: "Ya está en tu billetera Tokepass.",
+        description: "Ya está en tu billetera TokePass.",
       })
       router.refresh()
     })
@@ -97,7 +97,7 @@ export function ClaimTicketView({
         </p>
       ) : (
         <p className="mt-4 text-sm text-muted-foreground">
-          Al aceptar, la titularidad pasa a tu cuenta Tokepass y el Living QR se
+          Al aceptar, la titularidad pasa a tu cuenta TokePass y el Living QR se
           genera en tu teléfono.
         </p>
       )}

@@ -241,7 +241,7 @@ export async function assignEventStaff(input: {
       return {
         success: false,
         error:
-          "No hay usuario Tokepass con ese email. Pedile que se registre primero.",
+          "No hay usuario TokePass con ese email. Pedile que se registre primero.",
       }
     }
 

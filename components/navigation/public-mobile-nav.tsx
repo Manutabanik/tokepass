@@ -12,6 +12,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
 
+import { PwaInstallNavButton } from "@/components/pwa/pwa-install-nav-button"
 import { BrandLogo } from "@/components/shared/brand-logo"
 import { Button } from "@/components/ui/button"
 import {
@@ -59,10 +60,11 @@ const ITEMS = [
     guestHref: "/login?next=/perfil",
   },
   {
-    href: "/organizadores",
+    href: "/organizar-eventos",
     label: "Organizar Eventos",
     icon: CalendarPlus,
     match: (path: string) =>
+      path.startsWith("/organizar-eventos") ||
       path.startsWith("/organizadores") ||
       path.startsWith("/login-organizador") ||
       path.startsWith("/admin"),
@@ -98,7 +100,7 @@ export function PublicMobileNav({ isAuthenticated }: PublicMobileNavProps) {
           <BrandLogo href="/" size="md" />
           <SheetTitle className="sr-only">Navegacion</SheetTitle>
           <SheetDescription className="sr-only">
-            Menu principal de Tokepass
+            Menu principal de TokePass
           </SheetDescription>
         </SheetHeader>
         <nav className="flex-1 space-y-1 overflow-y-auto p-3" aria-label="Menu movil">
@@ -124,6 +126,10 @@ export function PublicMobileNav({ isAuthenticated }: PublicMobileNavProps) {
               </Link>
             )
           })}
+          <PwaInstallNavButton
+            variant="nav"
+            onAction={() => setOpen(false)}
+          />
         </nav>
         <div className="mt-auto flex items-center justify-between gap-3 border-t border-border p-4">
           <p className="text-sm font-medium text-foreground">Apariencia</p>

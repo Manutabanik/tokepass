@@ -13,6 +13,7 @@ import {
   Pencil,
   Plus,
   Rocket,
+  ShieldAlert,
   Sparkles,
   Trash2,
   TriangleAlert,
@@ -28,6 +29,7 @@ import {
   deleteOrArchiveEvent,
   type OrganizerEvent,
 } from "@/app/actions/events"
+import { requestEventCancellationSupport } from "@/app/actions/support"
 import { BoostModal } from "@/components/admin/boost-modal"
 import { PublishEventConfirmDialog } from "@/components/admin/publish-event-confirm-dialog"
 import { EventStatusBadge } from "@/components/superadmin/badges"
@@ -49,6 +51,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { canSubmitEventForReview } from "@/lib/events/review-status"
 import { isBoostActive } from "@/lib/services/events-service"
 import { formatEventDay } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -87,8 +90,10 @@ export function OrganizerEventsManager({
   const router = useRouter()
   const [boostEvent, setBoostEvent] = useState<OrganizerEvent | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<OrganizerEvent | null>(null)
+  const [supportTarget, setSupportTarget] = useState<OrganizerEvent | null>(null)
   const [pendingDelete, startDelete] = useTransition()
   const [pendingArchive, startArchive] = useTransition()
+  const [pendingSupport, startSupport] = useTransition()
 
   const hint = useMemo(() => {
     if (boostHint === "success") {
@@ -123,8 +128,8 @@ export function OrganizerEventsManager({
             Mis Eventos
           </h1>
           <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-            Creá borradores, previsualizá compras de prueba y publicá cuando
-            esté listo.
+            Creá borradores, previsualizá compras de prueba y envialo a
+            revisión cuando esté listo.
           </p>
         </div>
         <Button
@@ -159,7 +164,7 @@ export function OrganizerEventsManager({
                 Multiplicá tus ventas hasta x3
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Destacá este evento en la portada con Tokepass Boost (Silver,
+                Destacá este evento en la portada con TokePass Boost (Silver,
                 Gold o Platinum).
               </p>
             </div>
@@ -188,7 +193,7 @@ export function OrganizerEventsManager({
             <p className="mt-4 text-lg font-bold text-foreground">Sin eventos aún</p>
             <p className="mt-2 text-sm text-muted-foreground">
               Creá tu primera noche como borrador y previsualizala antes de
-              publicar.
+              enviarla a revisión.
             </p>
           </div>
         </div>
@@ -247,11 +252,16 @@ export function OrganizerEventsManager({
                         ? `${event.ticketsSold} entrada${event.ticketsSold === 1 ? "" : "s"} vendida${event.ticketsSold === 1 ? "" : "s"} / comprometidas`
                         : "Sin ventas todavía"}
                     </p>
+                    {event.status === "needs_revision" && event.review_note ? (
+                      <p className="text-xs leading-5 text-orange-800 dark:text-orange-200">
+                        Cambios pedidos: {event.review_note}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
 
                 <div className="mt-4 flex w-full items-center justify-between gap-2 border-t border-border pt-4 md:mt-0 md:w-auto md:shrink-0 md:justify-end md:border-t-0 md:pt-0">
-                  {event.status === "draft" ? (
+                  {canSubmitEventForReview(event.status) ? (
                     <PublishEventButton eventId={event.id} />
                   ) : null}
                   <Button
@@ -296,7 +306,11 @@ export function OrganizerEventsManager({
                         <Sparkles className="size-4 text-muted-foreground" aria-hidden="true" />
                         {active ? "Renovar Boost" : "Destacar"}
                       </DropdownMenuItem>
-                      {event.status === "published" || event.status === "draft" ? (
+                      {event.paidOrderCount === 0 &&
+                      (event.status === "published" ||
+                        event.status === "draft" ||
+                        event.status === "pending_approval" ||
+                        event.status === "needs_revision") ? (
                         <DropdownMenuItem
                           disabled={pendingArchive}
                           onClick={() => {
@@ -318,13 +332,22 @@ export function OrganizerEventsManager({
                       {event.status !== "cancelled" ? (
                         <>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className="text-destructive data-highlighted:bg-destructive/10 data-highlighted:text-destructive"
-                            onClick={() => setDeleteTarget(event)}
-                          >
-                            <Trash2 className="size-4" aria-hidden="true" />
-                            Eliminar
-                          </DropdownMenuItem>
+                          {event.paidOrderCount > 0 ? (
+                            <DropdownMenuItem
+                              onClick={() => setSupportTarget(event)}
+                            >
+                              <ShieldAlert className="size-4" aria-hidden="true" />
+                              Solicitar Cancelación a Soporte
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem
+                              className="text-destructive data-highlighted:bg-destructive/10 data-highlighted:text-destructive"
+                              onClick={() => setDeleteTarget(event)}
+                            >
+                              <Trash2 className="size-4" aria-hidden="true" />
+                              Eliminar
+                            </DropdownMenuItem>
+                          )}
                         </>
                       ) : null}
                     </DropdownMenuContent>
@@ -410,6 +433,65 @@ export function OrganizerEventsManager({
               {deleteTarget && deleteTarget.ticketsSold > 0
                 ? "Cancelar evento"
                 : "Eliminar definitivamente"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(supportTarget)}
+        onOpenChange={(open) => {
+          if (!open) setSupportTarget(null)
+        }}
+      >
+        <DialogContent className="border-border bg-card text-foreground sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-foreground">
+              <ShieldAlert className="size-4 text-amber-600 dark:text-amber-300" aria-hidden="true" />
+              Cancelación con ventas cobradas
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              {supportTarget
+                ? `“${supportTarget.title}” tiene ${supportTarget.paidOrderCount} compra(s) pagada(s). No podés cancelarlo desde el panel. Soporte debe evaluar el reembolso por la pasarela de pago.`
+                : "Este evento tiene compras pagadas."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="border-border"
+              onClick={() => setSupportTarget(null)}
+            >
+              Volver
+            </Button>
+            <Button
+              type="button"
+              disabled={pendingSupport || !supportTarget}
+              className="bg-amber-600 text-white hover:bg-amber-500"
+              onClick={() => {
+                if (!supportTarget) return
+                startSupport(async () => {
+                  const result = await requestEventCancellationSupport(
+                    supportTarget.id,
+                  )
+                  if (!result.success) {
+                    toast.error(result.error)
+                    return
+                  }
+                  toast.success("Solicitud enviada a soporte", {
+                    description: "El equipo de TokePass va a revisar la cancelación y los reembolsos.",
+                  })
+                  setSupportTarget(null)
+                })
+              }}
+            >
+              {pendingSupport ? (
+                <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <ShieldAlert className="size-4" aria-hidden="true" />
+              )}
+              Solicitar Cancelación a Soporte
             </Button>
           </DialogFooter>
         </DialogContent>

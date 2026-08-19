@@ -24,16 +24,10 @@ export function SiteFooter() {
           className="flex flex-wrap items-center gap-x-5 gap-y-2"
         >
           <Link
-            href="/beneficios"
+            href="/organizar-eventos"
             className="text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
-            Beneficios
-          </Link>
-          <Link
-            href="/organizadores"
-            className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Organizadores
+            Organizar eventos
           </Link>
         </nav>
 

@@ -18,7 +18,7 @@ type PromoVideoPlayerProps = {
   deferUntilActive?: boolean
   /** Fill the parent instead of reserving aspect-video. */
   fill?: boolean
-  /** Hero gallery: standard YouTube/Vimeo embed, tap to play, no autoplay. */
+  /** Hero gallery: embed montado tras el Play propio, con autoplay. */
   gallery?: boolean
 }
 
@@ -128,7 +128,7 @@ export function PromoVideoPlayer({
         src={embed.embedUrl ?? undefined}
         title={title}
         loading="lazy"
-        allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
         allowFullScreen
         className="h-full w-full border-0"
       />

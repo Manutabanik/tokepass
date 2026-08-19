@@ -19,6 +19,36 @@ export type EventInventoryInput = {
   }> | null
 }
 
+/** Inicio comercial: primera jornada, o `date` del evento. */
+export function resolveEventStartAt(
+  event: EventTimingInput,
+): Date | null {
+  const days = Array.isArray(event.scheduleDays)
+    ? event.scheduleDays.every(
+        (item) =>
+          item &&
+          typeof item === "object" &&
+          "end_time" in item &&
+          "start_time" in item,
+      )
+      ? (event.scheduleDays as ScheduleDay[])
+      : parseScheduleDays(event.scheduleDays)
+    : parseScheduleDays(event.scheduleDays)
+
+  if (days.length > 0) {
+    let earliest = Number.POSITIVE_INFINITY
+    for (const day of days) {
+      const ms = new Date(day.start_time).getTime()
+      if (Number.isFinite(ms) && ms < earliest) earliest = ms
+    }
+    if (Number.isFinite(earliest)) return new Date(earliest)
+  }
+
+  const start = new Date(event.date)
+  if (Number.isNaN(start.getTime())) return null
+  return start
+}
+
 /** Instantánea de cierre: último end de jornada, `ends_at`, o el inicio del evento. */
 export function resolveEventEndAt(
   event: EventTimingInput,

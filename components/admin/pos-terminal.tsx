@@ -1536,7 +1536,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
 
       <PosTicketHandoffDialog
         open={handoffTickets.length > 0}
-        eventTitle={selectedEvent?.title ?? "Evento Tokepass"}
+        eventTitle={selectedEvent?.title ?? "Evento TokePass"}
         tickets={handoffTickets}
         initialPhone={phone}
         onClose={() => setHandoffTickets([])}

@@ -187,7 +187,146 @@ export async function signUpWithEmail(
 }
 
 export async function signUpOrganizer(): Promise<AuthActionState> {
-  redirect("/organizadores#solicitud")
+  redirect("/register-organizador")
+}
+
+async function promoteProfileToOrganizer(
+  userId: string,
+  extras?: {
+    email?: string
+    fullName?: string | null
+    phone?: string | null
+  },
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const admin = createAdminClient()
+  const now = new Date().toISOString()
+  const patch = {
+    role: "admin" as const,
+    organizer_approval_status: "approved" as const,
+    updated_at: now,
+    ...(extras?.fullName?.trim() ? { full_name: extras.fullName.trim() } : {}),
+    ...(extras?.phone?.trim() ? { phone: extras.phone.trim() } : {}),
+  }
+
+  const { data, error } = await admin
+    .from("profiles")
+    .update(patch)
+    .eq("id", userId)
+    .select("id")
+    .maybeSingle()
+
+  if (data) return { ok: true }
+
+  if (extras?.email) {
+    const { error: upsertError } = await admin.from("profiles").upsert({
+      id: userId,
+      email: extras.email,
+      full_name: extras.fullName?.trim() || null,
+      public_name: extras.fullName?.trim() || null,
+      public_bio: null,
+      avatar_url: null,
+      phone: extras.phone?.trim() || null,
+      role: "admin",
+      organizer_approval_status: "approved",
+    })
+    if (!upsertError) return { ok: true }
+    logger.error({
+      context: "auth/organizer-signup",
+      message: "promote_upsert_failed",
+      userId,
+      error: upsertError,
+    })
+    return { ok: false, error: upsertError.message }
+  }
+
+  logger.error({
+    context: "auth/organizer-signup",
+    message: "promote_update_failed",
+    userId,
+    error,
+  })
+  return {
+    ok: false,
+    error: error?.message ?? "No se pudo activar tu cuenta de organizador.",
+  }
+}
+
+export async function signUpOrganizerAccount(
+  _previousState: AuthActionState,
+  formData: FormData,
+): Promise<AuthActionState> {
+  const credentials = readCredentials(formData)
+
+  if (!credentials.ok) {
+    return { error: credentials.error, success: null }
+  }
+
+  if (credentials.password.length < 8) {
+    return {
+      error: "La contraseña debe tener al menos 8 caracteres.",
+      success: null,
+    }
+  }
+
+  const fullNameRaw = formData.get("fullName")
+  const phoneRaw = formData.get("phone")
+  const fullName =
+    typeof fullNameRaw === "string" && fullNameRaw.trim()
+      ? fullNameRaw.trim()
+      : null
+  const phone =
+    typeof phoneRaw === "string" && phoneRaw.trim() ? phoneRaw.trim() : null
+
+  const emailRedirectTo = await getAuthCallbackUrl("/admin")
+  const supabase = await createClient()
+  const { data, error } = await supabase.auth.signUp({
+    email: credentials.email,
+    password: credentials.password,
+    options: {
+      data: {
+        full_name: fullName,
+        phone,
+      },
+      emailRedirectTo,
+    },
+  })
+
+  if (error) {
+    return { error: mapAuthErrorMessage(error.message), success: null }
+  }
+
+  if (data.user && !data.user.identities?.length) {
+    return {
+      error:
+        "Este email ya está registrado. Iniciá sesión o utilizá otra cuenta.",
+      success: null,
+    }
+  }
+
+  if (data.user) {
+    const promoted = await promoteProfileToOrganizer(data.user.id, {
+      email: credentials.email,
+      fullName,
+      phone,
+    })
+    if (!promoted.ok) {
+      return {
+        error:
+          "La cuenta se creó, pero no se pudo activar el panel. Escribí a soporte de TokePass.",
+        success: null,
+      }
+    }
+  }
+
+  if (data.session) {
+    redirect(credentials.next || "/admin")
+  }
+
+  return {
+    error: null,
+    success:
+      "Cuenta creada. Revisá tu correo para confirmar el registro y después entrá a Tu Panel.",
+  }
 }
 
 export async function signInWithEmail(
@@ -232,7 +371,11 @@ export async function signInWithEmail(
         })
       }
       if (!hasOrganizerAccount) {
-        redirect("/organizadores#solicitud")
+        return {
+          error:
+            "No hay una cuenta con ese email. Creá tu cuenta de organizador para entrar al panel.",
+          success: null,
+        }
       }
     }
     return { error: mapAuthErrorMessage(error.message), success: null }
@@ -270,18 +413,16 @@ export async function signInWithEmail(
     }
   }
 
-  // Governance restrictions only apply to organizer accounts. A customer with
-  // an organizer application pending/rejected can still use the B2C catalog.
+  // La cuenta de organizador se crea libremente. El gate es la auditoría
+  // del evento, no el alta de la productora. Solo se bloquea rechazo/suspensión.
   if (
+    loginSource === "organizer" &&
     profile?.role === "admin" &&
     profile.organizerApprovalStatus === "pending"
   ) {
-    await supabase.auth.signOut()
-    return {
-      error:
-        "Tu solicitud de organizador sigue pendiente de aprobación. Te avisamos cuando esté activa.",
-      success: null,
-    }
+    await promoteProfileToOrganizer(user.id, {
+      email: user.email ?? credentials.email,
+    })
   }
 
   if (
@@ -302,23 +443,7 @@ export async function signInWithEmail(
     await supabase.auth.signOut()
     return {
       error:
-        "Tu productora está suspendida. Contactá a soporte de Tokepass para revisar el caso.",
-      success: null,
-    }
-  }
-
-  // Pending organizer applicants (still role=customer) logging into the
-  // organizer portal should see a clear message instead of a silent / redirect.
-  if (
-    loginSource === "organizer" &&
-    profile?.organizerApprovalStatus === "pending" &&
-    profile.role !== "admin" &&
-    profile.role !== "super_admin"
-  ) {
-    await supabase.auth.signOut()
-    return {
-      error:
-        "Tu solicitud de organizador sigue pendiente de aprobación. Te avisamos cuando esté activa.",
+        "Tu productora está suspendida. Contactá a soporte de TokePass para revisar el caso.",
       success: null,
     }
   }
@@ -328,8 +453,18 @@ export async function signInWithEmail(
     profile?.role !== "admin" &&
     profile?.role !== "super_admin"
   ) {
-    await supabase.auth.signOut()
-    redirect("/organizadores#solicitud")
+    const promoted = await promoteProfileToOrganizer(user.id, {
+      email: user.email ?? credentials.email,
+    })
+    if (!promoted.ok) {
+      await supabase.auth.signOut()
+      return {
+        error:
+          "No se pudo activar tu cuenta de organizador. Intentá de nuevo o escribinos a soporte.",
+        success: null,
+      }
+    }
+    redirect(credentials.next || "/admin")
   }
 
   const fallback = postLoginDestination(profile?.role)

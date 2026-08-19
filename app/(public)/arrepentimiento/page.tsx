@@ -6,7 +6,7 @@ import { WithdrawalForm } from "@/components/legal/withdrawal-form"
 export const metadata: Metadata = {
   title: "Arrepentimiento de compra",
   description:
-    "Solicitá la cancelación de tu compra en Tokepass dentro de los 10 días, si el evento no se realizó.",
+    "Solicitá la cancelación de tu compra en TokePass dentro de los 10 días, si el evento no se realizó.",
 }
 
 export default function ArrepentimientoPage() {
@@ -32,7 +32,8 @@ export default function ArrepentimientoPage() {
         >
           Mis compras
         </Link>
-        . Este canal todavía no dispara un reembolso automático.
+        . Si la solicitud cumple el plazo legal, anulamos los códigos QR de
+        inmediato y procesamos la devolución con la pasarela de pago.
       </p>
 
       <div className="mt-10 rounded-3xl border border-border bg-card p-5 sm:p-6">

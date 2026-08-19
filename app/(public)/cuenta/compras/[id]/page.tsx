@@ -12,7 +12,7 @@ import { formatCurrency, formatEventDay, formatEventTime } from "@/lib/format"
 
 export const metadata: Metadata = {
   title: "Detalle de la compra",
-  description: "Estado de tu orden y reintento de pago Tokepass.",
+  description: "Estado de tu orden y reintento de pago TokePass.",
 }
 
 export default async function CuentaCompraDetallePage({
@@ -57,7 +57,7 @@ export default async function CuentaCompraDetallePage({
           Orden {order.id.slice(0, 8).toUpperCase()}
         </p>
         <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
-          {order.eventTitle ?? "Compra Tokepass"}
+          {order.eventTitle ?? "Compra TokePass"}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
           {formatEventDay(order.createdAt)} · {formatEventTime(order.createdAt)}{" "}

@@ -13,6 +13,13 @@ import {
 import { PublishEventConfirmDialog } from "@/components/admin/publish-event-confirm-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  canSubmitEventForReview,
+  EVENT_SENT_TO_REVIEW_BODY,
+  EVENT_SENT_TO_REVIEW_TITLE,
+  isPendingEventReview,
+  isSandboxEventStatus,
+} from "@/lib/events/review-status"
 import { cn } from "@/lib/utils"
 
 type EventCommandHeaderProps = {
@@ -21,6 +28,7 @@ type EventCommandHeaderProps = {
   subtitle: string
   status: string
   isSponsored: boolean
+  reviewNote?: string | null
 }
 
 function statusPresentation(status: string): {
@@ -39,6 +47,27 @@ function statusPresentation(status: string): {
       label: "Pausado (Oculto)",
       className:
         "border-orange-500/45 bg-orange-500/15 px-3 py-1.5 text-sm font-bold uppercase tracking-wide text-orange-800 dark:text-orange-100",
+    }
+  }
+  if (status === "pending_approval") {
+    return {
+      label: "En revisión",
+      className:
+        "border-sky-500/45 bg-sky-500/15 px-3 py-1.5 text-sm font-bold uppercase tracking-wide text-sky-800 dark:text-sky-200",
+    }
+  }
+  if (status === "needs_revision") {
+    return {
+      label: "Pide cambios",
+      className:
+        "border-orange-500/45 bg-orange-500/15 px-3 py-1.5 text-sm font-bold uppercase tracking-wide text-orange-800 dark:text-orange-100",
+    }
+  }
+  if (status === "rejected") {
+    return {
+      label: "Rechazado",
+      className:
+        "border-rose-500/45 bg-rose-500/15 px-3 py-1.5 text-sm font-bold uppercase tracking-wide text-rose-700 dark:text-rose-200",
     }
   }
   if (status === "draft") {
@@ -75,19 +104,20 @@ export function EventCommandHeader({
   subtitle,
   status,
   isSponsored,
+  reviewNote,
 }: EventCommandHeaderProps) {
   const router = useRouter()
   const [publishOpen, setPublishOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [copyingLink, setCopyingLink] = useState(false)
   const statusUi = statusPresentation(status)
-  const isDraft = status === "draft"
+  const canSubmit = canSubmitEventForReview(status)
+  const awaitingReview = isPendingEventReview(status)
   const isPublished = status === "published"
   const isPaused = status === "paused"
-  const previewHref =
-    isDraft || isPaused
-      ? `/events/preview/${eventId}`
-      : `/eventos/${eventId}`
+  const previewHref = isSandboxEventStatus(status) || isPaused
+    ? `/events/preview/${eventId}`
+    : `/eventos/${eventId}`
 
   async function copyPreviewLink() {
     setCopyingLink(true)
@@ -134,7 +164,7 @@ export function EventCommandHeader({
               </Badge>
               {isSponsored ? (
                 <Badge className="rounded-full border border-amber-400/40 bg-amber-500/15 text-amber-900 dark:text-amber-100">
-                  Auspiciado por Tokepass
+                  Auspiciado por TokePass
                 </Badge>
               ) : null}
             </div>
@@ -142,6 +172,21 @@ export function EventCommandHeader({
               {title}
             </h1>
             <p className="text-sm text-muted-foreground">{subtitle}</p>
+            {awaitingReview ? (
+              <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm leading-6 text-sky-950 dark:text-sky-100">
+                <p className="font-semibold">{EVENT_SENT_TO_REVIEW_TITLE}</p>
+                <p className="mt-1">{EVENT_SENT_TO_REVIEW_BODY}</p>
+              </div>
+            ) : null}
+            {(status === "needs_revision" || status === "rejected") &&
+            reviewNote?.trim() ? (
+              <p className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm leading-6 text-orange-950 dark:text-orange-100">
+                <span className="font-semibold">
+                  {status === "rejected" ? "Motivo del rechazo: " : "Cambios pedidos: "}
+                </span>
+                {reviewNote.trim()}
+              </p>
+            ) : null}
           </div>
 
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
@@ -161,7 +206,7 @@ export function EventCommandHeader({
               Vista Previa
             </Button>
 
-            {isDraft ? (
+            {isSandboxEventStatus(status) ? (
               <Button
                 type="button"
                 variant="outline"
@@ -178,7 +223,7 @@ export function EventCommandHeader({
               </Button>
             ) : null}
 
-            {isDraft ? (
+            {canSubmit ? (
               <Button
                 type="button"
                 className="h-12 rounded-xl bg-emerald-600 px-6 text-base font-bold text-white hover:bg-emerald-500 sm:min-w-[220px]"

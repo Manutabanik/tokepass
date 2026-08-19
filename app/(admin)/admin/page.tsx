@@ -66,7 +66,7 @@ export default async function AdminDashboardPage() {
       icon: DollarSign,
     },
     {
-      label: "Comisión Tokepass",
+      label: "Comisión TokePass",
       value: formatCurrency(metrics.tokepassServiceCharge),
       helper: "Service charge descontado del bruto",
       icon: Landmark,

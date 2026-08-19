@@ -6,7 +6,7 @@ import { AccountProfileForm } from "@/components/account/account-profile-form"
 
 export const metadata: Metadata = {
   title: "Mis Datos",
-  description: "Editá tu perfil y foto en Tokepass.",
+  description: "Editá tu perfil y foto en TokePass.",
 }
 
 export default async function CuentaPerfilPage() {

@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/server"
 
 export const metadata: Metadata = {
   title: "Entrada para imprimir",
-  description: "Vista imprimible / PDF de tu entrada Tokepass.",
+  description: "Vista imprimible / PDF de tu entrada TokePass.",
 }
 
 export default async function TicketPrintPage({

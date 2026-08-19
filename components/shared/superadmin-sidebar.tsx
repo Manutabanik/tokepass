@@ -5,6 +5,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
 
+import { PwaInstallNavButton } from "@/components/pwa/pwa-install-nav-button"
 import { BrandLogo } from "@/components/shared/brand-logo"
 import { SUPERADMIN_NAV } from "@/components/shared/superadmin-mobile-nav"
 import { cn } from "@/lib/utils"
@@ -100,6 +101,11 @@ export function SuperAdminSidebar() {
       </nav>
 
       <div className="mt-auto px-2 pt-4">
+        {collapsed ? (
+          <PwaInstallNavButton variant="icon" className="mx-auto mb-3" />
+        ) : (
+          <PwaInstallNavButton variant="sidebar" className="mb-3 px-1" />
+        )}
         <p
           className={cn(
             "text-[11px] text-muted-foreground",

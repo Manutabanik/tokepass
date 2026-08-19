@@ -69,7 +69,7 @@ export function BoostModal({
       <DialogContent className="max-h-[90vh] overflow-y-auto border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="text-xl font-black tracking-tight">
-            Tokepass Boost
+            TokePass Boost
           </DialogTitle>
           <DialogDescription className="text-muted-foreground">
             Multiplicá las ventas de{" "}

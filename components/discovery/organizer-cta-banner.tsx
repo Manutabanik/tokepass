@@ -3,6 +3,8 @@
 import Link from "next/link"
 import { ArrowRight } from "lucide-react"
 
+import { ORGANIZER_REGISTER_HREF } from "@/lib/commercial-contact"
+
 export function OrganizerCtaBanner() {
   return (
     <section className="relative overflow-hidden rounded-3xl border border-zinc-200 bg-white px-6 py-12 dark:border-white/8 dark:bg-zinc-900/60 sm:px-10 sm:py-14">
@@ -12,16 +14,17 @@ export function OrganizerCtaBanner() {
       />
       <div className="relative mx-auto max-w-2xl text-center">
         <h2 className="text-balance text-3xl font-bold tracking-tight text-zinc-900 dark:text-white sm:text-4xl">
-          Publicá tu evento en Tokepass
+          Publicá tu evento en TokePass
         </h2>
         <p className="mx-auto mt-4 max-w-lg text-pretty text-base text-zinc-600 dark:text-zinc-400 sm:text-lg">
-          La plataforma de boletería digital más rápida, segura e intuitiva.
+          Armá el evento en el panel. TokePass audita fecha, locación y
+          condiciones antes de habilitar la venta al público.
         </p>
         <Link
-          href="/organizadores#solicitud"
+          href={ORGANIZER_REGISTER_HREF}
           className="mt-8 inline-flex items-center gap-2 rounded-full bg-zinc-950 px-6 py-3 text-sm font-semibold text-white transition hover:scale-[1.02] hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100"
         >
-          Solicitar acceso de organizador
+          Crear cuenta de Organizador
           <ArrowRight className="size-4" aria-hidden="true" />
         </Link>
       </div>

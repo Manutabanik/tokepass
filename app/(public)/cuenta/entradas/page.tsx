@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/server"
 export const metadata: Metadata = {
   title: "Mis entradas",
   description:
-    "Billetera digital Tokepass: tus entradas con QR vivo, incluso sin conexión.",
+    "Billetera digital TokePass: tus entradas con QR vivo, incluso sin conexión.",
 }
 
 export default async function CuentaEntradasPage() {

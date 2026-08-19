@@ -5,13 +5,16 @@ import { useMemo, useState, type FormEvent } from "react"
 import type { FieldErrors } from "react-hook-form"
 
 import type { ValidatedPromo } from "@/app/actions/coupons"
+import type { CheckoutPromoterPreview } from "@/app/actions/promoters"
 import { CheckoutBuyerFields } from "@/components/public/checkout-buyer-fields"
+import { CheckoutPromoterCodeInput } from "@/components/public/checkout-promoter-code-input"
 import {
   PaymentMethodSelector,
   type CheckoutPaymentProvider,
 } from "@/components/public/payment-method-selector"
 import { PromoCodeInput } from "@/components/public/promo-code-input"
 import { CheckoutLegalClickwrap } from "@/components/checkout/checkout-legal-clickwrap"
+import { TokepassGuaranteeBadge } from "@/components/shared/tokepass-guarantee-badge"
 import { Button } from "@/components/ui/button"
 import type { CheckoutBuyerInfo } from "@/lib/checkout-buyer"
 import { formatCurrency } from "@/lib/format"
@@ -33,6 +36,9 @@ export function CheckoutPaymentForm({
   finalTotal,
   totalTickets,
   appliedPromo,
+  appliedPromoter,
+  attributionLocked,
+  initialPromoterCode,
   selectedProvider,
   isDraftPreview,
   controlsLocked,
@@ -42,6 +48,8 @@ export function CheckoutPaymentForm({
   onBuyerChange,
   onAppliedPromo,
   onClearedPromo,
+  onAppliedPromoter,
+  onClearedPromoter,
   onSelectProvider,
   onSandboxReserve,
   onDetailsSubmit,
@@ -59,6 +67,9 @@ export function CheckoutPaymentForm({
   finalTotal: number
   totalTickets: number
   appliedPromo: ValidatedPromo | null
+  appliedPromoter: CheckoutPromoterPreview | null
+  attributionLocked?: boolean
+  initialPromoterCode?: string | null
   selectedProvider: CheckoutPaymentProvider
   sandboxEligible: boolean
   isDraftPreview?: boolean
@@ -69,6 +80,8 @@ export function CheckoutPaymentForm({
   onBuyerChange: (next: CheckoutBuyerInfo) => void
   onAppliedPromo: (promo: ValidatedPromo) => void
   onClearedPromo: () => void
+  onAppliedPromoter: (promoter: CheckoutPromoterPreview) => void
+  onClearedPromoter: () => void
   onSelectProvider: (provider: CheckoutPaymentProvider) => void
   onSandboxReserve: () => void
   onDetailsSubmit?: () => void
@@ -128,6 +141,16 @@ export function CheckoutPaymentForm({
         applied={appliedPromo}
         onApplied={onAppliedPromo}
         onCleared={onClearedPromo}
+        disabled={controlsLocked || !canProceedFromCart}
+      />
+
+      <CheckoutPromoterCodeInput
+        eventId={eventId}
+        initialCode={initialPromoterCode}
+        applied={appliedPromoter}
+        locked={attributionLocked}
+        onApplied={onAppliedPromoter}
+        onCleared={onClearedPromoter}
         disabled={controlsLocked || !canProceedFromCart}
       />
 
@@ -329,6 +352,7 @@ function PaymentOrderSummary({
           {formatCurrency(finalTotal)}
         </span>
       </div>
+      <TokepassGuaranteeBadge variant="full" />
     </div>
   )
 }

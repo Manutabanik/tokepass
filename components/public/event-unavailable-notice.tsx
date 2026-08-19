@@ -11,7 +11,11 @@ export function EventUnavailableNotice({
   status: string
 }) {
   const isPaused = status === "paused"
-  const isDraft = status === "draft"
+  const isDraft =
+    status === "draft" ||
+    status === "pending_approval" ||
+    status === "needs_revision" ||
+    status === "rejected"
 
   return (
     <section className="mx-auto flex min-h-[60vh] max-w-lg flex-col items-center justify-center px-4 py-20 text-center">

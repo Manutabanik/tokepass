@@ -8,6 +8,7 @@ import { AdaptiveSeatingFlow } from "@/components/public/adaptive-seating-flow"
 import { CartSummary } from "@/components/public/cart-summary"
 import type { SeatSelectionContext } from "@/components/public/seat-selection-sheet"
 import { CheckoutLegalClickwrap } from "@/components/checkout/checkout-legal-clickwrap"
+import { TokepassGuaranteeBadge } from "@/components/shared/tokepass-guarantee-badge"
 import { Button } from "@/components/ui/button"
 import { cartLineAmount } from "@/lib/checkout/cart-lines"
 import { formatCurrency } from "@/lib/format"
@@ -180,6 +181,7 @@ export function CheckoutSelectionSidebar({
             {formatCurrency(total)}
           </p>
         </div>
+        <TokepassGuaranteeBadge variant="full" className="mt-3" />
 
         {cta ? (
           <div className="mt-4 hidden lg:block">

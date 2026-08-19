@@ -1,7 +1,7 @@
-# Auditoría completa del sistema Tokepass
+# Auditoría completa del sistema TokePass
 
 **Fecha:** 21 de julio de 2026  
-**Proyecto:** Tokepass — Plataforma de Boletería Digital  
+**Proyecto:** TokePass — Plataforma de Boletería Digital  
 **Versión del codebase:** 0.1.0  
 **Estado general:** MVP de arquitectura avanzada — cimientos de producción listos; checkout y varios módulos operativos aún pendientes
 
@@ -9,7 +9,7 @@
 
 ## 1. Resumen ejecutivo
 
-Tokepass es una plataforma de ticketing digital construida con **Next.js 16 (App Router)**, **React 19**, **Tailwind CSS 4**, **Shadcn UI (Base UI)** y **Supabase** (Auth + PostgreSQL + RLS).
+TokePass es una plataforma de ticketing digital construida con **Next.js 16 (App Router)**, **React 19**, **Tailwind CSS 4**, **Shadcn UI (Base UI)** y **Supabase** (Auth + PostgreSQL + RLS).
 
 El sistema está organizado en **tres superficies de producto**:
 
@@ -398,7 +398,7 @@ Todas requieren `requireSuperAdmin()`:
 
 | Componente | Propósito |
 |---|---|
-| `brand-logo.tsx` | Logo Tokepass |
+| `brand-logo.tsx` | Logo TokePass |
 | `public-navbar.tsx` | Nav pública (búsqueda, login/logout) |
 | `auth-forms.tsx` | Formularios customer + Google |
 | `organizer-auth-form.tsx` | Formularios organizador (dark) |
@@ -609,7 +609,7 @@ Aunque no todo esté cableado, el diseño implícito del producto es:
 
 ## 17. Conclusión
 
-Tokepass ya tiene **cimientos de producción serios**:
+TokePass ya tiene **cimientos de producción serios**:
 
 - Tres paneles claros (público, organizador, plataforma).
 - Auth multi-rol con defensa en profundidad.
@@ -624,4 +624,4 @@ Con esos bloques, el resto del sistema (roles, RLS, Platform OS, RPC de inventar
 
 ---
 
-*Documento generado automáticamente a partir del estado del repositorio Tokepass. No inventa features: refleja solo lo presente en el código y las migraciones al momento de la auditoría.*
+*Documento generado automáticamente a partir del estado del repositorio TokePass. No inventa features: refleja solo lo presente en el código y las migraciones al momento de la auditoría.*

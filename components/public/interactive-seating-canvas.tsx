@@ -297,19 +297,12 @@ export function InteractiveSeatingCanvas({
 
   function applyContextCamera(ids: string[]) {
     const controls = transformRef.current
-    if (!controls) return
-    if (ids.length === 0) {
-      controls.resetTransform(CONTEXT_FOCUS_ANIM_MS, "easeOut")
-      return
-    }
+    if (!controls || ids.length === 0) return
     const boxes = ids
       .map((id) => aabbForItemId(id))
       .filter((box): box is Aabb => box != null)
     const union = unionAabb(boxes)
-    if (!union) {
-      controls.resetTransform(CONTEXT_FOCUS_ANIM_MS, "easeOut")
-      return
-    }
+    if (!union) return
     const camera = lodCameraTransform(
       expandSelectionForContext(union),
       wrapWidth,
@@ -336,19 +329,10 @@ export function InteractiveSeatingCanvas({
 
   useEffect(() => {
     if (focusTick <= 0) return
-    applyContextCameraRef.current(focusedMapIds)
-  }, [focusTick, focusedMapIds])
-
-  const assignedFocusKey = liveSelectedItems.map((item) => item.id).join("|")
-
-  useEffect(() => {
-    const ids = assignedFocusKey ? assignedFocusKey.split("|") : []
-    const timer = window.setTimeout(
-      () => applyContextCameraRef.current(ids),
-      40,
+    applyContextCameraRef.current(
+      useStorefrontSeatStore.getState().focusedMapIds,
     )
-    return () => window.clearTimeout(timer)
-  }, [assignedFocusKey, wrapWidth, wrapHeight])
+  }, [focusTick])
 
   useEffect(() => {
     if (disableIdlePrompt || selectedSeats.length === 0) {
@@ -367,6 +351,56 @@ export function InteractiveSeatingCanvas({
     stampActivity(lastActivity)
     setIdleOpen(false)
   }
+
+  const handleTransformed = useCallback(
+    (_ref: unknown, state: { scale: number }) => {
+      setZoom((current) =>
+        Math.abs(current - state.scale) < 0.04 ? current : state.scale,
+      )
+    },
+    [],
+  )
+  const wheelOptions = useMemo(
+    () => ({ step: WHEEL_STEP, disabled: readOnly }),
+    [readOnly],
+  )
+  const pinchOptions = useMemo(
+    () => ({ step: 5, allowPanning: !readOnly, disabled: readOnly }),
+    [readOnly],
+  )
+  const panningOptions = useMemo(
+    () => ({
+      disabled: readOnly,
+      velocityDisabled: readOnly,
+      allowLeftClickPan: !readOnly,
+    }),
+    [readOnly],
+  )
+  const doubleClickOptions = useMemo(() => ({ disabled: true }), [])
+  const zoomAnimationOptions = useMemo(
+    () => ({
+      disabled: false,
+      animationTime: ZOOM_ANIM_MS,
+      animationType: "easeOut" as const,
+    }),
+    [],
+  )
+  const autoAlignmentOptions = useMemo(
+    () => ({
+      disabled: true,
+      animationTime: 280,
+      animationType: "easeOutCubic" as const,
+    }),
+    [],
+  )
+  const velocityAnimationOptions = useMemo(
+    () => ({
+      disabled: false,
+      animationTime: 220,
+      animationType: "easeOut" as const,
+    }),
+    [],
+  )
 
   function seatPrice(...keysAndFallback: Array<string | number>) {
     const fallback = keysAndFallback.find((value) => typeof value === "number")
@@ -678,36 +712,16 @@ export function InteractiveSeatingCanvas({
         centerZoomedOut
         limitToBounds
         smooth
-        wheel={{ step: WHEEL_STEP, disabled: readOnly }}
-        pinch={{ step: 5, allowPanning: !readOnly, disabled: readOnly }}
-        panning={{
-          disabled: readOnly,
-          velocityDisabled: readOnly,
-          allowLeftClickPan: !readOnly,
-        }}
-        doubleClick={{ disabled: true }}
-        zoomAnimation={{
-          disabled: false,
-          animationTime: ZOOM_ANIM_MS,
-          animationType: "easeOut",
-        }}
-        autoAlignment={{
-          disabled: false,
-          animationTime: 280,
-          animationType: "easeOutCubic",
-        }}
-        velocityAnimation={{
-          disabled: false,
-          animationTime: 220,
-          animationType: "easeOut",
-        }}
-        onTransform={(_, state) => {
-          setZoom((current) =>
-            Math.abs(current - state.scale) < 0.04 ? current : state.scale,
-          )
-        }}
-        onPanningStop={() => markActivity()}
-        onPinchStop={() => markActivity()}
+        wheel={wheelOptions}
+        pinch={pinchOptions}
+        panning={panningOptions}
+        doubleClick={doubleClickOptions}
+        zoomAnimation={zoomAnimationOptions}
+        autoAlignment={autoAlignmentOptions}
+        velocityAnimation={velocityAnimationOptions}
+        onTransform={handleTransformed}
+        onPanningStop={markActivity}
+        onPinchStop={markActivity}
       >
       <div
         ref={wrapRef}

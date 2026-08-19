@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
         items: [
           {
             id: `boost-${plan.tier}`,
-            title: `Tokepass Boost ${plan.name} — ${event.title}`.slice(0, 256),
+            title: `TokePass Boost ${plan.name} — ${event.title}`.slice(0, 256),
             quantity: 1,
             unit_price: plan.priceArs,
             currency_id: "ARS",

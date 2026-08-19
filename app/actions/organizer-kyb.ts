@@ -346,7 +346,7 @@ export async function approveOrganizerApplication(
 
     if (appError) return { success: false, error: appError.message }
 
-    // Rol canónico en Tokepass: admin = productora/organizador.
+    // Rol canónico en TokePass: admin = productora/organizador.
     const { error: profileError } = await admin
       .from("profiles")
       .update({

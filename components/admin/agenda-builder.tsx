@@ -513,7 +513,6 @@ function AgendaBlockCard({
 
   return (
     <motion.li
-      layout={!reduceMotion}
       initial={reduceMotion ? false : { opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={reduceMotion ? undefined : { opacity: 0, y: -8 }}

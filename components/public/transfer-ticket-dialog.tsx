@@ -93,7 +93,7 @@ export function TransferTicketDialog({
             <DialogDescription>
               Vas a ceder la titularidad de tu acceso a{" "}
               <span className="font-medium text-foreground">{eventTitle}</span>.
-              Solo necesitamos el email de la cuenta Tokepass destinataria.
+              Solo necesitamos el email de la cuenta TokePass destinataria.
             </DialogDescription>
           </DialogHeader>
 

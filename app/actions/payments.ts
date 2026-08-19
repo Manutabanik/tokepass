@@ -109,7 +109,7 @@ export async function createPaymentPreference(
   const rows = (tickets ?? []) as unknown as OrderTicketRow[]
   const isStoreOnlyOrder = rows.length === 0
 
-  let eventTitle = rows[0]?.events?.title ?? "Evento Tokepass"
+  let eventTitle = rows[0]?.events?.title ?? "Evento TokePass"
   let eventId = rows[0]?.events?.id ?? ""
 
   if (isStoreOnlyOrder) {
@@ -135,7 +135,7 @@ export async function createPaymentPreference(
     const first = storeRows[0] as unknown as StoreJoin
     eventTitle =
       first.event_items?.events?.title ??
-      "Tokepass — Tienda de Extras"
+      "TokePass — Tienda de Extras"
     eventId = first.event_items?.events?.id ?? eventId
   }
 

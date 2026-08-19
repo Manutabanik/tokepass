@@ -17,6 +17,11 @@ import {
 } from "@/lib/checkout/guest-access"
 import { guestTicketUrl, isGuestOrderToken } from "@/lib/checkout/guest-token"
 import { persistOrderGuestToken } from "@/lib/checkout/server-guards"
+import {
+  findScheduleDay,
+  parseScheduleDays,
+  resolveEventAnchorDate,
+} from "@/lib/event-schedule"
 import { consumeRateLimit } from "@/lib/rate-limit"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
@@ -129,7 +134,7 @@ export async function listGuestOrderTickets(): Promise<GuestTicketPreview[]> {
 }
 
 const GUEST_TICKET_DETAIL_SELECT =
-  "id, status, order_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, holder_name, holder_dni, ticket_tiers(name, bonus_reward, day_id, price), events(id, title, date, location, flyer_url, image_url, qr_type, social_share_image_url, venues(name))"
+  "id, status, order_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, holder_name, holder_dni, ticket_tiers(name, bonus_reward, day_id, price), events(id, title, date, location, flyer_url, image_url, qr_type, social_share_image_url, schedule_days, venues(name))"
 
 type GuestTicketDetailRow = {
   id: string
@@ -160,6 +165,7 @@ type GuestTicketDetailRow = {
         image_url?: string | null
         qr_type?: string | null
         social_share_image_url?: string | null
+        schedule_days?: unknown
         venues?: { name?: string | null } | { name?: string | null }[] | null
       }
     | {
@@ -171,6 +177,7 @@ type GuestTicketDetailRow = {
         image_url?: string | null
         qr_type?: string | null
         social_share_image_url?: string | null
+        schedule_days?: unknown
         venues?: { name?: string | null } | { name?: string | null }[] | null
       }[]
     | null
@@ -184,6 +191,7 @@ function mapGuestTicketRow(row: GuestTicketDetailRow, revealQr: boolean): MyTick
   const venue = Array.isArray(venueRaw) ? venueRaw[0] : venueRaw
   const tierRaw = row.ticket_tiers
   const tier = Array.isArray(tierRaw) ? tierRaw[0] : tierRaw
+  const scheduleDays = parseScheduleDays(events.schedule_days)
 
   return {
     id: row.id,
@@ -206,6 +214,9 @@ function mapGuestTicketRow(row: GuestTicketDetailRow, revealQr: boolean): MyTick
     eventId: events.id,
     eventTitle: events.title,
     eventDate: events.date,
+    doorsOpenAt:
+      findScheduleDay(scheduleDays, tier?.day_id ?? undefined)?.start_time ??
+      resolveEventAnchorDate(scheduleDays, events.date),
     eventLocation: events.location,
     flyerUrl: events.flyer_url ?? events.image_url ?? null,
     socialShareImageUrl: events.social_share_image_url ?? null,
@@ -218,7 +229,7 @@ function mapGuestTicketRow(row: GuestTicketDetailRow, revealQr: boolean): MyTick
     orderId: row.order_id,
     isTest: Boolean(row.is_test),
     tierPrice: Number(tier?.price ?? 0),
-    isSponsoredByTokepass: false,
+    isSponsoredByTokePass: false,
     activeResaleListingId: null,
     pendingTransfer: null,
   }

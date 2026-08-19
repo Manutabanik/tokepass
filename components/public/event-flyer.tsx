@@ -79,7 +79,7 @@ export function EventFlyer({
       </span>
       <div className="relative z-10">
         <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/60">
-          Tokepass
+          TokePass
         </p>
         <p className="mt-2 line-clamp-3 text-lg font-bold leading-snug tracking-tight">
           {title}

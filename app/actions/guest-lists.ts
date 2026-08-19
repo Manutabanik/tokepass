@@ -400,7 +400,7 @@ export async function registerPublicGuest(input: {
       fullName: input.fullName.trim(),
       email,
       phone: input.phone,
-      eventTitle: publicMeta?.eventTitle ?? "Evento Tokepass",
+      eventTitle: publicMeta?.eventTitle ?? "Evento TokePass",
       listName: publicMeta?.name ?? "Lista",
       claimUrl: ticketId
         ? undefined

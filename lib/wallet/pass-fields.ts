@@ -85,7 +85,7 @@ export function buildWalletPassFields(ticket: MyTicket): WalletPassFields {
     barcodeValue: barcode,
     barcodeAlt: ticket.id.slice(0, 8).toUpperCase(),
     flyerUrl: ticket.flyerUrl?.trim() || ticket.socialShareImageUrl?.trim() || null,
-    organizationName: "Tokepass",
+    organizationName: "TokePass",
     logoUrl: `${origin}/brand/tokepass-mark.png`,
   }
 }
@@ -101,7 +101,7 @@ export function buildApplePassJson(
     teamIdentifier: ids.teamIdentifier,
     organizationName: fields.organizationName,
     description: fields.eventTitle,
-    logoText: "Tokepass",
+    logoText: "TokePass",
     backgroundColor: WALLET_BG_RGB,
     foregroundColor: WALLET_FG_RGB,
     labelColor: WALLET_ACCENT_RGB,
@@ -182,7 +182,7 @@ export function buildGoogleWalletResources(
     heroImage?: { sourceUri: { uri: string } }
   } = {
     id: classId,
-    issuerName: "Tokepass",
+    issuerName: "TokePass",
     reviewStatus: "UNDER_REVIEW",
     hexBackgroundColor: WALLET_BG,
     eventName: {
@@ -196,7 +196,7 @@ export function buildGoogleWalletResources(
     logo: {
       sourceUri: { uri: fields.logoUrl },
       contentDescription: {
-        defaultValue: { language: "es-AR", value: "Tokepass" },
+        defaultValue: { language: "es-AR", value: "TokePass" },
       },
     },
   }

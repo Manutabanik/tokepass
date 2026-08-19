@@ -53,7 +53,7 @@ const tiers: Array<{
     id: "TIER_2_INSTANT_SPLIT",
     title: "Nivel medio · Cobro al instante",
     description:
-      "Al cobrarse la entrada, se reparte al toque: neto al organizador y comisión a Tokepass. Hace falta tener Mercado Pago vinculado.",
+      "Al cobrarse la entrada, se reparte al toque: neto al organizador y comisión a TokePass. Hace falta tener Mercado Pago vinculado.",
     icon: Zap,
     accent:
       "border-sky-500/35 bg-sky-500/15 text-sky-800 ring-sky-500/20 dark:text-sky-100",

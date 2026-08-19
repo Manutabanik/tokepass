@@ -46,7 +46,7 @@ export function GuestListClaimForm({
         return
       }
       toast.success("FreePass canjeado", {
-        description: "Ya está en tu billetera Tokepass.",
+        description: "Ya está en tu billetera TokePass.",
       })
       router.push("/cuenta/entradas")
     })

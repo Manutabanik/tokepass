@@ -15,6 +15,7 @@ import { useTransition } from "react"
 
 import { signOut } from "@/app/actions/auth"
 import { NotificationDot } from "@/components/account/notification-dot"
+import { PwaInstallNavButton } from "@/components/pwa/pwa-install-nav-button"
 import { Button } from "@/components/ui/button"
 import { useUserNotifications } from "@/hooks/use-user-notifications"
 import { getInitials } from "@/lib/format"
@@ -172,6 +173,7 @@ export function AccountSidebar({ profile }: { profile: AccountNavProfile }) {
             </Link>
           )
         })}
+        <PwaInstallNavButton variant="sidebar" className="px-4" />
       </nav>
 
       <Button

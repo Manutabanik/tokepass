@@ -1,5 +1,5 @@
 /**
- * Platform owner = dueño de Tokepass.
+ * Platform owner = dueño de TokePass.
  * En el esquema actual el rol canónico es `super_admin`
  * (alias de producto: PLATFORM_OWNER).
  */

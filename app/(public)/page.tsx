@@ -19,7 +19,7 @@ import type { CatalogEvent } from "@/app/actions/public-events"
 export const revalidate = 60
 
 export const metadata: Metadata = {
-  title: "Tokepass — Tu próxima gran noche",
+  title: "TokePass — Tu próxima gran noche",
   description:
     "Fiestas, festivales y las mejores noches de tu ciudad. Entradas digitales seguras que funcionan sin internet.",
 }

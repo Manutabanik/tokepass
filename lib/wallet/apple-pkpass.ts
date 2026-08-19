@@ -31,7 +31,7 @@ async function loadWwdr(): Promise<Buffer> {
 async function loadBrandPng(): Promise<Buffer> {
   if (iconCache) return iconCache
   iconCache = await readFile(
-    path.join(process.cwd(), "public", "icons", "icon-192.png"),
+    path.join(process.cwd(), "public", "icons", "icon-192x192.png"),
   )
   return iconCache
 }

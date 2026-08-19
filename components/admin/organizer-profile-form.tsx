@@ -39,7 +39,7 @@ export function OrganizerProfileForm({
     initial.publicName || initial.fullName || "",
   )
   const [publicBio, setPublicBio] = useState(
-    initial.publicBio || "Productora en Tokepass",
+    initial.publicBio || "Productora en TokePass",
   )
   const [fullName, setFullName] = useState(initial.fullName)
   const [avatarUrl, setAvatarUrl] = useState(initial.avatarUrl)
@@ -149,7 +149,7 @@ export function OrganizerProfileForm({
               {displayName}
             </p>
             <p className="mt-0.5 text-sm text-muted-foreground">
-              {publicBio.trim() || "Productora en Tokepass"}
+              {publicBio.trim() || "Productora en TokePass"}
             </p>
             <p className="mt-2 text-xs text-zinc-600">{initial.email}</p>
           </div>
@@ -162,7 +162,7 @@ export function OrganizerProfileForm({
               id="public-name"
               value={publicName}
               onChange={(event) => setPublicName(event.target.value)}
-              placeholder='Ej: "Productora Tokepass", "En Vivo Producciones"'
+              placeholder='Ej: "Productora TokePass", "En Vivo Producciones"'
               maxLength={80}
               className="h-11 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950"
             />
@@ -174,7 +174,7 @@ export function OrganizerProfileForm({
               id="public-bio"
               value={publicBio}
               onChange={(event) => setPublicBio(event.target.value)}
-              placeholder='Ej: "Productora en Tokepass", "Eventos masivos"'
+              placeholder='Ej: "Productora en TokePass", "Eventos masivos"'
               maxLength={160}
               rows={3}
               className="resize-none border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950"

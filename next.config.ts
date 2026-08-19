@@ -139,6 +139,11 @@ const nextConfig: NextConfig = {
         destination: "/cuenta/entradas",
         permanent: true,
       },
+      {
+        source: "/beneficios",
+        destination: "/",
+        permanent: true,
+      },
     ]
   },
   async rewrites() {

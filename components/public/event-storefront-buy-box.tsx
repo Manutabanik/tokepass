@@ -1,7 +1,8 @@
 "use client"
 
-import { Calendar, Lock, MapPin, ShieldCheck } from "lucide-react"
+import { Calendar, Lock, MapPin } from "lucide-react"
 
+import { TokepassGuaranteeBadge } from "@/components/shared/tokepass-guarantee-badge"
 import { formatCurrency } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
@@ -87,10 +88,7 @@ export function EventStorefrontBuyBox({
           <Lock className="size-3.5 shrink-0" aria-hidden="true" />
           Compra 100% segura y encriptada
         </p>
-        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <ShieldCheck className="size-3.5 shrink-0" aria-hidden="true" />
-          Protegido por Tokepass
-        </p>
+        <TokepassGuaranteeBadge variant="full" className="w-full" />
       </div>
     </div>
   )

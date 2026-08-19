@@ -4,6 +4,7 @@ import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
 
 import { listEventPromoCodes } from "@/app/actions/coupons"
+import { listOrganizerPromoterOptions } from "@/app/actions/promoters"
 import { EventCouponsManager } from "@/components/admin/event-coupons-manager"
 import { createClient } from "@/lib/supabase/server"
 
@@ -45,7 +46,10 @@ export default async function EventCouponsPage({
     redirect("/admin/events")
   }
 
-  const coupons = await listEventPromoCodes(id)
+  const [coupons, promoters] = await Promise.all([
+    listEventPromoCodes(id),
+    listOrganizerPromoterOptions(event.organizer_id),
+  ])
 
   return (
     <main className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8 sm:px-6">
@@ -75,6 +79,7 @@ export default async function EventCouponsPage({
         eventId={id}
         eventTitle={event.title}
         initialCoupons={coupons}
+        promoters={promoters}
       />
     </main>
   )

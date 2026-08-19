@@ -1,4 +1,4 @@
-/** Sociedad administradora de la plataforma Tokepass. */
+/** Sociedad administradora de la plataforma TokePass. */
 export const LEGAL_ENTITY_NAME = "EMPREID S.R.L."
 export const LEGAL_ENTITY_LEGAJO = "6467"
 export const LEGAL_ENTITY_ADDRESS =

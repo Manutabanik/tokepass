@@ -11,6 +11,7 @@ import {
   type StaffAssignmentRow,
 } from "@/app/actions/event-staff"
 import type { OrganizerEvent } from "@/app/actions/events"
+import { DoorAccessPinCard } from "@/components/admin/door-access-pin-card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -129,6 +130,13 @@ export function EventStaffManager({
           </Button>
         </div>
       </form>
+
+      {eventId ? (
+        <DoorAccessPinCard
+          eventId={eventId}
+          eventTitle={events.find((event) => event.id === eventId)?.title}
+        />
+      ) : null}
 
       {sorted.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 px-6 py-12 text-center text-sm text-muted-foreground">

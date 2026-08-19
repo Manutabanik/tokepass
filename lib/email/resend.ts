@@ -44,7 +44,7 @@ function getResendClient(): Resend | null {
 function resendFromAddress(): string {
   return (
     process.env.RESEND_FROM_EMAIL?.trim() ||
-    "Tokepass <entradas@tokepass.com>"
+    "TokePass <entradas@tokepass.com>"
   )
 }
 
@@ -219,9 +219,9 @@ export async function sendGuestOtpEmail(input: {
       totalPaid: 0,
     },
     eventDetails: {
-      title: "Tu entrada Tokepass",
+      title: "Tu entrada TokePass",
       date: new Date().toISOString(),
-      location: "Tokepass",
+      location: "TokePass",
     },
   })
 }
@@ -324,7 +324,7 @@ export async function sendPaidOrderReceiptEmail(
     otpCode = issued?.otp?.trim() || undefined
   }
 
-  const eventName = event?.title?.trim() || "Evento Tokepass"
+  const eventName = event?.title?.trim() || "Evento TokePass"
   const eventDate = event?.date
     ? formatEventDate(event.date)
     : "Fecha a confirmar"
@@ -390,5 +390,150 @@ export async function sendPaidOrderReceiptEmail(
         error: fallbackError,
       })
     }
+  }
+}
+
+export async function sendOpsAlertEmail(input: {
+  to: string
+  subject: string
+  text: string
+}): Promise<void> {
+  const email = input.to.trim().toLowerCase()
+  if (!email || !email.includes("@")) return
+  const client = getResendClient()
+  if (!client) return
+  const { error } = await client.emails.send({
+    from: resendFromAddress(),
+    to: [email],
+    subject: input.subject,
+    text: input.text,
+    html: `<p>${input.text.replaceAll("\n", "<br/>")}</p>`,
+  })
+  if (error) {
+    logger.error({
+      context: "email/resend",
+      message: "ops_alert_failed",
+      error: error.message,
+    })
+  }
+}
+
+export async function sendEventAuditEmail(input: {
+  to: string
+  organizerName: string
+  eventTitle: string
+  kind: "submitted" | "approved" | "needs_revision" | "rejected"
+  note?: string | null
+}): Promise<void> {
+  const email = input.to.trim().toLowerCase()
+  if (!email || !email.includes("@")) return
+
+  const client = getResendClient()
+  if (!client) {
+    logger.warn({
+      context: "email/resend",
+      message: "resend_api_key_missing",
+      kind: input.kind,
+    })
+    return
+  }
+
+  const appUrl = getEmailAppUrl()
+  const panelUrl = `${appUrl}/admin/events`
+  const name = input.organizerName.trim() || "hola"
+  const copy = {
+    submitted: {
+      subject: `Recibimos ${input.eventTitle} para revisión`,
+      text: `${name}, recibimos “${input.eventTitle}”. El equipo de TokePass audita fecha, locación y condiciones antes de habilitar la venta. Te avisamos a este correo cuando esté activo.`,
+    },
+    approved: {
+      subject: `${input.eventTitle} ya está activo en TokePass`,
+      text: `${name}, “${input.eventTitle}” ya está publicado. La venta de entradas quedó habilitada. Podés verlo en ${panelUrl}.`,
+    },
+    needs_revision: {
+      subject: `Hay que revisar ${input.eventTitle}`,
+      text: `${name}, TokePass pidió cambios en “${input.eventTitle}” antes de habilitar la venta.${
+        input.note?.trim() ? ` Motivo: ${input.note.trim()}` : ""
+      } Editá el evento en ${panelUrl} y volvé a enviarlo a revisión.`,
+    },
+    rejected: {
+      subject: `${input.eventTitle} no fue aprobado`,
+      text: `${name}, “${input.eventTitle}” fue rechazado y no sale a la venta.${
+        input.note?.trim() ? ` Motivo: ${input.note.trim()}` : ""
+      } Si corresponde, editá el evento en ${panelUrl} y volvé a enviarlo a revisión.`,
+    },
+  }[input.kind]
+
+  const { error } = await client.emails.send({
+    from: resendFromAddress(),
+    to: [email],
+    subject: copy.subject,
+    text: copy.text,
+    html: `<p>${copy.text}</p><p><a href="${panelUrl}">Ir a Tu Panel</a></p>`,
+  })
+
+  if (error) {
+    logger.error({
+      context: "email/resend",
+      message: "event_audit_email_failed",
+      kind: input.kind,
+      error: error.message,
+    })
+  }
+}
+
+export async function sendPayoutSettlementEmail(input: {
+  to: string
+  organizerName: string
+  eventTitle: string
+  grossAmount: string
+  serviceFeeAmount: string
+  netAmount: string
+  destination: string
+  transferredAt: string
+}): Promise<void> {
+  const email = input.to.trim().toLowerCase()
+  if (!email || !email.includes("@")) return
+
+  const client = getResendClient()
+  if (!client) {
+    logger.warn({
+      context: "email/resend",
+      message: "resend_api_key_missing",
+      kind: "payout_settlement",
+    })
+    return
+  }
+
+  const appUrl = getEmailAppUrl()
+  const panelUrl = `${appUrl}/admin/finances`
+  const name = input.organizerName.trim() || "hola"
+  const subject = `Comprobante de liquidación TokePass — ${input.eventTitle}`
+  const text = [
+    `${name}, TokePass liberó la liquidación de “${input.eventTitle}”.`,
+    "",
+    `Recaudación bruta: ${input.grossAmount}`,
+    `Comisión TokePass: ${input.serviceFeeAmount}`,
+    `Saldo neto transferido: ${input.netAmount}`,
+    `Destino: ${input.destination}`,
+    `Fecha de transferencia: ${input.transferredAt}`,
+    "",
+    `Podés ver el detalle en ${panelUrl}.`,
+  ].join("\n")
+
+  const { error } = await client.emails.send({
+    from: resendFromAddress(),
+    to: [email],
+    subject,
+    text,
+    html: `<p>${text.replaceAll("\n", "<br/>")}</p><p><a href="${panelUrl}">Ir a Recaudación</a></p>`,
+  })
+
+  if (error) {
+    logger.error({
+      context: "email/resend",
+      message: "payout_settlement_email_failed",
+      error: error.message,
+    })
   }
 }

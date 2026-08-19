@@ -10,6 +10,7 @@ import {
   Lock,
   Wallet,
 } from "lucide-react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useMemo, useState, useTransition } from "react"
 import { toast } from "sonner"
@@ -190,12 +191,21 @@ export function OrganizerFinancesDashboard({
             Recaudación y Retiros
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            Acá ves cuánto recaudaste, qué se queda Tokepass y cuánto podés
+            Acá ves cuánto recaudaste, qué se queda TokePass y cuánto podés
             pedir que te transfieran. El saldo retenido se libera cuando termina
             el evento.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            render={<Link href="/dashboard/settings/bank" />}
+            className="h-11 rounded-full"
+          >
+            <Landmark className="size-4" aria-hidden="true" />
+            Datos de cobro
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -236,7 +246,7 @@ export function OrganizerFinancesDashboard({
           icon={Banknote}
         />
         <StatCard
-          label="Comisión Tokepass"
+          label="Comisión TokePass"
           value={formatCurrency(summary.tokepassServiceCharge)}
           hint="Descontada de tu ganancia"
           icon={Landmark}
@@ -274,7 +284,7 @@ export function OrganizerFinancesDashboard({
             Historial de retiros
           </h2>
           <p className="text-sm text-muted-foreground">
-            Pedís el retiro acá; Tokepass lo marca como transferido cuando te
+            Pedís el retiro acá; TokePass lo marca como transferido cuando te
             manda la plata.
           </p>
         </div>
@@ -377,7 +387,7 @@ export function OrganizerFinancesDashboard({
                 className="min-h-12 h-12 text-base"
               />
               <p className="text-xs text-muted-foreground">
-                Tokepass te transfiere acá cuando apruebe el retiro.
+                TokePass te transfiere acá cuando apruebe el retiro.
               </p>
             </div>
           </div>

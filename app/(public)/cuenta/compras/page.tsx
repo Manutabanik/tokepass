@@ -13,7 +13,7 @@ import type { OrderStatus } from "@/types/database"
 
 export const metadata: Metadata = {
   title: "Mis compras",
-  description: "Historial de órdenes y comprobantes Tokepass.",
+  description: "Historial de órdenes y comprobantes TokePass.",
 }
 
 function statusLabel(status: OrderStatus): { text: string; className: string } {
@@ -29,6 +29,12 @@ function statusLabel(status: OrderStatus): { text: string; className: string } {
         text: "Reembolsada",
         className:
           "bg-amber-500/15 text-amber-800 ring-amber-500/30 dark:text-amber-200",
+      }
+    case "refund_processing":
+      return {
+        text: "Devolución en proceso",
+        className:
+          "bg-sky-500/15 text-sky-800 ring-sky-500/30 dark:text-sky-200",
       }
     case "failed":
     case "expired":
@@ -116,7 +122,7 @@ export default async function CuentaComprasPage() {
                         : ""}
                     </p>
                     <h2 className="mt-1 truncate text-lg font-bold text-foreground">
-                      {order.eventTitle ?? "Compra Tokepass"}
+                      {order.eventTitle ?? "Compra TokePass"}
                     </h2>
                     <p className="mt-1 text-sm text-muted-foreground">
                       {formatEventDay(order.createdAt)} ·{" "}
