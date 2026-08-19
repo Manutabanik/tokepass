@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation"
 
 import { getMyAccountProfile } from "@/app/actions/account"
-import { AccountBottomNav } from "@/components/account/account-bottom-nav"
 import { AccountShell } from "@/components/account/account-shell"
 import {
   AccountPillsNav,
@@ -56,7 +55,6 @@ export async function AccountPortalLayout({
           <AccountShell>{children}</AccountShell>
         </div>
       </div>
-      <AccountBottomNav />
     </div>
   )
 }
