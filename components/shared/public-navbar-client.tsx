@@ -72,14 +72,14 @@ export function PublicNavbarClient({
           </Link>
         </nav>
 
-        <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-2.5">
           <NavbarSearch />
 
           <ThemeToggle
             className={cn(
-              "hidden size-11 shrink-0 place-items-center rounded-full border border-zinc-200 text-zinc-600 lg:grid",
+              "inline-flex size-11 shrink-0 items-center justify-center rounded-full border-0 bg-transparent text-zinc-600 shadow-none",
               "hover:bg-zinc-100 hover:text-zinc-900",
-              "dark:border-white/10 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white",
+              "dark:bg-transparent dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white",
             )}
             compact
           />
