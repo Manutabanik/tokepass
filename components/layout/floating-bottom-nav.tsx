@@ -74,7 +74,7 @@ export function FloatingBottomNav() {
       aria-label="Navegacion principal"
       className={cn(
         // Match the public navbar breakpoint (top links appear at `lg`).
-        "pointer-events-auto fixed bottom-6 left-1/2 z-[9999] flex lg:hidden",
+        "pointer-events-auto fixed bottom-6 left-1/2 z-40 flex lg:hidden",
         "items-center gap-1 rounded-full border border-white/10 bg-black/80 p-1.5 shadow-2xl backdrop-blur-md",
         "transition-transform duration-300 ease-in-out will-change-transform",
         "pb-[max(0.375rem,env(safe-area-inset-bottom))]",
