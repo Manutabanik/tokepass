@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Suspense } from "react";
 
+import { NavigationProgressBar } from "@/components/navigation/navigation-progress-bar";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { ReferralCapture } from "@/components/public/referral-capture";
 import { InstallBanner } from "@/components/pwa/install-banner";
@@ -103,6 +104,7 @@ export default async function RootLayout({
           disableTransitionOnChange
           nonce={nonce}
         >
+          <NavigationProgressBar />
           <Suspense fallback={null}>
             <ReferralCapture />
           </Suspense>
