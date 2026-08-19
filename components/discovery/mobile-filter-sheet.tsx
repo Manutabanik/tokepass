@@ -461,7 +461,7 @@ export function MobileFilterSheet({
             </Accordion>
           </div>
 
-          <div className="sticky bottom-0 left-0 z-20 w-full border-t border-border/20 bg-gradient-to-t from-background via-background/95 to-transparent px-6 pt-6 pb-4 backdrop-blur-md">
+          <div className="sticky bottom-0 left-0 z-20 w-full border-t border-border/20 bg-gradient-to-t from-background via-background/95 to-transparent px-6 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] backdrop-blur-md">
             <button
               type="button"
               onClick={commitAndClose}
@@ -469,7 +469,7 @@ export function MobileFilterSheet({
                 "flex h-12 w-full items-center justify-center rounded-2xl text-base font-semibold text-white",
                 "bg-gradient-to-r from-violet-600 to-fuchsia-600",
                 "shadow-sm transition hover:from-violet-500 hover:to-fuchsia-500 hover:shadow-md",
-                "mb-[max(0px,env(safe-area-inset-bottom))] active:scale-[0.99]",
+                "active:scale-[0.99]",
               )}
             >
               {countLabel}

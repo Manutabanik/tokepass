@@ -34,7 +34,7 @@ export function PublicNavbarClient({
   return (
     <header
       className={cn(
-        "navbar no-print sticky top-0 z-50 w-full border-b border-border/50 bg-background/80 backdrop-blur-md",
+        "navbar no-print sticky top-0 z-40 w-full border-b border-border/50 bg-background/80 backdrop-blur-md",
         "pt-[max(env(safe-area-inset-top),1rem)]",
       )}
     >
