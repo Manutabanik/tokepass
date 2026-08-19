@@ -25,6 +25,7 @@ import {
   type OmniEventHit,
   type OmniSearchResult,
 } from "@/lib/omni-search"
+import { exploreCatalogPath } from "@/lib/discovery-filters"
 import { publicEventPath } from "@/lib/seo/site"
 import { usePublicSearchUiStore } from "@/lib/stores/public-search-ui-store"
 import { cn, tapFeedbackClass } from "@/lib/utils"
@@ -38,7 +39,7 @@ function activeEventsLabel(count: number): string {
 }
 
 function artistExploreHref(artistId: string): string {
-  return `/buscar?artist=${encodeURIComponent(artistId)}`
+  return exploreCatalogPath({ artist: artistId })
 }
 
 function EventThumb({ imageUrl }: { imageUrl: string | null }) {
@@ -307,7 +308,7 @@ export function NavbarSearch() {
     event.preventDefault()
     const needle = query.trim()
     dismiss()
-    router.push(needle ? `/buscar?q=${encodeURIComponent(needle)}` : "/buscar")
+    router.push(exploreCatalogPath({ q: needle }))
   }
 
   const resultsProps = {

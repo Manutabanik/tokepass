@@ -2,7 +2,11 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import type { CatalogEvent } from "@/app/actions/public-events"
-import { filterCatalogEvents } from "@/lib/discovery-filters"
+import {
+  catalogFiltersFromSearchParams,
+  exploreCatalogPath,
+  filterCatalogEvents,
+} from "@/lib/discovery-filters"
 
 function event(partial: Partial<CatalogEvent> & Pick<CatalogEvent, "id" | "title">): CatalogEvent {
   return {
@@ -125,5 +129,28 @@ describe("filterCatalogEvents", () => {
       filterCatalogEvents(dated, { datePreset: "month", now }).length,
       1,
     )
+  })
+})
+
+describe("exploreCatalogPath", () => {
+  it("keeps catalog filters on the home URL", () => {
+    assert.equal(exploreCatalogPath({}), "/")
+    assert.equal(exploreCatalogPath({ q: "  fiesta  " }), "/?q=fiesta")
+    assert.equal(exploreCatalogPath({ location: "todas", category: "all" }), "/")
+    assert.equal(
+      exploreCatalogPath({ artist: "a1", when: "weekend" }),
+      "/?artist=a1&when=weekend",
+    )
+  })
+
+  it("reads catalog filters from search params", () => {
+    const params = new URLSearchParams("q=rock&location=CABA&when=today")
+    assert.deepEqual(catalogFiltersFromSearchParams(params), {
+      query: "rock",
+      location: "CABA",
+      categoryId: "all",
+      artistId: "",
+      datePreset: "today",
+    })
   })
 })

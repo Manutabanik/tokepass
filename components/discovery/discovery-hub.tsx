@@ -2,8 +2,15 @@
 
 import { Flame, Search } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
-import { usePathname, useRouter } from "next/navigation"
-import { useEffect, useMemo, useState, useTransition } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import {
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+  useTransition,
+} from "react"
 
 import { useDebounce } from "@/hooks/use-debounce"
 
@@ -24,6 +31,8 @@ import type { DiscoveryCategory } from "@/lib/discovery-categories"
 import {
   DEFAULT_DISCOVERY_CATEGORIES,
   DISCOVERY_DATE_PRESETS,
+  catalogFiltersFromSearchParams,
+  catalogSearchParams,
   filterCatalogEvents,
   parseDatePreset,
   pickUpcoming,
@@ -34,18 +43,9 @@ import type { FeaturedRotationResult } from "@/lib/featured-rotation"
 import { isFeaturedRailEligible } from "@/lib/featured-rotation"
 import { cn } from "@/lib/utils"
 
-export function DiscoveryHub({
-  events,
-  initialQuery = "",
-  initialLocation = "todas",
-  initialCategoryId = "all",
-  initialArtistId = "",
-  initialDatePreset = "all",
-  initialFeatured,
-  featuredArtists = [],
-  categories = DEFAULT_DISCOVERY_CATEGORIES,
-  variant = "landing",
-}: {
+const EMPTY_SEARCH_PARAMS = new URLSearchParams()
+
+type DiscoveryHubProps = {
   events: CatalogEvent[]
   initialQuery?: string
   /** Nombre de provincia Georef, o `todas`. */
@@ -61,46 +61,100 @@ export function DiscoveryHub({
   /** Categorías / tags — hoy default local; mañana desde DB. */
   categories?: DiscoveryCategory[]
   variant?: "landing" | "directory"
+}
+
+export function DiscoveryHub(props: DiscoveryHubProps) {
+  return (
+    <Suspense
+      fallback={
+        <DiscoveryHubInner
+          {...props}
+          searchParams={EMPTY_SEARCH_PARAMS}
+          enableUrlSync={false}
+        />
+      }
+    >
+      <DiscoveryHubWithSearchParams {...props} />
+    </Suspense>
+  )
+}
+
+function DiscoveryHubWithSearchParams(props: DiscoveryHubProps) {
+  const searchParams = useSearchParams()
+  return (
+    <DiscoveryHubInner
+      {...props}
+      searchParams={searchParams}
+      enableUrlSync
+    />
+  )
+}
+
+function DiscoveryHubInner({
+  events,
+  initialQuery = "",
+  initialLocation = "todas",
+  initialCategoryId = "all",
+  initialArtistId = "",
+  initialDatePreset = "all",
+  initialFeatured,
+  featuredArtists = [],
+  categories = DEFAULT_DISCOVERY_CATEGORIES,
+  variant = "landing",
+  searchParams,
+  enableUrlSync,
+}: DiscoveryHubProps & {
+  searchParams: { get(name: string): string | null }
+  enableUrlSync: boolean
 }) {
   const router = useRouter()
   const pathname = usePathname()
   const { provinces, isLoading: locationsLoading } = useArgentinaProvinces()
   const [, startTransition] = useTransition()
 
-  const [query, setQuery] = useState(initialQuery)
-  const [categoryId, setCategoryId] = useState(initialCategoryId)
+  const urlFilters = catalogFiltersFromSearchParams(searchParams)
+  const urlKey = catalogSearchParams({
+    q: urlFilters.query,
+    location: urlFilters.location,
+    category: urlFilters.categoryId,
+    artist: urlFilters.artistId,
+    when: urlFilters.datePreset,
+  }).toString()
+  const [query, setQuery] = useState(
+    enableUrlSync ? urlFilters.query : initialQuery,
+  )
+  const [categoryId, setCategoryId] = useState(
+    enableUrlSync ? urlFilters.categoryId : initialCategoryId,
+  )
   const [tagId, setTagId] = useState<string | null>(null)
-  const [city, setCity] = useState(initialLocation)
-  const [artistId, setArtistId] = useState(initialArtistId.trim())
+  const [city, setCity] = useState(
+    enableUrlSync ? urlFilters.location : initialLocation,
+  )
+  const [artistId, setArtistId] = useState(
+    enableUrlSync ? urlFilters.artistId : initialArtistId.trim(),
+  )
   const [datePreset, setDatePreset] = useState<DiscoveryDatePreset>(
-    parseDatePreset(initialDatePreset),
+    enableUrlSync
+      ? urlFilters.datePreset
+      : parseDatePreset(initialDatePreset),
   )
   const debouncedQuery = useDebounce(query, 450)
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const nextQuery = params.get("q") ?? ""
-    const nextLocation = params.get("location")?.trim() || "todas"
-    const nextCategory = params.get("category")?.trim() || "all"
-    const nextArtist = params.get("artist")?.trim() || ""
-    const nextWhen = parseDatePreset(params.get("when") ?? "all")
-    const timer = window.setTimeout(() => {
-      if (nextQuery && !initialQuery) setQuery(nextQuery)
-      if (nextLocation !== "todas" && initialLocation === "todas") {
-        setCity(nextLocation)
-      }
-      if (nextCategory !== "all" && initialCategoryId === "all") {
-        setCategoryId(nextCategory)
-      }
-      if (nextArtist && !initialArtistId) setArtistId(nextArtist)
-      if (nextWhen !== "all" && parseDatePreset(initialDatePreset) === "all") {
-        setDatePreset(nextWhen)
-      }
-    }, 0)
-    return () => window.clearTimeout(timer)
-    // Hydrate shared search URLs after the static shell. Run once.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  useLayoutEffect(() => {
+    if (!enableUrlSync) return
+    setQuery(urlFilters.query)
+    setCity(urlFilters.location)
+    setCategoryId(urlFilters.categoryId)
+    setArtistId(urlFilters.artistId)
+    setDatePreset(urlFilters.datePreset)
+  }, [
+    enableUrlSync,
+    urlFilters.artistId,
+    urlFilters.categoryId,
+    urlFilters.datePreset,
+    urlFilters.location,
+    urlFilters.query,
+  ])
 
   useEffect(() => {
     publishDiscoveryControls({
@@ -115,34 +169,32 @@ export function DiscoveryHub({
   }, [query, city, provinces, events])
 
   useEffect(() => {
-    const nextParams = new URLSearchParams()
-    if (debouncedQuery.trim()) nextParams.set("q", debouncedQuery.trim())
-    if (city && city !== "todas") nextParams.set("location", city)
-    if (categoryId && categoryId !== "all") nextParams.set("category", categoryId)
-    if (artistId) nextParams.set("artist", artistId)
-    if (datePreset && datePreset !== "all") nextParams.set("when", datePreset)
+    if (!enableUrlSync) return
+    if (query !== debouncedQuery) return
 
-    const currentParams =
-      typeof window !== "undefined"
-        ? new URLSearchParams(window.location.search)
-        : new URLSearchParams()
-
-    const keys = new Set([
-      ...nextParams.keys(),
-      ...currentParams.keys(),
-    ])
-    let same = true
-    for (const key of keys) {
-      if ((nextParams.get(key) ?? "") !== (currentParams.get(key) ?? "")) {
-        same = false
-        break
-      }
-    }
-    if (same) return
+    const nextParams = catalogSearchParams({
+      q: debouncedQuery,
+      location: city,
+      category: categoryId,
+      artist: artistId,
+      when: datePreset,
+    })
+    if (nextParams.toString() === urlKey) return
 
     const next = nextParams.toString()
     router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false })
-  }, [artistId, categoryId, city, datePreset, debouncedQuery, pathname, router])
+  }, [
+    artistId,
+    categoryId,
+    city,
+    datePreset,
+    debouncedQuery,
+    enableUrlSync,
+    pathname,
+    query,
+    router,
+    urlKey,
+  ])
 
   const featuredPool = useMemo(
     () => featuredPoolSafe(events, initialFeatured),

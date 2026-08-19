@@ -48,6 +48,55 @@ export function parseDatePreset(value?: string | null): DiscoveryDatePreset {
   return "all"
 }
 
+export type ExploreCatalogQuery = {
+  q?: string | null
+  location?: string | null
+  category?: string | null
+  artist?: string | null
+  when?: string | null
+}
+
+/** Query string de la cartelera en Inicio (`q`, `location`, `category`, `artist`, `when`). */
+export function catalogSearchParams(
+  params: ExploreCatalogQuery = {},
+): URLSearchParams {
+  const qs = new URLSearchParams()
+  const q = params.q?.trim() ?? ""
+  const location = params.location?.trim() ?? ""
+  const category = params.category?.trim() ?? ""
+  const artist = params.artist?.trim() ?? ""
+  const when = parseDatePreset(params.when)
+  if (q) qs.set("q", q)
+  if (location && location !== "todas") qs.set("location", location)
+  if (category && category !== "all") qs.set("category", category)
+  if (artist) qs.set("artist", artist)
+  if (when !== "all") qs.set("when", when)
+  return qs
+}
+
+export function exploreCatalogPath(params: ExploreCatalogQuery = {}): string {
+  const encoded = catalogSearchParams(params).toString()
+  return encoded ? `/?${encoded}` : "/"
+}
+
+export function catalogFiltersFromSearchParams(params: {
+  get(name: string): string | null
+}): {
+  query: string
+  location: string
+  categoryId: string
+  artistId: string
+  datePreset: DiscoveryDatePreset
+} {
+  return {
+    query: params.get("q")?.trim() ?? "",
+    location: params.get("location")?.trim() || "todas",
+    categoryId: params.get("category")?.trim() || "all",
+    artistId: params.get("artist")?.trim() || "",
+    datePreset: parseDatePreset(params.get("when")),
+  }
+}
+
 const ARGENTINA_TZ = "America/Argentina/Buenos_Aires"
 
 function ymdInArgentina(value: Date): string {

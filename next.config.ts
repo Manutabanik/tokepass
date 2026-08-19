@@ -144,6 +144,11 @@ const nextConfig: NextConfig = {
         destination: "/",
         permanent: true,
       },
+      {
+        source: "/buscar",
+        destination: "/",
+        permanent: true,
+      },
     ]
   },
   async rewrites() {
