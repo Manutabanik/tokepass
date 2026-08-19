@@ -1,7 +1,7 @@
 "use client"
 
 import { LoaderCircle, Search, UserCheck, Users } from "lucide-react"
-import { useMemo, useState, useTransition } from "react"
+import { useMemo, useTransition } from "react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -18,39 +18,52 @@ import {
   searchManifestTickets,
 } from "@/lib/offline-scanner-store"
 import { cn } from "@/lib/utils"
+import { useEffect, useState } from "react"
 
 export function EmergencyTicketSearch({
   eventId,
   open,
+  query,
   onOpenChange,
+  onQueryChange,
   onValidate,
   onValidateMany,
 }: {
   eventId: string
   open: boolean
+  query: string
   onOpenChange: (open: boolean) => void
+  onQueryChange: (value: string) => void
   onValidate: (ticket: ScannerManifestTicket) => void
   onValidateMany?: (tickets: ScannerManifestTicket[]) => void
 }) {
-  const [query, setQuery] = useState("")
   const [results, setResults] = useState<ScannerManifestTicket[]>([])
   const [isPending, startTransition] = useTransition()
 
-  function handleQuery(value: string) {
-    setQuery(value)
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    const value = query
     startTransition(async () => {
       if (!eventId || value.trim().length < 2) {
-        setResults([])
+        if (!cancelled) setResults([])
         return
       }
       const matches = await searchManifestTickets(eventId, value)
-      setResults(matches)
+      if (!cancelled) setResults(matches)
     })
+    return () => {
+      cancelled = true
+    }
+  }, [open, query, eventId])
+
+  function handleQuery(value: string) {
+    onQueryChange(value)
   }
 
   const emptyHint = useMemo(() => {
     if (query.trim().length < 2) {
-      return "Escribí al menos 2 caracteres (nombre o DNI)."
+      return "Escribi al menos 2 caracteres (nombre, DNI o codigo)."
     }
     if (!isPending && results.length === 0) {
       return "No encontramos coincidencias en la lista local."
@@ -67,28 +80,28 @@ export function EmergencyTicketSearch({
     const validOnes = group.filter((t) => t.status === "valid")
     if (validOnes.length <= 1) {
       onValidate(ticket)
-      return
+    } else {
+      onValidateMany(validOnes)
     }
-    onValidateMany(validOnes)
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85dvh] overflow-hidden border-zinc-200 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Buscar por DNI / Nombre</DialogTitle>
+          <DialogTitle>Busqueda manual</DialogTitle>
           <DialogDescription className="text-muted-foreground">
-            Buscá por nombre o DNI. Si es una mesa, podés validar un acceso o
-            todos juntos.
+            Busca por nombre, DNI o codigo de entrada. Si es una mesa, podes
+            validar un acceso o todos juntos. La camara sigue activa.
           </DialogDescription>
         </DialogHeader>
 
         <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
             onChange={(event) => handleQuery(event.target.value)}
-            placeholder="Nombre, apellido o DNI"
+            placeholder="Nombre, DNI o codigo"
             autoFocus
             className="h-14 rounded-2xl border-zinc-300 bg-black pl-10 text-base text-zinc-900 dark:border-zinc-700 dark:text-white"
           />
@@ -103,7 +116,9 @@ export function EmergencyTicketSearch({
           ) : null}
 
           {emptyHint ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">{emptyHint}</p>
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              {emptyHint}
+            </p>
           ) : null}
 
           {results.map((ticket) => (

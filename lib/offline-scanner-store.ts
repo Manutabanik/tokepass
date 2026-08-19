@@ -545,7 +545,13 @@ export async function searchManifestTickets(
       const name = row.owner_name.toLowerCase()
       const dni = (row.dni ?? "").toLowerCase()
       const tier = row.ticket_tier.toLowerCase()
-      return name.includes(q) || dni.includes(q) || tier.includes(q)
+      const id = row.id.toLowerCase()
+      return (
+        name.includes(q) ||
+        dni.includes(q) ||
+        tier.includes(q) ||
+        id.includes(q)
+      )
     })
     .map((row) => ({ ...row, totp_secret: "" }))
     .slice(0, limit)
