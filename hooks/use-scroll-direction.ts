@@ -6,7 +6,7 @@ const THRESHOLD_PX = 10
 
 /**
  * Detects vertical scroll direction with a small threshold to ignore micro-movements.
- * Returns `"down"` while the user reads ahead, `"up"` when they scroll back.
+ * Defaults to `"up"` so UI that depends on it stays visible until the user scrolls down.
  */
 export function useScrollDirection(): "up" | "down" {
   const [direction, setDirection] = useState<"up" | "down">("up")
@@ -15,7 +15,7 @@ export function useScrollDirection(): "up" | "down" {
     let lastY = window.scrollY
 
     function onScroll() {
-      const y = window.scrollY
+      const y = Math.max(0, window.scrollY)
 
       if (y <= THRESHOLD_PX) {
         setDirection("up")

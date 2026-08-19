@@ -88,7 +88,7 @@ export function PublicMobileNav({ isAuthenticated }: PublicMobileNavProps) {
             type="button"
             variant="ghost"
             size="icon"
-            className="hidden size-11 shrink-0 text-foreground md:inline-flex lg:hidden"
+            className="inline-flex size-11 shrink-0 text-foreground"
             aria-label="Abrir menú"
           />
         }

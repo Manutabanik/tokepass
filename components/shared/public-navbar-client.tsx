@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation"
 
 import { AccountAvatarMenu } from "@/components/account/account-avatar-menu"
 import { MobileAccountAvatarLink } from "@/components/account/mobile-account-avatar-link"
-import { PublicMobileNav } from "@/components/navigation/public-mobile-nav"
 import { BrandLogo } from "@/components/shared/brand-logo"
 import { NavbarSearch } from "@/components/shared/navbar-search"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
@@ -40,7 +39,6 @@ export function PublicNavbarClient({
     >
       <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-2 px-4 sm:h-[4.25rem] sm:gap-3 lg:px-8">
         <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
-          <PublicMobileNav isAuthenticated={isAuthenticated} />
           <BrandLogo size="header" className="min-w-0 truncate" />
         </div>
 

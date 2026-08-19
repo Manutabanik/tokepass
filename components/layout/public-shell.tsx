@@ -34,8 +34,8 @@ export function PublicShell({
   return (
     <div
       className={cn(
-        "relative flex min-h-screen flex-col bg-background text-foreground",
-        checkoutTunnel && "h-[100dvh] overflow-hidden",
+        "flex min-h-screen flex-col bg-background text-foreground",
+        checkoutTunnel && "relative h-[100dvh] overflow-hidden",
       )}
     >
       {checkoutTunnel ? null : navbar}
@@ -48,6 +48,7 @@ export function PublicShell({
         {children}
       </main>
       {checkoutTunnel ? null : footer}
+      {/* Portaled to document.body inside the component to avoid overflow/stacking traps. */}
       {checkoutTunnel ? null : <FloatingBottomNav />}
     </div>
   )
