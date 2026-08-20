@@ -19,7 +19,7 @@ import {
   resolvePurchaseLimit,
   storefrontLimitMessage,
 } from "@/lib/checkout-limits"
-import { formatCurrency } from "@/lib/format"
+import { formatTicketPrice } from "@/lib/format"
 import { buildAccessibleSeatTree } from "@/lib/seating/accessible-seat-tree"
 import { resolveSectorAssignMeta } from "@/lib/seating/assign-best-seats"
 import {
@@ -85,6 +85,7 @@ export function SeatSelectionSheet({
   pending = false,
   maxTicketsPerUser = null,
   context,
+  selectionMode = "auto",
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -93,6 +94,7 @@ export function SeatSelectionSheet({
   pending?: boolean
   maxTicketsPerUser?: number | null
   context: SeatSelectionContext
+  selectionMode?: "auto" | "map" | "counter"
 }) {
   const selectedItems = useStorefrontSeatStore((state) => state.selectedItems)
   const selectedUnitIds = useMemo(
@@ -100,8 +102,10 @@ export function SeatSelectionSheet({
     [selectedItems],
   )
   const [mapExpanded, setMapExpanded] = useState(false)
-  if (!open && mapExpanded) {
-    setMapExpanded(false)
+  const [wasOpen, setWasOpen] = useState(open)
+  if (open !== wasOpen) {
+    setWasOpen(open)
+    setMapExpanded(open)
   }
   const [peopleCount, setPeopleCount] = useState(1)
 
@@ -158,7 +162,10 @@ export function SeatSelectionSheet({
   }, [context.map, mapSeats, targetSector])
 
   const isTableSector = assignMeta.isTableSector
-  const isGeneralAdmission = targetSector?.kind === "ga"
+  const isGeneralAdmission =
+    selectionMode === "counter" ||
+    (selectionMode !== "map" && targetSector?.kind === "ga")
+  const showFullMap = !isGeneralAdmission
   const placeCount = storefrontSelectionCount(selectedItems)
   const placeTotal = storefrontSelectionTotal(selectedItems)
   const canConfirm = placeCount > 0
@@ -166,18 +173,24 @@ export function SeatSelectionSheet({
   const emptyPrompt = isTableSector
     ? "Seleccioná una mesa en la lista o en el mapa."
     : "Seleccioná un lugar en la lista o en el mapa."
+  const assignZoneQuantity = context.onAssignZoneQuantity
+  const targetSectorId = targetSector?.id ?? null
 
   useEffect(() => {
     if (!open) return
     const timer = window.setTimeout(() => {
       const store = useStorefrontSeatStore.getState()
       const existing = storefrontSelectionCount(store.selectedItems)
-      setPeopleCount(Math.max(1, existing || 1))
+      const nextCount = Math.max(1, existing || 1)
+      setPeopleCount(nextCount)
       const ids = store.selectedItems.map((item) => item.id)
       if (ids.length > 0) store.pulseFocus(ids)
+      if (isGeneralAdmission && targetSectorId) {
+        assignZoneQuantity(targetSectorId, nextCount)
+      }
     }, 0)
     return () => window.clearTimeout(timer)
-  }, [open])
+  }, [open, isGeneralAdmission, targetSectorId, assignZoneQuantity])
 
   function handleTogglePlace(seatId: string) {
     if (pending || !context.map) return
@@ -255,8 +268,14 @@ export function SeatSelectionSheet({
         showCloseButton={false}
         overlayClassName="z-[100]"
         className={cn(
-          "z-[100] flex h-[100dvh] max-h-[100dvh] flex-col gap-0 overflow-hidden rounded-none p-0",
-          "lg:inset-x-auto lg:bottom-auto lg:left-1/2 lg:top-1/2 lg:h-[min(88dvh,840px)] lg:max-h-[88dvh] lg:w-[min(56rem,94vw)] lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-3xl",
+          "z-[100] flex flex-col gap-0 overflow-hidden rounded-none p-0",
+          isGeneralAdmission
+            ? "h-auto max-h-[min(36rem,90dvh)]"
+            : "h-[100dvh] max-h-[100dvh]",
+          "lg:inset-x-auto lg:bottom-auto lg:left-1/2 lg:top-1/2 lg:max-h-[88dvh] lg:w-[min(56rem,94vw)] lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-3xl",
+          isGeneralAdmission
+            ? "lg:h-auto"
+            : "lg:h-[min(88dvh,840px)]",
         )}
       >
         <SheetHeader className="shrink-0 border-b border-border px-4 py-3 text-left">
@@ -266,7 +285,9 @@ export function SeatSelectionSheet({
                 {title}
               </SheetTitle>
               <SheetDescription className="mt-0.5 text-sm text-muted-foreground">
-                El mapa de arriba muestra dónde queda el lugar que elijas abajo.
+                {isGeneralAdmission
+                  ? "Indicá cuántas entradas querés."
+                  : "El mapa de arriba muestra dónde queda el lugar que elijas abajo."}
               </SheetDescription>
             </div>
             <button
@@ -281,23 +302,25 @@ export function SeatSelectionSheet({
         </SheetHeader>
 
         <div className="flex min-h-0 flex-1 flex-col">
-          <SeatSelectionSplitMap
-            map={context.map}
-            eventId={context.eventId}
-            eventTitle={context.eventTitle}
-            pending={pending}
-            maxSelectable={maxTicketsPerUser}
-            selectedZoneId={context.selectedZoneId}
-            unavailableZoneIds={context.unavailableZoneIds}
-            occupancyBySeatId={context.occupancyBySeatId}
-            heldSeatIds={context.heldSeatIds}
-            priceBySectorId={context.priceBySectorId}
-            sectors={context.sectors}
-            expanded={mapExpanded}
-            onExpandedChange={setMapExpanded}
-            onSelectZone={context.onSelectZone}
-            onContinue={context.onUniversalContinue}
-          />
+          {showFullMap ? (
+            <SeatSelectionSplitMap
+              map={context.map}
+              eventId={context.eventId}
+              eventTitle={context.eventTitle}
+              pending={pending}
+              maxSelectable={maxTicketsPerUser}
+              selectedZoneId={context.selectedZoneId}
+              unavailableZoneIds={context.unavailableZoneIds}
+              occupancyBySeatId={context.occupancyBySeatId}
+              heldSeatIds={context.heldSeatIds}
+              priceBySectorId={context.priceBySectorId}
+              sectors={context.sectors}
+              expanded={mapExpanded}
+              onExpandedChange={setMapExpanded}
+              onSelectZone={context.onSelectZone}
+              onContinue={context.onUniversalContinue}
+            />
+          ) : null}
 
           <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
             {isGeneralAdmission ? (
@@ -305,11 +328,8 @@ export function SeatSelectionSheet({
                 pending={pending}
                 peopleCount={peopleCount}
                 maxPeople={resolvePurchaseLimit(maxTicketsPerUser) ?? 20}
-                selected={Boolean(
-                  targetSector &&
-                    selectedItems.some((item) => item.id === targetSector.id),
-                )}
                 sectorName={targetSector?.name ?? title}
+                unitKind="access"
                 onChange={(next) => {
                   setPeopleCount(next)
                   if (targetSector) {
@@ -347,7 +367,7 @@ export function SeatSelectionSheet({
             )}
           >
             {canConfirm
-              ? `Confirmar ${placeCount} ${placeCount === 1 ? "lugar" : "lugares"} · ${formatCurrency(placeTotal)}`
+              ? `Confirmar ${placeCount} ${placeCount === 1 ? "lugar" : "lugares"} · ${formatTicketPrice(placeTotal)}`
               : "Confirmá al menos un lugar"}
           </Button>
         </div>
@@ -370,43 +390,42 @@ function formatAssistantLine(
   )
   const accessLabel = accesses === 1 ? "1 acceso" : `${accesses} accesos`
   const heading = names.join(" · ") || "Selección"
-  return `${heading} · ${accessLabel} · ${formatCurrency(total)}`
+  return `${heading} · ${accessLabel} · ${formatTicketPrice(total)}`
+}
+
+function quantityUnitLabel(
+  count: number,
+  unitKind: "access" | "person",
+): string {
+  if (unitKind === "person") {
+    return count === 1 ? "1 persona" : `${count} personas`
+  }
+  return count === 1 ? "1 acceso" : `${count} accesos`
 }
 
 function GeneralAdmissionPicker({
   sectorName,
   peopleCount,
   maxPeople,
-  selected,
   pending,
+  unitKind,
   onChange,
 }: {
   sectorName: string
   peopleCount: number
   maxPeople: number
-  selected: boolean
   pending: boolean
+  unitKind: "access" | "person"
   onChange: (next: number) => void
 }) {
   return (
     <div className="flex flex-col items-center gap-4 py-6">
-      <button
-        type="button"
-        disabled={pending}
-        aria-pressed={selected}
-        onClick={() => onChange(peopleCount)}
-        className={cn(
-          "flex min-h-12 w-full items-center justify-center rounded-xl border-2 p-3 font-semibold select-none touch-manipulation transition-all duration-200",
-          "focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-          selected
-            ? "border-primary bg-primary text-primary-foreground shadow-[0_0_15px_color-mix(in_srgb,var(--primary)_40%,transparent)]"
-            : "border-border bg-card text-foreground hover:border-primary",
-        )}
-      >
+      <h3 className="mb-2 text-center text-lg font-bold text-gray-900 dark:text-foreground">
         {sectorName}
-      </button>
+      </h3>
       <p className="text-center text-sm text-muted-foreground">
-        Acceso general. Indicá cuántas personas son.
+        Acceso general. Indicá cuántas{" "}
+        {unitKind === "person" ? "personas" : "entradas"} querés.
       </p>
       <div className="flex items-center gap-3 rounded-full bg-secondary/50 px-1 py-1">
         <button
@@ -422,7 +441,7 @@ function GeneralAdmissionPicker({
           <Minus className="size-4" />
         </button>
         <span className="min-w-16 text-center text-lg font-black tabular-nums">
-          {peopleCount} {peopleCount === 1 ? "persona" : "personas"}
+          {quantityUnitLabel(peopleCount, unitKind)}
         </span>
         <button
           type="button"

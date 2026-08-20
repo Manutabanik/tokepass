@@ -8,21 +8,39 @@ export function isEventUuid(value: string): boolean {
   return UUID_RE.test(value.trim())
 }
 
-export function getSeoOrigin(): string {
-  const raw =
-    process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
-    process.env.NEXT_PUBLIC_BASE_URL?.trim() ||
-    ""
-
-  if (raw) {
+function firstValidOrigin(
+  ...candidates: Array<string | null | undefined>
+): string | null {
+  for (const raw of candidates) {
+    const value = raw?.trim()
+    if (!value) continue
     try {
-      return new URL(raw).origin
+      const href = /^https?:\/\//i.test(value) ? value : `https://${value}`
+      const url = new URL(href)
+      if (url.protocol !== "http:" && url.protocol !== "https:") continue
+      return url.origin
     } catch {
-      /* fall through */
+      /* next candidate */
     }
   }
+  return null
+}
 
-  return "https://www.tokepass.com.ar"
+export function getSeoOrigin(): string {
+  const fromEnv = firstValidOrigin(
+    process.env.NEXT_PUBLIC_SITE_URL,
+    process.env.NEXT_PUBLIC_BASE_URL,
+    process.env.VERCEL_URL,
+  )
+  if (fromEnv) return fromEnv
+  if (process.env.NODE_ENV === "production") {
+    return "https://www.tokepass.com.ar"
+  }
+  return "http://localhost:3000"
+}
+
+export function getMetadataBaseUrl(): URL {
+  return new URL(getSeoOrigin())
 }
 
 export function publicEventPath(event: {
@@ -45,6 +63,14 @@ export function publicEventLoginPath(event: {
   id: string
 }): string {
   return `/login?next=${encodeURIComponent(publicEventPath(event))}`
+}
+
+export function publicProducerPath(producerId: string): string {
+  return `/producer/${producerId.trim()}`
+}
+
+export function publicProducerUrl(producerId: string): string {
+  return `${getSeoOrigin()}${publicProducerPath(producerId)}`
 }
 
 export function toArgentinaIso8601(value: string | Date): string {

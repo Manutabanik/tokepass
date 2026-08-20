@@ -4,6 +4,7 @@ import type { Database } from "@/types/database"
 
 export type PublicOrganizerCard = {
   name: string
+  bio: string | null
   avatarUrl: string | null
 }
 
@@ -22,20 +23,24 @@ export async function fetchPublicOrganizerCard(
 
   const profile = row as {
     public_name?: string | null
+    public_bio?: string | null
     full_name?: string | null
     avatar_url?: string | null
   }
   const name =
     profile.public_name?.trim() || profile.full_name?.trim() || ""
+  const bio = profile.public_bio?.trim() || null
   if (!name) {
     return {
       name: "Organizador",
+      bio,
       avatarUrl: profile.avatar_url?.trim() || null,
     }
   }
 
   return {
     name,
+    bio,
     avatarUrl: profile.avatar_url?.trim() || null,
   }
 }

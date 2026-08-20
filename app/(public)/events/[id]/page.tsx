@@ -10,7 +10,9 @@ import { EventUnavailableNotice } from "@/components/public/event-unavailable-no
 import { normalizePreviewKey, withPreviewKey } from "@/lib/preview/sandbox"
 import {
   buildEventMetadata,
+  buildNoindexEventMetadata,
   eventSeoFromDetails,
+  isSeoHiddenEventStatus,
 } from "@/lib/seo/event-metadata"
 import { extractAffiliateCode } from "@/lib/rrpp"
 import { publicEventPath } from "@/lib/seo/site"
@@ -23,11 +25,16 @@ export async function generateMetadata({
   const { id } = await params
   const event = await getEventDetails(id)
 
-  if (!event) {
-    return { title: "Evento no encontrado" }
+  if (event) {
+    return buildEventMetadata(eventSeoFromDetails(event))
   }
 
-  return buildEventMetadata(eventSeoFromDetails(event))
+  const gate = await getEventAccessGate(id)
+  if (gate && isSeoHiddenEventStatus(gate.status)) {
+    return buildNoindexEventMetadata(gate.title)
+  }
+
+  return { title: "Evento no encontrado", robots: { index: false, follow: false } }
 }
 
 export default async function LegacyEventDetailPage({

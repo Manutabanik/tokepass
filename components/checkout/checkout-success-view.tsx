@@ -6,8 +6,11 @@ import { useEffect, useRef, useState } from "react"
 import { ArrowRight, CheckCircle2, LoaderCircle, Ticket } from "lucide-react"
 import useEmblaCarousel from "embla-carousel-react"
 
+import type { PurchaseAnalyticsPayload } from "@/app/actions/event-marketing"
 import { getCheckoutOrderFulfillment } from "@/app/actions/checkout-fulfillment"
 import type { CheckoutOrderFulfillment } from "@/app/actions/checkout-fulfillment"
+import { PurchaseAnalyticsTracker } from "@/components/public/purchase-analytics-tracker"
+import { hasActivePixels } from "@/lib/analytics/pixels"
 import { WalletPassButtons } from "@/components/account/wallet-pass-buttons"
 import { LivingTicketCard } from "@/components/public/living-ticket-card"
 import { Button } from "@/components/ui/button"
@@ -56,12 +59,14 @@ export function CheckoutSuccessView({
   appleWalletEnabled,
   googleWalletEnabled,
   skipPolling = false,
+  purchaseAnalytics = null,
 }: {
   orderId: string
   initial: CheckoutOrderFulfillment
   appleWalletEnabled: boolean
   googleWalletEnabled: boolean
   skipPolling?: boolean
+  purchaseAnalytics?: PurchaseAnalyticsPayload | null
 }) {
   const [fulfillment, setFulfillment] = useState(initial)
   const [timedOut, setTimedOut] = useState(false)
@@ -133,6 +138,26 @@ export function CheckoutSuccessView({
 
   return (
     <div className="flex w-full flex-col items-center text-center">
+      {purchaseAnalytics && hasActivePixels(purchaseAnalytics.pixels) ? (
+        <PurchaseAnalyticsTracker
+          enabled={status === "paid"}
+          pixels={purchaseAnalytics.pixels}
+          eventTitle={
+            purchaseAnalytics.eventTitle || fulfillment.eventTitle || "Evento"
+          }
+          orderId={purchaseAnalytics.orderId || orderId}
+          value={
+            status === "paid" && fulfillment.totalAmount > 0
+              ? fulfillment.totalAmount
+              : purchaseAnalytics.value
+          }
+          ticketIds={
+            fulfillment.tickets.length > 0
+              ? fulfillment.tickets.map((ticket) => ticket.id)
+              : purchaseAnalytics.ticketIds
+          }
+        />
+      ) : null}
       <AnimatePresence mode="wait" initial={false}>
         {status === "pending" ? (
           <motion.div

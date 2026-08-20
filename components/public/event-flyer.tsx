@@ -1,5 +1,7 @@
+"use client"
+
 import Image from "next/image"
-import type { ReactNode } from "react"
+import { useState, type ReactNode } from "react"
 
 import { BRAND_MARK_SRC } from "@/components/shared/brand-logo"
 import { cn } from "@/lib/utils"
@@ -11,12 +13,71 @@ const gradients = [
   "from-black via-zinc-900 to-sky-950",
 ]
 
+const OPTIMIZED_FLYER_HOSTS = new Set([
+  "i.ytimg.com",
+  "i.scdn.co",
+  "p.scdn.co",
+  "open.spotify.com",
+  "localhost",
+  "127.0.0.1",
+])
+
 function gradientForId(id: string) {
   let hash = 0
   for (let index = 0; index < id.length; index += 1) {
     hash = (hash + id.charCodeAt(index) * (index + 1)) % gradients.length
   }
   return gradients[hash] ?? gradients[0]
+}
+
+function shouldOptimizeFlyerSrc(src: string): boolean {
+  if (!src.startsWith("http://") && !src.startsWith("https://")) return true
+  try {
+    const url = new URL(src)
+    if (OPTIMIZED_FLYER_HOSTS.has(url.hostname)) return true
+    if (url.hostname.endsWith(".supabase.co")) return true
+    return url.pathname.includes("/storage/v1/object/public/")
+  } catch {
+    return false
+  }
+}
+
+function FlyerImage({
+  src,
+  alt,
+  priority,
+  sizes,
+  objectFit,
+}: {
+  src: string
+  alt: string
+  priority: boolean
+  sizes: string
+  objectFit: "cover" | "contain"
+}) {
+  const [useNative, setUseNative] = useState(() => !shouldOptimizeFlyerSrc(src))
+  const imageClass =
+    objectFit === "contain" ? "object-contain" : "object-cover"
+
+  if (useNative) {
+    return (
+      // Native fallback: next/image rejects hosts outside remotePatterns.
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={src} alt={alt} className={cn("size-full", imageClass)} />
+    )
+  }
+
+  return (
+    <Image
+      src={src}
+      alt={alt}
+      fill
+      priority={priority}
+      sizes={sizes}
+      className={imageClass}
+      onError={() => setUseNative(true)}
+    />
+  )
 }
 
 export function EventFlyer({
@@ -47,13 +108,12 @@ export function EventFlyer({
           className,
         )}
       >
-        <Image
+        <FlyerImage
           src={imageUrl}
           alt={title}
-          fill
           priority={priority}
           sizes={sizes}
-          className={objectFit === "contain" ? "object-contain" : "object-cover"}
+          objectFit={objectFit}
         />
       </div>
     )

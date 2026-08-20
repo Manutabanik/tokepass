@@ -9,7 +9,7 @@ export const WIZARD_STEP_COUNT = 5
 export type WizardVisibility = {
   hasSeatingPlan: boolean
   hasSchedule: boolean
-  /** Edición de evento: Info / Arquitectura / Tarifas, sin esconder el mapa. */
+  /** Edición de evento: Info / Arquitectura (si hay mapa) / Tarifas. */
   editWorkspace?: boolean
 }
 
@@ -103,11 +103,8 @@ export function isWizardStepVisible(
   flags: WizardVisibility,
 ): boolean {
   if (flags.editWorkspace) {
-    return (
-      step === WIZARD_STEP_IDENTITY ||
-      step === WIZARD_STEP_MAP ||
-      step === WIZARD_STEP_TICKETS
-    )
+    if (step === WIZARD_STEP_MAP) return flags.hasSeatingPlan
+    return step === WIZARD_STEP_IDENTITY || step === WIZARD_STEP_TICKETS
   }
   if (step === WIZARD_STEP_MAP) return flags.hasSeatingPlan
   if (step === WIZARD_STEP_AGENDA) return flags.hasSchedule
@@ -119,7 +116,11 @@ export function isWizardStepVisible(
 }
 
 export function visibleWizardSteps(flags: WizardVisibility): number[] {
-  if (flags.editWorkspace) return [...EDIT_WORKSPACE_STEPS]
+  if (flags.editWorkspace) {
+    return EDIT_WORKSPACE_STEPS.filter((step) =>
+      isWizardStepVisible(step, flags),
+    )
+  }
   return WIZARD_DISPLAY_ORDER.filter((step) => isWizardStepVisible(step, flags))
 }
 

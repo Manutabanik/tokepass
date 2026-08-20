@@ -6,6 +6,7 @@ import {
   eventNeedsInteractiveCanvas,
   isMapBackedTicket,
   migrateLegacyWizardStep,
+  sectorUsesNumberedMap,
   syncMapBackedTickets,
   ticketRequiresInteractiveMap,
   venueMapToPricingMap,
@@ -434,6 +435,32 @@ describe("venue-map-pricing", () => {
         { seatingSectorId: "zona-vip", layoutType: "numbered_seat" },
       ]),
       false,
+    )
+  })
+
+  it("routes numbered sectors to the map and GA sectors to the counter", () => {
+    assert.equal(
+      sectorUsesNumberedMap({ layoutType: "numbered_seat" }),
+      true,
+    )
+    assert.equal(sectorUsesNumberedMap({ layoutType: "general" }), false)
+    assert.equal(
+      sectorUsesNumberedMap({ seatingSectorId: "general:pista" }),
+      false,
+    )
+    assert.equal(
+      sectorUsesNumberedMap({
+        seatingSectorId: "campo",
+        sectors: [{ id: "campo", type: "general" }],
+      }),
+      false,
+    )
+    assert.equal(
+      sectorUsesNumberedMap({
+        seatingSectorId: "platea",
+        sectors: [{ id: "platea", type: "numbered" }],
+      }),
+      true,
     )
   })
 })

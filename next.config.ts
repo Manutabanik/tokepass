@@ -45,6 +45,7 @@ const nextConfig: NextConfig = {
     },
   },
   images: {
+    // Hosts outside this list render via native <img> in EventFlyer.
     remotePatterns: [
       ...(supabaseHostname
         ? [

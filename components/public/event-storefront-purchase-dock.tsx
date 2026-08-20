@@ -1,6 +1,6 @@
 "use client"
 
-import { formatCurrency } from "@/lib/format"
+import { formatTicketPrice } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 type EventStorefrontPurchaseDockProps = {
@@ -28,7 +28,7 @@ export function EventStorefrontPurchaseDock({
               Entradas desde
             </span>
             <span className="block truncate text-xl font-black tracking-tight text-primary tabular-nums">
-              {price != null ? formatCurrency(price) : "—"}
+              {price != null ? formatTicketPrice(price) : "—"}
             </span>
           </>
         ) : (

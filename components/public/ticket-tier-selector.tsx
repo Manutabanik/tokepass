@@ -14,7 +14,7 @@ import { useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { isFullPassDayId } from "@/lib/event-schedule"
-import { formatCurrency, formatEventDay } from "@/lib/format"
+import { formatCurrency, formatEventDay, formatTicketPrice } from "@/lib/format"
 import { generalTicketMaxQuantity } from "@/lib/checkout/general-ticket-quantity"
 import { isLogicalGeneralSectorId } from "@/lib/seating/venue-map-pricing"
 import type { TicketHighlightBadge } from "@/lib/checkout/ticket-picker"
@@ -394,7 +394,7 @@ function TierList({
                   </p>
                 ) : null}
                 <p className="text-2xl font-black tabular-nums text-foreground">
-                  {tier.price === 0 ? "Gratis" : formatCurrency(tier.price)}
+                  {formatTicketPrice(tier.price)}
                 </p>
               </div>
             </div>

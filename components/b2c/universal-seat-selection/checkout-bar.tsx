@@ -3,7 +3,7 @@
 import { ArrowRight } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { formatCurrency } from "@/lib/format"
+import { formatTicketPrice } from "@/lib/format"
 import {
   isSelectionValid,
   selectionSummary,
@@ -41,7 +41,7 @@ export function UniversalCheckoutBar({
             {selectionSummary(selection)}
           </p>
           <p className="mt-0.5 text-xs text-zinc-500">
-            {valid ? `Total ${formatCurrency(total)}` : "Completá tu selección"}
+            {valid ? `Total ${formatTicketPrice(total)}` : "Completá tu selección"}
           </p>
         </div>
         <Button

@@ -3,7 +3,7 @@
 import { Check } from "lucide-react"
 import type { CSSProperties } from "react"
 
-import { formatCurrency } from "@/lib/format"
+import { formatTicketPrice } from "@/lib/format"
 import type { UniversalSector } from "@/lib/seating/universal-seat-types"
 import { cn } from "@/lib/utils"
 
@@ -71,7 +71,7 @@ export function UniversalSectorCards({
                     {sector.name}
                   </span>
                   <span className="mt-1 block text-sm text-zinc-500 dark:text-zinc-400">
-                    Precio desde {formatCurrency(sector.price)}
+                    Precio desde {formatTicketPrice(sector.price)}
                   </span>
                   <span className="mt-2 inline-flex rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-600 ring-1 ring-zinc-200 dark:bg-zinc-950 dark:text-zinc-500 dark:ring-zinc-800">
                     {sector.type === "general" ? "Sin numerar" : "Numerado"}

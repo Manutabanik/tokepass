@@ -1,4 +1,4 @@
-import { formatCurrency } from "@/lib/format"
+import { formatTicketPrice } from "@/lib/format"
 
 export type ChargeUnitType = "per_person" | "full_table"
 export type ChargeNoun = "mesa" | "palco" | "lugar"
@@ -138,19 +138,19 @@ export function formatChargeFormula(input: {
   const units = Math.max(1, Math.floor(input.units) || 1)
   const capacity = Math.max(1, Math.floor(input.capacity) || 1)
   const unitPrice = Math.max(0, Number(input.unitPrice) || 0)
-  const priceLabel = formatCurrency(unitPrice)
+  const priceLabel = formatTicketPrice(unitPrice)
   const closed = isClosedUnitPricing(input)
 
   if (closed) {
     const people = input.unitType === "full_table" ? units * capacity : units
     const total = units * unitPrice
     const peopleLabel = people === 1 ? "persona incluida" : "personas incluidas"
-    return `${units} ${titleNoun(input.noun, units)} (${people} ${peopleLabel}) = ${formatCurrency(total)}`
+    return `${units} ${titleNoun(input.noun, units)} (${people} ${peopleLabel}) = ${formatTicketPrice(total)}`
   }
 
   const places = input.unitType === "full_table" ? units * capacity : units
   const placesLabel = places === 1 ? "lugar" : "lugares"
-  return `${places} ${placesLabel} \u00d7 ${priceLabel}/persona = ${formatCurrency(
+  return `${places} ${placesLabel} \u00d7 ${priceLabel}/persona = ${formatTicketPrice(
     places * unitPrice,
   )}`
 }

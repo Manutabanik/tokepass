@@ -7,6 +7,8 @@ import {
   Sparkles,
 } from "lucide-react"
 import { motion, useReducedMotion } from "motion/react"
+import dynamic from "next/dynamic"
+import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 
 import type { EventDetails } from "@/app/actions/public-events"
@@ -27,8 +29,8 @@ import { TokepassGuaranteeBadge } from "@/components/shared/tokepass-guarantee-b
 import { EventSaleStatusNotice } from "@/components/public/event-sale-status-notice"
 import { SponsorGrid } from "@/components/public/sponsor-grid"
 import { OrganizerAvatar } from "@/components/public/organizer-avatar"
+import { ProducerFollowButton } from "@/components/public/producer-follow-button"
 import { SandboxBanner } from "@/components/public/sandbox-banner"
-import { TicketSelector } from "@/components/public/ticket-selector"
 import { eventNeedsInteractiveCanvas } from "@/lib/seating/venue-map-pricing"
 import {
   Accordion,
@@ -62,12 +64,28 @@ import {
 } from "@/lib/format"
 import { isFullPassDayId, normalizeDayId } from "@/lib/event-schedule"
 import { deriveEventSaleState } from "@/lib/event-status"
+import { publicProducerPath } from "@/lib/seo/site"
 import { useEventCatalogRealtime } from "@/hooks/use-event-catalog-realtime"
 import {
   applyEventCatalogRow,
   applyTicketTierCatalogRow,
 } from "@/lib/storefront/event-catalog-realtime"
 import { cn } from "@/lib/utils"
+
+const TicketSelector = dynamic(
+  () =>
+    import("@/components/public/ticket-selector").then(
+      (mod) => mod.TicketSelector,
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="grid h-full place-items-center text-sm text-muted-foreground">
+        Cargando checkout…
+      </div>
+    ),
+  },
+)
 
 const storefrontStagger = {
   hidden: {},
@@ -488,37 +506,65 @@ export function EventStorefront({
         </section>
 
         <section className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 text-card-foreground">
-          <OrganizerAvatar
-            name={organizerName}
-            avatarUrl={event.organizerAvatarUrl}
-          />
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="truncate font-bold text-foreground">
-                {organizerName}
-              </p>
-              <Badge
-                variant="outline"
-                className="rounded-full border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold text-sky-700 dark:text-sky-300"
-              >
-                <BadgeCheck className="size-3" aria-hidden="true" />
-                Verificado
-              </Badge>
-            </div>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {organizerBio}
-            </p>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled
-            className="shrink-0 rounded-full border-border"
-            title="Próximamente"
-          >
-            Seguir
-          </Button>
+          {event.organizerId ? (
+            <Link
+              href={publicProducerPath(event.organizerId)}
+              className="flex min-w-0 flex-1 items-center gap-3 rounded-xl outline-none hover:opacity-90 focus-visible:ring-2 focus-visible:ring-primary/40"
+            >
+              <OrganizerAvatar
+                name={organizerName}
+                avatarUrl={event.organizerAvatarUrl}
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="truncate font-bold text-foreground">
+                    {organizerName}
+                  </p>
+                  <Badge
+                    variant="outline"
+                    className="rounded-full border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold text-sky-700 dark:text-sky-300"
+                  >
+                    <BadgeCheck className="size-3" aria-hidden="true" />
+                    Verificado
+                  </Badge>
+                </div>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {organizerBio}
+                </p>
+              </div>
+            </Link>
+          ) : (
+            <>
+              <OrganizerAvatar
+                name={organizerName}
+                avatarUrl={event.organizerAvatarUrl}
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="truncate font-bold text-foreground">
+                    {organizerName}
+                  </p>
+                  <Badge
+                    variant="outline"
+                    className="rounded-full border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold text-sky-700 dark:text-sky-300"
+                  >
+                    <BadgeCheck className="size-3" aria-hidden="true" />
+                    Verificado
+                  </Badge>
+                </div>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {organizerBio}
+                </p>
+              </div>
+            </>
+          )}
+          {event.organizerId && event.organizerId !== currentUserId ? (
+            <ProducerFollowButton
+              producerId={event.organizerId}
+              producerName={organizerName}
+              isAuthenticated={Boolean(currentUserId)}
+            />
+          ) : null}
         </section>
 
         <TokepassGuaranteeBadge variant="full" />

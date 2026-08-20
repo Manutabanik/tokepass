@@ -3,7 +3,7 @@
 import { Calendar, Lock, MapPin } from "lucide-react"
 
 import { TokepassGuaranteeBadge } from "@/components/shared/tokepass-guarantee-badge"
-import { formatCurrency } from "@/lib/format"
+import { formatTicketPrice } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 export function EventStorefrontBuyBox({
@@ -42,7 +42,7 @@ export function EventStorefrontBuyBox({
         Entradas desde
       </p>
       <p className="mt-1 text-4xl font-black tracking-tight text-foreground tabular-nums">
-        {price != null ? formatCurrency(price) : "Consultar"}
+        {price != null ? formatTicketPrice(price) : "Consultar"}
       </p>
 
       <ul className="mt-5 flex flex-col gap-3 border-t border-border/60 pt-5">

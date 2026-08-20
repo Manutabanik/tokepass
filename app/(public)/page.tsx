@@ -11,6 +11,7 @@ import { CATALOG_PAGE_SIZE } from "@/lib/catalog/constants"
 import { AnimatedBackground } from "@/components/discovery/animated-background"
 import { DiscoveryHub } from "@/components/discovery/discovery-hub"
 import { SponsorMarquee } from "@/components/public/sponsor-grid"
+import { WebsiteSchemaScript } from "@/components/public/website-schema-script"
 import { mapDbCategoriesToDiscovery } from "@/lib/category-icons"
 import { DEFAULT_DISCOVERY_CATEGORIES } from "@/lib/discovery-categories"
 import type { FeaturedRotationResult } from "@/lib/featured-rotation"
@@ -65,6 +66,7 @@ export default async function HomePage() {
 
   return (
     <div className="relative isolate min-h-[calc(100vh-4rem)] overflow-x-clip bg-[#f4f2f8] text-zinc-900 dark:bg-[#030712] dark:text-zinc-100">
+      <WebsiteSchemaScript />
       <AnimatedBackground />
 
       <div className="relative mx-auto max-w-7xl px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-28">

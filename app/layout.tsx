@@ -10,6 +10,8 @@ import { InstallBanner } from "@/components/pwa/install-banner";
 import { PwaRegister } from "@/components/pwa/pwa-register";
 import { Toaster } from "@/components/ui/sonner";
 
+import { getMetadataBaseUrl } from "@/lib/seo/site";
+
 import "./globals.css";
 
 const geistSans = Geist({
@@ -24,10 +26,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   applicationName: "TokePass",
-  metadataBase: new URL(
-    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
-      "http://localhost:3000",
-  ),
+  metadataBase: getMetadataBaseUrl(),
   title: {
     default: "TokePass — Vive el evento",
     template: "%s | TokePass",
@@ -77,8 +76,6 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   viewportFit: "cover",
   themeColor: "#09090b",
   colorScheme: "dark light",

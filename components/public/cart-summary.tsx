@@ -9,7 +9,7 @@ import {
   cartTicketLineId,
   parseCartTicketLineId,
 } from "@/lib/checkout/cart-lines"
-import { formatCurrency } from "@/lib/format"
+import { formatTicketPrice } from "@/lib/format"
 import {
   useCheckoutStore,
   type StorefrontCartLine,
@@ -110,7 +110,7 @@ export function CartSummary({
                       : "text-sm font-bold text-foreground",
                   )}
                 >
-                  {formatCurrency(cartLineAmount(item))}
+                  {formatTicketPrice(cartLineAmount(item))}
                 </span>
                 <button
                   type="button"

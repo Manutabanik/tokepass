@@ -17,7 +17,7 @@ import { CheckoutLegalClickwrap } from "@/components/checkout/checkout-legal-cli
 import { TokepassGuaranteeBadge } from "@/components/shared/tokepass-guarantee-badge"
 import { Button } from "@/components/ui/button"
 import type { CheckoutBuyerInfo } from "@/lib/checkout-buyer"
-import { formatCurrency } from "@/lib/format"
+import { formatTicketPrice } from "@/lib/format"
 import { cartLineAmount, cartLineDisplayName } from "@/lib/checkout/cart-lines"
 import {
   useCheckoutStore,
@@ -159,6 +159,11 @@ export function CheckoutPaymentForm({
           Este evento está en modo de prueba. El pago es simulado y las
           entradas no valen en puerta.
         </p>
+      ) : finalTotal === 0 ? (
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          Esta reserva no tiene costo. Al confirmar, emitimos tus entradas
+          sin pasar por la pasarela de pago.
+        </p>
       ) : (
         <>
           <PaymentMethodSelector
@@ -230,10 +235,12 @@ export function CheckoutPaymentForm({
           {confirmPending ? (
             <>
               <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-              Preparando pago
+              {finalTotal === 0 ? "Confirmando reserva" : "Preparando pago"}
             </>
+          ) : finalTotal === 0 ? (
+            "Confirmar reserva"
           ) : (
-            `Confirmar y Pagar ${formatCurrency(finalTotal)}`
+            `Confirmar y Pagar ${formatTicketPrice(finalTotal)}`
           )}
         </Button>
       )}
@@ -308,7 +315,7 @@ function PaymentOrderSummary({
             Entradas · {totalTickets}
           </span>
           <span className="shrink-0 tabular-nums text-card-foreground">
-            {formatCurrency(ticketsSubtotal)}
+            {formatTicketPrice(ticketsSubtotal)}
           </span>
         </div>
       )}
@@ -337,19 +344,23 @@ function PaymentOrderSummary({
         <div className="flex items-center justify-between text-sm text-emerald-600 dark:text-emerald-400">
           <span>Descuento ({appliedPromo.code})</span>
           <span className="tabular-nums">
-            −{formatCurrency(discountAmount)}
+            −{formatTicketPrice(discountAmount)}
           </span>
         </div>
       ) : null}
       <div className="flex items-start justify-between gap-3 border-t border-border pt-3">
         <div className="min-w-0">
-          <p className="font-semibold text-card-foreground">Total a pagar</p>
+          <p className="font-semibold text-card-foreground">
+            {finalTotal === 0 ? "Total" : "Total a pagar"}
+          </p>
           <p className="text-xs text-muted-foreground">
-            Precio final All-In. Incluye servicio.
+            {finalTotal === 0
+              ? "Entrada sin costo."
+              : "Precio final All-In. Incluye servicio."}
           </p>
         </div>
         <span className="shrink-0 text-xl font-black tabular-nums text-card-foreground">
-          {formatCurrency(finalTotal)}
+          {formatTicketPrice(finalTotal)}
         </span>
       </div>
       <TokepassGuaranteeBadge variant="full" />
@@ -373,7 +384,7 @@ function PaymentTicketRow({ item }: { item: StorefrontCartLine }) {
         </p>
       </div>
       <span className="shrink-0 text-sm font-bold tabular-nums text-card-foreground">
-        {formatCurrency(cartLineAmount(item))}
+        {formatTicketPrice(cartLineAmount(item))}
       </span>
     </li>
   )

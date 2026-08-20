@@ -15,6 +15,27 @@ type PurchaseAnalyticsTrackerProps = {
   orderId: string
   value: number
   ticketIds: string[]
+  enabled?: boolean
+}
+
+function purchaseTrackedKey(orderId: string) {
+  return `tokepass.purchaseTracked.${orderId}`
+}
+
+function alreadyTrackedPurchase(orderId: string): boolean {
+  try {
+    return window.sessionStorage.getItem(purchaseTrackedKey(orderId)) === "1"
+  } catch {
+    return false
+  }
+}
+
+function markPurchaseTracked(orderId: string) {
+  try {
+    window.sessionStorage.setItem(purchaseTrackedKey(orderId), "1")
+  } catch {
+    return
+  }
 }
 
 /** Dispara Purchase una sola vez en /checkout/success (espera scripts). */
@@ -24,11 +45,16 @@ export function PurchaseAnalyticsTracker({
   orderId,
   value,
   ticketIds,
+  enabled = true,
 }: PurchaseAnalyticsTrackerProps) {
   const fired = useRef(false)
 
   useEffect(() => {
-    if (!hasActivePixels(pixels) || fired.current) return
+    if (!enabled || !hasActivePixels(pixels) || fired.current) return
+    if (alreadyTrackedPurchase(orderId)) {
+      fired.current = true
+      return
+    }
 
     let attempts = 0
     const timer = window.setInterval(() => {
@@ -50,18 +76,20 @@ export function PurchaseAnalyticsTracker({
         window.clearInterval(timer)
         if (fired.current) return
         fired.current = true
+        markPurchaseTracked(orderId)
         trackPurchase({
           contentName: eventTitle,
           contentIds: ticketIds.length > 0 ? ticketIds : [orderId],
           value,
           currency: "ARS",
           numItems: Math.max(1, ticketIds.length),
+          transactionId: orderId,
         })
       }
     }, 250)
 
     return () => window.clearInterval(timer)
-  }, [eventTitle, orderId, pixels, ticketIds, value])
+  }, [enabled, eventTitle, orderId, pixels, ticketIds, value])
 
   return <AnalyticsTracker config={pixels} />
 }

@@ -19,7 +19,7 @@ import {
   getFavoriteIdsCache,
   setFavoriteIdsCache,
 } from "@/lib/favorite-ids-cache"
-import { formatCurrency, formatDiscoveryDateTime } from "@/lib/format"
+import { formatDiscoveryDateTime, formatTicketPrice } from "@/lib/format"
 import { isBoostActive } from "@/lib/services/events-service"
 import { publicEventPath } from "@/lib/seo/site"
 import { cn } from "@/lib/utils"
@@ -135,7 +135,7 @@ function EventListCard({
               Desde{" "}
               <strong className="text-sm text-foreground">
                 {event.startingPrice != null
-                  ? formatCurrency(event.startingPrice)
+                  ? formatTicketPrice(event.startingPrice)
                   : "ver precios"}
               </strong>
             </span>
@@ -318,7 +318,7 @@ export function EventCard({
               <p className="text-[11px] text-zinc-500">Desde</p>
               <p className="truncate text-base font-semibold text-zinc-900 dark:text-white">
                 {event.startingPrice != null
-                  ? formatCurrency(event.startingPrice)
+                  ? formatTicketPrice(event.startingPrice)
                   : "Ver precios"}
               </p>
             </div>

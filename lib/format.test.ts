@@ -2,10 +2,24 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import {
+  formatCurrency,
   formatEventDay,
   formatEventTime,
   formatStoryEventDates,
+  formatTicketPrice,
 } from "@/lib/format"
+
+describe("ticket prices", () => {
+  it("keeps money formatting for admin totals", () => {
+    assert.equal(formatCurrency(0), "$ 0")
+  })
+
+  it("shows free tickets as Gratis", () => {
+    assert.equal(formatTicketPrice(0), "Gratis")
+    assert.equal(formatCurrency(0, { freeLabel: true }), "Gratis")
+    assert.match(formatTicketPrice(1500), /1\.500|1500/)
+  })
+})
 
 describe("event date formatters", () => {
   it("uses Argentina timezone so SSR and client match", () => {

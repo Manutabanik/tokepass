@@ -6,7 +6,9 @@ import {
   emptyPixelConfig,
   type EventPixelConfig,
 } from "@/lib/analytics/pixels"
+import { hasCheckoutFulfillmentCookie } from "@/lib/checkout/fulfillment-cookie"
 import { fetchPublicOrganizerCard } from "@/lib/public-organizer"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
 type ActionResult<T = undefined> =
@@ -186,18 +188,41 @@ export async function getPurchaseAnalyticsForOrder(
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) return null
 
-  const { data: order, error } = await supabase
-    .from("orders")
-    .select("id, total_amount, buyer_id")
-    .eq("id", clean)
-    .eq("buyer_id", user.id)
-    .maybeSingle()
+  type AnalyticsOrder = { id: string; total_amount: number | string | null }
+  let order: AnalyticsOrder | null = null
+  let db: typeof supabase | ReturnType<typeof createAdminClient> = supabase
 
-  if (error || !order) return null
+  if (user) {
+    const { data } = await supabase
+      .from("orders")
+      .select("id, total_amount, buyer_id")
+      .eq("id", clean)
+      .eq("buyer_id", user.id)
+      .maybeSingle()
+    order = data
+  }
 
-  const { data: tickets } = await supabase
+  if (!order) {
+    const cookieOk = await hasCheckoutFulfillmentCookie(clean)
+    if (!cookieOk) return null
+    try {
+      const admin = createAdminClient()
+      const { data } = await admin
+        .from("orders")
+        .select("id, total_amount, buyer_id")
+        .eq("id", clean)
+        .maybeSingle()
+      order = data
+      db = admin
+    } catch {
+      return null
+    }
+  }
+
+  if (!order) return null
+
+  const { data: tickets } = await db
     .from("tickets")
     .select("id, event_id")
     .eq("order_id", clean)
@@ -206,7 +231,7 @@ export async function getPurchaseAnalyticsForOrder(
   let eventId = ticketRows[0]?.event_id ?? ""
 
   if (!eventId) {
-    const { data: storeLink } = await supabase
+    const { data: storeLink } = await db
       .from("item_redemptions")
       .select("event_items(event_id)")
       .eq("order_id", clean)
@@ -237,7 +262,7 @@ export async function getPurchaseAnalyticsForOrder(
     }
   }
 
-  const { data: event } = await supabase
+  const { data: event } = await db
     .from("events")
     .select(
       "id, title, date, location, flyer_url, image_url, social_share_image_url, organizer_id, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, venues(name, location)",

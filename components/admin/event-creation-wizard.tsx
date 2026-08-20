@@ -92,6 +92,7 @@ import {
   venueMapToPricingMap,
 } from "@/lib/seating/venue-map-pricing"
 import { InteractiveVenueMapEditor } from "@/components/admin/interactive-venue-map-editor"
+import { TokepassStudioOverlay } from "@/components/admin/tokepass-studio-overlay"
 import {
   seatingLayoutToVenueMap,
   venueMapToSeatingLayout,
@@ -179,6 +180,41 @@ const STEP_META = {
     icon: CreditCard,
   },
 } as const
+
+const COMPACT_STEP_SHELL = "mx-auto w-full max-w-4xl p-4 lg:p-8"
+
+function WorkspaceStepNav({
+  showBack,
+  showNext,
+  onBack,
+  onNext,
+  nextDisabled = false,
+}: {
+  showBack: boolean
+  showNext: boolean
+  onBack: () => void
+  onNext: () => void
+  nextDisabled?: boolean
+}) {
+  return (
+    <div className="mt-8 flex items-center justify-between gap-3 border-t border-border pt-6">
+      {showBack ? (
+        <Button type="button" variant="outline" onClick={onBack}>
+          <ArrowLeft />
+          Atrás
+        </Button>
+      ) : (
+        <span />
+      )}
+      {showNext ? (
+        <Button type="button" onClick={onNext} disabled={nextDisabled}>
+          Siguiente
+          <ArrowRight />
+        </Button>
+      ) : null}
+    </div>
+  )
+}
 
 const blankTicket = (): EventFormValues["tickets"][number] => ({
   ...createInventoryTicket("general"),
@@ -277,6 +313,8 @@ export function EventCreationWizard({
     () => initialData?.zoneTierPricing ?? [],
   )
   const [localVenues, setLocalVenues] = useState<OrganizerVenue[] | null>(null)
+  const [isStudioOpen, setIsStudioOpen] = useState(false)
+  const [isStudioClosing, setIsStudioClosing] = useState(false)
   const venueCatalog = localVenues ?? venues
 
   const form = useForm<EventFormValues>({
@@ -391,6 +429,12 @@ export function EventCreationWizard({
     const key = editWorkspaceStepKey(resolvedStep)
     router.replace(`${pathname}?step=${key}`, { scroll: false })
   }, [workspace, resolvedStep, pathname, router])
+
+  useEffect(() => {
+    if (resolvedStep !== WIZARD_STEP_MAP) {
+      setIsStudioOpen(false)
+    }
+  }, [resolvedStep])
 
   const inventoryBlocked =
     resolvedStep === WIZARD_STEP_TICKETS &&
@@ -866,6 +910,40 @@ export function EventCreationWizard({
     applyMapInventory(next)
   }
 
+  async function closeStudio() {
+    if (isStudioClosing) return
+    setIsStudioClosing(true)
+    try {
+      const map = parseVenueMap(form.getValues("venue.venueMap"))
+      persistWorkspaceMap(map)
+      flushAutosave()
+      const eventId = initialData?.id ?? persistedEventId
+      if (eventId) {
+        const result = await saveVenueMapOnly(eventId, map)
+        if (!result.success) {
+          toast.error("No se pudo guardar el mapa", {
+            description: result.error,
+          })
+          return
+        }
+      }
+      setIsStudioOpen(false)
+    } finally {
+      setIsStudioClosing(false)
+    }
+  }
+
+  const workspaceNav = workspace
+    ? {
+        showBack: resolvedStep !== WIZARD_STEP_IDENTITY,
+        showNext: !isLastVisibleWizardStep(resolvedStep, wizardFlags),
+        onBack: () =>
+          void moveToStep(prevWizardStep(resolvedStep, wizardFlags)),
+        onNext: () =>
+          void moveToStep(nextWizardStep(resolvedStep, wizardFlags)),
+      }
+    : null
+
   return (
     <>
     <Form {...form}>
@@ -1015,7 +1093,8 @@ export function EventCreationWizard({
                 workspace && "h-full overflow-y-auto",
               )}
             >
-              <CardHeader className="px-4 pt-6 sm:px-10 sm:pt-10">
+              <div className={COMPACT_STEP_SHELL}>
+              <CardHeader className="px-0 pt-6 sm:pt-10">
                 <CardTitle className="mb-1 text-2xl font-bold text-foreground">
                   Identidad del evento
                 </CardTitle>
@@ -1024,7 +1103,7 @@ export function EventCreationWizard({
                   también viven acá.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="grid grid-cols-1 items-start gap-6 px-4 py-6 sm:gap-8 sm:px-10 sm:py-8 lg:grid-cols-12">
+              <CardContent className="grid grid-cols-1 items-start gap-6 px-0 py-6 sm:gap-8 sm:py-8 lg:grid-cols-12">
                 <div className="space-y-6 lg:col-span-7">
                   <FormField
                     control={form.control}
@@ -1294,11 +1373,12 @@ export function EventCreationWizard({
                           </span>
                           <div className="space-y-1">
                             <FormLabel className="text-sm font-semibold leading-snug text-foreground">
-                              ¿Tu evento tiene mapa de ubicaciones o butacas
-                              numeradas?
+                              ¿El evento requiere diseño de mapa con
+                              butacas/mesas numeradas?
                             </FormLabel>
                             <FormDescription className="text-xs text-muted-foreground">
-                              Si lo activás, aparece el paso Mapa y Sectores.
+                              Si lo activas, aparece el paso Arquitectura. Si no,
+                              pasas directo a Tarifas.
                             </FormDescription>
                           </div>
                         </div>
@@ -1327,7 +1407,7 @@ export function EventCreationWizard({
                             }
                           }}
                           className="data-checked:bg-emerald-500"
-                          aria-label="¿Tu evento tiene mapa de ubicaciones o butacas numeradas?"
+                          aria-label="¿El evento requiere diseño de mapa con butacas/mesas numeradas?"
                         />
                       </FormItem>
                     )}
@@ -1472,6 +1552,15 @@ export function EventCreationWizard({
                   </div>
                 ) : null}
               </CardContent>
+              {workspaceNav ? (
+                <WorkspaceStepNav
+                  showBack={workspaceNav.showBack}
+                  showNext={workspaceNav.showNext}
+                  onBack={workspaceNav.onBack}
+                  onNext={workspaceNav.onNext}
+                />
+              ) : null}
+              </div>
             </TabsContent>
 
             <TabsContent
@@ -1500,33 +1589,73 @@ export function EventCreationWizard({
               id="event-wizard-step-1"
               className={cn(
                 "animate-in fade-in slide-in-from-right-2 duration-300",
-                workspace && "h-[calc(100dvh-3.5rem)] min-h-0 overflow-hidden",
+                workspace && "h-full overflow-y-auto",
               )}
             >
               {workspace ? (
-                <InteractiveVenueMapEditor
-                  variant="studio"
-                  eventTitle={watchedTitle || initialData?.title || "Evento"}
-                  onEventTitleChange={(title) =>
-                    form.setValue("basics.title", title, { shouldDirty: true })
-                  }
-                  value={parseVenueMap(watchedVenueMap)}
-                  tickets={watchedTickets}
-                  saving={form.formState.isSubmitting}
-                  onChange={(next) => persistWorkspaceMap(next)}
-                  onAutoSave={(next) => persistWorkspaceMap(next)}
-                  onSave={async (next) => {
-                    persistWorkspaceMap(next)
-                    const eventId = initialData?.id ?? persistedEventId
-                    if (!eventId) {
-                      throw new Error("No hay un evento para guardar el mapa.")
-                    }
-                    const result = await saveVenueMapOnly(eventId, next)
-                    if (!result.success) {
-                      throw new Error(result.error)
-                    }
-                  }}
-                />
+                <>
+                  <div className={COMPACT_STEP_SHELL}>
+                    <h2 className="text-2xl font-bold text-foreground">
+                      Arquitectura del Recinto
+                    </h2>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Diseña butacas, mesas y sectores numerados en TokePass
+                      Studio. El mapa se abre a pantalla completa para no
+                      romper el resto del formulario.
+                    </p>
+                    <Button
+                      type="button"
+                      size="lg"
+                      className="mt-8 h-12 w-full sm:w-auto"
+                      onClick={() => setIsStudioOpen(true)}
+                    >
+                      Abrir Diseñador (TokePass Studio)
+                    </Button>
+                    {workspaceNav ? (
+                      <WorkspaceStepNav
+                        showBack={workspaceNav.showBack}
+                        showNext={workspaceNav.showNext}
+                        onBack={workspaceNav.onBack}
+                        onNext={workspaceNav.onNext}
+                      />
+                    ) : null}
+                  </div>
+                  {isStudioOpen ? (
+                    <TokepassStudioOverlay
+                      open={isStudioOpen}
+                      closing={isStudioClosing}
+                      onClose={() => void closeStudio()}
+                    >
+                      <InteractiveVenueMapEditor
+                        variant="studio"
+                        eventTitle={watchedTitle || initialData?.title || "Evento"}
+                        onEventTitleChange={(title) =>
+                          form.setValue("basics.title", title, {
+                            shouldDirty: true,
+                          })
+                        }
+                        value={parseVenueMap(watchedVenueMap)}
+                        tickets={watchedTickets}
+                        saving={form.formState.isSubmitting || isStudioClosing}
+                        onChange={(next) => persistWorkspaceMap(next)}
+                        onAutoSave={(next) => persistWorkspaceMap(next)}
+                        onSave={async (next) => {
+                          persistWorkspaceMap(next)
+                          const eventId = initialData?.id ?? persistedEventId
+                          if (!eventId) {
+                            throw new Error(
+                              "No hay un evento para guardar el mapa.",
+                            )
+                          }
+                          const result = await saveVenueMapOnly(eventId, next)
+                          if (!result.success) {
+                            throw new Error(result.error)
+                          }
+                        }}
+                      />
+                    </TokepassStudioOverlay>
+                  ) : null}
+                </>
               ) : (
                 <>
               <CardHeader className="border-b border-zinc-200 px-4 py-6 dark:border-white/8 lg:px-8">
@@ -1566,7 +1695,8 @@ export function EventCreationWizard({
                 workspace && "h-full overflow-y-auto",
               )}
             >
-              <CardHeader className="border-b border-zinc-200 px-4 py-6 dark:border-white/8 lg:px-8">
+              <div className={COMPACT_STEP_SHELL}>
+              <CardHeader className="border-b border-zinc-200 px-0 py-6 dark:border-white/8">
                 <CardTitle className="text-xl text-foreground">
                   Entradas y combos
                 </CardTitle>
@@ -1575,7 +1705,7 @@ export function EventCreationWizard({
                   Una general puede quedar como inventario libre, sin sector.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4 px-4 py-7 lg:px-8">
+              <CardContent className="space-y-4 px-0 py-7">
                 <UnifiedInventoryPanel
                   form={form}
                   eventId={initialData?.id ?? persistedEventId}
@@ -1585,6 +1715,16 @@ export function EventCreationWizard({
                     form.formState.errors.tickets?.root?.message}
                 </FormMessage>
               </CardContent>
+              {workspaceNav ? (
+                <WorkspaceStepNav
+                  showBack={workspaceNav.showBack}
+                  showNext={workspaceNav.showNext}
+                  onBack={workspaceNav.onBack}
+                  onNext={workspaceNav.onNext}
+                  nextDisabled={inventoryBlocked}
+                />
+              ) : null}
+              </div>
             </TabsContent>
 
             <TabsContent

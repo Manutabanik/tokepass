@@ -12,7 +12,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { formatCurrency } from "@/lib/format"
+import { formatTicketPrice } from "@/lib/format"
 import { useCheckoutStore } from "@/lib/stores/checkout-store"
 import { cn, tapFeedbackClass } from "@/lib/utils"
 
@@ -127,7 +127,7 @@ export function CheckoutFloatingBar({
                   totalBump && "scale-105 text-primary",
                 )}
               >
-                {formatCurrency(resolvedTotal)}
+                {formatTicketPrice(resolvedTotal)}
               </span>
             </button>
           ) : null}
@@ -234,7 +234,7 @@ export function CheckoutFloatingBar({
                 Total
               </span>
               <span className="text-base font-black tabular-nums text-foreground">
-                {formatCurrency(resolvedTotal)}
+                {formatTicketPrice(resolvedTotal)}
               </span>
             </div>
             <Button

@@ -3,6 +3,7 @@ export const CATALOG_MAX_PAGE_SIZE = 48
 
 export type PublishedEventsOptions = {
   artistId?: string
+  organizerId?: string
   limit?: number
   offset?: number
 }

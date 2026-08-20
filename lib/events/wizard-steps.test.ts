@@ -82,19 +82,45 @@ describe("wizard-steps", () => {
     assert.equal(isLastVisibleWizardStep(WIZARD_STEP_TICKETS, both), false)
   })
 
-  it("keeps the three edit-workspace tabs even without a seating plan", () => {
+  it("hides architecture in the edit workspace when there is no seating plan", () => {
     const workspace = { ...none, editWorkspace: true }
     assert.deepEqual(visibleWizardSteps(workspace), [
       WIZARD_STEP_IDENTITY,
-      WIZARD_STEP_MAP,
       WIZARD_STEP_TICKETS,
     ])
-    assert.equal(clampWizardStep(WIZARD_STEP_MAP, workspace), WIZARD_STEP_MAP)
+    assert.equal(
+      nextWizardStep(WIZARD_STEP_IDENTITY, workspace),
+      WIZARD_STEP_TICKETS,
+    )
+    assert.equal(
+      prevWizardStep(WIZARD_STEP_TICKETS, workspace),
+      WIZARD_STEP_IDENTITY,
+    )
+    assert.equal(
+      clampWizardStep(WIZARD_STEP_MAP, workspace),
+      WIZARD_STEP_IDENTITY,
+    )
     assert.equal(
       clampWizardStep(WIZARD_STEP_CONFIG, workspace),
       WIZARD_STEP_TICKETS,
     )
     assert.equal(isLastVisibleWizardStep(WIZARD_STEP_TICKETS, workspace), true)
+  })
+
+  it("keeps architecture between info and pricing when the seating plan is on", () => {
+    const workspace = { ...mapOnly, editWorkspace: true }
+    assert.deepEqual(visibleWizardSteps(workspace), [
+      WIZARD_STEP_IDENTITY,
+      WIZARD_STEP_MAP,
+      WIZARD_STEP_TICKETS,
+    ])
+    assert.equal(
+      nextWizardStep(WIZARD_STEP_IDENTITY, workspace),
+      WIZARD_STEP_MAP,
+    )
+    assert.equal(nextWizardStep(WIZARD_STEP_MAP, workspace), WIZARD_STEP_TICKETS)
+    assert.equal(prevWizardStep(WIZARD_STEP_TICKETS, workspace), WIZARD_STEP_MAP)
+    assert.equal(clampWizardStep(WIZARD_STEP_MAP, workspace), WIZARD_STEP_MAP)
   })
 
   it("parses edit workspace query keys", () => {

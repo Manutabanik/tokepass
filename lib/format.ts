@@ -63,8 +63,19 @@ const eventTimeFormatter = new Intl.DateTimeFormat("es-AR", {
   timeZone: EVENT_TIME_ZONE,
 })
 
-export function formatCurrency(value: number): string {
+export function formatCurrency(
+  value: number,
+  options?: { freeLabel?: boolean },
+): string {
+  if (options?.freeLabel && Number.isFinite(value) && value === 0) {
+    return "Gratis"
+  }
   return normalizeIntlOutput(currencyFormatter.format(value))
+}
+
+/** Precio de entrada al público. Cero se muestra como Gratis. */
+export function formatTicketPrice(value: number): string {
+  return formatCurrency(value, { freeLabel: true })
 }
 
 export function formatCompactCurrency(value: number): string {

@@ -12,7 +12,7 @@ import {
 import type { TicketSelectorTier } from "@/components/public/ticket-tier-selector"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { formatCurrency } from "@/lib/format"
+import { formatCurrency, formatTicketPrice } from "@/lib/format"
 import {
   BUNDLE_TYPE_LABELS,
   bundleSavings,
@@ -116,7 +116,7 @@ function BundlePromoCard({
 
       <div className="mt-3 flex items-baseline gap-2">
         <span className="text-xl font-black tabular-nums text-foreground">
-          {formatCurrency(bundle.price)}
+          {formatTicketPrice(bundle.price)}
         </span>
         {bundle.listPrice != null && bundle.listPrice > bundle.price ? (
           <span className="text-xs text-muted-foreground line-through">

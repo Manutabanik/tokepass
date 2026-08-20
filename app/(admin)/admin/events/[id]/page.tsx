@@ -7,6 +7,7 @@ import {
   ImageIcon,
   Megaphone,
   Pencil,
+  Printer,
   QrCode,
   Settings,
   Share2,
@@ -154,6 +155,12 @@ export default async function ManageEventPage({
       label: "Emitir cortesías",
       description: "CSV nominado, lote innombrado, mesas y combos.",
       icon: Gift,
+    },
+    {
+      href: `/admin/events/${id}/print-studio`,
+      label: "Print Studio",
+      description: "Plantillas en mm, lotes de imprenta y acreditaciones.",
+      icon: Printer,
     },
     {
       href: `/admin/events/${id}/tiers`,

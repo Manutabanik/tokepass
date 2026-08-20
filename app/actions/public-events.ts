@@ -37,6 +37,7 @@ import type { FeaturedRotationResult } from "@/lib/featured-rotation"
 import { isPastEvent } from "@/lib/event-status"
 import { isSandboxEventStatus } from "@/lib/events/review-status"
 import { isHomePriority, sortCatalogForHome } from "@/lib/services/events-service"
+import { fetchPublicOrganizerCard } from "@/lib/public-organizer"
 import { isEventUuid } from "@/lib/seo/site"
 import { decodeEventParam, eventSlugSuffix, uuidPrefixFromSlugSuffix } from "@/lib/seo/event-slug"
 import {
@@ -110,6 +111,8 @@ export type EventDetails = {
   endsAt: string | null
   location: string
   imageUrl: string | null
+  /** 1.91:1 para WhatsApp/Meta. Si falta, el SEO usa el flyer. */
+  socialShareImageUrl: string | null
   status: Event["status"]
   visibility: Event["visibility"]
   scheduleDays: ScheduleDay[]
@@ -119,6 +122,7 @@ export type EventDetails = {
   platformFixedFee: number
   isSponsoredByTokePass: boolean
   maxFreeTickets: number
+  organizerId: string | null
   organizerName: string | null
   organizerBio: string | null
   organizerAvatarUrl: string | null
@@ -232,6 +236,7 @@ type EventDetailRow = {
   location: string
   image_url: string | null
   flyer_url: string | null
+  social_share_image_url?: string | null
   status: Event["status"]
   visibility: Event["visibility"] | null
   organizer_id?: string
@@ -389,7 +394,9 @@ export async function getPublishedEvents(
   const supabase = createPublicClient()
   const needle = sanitizeCatalogSearch(search ?? "")
   const artistId = options?.artistId?.trim() || ""
+  const organizerId = options?.organizerId?.trim() || ""
   const filterByArtist = Boolean(artistId) && isEventUuid(artistId)
+  const filterByOrganizer = Boolean(organizerId) && isEventUuid(organizerId)
   const limit = resolveCatalogLimit(options?.limit)
   const offset = resolveCatalogOffset(options?.offset)
   const artistEventIds = needle ? await findEventIdsMatchingArtistName(needle) : []
@@ -412,6 +419,9 @@ export async function getPublishedEvents(
 
     if (filterByArtist) {
       query = query.eq("event_artists.artist_id", artistId)
+    }
+    if (filterByOrganizer) {
+      query = query.eq("organizer_id", organizerId)
     }
     if (orFilter) {
       query = query.or(orFilter)
@@ -458,6 +468,26 @@ export async function getPublishedEventsByArtist(
     artistId,
     limit: CATALOG_MAX_PAGE_SIZE,
   })
+}
+
+/** Próximos eventos públicos de una productora. */
+export async function getPublishedEventsByOrganizer(
+  organizerId: string,
+): Promise<CatalogEvent[]> {
+  if (!isEventUuid(organizerId)) return []
+  const events = await getPublishedEvents(undefined, {
+    organizerId,
+    limit: CATALOG_MAX_PAGE_SIZE,
+  })
+  return events.filter((event) => !isPastEvent(event))
+}
+
+export async function getPublicOrganizerProfile(organizerId: string) {
+  if (!isEventUuid(organizerId)) return null
+  const supabase = createPublicClient()
+  const card = await fetchPublicOrganizerCard(supabase, organizerId)
+  if (!card) return null
+  return { id: organizerId, ...card }
 }
 
 /** Top artistas con más eventos publicados vigentes. */
@@ -872,7 +902,7 @@ async function loadEventDetails(
   if (!resolvedId) return null
 
   const eventSelectWithPicker =
-    "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, lineup, default_ticket_tab, venue_id, venue_map, venues(id, name, location, address, city, capacity, max_capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, bundle_items, bundle_type, description, highlight_badge), profiles!events_organizer_id_fkey(full_name)"
+    "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, social_share_image_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, lineup, default_ticket_tab, venue_id, venue_map, venues(id, name, location, address, city, capacity, max_capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, bundle_items, bundle_type, description, highlight_badge), profiles!events_organizer_id_fkey(full_name)"
   const eventSelectCore =
     "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, venue_id, venue_map, venues(id, name, location, address, city, capacity, max_capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, bundle_items, bundle_type), profiles!events_organizer_id_fkey(full_name)"
 
@@ -889,7 +919,7 @@ async function loadEventDetails(
 
   if (
     error &&
-    /default_ticket_tab|highlight_badge|ticket_tiers.*description|venue_map|lineup|max_capacity|schema cache|PGRST204|42703/i.test(
+    /default_ticket_tab|highlight_badge|ticket_tiers.*description|venue_map|lineup|max_capacity|social_share_image_url|schema cache|PGRST204|42703/i.test(
       error.message,
     )
   ) {
@@ -1080,6 +1110,7 @@ async function loadEventDetails(
     endsAt: event.ends_at ?? null,
     location: event.location,
     imageUrl: event.flyer_url ?? event.image_url,
+    socialShareImageUrl: event.social_share_image_url?.trim() || null,
     status: event.status,
     visibility:
       event.visibility === "private" || event.visibility === "guest_list_only"
@@ -1095,6 +1126,7 @@ async function loadEventDetails(
       if (!Number.isFinite(raw) || raw <= 0) return null
       return Math.floor(raw)
     })(),
+    organizerId: event.organizer_id?.trim() || null,
     organizerName,
     organizerBio,
     organizerAvatarUrl,

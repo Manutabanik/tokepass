@@ -3,6 +3,17 @@ import type { Metadata } from "next"
 import { formatEventDay } from "@/lib/format"
 import { publicEventUrl, toArgentinaIso8601 } from "@/lib/seo/site"
 
+export type EventSeoPerformer = {
+  name: string
+  imageUrl?: string | null
+}
+
+export type EventSeoOrganizer = {
+  name: string
+  bio?: string | null
+  imageUrl?: string | null
+}
+
 export type EventSeoInput = {
   id: string
   slug?: string | null
@@ -13,6 +24,7 @@ export type EventSeoInput = {
   createdAt?: string | null
   location: string
   imageUrl: string | null
+  socialShareImageUrl?: string | null
   venueName: string | null
   venueLocation: string | null
   venueCity: string | null
@@ -22,6 +34,8 @@ export type EventSeoInput = {
   status?: string | null
   ticketsLeft?: number | null
   prices: number[]
+  organizer?: EventSeoOrganizer | null
+  performers?: EventSeoPerformer[]
 }
 
 function venueLine(event: EventSeoInput): string {
@@ -55,6 +69,30 @@ function region(event: EventSeoInput): string {
   return "AR"
 }
 
+/** WhatsApp/Meta: crop 1.91:1 si existe; si no, flyer. */
+export function resolveEventShareImage(event: {
+  socialShareImageUrl?: string | null
+  imageUrl?: string | null
+}): string | null {
+  const share = event.socialShareImageUrl?.trim()
+  if (share) return share
+  return event.imageUrl?.trim() || null
+}
+
+export function isSeoHiddenEventStatus(status?: string | null): boolean {
+  return status === "paused" || status === "cancelled"
+}
+
+export function buildNoindexEventMetadata(title: string): Metadata {
+  const safeTitle = title.trim() || "Evento"
+  return {
+    title: safeTitle,
+    robots: { index: false, follow: false },
+    openGraph: { title: safeTitle },
+    twitter: { title: safeTitle },
+  }
+}
+
 export function buildEventMetadata(event: EventSeoInput): Metadata {
   const canonical = publicEventUrl(event)
   const place = venueLine(event)
@@ -69,10 +107,11 @@ export function buildEventMetadata(event: EventSeoInput): Metadata {
     locality(event),
     "TokePass",
   ].filter((item, index, all) => all.indexOf(item) === index)
-  const images = event.imageUrl
+  const shareImage = resolveEventShareImage(event)
+  const images = shareImage
     ? [
         {
-          url: event.imageUrl,
+          url: shareImage,
           width: 1200,
           height: 630,
           alt: event.title,
@@ -98,9 +137,42 @@ export function buildEventMetadata(event: EventSeoInput): Metadata {
       card: "summary_large_image",
       title,
       description,
-      images: event.imageUrl ? [event.imageUrl] : undefined,
+      images: shareImage ? [shareImage] : undefined,
     },
   }
+}
+
+function buildOrganizerJsonLd(
+  organizer?: EventSeoOrganizer | null,
+): Record<string, unknown> | undefined {
+  if (!organizer) return undefined
+  const name = organizer.name.trim()
+  if (!name) return undefined
+  return {
+    "@type": "Organization",
+    name,
+    description: organizer.bio?.trim() || undefined,
+    image: organizer.imageUrl?.trim() || undefined,
+  }
+}
+
+function buildPerformerJsonLd(
+  performers?: EventSeoPerformer[],
+): Record<string, unknown> | Array<Record<string, unknown>> | undefined {
+  const items = (performers ?? [])
+    .map((artist) => {
+      const name = artist.name?.trim()
+      if (!name) return null
+      return {
+        "@type": "PerformingGroup",
+        name,
+        image: artist.imageUrl?.trim() || undefined,
+      }
+    })
+    .filter((item): item is NonNullable<typeof item> => item != null)
+
+  if (items.length === 0) return undefined
+  return items.length === 1 ? items[0] : items
 }
 
 export function buildEventJsonLd(event: EventSeoInput): Record<string, unknown> {
@@ -113,6 +185,8 @@ export function buildEventJsonLd(event: EventSeoInput): Record<string, unknown> 
   const startDate = toArgentinaIso8601(event.date)
   const endDate = toArgentinaIso8601(event.endsAt || event.date)
   const validFrom = toArgentinaIso8601(event.createdAt || event.date)
+  const organizer = buildOrganizerJsonLd(event.organizer)
+  const performer = buildPerformerJsonLd(event.performers)
 
   return {
     "@context": "https://schema.org",
@@ -139,6 +213,8 @@ export function buildEventJsonLd(event: EventSeoInput): Record<string, unknown> 
     description:
       event.description?.trim() ||
       `Entradas oficiales para ${event.title} en TokePass.`,
+    organizer,
+    performer,
     offers: {
       "@type": "AggregateOffer",
       url,
@@ -167,7 +243,12 @@ export function eventSeoFromDetails(event: {
   createdAt?: string | null
   location: string
   imageUrl: string | null
+  socialShareImageUrl?: string | null
   status?: string | null
+  organizerName?: string | null
+  organizerBio?: string | null
+  organizerAvatarUrl?: string | null
+  lineup?: { artists?: EventSeoPerformer[] } | null
   venue?: {
     name: string
     location: string
@@ -181,6 +262,7 @@ export function eventSeoFromDetails(event: {
     .split(",")
     .map((part) => part.trim())
     .filter(Boolean)
+  const organizerName = event.organizerName?.trim() || null
 
   return {
     id: event.id,
@@ -192,6 +274,7 @@ export function eventSeoFromDetails(event: {
     createdAt: event.createdAt,
     location: event.location,
     imageUrl: event.imageUrl,
+    socialShareImageUrl: event.socialShareImageUrl?.trim() || null,
     venueName: event.venue?.name ?? null,
     venueLocation: event.venue?.location ?? null,
     venueCity: event.venue?.city ?? null,
@@ -204,6 +287,18 @@ export function eventSeoFromDetails(event: {
       0,
     ),
     prices: event.tiers.map((tier) => Number(tier.price)),
+    organizer: organizerName
+      ? {
+          name: organizerName,
+          bio: event.organizerBio?.trim() || null,
+          imageUrl: event.organizerAvatarUrl?.trim() || null,
+        }
+      : null,
+    performers: (event.lineup?.artists ?? [])
+      .map((artist) => ({
+        name: artist.name?.trim() ?? "",
+        imageUrl: artist.imageUrl?.trim() || null,
+      }))
+      .filter((artist) => artist.name.length > 0),
   }
 }
-

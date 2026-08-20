@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next"
 
-import { createClient } from "@/lib/supabase/server"
+import { createPublicClient } from "@/lib/supabase/public"
 import { getSeoOrigin, publicEventPath } from "@/lib/seo/site"
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
@@ -12,12 +12,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: new Date(),
       changeFrequency: "daily",
       priority: 1,
-    },
-    {
-      url: `${siteUrl}/eventos`,
-      lastModified: new Date(),
-      changeFrequency: "hourly",
-      priority: 0.6,
     },
     {
       url: `${siteUrl}/terminos-y-condiciones`,
@@ -37,22 +31,25 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ]
 
   try {
-    const supabase = await createClient()
+    const supabase = createPublicClient()
     const { data } = await supabase
       .from("events")
       .select("id, slug, updated_at, date")
       .eq("status", "published")
+      .eq("visibility", "public")
       .order("date", { ascending: true })
       .limit(5000)
 
-    const eventRoutes: MetadataRoute.Sitemap = (data ?? []).map((event) => ({
-      url: `${siteUrl}${publicEventPath(event)}`,
-      lastModified: event.updated_at
-        ? new Date(event.updated_at)
-        : new Date(event.date),
-      changeFrequency: "daily",
-      priority: 0.9,
-    }))
+    const eventRoutes: MetadataRoute.Sitemap = (data ?? [])
+      .filter((event) => Boolean(event.slug?.trim() || event.id))
+      .map((event) => ({
+        url: `${siteUrl}${publicEventPath(event)}`,
+        lastModified: event.updated_at
+          ? new Date(event.updated_at)
+          : new Date(event.date),
+        changeFrequency: "daily",
+        priority: 0.9,
+      }))
 
     return [...staticRoutes, ...eventRoutes]
   } catch {

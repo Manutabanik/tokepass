@@ -26,7 +26,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { resolveTicketHighlightBadge } from "@/lib/checkout/ticket-picker"
 import { resolveStockScarcity } from "@/lib/checkout/stock-scarcity"
-import { formatCurrency } from "@/lib/format"
+import { formatTicketPrice } from "@/lib/format"
 import { resolveSalePhases } from "@/lib/inventory/active-phase"
 import {
   inferInventoryTierType,
@@ -51,7 +51,10 @@ import {
   type CheckoutKindTab,
 } from "@/lib/checkout/ticket-day-groups"
 import { flattenSeatsForAvailability } from "@/lib/seating/venue-map-geometry"
-import { ticketRequiresInteractiveMap } from "@/lib/seating/venue-map-pricing"
+import {
+  sectorUsesNumberedMap,
+  ticketRequiresInteractiveMap,
+} from "@/lib/seating/venue-map-pricing"
 import { TicketTierList } from "@/components/public/ticket-tier-list"
 import { cn, tapFeedbackClass } from "@/lib/utils"
 import type { ScheduleDay } from "@/types/events"
@@ -138,6 +141,7 @@ export function EventCheckoutSelector({
     name: string
     sectorId: string | null
   } | null>(null)
+  const [seatSheetMode, setSeatSheetMode] = useState<"map" | "counter">("map")
   const selectedItems = useStorefrontSeatStore((state) => state.selectedItems)
   const grouped = groupCheckoutTiers(tiers)
   const listTiers = tiers.filter((tier) => {
@@ -205,11 +209,26 @@ export function EventCheckoutSelector({
       if (soldOut) return
     }
     if (hasInteractiveMap && seatSelection) {
+      const numbered =
+        category.id === SYNTHETIC_MAP_TIER_ID ||
+        sectorUsesNumberedMap({
+          seatingSectorId: category.sectorId ?? tier?.seatingSectorId,
+          layoutType: tier?.layoutType,
+          map: seatSelection.map,
+          sectors: seatSelection.sectors,
+        })
+      setSeatSheetMode(numbered ? "map" : "counter")
       setActiveSeatCategory({
         id: category.id,
         name: category.name,
         sectorId: category.sectorId ?? null,
       })
+      if (numbered && category.sectorId && seatSelection.map) {
+        const zone = (seatSelection.map.zones ?? []).find(
+          (item) => item.id === category.sectorId,
+        )
+        if (zone) seatSelection.onSelectZone(zone)
+      }
       setIsSeatSelectionOpen(true)
       return
     }
@@ -235,7 +254,7 @@ export function EventCheckoutSelector({
             </p>
             {selectedSeat ? (
               <p className="mt-1 text-sm text-gray-600 dark:text-muted-foreground">
-                {formatCurrency(selectedSeat.price)} · se confirma al
+                {formatTicketPrice(selectedSeat.price)} · se confirma al
                 continuar. El reloj de 10 minutos corre en el proceso de compra.
               </p>
             ) : null}
@@ -287,6 +306,7 @@ export function EventCheckoutSelector({
           pending={isPending}
           maxTicketsPerUser={maxTicketsPerUser}
           context={seatSelection}
+          selectionMode={seatSheetMode}
         />
       ) : null}
 
@@ -484,7 +504,7 @@ function TicketSelectionList({
       </h2>
       {showKindTabs ? (
         <div
-          className="grid grid-cols-2 gap-1 rounded-full bg-secondary p-1"
+          className="mb-6 grid grid-cols-2 gap-1 rounded-full bg-secondary p-1"
           role="tablist"
           aria-label="Tipo de entrada"
         >
@@ -818,7 +838,7 @@ function UnifiedTicketCard({
           {tier.name}
         </h4>
         <p className="text-xl font-extrabold tabular-nums text-gray-900 dark:text-foreground">
-          {formatCurrency(shownPrice)}
+          {formatTicketPrice(shownPrice)}
         </p>
         {badges.length > 0 ? (
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -1013,7 +1033,7 @@ export function QuantityList({
                   ) : null}
                 </div>
                 <p className="mt-1 text-xl font-extrabold tracking-tight text-gray-900 dark:text-foreground">
-                  {formatCurrency(unitPrice)}
+                  {formatTicketPrice(unitPrice)}
                 </p>
                 {phaseName ? (
                   <p className="text-xs text-muted-foreground">{phaseName}</p>
@@ -1059,7 +1079,7 @@ export function QuantityList({
                     <span className="flex min-w-0 items-center gap-1.5">
                       <Clock className="size-3 shrink-0" aria-hidden="true" />
                       <span className="truncate">
-                        {phase.name} - {formatCurrency(phase.price)}
+                        {phase.name} - {formatTicketPrice(phase.price)}
                       </span>
                     </span>
                     <span className="shrink-0 font-medium uppercase tracking-wide">

@@ -18,6 +18,7 @@ export type PixelCommercePayload = {
   value?: number
   currency?: string
   numItems?: number
+  transactionId?: string
 }
 
 declare global {
@@ -65,40 +66,54 @@ function commerceParams(payload: PixelCommercePayload): Record<string, unknown> 
   }
   if (payload.currency) params.currency = payload.currency
   if (payload.numItems != null) params.num_items = payload.numItems
+  if (payload.transactionId) params.transaction_id = payload.transactionId
   return params
 }
 
 function fireMeta(eventName: string, payload: PixelCommercePayload) {
-  if (typeof window === "undefined" || typeof window.fbq !== "function") return
-  window.fbq("track", eventName, commerceParams(payload))
+  try {
+    if (typeof window === "undefined" || typeof window.fbq !== "function") return
+    window.fbq("track", eventName, commerceParams(payload))
+  } catch {
+    return
+  }
 }
 
 function fireTikTok(eventName: string, payload: PixelCommercePayload) {
-  if (typeof window === "undefined" || !window.ttq?.track) return
-  const params = commerceParams(payload)
-  window.ttq.track(eventName, {
-    contents: (payload.contentIds ?? []).map((id) => ({
-      content_id: id,
-      content_type: "product",
-      content_name: payload.contentName,
-    })),
-    value: params.value,
-    currency: params.currency ?? "ARS",
-    quantity: payload.numItems,
-  })
+  try {
+    if (typeof window === "undefined" || !window.ttq?.track) return
+    const params = commerceParams(payload)
+    window.ttq.track(eventName, {
+      contents: (payload.contentIds ?? []).map((id) => ({
+        content_id: id,
+        content_type: "product",
+        content_name: payload.contentName,
+      })),
+      value: params.value,
+      currency: params.currency ?? "ARS",
+      quantity: payload.numItems,
+    })
+  } catch {
+    return
+  }
 }
 
 function fireGa4(eventName: string, payload: PixelCommercePayload) {
-  if (typeof window === "undefined" || typeof window.gtag !== "function") return
-  window.gtag("event", eventName, {
-    currency: payload.currency ?? "ARS",
-    value: payload.value,
-    items: (payload.contentIds ?? []).map((id) => ({
-      item_id: id,
-      item_name: payload.contentName,
-      quantity: 1,
-    })),
-  })
+  try {
+    if (typeof window === "undefined" || typeof window.gtag !== "function") return
+    window.gtag("event", eventName, {
+      currency: payload.currency ?? "ARS",
+      value: payload.value,
+      transaction_id: payload.transactionId,
+      items: (payload.contentIds ?? []).map((id) => ({
+        item_id: id,
+        item_name: payload.contentName,
+        quantity: 1,
+      })),
+    })
+  } catch {
+    return
+  }
 }
 
 /** Vista de ficha de evento. */

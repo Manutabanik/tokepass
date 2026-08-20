@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation"
+import { permanentRedirect } from "next/navigation"
 
 import { getEventDetails } from "@/app/actions/public-events"
 import { extractAffiliateCode, publicEventPathWithRrpp } from "@/lib/rrpp"
@@ -22,14 +22,14 @@ export default async function AffiliateEventShortLinkPage({
   const previewKey = normalizePreviewKey(query.preview_key)
   const event = await getEventDetails(slug).catch(() => null)
   if (event) {
-    redirect(
+    permanentRedirect(
       withPreviewKey(
         publicEventPathWithRrpp({ ...event, referralCode: code }),
         previewKey,
       ),
     )
   }
-  redirect(
+  permanentRedirect(
     withPreviewKey(
       code
         ? `${publicEventPath({ id: slug, slug })}?rrpp=${encodeURIComponent(code)}`

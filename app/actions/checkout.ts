@@ -2207,7 +2207,7 @@ export async function startCheckoutWithPayment(
       }
 
       initPoint = `/checkout/success?order_id=${orderId}&sandbox=1`
-    } else if (finalTotal === 0) {
+    } else if (Number.isFinite(finalTotal) && finalTotal <= 0) {
       const admin = createAdminClient()
       const { data: finalized, error: finalizeError } = await admin.rpc(
         "finalize_paid_order",

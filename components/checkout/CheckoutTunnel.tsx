@@ -170,7 +170,7 @@ import {
   storefrontItemFromElement,
   storefrontItemFromZone,
 } from "@/lib/seating/storefront-selection"
-import { formatCurrency } from "@/lib/format"
+import { formatTicketPrice } from "@/lib/format"
 import { centsToMoney, moneyToCents } from "@/lib/money/cents"
 import { roundMoney } from "@/lib/pricing/all-in"
 import { cn } from "@/lib/utils"
@@ -350,6 +350,7 @@ export function CheckoutTunnel({
   const [ctaBusy, setCtaBusy] = useState(false)
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const ctaBusyRef = useRef(false)
+  const initiatedCheckoutRef = useRef(false)
   const checkoutBusy = isPending || ctaBusy
   const controlsLocked = checkoutBusy || purchaseLocked
   const [showSeatFlow, setShowSeatFlow] = useState(false)
@@ -1289,7 +1290,8 @@ export function CheckoutTunnel({
   const finalTotal = hasMapSelection
     ? Math.max(totalAmount, totalMapSelectedItemsPrice)
     : totalAmount
-  const canProceedFromCart = hasMapSelection || finalTotal > 0
+  const canProceedFromCart =
+    hasMapSelection || extraQuantityCount > 0 || numberedExtraCount > 0
   const cartLines = useMemo<StorefrontCartLine[]>(() => {
     const seatLines = liveSelectedItems.map((item) => {
       const matched = displayTiers.filter(
@@ -1491,6 +1493,13 @@ export function CheckoutTunnel({
       toast.error(storefrontLimitMessage())
       return
     }
+    if (clamped > currentQty) {
+      fireAddToCartPixels({
+        contentIds: [tierId],
+        value: (tier?.price ?? 0) * (clamped - currentQty),
+        numItems: clamped - currentQty,
+      })
+    }
     const related = selectedItems.filter(
       (item) => item.type !== "seat" && resolveItemTierId(item) === tierId,
     )
@@ -1525,20 +1534,40 @@ export function CheckoutTunnel({
     toast.warning(info.message || PHASE_ROLLOVER_MESSAGE)
   }
 
-  function fireCartPixels(input: {
+  function pixelCommercePayload(input: {
     contentIds: string[]
     value: number
     numItems: number
   }) {
-    const payload = {
+    return {
       contentName: eventTitle,
       contentIds: input.contentIds,
       value: input.value,
       currency: "ARS" as const,
       numItems: input.numItems,
     }
-    trackAddToCart(payload)
-    trackInitiateCheckout(payload)
+  }
+
+  function fireAddToCartPixels(input: {
+    contentIds: string[]
+    value: number
+    numItems: number
+  }) {
+    trackAddToCart(pixelCommercePayload(input))
+  }
+
+  function fireInitiateCheckoutPixels() {
+    if (initiatedCheckoutRef.current) return
+    initiatedCheckoutRef.current = true
+    trackInitiateCheckout(
+      pixelCommercePayload({
+        contentIds: displayTiers
+          .filter((tier) => (quantities[tier.id] ?? 0) > 0)
+          .map((tier) => tier.id),
+        value: finalTotal,
+        numItems: Math.max(1, totalTickets),
+      }),
+    )
   }
 
   function seatingLineFromUnit(
@@ -1772,12 +1801,6 @@ export function CheckoutTunnel({
     }
     setBuyer(buyerCheck.buyer)
 
-    fireCartPixels({
-      contentIds: items.map((item) => item.tierId),
-      value: finalTotal,
-      numItems: items.reduce((sum, item) => sum + item.quantity, 0),
-    })
-
     const fallbackTitle = sandbox
       ? "Error en la compra de prueba"
       : "No se pudo iniciar el pago"
@@ -1864,6 +1887,7 @@ export function CheckoutTunnel({
 
   async function goToDetailsStep() {
     if (!canProceedFromCart || purchaseLocked) return
+    fireInitiateCheckoutPixels()
     const firstSeat = layoutSeats[0]
     if (firstSeat && !selectedSeat) {
       handleUniversalContinue(
@@ -1971,10 +1995,17 @@ export function CheckoutTunnel({
       if (focusedZoneId === zone.id) setFocusedZoneId(null)
       return
     }
+    fireAddToCartPixels({
+      contentIds: [zone.id],
+      value: zone.price ?? 0,
+      numItems: 1,
+    })
     focusSelectedZone(zone)
   }
 
   function applyZoneQuantity(sectorId: string, quantity: number) {
+    const previous = selectedItems.find((item) => item.id === sectorId)
+    const previousQty = previous ? Math.max(1, previous.capacity || 1) : 0
     const zone = (liveMap?.zones ?? []).find((item) => item.id === sectorId)
     const sectorName =
       zone?.name ??
@@ -1998,6 +2029,13 @@ export function CheckoutTunnel({
       if (!result.ok) {
         toast.error(storefrontLimitMessage(result.reason))
         return
+      }
+      if (quantity > previousQty) {
+        fireAddToCartPixels({
+          contentIds: [zone.id],
+          value: (zone.price ?? 0) * (quantity - previousQty),
+          numItems: quantity - previousQty,
+        })
       }
       focusSelectedZone(zone)
       useStorefrontSeatStore.getState().pulseFocus([zone.id])
@@ -2049,6 +2087,13 @@ export function CheckoutTunnel({
       return
     }
     store.pulseFocus(seats.map((seat) => seat.id))
+    if (seats.length > 0) {
+      fireAddToCartPixels({
+        contentIds: seats.map((seat) => seat.id),
+        value: seats.reduce((sum, seat) => sum + (seat.price ?? 0), 0),
+        numItems: seats.length,
+      })
+    }
   }
 
   function applyAssignedTables(tables: VenueMapElement[]) {
@@ -2089,6 +2134,11 @@ export function CheckoutTunnel({
     }
     if (ids.length > 0) {
       store.pulseFocus(ids)
+      fireAddToCartPixels({
+        contentIds: ids,
+        value: tables.reduce((sum, table) => sum + (table.price ?? 0), 0),
+        numItems: ids.length,
+      })
     }
   }
 
@@ -2480,10 +2530,14 @@ export function CheckoutTunnel({
       : visibleStep === "upsell"
         ? "Sumar al pedido y continuar"
         : visibleStep === "details"
-          ? "Continuar al pago"
+          ? finalTotal === 0
+            ? "Continuar"
+            : "Continuar al pago"
           : simulatePayment
             ? "Simular Pago (Modo Prueba)"
-            : `Confirmar y Pagar ${formatCurrency(finalTotal)}`
+            : finalTotal === 0
+              ? "Confirmar reserva"
+              : `Confirmar y Pagar ${formatTicketPrice(finalTotal)}`
 
   const seatSelection = hasInteractiveMap
     ? {

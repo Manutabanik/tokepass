@@ -65,6 +65,28 @@ export type OrganizerGuaranteeStatus =
 export type EventStaffRole = "door_staff" | "bar_staff" | "cashier"
 export type TicketTierPhaseStatus = "scheduled" | "active" | "sold_out"
 export type TicketReservationStatus = "held" | "confirmed" | "released"
+export type TicketIssuanceChannel =
+  | "online"
+  | "pos"
+  | "batch_print"
+  | "complimentary"
+  | "accreditation"
+export type TicketPrintMedium =
+  | "press_sheet"
+  | "thermal_80"
+  | "thermal_58"
+  | "badge"
+  | "wristband"
+export type TicketPrintBatchMode =
+  | "unnamed"
+  | "named"
+  | "seated"
+  | "accreditation"
+export type TicketPrintBatchChannel =
+  | "batch_print"
+  | "complimentary"
+  | "accreditation"
+export type TicketPrintBatchStatus = "draft" | "ready" | "void"
 
 export type EventStaffAssignment = {
   id: string
@@ -518,6 +540,17 @@ export type Ticket = {
   group_slot: number | null
   /** Lote de emisión masiva de cortesías. */
   batch_id: string | null
+  /** Canal de emisión: online, POS, imprenta, cortesía o acreditación. */
+  issuance_channel: TicketIssuanceChannel
+  /** Lote de Print Studio (distinto del batch_id huérfano de cortesías). */
+  print_batch_id: string | null
+  /** Folio humano, ej. A-00001. */
+  serial_label: string | null
+  serial_seq: number | null
+  /** Rol de acreditación (Técnica, Prensa, VIP, Producción). */
+  staff_role: string | null
+  /** Empresa / medio de la acreditación. */
+  staff_company: string | null
   /** Generada en borrador/preview; inválida en puerta de evento published. */
   is_test: boolean
   ticket_type: "admission" | "parking" | "access_pass"
@@ -525,6 +558,41 @@ export type Ticket = {
   phase_id: string | null
   created_at: string
   updated_at: string
+}
+
+export type TicketTemplate = {
+  id: string
+  organizer_id: string
+  name: string
+  medium: TicketPrintMedium
+  page_width_mm: number
+  page_height_mm: number
+  dpi: number
+  layout_json: Json
+  assets_json: Json
+  is_archived: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type TicketPrintBatch = {
+  id: string
+  event_id: string
+  organizer_id: string
+  template_id: string | null
+  tier_id: string | null
+  name: string
+  mode: TicketPrintBatchMode
+  channel: TicketPrintBatchChannel
+  series_code: string
+  seq_start: number
+  seq_end: number
+  status: TicketPrintBatchStatus
+  issued_count: number
+  artifact_csv_url: string | null
+  artifact_pdf_url: string | null
+  created_by: string | null
+  created_at: string
 }
 
 export type TicketTierPhase = {
@@ -969,6 +1037,18 @@ export type UserFavoriteInsert = {
   created_at?: string
 }
 
+export type UserProducerFollow = {
+  user_id: string
+  producer_id: string
+  created_at: string
+}
+
+export type UserProducerFollowInsert = {
+  user_id: string
+  producer_id: string
+  created_at?: string
+}
+
 export type CashierShift = {
   id: string
   event_id: string
@@ -1309,6 +1389,12 @@ type TicketInsert = Omit<
   | "group_id"
   | "group_slot"
   | "batch_id"
+  | "issuance_channel"
+  | "print_batch_id"
+  | "serial_label"
+  | "serial_seq"
+  | "staff_role"
+  | "staff_company"
   | "is_test"
   | "ticket_type"
   | "phase_id"
@@ -1336,6 +1422,12 @@ type TicketInsert = Omit<
   group_id?: string | null
   group_slot?: number | null
   batch_id?: string | null
+  issuance_channel?: TicketIssuanceChannel
+  print_batch_id?: string | null
+  serial_label?: string | null
+  serial_seq?: number | null
+  staff_role?: string | null
+  staff_company?: string | null
   is_test?: boolean
   ticket_type?: "admission" | "parking" | "access_pass"
   phase_id?: string | null
@@ -2083,6 +2175,97 @@ export type Database = {
           },
         ]
       }
+      ticket_templates: {
+        Row: TicketTemplate
+        Insert: Omit<
+          TicketTemplate,
+          | "id"
+          | "medium"
+          | "page_width_mm"
+          | "page_height_mm"
+          | "dpi"
+          | "layout_json"
+          | "assets_json"
+          | "is_archived"
+          | "created_at"
+          | "updated_at"
+        > & {
+          id?: string
+          medium?: TicketPrintMedium
+          page_width_mm?: number
+          page_height_mm?: number
+          dpi?: number
+          layout_json?: Json
+          assets_json?: Json
+          is_archived?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<
+          Omit<TicketTemplate, "id" | "organizer_id" | "created_at">
+        >
+        Relationships: [
+          {
+            foreignKeyName: "ticket_templates_organizer_id_fkey"
+            columns: ["organizer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ticket_print_batches: {
+        Row: TicketPrintBatch
+        Insert: Omit<
+          TicketPrintBatch,
+          | "id"
+          | "template_id"
+          | "tier_id"
+          | "mode"
+          | "channel"
+          | "series_code"
+          | "seq_start"
+          | "status"
+          | "issued_count"
+          | "artifact_csv_url"
+          | "artifact_pdf_url"
+          | "created_by"
+          | "created_at"
+        > & {
+          id?: string
+          template_id?: string | null
+          tier_id?: string | null
+          mode?: TicketPrintBatchMode
+          channel?: TicketPrintBatchChannel
+          series_code?: string
+          seq_start?: number
+          status?: TicketPrintBatchStatus
+          issued_count?: number
+          artifact_csv_url?: string | null
+          artifact_pdf_url?: string | null
+          created_by?: string | null
+          created_at?: string
+        }
+        Update: Partial<
+          Omit<TicketPrintBatch, "id" | "event_id" | "organizer_id" | "created_at">
+        >
+        Relationships: [
+          {
+            foreignKeyName: "ticket_print_batches_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ticket_print_batches_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "ticket_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ticket_tier_phases: {
         Row: TicketTierPhase
         Insert: Omit<
@@ -2142,6 +2325,13 @@ export type Database = {
             columns: ["event_id"]
             isOneToOne: false
             referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_print_batch_id_fkey"
+            columns: ["print_batch_id"]
+            isOneToOne: false
+            referencedRelation: "ticket_print_batches"
             referencedColumns: ["id"]
           },
         ]
@@ -2456,6 +2646,12 @@ export type Database = {
         Row: UserFavorite
         Insert: UserFavoriteInsert
         Update: Partial<UserFavoriteInsert>
+        Relationships: []
+      }
+      user_producer_follows: {
+        Row: UserProducerFollow
+        Insert: UserProducerFollowInsert
+        Update: Partial<UserProducerFollowInsert>
         Relationships: []
       }
       ticket_resale_listings: {
@@ -3986,6 +4182,24 @@ export type Database = {
           p_mode: string
           p_guests?: Json
           p_unnamed_count?: number
+        }
+        Returns: Json
+      }
+      issue_print_batch_tx: {
+        Args: {
+          p_event_id: string
+          p_staff_id: string
+          p_tier_id: string
+          p_template_id?: string | null
+          p_name: string
+          p_mode: string
+          p_channel: string
+          p_series_code: string
+          p_seq_start: number
+          p_unnamed_count: number
+          p_guests?: Json
+          p_default_staff_role?: string | null
+          p_default_staff_company?: string | null
         }
         Returns: Json
       }

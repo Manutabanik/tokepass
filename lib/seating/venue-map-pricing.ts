@@ -1,6 +1,9 @@
 import { inferInventoryTierType } from "@/lib/inventory/unified-inventory"
 import type { VenuePricingMap } from "@/lib/seating/venue-adapter"
-import { venueMapHasInventory } from "@/lib/seating/venue-map-geometry"
+import {
+  flattenSeatsForAvailability,
+  venueMapHasInventory,
+} from "@/lib/seating/venue-map-geometry"
 import {
   listVenuePriceGroups,
   type VenuePriceGroup,
@@ -62,6 +65,29 @@ export function ticketRequiresInteractiveMap(
   tier: Parameters<typeof isMapBackedTicket>[0],
 ): boolean {
   return isMapBackedTicket(tier)
+}
+
+/** Mesas/butacas van al mapa. Zonas GA van al contador. */
+export function sectorUsesNumberedMap(input: {
+  seatingSectorId?: string | null
+  layoutType?: string | null
+  map?: InteractiveVenueMap | null
+  sectors?: Array<{ id: string; type?: string; kind?: string }>
+}): boolean {
+  const layout = (input.layoutType ?? "").trim()
+  if (layout === "numbered_seat" || layout === "table_combo") return true
+  if (layout === "general") return false
+  const sectorId = (input.seatingSectorId ?? "").trim()
+  if (!sectorId || isLogicalGeneralSectorId(sectorId)) return false
+  const listed = input.sectors?.find((sector) => sector.id === sectorId)
+  if (listed) {
+    if (listed.type === "numbered" || listed.kind === "numbered") return true
+    if (listed.type === "general" || listed.kind === "ga") return false
+  }
+  if (!input.map) return false
+  return flattenSeatsForAvailability(input.map).some(
+    (seat) => seat.sectorId === sectorId,
+  )
 }
 
 export function eventNeedsInteractiveCanvas(

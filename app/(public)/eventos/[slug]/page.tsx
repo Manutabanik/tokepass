@@ -20,7 +20,9 @@ import {
 import { normalizePreviewKey } from "@/lib/preview/sandbox"
 import {
   buildEventMetadata,
+  buildNoindexEventMetadata,
   eventSeoFromDetails,
+  isSeoHiddenEventStatus,
 } from "@/lib/seo/event-metadata"
 import { decodeEventParam } from "@/lib/seo/event-slug"
 
@@ -80,6 +82,15 @@ export async function generateMetadata({
         robots: { index: false, follow: false },
       }
     }
+  }
+
+  const fullSlug = decodeURIComponent(rawSlug)
+  const decodedSlug = decodeEventParam(rawSlug)
+  const gate = await cachedEventAccessGate(
+    decodedSlug !== fullSlug ? decodedSlug : fullSlug,
+  )
+  if (gate && isSeoHiddenEventStatus(gate.status)) {
+    return buildNoindexEventMetadata(gate.title)
   }
 
   return { title: "Evento no encontrado", robots: { index: false, follow: false } }

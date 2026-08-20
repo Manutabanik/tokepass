@@ -7,7 +7,7 @@ import type { TicketSelectorTier } from "@/components/public/ticket-tier-selecto
 import { generalTicketMaxQuantity } from "@/lib/checkout/general-ticket-quantity"
 import { resolveStockScarcity } from "@/lib/checkout/stock-scarcity"
 import { resolveTicketHighlightBadge } from "@/lib/checkout/ticket-picker"
-import { formatCurrency } from "@/lib/format"
+import { formatTicketPrice } from "@/lib/format"
 import { isLogicalGeneralSectorId } from "@/lib/seating/venue-map-pricing"
 import { cn, tapFeedbackClass } from "@/lib/utils"
 
@@ -136,7 +136,7 @@ export function TicketTierList({
                   </div>
                   <div className="flex items-center gap-2">
                     <p className="text-xl font-extrabold tabular-nums text-gray-900 dark:text-foreground">
-                      {formatCurrency(tier.price)}
+                      {formatTicketPrice(tier.price)}
                     </p>
                     {soldOut ? (
                       <span className="text-xs font-semibold text-destructive">
