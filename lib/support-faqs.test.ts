@@ -16,6 +16,7 @@ describe("parseSupportFaqInput", () => {
       assert.equal(parsed.value.question, "Como reembolso?")
       assert.equal(parsed.value.isActive, true)
       assert.equal(parsed.value.order, 12)
+      assert.equal(parsed.value.category, "ventas")
     }
   })
 
@@ -34,5 +35,23 @@ describe("parseSupportFaqInput", () => {
     })
     assert.equal(parsed.ok, true)
     if (parsed.ok) assert.equal(parsed.value.isActive, false)
+  })
+
+  it("accepts a valid category and rejects an unknown one", () => {
+    const parsed = parseSupportFaqInput({
+      question: "Como retiro el dinero?",
+      answer: "Pedilo desde Recaudacion y Retiros.",
+      category: "cobros",
+      isActive: true,
+    })
+    assert.equal(parsed.ok, true)
+    if (parsed.ok) assert.equal(parsed.value.category, "cobros")
+
+    const invalid = parseSupportFaqInput({
+      question: "Como retiro el dinero?",
+      answer: "Pedilo desde Recaudacion y Retiros.",
+      category: "marketing",
+    })
+    assert.equal(invalid.ok, false)
   })
 })

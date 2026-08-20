@@ -10,9 +10,11 @@ import { clearClientSessionArtifacts } from "@/lib/session-cleanup"
 export function SignOutButton({
   className,
   showLabel = true,
+  label = "Salir",
 }: {
   className?: string
   showLabel?: boolean
+  label?: string
 }) {
   const [isPending, startTransition] = useTransition()
 
@@ -40,9 +42,7 @@ export function SignOutButton({
       }
     >
       <LogOut aria-hidden="true" />
-      {showLabel ? (
-        <span className="hidden sm:inline">Salir</span>
-      ) : null}
+      {showLabel ? <span>{label}</span> : null}
     </Button>
   )
 }

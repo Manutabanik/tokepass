@@ -91,6 +91,55 @@ export function aabbToRect(box: Aabb): BoundsRect {
   }
 }
 
+const SEAT_GIZMO_PAD = 8
+
+export function pointsToBounds(
+  points: Array<{ x: number; y: number }>,
+  pad = SEAT_GIZMO_PAD,
+): BoundsRect | null {
+  if (points.length === 0) return null
+  const xs = points.map((point) => point.x)
+  const ys = points.map((point) => point.y)
+  const minX = Math.min(...xs)
+  const minY = Math.min(...ys)
+  const maxX = Math.max(...xs)
+  const maxY = Math.max(...ys)
+  return {
+    x: minX - pad,
+    y: minY - pad,
+    width: Math.max(1, maxX - minX + pad * 2),
+    height: Math.max(1, maxY - minY + pad * 2),
+  }
+}
+
+export function applyLiveToSeats<
+  T extends { x: number; y: number; rotation?: number },
+>(seats: T[], live: LiveTransform): T[] {
+  if (live.type === "move") {
+    return seats.map((seat) => ({
+      ...seat,
+      x: roundCoord(seat.x + live.dx),
+      y: roundCoord(seat.y + live.dy),
+    }))
+  }
+  if (live.type === "rotate") {
+    return seats.map((seat) => {
+      const point = rotatePoint(seat.x, seat.y, live.cx, live.cy, live.deg)
+      return {
+        ...seat,
+        x: roundCoord(point.x),
+        y: roundCoord(point.y),
+        rotation: normalizeDeg((seat.rotation ?? 0) + live.deg),
+      }
+    })
+  }
+  return seats.map((seat) => ({
+    ...seat,
+    x: roundCoord(live.ox + (seat.x - live.ox) * live.scale),
+    y: roundCoord(live.oy + (seat.y - live.oy) * live.scale),
+  }))
+}
+
 export function aabbIntersects(a: Aabb, b: Aabb): boolean {
   return a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY
 }
@@ -370,7 +419,7 @@ export function boundsCenter(box: BoundsRect): { x: number; y: number } {
   }
 }
 
-function normalizeDeg(deg: number) {
+export function normalizeDeg(deg: number) {
   return roundCoord((((deg % 360) + 360) % 360))
 }
 

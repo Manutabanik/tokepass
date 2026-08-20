@@ -14,8 +14,8 @@ const MODES: Array<{
   icon: typeof Box
 }> = [
   { id: "architecture", label: "1. Arquitectura", short: "Arquitectura", icon: Box },
-  { id: "indexing", label: "2. Indexación", short: "Indexación", icon: Hash },
-  { id: "pricing", label: "3. Tarifas", short: "Tarifas", icon: CircleDollarSign },
+  { id: "indexing", label: "2. Numeración", short: "Numeración", icon: Hash },
+  { id: "pricing", label: "3. Precios", short: "Precios", icon: CircleDollarSign },
 ]
 
 export function VenueWorkModeTabs({
@@ -27,7 +27,7 @@ export function VenueWorkModeTabs({
   value: VenueWorkMode
   onChange: (mode: VenueWorkMode) => void
   className?: string
-  layout?: "tabs" | "stack"
+  layout?: "tabs" | "stack" | "stepper"
 }) {
   if (layout === "stack") {
     return (
@@ -78,25 +78,27 @@ export function VenueWorkModeTabs({
     >
       <TabsList
         aria-label="Modo de trabajo"
-        className="h-9 w-full min-w-0 justify-center gap-0 overflow-x-auto bg-muted p-0.5 text-muted-foreground sm:w-auto"
+        className={cn(
+          "h-9 w-auto min-w-0 justify-center gap-0 bg-zinc-100 p-0.5 text-muted-foreground dark:bg-zinc-900",
+          layout === "stepper" && "h-9",
+        )}
       >
-        {MODES.map((mode, index) => {
+        {MODES.map((mode) => {
           const Icon = mode.icon
+          const stepper = layout === "stepper"
           return (
             <TabsTrigger
               key={mode.id}
               value={mode.id}
-              className="h-8 shrink-0 gap-1 px-2 text-[11px] data-active:bg-background data-active:text-foreground sm:px-2.5 sm:text-xs"
+              className={cn(
+                "h-8 shrink-0 gap-1 px-2.5 text-xs data-active:bg-background data-active:text-foreground",
+                stepper && "px-3 text-[13px] font-medium",
+              )}
             >
-              <Icon className="size-3.5" aria-hidden="true" />
-              <span className="hidden md:inline">
-                {index + 1}. {mode.id === "architecture"
-                  ? "Arquitectura"
-                  : mode.id === "indexing"
-                    ? "Numeración"
-                    : "Precios y tarifas"}
-              </span>
-              <span className="md:hidden">{mode.short}</span>
+              {stepper ? null : (
+                <Icon className="size-3.5" aria-hidden="true" />
+              )}
+              <span>{mode.label}</span>
             </TabsTrigger>
           )
         })}

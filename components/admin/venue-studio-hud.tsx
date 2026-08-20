@@ -47,7 +47,7 @@ export function VenueStudioHud({
         className,
       )}
     >
-      <div className="flex max-w-[calc(100vw-1.5rem)] flex-nowrap items-center gap-3 overflow-x-auto rounded-full border border-border bg-card/95 px-3 py-1.5 text-xs font-medium text-card-foreground shadow-lg backdrop-blur-md hide-scrollbar md:gap-5 md:px-4">
+      <div className="flex max-w-[calc(100vw-1.5rem)] flex-nowrap items-center gap-2.5 overflow-x-auto rounded-full border border-border bg-card/95 px-2.5 py-1 text-[11px] font-medium text-card-foreground shadow-md backdrop-blur-md hide-scrollbar md:gap-4 md:px-3">
         <span className="inline-flex shrink-0 items-center gap-1.5">
           <Users className="size-3.5 shrink-0" aria-hidden="true" />
           {stats.total} {stats.total === 1 ? "lugar" : "lugares"}

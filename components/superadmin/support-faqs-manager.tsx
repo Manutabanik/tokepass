@@ -1,15 +1,24 @@
 "use client"
 
-import { LoaderCircle, Pencil, Plus, Trash2 } from "lucide-react"
+import {
+  ChevronDown,
+  ChevronUp,
+  LoaderCircle,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react"
 import { useState, useTransition } from "react"
 import { toast } from "sonner"
 
 import {
   createSupportFaq,
   deleteSupportFaq,
+  moveSupportFaq,
   updateSupportFaq,
   type SupportFaqItem,
 } from "@/app/actions/support-faqs"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -31,12 +40,18 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
-import { Badge } from "@/components/ui/badge"
+import {
+  FAQ_CATEGORIES,
+  faqCategoryLabel,
+  parseFaqCategory,
+} from "@/lib/support-faqs"
+import type { SupportFaqCategory } from "@/types/database"
 
 type Draft = {
   id?: string
   question: string
   answer: string
+  category: SupportFaqCategory
   isActive: boolean
   order: string
 }
@@ -44,6 +59,7 @@ type Draft = {
 const EMPTY_DRAFT: Draft = {
   question: "",
   answer: "",
+  category: "ventas",
   isActive: true,
   order: "",
 }
@@ -62,7 +78,9 @@ export function SupportFaqsManager({
   function openCreate() {
     setDraft({
       ...EMPTY_DRAFT,
-      order: String(faqs.length === 0 ? 0 : Math.max(...faqs.map((item) => item.order)) + 1),
+      order: String(
+        faqs.length === 0 ? 0 : Math.max(...faqs.map((item) => item.order)) + 1,
+      ),
     })
     setEditorOpen(true)
   }
@@ -72,6 +90,7 @@ export function SupportFaqsManager({
       id: faq.id,
       question: faq.question,
       answer: faq.answer,
+      category: faq.category,
       isActive: faq.isActive,
       order: String(faq.order),
     })
@@ -82,6 +101,7 @@ export function SupportFaqsManager({
     const payload = {
       question: draft.question,
       answer: draft.answer,
+      category: draft.category,
       isActive: draft.isActive,
       order: Number(draft.order),
     }
@@ -110,6 +130,17 @@ export function SupportFaqsManager({
     })
   }
 
+  function move(faq: SupportFaqItem, direction: "up" | "down") {
+    startTransition(async () => {
+      const result = await moveSupportFaq(faq.id, direction)
+      if (!result.success) {
+        toast.error(result.error)
+        return
+      }
+      setFaqs(result.data)
+    })
+  }
+
   function confirmDelete() {
     if (!deleteTarget) return
     const id = deleteTarget.id
@@ -135,7 +166,7 @@ export function SupportFaqsManager({
         </p>
         <Button type="button" onClick={openCreate} className="min-h-11">
           <Plus className="size-4" aria-hidden />
-          Nueva Pregunta
+          Nueva pregunta
         </Button>
       </div>
 
@@ -143,9 +174,9 @@ export function SupportFaqsManager({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-16">Orden</TableHead>
+              <TableHead className="w-24">Orden</TableHead>
               <TableHead>Pregunta</TableHead>
-              <TableHead className="hidden md:table-cell">Respuesta</TableHead>
+              <TableHead>Categoria</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead className="w-28 text-right">Acciones</TableHead>
             </TableRow>
@@ -157,26 +188,46 @@ export function SupportFaqsManager({
                   colSpan={5}
                   className="py-12 text-center text-sm text-muted-foreground"
                 >
-                  Crea la primera pregunta para el modulo de soporte.
+                  Crea la primera pregunta para el centro de ayuda.
                 </TableCell>
               </TableRow>
             ) : (
-              faqs.map((faq) => (
+              faqs.map((faq, index) => (
                 <TableRow key={faq.id}>
-                  <TableCell className="tabular-nums text-muted-foreground">
-                    {faq.order}
+                  <TableCell>
+                    <div className="flex items-center gap-1">
+                      <span className="w-6 tabular-nums text-muted-foreground">
+                        {faq.order}
+                      </span>
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label="Subir"
+                        disabled={pending || index === 0}
+                        onClick={() => move(faq, "up")}
+                      >
+                        <ChevronUp className="size-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label="Bajar"
+                        disabled={pending || index === faqs.length - 1}
+                        onClick={() => move(faq, "down")}
+                      >
+                        <ChevronDown className="size-4" />
+                      </Button>
+                    </div>
                   </TableCell>
-                  <TableCell className="max-w-[18rem] whitespace-normal font-medium text-foreground">
+                  <TableCell className="max-w-[22rem] whitespace-normal font-medium text-foreground">
                     {faq.question}
                   </TableCell>
-                  <TableCell className="hidden max-w-[22rem] whitespace-normal text-muted-foreground md:table-cell">
-                    {faq.answer.length > 140
-                      ? `${faq.answer.slice(0, 140)}…`
-                      : faq.answer}
-                  </TableCell>
+                  <TableCell>{faqCategoryLabel(faq.category)}</TableCell>
                   <TableCell>
                     <Badge variant={faq.isActive ? "default" : "secondary"}>
-                      {faq.isActive ? "Activa" : "Oculta"}
+                      {faq.isActive ? "Publicada" : "Borrador"}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
@@ -215,13 +266,13 @@ export function SupportFaqsManager({
               {draft.id ? "Editar pregunta" : "Nueva pregunta"}
             </DialogTitle>
             <DialogDescription>
-              Titulo visible, respuesta detallada y visibilidad en el modulo de
-              soporte.
+              Pregunta, categoria y respuesta que van a ver los productores en
+              Ayuda y FAQ.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="faq-question">Titulo de la pregunta</Label>
+              <Label htmlFor="faq-question">Pregunta</Label>
               <Input
                 id="faq-question"
                 value={draft.question}
@@ -232,11 +283,31 @@ export function SupportFaqsManager({
                     question: event.target.value,
                   }))
                 }
-                placeholder="Como descargo mi entrada?"
+                placeholder="Como retiro el dinero?"
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="faq-answer">Respuesta detallada</Label>
+              <Label htmlFor="faq-category">Categoria</Label>
+              <select
+                id="faq-category"
+                value={draft.category}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    category: parseFaqCategory(event.target.value),
+                  }))
+                }
+                className="h-10 rounded-lg border border-input bg-background px-3 text-sm"
+              >
+                {FAQ_CATEGORIES.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="faq-answer">Respuesta</Label>
               <Textarea
                 id="faq-answer"
                 value={draft.answer}
@@ -248,7 +319,7 @@ export function SupportFaqsManager({
                     answer: event.target.value,
                   }))
                 }
-                placeholder="Explica el paso a paso para la persona que consulta."
+                placeholder="Respuesta clara y resumida para el productor."
                 className="min-h-36"
               />
             </div>
@@ -270,7 +341,9 @@ export function SupportFaqsManager({
                 />
               </div>
               <label className="flex h-11 items-center justify-between gap-3 rounded-lg border border-border px-3">
-                <span className="text-sm font-medium">Visible</span>
+                <span className="text-sm font-medium">
+                  {draft.isActive ? "Publicada" : "Borrador"}
+                </span>
                 <Switch
                   checked={draft.isActive}
                   onCheckedChange={(checked) =>

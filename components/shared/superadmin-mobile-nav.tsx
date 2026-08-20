@@ -61,7 +61,7 @@ export const SUPERADMIN_NAV = [
   },
   {
     label: "Preguntas frecuentes",
-    href: "/admin/support-faqs",
+    href: "/superadmin/faq",
     icon: CircleHelp,
   },
   { label: "Categorías", href: "/superadmin/categories", icon: Tags },

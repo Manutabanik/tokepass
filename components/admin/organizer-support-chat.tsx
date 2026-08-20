@@ -28,6 +28,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { isAdminFocusedFlow } from "@/lib/navigation/focused-flows"
+import { OPEN_ORGANIZER_SUPPORT_EVENT } from "@/lib/support-events"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
 
@@ -118,6 +119,16 @@ export function OrganizerSupportChat() {
 
   useEffect(() => {
     void getOrganizerUnreadSupportCount().then(setUnread)
+  }, [])
+
+  useEffect(() => {
+    function openFromHelp() {
+      setOpen(true)
+    }
+    window.addEventListener(OPEN_ORGANIZER_SUPPORT_EVENT, openFromHelp)
+    return () => {
+      window.removeEventListener(OPEN_ORGANIZER_SUPPORT_EVENT, openFromHelp)
+    }
   }, [])
 
   useEffect(() => {

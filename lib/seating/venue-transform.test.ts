@@ -27,6 +27,8 @@ import {
   zoomTowardCursor,
   expandViewBoxToContainer,
   fitWorldInViewBox,
+  applyLiveToSeats,
+  pointsToBounds,
 } from "./venue-transform"
 
 describe("venue-transform", () => {
@@ -319,5 +321,33 @@ describe("venue-transform", () => {
     assert.equal(fitted.zoom, 1)
     assert.equal(fitted.pan.x, 200)
     assert.equal(fitted.pan.y, 0)
+  })
+
+  it("builds a padded box around selected seats", () => {
+    const box = pointsToBounds(
+      [
+        { x: 100, y: 80 },
+        { x: 140, y: 80 },
+      ],
+      8,
+    )
+    assert.ok(box)
+    assert.equal(box?.x, 92)
+    assert.equal(box?.width, 56)
+  })
+
+  it("orbits seats around the group center and adds the angle", () => {
+    const next = applyLiveToSeats(
+      [
+        { x: 80, y: 100, rotation: 0 },
+        { x: 120, y: 100, rotation: 15 },
+      ],
+      { type: "rotate", cx: 100, cy: 100, deg: 180 },
+    )
+    assert.equal(next[0]!.x, 120)
+    assert.equal(next[0]!.y, 100)
+    assert.equal(next[0]!.rotation, 180)
+    assert.equal(next[1]!.x, 80)
+    assert.equal(next[1]!.rotation, 195)
   })
 })

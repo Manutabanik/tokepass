@@ -12,8 +12,8 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useMemo, useState } from "react"
 
-import { PwaInstallNavButton } from "@/components/pwa/pwa-install-nav-button"
-import { getAdminNavItems } from "@/components/shared/admin-nav"
+import { getAdminNavGroups, getAdminNavItems } from "@/components/shared/admin-nav"
+import { AdminNavTree } from "@/components/shared/admin-nav-tree"
 import { BrandLogo } from "@/components/shared/brand-logo"
 import { SignOutButton } from "@/components/shared/sign-out-button"
 import {
@@ -160,7 +160,7 @@ function AdminBottomNavChrome({
     () => buildTabs(mode, staffRoles),
     [mode, staffRoles],
   )
-  const navigation = getAdminNavItems({ mode, staffRoles })
+  const groups = getAdminNavGroups({ mode, staffRoles })
 
   return (
     <>
@@ -238,37 +238,13 @@ function AdminBottomNavChrome({
             </div>
           </SheetHeader>
 
-          <nav
-            className="flex-1 space-y-1 overflow-y-auto p-3"
-            aria-label="Más opciones"
-          >
-            {navigation.map(({ label, href, icon: Icon }) => {
-              const active =
-                href === "/admin"
-                  ? pathname === href
-                  : pathname === href || pathname.startsWith(`${href}/`)
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={() => setMenuOpen(false)}
-                  className={cn(
-                    "flex min-h-12 items-center gap-3 rounded-xl px-3 text-sm font-medium transition",
-                    active
-                      ? "bg-violet-500/12 text-violet-700 dark:text-violet-300 ring-1 ring-inset ring-violet-500/15"
-                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-                  )}
-                >
-                  <Icon className="size-5 shrink-0" aria-hidden="true" />
-                  {label}
-                </Link>
-              )
-            })}
-            <PwaInstallNavButton
-              variant="sidebar"
-              onAction={() => setMenuOpen(false)}
+          <div className="min-h-0 flex-1 overflow-y-auto p-3 scrollbar-thin">
+            <AdminNavTree
+              groups={groups}
+              pathname={pathname}
+              onNavigate={() => setMenuOpen(false)}
             />
-          </nav>
+          </div>
 
           <SheetFooter className="gap-3">
             <div className="text-left">
@@ -277,7 +253,10 @@ function AdminBottomNavChrome({
               </p>
               <p className="truncate text-xs text-muted-foreground">{userEmail}</p>
             </div>
-            <SignOutButton className="min-h-12 h-12 w-full justify-center rounded-xl border border-border text-muted-foreground hover:bg-muted/50 hover:text-foreground" />
+            <SignOutButton
+              label="Cerrar Sesión"
+              className="min-h-12 h-12 w-full justify-center rounded-xl border border-border text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+            />
           </SheetFooter>
         </SheetContent>
       </Sheet>

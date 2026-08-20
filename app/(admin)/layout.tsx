@@ -11,6 +11,7 @@ import { AdminSidebar } from "@/components/shared/admin-sidebar"
 import { BrandLogo } from "@/components/shared/brand-logo"
 import { SignOutButton } from "@/components/shared/sign-out-button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { DashboardHeaderHelp } from "@/components/dashboard/header"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { OrganizerSupportChat } from "@/components/admin/organizer-support-chat"
 import { createClient } from "@/lib/supabase/server"
@@ -112,7 +113,17 @@ export default async function AdminLayout({
 
   return (
     <AdminChrome
-      sidebar={<AdminSidebar mode={mode} staffRoles={staffRoles} />}
+      sidebar={
+        <AdminSidebar
+          mode={mode}
+          staffRoles={staffRoles}
+          user={{
+            name: userLabel,
+            email: resolvedProfile.email ?? "",
+            avatarUrl: resolvedProfile.avatar_url,
+          }}
+        />
+      }
       header={
         <header className="sticky top-0 z-40 shrink-0 border-b border-border bg-background/85 pt-[max(env(safe-area-inset-top),1rem)] backdrop-blur-xl">
           <div className="flex h-16 items-center justify-between px-4 sm:px-8">
@@ -130,6 +141,7 @@ export default async function AdminLayout({
               </p>
             </div>
             <div className="flex items-center gap-2 sm:gap-3">
+              <DashboardHeaderHelp canChat={isOrganizer} />
               <ThemeToggle />
               <Link
                 href="/admin/scanner"

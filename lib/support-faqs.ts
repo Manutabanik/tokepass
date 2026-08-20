@@ -1,9 +1,19 @@
+import type { SupportFaqCategory } from "@/types/database"
+
 export const FAQ_QUESTION_MAX = 180
 export const FAQ_ANSWER_MAX = 8000
+
+export const FAQ_CATEGORIES = [
+  { id: "ventas", label: "Ventas" },
+  { id: "cobros", label: "Cobros" },
+  { id: "accesos", label: "Accesos" },
+  { id: "equipos", label: "Equipos" },
+] as const satisfies ReadonlyArray<{ id: SupportFaqCategory; label: string }>
 
 export type SupportFaqInput = {
   question: string
   answer: string
+  category: SupportFaqCategory
   isActive: boolean
   order: number
 }
@@ -23,9 +33,22 @@ function asInt(value: unknown, fallback: number) {
   return fallback
 }
 
+export function isFaqCategory(value: unknown): value is SupportFaqCategory {
+  return FAQ_CATEGORIES.some((item) => item.id === value)
+}
+
+export function parseFaqCategory(value: unknown): SupportFaqCategory {
+  return isFaqCategory(value) ? value : "ventas"
+}
+
+export function faqCategoryLabel(category: SupportFaqCategory) {
+  return FAQ_CATEGORIES.find((item) => item.id === category)?.label ?? "Ventas"
+}
+
 export function parseSupportFaqInput(raw: {
   question?: unknown
   answer?: unknown
+  category?: unknown
   isActive?: unknown
   order?: unknown
 }): SupportFaqParseResult {
@@ -49,11 +72,23 @@ export function parseSupportFaqInput(raw: {
       error: `La respuesta no puede superar ${FAQ_ANSWER_MAX} caracteres.`,
     }
   }
+  if (raw.category != null && !isFaqCategory(raw.category)) {
+    return { ok: false, error: "Elegí una categoría válida." }
+  }
   const isActive =
     raw.isActive === true ||
     raw.isActive === "true" ||
     raw.isActive === "on" ||
     raw.isActive === 1
   const order = Math.min(9999, Math.max(0, asInt(raw.order, 0)))
-  return { ok: true, value: { question, answer, isActive, order } }
+  return {
+    ok: true,
+    value: {
+      question,
+      answer,
+      category: parseFaqCategory(raw.category),
+      isActive,
+      order,
+    },
+  }
 }

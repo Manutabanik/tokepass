@@ -2,15 +2,19 @@
 
 import { revalidatePath } from "next/cache"
 
-import { parseSupportFaqInput } from "@/lib/support-faqs"
+import {
+  parseFaqCategory,
+  parseSupportFaqInput,
+} from "@/lib/support-faqs"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
-import type { SupportFaq } from "@/types/database"
+import type { SupportFaq, SupportFaqCategory } from "@/types/database"
 
 export type SupportFaqItem = {
   id: string
   question: string
   answer: string
+  category: SupportFaqCategory
   isActive: boolean
   order: number
   createdAt: string
@@ -26,6 +30,7 @@ function mapFaq(row: SupportFaq): SupportFaqItem {
     id: row.id,
     question: row.question,
     answer: row.answer,
+    category: parseFaqCategory(row.category),
     isActive: row.is_active,
     order: row.sort_order,
     createdAt: row.created_at,
@@ -33,7 +38,7 @@ function mapFaq(row: SupportFaq): SupportFaqItem {
   }
 }
 
-async function requireFaqEditor() {
+async function requireSuperAdminEditor() {
   const supabase = await createClient()
   const {
     data: { user },
@@ -47,22 +52,20 @@ async function requireFaqEditor() {
     .select("id, role")
     .eq("id", user.id)
     .maybeSingle()
-  if (
-    !profile ||
-    (profile.role !== "admin" && profile.role !== "super_admin")
-  ) {
-    throw new Error("No tenes permiso para gestionar preguntas frecuentes.")
+  if (!profile || profile.role !== "super_admin") {
+    throw new Error("Solo el Super Admin puede gestionar las preguntas frecuentes.")
   }
   return { supabase: createAdminClient() }
 }
 
 function revalidateFaqSurfaces() {
-  revalidatePath("/admin/support-faqs")
-  revalidatePath("/superadmin/soporte")
+  revalidatePath("/superadmin/faq")
+  revalidatePath("/super-admin/faq")
+  revalidatePath("/admin")
 }
 
 export async function listSupportFaqs(): Promise<SupportFaqItem[]> {
-  const { supabase } = await requireFaqEditor()
+  const { supabase } = await requireSuperAdminEditor()
   const { data, error } = await supabase
     .from("support_faqs")
     .select("*")
@@ -103,11 +106,12 @@ async function nextSortOrder(
 export async function createSupportFaq(input: {
   question: string
   answer: string
+  category: SupportFaqCategory
   isActive: boolean
   order?: number
 }): Promise<SupportFaqActionResult<SupportFaqItem>> {
   try {
-    const { supabase } = await requireFaqEditor()
+    const { supabase } = await requireSuperAdminEditor()
     const parsed = parseSupportFaqInput(input)
     if (!parsed.ok) return { success: false, error: parsed.error }
 
@@ -121,6 +125,7 @@ export async function createSupportFaq(input: {
       .insert({
         question: parsed.value.question,
         answer: parsed.value.answer,
+        category: parsed.value.category,
         is_active: parsed.value.isActive,
         sort_order: sortOrder,
       })
@@ -150,11 +155,12 @@ export async function updateSupportFaq(input: {
   id: string
   question: string
   answer: string
+  category: SupportFaqCategory
   isActive: boolean
   order: number
 }): Promise<SupportFaqActionResult<SupportFaqItem>> {
   try {
-    const { supabase } = await requireFaqEditor()
+    const { supabase } = await requireSuperAdminEditor()
     const id = input.id.trim()
     if (!id) return { success: false, error: "Falta el identificador." }
     const parsed = parseSupportFaqInput(input)
@@ -165,6 +171,7 @@ export async function updateSupportFaq(input: {
       .update({
         question: parsed.value.question,
         answer: parsed.value.answer,
+        category: parsed.value.category,
         is_active: parsed.value.isActive,
         sort_order: parsed.value.order,
       })
@@ -191,11 +198,78 @@ export async function updateSupportFaq(input: {
   }
 }
 
+export async function moveSupportFaq(
+  id: string,
+  direction: "up" | "down",
+): Promise<SupportFaqActionResult<SupportFaqItem[]>> {
+  try {
+    const { supabase } = await requireSuperAdminEditor()
+    const faqId = id.trim()
+    if (!faqId) return { success: false, error: "Falta el identificador." }
+
+    const { data, error } = await supabase
+      .from("support_faqs")
+      .select("*")
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true })
+
+    if (error || !data) {
+      return {
+        success: false,
+        error: error?.message ?? "No se pudo reordenar.",
+      }
+    }
+
+    const index = data.findIndex((item) => item.id === faqId)
+    const swapWith = direction === "up" ? index - 1 : index + 1
+    if (index < 0 || swapWith < 0 || swapWith >= data.length) {
+      return { success: true, data: data.map(mapFaq) }
+    }
+
+    const current = data[index]!
+    const neighbor = data[swapWith]!
+    const currentOrder = current.sort_order
+    const neighborOrder = neighbor.sort_order
+
+    const first = await supabase
+      .from("support_faqs")
+      .update({ sort_order: neighborOrder })
+      .eq("id", current.id)
+    if (first.error) {
+      return { success: false, error: first.error.message }
+    }
+    const second = await supabase
+      .from("support_faqs")
+      .update({ sort_order: currentOrder })
+      .eq("id", neighbor.id)
+    if (second.error) {
+      return { success: false, error: second.error.message }
+    }
+
+    revalidateFaqSurfaces()
+    const refreshed = await supabase
+      .from("support_faqs")
+      .select("*")
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true })
+    return {
+      success: true,
+      data: (refreshed.data ?? data).map(mapFaq),
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : "No se pudo reordenar.",
+    }
+  }
+}
+
 export async function deleteSupportFaq(
   id: string,
 ): Promise<SupportFaqActionResult<{ id: string }>> {
   try {
-    const { supabase } = await requireFaqEditor()
+    const { supabase } = await requireSuperAdminEditor()
     const faqId = id.trim()
     if (!faqId) return { success: false, error: "Falta el identificador." }
 

@@ -23,7 +23,6 @@ import {
   PanelRightClose,
   PanelRightOpen,
   Redo,
-  RotateCw,
   Save,
   Square,
   Trash2,
@@ -69,8 +68,13 @@ import {
   saveOrganizerVenueTemplate,
   type OrganizerVenueTemplate,
 } from "@/app/actions/venue-templates"
-import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { Button } from "@/components/ui/button"
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 import {
   Sheet,
   SheetContent,
@@ -152,6 +156,7 @@ import {
   applyMoveSnap,
   applyMoveSnapFromOrigin,
   applyRotateSnap,
+  applyLiveToSeats,
   bakeLiveTransform,
   boundsCenter,
   rotationDeltaFromPointer,
@@ -161,6 +166,8 @@ import {
   expandViewBoxToContainer,
   flipSelectedElements,
   liveTransformToSvg,
+  normalizeDeg,
+  pointsToBounds,
   resizeOrigin,
   rotateElementsAround,
   selectionBounds,
@@ -221,6 +228,7 @@ import {
   type InteractiveVenueMap,
   type VenueMapElement,
   type VenueMapPoint,
+  type VenueMapSeat,
   type VenueMapSector,
   type VenueMapZone,
 } from "@/types/venue-map"
@@ -249,6 +257,7 @@ type TransformDrag =
       mode: "move"
       ids: string[]
       zoneId?: string
+      target?: "seats"
       startX: number
       startY: number
       originX: number
@@ -258,6 +267,7 @@ type TransformDrag =
       mode: "scale"
       ids: string[]
       zoneId?: string
+      target?: "seats"
       ox: number
       oy: number
       startDist: number
@@ -267,6 +277,7 @@ type TransformDrag =
       mode: "rotate"
       ids: string[]
       zoneId?: string
+      target?: "seats"
       cx: number
       cy: number
       startAngle: number
@@ -279,6 +290,15 @@ type ContextTarget =
   | { kind: "aisle"; id: string }
   | { kind: "element"; id: string }
   | { kind: "zone"; id: string }
+
+type SelectedSeatEntry = {
+  key: string
+  x: number
+  y: number
+  source: "sector" | "element"
+  ownerId: string
+  seatId: string
+}
 
 const CANVAS = VENUE_MAP_CANVAS
 const ZONE_COLORS = ["#f97316", "#ec4899", "#f59e0b", "#10b981", "#6366f1", "#06b6d4"]
@@ -617,6 +637,64 @@ export function InteractiveVenueMapEditor({
     !preview && tool === "select" && !placement && selectedElements.length > 0
       ? selectionBounds(selectedElements)
       : null
+  const selectedSeatEntries = useMemo((): SelectedSeatEntry[] => {
+    if (preview || tool !== "select" || placement) return []
+    if (selection?.kind === "sector") {
+      const sector = map.sectors.find((item) => item.id === selection.id)
+      return (sector?.seats ?? []).map((seat) => ({
+        key: seatKey(sector!.id, seat.id),
+        x: seat.x,
+        y: seat.y,
+        source: "sector",
+        ownerId: sector!.id,
+        seatId: seat.id,
+      }))
+    }
+    if (selection?.kind !== "seats") return []
+    return selection.ids.flatMap((key): SelectedSeatEntry[] => {
+      const { ownerId, seatId } = parseSeatSelectionKey(key)
+      const sector = map.sectors.find((item) => item.id === ownerId)
+      const sectorSeat = sector?.seats.find((item) => item.id === seatId)
+      if (sector && sectorSeat) {
+        return [
+          {
+            key,
+            x: sectorSeat.x,
+            y: sectorSeat.y,
+            source: "sector" as const,
+            ownerId,
+            seatId,
+          },
+        ]
+      }
+      const element = (map.elements ?? []).find((item) => item.id === ownerId)
+      const elementSeat = element?.seats.find((item) => item.id === seatId)
+      if (element && elementSeat) {
+        return [
+          {
+            key,
+            x: elementSeat.x,
+            y: elementSeat.y,
+            source: "element" as const,
+            ownerId,
+            seatId,
+          },
+        ]
+      }
+      return []
+    })
+  }, [map.elements, map.sectors, placement, preview, selection, tool])
+  const selectedSeatBounds = useMemo(
+    () =>
+      selectedSeatEntries.length > 0
+        ? pointsToBounds(selectedSeatEntries)
+        : null,
+    [selectedSeatEntries],
+  )
+  const liveSeatKeys = useMemo(
+    () => new Set(selectedSeatEntries.map((item) => item.key)),
+    [selectedSeatEntries],
+  )
   const selectedZoneBounds =
     !preview && tool === "select" && !placement && selectedZone
       ? (() => {
@@ -624,7 +702,12 @@ export function InteractiveVenueMapEditor({
           return box ? aabbToRect(box) : null
         })()
       : null
-  const transformBounds = selectedZoneBounds ?? measuredBounds ?? computedBounds
+  const transformBounds =
+    selectedZoneBounds ??
+    selectedSeatBounds ??
+    measuredBounds ??
+    computedBounds
+  const seatGizmoActive = selectedSeatEntries.length > 0 && selectedElementIds.length === 0
   const geometryLocked = workMode === "pricing"
   const selectionLocked = selectedElements.some((item) => item.isLocked === true)
   const selectionFullyLocked = selectionIsFullyLocked(
@@ -804,6 +887,31 @@ export function InteractiveVenueMapEditor({
       clearLiveUi()
       return
     }
+    if (drag.target === "seats") {
+      const keys = new Set(drag.ids)
+      paintLive(null)
+      commit({
+        ...current,
+        sectors: current.sectors.map((sector) => ({
+          ...sector,
+          seats: sector.seats.map((seat) =>
+            keys.has(seatKey(sector.id, seat.id))
+              ? applyLiveToSeats([seat], snapped)[0]!
+              : seat,
+          ),
+        })),
+        elements: ensureElements(current).map((item) => ({
+          ...item,
+          seats: item.seats.map((seat) =>
+            keys.has(elementSeatKey(item.id, seat.id))
+              ? applyLiveToSeats([seat], snapped)[0]!
+              : seat,
+          ),
+        })),
+      })
+      clearLiveUi()
+      return
+    }
     const selected = new Set(drag.ids)
     const baked = bakeLiveTransform(
       ensureElements(current).filter((item) => selected.has(item.id)),
@@ -835,13 +943,16 @@ export function InteractiveVenueMapEditor({
     event: React.PointerEvent,
     zoneId?: string,
   ) {
-    if (!zoneId && idsAreLocked(ids)) return
+    const seatIds = selectedSeatEntries.map((item) => item.key)
+    const usingSeats = !zoneId && ids.length === 0 && seatIds.length > 0
+    if (!zoneId && !usingSeats && idsAreLocked(ids)) return
     const point = pointerToSvg(event)
     capturePointer(event)
     transformDrag.current = {
       mode: "move",
-      ids,
+      ids: usingSeats ? seatIds : ids,
       zoneId,
+      target: usingSeats ? "seats" : undefined,
       startX: point.x,
       startY: point.y,
       originX: transformBounds?.x ?? point.x,
@@ -856,6 +967,7 @@ export function InteractiveVenueMapEditor({
     bounds: BoundsRect,
     event: React.PointerEvent,
   ) {
+    if (seatGizmoActive) return
     if (idsAreLocked(selectedElementIds)) return
     const point = pointerToSvg(event)
     const origin = resizeOrigin(bounds, handle)
@@ -878,7 +990,9 @@ export function InteractiveVenueMapEditor({
   }
 
   function beginRotate(bounds: BoundsRect, event: React.PointerEvent) {
-    if (idsAreLocked(selectedElementIds)) return
+    const seatIds = selectedSeatEntries.map((item) => item.key)
+    const usingSeats = seatGizmoActive
+    if (!usingSeats && idsAreLocked(selectedElementIds)) return
     const point = pointerToSvg(event)
     const cx = bounds.x + bounds.width / 2
     const cy = bounds.y + bounds.height / 2
@@ -887,8 +1001,9 @@ export function InteractiveVenueMapEditor({
       selectionRef.current?.kind === "zone" ? selectionRef.current.id : undefined
     transformDrag.current = {
       mode: "rotate",
-      ids: selectedElementIds,
+      ids: usingSeats ? seatIds : selectedElementIds,
       zoneId,
+      target: usingSeats ? "seats" : undefined,
       cx,
       cy,
       startAngle: angleAt({ x: cx, y: cy }, point),
@@ -2191,6 +2306,39 @@ export function InteractiveVenueMapEditor({
     requestMobileProperties()
   }
 
+  function patchSeatsByKeys(
+    keys: Set<string>,
+    patch: {
+      status?: "available" | "blocked" | "reserved"
+      number?: number
+      x?: number
+      y?: number
+      rotation?: number
+      price?: number
+      label?: string
+    },
+  ) {
+    if (keys.size === 0) return
+    const current = mapRef.current
+    commit({
+      ...current,
+      sectors: current.sectors.map((sector) => ({
+        ...sector,
+        seats: sector.seats.map((seat) =>
+          keys.has(seatKey(sector.id, seat.id)) ? { ...seat, ...patch } : seat,
+        ),
+      })),
+      elements: ensureElements(current).map((item) => ({
+        ...item,
+        seats: item.seats.map((seat) =>
+          keys.has(elementSeatKey(item.id, seat.id))
+            ? { ...seat, ...patch }
+            : seat,
+        ),
+      })),
+    })
+  }
+
   function patchSelectedSeats(patch: {
     status?: "available" | "blocked" | "reserved"
     number?: number
@@ -2200,24 +2348,40 @@ export function InteractiveVenueMapEditor({
     price?: number
     label?: string
   }) {
-    if (selection?.kind !== "seats") return
-    const ids = new Set(selection.ids)
+    if (selection?.kind === "seats") {
+      patchSeatsByKeys(new Set(selection.ids), patch)
+      return
+    }
+    if (selection?.kind === "sector") {
+      patchSeatsByKeys(
+        new Set(selectedSeatEntries.map((item) => item.key)),
+        patch,
+      )
+    }
+  }
+
+  function applyOrientation(deg: number) {
+    const rotation = normalizeDeg(deg)
+    if (seatGizmoActive) {
+      patchSeatsByKeys(
+        new Set(selectedSeatEntries.map((item) => item.key)),
+        { rotation },
+      )
+      return
+    }
+    if (selectedElementIds.length === 0) return
+    const selected = new Set(selectedElementIds)
+    const current = mapRef.current
     commit({
-      ...map,
-      sectors: map.sectors.map((sector) => ({
-        ...sector,
-        seats: sector.seats.map((seat) =>
-          ids.has(seatKey(sector.id, seat.id)) ? { ...seat, ...patch } : seat,
-        ),
-      })),
-      elements: ensureElements(map).map((item) => ({
-        ...item,
-        seats: item.seats.map((seat) =>
-          ids.has(elementSeatKey(item.id, seat.id))
-            ? { ...seat, ...patch }
-            : seat,
-        ),
-      })),
+      ...current,
+      elements: ensureElements(current).map((item) => {
+        if (!selected.has(item.id)) return item
+        const next = { ...item, rotation }
+        if (!isInfrastructureElement(next)) {
+          next.seats = rebuildElementSeats(next)
+        }
+        return next
+      }),
     })
   }
 
@@ -2588,6 +2752,103 @@ export function InteractiveVenueMapEditor({
     Boolean(selectedElement?.groupId?.trim()) ||
     (selection?.kind === "elements" &&
       selectionHasGroup(selectedElements, selectedElementIds))
+  const inspectorHeadline = (() => {
+    if (workMode === "pricing") {
+      return { title: "Tarifas", detail: "Precio y color en el panel. El mapa no se mueve." }
+    }
+    if (workMode === "indexing") {
+      return {
+        title: "Indexación",
+        detail: "Numeración de filas y asientos del bloque seleccionado.",
+      }
+    }
+    if (selection?.kind === "seats") {
+      if (singleSeat) {
+        const title =
+          singleSeat.seat.label ??
+          (singleSeat.source === "sector"
+            ? `${singleSeat.sector.name} - Fila ${singleSeat.seat.row}, Asiento ${singleSeat.seat.number}`
+            : `${singleSeat.element.label} - Asiento ${singleSeat.seat.number}`)
+        return { title, detail: "Butaca" }
+      }
+      return {
+        title: `Selección: ${selectedSeatCount} Butacas`,
+        detail: "Precio, estado y rotación se aplican a toda la selección.",
+      }
+    }
+    if (selectedElementIds.length > 1) {
+      const allChairs = selectedElements.every((item) => item.type === "vip_chair")
+      return {
+        title: allChairs
+          ? `Selección: ${selectedElementIds.length} Butacas`
+          : `Selección: ${selectedElementIds.length} elementos`,
+        detail: "Edición masiva del grupo.",
+      }
+    }
+    if (selectedElement) {
+      return {
+        title: selectedElement.label || selectedElement.sectorName || "Elemento",
+        detail: selectedElement.sectorName || elementKindLabel(selectedElement.type),
+      }
+    }
+    if (selectedSector) {
+      return {
+        title: selectedSector.name,
+        detail: `Grada · ${selectedSector.seats.length} butacas`,
+      }
+    }
+    if (selectedZone) {
+      return { title: selectedZone.name, detail: "Zona" }
+    }
+    if (selection?.kind === "stage") {
+      return { title: map.stage?.label || "Escenario", detail: "Escenario" }
+    }
+    if (selection?.kind === "label") {
+      const text = map.labels.find((item) => item.id === selection.id)?.text
+      return { title: text || "Etiqueta", detail: "Texto de nivel" }
+    }
+    return {
+      title: "Predio",
+      detail: "Foto aérea y medidas del recinto.",
+    }
+  })()
+  const orientationState = (() => {
+    if (workMode !== "architecture") return null
+    if (seatGizmoActive && selectedSeatEntries.length > 0) {
+      if (singleSeat) {
+        return { value: singleSeat.seat.rotation ?? 0, mixed: false }
+      }
+      const rotations =
+        selection?.kind === "seats"
+          ? selection.ids.flatMap((key) => {
+              const { ownerId, seatId } = parseSeatSelectionKey(key)
+              const sectorSeat = map.sectors
+                .find((item) => item.id === ownerId)
+                ?.seats.find((item) => item.id === seatId)
+              if (sectorSeat) return [sectorSeat.rotation ?? 0]
+              const elementSeat = (map.elements ?? [])
+                .find((item) => item.id === ownerId)
+                ?.seats.find((item) => item.id === seatId)
+              return elementSeat ? [elementSeat.rotation ?? 0] : []
+            })
+          : (selectedSector?.seats.map((seat) => seat.rotation ?? 0) ?? [])
+      const first = rotations[0] ?? 0
+      return {
+        value: first,
+        mixed: rotations.some((value) => Math.round(value) !== Math.round(first)),
+      }
+    }
+    if (selectedElements.length > 0) {
+      const first = selectedElements[0]!.rotation
+      return {
+        value: first,
+        mixed: selectedElements.some(
+          (item) => Math.round(item.rotation) !== Math.round(first),
+        ),
+      }
+    }
+    return null
+  })()
 
   useEffect(() => {
     function isTypingTarget(target: EventTarget | null) {
@@ -3088,25 +3349,25 @@ export function InteractiveVenueMapEditor({
   )
 
   const workspaceHeader = (
-    <header className="z-30 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-card px-3 text-card-foreground">
-      <div className="flex min-w-0 flex-1 items-center gap-2">
+    <header className="z-30 flex h-14 shrink-0 items-center overflow-hidden border-b border-border bg-card px-3 text-card-foreground">
+      <div className="flex min-w-0 flex-1 items-center gap-2 pr-3">
         {backHref ? (
           <Link
             href={backHref}
-            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
           >
-            <ArrowLeft className="size-4" />
-            <span className="hidden md:inline">{backLabel}</span>
+            <ArrowLeft className="size-3.5" />
+            <span className="hidden lg:inline">{backLabel}</span>
           </Link>
         ) : onClose ? (
           <Button
             type="button"
             variant="ghost"
             onClick={onClose}
-            className="h-9 shrink-0 px-2"
+            className="h-8 shrink-0 px-1.5 text-xs text-muted-foreground"
           >
-            <ArrowLeft className="size-4" />
-            <span className="hidden md:inline">{backLabel}</span>
+            <ArrowLeft className="size-3.5" />
+            <span className="hidden lg:inline">{backLabel}</span>
           </Button>
         ) : null}
         <Input
@@ -3114,41 +3375,41 @@ export function InteractiveVenueMapEditor({
           readOnly={!onEventTitleChange}
           onChange={(event) => onEventTitleChange?.(event.target.value)}
           aria-label="Nombre del evento"
-          className="h-9 max-w-[16rem] border-transparent bg-transparent px-2 text-sm font-semibold shadow-none focus-visible:border-border"
+          className="h-8 min-w-0 max-w-[12rem] truncate border-transparent bg-transparent px-1.5 text-sm font-semibold shadow-none focus-visible:border-border"
         />
         <VenueAutosaveBadge status={saveBadgeStatus} />
       </div>
-      <div className="hidden min-w-0 flex-[1.2] justify-center lg:flex">
-        <VenueWorkModeTabs value={workMode} onChange={setStudioWorkMode} />
+      <div className="flex shrink-0 justify-center px-2">
+        <VenueWorkModeTabs
+          layout="stepper"
+          value={workMode}
+          onChange={setStudioWorkMode}
+        />
       </div>
-      <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5">
-        <ThemeToggle />
+      <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 pl-3">
         <Button
           type="button"
-          variant="outline"
-          className="h-9 shrink-0 px-2 md:px-3"
+          variant="ghost"
+          className="h-8 shrink-0 px-2 text-xs text-muted-foreground hover:text-foreground"
           onClick={() => setLibraryOpen(true)}
         >
-          <LayoutTemplate className="size-4 md:mr-2" />
-          <span className="hidden md:inline">Plantillas</span>
+          Plantillas
         </Button>
         <Button
           type="button"
-          variant="outline"
-          className="h-9 shrink-0 px-2 md:px-3"
+          variant="ghost"
+          className="h-8 shrink-0 px-2 text-xs text-muted-foreground hover:text-foreground"
           onClick={handleClearMap}
         >
-          <Trash2 className="size-4 md:mr-2" />
-          <span className="hidden md:inline">Limpiar</span>
+          Limpiar
         </Button>
         <Button
           type="button"
           variant="outline"
-          className="h-9 shrink-0 px-2 md:px-3"
+          className="h-8 shrink-0 px-2.5 text-xs"
           onClick={openPreview}
         >
-          <Eye className="size-4 md:mr-2" />
-          <span className="hidden lg:inline">Vista Previa del Comprador</span>
+          Vista Previa
         </Button>
         {onSave ? (
           <Button
@@ -3157,10 +3418,9 @@ export function InteractiveVenueMapEditor({
             onClick={() => {
               void persistEditorMap()
             }}
-            className="h-9 shrink-0 bg-emerald-600 px-3 font-bold text-white hover:bg-emerald-500"
+            className="h-8 shrink-0 bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-500"
           >
-            <Save className="size-4 md:mr-2" />
-            <span className="hidden md:inline">Guardar Cambios</span>
+            Guardar Cambios
           </Button>
         ) : null}
       </div>
@@ -3201,7 +3461,7 @@ export function InteractiveVenueMapEditor({
         <div
           ref={canvasRef}
           className={cn(
-            "relative overflow-hidden touch-none overscroll-none select-none bg-slate-50 bg-[radial-gradient(circle_at_1px_1px,#cbd5e1_1px,transparent_0)] bg-[size:20px_20px] dark:bg-[#09090b] dark:bg-[radial-gradient(circle_at_1px_1px,#18181b_1px,transparent_0)]",
+            "relative overflow-hidden touch-none overscroll-none select-none bg-slate-100 bg-[radial-gradient(circle_at_1px_1px,#cbd5e1_1px,transparent_0)] bg-[size:20px_20px] dark:bg-zinc-950 dark:bg-[radial-gradient(circle_at_1px_1px,#27272a_1px,transparent_0)]",
             isStudio
               ? "relative h-full min-h-0 w-full flex-1"
               : "min-h-[420px]",
@@ -3273,7 +3533,7 @@ export function InteractiveVenueMapEditor({
                 y={svgViewBox.y}
                 width={svgViewBox.width}
                 height={svgViewBox.height}
-                className="fill-slate-50 dark:fill-[#09090b]"
+                className="fill-slate-100 dark:fill-zinc-950"
               />
               <g className={isolationId ? "opacity-50" : undefined}>
               <VenueMapBackgroundLayer map={renderMap} />
@@ -3364,12 +3624,17 @@ export function InteractiveVenueMapEditor({
                 <g key={sector.id}>
                   {sector.seats.map((seat) => {
                     const key = seatKey(sector.id, seat.id)
+                    if (liveSeatKeys.has(key)) return null
                     const active =
                       (selection?.kind === "sector" && selection.id === sector.id) ||
                       (selection?.kind === "seats" && selection.ids.includes(key))
                     return (
-                      <g
+                      <SectorSeatNode
                         key={seat.id}
+                        sector={sector}
+                        seat={seat}
+                        selected={active}
+                        zoom={zoom}
                         onContextMenu={(event) =>
                           openObjectMenu(event, { kind: "sector", id: sector.id })
                         }
@@ -3406,19 +3671,7 @@ export function InteractiveVenueMapEditor({
                           isolateCanvasPointer(event)
                           event.preventDefault()
                         }}
-                      >
-                        <TheatreSeatSymbol
-                          cx={seat.x}
-                          cy={seat.y}
-                          width={12}
-                          height={12}
-                          color={seat.status === "blocked" ? "#3f3f46" : sector.color}
-                          selected={active}
-                          occupied={seat.status === "blocked"}
-                          label={zoom >= 1.2 ? String(seat.number) : undefined}
-                          showLabel={zoom >= 1.2}
-                        />
-                      </g>
+                      />
                     )
                   })}
                 </g>
@@ -3444,6 +3697,60 @@ export function InteractiveVenueMapEditor({
               />
               </g>
               <g ref={liveGroupRef}>
+                {renderMap.sectors.flatMap((sector) =>
+                  sector.seats.flatMap((seat) => {
+                    const key = seatKey(sector.id, seat.id)
+                    if (!liveSeatKeys.has(key)) return []
+                    const active =
+                      (selection?.kind === "sector" && selection.id === sector.id) ||
+                      (selection?.kind === "seats" && selection.ids.includes(key))
+                    return [
+                      <SectorSeatNode
+                        key={key}
+                        sector={sector}
+                        seat={seat}
+                        selected={active}
+                        zoom={zoom}
+                        onContextMenu={(event) =>
+                          openObjectMenu(event, { kind: "sector", id: sector.id })
+                        }
+                        onPointerDown={(event) => {
+                          if (wantsCanvasPan(event)) return
+                          isolateCanvasPointer(event, { preventGhostClick: true })
+                          if (event.button !== 0) return
+                          if (
+                            event.detail >= 2 ||
+                            seatEditModeRef.current ||
+                            event.shiftKey
+                          ) {
+                            elementDrag.current = null
+                            setIsPanning(false)
+                            cancelLiveTransform()
+                            const current = selectionRef.current
+                            const nextIds =
+                              event.shiftKey && current?.kind === "seats"
+                                ? [...new Set([...current.ids, key])]
+                                : [key]
+                            enterSeatEdit(nextIds)
+                            return
+                          }
+                          setIsolationId(null)
+                          setSelection({ kind: "sector", id: sector.id })
+                          requestMobileProperties()
+                        }}
+                        onDoubleClick={(event) => {
+                          isolateCanvasPointer(event)
+                          event.preventDefault()
+                          beginSeatEditFromPointer([key], event.shiftKey)
+                        }}
+                        onClick={(event) => {
+                          isolateCanvasPointer(event)
+                          event.preventDefault()
+                        }}
+                      />,
+                    ]
+                  }),
+                )}
                 {selectedZone ? (
                   <VenueMapZoneLayer
                     zones={[
@@ -3503,9 +3810,14 @@ export function InteractiveVenueMapEditor({
                     isRotating={transformingKind === "rotate"}
                     fatFinger={compactChrome}
                     locked={selectionLocked}
+                    hideResize={seatGizmoActive}
                     onMoveStart={(event) => {
                       if (selectedZone) {
                         beginGroupMove([], event, selectedZone.id)
+                        return
+                      }
+                      if (seatGizmoActive) {
+                        beginGroupMove([], event)
                         return
                       }
                       if (selectedElementIds.length === 0) return
@@ -3657,28 +3969,10 @@ export function InteractiveVenueMapEditor({
           {isStudio ? (
             <div className="hidden shrink-0 border-b border-border px-4 py-3 md:block">
               <p className="text-sm font-semibold text-foreground">
-                {workMode === "pricing"
-                  ? "Tarifas"
-                  : workMode === "indexing"
-                    ? "Indexación"
-                    : selectedElementIds.length > 1
-                      ? `${selectedElementIds.length} Elementos seleccionados`
-                      : selectedElementIds.length === 1 || selection
-                        ? "Propiedades"
-                        : "Predio"}
+                {inspectorHeadline.title}
               </p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                {workMode === "pricing"
-                  ? "Precio y color en el panel. El mapa no se mueve."
-                  : workMode === "indexing"
-                    ? "Numeración de filas y asientos del bloque seleccionado."
-                    : selectedElementIds.length > 1
-                      ? "Edición masiva del grupo."
-                      : selectedElementIds.length === 1
-                        ? "Ficha del elemento activo."
-                        : selection
-                          ? "Edición del elemento activo."
-                          : "Foto aérea y medidas del recinto."}
+                {inspectorHeadline.detail}
               </p>
             </div>
           ) : (
@@ -3750,6 +4044,14 @@ export function InteractiveVenueMapEditor({
             <>
           {showRings ? (
             <ConcentricRingGenerator onGenerate={applyGeneratedRing} />
+          ) : null}
+
+          {orientationState ? (
+            <OrientationControl
+              value={orientationState.value}
+              mixed={orientationState.mixed}
+              onChange={applyOrientation}
+            />
           ) : null}
 
           {tool === "polygon" ? (
@@ -3924,49 +4226,34 @@ export function InteractiveVenueMapEditor({
                 element={selectedElement}
                 onChange={(patch) => patchElement(selectedElement.id, patch)}
               />
-              <div className="grid grid-cols-2 gap-2">
-                <Field label="Ancho">
-                  <Input
-                    type="number"
-                    min={24}
-                    value={selectedElement.width}
-                    onChange={(event) =>
-                      patchElement(selectedElement.id, {
-                        width: Number(event.target.value) || 24,
-                      })
-                    }
-                  />
-                </Field>
-                <Field label="Alto">
-                  <Input
-                    type="number"
-                    min={24}
-                    value={selectedElement.height}
-                    onChange={(event) =>
-                      patchElement(selectedElement.id, {
-                        height: Number(event.target.value) || 24,
-                      })
-                    }
-                  />
-                </Field>
-              </div>
-              <Field label={`Rotación (${Math.round(selectedElement.rotation)}°)`}>
-                <div className="flex items-center gap-2">
-                  <RotateCw className="size-4 shrink-0 text-muted-foreground" />
-                  <input
-                    type="range"
-                    min={0}
-                    max={360}
-                    value={selectedElement.rotation}
-                    onChange={(event) =>
-                      patchElement(selectedElement.id, {
-                        rotation: Number(event.target.value),
-                      })
-                    }
-                    className="w-full accent-emerald-500"
-                  />
+              <AdvancedPositionSettings>
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Ancho">
+                    <Input
+                      type="number"
+                      min={24}
+                      value={selectedElement.width}
+                      onChange={(event) =>
+                        patchElement(selectedElement.id, {
+                          width: Number(event.target.value) || 24,
+                        })
+                      }
+                    />
+                  </Field>
+                  <Field label="Alto">
+                    <Input
+                      type="number"
+                      min={24}
+                      value={selectedElement.height}
+                      onChange={(event) =>
+                        patchElement(selectedElement.id, {
+                          height: Number(event.target.value) || 24,
+                        })
+                      }
+                    />
+                  </Field>
                 </div>
-              </Field>
+              </AdvancedPositionSettings>
               <Field
                 label={`Transparencia (${Math.round((selectedElement.opacity ?? 1) * 100)}%)`}
               >
@@ -4029,7 +4316,7 @@ export function InteractiveVenueMapEditor({
                 />
               </Field>
               <Field label={venueUnitPriceLabel({ type: selectedElement.type, sellMode: selectedElement.sellMode, priceMode: selectedElement.priceMode })}>
-                <PriceInput
+                <PriceField
                   value={selectedElement.price}
                   onValueChange={(value) => {
                     if (value == null) return
@@ -4067,23 +4354,6 @@ export function InteractiveVenueMapEditor({
                 element={selectedElement}
                 onChange={(patch) => patchElement(selectedElement.id, patch)}
               />
-              <Field label={`Rotación (${Math.round(selectedElement.rotation)}°)`}>
-                <div className="flex items-center gap-2">
-                  <RotateCw className="size-4 text-zinc-500" />
-                  <input
-                    type="range"
-                    min={0}
-                    max={360}
-                    value={selectedElement.rotation}
-                    onChange={(event) =>
-                      patchElement(selectedElement.id, {
-                        rotation: Number(event.target.value),
-                      })
-                    }
-                    className="w-full accent-emerald-500"
-                  />
-                </div>
-              </Field>
               {selectedElement.type === "round_table" ||
               selectedElement.type === "vip_box" ? (
                 <Field label="Sillas">
@@ -4346,10 +4616,10 @@ export function InteractiveVenueMapEditor({
               />
             </Field>
           ) : selection?.kind === "seats" ? (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {singleSeat ? (
                 <>
-                  <Field label="Identificador de ubicacion">
+                  <Field label="Identificador">
                     <Input
                       value={
                         singleSeat.seat.label ??
@@ -4360,28 +4630,18 @@ export function InteractiveVenueMapEditor({
                       onChange={(event) =>
                         patchSelectedSeats({ label: event.target.value })
                       }
+                      aria-label="Identificador de ubicacion"
+                      className="h-9"
                     />
                   </Field>
-                  <Field label="Estado del asiento">
-                    <select
-                      className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
+                  <Field label="Estado">
+                    <SeatStatusControl
                       value={singleSeat.seat.status}
-                      onChange={(event) =>
-                        patchSelectedSeats({
-                          status: event.target.value as
-                            | "available"
-                            | "blocked"
-                            | "reserved",
-                        })
-                      }
-                    >
-                      <option value="available">Activo</option>
-                      <option value="blocked">Inhabilitado</option>
-                      <option value="reserved">Reservado / Cortesia</option>
-                    </select>
+                      onChange={(status) => patchSelectedSeats({ status })}
+                    />
                   </Field>
-                  <Field label="Precio individual (ARS)">
-                    <PriceInput
+                  <Field label="Precio">
+                    <PriceField
                       value={
                         singleSeat.seat.price ??
                         (singleSeat.source === "sector"
@@ -4394,73 +4654,42 @@ export function InteractiveVenueMapEditor({
                       }}
                     />
                   </Field>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Field label="X">
-                      <Input
-                        type="number"
-                        value={Math.round(singleSeat.seat.x)}
-                        onChange={(event) =>
-                          patchSelectedSeats({
-                            x: Number(event.target.value) || 0,
-                          })
-                        }
-                      />
-                    </Field>
-                    <Field label="Y">
-                      <Input
-                        type="number"
-                        value={Math.round(singleSeat.seat.y)}
-                        onChange={(event) =>
-                          patchSelectedSeats({
-                            y: Number(event.target.value) || 0,
-                          })
-                        }
-                      />
-                    </Field>
-                  </div>
-                  <Field
-                    label={`Rotacion (${Math.round(singleSeat.seat.rotation ?? 0)} deg)`}
-                  >
-                    <input
-                      type="range"
-                      min={0}
-                      max={360}
-                      value={singleSeat.seat.rotation ?? 0}
-                      onChange={(event) =>
-                        patchSelectedSeats({
-                          rotation: Number(event.target.value),
-                        })
-                      }
-                      className="w-full accent-emerald-500"
-                    />
-                  </Field>
+                  <AdvancedPositionSettings>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Field label="Coordenada X">
+                        <Input
+                          type="number"
+                          value={Math.round(singleSeat.seat.x)}
+                          onChange={(event) =>
+                            patchSelectedSeats({
+                              x: Number(event.target.value) || 0,
+                            })
+                          }
+                        />
+                      </Field>
+                      <Field label="Coordenada Y">
+                        <Input
+                          type="number"
+                          value={Math.round(singleSeat.seat.y)}
+                          onChange={(event) =>
+                            patchSelectedSeats({
+                              y: Number(event.target.value) || 0,
+                            })
+                          }
+                        />
+                      </Field>
+                    </div>
+                  </AdvancedPositionSettings>
                 </>
               ) : (
-                <div className="space-y-3">
-                  <p className="text-sm text-muted-foreground">
-                    {selectedSeatCount} asientos seleccionados. Los cambios
-                    de estado y precio se aplican a toda la selección.
-                  </p>
-                  <Field label="Estado del asiento">
-                    <select
-                      className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
-                      defaultValue="available"
-                      onChange={(event) =>
-                        patchSelectedSeats({
-                          status: event.target.value as
-                            | "available"
-                            | "blocked"
-                            | "reserved",
-                        })
-                      }
-                    >
-                      <option value="available">Activo</option>
-                      <option value="blocked">Inhabilitado</option>
-                      <option value="reserved">Reservado / Cortesia</option>
-                    </select>
+                <div className="space-y-4">
+                  <Field label="Estado">
+                    <SeatStatusControl
+                      onChange={(status) => patchSelectedSeats({ status })}
+                    />
                   </Field>
-                  <Field label="Precio individual (ARS)">
-                    <PriceInput
+                  <Field label="Precio">
+                    <PriceField
                       value={undefined}
                       onValueChange={(value) => {
                         if (value == null) return
@@ -4470,7 +4699,15 @@ export function InteractiveVenueMapEditor({
                   </Field>
                 </div>
               )}
-              <Button type="button" variant="outline" onClick={restoreSelectedSeats}>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full border-red-200 text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
+                onClick={() => patchSelectedSeats({ status: "blocked" })}
+              >
+                Inhabilitar
+              </Button>
+              <Button type="button" variant="ghost" className="w-full text-muted-foreground" onClick={restoreSelectedSeats}>
                 Reactivar seleccionadas
               </Button>
             </div>
@@ -4488,22 +4725,14 @@ export function InteractiveVenueMapEditor({
                     map={map}
                     onChange={(patch) => commit({ ...mapRef.current, ...patch })}
                   />
-                  <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+                  <div className="space-y-3 rounded-xl border border-border bg-muted/40 p-3">
                     <p className="text-sm font-semibold text-foreground">
-                      Dimensiones del predio
+                      Encaje de la foto
                     </p>
                     <p className="text-xs leading-relaxed text-muted-foreground">
-                      Lienzo de trabajo {CANVAS.width} × {CANVAS.height} px. Usá
-                      la escala y la posición de la foto para encajar el recinto.
+                      Ajustá la escala de la foto sobre el plano. Las medidas
+                      técnicas del lienzo están en ajustes avanzados.
                     </p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Field label="Ancho (px)">
-                        <Input value={CANVAS.width} readOnly />
-                      </Field>
-                      <Field label="Alto (px)">
-                        <Input value={CANVAS.height} readOnly />
-                      </Field>
-                    </div>
                     <Field
                       label={`Escala de encaje (${Math.round((map.backgroundScale ?? 1) * 100)}%)`}
                     >
@@ -4521,20 +4750,33 @@ export function InteractiveVenueMapEditor({
                         className="w-full accent-emerald-500"
                       />
                     </Field>
+                    <AdvancedPositionSettings>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Field label="Ancho (px)">
+                          <Input value={CANVAS.width} readOnly />
+                        </Field>
+                        <Field label="Alto (px)">
+                          <Input value={CANVAS.height} readOnly />
+                        </Field>
+                      </div>
+                    </AdvancedPositionSettings>
                   </div>
                 </>
               ) : null}
             </div>
           )}
 
-          {selection ? (
-            <Button type="button" variant="destructive" onClick={deleteSelection}>
+          {selection && selection.kind !== "seats" ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full border-red-200 text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
+              onClick={deleteSelection}
+            >
               <Trash2 className="size-4" />
-              {selection.kind === "seats"
-                ? "Desactivar seleccionadas"
-                : selection.kind === "elements"
-                  ? "Eliminar seleccionados"
-                  : "Eliminar"}
+              {selection.kind === "elements"
+                ? "Eliminar seleccionados"
+                : "Eliminar"}
             </Button>
           ) : null}
 
@@ -4918,6 +5160,103 @@ function ToolButton({
   )
 }
 
+function elementKindLabel(type: VenueMapElement["type"]) {
+  if (type === "vip_chair") return "Butaca"
+  if (type === "round_table") return "Mesa redonda"
+  if (type === "long_table") return "Mesa rectangular"
+  if (type === "vip_box") return "Box VIP"
+  if (type === "standing_zone") return "Campo"
+  return "Servicio"
+}
+
+function SectorSeatNode({
+  sector,
+  seat,
+  selected,
+  zoom,
+  onContextMenu,
+  onPointerDown,
+  onDoubleClick,
+  onClick,
+}: {
+  sector: VenueMapSector
+  seat: VenueMapSeat
+  selected: boolean
+  zoom: number
+  onContextMenu: (event: React.MouseEvent) => void
+  onPointerDown: (event: React.PointerEvent) => void
+  onDoubleClick: (event: React.MouseEvent) => void
+  onClick: (event: React.MouseEvent) => void
+}) {
+  return (
+    <g
+      onContextMenu={onContextMenu}
+      onPointerDown={onPointerDown}
+      onDoubleClick={onDoubleClick}
+      onClick={onClick}
+    >
+      <TheatreSeatSymbol
+        cx={seat.x}
+        cy={seat.y}
+        width={12}
+        height={12}
+        rotation={seat.rotation ?? 0}
+        color={seat.status === "blocked" ? "#3f3f46" : sector.color}
+        selected={selected}
+        occupied={seat.status === "blocked"}
+        label={zoom >= 1.2 ? String(seat.number) : undefined}
+        showLabel={zoom >= 1.2}
+      />
+    </g>
+  )
+}
+
+function OrientationControl({
+  value,
+  mixed = false,
+  onChange,
+}: {
+  value: number
+  mixed?: boolean
+  onChange: (deg: number) => void
+}) {
+  const current = Math.round(value)
+  return (
+    <div className="space-y-2">
+      <Label className="text-xs text-muted-foreground">Orientación</Label>
+      <div className="grid grid-cols-4 gap-1">
+        {[0, 45, 90, 180].map((deg) => {
+          const active = !mixed && current === deg
+          return (
+            <button
+              key={deg}
+              type="button"
+              onClick={() => onChange(deg)}
+              className={cn(
+                "h-8 rounded-md border text-[11px] font-semibold",
+                active
+                  ? "border-emerald-500/50 bg-emerald-500/10 text-foreground"
+                  : "border-zinc-200 bg-background text-muted-foreground hover:bg-muted dark:border-zinc-800",
+              )}
+            >
+              {deg}°
+            </button>
+          )
+        })}
+      </div>
+      <Input
+        type="number"
+        min={0}
+        max={359}
+        value={mixed ? "" : current}
+        placeholder={mixed ? "Varios" : undefined}
+        onChange={(event) => onChange(Number(event.target.value) || 0)}
+        aria-label="Rotación en grados"
+      />
+    </div>
+  )
+}
+
 function Field({
   label,
   children,
@@ -4929,6 +5268,82 @@ function Field({
     <div className="space-y-1.5">
       <Label className="text-xs text-muted-foreground">{label}</Label>
       {children}
+    </div>
+  )
+}
+
+function AdvancedPositionSettings({ children }: { children: React.ReactNode }) {
+  return (
+    <Accordion className="rounded-lg border border-border px-3">
+      <AccordionItem value="position" className="border-0">
+        <AccordionTrigger className="py-2 text-xs text-muted-foreground hover:no-underline">
+          Ajustes Avanzados de Posición
+        </AccordionTrigger>
+        <AccordionContent className="space-y-3 pb-3">
+          {children}
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
+  )
+}
+
+function SeatStatusControl({
+  value,
+  onChange,
+}: {
+  value?: "available" | "blocked" | "reserved"
+  onChange: (status: "available" | "blocked" | "reserved") => void
+}) {
+  const options = [
+    { id: "available" as const, label: "Activo" },
+    { id: "blocked" as const, label: "Inhabilitado" },
+    { id: "reserved" as const, label: "Reservado" },
+  ]
+  return (
+    <div className="grid grid-cols-3 gap-1">
+      {options.map((option) => {
+        const active = value === option.id
+        return (
+          <button
+            key={option.id}
+            type="button"
+            onClick={() => onChange(option.id)}
+            className={cn(
+              "h-9 rounded-md border px-1 text-[11px] font-medium",
+              active
+                ? option.id === "blocked"
+                  ? "border-red-300 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300"
+                  : option.id === "reserved"
+                    ? "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+                    : "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
+                : "border-border bg-background text-muted-foreground hover:bg-muted",
+            )}
+          >
+            {option.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function PriceField({
+  value,
+  onValueChange,
+}: {
+  value: number | null | undefined
+  onValueChange: (value: number | undefined) => void
+}) {
+  return (
+    <div className="relative">
+      <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-xs text-muted-foreground">
+        $ ARS
+      </span>
+      <PriceInput
+        value={value}
+        onValueChange={onValueChange}
+        className="pl-14"
+      />
     </div>
   )
 }

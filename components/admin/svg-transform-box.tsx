@@ -31,6 +31,7 @@ export function SvgTransformBox({
   isRotating = false,
   fatFinger = false,
   locked = false,
+  hideResize = false,
   children,
   onMoveStart,
   onResizeStart,
@@ -42,6 +43,7 @@ export function SvgTransformBox({
   isRotating?: boolean
   fatFinger?: boolean
   locked?: boolean
+  hideResize?: boolean
   children?: React.ReactNode
   onMoveStart: (event: React.PointerEvent) => void
   onResizeStart: (handle: ResizeHandle, event: React.PointerEvent) => void
@@ -115,18 +117,20 @@ export function SvgTransformBox({
             const point = handlePoint(box, handle)
             return (
               <g key={handle}>
-                <rect
-                  x={point.x - hitSize / 2}
-                  y={point.y - hitSize / 2}
-                  width={hitSize}
-                  height={hitSize}
-                  className={`fill-transparent ${handleCursor(handle)}`}
-                  onPointerDown={(event) => {
-                    if (event.button !== 0) return
-                    event.stopPropagation()
-                    onResizeStart(handle, event)
-                  }}
-                />
+                {hideResize ? null : (
+                  <rect
+                    x={point.x - hitSize / 2}
+                    y={point.y - hitSize / 2}
+                    width={hitSize}
+                    height={hitSize}
+                    className={`fill-transparent ${handleCursor(handle)}`}
+                    onPointerDown={(event) => {
+                      if (event.button !== 0) return
+                      event.stopPropagation()
+                      onResizeStart(handle, event)
+                    }}
+                  />
+                )}
                 <rect
                   x={point.x - handleSize / 2}
                   y={point.y - handleSize / 2}
@@ -164,10 +168,10 @@ export function SvgTransformBox({
           }}
         />
         <RotateCw
-          size={14}
-          x={-7}
-          y={-7}
-          className="pointer-events-none text-slate-600"
+          size={16}
+          x={-8}
+          y={-8}
+          className="pointer-events-none h-4 w-4 text-slate-700"
         />
       </g>
       ) : null}

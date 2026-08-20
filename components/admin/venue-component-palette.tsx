@@ -323,7 +323,8 @@ export function VenueComponentPalette({
         <TabsList
           className={cn(
             "flex h-auto w-full flex-wrap rounded-xl bg-muted p-1",
-            studio && "shrink-0",
+            studio &&
+              "h-10 shrink-0 rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800",
           )}
         >
           {tabs.map((tab) => (
@@ -335,7 +336,7 @@ export function VenueComponentPalette({
                 sheet
                   ? "min-h-[44px] px-2 text-sm"
                   : studio
-                    ? "h-8 px-1 text-[10px]"
+                    ? "h-8 px-1.5 text-[11px] font-semibold text-zinc-500 data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:text-zinc-400 dark:data-active:text-zinc-50"
                     : "h-auto min-h-11 whitespace-normal px-2 py-2 text-sm leading-snug",
               )}
             >
@@ -432,12 +433,14 @@ function PaletteButton({
       className={cn(
         "border text-left transition",
         compact
-          ? "flex aspect-square flex-col items-center justify-center gap-1 rounded-lg px-1.5 py-2"
+          ? "flex h-14 flex-col items-center justify-center gap-1 rounded-lg px-1.5 py-1.5"
           : "flex w-full items-start gap-3 rounded-xl px-3 py-3",
         touchFriendly && "min-h-[44px] aspect-auto py-3",
         selected
           ? "border-emerald-500/50 bg-emerald-500/10 text-foreground ring-1 ring-emerald-500/30"
-          : "border-border bg-muted/50 text-foreground hover:border-emerald-500/30 hover:bg-muted",
+          : compact
+            ? "border border-zinc-200 bg-white text-foreground hover:border-emerald-500/30 hover:bg-muted hover:shadow-sm dark:border-zinc-800 dark:bg-zinc-950"
+            : "border-border bg-muted/50 text-foreground hover:border-emerald-500/30 hover:bg-muted",
       )}
     >
       <Icon

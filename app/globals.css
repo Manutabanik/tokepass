@@ -634,6 +634,33 @@ select:-webkit-autofill {
   animation: checkout-shake 0.42s ease-in-out;
 }
 
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(161 161 170 / 0.55) transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: rgb(161 161 170 / 0.55);
+  border-radius: 999px;
+}
+
+.dark .scrollbar-thin {
+  scrollbar-color: rgb(82 82 91 / 0.7) transparent;
+}
+
+.dark .scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: rgb(82 82 91 / 0.7);
+}
+
 .hide-scrollbar,
 .no-scrollbar {
   -ms-overflow-style: none;

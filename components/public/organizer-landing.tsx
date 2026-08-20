@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { ArrowRight, Shield, Smartphone, Wallet, Zap } from "lucide-react"
 
+import { CommercialCanvasSection } from "@/components/public/commercial-canvas-section"
 import { LandingReveal } from "@/components/public/landing-reveal"
 import { ORGANIZER_REGISTER_HREF, commercialWhatsAppHref } from "@/lib/commercial-contact"
 import { cn } from "@/lib/utils"
@@ -220,6 +221,8 @@ export function OrganizerLanding() {
           </div>
         </LandingReveal>
       </section>
+
+      <CommercialCanvasSection />
 
       <section
         id="solicitud"

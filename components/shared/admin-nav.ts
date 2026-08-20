@@ -1,14 +1,12 @@
 import {
   CalendarDays,
-  CircleHelp,
   ClipboardList,
   Home,
   Landmark,
   PieChart,
-  Presentation,
   QrCode,
-  ShoppingBag,
   Settings,
+  ShoppingBag,
   Store,
   UserRound,
   Users,
@@ -24,55 +22,124 @@ export type AdminNavItem = {
   icon: LucideIcon
 }
 
-export const ORGANIZER_NAV: AdminNavItem[] = [
-  { label: "Resumen de Ventas", href: "/admin", icon: Home },
-  { label: "Mis Eventos", href: "/admin/events", icon: CalendarDays },
-  { label: "Boletería POS", href: "/dashboard/pos", icon: Store },
+export type AdminNavGroup = {
+  id: string
+  label: string
+  items: AdminNavItem[]
+}
+
+export const ORGANIZER_NAV_GROUPS: AdminNavGroup[] = [
   {
-    label: "Recaudación y Retiros",
-    href: "/admin/finances",
-    icon: PieChart,
+    id: "operacion",
+    label: "Operación",
+    items: [
+      { label: "Resumen de Ventas", href: "/admin", icon: Home },
+      { label: "Mis Eventos", href: "/admin/events", icon: CalendarDays },
+    ],
   },
   {
-    label: "Datos de cobro",
-    href: "/dashboard/settings/bank",
-    icon: Landmark,
-  },
-  { label: "Listas y FreePass", href: "/admin/lists", icon: ClipboardList },
-  { label: "Equipo y Staff", href: "/admin/team", icon: Users },
-  {
-    label: "Usuarios y PIN de caja",
-    href: "/admin/settings/users",
-    icon: Settings,
-  },
-  { label: "Promotores y RRPP", href: "/admin/promoters", icon: Users },
-  { label: "Control de Puerta (Escáner)", href: "/admin/scanner", icon: QrCode },
-  { label: "Escáner de Tienda", href: "/admin/store-scanner", icon: ShoppingBag },
-  { label: "Mi Perfil", href: "/admin/profile", icon: UserRound },
-  {
-    label: "Preguntas frecuentes",
-    href: "/admin/support-faqs",
-    icon: CircleHelp,
+    id: "ventas",
+    label: "Ventas y difusión",
+    items: [
+      { label: "Boletería POS", href: "/dashboard/pos", icon: Store },
+      { label: "Promotores y RRPP", href: "/admin/promoters", icon: Users },
+      { label: "Listas y FreePass", href: "/admin/lists", icon: ClipboardList },
+    ],
   },
   {
-    label: "Canvas comercial",
-    href: "/admin/canvas-comercial",
-    icon: Presentation,
+    id: "finanzas",
+    label: "Finanzas",
+    items: [
+      {
+        label: "Recaudación y Retiros",
+        href: "/admin/finances",
+        icon: PieChart,
+      },
+      {
+        label: "Datos de Cobro",
+        href: "/dashboard/settings/bank",
+        icon: Landmark,
+      },
+    ],
+  },
+  {
+    id: "control",
+    label: "Control y equipo",
+    items: [
+      {
+        label: "Control de Puerta / Escáner",
+        href: "/admin/scanner",
+        icon: QrCode,
+      },
+      {
+        label: "Escáner de Tienda",
+        href: "/admin/store-scanner",
+        icon: ShoppingBag,
+      },
+      { label: "Equipo y Staff", href: "/admin/team", icon: Users },
+      {
+        label: "Usuarios y PIN de Caja",
+        href: "/admin/settings/users",
+        icon: Settings,
+      },
+    ],
+  },
+  {
+    id: "configuracion",
+    label: "Configuración",
+    items: [{ label: "Mi Perfil", href: "/admin/profile", icon: UserRound }],
   },
 ]
 
-const STAFF_NAV_META: AdminNavItem[] = [
-  { label: "Control de Puerta (Escáner)", href: "/admin/scanner", icon: QrCode },
-  { label: "Validador de acceso", href: "/admin/validator", icon: QrCode },
-  { label: "Escáner de Tienda", href: "/admin/store-scanner", icon: ShoppingBag },
-  { label: "Boletería POS", href: "/dashboard/pos", icon: Store },
+const STAFF_NAV_GROUPS: AdminNavGroup[] = [
+  {
+    id: "ventas",
+    label: "Ventas y difusión",
+    items: [{ label: "Boletería POS", href: "/dashboard/pos", icon: Store }],
+  },
+  {
+    id: "control",
+    label: "Control y equipo",
+    items: [
+      {
+        label: "Control de Puerta / Escáner",
+        href: "/admin/scanner",
+        icon: QrCode,
+      },
+      { label: "Validador de acceso", href: "/admin/validator", icon: QrCode },
+      {
+        label: "Escáner de Tienda",
+        href: "/admin/store-scanner",
+        icon: ShoppingBag,
+      },
+    ],
+  },
 ]
+
+export const ORGANIZER_NAV: AdminNavItem[] = ORGANIZER_NAV_GROUPS.flatMap(
+  (group) => group.items,
+)
+
+export function isAdminNavActive(pathname: string, href: string) {
+  if (href === "/admin") return pathname === href
+  return pathname === href || pathname.startsWith(`${href}/`)
+}
+
+export function getAdminNavGroups(input: {
+  mode: "organizer" | "staff"
+  staffRoles?: EventStaffRole[]
+}): AdminNavGroup[] {
+  if (input.mode === "organizer") return ORGANIZER_NAV_GROUPS
+  const allowed = new Set(navAllowedForStaffRoles(input.staffRoles ?? []))
+  return STAFF_NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => allowed.has(item.href)),
+  })).filter((group) => group.items.length > 0)
+}
 
 export function getAdminNavItems(input: {
   mode: "organizer" | "staff"
   staffRoles?: EventStaffRole[]
 }): AdminNavItem[] {
-  if (input.mode === "organizer") return ORGANIZER_NAV
-  const allowed = new Set(navAllowedForStaffRoles(input.staffRoles ?? []))
-  return STAFF_NAV_META.filter((item) => allowed.has(item.href))
+  return getAdminNavGroups(input).flatMap((group) => group.items)
 }

@@ -333,10 +333,13 @@ export type SupportMessage = {
   created_at: string
 }
 
+export type SupportFaqCategory = "ventas" | "cobros" | "accesos" | "equipos"
+
 export type SupportFaq = {
   id: string
   question: string
   answer: string
+  category: SupportFaqCategory
   is_active: boolean
   sort_order: number
   created_at: string
@@ -1747,6 +1750,7 @@ export type Database = {
           id?: string
           question: string
           answer: string
+          category?: SupportFaqCategory
           is_active?: boolean
           sort_order?: number
           created_at?: string
@@ -1755,6 +1759,7 @@ export type Database = {
         Update: Partial<{
           question: string
           answer: string
+          category: SupportFaqCategory
           is_active: boolean
           sort_order: number
           updated_at: string

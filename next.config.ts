@@ -90,6 +90,16 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       {
+        source: "/admin/canvas-comercial",
+        destination: "/organizar-eventos#comparativa",
+        permanent: true,
+      },
+      {
+        source: "/admin/support-faqs",
+        destination: "/admin",
+        permanent: true,
+      },
+      {
         source: "/my-tickets",
         destination: "/cuenta/entradas",
         permanent: true,
