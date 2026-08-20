@@ -44,8 +44,8 @@ export function BundleCardSelector({
   return (
     <section className="space-y-3">
       <div>
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-400/90">
-          Pases y combos
+        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-800 dark:text-emerald-300">
+          Combos y Promos
         </p>
         <h3 className="mt-1 text-base font-semibold text-foreground">
           Promociones destacadas
@@ -108,7 +108,7 @@ function BundlePromoCard({
           </p>
         </div>
         {savings.amount > 0 ? (
-          <Badge className="h-auto border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-emerald-400">
+          <Badge className="h-auto bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-100">
             Ahorrás {formatCurrency(savings.amount)}
           </Badge>
         ) : null}

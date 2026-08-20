@@ -1,8 +1,10 @@
 "use client"
 
 import type { ReactNode } from "react"
+import { usePathname } from "next/navigation"
 
 import { FloatingBottomNav } from "@/components/layout/floating-bottom-nav"
+import { isPublicEventStorefrontPath } from "@/lib/navigation/focused-flows"
 import { useStorefrontChromeStore } from "@/lib/stores/storefront-chrome-store"
 import { cn } from "@/lib/utils"
 
@@ -30,6 +32,8 @@ export function PublicShell({
   const checkoutTunnel = useStorefrontChromeStore(
     (state) => state.checkoutTunnel,
   )
+  const pathname = usePathname()
+  const eventStorefront = isPublicEventStorefrontPath(pathname)
 
   return (
     <div
@@ -44,7 +48,12 @@ export function PublicShell({
           "relative z-20 flex-1",
           checkoutTunnel
             ? "min-h-0 overflow-hidden"
-            : "pt-[calc(4rem+env(safe-area-inset-top)+1rem)] pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0",
+            : cn(
+                "pt-[calc(4rem+env(safe-area-inset-top)+1rem)]",
+                eventStorefront
+                  ? "pb-0"
+                  : "pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0",
+              ),
         )}
       >
         {children}

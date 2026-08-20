@@ -70,6 +70,7 @@ import {
 } from "@/lib/analytics/pixels"
 import {
   checkoutBuyerFormSchema,
+  getCheckoutBuyerFieldErrors,
   validateCheckoutBuyer,
   type CheckoutBuyerInfo,
 } from "@/lib/checkout-buyer"
@@ -106,8 +107,9 @@ import {
 import { type DefaultTicketTab } from "@/lib/checkout/ticket-picker"
 import {
   firstCheckoutBuyerErrorField,
-  onValidationError,
+  scrollToFirstInvalidCheckoutField,
 } from "@/lib/checkout/validation-scroll"
+import { GUIDED_ERROR_EVENT } from "@/lib/errors/app-error"
 import {
   applyPhaseRolloverToPhases,
   PHASE_ROLLOVER_MESSAGE,
@@ -263,7 +265,22 @@ function normalizeToastCopy(value: string) {
   return value.trim().replace(/\.+$/, "").toLocaleLowerCase("es-AR")
 }
 
-function toastCheckoutError(error: string, fallbackTitle: string) {
+const CHECKOUT_REVIEW_LABEL = "Revisar formulario"
+
+function checkoutReviewAction(onReview?: () => void) {
+  if (!onReview) return undefined
+  return {
+    label: CHECKOUT_REVIEW_LABEL,
+    onClick: onReview,
+  }
+}
+
+function toastCheckoutError(
+  error: string,
+  fallbackTitle: string,
+  onReview?: () => void,
+) {
+  const action = checkoutReviewAction(onReview)
   const technical =
     /invalid token|hydrat|undefined|cannot read|failed to fetch|networkerror|internal server/i.test(
       error,
@@ -271,30 +288,31 @@ function toastCheckoutError(error: string, fallbackTitle: string) {
   if (technical) {
     toast.error(
       "Ocurrió un problema al cargar los datos. Por favor, intentá de nuevo.",
+      action ? { action } : undefined,
     )
     return
   }
   if (error === HIGH_DEMAND_LOCK_TIMEOUT) {
-    toast.error(HIGH_DEMAND_LOCK_MESSAGE)
+    toast.error(HIGH_DEMAND_LOCK_MESSAGE, action ? { action } : undefined)
     return
   }
   if (isCheckoutStockConflict(error)) {
-    toast.error(CHECKOUT_STOCK_TAKEN_MESSAGE)
+    toast.error(CHECKOUT_STOCK_TAKEN_MESSAGE, action ? { action } : undefined)
     return
   }
   if (
     error === "El evento ya ha finalizado" ||
     error === "El evento o sector se encuentra agotado"
   ) {
-    toast.error(error)
+    toast.error(error, action ? { action } : undefined)
     return
   }
   const detail = error.trim()
   if (!detail || normalizeToastCopy(detail) === normalizeToastCopy(fallbackTitle)) {
-    toast.error(fallbackTitle)
+    toast.error(fallbackTitle, action ? { action } : undefined)
     return
   }
-  toast.error(fallbackTitle, { description: detail })
+  toast.error(fallbackTitle, { description: detail, action })
 }
 
 export function CheckoutTunnel({
@@ -408,6 +426,34 @@ export function CheckoutTunnel({
     criteriaMode: "all",
     shouldFocusError: true,
   })
+  const reviewCheckoutForm = useCallback((field?: string | null) => {
+    const values = buyerForm.getValues()
+    const buyerCheck = validateCheckoutBuyer(values)
+    const fieldToFocus =
+      field ??
+      firstCheckoutBuyerErrorField(getCheckoutBuyerFieldErrors(values))
+
+    if (!buyerCheck.ok) {
+      setCheckoutStep("details")
+      window.setTimeout(() => {
+        scrollToFirstInvalidCheckoutField(fieldToFocus)
+      }, 80)
+      return
+    }
+
+    scrollToFirstInvalidCheckoutField(fieldToFocus)
+  }, [buyerForm, setCheckoutStep])
+
+  useEffect(() => {
+    function onGuidedError() {
+      reviewCheckoutForm()
+    }
+    window.addEventListener(GUIDED_ERROR_EVENT, onGuidedError)
+    return () => {
+      window.removeEventListener(GUIDED_ERROR_EVENT, onGuidedError)
+    }
+  }, [reviewCheckoutForm])
+
   const holdExpiresAt = useCheckoutStore((state) =>
     state.eventId === eventId ? state.holdExpiresAt : null,
   )
@@ -1681,10 +1727,32 @@ export function CheckoutTunnel({
   }
 
   function applyCheckoutActionError(error: string, fallbackTitle: string) {
-    toastCheckoutError(error, fallbackTitle)
+    toastCheckoutError(error, fallbackTitle, () => reviewCheckoutForm())
     if (isCheckoutStockConflict(error)) {
       clearConflictingCheckoutSelection()
     }
+  }
+
+  function handleBuyerValidationFailure(
+    formErrors?: Parameters<typeof firstCheckoutBuyerErrorField>[0],
+  ) {
+    setFieldShake((current) => current + 1)
+    const field =
+      firstCheckoutBuyerErrorField(formErrors ?? buyerForm.formState.errors) ??
+      firstCheckoutBuyerErrorField(
+        getCheckoutBuyerFieldErrors(buyerForm.getValues()),
+      )
+    setCheckoutStep("details")
+    toast.error("Revisá los datos del formulario", {
+      description: "Completá nombre, DNI, mail y teléfono para continuar.",
+      action: {
+        label: CHECKOUT_REVIEW_LABEL,
+        onClick: () => reviewCheckoutForm(field),
+      },
+    })
+    window.setTimeout(() => {
+      scrollToFirstInvalidCheckoutField(field)
+    }, 80)
   }
 
   async function submitCheckout(
@@ -1699,10 +1767,7 @@ export function CheckoutTunnel({
     const source = buyerOverride ?? buyerForm.getValues()
     const buyerCheck = validateCheckoutBuyer(source)
     if (!buyerCheck.ok) {
-      const field = firstCheckoutBuyerErrorField(
-        buyerForm.formState.errors,
-      )
-      onValidationError(field)
+      handleBuyerValidationFailure(buyerForm.formState.errors)
       return
     }
     setBuyer(buyerCheck.buyer)
@@ -1728,7 +1793,7 @@ export function CheckoutTunnel({
       }
       if (!(await lockCheckoutStock())) return
 
-      const captchaToken = await getCheckoutCaptchaToken()
+      const captchaToken = sandbox ? null : await getCheckoutCaptchaToken()
 
       const result = sandbox
         ? await startSandboxCheckout(
@@ -1778,6 +1843,15 @@ export function CheckoutTunnel({
 
       if (sandbox) {
         toast.success("Compra de prueba lista")
+        const successUrl =
+          result.paymentUrl?.trim() ||
+          result.initPoint?.trim() ||
+          `/checkout/success?order_id=${encodeURIComponent(result.orderId)}&sandbox=1`
+        enterPaymentHold({
+          paymentUrl: successUrl,
+          initPoint: successUrl,
+        })
+        return
       }
       enterPaymentHold(result)
     } catch (error) {
@@ -1853,8 +1927,7 @@ export function CheckoutTunnel({
         panelBodyRef.current?.scrollTo({ top: 0, behavior: "smooth" })
       },
       (formErrors) => {
-        setFieldShake((current) => current + 1)
-        onValidationError(firstCheckoutBuyerErrorField(formErrors))
+        handleBuyerValidationFailure(formErrors)
       },
     )()
   }
@@ -2056,9 +2129,7 @@ export function CheckoutTunnel({
         )
       },
       (formErrors) => {
-        setFieldShake((current) => current + 1)
-        onValidationError(firstCheckoutBuyerErrorField(formErrors))
-        setCheckoutStep("details")
+        handleBuyerValidationFailure(formErrors)
       },
     )()
   }
@@ -2081,8 +2152,7 @@ export function CheckoutTunnel({
         void runCheckoutBusy(() => submitCheckout(undefined, true, values))
       },
       (formErrors) => {
-        setFieldShake((current) => current + 1)
-        onValidationError(firstCheckoutBuyerErrorField(formErrors))
+        handleBuyerValidationFailure(formErrors)
       },
     )()
   }

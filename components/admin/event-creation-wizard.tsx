@@ -19,7 +19,8 @@ import {
   Ticket,
   UploadCloud,
 } from "lucide-react"
-import { useRouter } from "next/navigation"
+import Link from "next/link"
+import { usePathname, useRouter } from "next/navigation"
 import { useCallback, useEffect, useState } from "react"
 import {
   useForm,
@@ -135,6 +136,8 @@ import {
 import { defaultInventoryDayId, seedTwoScheduleDays } from "@/lib/event-schedule"
 import {
   clampWizardStep,
+  editWorkspaceStepKey,
+  editWorkspaceStepMeta,
   isLastVisibleWizardStep,
   nextWizardStep,
   prevWizardStep,
@@ -235,6 +238,7 @@ export function EventCreationWizard({
   categories = [],
   initialData,
   workspace = false,
+  initialStep,
   backHref = "/admin/events",
   backLabel = "Volver al Panel",
 }: {
@@ -245,12 +249,16 @@ export function EventCreationWizard({
   categories?: Array<{ id: string; name: string; slug: string; iconName: string | null }>
   initialData?: EditableEventData
   workspace?: boolean
+  initialStep?: number
   backHref?: string
   backLabel?: string
 }) {
   const router = useRouter()
+  const pathname = usePathname()
   const isEditing = Boolean(initialData)
-  const [activeStep, setActiveStep] = useState(workspace ? WIZARD_STEP_MAP : 0)
+  const [activeStep, setActiveStep] = useState(
+    workspace ? (initialStep ?? WIZARD_STEP_IDENTITY) : 0,
+  )
   const [flyerFile, setFlyerFile] = useState<File | null>(null)
   const [flyerError, setFlyerError] = useState<string | null>(null)
   const [resultMessage, setResultMessage] = useState<{
@@ -294,12 +302,23 @@ export function EventCreationWizard({
   const hasSchedule = Boolean(
     useWatch({ control: form.control, name: "basics.hasSchedule" }),
   )
-  const wizardFlags: WizardVisibility = { hasSeatingPlan, hasSchedule }
+  const wizardFlags: WizardVisibility = {
+    hasSeatingPlan,
+    hasSchedule,
+    editWorkspace: workspace,
+  }
   const visibleStepIndexes = visibleWizardSteps(wizardFlags)
-  const visibleSteps = visibleStepIndexes.map((index) => ({
-    index,
-    ...STEP_META[index as keyof typeof STEP_META],
-  }))
+  const visibleSteps = visibleStepIndexes.map((index) => {
+    const meta = STEP_META[index as keyof typeof STEP_META]
+    if (!workspace) return { index, ...meta }
+    const editMeta = editWorkspaceStepMeta(index)
+    return {
+      index,
+      ...meta,
+      title: editMeta.title,
+      description: editMeta.description,
+    }
+  })
 
   const draftKey = initialData ? `edit:${initialData.id}` : "create"
   const { persistedEventId, flushAutosave } = useEventFormAutosave({
@@ -321,6 +340,15 @@ export function EventCreationWizard({
   const setWizardStep = useEventFormStore((s) => s.setWizardStep)
 
   useEffect(() => {
+    if (workspace) {
+      const resolved = clampWizardStep(
+        initialStep ?? WIZARD_STEP_IDENTITY,
+        { hasSeatingPlan, hasSchedule, editWorkspace: true },
+      )
+      setActiveStep(resolved)
+      setWizardStep(resolved)
+      return
+    }
     const apply = () => {
       const store = useEventFormStore.getState()
       const persisted =
@@ -357,6 +385,13 @@ export function EventCreationWizard({
     setActiveStep(resolvedStep)
     setWizardStep(resolvedStep)
   }
+
+  useEffect(() => {
+    if (!workspace) return
+    const key = editWorkspaceStepKey(resolvedStep)
+    router.replace(`${pathname}?step=${key}`, { scroll: false })
+  }, [workspace, resolvedStep, pathname, router])
+
   const inventoryBlocked =
     resolvedStep === WIZARD_STEP_TICKETS &&
     (capacitySnapshot.exceeded || ticketsHavePhaseOverflow(watchedTickets ?? []))
@@ -419,6 +454,7 @@ export function EventCreationWizard({
       const resolved = clampWizardStep(step, {
         hasSeatingPlan,
         hasSchedule,
+        editWorkspace: workspace,
       })
       if (resolved < 0 || resolved >= WIZARD_STEP_COUNT) return
       setActiveStep(resolved)
@@ -439,7 +475,7 @@ export function EventCreationWizard({
         }
       }, 80)
     },
-    [hasSeatingPlan, hasSchedule, setWizardStep],
+    [hasSeatingPlan, hasSchedule, setWizardStep, workspace],
   )
 
   useEffect(() => {
@@ -830,65 +866,14 @@ export function EventCreationWizard({
     applyMapInventory(next)
   }
 
-  if (workspace) {
-    return (
-      <>
-        <Form {...form}>
-          <form
-            className="contents"
-            onSubmit={(event) => {
-              event.preventDefault()
-            }}
-          >
-            <InteractiveVenueMapEditor
-              variant="workspace"
-              eventTitle={watchedTitle || initialData?.title || "Evento"}
-              onEventTitleChange={(title) =>
-                form.setValue("basics.title", title, { shouldDirty: true })
-              }
-              backHref={backHref}
-              backLabel={backLabel}
-              value={parseVenueMap(watchedVenueMap)}
-              tickets={watchedTickets}
-              saving={form.formState.isSubmitting}
-              onChange={(next) => persistWorkspaceMap(next)}
-              onAutoSave={(next) => persistWorkspaceMap(next)}
-              onSave={async (next) => {
-                persistWorkspaceMap(next)
-                const eventId = initialData?.id ?? persistedEventId
-                if (!eventId) {
-                  throw new Error("No hay un evento para guardar el mapa.")
-                }
-                const result = await saveVenueMapOnly(eventId, next)
-                if (!result.success) {
-                  throw new Error(result.error)
-                }
-              }}
-            />
-          </form>
-        </Form>
-        {publishConfirm.open ? (
-          <PublishEventConfirmDialog
-            eventId={publishConfirm.eventId}
-            open={publishConfirm.open}
-            onOpenChange={(open) =>
-              setPublishConfirm((current) => ({ ...current, open }))
-            }
-            onPublished={() => {
-              router.push(`/admin/events/${publishConfirm.eventId}`)
-              router.refresh()
-            }}
-          />
-        ) : null}
-      </>
-    )
-  }
-
   return (
     <>
     <Form {...form}>
       <form
-        className="dark text-zinc-100"
+        className={cn(
+          "dark text-zinc-100",
+          workspace && "flex h-full min-h-0 flex-col overflow-hidden bg-background",
+        )}
         onSubmit={form.handleSubmit(
           (data) => onSubmit(data, "draft"),
           () => {
@@ -913,8 +898,53 @@ export function EventCreationWizard({
             if (!Number.isFinite(next) || next === resolvedStep) return
             void moveToStep(next)
           }}
-          className="flex flex-col gap-8"
+          className={cn(
+            "flex flex-col gap-8",
+            workspace && "min-h-0 flex-1 gap-0 overflow-hidden",
+          )}
         >
+          {workspace ? (
+            <header className="z-30 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-card px-3 text-card-foreground">
+              <Link
+                href={backHref}
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <ArrowLeft className="size-3.5" />
+                <span className="hidden lg:inline">{backLabel}</span>
+              </Link>
+              <TabsList
+                aria-label="Pasos de edición"
+                className="h-9 min-w-0 flex-1 justify-center bg-zinc-100 p-0.5 text-muted-foreground dark:bg-zinc-900"
+              >
+                {visibleSteps.map(({ index, title }, visibleIndex) => (
+                  <TabsTrigger
+                    key={title}
+                    value={String(index)}
+                    className="h-8 gap-1.5 px-2.5 text-xs data-active:bg-background data-active:text-foreground sm:px-3 sm:text-[13px]"
+                  >
+                    <span className="font-mono text-[11px] text-muted-foreground">
+                      {visibleIndex + 1}.
+                    </span>
+                    <span className="truncate">{title}</span>
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+              <EventAutosaveIndicator />
+              <Button
+                type="submit"
+                disabled={form.formState.isSubmitting || inventoryBlocked}
+                className="h-8 shrink-0 bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-500"
+              >
+                {form.formState.isSubmitting ? (
+                  <LoaderCircle className="size-3.5 animate-spin" />
+                ) : (
+                  <Save className="size-3.5" />
+                )}
+                Guardar
+              </Button>
+            </header>
+          ) : (
+            <>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <EventCapacityHeader form={form} />
             <EventAutosaveIndicator />
@@ -968,13 +998,22 @@ export function EventCreationWizard({
               )
             })}
           </TabsList>
+            </>
+          )}
 
-          <Card className="gap-0 rounded-3xl border border-zinc-800 bg-zinc-950 bg-gradient-to-b from-zinc-900 to-zinc-950 pt-0 pb-32 text-zinc-100 shadow-2xl shadow-black/30 ring-0 max-sm:overflow-x-hidden lg:pb-0 [&_[data-slot=input]]:rounded-xl [&_[data-slot=input]]:border-zinc-800 [&_[data-slot=input]]:bg-zinc-950 [&_[data-slot=input]]:text-zinc-100 [&_[data-slot=input]]:shadow-inner [&_[data-slot=input]]:placeholder:text-zinc-500 [&_[data-slot=input]:focus-visible]:border-emerald-500/60 [&_[data-slot=input]:focus-visible]:bg-zinc-900 [&_[data-slot=input]:focus-visible]:ring-2 [&_[data-slot=input]:focus-visible]:ring-emerald-500/15 [&_[data-slot=select-trigger]]:rounded-xl [&_[data-slot=select-trigger]]:border-zinc-800 [&_[data-slot=select-trigger]]:bg-zinc-950 [&_[data-slot=select-trigger]]:text-zinc-100 [&_[data-slot=select-trigger]]:shadow-inner [&_[data-slot=select-trigger]:focus-visible]:border-emerald-500/60 [&_[data-slot=select-trigger]:focus-visible]:ring-2 [&_[data-slot=select-trigger]:focus-visible]:ring-emerald-500/15">
+          <Card className={cn(
+            "gap-0 rounded-3xl border border-zinc-800 bg-zinc-950 bg-gradient-to-b from-zinc-900 to-zinc-950 pt-0 pb-32 text-zinc-100 shadow-2xl shadow-black/30 ring-0 max-sm:overflow-x-hidden lg:pb-0 [&_[data-slot=input]]:rounded-xl [&_[data-slot=input]]:border-zinc-800 [&_[data-slot=input]]:bg-zinc-950 [&_[data-slot=input]]:text-zinc-100 [&_[data-slot=input]]:shadow-inner [&_[data-slot=input]]:placeholder:text-zinc-500 [&_[data-slot=input]:focus-visible]:border-emerald-500/60 [&_[data-slot=input]:focus-visible]:bg-zinc-900 [&_[data-slot=input]:focus-visible]:ring-2 [&_[data-slot=input]:focus-visible]:ring-emerald-500/15 [&_[data-slot=select-trigger]]:rounded-xl [&_[data-slot=select-trigger]]:border-zinc-800 [&_[data-slot=select-trigger]]:bg-zinc-950 [&_[data-slot=select-trigger]]:text-zinc-100 [&_[data-slot=select-trigger]]:shadow-inner [&_[data-slot=select-trigger]:focus-visible]:border-emerald-500/60 [&_[data-slot=select-trigger]:focus-visible]:ring-2 [&_[data-slot=select-trigger]:focus-visible]:ring-emerald-500/15",
+            workspace &&
+              "flex min-h-0 flex-1 flex-col overflow-hidden rounded-none border-0 bg-background pb-0 shadow-none",
+          )}>
             <TabsContent
               keepMounted
               value="0"
               id="event-wizard-step-0"
-              className="animate-in fade-in slide-in-from-right-2 duration-300"
+              className={cn(
+                "animate-in fade-in slide-in-from-right-2 duration-300",
+                workspace && "h-full overflow-y-auto",
+              )}
             >
               <CardHeader className="px-4 pt-6 sm:px-10 sm:pt-10">
                 <CardTitle className="mb-1 text-2xl font-bold text-foreground">
@@ -1411,6 +1450,27 @@ export function EventCreationWizard({
                     eventId={initialData?.id ?? persistedEventId}
                   />
                 </div>
+                {workspace ? (
+                  <div className="space-y-7 lg:col-span-12">
+                    <EventVenueStep
+                      form={form}
+                      eventId={initialData?.id ?? persistedEventId}
+                      venues={venueCatalog}
+                      onVenuesChange={setLocalVenues}
+                      onAppliedVenue={handleApplySavedVenue}
+                      onMapInventoryChange={applyMapInventory}
+                      catalogOrganizerId={
+                        targetOrganizerId ?? initialData?.organizerId ?? null
+                      }
+                      focus="location"
+                    />
+                    {hasSchedule ? (
+                      <AgendaBuilder
+                        eventId={initialData?.id ?? persistedEventId}
+                      />
+                    ) : null}
+                  </div>
+                ) : null}
               </CardContent>
             </TabsContent>
 
@@ -1435,11 +1495,40 @@ export function EventCreationWizard({
             </TabsContent>
 
             <TabsContent
-              keepMounted
+              keepMounted={!workspace}
               value="1"
               id="event-wizard-step-1"
-              className="animate-in fade-in slide-in-from-right-2 duration-300"
+              className={cn(
+                "animate-in fade-in slide-in-from-right-2 duration-300",
+                workspace && "h-[calc(100dvh-3.5rem)] min-h-0 overflow-hidden",
+              )}
             >
+              {workspace ? (
+                <InteractiveVenueMapEditor
+                  variant="studio"
+                  eventTitle={watchedTitle || initialData?.title || "Evento"}
+                  onEventTitleChange={(title) =>
+                    form.setValue("basics.title", title, { shouldDirty: true })
+                  }
+                  value={parseVenueMap(watchedVenueMap)}
+                  tickets={watchedTickets}
+                  saving={form.formState.isSubmitting}
+                  onChange={(next) => persistWorkspaceMap(next)}
+                  onAutoSave={(next) => persistWorkspaceMap(next)}
+                  onSave={async (next) => {
+                    persistWorkspaceMap(next)
+                    const eventId = initialData?.id ?? persistedEventId
+                    if (!eventId) {
+                      throw new Error("No hay un evento para guardar el mapa.")
+                    }
+                    const result = await saveVenueMapOnly(eventId, next)
+                    if (!result.success) {
+                      throw new Error(result.error)
+                    }
+                  }}
+                />
+              ) : (
+                <>
               <CardHeader className="border-b border-zinc-200 px-4 py-6 dark:border-white/8 lg:px-8">
                 <CardTitle className="text-xl text-foreground">
                   Mapa y sectores
@@ -1464,13 +1553,18 @@ export function EventCreationWizard({
                   focus="all"
                 />
               </CardContent>
+                </>
+              )}
             </TabsContent>
 
             <TabsContent
               keepMounted
               value="2"
               id="event-wizard-step-2"
-              className="animate-in fade-in slide-in-from-right-2 duration-300"
+              className={cn(
+                "animate-in fade-in slide-in-from-right-2 duration-300",
+                workspace && "h-full overflow-y-auto",
+              )}
             >
               <CardHeader className="border-b border-zinc-200 px-4 py-6 dark:border-white/8 lg:px-8">
                 <CardTitle className="text-xl text-foreground">
@@ -1639,6 +1733,7 @@ export function EventCreationWizard({
                 "fixed inset-x-0 bottom-0 z-50 flex w-full flex-col gap-2 border-t border-zinc-800 bg-zinc-950/95 px-4 pt-3 text-zinc-100 backdrop-blur-xl",
                 "pb-[max(0.75rem,env(safe-area-inset-bottom))]",
                 "lg:static lg:z-auto lg:flex-row lg:items-center lg:justify-between lg:bg-transparent lg:px-6 lg:py-5 lg:pb-5 lg:backdrop-blur-none",
+                workspace && "hidden",
               )}
             >
               <div className="flex items-center justify-between gap-2 lg:justify-start">

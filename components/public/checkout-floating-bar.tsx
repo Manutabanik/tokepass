@@ -93,7 +93,8 @@ export function CheckoutFloatingBar({
       {/* Barra Flotante Inferior Mobile */}
       <div
         className={cn(
-          "fixed bottom-3 left-3 right-3 z-50 flex items-center justify-between rounded-2xl border border-border/50 bg-background/95 p-2.5 shadow-[0_8px_30px_rgba(0,0,0,0.12)] backdrop-blur-xl transition-all duration-300 lg:hidden dark:shadow-[0_8px_30px_rgba(0,0,0,0.4)]",
+          "fixed right-0 bottom-0 left-0 z-50 flex items-center justify-between border-t border-gray-200 bg-white p-4 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)] lg:hidden dark:border-border dark:bg-card dark:shadow-[0_-10px_24px_-6px_rgba(0,0,0,0.45)]",
+          "pb-[max(1.5rem,env(safe-area-inset-bottom))]",
         )}
       >
         <div
@@ -109,7 +110,7 @@ export function CheckoutFloatingBar({
               onClick={() => setSummaryOpen(true)}
               className="flex min-w-0 cursor-pointer flex-col pl-1 text-left disabled:cursor-default lg:pointer-events-none"
             >
-              <span className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+              <span className="flex items-center gap-1 text-[11px] font-medium text-gray-600 dark:text-muted-foreground">
                 {resolvedCount > 0
                   ? `${resolvedCount} ${resolvedCount === 1 ? "seleccionado" : "seleccionados"}`
                   : "Total"}
@@ -122,7 +123,7 @@ export function CheckoutFloatingBar({
               </span>
               <span
                 className={cn(
-                  "text-lg font-black tabular-nums tracking-tight text-foreground transition-all md:text-xl lg:text-2xl",
+                  "text-lg font-black tracking-tight text-gray-900 tabular-nums transition-all md:text-xl lg:text-2xl dark:text-foreground",
                   totalBump && "scale-105 text-primary",
                 )}
               >

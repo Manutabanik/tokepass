@@ -101,14 +101,17 @@ export function Toaster({ className, ...props }: ToasterProps) {
       toastOptions={{
         classNames: {
           toast:
-            "group toast border-white/10 bg-[#121217] text-zinc-100 shadow-xl",
-          description: "text-zinc-500",
+            "group toast flex flex-col gap-1 p-4 border-white/10 bg-[#121217] text-zinc-100 shadow-xl",
+          content: "flex flex-col gap-1",
+          title: "break-words font-medium leading-snug",
+          description: "break-words text-zinc-500 leading-snug",
+          actionButton: "mt-1 shrink-0 self-start",
           success: "border-emerald-500/20",
           error: "border-red-500/20",
         },
       }}
       {...props}
-      position="bottom-left"
+      position="top-center"
       offset={24}
       visibleToasts={1}
     />

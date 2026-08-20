@@ -3,8 +3,10 @@ import { describe, it } from "node:test"
 
 import {
   clampWizardStep,
+  editWorkspaceStepKey,
   isLastVisibleWizardStep,
   nextWizardStep,
+  parseEditWorkspaceStep,
   prevWizardStep,
   visibleWizardSteps,
   WIZARD_STEP_AGENDA,
@@ -78,5 +80,28 @@ describe("wizard-steps", () => {
     assert.equal(prevWizardStep(WIZARD_STEP_MAP, both), WIZARD_STEP_AGENDA)
     assert.equal(isLastVisibleWizardStep(WIZARD_STEP_CONFIG, both), true)
     assert.equal(isLastVisibleWizardStep(WIZARD_STEP_TICKETS, both), false)
+  })
+
+  it("keeps the three edit-workspace tabs even without a seating plan", () => {
+    const workspace = { ...none, editWorkspace: true }
+    assert.deepEqual(visibleWizardSteps(workspace), [
+      WIZARD_STEP_IDENTITY,
+      WIZARD_STEP_MAP,
+      WIZARD_STEP_TICKETS,
+    ])
+    assert.equal(clampWizardStep(WIZARD_STEP_MAP, workspace), WIZARD_STEP_MAP)
+    assert.equal(
+      clampWizardStep(WIZARD_STEP_CONFIG, workspace),
+      WIZARD_STEP_TICKETS,
+    )
+    assert.equal(isLastVisibleWizardStep(WIZARD_STEP_TICKETS, workspace), true)
+  })
+
+  it("parses edit workspace query keys", () => {
+    assert.equal(parseEditWorkspaceStep("info"), WIZARD_STEP_IDENTITY)
+    assert.equal(parseEditWorkspaceStep("map"), WIZARD_STEP_MAP)
+    assert.equal(parseEditWorkspaceStep("pricing"), WIZARD_STEP_TICKETS)
+    assert.equal(parseEditWorkspaceStep("unknown"), WIZARD_STEP_IDENTITY)
+    assert.equal(editWorkspaceStepKey(WIZARD_STEP_MAP), "map")
   })
 })

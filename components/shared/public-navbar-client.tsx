@@ -5,7 +5,6 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 
 import { AccountAvatarMenu } from "@/components/account/account-avatar-menu"
-import { MobileAccountAvatarLink } from "@/components/account/mobile-account-avatar-link"
 import { BrandLogo } from "@/components/shared/brand-logo"
 import { NavbarSearch } from "@/components/shared/navbar-search"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
@@ -42,7 +41,7 @@ export function PublicNavbarClient({
       >
         <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-3 px-4 lg:px-8">
           <div className="flex min-w-0 flex-1 items-center">
-            <BrandLogo size="header" className="min-w-0 truncate" />
+            <BrandLogo href="/" size="header" className="min-w-0 truncate" />
           </div>
 
           <nav
@@ -84,18 +83,12 @@ export function PublicNavbarClient({
             />
 
             {isAuthenticated ? (
-              <>
-                <MobileAccountAvatarLink
-                  initials={userInitials}
-                  avatarUrl={avatarUrl}
-                />
-                <AccountAvatarMenu
-                  initials={userInitials}
-                  label={userLabel}
-                  email={userEmail}
-                  avatarUrl={avatarUrl}
-                />
-              </>
+              <AccountAvatarMenu
+                initials={userInitials}
+                label={userLabel}
+                email={userEmail}
+                avatarUrl={avatarUrl}
+              />
             ) : (
               <Link
                 href="/login"

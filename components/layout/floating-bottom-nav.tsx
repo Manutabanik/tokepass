@@ -7,7 +7,10 @@ import { useSyncExternalStore } from "react"
 import { createPortal } from "react-dom"
 
 import { useScrollDirection } from "@/hooks/use-scroll-direction"
-import { isPublicFocusedFlow } from "@/lib/navigation/focused-flows"
+import {
+  isPublicEventStorefrontPath,
+  isPublicFocusedFlow,
+} from "@/lib/navigation/focused-flows"
 import { cn } from "@/lib/utils"
 
 const ITEMS = [
@@ -65,6 +68,7 @@ export function FloatingBottomNav() {
 
   if (!hasDocument) return null
   if (isPublicFocusedFlow(pathname)) return null
+  if (isPublicEventStorefrontPath(pathname)) return null
 
   // Visible by default; only hide after a downward scroll gesture.
   const collapsed = scrollDirection === "down"

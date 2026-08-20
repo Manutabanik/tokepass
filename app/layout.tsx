@@ -113,7 +113,7 @@ export default async function RootLayout({
             <PwaRegister />
           </Suspense>
           <InstallBanner />
-          <Toaster position="bottom-left" offset={24} richColors closeButton />
+          <Toaster position="top-center" offset={24} richColors closeButton />
         </ThemeProvider>
       </body>
     </html>

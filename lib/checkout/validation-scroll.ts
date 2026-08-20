@@ -27,6 +27,13 @@ export function firstCheckoutBuyerErrorField(
   )
 }
 
+function focusCheckoutNode(node: HTMLElement) {
+  node.scrollIntoView({ behavior: "smooth", block: "center" })
+  window.setTimeout(() => {
+    node.focus({ preventScroll: true })
+  }, 280)
+}
+
 /** Scroll + focus the first invalid checkout field. Never leave the user on a toast alone. */
 export function onValidationError(field?: CheckoutBuyerField | string | null) {
   if (typeof document === "undefined") return
@@ -36,10 +43,20 @@ export function onValidationError(field?: CheckoutBuyerField | string | null) {
       : null
   const id = mapped ?? "checkout-buyer"
   const node = document.getElementById(id)
-  node?.scrollIntoView({ behavior: "smooth", block: "center" })
   if (node instanceof HTMLElement) {
-    window.setTimeout(() => {
-      node.focus({ preventScroll: true })
-    }, 280)
+    focusCheckoutNode(node)
   }
+}
+
+/** Prefer the first marked invalid input; fall back to a known buyer field. */
+export function scrollToFirstInvalidCheckoutField(
+  field?: CheckoutBuyerField | string | null,
+) {
+  if (typeof document === "undefined") return
+  const invalid = document.querySelector<HTMLElement>('[aria-invalid="true"]')
+  if (invalid) {
+    focusCheckoutNode(invalid)
+    return
+  }
+  onValidationError(field)
 }

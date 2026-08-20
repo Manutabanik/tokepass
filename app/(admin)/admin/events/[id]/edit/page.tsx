@@ -6,6 +6,7 @@ import { getEventForEditing } from "@/app/actions/events"
 import { getOrganizerLabel } from "@/app/actions/superadmin"
 import { listOrganizerVenues } from "@/app/actions/venues"
 import { EventCreationWizard } from "@/components/admin/event-creation-wizard"
+import { parseEditWorkspaceStep } from "@/lib/events/wizard-steps"
 import {
   DEFAULT_PLATFORM_FEE_PERCENTAGE,
   DEFAULT_PLATFORM_FIXED_FEE,
@@ -16,16 +17,20 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
 export const metadata: Metadata = {
-  title: "Editor de mapa",
-  description: "Diseñá el mapa de asientos del evento.",
+  title: "Editar evento",
+  description: "Información, mapa y tarifas del evento.",
 }
 
 export default async function EditEventPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ step?: string }>
 }) {
   const { id } = await params
+  const { step: stepParam } = await searchParams
+  const initialStep = parseEditWorkspaceStep(stepParam)
   const supabase = await createClient()
   const {
     data: { user },
@@ -115,6 +120,7 @@ export default async function EditEventPage({
   return (
     <EventCreationWizard
       workspace
+      initialStep={initialStep}
       backHref={impersonation ? `/superadmin/events/${id}` : `/admin/events/${id}`}
       backLabel="Volver al Panel"
       initialData={initialData}

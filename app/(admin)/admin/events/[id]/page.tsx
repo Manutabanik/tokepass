@@ -132,7 +132,7 @@ export default async function ManageEventPage({
 
   const actions = [
     {
-      href: `/admin/events/${id}/edit`,
+      href: `/admin/events/${id}/edit?step=info`,
       label: "Editar Datos",
       description: "Título, fecha, flyer, lugar y tipos de entrada.",
       icon: Pencil,

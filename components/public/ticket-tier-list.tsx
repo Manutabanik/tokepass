@@ -71,11 +71,11 @@ export function TicketTierList({
   if (tiers.length === 0) return null
 
   return (
-    <div className="flex w-full flex-col gap-2">
+    <div className="flex w-full flex-col gap-3">
       {groups.map((group) => (
-        <div key={group.key} className="flex flex-col gap-2">
+        <div key={group.key} className="flex flex-col gap-3">
           {showGroupLabels && group.label ? (
-            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-gray-600 dark:text-muted-foreground">
               {group.label}
             </h4>
           ) : null}
@@ -106,75 +106,69 @@ export function TicketTierList({
               <div
                 key={tier.id}
                 className={cn(
-                  "flex items-center justify-between gap-3 rounded-xl border border-border bg-card/80 px-3.5 py-3 transition-all",
-                  soldOut
-                    ? "cursor-not-allowed border-border bg-muted/40 opacity-60"
-                    : "hover:border-primary/40 hover:bg-card",
-                  (quantity > 0 || Boolean(selectedSeatName)) && !soldOut && "border-primary/40 bg-card",
+                  "flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-border dark:bg-card",
+                  soldOut && "cursor-not-allowed opacity-60",
+                  (quantity > 0 || Boolean(selectedSeatName)) &&
+                    !soldOut &&
+                    "border-emerald-300 dark:border-emerald-500/40",
                 )}
               >
-                {/* Lado Izquierdo: Información del ticket */}
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h4 className="truncate text-sm font-bold text-foreground md:text-base">
-                      {tier.name}
-                    </h4>
-
-                    {/* Indicador de asiento seleccionado en mapa */}
-                    {selectedSeatName ? (
-                      <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-400">
-                        Seleccionado: {selectedSeatName}
-                      </span>
-                    ) : null}
-
+                <div className="flex min-w-0 flex-col gap-1.5">
+                  <h4 className="truncate text-lg font-bold text-gray-900 dark:text-foreground">
+                    {tier.name}
+                  </h4>
+                  {selectedSeatName ? (
+                    <span className="w-fit rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-100">
+                      {selectedSeatName}
+                    </span>
+                  ) : null}
+                  <div className="flex flex-wrap items-center gap-1.5">
                     {highlight === "bestseller" ? (
-                      <span className="rounded-md border border-amber-500/20 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400">
+                      <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold uppercase text-amber-900 dark:bg-amber-500/20 dark:text-amber-100">
                         Más vendida
                       </span>
                     ) : null}
-
                     {custom ? (
-                      <span className="rounded-md border border-border bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                      <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-bold uppercase text-gray-800 dark:bg-muted dark:text-foreground">
                         {custom}
                       </span>
                     ) : null}
                   </div>
-
                   <div className="flex items-center gap-2">
-                    <p className="text-base font-extrabold tabular-nums text-foreground md:text-lg">
+                    <p className="text-xl font-extrabold tabular-nums text-gray-900 dark:text-foreground">
                       {formatCurrency(tier.price)}
                     </p>
                     {soldOut ? (
                       <span className="text-xs font-semibold text-destructive">
-                        • Agotado
+                        Agotado
                       </span>
                     ) : showStock && scarcity.kind === "low" ? (
-                      <span className="text-xs font-medium text-amber-500">
-                        • Pocas disponibles
+                      <span className="text-xs font-medium text-amber-800 dark:text-amber-300">
+                        Pocas disponibles
                       </span>
                     ) : null}
                   </div>
                 </div>
 
-                {/* Lado Derecho: Controles + / - o Botón de Selección de Mapa */}
-                <div className="flex shrink-0 items-center">
+                <div className="flex items-center justify-end">
                   {isMappedTier ? (
                     <Button
                       type="button"
+                      variant={selectedSeatName ? "outline" : "default"}
                       disabled={soldOut || isPending}
                       onClick={() => onSelectSeat?.(tier.id)}
                       className={cn(
                         tapFeedbackClass,
-                        "h-8 px-3.5 text-xs font-semibold rounded-lg transition-colors",
+                        "ml-auto h-9 px-4 font-semibold",
                         selectedSeatName
-                          ? "bg-secondary text-foreground border border-border hover:bg-secondary/80"
-                          : "bg-emerald-500 text-neutral-950 hover:bg-emerald-400",
+                          ? "border-emerald-600 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-400 dark:text-emerald-300 dark:hover:bg-emerald-500/10"
+                          : "bg-emerald-600 text-white hover:bg-emerald-700",
                       )}
                     >
-                      {selectedSeatName ? "Cambiar lugar" : "Elegir lugar"}
+                      {selectedSeatName ? "Modificar lugares" : "Elegir lugar"}
                     </Button>
                   ) : (
-                    <div className="flex items-center rounded-lg bg-secondary/80 p-0.5 border border-border/50">
+                    <div className="ml-auto flex items-center rounded-lg border border-gray-200 bg-gray-50 p-0.5 dark:border-border/50 dark:bg-secondary/80">
                       <Button
                         type="button"
                         size="icon-sm"
@@ -191,7 +185,7 @@ export function TicketTierList({
                       >
                         <Minus className="size-3" aria-hidden="true" />
                       </Button>
-                      <span className="w-6 text-center text-xs font-bold tabular-nums text-foreground">
+                      <span className="w-6 text-center text-xs font-bold tabular-nums text-gray-900 dark:text-foreground">
                         {quantity}
                       </span>
                       <Button

@@ -49,6 +49,7 @@ describe("focused-flows", () => {
     assert.equal(isPublicEventStorefrontPath("/eventos/fiesta-tradicion"), true)
     assert.equal(isPublicEventStorefrontPath("/events/abc"), true)
     assert.equal(isPublicEventStorefrontPath("/events/preview/abc"), true)
+    assert.equal(isPublicEventStorefrontPath("/e/fiesta"), true)
     assert.equal(isPublicEventStorefrontPath("/events"), false)
     assert.equal(isPublicEventStorefrontPath("/"), false)
   })

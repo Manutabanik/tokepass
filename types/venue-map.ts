@@ -155,6 +155,7 @@ export type VenueMapElementSeat = {
   y: number
   status: VenueMapSeatStatus
   label?: string
+  row?: string
   price?: number
   rotation?: number
 }
@@ -397,6 +398,9 @@ function parseElement(raw: unknown): VenueMapElement | null {
               status: parseSeatStatus(seat.status),
               ...(typeof seat.label === "string" && seat.label.trim()
                 ? { label: seat.label.trim().slice(0, 40) }
+                : {}),
+              ...(typeof seat.row === "string" && seat.row.trim()
+                ? { row: seat.row.trim().slice(0, 24) }
                 : {}),
               ...(price != null ? { price: Math.max(0, price) } : {}),
               ...(rotation != null ? { rotation } : {}),

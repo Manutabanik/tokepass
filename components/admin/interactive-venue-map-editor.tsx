@@ -45,6 +45,7 @@ import { VenueHeatmapPanel } from "@/components/admin/venue-heatmap-panel"
 import { VenueWorkModeTabs, type VenueWorkMode } from "@/components/admin/venue-work-mode-tabs"
 import { VenueAutosaveBadge } from "@/components/admin/venue-autosave-badge"
 import { AutoNumberingPanel } from "@/components/admin/auto-numbering-panel"
+import { VenueManualEditPanel } from "@/components/admin/venue-manual-edit-panel"
 import { BuyerViewModal } from "@/components/admin/buyer-view-modal"
 import { ConcentricRingGenerator } from "@/components/admin/concentric-ring-generator"
 import { VenueCanvasContextMenu } from "@/components/admin/venue-canvas-context-menu"
@@ -108,6 +109,11 @@ import {
   applyLabelOverride,
   applyMatrixNumbering,
 } from "@/lib/seating/auto-numbering"
+import {
+  composeManualSeatLabel,
+  parseManualSeatFields,
+  parseSeatNumberInput,
+} from "@/lib/seating/manual-seat-edit"
 import {
   applyHeatmapColors,
 } from "@/lib/seating/venue-heatmap"
@@ -674,7 +680,10 @@ export function InteractiveVenueMapEditor({
   const selectedElement =
     selection?.kind === "element"
       ? (map.elements ?? []).find((item) => item.id === selection.id) ?? null
-      : null
+      : selection?.kind === "elements" && selection.ids.length === 1
+        ? (map.elements ?? []).find((item) => item.id === selection.ids[0]) ??
+          null
+        : null
   const selectedElementIds = useMemo(
     () =>
       selection?.kind === "elements"
@@ -2523,6 +2532,7 @@ export function InteractiveVenueMapEditor({
       rotation?: number
       price?: number
       label?: string
+      row?: string
     },
   ) {
     if (keys.size === 0) return
@@ -2554,6 +2564,7 @@ export function InteractiveVenueMapEditor({
     rotation?: number
     price?: number
     label?: string
+    row?: string
   }) {
     if (selection?.kind === "seats") {
       patchSeatsByKeys(new Set(selection.ids), patch)
@@ -2565,6 +2576,56 @@ export function InteractiveVenueMapEditor({
         patch,
       )
     }
+  }
+
+  function applyManualSeatIdentity(next: {
+    label?: string
+    row?: string
+    number?: string
+  }) {
+    if (!singleSeat) return
+    const current = parseManualSeatFields({
+      label: next.label ?? singleSeat.seat.label ?? "",
+      row:
+        next.row ??
+        ("row" in singleSeat.seat ? singleSeat.seat.row : undefined),
+      number: next.number ?? singleSeat.seat.number,
+    })
+    const parsedNumber = parseSeatNumberInput(current.number)
+    patchSelectedSeats({
+      label: current.label,
+      ...(current.row ? { row: current.row } : {}),
+      ...(parsedNumber != null ? { number: parsedNumber } : {}),
+    })
+  }
+
+  function applyManualElementIdentity(next: {
+    label?: string
+    row?: string
+    number?: string
+  }) {
+    if (!selectedElement) return
+    const firstSeat = selectedElement.seats[0]
+    const current = parseManualSeatFields({
+      label: next.label ?? selectedElement.label,
+      row: next.row ?? firstSeat?.row,
+      number: next.number ?? firstSeat?.number,
+    })
+    const parsedNumber = parseSeatNumberInput(current.number)
+    patchElement(selectedElement.id, {
+      label: current.label,
+      labelLocked: true,
+      seats: selectedElement.seats.map((seat, index) =>
+        index === 0
+          ? {
+              ...seat,
+              label: current.label,
+              ...(parsedNumber != null ? { number: parsedNumber } : {}),
+              ...(current.row ? { row: current.row } : {}),
+            }
+          : seat,
+      ),
+    })
   }
 
   function applyOrientation(deg: number) {
@@ -3432,7 +3493,7 @@ export function InteractiveVenueMapEditor({
           : "flex-wrap gap-2 overflow-hidden px-3 py-2",
       )}
     >
-      {isStudio ? (
+      {isStudio && onClose ? (
         <div className="flex min-w-0 shrink-0 items-center gap-1.5">
           <Button
             type="button"
@@ -4387,31 +4448,107 @@ export function InteractiveVenueMapEditor({
             />
           ) : workMode === "indexing" ? (
             <div className="space-y-4">
-              <AutoNumberingPanel
-                elements={ensureElements(map)}
-                selectedIds={selectedElementIds}
-                onApply={applySelectedElements}
-              />
-              {selectedElement ? (
-                <Field label="Excepción de esta pieza">
-                  <Input
-                    value={selectedElement.label}
-                    onChange={(event) =>
-                      patchElement(selectedElement.id, {
-                        label: event.target.value,
-                        labelLocked: true,
-                      })
-                    }
-                  />
-                  <p className="text-[11px] leading-relaxed text-muted-foreground">
-                    Doble clic o clic derecho también edita una sola butaca sin
-                    renumerar la fila.
-                  </p>
-                </Field>
+              {singleSeat ? (
+                <VenueManualEditPanel
+                  label={singleSeat.seat.label ?? ""}
+                  row={
+                    "row" in singleSeat.seat
+                      ? (singleSeat.seat.row ?? "")
+                      : ""
+                  }
+                  number={String(singleSeat.seat.number)}
+                  showRow
+                  showNumber
+                  onLabelChange={(value) =>
+                    applyManualSeatIdentity({ label: value })
+                  }
+                  onRowChange={(value) => {
+                    const number = String(singleSeat.seat.number)
+                    applyManualSeatIdentity({
+                      row: value,
+                      label: composeManualSeatLabel({
+                        row: value,
+                        number,
+                        fallbackLabel: singleSeat.seat.label ?? "",
+                      }),
+                    })
+                  }}
+                  onNumberChange={(value) => {
+                    const row =
+                      singleSeat.source === "sector"
+                        ? singleSeat.seat.row
+                        : (singleSeat.seat.row ?? "")
+                    applyManualSeatIdentity({
+                      number: value,
+                      label: composeManualSeatLabel({
+                        row,
+                        number: value,
+                        fallbackLabel: singleSeat.seat.label ?? "",
+                      }),
+                    })
+                  }}
+                />
+              ) : selectedElement && selectedElementIds.length === 1 ? (
+                <VenueManualEditPanel
+                  label={selectedElement.label}
+                  row={selectedElement.seats[0]?.row}
+                  number={
+                    selectedElement.seats[0]
+                      ? String(selectedElement.seats[0].number)
+                      : ""
+                  }
+                  showRow={
+                    selectedElement.type === "vip_chair" ||
+                    Boolean(selectedElement.seats[0]?.row)
+                  }
+                  showNumber={
+                    selectedElement.type === "vip_chair" ||
+                    selectedElement.seats.length === 1
+                  }
+                  onLabelChange={(value) =>
+                    applyManualElementIdentity({ label: value })
+                  }
+                  onRowChange={(value) => {
+                    const number = selectedElement.seats[0]
+                      ? String(selectedElement.seats[0].number)
+                      : ""
+                    applyManualElementIdentity({
+                      row: value,
+                      label: composeManualSeatLabel({
+                        row: value,
+                        number,
+                        fallbackLabel: selectedElement.label,
+                      }),
+                    })
+                  }}
+                  onNumberChange={(value) => {
+                    applyManualElementIdentity({
+                      number: value,
+                      label: composeManualSeatLabel({
+                        row: selectedElement.seats[0]?.row ?? "",
+                        number: value,
+                        fallbackLabel: selectedElement.label,
+                      }),
+                    })
+                  }}
+                />
+              ) : (
+                <AutoNumberingPanel
+                  elements={ensureElements(map)}
+                  selectedIds={selectedElementIds}
+                  onApply={applySelectedElements}
+                />
+              )}
+              {singleSeat ||
+              (selectedElement && selectedElementIds.length === 1) ? (
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  Para numerar un bloque completo, deseleccioná esta pieza o
+                  seleccioná varias.
+                </p>
               ) : (
                 <p className="text-xs leading-relaxed text-muted-foreground">
-                  Clic en un bloque agrupado para numerarlo. Ctrl+G agrupa.
-                  Ctrl+Shift+G desagrupa.
+                  Clic en un bloque agrupado para numerarlo. Una sola butaca
+                  abre la edición manual.
                 </p>
               )}
             </div>

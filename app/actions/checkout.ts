@@ -1664,16 +1664,6 @@ export async function startCheckoutWithPayment(
   const payload = parsed.data
   const buyer = buyerToHolderFields(payload.buyer) satisfies NormalizedCheckoutBuyer
 
-  const captcha = await verifyCheckoutCaptcha({
-    token: options?.captchaToken,
-    ip: ctx.ip,
-    skip: false,
-  })
-  if (!captcha.ok) {
-    await recordCheckoutFailure(ctx)
-    return { success: false, error: captcha.error || CHECKOUT_VERIFY_ERROR }
-  }
-
   const supabase = await createClient()
   const {
     data: { user: earlyUser },
@@ -1699,7 +1689,20 @@ export async function startCheckoutWithPayment(
         "Las compras de prueba solo están disponibles antes de que el evento esté en venta.",
     }
   }
+  const useSandbox = access.useSandbox || Boolean(payload.sandbox)
   const db = access.db
+
+  const captcha = useSandbox
+    ? ({ ok: true, provider: "none", score: null } as const)
+    : await verifyCheckoutCaptcha({
+        token: options?.captchaToken,
+        ip: ctx.ip,
+        skip: false,
+      })
+  if (!captcha.ok) {
+    await recordCheckoutFailure(ctx)
+    return { success: false, error: captcha.error || CHECKOUT_VERIFY_ERROR }
+  }
 
   const room = await assertCheckoutWaitingRoom({
     eventId: access.eventId,
@@ -2124,7 +2127,6 @@ export async function startCheckoutWithPayment(
     }
 
     let initPoint: string
-    const useSandbox = access.useSandbox
     const reservedUntil = rows[0]?.reserved_until
     const checkoutExpiresAt = resolveCheckoutExpiresAt(reservedUntil).toISOString()
 
@@ -2463,7 +2465,8 @@ export async function canUserSandboxCheckout(
 }
 
 /**
- * Compra de prueba (Modo Sandbox): misma reserva atómica, sin Mercado Pago.
+ * Compra de prueba (Modo Sandbox): reserva atómica y éxito sin Getnet/Mobbex/MP.
+ * Si el payload Zod (nombre, email, DNI y carrito) es válido, no contacta la pasarela.
  */
 export async function startSandboxCheckout(
   eventId: string,
