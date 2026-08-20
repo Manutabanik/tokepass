@@ -149,12 +149,19 @@ import {
   ticketRequiresInteractiveMap,
 } from "@/lib/seating/venue-map-pricing"
 import { isCategorySoldOut } from "@/lib/checkout/category-stock"
-import { mapIncludesGeneralAccess, venuePriceModeFromSellMode, type VenueMapElement } from "@/types/venue-map"
+import {
+  mapIncludesGeneralAccess,
+  parseVenueMap,
+  venuePriceModeFromSellMode,
+  type VenueMapElement,
+} from "@/types/venue-map"
 import {
   occupancyFromSeatingUnits,
   resolveLiveVenueSeatStatus,
 } from "@/lib/seating/venue-map-occupancy"
 import { useSeatingOccupancyRealtime } from "@/hooks/use-seating-occupancy-realtime"
+import { useEventCatalogRealtime } from "@/hooks/use-event-catalog-realtime"
+import { ticketSelectorPatchFromRow } from "@/lib/storefront/event-catalog-realtime"
 import {
   hydrateStorefrontItemsFromMap,
   resolveStorefrontItemFromMap,
@@ -348,6 +355,9 @@ export function CheckoutTunnel({
   selectedSeatRef.current = selectedSeat
   const [fieldShake, setFieldShake] = useState(0)
   const [fetchedMap, setFetchedMap] = useState<InteractiveVenueMap | null>(null)
+  const [realtimeMap, setRealtimeMap] = useState<InteractiveVenueMap | null>(
+    null,
+  )
   const [mapFetchDone, setMapFetchDone] = useState(
     hasInteractiveVenueMap(venueMap),
   )
@@ -355,13 +365,15 @@ export function CheckoutTunnel({
     !hasInteractiveVenueMap(venueMap) && seatingLayout.length > 0
       ? seatingLayoutToVenueMap(seatingLayout, venueMap)
       : null
-  const liveMap = hasInteractiveVenueMap(venueMap)
-    ? venueMap
-    : hasInteractiveVenueMap(fetchedMap)
-      ? fetchedMap
-      : hasInteractiveVenueMap(reconstructedMap)
-        ? reconstructedMap
-        : fetchedMap
+  const liveMap = hasInteractiveVenueMap(realtimeMap)
+    ? realtimeMap
+    : hasInteractiveVenueMap(venueMap)
+      ? venueMap
+      : hasInteractiveVenueMap(fetchedMap)
+        ? fetchedMap
+        : hasInteractiveVenueMap(reconstructedMap)
+          ? reconstructedMap
+          : fetchedMap
   const mapLoading = !hasInteractiveVenueMap(liveMap) && !mapFetchDone
   const [loadedUnitsBySector, setLoadedUnitsBySector] = useState<
     Record<string, EventSeatingUnit[]>
@@ -375,6 +387,7 @@ export function CheckoutTunnel({
   if (eventId !== occupancyEventId) {
     setOccupancyEventId(eventId)
     setLiveOccupancy({})
+    setRealtimeMap(null)
   }
   const applyOccupancyPatch = useCallback((patch: Record<string, SeatStatus>) => {
     setLiveOccupancy((current) => ({ ...current, ...patch }))
@@ -410,6 +423,42 @@ export function CheckoutTunnel({
         ...tierOverrides[tier.id],
       })),
     [tierOverrides, tiers],
+  )
+  useEventCatalogRealtime(
+    eventId,
+    {
+      onEventUpdate: (row) => {
+        if (row.venue_map == null) return
+        const parsed = parseVenueMap(row.venue_map)
+        if (hasInteractiveVenueMap(parsed)) setRealtimeMap(parsed)
+      },
+      onTierChange: (change, row) => {
+        const tierId = row.id?.trim()
+        if (!tierId) return
+        if (change === "DELETE") {
+          setTierOverrides((prev) => {
+            const next = { ...prev }
+            delete next[tierId]
+            return next
+          })
+          setQuantities((qty) => ({ ...qty, [tierId]: 0 }))
+          return
+        }
+        const patch = ticketSelectorPatchFromRow(row)
+        if (!patch) return
+        setTierOverrides((prev) => ({
+          ...prev,
+          [tierId]: { ...prev[tierId], ...patch },
+        }))
+        if (typeof patch.available === "number") {
+          setQuantities((qty) => ({
+            ...qty,
+            [tierId]: Math.min(qty[tierId] ?? 0, patch.available ?? 0),
+          }))
+        }
+      },
+    },
+    "tunnel",
   )
   const checkoutDateCards = useMemo(
     () => listCheckoutDateCards(scheduleDays, displayTiers),

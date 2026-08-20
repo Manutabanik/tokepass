@@ -62,6 +62,11 @@ import {
 } from "@/lib/format"
 import { isFullPassDayId, normalizeDayId } from "@/lib/event-schedule"
 import { deriveEventSaleState } from "@/lib/event-status"
+import { useEventCatalogRealtime } from "@/hooks/use-event-catalog-realtime"
+import {
+  applyEventCatalogRow,
+  applyTicketTierCatalogRow,
+} from "@/lib/storefront/event-catalog-realtime"
 import { cn } from "@/lib/utils"
 
 const storefrontStagger = {
@@ -112,7 +117,7 @@ function demandLabel(tiers: EventDetails["tiers"]): string | null {
 }
 
 export function EventStorefront({
-  event,
+  event: initialEvent,
   currentUserId,
   referralCode = null,
   initialBuyer = null,
@@ -121,6 +126,18 @@ export function EventStorefront({
   sandboxEligible = false,
   previewKey = null,
 }: EventStorefrontProps) {
+  const [event, setEvent] = useState(initialEvent)
+  useEffect(() => {
+    setEvent(initialEvent)
+  }, [initialEvent])
+  useEventCatalogRealtime(event.id, {
+    onEventUpdate: (row) => {
+      setEvent((current) => applyEventCatalogRow(current, row))
+    },
+    onTierChange: (change, row) => {
+      setEvent((current) => applyTicketTierCatalogRow(current, change, row))
+    },
+  }, "storefront")
   const startingPrice =
     event.tiers.length > 0
       ? Math.min(...event.tiers.map((tier) => tier.price))
