@@ -1,6 +1,7 @@
 import { VenueMapBackgroundLayer } from "@/components/venue/venue-map-background-layer"
 import { VenueMapElementLayer } from "@/components/venue/venue-map-element-layer"
 import { VenueMapZoneLayer } from "@/components/venue/venue-map-zone-layer"
+import { canvasLabelFill } from "@/lib/seating/canvas-label-fill"
 import { VENUE_MAP_CANVAS } from "@/lib/seating/venue-polygon"
 import type { InteractiveVenueMap } from "@/types/venue-map"
 
@@ -19,6 +20,11 @@ export function VenueMapCanvas({
       role="img"
       aria-label="Plano de asientos"
     >
+      <rect
+        width={VENUE_MAP_CANVAS.width}
+        height={VENUE_MAP_CANVAS.height}
+        fill="#09090b"
+      />
       <VenueMapBackgroundLayer map={map} />
       <VenueMapZoneLayer zones={map.zones ?? []} />
       {map.aisles.map((aisle) => (
@@ -40,13 +46,13 @@ export function VenueMapCanvas({
             width={map.stage.width}
             height={map.stage.height}
             rx={10}
-            className="fill-zinc-100"
+            className="fill-zinc-800"
           />
           <text
             x={map.stage.x + map.stage.width / 2}
             y={map.stage.y + map.stage.height / 2 + 5}
             textAnchor="middle"
-            className="fill-zinc-900 text-[13px] font-black tracking-[0.28em]"
+            className="fill-[#e4e4e7] text-[13px] font-black tracking-[0.28em]"
           >
             {map.stage.label}
           </text>
@@ -75,7 +81,7 @@ export function VenueMapCanvas({
           x={label.x}
           y={label.y}
           textAnchor="middle"
-          fill={label.color}
+          fill={canvasLabelFill(label.color)}
           className="text-[15px] font-black tracking-[0.22em]"
         >
           {label.text}

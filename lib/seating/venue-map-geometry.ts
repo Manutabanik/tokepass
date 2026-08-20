@@ -130,9 +130,9 @@ function serializeStandaloneElement(element: VenueMapElement) {
           label: elementSeatLabel(element, seat.number),
           capacity: 1,
           status:
-            seat.status === "blocked"
-              ? ("blocked" as const)
-              : ("available" as const),
+            seat.status === "available"
+              ? ("available" as const)
+              : ("blocked" as const),
         })),
       },
     ],
@@ -362,7 +362,7 @@ export function seatingLayoutToVenueMap(
             number: seatIndex + 1,
             x: generatedSeat?.x ?? draft.x + seatIndex * 18,
             y: generatedSeat?.y ?? draft.y + rowIndex * 20,
-            status: item.status === "blocked" ? "blocked" : "available",
+            status: item.status === "available" ? "available" : "blocked",
           }
         }),
       )
@@ -406,7 +406,7 @@ export function flattenVenueMapSeats(map: InteractiveVenueMap): FlattenedVenueSe
       sectorId: sector.id,
       sectorName: sector.name,
       color: sector.color,
-      price: sector.price,
+      price: seat.price ?? sector.price,
       mapStatus: seat.status,
       source: "sector" as const,
     }))
@@ -446,7 +446,7 @@ export function flattenVenueMapSeats(map: InteractiveVenueMap): FlattenedVenueSe
       sectorId: elementInventorySectorId(element),
       sectorName: element.groupName || element.label,
       color: element.color,
-      price: element.price,
+      price: seat.price ?? element.price,
       mapStatus: seat.status,
       source: "element" as const,
     }))

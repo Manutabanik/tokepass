@@ -33,6 +33,10 @@ const STATUS_BY_APP_CODE: Record<AppErrorCode, PublicHttpStatus> = {
   PERMISSION_DENIED: 403,
   SESSION_REQUIRED: 401,
   EVENT_NOT_FOUND: 404,
+  SAVE_FAILED: 500,
+  INVALID_PROMO_PRICE: 400,
+  MISSING_SCHEDULE_DAY: 400,
+  FLYER_TOO_LARGE: 400,
   UNKNOWN: 500,
 }
 
@@ -51,7 +55,8 @@ export function toPublicHttpError(raw: unknown): PublicHttpError {
   }
 
   const mapped = mapUnknownError(raw, {
-    code: "UNKNOWN",
+    code: "SAVE_FAILED",
+    title: "No se pudieron guardar los cambios",
     message: GENERIC_PUBLIC_ERROR,
   })
 

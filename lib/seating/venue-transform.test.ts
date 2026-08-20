@@ -25,6 +25,8 @@ import {
   snapToGrid,
   translateElements,
   zoomTowardCursor,
+  expandViewBoxToContainer,
+  fitWorldInViewBox,
 } from "./venue-transform"
 
 describe("venue-transform", () => {
@@ -264,5 +266,58 @@ describe("venue-transform", () => {
     const worldAfterY = (cursor.y - next.pan.y) / next.zoom
     assert.equal(Math.abs(worldBeforeX - worldAfterX) < 1e-9, true)
     assert.equal(Math.abs(worldBeforeY - worldAfterY) < 1e-9, true)
+  })
+
+  it("expands the camera to the container aspect so meet has no letterbox", () => {
+    const wide = expandViewBoxToContainer({
+      containerWidth: 1600,
+      containerHeight: 560,
+      worldWidth: 800,
+      worldHeight: 560,
+      padding: 0,
+    })
+    assert.equal(Math.abs(wide.width / wide.height - 1600 / 560) < 1e-9, true)
+    assert.equal(wide.height, 560)
+    assert.equal(wide.width, 1600)
+    assert.equal(wide.x, (800 - 1600) / 2)
+    assert.equal(wide.y, 0)
+
+    const tall = expandViewBoxToContainer({
+      containerWidth: 800,
+      containerHeight: 900,
+      worldWidth: 800,
+      worldHeight: 560,
+      padding: 0,
+    })
+    assert.equal(Math.abs(tall.width / tall.height - 800 / 900) < 1e-9, true)
+    assert.equal(tall.width, 800)
+    assert.equal(tall.x, 0)
+  })
+
+  it("falls back to the logical world when the container size is invalid", () => {
+    const box = expandViewBoxToContainer({
+      containerWidth: 0,
+      containerHeight: -4,
+      worldWidth: 800,
+      worldHeight: 560,
+      padding: 0,
+    })
+    assert.equal(box.width, 800)
+    assert.equal(box.height, 560)
+    assert.equal(box.x, 0)
+    assert.equal(box.y, 0)
+  })
+
+  it("fits the 800x560 world inside the current camera without stretching", () => {
+    const fitted = fitWorldInViewBox({
+      viewWidth: 1200,
+      viewHeight: 560,
+      worldWidth: 800,
+      worldHeight: 560,
+      padding: 0,
+    })
+    assert.equal(fitted.zoom, 1)
+    assert.equal(fitted.pan.x, 200)
+    assert.equal(fitted.pan.y, 0)
   })
 })

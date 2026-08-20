@@ -31,7 +31,7 @@ function ToolbarButton({
       type="button"
       variant="ghost"
       size="icon-sm"
-      className="size-8 text-slate-600"
+      className="size-8 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
       disabled={disabled}
       aria-label={label}
       onClick={onClick}
@@ -81,7 +81,7 @@ export function VenueSelectionToolbar({
   return (
     <div
       className={cn(
-        "pointer-events-auto absolute z-50 flex items-center gap-1 rounded-md border border-slate-200 bg-white p-1.5 shadow-lg",
+        "pointer-events-auto absolute z-50 flex items-center gap-1 rounded-md border border-zinc-700 bg-zinc-900 p-1.5 text-zinc-100",
         className,
       )}
       style={{

@@ -68,10 +68,16 @@ describe("venue-grouping", () => {
 
   it("clears group metadata on ungroup without touching others", () => {
     const elements = [chair("a", "vip"), chair("b", "vip"), chair("c", "vip")]
+    elements[0]!.x = 40
+    elements[0]!.y = 80
+    elements[0]!.label = "Fila 1 - Asiento 2"
     const next = ungroupVenueElements(elements, ["a", "b"])
     assert.equal(next[0]?.groupId, undefined)
     assert.equal(next[1]?.groupName, undefined)
     assert.equal(next[2]?.groupId, "vip")
+    assert.equal(next[0]?.x, 40)
+    assert.equal(next[0]?.y, 80)
+    assert.equal(next[0]?.label, "Fila 1 - Asiento 2")
   })
 
   it("keeps a grouped click isolated to the target element", () => {

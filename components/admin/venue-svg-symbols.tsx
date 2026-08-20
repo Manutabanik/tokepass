@@ -22,6 +22,26 @@ export const CHAIR_DOT_RADIUS = VENUE_SHAPE.chairRadius
 
 type Occupancy = "available" | "occupied" | "blocked" | "selected" | "held"
 
+function seatInteractionProps(
+  seatId: string | undefined,
+  onSeatPointerDown?: (event: React.PointerEvent, seatId: string) => void,
+  onSeatDoubleClick?: (event: React.MouseEvent, seatId: string) => void,
+) {
+  if (!seatId) return undefined
+  return {
+    onPointerDown: onSeatPointerDown
+      ? (event: React.PointerEvent) => onSeatPointerDown(event, seatId)
+      : undefined,
+    onDoubleClick: onSeatDoubleClick
+      ? (event: React.MouseEvent) => {
+          event.stopPropagation()
+          event.preventDefault()
+          onSeatDoubleClick(event, seatId)
+        }
+      : undefined,
+  }
+}
+
 function seatState(
   seat: VenueMapElementSeat,
   occupancyBySeatId: Record<string, Occupancy | "available" | "occupied" | "blocked">,
@@ -161,6 +181,7 @@ export function RoundTableSymbol({
   occupancyBySeatId = {},
   selectedSeatIds,
   onSeatPointerDown,
+  onSeatDoubleClick,
 }: {
   cx: number
   cy: number
@@ -171,6 +192,7 @@ export function RoundTableSymbol({
   occupancyBySeatId?: Record<string, Occupancy | "available" | "occupied" | "blocked">
   selectedSeatIds: Set<string>
   onSeatPointerDown?: (event: React.PointerEvent, seatId: string) => void
+  onSeatDoubleClick?: (event: React.MouseEvent, seatId: string) => void
 }) {
   const r = Math.max(8, radius)
   const orbit = r + CHAIR_DOT_RADIUS + 2
@@ -188,7 +210,7 @@ export function RoundTableSymbol({
           : "available"
         return (
           <g key={seat?.id ?? `chair-${index}`}>
-            {seat && onSeatPointerDown ? (
+            {seat && (onSeatPointerDown || onSeatDoubleClick) ? (
               <circle
                 cx={x}
                 cy={y}
@@ -196,7 +218,7 @@ export function RoundTableSymbol({
                 fill="transparent"
                 stroke="transparent"
                 strokeWidth={14}
-                onPointerDown={(event) => onSeatPointerDown(event, seat.id)}
+                {...seatInteractionProps(seat.id, onSeatPointerDown, onSeatDoubleClick)}
               />
             ) : null}
             <circle
@@ -207,11 +229,7 @@ export function RoundTableSymbol({
               fillOpacity={state === "occupied" || state === "blocked" ? 0.4 : 0.95}
               stroke={strokeFor(color, selected, state)}
               strokeWidth={state === "selected" || selected ? 1.8 : 0.7}
-              onPointerDown={
-                seat && onSeatPointerDown
-                  ? (event) => onSeatPointerDown(event, seat.id)
-                  : undefined
-              }
+              {...seatInteractionProps(seat?.id, onSeatPointerDown, onSeatDoubleClick)}
             />
           </g>
         )
@@ -240,6 +258,7 @@ export function LongTableSymbol({
   occupancyBySeatId = {},
   selectedSeatIds,
   onSeatPointerDown,
+  onSeatDoubleClick,
 }: {
   cx: number
   cy: number
@@ -254,6 +273,7 @@ export function LongTableSymbol({
   occupancyBySeatId?: Record<string, Occupancy | "available" | "occupied" | "blocked">
   selectedSeatIds: Set<string>
   onSeatPointerDown?: (event: React.PointerEvent, seatId: string) => void
+  onSeatDoubleClick?: (event: React.MouseEvent, seatId: string) => void
 }) {
   const w = Math.max(8, width)
   const h = Math.max(8, height)
@@ -280,11 +300,7 @@ export function LongTableSymbol({
           fillOpacity={state === "occupied" || state === "blocked" ? 0.4 : 0.95}
           stroke={strokeFor(color, selected, state)}
           strokeWidth={state === "selected" || selected ? 1.1 : 0.7}
-          onPointerDown={
-            seat && onSeatPointerDown
-              ? (event) => onSeatPointerDown(event, seat.id)
-              : undefined
-          }
+          {...seatInteractionProps(seat?.id, onSeatPointerDown, onSeatDoubleClick)}
         />
       )
     })
@@ -318,6 +334,7 @@ export function VipBoxSymbol({
   occupancyBySeatId = {},
   selectedSeatIds,
   onSeatPointerDown,
+  onSeatDoubleClick,
 }: {
   cx: number
   cy: number
@@ -330,6 +347,7 @@ export function VipBoxSymbol({
   occupancyBySeatId?: Record<string, Occupancy | "available" | "occupied" | "blocked">
   selectedSeatIds?: Set<string>
   onSeatPointerDown?: (event: React.PointerEvent, seatId: string) => void
+  onSeatDoubleClick?: (event: React.MouseEvent, seatId: string) => void
 }) {
   const w = Math.max(24, width)
   const h = Math.max(18, height)
@@ -417,11 +435,7 @@ export function VipBoxSymbol({
             fillOpacity={state === "occupied" || state === "blocked" ? 0.4 : 0.9}
             stroke={strokeFor(color, selected, state)}
             strokeWidth={0.6}
-            onPointerDown={
-              onSeatPointerDown
-                ? (event) => onSeatPointerDown(event, seat.id)
-                : undefined
-            }
+            {...seatInteractionProps(seat.id, onSeatPointerDown, onSeatDoubleClick)}
           />
         )
       })}
@@ -573,6 +587,7 @@ export function VenueElementSymbol({
   zoom = 1,
   label,
   onSeatPointerDown,
+  onSeatDoubleClick,
 }: {
   element: VenueMapElement
   selected?: boolean
@@ -583,6 +598,7 @@ export function VenueElementSymbol({
   zoom?: number
   label?: string
   onSeatPointerDown?: (event: React.PointerEvent, seatId: string) => void
+  onSeatDoubleClick?: (event: React.MouseEvent, seatId: string) => void
 }) {
   const shape = resolveVenueShapeType(element)
   const color = element.color
@@ -616,6 +632,7 @@ export function VenueElementSymbol({
         occupancyBySeatId={occupancyBySeatId}
         selectedSeatIds={selectedSeatIds}
         onSeatPointerDown={onSeatPointerDown}
+        onSeatDoubleClick={onSeatDoubleClick}
       />
     )
   }
@@ -635,6 +652,7 @@ export function VenueElementSymbol({
         occupancyBySeatId={occupancyBySeatId}
         selectedSeatIds={selectedSeatIds}
         onSeatPointerDown={onSeatPointerDown}
+        onSeatDoubleClick={onSeatDoubleClick}
       />
     )
   }
@@ -652,6 +670,7 @@ export function VenueElementSymbol({
         occupancyBySeatId={occupancyBySeatId}
         selectedSeatIds={selectedSeatIds}
         onSeatPointerDown={onSeatPointerDown}
+        onSeatDoubleClick={onSeatDoubleClick}
       />
     )
   }

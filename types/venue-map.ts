@@ -1,4 +1,4 @@
-export type VenueMapSeatStatus = "available" | "blocked"
+export type VenueMapSeatStatus = "available" | "blocked" | "reserved"
 
 export type VenueMapSeat = {
   id: string
@@ -7,6 +7,9 @@ export type VenueMapSeat = {
   x: number
   y: number
   status: VenueMapSeatStatus
+  label?: string
+  price?: number
+  rotation?: number
 }
 
 export type VenueMapSector = {
@@ -151,6 +154,9 @@ export type VenueMapElementSeat = {
   x: number
   y: number
   status: VenueMapSeatStatus
+  label?: string
+  price?: number
+  rotation?: number
 }
 
 export type VenueMapElement = {
@@ -298,6 +304,21 @@ const VENUE_SHAPE_TYPES: VenueShapeType[] = [
   "infra_generic",
 ]
 
+function parseSeatStatus(value: unknown): VenueMapSeatStatus {
+  if (value === "reserved") return "reserved"
+  if (value === "blocked" || value === "disabled" || value === "inactive") {
+    return "blocked"
+  }
+  return "available"
+}
+
+function parseOptionalSeatNumber(value: unknown): number | undefined {
+  if (value == null || value === "") return undefined
+  const n = Number(value)
+  if (!Number.isFinite(n)) return undefined
+  return n
+}
+
 function parseShapeType(value: unknown): VenueShapeType | undefined {
   if (typeof value !== "string") return undefined
   return VENUE_SHAPE_TYPES.includes(value as VenueShapeType)
@@ -363,15 +384,22 @@ function parseElement(raw: unknown): VenueMapElement | null {
     layer === "infrastructure"
       ? []
       : Array.isArray(item.seats)
-        ? item.seats.map((seat, index) => ({
-            id: String(seat.id ?? `${item.id}-S${index + 1}`),
-            number: asNumber(seat.number, index + 1),
-            x: asNumber(seat.x, 0),
-            y: asNumber(seat.y, 0),
-            status: (seat.status === "blocked" ? "blocked" : "available") as
-              | "blocked"
-              | "available",
-          }))
+        ? item.seats.map((seat, index) => {
+            const price = parseOptionalSeatNumber(seat.price)
+            const rotation = parseOptionalSeatNumber(seat.rotation)
+            return {
+              id: String(seat.id ?? `${item.id}-S${index + 1}`),
+              number: asNumber(seat.number, index + 1),
+              x: asNumber(seat.x, 0),
+              y: asNumber(seat.y, 0),
+              status: parseSeatStatus(seat.status),
+              ...(typeof seat.label === "string" && seat.label.trim()
+                ? { label: seat.label.trim().slice(0, 40) }
+                : {}),
+              ...(price != null ? { price: Math.max(0, price) } : {}),
+              ...(rotation != null ? { rotation } : {}),
+            }
+          })
         : []
   return {
     id: String(item.id ?? `el-${Math.random().toString(36).slice(2, 8)}`),
@@ -546,10 +574,44 @@ export function mapIncludesGeneralAccess(
 
 function parsePolygonSector(raw: unknown): VenueMapSector | null {
   if (!raw || typeof raw !== "object") return null
-  const item = raw as Partial<VenueMapSector>
+  const item = raw as Record<string, unknown>
   if (!Array.isArray(item.seats)) return null
-  if (!item.id || !item.name) return null
-  return item as VenueMapSector
+  const id =
+    String(item.id ?? "").trim() ||
+    `sector-${Math.random().toString(36).slice(2, 10)}`
+  const name = String(item.name ?? "").trim() || "Sector"
+  const seats = item.seats.map((seat, index) => {
+    const row = seat && typeof seat === "object" ? (seat as Record<string, unknown>) : {}
+    const price = parseOptionalSeatNumber(row.price)
+    const rotation = parseOptionalSeatNumber(row.rotation)
+    const parsed: VenueMapSeat = {
+      id: String(row.id ?? `${id}-S${index + 1}`),
+      row: String(row.row ?? "1"),
+      number: asNumber(row.number, index + 1),
+      x: asNumber(row.x, 0),
+      y: asNumber(row.y, 0),
+      status: parseSeatStatus(row.status),
+    }
+    if (typeof row.label === "string" && row.label.trim()) {
+      parsed.label = row.label.trim().slice(0, 40)
+    }
+    if (price != null) parsed.price = Math.max(0, price)
+    if (rotation != null) parsed.rotation = rotation
+    return parsed
+  })
+  return {
+    id,
+    name,
+    color: String(item.color ?? "#f97316"),
+    price: Math.max(0, asNumber(item.price, 0)),
+    x: asNumber(item.x, 0),
+    y: asNumber(item.y, 0),
+    rows: Math.max(1, asNumber(item.rows, 1)),
+    seatsPerRow: Math.max(1, asNumber(item.seatsPerRow ?? item.seats_per_row, 1)),
+    curvature: Math.min(1, Math.max(0, asNumber(item.curvature, 0))),
+    aisle: Boolean(item.aisle),
+    seats,
+  }
 }
 
 function flattenNestedSectorElements(raw: unknown): VenueMapElement[] {

@@ -93,18 +93,38 @@ type PayMethod = "cash_pos" | "transfer_pos" | "card_pos"
 
 const LAST_TICKETS_KEY = "tokepass.pos.lastTicketIds"
 const LAST_TICKETS_EVENT = "tokepass-pos-last-tickets"
+const EMPTY_LAST_TICKET_IDS: string[] = []
+
+let lastTicketIdsRaw: string | null = null
+let lastTicketIdsSnapshot: string[] = EMPTY_LAST_TICKET_IDS
 
 function readLastTicketIds(): string[] {
-  if (typeof window === "undefined") return []
+  if (typeof window === "undefined") return EMPTY_LAST_TICKET_IDS
   try {
     const raw = localStorage.getItem(LAST_TICKETS_KEY)
-    if (!raw) return []
+    if (raw === lastTicketIdsRaw) return lastTicketIdsSnapshot
+    lastTicketIdsRaw = raw
+    if (!raw) {
+      lastTicketIdsSnapshot = EMPTY_LAST_TICKET_IDS
+      return lastTicketIdsSnapshot
+    }
     const parsed = JSON.parse(raw) as unknown
-    if (!Array.isArray(parsed)) return []
-    return parsed.filter((id): id is string => typeof id === "string")
+    if (!Array.isArray(parsed)) {
+      lastTicketIdsSnapshot = EMPTY_LAST_TICKET_IDS
+      return lastTicketIdsSnapshot
+    }
+    lastTicketIdsSnapshot = parsed.filter(
+      (id): id is string => typeof id === "string",
+    )
+    return lastTicketIdsSnapshot
   } catch {
-    return []
+    lastTicketIdsSnapshot = EMPTY_LAST_TICKET_IDS
+    return lastTicketIdsSnapshot
   }
+}
+
+function readLastTicketIdsServer(): string[] {
+  return EMPTY_LAST_TICKET_IDS
 }
 
 function subscribeLastTicketIds(onChange: () => void) {
@@ -124,9 +144,14 @@ function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 export function PosTerminal({ events }: { events: PosEventOption[] }) {
-  const [eventId, setEventId] = useState(events[0]?.id ?? "")
+  const catalog = useMemo(
+    () => (Array.isArray(events) ? events : []),
+    [events],
+  )
+  const [eventId, setEventId] = useState(catalog[0]?.id ?? "")
   const [cart, setCart] = useState<PosCart>({})
   const [soldDelta, setSoldDelta] = useState<Record<string, number>>({})
+  const [soldDeltaKey, setSoldDeltaKey] = useState("")
   const [phone, setPhone] = useState("")
   const [buyerEmail, setBuyerEmail] = useState("")
   const [dni, setDni] = useState("")
@@ -135,9 +160,15 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
   const [payMethod, setPayMethod] = useState<PayMethod>("cash_pos")
   const [tendered, setTendered] = useState<number | null>(null)
   const [customTender, setCustomTender] = useState("")
-  const [shift, setShift] = useState<CashierShiftRow | null>(null)
-  const [shiftLoading, setShiftLoading] = useState(() => Boolean(eventId))
-  const [shiftEventId, setShiftEventId] = useState(eventId)
+  const [shiftRecord, setShiftRecord] = useState<{
+    eventId: string
+    row: CashierShiftRow | null
+    loading: boolean
+  }>({
+    eventId: catalog[0]?.id ?? "",
+    row: null,
+    loading: Boolean(catalog[0]?.id),
+  })
   const [openCashAmount, setOpenCashAmount] = useState("0")
   const [openModal, setOpenModal] = useState(false)
   const [closeModal, setCloseModal] = useState(false)
@@ -146,7 +177,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
   const lastTicketIds = useSyncExternalStore(
     subscribeLastTicketIds,
     readLastTicketIds,
-    () => [],
+    readLastTicketIdsServer,
   )
   const [handoffTickets, setHandoffTickets] = useState<
     Array<{ id: string; totpSecret: string; signedQr?: string }>
@@ -182,8 +213,8 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
     reprintModal
 
   const selectedEvent = useMemo(
-    () => events.find((event) => event.id === eventId) ?? null,
-    [events, eventId],
+    () => catalog.find((event) => event.id === eventId) ?? null,
+    [catalog, eventId],
   )
 
   const tiers = useMemo(
@@ -204,19 +235,19 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
     () => tiers.map((tier) => `${tier.id}:${tier.available}`).join("|"),
     [tiers],
   )
-
-  const [prevStockFingerprint, setPrevStockFingerprint] =
-    useState(stockFingerprint)
-  if (stockFingerprint !== prevStockFingerprint) {
-    setPrevStockFingerprint(stockFingerprint)
+  if (soldDeltaKey !== stockFingerprint) {
+    setSoldDeltaKey(stockFingerprint)
     setSoldDelta({})
   }
 
-  if (eventId !== shiftEventId) {
-    setShiftEventId(eventId)
-    setShift(null)
-    setShiftLoading(Boolean(eventId))
-  }
+  const shift = !eventId
+    ? null
+    : shiftRecord.eventId === eventId
+      ? shiftRecord.row
+      : null
+  const shiftLoading =
+    Boolean(eventId) &&
+    (shiftRecord.eventId !== eventId || shiftRecord.loading)
 
   const lines = useMemo(
     () =>
@@ -260,8 +291,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
     let cancelled = false
     void getOpenCashierShift(eventId).then((row) => {
       if (cancelled) return
-      setShift(row)
-      setShiftLoading(false)
+      setShiftRecord({ eventId, row, loading: false })
       if (!row) setOpenModal(true)
     })
     void getPosPinContext(eventId).then((ctx) => {
@@ -366,7 +396,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
         toast.error(res.error)
         return
       }
-      setShift(res.shift)
+      setShiftRecord({ eventId, row: res.shift, loading: false })
       setOpenModal(false)
       toast.success("Caja abierta")
     })
@@ -389,7 +419,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
       }
       toast.success("Turno cerrado · imprimiendo Ticket Z")
       setCloseModal(false)
-      setShift(null)
+      setShiftRecord({ eventId, row: null, loading: false })
       setOpenModal(true)
       setCountedAmount("")
       setZReport(res.zReport)
@@ -542,22 +572,27 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
         })
         flushThermalPrint(receipts)
         playPosSaleBeep()
-        setShift((current) => {
-          if (!current) return current
+        setShiftRecord((current) => {
+          if (!current.row) return current
           return {
             ...current,
-            cashSalesTotal:
-              current.cashSalesTotal + (payMethod === "cash_pos" ? billed : 0),
-            cardSalesTotal:
-              current.cardSalesTotal + (payMethod === "card_pos" ? billed : 0),
-            transferSalesTotal:
-              current.transferSalesTotal +
-              (payMethod === "transfer_pos" ? billed : 0),
-            ticketsSold: current.ticketsSold + issuedIds.length,
+            row: {
+              ...current.row,
+              cashSalesTotal:
+                current.row.cashSalesTotal +
+                (payMethod === "cash_pos" ? billed : 0),
+              cardSalesTotal:
+                current.row.cardSalesTotal +
+                (payMethod === "card_pos" ? billed : 0),
+              transferSalesTotal:
+                current.row.transferSalesTotal +
+                (payMethod === "transfer_pos" ? billed : 0),
+              ticketsSold: current.row.ticketsSold + issuedIds.length,
+            },
           }
         })
         const next = await getOpenCashierShift(eventId)
-        if (next) setShift(next)
+        if (next) setShiftRecord({ eventId, row: next, loading: false })
       }
 
       if (failed) {
@@ -747,7 +782,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
         setVoidModal(false)
         if (eventId) {
           const next = await getOpenCashierShift(eventId)
-          if (next) setShift(next)
+          if (next) setShiftRecord({ eventId, row: next, loading: false })
         }
       })
     }
@@ -804,7 +839,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [])
 
-  if (events.length === 0) {
+  if (catalog.length === 0) {
     return (
       <div className="rounded-3xl border border-dashed border-border bg-card px-5 py-12 text-center">
         <Ticket className="mx-auto size-8 text-muted-foreground" />
@@ -890,7 +925,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
             <Select
               value={eventId}
               onValueChange={(value) => value && onEventChange(value)}
-              items={events.map((event) => ({
+              items={catalog.map((event) => ({
                 value: event.id,
                 label: event.title,
               }))}
@@ -901,7 +936,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {events.map((event) => (
+                {catalog.map((event) => (
                   <SelectItem key={event.id} value={event.id}>
                     <span className="block max-w-[220px] truncate sm:max-w-[420px]">
                       {event.title}

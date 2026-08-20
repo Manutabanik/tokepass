@@ -13,6 +13,10 @@ export const AFIP_DATA_FISCAL_HREF =
 
 export const LEGAL_TERMS_HREF = "/terminos-y-condiciones"
 export const LEGAL_PRIVACY_HREF = "/politica-de-privacidad"
+/** Anexo de privacidad de Cloudflare Turnstile (modo invisible). */
+export const TURNSTILE_PRIVACY_HREF =
+  "https://www.cloudflare.com/en-gb/turnstile-privacy-policy/"
+export const TURNSTILE_PRIVACY_LOCAL_HREF = "/legal/turnstile-privacy"
 
 export const LEGAL_NAV = [
   { href: LEGAL_TERMS_HREF, label: "Términos y condiciones" },

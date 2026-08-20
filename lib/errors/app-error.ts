@@ -11,6 +11,10 @@ export const APP_ERROR_CODES = [
   "PERMISSION_DENIED",
   "SESSION_REQUIRED",
   "EVENT_NOT_FOUND",
+  "SAVE_FAILED",
+  "INVALID_PROMO_PRICE",
+  "MISSING_SCHEDULE_DAY",
+  "FLYER_TOO_LARGE",
   "UNKNOWN",
 ] as const
 
@@ -19,15 +23,21 @@ export type AppErrorCode = (typeof APP_ERROR_CODES)[number]
 export type GuidedErrorAction = {
   step: 0 | 1 | 2 | 3 | 4
   label: string
+  field?: string
 }
 
 export type AppError = {
   code: AppErrorCode
+  title: string
   message: string
   action?: GuidedErrorAction
+  field?: string
+  retryable?: boolean
 }
 
 export const GUIDED_ERROR_EVENT = "tokepass:guided-error"
+
+export const FIELD_REVIEW_HINT = "Revisá este valor antes de continuar."
 
 export function isAppErrorCode(value: unknown): value is AppErrorCode {
   return (
@@ -39,64 +49,128 @@ export function isAppErrorCode(value: unknown): value is AppErrorCode {
 export const APP_ERRORS: Record<AppErrorCode, AppError> = {
   INVALID_DAY_SELECTION: {
     code: "INVALID_DAY_SELECTION",
-    message: "El día seleccionado no es válido.",
-    action: { step: 2, label: "Ir a Entradas y combos" },
+    title: "Error en jornadas",
+    message: "Falta seleccionar la jornada obligatoria.",
+    field: "tickets",
+    action: { step: 2, label: "Corregir campo", field: "tickets" },
+    retryable: true,
   },
   ERROR_FALTA_UBICACION: {
     code: "ERROR_FALTA_UBICACION",
+    title: "Error en el lugar",
     message: "Completá los datos del lugar antes de continuar.",
-    action: { step: 1, label: "Ir a gestionar ubicaciones" },
+    field: "venue.venueName",
+    action: { step: 1, label: "Corregir campo", field: "venue.venueName" },
+    retryable: true,
   },
   MISSING_VENUE_NAME: {
     code: "MISSING_VENUE_NAME",
+    title: "Error en el lugar",
     message: "Ingresá el nombre del lugar.",
-    action: { step: 1, label: "Ir a gestionar ubicaciones" },
+    field: "venue.venueName",
+    action: { step: 1, label: "Corregir campo", field: "venue.venueName" },
+    retryable: true,
   },
   MISSING_TICKETS: {
     code: "MISSING_TICKETS",
+    title: "Error en entradas",
     message: "Configurá al menos un tipo de entrada con stock.",
-    action: { step: 2, label: "Ir a Entradas y combos" },
+    field: "tickets",
+    action: { step: 2, label: "Corregir campo", field: "tickets" },
+    retryable: true,
   },
   INVALID_EVENT_DATE: {
     code: "INVALID_EVENT_DATE",
+    title: "Error en identidad",
     message: "La fecha de inicio debe ser futura.",
-    action: { step: 0, label: "Ir a Identidad" },
+    field: "basics.date",
+    action: { step: 0, label: "Corregir campo", field: "basics.date" },
+    retryable: true,
   },
   INVENTORY_SYNC: {
     code: "INVENTORY_SYNC",
-    message: "Sincronizando inventario, por favor intente nuevamente.",
+    title: "No se pudieron guardar los cambios",
+    message: "No se pudieron sincronizar las entradas. Intentá guardar de nuevo.",
+    retryable: true,
+    action: { step: 2, label: "Revisar entradas" },
   },
   SEATING_SECTOR_MISMATCH: {
     code: "SEATING_SECTOR_MISMATCH",
+    title: "Error en mapa y tarifas",
     message: "El mapa y las entradas no coinciden. Revisá sectores y precios.",
-    action: { step: 1, label: "Ir a Mapa y Sectores" },
+    field: "venue.venueMap",
+    action: { step: 1, label: "Corregir campo", field: "venue.venueMap" },
+    retryable: true,
   },
   CAPACITY_OVERFLOW: {
     code: "CAPACITY_OVERFLOW",
-    message: "El aforo del evento está excedido.",
-    action: { step: 2, label: "Ir a Entradas y combos" },
+    title: "Error en aforo",
+    message: "El cupo total supera el aforo permitido.",
+    field: "tickets",
+    action: { step: 2, label: "Corregir campo", field: "tickets" },
+    retryable: true,
   },
   PHASE_OVERFLOW: {
     code: "PHASE_OVERFLOW",
+    title: "Error en lotes de precio",
     message:
       "La suma de los lotes de precio no puede superar la capacidad de la entrada.",
-    action: { step: 2, label: "Ir a Entradas y combos" },
+    field: "tickets",
+    action: { step: 2, label: "Corregir campo", field: "tickets" },
+    retryable: true,
   },
   PERMISSION_DENIED: {
     code: "PERMISSION_DENIED",
+    title: "Permiso insuficiente",
     message: "No tenés permiso para esta acción.",
   },
   SESSION_REQUIRED: {
     code: "SESSION_REQUIRED",
+    title: "Sesión requerida",
     message: "Iniciá sesión para continuar.",
   },
   EVENT_NOT_FOUND: {
     code: "EVENT_NOT_FOUND",
-    message: "Evento no encontrado.",
+    title: "Evento no encontrado",
+    message: "No encontramos este evento. Volvé al listado e intentá de nuevo.",
+  },
+  SAVE_FAILED: {
+    code: "SAVE_FAILED",
+    title: "No se pudieron guardar los cambios",
+    message: "No se pudieron guardar los cambios. Revisá los datos e intentá de nuevo.",
+    retryable: true,
+    action: { step: 0, label: "Revisar formulario" },
+  },
+  INVALID_PROMO_PRICE: {
+    code: "INVALID_PROMO_PRICE",
+    title: "Error en promoción",
+    message: "El precio promocional debe ser menor al precio de lista.",
+    field: "tickets",
+    action: { step: 2, label: "Corregir campo", field: "tickets" },
+    retryable: true,
+  },
+  MISSING_SCHEDULE_DAY: {
+    code: "MISSING_SCHEDULE_DAY",
+    title: "Error en jornadas",
+    message: "Falta seleccionar la jornada obligatoria.",
+    field: "tickets",
+    action: { step: 2, label: "Corregir campo", field: "tickets" },
+    retryable: true,
+  },
+  FLYER_TOO_LARGE: {
+    code: "FLYER_TOO_LARGE",
+    title: "Error en identidad",
+    message: "El flyer supera los 5MB. Comprimilo o elegí otra imagen.",
+    field: "basics.flyerName",
+    action: { step: 0, label: "Corregir campo", field: "basics.flyerName" },
+    retryable: true,
   },
   UNKNOWN: {
-    code: "UNKNOWN",
-    message: "Sincronizando inventario, por favor intente nuevamente.",
+    code: "SAVE_FAILED",
+    title: "No se pudieron guardar los cambios",
+    message: "No se pudieron guardar los cambios. Revisá los datos e intentá de nuevo.",
+    retryable: true,
+    action: { step: 0, label: "Revisar formulario" },
   },
 }
 

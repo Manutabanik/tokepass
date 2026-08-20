@@ -2,7 +2,7 @@
 
 import { SegmentErrorFallback } from "@/components/errors/segment-error-fallback"
 
-export default function Error({
+export default function DashboardPosError({
   error,
   reset,
 }: {
@@ -13,8 +13,8 @@ export default function Error({
     <SegmentErrorFallback
       error={error}
       reset={reset}
-      logContext="app/error"
-      homeHref="/"
+      logContext="app/(admin)/dashboard/pos/error"
+      homeHref="/admin"
       homeLabel="Ir al inicio"
     />
   )

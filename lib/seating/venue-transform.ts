@@ -165,6 +165,80 @@ export function clampVenueZoom(zoom: number) {
   return Math.min(VENUE_ZOOM_MAX, Math.max(VENUE_ZOOM_MIN, zoom))
 }
 
+export const VENUE_VIEW_PADDING = 16
+
+/**
+ * Camera that matches the container aspect so `preserveAspectRatio="xMidYMid meet"`
+ * fills the SVG element. The 800x560 world stays centered; extra space is
+ * empty canvas, not CSS letterboxing around a small viewBox.
+ */
+export function expandViewBoxToContainer({
+  containerWidth,
+  containerHeight,
+  worldWidth,
+  worldHeight,
+  padding = VENUE_VIEW_PADDING,
+}: {
+  containerWidth: number
+  containerHeight: number
+  worldWidth: number
+  worldHeight: number
+  padding?: number
+}): { x: number; y: number; width: number; height: number } {
+  const pad = Number.isFinite(padding) && padding >= 0 ? padding : VENUE_VIEW_PADDING
+  const worldW = Number.isFinite(worldWidth) && worldWidth > 0 ? worldWidth : 800
+  const worldH = Number.isFinite(worldHeight) && worldHeight > 0 ? worldHeight : 560
+  const safeW =
+    Number.isFinite(containerWidth) && containerWidth > 0 ? containerWidth : worldW
+  const safeH =
+    Number.isFinite(containerHeight) && containerHeight > 0 ? containerHeight : worldH
+  const contentW = worldW + pad * 2
+  const contentH = worldH + pad * 2
+  const containerAspect = safeW / safeH
+  const contentAspect = contentW / contentH
+  const width =
+    containerAspect >= contentAspect ? contentH * containerAspect : contentW
+  const height =
+    containerAspect >= contentAspect ? contentH : contentW / containerAspect
+  return {
+    x: (worldW - width) / 2,
+    y: (worldH - height) / 2,
+    width,
+    height,
+  }
+}
+
+/** Center the logical world in the current camera without stretching seats. */
+export function fitWorldInViewBox({
+  viewWidth,
+  viewHeight,
+  worldWidth,
+  worldHeight,
+  padding = VENUE_VIEW_PADDING,
+}: {
+  viewWidth: number
+  viewHeight: number
+  worldWidth: number
+  worldHeight: number
+  padding?: number
+}): { pan: { x: number; y: number }; zoom: number } {
+  const pad = Number.isFinite(padding) && padding >= 0 ? padding : VENUE_VIEW_PADDING
+  const worldW = Number.isFinite(worldWidth) && worldWidth > 0 ? worldWidth : 800
+  const worldH = Number.isFinite(worldHeight) && worldHeight > 0 ? worldHeight : 560
+  const viewW = Number.isFinite(viewWidth) && viewWidth > 0 ? viewWidth : worldW
+  const viewH = Number.isFinite(viewHeight) && viewHeight > 0 ? viewHeight : worldH
+  const zoom = clampVenueZoom(
+    Math.min((viewW - pad * 2) / worldW, (viewH - pad * 2) / worldH),
+  )
+  return {
+    zoom,
+    pan: {
+      x: (viewW - worldW * zoom) / 2,
+      y: (viewH - worldH * zoom) / 2,
+    },
+  }
+}
+
 export function snapToGrid(value: number, grid = VENUE_GRID_SIZE) {
   const size = grid > 0 ? grid : VENUE_GRID_SIZE
   if (!Number.isFinite(value)) return 0

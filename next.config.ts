@@ -149,6 +149,12 @@ const nextConfig: NextConfig = {
         destination: "/",
         permanent: true,
       },
+      {
+        source: "/legal/turnstile-privacy",
+        destination:
+          "https://www.cloudflare.com/en-gb/turnstile-privacy-policy/",
+        permanent: true,
+      },
     ]
   },
   async rewrites() {

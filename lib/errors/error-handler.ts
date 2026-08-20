@@ -8,6 +8,7 @@ import {
   type GuidedErrorAction,
   GUIDED_ERROR_EVENT,
 } from "@/lib/errors/app-error"
+import { isForbiddenUserCopy } from "@/lib/errors/form-field"
 
 export {
   APP_ERRORS,
@@ -38,6 +39,20 @@ type ErrorRule = {
 }
 
 const ERROR_RULES: ErrorRule[] = [
+  {
+    code: "FLYER_TOO_LARGE",
+    match: /flyer supera|flyer no puede superar|5\s*mb/i,
+  },
+  {
+    code: "INVALID_PROMO_PRICE",
+    match:
+      /precio promocional|promotional_price|list_price|listPrice|2\s*x\s*1|debe ser menor al precio/i,
+  },
+  {
+    code: "MISSING_SCHEDULE_DAY",
+    match:
+      /jornada obligatoria|seleccionar la jornada|null value in column ["']day_id/i,
+  },
   {
     code: "INVALID_DAY_SELECTION",
     match:
@@ -90,6 +105,11 @@ const ERROR_RULES: ErrorRule[] = [
     code: "INVENTORY_SYNC",
     match: /schema cache|PGRST204|42703|promo_discount/i,
   },
+  {
+    code: "SAVE_FAILED",
+    match:
+      /duplicate key|unique constraint|null value in column|violates not-null|internal server error|error 500|\bunknown\b/i,
+  },
 ]
 
 export function containsInternalErrorCode(text: string): boolean {
@@ -132,37 +152,82 @@ function textFromUnknown(raw: unknown): string {
   return String(raw).trim()
 }
 
+function sanitizeMappedError(error: AppError): AppError {
+  const code = error.code === "UNKNOWN" ? "SAVE_FAILED" : error.code
+  const catalog = APP_ERRORS[code] ?? APP_ERRORS.SAVE_FAILED
+  const title = error.title?.trim() || catalog.title
+  const message = error.message.trim()
+  const safeMessage =
+    !message ||
+    isForbiddenDisplay(message) ||
+    containsInternalErrorCode(message)
+      ? catalog.message
+      : message
+  return {
+    ...catalog,
+    ...error,
+    code,
+    title: isForbiddenDisplay(title) ? catalog.title : title,
+    message: safeMessage,
+  }
+}
+
+function isForbiddenDisplay(text: string): boolean {
+  return isForbiddenUserCopy(text)
+}
+
 export function mapUnknownError(
   raw: unknown,
-  fallback: AppError = APP_ERRORS.INVENTORY_SYNC,
+  fallback: AppError = APP_ERRORS.SAVE_FAILED,
 ): AppError {
   if (raw && typeof raw === "object" && "code" in raw) {
-    const code = (raw as { code?: unknown }).code
+    const record = raw as { code?: unknown; message?: unknown; field?: unknown; title?: unknown }
+    const code = record.code
     if (isAppErrorCode(code) && code !== "UNKNOWN") {
-      return APP_ERRORS[code]
+      const catalog = APP_ERRORS[code]
+      const message =
+        typeof record.message === "string" && isSafeUserFacingCopy(record.message)
+          ? record.message.trim()
+          : catalog.message
+      const field =
+        typeof record.field === "string" && record.field.trim()
+          ? record.field.trim()
+          : catalog.field
+      const title =
+        typeof record.title === "string" && record.title.trim()
+          ? record.title.trim()
+          : catalog.title
+      return sanitizeMappedError({ ...catalog, message, field, title })
     }
   }
 
   const text = textFromUnknown(raw)
-  if (!text) return fallback
-  if (/legal_consent|LEGAL_CONSENT_REQUIRED/i.test(text)) {
-    return {
-      code: "UNKNOWN",
-      message: "Debés aceptar los términos y condiciones para continuar.",
-    }
+  if (!text || isForbiddenDisplay(text)) {
+    return sanitizeMappedError(fallback)
   }
-  if (isAppErrorCode(text) && text !== "UNKNOWN") return APP_ERRORS[text]
+  if (/legal_consent|LEGAL_CONSENT_REQUIRED/i.test(text)) {
+    return sanitizeMappedError({
+      ...APP_ERRORS.SAVE_FAILED,
+      title: "Términos y condiciones",
+      message: "Debés aceptar los términos y condiciones para continuar.",
+    })
+  }
+  if (isAppErrorCode(text) && text !== "UNKNOWN") {
+    return sanitizeMappedError(APP_ERRORS[text])
+  }
 
   for (const rule of ERROR_RULES) {
-    if (rule.match.test(text)) return APP_ERRORS[rule.code]
+    if (rule.match.test(text)) return sanitizeMappedError(APP_ERRORS[rule.code])
   }
 
-  if (!isSafeUserFacingCopy(text)) return fallback
+  if (!isSafeUserFacingCopy(text)) {
+    return sanitizeMappedError(fallback)
+  }
 
-  return {
-    code: "UNKNOWN",
+  return sanitizeMappedError({
+    ...APP_ERRORS.SAVE_FAILED,
     message: text,
-  }
+  })
 }
 
 export function dispatchGuidedError(action: GuidedErrorAction) {

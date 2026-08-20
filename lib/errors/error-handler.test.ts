@@ -20,7 +20,7 @@ describe("error handler", () => {
       "Completá los datos del lugar / ubicación antes de publicar.",
     )
     assert.equal(mapped.code, "ERROR_FALTA_UBICACION")
-    assert.equal(mapped.action?.label, "Ir a gestionar ubicaciones")
+    assert.equal(mapped.action?.label, "Corregir campo")
   })
 
   it("accepts explicit application codes", () => {
@@ -51,17 +51,36 @@ describe("error handler", () => {
       mapUnknownError(
         'duplicate key value violates unique constraint "orders_pkey"',
       ).code,
-      "INVENTORY_SYNC",
+      "SAVE_FAILED",
     )
     assert.equal(
       mapUnknownError("TypeError: Cannot read properties of undefined").code,
-      "INVENTORY_SYNC",
+      "SAVE_FAILED",
     )
     assert.equal(
       mapUnknownError("Could not find the function public.process_pos_checkout_tx")
         .code,
-      "INVENTORY_SYNC",
+      "SAVE_FAILED",
     )
+  })
+
+  it("never shows UNKNOWN, Error 500 or Internal Server Error", () => {
+    for (const raw of ["UNKNOWN", "Error 500", "Internal Server Error", { code: "UNKNOWN" }]) {
+      const mapped = mapUnknownError(raw)
+      assert.notEqual(mapped.code, "UNKNOWN")
+      assert.notEqual(mapped.message.toUpperCase(), "UNKNOWN")
+      assert.doesNotMatch(mapped.message, /error 500|internal server error/i)
+      assert.doesNotMatch(mapped.title, /unknown|error 500|internal server error/i)
+    }
+  })
+
+  it("prefers the human message when the code is UNKNOWN", () => {
+    const mapped = mapUnknownError({
+      code: "UNKNOWN",
+      message: "El cupo total supera el aforo permitido.",
+    })
+    assert.equal(mapped.message, "El cupo total supera el aforo permitido.")
+    assert.notEqual(mapped.code, "UNKNOWN")
   })
 
   it("routes zod paths to wizard steps", () => {

@@ -4,7 +4,6 @@ import { z } from "zod"
 
 import { APP_ERRORS } from "@/lib/errors/app-error"
 import { toPublicHttpError } from "@/lib/errors/public-http"
-import { GENERIC_PUBLIC_ERROR } from "@/lib/errors/user-facing-error"
 
 describe("toPublicHttpError", () => {
   it("maps session and not-found to standard HTTP codes", () => {
@@ -29,8 +28,8 @@ describe("toPublicHttpError", () => {
       'duplicate key value violates unique constraint "orders_pkey"',
     )
     assert.equal(mapped.status, 500)
-    assert.equal(mapped.message, GENERIC_PUBLIC_ERROR)
-    assert.doesNotMatch(mapped.message, /duplicate key|orders_pkey/i)
+    assert.equal(mapped.message, APP_ERRORS.SAVE_FAILED.message)
+    assert.doesNotMatch(mapped.message, /duplicate key|orders_pkey|UNKNOWN|500/i)
   })
 
   it("keeps catalog copy for known app codes", () => {

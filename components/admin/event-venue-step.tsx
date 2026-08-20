@@ -93,7 +93,7 @@ const EventLocationMapInner = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="grid h-full place-items-center bg-white dark:bg-zinc-950 text-xs text-muted-foreground">
+      <div className="grid h-full place-items-center bg-zinc-950 text-xs text-zinc-400">
         Cargando mapa…
       </div>
     ),
@@ -533,8 +533,8 @@ export function EventVenueStep({
           className={cn(
             "rounded-2xl border px-4 py-3 text-left text-sm transition disabled:opacity-40",
             venueMode === "existing" && !editingSaved
-              ? "border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
-              : "border-border bg-muted text-muted-foreground",
+              ? "border-emerald-800 bg-emerald-950/40 text-emerald-200"
+              : "border-zinc-700 bg-zinc-800/50 text-zinc-400",
           )}
         >
           Elegir un lugar guardado
@@ -548,8 +548,8 @@ export function EventVenueStep({
           className={cn(
             "rounded-2xl border px-4 py-3 text-left text-sm transition",
             showCreateForm && (venueMode === "new" || editingSaved)
-              ? "border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
-              : "border-border bg-muted text-muted-foreground",
+              ? "border-emerald-800 bg-emerald-950/40 text-emerald-200"
+              : "border-zinc-700 bg-zinc-800/50 text-zinc-400",
           )}
         >
           Crear un lugar nuevo
@@ -574,7 +574,7 @@ export function EventVenueStep({
       ) : null}
 
       {venueMode === "existing" && !editingSaved && selectedVenue ? (
-        <div className="space-y-4 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
+        <div className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-zinc-100 shadow-sm sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-base font-semibold text-foreground">
@@ -697,7 +697,7 @@ export function EventVenueStep({
       ) : null}
 
       {showCreateForm ? (
-        <div className="space-y-6 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
+        <div className="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-zinc-100 shadow-sm sm:p-5">
           {editingSaved ? (
             <p className="text-sm text-emerald-800 dark:text-emerald-300/90">
               Estás editando un lugar guardado. Los cambios se aplican a futuros
@@ -710,7 +710,7 @@ export function EventVenueStep({
             control={form.control}
             name="venue.includesSeatingMap"
             render={({ field }) => (
-              <FormItem className="rounded-2xl border border-border bg-muted/60 px-4 py-4">
+              <FormItem className="rounded-2xl border border-zinc-800 bg-zinc-950/60 px-4 py-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex gap-3">
                     <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-800 dark:text-emerald-300">
@@ -755,7 +755,9 @@ export function EventVenueStep({
             control={form.control}
             name="venue.venueName"
             render={({ fieldState }) => (
-              <FormMessage>{fieldState.error?.message}</FormMessage>
+              <div data-field="venue.venueName">
+                <FormMessage>{fieldState.error?.message}</FormMessage>
+              </div>
             )}
           />
           <FormField
@@ -782,7 +784,7 @@ export function EventVenueStep({
             canOpenStudio={canDesignMap}
             blockedReason={mapBlockedReason}
           />
-          <div className="space-y-3 rounded-2xl border border-border bg-muted/60 p-4">
+          <div className="space-y-3 rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
             <div className="flex items-center gap-2">
               <ImageIcon className="size-4 text-emerald-700 dark:text-emerald-400" />
               <Label className="text-sm text-foreground">
@@ -801,7 +803,7 @@ export function EventVenueStep({
                 />
               </div>
             ) : null}
-            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950/60 px-4 py-6 text-sm text-muted-foreground hover:border-emerald-500/40 hover:text-emerald-800 dark:text-emerald-200">
+            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-700 bg-zinc-950/60 px-4 py-6 text-sm text-zinc-400 hover:border-emerald-500/40 hover:text-emerald-200">
               {pendingUpload ? (
                 <LoaderCircle className="size-4 animate-spin" />
               ) : (
@@ -828,9 +830,9 @@ export function EventVenueStep({
             control={form.control}
             name="venue.saveVenueForReuse"
             render={({ field }) => (
-              <FormItem className="flex flex-row items-start justify-between gap-3 rounded-2xl border border-border bg-muted/60 px-4 py-3">
+              <FormItem className="flex flex-row items-start justify-between gap-3 rounded-2xl border border-zinc-800 bg-zinc-950/60 px-4 py-3">
                 <div className="space-y-1">
-                  <FormLabel className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                  <FormLabel className="text-sm font-medium text-zinc-100">
                     Guardar este lugar para futuros eventos
                   </FormLabel>
                   <FormDescription className="text-xs text-muted-foreground">
@@ -854,7 +856,7 @@ export function EventVenueStep({
                 variant="outline"
                 disabled={pendingSave}
                 onClick={persistVenueNow}
-                className="border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
+                className="border-emerald-800 bg-emerald-950/40 text-emerald-200"
               >
                 {pendingSave ? (
                   <LoaderCircle className="size-4 animate-spin" />

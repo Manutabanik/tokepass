@@ -24,13 +24,13 @@ export function VenueMapStudioSummary({
   const segments = inventory.sectors.filter((row) => row.share > 0)
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-zinc-100 sm:p-5">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <article className="rounded-xl border border-border bg-muted/40 p-4">
-          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+        <article className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+          <p className="text-xs font-semibold tracking-wide text-zinc-400 uppercase">
             Aforo total
           </p>
-          <p className="mt-2 text-3xl font-bold tabular-nums tracking-tight text-foreground">
+          <p className="mt-2 text-3xl font-bold tabular-nums tracking-tight text-zinc-100">
             {formatNumber(inventory.capacity)}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -40,7 +40,7 @@ export function VenueMapStudioSummary({
               : ""}
           </p>
           <div
-            className="mt-4 h-2.5 overflow-hidden rounded-full bg-muted"
+            className="mt-4 h-2.5 overflow-hidden rounded-full bg-zinc-800"
             role="img"
             aria-label="Distribucion del aforo por sector"
           >
@@ -59,16 +59,16 @@ export function VenueMapStudioSummary({
                 ))}
               </div>
             ) : (
-              <div className="h-full w-full bg-muted" />
+              <div className="h-full w-full bg-zinc-800" />
             )}
           </div>
         </article>
 
-        <article className="rounded-xl border border-border bg-muted/40 p-4">
-          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+        <article className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+          <p className="text-xs font-semibold tracking-wide text-zinc-400 uppercase">
             Proyección de recaudación
           </p>
-          <p className="mt-2 text-3xl font-bold tabular-nums tracking-tight text-foreground">
+          <p className="mt-2 text-3xl font-bold tabular-nums tracking-tight text-zinc-100">
             {formatCurrency(inventory.projectedRevenue)}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -76,8 +76,8 @@ export function VenueMapStudioSummary({
           </p>
         </article>
 
-        <article className="rounded-xl border border-border bg-muted/40 p-4">
-          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+        <article className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+          <p className="text-xs font-semibold tracking-wide text-zinc-400 uppercase">
             Configuración de sectores
           </p>
           {inventory.sectors.length > 0 ? (
@@ -87,7 +87,7 @@ export function VenueMapStudioSummary({
                   <button
                     type="button"
                     onClick={onOpen}
-                    className="flex w-full items-start justify-between gap-3 rounded-lg px-1 py-1 text-left transition hover:bg-background/80"
+                    className="flex w-full items-start justify-between gap-3 rounded-lg px-1 py-1 text-left transition hover:bg-zinc-800"
                   >
                     <span className="flex min-w-0 items-start gap-2">
                       <span
@@ -96,7 +96,7 @@ export function VenueMapStudioSummary({
                         aria-hidden="true"
                       />
                       <span className="min-w-0">
-                        <span className="block truncate font-medium text-foreground">
+                        <span className="block truncate font-medium text-zinc-100">
                           {row.name}
                         </span>
                         <span className="mt-1 flex flex-wrap items-center gap-1.5">
@@ -109,7 +109,7 @@ export function VenueMapStudioSummary({
                         </span>
                       </span>
                     </span>
-                    <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">
+                    <span className="shrink-0 text-sm font-semibold tabular-nums text-zinc-100">
                       {formatCurrency(row.price)}
                     </span>
                   </button>

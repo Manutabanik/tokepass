@@ -15,7 +15,7 @@ export default function AdminError({
       reset={reset}
       logContext="app/(admin)/error"
       homeHref="/admin"
-      homeLabel="Volver al panel"
+      homeLabel="Ir al inicio"
     />
   )
 }

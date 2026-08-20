@@ -13,6 +13,8 @@ import {
   Maximize2,
   Music2,
   ParkingCircle,
+  PanelLeftClose,
+  PanelLeftOpen,
   PenTool,
   Sparkles,
   Square,
@@ -39,97 +41,103 @@ type PaletteItem = {
   icon: typeof Armchair
 }
 
-const COMMERCIAL_GROUPS: Array<{
-  id: string
+const PALETTE_TABS: Array<{
+  id: "shapes" | "seats" | "tables" | "services"
   title: string
   items: PaletteItem[]
 }> = [
   {
-    id: "furniture",
-    title: "Mesas y sillas",
+    id: "shapes",
+    title: "Formas y zonas",
     items: [
       {
-        placement: { kind: "element", type: "round_table" },
-        label: "Mesa redonda",
-        shortLabel: "Mesa",
-        hint: "Se vende como mesa. 2 a 12 sillas.",
-        icon: CircleDot,
+        placement: { kind: "element", type: "infrastructure", subtype: "stage" },
+        label: "Escenario",
+        shortLabel: "Escena",
+        hint: "Solo orientación. No se vende.",
+        icon: Sparkles,
       },
       {
-        placement: { kind: "element", type: "long_table" },
-        label: "Tablón rectangular",
-        shortLabel: "Tablón",
-        hint: "Se vende como tablón. Sillas en ambos lados.",
-        icon: Square,
+        placement: { kind: "element", type: "standing_zone" },
+        label: "Campo / pista",
+        shortLabel: "Pista",
+        hint: "Zona con cupo. El comprador elige cantidad.",
+        icon: Users,
       },
       {
         placement: { kind: "element", type: "vip_box" },
         label: "Box VIP",
-        shortLabel: "Box",
+        shortLabel: "VIP",
         hint: "Living o palco. Precio por box.",
         icon: Maximize2,
       },
       {
-        placement: { kind: "element", type: "vip_chair" },
-        label: "Silla / butaca",
-        shortLabel: "Silla",
-        hint: "Un asiento con precio propio.",
-        icon: Armchair,
+        placement: { kind: "zone_polygon" },
+        label: "Trazar zona",
+        shortLabel: "Zona",
+        hint: "Dibujá un polígono. El inventario se genera por filas y mesas.",
+        icon: PenTool,
       },
     ],
   },
   {
-    id: "theater",
-    title: "Filas y graderías",
+    id: "seats",
+    title: "Asientos",
     items: [
       {
         placement: { kind: "seat_block" },
         label: "Bloque de butacas",
-        shortLabel: "Butacas",
+        shortLabel: "Filas",
         hint: "Filas numeradas para vender asientos.",
         icon: LayoutGrid,
       },
       {
         placement: { kind: "grid_array" },
         label: "Matriz filas × columnas",
-        shortLabel: "Matriz",
+        shortLabel: "Gradas",
         hint: "Genera un bloque de sillas o mesas con filas, columnas y separación.",
         icon: Grid3x3,
       },
       {
         placement: { kind: "rings" },
-        label: "Graderías en curva",
-        shortLabel: "Grada",
+        label: "Graderías en arco",
+        shortLabel: "Arcos",
         hint: "Arcos de mesas o butacas alrededor del escenario.",
         icon: Layers,
       },
-    ],
-  },
-  {
-    id: "festival",
-    title: "Festivales",
-    items: [
       {
-        placement: { kind: "zone_polygon" },
-        label: "Trazar zona paramétrica",
-        shortLabel: "Zona",
-        hint: "Dibujá un polígono sobre la foto. El inventario se genera por filas y mesas, sin dibujar cada una.",
-        icon: PenTool,
+        placement: { kind: "element", type: "vip_chair" },
+        label: "Butaca individual",
+        shortLabel: "Butaca",
+        hint: "Un asiento con precio propio.",
+        icon: Armchair,
       },
     ],
   },
   {
-    id: "standing",
-    title: "Campo",
+    id: "tables",
+    title: "Mesas",
     items: [
       {
-        placement: { kind: "element", type: "standing_zone" },
-        label: "Campo general de pie",
-        shortLabel: "Campo",
-        hint: "Zona con cupo. El comprador elige cantidad.",
-        icon: Users,
+        placement: { kind: "element", type: "round_table" },
+        label: "Mesa redonda",
+        shortLabel: "Redonda",
+        hint: "Se vende como mesa. 2 a 12 sillas.",
+        icon: CircleDot,
+      },
+      {
+        placement: { kind: "element", type: "long_table" },
+        label: "Mesa rectangular",
+        shortLabel: "Recta",
+        hint: "Se vende como tablón. Sillas en ambos lados.",
+        icon: Square,
       },
     ],
+  },
+  {
+    id: "services",
+    title: "Servicios",
+    items: [],
   },
 ]
 
@@ -192,144 +200,190 @@ const INFRA_ITEMS: PaletteItem[] = [
   },
 ]
 
+const PALETTE_SHORTCUTS: PaletteItem[] = [
+  PALETTE_TABS[1]!.items[0]!,
+  PALETTE_TABS[1]!.items[3]!,
+  PALETTE_TABS[2]!.items[0]!,
+  PALETTE_TABS[0]!.items[0]!,
+]
+
 export function VenueComponentPalette({
   active,
   onPick,
   variant = "compact",
   surface = "sidebar",
   className,
+  collapsed = false,
+  onCollapsedChange,
 }: {
   active: PalettePlacement | null
   onPick: (placement: PalettePlacement) => void
   variant?: "compact" | "studio"
   surface?: "sidebar" | "sheet"
   className?: string
+  collapsed?: boolean
+  onCollapsedChange?: (collapsed: boolean) => void
 }) {
   const studio = variant === "studio"
   const sheet = surface === "sheet"
+  const tabs = PALETTE_TABS.map((tab) =>
+    tab.id === "services"
+      ? {
+          ...tab,
+          items: INFRA_ITEMS.filter(
+            (item) =>
+              item.placement.kind !== "element" ||
+              item.placement.subtype !== "stage",
+          ),
+        }
+      : tab,
+  )
+  const canCollapse = Boolean(onCollapsedChange) && studio && !sheet
 
-  const commercial = COMMERCIAL_GROUPS.map((group) => (
-    <div key={group.id} className={studio ? "space-y-1.5" : "space-y-2"}>
-      <p
+  if (canCollapse && collapsed) {
+    return (
+      <aside
         className={cn(
-          "font-semibold text-muted-foreground",
-          studio
-            ? "text-[10px] uppercase tracking-[0.16em]"
-            : "text-sm text-foreground",
+          "flex h-full w-12 shrink-0 flex-col items-center gap-1 overflow-hidden border-r border-border bg-card py-2 text-card-foreground",
+          className,
         )}
       >
-        {group.title}
-      </p>
-      <div className={studio ? "grid grid-cols-2 gap-1.5" : "space-y-2"}>
-        {group.items.map((item) => (
-          <PaletteButton
-            key={item.label}
-            item={item}
-            active={active}
-            onPick={onPick}
-            compact={studio}
-            touchFriendly={sheet}
-          />
-        ))}
-      </div>
-    </div>
-  ))
-
-  const references = (
-    <div className={studio ? "space-y-1.5" : "space-y-2"}>
-      {studio ? null : (
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          Estos dibujos ayudan a ubicarse. El comprador no puede tocarlos ni
-          pagarlos.
-        </p>
-      )}
-      <div className={studio ? "grid grid-cols-2 gap-1.5" : "space-y-2"}>
-        {INFRA_ITEMS.map((item) => (
-          <PaletteButton
-            key={item.label}
-            item={item}
-            active={active}
-            onPick={onPick}
-            compact={studio}
-            touchFriendly={sheet}
-          />
-        ))}
-      </div>
-    </div>
-  )
+        <button
+          type="button"
+          title="Expandir paleta"
+          aria-label="Expandir paleta"
+          onClick={() => onCollapsedChange?.(false)}
+          className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          <PanelLeftOpen className="size-4" />
+        </button>
+        <div className="mt-1 flex w-full flex-1 flex-col items-center gap-1 overflow-y-auto px-1">
+          {PALETTE_SHORTCUTS.map((item) => {
+            const Icon = item.icon
+            const selected = placementKey(active) === placementKey(item.placement)
+            return (
+              <button
+                key={item.label}
+                type="button"
+                title={item.label}
+                aria-label={item.label}
+                onClick={() => onPick(item.placement)}
+                className={cn(
+                  "flex size-9 items-center justify-center rounded-md",
+                  selected
+                    ? "bg-emerald-500/15 text-emerald-600 ring-1 ring-emerald-500/40"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                <Icon className="size-4" />
+              </button>
+            )
+          })}
+        </div>
+      </aside>
+    )
+  }
 
   return (
     <aside
       className={cn(
-        "flex shrink-0 flex-col border-border bg-card",
+        "flex min-h-0 w-full shrink-0 flex-col bg-card text-card-foreground",
         sheet
-          ? "h-auto w-full overflow-hidden border-0"
+          ? "h-auto overflow-hidden border-0"
           : studio
-            ? "h-full w-64 overflow-hidden border-r"
-            : "max-h-[min(70vh,560px)] overflow-y-auto border-b bg-card/50 p-4 lg:border-r lg:border-b-0",
+            ? "h-full w-72 overflow-hidden border-r border-border"
+            : "max-h-[min(70vh,560px)] overflow-y-auto border-b border-border p-4 lg:border-r lg:border-b-0",
         className,
       )}
     >
       {sheet ? null : studio ? (
-        <p className="shrink-0 border-b border-border px-3 py-2.5 text-xs font-semibold text-foreground">
-          Herramientas
-        </p>
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-2 py-2">
+          <p className="px-1 text-xs font-semibold">Herramientas</p>
+          {canCollapse ? (
+            <button
+              type="button"
+              title="Contraer paleta"
+              aria-label="Contraer paleta"
+              onClick={() => onCollapsedChange?.(true)}
+              className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <PanelLeftClose className="size-4" />
+            </button>
+          ) : null}
+        </div>
       ) : (
         <p className="mb-3 text-base font-semibold text-foreground">
           Qué querés agregar
         </p>
       )}
       <Tabs
-        defaultValue="commercial"
+        defaultValue="shapes"
         className={cn("min-h-0 w-full", studio ? "flex flex-1 flex-col gap-2 p-2" : "gap-3")}
       >
         <TabsList
           className={cn(
-            "flex h-auto w-full rounded-xl bg-muted p-1",
+            "flex h-auto w-full flex-wrap rounded-xl bg-muted p-1",
             studio && "shrink-0",
           )}
         >
-          <TabsTrigger
-            value="commercial"
-            className={cn(
-              "flex-1",
-              sheet
-                ? "min-h-[44px] px-2 text-sm"
-                : studio
-                  ? "h-8 px-1.5 text-[11px]"
-                  : "h-auto min-h-11 whitespace-normal px-2 py-2 text-sm leading-snug",
-            )}
-          >
-            {studio ? "Venta" : "Lugares a la venta"}
-          </TabsTrigger>
-          <TabsTrigger
-            value="map"
-            className={cn(
-              "flex-1",
-              sheet
-                ? "min-h-[44px] px-2 text-sm"
-                : studio
-                  ? "h-8 px-1.5 text-[11px]"
-                  : "h-auto min-h-11 whitespace-normal px-2 py-2 text-sm leading-snug",
-            )}
-          >
-            {studio ? "Mapa" : "Mapa y referencias"}
-          </TabsTrigger>
+          {tabs.map((tab) => (
+            <TabsTrigger
+              key={tab.id}
+              value={tab.id}
+              className={cn(
+                "flex-1",
+                sheet
+                  ? "min-h-[44px] px-2 text-sm"
+                  : studio
+                    ? "h-8 px-1 text-[10px]"
+                    : "h-auto min-h-11 whitespace-normal px-2 py-2 text-sm leading-snug",
+              )}
+            >
+              {studio
+                ? tab.id === "shapes"
+                  ? "Zonas"
+                  : tab.id === "seats"
+                    ? "Asientos"
+                    : tab.id === "tables"
+                      ? "Mesas"
+                      : "Servicios"
+                : tab.title}
+            </TabsTrigger>
+          ))}
         </TabsList>
-        <TabsContent
-          value="commercial"
-          className={cn(
-            studio ? "min-h-0 flex-1 space-y-3 overflow-y-auto pr-0.5" : "space-y-5",
-          )}
-        >
-          {commercial}
-        </TabsContent>
-        <TabsContent
-          value="map"
-          className={studio ? "min-h-0 flex-1 overflow-y-auto pr-0.5" : undefined}
-        >
-          {references}
-        </TabsContent>
+        {tabs.map((tab) => (
+          <TabsContent
+            key={tab.id}
+            value={tab.id}
+            className={
+              studio
+                ? "min-h-0 flex-1 space-y-2 overflow-y-auto pr-0.5"
+                : "space-y-3"
+            }
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              {tab.title}
+            </p>
+            {tab.id === "services" && !studio ? (
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                Estos dibujos ayudan a ubicarse. El comprador no puede tocarlos
+                ni pagarlos.
+              </p>
+            ) : null}
+            <div className={studio ? "grid grid-cols-2 gap-1.5" : "space-y-2"}>
+              {tab.items.map((item) => (
+                <PaletteButton
+                  key={item.label}
+                  item={item}
+                  active={active}
+                  onPick={onPick}
+                  compact={studio}
+                  touchFriendly={sheet}
+                />
+              ))}
+            </div>
+          </TabsContent>
+        ))}
       </Tabs>
     </aside>
   )
@@ -382,8 +436,8 @@ function PaletteButton({
           : "flex w-full items-start gap-3 rounded-xl px-3 py-3",
         touchFriendly && "min-h-[44px] aspect-auto py-3",
         selected
-          ? "border-emerald-500/50 bg-emerald-500/10 ring-1 ring-emerald-500/30"
-          : "border-border bg-background hover:border-emerald-500/30 hover:bg-muted/40",
+          ? "border-emerald-500/50 bg-emerald-500/10 text-foreground ring-1 ring-emerald-500/30"
+          : "border-border bg-muted/50 text-foreground hover:border-emerald-500/30 hover:bg-muted",
       )}
     >
       <Icon

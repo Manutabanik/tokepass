@@ -20,6 +20,8 @@ import {
   Minus,
   MousePointer,
   Palette,
+  PanelRightClose,
+  PanelRightOpen,
   Redo,
   RotateCw,
   Save,
@@ -35,6 +37,7 @@ import {
   Send,
 } from "lucide-react"
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react"
+import Link from "next/link"
 import { toast } from "sonner"
 
 import { VenueBulkEditPanel } from "@/components/admin/venue-bulk-edit-panel"
@@ -66,6 +69,7 @@ import {
   saveOrganizerVenueTemplate,
   type OrganizerVenueTemplate,
 } from "@/app/actions/venue-templates"
+import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { Button } from "@/components/ui/button"
 import {
   Sheet,
@@ -91,6 +95,7 @@ import { Switch } from "@/components/ui/switch"
 import { VenueMapBackgroundLayer } from "@/components/venue/venue-map-background-layer"
 import { VenueMapElementLayer } from "@/components/venue/venue-map-element-layer"
 import { VenueMapZoneLayer } from "@/components/venue/venue-map-zone-layer"
+import { canvasLabelFill } from "@/lib/seating/canvas-label-fill"
 import {
   applyLabelOverride,
   applyMatrixNumbering,
@@ -124,6 +129,7 @@ import {
 import {
   cloneVenueElement,
   createVenueElement,
+  explodeVenueSectorToChairs,
   rebuildElementSeats,
 } from "@/lib/seating/venue-element-geometry"
 import {
@@ -152,12 +158,14 @@ import {
   clampScale,
   clampVenueZoom,
   elementAabb,
+  expandViewBoxToContainer,
   flipSelectedElements,
   liveTransformToSvg,
   resizeOrigin,
   rotateElementsAround,
   selectionBounds,
   translateElements,
+  VENUE_VIEW_PADDING,
   zoomTowardCursor,
   type BoundsRect,
   type LiveTransform,
@@ -166,6 +174,11 @@ import {
 import {
   applyTwoFingerViewport,
   emptyCanvasDragAction,
+  isolateCanvasPointer,
+  isIntentionalSheetClose,
+  nowMs,
+  SHEET_DISMISS_GUARD_MS,
+  shouldIgnoreSheetDismiss,
   touchDistance,
   touchMidpoint,
   type PinchOrigin,
@@ -288,17 +301,23 @@ export function InteractiveVenueMapEditor({
   saving = false,
   variant = "card",
   eventTitle = "Mapa del recinto",
+  onEventTitleChange,
+  backHref,
+  backLabel = "Volver al Panel",
   tickets,
 }: {
   value?: InteractiveVenueMap | null
   onChange: (map: InteractiveVenueMap, seatingLayout: VenueSeatingLayout) => void
-  onSave?: (map: InteractiveVenueMap) => void
+  onSave?: (map: InteractiveVenueMap) => void | Promise<void>
   onAutoSave?: (map: InteractiveVenueMap) => void | Promise<void>
   onClose?: () => void
   onPreview?: () => void
   saving?: boolean
-  variant?: "card" | "studio"
+  variant?: "card" | "studio" | "workspace"
   eventTitle?: string
+  onEventTitleChange?: (title: string) => void
+  backHref?: string
+  backLabel?: string
   tickets?: VenueMapSkuTicketRef[] | null
 }) {
   const svgRef = useRef<SVGSVGElement>(null)
@@ -312,6 +331,19 @@ export function InteractiveVenueMapEditor({
   const [polygonCursor, setPolygonCursor] = useState<VenueMapPoint | null>(null)
   const [rulesFocusId, setRulesFocusId] = useState<string | null>(null)
   const [zoom, setZoom] = useState(1)
+  const [paletteCollapsed, setPaletteCollapsed] = useState(false)
+  const [inspectorCollapsed, setInspectorCollapsed] = useState(false)
+  const [svgViewBox, setSvgViewBox] = useState<{
+    x: number
+    y: number
+    width: number
+    height: number
+  }>({
+    x: 0,
+    y: 0,
+    width: CANVAS.width,
+    height: CANVAS.height,
+  })
   const [preview, setPreview] = useState(false)
   const [showRings, setShowRings] = useState(false)
   const [workMode, setWorkMode] = useState<VenueWorkMode>("architecture")
@@ -326,6 +358,11 @@ export function InteractiveVenueMapEditor({
   } | null>(null)
   const [isolationId, setIsolationId] = useState<string | null>(null)
   const isolationIdRef = useRef<string | null>(null)
+  const [seatEditMode, setSeatEditMode] = useState(false)
+  const seatEditModeRef = useRef(false)
+  const [explicitSaveStatus, setExplicitSaveStatus] = useState<
+    "saving" | "saved" | "error" | null
+  >(null)
   const [hoveredGroupId, setHoveredGroupId] = useState<string | null>(null)
   const hoverClearTimer = useRef<number | null>(null)
   const [marquee, setMarquee] = useState<{
@@ -360,14 +397,42 @@ export function InteractiveVenueMapEditor({
     delayMs: 3000,
     onSave: onAutoSave,
   })
+  const saveBadgeStatus =
+    autosaveStatus === "dirty" || autosaveStatus === "saving"
+      ? autosaveStatus
+      : (explicitSaveStatus ?? autosaveStatus)
+
+  async function persistEditorMap() {
+    if (!onSave) return
+    const healedTickets = applyMapCapacityToTickets(tickets ?? [], map)
+    const result = validateVenueMapSkuConsistency({
+      map,
+      tickets: healedTickets,
+    })
+    if (!result.ok) {
+      setExplicitSaveStatus("error")
+      toast.error("No se puede guardar el mapa", {
+        description: formatVenueMapSkuErrors(result.errors),
+      })
+      return
+    }
+    setExplicitSaveStatus("saving")
+    try {
+      await onSave(map)
+      setExplicitSaveStatus("saved")
+    } catch {
+      setExplicitSaveStatus("error")
+    }
+  }
   useLayoutEffect(() => {
     isolationIdRef.current = isolationId
     workModeRef.current = workMode
     selectionRef.current = selection
     compactChromeRef.current = compactChrome
     lassoModeRef.current = lassoMode
+    seatEditModeRef.current = seatEditMode
     mapRef.current = map
-  }, [isolationId, workMode, selection, compactChrome, lassoMode, map])
+  }, [isolationId, workMode, selection, compactChrome, lassoMode, seatEditMode, map])
   const [customTemplates, setCustomTemplates] = useState<OrganizerVenueTemplate[]>(
     [],
   )
@@ -414,6 +479,10 @@ export function InteractiveVenueMapEditor({
   const lassoModeRef = useRef(lassoMode)
   const pinchRef = useRef<PinchOrigin | null>(null)
   const pointersRef = useRef(new Map<number, { x: number; y: number }>())
+  const isSelectingRef = useRef(false)
+  const pendingMobileProperties = useRef(false)
+  const sheetGuardUntil = useRef(0)
+  const sheetGuardTimer = useRef<number | null>(null)
 
   useEffect(() => {
     if (!value) return
@@ -428,6 +497,9 @@ export function InteractiveVenueMapEditor({
       if (hoverClearTimer.current != null) {
         window.clearTimeout(hoverClearTimer.current)
       }
+      if (sheetGuardTimer.current != null) {
+        window.clearTimeout(sheetGuardTimer.current)
+      }
     }
   }, [])
 
@@ -440,13 +512,6 @@ export function InteractiveVenueMapEditor({
       setModesOpen(false)
     })
   }, [isDesktop])
-
-  useEffect(() => {
-    if (workMode !== "architecture" || selection || !propertiesOpen) return
-    queueMicrotask(() => {
-      setPropertiesOpen(false)
-    })
-  }, [workMode, selection, propertiesOpen])
 
   useEffect(() => {
     if (variant !== "studio") return
@@ -836,6 +901,68 @@ export function InteractiveVenueMapEditor({
     return event.button === 1 || (event.button === 0 && (event.altKey || spaceHeld.current))
   }
 
+  function armSheetDismissGuard() {
+    isSelectingRef.current = true
+    sheetGuardUntil.current = nowMs() + SHEET_DISMISS_GUARD_MS
+    if (sheetGuardTimer.current != null) {
+      window.clearTimeout(sheetGuardTimer.current)
+    }
+    sheetGuardTimer.current = window.setTimeout(() => {
+      isSelectingRef.current = false
+      sheetGuardTimer.current = null
+    }, SHEET_DISMISS_GUARD_MS)
+  }
+
+  function requestMobileProperties() {
+    if (!compactChromeRef.current) return
+    pendingMobileProperties.current = true
+    armSheetDismissGuard()
+  }
+
+  function flushMobileProperties() {
+    if (!compactChromeRef.current) return
+    pendingMobileProperties.current = false
+    armSheetDismissGuard()
+    setPropertiesOpen(true)
+  }
+
+  function openMobilePropertiesSheet() {
+    pendingMobileProperties.current = false
+    armSheetDismissGuard()
+    setPropertiesOpen(true)
+  }
+
+  function shouldBlockCanvasDeselect() {
+    return (
+      isSelectingRef.current ||
+      nowMs() < sheetGuardUntil.current ||
+      pendingMobileProperties.current
+    )
+  }
+
+  function handlePropertiesOpenChange(
+    open: boolean,
+    details?: { reason?: string; cancel?: () => void },
+  ) {
+    if (open) {
+      armSheetDismissGuard()
+      setPropertiesOpen(true)
+      return
+    }
+    if (
+      shouldIgnoreSheetDismiss({
+        reason: details?.reason,
+        nowMs: nowMs(),
+        guardUntilMs: sheetGuardUntil.current,
+      }) ||
+      (compactChromeRef.current && !isIntentionalSheetClose(details?.reason))
+    ) {
+      details?.cancel?.()
+      return
+    }
+    setPropertiesOpen(false)
+  }
+
   function applyElementIds(ids: string[], options?: { isolate?: boolean }) {
     if (!options?.isolate) setIsolationId(null)
     const next = selectionFromIds(ids)
@@ -930,8 +1057,27 @@ export function InteractiveVenueMapEditor({
 
   function ungroupSelection() {
     if (workModeRef.current === "pricing") return
-    if (selectedElementIds.length === 0) return
     const current = mapRef.current
+    const activeSelection = selectionRef.current
+    if (activeSelection?.kind === "sector") {
+      const sector = current.sectors.find(
+        (item) => item.id === activeSelection.id,
+      )
+      if (!sector || sector.seats.length === 0) return
+      const chairs = explodeVenueSectorToChairs(sector)
+      commit({
+        ...current,
+        sectors: current.sectors.filter((item) => item.id !== sector.id),
+        elements: [...ensureElements(current), ...chairs],
+      })
+      applyElementIds(chairs.map((item) => item.id))
+      setSeatEditMode(false)
+      return
+    }
+    if (selectedElementIds.length === 0) return
+    const selected = ensureElements(current).filter((item) =>
+      selectedElementIds.includes(item.id),
+    )
     commit({
       ...current,
       elements: ungroupVenueElements(
@@ -939,6 +1085,7 @@ export function InteractiveVenueMapEditor({
         selectedElementIds,
       ),
     })
+    applyElementIds(selected.map((item) => item.id))
   }
 
   function setStudioWorkMode(next: VenueWorkMode) {
@@ -961,7 +1108,7 @@ export function InteractiveVenueMapEditor({
     element: VenueMapElement,
   ) {
     if (wantsCanvasPan(event)) return
-    event.stopPropagation()
+    isolateCanvasPointer(event, { preventGhostClick: true })
     if (event.button !== 0) return
     let target = element
     if (event.altKey) {
@@ -987,11 +1134,13 @@ export function InteractiveVenueMapEditor({
         ),
         isolationId ? { isolate: true } : undefined,
       )
+      requestMobileProperties()
       return
     }
 
     if (event.detail >= 2) {
       if (workModeRef.current === "pricing") return
+      if (beginElementSeatEdit(target)) return
       if (grouped && isolationId !== target.id) {
         enterIsolation(target.id)
         return
@@ -1011,6 +1160,7 @@ export function InteractiveVenueMapEditor({
         isolated?.groupId === target.groupId
       if (target.id === isolationId || sameGroup) {
         enterIsolation(target.id)
+        requestMobileProperties()
         if (lassoModeRef.current) return
         if (workModeRef.current !== "pricing") {
           beginGroupMove([target.id], event)
@@ -1029,9 +1179,8 @@ export function InteractiveVenueMapEditor({
     if (lassoModeRef.current) return
     if (workModeRef.current !== "pricing") {
       beginGroupMove(groupIds, event)
-    } else if (compactChromeRef.current) {
-      setPropertiesOpen(true)
     }
+    requestMobileProperties()
   }
 
   function pushHistory() {
@@ -1123,6 +1272,21 @@ export function InteractiveVenueMapEditor({
     zoomRef.current = next.zoom
     setPan(next.pan)
     setZoom(next.zoom)
+  }
+
+  function nudgeCanvasZoom(delta: number) {
+    const rect = svgRef.current?.getBoundingClientRect()
+    const cursor = rect
+      ? clientToViewBox(rect.left + rect.width / 2, rect.top + rect.height / 2)
+      : { x: CANVAS.width / 2, y: CANVAS.height / 2 }
+    applyViewport(
+      zoomTowardCursor({
+        pan: panRef.current,
+        zoom: zoomRef.current,
+        nextZoom: clampVenueZoom(zoomRef.current + delta),
+        cursor,
+      }),
+    )
   }
 
   function abortTransientGestures() {
@@ -1256,7 +1420,7 @@ export function InteractiveVenueMapEditor({
       ...map,
       labels: [
         ...map.labels,
-        { id, text, x: 320, y: 100 + map.labels.length * 24, color: "#ec4899" },
+        { id, text, x: 320, y: 100 + map.labels.length * 24, color: "#e4e4e7" },
       ],
     })
     setSelection({ kind: "label", id })
@@ -1801,18 +1965,10 @@ export function InteractiveVenueMapEditor({
         elements: ensureElements(map).filter((item) => !ids.has(item.id)),
       })
     } else if (selection.kind === "seats") {
-      const blocked = new Set(selection.ids)
-      commit({
-        ...map,
-        sectors: map.sectors.map((sector) => ({
-          ...sector,
-          seats: sector.seats.map((seat) =>
-            blocked.has(seatKey(sector.id, seat.id))
-              ? { ...seat, status: "blocked" as const }
-              : seat,
-          ),
-        })),
-      })
+      patchSelectedSeats({ status: "blocked" })
+      setIsolationId(null)
+      setSelection(null)
+      return
     } else if (selection.kind === "zone") {
       commit({
         ...map,
@@ -1835,7 +1991,7 @@ export function InteractiveVenueMapEditor({
 
   function focusProperties() {
     if (compactChrome) {
-      setPropertiesOpen(true)
+      openMobilePropertiesSheet()
       return
     }
     propertiesRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" })
@@ -1912,6 +2068,138 @@ export function InteractiveVenueMapEditor({
   }
 
   function restoreSelectedSeats() {
+    patchSelectedSeats({ status: "available" })
+  }
+
+  function elementSeatKey(elementId: string, seatId: string) {
+    return `${elementId}::${seatId}`
+  }
+
+  function parseSeatSelectionKey(key: string) {
+    const splitAt = key.indexOf("::")
+    if (splitAt < 0) return { ownerId: "", seatId: key }
+    return { ownerId: key.slice(0, splitAt), seatId: key.slice(splitAt + 2) }
+  }
+
+  function enterSeatEdit(ids: string[]) {
+    setSeatEditMode(true)
+    setSelection({ kind: "seats", ids })
+    requestMobileProperties()
+  }
+
+  function beginSeatEditFromPointer(ids: string[], shiftKey: boolean) {
+    elementDrag.current = null
+    setIsPanning(false)
+    cancelLiveTransform()
+    const current = selectionRef.current
+    const nextIds =
+      shiftKey && current?.kind === "seats"
+        ? [...new Set([...current.ids, ...ids])]
+        : ids
+    enterSeatEdit(nextIds)
+  }
+
+  function beginElementSeatEdit(
+    element: VenueMapElement,
+    seatId?: string,
+    shiftKey = false,
+  ) {
+    if (workModeRef.current === "pricing") return false
+    const seat = seatId
+      ? element.seats.find((item) => item.id === seatId)
+      : element.seats[0]
+    if (!seat) return false
+    enterIsolation(element.id)
+    beginSeatEditFromPointer(
+      [elementSeatKey(element.id, seat.id)],
+      shiftKey,
+    )
+    return true
+  }
+
+  function onMapElementDoubleClick(
+    event: React.MouseEvent,
+    element: VenueMapElement,
+  ) {
+    if (workModeRef.current === "pricing") return
+    isolateCanvasPointer(event)
+    event.preventDefault()
+    if (beginElementSeatEdit(element)) return
+    if (element.groupId?.trim() && isolationId !== element.id) {
+      enterIsolation(element.id)
+    }
+  }
+
+  function onMapSeatDoubleClick(
+    event: React.MouseEvent,
+    element: VenueMapElement,
+    seatId: string,
+  ) {
+    isolateCanvasPointer(event)
+    event.preventDefault()
+    beginElementSeatEdit(element, seatId, event.shiftKey)
+  }
+
+  function convertSelectionToIndividualSeats() {
+    if (workModeRef.current === "pricing") return
+    const current = mapRef.current
+    const activeSelection = selectionRef.current
+    if (activeSelection?.kind === "sector") {
+      const sector = current.sectors.find(
+        (item) => item.id === activeSelection.id,
+      )
+      if (!sector || sector.seats.length === 0) return
+      const chairs = explodeVenueSectorToChairs(sector)
+      commit({
+        ...current,
+        sectors: current.sectors.filter((item) => item.id !== sector.id),
+        elements: [...ensureElements(current), ...chairs],
+      })
+      const keys = chairs.flatMap((chair) =>
+        chair.seats.map((seat) => elementSeatKey(chair.id, seat.id)),
+      )
+      if (keys.length > 0) enterSeatEdit(keys)
+      return
+    }
+    if (selectedElementIds.length === 0) return
+    ungroupSelection()
+    const items = ensureElements(mapRef.current).filter((item) =>
+      selectedElementIds.includes(item.id),
+    )
+    const keys = items.flatMap((item) =>
+      item.seats.map((seat) => elementSeatKey(item.id, seat.id)),
+    )
+    if (keys.length > 0) enterSeatEdit(keys)
+  }
+
+  function onMapSeatPointerDown(
+    event: React.PointerEvent,
+    element: VenueMapElement,
+    seatId: string,
+  ) {
+    if (wantsCanvasPan(event)) return
+    isolateCanvasPointer(event, { preventGhostClick: true })
+    if (event.button !== 0) return
+    const key = elementSeatKey(element.id, seatId)
+    if (event.detail >= 2 || seatEditModeRef.current || event.shiftKey) {
+      enterIsolation(element.id)
+      beginSeatEditFromPointer([key], event.shiftKey)
+      return
+    }
+    enterIsolation(element.id)
+    applyElementIds([element.id], { isolate: true })
+    requestMobileProperties()
+  }
+
+  function patchSelectedSeats(patch: {
+    status?: "available" | "blocked" | "reserved"
+    number?: number
+    x?: number
+    y?: number
+    rotation?: number
+    price?: number
+    label?: string
+  }) {
     if (selection?.kind !== "seats") return
     const ids = new Set(selection.ids)
     commit({
@@ -1919,8 +2207,14 @@ export function InteractiveVenueMapEditor({
       sectors: map.sectors.map((sector) => ({
         ...sector,
         seats: sector.seats.map((seat) =>
-          ids.has(seatKey(sector.id, seat.id))
-            ? { ...seat, status: "available" as const }
+          ids.has(seatKey(sector.id, seat.id)) ? { ...seat, ...patch } : seat,
+        ),
+      })),
+      elements: ensureElements(map).map((item) => ({
+        ...item,
+        seats: item.seats.map((seat) =>
+          ids.has(elementSeatKey(item.id, seat.id))
+            ? { ...seat, ...patch }
             : seat,
         ),
       })),
@@ -1952,15 +2246,14 @@ export function InteractiveVenueMapEditor({
 
   function onZonePointerDown(event: React.PointerEvent, zone: VenueMapZone) {
     if (wantsCanvasPan(event)) return
-    event.stopPropagation()
+    isolateCanvasPointer(event, { preventGhostClick: true })
     if (event.button !== 0) return
     setIsolationId(null)
     setSelection({ kind: "zone", id: zone.id })
+    requestMobileProperties()
     if (lassoModeRef.current) return
     if (workModeRef.current !== "pricing") {
       beginGroupMove([], event, zone.id)
-    } else if (compactChromeRef.current) {
-      setPropertiesOpen(true)
     }
   }
 
@@ -2001,7 +2294,7 @@ export function InteractiveVenueMapEditor({
         lassoMode: lassoModeRef.current,
       }) === "ignore"
     ) {
-      if (!event.shiftKey) {
+      if (!event.shiftKey && !shouldBlockCanvasDeselect()) {
         setIsolationId(null)
         setSelection(null)
       }
@@ -2152,14 +2445,22 @@ export function InteractiveVenueMapEditor({
     if (transformDrag.current) {
       const live = liveTransformRef.current
       const wasTap = !live || isIdentityLive(live)
+      const dragged = Boolean(live && !isIdentityLive(live))
       commitLiveTransform(snapActive(shiftKey))
       drag.current = null
       elementDrag.current = null
       setIsPanning(false)
       marqueeRef.current = null
       setMarquee(null)
-      if (wasTap && compactChromeRef.current && !lassoModeRef.current) {
-        setPropertiesOpen(true)
+      if (
+        compactChromeRef.current &&
+        !lassoModeRef.current &&
+        !dragged &&
+        (wasTap || pendingMobileProperties.current)
+      ) {
+        flushMobileProperties()
+      } else {
+        pendingMobileProperties.current = false
       }
       return
     }
@@ -2228,8 +2529,15 @@ export function InteractiveVenueMapEditor({
     setIsPanning(false)
     marqueeRef.current = null
     setMarquee(null)
-    if (compactChromeRef.current && (legacyTap || selectedFromMarquee)) {
-      setPropertiesOpen(true)
+    const dragged = Boolean(legacyDrag?.recorded)
+    if (
+      compactChromeRef.current &&
+      !dragged &&
+      (legacyTap || selectedFromMarquee || pendingMobileProperties.current)
+    ) {
+      flushMobileProperties()
+    } else {
+      pendingMobileProperties.current = false
     }
   }
 
@@ -2242,14 +2550,44 @@ export function InteractiveVenueMapEditor({
     if (tool === "polygon") setPolygonCursor(null)
     if (pinchRef.current) return
     if (transformDrag.current || elementDrag.current) return
+    if (!drag.current) return
+    const pending = pendingMobileProperties.current
     finishPointerGesture(event.shiftKey)
+    pendingMobileProperties.current = pending
   }
 
   const selectedSeatCount = selection?.kind === "seats" ? selection.ids.length : 0
+  const selectedRawSeatIds = useMemo(() => {
+    if (selection?.kind !== "seats") return []
+    return selection.ids.map((key) => parseSeatSelectionKey(key).seatId)
+  }, [selection])
+  const singleSeat =
+    selection?.kind === "seats" && selection.ids.length === 1
+      ? (() => {
+          const { ownerId, seatId } = parseSeatSelectionKey(selection.ids[0]!)
+          const sector = map.sectors.find((item) => item.id === ownerId)
+          const sectorSeat = sector?.seats.find((item) => item.id === seatId)
+          if (sector && sectorSeat) {
+            return { source: "sector" as const, sector, seat: sectorSeat }
+          }
+          const element = (map.elements ?? []).find((item) => item.id === ownerId)
+          const elementSeat = element?.seats.find((item) => item.id === seatId)
+          if (element && elementSeat) {
+            return { source: "element" as const, element, seat: elementSeat }
+          }
+          return null
+        })()
+      : null
   const capacity = useMemo(() => venueMapCapacity(map), [map])
   const canUndo = undoCount > 0
   const canRedo = redoCount > 0
-  const isStudio = variant === "studio"
+  const isWorkspace = variant === "workspace"
+  const isStudio = variant === "studio" || isWorkspace
+  const canConvertToIndividualSeats =
+    Boolean(selectedSector && selectedSector.seats.length > 0) ||
+    Boolean(selectedElement?.groupId?.trim()) ||
+    (selection?.kind === "elements" &&
+      selectionHasGroup(selectedElements, selectedElementIds))
 
   useEffect(() => {
     function isTypingTarget(target: EventTarget | null) {
@@ -2286,15 +2624,25 @@ export function InteractiveVenueMapEditor({
           return
         }
         const isolatedId = isolationIdRef.current
-        if (isolatedId) {
+        if (isolatedId || seatEditModeRef.current) {
           event.preventDefault()
-          const members = elementGroupMembers(
-            ensureElements(mapRef.current),
-            isolatedId,
-          )
+          const members = isolatedId
+            ? elementGroupMembers(ensureElements(mapRef.current), isolatedId)
+            : []
+          setSeatEditMode(false)
           setIsolationId(null)
-          applyElementIds(members.map((item) => item.id))
+          if (members.length > 0) {
+            applyElementIds(members.map((item) => item.id))
+          } else {
+            setSelection(null)
+          }
           return
+        }
+        if (selectionRef.current) {
+          event.preventDefault()
+          setSelection(null)
+          setPlacement(null)
+          setTool("select")
         }
       }
       if (event.key === "Enter" && tool === "polygon") {
@@ -2409,6 +2757,29 @@ export function InteractiveVenueMapEditor({
     }
   }, [])
 
+  useLayoutEffect(() => {
+    const canvasEl = canvasRef.current
+    if (!canvasEl) return
+    function syncViewBox() {
+      const node = canvasRef.current
+      if (!node) return
+      const rect = node.getBoundingClientRect()
+      setSvgViewBox(
+        expandViewBoxToContainer({
+          containerWidth: rect.width,
+          containerHeight: rect.height,
+          worldWidth: CANVAS.width,
+          worldHeight: CANVAS.height,
+          padding: VENUE_VIEW_PADDING,
+        }),
+      )
+    }
+    syncViewBox()
+    const observer = new ResizeObserver(syncViewBox)
+    observer.observe(canvasEl)
+    return () => observer.disconnect()
+  }, [])
+
   useEffect(() => {
     return () => {
       if (pointerFrame.current != null) {
@@ -2445,6 +2816,14 @@ export function InteractiveVenueMapEditor({
 
   const hasPropertiesTarget =
     Boolean(selection) || workMode === "pricing" || workMode === "indexing"
+  const propertiesTargetKey =
+    selection?.kind === "seats"
+      ? selection.ids[0] ?? "seats"
+      : selection?.kind === "elements"
+        ? selection.ids[0] ?? "elements"
+        : selection && "id" in selection && selection.id
+          ? selection.id
+          : "predio"
   const mobileSheetOpen = toolsOpen || propertiesOpen || modesOpen
   const showSelectionToolbar =
     selectedElementIds.length >= 1 &&
@@ -2476,7 +2855,7 @@ export function InteractiveVenueMapEditor({
   const toolbar = (
     <div
       className={cn(
-        "z-20 flex w-full items-center border-b border-border bg-card",
+        "z-20 flex w-full items-center border-b border-border bg-card text-card-foreground",
         isStudio
           ? "min-h-14 shrink-0 flex-nowrap gap-2 overflow-x-auto px-2 py-1.5 hide-scrollbar"
           : "flex-wrap gap-2 overflow-hidden px-3 py-2",
@@ -2505,12 +2884,12 @@ export function InteractiveVenueMapEditor({
         onChange={setStudioWorkMode}
         className={cn("min-w-0 shrink-0", compactChrome && "hidden")}
       />
-      <VenueAutosaveBadge status={autosaveStatus} />
+      <VenueAutosaveBadge status={saveBadgeStatus} />
 
       <div
         data-slot="button-group"
         className={cn(
-          "inline-flex min-w-0 items-center rounded-lg border border-border bg-muted/40 p-0.5",
+          "inline-flex min-w-0 items-center rounded-lg border border-zinc-800 bg-zinc-950 p-0.5",
           isStudio && "scrollbar-none overflow-x-auto",
           !isStudio && "flex-wrap gap-1 border-0 bg-transparent p-0",
           compactChrome && "hidden",
@@ -2695,19 +3074,7 @@ export function InteractiveVenueMapEditor({
             type="button"
             disabled={saving}
             onClick={() => {
-              if (!onSave) return
-              const healedTickets = applyMapCapacityToTickets(tickets ?? [], map)
-              const result = validateVenueMapSkuConsistency({
-                map,
-                tickets: healedTickets,
-              })
-              if (!result.ok) {
-                toast.error("No se puede guardar el mapa", {
-                  description: formatVenueMapSkuErrors(result.errors),
-                })
-                return
-              }
-              onSave(map)
+              void persistEditorMap()
             }}
             className="h-9 shrink-0 bg-emerald-500 px-2 font-bold text-black hover:bg-emerald-400 md:px-3"
             aria-label="Guardar cambios"
@@ -2720,16 +3087,99 @@ export function InteractiveVenueMapEditor({
     </div>
   )
 
+  const workspaceHeader = (
+    <header className="z-30 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-card px-3 text-card-foreground">
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        {backHref ? (
+          <Link
+            href={backHref}
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <ArrowLeft className="size-4" />
+            <span className="hidden md:inline">{backLabel}</span>
+          </Link>
+        ) : onClose ? (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            className="h-9 shrink-0 px-2"
+          >
+            <ArrowLeft className="size-4" />
+            <span className="hidden md:inline">{backLabel}</span>
+          </Button>
+        ) : null}
+        <Input
+          value={eventTitle}
+          readOnly={!onEventTitleChange}
+          onChange={(event) => onEventTitleChange?.(event.target.value)}
+          aria-label="Nombre del evento"
+          className="h-9 max-w-[16rem] border-transparent bg-transparent px-2 text-sm font-semibold shadow-none focus-visible:border-border"
+        />
+        <VenueAutosaveBadge status={saveBadgeStatus} />
+      </div>
+      <div className="hidden min-w-0 flex-[1.2] justify-center lg:flex">
+        <VenueWorkModeTabs value={workMode} onChange={setStudioWorkMode} />
+      </div>
+      <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5">
+        <ThemeToggle />
+        <Button
+          type="button"
+          variant="outline"
+          className="h-9 shrink-0 px-2 md:px-3"
+          onClick={() => setLibraryOpen(true)}
+        >
+          <LayoutTemplate className="size-4 md:mr-2" />
+          <span className="hidden md:inline">Plantillas</span>
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-9 shrink-0 px-2 md:px-3"
+          onClick={handleClearMap}
+        >
+          <Trash2 className="size-4 md:mr-2" />
+          <span className="hidden md:inline">Limpiar</span>
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-9 shrink-0 px-2 md:px-3"
+          onClick={openPreview}
+        >
+          <Eye className="size-4 md:mr-2" />
+          <span className="hidden lg:inline">Vista Previa del Comprador</span>
+        </Button>
+        {onSave ? (
+          <Button
+            type="button"
+            disabled={saving}
+            onClick={() => {
+              void persistEditorMap()
+            }}
+            className="h-9 shrink-0 bg-emerald-600 px-3 font-bold text-white hover:bg-emerald-500"
+          >
+            <Save className="size-4 md:mr-2" />
+            <span className="hidden md:inline">Guardar Cambios</span>
+          </Button>
+        ) : null}
+      </div>
+    </header>
+  )
+
   return (
     <div
       className={cn(
-        "relative overflow-hidden bg-background",
-        isStudio
-          ? "flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden"
-          : "rounded-2xl border border-border",
+        "relative overflow-hidden bg-background text-foreground",
+        isWorkspace
+          ? "flex h-full min-h-0 w-full flex-col overflow-hidden"
+          : isStudio
+            ? "flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden"
+            : "rounded-2xl border border-border",
       )}
+      data-field="venue.venueMap"
     >
-      {toolbar}
+      {isWorkspace && !compactChrome ? workspaceHeader : toolbar}
 
       <div
         className={cn(
@@ -2738,20 +3188,23 @@ export function InteractiveVenueMapEditor({
             : "grid lg:grid-cols-[220px_1fr_280px]",
         )}
       >
-        {workMode === "architecture" && !compactChrome ? (
+        {(workMode === "architecture" || isWorkspace) && !compactChrome ? (
           <VenueComponentPalette
             variant={isStudio ? "studio" : "compact"}
             active={placement}
             onPick={pickPaletteItem}
+            collapsed={isStudio ? paletteCollapsed : false}
+            onCollapsedChange={isStudio ? setPaletteCollapsed : undefined}
+            className={isWorkspace ? "h-full" : undefined}
           />
         ) : null}
         <div
           ref={canvasRef}
           className={cn(
-            "relative overflow-hidden touch-none overscroll-none select-none bg-background bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.08)_1px,transparent_0)] bg-[size:20px_20px]",
+            "relative overflow-hidden touch-none overscroll-none select-none bg-slate-50 bg-[radial-gradient(circle_at_1px_1px,#cbd5e1_1px,transparent_0)] bg-[size:20px_20px] dark:bg-[#09090b] dark:bg-[radial-gradient(circle_at_1px_1px,#18181b_1px,transparent_0)]",
             isStudio
               ? "relative h-full min-h-0 w-full flex-1"
-              : "min-h-[420px] bg-zinc-950",
+              : "min-h-[420px]",
             spacePan && !isPanning && "cursor-grab [&_*]:cursor-grab",
             isPanning && "cursor-grabbing [&_*]:cursor-grabbing",
           )}
@@ -2792,10 +3245,11 @@ export function InteractiveVenueMapEditor({
         >
           <svg
             ref={svgRef}
-            viewBox={`0 0 ${CANVAS.width} ${CANVAS.height}`}
+            viewBox={`${svgViewBox.x} ${svgViewBox.y} ${svgViewBox.width} ${svgViewBox.height}`}
+            preserveAspectRatio="xMidYMid meet"
             className={cn(
               "w-full touch-none select-none",
-              isStudio ? "h-full" : "h-[min(70vh,560px)]",
+              isStudio ? "absolute inset-0 h-full" : "h-[min(70vh,560px)]",
               tool === "polygon" && "cursor-crosshair",
               (spacePan || isPanning) && tool !== "polygon" && "cursor-grab",
               isPanning && "cursor-grabbing",
@@ -2814,7 +3268,13 @@ export function InteractiveVenueMapEditor({
             onPointerCancel={onPointerUp}
           >
             <g transform={`translate(${pan.x} ${pan.y}) scale(${zoom})`}>
-              <rect width={CANVAS.width} height={CANVAS.height} fill="transparent" />
+              <rect
+                x={svgViewBox.x}
+                y={svgViewBox.y}
+                width={svgViewBox.width}
+                height={svgViewBox.height}
+                className="fill-slate-50 dark:fill-[#09090b]"
+              />
               <g className={isolationId ? "opacity-50" : undefined}>
               <VenueMapBackgroundLayer map={renderMap} />
               <VenueMapZoneLayer
@@ -2885,7 +3345,7 @@ export function InteractiveVenueMapEditor({
                     height={map.stage.height}
                     rx={10}
                     className={cn(
-                      "fill-zinc-200 dark:fill-zinc-100",
+                      "fill-slate-200 dark:fill-zinc-800",
                       selection?.kind === "stage" && "stroke-emerald-400",
                     )}
                     strokeWidth={selection?.kind === "stage" ? 2 : 0}
@@ -2894,7 +3354,7 @@ export function InteractiveVenueMapEditor({
                     x={map.stage.x + map.stage.width / 2}
                     y={map.stage.y + map.stage.height / 2 + 5}
                     textAnchor="middle"
-                    className="fill-zinc-900 text-[13px] font-black tracking-[0.28em]"
+                    className="fill-slate-600 text-[13px] font-black tracking-[0.28em] dark:fill-[#e4e4e7]"
                   >
                     {map.stage.label}
                   </text>
@@ -2915,22 +3375,36 @@ export function InteractiveVenueMapEditor({
                         }
                         onPointerDown={(event) => {
                           if (wantsCanvasPan(event)) return
-                          event.stopPropagation()
+                          isolateCanvasPointer(event, { preventGhostClick: true })
                           if (event.button !== 0) return
-                          if (event.shiftKey) {
-                            setIsolationId(null)
-                            setSelection({ kind: "seats", ids: [key] })
+                          if (
+                            event.detail >= 2 ||
+                            seatEditModeRef.current ||
+                            event.shiftKey
+                          ) {
+                            elementDrag.current = null
+                            setIsPanning(false)
+                            cancelLiveTransform()
+                            const current = selectionRef.current
+                            const nextIds =
+                              event.shiftKey && current?.kind === "seats"
+                                ? [...new Set([...current.ids, key])]
+                                : [key]
+                            enterSeatEdit(nextIds)
                             return
                           }
                           setIsolationId(null)
                           setSelection({ kind: "sector", id: sector.id })
-                          beginElementDrag(
-                            "sector",
-                            event,
-                            sector.x,
-                            sector.y,
-                            sector.id,
-                          )
+                          requestMobileProperties()
+                        }}
+                        onDoubleClick={(event) => {
+                          isolateCanvasPointer(event)
+                          event.preventDefault()
+                          beginSeatEditFromPointer([key], event.shiftKey)
+                        }}
+                        onClick={(event) => {
+                          isolateCanvasPointer(event)
+                          event.preventDefault()
                         }}
                       >
                         <TheatreSeatSymbol
@@ -2963,6 +3437,10 @@ export function InteractiveVenueMapEditor({
                 onElementContextMenu={(event, element) =>
                   openObjectMenu(event, { kind: "element", id: element.id })
                 }
+                onSeatPointerDown={onMapSeatPointerDown}
+                onElementDoubleClick={onMapElementDoubleClick}
+                onSeatDoubleClick={onMapSeatDoubleClick}
+                selectedSeatIds={selectedRawSeatIds}
               />
               </g>
               <g ref={liveGroupRef}>
@@ -3011,6 +3489,10 @@ export function InteractiveVenueMapEditor({
                     onElementContextMenu={(event, element) =>
                       openObjectMenu(event, { kind: "element", id: element.id })
                     }
+                    onSeatPointerDown={onMapSeatPointerDown}
+                    onElementDoubleClick={onMapElementDoubleClick}
+                    onSeatDoubleClick={onMapSeatDoubleClick}
+                    selectedSeatIds={selectedRawSeatIds}
                   />
                 </g>
                 {transformBounds && !geometryLocked ? (
@@ -3056,7 +3538,7 @@ export function InteractiveVenueMapEditor({
                   x={label.x}
                   y={label.y}
                   textAnchor="middle"
-                  fill={label.color}
+                  fill={canvasLabelFill(label.color)}
                   className="cursor-pointer text-[15px] font-black tracking-[0.22em]"
                   onContextMenu={(event) => openObjectMenu(event, { kind: "label", id: label.id })}
                   onPointerDown={(event) => {
@@ -3090,6 +3572,10 @@ export function InteractiveVenueMapEditor({
             <VenueStudioHud
               map={map}
               className={compactChrome ? "top-3 bottom-auto" : undefined}
+              zoomPercent={Math.round(zoom * 100)}
+              onZoomIn={() => nudgeCanvasZoom(0.1)}
+              onZoomOut={() => nudgeCanvasZoom(-0.1)}
+              onZoomReset={() => applyViewport({ pan: { x: 0, y: 0 }, zoom: 1 })}
             />
           ) : null}
           {compactChrome && lassoMode && tool === "select" ? (
@@ -3146,8 +3632,13 @@ export function InteractiveVenueMapEditor({
           isStudio={isStudio}
           isDesktop={isDesktop}
           open={propertiesOpen}
-          onOpenChange={setPropertiesOpen}
+          onOpenChange={handlePropertiesOpenChange}
+          selectionKey={propertiesTargetKey}
           propertiesRef={propertiesRef}
+          collapsed={isStudio && !compactChrome ? inspectorCollapsed : false}
+          onCollapsedChange={
+            isStudio && !compactChrome ? setInspectorCollapsed : undefined
+          }
           title={
             workMode === "pricing"
               ? "Tarifas"
@@ -3209,6 +3700,15 @@ export function InteractiveVenueMapEditor({
                   : "contents",
             )}
           >
+          {workMode === "architecture" && canConvertToIndividualSeats ? (
+            <Button
+              type="button"
+              className="w-full bg-emerald-600 text-white hover:bg-emerald-500"
+              onClick={convertSelectionToIndividualSeats}
+            >
+              Convertir a butacas individuales
+            </Button>
+          ) : null}
           {workMode === "pricing" ? (
             <VenueHeatmapPanel
               map={map}
@@ -3382,6 +3882,20 @@ export function InteractiveVenueMapEditor({
                 />
                 Pasillo central
               </label>
+              <Button
+                type="button"
+                className="w-full bg-emerald-600 text-white hover:bg-emerald-500"
+                onClick={() => {
+                  const first = selectedSector.seats[0]
+                  enterSeatEdit(
+                    first
+                      ? [seatKey(selectedSector.id, first.id)]
+                      : [],
+                  )
+                }}
+              >
+                Editar asientos individuales
+              </Button>
             </div>
           ) : selectedElement && isInfrastructureElement(selectedElement) ? (
             <div className="space-y-3">
@@ -3652,6 +4166,23 @@ export function InteractiveVenueMapEditor({
                   Seleccionar grada completa
                 </Button>
               ) : null}
+              {selectedElement.seats.length > 0 && !selectedElement.groupId ? (
+                <Button
+                  type="button"
+                  className="w-full bg-emerald-600 text-white hover:bg-emerald-500"
+                  onClick={() => {
+                    const first = selectedElement.seats[0]
+                    enterIsolation(selectedElement.id)
+                    enterSeatEdit(
+                      first
+                        ? [elementSeatKey(selectedElement.id, first.id)]
+                        : [],
+                    )
+                  }}
+                >
+                  Editar asientos individuales
+                </Button>
+              ) : null}
               {selectedElement.groupId ? (
                 <Button
                   type="button"
@@ -3815,10 +4346,130 @@ export function InteractiveVenueMapEditor({
               />
             </Field>
           ) : selection?.kind === "seats" ? (
-            <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">
-                {selectedSeatCount} asientos seleccionados. Podés desactivarlos o reactivarlos en lote.
-              </p>
+            <div className="space-y-3">
+              {singleSeat ? (
+                <>
+                  <Field label="Identificador de ubicacion">
+                    <Input
+                      value={
+                        singleSeat.seat.label ??
+                        (singleSeat.source === "sector"
+                          ? `Fila ${singleSeat.seat.row} - Asiento ${singleSeat.seat.number}`
+                          : `${singleSeat.element.label} - Asiento ${singleSeat.seat.number}`)
+                      }
+                      onChange={(event) =>
+                        patchSelectedSeats({ label: event.target.value })
+                      }
+                    />
+                  </Field>
+                  <Field label="Estado del asiento">
+                    <select
+                      className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
+                      value={singleSeat.seat.status}
+                      onChange={(event) =>
+                        patchSelectedSeats({
+                          status: event.target.value as
+                            | "available"
+                            | "blocked"
+                            | "reserved",
+                        })
+                      }
+                    >
+                      <option value="available">Activo</option>
+                      <option value="blocked">Inhabilitado</option>
+                      <option value="reserved">Reservado / Cortesia</option>
+                    </select>
+                  </Field>
+                  <Field label="Precio individual (ARS)">
+                    <PriceInput
+                      value={
+                        singleSeat.seat.price ??
+                        (singleSeat.source === "sector"
+                          ? singleSeat.sector.price
+                          : singleSeat.element.price)
+                      }
+                      onValueChange={(value) => {
+                        if (value == null) return
+                        patchSelectedSeats({ price: value })
+                      }}
+                    />
+                  </Field>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field label="X">
+                      <Input
+                        type="number"
+                        value={Math.round(singleSeat.seat.x)}
+                        onChange={(event) =>
+                          patchSelectedSeats({
+                            x: Number(event.target.value) || 0,
+                          })
+                        }
+                      />
+                    </Field>
+                    <Field label="Y">
+                      <Input
+                        type="number"
+                        value={Math.round(singleSeat.seat.y)}
+                        onChange={(event) =>
+                          patchSelectedSeats({
+                            y: Number(event.target.value) || 0,
+                          })
+                        }
+                      />
+                    </Field>
+                  </div>
+                  <Field
+                    label={`Rotacion (${Math.round(singleSeat.seat.rotation ?? 0)} deg)`}
+                  >
+                    <input
+                      type="range"
+                      min={0}
+                      max={360}
+                      value={singleSeat.seat.rotation ?? 0}
+                      onChange={(event) =>
+                        patchSelectedSeats({
+                          rotation: Number(event.target.value),
+                        })
+                      }
+                      className="w-full accent-emerald-500"
+                    />
+                  </Field>
+                </>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    {selectedSeatCount} asientos seleccionados. Los cambios
+                    de estado y precio se aplican a toda la selección.
+                  </p>
+                  <Field label="Estado del asiento">
+                    <select
+                      className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
+                      defaultValue="available"
+                      onChange={(event) =>
+                        patchSelectedSeats({
+                          status: event.target.value as
+                            | "available"
+                            | "blocked"
+                            | "reserved",
+                        })
+                      }
+                    >
+                      <option value="available">Activo</option>
+                      <option value="blocked">Inhabilitado</option>
+                      <option value="reserved">Reservado / Cortesia</option>
+                    </select>
+                  </Field>
+                  <Field label="Precio individual (ARS)">
+                    <PriceInput
+                      value={undefined}
+                      onValueChange={(value) => {
+                        if (value == null) return
+                        patchSelectedSeats({ price: value })
+                      }}
+                    />
+                  </Field>
+                </div>
+              )}
               <Button type="button" variant="outline" onClick={restoreSelectedSeats}>
                 Reactivar seleccionadas
               </Button>
@@ -3837,7 +4488,7 @@ export function InteractiveVenueMapEditor({
                     map={map}
                     onChange={(patch) => commit({ ...mapRef.current, ...patch })}
                   />
-                  <div className="space-y-3 rounded-xl border border-border bg-background p-3">
+                  <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-950 p-3">
                     <p className="text-sm font-semibold text-foreground">
                       Dimensiones del predio
                     </p>
@@ -3914,7 +4565,7 @@ export function InteractiveVenueMapEditor({
                 onLasso={() => setLassoMode((value) => !value)}
                 onUndo={undo}
                 onRedo={redo}
-                onProperties={() => setPropertiesOpen(true)}
+                onProperties={() => openMobilePropertiesSheet()}
               />
             </div>
           ) : null}
@@ -4130,24 +4781,33 @@ function StudioInspectorFrame({
   open,
   onOpenChange,
   propertiesRef,
+  selectionKey = "predio",
   title = "Propiedades",
   description = "Editá nombre, precio y reglas del elemento seleccionado.",
+  collapsed = false,
+  onCollapsedChange,
   children,
 }: {
   isStudio: boolean
   isDesktop: boolean
   open: boolean
-  onOpenChange: (open: boolean) => void
+  onOpenChange: (
+    open: boolean,
+    details?: { reason?: string; cancel?: () => void },
+  ) => void
   propertiesRef: React.RefObject<HTMLElement | null>
+  selectionKey?: string
   title?: string
   description?: string
+  collapsed?: boolean
+  onCollapsedChange?: (collapsed: boolean) => void
   children: React.ReactNode
 }) {
   if (isDesktop && !isStudio) {
     return (
       <aside
         ref={propertiesRef}
-        className="flex flex-col space-y-4 overflow-y-auto border-t border-border bg-card/50 p-4 lg:max-h-[min(70vh,560px)] lg:border-t-0 lg:border-l"
+        className="flex flex-col space-y-4 overflow-y-auto border-t border-border bg-card p-4 text-card-foreground lg:max-h-[min(70vh,560px)] lg:border-t-0 lg:border-l"
       >
         {children}
       </aside>
@@ -4158,19 +4818,48 @@ function StudioInspectorFrame({
     return (
       <aside
         ref={propertiesRef}
-        className="flex h-full w-80 shrink-0 flex-col overflow-hidden border-l border-border bg-card"
+        className={cn(
+          "flex h-full shrink-0 flex-col overflow-hidden border-l border-border bg-card text-card-foreground",
+          collapsed ? "w-12" : "w-80",
+        )}
       >
-        {children}
+        <div
+          className={cn(
+            "flex shrink-0 items-center border-b border-border",
+            collapsed ? "justify-center py-2" : "justify-end px-2 py-1.5",
+          )}
+        >
+          <button
+            type="button"
+            title={collapsed ? "Expandir inspector" : "Contraer inspector"}
+            aria-label={collapsed ? "Expandir inspector" : "Contraer inspector"}
+            onClick={() => onCollapsedChange?.(!collapsed)}
+            className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            {collapsed ? (
+              <PanelRightOpen className="size-4" />
+            ) : (
+              <PanelRightClose className="size-4" />
+            )}
+          </button>
+        </div>
+        {collapsed ? null : children}
       </aside>
     )
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet
+      key="venue-mobile-properties"
+      open={open}
+      onOpenChange={onOpenChange}
+    >
       <SheetContent
         side="bottom"
-        overlayClassName="bg-black/20"
-        className="h-[48dvh] max-h-[48dvh] gap-0 p-0"
+        overlayClassName="bg-black/50"
+        initialFocus={false}
+        finalFocus={false}
+        className="h-[48dvh] max-h-[48dvh] gap-0 border-border bg-card p-0 text-card-foreground"
       >
         <div className="mx-auto mt-2 h-1.5 w-10 rounded-full bg-muted" />
         <SheetHeader>
@@ -4178,6 +4867,7 @@ function StudioInspectorFrame({
           <SheetDescription>{description}</SheetDescription>
         </SheetHeader>
         <div
+          key={selectionKey}
           ref={(node) => {
             propertiesRef.current = node
           }}
@@ -4211,7 +4901,10 @@ function ToolButton({
       variant={active ? "secondary" : "outline"}
       onClick={onClick}
       disabled={disabled}
-      className={cn("h-9 shrink-0 gap-1.5 px-2 md:px-3", active && "ring-1 ring-emerald-500/40")}
+      className={cn(
+        "h-9 shrink-0 gap-1.5 border-zinc-700 bg-zinc-800/50 px-2 text-zinc-200 hover:bg-zinc-800 hover:text-zinc-100 md:px-3",
+        active && "border-zinc-600 bg-zinc-800 text-zinc-100 ring-1 ring-emerald-500/40",
+      )}
     >
       {children}
       {showLabel === true ? (

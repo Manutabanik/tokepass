@@ -10,6 +10,7 @@ import {
 } from "react-hook-form"
 
 import { Label } from "@/components/ui/label"
+import { FIELD_REVIEW_HINT } from "@/lib/errors/app-error"
 import { cn } from "@/lib/utils"
 
 const Form = FormProvider
@@ -57,6 +58,8 @@ function FormMessage({
   ...props
 }: ComponentProps<"p">) {
   if (!children) return null
+  const copy = typeof children === "string" ? children.trim() : ""
+  const showHint = copy.length > 0 && copy !== FIELD_REVIEW_HINT
 
   return (
     <p
@@ -66,6 +69,9 @@ function FormMessage({
       {...props}
     >
       {children}
+      {showHint ? (
+        <span className="mt-0.5 block font-normal">{FIELD_REVIEW_HINT}</span>
+      ) : null}
     </p>
   )
 }

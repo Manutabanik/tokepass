@@ -98,6 +98,7 @@ import { logger } from "@/lib/logger"
 import { writeSecurityAuditLog } from "@/lib/security/audit-log"
 import { mapUnknownError } from "@/lib/errors/error-handler"
 import type { AppErrorCode } from "@/lib/errors/app-error"
+import { fieldFromAppError } from "@/lib/errors/form-field"
 import {
   summarizeVenueMapSkuConflicts,
   validateVenueMapSkuConsistency,
@@ -846,13 +847,19 @@ function persistFailure(error: unknown): {
   success: false
   error: string
   code: AppErrorCode
+  title?: string
+  field?: string
   wizardConflict?: WizardConflict
 } {
   const mapped = mapUnknownError(error)
+  const code = mapped.code === "UNKNOWN" ? "SAVE_FAILED" : mapped.code
+  const field = fieldFromAppError(mapped)
   return {
     success: false,
     error: mapped.message,
-    code: mapped.code,
+    code,
+    title: mapped.title,
+    ...(field ? { field } : {}),
     ...(mapped.action
       ? {
           wizardConflict: {
@@ -1599,6 +1606,8 @@ export type CreateCompleteEventResult =
       success: false
       error: string
       code?: AppErrorCode
+      title?: string
+      field?: string
       wizardConflict?: WizardConflict
     }
 

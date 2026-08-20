@@ -28,6 +28,64 @@ export function emptyCanvasDragAction(opts: {
   return opts.lassoMode ? "marquee" : "ignore"
 }
 
+/** Ignore the synthetic click that follows a touch after opening the sheet. */
+export const SHEET_DISMISS_GUARD_MS = 150
+
+/** Clock read for event handlers. Keep Date.now out of component bodies. */
+export function nowMs() {
+  return Date.now()
+}
+
+type IsolatablePointer = {
+  stopPropagation?: () => void
+  preventDefault?: () => void
+  pointerType?: string
+  cancelBubble?: boolean
+  nativeEvent?: {
+    stopImmediatePropagation?: () => void
+    cancelBubble?: boolean
+  }
+}
+
+/** Keep a canvas hit from bubbling into deselect / sheet-dismiss handlers. */
+export function isolateCanvasPointer(
+  event: IsolatablePointer,
+  options?: { preventGhostClick?: boolean },
+) {
+  event.stopPropagation?.()
+  event.cancelBubble = true
+  const native = event.nativeEvent
+  if (native) {
+    native.cancelBubble = true
+    native.stopImmediatePropagation?.()
+  }
+  if (
+    options?.preventGhostClick &&
+    (event.pointerType === "touch" || event.pointerType === "pen")
+  ) {
+    event.preventDefault?.()
+  }
+}
+
+export function shouldIgnoreSheetDismiss(input: {
+  reason?: string | null
+  nowMs: number
+  guardUntilMs: number
+}): boolean {
+  const reason = input.reason ?? ""
+  if (reason === "close-press" || reason === "escape-key") return false
+  if (input.nowMs < input.guardUntilMs) return true
+  return reason === "focus-out" || reason === "none" || reason === ""
+}
+
+export function isIntentionalSheetClose(reason?: string | null): boolean {
+  return (
+    reason === "close-press" ||
+    reason === "escape-key" ||
+    reason === "outside-press"
+  )
+}
+
 /**
  * World-unit sizes for transform knobs. Fat-finger hits stay ≥4× the visible
  * knob and map to ~48 CSS px on a typical phone canvas.

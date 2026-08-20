@@ -280,6 +280,7 @@ export function formatVenueMapSkuErrors(errors: VenueMapSkuMismatch[]): string {
 export type WizardConflictAction = {
   step: 0 | 1 | 2 | 3 | 4
   label: string
+  field?: string
 }
 
 export type WizardConflict = {
@@ -290,12 +291,14 @@ export type WizardConflict = {
 
 const MAP_ACTION: WizardConflictAction = {
   step: 1,
-  label: "Ir al Paso 2: Mapa y Sectores",
+  label: "Corregir campo",
+  field: "venue.venueMap",
 }
 
 const TICKETS_ACTION: WizardConflictAction = {
   step: 2,
-  label: "Ir al Paso 3: Entradas",
+  label: "Ver detalle",
+  field: "tickets",
 }
 
 function isCapacityMismatch(error: VenueMapSkuMismatch): boolean {

@@ -5,6 +5,7 @@ import {
   Home,
   Landmark,
   PieChart,
+  Presentation,
   QrCode,
   ShoppingBag,
   Settings,
@@ -52,6 +53,11 @@ export const ORGANIZER_NAV: AdminNavItem[] = [
     label: "Preguntas frecuentes",
     href: "/admin/support-faqs",
     icon: CircleHelp,
+  },
+  {
+    label: "Canvas comercial",
+    href: "/admin/canvas-comercial",
+    icon: Presentation,
   },
 ]
 

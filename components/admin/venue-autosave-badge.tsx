@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils"
 
 const LABELS: Record<DebouncedAutosaveStatus, string> = {
   idle: "",
-  dirty: "Sin guardar",
+  dirty: "Cambios sin guardar",
   saving: "Guardando...",
   saved: "Guardado",
   error: "No se pudo guardar",
@@ -43,7 +43,7 @@ export function VenueAutosaveBadge({
         <CheckCircle2 className="size-3.5" aria-hidden="true" />
       )}
       <span>
-        {status === "saved" ? "Guardado ✔️" : LABELS[status]}
+        {LABELS[status]}
       </span>
     </p>
   )

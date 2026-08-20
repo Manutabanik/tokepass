@@ -6,6 +6,7 @@ import {
   isAdminFocusedFlow,
   isPublicEventStorefrontPath,
   isPublicFocusedFlow,
+  isVenueMapWorkspace,
 } from "@/lib/navigation/focused-flows"
 
 describe("focused-flows", () => {
@@ -18,6 +19,13 @@ describe("focused-flows", () => {
     assert.equal(isAdminFocusedFlow("/admin/validator"), true)
     assert.equal(isAdminFocusedFlow("/admin/events"), false)
     assert.equal(isAdminFocusedFlow("/admin"), false)
+  })
+
+  it("detecta el workspace de mapa en /edit", () => {
+    assert.equal(isVenueMapWorkspace("/admin/events/abc/edit"), true)
+    assert.equal(isVenueMapWorkspace("/admin/events/abc/edit/"), true)
+    assert.equal(isVenueMapWorkspace("/admin/events/create"), false)
+    assert.equal(isVenueMapWorkspace("/admin/events/abc"), false)
   })
 
   it("oculta chrome de cuenta en detalle de entrada o compra", () => {

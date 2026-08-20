@@ -4,6 +4,7 @@ import { describe, it } from "node:test"
 import {
   compactVenueElementLabel,
   createVenueElement,
+  explodeVenueSectorToChairs,
   rebuildElementSeats,
   VENUE_SHAPE,
 } from "./venue-element-geometry"
@@ -100,5 +101,46 @@ describe("venue-element-geometry", () => {
       ],
     })
     assert.equal(map.elements[0]?.isLocked, true)
+  })
+
+  it("explota una grada en butacas sin perder fila, numero ni coordenadas", () => {
+    const chairs = explodeVenueSectorToChairs({
+      id: "pullman",
+      name: "PULLMAN",
+      color: "#22d3ee",
+      price: 12000,
+      x: 40,
+      y: 80,
+      rows: 2,
+      seatsPerRow: 2,
+      curvature: 0,
+      aisle: false,
+      seats: [
+        {
+          id: "s-1",
+          row: "3",
+          number: 14,
+          x: 120,
+          y: 160,
+          status: "available",
+        },
+        {
+          id: "s-2",
+          row: "3",
+          number: 15,
+          x: 136,
+          y: 160,
+          status: "reserved",
+          price: 15000,
+        },
+      ],
+    })
+    assert.equal(chairs.length, 2)
+    assert.equal(chairs[0]?.x, 120)
+    assert.equal(chairs[0]?.y, 160)
+    assert.equal(chairs[0]?.label, "Fila 3 - Asiento 14")
+    assert.equal(chairs[0]?.price, 12000)
+    assert.equal(chairs[1]?.price, 15000)
+    assert.equal(chairs[1]?.seats[0]?.status, "reserved")
   })
 })

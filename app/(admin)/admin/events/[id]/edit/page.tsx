@@ -1,6 +1,4 @@
-import { ArrowLeft, Pencil, Sparkles } from "lucide-react"
 import type { Metadata } from "next"
-import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
 
 import { getActiveEventCategories } from "@/app/actions/categories"
@@ -18,8 +16,8 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
 export const metadata: Metadata = {
-  title: "Datos del Evento",
-  description: "Actualizá el lugar y los tipos de entradas.",
+  title: "Editor de mapa",
+  description: "Diseñá el mapa de asientos del evento.",
 }
 
 export default async function EditEventPage({
@@ -115,55 +113,16 @@ export default async function EditEventPage({
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 sm:gap-8">
-      <Link
-        href={impersonation ? `/superadmin/events/${id}` : "/admin/events"}
-        className="inline-flex w-fit items-center gap-2 text-sm text-muted-foreground transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" aria-hidden="true" />
-        {impersonation ? "Volver al control del evento" : "Volver a Mis Eventos"}
-      </Link>
-
-      {impersonation ? (
-        <div
-          role="alert"
-          className="flex items-start gap-3 rounded-2xl border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-amber-100"
-        >
-          <Sparkles className="mt-0.5 size-4 shrink-0 text-amber-300" />
-          <div>
-            <p className="text-sm font-semibold text-amber-200">
-              Asistencia delegada: configurás el evento de {impersonation.name}
-            </p>
-            <p className="mt-1 text-xs text-amber-200/70">
-              Seguís con tu sesión de SuperAdmin. Los cambios quedan en esa
-              productora.
-            </p>
-          </div>
-        </div>
-      ) : null}
-
-      <header>
-        <p className="mb-3 inline-flex items-center gap-2 font-mono text-xs uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-400">
-          <Pencil className="size-3.5" aria-hidden="true" />
-          Datos del Evento
-        </p>
-        <h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
-          Editá: {initialData.title}
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-          Actualizá el título, el lugar y los tipos de entradas. Los cambios no
-          afectan las compras que ya se hicieron.
-        </p>
-      </header>
-
-      <EventCreationWizard
-        initialData={initialData}
-        organizerServiceRate={eventFeeRate(feeConfig)}
-        platformFixedFee={eventFixedFee(feeConfig)}
-        targetOrganizerId={impersonation?.id ?? null}
-        venues={venues}
-        categories={categories}
-      />
-    </main>
+    <EventCreationWizard
+      workspace
+      backHref={impersonation ? `/superadmin/events/${id}` : `/admin/events/${id}`}
+      backLabel="Volver al Panel"
+      initialData={initialData}
+      organizerServiceRate={eventFeeRate(feeConfig)}
+      platformFixedFee={eventFixedFee(feeConfig)}
+      targetOrganizerId={impersonation?.id ?? null}
+      venues={venues}
+      categories={categories}
+    />
   )
 }

@@ -4,6 +4,7 @@ import { memo, useMemo } from "react"
 
 import { VenueElementSymbol } from "@/components/admin/venue-svg-symbols"
 import { compactVenueElementLabel } from "@/lib/seating/venue-element-geometry"
+import { isolateCanvasPointer } from "@/lib/seating/venue-touch"
 import { cn } from "@/lib/utils"
 import type { InteractiveVenueMap, VenueMapElement } from "@/types/venue-map"
 
@@ -17,6 +18,8 @@ const VenueElementShape = memo(function VenueElementShape({
   onElementPointerLeave,
   onElementContextMenu,
   onSeatPointerDown,
+  onElementDoubleClick,
+  onSeatDoubleClick,
   showLabels,
   showChairs,
   interactive,
@@ -47,6 +50,15 @@ const VenueElementShape = memo(function VenueElementShape({
   ) => void
   onSeatPointerDown?: (
     event: React.PointerEvent,
+    element: VenueMapElement,
+    seatId: string,
+  ) => void
+  onElementDoubleClick?: (
+    event: React.MouseEvent,
+    element: VenueMapElement,
+  ) => void
+  onSeatDoubleClick?: (
+    event: React.MouseEvent,
     element: VenueMapElement,
     seatId: string,
   ) => void
@@ -85,6 +97,14 @@ const VenueElementShape = memo(function VenueElementShape({
           ? (event) => onElementPointerDown?.(event, element)
           : undefined
       }
+      onClick={
+        interactive
+          ? (event) => {
+              isolateCanvasPointer(event)
+              event.preventDefault()
+            }
+          : undefined
+      }
       onMouseEnter={
         interactive
           ? (event) => onElementPointerEnter?.(event, element)
@@ -98,6 +118,15 @@ const VenueElementShape = memo(function VenueElementShape({
       onContextMenu={
         interactive
           ? (event) => onElementContextMenu?.(event, element)
+          : undefined
+      }
+      onDoubleClick={
+        interactive
+          ? (event) => {
+              isolateCanvasPointer(event)
+              event.preventDefault()
+              onElementDoubleClick?.(event, element)
+            }
           : undefined
       }
     >
@@ -125,8 +154,17 @@ const VenueElementShape = memo(function VenueElementShape({
           onSeatPointerDown={
             onSeatPointerDown
               ? (event, seatId) => {
-                  event.stopPropagation()
+                  isolateCanvasPointer(event)
                   onSeatPointerDown(event, element, seatId)
+                }
+              : undefined
+          }
+          onSeatDoubleClick={
+            onSeatDoubleClick
+              ? (event, seatId) => {
+                  isolateCanvasPointer(event)
+                  event.preventDefault()
+                  onSeatDoubleClick(event, element, seatId)
                 }
               : undefined
           }
@@ -184,6 +222,8 @@ export function VenueMapElementLayer({
   onElementPointerLeave,
   onElementContextMenu,
   onSeatPointerDown,
+  onElementDoubleClick,
+  onSeatDoubleClick,
   showSeats = true,
   zoom = 1,
   interactive = true,
@@ -215,6 +255,15 @@ export function VenueMapElementLayer({
   ) => void
   onSeatPointerDown?: (
     event: React.PointerEvent,
+    element: VenueMapElement,
+    seatId: string,
+  ) => void
+  onElementDoubleClick?: (
+    event: React.MouseEvent,
+    element: VenueMapElement,
+  ) => void
+  onSeatDoubleClick?: (
+    event: React.MouseEvent,
     element: VenueMapElement,
     seatId: string,
   ) => void
@@ -287,6 +336,12 @@ export function VenueMapElementLayer({
               }
               onSeatPointerDown={
                 visible && interactive ? onSeatPointerDown : undefined
+              }
+              onElementDoubleClick={
+                visible && interactive ? onElementDoubleClick : undefined
+              }
+              onSeatDoubleClick={
+                visible && interactive ? onSeatDoubleClick : undefined
               }
               showLabels={renderLabels || isSelected || isHighlighted}
               showChairs={renderChairs || isSelected}

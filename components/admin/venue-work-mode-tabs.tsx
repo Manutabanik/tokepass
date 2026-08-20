@@ -49,8 +49,8 @@ export function VenueWorkModeTabs({
               className={cn(
                 "flex min-h-12 items-center gap-3 rounded-xl border px-4 py-3 text-left text-sm font-medium touch-manipulation",
                 active
-                  ? "border-emerald-500/50 bg-emerald-500/10 text-foreground"
-                  : "border-border bg-background text-muted-foreground",
+                  ? "border-emerald-500/50 bg-emerald-500/10 text-zinc-100"
+                  : "border-zinc-700 bg-zinc-800/50 text-zinc-400",
               )}
             >
               <Icon className="size-5 shrink-0" aria-hidden="true" />
@@ -78,18 +78,24 @@ export function VenueWorkModeTabs({
     >
       <TabsList
         aria-label="Modo de trabajo"
-        className="h-9 w-full min-w-0 justify-start gap-0.5 overflow-x-auto bg-muted p-0.5 sm:w-auto"
+        className="h-9 w-full min-w-0 justify-center gap-0 overflow-x-auto bg-muted p-0.5 text-muted-foreground sm:w-auto"
       >
-        {MODES.map((mode) => {
+        {MODES.map((mode, index) => {
           const Icon = mode.icon
           return (
             <TabsTrigger
               key={mode.id}
               value={mode.id}
-              className="h-8 shrink-0 gap-1 px-2 text-[11px] sm:px-2.5 sm:text-xs"
+              className="h-8 shrink-0 gap-1 px-2 text-[11px] data-active:bg-background data-active:text-foreground sm:px-2.5 sm:text-xs"
             >
               <Icon className="size-3.5" aria-hidden="true" />
-              <span className="hidden md:inline">{mode.label}</span>
+              <span className="hidden md:inline">
+                {index + 1}. {mode.id === "architecture"
+                  ? "Arquitectura"
+                  : mode.id === "indexing"
+                    ? "Numeración"
+                    : "Precios y tarifas"}
+              </span>
               <span className="md:hidden">{mode.short}</span>
             </TabsTrigger>
           )

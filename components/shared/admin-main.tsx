@@ -3,12 +3,24 @@
 import { usePathname } from "next/navigation"
 import type { ReactNode } from "react"
 
-import { isAdminFocusedFlow } from "@/lib/navigation/focused-flows"
+import {
+  isAdminFocusedFlow,
+  isVenueMapWorkspace,
+} from "@/lib/navigation/focused-flows"
 import { cn } from "@/lib/utils"
 
 export function AdminMain({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const focused = isAdminFocusedFlow(pathname)
+  const workspace = isVenueMapWorkspace(pathname)
+
+  if (workspace) {
+    return (
+      <main className="flex h-full min-h-0 w-full max-w-full flex-1 flex-col overflow-hidden bg-background text-foreground">
+        {children}
+      </main>
+    )
+  }
 
   return (
     <main

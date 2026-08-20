@@ -66,7 +66,7 @@ export function InteractiveVenueMapStudio({
   if (!open || !mounted) return null
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex h-[100dvh] w-full flex-col overflow-hidden overscroll-none bg-background">
+    <div className="fixed inset-0 z-50 flex h-[100dvh] w-screen flex-col overflow-hidden overscroll-none bg-background text-foreground">
       <InteractiveVenueMapEditor
         variant="studio"
         eventTitle={eventTitle}

@@ -39,19 +39,11 @@ export function PosSeatingMap({
   disabled?: boolean
   onToggleSeat: (pick: PosSeatPick) => void
 }) {
-  const [map, setMap] = useState<InteractiveVenueMap | null>(null)
-  const [occupancy, setOccupancy] = useState<
-    Record<string, "available" | "occupied" | "blocked">
-  >({})
-  const [loading, setLoading] = useState(true)
-  const [loadedEventId, setLoadedEventId] = useState(event.id)
-
-  if (event.id !== loadedEventId) {
-    setLoadedEventId(event.id)
-    setMap(null)
-    setOccupancy({})
-    setLoading(true)
-  }
+  const [snapshot, setSnapshot] = useState<{
+    eventId: string
+    map: InteractiveVenueMap | null
+    occupancy: Record<string, "available" | "occupied" | "blocked">
+  } | null>(null)
 
   const priceBySectorId = useMemo(() => {
     const prices: Record<string, number> = {}
@@ -70,19 +62,26 @@ export function PosSeatingMap({
       getEventSeatingAvailability(event.id),
     ]).then(([venueMap, units]) => {
       if (cancelled) return
-      setMap(venueMap)
-      if (venueMap) {
-        const known = flattenVenueMapSeats(venueMap).map((seat) => seat.id)
-        setOccupancy(occupancyFromSeatingUnits(units, known))
-      } else {
-        setOccupancy({})
-      }
-      setLoading(false)
+      setSnapshot({
+        eventId: event.id,
+        map: venueMap,
+        occupancy: venueMap
+          ? occupancyFromSeatingUnits(
+              units,
+              flattenVenueMapSeats(venueMap).map((seat) => seat.id),
+            )
+          : {},
+      })
     })
     return () => {
       cancelled = true
     }
   }, [event.id])
+
+  const map = snapshot?.eventId === event.id ? snapshot.map : null
+  const occupancy =
+    snapshot?.eventId === event.id ? snapshot.occupancy : {}
+  const loading = snapshot?.eventId !== event.id
 
   function resolvePick(
     seatId: string,

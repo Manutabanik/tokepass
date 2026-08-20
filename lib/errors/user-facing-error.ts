@@ -20,8 +20,12 @@ export function toUserFacingError(
     ? fallback
     : GENERIC_PUBLIC_ERROR
   const message = mapUnknownError(text, {
-    code: "INVENTORY_SYNC",
+    code: "SAVE_FAILED",
+    title: "No se pudieron guardar los cambios",
     message: safeFallback,
   }).message
+  if (/^(unknown|error\s*500|internal server error|500)$/i.test(message.trim())) {
+    return safeFallback
+  }
   return isSafeUserFacingCopy(message) ? message : safeFallback
 }

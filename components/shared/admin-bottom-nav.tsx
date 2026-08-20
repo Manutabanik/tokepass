@@ -126,16 +126,41 @@ export function AdminBottomNav({
   userEmail: string
 }) {
   const pathname = usePathname()
+  if (isAdminFocusedFlow(pathname)) {
+    return null
+  }
+
+  return (
+    <AdminBottomNavChrome
+      mode={mode}
+      staffRoles={staffRoles}
+      orgLabel={orgLabel}
+      userLabel={userLabel}
+      userEmail={userEmail}
+    />
+  )
+}
+
+function AdminBottomNavChrome({
+  mode,
+  staffRoles,
+  orgLabel,
+  userLabel,
+  userEmail,
+}: {
+  mode: "organizer" | "staff"
+  staffRoles: EventStaffRole[]
+  orgLabel: string
+  userLabel: string
+  userEmail: string
+}) {
+  const pathname = usePathname()
   const [menuOpen, setMenuOpen] = useState(false)
   const tabs = useMemo(
     () => buildTabs(mode, staffRoles),
     [mode, staffRoles],
   )
   const navigation = getAdminNavItems({ mode, staffRoles })
-
-  if (isAdminFocusedFlow(pathname)) {
-    return null
-  }
 
   return (
     <>

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 
 import { getPosEvents } from "@/app/actions/pos"
 import { PosTerminal } from "@/components/admin/pos-terminal"
+import { ClientErrorBoundary } from "@/components/errors/client-error-boundary"
 import { createClient } from "@/lib/supabase/server"
 
 export const metadata: Metadata = {
@@ -22,16 +23,20 @@ export default async function DashboardPosPage() {
 
   let events: Awaited<ReturnType<typeof getPosEvents>> = []
   try {
-    events = await getPosEvents()
+    const loaded = await getPosEvents()
+    events = Array.isArray(loaded) ? loaded : []
   } catch (error) {
     if (error instanceof Error && error.message === "auth_required") {
       redirect("/login?next=/dashboard/pos")
     }
+    events = []
   }
 
   return (
     <div className="-m-4 h-full min-h-0 sm:-m-8 lg:-m-10">
-      <PosTerminal events={events} />
+      <ClientErrorBoundary homeHref="/admin" homeLabel="Ir al inicio">
+        <PosTerminal events={events} />
+      </ClientErrorBoundary>
     </div>
   )
 }

@@ -23,6 +23,7 @@ export function PriceInput({
   disabled,
   min = 0,
   onBlur,
+  "aria-invalid": ariaInvalid,
 }: {
   value: number | null | undefined
   onValueChange: (value: number | undefined) => void
@@ -33,6 +34,7 @@ export function PriceInput({
   disabled?: boolean
   min?: number
   onBlur?: React.FocusEventHandler<HTMLInputElement>
+  "aria-invalid"?: boolean
 }) {
   const [focused, setFocused] = useState(false)
   const [draft, setDraft] = useState("")
@@ -41,6 +43,7 @@ export function PriceInput({
     <Input
       id={id}
       name={name}
+      aria-invalid={ariaInvalid}
       type="text"
       inputMode="decimal"
       autoComplete="off"

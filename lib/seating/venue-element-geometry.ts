@@ -3,6 +3,7 @@ import type {
   VenueMapElementSeat,
   VenueElementType,
   VenueInfraSubtype,
+  VenueMapSector,
   VenueShapeType,
 } from "@/types/venue-map"
 
@@ -335,4 +336,37 @@ export function applyVenueShape(
     next.seats = rebuildElementSeats(next)
   }
   return next
+}
+
+export function explodeVenueSectorToChairs(
+  sector: VenueMapSector,
+): VenueMapElement[] {
+  return sector.seats.map((seat, index) => {
+    const chair = createVenueElement("vip_chair", index, {
+      x: seat.x,
+      y: seat.y,
+    })
+    chair.id = seat.id || chair.id
+    chair.label =
+      seat.label?.trim() || `Fila ${seat.row} - Asiento ${seat.number}`
+    chair.labelLocked = true
+    chair.sectorName = sector.name
+    chair.color = sector.color
+    chair.price = seat.price ?? sector.price
+    chair.rotation = seat.rotation ?? 0
+    chair.capacity = 1
+    chair.seats = [
+      {
+        id: `${chair.id}-S1`,
+        number: seat.number,
+        x: chair.x,
+        y: chair.y,
+        status: seat.status,
+        ...(seat.price != null ? { price: seat.price } : {}),
+        ...(seat.rotation != null ? { rotation: seat.rotation } : {}),
+        ...(seat.label ? { label: seat.label } : {}),
+      },
+    ]
+    return chair
+  })
 }

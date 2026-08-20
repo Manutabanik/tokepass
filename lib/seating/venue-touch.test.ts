@@ -4,6 +4,10 @@ import { describe, it } from "node:test"
 import {
   applyTwoFingerViewport,
   emptyCanvasDragAction,
+  isolateCanvasPointer,
+  isIntentionalSheetClose,
+  SHEET_DISMISS_GUARD_MS,
+  shouldIgnoreSheetDismiss,
   touchDistance,
   touchMidpoint,
   transformHandleWorldSize,
@@ -85,5 +89,65 @@ describe("venue-touch", () => {
     assert.equal(hit / visual >= 3, true)
     const tight = transformHandleWorldSize(2.5, true)
     assert.equal(tight.hit / tight.visual >= 3, true)
+  })
+
+  it("stops canvas pointer bubbling and marks cancelBubble", () => {
+    let stopped = false
+    let immediate = false
+    const event = {
+      pointerType: "touch",
+      stopPropagation() {
+        stopped = true
+      },
+      preventDefault() {},
+      nativeEvent: {
+        stopImmediatePropagation() {
+          immediate = true
+        },
+      },
+    }
+    isolateCanvasPointer(event, { preventGhostClick: true })
+    assert.equal(stopped, true)
+    assert.equal(immediate, true)
+    assert.equal(event.nativeEvent.cancelBubble, true)
+  })
+
+  it("ignores ghost outside-press during the 150ms guard", () => {
+    const openedAt = 1_000
+    const guardUntil = openedAt + SHEET_DISMISS_GUARD_MS
+    assert.equal(
+      shouldIgnoreSheetDismiss({
+        reason: "outside-press",
+        nowMs: openedAt + 20,
+        guardUntilMs: guardUntil,
+      }),
+      true,
+    )
+    assert.equal(
+      shouldIgnoreSheetDismiss({
+        reason: "focus-out",
+        nowMs: openedAt + 20,
+        guardUntilMs: guardUntil,
+      }),
+      true,
+    )
+    assert.equal(
+      shouldIgnoreSheetDismiss({
+        reason: "close-press",
+        nowMs: openedAt + 20,
+        guardUntilMs: guardUntil,
+      }),
+      false,
+    )
+    assert.equal(
+      shouldIgnoreSheetDismiss({
+        reason: "outside-press",
+        nowMs: guardUntil + 1,
+        guardUntilMs: guardUntil,
+      }),
+      false,
+    )
+    assert.equal(isIntentionalSheetClose("outside-press"), true)
+    assert.equal(isIntentionalSheetClose("focus-out"), false)
   })
 })

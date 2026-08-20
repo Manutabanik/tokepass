@@ -1,5 +1,9 @@
 /** Flujos a pantalla completa: la bottom nav global no debe competir. */
 
+export function isVenueMapWorkspace(pathname: string): boolean {
+  return /^\/admin\/events\/[^/]+\/edit\/?$/.test(pathname)
+}
+
 export function isAdminFocusedFlow(pathname: string): boolean {
   if (pathname.startsWith("/admin/pos")) return true
   if (pathname.startsWith("/dashboard/pos")) return true
@@ -9,7 +13,7 @@ export function isAdminFocusedFlow(pathname: string): boolean {
   if (pathname.startsWith("/admin/bar-scanner")) return true
   if (pathname.startsWith("/admin/events/create")) return true
   if (pathname.startsWith("/admin/events/new")) return true
-  if (/^\/admin\/events\/[^/]+\/edit\/?$/.test(pathname)) return true
+  if (isVenueMapWorkspace(pathname)) return true
   return false
 }
 

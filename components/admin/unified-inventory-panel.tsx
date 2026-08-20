@@ -341,13 +341,11 @@ export function UnifiedInventoryPanel({ form, eventId = null }: Props) {
   })
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" data-field="tickets">
       <MasterManifestTable rows={manifestRows} capacity={capacity} />
       <CapacityBudgetBar form={form} />
       {typeof form.formState.errors.tickets?.message === "string" ? (
-        <p className="text-sm text-destructive" role="alert">
-          {form.formState.errors.tickets.message}
-        </p>
+        <FormMessage>{form.formState.errors.tickets.message}</FormMessage>
       ) : null}
       <div>
         <p className="text-sm font-semibold text-foreground">
@@ -831,6 +829,8 @@ function InventoryRow({
               <FormItem className="md:col-span-3">
                 <FormLabel>{priceLabel}</FormLabel>
                 <PriceInput
+                  name={`tickets.${index}.price`}
+                  aria-invalid={Boolean(fieldState.error)}
                   value={field.value}
                   onValueChange={(value) => field.onChange(value ?? undefined)}
                   className="h-11"
@@ -996,6 +996,8 @@ function InventoryRow({
                 Precio de lista (para mostrar ahorro)
               </FormLabel>
               <PriceInput
+                name={`tickets.${index}.listPrice`}
+                aria-invalid={Boolean(fieldState.error)}
                 value={field.value ?? undefined}
                 onValueChange={(value) => field.onChange(value ?? null)}
                 className="h-11 max-w-xs"

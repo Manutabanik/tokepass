@@ -1,0 +1,136 @@
+import assert from "node:assert/strict"
+import { describe, it } from "node:test"
+
+import { emptyVenueMap, parseVenueMap, serializeVenueMap } from "@/types/venue-map"
+
+describe("venue-map persist", () => {
+  it("roundtrip de butacas individuales con estado, precio y coordenadas", () => {
+    const map = emptyVenueMap()
+    map.sectors = [
+      {
+        id: "platea",
+        name: "PLATEA",
+        color: "#f97316",
+        price: 8000,
+        x: 20,
+        y: 40,
+        rows: 1,
+        seatsPerRow: 1,
+        curvature: 0,
+        aisle: false,
+        seats: [
+          {
+            id: "p-1",
+            row: "A",
+            number: 7,
+            x: 88.5,
+            y: 112.25,
+            status: "reserved",
+            price: 9500,
+            rotation: 15,
+            label: "Fila A - Asiento 7",
+          },
+        ],
+      },
+    ]
+    map.elements = [
+      {
+        id: "chair-1",
+        type: "vip_chair",
+        label: "Fila 2 - Asiento 4",
+        category: "commercial",
+        sectorName: "VIP",
+        x: 200,
+        y: 180,
+        width: 12,
+        height: 12,
+        rotation: 10,
+        price: 18000,
+        color: "#f97316",
+        opacity: 1,
+        chairCount: 1,
+        sideA: 1,
+        sideB: 1,
+        sellMode: "per_seat",
+        priceMode: "per_person",
+        capacity: 1,
+        seats: [
+          {
+            id: "chair-1-S1",
+            number: 4,
+            x: 200,
+            y: 180,
+            status: "blocked",
+            price: 18000,
+            rotation: 10,
+          },
+        ],
+      },
+    ]
+
+    const persisted = parseVenueMap(serializeVenueMap(map))
+    const sectorSeat = persisted.sectors[0]?.seats[0]
+    const elementSeat = persisted.elements[0]?.seats[0]
+    assert.equal(sectorSeat?.status, "reserved")
+    assert.equal(sectorSeat?.price, 9500)
+    assert.equal(sectorSeat?.x, 88.5)
+    assert.equal(sectorSeat?.y, 112.25)
+    assert.equal(sectorSeat?.rotation, 15)
+    assert.equal(sectorSeat?.label, "Fila A - Asiento 7")
+    assert.equal(elementSeat?.status, "blocked")
+    assert.equal(elementSeat?.price, 18000)
+    assert.equal(persisted.elements[0]?.x, 200)
+    assert.equal(persisted.elements[0]?.label, "Fila 2 - Asiento 4")
+  })
+
+  it("acepta aliases de estado y precios en string sin perder la grada", () => {
+    const persisted = parseVenueMap({
+      version: 1,
+      sectors: [
+        {
+          seats: [
+            {
+              id: "a-1",
+              row: "B",
+              number: 2,
+              x: "40.5",
+              y: "80",
+              status: "disabled",
+              price: "12000",
+              rotation: "8",
+            },
+            {
+              id: "a-2",
+              row: "B",
+              number: 3,
+              x: 52,
+              y: 80,
+              status: "active",
+            },
+          ],
+        },
+      ],
+      elements: [
+        {
+          id: "chair-legacy",
+          type: "vip_chair",
+          label: "Butaca suelta",
+          x: 10,
+          y: 20,
+          seats: [{ id: "s1", number: 1, x: 10, y: 20, status: "inactive", price: "5000" }],
+        },
+      ],
+    })
+    const first = persisted.sectors[0]?.seats[0]
+    const second = persisted.sectors[0]?.seats[1]
+    assert.ok(persisted.sectors[0]?.id)
+    assert.equal(persisted.sectors[0]?.name, "Sector")
+    assert.equal(first?.status, "blocked")
+    assert.equal(first?.price, 12000)
+    assert.equal(first?.x, 40.5)
+    assert.equal(first?.rotation, 8)
+    assert.equal(second?.status, "available")
+    assert.equal(persisted.elements[0]?.seats[0]?.status, "blocked")
+    assert.equal(persisted.elements[0]?.seats[0]?.price, 5000)
+  })
+})

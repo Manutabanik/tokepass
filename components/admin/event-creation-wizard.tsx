@@ -20,7 +20,7 @@ import {
   UploadCloud,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import {
   useForm,
   useWatch,
@@ -89,7 +89,11 @@ import {
   syncMapBackedTickets,
   venueMapToPricingMap,
 } from "@/lib/seating/venue-map-pricing"
-import { seatingLayoutToVenueMap } from "@/lib/seating/venue-map-geometry"
+import { InteractiveVenueMapEditor } from "@/components/admin/interactive-venue-map-editor"
+import {
+  seatingLayoutToVenueMap,
+  venueMapToSeatingLayout,
+} from "@/lib/seating/venue-map-geometry"
 import {
   computeEventCapacityFromForm,
   eventCapacityOverflowMessage,
@@ -97,12 +101,18 @@ import {
 } from "@/lib/inventory/capacity-budget"
 import { assignableLogicalSectorIds } from "@/lib/inventory/logical-sectors"
 import { useEventCapacity } from "@/hooks/use-event-capacity"
+import { ActionableFormError } from "@/components/admin/actionable-form-error"
 import {
   GUIDED_ERROR_EVENT,
   mapUnknownError,
   wizardStepFromPath,
   type GuidedErrorAction,
 } from "@/lib/errors/error-handler"
+import { FIELD_REVIEW_HINT } from "@/lib/errors/app-error"
+import {
+  fieldFromAppError,
+  focusInvalidFormField,
+} from "@/lib/errors/form-field"
 import { toUserFacingError } from "@/lib/errors/user-facing-error"
 import {
   conflictFromPersistError,
@@ -223,6 +233,9 @@ export function EventCreationWizard({
   venues = [],
   categories = [],
   initialData,
+  workspace = false,
+  backHref = "/admin/events",
+  backLabel = "Volver al Panel",
 }: {
   organizerServiceRate: number
   platformFixedFee?: number
@@ -230,15 +243,20 @@ export function EventCreationWizard({
   venues?: OrganizerVenue[]
   categories?: Array<{ id: string; name: string; slug: string; iconName: string | null }>
   initialData?: EditableEventData
+  workspace?: boolean
+  backHref?: string
+  backLabel?: string
 }) {
   const router = useRouter()
   const isEditing = Boolean(initialData)
-  const [activeStep, setActiveStep] = useState(0)
+  const [activeStep, setActiveStep] = useState(workspace ? WIZARD_STEP_MAP : 0)
   const [flyerFile, setFlyerFile] = useState<File | null>(null)
   const [flyerError, setFlyerError] = useState<string | null>(null)
   const [resultMessage, setResultMessage] = useState<{
     type: "success" | "error"
     text: string
+    title?: string
+    field?: string
     conflict?: WizardConflict
   } | null>(null)
   const [publishConfirm, setPublishConfirm] = useState<{
@@ -263,6 +281,8 @@ export function EventCreationWizard({
   const capacitySnapshot = useEventCapacity(form)
   const watchedTickets = useWatch({ control: form.control, name: "tickets" })
   const flyerName = useWatch({ control: form.control, name: "basics.flyerName" })
+  const watchedTitle = useWatch({ control: form.control, name: "basics.title" })
+  const watchedVenueMap = useWatch({ control: form.control, name: "venue.venueMap" })
   const isMultiDay = useWatch({
     control: form.control,
     name: "basics.isMultiDay",
@@ -393,47 +413,54 @@ export function EventCreationWizard({
     setWizardStep(target)
   }
 
-  function goToWizardStep(step: number, sectorId?: string) {
-    const resolved = clampWizardStep(step, {
-      hasSeatingPlan,
-      hasSchedule,
-    })
-    if (resolved < 0 || resolved >= WIZARD_STEP_COUNT) return
-    setActiveStep(resolved)
-    setWizardStep(resolved)
-    window.setTimeout(() => {
-      const panel = document.getElementById(`event-wizard-step-${resolved}`)
-      panel?.scrollIntoView({ behavior: "smooth", block: "start" })
-      if (!sectorId) return
-      const target = document.querySelector(
-        `[data-conflict-sector="${CSS.escape(sectorId)}"]`,
-      )
-      if (target instanceof HTMLElement) {
-        target.scrollIntoView({ behavior: "smooth", block: "center" })
-      }
-    }, 50)
-  }
-
-  useEffect(() => {
-    function onGuided(event: Event) {
-      const action = (event as CustomEvent<GuidedErrorAction>).detail
-      if (action == null || typeof action.step !== "number") return
-      const resolved = clampWizardStep(action.step, {
+  const goToWizardStep = useCallback(
+    (step: number, sectorId?: string, field?: string) => {
+      const resolved = clampWizardStep(step, {
         hasSeatingPlan,
         hasSchedule,
       })
       if (resolved < 0 || resolved >= WIZARD_STEP_COUNT) return
       setActiveStep(resolved)
       setWizardStep(resolved)
+      window.setTimeout(() => {
+        const panel = document.getElementById(`event-wizard-step-${resolved}`)
+        panel?.scrollIntoView({ behavior: "smooth", block: "start" })
+        if (field) {
+          focusInvalidFormField(field)
+          return
+        }
+        if (!sectorId) return
+        const target = document.querySelector(
+          `[data-conflict-sector="${CSS.escape(sectorId)}"]`,
+        )
+        if (target instanceof HTMLElement) {
+          target.scrollIntoView({ behavior: "smooth", block: "center" })
+        }
+      }, 80)
+    },
+    [hasSeatingPlan, hasSchedule, setWizardStep],
+  )
+
+  useEffect(() => {
+    function onGuided(event: Event) {
+      const action = (event as CustomEvent<GuidedErrorAction>).detail
+      if (action == null || typeof action.step !== "number") return
+      goToWizardStep(action.step, undefined, action.field)
     }
     window.addEventListener(GUIDED_ERROR_EVENT, onGuided)
     return () => window.removeEventListener(GUIDED_ERROR_EVENT, onGuided)
-  }, [hasSeatingPlan, hasSchedule, setWizardStep])
+  }, [goToWizardStep])
 
-  function showWizardConflict(conflict: WizardConflict, title: string) {
+  function retryLastSave() {
+    void form.handleSubmit((data) => onSubmit(data, "draft"))()
+  }
+
+  function showWizardConflict(conflict: WizardConflict, title: string, field?: string) {
     setResultMessage({
       type: "error",
+      title,
       text: conflict.summary,
+      field,
       conflict,
     })
     toast.error(title, {
@@ -447,11 +474,20 @@ export function EventCreationWizard({
                 key={`${action.step}-${action.label}`}
                 type="button"
                 className="h-10 min-h-10 rounded-full border border-white/20 px-3 text-left text-xs font-semibold text-zinc-100"
-                onClick={() => goToWizardStep(action.step, conflict.sectorId)}
+                onClick={() =>
+                  goToWizardStep(action.step, conflict.sectorId, action.field ?? field)
+                }
               >
                 {action.label}
               </button>
             ))}
+            <button
+              type="button"
+              className="h-10 min-h-10 rounded-full border border-white/20 px-3 text-left text-xs font-semibold text-zinc-100"
+              onClick={() => retryLastSave()}
+            >
+              Reintentar guardado
+            </button>
           </div>
         </div>
       ),
@@ -463,8 +499,23 @@ export function EventCreationWizard({
     title: string,
     wizardConflict?: WizardConflict,
     code?: string,
+    field?: string,
   ) {
-    const mapped = mapUnknownError(code ?? raw)
+    const mapped = mapUnknownError({
+      code,
+      message: raw,
+      title,
+      field,
+    })
+    const resolvedField = field ?? fieldFromAppError(mapped)
+    const safeTitle = toUserFacingError(mapped.title || title)
+    const safeMessage = toUserFacingError(mapped.message)
+    if (resolvedField) {
+      form.setError(resolvedField as never, {
+        type: "manual",
+        message: FIELD_REVIEW_HINT,
+      })
+    }
     const conflict =
       wizardConflict ??
       conflictFromPersistError(mapped.message) ??
@@ -472,11 +523,55 @@ export function EventCreationWizard({
         ? { summary: mapped.message, actions: [mapped.action] }
         : null)
     if (conflict) {
-      showWizardConflict(conflict, title)
+      showWizardConflict(conflict, safeTitle, resolvedField)
+      window.setTimeout(() => {
+        if (mapped.action) {
+          goToWizardStep(mapped.action.step, conflict.sectorId, resolvedField)
+        } else {
+          focusInvalidFormField(resolvedField)
+        }
+      }, 80)
       return
     }
-    setResultMessage({ type: "error", text: mapped.message })
-    toast.error(title, { description: mapped.message })
+    setResultMessage({
+      type: "error",
+      title: safeTitle,
+      text: safeMessage,
+      field: resolvedField,
+    })
+    toast.error(safeTitle, {
+      duration: 14000,
+      description: (
+        <div className="space-y-2">
+          <p>{safeMessage}</p>
+          <div className="flex flex-col gap-1">
+            {resolvedField || mapped.action ? (
+              <button
+                type="button"
+                className="h-10 min-h-10 rounded-full border border-white/20 px-3 text-left text-xs font-semibold text-zinc-100"
+                onClick={() => {
+                  if (mapped.action) {
+                    goToWizardStep(mapped.action.step, undefined, resolvedField)
+                    return
+                  }
+                  focusInvalidFormField(resolvedField)
+                }}
+              >
+                Corregir campo
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="h-10 min-h-10 rounded-full border border-white/20 px-3 text-left text-xs font-semibold text-zinc-100"
+              onClick={() => retryLastSave()}
+            >
+              Reintentar guardado
+            </button>
+          </div>
+        </div>
+      ),
+    })
+    window.setTimeout(() => focusInvalidFormField(resolvedField), 80)
   }
 
   async function onSaveIdentity(data: EventFormValues) {
@@ -516,9 +611,10 @@ export function EventCreationWizard({
     if (!result.success) {
       reportPersistError(
         result.error,
-        "No se pudo guardar la identidad",
+        result.title ?? "No se pudo guardar la identidad",
         result.wizardConflict,
         result.code,
+        result.field,
       )
       return
     }
@@ -535,12 +631,12 @@ export function EventCreationWizard({
   async function onSubmit(
     data: EventFormValues,
     intent: "draft" | "publish" = "draft",
-  ) {
+  ): Promise<boolean> {
     setResultMessage(null)
 
-    if (intent === "draft" && activeStep === 0) {
+    if (intent === "draft" && activeStep === 0 && !workspace) {
       await onSaveIdentity(data)
-      return
+      return true
     }
 
     const capacity = computeEventCapacityFromForm(data)
@@ -550,7 +646,7 @@ export function EventCreationWizard({
       toast.error("El aforo está excedido", { description: message })
       setResultMessage({ type: "error", text: message })
       goToWizardStep(2)
-      return
+      return false
     }
 
     if (intent === "publish") {
@@ -569,7 +665,7 @@ export function EventCreationWizard({
         goToWizardStep(
           mapped.action?.step ?? wizardStepFromPath(first?.path ?? []),
         )
-        return
+        return false
       }
     }
 
@@ -579,7 +675,7 @@ export function EventCreationWizard({
       setFlyerError(message)
       form.setError("basics.flyerName", { type: "manual", message })
       setActiveStep(0)
-      return
+      return false
     }
 
     let payloadData = data
@@ -610,8 +706,11 @@ export function EventCreationWizard({
           : undefined,
       })
       if (!persist.success) {
-        reportPersistError(persist.error, "No se pudo guardar el lugar")
-        return
+        reportPersistError(
+          persist.error,
+          "No se pudieron guardar los cambios en el lugar",
+        )
+        return false
       }
       payloadData = {
         ...data,
@@ -674,13 +773,15 @@ export function EventCreationWizard({
     if (!result.success) {
       reportPersistError(
         result.error,
-        isEditing || editingId
-          ? "No se pudieron guardar los cambios"
-          : "No se pudo crear el evento",
+        result.title ??
+          (isEditing || editingId
+            ? "No se pudieron guardar los cambios"
+            : "No se pudo crear el evento"),
         result.wizardConflict,
         result.code,
+        result.field,
       )
-      return
+      return false
     }
 
     // Persiste matriz Zona × Tier
@@ -707,7 +808,7 @@ export function EventCreationWizard({
         },
       )
       setPublishConfirm({ open: true, eventId: result.eventId })
-      return
+      return true
     }
 
     toast.success("Cambios guardados", {
@@ -715,12 +816,98 @@ export function EventCreationWizard({
         ? "Borrador con flyer listo. Completá barra y multimedia cuando quieras."
         : "Podés seguir editando en esta pestaña.",
     })
+    return true
+  }
+
+  function persistWorkspaceMap(next: ReturnType<typeof parseVenueMap>) {
+    form.setValue("venue.venueMap", next, { shouldDirty: true })
+    form.setValue("venue.seatingLayout", venueMapToSeatingLayout(next), {
+      shouldDirty: true,
+    })
+    form.setValue("venue.includesSeatingMap", true, { shouldDirty: true })
+    form.setValue("basics.hasSeatingPlan", true, { shouldDirty: true })
+    applyMapInventory(next)
+  }
+
+  if (workspace) {
+    return (
+      <>
+        <Form {...form}>
+          <form
+            className="contents"
+            onSubmit={form.handleSubmit((data) => onSubmit(data, "draft"))}
+          >
+            <InteractiveVenueMapEditor
+              variant="workspace"
+              eventTitle={watchedTitle || initialData?.title || "Evento"}
+              onEventTitleChange={(title) =>
+                form.setValue("basics.title", title, { shouldDirty: true })
+              }
+              backHref={backHref}
+              backLabel={backLabel}
+              value={parseVenueMap(watchedVenueMap)}
+              tickets={watchedTickets}
+              saving={form.formState.isSubmitting}
+              onChange={(next) => persistWorkspaceMap(next)}
+              onAutoSave={(next) => persistWorkspaceMap(next)}
+              onSave={async (next) => {
+                persistWorkspaceMap(next)
+                let persisted = false
+                await form.handleSubmit(async (data) => {
+                  persisted = (await onSubmit(data, "draft")) === true
+                })()
+                if (!persisted) {
+                  throw new Error("No se pudo guardar el mapa")
+                }
+              }}
+            />
+          </form>
+        </Form>
+        {resultMessage?.type === "error" ? (
+          <div className="pointer-events-auto fixed top-16 right-3 left-3 z-[120] md:left-auto md:w-[24rem]">
+            {resultMessage.conflict ? (
+              <WizardConflictBanner
+                title={resultMessage.title}
+                conflict={resultMessage.conflict}
+                onGoToStep={goToWizardStep}
+                onRetry={() => retryLastSave()}
+              />
+            ) : (
+              <ActionableFormError
+                title={resultMessage.title ?? "No se pudieron guardar los cambios"}
+                description={toUserFacingError(resultMessage.text)}
+                onFixField={
+                  resultMessage.field
+                    ? () => focusInvalidFormField(resultMessage.field)
+                    : undefined
+                }
+                onRetry={() => retryLastSave()}
+              />
+            )}
+          </div>
+        ) : null}
+        {publishConfirm.open ? (
+          <PublishEventConfirmDialog
+            eventId={publishConfirm.eventId}
+            open={publishConfirm.open}
+            onOpenChange={(open) =>
+              setPublishConfirm((current) => ({ ...current, open }))
+            }
+            onPublished={() => {
+              router.push(`/admin/events/${publishConfirm.eventId}`)
+              router.refresh()
+            }}
+          />
+        ) : null}
+      </>
+    )
   }
 
   return (
     <>
     <Form {...form}>
       <form
+        className="dark text-zinc-100"
         onSubmit={form.handleSubmit(
           (data) => onSubmit(data, "draft"),
           () => {
@@ -753,7 +940,7 @@ export function EventCreationWizard({
           </div>
           <TabsList
             className={cn(
-              "flex w-full items-stretch gap-2 overflow-x-auto rounded-2xl border border-zinc-200 bg-white p-2 shadow-lg shadow-zinc-200/70 backdrop-blur-md group-data-horizontal/tabs:h-auto max-sm:snap-x max-sm:snap-mandatory dark:border-zinc-800 dark:bg-zinc-900/80 dark:shadow-black/20 sm:grid sm:grid-cols-2 sm:overflow-visible",
+              "flex w-full items-stretch gap-2 overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-900 p-2 text-zinc-100 shadow-lg shadow-black/20 backdrop-blur-md group-data-horizontal/tabs:h-auto max-sm:snap-x max-sm:snap-mandatory sm:grid sm:grid-cols-2 sm:overflow-visible",
               visibleSteps.length >= 5
                 ? "lg:grid-cols-5"
                 : visibleSteps.length === 4
@@ -771,15 +958,15 @@ export function EventCreationWizard({
                   key={title}
                   value={String(index)}
                   disabled={!available}
-                  className="h-auto min-w-[15.5rem] shrink-0 snap-start items-center justify-start gap-3 rounded-xl border border-transparent bg-transparent p-3 text-left text-foreground opacity-60 transition-all hover:bg-zinc-100 hover:opacity-100 data-active:border-emerald-500/40 data-active:bg-zinc-100 data-active:text-zinc-900 data-active:opacity-100 data-active:shadow-[0_0_20px_rgba(16,185,129,0.15)] dark:hover:bg-zinc-800/40 dark:data-active:bg-zinc-800/90 dark:data-active:text-white sm:min-w-0"
+                  className="h-auto min-w-[15.5rem] shrink-0 snap-start items-center justify-start gap-3 rounded-xl border border-transparent bg-transparent p-3 text-left text-zinc-200 opacity-60 transition-all hover:bg-zinc-800 hover:opacity-100 data-active:border-emerald-500/40 data-active:bg-zinc-800 data-active:text-zinc-100 data-active:opacity-100 data-active:shadow-[0_0_20px_rgba(16,185,129,0.15)] sm:min-w-0"
                 >
                   <span
                     className={cn(
-                      "flex size-8 shrink-0 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800 font-mono text-sm font-bold text-muted-foreground",
+                      "flex size-8 shrink-0 items-center justify-center rounded-lg bg-zinc-800 font-mono text-sm font-bold text-zinc-400",
                       completed &&
-                        "border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+                        "border border-emerald-500/20 bg-emerald-500/10 text-emerald-400",
                       resolvedStep === index &&
-                        "border border-emerald-500/30 bg-emerald-500/20 text-emerald-700 dark:text-emerald-400",
+                        "border border-emerald-500/30 bg-emerald-500/20 text-emerald-400",
                     )}
                   >
                     {completed ? (
@@ -801,7 +988,7 @@ export function EventCreationWizard({
             })}
           </TabsList>
 
-          <Card className="gap-0 rounded-3xl border border-zinc-200 bg-gradient-to-b from-white to-zinc-50 pt-0 pb-32 shadow-2xl shadow-zinc-200/80 ring-0 max-sm:overflow-x-hidden dark:border-zinc-800 dark:from-zinc-900/90 dark:to-zinc-950/95 dark:shadow-black/30 lg:pb-0 [&_[data-slot=input]]:rounded-xl [&_[data-slot=input]]:border-zinc-200 [&_[data-slot=input]]:bg-white [&_[data-slot=input]]:text-zinc-900 [&_[data-slot=input]]:shadow-inner [&_[data-slot=input]]:placeholder:text-slate-500 dark:placeholder:text-muted-foreground [&_[data-slot=input]:focus-visible]:border-emerald-500/60 [&_[data-slot=input]:focus-visible]:bg-white [&_[data-slot=input]:focus-visible]:ring-2 [&_[data-slot=input]:focus-visible]:ring-emerald-500/15 dark:[&_[data-slot=input]]:border-zinc-800 dark:[&_[data-slot=input]]:bg-zinc-950 dark:[&_[data-slot=input]]:text-white dark:[&_[data-slot=input]]:placeholder:text-zinc-600 dark:[&_[data-slot=input]:focus-visible]:bg-zinc-900 [&_[data-slot=select-trigger]]:rounded-xl [&_[data-slot=select-trigger]]:border-zinc-200 [&_[data-slot=select-trigger]]:bg-zinc-50 [&_[data-slot=select-trigger]]:text-zinc-900 [&_[data-slot=select-trigger]]:shadow-inner [&_[data-slot=select-trigger]:focus-visible]:border-emerald-500/60 [&_[data-slot=select-trigger]:focus-visible]:ring-2 [&_[data-slot=select-trigger]:focus-visible]:ring-emerald-500/15 dark:[&_[data-slot=select-trigger]]:border-zinc-800 dark:[&_[data-slot=select-trigger]]:bg-zinc-950/80 dark:[&_[data-slot=select-trigger]]:text-white">
+          <Card className="gap-0 rounded-3xl border border-zinc-800 bg-zinc-950 bg-gradient-to-b from-zinc-900 to-zinc-950 pt-0 pb-32 text-zinc-100 shadow-2xl shadow-black/30 ring-0 max-sm:overflow-x-hidden lg:pb-0 [&_[data-slot=input]]:rounded-xl [&_[data-slot=input]]:border-zinc-800 [&_[data-slot=input]]:bg-zinc-950 [&_[data-slot=input]]:text-zinc-100 [&_[data-slot=input]]:shadow-inner [&_[data-slot=input]]:placeholder:text-zinc-500 [&_[data-slot=input]:focus-visible]:border-emerald-500/60 [&_[data-slot=input]:focus-visible]:bg-zinc-900 [&_[data-slot=input]:focus-visible]:ring-2 [&_[data-slot=input]:focus-visible]:ring-emerald-500/15 [&_[data-slot=select-trigger]]:rounded-xl [&_[data-slot=select-trigger]]:border-zinc-800 [&_[data-slot=select-trigger]]:bg-zinc-950 [&_[data-slot=select-trigger]]:text-zinc-100 [&_[data-slot=select-trigger]]:shadow-inner [&_[data-slot=select-trigger]:focus-visible]:border-emerald-500/60 [&_[data-slot=select-trigger]:focus-visible]:ring-2 [&_[data-slot=select-trigger]:focus-visible]:ring-emerald-500/15">
             <TabsContent
               keepMounted
               value="0"
@@ -1167,6 +1354,7 @@ export function EventCreationWizard({
                   </FormLabel>
                   <label
                     htmlFor="event-flyer"
+                    data-field="basics.flyerName"
                     className="group relative flex min-h-[280px] flex-1 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/40 p-8 text-center transition-all hover:border-emerald-500/50 hover:bg-white dark:hover:bg-zinc-900/80"
                   >
                     {initialData?.flyerUrl && !flyerFile ? (
@@ -1231,10 +1419,10 @@ export function EventCreationWizard({
                   </label>
                   {(flyerError ||
                     form.formState.errors.basics?.flyerName?.message) && (
-                    <p className="text-sm text-red-400" role="alert">
+                    <FormMessage>
                       {flyerError ??
                         form.formState.errors.basics?.flyerName?.message}
-                    </p>
+                    </FormMessage>
                   )}
                 </FormItem>
                 <div className="lg:col-span-12">
@@ -1442,25 +1630,33 @@ export function EventCreationWizard({
               <div className="px-4 pb-2 lg:px-8">
                 {resultMessage.conflict ? (
                   <WizardConflictBanner
+                    title={resultMessage.title}
                     conflict={resultMessage.conflict}
                     onGoToStep={goToWizardStep}
+                    onRetry={() => retryLastSave()}
                   />
                 ) : (
-                  <p
-                    role="alert"
-                    className="rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-800 dark:text-red-200"
-                  >
-                    {toUserFacingError(resultMessage.text)}
-                  </p>
+                  <ActionableFormError
+                    title={resultMessage.title ?? "No se pudieron guardar los cambios"}
+                    description={toUserFacingError(resultMessage.text)}
+                    onFixField={
+                      resultMessage.field
+                        ? () => {
+                            if (resultMessage.conflict) return
+                            focusInvalidFormField(resultMessage.field)
+                          }
+                        : undefined
+                    }
+                    onRetry={() => retryLastSave()}
+                  />
                 )}
               </div>
             ) : null}
 
             <div
               className={cn(
-                "fixed inset-x-0 bottom-0 z-50 flex w-full flex-col gap-2 border-t border-zinc-200 bg-white/95 px-4 pt-3 backdrop-blur-xl",
+                "fixed inset-x-0 bottom-0 z-50 flex w-full flex-col gap-2 border-t border-zinc-800 bg-zinc-950/95 px-4 pt-3 text-zinc-100 backdrop-blur-xl",
                 "pb-[max(0.75rem,env(safe-area-inset-bottom))]",
-                "dark:border-white/8 dark:bg-[#0c0c0f]/95",
                 "lg:static lg:z-auto lg:flex-row lg:items-center lg:justify-between lg:bg-transparent lg:px-6 lg:py-5 lg:pb-5 lg:backdrop-blur-none",
               )}
             >
@@ -1475,7 +1671,7 @@ export function EventCreationWizard({
                   onClick={() =>
                     void moveToStep(prevWizardStep(resolvedStep, wizardFlags))
                   }
-                  className="min-h-11 min-w-11 text-muted-foreground hover:bg-zinc-100 hover:text-foreground dark:hover:bg-white/5"
+                  className="min-h-11 min-w-11 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
                 >
                   <ArrowLeft />
                   Anterior
@@ -1484,7 +1680,7 @@ export function EventCreationWizard({
                   type="submit"
                   disabled={form.formState.isSubmitting || inventoryBlocked}
                   variant="ghost"
-                  className="min-h-11 min-w-11 text-muted-foreground hover:bg-zinc-100 hover:text-foreground dark:hover:bg-white/5 lg:hidden"
+                  className="min-h-11 min-w-11 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 lg:hidden"
                 >
                   {form.formState.isSubmitting ? (
                     <LoaderCircle className="animate-spin" />
