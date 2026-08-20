@@ -3,6 +3,7 @@
 import { useEffect } from "react"
 import { usePathname } from "next/navigation"
 
+import { purgeExpiredOfflineTickets } from "@/lib/offline-store"
 import { requestDoorAssetCache } from "@/lib/pwa/door-cache"
 import { IosInstructionsModal } from "@/components/pwa/ios-instructions-modal"
 import { PwaUpdateBanner } from "@/components/pwa/pwa-update-banner"
@@ -37,6 +38,7 @@ export function PwaRegister() {
 
   useEffect(() => {
     ensurePwaInstallCapture()
+    void purgeExpiredOfflineTickets().catch(() => {})
   }, [])
 
   useEffect(() => {

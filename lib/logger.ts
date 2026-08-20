@@ -1,4 +1,5 @@
 import { reportErrorToSentry } from "@/lib/sentry-report"
+import { scrubSensitiveValue } from "@/lib/sentry/privacy"
 
 type LogLevel = "error" | "warn" | "info"
 
@@ -39,7 +40,7 @@ function emit(level: LogLevel, fields: LogFields) {
   const { error, stack, message, context, ...rest } = fields
   const serialized = error != null ? serializeError(error) : null
 
-  const payload = {
+  const payload = scrubSensitiveValue({
     timestamp: new Date().toISOString(),
     level,
     context,
@@ -49,7 +50,7 @@ function emit(level: LogLevel, fields: LogFields) {
       ? { name: serialized.name, message: serialized.message }
       : undefined,
     ...rest,
-  }
+  }) as Record<string, unknown>
 
   const line = JSON.stringify(payload)
 
@@ -58,8 +59,8 @@ function emit(level: LogLevel, fields: LogFields) {
     reportErrorToSentry({
       message: String(payload.message ?? "error"),
       context,
-      stack: payload.stack,
-      extra: rest as Record<string, unknown>,
+      stack: typeof payload.stack === "string" ? payload.stack : undefined,
+      extra: scrubSensitiveValue(rest) as Record<string, unknown>,
     })
   } else if (level === "warn") {
     console.warn(line)

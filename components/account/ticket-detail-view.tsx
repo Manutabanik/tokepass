@@ -3,10 +3,16 @@
 import {
   ArrowLeft,
   Calendar,
+  Clock,
+  LoaderCircle,
   MapPin,
   Printer,
+  Send,
   ShieldCheck,
+  ShoppingBag,
+  Undo2,
   User,
+  XCircle,
 } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
@@ -23,7 +29,9 @@ import { WalletPassButtons } from "@/components/account/wallet-pass-buttons"
 import { SaveTicketButton } from "@/components/public/save-ticket-button"
 import { SponsorGrid } from "@/components/public/sponsor-grid"
 import { StoryFlyerWalletButton } from "@/components/public/story-flyer-modal"
-import { TransferTicketDialog, CancelTicketTransferButton } from "@/components/public/transfer-ticket-dialog"
+import { TransferShareConfirmDialog } from "@/components/public/transfer-share-confirm-dialog"
+import { useTicketResaleVisual } from "@/components/public/use-ticket-resale-visual"
+import { useTicketTransferVisual } from "@/components/public/use-ticket-transfer-visual"
 import { useOnlineStatus } from "@/components/pwa/use-online-status"
 import { BrandMark } from "@/components/shared/brand-logo"
 import { Button } from "@/components/ui/button"
@@ -71,15 +79,22 @@ export function TicketDetailView({
     }
   }, [online, userId, initialTicket.id])
 
+  const [transferConfirmOpen, setTransferConfirmOpen] = useState(false)
+  const transfer = useTicketTransferVisual(ticket)
+  const resale = useTicketResaleVisual(ticket)
+  const visualStatus =
+    transfer.optimisticVisual ?? resale.optimisticVisual ?? ticket.visualStatus
+  const transferPending = visualStatus === "transfer_pending"
+  const resalePending = visualStatus === "resale_pending"
   const canShowQr =
-    ticket.status === "valid" && otpUnlocked && !ticket.pendingTransfer
+    ticket.status === "valid" && otpUnlocked && visualStatus === "active"
   const isStatic = ticket.qrType === "static"
   const canTransfer =
     ticket.status === "valid" &&
+    ticket.admissionsUsed === 0 &&
     ticket.transferCount < ticket.maxTransfersAllowed &&
     online &&
-    !ticket.activeResaleListingId &&
-    !ticket.pendingTransfer
+    visualStatus === "active"
 
   const mapsHref = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
     ticket.venueName
@@ -233,32 +248,78 @@ export function TicketDetailView({
             </div>
           ) : null}
         </div>
+      ) : transferPending ? (
+        <div className="space-y-3 rounded-3xl border border-amber-400/50 bg-amber-100 p-5 dark:border-amber-500/40 dark:bg-amber-500/15">
+          <div
+            role="status"
+            className="flex items-start gap-3 text-left text-sm font-semibold leading-5 text-amber-950 dark:text-amber-100"
+          >
+            <Clock className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
+            Esperando que tu amigo acepte la entrada
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={transfer.pending || !transfer.transferId}
+            onClick={transfer.cancelSend}
+            className="min-h-12 w-full rounded-2xl text-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-500/10"
+          >
+            {transfer.pending ? (
+              <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <XCircle className="size-4" aria-hidden="true" />
+            )}
+            Cancelar envío
+          </Button>
+        </div>
+      ) : resalePending ? (
+        <div className="space-y-3 rounded-3xl bg-slate-100 p-5">
+          <div
+            role="status"
+            className="flex flex-col items-center gap-3 text-center text-sm font-semibold leading-5 text-slate-800"
+          >
+            <ShoppingBag className="size-8 text-slate-600" aria-hidden="true" />
+            Entrada en venta. Relajate, nosotros nos encargamos.
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={resale.pending || !resale.listingId}
+            onClick={resale.withdraw}
+            className="min-h-12 w-full rounded-2xl"
+          >
+            {resale.pending ? (
+              <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Undo2 className="size-4" aria-hidden="true" />
+            )}
+            Sacar de la venta
+          </Button>
+        </div>
       ) : (
         <div className="rounded-3xl border border-dashed border-border bg-muted/40 px-5 py-10 text-center text-sm text-muted-foreground">
-          {ticket.pendingTransfer
-            ? `Transferencia pendiente a ${ticket.pendingTransfer.receiverEmail}. El Living QR está oculto.`
-            : `Esta entrada ya no muestra QR vivo${ticket.status === "transferred" ? " (fue transferida)" : ""}.`}
+          {`Esta entrada ya no muestra QR vivo${ticket.status === "transferred" ? " (fue transferida)" : ""}.`}
         </div>
       )}
 
       <div className="grid gap-3">
-        {ticket.pendingTransfer && online ? (
-          <CancelTicketTransferButton
-            transferId={ticket.pendingTransfer.id}
-            receiverEmail={ticket.pendingTransfer.receiverEmail}
-            className="min-h-12 w-full rounded-2xl"
-          />
-        ) : null}
         {canTransfer ? (
-          <TransferTicketDialog
-            ticketId={ticket.id}
-            eventTitle={ticket.eventTitle}
-            triggerLabel="Transferir a un amigo"
-            triggerClassName="min-h-12 w-full rounded-2xl"
-          />
+          <Button
+            type="button"
+            disabled={transfer.pending}
+            onClick={() => setTransferConfirmOpen(true)}
+            className="min-h-12 w-full rounded-2xl bg-green-600 text-white hover:bg-green-700"
+          >
+            {transfer.pending ? (
+              <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Send className="size-4" aria-hidden="true" />
+            )}
+            Enviar a un amigo
+          </Button>
         ) : null}
 
-        {ticket.status === "valid" && !ticket.pendingTransfer ? (
+        {ticket.status === "valid" && visualStatus === "active" ? (
           <>
             <WalletPassButtons
               ticketId={ticket.id}
@@ -341,6 +402,17 @@ export function TicketDetailView({
           </li>
         </ul>
       </section>
+
+      <TransferShareConfirmDialog
+        open={transferConfirmOpen}
+        onOpenChange={setTransferConfirmOpen}
+        eventTitle={ticket.eventTitle}
+        pending={transfer.pending}
+        onConfirm={() => {
+          setTransferConfirmOpen(false)
+          transfer.sendToFriend(ticket.id, ticket.eventTitle)
+        }}
+      />
     </div>
   )
 }

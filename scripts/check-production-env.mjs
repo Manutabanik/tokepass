@@ -25,6 +25,16 @@ const requiredGroups = [
   ["RESEND_API_KEY"],
   ["CHECKOUT_FULFILLMENT_SECRET"],
   ["GUEST_TICKET_SECRET"],
+  ["UPSTASH_REDIS_REST_URL"],
+  ["UPSTASH_REDIS_REST_TOKEN"],
+  ["WAITING_ROOM_SECRET"],
+  [
+    "TURNSTILE_SECRET_KEY",
+    "CLOUDFLARE_TURNSTILE_SECRET_KEY",
+    "RECAPTCHA_SECRET_KEY",
+    "RECAPTCHA_SECRET",
+  ],
+  ["NEXT_PUBLIC_TURNSTILE_SITE_KEY", "NEXT_PUBLIC_RECAPTCHA_SITE_KEY"],
 ]
 
 for (const group of requiredGroups) {
@@ -67,11 +77,22 @@ for (const group of [
   ["CHECKOUT_FULFILLMENT_SECRET"],
   ["GUEST_TICKET_SECRET"],
   ["RESEND_API_KEY"],
+  ["UPSTASH_REDIS_REST_TOKEN"],
+  ["WAITING_ROOM_SECRET"],
 ]) {
   const found = firstConfigured(...group)
   if (found && found.value.length < 24) {
     errors.push(`${found.name} es demasiado corta`)
   }
+}
+
+if (process.env.MP_FORCE_SANDBOX === "1") {
+  errors.push("MP_FORCE_SANDBOX=1 no está permitido en producción")
+}
+
+const mpToken = firstConfigured("MERCADOPAGO_ACCESS_TOKEN", "MP_ACCESS_TOKEN")
+if (mpToken?.value.startsWith("TEST-")) {
+  errors.push(`${mpToken.name} no puede ser un token TEST- en producción`)
 }
 
 if (errors.length > 0) {

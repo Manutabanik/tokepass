@@ -205,7 +205,8 @@ export function EventMassRefundDangerZone({
               <span className="font-semibold text-foreground">
                 {preview.eventTitle}
               </span>
-              .
+              . Esta acción exige autenticación MFA (AAL2) en tu sesión de Super
+              Admin.
             </DialogDescription>
           </DialogHeader>
 

@@ -16,8 +16,15 @@ export async function createClient() {
         },
         setAll(cookiesToSet) {
           try {
+            const secure =
+              process.env.VERCEL === "1" ||
+              process.env.VERCEL_ENV === "production"
             cookiesToSet.forEach(({ name, value, options }) => {
-              cookieStore.set(name, value, options)
+              cookieStore.set(name, value, {
+                ...options,
+                sameSite: "lax",
+                secure,
+              })
             })
           } catch {
             // Server Components cannot write cookies. The root proxy refreshes them.

@@ -1,6 +1,7 @@
 export type OfflineFlushTicket = {
   id: string
   pending_transfer?: boolean | null
+  listed_for_resale?: boolean | null
   status?: string | null
 }
 
@@ -17,6 +18,7 @@ export function selectOfflineScansReadyToFlush<
     const ticket = byId.get(item.ticket_id)
     if (!ticket) return false
     if (ticket.pending_transfer) return false
+    if (ticket.listed_for_resale) return false
     const status = String(ticket.status ?? "").trim().toLowerCase()
     if (
       status === "transferred" ||

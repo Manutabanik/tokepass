@@ -9,12 +9,12 @@ import {
   isGuestOrderToken,
   uniqueTicketCount,
 } from "@/lib/checkout/guest-token"
-import { getCheckoutIpLimiter } from "@/lib/checkout/memory-rate-limit"
 import {
   sanitizeDeviceHash,
   sanitizeDwellMs,
   type CheckoutRequestContext,
 } from "@/lib/checkout/request-context"
+import { consumeNamedRateLimit } from "@/lib/security/distributed-rate-limit"
 import { logger } from "@/lib/logger"
 import { resolvePurchaseLimit } from "@/lib/checkout-limits"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -22,7 +22,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 export async function checkoutIpBurstBlocked(
   ctx: CheckoutRequestContext,
 ): Promise<boolean> {
-  return !getCheckoutIpLimiter().consume(ctx.ip)
+  return !(await consumeNamedRateLimit("checkoutIp", ctx.ip))
 }
 
 export async function checkoutFailuresBlocked(
@@ -100,6 +100,8 @@ export async function persistCheckoutSecurityEvent(input: {
   ctx: CheckoutRequestContext
   deviceHash?: string | null
   dwellMs?: number | null
+  captchaProvider?: string | null
+  captchaScore?: number | null
 }): Promise<void> {
   try {
     const admin = createAdminClient()
@@ -111,8 +113,8 @@ export async function persistCheckoutSecurityEvent(input: {
       user_agent: input.ctx.userAgent,
       device_hash: sanitizeDeviceHash(input.deviceHash),
       dwell_ms: sanitizeDwellMs(input.dwellMs),
-      captcha_provider: "none",
-      captcha_score: null,
+      captcha_provider: input.captchaProvider ?? "none",
+      captcha_score: input.captchaScore,
     })
   } catch (error) {
     logger.error({

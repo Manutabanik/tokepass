@@ -8,10 +8,16 @@ import {
   aabbIntersects,
   aabbToRect,
   alignElementsWithGap,
+  alignSelectedToCenter,
+  distributeSelectedHorizontally,
   applyMoveSnap,
   applyMoveSnapFromOrigin,
   applyRotateSnap,
   bakeLiveTransform,
+  flipSelectedElements,
+  rotateElementsAround,
+  rotationDeltaDegrees,
+  rotationHandleAnchor,
   elementAabb,
   scaleElements,
   selectionBounds,
@@ -28,6 +34,37 @@ describe("venue-transform", () => {
     const bounds = selectionBounds([a, b])
     assert.equal(bounds != null, true)
     assert.equal((bounds?.width ?? 0) > 40, true)
+  })
+
+  it("orbits a multi-select around the bounding-box center and adds the angle", () => {
+    const a = createVenueElement("vip_chair", 0, { x: 80, y: 100 })
+    const b = createVenueElement("vip_chair", 1, { x: 120, y: 100 })
+    a.rotation = 0
+    b.rotation = 15
+    const turned = rotateElementsAround([a, b], { x: 100, y: 100 }, 180)
+    assert.equal(turned[0]!.x, 120)
+    assert.equal(turned[0]!.y, 100)
+    assert.equal(turned[1]!.x, 80)
+    assert.equal(turned[1]!.y, 100)
+    assert.equal(turned[0]!.rotation, 180)
+    assert.equal(turned[1]!.rotation, 195)
+  })
+
+  it("mirrors a pair across the selection center on each axis", () => {
+    const a = createVenueElement("vip_chair", 0, { x: 80, y: 90 })
+    const b = createVenueElement("vip_chair", 1, { x: 120, y: 110 })
+    a.rotation = 90
+    b.rotation = 90
+    const horizontal = flipSelectedElements([a, b], [a.id, b.id], "horizontal")
+    assert.equal(horizontal[0]!.x, 120)
+    assert.equal(horizontal[0]!.y, 90)
+    assert.equal(horizontal[1]!.x, 80)
+    assert.equal(horizontal[0]!.rotation, 270)
+    const vertical = flipSelectedElements([a, b], [a.id, b.id], "vertical")
+    assert.equal(vertical[0]!.y, 110)
+    assert.equal(vertical[1]!.y, 90)
+    assert.equal(vertical[0]!.x, 80)
+    assert.equal(vertical[0]!.rotation, 90)
   })
 
   it("keeps relative offsets when translating a group", () => {
@@ -152,6 +189,27 @@ describe("venue-transform", () => {
     assert.equal(Math.abs(next[0]!.y - next[1]!.y) < 1, true)
   })
 
+  it("aligns selected elements onto the average Y axis", () => {
+    const a = createVenueElement("vip_chair", 0, { x: 80, y: 90 })
+    const b = createVenueElement("vip_chair", 1, { x: 140, y: 110 })
+    const next = alignSelectedToCenter([a, b], [a.id, b.id], "y")
+    assert.equal(next[0]!.y, 100)
+    assert.equal(next[1]!.y, 100)
+    assert.equal(next[0]!.x, 80)
+    assert.equal(next[1]!.x, 140)
+  })
+
+  it("distributes intermediate X while pinning first and last", () => {
+    const a = createVenueElement("vip_chair", 0, { x: 0, y: 40 })
+    const b = createVenueElement("vip_chair", 1, { x: 12, y: 55 })
+    const c = createVenueElement("vip_chair", 2, { x: 90, y: 48 })
+    const next = distributeSelectedHorizontally([a, b, c], [a.id, b.id, c.id])
+    assert.equal(next[0]!.x, 0)
+    assert.equal(next[2]!.x, 90)
+    assert.equal(next[1]!.x, 45)
+    assert.equal(next[1]!.y, 55)
+  })
+
   it("snaps translation to the canvas grid and rotation to 15 degrees", () => {
     assert.equal(snapToGrid(27), 20)
     assert.equal(snapToGrid(31), 40)
@@ -165,6 +223,34 @@ describe("venue-transform", () => {
     )
     assert.equal(applyRotateSnap(22, true), 15)
     assert.equal(applyRotateSnap(22, false), 22)
+  })
+
+  it("keeps rotation at 0 while the pointer stays on the handle", () => {
+    const center = { x: 100, y: 80 }
+    const handle = { x: 100, y: 40 }
+    assert.equal(rotationDeltaDegrees(center, handle, handle), 0)
+  })
+
+  it("follows a quarter turn around the bounding-box center", () => {
+    const center = { x: 0, y: 0 }
+    const origin = { x: 0, y: -10 }
+    const current = { x: 10, y: 0 }
+    assert.equal(Math.round(rotationDeltaDegrees(center, origin, current)), 90)
+  })
+
+  it("snaps the live angle to the nearest 15 degrees while Shift is held", () => {
+    const center = { x: 0, y: 0 }
+    const origin = { x: 10, y: 0 }
+    const current = { x: 10, y: 3 }
+    assert.equal(rotationDeltaDegrees(center, origin, current, true), 15)
+    assert.equal(rotationDeltaDegrees(center, origin, current, false) > 15, true)
+  })
+
+  it("drops the rotate handle below the box when the top stem would clip", () => {
+    const tight = rotationHandleAnchor({ x: 20, y: 0, width: 40, height: 24 }, 1)
+    assert.equal(tight.side, "bottom")
+    const roomy = rotationHandleAnchor({ x: 20, y: 80, width: 40, height: 24 }, 1)
+    assert.equal(roomy.side, "top")
   })
 
   it("keeps the world point under the cursor stable when zooming", () => {

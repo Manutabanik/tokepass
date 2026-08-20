@@ -19,6 +19,7 @@ export function GuestOtpGate({
   onVerified: () => void
 }) {
   const [code, setCode] = useState("")
+  const [email, setEmail] = useState("")
   const [isPending, startTransition] = useTransition()
 
   function submit() {
@@ -34,7 +35,9 @@ export function GuestOtpGate({
 
   function resend() {
     startTransition(async () => {
-      const result = await requestGuestOtpResend(orderId)
+      const result = await requestGuestOtpResend(orderId, {
+        email: email.trim() || undefined,
+      })
       if (!result.ok) {
         toast.error(result.error)
         return
@@ -75,6 +78,14 @@ export function GuestOtpGate({
       >
         {isPending ? <LoaderCircle className="animate-spin" /> : "Mostrar QR"}
       </Button>
+      <Input
+        type="email"
+        autoComplete="email"
+        value={email}
+        onChange={(event) => setEmail(event.target.value)}
+        placeholder="Correo de la compra"
+        className="mx-auto mt-4 h-11 max-w-sm text-center text-sm"
+      />
       <button
         type="button"
         disabled={isPending}

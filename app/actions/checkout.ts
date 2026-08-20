@@ -41,8 +41,13 @@ import {
   isHighDemandLockError,
   reserveRpcErrorText,
 } from "@/lib/checkout/lock-timeout"
-import { consumeRateLimit } from "@/lib/rate-limit"
+import {
+  CHECKOUT_VERIFY_ERROR,
+  verifyCheckoutCaptcha,
+} from "@/lib/checkout/bot-guard"
 import { getCheckoutRequestContext } from "@/lib/checkout/request-context"
+import { consumeNamedRateLimit } from "@/lib/security/distributed-rate-limit"
+import { assertWaitingRoomCheckoutPass } from "@/lib/waiting-room/assert-checkout-pass"
 import {
   CHECKOUT_BUSY_ERROR,
   assertGuestTicketCap,
@@ -137,6 +142,14 @@ function mapReserveRpcError(
       success: false,
       error:
         "Alcanzaste el máximo de entradas por persona para este evento.",
+    }
+  }
+
+  if (normalized.includes("buyer_denylisted")) {
+    return {
+      success: false,
+      error:
+        "Esta identidad no puede comprar entradas. Si crees que es un error, escribinos a soporte.",
     }
   }
 
@@ -266,8 +279,23 @@ async function attachPromoterToPendingOrder(input: {
 }
 
 type CheckoutEventAccess =
-  | { ok: true; useSandbox: boolean; db: CheckoutSupabase }
+  | {
+      ok: true
+      useSandbox: boolean
+      db: CheckoutSupabase
+      eventId: string
+      eventSlug: string | null
+    }
   | { ok: false; error: string }
+
+async function assertCheckoutWaitingRoom(input: {
+  eventId: string
+  eventSlug?: string | null
+  bypass?: boolean
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (input.bypass) return { ok: true }
+  return assertWaitingRoomCheckoutPass([input.eventId, input.eventSlug])
+}
 
 async function resolveCheckoutEventAccess(input: {
   eventId: string
@@ -278,7 +306,7 @@ async function resolveCheckoutEventAccess(input: {
   const admin = createAdminClient() as CheckoutSupabase
   const { data: event } = await admin
     .from("events")
-    .select("id, organizer_id, status")
+    .select("id, slug, organizer_id, status")
     .eq("id", input.eventId)
     .maybeSingle()
 
@@ -287,7 +315,13 @@ async function resolveCheckoutEventAccess(input: {
   }
 
   if (event.status === "published") {
-    return { ok: true, useSandbox: false, db: userClient }
+    return {
+      ok: true,
+      useSandbox: false,
+      db: userClient,
+      eventId: event.id,
+      eventSlug: event.slug ?? null,
+    }
   }
 
   if (event.status === "paused") {
@@ -301,7 +335,13 @@ async function resolveCheckoutEventAccess(input: {
     if (!isStaff) {
       return { ok: false, error: "Este evento no está en venta." }
     }
-    return { ok: true, useSandbox: false, db: userClient }
+    return {
+      ok: true,
+      useSandbox: false,
+      db: userClient,
+      eventId: event.id,
+      eventSlug: event.slug ?? null,
+    }
   }
 
   if (!isSandboxEventStatus(event.status)) {
@@ -318,7 +358,13 @@ async function resolveCheckoutEventAccess(input: {
       p_key: key,
     })
     if (matches) {
-      return { ok: true, useSandbox: true, db: admin }
+      return {
+        ok: true,
+        useSandbox: true,
+        db: admin,
+        eventId: event.id,
+        eventSlug: event.slug ?? null,
+      }
     }
   }
 
@@ -333,7 +379,13 @@ async function resolveCheckoutEventAccess(input: {
     return { ok: false, error: "Este evento no es público." }
   }
 
-  return { ok: true, useSandbox: true, db: admin }
+  return {
+    ok: true,
+    useSandbox: true,
+    db: admin,
+    eventId: event.id,
+    eventSlug: event.slug ?? null,
+  }
 }
 
 type AtomicReserveRow = {
@@ -676,11 +728,16 @@ export async function holdSeatingUnitForCart(
   }
   const db = access.db
 
-  const allowed = await consumeRateLimit({
-    bucketKey: `cart-hold:user:${user.id}`,
-    limit: 20,
-    windowSeconds: 60,
+  const room = await assertCheckoutWaitingRoom({
+    eventId: access.eventId,
+    eventSlug: access.eventSlug,
+    bypass: access.useSandbox || Boolean(previewKey),
   })
+  if (!room.ok) {
+    return { success: false, error: room.error }
+  }
+
+  const allowed = await consumeNamedRateLimit("cartHoldUser", user.id)
   if (!allowed) {
     return {
       success: false,
@@ -771,11 +828,16 @@ export async function holdSeatingUnitForCartByLayoutItem(
   }
   const db = access.db
 
-  const allowed = await consumeRateLimit({
-    bucketKey: `cart-hold:user:${user.id}`,
-    limit: 20,
-    windowSeconds: 60,
+  const room = await assertCheckoutWaitingRoom({
+    eventId: access.eventId,
+    eventSlug: access.eventSlug,
+    bypass: access.useSandbox || Boolean(previewKey),
   })
+  if (!room.ok) {
+    return { success: false, error: room.error }
+  }
+
+  const allowed = await consumeNamedRateLimit("cartHoldUser", user.id)
   if (!allowed) {
     return {
       success: false,
@@ -958,11 +1020,16 @@ export async function lockTickets(
     return { success: false, error: access.error }
   }
 
-  const allowed = await consumeRateLimit({
-    bucketKey: `ga-hold:user:${user.id}`,
-    limit: 20,
-    windowSeconds: 60,
+  const room = await assertCheckoutWaitingRoom({
+    eventId: access.eventId,
+    eventSlug: access.eventSlug,
+    bypass: access.useSandbox || Boolean(previewKey),
   })
+  if (!room.ok) {
+    return { success: false, error: room.error }
+  }
+
+  const allowed = await consumeNamedRateLimit("cartHoldUser", user.id)
   if (!allowed) {
     return {
       success: false,
@@ -1419,6 +1486,16 @@ export async function reserveSeatAtomic(
     return { success: false, error: "Datos de ubicación incompletos." }
   }
 
+  const ctx = await getCheckoutRequestContext()
+  const captcha = await verifyCheckoutCaptcha({
+    token: security?.captchaToken,
+    ip: ctx.ip,
+    skip: false,
+  })
+  if (!captcha.ok) {
+    return { success: false, error: captcha.error || CHECKOUT_VERIFY_ERROR }
+  }
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -1483,6 +1560,7 @@ export async function createComboReservation(
     sandbox?: boolean
     previewKey?: string | null
     paymentProvider?: SupportedPaymentProvider
+    captchaToken?: string | null
   },
 ): Promise<CheckoutResult> {
   const parsed = CheckoutPayloadSchema.safeParse({
@@ -1585,6 +1663,16 @@ export async function startCheckoutWithPayment(
   const payload = parsed.data
   const buyer = buyerToHolderFields(payload.buyer) satisfies NormalizedCheckoutBuyer
 
+  const captcha = await verifyCheckoutCaptcha({
+    token: options?.captchaToken,
+    ip: ctx.ip,
+    skip: false,
+  })
+  if (!captcha.ok) {
+    await recordCheckoutFailure(ctx)
+    return { success: false, error: captcha.error || CHECKOUT_VERIFY_ERROR }
+  }
+
   const supabase = await createClient()
   const {
     data: { user: earlyUser },
@@ -1612,6 +1700,15 @@ export async function startCheckoutWithPayment(
   }
   const db = access.db
 
+  const room = await assertCheckoutWaitingRoom({
+    eventId: access.eventId,
+    eventSlug: access.eventSlug,
+    bypass: access.useSandbox || Boolean(payload.previewKey || payload.sandbox),
+  })
+  if (!room.ok) {
+    return { success: false, error: room.error }
+  }
+
   // Saneamos los items garantizando que 'type' siempre tenga valor ("mapped" o "general")
   const rawItems = payload.items ?? items
   const sanitizedItems = rawItems.map((item) => ({
@@ -1634,12 +1731,7 @@ export async function startCheckoutWithPayment(
 
   const user = earlyUser
 
-  const checkoutAllowed = await consumeRateLimit({
-    bucketKey: `checkout:user:${user.id}`,
-    limit: 8,
-    windowSeconds: 10 * 60,
-    useAdmin: true,
-  })
+  const checkoutAllowed = await consumeNamedRateLimit("checkoutUser", user.id)
   if (!checkoutAllowed) {
     return {
       success: false,
@@ -1777,6 +1869,26 @@ export async function startCheckoutWithPayment(
     }
 
     const isGaOnly = !hasSeating && !hasBundle
+    const addonItems = payload.addons.map((addon) => ({
+      item_id: addon.itemId,
+      quantity: addon.quantity,
+    }))
+
+    const denylistGate = await db.rpc("assert_buyer_not_denylisted", {
+      p_holder_dni: buyer.buyerDni,
+      p_holder_email: buyer.buyerEmail,
+    })
+    if (
+      denylistGate.error &&
+      !/could not find|schema cache|does not exist/i.test(
+        denylistGate.error.message,
+      )
+    ) {
+      const mapped = mapReserveRpcError(
+        reserveRpcErrorText(denylistGate.error),
+      )
+      if (mapped) return mapped
+    }
 
     if (isGaOnly) {
       const claimed = await db.rpc("claim_and_reserve_ga_cart_tx", {
@@ -1784,6 +1896,9 @@ export async function startCheckoutWithPayment(
         p_owner_id: user.id,
         p_items: rpcItems,
         p_promoter_id: promoterId,
+        p_holder_dni: buyer.buyerDni,
+        p_holder_email: buyer.buyerEmail,
+        p_addons: addonItems,
       })
       const missingClaim = Boolean(
         claimed.error &&
@@ -1793,6 +1908,11 @@ export async function startCheckoutWithPayment(
       )
       if (!missingClaim) {
         reservation = claimed
+      } else if (addonItems.length > 0) {
+        reservation = {
+          data: null,
+          error: { message: "No se pudieron reservar las consumiciones." },
+        }
       } else if (canUseAtomic) {
         const item = quantityItems[0]
         const decision = decidePhaseCart(
@@ -1833,6 +1953,9 @@ export async function startCheckoutWithPayment(
         p_owner_id: user.id,
         p_items: rpcItems,
         p_promoter_id: promoterId,
+        p_holder_dni: buyer.buyerDni,
+        p_holder_email: buyer.buyerEmail,
+        p_addons: addonItems,
       })
       const missingHybrid = Boolean(
         hybrid.error &&
@@ -1846,6 +1969,9 @@ export async function startCheckoutWithPayment(
             p_owner_id: user.id,
             p_items: rpcItems,
             p_promoter_id: promoterId,
+            p_holder_dni: buyer.buyerDni,
+            p_holder_email: buyer.buyerEmail,
+            p_addons: addonItems,
           })
         : hybrid
     }
@@ -1931,35 +2057,9 @@ export async function startCheckoutWithPayment(
       ctx,
       deviceHash: options?.deviceHash,
       dwellMs: options?.dwellMs,
+      captchaProvider: captcha.provider,
+      captchaScore: captcha.score,
     })
-
-    if (payload.addons.length > 0) {
-      const { error: addonsError } = await db.rpc(
-        "attach_event_items_to_order",
-        {
-          p_order_id: orderId,
-          p_owner_id: user.id,
-          p_items: payload.addons.map((addon) => ({
-            item_id: addon.itemId,
-            quantity: addon.quantity,
-          })),
-        },
-      )
-
-      if (addonsError) {
-        await cleanupPendingOrder(orderId)
-
-        const mappedAddons = mapReserveRpcError(
-          reserveRpcErrorText(addonsError),
-        )
-        if (mappedAddons) return mappedAddons
-
-        return {
-          success: false,
-          error: "No se pudieron reservar las consumiciones.",
-        }
-      }
-    }
 
     const cleanPromoId = payload.promoCodeId
     if (cleanPromoId) {
@@ -2373,6 +2473,7 @@ export async function startSandboxCheckout(
   promoCodeId?: string | null,
   previewKey?: string | null,
   termsAccepted = true,
+  captchaToken?: string | null,
 ): Promise<CheckoutResult> {
   const parsed = CheckoutPayloadSchema.safeParse({
     eventId,
@@ -2400,6 +2501,7 @@ export async function startSandboxCheckout(
       sandbox: true,
       previewKey: parsed.data.previewKey,
       termsAccepted: parsed.data.termsAccepted !== false,
+      captchaToken,
     },
   )
 }

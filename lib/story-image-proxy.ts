@@ -1,6 +1,19 @@
 import { NextResponse } from "next/server"
 
+import { getSeoOrigin } from "@/lib/seo/site"
 import { parseStoryImageUrl } from "@/lib/story-image"
+
+function officialSiteOrigin(): string {
+  const raw = process.env.NEXT_PUBLIC_SITE_URL?.trim()
+  if (raw) {
+    try {
+      return new URL(raw).origin
+    } catch {
+      /* fall through */
+    }
+  }
+  return getSeoOrigin()
+}
 
 const MAX_BYTES = 8 * 1024 * 1024
 
@@ -99,8 +112,8 @@ export async function handleStoryImageProxy(request: Request) {
     return new NextResponse(buffer, {
       headers: {
         "Content-Type": mime,
-        "Access-Control-Allow-Origin": "*",
-        "Cross-Origin-Resource-Policy": "cross-origin",
+        "Access-Control-Allow-Origin": officialSiteOrigin(),
+        "Cross-Origin-Resource-Policy": "same-origin",
         "Cache-Control": "public, max-age=300",
       },
     })

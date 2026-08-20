@@ -1,11 +1,11 @@
 import "server-only"
 
 import { expandIndividualAccessTickets } from "@/lib/email/order-ticket-payload"
-import { sendPaidOrderReceiptEmail } from "@/lib/email/resend"
 import { logger } from "@/lib/logger"
 import { moneyAmountsEqual } from "@/lib/money/cents"
+import { scheduleNotificationOutboxDrain } from "@/lib/notifications/outbox"
+import { isAllowedPaymentCurrency } from "@/lib/payments/currency"
 import type { SupportedPaymentProvider } from "@/lib/payments/core/interfaces"
-import { notifyGobiOrderPaid } from "@/lib/services/notify-gobi-order-paid"
 import { createAdminClient } from "@/lib/supabase/admin"
 import type { Json, PaymentProvider } from "@/types/database"
 
@@ -14,6 +14,7 @@ export type ProcessPaidOrderNotificationInput = {
   transactionId: string
   orderId: string
   amount: number
+  currency?: string | null
   rawPayload: unknown
 }
 
@@ -57,16 +58,28 @@ export async function processPaidOrderNotification(
     return { ok: false, code: "invalid_args" }
   }
 
+  if (!isAllowedPaymentCurrency(input.currency)) {
+    logger.error({
+      context: "payments/confirm-order",
+      message: "currency_mismatch",
+      orderId,
+      provider,
+      transactionId,
+      currency: input.currency ?? "",
+    })
+    return { ok: false, code: "currency_mismatch", needsRefund: true }
+  }
+
   const admin = createAdminClient()
 
   const { data: seen } = await admin
     .from("payment_webhook_events")
-    .select("id")
+    .select("id, status")
     .eq("provider", provider)
     .eq("external_event_id", transactionId)
     .maybeSingle()
 
-  if (seen) {
+  if (seen?.status === "processed") {
     return { ok: true, code: "already_processed", idempotent: true }
   }
 
@@ -164,30 +177,16 @@ export async function processPaidOrderNotification(
   }
 
   if (!finalize.idempotent) {
-    let access: { magicUrl: string; otp: string } | null = null
     try {
       const { issueGuestReceiptAccess } = await import(
         "@/app/actions/guest-ticket-access"
       )
-      access = await issueGuestReceiptAccess(orderId)
+      await issueGuestReceiptAccess(orderId)
     } catch (error) {
       logger.error({
         context: "payments/confirm-order",
         message: "guest_access_issue_failed",
         orderId,
-        error,
-      })
-    }
-
-    try {
-      await notifyGobiOrderPaid(admin, orderId, access)
-    } catch (error) {
-      logger.error({
-        context: "payments/confirm-order",
-        message: "gobi_dispatch_failed",
-        orderId,
-        provider,
-        transactionId,
         error,
       })
     }
@@ -204,20 +203,9 @@ export async function processPaidOrderNotification(
         error,
       })
     }
-
-    try {
-      await sendPaidOrderReceiptEmail(admin, orderId, access)
-    } catch (error) {
-      logger.error({
-        context: "payments/confirm-order",
-        message: "receipt_email_failed",
-        orderId,
-        provider,
-        transactionId,
-        error,
-      })
-    }
   }
+
+  scheduleNotificationOutboxDrain()
 
   return {
     ok: true,

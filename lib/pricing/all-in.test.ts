@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
-import { allInBreakdown } from "./all-in"
+import { allInBreakdown, allInPlatformFee } from "./all-in"
 
 describe("all-in pricing", () => {
   it("splits a public price using the organizer rate", () => {
@@ -47,6 +47,11 @@ describe("all-in pricing", () => {
       rate: 0.08,
       fixedFee: 200,
     })
+  })
+
+  it("mirrors SQL all_in_platform_fee from the organizer net", () => {
+    assert.equal(allInPlatformFee(8500, 0.15), 1500)
+    assert.equal(allInPlatformFee(0, 0.15), 0)
   })
 
   it("ignores fixed fee on free tickets", () => {

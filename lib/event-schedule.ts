@@ -254,6 +254,24 @@ export function resolveEventAnchorDate(
   return sorted[0]?.start_time ?? fallbackDate
 }
 
+/** Cierre del evento: ends_at, ultima jornada, o fecha ancla. */
+export function resolveEventEndsAt(
+  scheduleDays: ScheduleDay[],
+  endsAt?: string | null,
+  fallbackDate?: string | null,
+): string | null {
+  const explicit = endsAt?.trim()
+  if (explicit) return explicit
+  if (scheduleDays.length > 0) {
+    const sorted = [...scheduleDays].sort(
+      (a, b) =>
+        new Date(b.end_time).getTime() - new Date(a.end_time).getTime(),
+    )
+    return sorted[0]?.end_time ?? fallbackDate ?? null
+  }
+  return fallbackDate?.trim() || null
+}
+
 export function findScheduleDay(
   scheduleDays: ScheduleDay[],
   dayId: TicketDayId | undefined,

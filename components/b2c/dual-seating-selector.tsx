@@ -30,6 +30,7 @@ import {
 } from "@/lib/checkout/validation-scroll"
 import {
   getCheckoutDwellMs,
+  getCheckoutCaptchaToken,
   getOrCreateDeviceHash,
 } from "@/lib/checkout/client-security"
 import { formatCurrency } from "@/lib/format"
@@ -236,6 +237,7 @@ export function DualSeatingSelector({
         null,
         undefined,
         {
+          captchaToken: await getCheckoutCaptchaToken(),
           deviceHash: getOrCreateDeviceHash(),
           dwellMs: getCheckoutDwellMs(),
         },

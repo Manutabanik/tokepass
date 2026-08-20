@@ -333,6 +333,16 @@ export type SupportMessage = {
   created_at: string
 }
 
+export type SupportFaq = {
+  id: string
+  question: string
+  answer: string
+  is_active: boolean
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
 export type EventSchedule = {
   id: string
   event_id: string
@@ -350,6 +360,13 @@ export type EventCategory = {
   sort_order: number
   created_at: string
   updated_at: string
+}
+
+export type PlatformSettings = {
+  id: number
+  resale_fee_percentage: number
+  updated_at: string
+  updated_by: string | null
 }
 
 export type PlatformSponsor = {
@@ -532,6 +549,18 @@ export type EventSkuChangelog = {
   created_at: string
 }
 
+export type SecurityAuditLog = {
+  id: string
+  actor_id: string | null
+  action: string
+  entity: string
+  entity_id: string | null
+  ip: string | null
+  user_agent: string | null
+  details: Json
+  created_at: string
+}
+
 export type TicketReservation = {
   id: string
   event_id: string
@@ -559,9 +588,26 @@ export type TicketTransfer = {
   receiver_id: string | null
   accepted_at: string | null
   cancelled_at: string | null
+  open_claim: boolean
+  expires_at: string | null
 }
 
-export type TicketResaleListingStatus = "active" | "sold" | "cancelled"
+export type TicketActionConsent = {
+  id: string
+  user_id: string
+  ticket_id: string
+  action: "transfer" | "resale"
+  terms_version: string
+  accepted_at: string
+  transfer_id: string | null
+  listing_id: string | null
+}
+
+export type TicketResaleListingStatus =
+  | "active"
+  | "reserved"
+  | "sold"
+  | "cancelled"
 export type PayoutPendingStatus = "pending" | "paid" | "cancelled"
 export type PayoutRequestStatus =
   | "pending"
@@ -644,6 +690,7 @@ export type TicketResaleListing = {
   buyer_id: string | null
   mp_preference_id: string | null
   mp_payment_id: string | null
+  reserved_until: string | null
   created_at: string
   updated_at: string
 }
@@ -676,7 +723,49 @@ export type PaymentWebhookEvent = {
   external_event_id: string
   event_type: string
   payload: Json
-  processed_at: string
+  processed_at: string | null
+  status: "pending" | "processing" | "processed" | "failed" | "dead"
+  attempts: number
+  last_error: string | null
+  available_at: string
+  received_at: string
+}
+
+export type NotificationOutboxType =
+  | "order_paid"
+  | "ticket_transfer"
+  | "pos_issue"
+
+export type NotificationOutboxChannel = "email" | "whatsapp"
+
+export type NotificationOutboxStatus =
+  | "pending"
+  | "processing"
+  | "processed"
+  | "failed"
+  | "dead"
+
+export type BuyerDenylist = {
+  id: string
+  dni_hash: string | null
+  email_norm: string | null
+  reason: string
+  source_order_id: string | null
+  created_at: string
+}
+
+export type NotificationOutbox = {
+  id: string
+  order_id: string | null
+  type: NotificationOutboxType
+  channel: NotificationOutboxChannel
+  payload: Json
+  status: NotificationOutboxStatus
+  attempts: number
+  last_error: string | null
+  available_at: string
+  created_at: string
+  processed_at: string | null
 }
 
 export type EventZone = {
@@ -1652,6 +1741,26 @@ export type Database = {
           },
         ]
       }
+      support_faqs: {
+        Row: SupportFaq
+        Insert: {
+          id?: string
+          question: string
+          answer: string
+          is_active?: boolean
+          sort_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<{
+          question: string
+          answer: string
+          is_active: boolean
+          sort_order: number
+          updated_at: string
+        }>
+        Relationships: []
+      }
       event_schedules: {
         Row: EventSchedule
         Insert: {
@@ -1698,6 +1807,29 @@ export type Database = {
           updated_at: string
         }>
         Relationships: []
+      }
+      platform_settings: {
+        Row: PlatformSettings
+        Insert: {
+          id?: number
+          resale_fee_percentage?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: Partial<{
+          resale_fee_percentage: number
+          updated_at: string
+          updated_by: string | null
+        }>
+        Relationships: [
+          {
+            foreignKeyName: "platform_settings_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       platform_sponsors: {
         Row: PlatformSponsor
@@ -1965,6 +2097,15 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      security_audit_log: {
+        Row: SecurityAuditLog
+        Insert: Omit<SecurityAuditLog, "id" | "created_at"> & {
+          id?: string
+          created_at?: string
+        }
+        Update: never
+        Relationships: []
+      }
       ticket_reservations: {
         Row: TicketReservation
         Insert: Omit<TicketReservation, "id" | "status" | "created_at"> & {
@@ -2108,7 +2249,7 @@ export type Database = {
           metadata?: Json
           created_at?: string
         }
-        Update: Partial<PlatformOpsAudit>
+        Update: never
         Relationships: []
       }
       checkout_security_events: {
@@ -2270,6 +2411,8 @@ export type Database = {
           | "receiver_id"
           | "accepted_at"
           | "cancelled_at"
+          | "open_claim"
+          | "expires_at"
         > & {
           id?: string
           new_ticket_id?: string | null
@@ -2279,8 +2422,25 @@ export type Database = {
           receiver_id?: string | null
           accepted_at?: string | null
           cancelled_at?: string | null
+          open_claim?: boolean
+          expires_at?: string | null
         }
         Update: Partial<TicketTransfer>
+        Relationships: []
+      }
+      ticket_action_consents: {
+        Row: TicketActionConsent
+        Insert: {
+          id?: string
+          user_id: string
+          ticket_id: string
+          action: "transfer" | "resale"
+          terms_version: string
+          accepted_at?: string
+          transfer_id?: string | null
+          listing_id?: string | null
+        }
+        Update: Partial<TicketActionConsent>
         Relationships: []
       }
       user_favorites: {
@@ -2303,6 +2463,7 @@ export type Database = {
           buyer_id?: string | null
           mp_preference_id?: string | null
           mp_payment_id?: string | null
+          reserved_until?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -2443,14 +2604,110 @@ export type Database = {
           external_event_id: string
           event_type: string
           payload: Json
-          processed_at?: string
+          processed_at?: string | null
+          status?: "pending" | "processing" | "processed" | "failed"
+          attempts?: number
+          last_error?: string | null
+          available_at?: string
+          received_at?: string
         }
         Update: Partial<PaymentWebhookEvent>
+        Relationships: []
+      }
+      ticket_day_admissions: {
+        Row: {
+          ticket_id: string
+          day_id: string
+          scanned_at: string
+        }
+        Insert: {
+          ticket_id: string
+          day_id: string
+          scanned_at?: string
+        }
+        Update: Partial<{
+          scanned_at: string
+        }>
+        Relationships: []
+      }
+      buyer_denylist: {
+        Row: BuyerDenylist
+        Insert: {
+          id?: string
+          dni_hash?: string | null
+          email_norm?: string | null
+          reason: string
+          source_order_id?: string | null
+          created_at?: string
+        }
+        Update: Partial<{
+          dni_hash: string | null
+          email_norm: string | null
+          reason: string
+          source_order_id: string | null
+        }>
+        Relationships: []
+      }
+      notification_outbox: {
+        Row: NotificationOutbox
+        Insert: {
+          id?: string
+          order_id?: string | null
+          type: NotificationOutboxType
+          channel: NotificationOutboxChannel
+          payload?: Json
+          status?: NotificationOutboxStatus
+          attempts?: number
+          last_error?: string | null
+          available_at?: string
+          created_at?: string
+          processed_at?: string | null
+        }
+        Update: Partial<NotificationOutbox>
         Relationships: []
       }
     }
     Views: Record<string, never>
     Functions: {
+      get_resale_fee_percentage: {
+        Args: Record<string, never>
+        Returns: number
+      }
+      assert_buyer_not_denylisted: {
+        Args: {
+          p_holder_dni: string | null
+          p_holder_email: string | null
+        }
+        Returns: undefined
+      }
+      record_buyer_denylist_from_order: {
+        Args: {
+          p_order_id: string
+          p_reason?: string
+        }
+        Returns: string
+      }
+      write_security_audit_log: {
+        Args: {
+          p_action: string
+          p_entity: string
+          p_entity_id?: string | null
+          p_ip?: string | null
+          p_user_agent?: string | null
+          p_details?: Json
+          p_actor_id?: string | null
+        }
+        Returns: string
+      }
+      assert_holder_identity_ticket_cap: {
+        Args: {
+          p_event_id: string
+          p_holder_dni: string | null
+          p_holder_email: string | null
+          p_requested: number
+        }
+        Returns: undefined
+      }
       get_public_organizer_profile: {
         Args: {
           p_organizer_id: string
@@ -2496,6 +2753,9 @@ export type Database = {
           p_owner_id: string
           p_items: Json
           p_promoter_id?: string | null
+          p_holder_dni?: string | null
+          p_holder_email?: string | null
+          p_addons?: Json
         }
         Returns: {
           order_id: string
@@ -2511,6 +2771,9 @@ export type Database = {
           p_owner_id: string
           p_items: Json
           p_promoter_id?: string | null
+          p_holder_dni?: string | null
+          p_holder_email?: string | null
+          p_addons?: Json
         }
         Returns: {
           order_id: string
@@ -2676,6 +2939,9 @@ export type Database = {
           p_owner_id: string
           p_items: Json
           p_promoter_id?: string | null
+          p_holder_dni?: string | null
+          p_holder_email?: string | null
+          p_addons?: Json
         }
         Returns: {
           order_id: string
@@ -2708,7 +2974,7 @@ export type Database = {
         Returns: number
       }
       expire_ga_cart_holds: {
-        Args: Record<string, never>
+        Args: { p_batch_size?: number }
         Returns: number
       }
       heal_ticket_tier_phases: {
@@ -2764,7 +3030,7 @@ export type Database = {
         Returns: string
       }
       expire_seating_cart_holds: {
-        Args: Record<string, never>
+        Args: { p_batch_size?: number }
         Returns: number
       }
       get_event_seating_availability: {
@@ -2868,6 +3134,13 @@ export type Database = {
         }
         Returns: boolean
       }
+      resolve_current_event_schedule_day: {
+        Args: {
+          p_event_id: string
+          p_now?: string
+        }
+        Returns: string
+      }
       scan_ticket_admission: {
         Args: {
           p_ticket_id: string
@@ -2883,7 +3156,7 @@ export type Database = {
         Returns: undefined
       }
       expire_seating_orders: {
-        Args: Record<string, never>
+        Args: { p_batch_size?: number }
         Returns: number
       }
       get_event_service_charge_rate: {
@@ -3129,7 +3402,53 @@ export type Database = {
         Returns: boolean
       }
       expire_abandoned_orders: {
-        Args: { p_older_than?: string }
+        Args: { p_older_than?: string; p_batch_size?: number }
+        Returns: number
+      }
+      claim_payment_webhook_events: {
+        Args: { p_limit?: number }
+        Returns: PaymentWebhookEvent[]
+      }
+      enqueue_payment_webhook_event: {
+        Args: {
+          p_provider: string
+          p_external_event_id: string
+          p_event_type: string
+          p_payload: Json
+        }
+        Returns: { id: string; status: string }[]
+      }
+      replay_dead_webhook_event: {
+        Args: {
+          p_event_id: string
+        }
+        Returns: boolean
+      }
+      anonymize_account: {
+        Args: {
+          p_user_id: string
+        }
+        Returns: undefined
+      }
+      enqueue_notification_outbox: {
+        Args: {
+          p_order_id: string | null
+          p_type: string
+          p_channel: string
+          p_payload?: Json
+        }
+        Returns: string
+      }
+      claim_notification_outbox: {
+        Args: { p_limit?: number }
+        Returns: NotificationOutbox[]
+      }
+      requeue_notification_outbox: {
+        Args: {
+          p_order_id: string
+          p_type: string
+          p_payload?: Json
+        }
         Returns: number
       }
       consume_rate_limit: {
@@ -3397,16 +3716,40 @@ export type Database = {
         Args: { p_ticket_id: string }
         Returns: boolean
       }
+      ticket_has_active_resale_listing: {
+        Args: { p_ticket_id: string }
+        Returns: boolean
+      }
+      create_resale_listing: {
+        Args: { p_ticket_id: string; p_terms_version: string }
+        Returns: {
+          listing_id: string
+          ticket_id: string
+          event_id: string
+          price: number
+          status: TicketResaleListingStatus
+          created_at: string
+        }[]
+      }
       initiate_ticket_transfer: {
         Args: {
           p_ticket_id: string
           p_receiver_email: string
+          p_terms_version: string
         }
         Returns: {
           transfer_id: string
           claim_token: string
           event_title: string
           receiver_email: string
+        }[]
+      }
+      initiate_ticket_share_transfer: {
+        Args: { p_ticket_id: string; p_terms_version: string }
+        Returns: {
+          transfer_id: string
+          claim_token: string
+          event_title: string
         }[]
       }
       cancel_ticket_transfer: {
@@ -3441,6 +3784,25 @@ export type Database = {
           p_mp_payment_id: string
         }
         Returns: Json
+      }
+      reserve_resale_listing: {
+        Args: {
+          p_listing_id: string
+          p_ttl_minutes?: number
+        }
+        Returns: Json
+      }
+      release_resale_listing_reservation: {
+        Args: { p_listing_id: string }
+        Returns: boolean
+      }
+      expire_resale_listing_reservations: {
+        Args: { p_batch_size?: number }
+        Returns: number
+      }
+      expire_pending_ticket_transfers: {
+        Args: { p_batch_size?: number }
+        Returns: number
       }
       claim_pending_ticket_transfers: {
         Args: { p_user_id: string }

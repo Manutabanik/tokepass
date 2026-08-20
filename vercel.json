@@ -3,6 +3,14 @@
     {
       "path": "/api/cron/expire-orders",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/process-webhooks",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/process-notifications",
+      "schedule": "* * * * *"
     }
   ]
 }

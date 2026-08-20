@@ -1,31 +1,110 @@
 "use client"
 
-import { LoaderCircle, MessageSquare, Send, X } from "lucide-react"
+import { LoaderCircle, MessageCircle, Send } from "lucide-react"
 import { usePathname } from "next/navigation"
 import { useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { toast } from "sonner"
 
 import {
-  getOrCreateOrganizerThread,
   getOrganizerUnreadSupportCount,
   listSupportMessages,
   markSupportThreadRead,
+  peekOrganizerSupportSession,
   sendSupportMessage,
+  startHumanSupportChat,
   type SupportMessageItem,
 } from "@/app/actions/support"
+import {
+  listActiveSupportFaqs,
+  type SupportFaqItem,
+} from "@/app/actions/support-faqs"
 import { Button } from "@/components/ui/button"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
+import { isAdminFocusedFlow } from "@/lib/navigation/focused-flows"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
+
+const WELCOME_MESSAGE =
+  "Hola. Antes de hablar con una persona, estas respuestas suelen resolver lo más frecuente."
+
+type ChatMode = "bot" | "human"
+
+type BotTurn = {
+  id: string
+  question: string
+  answer: string
+  at: string
+}
 
 function eventIdFromPath(pathname: string): string | null {
   const match = pathname.match(/\/admin\/events\/([0-9a-f-]{36})/i)
   return match?.[1] ?? null
 }
 
+function formatMessageTime(iso: string) {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ""
+  return new Intl.DateTimeFormat("es-AR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date)
+}
+
+function ChatBubble({
+  fromSupport,
+  children,
+  time,
+}: {
+  fromSupport: boolean
+  children: React.ReactNode
+  time?: string
+}) {
+  return (
+    <div
+      className={cn(
+        "flex flex-col gap-1",
+        fromSupport ? "items-start" : "items-end",
+      )}
+    >
+      <div
+        className={cn(
+          "max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-6 whitespace-pre-wrap",
+          fromSupport ? "bg-slate-100 text-slate-900" : "bg-primary text-white",
+        )}
+      >
+        {children}
+      </div>
+      {time ? (
+        <p
+          className={cn(
+            "text-xs",
+            fromSupport ? "text-slate-400" : "text-muted-foreground",
+          )}
+        >
+          {time}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 export function OrganizerSupportChat() {
   const pathname = usePathname()
   const eventId = useMemo(() => eventIdFromPath(pathname), [pathname])
+  const focused = isAdminFocusedFlow(pathname)
   const [open, setOpen] = useState(false)
+  const [mode, setMode] = useState<ChatMode>("bot")
+  const [startedInBot, setStartedInBot] = useState(false)
+  const [faqs, setFaqs] = useState<SupportFaqItem[]>([])
+  const [botTurns, setBotTurns] = useState<BotTurn[]>([])
   const [threadId, setThreadId] = useState<string | null>(null)
   const [messages, setMessages] = useState<SupportMessageItem[]>([])
   const [draft, setDraft] = useState("")
@@ -35,44 +114,68 @@ export function OrganizerSupportChat() {
   const scroller = useRef<HTMLDivElement>(null)
   const requestKey = open ? (eventId ?? "general") : null
   const loading = requestKey !== null && readyKey !== requestKey
+  const lastFaqQuestion = botTurns.at(-1)?.question ?? null
 
   useEffect(() => {
     void getOrganizerUnreadSupportCount().then(setUnread)
   }, [])
 
   useEffect(() => {
-    if (!requestKey) return
+    if (!open) {
+      queueMicrotask(() => {
+        setReadyKey(null)
+      })
+      return
+    }
     let cancelled = false
-    void getOrCreateOrganizerThread(eventId)
-      .then(async (result) => {
-        if (!result.success) {
-          toast.error(result.error)
+    queueMicrotask(() => {
+      if (cancelled) return
+      setMode("bot")
+      setStartedInBot(false)
+      setThreadId(null)
+      setMessages([])
+      setBotTurns([])
+      setFaqs([])
+      setDraft("")
+    })
+    void Promise.all([
+      listActiveSupportFaqs(),
+      peekOrganizerSupportSession(eventId),
+    ])
+      .then(async ([activeFaqs, session]) => {
+        if (cancelled) return
+        setFaqs(activeFaqs.filter((faq) => faq.isActive))
+        if (!session.hasHumanConversation || !session.threadId) {
+          setStartedInBot(true)
           return
         }
-        if (cancelled) return
-        setThreadId(result.data.threadId)
+        setMode("human")
+        setThreadId(session.threadId)
         const [nextMessages] = await Promise.all([
-          listSupportMessages(result.data.threadId),
-          markSupportThreadRead(result.data.threadId),
+          listSupportMessages(session.threadId),
+          markSupportThreadRead(session.threadId),
         ])
         if (cancelled) return
         setMessages(nextMessages)
         setUnread(0)
       })
+      .catch(() => {
+        if (!cancelled) toast.error("No se pudo abrir el chat.")
+      })
       .finally(() => {
-        if (!cancelled) setReadyKey(requestKey)
+        if (!cancelled) setReadyKey(eventId ?? "general")
       })
     return () => {
       cancelled = true
     }
-  }, [eventId, requestKey])
+  }, [eventId, open])
 
   useEffect(() => {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight })
-  }, [messages.length, open])
+  }, [botTurns.length, messages.length, open, mode])
 
   useEffect(() => {
-    if (!threadId || !open) return
+    if (!threadId || !open || mode !== "human") return
     const supabase = createClient()
     const channel = supabase
       .channel(`org-support:${threadId}`)
@@ -113,10 +216,42 @@ export function OrganizerSupportChat() {
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [open, threadId])
+  }, [mode, open, threadId])
+
+  function askFaq(faq: SupportFaqItem) {
+    if (mode !== "bot" || pending) return
+    setBotTurns((current) => [
+      ...current,
+      {
+        id: `${faq.id}-${Date.now()}`,
+        question: faq.question,
+        answer: faq.answer,
+        at: new Date().toISOString(),
+      },
+    ])
+  }
+
+  function escalate() {
+    if (mode !== "bot" || pending) return
+    startTransition(async () => {
+      const result = await startHumanSupportChat(eventId, lastFaqQuestion)
+      if (!result.success) {
+        toast.error(result.error)
+        return
+      }
+      setMode("human")
+      setThreadId(result.data.threadId)
+      setMessages((current) =>
+        current.some((item) => item.id === result.data.message.id)
+          ? current
+          : [...current, result.data.message],
+      )
+      setUnread(0)
+    })
+  }
 
   function send() {
-    if (!threadId || !draft.trim()) return
+    if (mode !== "human" || !threadId || !draft.trim()) return
     const text = draft.trim()
     setDraft("")
     startTransition(async () => {
@@ -135,97 +270,158 @@ export function OrganizerSupportChat() {
   }
 
   return (
-    <div className="pointer-events-none fixed inset-x-4 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-50 flex flex-col items-end gap-3 lg:bottom-6 lg:right-6 lg:left-auto">
-      {open ? (
-        <div className="pointer-events-auto flex h-[min(32rem,70vh)] w-full max-w-md flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
-          <header className="flex items-center justify-between border-b border-border px-4 py-3">
-            <div>
-              <p className="text-sm font-semibold text-foreground">Soporte TokePass</p>
-              <p className="text-xs text-muted-foreground">
-                {eventId
-                  ? "Consulta atada a este evento"
-                  : "Consulta general del panel"}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="grid size-9 place-items-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground"
-              aria-label="Cerrar soporte"
-            >
-              <X className="size-4" />
-            </button>
-          </header>
-          <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label="Abrir soporte"
+        className={cn(
+          "fixed z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-black/20 transition hover:bg-primary/90",
+          "right-6",
+          focused
+            ? "bottom-6"
+            : "bottom-[calc(5.75rem+env(safe-area-inset-bottom))] lg:bottom-6",
+        )}
+      >
+        <span className="relative">
+          <MessageCircle className="size-6" aria-hidden="true" />
+          {unread > 0 ? (
+            <span className="absolute -top-1 -right-1 size-2.5 rounded-full bg-amber-400 ring-2 ring-primary" />
+          ) : null}
+        </span>
+      </button>
+
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent
+          side="right"
+          className="h-dvh w-[min(100%,400px)] max-w-[400px] p-0 sm:w-[400px]"
+        >
+          <SheetHeader className="pr-12">
+            <SheetTitle>Soporte TokePass</SheetTitle>
+            <SheetDescription>
+              {eventId
+                ? "Consulta atada a este evento"
+                : "Consulta general del panel"}
+            </SheetDescription>
+          </SheetHeader>
+
+          <div
+            ref={scroller}
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 scroll-pb-4"
+          >
             {loading ? (
               <div className="grid h-full place-items-center text-muted-foreground">
                 <LoaderCircle className="size-5 animate-spin" />
               </div>
-            ) : messages.length === 0 ? (
-              <p className="text-sm leading-6 text-muted-foreground">
-                Escribí tu duda. El equipo de TokePass te responde acá, con el
-                contexto del evento si estás editándolo.
-              </p>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-4">
+                {startedInBot ? (
+                  <ChatBubble fromSupport>{WELCOME_MESSAGE}</ChatBubble>
+                ) : null}
+
+                {botTurns.map((turn, index) => (
+                  <div key={turn.id} className="space-y-4">
+                    <ChatBubble fromSupport={false} time={formatMessageTime(turn.at)}>
+                      {turn.question}
+                    </ChatBubble>
+                    <div className="space-y-2">
+                      <ChatBubble fromSupport time={formatMessageTime(turn.at)}>
+                        {turn.answer}
+                      </ChatBubble>
+                      {mode === "bot" && index === botTurns.length - 1 ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={pending}
+                          onClick={escalate}
+                        >
+                          Hablar con soporte
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+
+                {mode === "bot" && faqs.length > 0 ? (
+                  <div className="space-y-2">
+                    {faqs.map((faq) => (
+                      <button
+                        key={faq.id}
+                        type="button"
+                        disabled={pending}
+                        onClick={() => askFaq(faq)}
+                        className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-left text-sm leading-5 transition hover:bg-muted disabled:opacity-60"
+                      >
+                        {faq.question}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+
+                {mode === "bot" && faqs.length === 0 ? (
+                  <div className="space-y-3">
+                    <p className="text-sm leading-6 text-muted-foreground">
+                      No hay preguntas frecuentes publicadas por ahora.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={pending}
+                      onClick={escalate}
+                    >
+                      Hablar con soporte
+                    </Button>
+                  </div>
+                ) : null}
+
                 {messages.map((message) => (
-                  <div
+                  <ChatBubble
                     key={message.id}
-                    className={cn(
-                      "max-w-[85%] rounded-xl px-3 py-2 text-sm leading-6",
-                      message.isAdmin
-                        ? "bg-muted text-foreground"
-                        : "ml-auto bg-violet-600 text-white",
-                    )}
+                    fromSupport={message.isAdmin}
+                    time={formatMessageTime(message.createdAt)}
                   >
                     {message.content}
-                  </div>
+                  </ChatBubble>
                 ))}
               </div>
             )}
           </div>
-          <form
-            className="flex gap-2 border-t border-border p-3"
-            onSubmit={(event) => {
-              event.preventDefault()
-              send()
-            }}
-          >
-            <input
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder="Escribí tu mensaje"
-              className="h-11 min-w-0 flex-1 rounded-xl border border-input bg-background px-3 text-sm"
-              maxLength={4000}
-            />
-            <Button
-              type="submit"
-              disabled={pending || !draft.trim()}
-              className="h-11 rounded-xl"
-            >
-              {pending ? (
-                <LoaderCircle className="size-4 animate-spin" />
-              ) : (
-                <Send className="size-4" />
-              )}
-            </Button>
-          </form>
-        </div>
-      ) : null}
 
-      <button
-        type="button"
-        onClick={() => setOpen((current) => !current)}
-        className="pointer-events-auto inline-flex h-12 items-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-semibold text-white shadow-lg shadow-violet-950/20 hover:bg-violet-500"
-      >
-        <span className="relative">
-          <MessageSquare className="size-4" aria-hidden="true" />
-          {unread > 0 && !open ? (
-            <span className="absolute -right-1.5 -top-1.5 size-2 rounded-full bg-amber-400" />
+          {mode === "human" ? (
+            <SheetFooter className="p-3">
+              <form
+                className="flex w-full gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  send()
+                }}
+              >
+                <input
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                  placeholder="Escribí tu mensaje"
+                  className="h-11 min-w-0 flex-1 rounded-xl border border-input bg-background px-3 text-sm"
+                  maxLength={4000}
+                />
+                <Button
+                  type="submit"
+                  disabled={pending || !draft.trim()}
+                  className="h-11 w-11 shrink-0 rounded-xl p-0"
+                  aria-label="Enviar mensaje"
+                >
+                  {pending ? (
+                    <LoaderCircle className="size-4 animate-spin" />
+                  ) : (
+                    <Send className="size-4" />
+                  )}
+                </Button>
+              </form>
+            </SheetFooter>
           ) : null}
-        </span>
-        Soporte TokePass
-      </button>
-    </div>
+        </SheetContent>
+      </Sheet>
+    </>
   )
 }

@@ -12,6 +12,7 @@ import {
   STORY_CANVAS_WIDTH,
   findStoryHeadline,
   findStoryTheme,
+  splitStoryTitle,
   publicStoryName,
   storyCtaUrl,
   storyInitials,
@@ -46,6 +47,7 @@ export function StoryCanvas({
   data,
   themeId,
   headlineId,
+  headlineText,
   canvasRef,
   live = false,
   pauseMotion = false,
@@ -57,6 +59,7 @@ export function StoryCanvas({
   data: StoryFlyerData
   themeId: StoryThemeId
   headlineId: StoryHeadlineId
+  headlineText?: string
   canvasRef?: RefObject<HTMLDivElement | null>
   live?: boolean
   pauseMotion?: boolean
@@ -80,6 +83,8 @@ export function StoryCanvas({
   })
   const theme = findStoryTheme(themeId)
   const headline = findStoryHeadline(headlineId)
+  const titleLines =
+    headlineText !== undefined ? splitStoryTitle(headlineText) : headline.lines
   const eventImage = storySafeImageSrc(data.imageUrl)
   const artistName = publicStoryName(data.artistName, "")
   const artistImage = storySafeImageSrc(data.artistImageUrl)
@@ -150,12 +155,13 @@ export function StoryCanvas({
           flexDirection: "column",
         }}
       >
+        {titleLines.length > 0 ? (
         <svg
           width="100%"
-          height="188"
-          viewBox="0 0 936 220"
+          height={titleLines.length === 1 ? 110 : 188}
+          viewBox={titleLines.length === 1 ? "0 0 936 130" : "0 0 936 220"}
           role="img"
-          aria-label={`${headline.lines[0]} ${headline.lines[1]}`}
+          aria-label={titleLines.join(" ")}
         >
           <defs>
             <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
@@ -164,31 +170,23 @@ export function StoryCanvas({
               <stop offset="100%" stopColor={theme.gradientStops[2]} />
             </linearGradient>
           </defs>
-          <text
-            x="468"
-            y="92"
-            textAnchor="middle"
-            fill={`url(#${gradientId})`}
-            fontSize="86"
-            fontWeight={900}
-            letterSpacing="-3"
-            fontFamily={FONT}
-          >
-            {headline.lines[0]}
-          </text>
-          <text
-            x="468"
-            y="188"
-            textAnchor="middle"
-            fill={`url(#${gradientId})`}
-            fontSize="86"
-            fontWeight={900}
-            letterSpacing="-3"
-            fontFamily={FONT}
-          >
-            {headline.lines[1]}
-          </text>
+          {titleLines.map((line, index) => (
+            <text
+              key={`${line}-${index}`}
+              x="468"
+              y={titleLines.length === 1 ? 96 : index === 0 ? 92 : 188}
+              textAnchor="middle"
+              fill={`url(#${gradientId})`}
+              fontSize={line.length > 14 ? 68 : 86}
+              fontWeight={900}
+              letterSpacing="-3"
+              fontFamily={FONT}
+            >
+              {line}
+            </text>
+          ))}
         </svg>
+        ) : null}
 
         <div
           style={{
@@ -258,6 +256,8 @@ export function StoryCanvas({
                   src={eventImage}
                   alt="Event Flyer"
                   crossOrigin="anonymous"
+                  loading="eager"
+                  decoding="sync"
                   data-story-image="hero"
                   data-flyer-img=""
                   onLoad={onPainted}
@@ -380,6 +380,8 @@ export function StoryCanvas({
                         src={artist.imageUrl}
                         alt=""
                         crossOrigin="anonymous"
+                        loading="eager"
+                        decoding="sync"
                         style={{
                           width: "100%",
                           height: "100%",
@@ -416,6 +418,8 @@ export function StoryCanvas({
                     src={stampImage}
                     alt=""
                     crossOrigin="anonymous"
+                    loading="eager"
+                    decoding="sync"
                     style={{
                       width: "100%",
                       height: "100%",
@@ -496,6 +500,8 @@ export function StoryCanvas({
                 src={organizerAvatar}
                 alt=""
                 crossOrigin="anonymous"
+                loading="eager"
+                decoding="sync"
                 style={{
                   width: 36,
                   height: 36,
@@ -536,7 +542,7 @@ export function StoryCanvas({
               level="H"
               includeMargin
               bgColor="#ffffff"
-              fgColor="#09090b"
+              fgColor="#000000"
             />
           </div>
         </div>

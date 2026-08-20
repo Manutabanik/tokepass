@@ -25,6 +25,7 @@ export function overlayKindFromDeniedScanStatus(
   | "test_ticket"
   | "wrong_sector"
   | "transfer_pending"
+  | "listed_for_resale"
   | "wrong_schedule"
   | "cancelled"
   | "unpaid"
@@ -37,6 +38,8 @@ export function overlayKindFromDeniedScanStatus(
       return "wrong_sector"
     case "transfer_pending":
       return "transfer_pending"
+    case "listed_for_resale":
+      return "listed_for_resale"
     case "wrong_day":
       return "wrong_schedule"
     case "test_ticket":

@@ -5,6 +5,61 @@ const PRIVATE_HOST =
 const PRIVATE_IPV4 =
   /^(10\.|127\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/
 
+const ALLOWED_HOST_EXACT = new Set([
+  "i.scdn.co",
+  "mosaic.scdn.co",
+  "i.ytimg.com",
+  "img.youtube.com",
+  "www.tokepass.com.ar",
+  "tokepass.com.ar",
+])
+
+const ALLOWED_HOST_SUFFIXES = [
+  "supabase.co",
+  "supabase.in",
+  "scdn.co",
+  "spotifycdn.com",
+  "ytimg.com",
+]
+
+function envHost(raw: string | null | undefined): string | null {
+  const value = raw?.trim()
+  if (!value) return null
+  try {
+    return new URL(value).hostname.toLowerCase()
+  } catch {
+    return null
+  }
+}
+
+export function isAllowedStoryImageHost(host: string): boolean {
+  const normalized = host.toLowerCase().replace(/\.$/, "")
+  if (PRIVATE_HOST.test(normalized) || PRIVATE_IPV4.test(normalized)) {
+    return false
+  }
+  if (normalized.endsWith(".local") || normalized.endsWith(".internal")) {
+    return false
+  }
+  if (ALLOWED_HOST_EXACT.has(normalized)) return true
+  if (
+    ALLOWED_HOST_SUFFIXES.some(
+      (suffix) =>
+        normalized === suffix || normalized.endsWith(`.${suffix}`),
+    )
+  ) {
+    return true
+  }
+
+  const siteHosts = [
+    envHost(process.env.NEXT_PUBLIC_SITE_URL),
+    envHost(process.env.NEXT_PUBLIC_APP_URL),
+    envHost(process.env.NEXT_PUBLIC_BASE_URL),
+    envHost(process.env.NEXT_PUBLIC_SUPABASE_URL),
+    process.env.VERCEL_URL?.replace(/\/$/, "").toLowerCase() ?? null,
+  ]
+  return siteHosts.some((value) => value && value === normalized)
+}
+
 export function parseStoryImageUrl(raw: string | null | undefined): URL | null {
   const trimmed = raw?.trim()
   if (!trimmed) return null
@@ -22,6 +77,7 @@ export function parseStoryImageUrl(raw: string | null | undefined): URL | null {
     const host = parsed.hostname.toLowerCase()
     if (PRIVATE_HOST.test(host) || PRIVATE_IPV4.test(host)) return null
     if (host.endsWith(".local") || host.endsWith(".internal")) return null
+    if (!isAllowedStoryImageHost(host)) return null
     return parsed
   } catch {
     return null

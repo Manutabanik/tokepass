@@ -15,6 +15,7 @@ function sampleTicket(overrides: Partial<MyTicket> = {}): MyTicket {
   return {
     id: "9dfcc6ca-8d97-4d9c-951d-ffabc21e6210",
     status: "valid",
+    visualStatus: "active",
     qrCode: "qr-code-value",
     totpSecret: "a".repeat(48),
     transferCount: 0,
@@ -33,6 +34,7 @@ function sampleTicket(overrides: Partial<MyTicket> = {}): MyTicket {
     eventId: "11111111-2222-4333-8444-555555555555",
     eventTitle: "Noche Neon",
     eventDate: "2026-08-20T22:00:00.000Z",
+    endsAt: "2026-08-21T06:00:00.000Z",
     doorsOpenAt: "2026-08-20T22:00:00.000Z",
     eventLocation: "Niceto, Palermo",
     flyerUrl: "https://cdn.example.com/flyer.png",

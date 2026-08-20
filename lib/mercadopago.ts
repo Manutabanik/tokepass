@@ -43,8 +43,22 @@ export function isMercadoPagoSandboxToken(accessToken?: string): boolean {
   return token.startsWith("TEST-")
 }
 
+export function assertMercadoPagoProductionSafe(accessToken?: string): void {
+  if (process.env.VERCEL_ENV !== "production") return
+  if (process.env.MP_FORCE_SANDBOX === "1") {
+    throw new Error("MP_FORCE_SANDBOX=1 no esta permitido en produccion.")
+  }
+  const token = (accessToken ?? getMercadoPagoAccessToken()).trim()
+  if (token.startsWith("TEST-")) {
+    throw new Error(
+      "El token de Mercado Pago de produccion no puede comenzar con TEST-.",
+    )
+  }
+}
+
 /** Sandbox de prueba: token TEST-, force flag, o entorno local/preview. */
 export function isMercadoPagoSandboxMode(accessToken?: string): boolean {
+  assertMercadoPagoProductionSafe(accessToken)
   if (isMercadoPagoSandboxToken(accessToken)) return true
   if (process.env.MP_FORCE_SANDBOX === "1") return true
   if (process.env.VERCEL_ENV === "production") return false
@@ -60,10 +74,12 @@ export function getMercadoPagoSandboxBuyerEmail(): string | null {
 }
 
 export function getMercadoPagoClient() {
+  const accessToken = getMercadoPagoAccessToken()
+  assertMercadoPagoProductionSafe(accessToken)
   return new MercadoPagoConfig({
-    accessToken: getMercadoPagoAccessToken(),
+    accessToken,
     options: {
-      timeout: 10_000,
+      timeout: 8_000,
     },
   })
 }

@@ -2,6 +2,10 @@ import "server-only"
 
 import { logger } from "@/lib/logger"
 import {
+  CircuitOpenError,
+  circuitFetch,
+} from "@/lib/resilience/circuit-breaker"
+import {
   invalidWebhookResult,
   PaymentProviderUnavailableError,
 } from "@/lib/payments/core/errors"
@@ -11,6 +15,7 @@ import type {
   IPaymentGatewayAdapter,
   WebhookVerificationResult,
 } from "@/lib/payments/core/interfaces"
+import { mapGatewayPaymentStatus } from "@/lib/payments/core/map-gateway-status"
 import { verifyWebhookSignature } from "@/lib/payments/core/webhook-secret"
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -52,27 +57,46 @@ export class PaywayAdapter implements IPaymentGatewayAdapter {
       )
     }
 
-    const response = await fetch(`${config.baseUrl}/payments/checkout`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: config.apiKey,
-        "X-Site-Id": config.siteId,
-      },
-      body: JSON.stringify({
-        site_id: config.siteId,
-        external_reference: input.orderId,
-        amount: input.amount,
-        currency: input.currency,
-        description: input.description,
-        payer: input.buyer,
-        items: input.items,
-        success_url: input.redirectUrls.success,
-        failure_url: input.redirectUrls.failure,
-        pending_url: input.redirectUrls.pending,
-        notification_url: input.webhookUrl,
-      }),
-    })
+    let response: Response
+    try {
+      response = await circuitFetch(
+        "payway",
+        `${config.baseUrl}/payments/checkout`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: config.apiKey,
+            "X-Site-Id": config.siteId,
+          },
+          body: JSON.stringify({
+            site_id: config.siteId,
+            external_reference: input.orderId,
+            amount: input.amount,
+            currency: input.currency,
+            description: input.description,
+            payer: input.buyer,
+            items: input.items,
+            success_url: input.redirectUrls.success,
+            failure_url: input.redirectUrls.failure,
+            pending_url: input.redirectUrls.pending,
+            notification_url: input.webhookUrl,
+          }),
+          signal: AbortSignal.timeout(8000),
+        },
+      )
+    } catch (error) {
+      if (error instanceof CircuitOpenError) {
+        throw new PaymentProviderUnavailableError(
+          this.provider,
+          error.message,
+        )
+      }
+      throw new PaymentProviderUnavailableError(
+        this.provider,
+        "Payway no pudo iniciar el checkout.",
+      )
+    }
 
     const payload: unknown = await response.json().catch(() => null)
     const record = asRecord(payload)
@@ -137,12 +161,7 @@ export class PaywayAdapter implements IPaymentGatewayAdapter {
       const statusRaw = (readString(record, "status") ?? "pending").toLowerCase()
       const amount = Number(record.amount ?? 0)
 
-      const status =
-        statusRaw === "approved" || statusRaw === "accredited"
-          ? "approved"
-          : statusRaw === "rejected" || statusRaw === "cancelled"
-            ? "rejected"
-            : "pending"
+      const status = mapGatewayPaymentStatus(statusRaw)
 
       return {
         isValid: Boolean(orderId && transactionId),
@@ -150,6 +169,7 @@ export class PaywayAdapter implements IPaymentGatewayAdapter {
         transactionId,
         status,
         amount: Number.isFinite(amount) ? amount : 0,
+        currency: (readString(record, "currency") ?? "ARS").toUpperCase(),
         rawPayload: payload,
       }
     } catch {

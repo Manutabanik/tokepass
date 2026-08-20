@@ -28,6 +28,7 @@ export function invalidWebhookResult(
   transactionId: string
   status: "pending"
   amount: number
+  currency: string
   rawPayload: unknown
 } {
   return {
@@ -36,6 +37,7 @@ export function invalidWebhookResult(
     transactionId: "",
     status: "pending",
     amount: 0,
+    currency: "",
     rawPayload,
   }
 }

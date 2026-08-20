@@ -2,6 +2,12 @@
 
 import { revalidatePath } from "next/cache"
 
+import {
+  bytesToBlob,
+  detectRasterImageMagic,
+  rasterContentType,
+  readFileBytes,
+} from "@/lib/media/image-magic"
 import { createClient } from "@/lib/supabase/server"
 
 type ActionResult<T = undefined> =
@@ -139,19 +145,20 @@ export async function uploadOrganizerAvatar(
       }
     }
 
-    const safeName = (file.name || "avatar.png")
-      .normalize("NFKD")
-      .replace(/[^\w.\-]+/g, "-")
-      .replace(/-+/g, "-")
-      .toLowerCase()
-      .slice(0, 80)
-    const path = `${userId}/avatars/${Date.now()}-${safeName}`
+    const bytes = await readFileBytes(file)
+    const kind = detectRasterImageMagic(bytes)
+    if (!kind) {
+      return { success: false, error: "La foto no es un JPG, PNG o WEBP valido." }
+    }
+    const contentType = rasterContentType(kind)
+
+    const path = `${userId}/avatar.webp`
     const { error } = await supabase.storage
-      .from("event-flyers")
-      .upload(path, file, {
+      .from("avatars")
+      .upload(path, bytesToBlob(bytes, contentType), {
         cacheControl: "3600",
-        contentType: file.type,
-        upsert: false,
+        contentType,
+        upsert: true,
       })
 
     if (error) {
@@ -161,11 +168,13 @@ export async function uploadOrganizerAvatar(
       }
     }
 
-    const { data } = supabase.storage.from("event-flyers").getPublicUrl(path)
+    const { data } = supabase.storage.from("avatars").getPublicUrl(path)
     if (!data.publicUrl) {
-      await supabase.storage.from("event-flyers").remove([path])
+      await supabase.storage.from("avatars").remove([path])
       return { success: false, error: "No pudimos publicar la foto." }
     }
+
+    const avatarUrl = `${data.publicUrl.split("?")[0]}?v=${Date.now()}`
 
     const { data: previous } = await supabase
       .from("profiles")
@@ -175,26 +184,28 @@ export async function uploadOrganizerAvatar(
 
     const { error: updateError } = await supabase
       .from("profiles")
-      .update({ avatar_url: data.publicUrl })
+      .update({ avatar_url: avatarUrl })
       .eq("id", userId)
 
     if (updateError) {
-      await supabase.storage.from("event-flyers").remove([path])
+      await supabase.storage.from("avatars").remove([path])
       return {
         success: false,
         error: `No pudimos guardar la foto: ${updateError.message}`,
       }
     }
 
-    const previousPath = previous?.avatar_url?.split("/event-flyers/")[1]
-    if (previousPath) {
-      await supabase.storage.from("event-flyers").remove([previousPath])
+    const previousFlyerPath = previous?.avatar_url?.split("/event-flyers/")[1]
+    if (previousFlyerPath) {
+      await supabase.storage
+        .from("event-flyers")
+        .remove([previousFlyerPath.split("?")[0] ?? previousFlyerPath])
     }
 
     revalidatePath("/admin")
     revalidatePath("/admin/profile")
     revalidatePath("/events", "layout")
-    return { success: true, data: { url: data.publicUrl } }
+    return { success: true, data: { url: avatarUrl } }
   } catch (error) {
     return {
       success: false,

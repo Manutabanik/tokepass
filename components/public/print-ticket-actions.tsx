@@ -34,7 +34,7 @@ export function PrintTicketActions({
     <Button
       type="button"
       onClick={() => window.print()}
-      className="h-10 rounded-full bg-zinc-950 text-white hover:bg-zinc-800"
+      className="no-print print:hidden h-10 rounded-full bg-zinc-950 text-white hover:bg-zinc-800"
     >
       <Printer className="size-4" aria-hidden="true" />
       Imprimir ticket

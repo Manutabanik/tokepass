@@ -15,14 +15,20 @@ import {
 import {
   buildPreferencePayer,
 } from "@/lib/payments/mercadopago"
+import { getResaleFeePercentage } from "@/app/actions/platform-settings"
 import {
   computeResaleFeeSplit,
+  RESALE_CHECKOUT_TTL_MINUTES,
   resaleExternalRef,
 } from "@/lib/resale"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createPublicClient } from "@/lib/supabase/public"
 import { createClient } from "@/lib/supabase/server"
 import { formatCurrency } from "@/lib/format"
+import {
+  LEGAL_CONSENT_REQUIRED_ERROR,
+  TICKET_TRANSFER_RESALE_TERMS_VERSION,
+} from "@/lib/legal/terms"
 
 export type ResaleListingPublic = {
   id: string
@@ -36,7 +42,7 @@ export type MyResaleListing = {
   ticketId: string
   eventId: string
   price: number
-  status: "active" | "sold" | "cancelled"
+  status: "active" | "reserved" | "sold" | "cancelled"
   createdAt: string
 }
 
@@ -87,8 +93,47 @@ export async function getActiveResaleListingsForEvent(
   }))
 }
 
+function mapCreateResaleListingError(message: string): string {
+  const normalized = message.toUpperCase()
+  if (normalized.includes("CONSENT_REQUIRED")) {
+    return LEGAL_CONSENT_REQUIRED_ERROR
+  }
+  if (normalized.includes("AUTH_REQUIRED")) {
+    return "Debés iniciar sesión."
+  }
+  if (normalized.includes("TICKET_NOT_FOUND")) {
+    return "Entrada no encontrada."
+  }
+  if (normalized.includes("NOT_TICKET_OWNER")) {
+    return "Solo el titular puede publicar la reventa."
+  }
+  if (normalized.includes("TICKET_ALREADY_ADMITTED")) {
+    return "Esta entrada ya fue usada parcialmente y no se puede revender."
+  }
+  if (normalized.includes("TICKET_IS_TEST")) {
+    return "Las entradas de prueba no se pueden revender."
+  }
+  if (normalized.includes("TRANSFER_LIMIT_REACHED")) {
+    return "Esta entrada alcanzó el límite de transferencias."
+  }
+  if (normalized.includes("TICKET_TRANSFER_PENDING")) {
+    return "Cancelá el envío pendiente antes de revender."
+  }
+  if (normalized.includes("TICKET_ALREADY_LISTED")) {
+    return "Esta entrada ya está publicada para reventa."
+  }
+  if (normalized.includes("TICKET_NOT_RESALABLE")) {
+    return "Las entradas gratuitas no se publican en el marketplace."
+  }
+  if (normalized.includes("TICKET_NOT_TRANSFERABLE")) {
+    return "Solo se pueden revender entradas válidas."
+  }
+  return message || "No se pudo publicar la reventa."
+}
+
 export async function createResaleListingAction(
   ticketId: string,
+  options?: { termsAccepted?: boolean },
 ): Promise<ActionResult<MyResaleListing>> {
   try {
     const supabase = await createClient()
@@ -99,96 +144,45 @@ export async function createResaleListingAction(
       return { success: false, error: "Debés iniciar sesión." }
     }
 
-    const { data: ticket, error: ticketError } = await supabase
-      .from("tickets")
-      .select(
-        "id, owner_id, event_id, status, is_test, admissions_used, transfer_count, max_transfers_allowed, ticket_tiers(price, name)",
-      )
-      .eq("id", ticketId)
-      .maybeSingle()
-
-    if (ticketError || !ticket) {
-      return { success: false, error: "Entrada no encontrada." }
-    }
-    if (ticket.owner_id !== user.id) {
-      return { success: false, error: "Solo el titular puede publicar la reventa." }
-    }
-    if (ticket.status !== "valid") {
-      return { success: false, error: "Solo se pueden revender entradas válidas." }
-    }
-    if (ticket.is_test) {
-      return { success: false, error: "Las entradas de prueba no se pueden revender." }
-    }
-    if (Number(ticket.admissions_used) > 0) {
-      return {
-        success: false,
-        error: "Esta entrada ya fue usada parcialmente y no se puede revender.",
-      }
-    }
-    if (ticket.transfer_count >= ticket.max_transfers_allowed) {
-      return {
-        success: false,
-        error: "Esta entrada alcanzó el límite de transferencias.",
-      }
+    if (!options?.termsAccepted) {
+      return { success: false, error: LEGAL_CONSENT_REQUIRED_ERROR }
     }
 
-    const tier = ticket.ticket_tiers as { price: number; name: string } | null
-    const officialPrice = Number(tier?.price ?? 0)
-    if (!Number.isFinite(officialPrice) || officialPrice <= 0) {
-      return {
-        success: false,
-        error: "Las entradas gratuitas no se publican en el marketplace.",
-      }
+    const { data, error } = await supabase.rpc("create_resale_listing", {
+      p_ticket_id: ticketId,
+      p_terms_version: TICKET_TRANSFER_RESALE_TERMS_VERSION,
+    })
+
+    if (error) {
+      return { success: false, error: mapCreateResaleListingError(error.message) }
     }
 
-    const split = computeResaleFeeSplit(officialPrice)
+    const listing = (
+      data as Array<{
+        listing_id: string
+        ticket_id: string
+        event_id: string
+        price: number
+        status: MyResaleListing["status"]
+        created_at: string
+      }> | null
+    )?.[0]
 
-    const { data: existing } = await supabase
-      .from("ticket_resale_listings")
-      .select("id")
-      .eq("ticket_id", ticketId)
-      .eq("status", "active")
-      .maybeSingle()
-
-    if (existing) {
-      return {
-        success: false,
-        error: "Esta entrada ya está publicada para reventa.",
-      }
-    }
-
-    const { data: listing, error } = await supabase
-      .from("ticket_resale_listings")
-      .insert({
-        ticket_id: ticketId,
-        seller_id: user.id,
-        event_id: ticket.event_id,
-        price: split.price,
-        platform_fee_amount: split.platformFeeAmount,
-        seller_net_amount: split.sellerNetAmount,
-        status: "active",
-      })
-      .select("id, ticket_id, event_id, price, status, created_at")
-      .single()
-
-    if (error || !listing) {
-      return {
-        success: false,
-        error: error?.message || "No se pudo publicar la reventa.",
-      }
+    if (!listing) {
+      return { success: false, error: "No se pudo publicar la reventa." }
     }
 
     revalidatePath("/cuenta/entradas")
-    revalidatePath(`/events/${ticket.event_id}`)
+    revalidatePath(`/events/${listing.event_id}`)
 
     return {
       success: true,
       data: {
-        id: listing.id,
+        id: listing.listing_id,
         ticketId: listing.ticket_id,
         eventId: listing.event_id,
         price: Number(listing.price),
-        status: listing.status as MyResaleListing["status"],
+        status: listing.status,
         createdAt: listing.created_at,
       },
     }
@@ -196,7 +190,9 @@ export async function createResaleListingAction(
     return {
       success: false,
       error:
-        error instanceof Error ? error.message : "Error al publicar la reventa.",
+        error instanceof Error
+          ? mapCreateResaleListingError(error.message)
+          : "Error al publicar la reventa.",
     }
   }
 }
@@ -224,6 +220,13 @@ export async function cancelResaleListingAction(
     }
     if (listing.seller_id !== user.id) {
       return { success: false, error: "No podés cancelar este listado." }
+    }
+    if (listing.status === "reserved") {
+      return {
+        success: false,
+        error:
+          "Hay un comprador pagando esta entrada. Si no se completa, vuelve a estar disponible en unos minutos.",
+      }
     }
     if (listing.status !== "active") {
       return { success: false, error: "El listado ya no está activo." }
@@ -253,52 +256,92 @@ export async function cancelResaleListingAction(
   }
 }
 
+function mapReserveResaleError(message: string): string {
+  const normalized = message.toUpperCase()
+  if (normalized.includes("AUTH_REQUIRED")) {
+    return "Iniciá sesión para comprar en la reventa oficial."
+  }
+  if (normalized.includes("LISTING_NOT_FOUND")) {
+    return "Listado no encontrado."
+  }
+  if (normalized.includes("LISTING_RESERVED")) {
+    return "Otro comprador ya está pagando esta entrada. Reintentá en unos minutos."
+  }
+  if (normalized.includes("CANNOT_BUY_OWN")) {
+    return "No podés comprar tu propia entrada."
+  }
+  if (normalized.includes("LISTING_NOT_AVAILABLE")) {
+    return "Esta reventa ya no está disponible."
+  }
+  return message || "No se pudo reservar la reventa."
+}
+
 export async function startResaleCheckoutAction(
   listingId: string,
 ): Promise<ActionResult<{ initPoint: string }>> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) {
+    return {
+      success: false,
+      error: "Iniciá sesión para comprar en la reventa oficial.",
+    }
+  }
+
+  let reservedListingId: string | null = null
+
   try {
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      return {
-        success: false,
-        error: "Iniciá sesión para comprar en la reventa oficial.",
-      }
+    const { data: reservedRaw, error: reserveError } = await supabase.rpc(
+      "reserve_resale_listing",
+      {
+        p_listing_id: listingId,
+        p_ttl_minutes: RESALE_CHECKOUT_TTL_MINUTES,
+      },
+    )
+
+    if (reserveError) {
+      return { success: false, error: mapReserveResaleError(reserveError.message) }
     }
 
-    const { data: listing, error: listingError } = await supabase
-      .from("ticket_resale_listings")
-      .select("id, seller_id, event_id, price, status, ticket_id")
-      .eq("id", listingId)
-      .maybeSingle()
+    const reserved = (reservedRaw ?? {}) as {
+      ok?: boolean
+      listing_id?: string
+      ticket_id?: string
+      event_id?: string
+      seller_id?: string
+      price?: number
+      reserved_until?: string
+    }
 
-    if (listingError || !listing) {
-      return { success: false, error: "Listado no encontrado." }
+    if (!reserved.ok || !reserved.listing_id || !reserved.ticket_id) {
+      return { success: false, error: "No se pudo reservar la reventa." }
     }
-    if (listing.status !== "active") {
-      return { success: false, error: "Esta reventa ya no está disponible." }
-    }
-    if (listing.seller_id === user.id) {
-      return { success: false, error: "No podés comprar tu propia entrada." }
-    }
+
+    reservedListingId = reserved.listing_id
 
     const { data: ticket } = await supabase
       .from("tickets")
       .select("id, status, ticket_tiers(name), events(title)")
-      .eq("id", listing.ticket_id)
+      .eq("id", reserved.ticket_id)
       .maybeSingle()
 
     if (!ticket || ticket.status !== "valid") {
+      await supabase.rpc("release_resale_listing_reservation", {
+        p_listing_id: reserved.listing_id,
+      })
       return {
         success: false,
         error: "La entrada ya no está disponible para reventa.",
       }
     }
 
-    const frozenPrice = Number(listing.price)
+    const frozenPrice = Number(reserved.price)
     if (!Number.isFinite(frozenPrice) || frozenPrice <= 0) {
+      await supabase.rpc("release_resale_listing_reservation", {
+        p_listing_id: reserved.listing_id,
+      })
       return { success: false, error: "Precio de reventa inválido." }
     }
 
@@ -323,6 +366,9 @@ export async function startResaleCheckoutAction(
       sandboxMode,
       sandboxBuyerEmail: getMercadoPagoSandboxBuyerEmail(),
     })
+    const reservedUntil = reserved.reserved_until
+      ? new Date(reserved.reserved_until)
+      : new Date(Date.now() + RESALE_CHECKOUT_TTL_MINUTES * 60 * 1000)
 
     const client = getMercadoPagoClient()
     const preference = new Preference(client)
@@ -330,7 +376,7 @@ export async function startResaleCheckoutAction(
       body: {
         items: [
           {
-            id: `resale-${listing.id}`,
+            id: `resale-${reserved.listing_id}`,
             title: `Reventa oficial · ${eventTitle} · ${tierName}`.slice(0, 256),
             quantity: 1,
             unit_price: frozenPrice,
@@ -338,12 +384,14 @@ export async function startResaleCheckoutAction(
           },
         ],
         ...(payer ? { payer } : {}),
-        external_reference: resaleExternalRef(listing.id),
+        external_reference: resaleExternalRef(reserved.listing_id),
         statement_descriptor: "TOKEPASS",
+        expires: true,
+        expiration_date_to: reservedUntil.toISOString(),
         back_urls: {
-          success: `${base}/checkout/success?resale=1&listing_id=${listing.id}`,
-          failure: `${base}/checkout/failure?resale=1&listing_id=${listing.id}`,
-          pending: `${base}/checkout/pending?resale=1&listing_id=${listing.id}`,
+          success: `${base}/checkout/success?resale=1&listing_id=${reserved.listing_id}`,
+          failure: `${base}/checkout/failure?resale=1&listing_id=${reserved.listing_id}`,
+          pending: `${base}/checkout/pending?resale=1&listing_id=${reserved.listing_id}`,
         },
         ...(!localSite ? { auto_return: "approved" as const } : {}),
         ...(!localSite
@@ -351,10 +399,10 @@ export async function startResaleCheckoutAction(
           : {}),
         metadata: {
           kind: "ticket_resale",
-          listing_id: listing.id,
+          listing_id: reserved.listing_id,
           buyer_id: user.id,
-          seller_id: listing.seller_id,
-          event_id: listing.event_id,
+          seller_id: reserved.seller_id,
+          event_id: reserved.event_id,
           ticket_id: ticket.id,
           price: frozenPrice,
         },
@@ -364,6 +412,9 @@ export async function startResaleCheckoutAction(
     const initPoint = resolveCheckoutInitPoint(created)
     const preferenceId = created.id
     if (!preferenceId || !initPoint) {
+      await supabase.rpc("release_resale_listing_reservation", {
+        p_listing_id: reserved.listing_id,
+      })
       return {
         success: false,
         error: "Mercado Pago no devolvió una preferencia válida.",
@@ -374,23 +425,37 @@ export async function startResaleCheckoutAction(
     const { error: updateError } = await admin
       .from("ticket_resale_listings")
       .update({
-        buyer_id: user.id,
         mp_preference_id: preferenceId,
       })
-      .eq("id", listing.id)
-      .eq("status", "active")
+      .eq("id", reserved.listing_id)
+      .eq("buyer_id", user.id)
+      .eq("status", "reserved")
 
     if (updateError) {
       logger.error({
         context: "resale",
         message: "preference_link_failed",
-        listingId: listing.id,
+        listingId: reserved.listing_id,
         error: updateError.message,
       })
+      await supabase.rpc("release_resale_listing_reservation", {
+        p_listing_id: reserved.listing_id,
+      })
+      return {
+        success: false,
+        error: "No se pudo vincular el pago a la reserva.",
+      }
     }
 
     return { success: true, data: { initPoint } }
   } catch (error) {
+    if (reservedListingId) {
+      await Promise.resolve(
+        supabase.rpc("release_resale_listing_reservation", {
+          p_listing_id: reservedListingId,
+        }),
+      ).catch(() => undefined)
+    }
     logger.error({
       context: "resale",
       message: "checkout_failed",
@@ -409,7 +474,15 @@ export async function startResaleCheckoutAction(
 /** Helper copy for seller modal net preview. */
 export async function getResaleListingPreview(
   ticketId: string,
-): Promise<ActionResult<{ price: number; sellerNet: number; fee: number; label: string }>> {
+): Promise<
+  ActionResult<{
+    price: number
+    sellerNet: number
+    fee: number
+    feePercentage: number
+    label: string
+  }>
+> {
   const supabase = await createClient()
   const {
     data: { user },
@@ -431,13 +504,15 @@ export async function getResaleListingPreview(
   if (price <= 0) {
     return { success: false, error: "Entrada no elegible para reventa." }
   }
-  const split = computeResaleFeeSplit(price)
+  const feePercentage = await getResaleFeePercentage()
+  const split = computeResaleFeeSplit(price, feePercentage)
   return {
     success: true,
     data: {
       price: split.price,
       sellerNet: split.sellerNetAmount,
       fee: split.platformFeeAmount,
+      feePercentage: split.feePercentage,
       label: `${tier?.name ?? "Entrada"} · ${formatCurrency(split.price)}`,
     },
   }

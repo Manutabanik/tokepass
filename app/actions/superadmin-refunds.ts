@@ -2,11 +2,13 @@
 
 import { revalidatePath } from "next/cache"
 
+import { AAL2_REQUIRED_ERROR, assertCurrentSessionAal2 } from "@/lib/auth/aal2"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { isGatewayRefundSuccess, isLocallyRefundablePayment } from "@/lib/legal/withdrawal"
 import { mercadoPagoRefundService } from "@/lib/mercadopago/refund-service"
 import { logger } from "@/lib/logger"
+import { writeSecurityAuditLog } from "@/lib/security/audit-log"
 import { SuperAdminForbiddenError } from "@/lib/superadmin-errors"
 import type { EventStatus, OrganizerRiskTier } from "@/types/database"
 
@@ -38,7 +40,7 @@ async function requireSuperAdminActor() {
     throw new SuperAdminForbiddenError()
   }
 
-  return { admin: createAdminClient(), actorId: user.id }
+  return { admin: createAdminClient(), actorId: user.id, supabase }
 }
 
 export type MassRefundPreview = {
@@ -176,7 +178,7 @@ export async function executeMassEventRefund(
   reason: string,
 ): Promise<MassRefundResult> {
   try {
-    const { admin, actorId } = await requireSuperAdminActor()
+    const { admin, actorId, supabase } = await requireSuperAdminActor()
     const id = eventId.trim()
     const cleanReason = reason.trim()
 
@@ -188,6 +190,18 @@ export async function executeMassEventRefund(
         success: false,
         error: "Indicá un motivo legal de al menos 8 caracteres.",
       }
+    }
+
+    const aal2 = await assertCurrentSessionAal2(supabase)
+    if (!aal2.ok) {
+      await admin.from("platform_ops_audit").insert({
+        actor_id: actorId,
+        action: "MASS_REFUND_AAL2_REQUIRED",
+        event_id: id,
+        reason: cleanReason,
+        metadata: { blocked: true, required: "aal2" },
+      })
+      return { success: false, error: aal2.error || AAL2_REQUIRED_ERROR }
     }
 
     const { data: event, error: eventError } = await admin
@@ -333,7 +347,35 @@ export async function executeMassEventRefund(
 
       ordersRefunded += 1
       ticketsCancelled += Number(cancelledCount ?? 0)
+
+      await writeSecurityAuditLog({
+        actorId,
+        action: "order_refund",
+        entity: "order",
+        entityId: order.id,
+        details: {
+          source: "mass_refund",
+          eventId: id,
+          ticketsCancelled: Number(cancelledCount ?? 0),
+        },
+      })
     }
+
+    await writeSecurityAuditLog({
+      actorId,
+      action: "mass_refund",
+      entity: "event",
+      entityId: id,
+      details: {
+        reason: cleanReason,
+        ordersRefunded,
+        ticketsCancelled,
+        mpAttempts,
+        mpSucceeded,
+        mpFailed,
+        riskTier,
+      },
+    })
 
     revalidatePath("/superadmin")
     revalidatePath("/superadmin/events")

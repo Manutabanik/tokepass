@@ -3,6 +3,7 @@
 import type { ReactNode } from "react"
 import { Flashlight, FlashlightOff, Search, Sun } from "lucide-react"
 
+import { offlineDegradedModeMessage } from "@/lib/scanner/offline-degraded-mode"
 import { cn } from "@/lib/utils"
 
 export function NeonFocusFrame() {
@@ -81,6 +82,14 @@ export function DoorScannerSessionChrome({
             </button>
           ) : null}
         </div>
+        {!online ? (
+          <p
+            role="status"
+            className="rounded-xl border border-amber-400/40 bg-amber-500/15 px-3 py-2 text-center text-[12px] font-semibold leading-5 text-amber-100"
+          >
+            {offlineDegradedModeMessage()}
+          </p>
+        ) : null}
         {!isTotem ? (
           <button
             type="button"

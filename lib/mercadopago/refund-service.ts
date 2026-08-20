@@ -1,9 +1,14 @@
 import "server-only"
 
-import { MercadoPagoConfig, PaymentRefund } from "mercadopago"
+import { MercadoPagoConfig, Payment, PaymentRefund } from "mercadopago"
 
 import { getMercadoPagoClient } from "@/lib/mercadopago"
 import { logger } from "@/lib/logger"
+import { withCircuit } from "@/lib/resilience/circuit-breaker"
+import {
+  isWithinMercadoPagoRefundWindow,
+  parseMercadoPagoPaidAt,
+} from "@/lib/mercadopago/refund-window"
 
 export type MercadoPagoRefundRequest = {
   paymentId: string
@@ -11,6 +16,8 @@ export type MercadoPagoRefundRequest = {
   accessToken?: string | null
   amount?: number | null
   reason?: string | null
+  /** Fecha de aprobacion/creacion del cobro original (date_approved). */
+  paidAt?: Date | string | number | null
   /** Fuerza mock auditado (Tier 2/3 sin Connect vinculado). */
   forceMock?: boolean
 }
@@ -79,14 +86,43 @@ export class MercadoPagoRefundService {
       const client = organizerToken
         ? new MercadoPagoConfig({
             accessToken: organizerToken,
-            options: { timeout: 12_000 },
+            options: { timeout: 8_000 },
           })
         : getMercadoPagoClient()
 
+      let paidAt = parseMercadoPagoPaidAt(input.paidAt)
+      if (!paidAt) {
+        const paymentClient = new Payment(client)
+        const payment = await withCircuit("mercadopago", () =>
+          paymentClient.get({ id: paymentId }),
+        )
+        paidAt = parseMercadoPagoPaidAt(
+          payment.date_approved ?? payment.date_created ?? null,
+        )
+      }
+
+      if (!isWithinMercadoPagoRefundWindow(paidAt)) {
+        logger.error({
+          context: "mercadopago/refund-service",
+          message: "refund_window_expired",
+          paymentId,
+          paidAt: paidAt?.toISOString() ?? null,
+          reason: input.reason ?? null,
+        })
+        return {
+          success: false,
+          paymentId,
+          mode,
+          error: "refund_window_expired",
+        }
+      }
+
       const refunds = new PaymentRefund(client)
-      const response = await refunds.total({
-        payment_id: paymentId,
-      })
+      const response = await withCircuit("mercadopago", () =>
+        refunds.total({
+          payment_id: paymentId,
+        }),
+      )
 
       const envelope = response as {
         id?: string | number

@@ -41,6 +41,18 @@ describe("evaluateOfflineManifestGate", () => {
     if (!result.ok) assert.equal(result.reason, "wrong_schedule")
   })
 
+  it("bloquea un ticket publicado en reventa", () => {
+    const result = evaluateOfflineManifestGate({
+      pendingTransfer: false,
+      listedForResale: true,
+      dayId: "day-1",
+      scheduleDays: days,
+      now: new Date("2026-08-21T23:00:00.000Z"),
+    })
+    assert.equal(result.ok, false)
+    if (!result.ok) assert.equal(result.reason, "listed_for_resale")
+  })
+
   it("admite un ticket de la jornada en curso", () => {
     const result = evaluateOfflineManifestGate({
       pendingTransfer: false,

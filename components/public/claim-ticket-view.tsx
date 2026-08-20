@@ -86,6 +86,11 @@ export function ClaimTicketView({
           El envío fue cancelado. Pedile a quien te la transfirió que la vuelva a
           enviar.
         </p>
+      ) : alreadyOwner && status === "pending" ? (
+        <p className="mt-4 text-sm text-muted-foreground">
+          Esta entrada sigue en tu billetera. El QR está oculto hasta que tu
+          amigo la acepte o canceles el envío.
+        </p>
       ) : !emailMatches ? (
         <p className="mt-4 text-sm text-muted-foreground">
           Esta entrada fue enviada a otro email. Ingresá con la cuenta

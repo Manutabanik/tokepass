@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 
+import { centsToMoney, moneyToCents } from "@/lib/money/cents"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import type { PromoCode, PromoDiscountType } from "@/types/database"
@@ -305,11 +306,12 @@ export async function validatePromoCode(
     if (!Number.isFinite(base) || base < 0) {
       return { success: false, error: "Subtotal inválido." }
     }
+    const subtotal = centsToMoney(moneyToCents(base))
 
     const { data, error } = await supabase.rpc("validate_promo_code", {
       p_event_id: eventId,
       p_code: cleanCode,
-      p_cart_subtotal: base,
+      p_cart_subtotal: subtotal,
     })
 
     if (error) {
@@ -368,7 +370,7 @@ export async function validatePromoCode(
         code: row.code,
         discountType: (row.discount_type ?? "fixed_amount") as PromoDiscountType,
         discountValue: Number(row.discount_value ?? 0),
-        discountAmount: Number(row.discount_amount ?? 0),
+        discountAmount: centsToMoney(moneyToCents(row.discount_amount ?? 0)),
         promoterId,
         promoterName,
         promoterReferralCode,

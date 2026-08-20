@@ -24,6 +24,7 @@ import { toast } from "sonner"
 import { getStoryCardData } from "@/app/actions/public-story"
 import { StoryCanvas } from "@/components/public/story-canvas"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { useLockBodyScroll } from "@/hooks/use-lock-body-scroll"
 import { use3DTilt } from "@/hooks/use-3d-tilt"
 import {
@@ -35,11 +36,13 @@ import {
 } from "@/components/ui/dialog"
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import {
+  DEFAULT_STORY_TITLE,
   STORY_CANVAS_HEIGHT,
   STORY_CANVAS_WIDTH,
   STORY_HEADLINES,
   STORY_THEMES,
   defaultStoryHeadlineId,
+  defaultStoryTitle,
   findStoryTheme,
   type StoryFlyerData,
   type StoryFlyerMode,
@@ -55,6 +58,7 @@ import {
   storySafeImageSrc,
 } from "@/lib/story-image"
 import {
+  dataUrlToPngFile,
   fitStoryPngWeight,
   storyPngOptions,
   waitForStoryFlyerPaint,
@@ -95,6 +99,7 @@ export function StoryFlyerModal({
   const [headlineId, setHeadlineId] = useState<StoryHeadlineId>(() =>
     defaultStoryHeadlineId(data.mode),
   )
+  const [customTitle, setCustomTitle] = useState(DEFAULT_STORY_TITLE)
   const [resolved, setResolved] = useState(data)
   const [dataKey, setDataKey] = useState(
     () => `${data.eventId}-${data.imageUrl}-${data.mode}`,
@@ -104,6 +109,7 @@ export function StoryFlyerModal({
     setDataKey(nextDataKey)
     setResolved(data)
     setHeadlineId(defaultStoryHeadlineId(data.mode))
+    setCustomTitle(defaultStoryTitle(data.mode))
     setSafeImageUrl(storySafeImageSrc(data.imageUrl))
     setHydrating(
       Boolean(data.imageUrl?.trim()) && !isStorySafeImage(data.imageUrl),
@@ -209,16 +215,17 @@ export function StoryFlyerModal({
     if (!node) return null
     await waitForImages(node)
     await waitForStoryFlyerPaint(node)
-    const { toBlob } = await import("html-to-image")
+    const { toPng } = await import("html-to-image")
     const options = storyPngOptions(findStoryTheme(themeId).background)
-    let blob: Blob | null
+    let dataUrl: string
     try {
-      blob = await toBlob(node, options)
+      dataUrl = await toPng(node, options)
     } catch {
-      blob = await toBlob(node, { ...options, skipFonts: true })
+      dataUrl = await toPng(node, { ...options, skipFonts: true })
     }
-    if (!blob) return null
-    return fitStoryPngWeight(blob)
+    if (!dataUrl.startsWith("data:image/")) return null
+    const file = dataUrlToPngFile(dataUrl, "tokepass-entrada.png")
+    return fitStoryPngWeight(file)
   }
 
   async function handleShareInstagram() {
@@ -278,12 +285,13 @@ export function StoryFlyerModal({
     <>
       <div
         aria-hidden
-        className="pointer-events-none fixed inset-0 -z-50 overflow-hidden opacity-0"
+        className="pointer-events-none absolute top-[-9999px] left-[-9999px] flex h-[1920px] w-[1080px] flex-col items-center justify-center bg-black"
       >
         <StoryCanvas
           data={resolved}
           themeId={themeId}
           headlineId={headlineId}
+          headlineText={customTitle}
           canvasRef={storyCardRef}
           live={false}
           pauseMotion={busy}
@@ -354,6 +362,7 @@ export function StoryFlyerModal({
                       data={resolved}
                       themeId={themeId}
                       headlineId={headlineId}
+                      headlineText={customTitle}
                       live
                       pauseMotion={busy || hydrating || isZoomed}
                       imagePending={hydrating && flyerRequired}
@@ -409,7 +418,10 @@ export function StoryFlyerModal({
                         <button
                           key={headline.id}
                           type="button"
-                          onClick={() => setHeadlineId(headline.id)}
+                          onClick={() => {
+                            setHeadlineId(headline.id)
+                            setCustomTitle(headline.lines.join(" "))
+                          }}
                           aria-pressed={selected}
                           className={cn(
                             "shrink-0 snap-start rounded-full px-3 py-1.5 text-[11px] font-bold tracking-wide transition",
@@ -423,6 +435,26 @@ export function StoryFlyerModal({
                       )
                     })}
                   </div>
+                </div>
+
+                <div className="w-full">
+                  <label
+                    htmlFor={titleId + "-custom"}
+                    className="mb-2 block text-center text-[10px] font-bold uppercase tracking-[0.18em] text-white/50 md:text-left"
+                  >
+                    Texto superior
+                  </label>
+                  <Input
+                    id={titleId + "-custom"}
+                    value={customTitle}
+                    maxLength={48}
+                    placeholder="YA TENGO MI ENTRADA"
+                    onChange={(event) => setCustomTitle(event.target.value)}
+                    className="h-11 rounded-xl border-white/15 bg-white/8 text-white placeholder:text-white/35"
+                  />
+                  <p className="mt-1.5 text-center text-[11px] text-white/40 md:text-left">
+                    Vacio: se oculta el titulo en la historia.
+                  </p>
                 </div>
 
                 <Button
@@ -504,6 +536,7 @@ export function StoryFlyerModal({
                   data={resolved}
                   themeId={themeId}
                   headlineId={headlineId}
+                  headlineText={customTitle}
                   live={false}
                   pauseMotion
                   imagePending={hydrating && flyerRequired}
@@ -527,7 +560,7 @@ type StoryFlyerTriggerProps = {
   label: string
   icon?: ReactNode
   className?: string
-  variant?: "primary" | "outline" | "card" | "hero"
+  variant?: "primary" | "outline" | "card" | "hero" | "solid"
 }
 
 export function StoryFlyerTrigger({
@@ -574,6 +607,7 @@ export function StoryFlyerTrigger({
             "w-full border border-fuchsia-500/30 bg-gradient-to-br from-violet-600/20 via-fuchsia-600/15 to-pink-500/10 text-foreground hover:border-fuchsia-400/50",
           variant === "hero" &&
             "h-14 w-full rounded-2xl bg-gradient-to-r from-purple-600 via-pink-500 to-amber-500 text-base font-bold text-white shadow-lg shadow-pink-500/20",
+          variant === "solid" && "w-full",
           className,
         )}
       >

@@ -142,11 +142,13 @@ function DiscoveryHubInner({
 
   useLayoutEffect(() => {
     if (!enableUrlSync) return
-    setQuery(urlFilters.query)
-    setCity(urlFilters.location)
-    setCategoryId(urlFilters.categoryId)
-    setArtistId(urlFilters.artistId)
-    setDatePreset(urlFilters.datePreset)
+    queueMicrotask(() => {
+      setQuery(urlFilters.query)
+      setCity(urlFilters.location)
+      setCategoryId(urlFilters.categoryId)
+      setArtistId(urlFilters.artistId)
+      setDatePreset(urlFilters.datePreset)
+    })
   }, [
     enableUrlSync,
     urlFilters.artistId,

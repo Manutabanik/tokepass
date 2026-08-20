@@ -20,6 +20,7 @@ import {
 import { toast } from "sonner"
 
 import {
+  deleteAccount,
   requestPasswordResetEmail,
   updateMyAccountProfile,
   uploadMyAvatar,
@@ -66,6 +67,8 @@ export function AccountProfileForm({
   const [pending, startTransition] = useTransition()
   const [avatarPending, startAvatarTransition] = useTransition()
   const [passwordPending, startPasswordTransition] = useTransition()
+  const [deletePending, startDeleteTransition] = useTransition()
+  const [deleteConfirm, setDeleteConfirm] = useState("")
 
   const displayName =
     [firstName, lastName].filter(Boolean).join(" ") || initial.email
@@ -315,6 +318,46 @@ export function AccountProfileForm({
           Guardar cambios
         </Button>
       </form>
+
+      <section className="space-y-3 rounded-2xl border border-destructive/30 bg-destructive/5 p-4">
+        <h2 className="text-sm font-bold uppercase tracking-[0.14em] text-destructive">
+          Eliminar cuenta
+        </h2>
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          Anonimizamos tu nombre, email, DNI, telefono y titulares de entradas.
+          Conservamos comprobantes de pago y liquidaciones por obligación
+          contable (Ley 25.326).
+        </p>
+        <Label htmlFor="account-delete-confirm">
+          Escribí ELIMINAR para confirmar
+        </Label>
+        <Input
+          id="account-delete-confirm"
+          value={deleteConfirm}
+          onChange={(event) => setDeleteConfirm(event.target.value)}
+          autoComplete="off"
+          className="min-h-12 border-input bg-background text-base"
+        />
+        <Button
+          type="button"
+          variant="destructive"
+          disabled={deletePending || deleteConfirm.trim().toUpperCase() !== "ELIMINAR"}
+          onClick={() => {
+            startDeleteTransition(async () => {
+              const result = await deleteAccount()
+              if (result && "success" in result && result.success === false) {
+                toast.error(result.error)
+              }
+            })
+          }}
+          className="min-h-12 w-full rounded-2xl"
+        >
+          {deletePending ? (
+            <LoaderCircle className="animate-spin" />
+          ) : null}
+          Eliminar mi cuenta
+        </Button>
+      </section>
     </div>
   )
 }

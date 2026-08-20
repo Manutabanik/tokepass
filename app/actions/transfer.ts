@@ -3,15 +3,24 @@
 import { revalidatePath } from "next/cache"
 
 import { loginUrlWithNext } from "@/lib/auth/post-login"
+import {
+  LEGAL_CONSENT_REQUIRED_ERROR,
+  TICKET_TRANSFER_RESALE_TERMS_VERSION,
+} from "@/lib/legal/terms"
 import { logger } from "@/lib/logger"
-import { notifyTicketTransfer } from "@/lib/notifications"
+import {
+  attachTransferClaimUrl,
+  scheduleNotificationOutboxDrain,
+} from "@/lib/notifications/outbox"
 import { getSeoOrigin } from "@/lib/seo/site"
+import { buildTicketClaimUrl } from "@/lib/ticket-share"
 import { createClient } from "@/lib/supabase/server"
 import type { TicketTransferStatus } from "@/types/database"
 
 export type TransferTicketInput = {
   ticketId: string
   receiverEmail: string
+  termsAccepted?: boolean
 }
 
 export type TransferTicketResult =
@@ -35,6 +44,8 @@ export type TransferTicketResult =
         | "not_found"
         | "pending"
         | "listed"
+        | "already_admitted"
+        | "consent_required"
         | "unknown"
     }
 
@@ -53,9 +64,18 @@ function revalidateWalletPaths() {
   revalidatePath("/admin/scanner")
 }
 
-function mapTransferError(message: string): TransferTicketResult {
+function mapTransferError(
+  message: string,
+): Extract<TransferTicketResult, { success: false }> {
   const normalized = message.toUpperCase()
 
+  if (normalized.includes("CONSENT_REQUIRED")) {
+    return {
+      success: false,
+      error: LEGAL_CONSENT_REQUIRED_ERROR,
+      code: "consent_required",
+    }
+  }
   if (normalized.includes("AUTH_REQUIRED")) {
     return {
       success: false,
@@ -82,6 +102,13 @@ function mapTransferError(message: string): TransferTicketResult {
       success: false,
       error: "Solo el titular puede transferir esta entrada.",
       code: "not_owner",
+    }
+  }
+  if (normalized.includes("TICKET_ALREADY_ADMITTED")) {
+    return {
+      success: false,
+      error: "Esta entrada ya fue usada y no se puede transferir.",
+      code: "already_admitted",
     }
   }
   if (normalized.includes("TICKET_NOT_TRANSFERABLE")) {
@@ -142,6 +169,14 @@ export async function transferTicketAction(
       }
     }
 
+    if (!input.termsAccepted) {
+      return {
+        success: false,
+        error: LEGAL_CONSENT_REQUIRED_ERROR,
+        code: "consent_required",
+      }
+    }
+
     const supabase = await createClient()
     const {
       data: { user },
@@ -159,6 +194,7 @@ export async function transferTicketAction(
     const { data, error } = await supabase.rpc("initiate_ticket_transfer", {
       p_ticket_id: ticketId,
       p_receiver_email: receiverEmail,
+      p_terms_version: TICKET_TRANSFER_RESALE_TERMS_VERSION,
     })
 
     if (error) {
@@ -176,20 +212,18 @@ export async function transferTicketAction(
       }
     }
 
-    const claimUrl = `${getSeoOrigin()}/claim?token=${encodeURIComponent(row.claim_token)}`
+    const claimUrl = buildTicketClaimUrl(getSeoOrigin(), row.claim_token)
 
-    void notifyTicketTransfer({
-      receiverEmail: row.receiver_email,
-      eventTitle: row.event_title,
-      senderUserId: user.id,
-      claimUrl,
-    }).catch((notifyError: unknown) => {
-      logger.error({
-        context: "transfer",
-        message: "notify_failed",
-        error: notifyError,
-      })
-    })
+    void attachTransferClaimUrl(row.transfer_id, claimUrl).catch(
+      (notifyError: unknown) => {
+        logger.error({
+          context: "transfer",
+          message: "outbox_claim_url_failed",
+          error: notifyError,
+        })
+      },
+    )
+    scheduleNotificationOutboxDrain()
 
     revalidateWalletPaths()
 
@@ -199,6 +233,85 @@ export async function transferTicketAction(
       transferId: row.transfer_id,
       eventTitle: row.event_title,
       receiverEmail: row.receiver_email,
+    }
+  } catch (error) {
+    return mapTransferError(
+      error instanceof Error ? error.message : "Error inesperado",
+    )
+  }
+}
+
+type ShareRpcRow = {
+  transfer_id: string
+  claim_token: string
+  event_title: string
+}
+
+export async function startTicketShareTransferAction(
+  ticketId: string,
+  options?: { termsAccepted?: boolean },
+): Promise<
+  | {
+      success: true
+      transferId: string
+      claimUrl: string
+      eventTitle: string
+    }
+  | Extract<TransferTicketResult, { success: false }>
+> {
+  const id = ticketId?.trim()
+  if (!id) {
+    return { success: false, error: "Entrada no encontrada.", code: "not_found" }
+  }
+
+  try {
+    const supabase = await createClient()
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return {
+        success: false,
+        error: "Debés iniciar sesión para transferir.",
+        code: "auth_required",
+      }
+    }
+
+    if (!options?.termsAccepted) {
+      return {
+        success: false,
+        error: LEGAL_CONSENT_REQUIRED_ERROR,
+        code: "consent_required",
+      }
+    }
+
+    const { data, error } = await supabase.rpc("initiate_ticket_share_transfer", {
+      p_ticket_id: id,
+      p_terms_version: TICKET_TRANSFER_RESALE_TERMS_VERSION,
+    })
+
+    if (error) {
+      return mapTransferError(error.message)
+    }
+
+    const row = ((data ?? []) as ShareRpcRow[])[0]
+    if (!row) {
+      return {
+        success: false,
+        error: "La transferencia no devolvió resultado.",
+        code: "unknown",
+      }
+    }
+
+    revalidateWalletPaths()
+
+    return {
+      success: true,
+      transferId: row.transfer_id,
+      claimUrl: buildTicketClaimUrl(getSeoOrigin(), row.claim_token),
+      eventTitle: row.event_title,
     }
   } catch (error) {
     return mapTransferError(
@@ -282,7 +395,7 @@ export async function peekTicketTransferClaimAction(
     return {
       ok: false,
       error: "Iniciá sesión para reclamar esta entrada.",
-      loginUrl: loginUrlWithNext(`/claim?token=${raw}`),
+      loginUrl: loginUrlWithNext(`/claim/${raw}`),
     }
   }
 
@@ -295,7 +408,7 @@ export async function peekTicketTransferClaimAction(
       return {
         ok: false,
         error: "Iniciá sesión para reclamar esta entrada.",
-        loginUrl: loginUrlWithNext(`/claim?token=${raw}`),
+        loginUrl: loginUrlWithNext(`/claim/${raw}`),
       }
     }
     return { ok: false, error: "No se pudo validar el enlace." }
@@ -343,7 +456,7 @@ export async function claimTicketTransferAction(
     return {
       success: false,
       error: "Iniciá sesión para reclamar esta entrada.",
-      loginUrl: loginUrlWithNext(`/claim?token=${raw}`),
+      loginUrl: loginUrlWithNext(`/claim/${raw}`),
     }
   }
 
@@ -357,13 +470,19 @@ export async function claimTicketTransferAction(
       return {
         success: false,
         error: "Iniciá sesión para reclamar esta entrada.",
-        loginUrl: loginUrlWithNext(`/claim?token=${raw}`),
+        loginUrl: loginUrlWithNext(`/claim/${raw}`),
       }
     }
     if (normalized.includes("EMAIL_MISMATCH")) {
       return {
         success: false,
         error: "Esta entrada fue enviada a otro email. Ingresá con la cuenta destinataria.",
+      }
+    }
+    if (normalized.includes("TRANSFER_EXPIRED")) {
+      return {
+        success: false,
+        error: "Este enlace venció. Pedile que te reenvíe la entrada.",
       }
     }
     if (normalized.includes("TRANSFER_CANCELLED")) {
@@ -382,6 +501,12 @@ export async function claimTicketTransferAction(
       return {
         success: false,
         error: "Alcanzaste el máximo de entradas para este evento.",
+      }
+    }
+    if (normalized.includes("TICKET_ALREADY_ADMITTED")) {
+      return {
+        success: false,
+        error: "Esta entrada ya fue usada y no se puede transferir.",
       }
     }
     return {

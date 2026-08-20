@@ -94,6 +94,8 @@ export const STORY_HEADLINES: StoryHeadline[] = [
   { id: "going-out", lines: ["HOY", "SE SALE"] },
 ]
 
+export const DEFAULT_STORY_TITLE = "YA TENGO MI ENTRADA"
+
 export function defaultStoryHeadlineId(mode: StoryFlyerMode): StoryHeadlineId {
   return mode === "buyer" ? "got-ticket" : "see-you"
 }
@@ -104,6 +106,25 @@ export function findStoryTheme(id: StoryThemeId): StoryTheme {
 
 export function findStoryHeadline(id: StoryHeadlineId): StoryHeadline {
   return STORY_HEADLINES.find((item) => item.id === id) ?? STORY_HEADLINES[0]
+}
+
+export function defaultStoryTitle(mode: StoryFlyerMode): string {
+  return findStoryHeadline(defaultStoryHeadlineId(mode)).lines.join(" ")
+}
+
+/** Split a custom story title into one or two paint lines. Blank → nothing. */
+export function splitStoryTitle(title: string): string[] {
+  const explicit = title
+    .split(/\n/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+  if (explicit.length === 0) return []
+  if (explicit.length > 1) return explicit.slice(0, 2)
+  const words = explicit[0]!.split(" ")
+  if (words.length <= 1) return explicit
+  if (words.length === 2) return words
+  const mid = Math.ceil(words.length / 2)
+  return [words.slice(0, mid).join(" "), words.slice(mid).join(" ")]
 }
 
 export function storyCategoryLabel(input: {

@@ -99,6 +99,7 @@ import {
 } from "@/lib/checkout/guest-session"
 import { hasCheckoutIdentity } from "@/lib/checkout/identity"
 import {
+  getCheckoutCaptchaToken,
   getCheckoutDwellMs,
   getOrCreateDeviceHash,
 } from "@/lib/checkout/client-security"
@@ -161,6 +162,8 @@ import {
   storefrontItemFromZone,
 } from "@/lib/seating/storefront-selection"
 import { formatCurrency } from "@/lib/format"
+import { centsToMoney, moneyToCents } from "@/lib/money/cents"
+import { roundMoney } from "@/lib/pricing/all-in"
 import { cn } from "@/lib/utils"
 import { publicEventLoginPath } from "@/lib/seo/site"
 import {
@@ -247,10 +250,6 @@ type TicketSelectorProps = {
   onReservationExpired?: () => void
   onLeaveCheckout?: () => void
   renderLayout?: (parts: { map: ReactNode; panel: ReactNode }) => ReactNode
-}
-
-function roundMoney(value: number): number {
-  return Math.round(value * 100) / 100
 }
 
 function normalizeToastCopy(value: string) {
@@ -1182,9 +1181,16 @@ export function CheckoutTunnel({
   // All-In: tier.price already includes TokePass fee.
   const cartSubtotal = ticketsSubtotal
   const discountAmount = appliedPromo
-    ? Math.min(appliedPromo.discountAmount, cartSubtotal)
+    ? centsToMoney(
+        Math.min(
+          moneyToCents(appliedPromo.discountAmount),
+          moneyToCents(cartSubtotal),
+        ),
+      )
     : 0
-  const totalAmount = roundMoney(Math.max(0, cartSubtotal - discountAmount))
+  const totalAmount = centsToMoney(
+    Math.max(0, moneyToCents(cartSubtotal) - moneyToCents(discountAmount)),
+  )
   const finalTotal = hasMapSelection
     ? Math.max(totalAmount, totalMapSelectedItemsPrice)
     : totalAmount
@@ -1673,6 +1679,8 @@ export function CheckoutTunnel({
       }
       if (!(await lockCheckoutStock())) return
 
+      const captchaToken = await getCheckoutCaptchaToken()
+
       const result = sandbox
         ? await startSandboxCheckout(
             eventId,
@@ -1683,6 +1691,7 @@ export function CheckoutTunnel({
             appliedPromo?.promoCodeId ?? null,
             previewKey,
             acceptedTerms,
+            captchaToken,
           )
         : await startCheckoutWithPayment(
             eventId,
@@ -1697,6 +1706,7 @@ export function CheckoutTunnel({
               deviceHash: getOrCreateDeviceHash(),
               dwellMs: getCheckoutDwellMs(),
               termsAccepted: acceptedTerms,
+              captchaToken,
             },
           )
 

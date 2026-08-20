@@ -3,6 +3,12 @@
 import { revalidatePath } from "next/cache"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
+import {
+  bytesToBlob,
+  detectRasterImageMagic,
+  rasterContentType,
+  readFileBytes,
+} from "@/lib/media/image-magic"
 import { publicEventPreviewPath } from "@/lib/preview/sandbox"
 import { getSeoOrigin } from "@/lib/seo/site"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -89,6 +95,7 @@ import {
 import { notifyOrganizerEventAudit } from "@/lib/events/notify-event-audit"
 import { isSandboxEventStatus } from "@/lib/events/review-status"
 import { logger } from "@/lib/logger"
+import { writeSecurityAuditLog } from "@/lib/security/audit-log"
 import { mapUnknownError } from "@/lib/errors/error-handler"
 import type { AppErrorCode } from "@/lib/errors/app-error"
 import {
@@ -1552,15 +1559,22 @@ async function uploadEventFlyer(
     }
   }
 
+  const bytes = await readFileBytes(file)
+  const kind = detectRasterImageMagic(bytes)
+  if (!kind) {
+    return { error: "El flyer no es un JPG, PNG o WEBP valido." }
+  }
+  const contentType = rasterContentType(kind)
+
   const uniqueName = `${Date.now()}-${sanitizeFileName(file.name || "flyer.jpg")}`
   const path = `${userId}/${uniqueName}`
 
   const { error: uploadError } = await supabase.storage
     .from("event-flyers")
-    .upload(path, file, {
+    .upload(path, bytesToBlob(bytes, contentType), {
       cacheControl: "3600",
       upsert: false,
-      contentType: file.type,
+      contentType,
     })
 
   if (uploadError) {
@@ -2782,6 +2796,21 @@ export async function updateCompleteEvent(
     revalidatePath(`/events/${eventId}`)
     revalidatePath("/")
   }
+
+  await writeSecurityAuditLog({
+    actorId: userId,
+    action: "event_price_update",
+    entity: "event",
+    entityId: eventId,
+    details: {
+      draftMode,
+      ticketCount: formValues.tickets.length,
+      prices: formValues.tickets.map((ticket) => ({
+        id: ticket.id ?? null,
+        price: ticket.price,
+      })),
+    },
+  })
 
   return {
     success: true,

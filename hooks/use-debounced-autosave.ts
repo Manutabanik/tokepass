@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 
 export type DebouncedAutosaveStatus =
   | "idle"
@@ -21,8 +21,10 @@ export function useDebouncedAutosave<T>(options: {
   const generation = useRef(0)
   const valueRef = useRef(value)
   const onSaveRef = useRef(onSave)
-  valueRef.current = value
-  onSaveRef.current = onSave
+  useLayoutEffect(() => {
+    valueRef.current = value
+    onSaveRef.current = onSave
+  }, [value, onSave])
 
   useEffect(() => {
     if (!enabled) return

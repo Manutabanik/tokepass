@@ -50,8 +50,8 @@ export function StaticSignedQR({
           size={size}
           level="H"
           bgColor="#ffffff"
-          fgColor="#09090b"
-          className="mx-auto h-auto w-full"
+          fgColor="#000000"
+          className="mx-auto h-auto w-full bg-white"
         />
       ) : (
         <div

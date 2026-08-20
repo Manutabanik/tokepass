@@ -6,6 +6,8 @@ import { logger } from "@/lib/logger"
 import { captureCriticalException } from "@/lib/sentry/capture"
 import { processPaidOrderNotification } from "@/lib/payments/core/confirm-order"
 import { PaymentGatewayFactory } from "@/lib/payments/core/factory"
+import { isDisputedGatewayStatus } from "@/lib/payments/core/map-gateway-status"
+import { revokeDisputedPaidOrder } from "@/lib/payments/core/revoke-disputed-order"
 import type { SupportedPaymentProvider } from "@/lib/payments/core/interfaces"
 
 const ORDER_UUID =
@@ -31,6 +33,32 @@ export async function handlePaymentProviderWebhook(
       return webhookAck({ ignored: true, reason: "invalid_webhook" })
     }
 
+    if (!ORDER_UUID.test(verified.orderId)) {
+      return webhookAck({
+        ignored: true,
+        reason: "unrecognized_order_id",
+      })
+    }
+
+    if (isDisputedGatewayStatus(verified.status)) {
+      const revoked = await revokeDisputedPaidOrder({
+        orderId: verified.orderId,
+        status: verified.status,
+      })
+      if (!revoked.ok) {
+        return webhookRetry({
+          provider,
+          reason: revoked.error ?? "dispute_revoke_failed",
+          status: verified.status,
+        })
+      }
+      return webhookAck({
+        provider,
+        status: verified.status,
+        revoked: true,
+      })
+    }
+
     if (verified.status !== "approved") {
       return webhookAck({
         ignored: true,
@@ -39,18 +67,12 @@ export async function handlePaymentProviderWebhook(
       })
     }
 
-    if (!ORDER_UUID.test(verified.orderId)) {
-      return webhookAck({
-        ignored: true,
-        reason: "unrecognized_order_id",
-      })
-    }
-
     const result = await processPaidOrderNotification({
       provider,
       transactionId: verified.transactionId,
       orderId: verified.orderId,
       amount: verified.amount,
+      currency: verified.currency,
       rawPayload: verified.rawPayload,
     })
 

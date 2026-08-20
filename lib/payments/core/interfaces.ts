@@ -41,8 +41,15 @@ export interface WebhookVerificationResult {
   isValid: boolean
   orderId: string
   transactionId: string
-  status: "approved" | "rejected" | "pending"
+  status:
+    | "approved"
+    | "rejected"
+    | "pending"
+    | "refunded"
+    | "charged_back"
+    | "in_mediation"
   amount: number
+  currency?: string
   rawPayload: unknown
 }
 

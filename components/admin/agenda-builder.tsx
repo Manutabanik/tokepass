@@ -173,6 +173,69 @@ export function AgendaBuilder({ eventId }: { eventId?: string | null }) {
   const visibleCards = cardsForDay(cards, activeDayId, isMultiDay)
   const officialDayIds = dayTabs.map((day) => day.id)
 
+  async function persistCard(card: AgendaCard) {
+    if (!eventId || saving.current.has(card.clientId)) return
+    if (!canPersistAgendaBlock(card)) return
+
+    saving.current.add(card.clientId)
+    const latest =
+      cardsRef.current.find((item) => item.clientId === card.clientId) ?? card
+    const named = persistableParticipant(latest.participant)
+    const payload: {
+      dayId: string | null
+      startTime: string
+      endTime: string
+      title: string
+      participant?: ReturnType<typeof persistableParticipant>
+    } = {
+      dayId: isMultiDay
+        ? remapBoundDayId(latest.dayId, dayIdsRef.current, "first")
+        : null,
+      startTime: latest.startTime,
+      endTime: latest.endTime,
+      title: latest.title,
+    }
+    if (named) {
+      payload.participant = named
+    } else if (latest.id && latest.participant == null) {
+      payload.participant = null
+    }
+
+    const result = latest.id
+      ? await updateAgendaBlock(
+          eventId,
+          latest.id,
+          payload,
+          scheduleRef.current,
+        )
+      : await createAgendaBlock(eventId, payload, scheduleRef.current)
+
+    saving.current.delete(card.clientId)
+    if (!result.success) {
+      toast.error(result.error)
+      return
+    }
+
+    const saved = dtoToCard(result.data)
+    setCards((current) =>
+      current.map((item) =>
+        item.clientId === card.clientId
+          ? { ...saved, clientId: item.clientId, participantOpen: item.participantOpen }
+          : item,
+      ),
+    )
+  }
+
+  function scheduleSave(clientId: string) {
+    const previous = saveTimers.current.get(clientId)
+    if (previous) window.clearTimeout(previous)
+    const timer = window.setTimeout(() => {
+      const latest = cardsRef.current.find((card) => card.clientId === clientId)
+      if (latest) void persistCard(latest)
+    }, SAVE_DEBOUNCE_MS)
+    saveTimers.current.set(clientId, timer)
+  }
+
   useEffect(() => {
     const nextIds = officialDayIds
     if (previousDayIds.current == null) {
@@ -240,69 +303,6 @@ export function AgendaBuilder({ eventId }: { eventId?: string | null }) {
     setCards((current) =>
       current.map((card) =>
         card.clientId === clientId ? { ...card, ...patch } : card,
-      ),
-    )
-  }
-
-  function scheduleSave(clientId: string) {
-    const previous = saveTimers.current.get(clientId)
-    if (previous) window.clearTimeout(previous)
-    const timer = window.setTimeout(() => {
-      const latest = cardsRef.current.find((card) => card.clientId === clientId)
-      if (latest) void persistCard(latest)
-    }, SAVE_DEBOUNCE_MS)
-    saveTimers.current.set(clientId, timer)
-  }
-
-  async function persistCard(card: AgendaCard) {
-    if (!eventId || saving.current.has(card.clientId)) return
-    if (!canPersistAgendaBlock(card)) return
-
-    saving.current.add(card.clientId)
-    const latest =
-      cardsRef.current.find((item) => item.clientId === card.clientId) ?? card
-    const named = persistableParticipant(latest.participant)
-    const payload: {
-      dayId: string | null
-      startTime: string
-      endTime: string
-      title: string
-      participant?: ReturnType<typeof persistableParticipant>
-    } = {
-      dayId: isMultiDay
-        ? remapBoundDayId(latest.dayId, dayIdsRef.current, "first")
-        : null,
-      startTime: latest.startTime,
-      endTime: latest.endTime,
-      title: latest.title,
-    }
-    if (named) {
-      payload.participant = named
-    } else if (latest.id && latest.participant == null) {
-      payload.participant = null
-    }
-
-    const result = latest.id
-      ? await updateAgendaBlock(
-          eventId,
-          latest.id,
-          payload,
-          scheduleRef.current,
-        )
-      : await createAgendaBlock(eventId, payload, scheduleRef.current)
-
-    saving.current.delete(card.clientId)
-    if (!result.success) {
-      toast.error(result.error)
-      return
-    }
-
-    const saved = dtoToCard(result.data)
-    setCards((current) =>
-      current.map((item) =>
-        item.clientId === card.clientId
-          ? { ...saved, clientId: item.clientId, participantOpen: item.participantOpen }
-          : item,
       ),
     )
   }

@@ -6,13 +6,21 @@ import {
   formatDayValidityLabel,
   parseScheduleDays,
   resolveEventAnchorDate,
+  resolveEventEndsAt,
 } from "@/lib/event-schedule"
 import { fetchPublicOrganizerCards } from "@/lib/public-organizer"
+import { isOpenClaimReceiverEmail } from "@/lib/ticket-share"
+import {
+  resolveTicketVisualStatus,
+  type TicketVisualStatus,
+} from "@/lib/ticket-visual-status"
 import type { QrType, TicketStatus } from "@/types/database"
 
 export type MyTicket = {
   id: string
   status: TicketStatus
+  /** Estado visual de la billetera (no reemplaza el status de puerta). */
+  visualStatus: TicketVisualStatus
   qrCode: string
   totpSecret: string
   transferCount: number
@@ -31,6 +39,8 @@ export type MyTicket = {
   eventId: string
   eventTitle: string
   eventDate: string
+  /** Cierre del evento (ends_at, ultima jornada o date). */
+  endsAt: string | null
   /** Apertura de puertas (jornada o fecha del evento). */
   doorsOpenAt: string
   eventLocation: string
@@ -85,6 +95,7 @@ type TicketRow = {
     id: string
     title: string
     date: string
+    ends_at?: string | null
     location: string
     flyer_url: string | null
     image_url: string | null
@@ -127,7 +138,7 @@ export async function getMyTickets(options?: {
   let query = supabase
     .from("tickets")
     .select(
-      "id, status, order_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ticket_tiers(name, bonus_reward, day_id, price), events(id, title, date, location, flyer_url, image_url, qr_type, schedule_days, is_sponsored_by_tokepass, organizer_id, social_share_image_url, venues(name)), orders(status)",
+      "id, status, order_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, event_seating_units(label, sector_name, row_label, layout_type, capacity_per_unit), ticket_tiers(name, bonus_reward, day_id, price), events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, schedule_days, is_sponsored_by_tokepass, organizer_id, social_share_image_url, venues(name)), orders(status)",
     )
     .eq("owner_id", user.id)
     .in("status", ["valid", "used", "scanned", "transferred"])
@@ -209,6 +220,11 @@ export async function getMyTickets(options?: {
         eventId: ticket.events.id,
         eventTitle: ticket.events.title,
         eventDate: ticket.events.date,
+        endsAt: resolveEventEndsAt(
+          scheduleDays,
+          ticket.events.ends_at,
+          ticket.events.date,
+        ),
         doorsOpenAt:
           findScheduleDay(scheduleDays, dayId ?? undefined)?.start_time ??
           resolveEventAnchorDate(scheduleDays, ticket.events.date),
@@ -230,6 +246,7 @@ export async function getMyTickets(options?: {
         ),
         activeResaleListingId: null,
         pendingTransfer: null,
+        visualStatus: "active",
       }
       return [mapped]
     })
@@ -240,7 +257,7 @@ export async function getMyTickets(options?: {
       .from("ticket_resale_listings")
       .select("id, ticket_id")
       .in("ticket_id", ticketIds)
-      .eq("status", "active")
+      .in("status", ["active", "reserved"])
 
     const byTicket = new Map(
       (listings ?? []).map((row) => [row.ticket_id, row.id]),
@@ -266,10 +283,16 @@ export async function getMyTickets(options?: {
       if (!pending) continue
       ticket.pendingTransfer = {
         id: pending.id,
-        receiverEmail: pending.receiver_email,
+        receiverEmail: isOpenClaimReceiverEmail(pending.receiver_email)
+          ? ""
+          : pending.receiver_email,
       }
       ticket.totpSecret = ""
     }
+  }
+
+  for (const ticket of tickets) {
+    ticket.visualStatus = resolveTicketVisualStatus(ticket)
   }
 
   tickets.sort(

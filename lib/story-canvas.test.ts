@@ -3,7 +3,9 @@ import { describe, it } from "node:test"
 
 import {
   defaultStoryHeadlineId,
+  defaultStoryTitle,
   findStoryTheme,
+  splitStoryTitle,
   storyCategoryLabel,
   storyInitials,
   storyLiquidLayers,
@@ -27,7 +29,17 @@ describe("story canvas helpers", () => {
 
   it("picks a buyer headline by default", () => {
     assert.equal(defaultStoryHeadlineId("buyer"), "got-ticket")
+    assert.equal(defaultStoryTitle("buyer"), "YA TENGO MI ENTRADA")
     assert.equal(defaultStoryHeadlineId("visitor"), "see-you")
+  })
+
+  it("splits a custom story title and hides a blank one", () => {
+    assert.deepEqual(splitStoryTitle("YA TENGO MI ENTRADA"), [
+      "YA TENGO",
+      "MI ENTRADA",
+    ])
+    assert.deepEqual(splitStoryTitle("   "), [])
+    assert.deepEqual(splitStoryTitle("VOY\nSI O SI"), ["VOY", "SI O SI"])
   })
 
   it("builds initials for the artist stamp", () => {

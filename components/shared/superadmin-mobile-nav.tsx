@@ -3,6 +3,7 @@
 import {
   Building2,
   CalendarDays,
+  CircleHelp,
   Banknote,
   ClipboardCheck,
   ClipboardList,
@@ -57,6 +58,11 @@ export const SUPERADMIN_NAV = [
     label: "Centro de Soporte",
     href: "/superadmin/soporte",
     icon: MessageSquare,
+  },
+  {
+    label: "Preguntas frecuentes",
+    href: "/admin/support-faqs",
+    icon: CircleHelp,
   },
   { label: "Categorías", href: "/superadmin/categories", icon: Tags },
   { label: "Partners", href: "/superadmin/settings/sponsors", icon: Handshake },

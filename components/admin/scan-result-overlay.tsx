@@ -3,6 +3,7 @@
 import {
   AlertTriangle,
   ArrowRightLeft,
+  ShoppingBag,
   Smartphone,
   XCircle,
 } from "lucide-react"
@@ -42,6 +43,9 @@ export type ScanOverlayState =
       kind: "transfer_pending"
     }
   | {
+      kind: "listed_for_resale"
+    }
+  | {
       kind: "wrong_schedule"
       message: string
     }
@@ -69,6 +73,11 @@ const OVERLAY: Record<
   wrong_sector: { bg: "#3B82F6", title: "SECTOR INCORRECTO" },
   main_gate_review: { bg: "#F59E0B", title: "REVISION EN PUERTA PRINCIPAL" },
   transfer_pending: { bg: "#F59E0B", title: "TRANSFERENCIA PENDIENTE" },
+  listed_for_resale: {
+    bg: "#F59E0B",
+    title: "ENTRADA EN REVENTA",
+    Icon: ShoppingBag,
+  },
   wrong_schedule: { bg: "#F59E0B", title: "FUERA DE JORNADA" },
   cancelled: { bg: "#EF4444", title: "ENTRADA CANCELADA", Icon: XCircle },
   unpaid: { bg: "#F97316", title: "PAGO PENDIENTE", Icon: AlertTriangle },
@@ -144,6 +153,12 @@ export function ScanResultOverlay({ state }: { state: ScanOverlayState }) {
       {state.kind === "transfer_pending" ? (
         <p className="mt-8 max-w-xl text-lg font-semibold leading-7 text-white/95">
           Esta entrada esta en cesion. El QR se habilita cuando el destinatario la reclama o se cancela la transferencia.
+        </p>
+      ) : null}
+
+      {state.kind === "listed_for_resale" ? (
+        <p className="mt-8 max-w-xl text-lg font-semibold leading-7 text-white/95">
+          Esta entrada esta publicada en el marketplace. El QR se habilita cuando se retire de la venta o se complete la compra.
         </p>
       ) : null}
 

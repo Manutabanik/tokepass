@@ -9,6 +9,7 @@ import {
   cancelTicketTransferAction,
   transferTicketAction,
 } from "@/app/actions/transfer"
+import { TicketActionLegalClickwrap } from "@/components/public/ticket-action-legal-clickwrap"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -37,16 +38,18 @@ export function TransferTicketDialog({
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [email, setEmail] = useState("")
+  const [accepted, setAccepted] = useState(false)
   const [isPending, startTransition] = useTransition()
 
   function handleTransfer() {
-    if (isPending) return
+    if (isPending || !accepted) return
 
     startTransition(async () => {
       try {
         const result = await transferTicketAction({
           ticketId,
           receiverEmail: email,
+          termsAccepted: accepted,
         })
 
         if (!result.success) {
@@ -59,6 +62,7 @@ export function TransferTicketDialog({
         })
         setOpen(false)
         setEmail("")
+        setAccepted(false)
         router.refresh()
       } catch (error) {
         toast.error(
@@ -74,7 +78,7 @@ export function TransferTicketDialog({
     <>
       <Button
         type="button"
-        variant="outline"
+        variant={triggerClassName ? "default" : "outline"}
         disabled={disabled}
         onClick={() => setOpen(true)}
         className={
@@ -86,7 +90,13 @@ export function TransferTicketDialog({
         {triggerLabel}
       </Button>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next)
+          if (!next) setAccepted(false)
+        }}
+      >
         <DialogContent className="border-border bg-card/90 shadow-2xl shadow-black/20 backdrop-blur-xl sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Transferir a un amigo</DialogTitle>
@@ -124,10 +134,17 @@ export function TransferTicketDialog({
             />
           </div>
 
+          <TicketActionLegalClickwrap
+            checked={accepted}
+            onCheckedChange={setAccepted}
+            disabled={isPending}
+            actionLabel="cedés la titularidad al email indicado"
+          />
+
           <DialogFooter className="sm:justify-stretch">
             <Button
               type="button"
-              disabled={isPending || !email.trim()}
+              disabled={isPending || !email.trim() || !accepted}
               onClick={handleTransfer}
               className="h-11 w-full rounded-full bg-emerald-500 text-zinc-950 hover:bg-emerald-400"
             >

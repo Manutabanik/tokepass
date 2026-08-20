@@ -4,6 +4,7 @@ import { Preference } from "mercadopago"
 
 import { logger } from "@/lib/logger"
 import { getMercadoPagoClient } from "@/lib/mercadopago"
+import { withCircuit } from "@/lib/resilience/circuit-breaker"
 import {
   preferenceIdFromOrder,
   selectStalePreferenceOrders,
@@ -24,13 +25,15 @@ export async function expireMercadoPagoPreference(
   if (!id) return
   const client = getMercadoPagoClient()
   const preference = new Preference(client)
-  await preference.update({
-    id,
-    updatePreferenceRequest: {
-      expires: true,
-      expiration_date_to: new Date(Date.now() - 1000).toISOString(),
-    } as Parameters<Preference["update"]>[0]["updatePreferenceRequest"],
-  })
+  await withCircuit("mercadopago", () =>
+    preference.update({
+      id,
+      updatePreferenceRequest: {
+        expires: true,
+        expiration_date_to: new Date(Date.now() - 1000).toISOString(),
+      } as Parameters<Preference["update"]>[0]["updatePreferenceRequest"],
+    }),
+  )
 }
 
 export async function expireCheckoutPreferenceOnOrder(

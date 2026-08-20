@@ -1,6 +1,10 @@
 /**
  * IndexedDB del Zero-Offline Scanner (puerta).
  * Manifiesto cifrado por PIN + cola de sync + scan leases.
+ *
+ * H-DOOR-1: leases y cola son por dispositivo. Varios scanners offline
+ * no se mutexean entre si; hace falta resync cada
+ * OFFLINE_ADMISSION_SYNC_MINUTES (ver lib/scanner/offline-degraded-mode.ts).
  */
 
 import {
@@ -22,6 +26,7 @@ import {
   clearPrefetchedManifest,
   peekPrefetchedManifest,
 } from "@/lib/scanner/prefetch-manifest"
+import { hashTotpSecretSha256 } from "@/lib/scanner/totp-secret-hash"
 
 export type ScannerManifestTicket = {
   id: string
@@ -60,6 +65,10 @@ export type ScannerManifestTicket = {
   ticket_type?: string | null
   /** Cesion en curso: no admite en puerta hasta claim o cancel. */
   pending_transfer?: boolean
+  /** Listing activo de reventa oficial: QR bloqueado en puerta. */
+  listed_for_resale?: boolean
+  /** SHA-256 del totp_secret vigente en server (snapshot). */
+  totp_secret_hash?: string | null
   /** FK a event_schedules / abono si es null. */
   day_id?: string | null
 }
@@ -188,6 +197,8 @@ function persistedTicket(ticket: ScannerManifestTicket): ScannerManifestTicket {
     is_test: Boolean(ticket.is_test),
     is_sandbox: Boolean(ticket.is_sandbox),
     pending_transfer: Boolean(ticket.pending_transfer),
+    listed_for_resale: Boolean(ticket.listed_for_resale),
+    totp_secret_hash: ticket.totp_secret_hash ?? null,
     day_id: ticket.day_id ?? null,
   }
 }
@@ -215,10 +226,12 @@ async function sealTicket(
   }
   const blob = await encryptTotpSecret(plaintext)
   const lookup = await totpSecretLookupHash(plaintext)
+  const totpSecretHash = await hashTotpSecretSha256(plaintext)
   return persistedTicket({
     ...ticket,
     totp_secret_enc: serializeEncryptedSecret(blob),
     secret_lookup: lookup,
+    totp_secret_hash: totpSecretHash,
   })
 }
 
@@ -226,14 +239,20 @@ export async function hashManifest(
   tickets: Array<
     Pick<
       ScannerManifestTicket,
-      "id" | "status" | "totp_secret" | "secret_lookup" | "pending_transfer" | "day_id"
+      | "id"
+      | "status"
+      | "totp_secret"
+      | "secret_lookup"
+      | "pending_transfer"
+      | "listed_for_resale"
+      | "day_id"
     >
   >,
 ): Promise<string> {
   const payload = tickets
     .map(
       (t) =>
-        `${t.id}:${t.status}:${t.secret_lookup || t.totp_secret || ""}:${t.pending_transfer ? 1 : 0}:${t.day_id ?? ""}`,
+        `${t.id}:${t.status}:${t.secret_lookup || t.totp_secret || ""}:${t.pending_transfer ? 1 : 0}:${t.listed_for_resale ? 1 : 0}:${t.day_id ?? ""}`,
     )
     .sort()
     .join("|")
@@ -641,6 +660,9 @@ export async function applyAdmissionSnapshot(
     status: ScannerManifestTicket["status"]
     admissions_used: number
     scanned_at: string | null
+    totp_secret_hash?: string | null
+    pending_transfer?: boolean
+    listed_for_resale?: boolean
   }>,
 ): Promise<number> {
   if (!eventId || rows.length === 0) return 0
@@ -665,9 +687,15 @@ export async function applyAdmissionSnapshot(
     if (!current || current.event_id !== eventId) continue
 
     const used = Math.max(0, Math.floor(Number(row.admissions_used) || 0))
+    const nextHash = row.totp_secret_hash?.trim() || current.totp_secret_hash || null
+    const nextPending = Boolean(row.pending_transfer ?? current.pending_transfer)
+    const nextListed = Boolean(row.listed_for_resale ?? current.listed_for_resale)
     if (
       current.status === row.status &&
-      (current.admissions_used ?? 0) === used
+      (current.admissions_used ?? 0) === used &&
+      (current.totp_secret_hash ?? null) === nextHash &&
+      Boolean(current.pending_transfer) === nextPending &&
+      Boolean(current.listed_for_resale) === nextListed
     ) {
       continue
     }
@@ -684,6 +712,9 @@ export async function applyAdmissionSnapshot(
       scanned_at_local: Number.isFinite(scannedAtLocal)
         ? scannedAtLocal
         : current.scanned_at_local,
+      totp_secret_hash: nextHash,
+      pending_transfer: nextPending,
+      listed_for_resale: nextListed,
     })
     applied += 1
   }

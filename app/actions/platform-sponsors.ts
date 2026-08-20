@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 
+import { prepareSponsorLogo } from "@/lib/media/sponsor-logo"
 import { SuperAdminForbiddenError } from "@/lib/superadmin-errors"
 import {
   MAX_SPONSOR_LOGO_BYTES,
@@ -91,11 +92,16 @@ export async function createPlatformSponsor(formData: FormData): Promise<Mutatio
     if (!(file instanceof File) || file.size === 0) {
       return { success: false, error: "Subí un logo PNG, SVG, JPG o WEBP." }
     }
-    if (!SPONSOR_LOGO_TYPES.has(file.type)) {
+    if (!SPONSOR_LOGO_TYPES.has(file.type) && !file.name.toLowerCase().endsWith(".svg")) {
       return { success: false, error: "Solo PNG, SVG, JPG o WEBP." }
     }
     if (file.size > MAX_SPONSOR_LOGO_BYTES) {
       return { success: false, error: "El logo no puede superar 2 MB." }
+    }
+
+    const prepared = await prepareSponsorLogo(file)
+    if ("error" in prepared) {
+      return { success: false, error: prepared.error }
     }
 
     const { data: inserted, error: insertError } = await supabase
@@ -114,11 +120,10 @@ export async function createPlatformSponsor(formData: FormData): Promise<Mutatio
       return { success: false, error: insertError?.message ?? "No se pudo crear el partner." }
     }
 
-    const ext = file.name.split(".").pop()?.toLowerCase() || "png"
-    const path = `platform/${inserted.id}/logo.${ext}`
-    const { error: uploadError } = await supabase.storage.from("sponsors").upload(path, file, {
+    const path = `platform/${inserted.id}/logo.${prepared.extension}`
+    const { error: uploadError } = await supabase.storage.from("sponsors").upload(path, prepared.blob, {
       upsert: true,
-      contentType: file.type,
+      contentType: prepared.contentType,
       cacheControl: "3600",
     })
 
@@ -181,17 +186,20 @@ export async function updatePlatformSponsor(formData: FormData): Promise<Mutatio
     }
 
     if (file instanceof File && file.size > 0) {
-      if (!SPONSOR_LOGO_TYPES.has(file.type)) {
+      if (!SPONSOR_LOGO_TYPES.has(file.type) && !file.name.toLowerCase().endsWith(".svg")) {
         return { success: false, error: "Solo PNG, SVG, JPG o WEBP." }
       }
       if (file.size > MAX_SPONSOR_LOGO_BYTES) {
         return { success: false, error: "El logo no puede superar 2 MB." }
       }
-      const ext = file.name.split(".").pop()?.toLowerCase() || "png"
-      const path = `platform/${id}/logo.${ext}`
-      const { error: uploadError } = await supabase.storage.from("sponsors").upload(path, file, {
+      const prepared = await prepareSponsorLogo(file)
+      if ("error" in prepared) {
+        return { success: false, error: prepared.error }
+      }
+      const path = `platform/${id}/logo.${prepared.extension}`
+      const { error: uploadError } = await supabase.storage.from("sponsors").upload(path, prepared.blob, {
         upsert: true,
-        contentType: file.type,
+        contentType: prepared.contentType,
         cacheControl: "3600",
       })
       if (uploadError) {

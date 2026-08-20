@@ -28,8 +28,9 @@ export default async function OrganizerRegisterPage({
       <div className="w-full max-w-md space-y-4">
         {pending ? (
           <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
-            Ya podés entrar a Tu Panel y armar eventos. La venta al público se
-            habilita después de la auditoría de cada evento.
+            Tu cuenta de organizador quedó pendiente de aprobación. Podés
+            entrar a Tu Panel, pero la venta se habilita cuando Super Admin
+            apruebe el KYB y audite cada evento.
           </div>
         ) : null}
         {blockedStatus ? (

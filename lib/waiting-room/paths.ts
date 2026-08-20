@@ -46,12 +46,54 @@ export function resolveProtectedEventKey(pathname: string): string | null {
     return decodePathSegment(events[1])
   }
 
+  const shortLink = pathname.match(/^\/e\/([^/]+)$/)
+  if (shortLink?.[1]) {
+    return decodePathSegment(shortLink[1])
+  }
+
   if (pathname === "/checkout") return "__checkout__"
   if (pathname.startsWith("/checkout/") && !CHECKOUT_PASS_THROUGH.has(pathname)) {
     return "__checkout__"
   }
 
   return null
+}
+
+export function isNextServerActionRequest(request: {
+  method: string
+  headers: { get(name: string): string | null }
+}): boolean {
+  return (
+    request.method === "POST" && Boolean(request.headers.get("next-action"))
+  )
+}
+
+export function resolveRefererEventKey(
+  referer: string | null,
+  origin: string,
+): string | null {
+  if (!referer?.trim()) return null
+  try {
+    const url = new URL(referer)
+    if (url.origin !== origin) return null
+    return resolveProtectedEventKey(url.pathname)
+  } catch {
+    return null
+  }
+}
+
+export function resolveRequestEventKey(request: {
+  method: string
+  headers: { get(name: string): string | null }
+  nextUrl: { pathname: string; origin: string }
+}): string | null {
+  const fromPath = resolveProtectedEventKey(request.nextUrl.pathname)
+  if (fromPath) return fromPath
+  if (!isNextServerActionRequest(request)) return null
+  return resolveRefererEventKey(
+    request.headers.get("referer"),
+    request.nextUrl.origin,
+  )
 }
 
 export function waitingRoomUrl(

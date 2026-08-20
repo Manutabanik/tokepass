@@ -6,12 +6,16 @@
  * - GOBI_WEBHOOK_SECRET / TOKEPASS_WEBHOOK_SECRET
  *
  * Header: X-TokePass-Signature: sha256=<hex>
- * Timeout ACK: 3s. Reintentos solo ante 5xx / red (máx 3).
+ * Timeout ACK: 8s. Reintentos solo ante 5xx / red (máx 3).
  */
 
 import { createHmac } from "crypto"
 
 import { logger } from "@/lib/logger"
+import {
+  CircuitOpenError,
+  circuitFetch,
+} from "@/lib/resilience/circuit-breaker"
 
 export type GobiOrderPaidPayload = {
   type: "order.paid"
@@ -27,7 +31,6 @@ export type GobiDispatchResult =
   | { ok: true; status: string; partnerEventId?: string; elapsedMs?: number }
   | { ok: false; status: number; error: string }
 
-const ACK_TIMEOUT_MS = 3_000
 const MAX_ATTEMPTS = 3
 
 function readGobiWebhookUrl(): string | null {
@@ -44,6 +47,10 @@ function readGobiWebhookSecret(): string | null {
     process.env.TOKEPASS_WEBHOOK_SECRET?.trim() ||
     null
   )
+}
+
+export function isGobiConfigured(): boolean {
+  return Boolean(readGobiWebhookUrl() && readGobiWebhookSecret())
 }
 
 export function signGobiWebhookPayload(
@@ -65,18 +72,15 @@ async function postOnce(
   rawBody: string,
   signature: string,
 ): Promise<{ ok: boolean; status: number; json: Record<string, unknown>; error?: string }> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), ACK_TIMEOUT_MS)
-
   try {
-    const response = await fetch(url, {
+    const response = await circuitFetch("whatsapp", url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-TokePass-Signature": signature,
       },
       body: rawBody,
-      signal: controller.signal,
+      signal: AbortSignal.timeout(8000),
     })
 
     const text = await response.text()
@@ -96,8 +100,11 @@ async function postOnce(
     }
 
     return { ok: true, status: response.status, json }
-  } finally {
-    clearTimeout(timer)
+  } catch (error) {
+    if (error instanceof CircuitOpenError) {
+      return { ok: false, status: 0, json: {}, error: "circuit_open" }
+    }
+    throw error
   }
 }
 

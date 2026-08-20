@@ -11,6 +11,7 @@ import { listOperableEvents } from "@/lib/event-ops-access"
 import { readValidDoorGuestSession } from "@/lib/scanner/door-guest-session"
 import { isTerminalOfflineSyncConflict } from "@/lib/scanner/offline-sync-conflicts"
 import { resolveScannerActor } from "@/lib/scanner/resolve-scanner-access"
+import { hashTotpSecretSha256 } from "@/lib/scanner/totp-secret-hash"
 import {
   isTicketValidForNow,
   parseScheduleDays,
@@ -81,6 +82,7 @@ export type ScanTicketResult =
         | "test_ticket"
         | "wrong_sector"
         | "transfer_pending"
+        | "listed_for_resale"
       message: string
       scannedAt?: string | null
       redirectSector?: string
@@ -611,32 +613,6 @@ export async function scanAndValidateTicket(
     }
   }
 
-  const { data: pendingTransfer, error: pendingError } = await supabase.rpc(
-    "ticket_has_pending_transfer",
-    { p_ticket_id: row.id },
-  )
-
-  if (pendingError) {
-    logger.error({
-      context: "actions/scanner",
-      message: "pending_transfer_check_failed",
-      error: pendingError.message,
-    })
-    return {
-      success: false,
-      status: "update_failed",
-      message: "No se pudo verificar el estado de la entrada",
-    }
-  }
-
-  if (pendingTransfer) {
-    return {
-      success: false,
-      status: "transfer_pending",
-      message: "Transferencia pendiente — QR bloqueado",
-    }
-  }
-
   const { data: admissionOk, error: admissionError } = await supabase.rpc(
     "is_ticket_admission_eligible",
     { p_ticket_id: row.id },
@@ -709,6 +685,36 @@ export async function scanAndValidateTicket(
         success: false,
         status: "transferred",
         message: "ENTRADA INVALIDA: Este ticket fue transferido a otro usuario",
+      }
+    }
+    if (admission.code === "transfer_pending") {
+      return {
+        success: false,
+        status: "transfer_pending",
+        message: "Transferencia pendiente — QR bloqueado",
+      }
+    }
+    if (admission.code === "listed_for_resale") {
+      return {
+        success: false,
+        status: "listed_for_resale",
+        message: "Entrada en reventa — QR bloqueado",
+      }
+    }
+    if (admission.code === "already_used_today") {
+      return {
+        success: false,
+        status: "already_used",
+        message: "Este abono ya fue utilizado en la jornada actual",
+        scannedAt: row.scanned_at,
+      }
+    }
+    if (admission.code === "outside_window") {
+      return {
+        success: false,
+        status: "wrong_day",
+        message:
+          "Abono fuera de las jornadas habilitadas para ingreso",
       }
     }
     return {
@@ -807,6 +813,7 @@ export type EventTicketManifestPayload = {
     batch_id: string | null
     ticket_type: string | null
     pending_transfer: boolean
+    listed_for_resale: boolean
     day_id: string | null
   }>
 }
@@ -956,6 +963,7 @@ export async function fetchEventTicketManifest(
   }
 
   const pendingTransferIds = new Set<string>()
+  const listedForResaleIds = new Set<string>()
   const ticketIds = rows.map((row) => row.id)
   if (ticketIds.length > 0) {
     const pending = await supabase
@@ -967,6 +975,18 @@ export async function fetchEventTicketManifest(
       for (const row of pending.data ?? []) {
         const id = String(row.original_ticket_id ?? "").trim()
         if (id) pendingTransferIds.add(id)
+      }
+    }
+
+    const listings = await supabase
+      .from("ticket_resale_listings")
+      .select("ticket_id")
+      .in("status", ["active", "reserved"])
+      .in("ticket_id", ticketIds)
+    if (!listings.error) {
+      for (const row of listings.data ?? []) {
+        const id = String(row.ticket_id ?? "").trim()
+        if (id) listedForResaleIds.add(id)
       }
     }
   }
@@ -1011,6 +1031,7 @@ export async function fetchEventTicketManifest(
       batch_id: row.batch_id ?? null,
       ticket_type: row.ticket_type ?? "admission",
       pending_transfer: pendingTransferIds.has(row.id),
+      listed_for_resale: listedForResaleIds.has(row.id),
       day_id: row.ticket_tiers?.day_id ?? null,
     }
   })
@@ -1018,7 +1039,7 @@ export async function fetchEventTicketManifest(
   const hashSource = tickets
     .map(
       (t) =>
-        `${t.id}:${t.status}:${t.totp_secret}:${t.is_test ? 1 : 0}:${t.is_sandbox ? 1 : 0}:${t.pending_transfer ? 1 : 0}:${t.day_id ?? ""}`,
+        `${t.id}:${t.status}:${t.totp_secret}:${t.is_test ? 1 : 0}:${t.is_sandbox ? 1 : 0}:${t.pending_transfer ? 1 : 0}:${t.listed_for_resale ? 1 : 0}:${t.day_id ?? ""}`,
     )
     .sort()
     .join("|")
@@ -1043,9 +1064,15 @@ export type EventAdmissionSnapshotRow = {
   status: EventTicketManifestPayload["tickets"][number]["status"]
   admissions_used: number
   scanned_at: string | null
+  totp_secret_hash: string
+  pending_transfer: boolean
+  listed_for_resale: boolean
 }
 
-/** Delta liviano: estados de ingreso, sin secretos. Para pistolas ya cacheadas. */
+/**
+ * Delta periodico: status, admissions, hash TOTP, cesion y reventa.
+ * Incluye transferred para que el manifiesto local baje QRs desacoplados.
+ */
 export async function fetchEventAdmissionSnapshot(
   eventId: string,
 ): Promise<{
@@ -1070,23 +1097,61 @@ export async function fetchEventAdmissionSnapshot(
 
   const { data, error } = await supabase
     .from("tickets")
-    .select("id, status, admissions_used, scanned_at")
+    .select("id, status, admissions_used, scanned_at, totp_secret")
     .eq("event_id", eventId)
-    .in("status", ["valid", "used", "scanned"])
+    .in("status", ["valid", "used", "scanned", "transferred"])
 
   if (error) {
     throw new Error(error.message)
   }
 
-  return {
-    eventId,
-    server_timestamp: Date.now(),
-    tickets: (data ?? []).map((row) => ({
+  const rows = data ?? []
+  const ticketIds = rows.map((row) => String(row.id))
+  const pendingTransferIds = new Set<string>()
+  const listedForResaleIds = new Set<string>()
+
+  if (ticketIds.length > 0) {
+    const pending = await supabase
+      .from("ticket_transfers")
+      .select("original_ticket_id")
+      .eq("status", "pending")
+      .in("original_ticket_id", ticketIds)
+    if (!pending.error) {
+      for (const row of pending.data ?? []) {
+        const id = String(row.original_ticket_id ?? "").trim()
+        if (id) pendingTransferIds.add(id)
+      }
+    }
+
+    const listings = await supabase
+      .from("ticket_resale_listings")
+      .select("ticket_id")
+      .in("status", ["active", "reserved"])
+      .in("ticket_id", ticketIds)
+    if (!listings.error) {
+      for (const row of listings.data ?? []) {
+        const id = String(row.ticket_id ?? "").trim()
+        if (id) listedForResaleIds.add(id)
+      }
+    }
+  }
+
+  const tickets = await Promise.all(
+    rows.map(async (row) => ({
       id: String(row.id),
       status: row.status as EventAdmissionSnapshotRow["status"],
       admissions_used: Number(row.admissions_used ?? 0),
       scanned_at: row.scanned_at ?? null,
+      totp_secret_hash: await hashTotpSecretSha256(String(row.totp_secret ?? "")),
+      pending_transfer: pendingTransferIds.has(String(row.id)),
+      listed_for_resale: listedForResaleIds.has(String(row.id)),
     })),
+  )
+
+  return {
+    eventId,
+    server_timestamp: Date.now(),
+    tickets,
   }
 }
 
@@ -1175,7 +1240,12 @@ export async function syncOfflineScansBatch(
         break
       }
       if (!result.ok) {
-        if (result.code === "already_used") break
+        if (
+          result.code === "already_used" ||
+          result.code === "already_used_today"
+        ) {
+          break
+        }
         syncError = result.code ?? "sync_failed"
         break
       }

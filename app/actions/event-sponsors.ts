@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 
+import { prepareSponsorLogo } from "@/lib/media/sponsor-logo"
 import {
   MAX_EVENT_SPONSORS,
   MAX_SPONSOR_LOGO_BYTES,
@@ -109,20 +110,24 @@ export async function createEventSponsor(
     if (!(file instanceof File) || file.size === 0) {
       return { success: false, error: "Subí un logo PNG o SVG transparente." }
     }
-    if (!SPONSOR_LOGO_TYPES.has(file.type)) {
+    if (!SPONSOR_LOGO_TYPES.has(file.type) && !file.name.toLowerCase().endsWith(".svg")) {
       return { success: false, error: "Solo PNG, SVG, JPG o WEBP." }
     }
     if (file.size > MAX_SPONSOR_LOGO_BYTES) {
       return { success: false, error: "El logo no puede superar 2 MB." }
     }
 
-    const ext = file.name.split(".").pop()?.toLowerCase() || "png"
-    const path = `events/${eventId}/${crypto.randomUUID()}.${ext}`
+    const prepared = await prepareSponsorLogo(file)
+    if ("error" in prepared) {
+      return { success: false, error: prepared.error }
+    }
+
+    const path = `events/${eventId}/${crypto.randomUUID()}.${prepared.extension}`
     const { error: uploadError } = await access.supabase.storage
       .from("sponsors")
-      .upload(path, file, {
+      .upload(path, prepared.blob, {
         upsert: false,
-        contentType: file.type,
+        contentType: prepared.contentType,
         cacheControl: "3600",
       })
 

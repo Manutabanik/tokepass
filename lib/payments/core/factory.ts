@@ -6,9 +6,11 @@ import type {
   IPaymentGatewayAdapter,
   SupportedPaymentProvider,
 } from "@/lib/payments/core/interfaces"
+import { assertSecondaryPspDisabledInProduction } from "@/lib/payments/production-guard"
 
 export class PaymentGatewayFactory {
   static getAdapter(provider: SupportedPaymentProvider): IPaymentGatewayAdapter {
+    assertSecondaryPspDisabledInProduction(provider)
     switch (provider) {
       case "mercadopago":
         return new MercadoPagoAdapter()

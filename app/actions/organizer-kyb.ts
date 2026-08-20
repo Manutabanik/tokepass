@@ -316,7 +316,14 @@ export async function listApprovedOrganizers(): Promise<ApprovedOrganizerRow[]> 
 /**
  * Aprueba KYB: status approved + profiles.role = admin (organizador canónico)
  * + user_metadata de identidad B2B. Requiere SuperAdmin.
+ * Unica via para pasar organizer_approval_status a approved.
  */
+export async function approveOrganizerKyb(
+  applicationId: string,
+): Promise<KybActionResult> {
+  return approveOrganizerApplication(applicationId)
+}
+
 export async function approveOrganizerApplication(
   applicationId: string,
 ): Promise<KybActionResult> {

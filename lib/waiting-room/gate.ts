@@ -11,7 +11,7 @@ import {
 } from "@/lib/waiting-room/config"
 import {
   isWaitingRoomBypassPath,
-  resolveProtectedEventKey,
+  resolveRequestEventKey,
   waitingRoomUrl,
 } from "@/lib/waiting-room/paths"
 import {
@@ -89,10 +89,9 @@ export async function evaluateWaitingRoomGate(
     }
   }
 
-  const { pathname } = request.nextUrl
-  if (isWaitingRoomBypassPath(pathname)) return { kind: "bypass" }
+  if (isWaitingRoomBypassPath(request.nextUrl.pathname)) return { kind: "bypass" }
 
-  const pathKey = resolveProtectedEventKey(pathname)
+  const pathKey = resolveRequestEventKey(request)
   if (!pathKey) return { kind: "bypass" }
 
   const eventKey =

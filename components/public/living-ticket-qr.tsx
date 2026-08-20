@@ -91,31 +91,36 @@ export function LivingTicketQR({
         <div
           className={cn(
             isScan
-              ? "relative aspect-square w-full bg-transparent p-0"
+              ? "relative aspect-square w-full bg-white p-0"
               : "pointer-events-none relative rounded-[1.35rem] bg-white p-3.5 shadow-[0_0_32px_rgba(255,255,255,0.08)]",
           )}
+          style={isScan ? { colorScheme: "light" } : undefined}
         >
           {token ? (
-            <div className="relative overflow-hidden rounded-[inherit]">
+            <div className="relative overflow-hidden rounded-[inherit] bg-white">
               <QRCodeSVG
                 value={token}
                 size={size}
                 level="M"
                 includeMargin={false}
                 bgColor="#ffffff"
-                fgColor="#09090b"
-                className={cn("mx-auto", isScan && "h-auto w-full")}
+                fgColor="#000000"
+                className={cn("mx-auto bg-white", isScan && "h-auto w-full")}
               />
-              <span
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]"
-              >
-                <span className="living-qr-scan-beam absolute inset-x-0 top-0 h-[28%] bg-gradient-to-b from-transparent via-emerald-400/80 to-transparent" />
-              </span>
-              <span
-                aria-hidden="true"
-                className="living-qr-live-ring pointer-events-none absolute inset-0 rounded-[inherit] ring-2 ring-emerald-400/50"
-              />
+              {isScan ? null : (
+                <>
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]"
+                  >
+                    <span className="living-qr-scan-beam absolute inset-x-0 top-0 h-[28%] bg-gradient-to-b from-transparent via-emerald-400/80 to-transparent" />
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className="living-qr-live-ring pointer-events-none absolute inset-0 rounded-[inherit] ring-2 ring-emerald-400/50"
+                  />
+                </>
+              )}
             </div>
           ) : (
             <div

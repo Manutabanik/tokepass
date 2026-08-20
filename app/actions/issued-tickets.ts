@@ -20,10 +20,9 @@ import {
 } from "@/lib/admin/audience-csv"
 import { assertEventOpsAccess } from "@/lib/event-ops-access"
 import { logger } from "@/lib/logger"
-import {
-  notifyLivingTicketEmail,
-  notifyTicketTransfer,
-} from "@/lib/notifications"
+import { notifyLivingTicketEmail } from "@/lib/notifications"
+import { writeSecurityAuditLog } from "@/lib/security/audit-log"
+import { scheduleNotificationOutboxDrain } from "@/lib/notifications/outbox"
 import { createAdminClient } from "@/lib/supabase/admin"
 import type { TicketStatus } from "@/types/database"
 
@@ -148,7 +147,7 @@ function normalizeStatusFilter(
 }
 
 function deadTotpSecret(prefix: "cancel" | "xfer"): string {
-  return `${prefix}_dead_${randomUUID().replace(/-/g, "")}`
+  return `dead-${prefix}-${randomUUID().replace(/-/g, "")}`
 }
 
 function freshTotpSecret(): string {
@@ -532,17 +531,30 @@ export async function cancelTicketAdmin(
       }
     }
 
-    const { error } = await access.admin
+    const deadSecret = deadTotpSecret("cancel")
+    const { data: updated, error } = await access.admin
       .from("tickets")
       .update({
         status: "cancelled",
-        totp_secret: deadTotpSecret("cancel"),
+        totp_secret: deadSecret,
         scanned_at: null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", ticketId)
+      .select("id, status, totp_secret")
+      .maybeSingle()
 
     if (error) return { success: false, error: error.message }
+    if (
+      !updated ||
+      updated.status !== "cancelled" ||
+      !String(updated.totp_secret ?? "").startsWith("dead-")
+    ) {
+      return {
+        success: false,
+        error: "No se pudo invalidar el codigo QR de esta entrada.",
+      }
+    }
 
     logger.info({
       context: "issued-tickets",
@@ -551,6 +563,17 @@ export async function cancelTicketAdmin(
       ticket_id: ticketId,
       actor_id: access.userId,
       reason: trimmedReason,
+    })
+
+    await writeSecurityAuditLog({
+      actorId: access.userId,
+      action: "ticket_cancel",
+      entity: "ticket",
+      entityId: ticketId,
+      details: {
+        eventId: access.eventId,
+        reason: trimmedReason,
+      },
     })
 
     revalidatePath(`/admin/events/${access.eventId}/tickets`)
@@ -907,11 +930,19 @@ export async function reassignTicketAdmin(
       })
     })
 
-    void notifyTicketTransfer({
-      receiverEmail: email,
-      eventTitle,
-      senderUserId: access.userId,
-    }).catch(() => undefined)
+    scheduleNotificationOutboxDrain()
+
+    await writeSecurityAuditLog({
+      actorId: access.userId,
+      action: "ticket_reassign",
+      entity: "ticket",
+      entityId: created.id,
+      details: {
+        eventId: access.eventId,
+        sourceTicketId: ticketId,
+        receiverEmail: email,
+      },
+    })
 
     revalidatePath(`/admin/events/${access.eventId}/tickets`)
     revalidatePath("/admin/scanner")

@@ -28,6 +28,7 @@ import {
   type TicketTierCategory,
 } from "@/lib/ticket-tier-category"
 import { toUserFacingError } from "@/lib/errors/user-facing-error"
+import { writeSecurityAuditLog } from "@/lib/security/audit-log"
 import { asUuidOrNull } from "@/lib/validations/relation-id"
 
 export type BundleStoreItem = {
@@ -84,7 +85,7 @@ async function assertOrganizer(eventId: string) {
     return { ok: false as const, error: "Sin permiso para este evento." }
   }
 
-  return { ok: true as const, supabase, event }
+  return { ok: true as const, supabase, event, user }
 }
 
 export async function getEventBundleWorkspace(eventId: string): Promise<{
@@ -384,6 +385,20 @@ export async function upsertTicketBundle(input: {
   revalidatePath(`/admin/events/${input.eventId}`)
   revalidatePath(`/admin/events/${input.eventId}/tiers`)
   revalidatePath(`/admin/events/${input.eventId}/edit`)
+
+  await writeSecurityAuditLog({
+    actorId: gate.user.id,
+    action: "event_price_update",
+    entity: "event",
+    entityId: input.eventId,
+    details: {
+      source: "ticket_bundle",
+      tierId,
+      salePrice: input.salePrice,
+      listPrice: input.listPrice,
+    },
+  })
+
   return { success: true, tierId }
 }
 

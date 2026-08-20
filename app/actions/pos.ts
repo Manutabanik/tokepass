@@ -5,8 +5,11 @@ import { revalidatePath } from "next/cache"
 import { findScheduleDay, parseScheduleDays } from "@/lib/event-schedule"
 import { assertEventOpsAccess, listOperableEvents } from "@/lib/event-ops-access"
 import { toPosUserError } from "@/lib/errors/commerce-errors"
-import { logger } from "@/lib/logger"
-import { notifyPosTicketIssued } from "@/lib/notifications"
+import {
+  requeuePosIssueNotifications,
+  scheduleNotificationOutboxDrain,
+} from "@/lib/notifications/outbox"
+import { createAdminClient } from "@/lib/supabase/admin"
 import {
   POS_STAFF_ROLES,
   isPosStaffRole,
@@ -582,33 +585,9 @@ export async function createPosSale(input: {
       p_seating_layout_item_id: seatingLayoutItemId,
     }
 
-    let data: unknown = null
-    let error: { message: string } | null = null
     const checkout = await supabase.rpc("process_pos_checkout_tx", checkoutArgs)
-    data = checkout.data
-    error = checkout.error
-    if (error && /process_pos_checkout_tx|PGRST202|schema cache/i.test(error.message)) {
-      if (seatingUnitId || seatingLayoutItemId) {
-        return {
-          success: false,
-          error: "No se pudo reservar el asiento. Reintentá o actualizá la caja.",
-        }
-      }
-      const fallback = await supabase.rpc("create_pos_sale_tx", {
-        p_event_id: sale.eventId,
-        p_tier_id: sale.tierId,
-        p_quantity: sale.quantity,
-        p_payment_method: paymentMethod,
-        p_staff_id: user.id,
-        p_customer_phone: sale.customerPhone,
-        p_customer_dni: dni,
-        p_customer_name: sale.customerName,
-        p_shift_id: sale.shiftId,
-        p_supervisor_pin: sale.supervisorPin,
-      })
-      data = fallback.data
-      error = fallback.error
-    }
+    const data = checkout.data
+    const error = checkout.error
 
     if (error) {
       return { success: false, error: toPosUserError(error) }
@@ -630,29 +609,7 @@ export async function createPosSale(input: {
 
     const holderName = sale.customerName?.trim() || "Consumidor Final"
 
-    const { data: event } = await supabase
-      .from("events")
-      .select("title")
-      .eq("id", sale.eventId)
-      .maybeSingle()
-
-    const phone = sale.customerPhone
-    const email = sale.customerEmail
-    if (phone || email) {
-      void notifyPosTicketIssued({
-        phone: phone || "",
-        email: email || null,
-        eventTitle: event?.title ?? "Evento TokePass",
-        ticketIds: rows.map((row) => row.ticket_id),
-        quantity: rows.length,
-      }).catch((notifyError: unknown) => {
-        logger.error({
-          context: "pos",
-          message: "notify_failed",
-          error: notifyError,
-        })
-      })
-    }
+    scheduleNotificationOutboxDrain()
 
     revalidatePath("/admin/pos")
     revalidatePath("/dashboard/pos")
@@ -699,13 +656,25 @@ export async function deliverPosTickets(input: {
     return { success: false, error: "Ingresá WhatsApp, SMS o email." }
   }
   try {
-    await notifyPosTicketIssued({
-      phone,
-      email,
+    const admin = createAdminClient()
+    const { data: ticket } = await admin
+      .from("tickets")
+      .select("order_id")
+      .eq("id", ticketIds[0])
+      .maybeSingle()
+
+    if (!ticket?.order_id) {
+      return { success: false, error: "No se encontro la orden de esas entradas." }
+    }
+
+    await requeuePosIssueNotifications({
+      orderId: ticket.order_id,
       eventTitle: parsed.data.eventTitle,
       ticketIds,
-      quantity: ticketIds.length,
+      phone,
+      email,
     })
+    scheduleNotificationOutboxDrain()
     return { success: true }
   } catch (error) {
     return {
@@ -783,9 +752,7 @@ export async function getPosPinContext(
   const role = profile?.role ?? ""
   const canManagePins = Boolean(
     event &&
-      (event.organizer_id === user.id ||
-        role === "admin" ||
-        role === "super_admin"),
+      (event.organizer_id === user.id || role === "super_admin"),
   )
 
   return {

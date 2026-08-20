@@ -2,7 +2,7 @@
 
 import { Loader2, RefreshCcw } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { useState, useTransition } from "react"
+import { useEffect, useState, useTransition } from "react"
 import { toast } from "sonner"
 
 import {
@@ -29,6 +29,9 @@ export function ResaleTicketDialog({
   disabled = false,
   triggerLabel = "Vender mi entrada de forma segura",
   triggerClassName,
+  hideTrigger = false,
+  open: openProp,
+  onOpenChange,
 }: {
   ticketId: string
   eventTitle: string
@@ -37,9 +40,14 @@ export function ResaleTicketDialog({
   disabled?: boolean
   triggerLabel?: string
   triggerClassName?: string
+  hideTrigger?: boolean
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }) {
   const router = useRouter()
-  const [open, setOpen] = useState(false)
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
+  const open = openProp ?? uncontrolledOpen
+  const setOpen = onOpenChange ?? setUncontrolledOpen
   const [preview, setPreview] = useState<{
     price: number
     sellerNet: number
@@ -49,6 +57,34 @@ export function ResaleTicketDialog({
   const [isPending, startTransition] = useTransition()
 
   const listed = Boolean(activeListingId)
+
+  useEffect(() => {
+    if (!hideTrigger || !open || listed || tierPrice <= 0) return
+    let cancelled = false
+    queueMicrotask(() => {
+      if (!cancelled) setLoadingPreview(true)
+    })
+    void getResaleListingPreview(ticketId)
+      .then((result) => {
+        if (cancelled) return
+        if (!result.success) {
+          toast.error(result.error)
+          setOpen(false)
+          return
+        }
+        setPreview({
+          price: result.data.price,
+          sellerNet: result.data.sellerNet,
+          fee: result.data.fee,
+        })
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingPreview(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [hideTrigger, listed, open, setOpen, ticketId, tierPrice])
 
   async function openPublishModal() {
     setOpen(true)
@@ -98,7 +134,7 @@ export function ResaleTicketDialog({
 
   if (tierPrice <= 0) return null
 
-  if (listed) {
+  if (listed && !hideTrigger) {
     return (
       <div className="space-y-2">
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-3 text-center text-xs font-semibold uppercase tracking-[0.12em] text-amber-800 dark:text-amber-100">
@@ -122,18 +158,51 @@ export function ResaleTicketDialog({
     )
   }
 
+  if (listed && hideTrigger) {
+    return (
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reventa oficial TokePass</DialogTitle>
+            <DialogDescription>
+              Tu entrada de{" "}
+              <span className="font-medium text-foreground">{eventTitle}</span>{" "}
+              está publicada en el marketplace.
+            </DialogDescription>
+          </DialogHeader>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={disabled || isPending}
+            onClick={cancelListing}
+            className="h-11 w-full rounded-full"
+          >
+            {isPending ? (
+              <Loader2 className="size-4 animate-spin" aria-hidden />
+            ) : (
+              <RefreshCcw className="mr-2 size-4" aria-hidden />
+            )}
+            Retirar del marketplace
+          </Button>
+        </DialogContent>
+      </Dialog>
+    )
+  }
+
   return (
     <>
-      <Button
-        type="button"
-        variant="outline"
-        disabled={disabled}
-        onClick={() => void openPublishModal()}
-        className={triggerClassName ?? "h-11 w-full rounded-full"}
-      >
-        <RefreshCcw className="size-4" aria-hidden />
-        {triggerLabel}
-      </Button>
+      {hideTrigger ? null : (
+        <Button
+          type="button"
+          variant="outline"
+          disabled={disabled}
+          onClick={() => void openPublishModal()}
+          className={triggerClassName ?? "h-11 w-full rounded-full"}
+        >
+          <RefreshCcw className="size-4" aria-hidden />
+          {triggerLabel}
+        </Button>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">

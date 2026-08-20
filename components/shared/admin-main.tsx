@@ -17,7 +17,7 @@ export function AdminMain({ children }: { children: ReactNode }) {
         "px-4 pt-4 sm:px-8 sm:pt-8 lg:px-10 lg:pt-10",
         focused
           ? "flex min-h-0 flex-col pb-[max(1rem,env(safe-area-inset-bottom))]"
-          : "pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-10",
+          : "scroll-pb-24 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-24",
       )}
     >
       {children}

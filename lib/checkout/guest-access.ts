@@ -53,6 +53,16 @@ export function otpEquals(left: string, right: string): boolean {
   return timingSafeEqual(a, b)
 }
 
+export function holderEmailsMatch(
+  left: string | null | undefined,
+  right: string | null | undefined,
+): boolean {
+  const a = (left ?? "").trim().toLowerCase()
+  const b = (right ?? "").trim().toLowerCase()
+  if (!a || !b || !a.includes("@") || !b.includes("@")) return false
+  return otpEquals(a, b)
+}
+
 export async function signGuestAccessToken(input: {
   orderId: string
   email: string

@@ -10,6 +10,9 @@ export const SEATING_HOLD_MINUTES = 10
 
 export const GA_CHECKOUT_HOLD_INTERVAL = `${GA_CHECKOUT_HOLD_MINUTES} minutes` as const
 
+/** Cron de expiracion: lotes chicos + SKIP LOCKED para no pelear con reserve. */
+export const EXPIRE_HOLD_BATCH_SIZE = 500
+
 export const GA_CHECKOUT_HOLD_MS = GA_CHECKOUT_HOLD_MINUTES * 60 * 1000
 
 export const HOLD_EXPIRED_MESSAGE = "Tu reserva ha expirado por tiempo"

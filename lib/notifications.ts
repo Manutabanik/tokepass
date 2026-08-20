@@ -2,6 +2,8 @@
  * Notificaciones outbound (email / WhatsApp webhook).
  */
 
+import { circuitFetch } from "@/lib/resilience/circuit-breaker"
+
 export type TicketTransferNotifyPayload = {
   receiverEmail: string
   eventTitle: string
@@ -24,10 +26,11 @@ async function postWebhook(
   const webhookUrl = process.env.NOTIFICATION_WEBHOOK_URL?.trim()
   if (!webhookUrl) return false
 
-  const response = await fetch(webhookUrl, {
+  const response = await circuitFetch("whatsapp", webhookUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ channel, ...body }),
+    signal: AbortSignal.timeout(8000),
   })
 
   if (!response.ok) {
@@ -63,7 +66,7 @@ export async function notifyTicketTransfer(
     process.env.RESEND_FROM_EMAIL?.trim() || "TokePass <onboarding@resend.dev>"
 
   if (resendKey) {
-    const response = await fetch("https://api.resend.com/emails", {
+    const response = await circuitFetch("resend", "https://api.resend.com/emails", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${resendKey}`,
@@ -75,6 +78,7 @@ export async function notifyTicketTransfer(
         subject: `Te enviaron una entrada — ${payload.eventTitle}`,
         text: message,
       }),
+      signal: AbortSignal.timeout(8000),
     })
 
     if (!response.ok) {
@@ -133,7 +137,7 @@ export async function notifyLivingTicketEmail(
     process.env.RESEND_FROM_EMAIL?.trim() || "TokePass <onboarding@resend.dev>"
 
   if (resendKey) {
-    const response = await fetch("https://api.resend.com/emails", {
+    const response = await circuitFetch("resend", "https://api.resend.com/emails", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${resendKey}`,
@@ -145,6 +149,7 @@ export async function notifyLivingTicketEmail(
         subject: `Tu entrada TokePass — ${payload.eventTitle}`,
         text: message,
       }),
+      signal: AbortSignal.timeout(8000),
     })
 
     if (!response.ok) {

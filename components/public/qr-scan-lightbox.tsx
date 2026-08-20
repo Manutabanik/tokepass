@@ -41,8 +41,8 @@ export function QrScanLightbox({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
-        overlayClassName="bg-zinc-950/96 backdrop-blur-xl"
-        className="pointer-events-none fixed inset-0 top-0 left-0 z-50 flex h-dvh max-h-dvh w-full max-w-none translate-x-0 translate-y-0 flex-col items-center justify-center overflow-y-auto overscroll-contain rounded-none bg-transparent p-4 shadow-none ring-0 sm:max-w-none sm:p-6"
+        overlayClassName="z-[100] bg-zinc-950/96 backdrop-blur-xl"
+        className="pointer-events-none fixed inset-0 top-0 left-0 isolate z-[110] flex h-dvh max-h-dvh w-full max-w-none translate-x-0 translate-y-0 flex-col items-center justify-center overflow-y-auto overscroll-contain rounded-none bg-transparent p-4 text-zinc-950 shadow-none ring-0 sm:max-w-none sm:p-6"
       >
         <DialogClose
           render={
@@ -61,15 +61,18 @@ export function QrScanLightbox({
         <DialogTitle className="sr-only">Código de ingreso</DialogTitle>
         <DialogDescription className="sr-only">{caption}</DialogDescription>
 
-        <div className="pointer-events-auto flex w-full max-w-md flex-col items-center justify-center py-8">
-          <div className="flex w-full flex-col items-center rounded-3xl bg-white p-5 text-zinc-950 sm:p-8">
-            <div className="size-[min(20rem,calc(100vw-5rem))]">
+        <div className="pointer-events-auto relative z-[110] flex w-full max-w-md flex-col items-center justify-center py-8">
+          <div
+            className="flex w-full flex-col items-center bg-white p-6 rounded-xl shadow-2xl text-zinc-950"
+            style={{ colorScheme: "light" }}
+          >
+            <div className="size-[min(20rem,calc(100vw-5rem))] bg-white">
               {isStatic ? (
                 <StaticSignedQR
                   ticketId={ticketId}
                   totpSecret={totpSecret}
                   size={320}
-                  className="aspect-square size-full max-w-none p-0 shadow-none"
+                  className="aspect-square size-full max-w-none bg-white p-0 shadow-none"
                 />
               ) : (
                 <LivingTicketQR
@@ -77,7 +80,7 @@ export function QrScanLightbox({
                   totpSecret={totpSecret}
                   size={320}
                   variant="scan"
-                  className="size-full max-w-none"
+                  className="size-full max-w-none bg-white"
                 />
               )}
             </div>

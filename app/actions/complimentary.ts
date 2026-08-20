@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 
+import { writeSecurityAuditLog } from "@/lib/security/audit-log"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
@@ -232,7 +233,21 @@ export async function issueComplimentaryNamed(input: {
     }
   }
 
-  return mapBatchSuccess(data, input.eventId)
+  const result = mapBatchSuccess(data, input.eventId)
+  await writeSecurityAuditLog({
+    actorId: gate.user.id,
+    action: "complimentary_issue",
+    entity: "event",
+    entityId: input.eventId,
+    details: {
+      mode: "named",
+      tierId: input.tierId,
+      batchId: result.batchId,
+      orderId: result.orderId,
+      ticketsIssued: result.ticketsIssued,
+    },
+  })
+  return result
 }
 
 export async function issueComplimentaryUnnamed(input: {
@@ -270,7 +285,21 @@ export async function issueComplimentaryUnnamed(input: {
     }
   }
 
-  return mapBatchSuccess(data, input.eventId)
+  const result = mapBatchSuccess(data, input.eventId)
+  await writeSecurityAuditLog({
+    actorId: gate.user.id,
+    action: "complimentary_issue",
+    entity: "event",
+    entityId: input.eventId,
+    details: {
+      mode: "unnamed",
+      tierId: input.tierId,
+      batchId: result.batchId,
+      orderId: result.orderId,
+      ticketsIssued: result.ticketsIssued,
+    },
+  })
+  return result
 }
 
 export async function getComplimentaryBatchTickets(input: {
@@ -326,7 +355,7 @@ function mapBatchError(message: string): string {
 function mapBatchSuccess(
   data: unknown,
   eventId: string,
-): ComplimentaryBatchResult {
+): Extract<ComplimentaryBatchResult, { success: true }> {
   const row = data as {
     batch_id: string
     order_id: string

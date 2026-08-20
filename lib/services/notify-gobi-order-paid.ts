@@ -3,15 +3,24 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { logger } from "@/lib/logger"
 import { dispatchOrderPaidToGobi } from "@/lib/services/gobi-dispatcher"
 
+export type GobiNotifyOutcome =
+  | { status: "sent" }
+  | {
+      status: "skipped"
+      reason: "no_order" | "no_phone" | "no_tickets" | "not_configured"
+    }
+  | { status: "failed"; error: string }
+
 /**
  * Carga datos de la orden pagada y notifica a Gobi (Living Ticket vía WhatsApp HSM).
- * Fire-and-forget seguro: errores se loguean; no revierte el pago.
+ * No revierte el pago. El worker de outbox decide reintento o skip.
  */
 export async function notifyGobiOrderPaid(
   admin: SupabaseClient,
   orderId: string,
   access?: { magicUrl: string; otp: string } | null,
-): Promise<void> {
+  options?: { throwOnError?: boolean },
+): Promise<GobiNotifyOutcome> {
   const { data: order, error: orderError } = await admin
     .from("orders")
     .select("id, customer_phone, buyer_id")
@@ -25,7 +34,7 @@ export async function notifyGobiOrderPaid(
       order_id: orderId,
       error: orderError?.message,
     })
-    return
+    return { status: "skipped", reason: "no_order" }
   }
 
   const phone = String(order.customer_phone ?? "").trim()
@@ -35,7 +44,7 @@ export async function notifyGobiOrderPaid(
       message: "missing_customer_phone_skip",
       order_id: orderId,
     })
-    return
+    return { status: "skipped", reason: "no_phone" }
   }
 
   const [{ data: profile }, { data: tickets }] = await Promise.all([
@@ -55,7 +64,7 @@ export async function notifyGobiOrderPaid(
   const ticket = tickets?.[0]
   if (!ticket?.id) {
     console.warn("[notifyGobiOrderPaid] sin tickets — skip Gobi", { orderId })
-    return
+    return { status: "skipped", reason: "no_tickets" }
   }
 
   let eventName = "Tu evento"
@@ -92,7 +101,7 @@ export async function notifyGobiOrderPaid(
     ticketUrl = `${siteUrl}/cuenta/entradas`
   }
 
-  await dispatchOrderPaidToGobi({
+  const result = await dispatchOrderPaidToGobi({
     order_id: orderId,
     event_name: eventName,
     customer_name: customerName,
@@ -100,4 +109,18 @@ export async function notifyGobiOrderPaid(
     ticket_url: ticketUrl,
     ...(accessCode ? { access_code: accessCode } : {}),
   })
+
+  if (result.ok) {
+    return { status: "sent" }
+  }
+
+  if (result.error === "gobi_not_configured") {
+    return { status: "skipped", reason: "not_configured" }
+  }
+
+  if (options?.throwOnError) {
+    throw new Error(result.error)
+  }
+
+  return { status: "failed", error: result.error }
 }

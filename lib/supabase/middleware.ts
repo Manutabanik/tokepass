@@ -40,15 +40,30 @@ function createPassthroughResponse(request: NextRequest, nonce: string) {
   )
 }
 
+function sessionCookieSecurity(request: NextRequest) {
+  return {
+    sameSite: "lax" as const,
+    secure:
+      request.nextUrl.protocol === "https:" ||
+      process.env.VERCEL === "1" ||
+      process.env.VERCEL_ENV === "production",
+  }
+}
+
 function redirectWithRefreshedCookies(
   url: URL,
   responseWithCookies: NextResponse,
   nonce: string,
+  request: NextRequest,
 ) {
   const redirectResponse = applyCsp(NextResponse.redirect(url), nonce)
+  const security = sessionCookieSecurity(request)
 
   responseWithCookies.cookies.getAll().forEach((cookie) => {
-    redirectResponse.cookies.set(cookie.name, cookie.value, cookie)
+    redirectResponse.cookies.set(cookie.name, cookie.value, {
+      ...cookie,
+      ...security,
+    })
   })
 
   return redirectResponse
@@ -118,8 +133,13 @@ export async function updateSession(request: NextRequest) {
           response = createPassthroughResponse(request, nonce)
           response = captureReferralFromRequest(request, response)
 
+          const security = sessionCookieSecurity(request)
           cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options)
+            response.cookies.set(name, value, {
+              ...options,
+              sameSite: security.sameSite,
+              secure: security.secure,
+            })
           })
         },
       },
@@ -145,7 +165,7 @@ export async function updateSession(request: NextRequest) {
     loginUrl.pathname = isPromoterRoute ? "/login" : "/login-organizador"
     loginUrl.searchParams.set("next", `${pathname}${request.nextUrl.search}`)
 
-    return redirectWithRefreshedCookies(loginUrl, response, nonce)
+    return redirectWithRefreshedCookies(loginUrl, response, nonce, request)
   }
 
   if (user && isProtectedRoute) {
@@ -162,7 +182,7 @@ export async function updateSession(request: NextRequest) {
       const fallbackUrl = request.nextUrl.clone()
       fallbackUrl.pathname = role === "admin" ? "/admin" : "/"
       fallbackUrl.search = ""
-      return redirectWithRefreshedCookies(fallbackUrl, response, nonce)
+      return redirectWithRefreshedCookies(fallbackUrl, response, nonce, request)
     }
 
     const actorId = user.id
@@ -190,7 +210,7 @@ export async function updateSession(request: NextRequest) {
         const homeUrl = request.nextUrl.clone()
         homeUrl.pathname = staffRoles.length > 0 ? staffHome(staffRoles) : "/"
         homeUrl.search = ""
-        return redirectWithRefreshedCookies(homeUrl, response, nonce)
+        return redirectWithRefreshedCookies(homeUrl, response, nonce, request)
       }
     }
 
@@ -201,7 +221,7 @@ export async function updateSession(request: NextRequest) {
         const homeUrl = request.nextUrl.clone()
         homeUrl.pathname = "/"
         homeUrl.search = ""
-        return redirectWithRefreshedCookies(homeUrl, response, nonce)
+        return redirectWithRefreshedCookies(homeUrl, response, nonce, request)
       }
 
       if (
@@ -211,7 +231,7 @@ export async function updateSession(request: NextRequest) {
         const staffHomeUrl = request.nextUrl.clone()
         staffHomeUrl.pathname = staffHome(staffRoles)
         staffHomeUrl.search = ""
-        return redirectWithRefreshedCookies(staffHomeUrl, response, nonce)
+        return redirectWithRefreshedCookies(staffHomeUrl, response, nonce, request)
       }
     }
   }

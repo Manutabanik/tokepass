@@ -2,6 +2,12 @@
 
 import { revalidatePath } from "next/cache"
 
+import {
+  bytesToBlob,
+  detectRasterImageMagic,
+  rasterContentType,
+  readFileBytes,
+} from "@/lib/media/image-magic"
 import { isValidPromoVideoUrl, parsePromoVideoUrl } from "@/lib/promo-video"
 import { createClient } from "@/lib/supabase/server"
 import type { Database } from "@/types/database"
@@ -175,15 +181,22 @@ async function uploadGalleryImage(
     return { error: "Cada imagen debe pesar como máximo 2 MB." }
   }
 
+  const bytes = await readFileBytes(file)
+  const kind = detectRasterImageMagic(bytes)
+  if (!kind) {
+    return { error: "La imagen no es un JPG, PNG o WEBP valido." }
+  }
+  const contentType = rasterContentType(kind)
+
   const uniqueName = `${Date.now()}-${sanitizeFileName(file.name || "gallery.jpg")}`
   const path = `${userId}/${eventId}/gallery/${uniqueName}`
 
   const { error: uploadError } = await supabase.storage
     .from("event-flyers")
-    .upload(path, file, {
+    .upload(path, bytesToBlob(bytes, contentType), {
       cacheControl: "3600",
       upsert: false,
-      contentType: file.type,
+      contentType,
     })
 
   if (uploadError) {
@@ -321,15 +334,22 @@ export async function uploadEventSocialShareImage(
       }
     }
 
+    const bytes = await readFileBytes(file)
+    const kind = detectRasterImageMagic(bytes)
+    if (!kind) {
+      return { success: false, error: "La imagen no es un JPG, PNG o WEBP valido." }
+    }
+    const contentType = rasterContentType(kind)
+
     const uniqueName = `${Date.now()}-${sanitizeFileName(file.name || "story.jpg")}`
     const path = `${access.userId}/${eventId}/social-share/${uniqueName}`
 
     const { error: uploadError } = await access.supabase.storage
       .from("event-flyers")
-      .upload(path, file, {
+      .upload(path, bytesToBlob(bytes, contentType), {
         cacheControl: "3600",
         upsert: false,
-        contentType: file.type,
+        contentType,
       })
 
     if (uploadError) {

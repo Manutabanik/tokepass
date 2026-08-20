@@ -13,6 +13,8 @@ const VenueElementShape = memo(function VenueElementShape({
   occupancyBySeatId,
   selectedSeatIds,
   onElementPointerDown,
+  onElementPointerEnter,
+  onElementPointerLeave,
   onElementContextMenu,
   onSeatPointerDown,
   showLabels,
@@ -29,6 +31,14 @@ const VenueElementShape = memo(function VenueElementShape({
   selectedSeatIds: Set<string>
   onElementPointerDown?: (
     event: React.PointerEvent,
+    element: VenueMapElement,
+  ) => void
+  onElementPointerEnter?: (
+    event: React.MouseEvent,
+    element: VenueMapElement,
+  ) => void
+  onElementPointerLeave?: (
+    event: React.MouseEvent,
     element: VenueMapElement,
   ) => void
   onElementContextMenu?: (
@@ -73,6 +83,16 @@ const VenueElementShape = memo(function VenueElementShape({
       onPointerDown={
         interactive
           ? (event) => onElementPointerDown?.(event, element)
+          : undefined
+      }
+      onMouseEnter={
+        interactive
+          ? (event) => onElementPointerEnter?.(event, element)
+          : undefined
+      }
+      onMouseLeave={
+        interactive
+          ? (event) => onElementPointerLeave?.(event, element)
           : undefined
       }
       onContextMenu={
@@ -160,6 +180,8 @@ export function VenueMapElementLayer({
   selectedSeatIds,
   occupancyBySeatId = {},
   onElementPointerDown,
+  onElementPointerEnter,
+  onElementPointerLeave,
   onElementContextMenu,
   onSeatPointerDown,
   showSeats = true,
@@ -177,6 +199,14 @@ export function VenueMapElementLayer({
   occupancyBySeatId?: Record<string, "available" | "occupied" | "blocked">
   onElementPointerDown?: (
     event: React.PointerEvent,
+    element: VenueMapElement,
+  ) => void
+  onElementPointerEnter?: (
+    event: React.MouseEvent,
+    element: VenueMapElement,
+  ) => void
+  onElementPointerLeave?: (
+    event: React.MouseEvent,
     element: VenueMapElement,
   ) => void
   onElementContextMenu?: (
@@ -245,6 +275,12 @@ export function VenueMapElementLayer({
               selectedSeatIds={selectedSeats}
               onElementPointerDown={
                 visible && interactive ? onElementPointerDown : undefined
+              }
+              onElementPointerEnter={
+                visible && interactive ? onElementPointerEnter : undefined
+              }
+              onElementPointerLeave={
+                visible && interactive ? onElementPointerLeave : undefined
               }
               onElementContextMenu={
                 visible && interactive ? onElementContextMenu : undefined

@@ -1,7 +1,6 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { headers } from "next/headers"
 
 import { resolveEventStartAt } from "@/lib/event-status"
 import {
@@ -16,6 +15,8 @@ import {
 import { logger } from "@/lib/logger"
 import { mercadoPagoRefundService } from "@/lib/mercadopago/refund-service"
 import { consumeRateLimit } from "@/lib/rate-limit"
+import { getRequestIp } from "@/lib/request-ip"
+import { writeSecurityAuditLog } from "@/lib/security/audit-log"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
@@ -50,11 +51,7 @@ export async function submitWithdrawalRequest(input: {
     return { success: false, error: GENERIC_NOT_FOUND }
   }
 
-  const requestHeaders = await headers()
-  const ip =
-    requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    requestHeaders.get("x-real-ip")?.trim() ||
-    "unknown"
+  const ip = await getRequestIp()
 
   const allowed = await consumeRateLimit({
     bucketKey: `withdrawal:${ip}:${email}`,
@@ -265,6 +262,19 @@ export async function submitWithdrawalRequest(input: {
   revalidatePath("/cuenta/compras")
   revalidatePath("/cuenta/entradas")
   revalidatePath("/superadmin/orders")
+
+  await writeSecurityAuditLog({
+    actorId: requestUserId,
+    action: "order_refund",
+    entity: "order",
+    entityId: order.id,
+    details: {
+      source: "withdrawal",
+      requestId: requestRow.id,
+      orderStatus,
+      moneyMoved,
+    },
+  })
 
   return {
     success: true,

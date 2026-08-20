@@ -4,6 +4,7 @@ import { describe, it } from "node:test"
 import {
   decodeLivingPayload,
   isLivingWindowAccepted,
+  isRetiredTransferSecret,
   resolveScanSecret,
 } from "./scan-payload"
 import {
@@ -125,5 +126,11 @@ describe("Living QR time window", () => {
     const offset = deviceClockOffsetMs(serverTs, deviceTs)
     assert.equal(offset, deviceTs - serverTs)
     assert.equal(serverAlignedNowMs(offset, deviceTs), serverTs)
+  })
+
+  it("rejects secrets left on a decoupled transferred ticket", () => {
+    assert.equal(isRetiredTransferSecret("xfer_dead_abc"), true)
+    assert.equal(isRetiredTransferSecret("live-secret"), false)
+    assert.equal(resolveScanSecret("xfer_dead_abc", "dynamic"), null)
   })
 })

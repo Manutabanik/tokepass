@@ -5,6 +5,8 @@ import {
   expandElementSelection,
   groupVenueElements,
   selectionHasGroup,
+  selectionIsLogicalGroup,
+  toggleElementsLocked,
   ungroupVenueElements,
 } from "./venue-grouping"
 import type { VenueMapElement } from "@/types/venue-map"
@@ -70,5 +72,30 @@ describe("venue-grouping", () => {
     assert.equal(next[0]?.groupId, undefined)
     assert.equal(next[1]?.groupName, undefined)
     assert.equal(next[2]?.groupId, "vip")
+  })
+
+  it("keeps a grouped click isolated to the target element", () => {
+    const elements = [chair("a", "vip"), chair("b", "vip"), chair("c")]
+    assert.deepEqual(
+      expandElementSelection(elements, "b", [], false, { isolate: true }),
+      ["b"],
+    )
+  })
+
+  it("treats a shared groupId as one logical group", () => {
+    const elements = [chair("a", "vip"), chair("b", "vip"), chair("c")]
+    assert.equal(selectionIsLogicalGroup(elements, ["a", "b"]), true)
+    assert.equal(selectionIsLogicalGroup(elements, ["a", "c"]), false)
+  })
+
+  it("toggles isLocked on the current selection only", () => {
+    const elements = [chair("a"), chair("b"), chair("c")]
+    const locked = toggleElementsLocked(elements, ["a", "c"])
+    assert.equal(locked[0]?.isLocked, true)
+    assert.equal(locked[1]?.isLocked, undefined)
+    assert.equal(locked[2]?.isLocked, true)
+    const unlocked = toggleElementsLocked(locked, ["a", "c"])
+    assert.equal(unlocked[0]?.isLocked, undefined)
+    assert.equal(unlocked[2]?.isLocked, undefined)
   })
 })

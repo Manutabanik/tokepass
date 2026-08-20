@@ -41,20 +41,23 @@ function PremiumPassTicket({ ticket }: { ticket: PrintableTicket }) {
   const doorsAt = ticket.doorsOpenAt || ticket.eventDate
 
   return (
-    <div className="ticket-print-card print-ticket-pass relative mx-auto w-full max-w-[440px] overflow-hidden rounded-2xl border border-slate-200 bg-white text-zinc-950">
+    <div
+      className="ticket-print-card print-ticket-pass relative mx-auto w-full max-w-[440px] overflow-hidden rounded-2xl border border-slate-200 bg-white text-zinc-950 print:bg-white [print-color-adjust:exact] [-webkit-print-color-adjust:exact]"
+      style={{ WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}
+    >
       {ticket.isTest ? <TestTicketWatermark /> : null}
-      <div className="ticket-print-banner relative isolate h-44 overflow-hidden bg-zinc-950">
+      <div className="ticket-print-banner relative isolate h-44 overflow-hidden bg-black print:h-auto print:bg-transparent">
         {ticket.flyerUrl ? (
           // External event flyers may live outside the Next image allowlist.
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={ticket.flyerUrl}
             alt=""
-            className="absolute inset-0 size-full object-cover"
+            className="absolute inset-0 size-full object-cover print:hidden"
           />
         ) : null}
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/45 to-black/10" />
-        <div className="absolute top-3 right-3 size-8 overflow-hidden rounded-md">
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/45 to-black/10 print:hidden" />
+        <div className="absolute top-3 right-3 size-8 overflow-hidden rounded-md print:relative print:top-auto print:right-auto print:mx-5 print:mt-3 print:mb-1">
           <BrandMarkSvg title="TokePass" />
         </div>
       </div>
@@ -96,13 +99,13 @@ function PremiumPassTicket({ ticket }: { ticket: PrintableTicket }) {
           </p>
         </div>
 
-        <div className="rounded-none bg-zinc-950 px-4 py-3 text-center text-white">
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/70">
+        <div className="rounded-none bg-black px-4 py-3 text-center text-white print:border-2 print:border-black print:bg-white print:text-black">
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/70 print:text-zinc-600">
             Categoría
           </p>
           <p className="mt-1 text-lg font-black tracking-tight">{sector}</p>
           {ticket.seatingLabel ? (
-            <p className="mt-0.5 text-xs font-semibold text-white/80">
+            <p className="mt-0.5 text-xs font-semibold text-white/80 print:text-zinc-700">
               {ticket.seatingLabel}
             </p>
           ) : null}
@@ -154,7 +157,7 @@ export function PrintableTicketView({
       <>
         <style>{`
           @media print {
-            @page { size: A4 portrait; margin: 12mm; }
+            @page { size: A4 portrait; margin: 0.5cm; }
           }
         `}</style>
         <PremiumPassTicket ticket={ticket} />

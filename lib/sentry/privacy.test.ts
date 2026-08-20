@@ -20,6 +20,34 @@ describe("sentry privacy", () => {
     assert.equal(scrubbed.note, "card [Filtered]")
   })
 
+  it("redacts dni, email, phone and holder fields without touching to_hash", () => {
+    const scrubbed = scrubSensitiveValue({
+      dni: "30111222",
+      cuil: "20301112227",
+      email: "ana@example.com",
+      to: "ana@example.com",
+      to_hash: "abc123def4567890",
+      phone: "1144445555",
+      telefono: "1144445555",
+      holder_email: "ana@example.com",
+      holder_name: "Ana Perez",
+      holder_dni: "30111222",
+      orderId: "ok-uuid",
+    }) as Record<string, unknown>
+
+    assert.equal(scrubbed.dni, "[Filtered]")
+    assert.equal(scrubbed.cuil, "[Filtered]")
+    assert.equal(scrubbed.email, "[Filtered]")
+    assert.equal(scrubbed.to, "[Filtered]")
+    assert.equal(scrubbed.to_hash, "abc123def4567890")
+    assert.equal(scrubbed.phone, "[Filtered]")
+    assert.equal(scrubbed.telefono, "[Filtered]")
+    assert.equal(scrubbed.holder_email, "[Filtered]")
+    assert.equal(scrubbed.holder_name, "[Filtered]")
+    assert.equal(scrubbed.holder_dni, "[Filtered]")
+    assert.equal(scrubbed.orderId, "ok-uuid")
+  })
+
   it("strips cookies and authorization from request metadata", () => {
     const event = scrubSentryEvent({
       request: {

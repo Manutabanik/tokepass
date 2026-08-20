@@ -2,6 +2,10 @@ import "server-only"
 
 import { logger } from "@/lib/logger"
 import {
+  CircuitOpenError,
+  circuitFetch,
+} from "@/lib/resilience/circuit-breaker"
+import {
   invalidWebhookResult,
   PaymentProviderUnavailableError,
 } from "@/lib/payments/core/errors"
@@ -11,6 +15,7 @@ import type {
   IPaymentGatewayAdapter,
   WebhookVerificationResult,
 } from "@/lib/payments/core/interfaces"
+import { mapGatewayPaymentStatus } from "@/lib/payments/core/map-gateway-status"
 import { verifyWebhookSignature } from "@/lib/payments/core/webhook-secret"
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -53,25 +58,44 @@ export class NaranjaXAdapter implements IPaymentGatewayAdapter {
       )
     }
 
-    const response = await fetch(`${config.baseUrl}/checkout/sessions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${config.apiKey}`,
-        "X-Merchant-Id": config.merchantId,
-      },
-      body: JSON.stringify({
-        merchant_id: config.merchantId,
-        order_id: input.orderId,
-        amount: input.amount,
-        currency: input.currency,
-        description: input.description,
-        customer: input.buyer,
-        items: input.items,
-        redirect_urls: input.redirectUrls,
-        webhook_url: input.webhookUrl,
-      }),
-    })
+    let response: Response
+    try {
+      response = await circuitFetch(
+        "naranjax",
+        `${config.baseUrl}/checkout/sessions`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${config.apiKey}`,
+            "X-Merchant-Id": config.merchantId,
+          },
+          body: JSON.stringify({
+            merchant_id: config.merchantId,
+            order_id: input.orderId,
+            amount: input.amount,
+            currency: input.currency,
+            description: input.description,
+            customer: input.buyer,
+            items: input.items,
+            redirect_urls: input.redirectUrls,
+            webhook_url: input.webhookUrl,
+          }),
+          signal: AbortSignal.timeout(8000),
+        },
+      )
+    } catch (error) {
+      if (error instanceof CircuitOpenError) {
+        throw new PaymentProviderUnavailableError(
+          this.provider,
+          error.message,
+        )
+      }
+      throw new PaymentProviderUnavailableError(
+        this.provider,
+        "Naranja X no pudo iniciar el checkout.",
+      )
+    }
 
     const payload: unknown = await response.json().catch(() => null)
     const record = asRecord(payload)
@@ -138,12 +162,7 @@ export class NaranjaXAdapter implements IPaymentGatewayAdapter {
       const statusRaw = (readString(record, "status") ?? "pending").toLowerCase()
       const amount = Number(record.amount ?? 0)
 
-      const status =
-        statusRaw === "approved" || statusRaw === "paid"
-          ? "approved"
-          : statusRaw === "rejected" || statusRaw === "failed"
-            ? "rejected"
-            : "pending"
+      const status = mapGatewayPaymentStatus(statusRaw)
 
       return {
         isValid: Boolean(orderId && transactionId),
@@ -151,6 +170,7 @@ export class NaranjaXAdapter implements IPaymentGatewayAdapter {
         transactionId,
         status,
         amount: Number.isFinite(amount) ? amount : 0,
+        currency: (readString(record, "currency") ?? "ARS").toUpperCase(),
         rawPayload: payload,
       }
     } catch {

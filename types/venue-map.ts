@@ -188,6 +188,8 @@ export type VenueMapElement = {
   ringIndex?: number
   /** When true, bulk numbering leaves this label untouched. */
   labelLocked?: boolean
+  /** When true, drag / resize / rotate are disabled. */
+  isLocked?: boolean
 }
 
 export type VenueMapPoint = { x: number; y: number }
@@ -420,6 +422,9 @@ function parseElement(raw: unknown): VenueMapElement | null {
         : parseOptionalInt(item.ringIndex ?? item.ring_index),
     ...(parseOptionalBoolean(item.labelLocked ?? item.label_locked)
       ? { labelLocked: true as const }
+      : {}),
+    ...(parseOptionalBoolean(item.isLocked ?? item.is_locked)
+      ? { isLocked: true as const }
       : {}),
   }
 }

@@ -101,8 +101,10 @@ import {
 import {
   assertLivingMac,
   assertStaticMac,
+  isRetiredTransferSecret,
   resolveScanSecret,
 } from "@/lib/scan-payload"
+import { hashTotpSecretSha256 } from "@/lib/scanner/totp-secret-hash"
 import { serverAlignedNowMs } from "@/lib/totp-offline"
 import { cn } from "@/lib/utils"
 
@@ -452,6 +454,7 @@ export function DoorScanner({
           : next.kind === "wrong_sector" ||
               next.kind === "main_gate_review" ||
               next.kind === "transfer_pending" ||
+              next.kind === "listed_for_resale" ||
               next.kind === "wrong_schedule" ||
               next.kind === "unpaid" ||
               next.kind === "transferred"
@@ -465,6 +468,7 @@ export function DoorScanner({
           : next.kind === "wrong_sector" ||
               next.kind === "main_gate_review" ||
               next.kind === "transfer_pending" ||
+              next.kind === "listed_for_resale" ||
               next.kind === "wrong_schedule" ||
               next.kind === "unpaid" ||
               next.kind === "transferred"
@@ -554,6 +558,7 @@ export function DoorScanner({
         kind === "expired_qr" ||
         kind === "test_ticket" ||
         kind === "transfer_pending" ||
+        kind === "listed_for_resale" ||
         kind === "invalid"
       ) {
         showOverlay({ kind })
@@ -589,6 +594,7 @@ export function DoorScanner({
 
       const manifestGate = evaluateOfflineManifestGate({
         pendingTransfer: ticket.pending_transfer,
+        listedForResale: ticket.listed_for_resale,
         dayId: ticket.day_id,
         scheduleDays: manifestMeta?.scheduleDays,
         eventDate: manifestMeta?.eventDate,
@@ -597,6 +603,10 @@ export function DoorScanner({
       if (!manifestGate.ok) {
         if (manifestGate.reason === "transfer_pending") {
           showOverlay({ kind: "transfer_pending" })
+          return
+        }
+        if (manifestGate.reason === "listed_for_resale") {
+          showOverlay({ kind: "listed_for_resale" })
           return
         }
         showOverlay({
@@ -710,62 +720,70 @@ export function DoorScanner({
 
       void (async () => {
         try {
-          const meta = manifestMeta ?? (await getManifestMeta(eventId))
-          if (meta) {
-            const resolved = resolveScanSecret(raw, qrType, {
-              nowMs: serverAlignedNowMs(meta.clockOffsetMs),
+          if (typeof navigator !== "undefined" && navigator.onLine) {
+            startTransition(async () => {
+              const result = await scanAndValidateTicket(raw, eventId, gateId)
+              applyServerResult(result)
             })
-            if (!resolved) {
+            return
+          }
+
+          const meta = manifestMeta ?? (await getManifestMeta(eventId))
+          if (!meta) {
+            showOverlay({ kind: "invalid" })
+            return
+          }
+
+          const resolved = resolveScanSecret(raw, qrType, {
+            nowMs: serverAlignedNowMs(meta.clockOffsetMs),
+          })
+          if (!resolved) {
+            showOverlay({ kind: "invalid" })
+            return
+          }
+          if (resolved.enforceFreshness && resolved.expired) {
+            showOverlay({ kind: "expired_qr" })
+            return
+          }
+
+          let local: ScannerManifestTicket | null = null
+          if (resolved.mode === "v2" || resolved.mode === "tps") {
+            local = await getTicketById(resolved.ticketId)
+            if (local && local.event_id === eventId) {
+              const ok =
+                resolved.mode === "v2"
+                  ? await assertLivingMac(local.totp_secret, resolved)
+                  : await assertStaticMac(local.totp_secret, resolved)
+              if (!ok) {
+                showOverlay({ kind: "invalid" })
+                return
+              }
+            } else {
+              local = null
+            }
+          } else {
+            local = await getTicketBySecret(eventId, resolved.totpSecret)
+          }
+
+          if (!local) {
+            showOverlay({ kind: "invalid" })
+            return
+          }
+          if (isRetiredTransferSecret(local.totp_secret)) {
+            showOverlay({ kind: "transferred" })
+            return
+          }
+
+          const snapshotHash = local.totp_secret_hash?.trim() ?? ""
+          if (snapshotHash) {
+            const scannedHash = await hashTotpSecretSha256(local.totp_secret)
+            if (!scannedHash || scannedHash !== snapshotHash) {
               showOverlay({ kind: "invalid" })
               return
             }
-            if (resolved.enforceFreshness && resolved.expired) {
-              showOverlay({ kind: "expired_qr" })
-              return
-            }
-
-            let local: ScannerManifestTicket | null = null
-            if (resolved.mode === "v2" || resolved.mode === "tps") {
-              local = await getTicketById(resolved.ticketId)
-              if (local && local.event_id === eventId) {
-                const ok =
-                  resolved.mode === "v2"
-                    ? await assertLivingMac(local.totp_secret, resolved)
-                    : await assertStaticMac(local.totp_secret, resolved)
-                if (!ok) {
-                  showOverlay({ kind: "invalid" })
-                  return
-                }
-              } else {
-                local = null
-              }
-            } else {
-              local = await getTicketBySecret(eventId, resolved.totpSecret)
-            }
-
-            if (local) {
-              await validateLocalTicket(local)
-              return
-            }
-            if (navigator.onLine) {
-              startTransition(async () => {
-                const result = await scanAndValidateTicket(raw, eventId, gateId)
-                applyServerResult(result)
-              })
-              return
-            }
-            showOverlay({ kind: "invalid" })
-            return
           }
 
-          if (!navigator.onLine) {
-            showOverlay({ kind: "invalid" })
-            return
-          }
-          startTransition(async () => {
-            const result = await scanAndValidateTicket(raw, eventId, gateId)
-            applyServerResult(result)
-          })
+          await validateLocalTicket(local)
         } catch (error) {
           logger.error({
             context: "door-scanner",
@@ -920,6 +938,7 @@ export function DoorScanner({
     }
 
     void pullAdmissions()
+    // Online snapshot: 20s. Offline ops SLO: OFFLINE_ADMISSION_SYNC_MINUTES.
     const timer = window.setInterval(() => {
       void pullAdmissions()
     }, 20_000)

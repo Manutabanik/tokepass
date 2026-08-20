@@ -35,6 +35,13 @@ export type DecodedLivingLegacy = {
 
 export type DecodedLiving = DecodedLivingV2 | DecodedLivingLegacy
 
+/** Secreto que deja execute_safe_transfer / claim en el ticket desacoplado. */
+export const TRANSFER_DEAD_SECRET_PREFIX = "xfer_dead_"
+
+export function isRetiredTransferSecret(secret: string | null | undefined): boolean {
+  return (secret ?? "").trim().toLowerCase().startsWith(TRANSFER_DEAD_SECRET_PREFIX)
+}
+
 export function decodeStaticSignedPayload(
   rawPayload: string,
 ): DecodedStaticSigned | null {
@@ -139,6 +146,7 @@ export function resolveScanSecret(
 ): ResolvedScan | null {
   const cleaned = rawPayload.trim()
   if (!cleaned) return null
+  if (isRetiredTransferSecret(cleaned)) return null
 
   const signed = decodeStaticSignedPayload(cleaned)
   if (signed) {

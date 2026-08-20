@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-type ProbeStatus = "ok" | "error" | "skipped"
+type ProbeStatus = "ok" | "error" | "skipped" | "degraded"
 
 type ProbeResult = {
   status: ProbeStatus
@@ -97,7 +97,7 @@ async function checkUpstashRedis(): Promise<ProbeResult> {
 
     if (!response.ok) {
       return {
-        status: "error",
+        status: "degraded",
         latencyMs: Date.now() - started,
         detail: `http_${response.status}`,
       }
@@ -109,7 +109,7 @@ async function checkUpstashRedis(): Promise<ProbeResult> {
 
     if (body?.result && String(body.result).toUpperCase() !== "PONG") {
       return {
-        status: "error",
+        status: "degraded",
         latencyMs: Date.now() - started,
         detail: `unexpected_ping:${String(body.result)}`,
       }
@@ -118,7 +118,7 @@ async function checkUpstashRedis(): Promise<ProbeResult> {
     return { status: "ok", latencyMs: Date.now() - started }
   } catch (error) {
     return {
-      status: "error",
+      status: "degraded",
       latencyMs: Date.now() - started,
       detail: error instanceof Error ? error.message : "redis_unreachable",
     }
@@ -133,8 +133,8 @@ export async function GET() {
     checkUpstashRedis(),
   ])
 
-  const requiredFailed =
-    supabase.status === "error" || redis.status === "error"
+  const supabaseFailed = supabase.status === "error"
+  const redisDegraded = redis.status === "degraded"
 
   const probes = [supabase, redis].filter((p) => p.status !== "skipped")
   const avgLatencyMs =
@@ -145,7 +145,7 @@ export async function GET() {
       : Date.now() - started
 
   const body = {
-    status: requiredFailed ? "unhealthy" : "healthy",
+    status: supabaseFailed ? "unhealthy" : redisDegraded ? "degraded" : "healthy",
     timestamp: new Date().toISOString(),
     latencyMs: {
       total: Date.now() - started,
@@ -159,13 +159,21 @@ export async function GET() {
     },
   }
 
-  if (requiredFailed) {
+  if (supabaseFailed) {
     logger.error({
       context: "api/health",
       message: "healthcheck_failed",
       checks: { supabase, redis },
     })
     return NextResponse.json(body, { status: 503 })
+  }
+
+  if (redisDegraded) {
+    logger.warn({
+      context: "api/health",
+      message: "redis_degraded",
+      checks: { redis },
+    })
   }
 
   return NextResponse.json(body, {

@@ -2,8 +2,11 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import {
+  isNextServerActionRequest,
   isWaitingRoomBypassPath,
   resolveProtectedEventKey,
+  resolveRefererEventKey,
+  resolveRequestEventKey,
   safeQueueNextPath,
   waitingRoomUrl,
 } from "./paths"
@@ -14,6 +17,7 @@ describe("waiting-room paths", () => {
     assert.equal(resolveProtectedEventKey("/events/abc/checkout"), "abc")
     assert.equal(resolveProtectedEventKey("/eventos/fiesta/checkout"), "fiesta")
     assert.equal(resolveProtectedEventKey("/eventos/fiesta"), "fiesta")
+    assert.equal(resolveProtectedEventKey("/e/fiesta"), "fiesta")
     assert.equal(resolveProtectedEventKey("/checkout"), "__checkout__")
   })
 
@@ -39,5 +43,37 @@ describe("waiting-room paths", () => {
     assert.equal(safeQueueNextPath("https://evil.test", "fiesta"), "/eventos/fiesta")
     assert.equal(safeQueueNextPath("//evil.test", "fiesta"), "/eventos/fiesta")
     assert.equal(safeQueueNextPath("/eventos/fiesta", "fiesta"), "/eventos/fiesta")
+  })
+
+  it("gates server actions via same-origin referer", () => {
+    assert.equal(
+      isNextServerActionRequest({
+        method: "POST",
+        headers: { get: (name) => (name === "next-action" ? "abc" : null) },
+      }),
+      true,
+    )
+    assert.equal(
+      resolveRefererEventKey("https://tokepass.test/e/fiesta", "https://tokepass.test"),
+      "fiesta",
+    )
+    assert.equal(
+      resolveRefererEventKey("https://evil.test/e/fiesta", "https://tokepass.test"),
+      null,
+    )
+    assert.equal(
+      resolveRequestEventKey({
+        method: "POST",
+        headers: {
+          get: (name) => {
+            if (name === "next-action") return "abc"
+            if (name === "referer") return "https://tokepass.test/e/fiesta"
+            return null
+          },
+        },
+        nextUrl: { pathname: "/", origin: "https://tokepass.test" },
+      }),
+      "fiesta",
+    )
   })
 })

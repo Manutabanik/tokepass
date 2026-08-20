@@ -22,8 +22,10 @@ import {
   expireCheckoutPreferenceOnOrder,
   invalidateStaleCheckoutPreferences,
 } from "@/lib/payments/stale-preferences"
+import { consumeNamedRateLimit } from "@/lib/security/distributed-rate-limit"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import { assertWaitingRoomCheckoutPass } from "@/lib/waiting-room/assert-checkout-pass"
 
 export type CreatePreferenceResult =
   | { success: true; initPoint: string; paymentUrl: string; preferenceId: string }
@@ -34,6 +36,7 @@ type OrderTicketRow = {
   events: {
     id: string
     title: string
+    slug: string | null
   } | null
   seating_unit: {
     reserved_until: string | null
@@ -62,6 +65,17 @@ export async function createPaymentPreference(
     return { success: false, error: "Debés iniciar sesión para pagar." }
   }
 
+  const preferenceAllowed = await consumeNamedRateLimit(
+    "paymentPreferenceUser",
+    user.id,
+  )
+  if (!preferenceAllowed) {
+    return {
+      success: false,
+      error: "Demasiados intentos de pago. Esperá un minuto e intentá de nuevo.",
+    }
+  }
+
   const { data: order, error: orderError } = await supabase
     .from("orders")
     .select(
@@ -88,7 +102,7 @@ export async function createPaymentPreference(
   const { data: tickets, error: ticketsError } = await supabase
     .from("tickets")
     .select(
-      "id, events(id, title), seating_unit:event_seating_units(reserved_until)",
+      "id, events(id, title, slug), seating_unit:event_seating_units(reserved_until)",
     )
     .eq("order_id", orderId)
 
@@ -111,11 +125,12 @@ export async function createPaymentPreference(
 
   let eventTitle = rows[0]?.events?.title ?? "Evento TokePass"
   let eventId = rows[0]?.events?.id ?? ""
+  let eventSlug = rows[0]?.events?.slug ?? null
 
   if (isStoreOnlyOrder) {
     const { data: storeRows, error: storeError } = await supabase
       .from("item_redemptions")
-      .select("id, event_items(name, events(id, title))")
+      .select("id, event_items(name, events(id, title, slug))")
       .eq("order_id", orderId)
       .limit(5)
 
@@ -129,7 +144,7 @@ export async function createPaymentPreference(
     type StoreJoin = {
       event_items: {
         name: string
-        events: { id: string; title: string } | null
+        events: { id: string; title: string; slug: string | null } | null
       } | null
     }
     const first = storeRows[0] as unknown as StoreJoin
@@ -137,6 +152,14 @@ export async function createPaymentPreference(
       first.event_items?.events?.title ??
       "TokePass — Tienda de Extras"
     eventId = first.event_items?.events?.id ?? eventId
+    eventSlug = first.event_items?.events?.slug ?? eventSlug
+  }
+
+  if (eventId) {
+    const room = await assertWaitingRoomCheckoutPass([eventId, eventSlug])
+    if (!room.ok) {
+      return { success: false, error: room.error }
+    }
   }
 
   const frozenSubtotal = Number(order.subtotal)

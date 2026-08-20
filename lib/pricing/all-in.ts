@@ -1,5 +1,24 @@
+import { centsToMoney, moneyToCents } from "@/lib/money/cents"
+
 export function roundMoney(value: number): number {
-  return Math.round((value + Number.EPSILON) * 100) / 100
+  return centsToMoney(moneyToCents(value))
+}
+
+function clampRate(rate: number): number {
+  if (!Number.isFinite(rate)) return 0
+  return Math.min(0.95, Math.max(0, rate))
+}
+
+/**
+ * Mirrors SQL `all_in_platform_fee(base, rate)`: fee = public(base) - base.
+ * Arithmetic stays in integer cents (numeric(12,2)).
+ */
+export function allInPlatformFee(base: number, rate: number): number {
+  const safeRate = clampRate(rate)
+  const baseCents = Math.max(0, moneyToCents(base))
+  if (baseCents <= 0 || safeRate <= 0) return 0
+  const publicCents = Math.round(baseCents / (1 - safeRate))
+  return centsToMoney(Math.max(0, publicCents - baseCents))
 }
 
 export function allInBreakdown(
@@ -13,18 +32,14 @@ export function allInBreakdown(
   rate: number
   fixedFee: number
 } {
-  const safePublicPrice = Number.isFinite(publicPrice)
-    ? Math.max(0, publicPrice)
-    : 0
-  const safeRate = Number.isFinite(rate)
-    ? Math.min(0.95, Math.max(0, rate))
-    : 0
-  const safeFixed =
-    safePublicPrice > 0 && Number.isFinite(fixedFee)
-      ? Math.max(0, fixedFee)
+  const publicCents = Math.max(0, moneyToCents(publicPrice))
+  const safeRate = clampRate(rate)
+  const fixedCents =
+    publicCents > 0 && Number.isFinite(fixedFee)
+      ? Math.max(0, moneyToCents(fixedFee))
       : 0
 
-  if (safePublicPrice === 0) {
+  if (publicCents === 0) {
     return {
       basePrice: 0,
       platformFee: 0,
@@ -34,15 +49,16 @@ export function allInBreakdown(
     }
   }
 
-  const platformFee = roundMoney(
-    Math.min(safePublicPrice, safePublicPrice * safeRate + safeFixed),
+  const platformFeeCents = Math.min(
+    publicCents,
+    Math.round(publicCents * safeRate) + fixedCents,
   )
 
   return {
-    basePrice: roundMoney(safePublicPrice - platformFee),
-    platformFee,
-    publicPrice: roundMoney(safePublicPrice),
+    basePrice: centsToMoney(publicCents - platformFeeCents),
+    platformFee: centsToMoney(platformFeeCents),
+    publicPrice: centsToMoney(publicCents),
     rate: safeRate,
-    fixedFee: roundMoney(safeFixed),
+    fixedFee: centsToMoney(fixedCents),
   }
 }

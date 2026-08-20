@@ -1,8 +1,7 @@
 "use server"
 
-import { headers } from "next/headers"
-
 import { logger } from "@/lib/logger"
+import { getRequestIp } from "@/lib/request-ip"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { organizerLeadSchema } from "@/lib/validations/organizer-lead"
 
@@ -14,11 +13,6 @@ export type OrganizerLeadState = {
 const RATE_WINDOW_MS = 10 * 60 * 1000
 const RATE_MAX = 4
 const recentByIp = new Map<string, number[]>()
-
-function clientIp(headerList: Headers): string {
-  const forwarded = headerList.get("x-forwarded-for")?.split(",")[0]?.trim()
-  return forwarded || headerList.get("x-real-ip")?.trim() || "unknown"
-}
 
 function allowLead(ip: string): boolean {
   const now = Date.now()
@@ -38,8 +32,7 @@ export async function submitOrganizerLead(
   _previous: OrganizerLeadState,
   formData: FormData,
 ): Promise<OrganizerLeadState> {
-  const headerList = await headers()
-  if (!allowLead(clientIp(headerList))) {
+  if (!allowLead(await getRequestIp())) {
     return {
       error: "Demasiadas solicitudes. Esperá unos minutos e intentá de nuevo.",
       success: null,

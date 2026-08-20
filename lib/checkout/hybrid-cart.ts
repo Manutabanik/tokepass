@@ -1,4 +1,5 @@
 import { decidePhaseCart, type PublicTicketPhase } from "@/lib/inventory/active-phase"
+import { centsToMoney, moneyAmountsEqual, moneyToCents } from "@/lib/money/cents"
 import type { CheckoutCartItem } from "@/lib/validations/checkout"
 
 export function isMappedCheckoutItem(item: CheckoutCartItem): boolean {
@@ -59,7 +60,7 @@ export function quoteHybridCartTotal(input: {
   unitPriceByTier: Map<string, number>
   phasesByTier?: Map<string, PublicTicketPhase[]>
 }): { ok: true; total: number } | { ok: false; error: string } {
-  let total = 0
+  let totalCents = 0
   for (const item of input.items) {
     const tierId = checkoutItemTierId(item)
     const phases = input.phasesByTier?.get(tierId) ?? []
@@ -71,11 +72,11 @@ export function quoteHybridCartTotal(input: {
       return { ok: false, error: "No se pudo cotizar el precio vigente." }
     }
     const quantity = isMappedCheckoutItem(item) ? 1 : item.quantity
-    total += unit * quantity
+    totalCents += moneyToCents(unit) * quantity
   }
-  return { ok: true, total: Math.round(total * 100) / 100 }
+  return { ok: true, total: centsToMoney(totalCents) }
 }
 
-export function amountsMatch(left: number, right: number, cents = 2): boolean {
-  return Math.abs(left - right) <= cents / 100
+export function amountsMatch(left: number, right: number): boolean {
+  return moneyAmountsEqual(left, right)
 }

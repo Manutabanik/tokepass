@@ -5,6 +5,7 @@
 
 import type { MyTicket } from "@/app/actions/tickets"
 import type { TicketStatus } from "@/types/database"
+import { resolveTicketVisualStatus } from "@/lib/ticket-visual-status"
 import { requestTicketAssetCache } from "@/lib/wallet-cache"
 
 const DB_NAME = "tokepass-offline"
@@ -18,6 +19,7 @@ export type OfflineEventData = {
   eventId: string
   eventTitle: string
   eventDate: string
+  ends_at?: string | null
   doorsOpenAt?: string
   eventLocation: string
   flyerUrl: string | null
@@ -45,6 +47,7 @@ export type OfflineEventData = {
     id: string
     receiverEmail: string
   } | null
+  activeResaleListingId?: string | null
 }
 
 export type OfflineTicketRecord = {
@@ -246,6 +249,35 @@ async function unsealOfflineRecord(
   ) as OfflineTicketRecord
 }
 
+export const OFFLINE_TICKET_TTL_GRACE_MS = 86_400_000
+
+export function resolveOfflineTicketEndsAt(ticket: {
+  endsAt?: string | null
+  ends_at?: string | null
+  eventDate?: string | null
+  event_data?: { ends_at?: string | null; eventDate?: string }
+}): string | null {
+  const endedAt =
+    ticket.endsAt ??
+    ticket.ends_at ??
+    ticket.event_data?.ends_at ??
+    ticket.eventDate ??
+    ticket.event_data?.eventDate ??
+    null
+  return endedAt?.trim() || null
+}
+
+export function isOfflineTicketExpired(
+  ticket: Parameters<typeof resolveOfflineTicketEndsAt>[0],
+  nowMs = Date.now(),
+): boolean {
+  const endedAt = resolveOfflineTicketEndsAt(ticket)
+  if (!endedAt) return false
+  const endMs = new Date(endedAt).getTime()
+  if (!Number.isFinite(endMs)) return false
+  return nowMs > endMs + OFFLINE_TICKET_TTL_GRACE_MS
+}
+
 export function ticketToOfflineRecord(
   ticket: MyTicket,
   userId: string,
@@ -253,11 +285,15 @@ export function ticketToOfflineRecord(
   return {
     ticket_id: ticket.id,
     user_id: userId,
-    totp_secret: ticket.pendingTransfer ? "" : ticket.totpSecret || ticket.id,
+    totp_secret:
+      ticket.pendingTransfer || ticket.activeResaleListingId
+        ? ""
+        : ticket.totpSecret || ticket.id,
     event_data: {
       eventId: ticket.eventId,
       eventTitle: ticket.eventTitle,
       eventDate: ticket.eventDate,
+      ends_at: ticket.endsAt,
       doorsOpenAt: ticket.doorsOpenAt,
       eventLocation: ticket.eventLocation,
       flyerUrl: ticket.flyerUrl,
@@ -282,6 +318,7 @@ export function ticketToOfflineRecord(
       tierPrice: ticket.tierPrice,
       isSponsoredByTokePass: ticket.isSponsoredByTokePass,
       pendingTransfer: ticket.pendingTransfer,
+      activeResaleListingId: ticket.activeResaleListingId,
     },
     status: ticket.status,
     qr_code: ticket.qrCode,
@@ -298,9 +335,11 @@ export function offlineRecordToTicket(record: OfflineTicketRecord): MyTicket {
     id: record.ticket_id,
     status: record.status,
     qrCode: record.qr_code,
-    totpSecret: record.event_data.pendingTransfer
-      ? ""
-      : record.totp_secret,
+    totpSecret:
+      record.event_data.pendingTransfer ||
+      record.event_data.activeResaleListingId
+        ? ""
+        : record.totp_secret,
     transferCount: record.transfer_count ?? 0,
     maxTransfersAllowed: record.max_transfers_allowed ?? 1,
     createdAt: record.created_at,
@@ -317,6 +356,7 @@ export function offlineRecordToTicket(record: OfflineTicketRecord): MyTicket {
     eventId: record.event_data.eventId,
     eventTitle: record.event_data.eventTitle,
     eventDate: record.event_data.eventDate,
+    endsAt: record.event_data.ends_at ?? record.event_data.eventDate,
     doorsOpenAt: record.event_data.doorsOpenAt ?? record.event_data.eventDate,
     eventLocation: record.event_data.eventLocation,
     flyerUrl: record.event_data.flyerUrl,
@@ -332,8 +372,12 @@ export function offlineRecordToTicket(record: OfflineTicketRecord): MyTicket {
     isSponsoredByTokePass: Boolean(
       record.event_data.isSponsoredByTokePass,
     ),
-    activeResaleListingId: null,
+    activeResaleListingId: record.event_data.activeResaleListingId ?? null,
     pendingTransfer: record.event_data.pendingTransfer ?? null,
+    visualStatus: resolveTicketVisualStatus({
+      pendingTransfer: record.event_data.pendingTransfer ?? null,
+      activeResaleListingId: record.event_data.activeResaleListingId ?? null,
+    }),
   }
 }
 
@@ -342,11 +386,15 @@ async function putTicketsAndMeta(
   tickets: MyTicket[],
   mode: "replace" | "merge",
 ): Promise<MyTicket[]> {
+  const expiredIds = new Set(
+    tickets.filter((ticket) => isOfflineTicketExpired(ticket)).map((ticket) => ticket.id),
+  )
   const active = tickets.filter(
     (ticket) =>
-      ticket.status === "valid" ||
-      ticket.status === "used" ||
-      ticket.status === "scanned",
+      !expiredIds.has(ticket.id) &&
+      (ticket.status === "valid" ||
+        ticket.status === "used" ||
+        ticket.status === "scanned"),
   )
   const encryptedActive = await Promise.all(
     active.map((ticket) =>
@@ -377,16 +425,20 @@ async function putTicketsAndMeta(
         ticketStore.delete(row.ticket_id)
         continue
       }
-      if (!active.some((ticket) => ticket.id === row.ticket_id)) {
+      if (
+        expiredIds.has(row.ticket_id) ||
+        !active.some((ticket) => ticket.id === row.ticket_id)
+      ) {
         ticketStore.delete(row.ticket_id)
       }
     }
   } else {
     for (const ticket of tickets) {
       const keep =
-        ticket.status === "valid" ||
-        ticket.status === "used" ||
-        ticket.status === "scanned"
+        !expiredIds.has(ticket.id) &&
+        (ticket.status === "valid" ||
+          ticket.status === "used" ||
+          ticket.status === "scanned")
       if (!keep) {
         ticketStore.delete(ticket.id)
       }
@@ -482,12 +534,23 @@ export async function getTicketsOffline(
     ? rows.filter((row) => row.user_id === userId)
     : rows
 
-  return filtered
-    .map(offlineRecordToTicket)
+  const mapped = filtered.map(offlineRecordToTicket)
+  const expired = mapped.filter((ticket) => isOfflineTicketExpired(ticket))
+  for (const ticket of expired) {
+    await removeTicketOffline(ticket.id)
+  }
+
+  return mapped
+    .filter((ticket) => !isOfflineTicketExpired(ticket))
     .sort(
       (a, b) =>
         new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime(),
     )
+}
+
+/** Purga tickets cuyo evento ya cerro. Se llama al abrir la PWA. */
+export async function purgeExpiredOfflineTickets(): Promise<void> {
+  await getTicketsOffline()
 }
 
 export async function getOfflineActiveUserId(): Promise<string | null> {

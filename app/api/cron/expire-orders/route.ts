@@ -1,6 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server"
 
-import { GA_CHECKOUT_HOLD_INTERVAL } from "@/lib/checkout-hold"
+import {
+  EXPIRE_HOLD_BATCH_SIZE,
+  GA_CHECKOUT_HOLD_INTERVAL,
+} from "@/lib/checkout-hold"
 import { logger } from "@/lib/logger"
 import { createAdminClient } from "@/lib/supabase/admin"
 
@@ -24,14 +27,9 @@ function authorizeCron(request: NextRequest): boolean {
 }
 
 /**
- * Libera stock de checkouts abandonados (barrido). El self-heal en
- * get_event_seating_* / get_event_tier_live_stock / assert_cascade_stock_available
- * ya libera holds expirados al consultar disponibilidad.
- * - GA / pending: TTL = GA_CHECKOUT_HOLD_INTERVAL, batch 2500 en RPC.
- * - Seating: reserved_until vía expire_seating_orders.
- * - Cart holds (sin orden): expire_seating_cart_holds.
- * - GA cart holds: expire_ga_cart_holds.
- * Secure with CRON_SECRET (Vercel Cron sends Authorization: Bearer …).
+ * Libera stock de checkouts abandonados (barrido).
+ * Lotes de 500 + SKIP LOCKED, un RPC a la vez, para no pelear
+ * locks con reserve_unified_cart_tx.
  */
 export async function GET(request: NextRequest) {
   if (!authorizeCron(request)) {
@@ -40,63 +38,59 @@ export async function GET(request: NextRequest) {
 
   try {
     const admin = createAdminClient()
-    const [
-      { data, error },
-      { data: seatingData, error: seatingError },
-      { data: cartHoldData, error: cartHoldError },
-      { data: gaHoldData, error: gaHoldError },
-    ] = await Promise.all([
-      admin.rpc("expire_abandoned_orders", {
-        p_older_than: GA_CHECKOUT_HOLD_INTERVAL,
-      }),
-      admin.rpc("expire_seating_orders"),
-      admin.rpc("expire_seating_cart_holds"),
-      admin.rpc("expire_ga_cart_holds"),
-    ])
+    const batch = { p_batch_size: EXPIRE_HOLD_BATCH_SIZE }
 
-    if (error || seatingError || cartHoldError || gaHoldError) {
-      logger.error({
-        context: "api/cron/expire-orders",
-        message: "expire_abandoned_orders_failed",
-        error:
-          error?.message ??
-          seatingError?.message ??
-          cartHoldError?.message ??
-          gaHoldError?.message,
-      })
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            error?.message ??
-            seatingError?.message ??
-            cartHoldError?.message ??
-            gaHoldError?.message,
-        },
-        { status: 500 },
-      )
+    const abandoned = await admin.rpc("expire_abandoned_orders", {
+      p_older_than: GA_CHECKOUT_HOLD_INTERVAL,
+      ...batch,
+    })
+    if (abandoned.error) {
+      throw new Error(abandoned.error.message)
+    }
+
+    const seating = await admin.rpc("expire_seating_orders", batch)
+    if (seating.error) {
+      throw new Error(seating.error.message)
+    }
+
+    const cartHolds = await admin.rpc("expire_seating_cart_holds", batch)
+    if (cartHolds.error) {
+      throw new Error(cartHolds.error.message)
+    }
+
+    const gaHolds = await admin.rpc("expire_ga_cart_holds", batch)
+    if (gaHolds.error) {
+      throw new Error(gaHolds.error.message)
+    }
+
+    const resaleHolds = await admin.rpc("expire_resale_listing_reservations", batch)
+    if (resaleHolds.error) {
+      throw new Error(resaleHolds.error.message)
+    }
+
+    const transfers = await admin.rpc("expire_pending_ticket_transfers", batch)
+    if (transfers.error) {
+      throw new Error(transfers.error.message)
+    }
+
+    const data = {
+      expiredCount: Number(abandoned.data ?? 0),
+      expiredSeatingCount: Number(seating.data ?? 0),
+      expiredCartHoldCount: Number(cartHolds.data ?? 0),
+      expiredGaHoldCount: Number(gaHolds.data ?? 0),
+      expiredResaleHoldCount: Number(resaleHolds.data ?? 0),
+      expiredTransferHoldCount: Number(transfers.data ?? 0),
+      holdInterval: GA_CHECKOUT_HOLD_INTERVAL,
+      batchSize: EXPIRE_HOLD_BATCH_SIZE,
     }
 
     logger.info({
       context: "api/cron/expire-orders",
       message: "expire_abandoned_orders_ok",
-      expiredCount: Number(data ?? 0),
-      expiredSeatingCount: Number(seatingData ?? 0),
-      expiredCartHoldCount: Number(cartHoldData ?? 0),
-      expiredGaHoldCount: Number(gaHoldData ?? 0),
-      holdInterval: GA_CHECKOUT_HOLD_INTERVAL,
+      ...data,
     })
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        expiredCount: Number(data ?? 0),
-        expiredSeatingCount: Number(seatingData ?? 0),
-        expiredCartHoldCount: Number(cartHoldData ?? 0),
-        expiredGaHoldCount: Number(gaHoldData ?? 0),
-        holdInterval: GA_CHECKOUT_HOLD_INTERVAL,
-      },
-    })
+    return NextResponse.json({ success: true, data })
   } catch (error) {
     logger.error({
       context: "api/cron/expire-orders",
@@ -106,7 +100,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: "cron_error",
+        error: error instanceof Error ? error.message : "cron_error",
       },
       { status: 500 },
     )

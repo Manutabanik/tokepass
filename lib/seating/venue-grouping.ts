@@ -17,8 +17,13 @@ export function expandElementSelection(
   clickedId: string,
   currentIds: string[],
   additive: boolean,
+  options?: { isolate?: boolean },
 ): string[] {
-  const bunch = elementGroupMembers(elements, clickedId).map((item) => item.id)
+  const bunch = options?.isolate
+    ? elements.some((item) => item.id === clickedId)
+      ? [clickedId]
+      : []
+    : elementGroupMembers(elements, clickedId).map((item) => item.id)
   if (bunch.length === 0) return currentIds
   if (!additive) return bunch
   const set = new Set(currentIds)
@@ -29,6 +34,15 @@ export function expandElementSelection(
     for (const id of bunch) set.add(id)
   }
   return [...set]
+}
+
+export function elementsInGroup(
+  elements: VenueMapElement[],
+  groupId: string,
+): VenueMapElement[] {
+  const id = groupId.trim()
+  if (!id) return []
+  return elements.filter((item) => item.groupId?.trim() === id)
 }
 
 export function selectionFromIds(ids: string[]): {
@@ -49,7 +63,7 @@ export function groupVenueElements(
   const ids = new Set(selectedIds)
   const selected = elements.filter((item) => ids.has(item.id))
   if (selected.length < 2) return elements
-  const groupId = `grp-${crypto.randomUUID().slice(0, 8)}`
+  const groupId = crypto.randomUUID()
   const name =
     groupName?.trim() ||
     selected[0]?.groupName?.trim() ||
@@ -83,4 +97,51 @@ export function selectionHasGroup(
 ): boolean {
   const ids = new Set(selectedIds)
   return elements.some((item) => ids.has(item.id) && Boolean(item.groupId?.trim()))
+}
+
+/** True when every selected item shares one groupId (a logical group). */
+export function selectionIsLogicalGroup(
+  elements: VenueMapElement[],
+  selectedIds: string[],
+): boolean {
+  if (selectedIds.length < 2) return false
+  const ids = new Set(selectedIds)
+  const selected = elements.filter((item) => ids.has(item.id))
+  const groupId = selected[0]?.groupId?.trim()
+  if (!groupId || selected.length !== ids.size) return false
+  return selected.every((item) => item.groupId?.trim() === groupId)
+}
+
+export function selectionHasLocked(
+  elements: VenueMapElement[],
+  selectedIds: string[],
+): boolean {
+  const ids = new Set(selectedIds)
+  return elements.some((item) => ids.has(item.id) && item.isLocked === true)
+}
+
+export function selectionIsFullyLocked(
+  elements: VenueMapElement[],
+  selectedIds: string[],
+): boolean {
+  const ids = new Set(selectedIds)
+  const selected = elements.filter((item) => ids.has(item.id))
+  return selected.length > 0 && selected.every((item) => item.isLocked === true)
+}
+
+export function toggleElementsLocked(
+  elements: VenueMapElement[],
+  selectedIds: string[],
+): VenueMapElement[] {
+  const ids = new Set(selectedIds)
+  const selected = elements.filter((item) => ids.has(item.id))
+  if (selected.length === 0) return elements
+  const nextLocked = !selected.every((item) => item.isLocked === true)
+  return elements.map((item) => {
+    if (!ids.has(item.id)) return item
+    if (nextLocked) return { ...item, isLocked: true }
+    const next = { ...item }
+    delete next.isLocked
+    return next
+  })
 }

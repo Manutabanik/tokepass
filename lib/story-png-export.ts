@@ -3,7 +3,8 @@ import {
   STORY_CANVAS_WIDTH,
 } from "@/lib/story-canvas"
 
-export const STORY_EXPORT_PIXEL_RATIO = 3
+/** Native 1080x1920 mold: do not upscale on mobile (iOS Safari OOM / black canvas). */
+export const STORY_EXPORT_PIXEL_RATIO = 1
 export const STORY_EXPORT_QUALITY = 1
 export const STORY_EXPORT_MAX_BYTES = Math.round(3.5 * 1024 * 1024)
 export const STORY_EXPORT_MIN_BYTES = Math.round(1.5 * 1024 * 1024)
@@ -21,6 +22,8 @@ export type StoryPngOptions = {
   backgroundColor: string
   imagePlaceholder: string
   skipFonts: boolean
+  useCORS: boolean
+  allowTaint: boolean
   fetchRequestInit: RequestInit
   style: {
     transform: string
@@ -40,9 +43,12 @@ export function storyPngOptions(backgroundColor: string): StoryPngOptions {
     backgroundColor,
     imagePlaceholder: IMAGE_PLACEHOLDER,
     skipFonts: false,
+    useCORS: true,
+    allowTaint: true,
     fetchRequestInit: {
       mode: "cors",
       cache: "no-cache",
+      credentials: "omit",
     },
     style: {
       transform: "none",
@@ -50,6 +56,22 @@ export function storyPngOptions(backgroundColor: string): StoryPngOptions {
       top: "0",
     },
   }
+}
+
+export function dataUrlToPngFile(
+  dataUrl: string,
+  filename = "tokepass-entrada.png",
+): File {
+  const comma = dataUrl.indexOf(",")
+  const header = comma >= 0 ? dataUrl.slice(0, comma) : "data:image/png;base64"
+  const payload = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl
+  const mime = /data:([^;]+)/.exec(header)?.[1] || "image/png"
+  const binary = atob(payload)
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index)
+  }
+  return new File([bytes], filename, { type: mime })
 }
 
 function loadBlobImage(blob: Blob): Promise<HTMLImageElement> {

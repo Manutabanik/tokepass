@@ -1,8 +1,10 @@
-import { CheckCircle2, Handshake, ShieldAlert, ShieldCheck } from "lucide-react"
+import { CheckCircle2, Handshake, Percent, ShieldAlert, ShieldCheck } from "lucide-react"
 import type { Metadata } from "next"
 import Link from "next/link"
 
+import { getResaleFeePercentage } from "@/app/actions/platform-settings"
 import { PageHeading } from "@/components/superadmin/page-heading"
+import { PlatformResaleFeeForm } from "@/components/superadmin/platform-resale-fee-form"
 import {
   Card,
   CardContent,
@@ -15,7 +17,8 @@ export const metadata: Metadata = {
   title: "Ajustes",
 }
 
-export default function SuperAdminSettingsPage() {
+export default async function SuperAdminSettingsPage() {
+  const resaleFeePercentage = await getResaleFeePercentage()
   const checks = [
     {
       label: "Conexión a la base de datos",
@@ -107,6 +110,22 @@ where email = 'tu@email.com';`}</code>
               Ejecutá esta consulta en el editor SQL de Supabase. La persona
               tiene que existir antes en el listado de usuarios.
             </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border border-border bg-card py-0 text-card-foreground">
+          <CardHeader className="px-6 pt-6">
+            <CardTitle className="flex items-center gap-2 text-base font-medium text-muted-foreground">
+              <Percent className="size-4 text-sky-400" />
+              Comisión de reventa
+            </CardTitle>
+            <CardDescription className="text-muted-foreground">
+              Porcentaje global que se descuenta al vendedor al publicar una
+              entrada en el marketplace oficial.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="px-6 pb-6 pt-2">
+            <PlatformResaleFeeForm initialPercentage={resaleFeePercentage} />
           </CardContent>
         </Card>
 

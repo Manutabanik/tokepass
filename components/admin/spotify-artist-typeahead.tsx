@@ -72,13 +72,13 @@ export function SpotifyArtistTypeahead({
   useEffect(() => {
     const needle = debounced
     if (needle.length < 2) {
-      setItems([])
-      setLoading(false)
       return
     }
 
     let cancelled = false
-    setLoading(true)
+    queueMicrotask(() => {
+      if (!cancelled) setLoading(true)
+    })
     void fetch(`/api/spotify/search?q=${encodeURIComponent(needle)}`, {
       credentials: "same-origin",
     })

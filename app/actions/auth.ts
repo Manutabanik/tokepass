@@ -10,12 +10,24 @@ import {
   type FreshLoginProfile,
 } from "@/lib/auth/post-login"
 import { logger } from "@/lib/logger"
+import { getRequestIp } from "@/lib/request-ip"
+import {
+  AUTH_RATE_LIMIT_ERROR,
+  consumeNamedRateLimit,
+} from "@/lib/security/distributed-rate-limit"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
 export interface AuthActionState {
   error: string | null
   success: string | null
+}
+
+async function assertAuthIpRateLimit(): Promise<AuthActionState | null> {
+  const ip = await getRequestIp()
+  const allowed = await consumeNamedRateLimit("authIp", ip)
+  if (allowed) return null
+  return { error: AUTH_RATE_LIMIT_ERROR, success: null }
 }
 
 async function getAuthCallbackUrl(next?: string | null) {
@@ -133,6 +145,9 @@ export async function signUpWithEmail(
   _previousState: AuthActionState,
   formData: FormData,
 ): Promise<AuthActionState> {
+  const limited = await assertAuthIpRateLimit()
+  if (limited) return limited
+
   const credentials = readCredentials(formData)
 
   if (!credentials.ok) {
@@ -200,9 +215,25 @@ async function promoteProfileToOrganizer(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const admin = createAdminClient()
   const now = new Date().toISOString()
+
+  const { data: existing } = await admin
+    .from("profiles")
+    .select("organizer_approval_status")
+    .eq("id", userId)
+    .maybeSingle()
+
+  const currentStatus = existing?.organizer_approval_status
+  if (
+    currentStatus === "approved" ||
+    currentStatus === "rejected" ||
+    currentStatus === "suspended"
+  ) {
+    return { ok: true }
+  }
+
   const patch = {
     role: "admin" as const,
-    organizer_approval_status: "approved" as const,
+    organizer_approval_status: "pending" as const,
     updated_at: now,
     ...(extras?.fullName?.trim() ? { full_name: extras.fullName.trim() } : {}),
     ...(extras?.phone?.trim() ? { phone: extras.phone.trim() } : {}),
@@ -227,7 +258,7 @@ async function promoteProfileToOrganizer(
       avatar_url: null,
       phone: extras.phone?.trim() || null,
       role: "admin",
-      organizer_approval_status: "approved",
+      organizer_approval_status: "pending",
     })
     if (!upsertError) return { ok: true }
     logger.error({
@@ -255,6 +286,9 @@ export async function signUpOrganizerAccount(
   _previousState: AuthActionState,
   formData: FormData,
 ): Promise<AuthActionState> {
+  const limited = await assertAuthIpRateLimit()
+  if (limited) return limited
+
   const credentials = readCredentials(formData)
 
   if (!credentials.ok) {
@@ -312,7 +346,7 @@ export async function signUpOrganizerAccount(
     if (!promoted.ok) {
       return {
         error:
-          "La cuenta se creó, pero no se pudo activar el panel. Escribí a soporte de TokePass.",
+          "La cuenta se creó, pero no se pudo dejar la productora en revisión. Escribí a soporte de TokePass.",
         success: null,
       }
     }
@@ -325,7 +359,7 @@ export async function signUpOrganizerAccount(
   return {
     error: null,
     success:
-      "Cuenta creada. Revisá tu correo para confirmar el registro y después entrá a Tu Panel.",
+      "Cuenta creada. Quedó pendiente de aprobación. Revisá tu correo y después entrá a Tu Panel.",
   }
 }
 
@@ -333,6 +367,9 @@ export async function signInWithEmail(
   _previousState: AuthActionState,
   formData: FormData,
 ): Promise<AuthActionState> {
+  const limited = await assertAuthIpRateLimit()
+  if (limited) return limited
+
   const credentials = readCredentials(formData)
 
   if (!credentials.ok) {
@@ -413,18 +450,6 @@ export async function signInWithEmail(
     }
   }
 
-  // La cuenta de organizador se crea libremente. El gate es la auditoría
-  // del evento, no el alta de la productora. Solo se bloquea rechazo/suspensión.
-  if (
-    loginSource === "organizer" &&
-    profile?.role === "admin" &&
-    profile.organizerApprovalStatus === "pending"
-  ) {
-    await promoteProfileToOrganizer(user.id, {
-      email: user.email ?? credentials.email,
-    })
-  }
-
   if (
     profile?.role === "admin" &&
     profile.organizerApprovalStatus === "rejected"
@@ -475,6 +500,9 @@ export async function signInWithMagicLink(
   _previousState: AuthActionState,
   formData: FormData,
 ): Promise<AuthActionState> {
+  const limited = await assertAuthIpRateLimit()
+  if (limited) return limited
+
   const emailRaw = formData.get("email")
   if (typeof emailRaw !== "string" || !emailRaw.trim()) {
     return { error: "El correo electrónico es obligatorio.", success: null }
@@ -502,6 +530,15 @@ export async function signInWithMagicLink(
 }
 
 export async function signInWithGoogle(formData?: FormData): Promise<void> {
+  const limited = await assertAuthIpRateLimit()
+  if (limited) {
+    const next = safeInternalNextPath(formData?.get("next"))
+    const loginUrl = new URL("/login", "http://localhost")
+    loginUrl.searchParams.set("error", limited.error ?? AUTH_RATE_LIMIT_ERROR)
+    if (next) loginUrl.searchParams.set("next", next)
+    redirect(`${loginUrl.pathname}${loginUrl.search}`)
+  }
+
   const supabase = await createClient()
   const next = safeInternalNextPath(formData?.get("next"))
   const redirectTo = await getAuthCallbackUrl(next)

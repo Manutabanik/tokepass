@@ -13,22 +13,24 @@ import {
   isMercadoPagoSandboxToken,
   resolveCheckoutInitPoint,
 } from "@/lib/mercadopago"
+import { mapGatewayPaymentStatus } from "@/lib/payments/core/map-gateway-status"
 import { buildPreferencePayer } from "@/lib/payments/mercadopago"
+import { resolveMercadoPagoChargebackPaymentId } from "@/lib/payments/mercadopago/chargebacks"
+import { parseMercadoPagoNotification } from "@/lib/payments/mercadopago/parse-notification"
 import {
   invalidWebhookResult,
   PaymentProviderUnavailableError,
 } from "@/lib/payments/core/errors"
+import {
+  CircuitOpenError,
+  withCircuit,
+} from "@/lib/resilience/circuit-breaker"
 import type {
   CheckoutResult,
   CreateCheckoutInput,
   IPaymentGatewayAdapter,
   WebhookVerificationResult,
 } from "@/lib/payments/core/interfaces"
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (typeof value !== "object" || value === null) return null
-  return value as Record<string, unknown>
-}
 
 function firstString(value: unknown): string | null {
   if (typeof value === "string" && value.trim()) return value.trim()
@@ -38,62 +40,12 @@ function firstString(value: unknown): string | null {
   return null
 }
 
-function mapMpStatus(
-  status: string | null,
-): WebhookVerificationResult["status"] {
-  if (status === "approved") return "approved"
-  if (
-    status === "rejected" ||
-    status === "cancelled" ||
-    status === "refunded" ||
-    status === "charged_back"
-  ) {
-    return "rejected"
-  }
-  return "pending"
-}
-
-async function extractPaymentId(req: Request): Promise<string | null> {
-  const url = new URL(req.url)
-  const queryDataId = url.searchParams.get("data.id")
-  const queryId = url.searchParams.get("id")
-  const topic = url.searchParams.get("topic") ?? url.searchParams.get("type")
-
-  if (queryDataId) return queryDataId
-  if ((topic === "payment" || topic?.startsWith("payment.")) && queryId) {
-    return queryId
-  }
-
-  try {
-    const raw = await req.text()
-    if (!raw.trim()) return queryId
-    const body = JSON.parse(raw) as unknown
-    const record = asRecord(body)
-    if (!record) return queryId
-
-    const data = asRecord(record.data)
-    if (data?.id != null) return String(data.id)
-
-    const kind =
-      firstString(record.type) ??
-      firstString(record.action) ??
-      firstString(record.topic) ??
-      topic
-    if (
-      (kind === "payment" ||
-        kind === "payment.created" ||
-        kind === "payment.updated" ||
-        String(kind ?? "").startsWith("payment.")) &&
-      (record.id != null || queryId)
-    ) {
-      return record.id != null ? String(record.id) : queryId
-    }
-    if (record.id != null) return String(record.id)
-  } catch {
-    return queryId
-  }
-
-  return queryId
+async function extractSignedResourceId(req: Request): Promise<{
+  kind: "payment" | "chargeback"
+  id: string
+} | null> {
+  const raw = await req.text()
+  return parseMercadoPagoNotification(req.url, raw)
 }
 
 export class MercadoPagoAdapter implements IPaymentGatewayAdapter {
@@ -120,36 +72,38 @@ export class MercadoPagoAdapter implements IPaymentGatewayAdapter {
     try {
       const client = getMercadoPagoClient()
       const preference = new Preference(client)
-      const created = await preference.create({
-        body: {
-          items: [
-            {
-              id: `order-${input.orderId}-all-in`,
-              title: input.description.slice(0, 256),
-              quantity: 1,
-              unit_price: input.amount,
-              currency_id: input.currency === "USD" ? "USD" : "ARS",
+      const created = await withCircuit("mercadopago", () =>
+        preference.create({
+          body: {
+            items: [
+              {
+                id: `order-${input.orderId}-all-in`,
+                title: input.description.slice(0, 256),
+                quantity: 1,
+                unit_price: input.amount,
+                currency_id: input.currency === "USD" ? "USD" : "ARS",
+              },
+            ],
+            ...(payer ? { payer } : {}),
+            external_reference: input.orderId,
+            statement_descriptor: "TOKEPASS",
+            back_urls: {
+              success: input.redirectUrls.success,
+              failure: input.redirectUrls.failure,
+              pending: input.redirectUrls.pending,
             },
-          ],
-          ...(payer ? { payer } : {}),
-          external_reference: input.orderId,
-          statement_descriptor: "TOKEPASS",
-          back_urls: {
-            success: input.redirectUrls.success,
-            failure: input.redirectUrls.failure,
-            pending: input.redirectUrls.pending,
+            ...(!localSite ? { auto_return: "approved" as const } : {}),
+            ...(!localSite ? { notification_url: input.webhookUrl } : {}),
+            expires: true,
+            expiration_date_to: expiresAt,
+            metadata: {
+              order_id: input.orderId,
+              frozen_pricing: true,
+              sandbox_mode: sandboxMode,
+            },
           },
-          ...(!localSite ? { auto_return: "approved" as const } : {}),
-          ...(!localSite ? { notification_url: input.webhookUrl } : {}),
-          expires: true,
-          expiration_date_to: expiresAt,
-          metadata: {
-            order_id: input.orderId,
-            frozen_pricing: true,
-            sandbox_mode: sandboxMode,
-          },
-        },
-      })
+        }),
+      )
 
       const checkoutUrl = resolveCheckoutInitPoint(created)
       const preferenceId = created.id?.trim() ?? ""
@@ -194,6 +148,12 @@ export class MercadoPagoAdapter implements IPaymentGatewayAdapter {
       }
     } catch (error) {
       if (error instanceof PaymentProviderUnavailableError) throw error
+      if (error instanceof CircuitOpenError) {
+        throw new PaymentProviderUnavailableError(
+          this.provider,
+          error.message,
+        )
+      }
       logger.error({
         context: "payments/adapter/mercadopago",
         message: "checkout_session_failed",
@@ -213,8 +173,8 @@ export class MercadoPagoAdapter implements IPaymentGatewayAdapter {
       return invalidWebhookResult({ reason: "missing_webhook_secret" })
     }
 
-    const paymentId = await extractPaymentId(req)
-    if (!paymentId) {
+    const notification = await extractSignedResourceId(req)
+    if (!notification) {
       return invalidWebhookResult({ reason: "missing_payment_id" })
     }
 
@@ -222,30 +182,56 @@ export class MercadoPagoAdapter implements IPaymentGatewayAdapter {
       WebhookSignatureValidator.validate({
         xSignature: req.headers.get("x-signature"),
         xRequestId: req.headers.get("x-request-id"),
-        dataId: paymentId,
+        dataId: notification.id,
         secret,
         toleranceSeconds: 300,
       })
     } catch {
       return invalidWebhookResult({
         reason: "invalid_signature",
-        paymentId,
+        paymentId: notification.id,
       })
+    }
+
+    let paymentId = notification.id
+    if (notification.kind === "chargeback") {
+      const resolved = await resolveMercadoPagoChargebackPaymentId(
+        notification.id,
+      )
+      if (!resolved) {
+        return invalidWebhookResult({
+          reason: "chargeback_payment_unresolved",
+          chargebackId: notification.id,
+        })
+      }
+      paymentId = resolved
     }
 
     try {
       const client = getMercadoPagoClient()
       const paymentClient = new Payment(client)
-      const payment = await paymentClient.get({ id: paymentId })
+      const payment = await withCircuit("mercadopago", () =>
+        paymentClient.get({ id: paymentId }),
+      )
       const orderId = firstString(payment.external_reference) ?? ""
       const amount = Number(payment.transaction_amount ?? 0)
+      const currency = firstString(payment.currency_id) ?? ""
+      const mapped = mapGatewayPaymentStatus(firstString(payment.status))
+      const status =
+        notification.kind === "chargeback" &&
+        mapped !== "in_mediation" &&
+        mapped !== "charged_back" &&
+        mapped !== "refunded"
+          ? "charged_back"
+          : mapped
 
       return {
         isValid: Boolean(orderId),
         orderId,
         transactionId: paymentId,
-        status: mapMpStatus(firstString(payment.status)),
+        status,
         amount: Number.isFinite(amount) ? amount : 0,
+        currency,
         rawPayload: payment,
       }
     } catch (error) {

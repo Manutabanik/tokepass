@@ -14,6 +14,7 @@ import {
   updateCompleteEvent,
 } from "@/app/actions/events"
 import { toUserFacingError } from "@/lib/errors/user-facing-error"
+import { writeSecurityAuditLog } from "@/lib/security/audit-log"
 import {
   collectLiveSeatingSectorIds,
   sanitizeEventSubmitPayload,
@@ -343,5 +344,21 @@ export async function syncZoneTierPricing(input: {
     revalidatePath(`/admin/events/${input.eventId}`)
     revalidatePath(`/e/${input.eventId}`)
   }
+
+  await writeSecurityAuditLog({
+    actorId: user.id,
+    action: "event_price_update",
+    entity: "event",
+    entityId: input.eventId,
+    details: {
+      source: "zone_tier_pricing",
+      prices: payload.map((row) => ({
+        tierId: row.ticket_tier_id,
+        sectorKey: row.sector_key,
+        price: row.price,
+      })),
+    },
+  })
+
   return { success: true }
 }

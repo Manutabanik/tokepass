@@ -1,7 +1,7 @@
 const REDACTED = "[Filtered]"
 
 const SENSITIVE_KEY =
-  /password|passwd|secret|token|authorization|api[_-]?key|access[_-]?token|refresh[_-]?token|card[_-]?number|credit[_-]?card|^pan$|cvv|cvc|ccv|otp|cookie|set-cookie|service[_-]?role|private[_-]?key|bearer/i
+  /password|passwd|secret|token|authorization|api[_-]?key|access[_-]?token|refresh[_-]?token|card[_-]?number|credit[_-]?card|^pan$|cvv|cvc|ccv|otp|cookie|set-cookie|service[_-]?role|private[_-]?key|bearer|^dni$|holder_dni|cuil|cuit|email|^to$|phone|telefono|holder_email|holder_name/i
 
 const CARD_NUMBER = /\b(?:\d[ \-]*){13,19}\b/g
 const JWT_LIKE = /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9._-]{10,}\b/g

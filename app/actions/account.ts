@@ -2,7 +2,15 @@
 
 import { revalidatePath } from "next/cache"
 import { headers } from "next/headers"
+import { redirect } from "next/navigation"
 
+import {
+  bytesToBlob,
+  detectRasterImageMagic,
+  rasterContentType,
+  readFileBytes,
+} from "@/lib/media/image-magic"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
 export type BuyerAccountProfile = {
@@ -143,20 +151,21 @@ export async function uploadMyAvatar(
       return { success: false, error: "Usá JPG, PNG o WEBP." }
     }
 
-    const safeName = (file.name || "avatar.jpg")
-      .normalize("NFKD")
-      .replace(/[^\w.\-]+/g, "-")
-      .replace(/-+/g, "-")
-      .toLowerCase()
-      .slice(0, 80)
-    const path = `${user.id}/avatars/${Date.now()}-${safeName}`
+    const bytes = await readFileBytes(file)
+    const kind = detectRasterImageMagic(bytes)
+    if (!kind) {
+      return { success: false, error: "La foto no es un JPG, PNG o WEBP valido." }
+    }
+    const contentType = rasterContentType(kind)
+
+    const path = `${user.id}/avatar.webp`
 
     const { error: uploadError } = await supabase.storage
-      .from("event-flyers")
-      .upload(path, file, {
+      .from("avatars")
+      .upload(path, bytesToBlob(bytes, contentType), {
         cacheControl: "3600",
-        contentType: file.type,
-        upsert: false,
+        contentType,
+        upsert: true,
       })
 
     if (uploadError) {
@@ -167,13 +176,15 @@ export async function uploadMyAvatar(
     }
 
     const { data: publicData } = supabase.storage
-      .from("event-flyers")
+      .from("avatars")
       .getPublicUrl(path)
 
     if (!publicData.publicUrl) {
-      await supabase.storage.from("event-flyers").remove([path])
+      await supabase.storage.from("avatars").remove([path])
       return { success: false, error: "No pudimos publicar la foto." }
     }
+
+    const avatarUrl = `${publicData.publicUrl.split("?")[0]}?v=${Date.now()}`
 
     const { data: previous } = await supabase
       .from("profiles")
@@ -184,26 +195,28 @@ export async function uploadMyAvatar(
     const { error: updateError } = await supabase
       .from("profiles")
       .update({
-        avatar_url: publicData.publicUrl,
+        avatar_url: avatarUrl,
         updated_at: new Date().toISOString(),
       })
       .eq("id", user.id)
 
     if (updateError) {
-      await supabase.storage.from("event-flyers").remove([path])
+      await supabase.storage.from("avatars").remove([path])
       return {
         success: false,
         error: `No pudimos guardar la foto: ${updateError.message}`,
       }
     }
 
-    const previousPath = previous?.avatar_url?.split("/event-flyers/")[1]
-    if (previousPath && previousPath !== path) {
-      await supabase.storage.from("event-flyers").remove([previousPath])
+    const previousFlyerPath = previous?.avatar_url?.split("/event-flyers/")[1]
+    if (previousFlyerPath) {
+      await supabase.storage
+        .from("event-flyers")
+        .remove([previousFlyerPath.split("?")[0] ?? previousFlyerPath])
     }
 
     revalidateBuyerProfile()
-    return { success: true, url: publicData.publicUrl }
+    return { success: true, url: avatarUrl }
   } catch (error) {
     return {
       success: false,
@@ -250,4 +263,78 @@ export async function requestPasswordResetEmail(): Promise<
   }
 
   return { success: true }
+}
+
+async function removeAvatarFolder(userId: string): Promise<void> {
+  const admin = createAdminClient()
+  const folder = userId.trim()
+  if (!folder) return
+
+  const { data } = await admin.storage.from("avatars").list(folder, {
+    limit: 100,
+  })
+  const paths = (data ?? [])
+    .map((entry) => entry.name?.trim())
+    .filter((name): name is string => Boolean(name))
+    .map((name) => `${folder}/${name}`)
+
+  if (paths.length === 0) {
+    await admin.storage.from("avatars").remove([`${folder}/avatar.webp`])
+    return
+  }
+
+  await admin.storage.from("avatars").remove(paths)
+}
+
+export async function deleteAccount(): Promise<{
+  success: false
+  error: string
+}> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { success: false, error: "Tenés que iniciar sesión." }
+  }
+
+  const { error: anonymizeError } = await supabase.rpc("anonymize_account", {
+    p_user_id: user.id,
+  })
+
+  if (anonymizeError) {
+    return {
+      success: false,
+      error:
+        anonymizeError.message ||
+        "No pudimos anonimizar la cuenta. Probá de nuevo.",
+    }
+  }
+
+  try {
+    await removeAvatarFolder(user.id)
+  } catch {
+    // la baja sigue: el perfil ya no apunta al avatar
+  }
+
+  const admin = createAdminClient()
+  const { error: deleteError } = await admin.auth.admin.deleteUser(user.id)
+  if (deleteError) {
+    const { error: softDeleteError } = await admin.auth.admin.deleteUser(
+      user.id,
+      true,
+    )
+    if (softDeleteError) {
+      return {
+        success: false,
+        error:
+          "Los datos personales ya se anonimizaron, pero no pudimos cerrar el acceso. Escribinos a soporte.",
+      }
+    }
+  }
+
+  await supabase.auth.signOut()
+  revalidateBuyerProfile()
+  redirect("/")
 }

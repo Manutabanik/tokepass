@@ -2,6 +2,8 @@
 
 import { listEventSponsors } from "@/app/actions/event-sponsors"
 import { logger } from "@/lib/logger"
+import { getRequestIp, isRateLimitableIp } from "@/lib/request-ip"
+import { consumeNamedRateLimit } from "@/lib/security/distributed-rate-limit"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import {
@@ -842,10 +844,24 @@ async function loadEventCoreRow(
   return data
 }
 
+async function allowPublicStockRead(): Promise<boolean> {
+  try {
+    const ip = await getRequestIp()
+    if (!isRateLimitableIp(ip)) return true
+    return consumeNamedRateLimit("publicStockIp", ip)
+  } catch {
+    return true
+  }
+}
+
 async function loadEventDetails(
   eventId: string,
   options: { mode: EventLoadMode },
 ): Promise<EventDetails | null> {
+  if (options.mode === "public" && !(await allowPublicStockRead())) {
+    return null
+  }
+
   const supabase =
     options.mode === "preview"
       ? await createClient()
@@ -854,10 +870,6 @@ async function loadEventDetails(
         : createPublicClient()
   const resolvedId = await resolveEventRecordId(supabase, eventId)
   if (!resolvedId) return null
-
-  await supabase.rpc("purge_expired_checkout_holds", {
-    p_event_id: resolvedId,
-  })
 
   const eventSelectWithPicker =
     "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, lineup, default_ticket_tab, venue_id, venue_map, venues(id, name, location, address, city, capacity, max_capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, bundle_items, bundle_type, description, highlight_badge), profiles!events_organizer_id_fkey(full_name)"
@@ -1404,6 +1416,7 @@ export async function getEventSeatingUnitsForSector(
   const cleanEvent = eventId.trim()
   const cleanSector = sectorId.trim()
   if (!cleanEvent || !cleanSector) return []
+  if (!(await allowPublicStockRead())) return []
 
   const supabase = await createClient()
   const { data, error } = await supabase.rpc(
@@ -1424,6 +1437,7 @@ export async function getEventSeatingAvailability(
 ): Promise<EventSeatingUnit[]> {
   const cleanEvent = eventId.trim()
   if (!cleanEvent) return []
+  if (!(await allowPublicStockRead())) return []
 
   const supabase = await createClient()
   const { data, error } = await supabase.rpc("get_event_seating_availability", {

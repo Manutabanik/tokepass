@@ -12,6 +12,7 @@ import { useMemo, useState, useTransition } from "react"
 import { toast } from "sonner"
 
 import { startCheckoutWithPayment } from "@/app/actions/checkout"
+import { getCheckoutCaptchaToken } from "@/lib/checkout/client-security"
 import {
   Dialog,
   DialogContent,
@@ -90,6 +91,7 @@ export function SeatingSelector({
     if (!selected || pending) return
 
     startTransition(async () => {
+      const captchaToken = await getCheckoutCaptchaToken()
       const result = await startCheckoutWithPayment(
         eventId,
         [
@@ -104,6 +106,10 @@ export function SeatingSelector({
           },
         ],
         referralCode,
+        [],
+        undefined,
+        undefined,
+        { captchaToken },
       )
 
       if (!result.success) {

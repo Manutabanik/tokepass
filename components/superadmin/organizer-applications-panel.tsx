@@ -14,7 +14,7 @@ import { useState, useTransition } from "react"
 import { toast } from "sonner"
 
 import {
-  approveOrganizerApplication,
+  approveOrganizerKyb,
   rejectOrganizerApplication,
   type OrganizerApplicationRow,
 } from "@/app/actions/organizer-kyb"
@@ -42,7 +42,7 @@ export function OrganizerApplicationsPanel({
   function runApprove() {
     if (!selected) return
     startTransition(async () => {
-      const result = await approveOrganizerApplication(selected.id)
+      const result = await approveOrganizerKyb(selected.id)
       if (!result.success) {
         toast.error(result.error)
         return

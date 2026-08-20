@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache"
 import { notifyOpsAlert } from "@/lib/ops/notify-ops"
 import { getEmailAppUrl, sendOpsAlertEmail } from "@/lib/email/resend"
 import { logger } from "@/lib/logger"
+import { buildSupportEscalateMessage } from "@/lib/support-escalate"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import type { SupportMessage, SupportThread } from "@/types/database"
@@ -303,6 +304,87 @@ export async function getOrCreateOrganizerThread(
       success: false,
       error: error instanceof Error ? error.message : "No se pudo abrir el chat.",
     }
+  }
+}
+
+export async function peekOrganizerSupportSession(
+  eventId?: string | null,
+): Promise<{
+  threadId: string | null
+  hasHumanConversation: boolean
+}> {
+  try {
+    const { user, profile, admin } = await requireUser()
+    if (profile.role !== "admin" && profile.role !== "super_admin") {
+      return { threadId: null, hasHumanConversation: false }
+    }
+
+    let resolvedEventId: string | null = eventId?.trim() || null
+    if (resolvedEventId) {
+      const { data: event } = await admin
+        .from("events")
+        .select("id, organizer_id")
+        .eq("id", resolvedEventId)
+        .maybeSingle()
+      if (!event || (event.organizer_id !== user.id && profile.role !== "super_admin")) {
+        resolvedEventId = null
+      }
+    }
+
+    const organizerId =
+      profile.role === "super_admin" && resolvedEventId
+        ? (
+            await admin
+              .from("events")
+              .select("organizer_id")
+              .eq("id", resolvedEventId)
+              .maybeSingle()
+          ).data?.organizer_id ?? user.id
+        : user.id
+
+    let query = admin
+      .from("support_threads")
+      .select("id")
+      .eq("organizer_id", organizerId)
+    query = resolvedEventId
+      ? query.eq("event_id", resolvedEventId)
+      : query.is("event_id", null)
+
+    const existing = await query.maybeSingle()
+    if (!existing.data?.id) {
+      return { threadId: null, hasHumanConversation: false }
+    }
+
+    const { count } = await admin
+      .from("support_messages")
+      .select("id", { count: "exact", head: true })
+      .eq("thread_id", existing.data.id)
+
+    return {
+      threadId: existing.data.id,
+      hasHumanConversation: (count ?? 0) > 0,
+    }
+  } catch {
+    return { threadId: null, hasHumanConversation: false }
+  }
+}
+
+export async function startHumanSupportChat(
+  eventId?: string | null,
+  faqQuestion?: string | null,
+): Promise<
+  SupportActionResult<{ threadId: string; message: SupportMessageItem }>
+> {
+  const thread = await getOrCreateOrganizerThread(eventId)
+  if (!thread.success) return thread
+  const sent = await sendSupportMessage(
+    thread.data.threadId,
+    buildSupportEscalateMessage(faqQuestion),
+  )
+  if (!sent.success) return sent
+  return {
+    success: true,
+    data: { threadId: thread.data.threadId, message: sent.data },
   }
 }
 

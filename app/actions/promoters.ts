@@ -2,8 +2,8 @@
 
 import { createHash } from "crypto"
 import { revalidatePath } from "next/cache"
-import { headers } from "next/headers"
 
+import { getRequestIp, getRequestUserAgent } from "@/lib/request-ip"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { normalizeReferralCode } from "@/lib/referral"
@@ -691,12 +691,11 @@ export async function trackReferralVisit(input: {
 
     if (!promoter) return { success: false }
 
-    const headerStore = await headers()
-    const forwarded = headerStore.get("x-forwarded-for")?.split(",")[0]?.trim()
-    const ua = headerStore.get("user-agent") ?? ""
+    const ip = await getRequestIp()
+    const ua = await getRequestUserAgent()
     const rawVisitor =
       input.visitorKey?.trim() ||
-      `${forwarded ?? "anon"}|${ua.slice(0, 120)}`
+      `${ip}|${ua.slice(0, 120)}`
     const visitorKey = createHash("sha256")
       .update(rawVisitor)
       .digest("hex")

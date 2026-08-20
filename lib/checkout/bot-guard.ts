@@ -53,7 +53,6 @@ export function getCaptchaProvider(): CaptchaProvider {
 }
 
 export function isCaptchaRequired(): boolean {
-  if (getCaptchaProvider() === "none") return false
   return process.env.NODE_ENV === "production"
 }
 
@@ -120,19 +119,49 @@ async function verifyTurnstile(
   return { ok: true, provider: "turnstile", score: 1 }
 }
 
+const recentCaptchaOk = new Map<string, { at: number; result: CaptchaVerification }>()
+const CAPTCHA_OK_TTL_MS = 20_000
+
 export async function verifyCheckoutCaptcha(input: {
   token?: string | null
   ip?: string | null
   skip?: boolean
 }): Promise<CaptchaVerification> {
+  const required = isCaptchaRequired()
+  const skip = Boolean(input.skip) && !required
   const provider = getCaptchaProvider()
-  if (input.skip || provider === "none") {
+  const cachedToken = input.token?.trim() ?? ""
+  if (cachedToken) {
+    const hit = recentCaptchaOk.get(cachedToken)
+    if (hit && Date.now() - hit.at < CAPTCHA_OK_TTL_MS) {
+      return hit.result
+    }
+  }
+
+  if (skip) {
+    return { ok: true, provider: "none", score: null }
+  }
+
+  if (required && (provider === "none" || input.skip)) {
+    logger.warn({
+      context: "checkout/bot-guard",
+      message: "captcha_required_missing_provider",
+    })
+    return {
+      ok: false,
+      provider,
+      score: null,
+      error: CHECKOUT_VERIFY_ERROR,
+    }
+  }
+
+  if (provider === "none") {
     return { ok: true, provider: "none", score: null }
   }
 
   const token = input.token?.trim() ?? ""
   if (!token) {
-    if (!isCaptchaRequired()) {
+    if (!required) {
       return { ok: true, provider: "none", score: null }
     }
     return {
@@ -144,19 +173,20 @@ export async function verifyCheckoutCaptcha(input: {
   }
 
   try {
-    if (provider === "recaptcha") {
-      return await verifyRecaptcha(token, input.ip ?? null)
+    const result =
+      provider === "recaptcha"
+        ? await verifyRecaptcha(token, input.ip ?? null)
+        : await verifyTurnstile(token, input.ip ?? null)
+    if (result.ok && token) {
+      recentCaptchaOk.set(token, { at: Date.now(), result })
     }
-    return await verifyTurnstile(token, input.ip ?? null)
+    return result
   } catch (error) {
     logger.error({
       context: "checkout/bot-guard",
       message: "captcha_verify_failed",
       error,
     })
-    if (!isCaptchaRequired()) {
-      return { ok: true, provider: "none", score: null }
-    }
     return {
       ok: false,
       provider,

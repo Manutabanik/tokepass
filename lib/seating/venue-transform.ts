@@ -282,11 +282,73 @@ export function rotateElementsAround(
       ...element,
       x: roundCoord(point.x),
       y: roundCoord(point.y),
-      rotation: roundCoord((((element.rotation + deltaDeg) % 360) + 360) % 360),
+      rotation: normalizeDeg(element.rotation + deltaDeg),
     }
     if (!isInfrastructureElement(next)) next.seats = rebuildElementSeats(next)
     return next
   })
+}
+
+export function boundsCenter(box: BoundsRect): { x: number; y: number } {
+  return {
+    x: box.x + box.width / 2,
+    y: box.y + box.height / 2,
+  }
+}
+
+function normalizeDeg(deg: number) {
+  return roundCoord((((deg % 360) + 360) % 360))
+}
+
+/** Mirror over the vertical axis through `center` (X). Facing right becomes left. */
+export function flipElementsHorizontal(
+  elements: VenueMapElement[],
+  center: { x: number; y: number },
+): VenueMapElement[] {
+  return elements.map((element) => {
+    const next = {
+      ...element,
+      x: roundCoord(center.x - (element.x - center.x)),
+      rotation: normalizeDeg(-element.rotation),
+    }
+    if (!isInfrastructureElement(next)) next.seats = rebuildElementSeats(next)
+    return next
+  })
+}
+
+/** Mirror over the horizontal axis through `center` (Y). Facing up becomes down. */
+export function flipElementsVertical(
+  elements: VenueMapElement[],
+  center: { x: number; y: number },
+): VenueMapElement[] {
+  return elements.map((element) => {
+    const next = {
+      ...element,
+      y: roundCoord(center.y - (element.y - center.y)),
+      rotation: normalizeDeg(180 - element.rotation),
+    }
+    if (!isInfrastructureElement(next)) next.seats = rebuildElementSeats(next)
+    return next
+  })
+}
+
+export function flipSelectedElements(
+  elements: VenueMapElement[],
+  selectedIds: string[],
+  axis: "horizontal" | "vertical",
+): VenueMapElement[] {
+  const ids = new Set(selectedIds)
+  const selected = elements.filter((item) => ids.has(item.id))
+  if (selected.length === 0) return elements
+  const bounds = selectionBounds(selected)
+  if (!bounds) return elements
+  const center = boundsCenter(bounds)
+  const flipped =
+    axis === "horizontal"
+      ? flipElementsHorizontal(selected, center)
+      : flipElementsVertical(selected, center)
+  const byId = new Map(flipped.map((item) => [item.id, item]))
+  return elements.map((item) => byId.get(item.id) ?? item)
 }
 
 export function bakeLiveTransform(
@@ -385,9 +447,120 @@ export function alignElementsWithGap(
   })
 }
 
+function applyElementPositions(
+  elements: VenueMapElement[],
+  nextPos: Map<string, { x: number; y: number }>,
+): VenueMapElement[] {
+  return elements.map((element) => {
+    const pos = nextPos.get(element.id)
+    if (!pos) return element
+    const next = { ...element, x: pos.x, y: pos.y }
+    if (!isInfrastructureElement(next)) next.seats = rebuildElementSeats(next)
+    return next
+  })
+}
+
+/** Snap selected items onto one shared center axis (average X or Y). */
+export function alignSelectedToCenter(
+  elements: VenueMapElement[],
+  selectedIds: string[],
+  axis: "x" | "y" = "y",
+): VenueMapElement[] {
+  const ids = new Set(selectedIds)
+  const selected = elements.filter((item) => ids.has(item.id))
+  if (selected.length < 2) return elements
+  const center =
+    selected.reduce((sum, item) => sum + (axis === "y" ? item.y : item.x), 0) /
+    selected.length
+  const snapped = roundCoord(center)
+  const nextPos = new Map<string, { x: number; y: number }>()
+  for (const item of selected) {
+    nextPos.set(item.id, {
+      x: axis === "x" ? snapped : item.x,
+      y: axis === "y" ? snapped : item.y,
+    })
+  }
+  return applyElementPositions(elements, nextPos)
+}
+
+/**
+ * Pin the leftmost and rightmost items, then space the rest evenly on X
+ * so the gap between consecutive centers is identical.
+ */
+export function distributeSelectedHorizontally(
+  elements: VenueMapElement[],
+  selectedIds: string[],
+): VenueMapElement[] {
+  const ids = new Set(selectedIds)
+  const selected = elements.filter((item) => ids.has(item.id))
+  if (selected.length < 3) return elements
+  const ordered = [...selected].sort((left, right) => {
+    const dx = left.x - right.x
+    return dx !== 0 ? dx : left.y - right.y
+  })
+  const first = ordered[0]!
+  const last = ordered[ordered.length - 1]!
+  const span = last.x - first.x
+  if (!Number.isFinite(span) || Math.abs(span) < 0.01) return elements
+  const step = span / (ordered.length - 1)
+  const nextPos = new Map<string, { x: number; y: number }>()
+  ordered.forEach((item, index) => {
+    nextPos.set(item.id, {
+      x: roundCoord(first.x + step * index),
+      y: item.y,
+    })
+  })
+  return applyElementPositions(elements, nextPos)
+}
+
 export function angleAt(
   center: { x: number; y: number },
   point: { x: number; y: number },
 ): number {
   return (Math.atan2(point.y - center.y, point.x - center.x) * 180) / Math.PI
+}
+
+/** Stem + knob placement. Flips below the box when the top would clip. */
+export function rotationHandleAnchor(box: BoundsRect, zoom: number) {
+  const z = Math.max(0.25, zoom)
+  const lift = 36 / z
+  const minTop = 12 / z
+  const cx = box.x + box.width / 2
+  const topY = box.y - lift
+  if (topY >= minTop) {
+    return { cx, cy: topY, edgeY: box.y, side: "top" as const }
+  }
+  return {
+    cx,
+    cy: box.y + box.height + lift,
+    edgeY: box.y + box.height,
+    side: "bottom" as const,
+  }
+}
+
+/**
+ * Degrees to apply from the original pointer on the handle to the current
+ * pointer, so the first frame is 0 (no jump). Shift imanta a 15°.
+ */
+export function rotationDeltaDegrees(
+  center: { x: number; y: number },
+  origin: { x: number; y: number },
+  current: { x: number; y: number },
+  snap = false,
+) {
+  return rotationDeltaFromPointer(
+    center,
+    angleAt(center, origin),
+    current,
+    snap,
+  )
+}
+
+export function rotationDeltaFromPointer(
+  center: { x: number; y: number },
+  startAngle: number,
+  current: { x: number; y: number },
+  snap = false,
+) {
+  return applyRotateSnap(angleAt(center, current) - startAngle, snap)
 }

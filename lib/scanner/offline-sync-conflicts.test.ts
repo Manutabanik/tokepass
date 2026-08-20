@@ -22,6 +22,7 @@ describe("denied scan overlay mapping", () => {
     assert.equal(overlayKindFromDeniedScanStatus("unpaid"), "unpaid")
     assert.equal(overlayKindFromDeniedScanStatus("transferred"), "transferred")
     assert.equal(overlayKindFromDeniedScanStatus("expired_qr"), "expired_qr")
+    assert.equal(overlayKindFromDeniedScanStatus("listed_for_resale"), "listed_for_resale")
     assert.equal(overlayKindFromDeniedScanStatus("wrong_event"), "invalid")
   })
 })

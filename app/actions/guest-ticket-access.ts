@@ -8,8 +8,11 @@ import {
   GUEST_OTP_LOCKED_ERROR,
   GUEST_ORDER_COOKIE,
   GUEST_OTP_COOKIE,
+  generateGuestOtp,
   guestAccessCookieAttrs,
+  guestOtpExpiresAt,
   hashGuestSecret,
+  holderEmailsMatch,
   otpEquals,
   signGuestOtpSession,
   verifyGuestAccessToken,
@@ -21,8 +24,14 @@ import {
   findScheduleDay,
   parseScheduleDays,
   resolveEventAnchorDate,
+  resolveEventEndsAt,
 } from "@/lib/event-schedule"
 import { consumeRateLimit } from "@/lib/rate-limit"
+import { getRequestIp } from "@/lib/request-ip"
+import {
+  AUTH_RATE_LIMIT_ERROR,
+  consumeNamedRateLimit,
+} from "@/lib/security/distributed-rate-limit"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import type { MyTicket } from "@/app/actions/tickets"
@@ -134,7 +143,7 @@ export async function listGuestOrderTickets(): Promise<GuestTicketPreview[]> {
 }
 
 const GUEST_TICKET_DETAIL_SELECT =
-  "id, status, order_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, holder_name, holder_dni, ticket_tiers(name, bonus_reward, day_id, price), events(id, title, date, location, flyer_url, image_url, qr_type, social_share_image_url, schedule_days, venues(name))"
+  "id, status, order_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, holder_name, holder_dni, ticket_tiers(name, bonus_reward, day_id, price), events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, social_share_image_url, schedule_days, venues(name))"
 
 type GuestTicketDetailRow = {
   id: string
@@ -160,6 +169,7 @@ type GuestTicketDetailRow = {
         id: string
         title: string
         date: string
+        ends_at?: string | null
         location: string
         flyer_url?: string | null
         image_url?: string | null
@@ -172,6 +182,7 @@ type GuestTicketDetailRow = {
         id: string
         title: string
         date: string
+        ends_at?: string | null
         location: string
         flyer_url?: string | null
         image_url?: string | null
@@ -214,6 +225,7 @@ function mapGuestTicketRow(row: GuestTicketDetailRow, revealQr: boolean): MyTick
     eventId: events.id,
     eventTitle: events.title,
     eventDate: events.date,
+    endsAt: resolveEventEndsAt(scheduleDays, events.ends_at, events.date),
     doorsOpenAt:
       findScheduleDay(scheduleDays, tier?.day_id ?? undefined)?.start_time ??
       resolveEventAnchorDate(scheduleDays, events.date),
@@ -232,6 +244,7 @@ function mapGuestTicketRow(row: GuestTicketDetailRow, revealQr: boolean): MyTick
     isSponsoredByTokePass: false,
     activeResaleListingId: null,
     pendingTransfer: null,
+    visualStatus: "active",
   }
 }
 
@@ -274,19 +287,53 @@ export async function isGuestOtpVerified(orderId: string): Promise<boolean> {
   return verifyGuestOtpSession(token, orderId)
 }
 
-export async function requestGuestOtpResend(
+async function guestHasOrderPossession(
   orderId: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const allowed = await consumeRateLimit({
-    bucketKey: `guest-otp:${orderId}`,
-    limit: 1,
-    windowSeconds: 60,
-    useAdmin: true,
-  })
-  if (!allowed) {
-    return { ok: false, error: "Esperá un minuto para pedir un código nuevo." }
+  holderEmail: string,
+  providedEmail?: string,
+): Promise<boolean> {
+  const store = await cookies()
+
+  const accessToken = store.get(GUEST_ORDER_COOKIE)?.value
+  if (accessToken) {
+    const parsed = await verifyGuestAccessToken(accessToken)
+    if (parsed?.orderId === orderId) return true
   }
 
+  const otpToken = store.get(GUEST_OTP_COOKIE)?.value
+  if (otpToken && (await verifyGuestOtpSession(otpToken, orderId))) {
+    return true
+  }
+
+  return holderEmailsMatch(providedEmail, holderEmail)
+}
+
+async function issueGuestOtpChallenge(input: {
+  orderId: string
+  email: string
+}): Promise<{ otp: string; magicUrl: string } | null> {
+  const token = await persistOrderGuestToken(input.orderId)
+  if (!token) return null
+
+  const otp = generateGuestOtp()
+  const jti = crypto.randomUUID()
+  const admin = createAdminClient()
+  const { error } = await admin.from("guest_access_challenges").insert({
+    order_id: input.orderId,
+    email: input.email,
+    otp_hash: hashGuestSecret(otp, jti),
+    magic_jti: jti,
+    expires_at: guestOtpExpiresAt(),
+  })
+  if (error) return null
+
+  return { otp, magicUrl: guestTicketUrl(token) }
+}
+
+export async function requestGuestOtpResend(
+  orderId: string,
+  options?: { email?: string },
+): Promise<{ ok: true } | { ok: false; error: string }> {
   const admin = createAdminClient()
   const { data: ticket } = await admin
     .from("tickets")
@@ -297,7 +344,29 @@ export async function requestGuestOtpResend(
   const email = ticket?.holder_email?.trim().toLowerCase()
   if (!email) return { ok: false, error: GUEST_ACCESS_ERROR }
 
-  const access = await attachGuestAccessToReceipt({ orderId, email })
+  const possessed = await guestHasOrderPossession(
+    orderId,
+    email,
+    options?.email,
+  )
+  if (!possessed) return { ok: false, error: GUEST_ACCESS_ERROR }
+
+  const ipAllowed = await consumeNamedRateLimit("authIp", await getRequestIp())
+  if (!ipAllowed) {
+    return { ok: false, error: AUTH_RATE_LIMIT_ERROR }
+  }
+
+  const allowed = await consumeRateLimit({
+    bucketKey: `guest-otp:${orderId}`,
+    limit: 1,
+    windowSeconds: 60,
+    useAdmin: true,
+  })
+  if (!allowed) {
+    return { ok: false, error: "Esperá un minuto para pedir un código nuevo." }
+  }
+
+  const access = await issueGuestOtpChallenge({ orderId, email })
   if (!access) return { ok: false, error: GUEST_ACCESS_ERROR }
 
   const { sendGuestOtpEmail } = await import("@/lib/email/resend")
@@ -315,6 +384,11 @@ export async function verifyGuestTicketOtp(input: {
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const code = input.code.replace(/\D/g, "").slice(0, 4)
   if (code.length !== 4) return { ok: false, error: GUEST_OTP_ERROR }
+
+  const ipAllowed = await consumeNamedRateLimit("authIp", await getRequestIp())
+  if (!ipAllowed) {
+    return { ok: false, error: AUTH_RATE_LIMIT_ERROR }
+  }
 
   const allowed = await consumeRateLimit({
     bucketKey: `guest-otp-try:${input.orderId}`,

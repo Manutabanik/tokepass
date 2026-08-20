@@ -52,6 +52,7 @@ import { VenueMapBackgroundPanel } from "@/components/admin/venue-map-background
 import { VenueParametricRulesPanel } from "@/components/admin/venue-parametric-rules-panel"
 import { VenueSetupGuide } from "@/components/admin/venue-setup-guide"
 import { SvgTransformBox } from "@/components/admin/svg-transform-box"
+import { VenueSelectionToolbar } from "@/components/admin/venue-selection-toolbar"
 import { VenueMobileFabBar } from "@/components/admin/venue-mobile-fab-bar"
 import { VenueNudgePad } from "@/components/admin/venue-nudge-pad"
 import { InspectorShapeSelector } from "@/components/admin/inspector-shape-selector"
@@ -98,10 +99,15 @@ import {
   applyHeatmapColors,
 } from "@/lib/seating/venue-heatmap"
 import {
+  elementGroupMembers,
+  elementsInGroup,
   expandElementSelection,
   groupVenueElements,
   selectionFromIds,
   selectionHasGroup,
+  selectionIsFullyLocked,
+  selectionIsLogicalGroup,
+  toggleElementsLocked,
   ungroupVenueElements,
 } from "@/lib/seating/venue-grouping"
 import {
@@ -134,16 +140,22 @@ import {
   aabbIntersects,
   aabbToRect,
   alignElementsWithGap,
+  alignSelectedToCenter,
+  distributeSelectedHorizontally,
   angleAt,
   applyMoveSnap,
   applyMoveSnapFromOrigin,
   applyRotateSnap,
   bakeLiveTransform,
+  boundsCenter,
+  rotationDeltaFromPointer,
   clampScale,
   clampVenueZoom,
   elementAabb,
+  flipSelectedElements,
   liveTransformToSvg,
   resizeOrigin,
+  rotateElementsAround,
   selectionBounds,
   translateElements,
   zoomTowardCursor,
@@ -312,6 +324,10 @@ export function InteractiveVenueMapEditor({
     id: string
     value: string
   } | null>(null)
+  const [isolationId, setIsolationId] = useState<string | null>(null)
+  const isolationIdRef = useRef<string | null>(null)
+  const [hoveredGroupId, setHoveredGroupId] = useState<string | null>(null)
+  const hoverClearTimer = useRef<number | null>(null)
   const [marquee, setMarquee] = useState<{
     x: number
     y: number
@@ -325,7 +341,6 @@ export function InteractiveVenueMapEditor({
   } | null>(null)
   const mapRef = useRef(map)
   const workModeRef = useRef(workMode)
-  workModeRef.current = workMode
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const undoStack = useRef<InteractiveVenueMap[]>([])
   const redoStack = useRef<InteractiveVenueMap[]>([])
@@ -345,9 +360,14 @@ export function InteractiveVenueMapEditor({
     delayMs: 3000,
     onSave: onAutoSave,
   })
-  useEffect(() => {
+  useLayoutEffect(() => {
+    isolationIdRef.current = isolationId
+    workModeRef.current = workMode
+    selectionRef.current = selection
+    compactChromeRef.current = compactChrome
+    lassoModeRef.current = lassoMode
     mapRef.current = map
-  }, [map])
+  }, [isolationId, workMode, selection, compactChrome, lassoMode, map])
   const [customTemplates, setCustomTemplates] = useState<OrganizerVenueTemplate[]>(
     [],
   )
@@ -370,7 +390,6 @@ export function InteractiveVenueMapEditor({
   const panRef = useRef(pan)
   const zoomRef = useRef(zoom)
   const selectionRef = useRef(selection)
-  selectionRef.current = selection
   const pendingPointer = useRef<PointerSample | null>(null)
   const pointerFrame = useRef<number | null>(null)
   const marqueeAdditive = useRef(false)
@@ -392,9 +411,7 @@ export function InteractiveVenueMapEditor({
   >(null)
   const [scaleHandle, setScaleHandle] = useState<ResizeHandle | null>(null)
   const compactChromeRef = useRef(compactChrome)
-  compactChromeRef.current = compactChrome
   const lassoModeRef = useRef(lassoMode)
-  lassoModeRef.current = lassoMode
   const pinchRef = useRef<PinchOrigin | null>(null)
   const pointersRef = useRef(new Map<number, { x: number; y: number }>())
 
@@ -407,16 +424,28 @@ export function InteractiveVenueMapEditor({
   }, [value])
 
   useEffect(() => {
+    return () => {
+      if (hoverClearTimer.current != null) {
+        window.clearTimeout(hoverClearTimer.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
     if (!isDesktop) return
-    setLassoMode(false)
-    setToolsOpen(false)
-    setPropertiesOpen(false)
-    setModesOpen(false)
+    queueMicrotask(() => {
+      setLassoMode(false)
+      setToolsOpen(false)
+      setPropertiesOpen(false)
+      setModesOpen(false)
+    })
   }, [isDesktop])
 
   useEffect(() => {
     if (workMode !== "architecture" || selection || !propertiesOpen) return
-    setPropertiesOpen(false)
+    queueMicrotask(() => {
+      setPropertiesOpen(false)
+    })
   }, [workMode, selection, propertiesOpen])
 
   useEffect(() => {
@@ -532,6 +561,31 @@ export function InteractiveVenueMapEditor({
       : null
   const transformBounds = selectedZoneBounds ?? measuredBounds ?? computedBounds
   const geometryLocked = workMode === "pricing"
+  const selectionLocked = selectedElements.some((item) => item.isLocked === true)
+  const selectionFullyLocked = selectionIsFullyLocked(
+    selectedElements,
+    selectedElementIds,
+  )
+  const canTidyUp =
+    selectedElementIds.length > 1 &&
+    !selectionIsLogicalGroup(selectedElements, selectedElementIds)
+  const hoverGroupBounds = useMemo(() => {
+    if (!hoveredGroupId || isolationId) return null
+    const members = elementsInGroup(map.elements ?? [], hoveredGroupId)
+    if (members.length < 2) return null
+    const selectedIsHoveredGroup =
+      selectedElements.length > 1 &&
+      selectedElements.every(
+        (item) => item.groupId?.trim() === hoveredGroupId,
+      )
+    if (selectedIsHoveredGroup) return null
+    return selectionBounds(members)
+  }, [
+    hoveredGroupId,
+    isolationId,
+    map.elements,
+    selectedElements,
+  ])
   const renderMap = workMode === "pricing" ? applyHeatmapColors(map) : map
   const activePriceGroup = matchPriceGroupFromSelection(map, {
     sectorId: selectedSector?.id ?? null,
@@ -703,11 +757,20 @@ export function InteractiveVenueMapEditor({
     clearLiveUi()
   }
 
+  function idsAreLocked(ids: string[]) {
+    if (ids.length === 0) return false
+    const locked = new Set(ids)
+    return ensureElements(mapRef.current).some(
+      (item) => locked.has(item.id) && item.isLocked === true,
+    )
+  }
+
   function beginGroupMove(
     ids: string[],
     event: React.PointerEvent,
     zoneId?: string,
   ) {
+    if (!zoneId && idsAreLocked(ids)) return
     const point = pointerToSvg(event)
     capturePointer(event)
     transformDrag.current = {
@@ -728,6 +791,7 @@ export function InteractiveVenueMapEditor({
     bounds: BoundsRect,
     event: React.PointerEvent,
   ) {
+    if (idsAreLocked(selectedElementIds)) return
     const point = pointerToSvg(event)
     const origin = resizeOrigin(bounds, handle)
     const startDist = Math.hypot(point.x - origin.x, point.y - origin.y)
@@ -749,6 +813,7 @@ export function InteractiveVenueMapEditor({
   }
 
   function beginRotate(bounds: BoundsRect, event: React.PointerEvent) {
+    if (idsAreLocked(selectedElementIds)) return
     const point = pointerToSvg(event)
     const cx = bounds.x + bounds.width / 2
     const cy = bounds.y + bounds.height / 2
@@ -771,11 +836,80 @@ export function InteractiveVenueMapEditor({
     return event.button === 1 || (event.button === 0 && (event.altKey || spaceHeld.current))
   }
 
-  function applyElementIds(ids: string[]) {
+  function applyElementIds(ids: string[], options?: { isolate?: boolean }) {
+    if (!options?.isolate) setIsolationId(null)
     const next = selectionFromIds(ids)
     if (!next) setSelection(null)
     else if (next.kind === "element") setSelection({ kind: "element", id: next.id! })
     else setSelection({ kind: "elements", ids: next.ids! })
+  }
+
+  function enterIsolation(id: string) {
+    cancelLiveTransform()
+    setIsolationId(id)
+    applyElementIds([id], { isolate: true })
+  }
+
+  function onMapElementPointerEnter(
+    _event: React.MouseEvent,
+    element: VenueMapElement,
+  ) {
+    if (hoverClearTimer.current != null) {
+      window.clearTimeout(hoverClearTimer.current)
+      hoverClearTimer.current = null
+    }
+    const groupId = element.groupId?.trim()
+    setHoveredGroupId(groupId || null)
+  }
+
+  function onMapElementPointerLeave() {
+    if (hoverClearTimer.current != null) {
+      window.clearTimeout(hoverClearTimer.current)
+    }
+    hoverClearTimer.current = window.setTimeout(() => {
+      setHoveredGroupId(null)
+      hoverClearTimer.current = null
+    }, 40)
+  }
+
+  function toggleSelectionLock() {
+    if (workModeRef.current === "pricing") return
+    if (selectedElementIds.length === 0) return
+    const current = mapRef.current
+    commit({
+      ...current,
+      elements: toggleElementsLocked(
+        ensureElements(current),
+        selectedElementIds,
+      ),
+    })
+  }
+
+  function tidyAlignCenter() {
+    if (workModeRef.current === "pricing") return
+    if (selectedElementIds.length < 2 || idsAreLocked(selectedElementIds)) return
+    const current = mapRef.current
+    commit({
+      ...current,
+      elements: alignSelectedToCenter(
+        ensureElements(current),
+        selectedElementIds,
+        "y",
+      ),
+    })
+  }
+
+  function tidyDistributeHorizontal() {
+    if (workModeRef.current === "pricing") return
+    if (selectedElementIds.length < 3 || idsAreLocked(selectedElementIds)) return
+    const current = mapRef.current
+    commit({
+      ...current,
+      elements: distributeSelectedHorizontally(
+        ensureElements(current),
+        selectedElementIds,
+      ),
+    })
   }
 
   function groupSelection() {
@@ -809,6 +943,7 @@ export function InteractiveVenueMapEditor({
 
   function setStudioWorkMode(next: VenueWorkMode) {
     if (next === workModeRef.current) return
+    setIsolationId(null)
     cancelLiveTransform()
     if (next !== "architecture") {
       if (tool === "polygon" || polygonDraft.length > 0) {
@@ -838,27 +973,54 @@ export function InteractiveVenueMapEditor({
       })
       target = clone
     }
+    const items = ensureElements(mapRef.current)
+    const grouped = Boolean(target.groupId?.trim())
+
     if (event.shiftKey) {
       applyElementIds(
         expandElementSelection(
-          ensureElements(mapRef.current),
+          items,
           target.id,
           selectedElementIds,
           true,
+          isolationId ? { isolate: true } : undefined,
         ),
+        isolationId ? { isolate: true } : undefined,
       )
       return
     }
+
     if (event.detail >= 2) {
       if (workModeRef.current === "pricing") return
+      if (grouped && isolationId !== target.id) {
+        enterIsolation(target.id)
+        return
+      }
       if (!selectedIdSet.has(target.id)) {
-        setSelection({ kind: "element", id: target.id })
+        applyElementIds([target.id], isolationId ? { isolate: true } : undefined)
       }
       setLabelOverride({ id: target.id, value: target.label })
       return
     }
+
+    if (isolationId) {
+      const isolated = items.find((item) => item.id === isolationId)
+      const sameGroup =
+        grouped &&
+        Boolean(isolated?.groupId?.trim()) &&
+        isolated?.groupId === target.groupId
+      if (target.id === isolationId || sameGroup) {
+        enterIsolation(target.id)
+        if (lassoModeRef.current) return
+        if (workModeRef.current !== "pricing") {
+          beginGroupMove([target.id], event)
+        }
+        return
+      }
+    }
+
     const groupIds = expandElementSelection(
-      ensureElements(mapRef.current),
+      items,
       target.id,
       selectedElementIds,
       false,
@@ -1302,7 +1464,7 @@ export function InteractiveVenueMapEditor({
     }, { skipHistory })
   }
 
-  function duplicateSelection() {
+  function duplicateSelection(offset = 15) {
     if (workModeRef.current === "pricing") return
     const current = mapRef.current
     const ids =
@@ -1314,13 +1476,27 @@ export function InteractiveVenueMapEditor({
     if (ids.length === 0) return
     const clones = ensureElements(current)
       .filter((item) => ids.includes(item.id))
-      .map((item) => cloneVenueElement(item))
+      .map((item) => cloneVenueElement(item, offset))
     commit({ ...current, elements: [...ensureElements(current), ...clones] })
     setSelection(
       clones.length === 1
         ? { kind: "element", id: clones[0]!.id }
         : { kind: "elements", ids: clones.map((item) => item.id) },
     )
+  }
+
+  function flipSelection(axis: "horizontal" | "vertical") {
+    if (workModeRef.current === "pricing") return
+    if (selectedElementIds.length === 0 || idsAreLocked(selectedElementIds)) return
+    const current = mapRef.current
+    commit({
+      ...current,
+      elements: flipSelectedElements(
+        ensureElements(current),
+        selectedElementIds,
+        axis,
+      ),
+    })
   }
 
   function duplicateTarget(target: ContextTarget | Selection) {
@@ -1397,16 +1573,16 @@ export function InteractiveVenueMapEditor({
     if (ids.length === 0) return
     const chosen = new Set(ids)
     const current = mapRef.current
+    const selected = ensureElements(current).filter((item) => chosen.has(item.id))
+    const bounds = selectionBounds(selected)
+    const center = bounds
+      ? boundsCenter(bounds)
+      : { x: selected[0]!.x, y: selected[0]!.y }
+    const rotated = rotateElementsAround(selected, center, delta)
+    const byId = new Map(rotated.map((item) => [item.id, item]))
     commit({
       ...current,
-      elements: ensureElements(current).map((item) => {
-        if (!chosen.has(item.id)) return item
-        const next = { ...item, rotation: (item.rotation + delta) % 360 }
-        if (!isInfrastructureElement(next)) {
-          next.seats = rebuildElementSeats(next)
-        }
-        return next
-      }),
+      elements: ensureElements(current).map((item) => byId.get(item.id) ?? item),
     })
   }
 
@@ -1560,7 +1736,7 @@ export function InteractiveVenueMapEditor({
   function alignSelection(
     mode: "left" | "centerX" | "right" | "top" | "centerY" | "bottom",
   ) {
-    if (selectedElementIds.length < 2) return
+    if (selectedElementIds.length < 2 || idsAreLocked(selectedElementIds)) return
     const current = mapRef.current
     commit({
       ...current,
@@ -1643,12 +1819,16 @@ export function InteractiveVenueMapEditor({
         zones: ensureZones(map).filter((zone) => zone.id !== selection.id),
       })
     }
+    setIsolationId(null)
     setSelection(null)
   }
 
   function openObjectMenu(event: React.MouseEvent, target: ContextTarget) {
     event.preventDefault()
     event.stopPropagation()
+    if (target.kind !== "element" || target.id !== isolationIdRef.current) {
+      setIsolationId(null)
+    }
     setSelection(target)
     setContextMenu({ x: event.clientX, y: event.clientY, target })
   }
@@ -1664,6 +1844,7 @@ export function InteractiveVenueMapEditor({
   function nudgeSelection(dx: number, dy: number) {
     if (workModeRef.current === "pricing") return
     if (!selection) return
+    if (idsAreLocked(selectedElementIds)) return
     const current = mapRef.current
     if (selection.kind === "stage" && current.stage) {
       commit({
@@ -1773,6 +1954,7 @@ export function InteractiveVenueMapEditor({
     if (wantsCanvasPan(event)) return
     event.stopPropagation()
     if (event.button !== 0) return
+    setIsolationId(null)
     setSelection({ kind: "zone", id: zone.id })
     if (lassoModeRef.current) return
     if (workModeRef.current !== "pricing") {
@@ -1819,7 +2001,10 @@ export function InteractiveVenueMapEditor({
         lassoMode: lassoModeRef.current,
       }) === "ignore"
     ) {
-      if (!event.shiftKey) setSelection(null)
+      if (!event.shiftKey) {
+        setIsolationId(null)
+        setSelection(null)
+      }
       return
     }
     capturePointer(event)
@@ -1828,7 +2013,10 @@ export function InteractiveVenueMapEditor({
     const seed = { x: point.x, y: point.y, w: 0, h: 0 }
     marqueeRef.current = seed
     setMarquee(seed)
-    if (!event.shiftKey) setSelection(null)
+    if (!event.shiftKey) {
+      setIsolationId(null)
+      setSelection(null)
+    }
   }
 
   function applyPointerMove(sample: PointerSample) {
@@ -1856,16 +2044,16 @@ export function InteractiveVenueMapEditor({
         })
         return
       }
-      const deg = applyRotateSnap(
-        angleAt({ x: transforming.cx, y: transforming.cy }, point) -
-          transforming.startAngle,
-        snapActive(sample.shiftKey),
-      )
       paintLive({
         type: "rotate",
         cx: transforming.cx,
         cy: transforming.cy,
-        deg,
+        deg: rotationDeltaFromPointer(
+          { x: transforming.cx, y: transforming.cy },
+          transforming.startAngle,
+          point,
+          snapActive(sample.shiftKey),
+        ),
       })
       return
     }
@@ -2097,6 +2285,17 @@ export function InteractiveVenueMapEditor({
           cancelLiveTransform()
           return
         }
+        const isolatedId = isolationIdRef.current
+        if (isolatedId) {
+          event.preventDefault()
+          const members = elementGroupMembers(
+            ensureElements(mapRef.current),
+            isolatedId,
+          )
+          setIsolationId(null)
+          applyElementIds(members.map((item) => item.id))
+          return
+        }
       }
       if (event.key === "Enter" && tool === "polygon") {
         event.preventDefault()
@@ -2247,6 +2446,32 @@ export function InteractiveVenueMapEditor({
   const hasPropertiesTarget =
     Boolean(selection) || workMode === "pricing" || workMode === "indexing"
   const mobileSheetOpen = toolsOpen || propertiesOpen || modesOpen
+  const showSelectionToolbar =
+    selectedElementIds.length >= 1 &&
+    !geometryLocked &&
+    !transformingKind &&
+    !preview &&
+    tool === "select"
+  const toolbarWorld =
+    showSelectionToolbar && transformBounds
+      ? {
+          x: transformBounds.x + transformBounds.width / 2,
+          y: transformBounds.y,
+          bottom: transformBounds.y + transformBounds.height,
+        }
+      : null
+  const toolbarTopCss = toolbarWorld
+    ? { x: toolbarWorld.x * zoom + pan.x, y: toolbarWorld.y * zoom + pan.y }
+    : null
+  const toolbarPlacement =
+    toolbarTopCss && toolbarTopCss.y < 52 ? "below" : "above"
+  const toolbarCss =
+    toolbarPlacement === "below" && toolbarWorld
+      ? {
+          x: toolbarWorld.x * zoom + pan.x,
+          y: toolbarWorld.bottom * zoom + pan.y,
+        }
+      : toolbarTopCss
 
   const toolbar = (
     <div
@@ -2401,7 +2626,7 @@ export function InteractiveVenueMapEditor({
             <ToolButton active={false} onClick={addLabel} label="Etiqueta de nivel">
               <Type className="size-4" />
             </ToolButton>
-            <ToolButton active={false} onClick={duplicateSelection} label="Duplicar">
+            <ToolButton active={false} onClick={() => duplicateSelection()} label="Duplicar">
               <Copy className="size-4" />
             </ToolButton>
           </>
@@ -2590,6 +2815,7 @@ export function InteractiveVenueMapEditor({
           >
             <g transform={`translate(${pan.x} ${pan.y}) scale(${zoom})`}>
               <rect width={CANVAS.width} height={CANVAS.height} fill="transparent" />
+              <g className={isolationId ? "opacity-50" : undefined}>
               <VenueMapBackgroundLayer map={renderMap} />
               <VenueMapZoneLayer
                 zones={(renderMap.zones ?? []).filter(
@@ -2602,7 +2828,10 @@ export function InteractiveVenueMapEditor({
                 onSelect={
                   tool === "polygon"
                     ? undefined
-                    : (zone) => setSelection({ kind: "zone", id: zone.id })
+                    : (zone) => {
+                        setIsolationId(null)
+                        setSelection({ kind: "zone", id: zone.id })
+                      }
                 }
                 onPointerDown={
                   tool === "polygon" ? undefined : onZonePointerDown
@@ -2629,6 +2858,7 @@ export function InteractiveVenueMapEditor({
                     if (wantsCanvasPan(event)) return
                     event.stopPropagation()
                     if (event.button !== 0) return
+                    setIsolationId(null)
                     setSelection({ kind: "aisle", id: aisle.id })
                     beginElementDrag("aisle", event, aisle.x, aisle.y, aisle.id)
                   }}
@@ -2641,6 +2871,7 @@ export function InteractiveVenueMapEditor({
                     if (wantsCanvasPan(event)) return
                     event.stopPropagation()
                     if (event.button !== 0) return
+                    setIsolationId(null)
                     setSelection({ kind: "stage" })
                     if (map.stage) {
                       beginElementDrag("stage", event, map.stage.x, map.stage.y)
@@ -2687,9 +2918,11 @@ export function InteractiveVenueMapEditor({
                           event.stopPropagation()
                           if (event.button !== 0) return
                           if (event.shiftKey) {
+                            setIsolationId(null)
                             setSelection({ kind: "seats", ids: [key] })
                             return
                           }
+                          setIsolationId(null)
                           setSelection({ kind: "sector", id: sector.id })
                           beginElementDrag(
                             "sector",
@@ -2725,10 +2958,13 @@ export function InteractiveVenueMapEditor({
                 zoom={zoom}
                 popSelected={false}
                 onElementPointerDown={onMapElementPointerDown}
+                onElementPointerEnter={onMapElementPointerEnter}
+                onElementPointerLeave={onMapElementPointerLeave}
                 onElementContextMenu={(event, element) =>
                   openObjectMenu(event, { kind: "element", id: element.id })
                 }
               />
+              </g>
               <g ref={liveGroupRef}>
                 {selectedZone ? (
                   <VenueMapZoneLayer
@@ -2742,10 +2978,18 @@ export function InteractiveVenueMapEditor({
                     onSelect={
                       tool === "polygon"
                         ? undefined
-                        : (zone) => setSelection({ kind: "zone", id: zone.id })
+                        : (zone) => {
+                            setIsolationId(null)
+                            setSelection({ kind: "zone", id: zone.id })
+                          }
                     }
                     onPointerDown={
-                      tool === "polygon" ? undefined : onZonePointerDown
+                      tool === "polygon"
+                        ? undefined
+                        : (event, zone) => {
+                            setIsolationId(null)
+                            onZonePointerDown(event, zone)
+                          }
                     }
                     onContextMenu={(event, zone) =>
                       openObjectMenu(event, { kind: "zone", id: zone.id })
@@ -2762,6 +3006,8 @@ export function InteractiveVenueMapEditor({
                     zoom={zoom}
                     popSelected={false}
                     onElementPointerDown={onMapElementPointerDown}
+                    onElementPointerEnter={onMapElementPointerEnter}
+                    onElementPointerLeave={onMapElementPointerLeave}
                     onElementContextMenu={(event, element) =>
                       openObjectMenu(event, { kind: "element", id: element.id })
                     }
@@ -2772,7 +3018,9 @@ export function InteractiveVenueMapEditor({
                     bounds={transformBounds}
                     zoom={zoom}
                     grabbing={transformingKind === "move"}
+                    isRotating={transformingKind === "rotate"}
                     fatFinger={compactChrome}
+                    locked={selectionLocked}
                     onMoveStart={(event) => {
                       if (selectedZone) {
                         beginGroupMove([], event, selectedZone.id)
@@ -2788,6 +3036,20 @@ export function InteractiveVenueMapEditor({
                   />
                 ) : null}
               </g>
+              {hoverGroupBounds ? (
+                <rect
+                  x={hoverGroupBounds.x}
+                  y={hoverGroupBounds.y}
+                  width={hoverGroupBounds.width}
+                  height={hoverGroupBounds.height}
+                  fill="none"
+                  stroke="#d4d4d8"
+                  strokeDasharray={`${4 / Math.max(0.25, zoom)} ${3 / Math.max(0.25, zoom)}`}
+                  strokeWidth={1 / Math.max(0.25, zoom)}
+                  pointerEvents="none"
+                />
+              ) : null}
+              <g className={isolationId ? "opacity-50" : undefined}>
               {map.labels.map((label) => (
                 <text
                   key={label.id}
@@ -2801,6 +3063,7 @@ export function InteractiveVenueMapEditor({
                     if (wantsCanvasPan(event)) return
                     event.stopPropagation()
                     if (event.button !== 0) return
+                    setIsolationId(null)
                     setSelection({ kind: "label", id: label.id })
                     beginElementDrag("label", event, label.x, label.y, label.id)
                   }}
@@ -2808,6 +3071,7 @@ export function InteractiveVenueMapEditor({
                   {label.text}
                 </text>
               ))}
+              </g>
               {marquee ? (
                 <rect
                   x={marquee.x}
@@ -2846,10 +3110,34 @@ export function InteractiveVenueMapEditor({
           {compactChrome &&
           selection &&
           !geometryLocked &&
+          !selectionLocked &&
           !mobileSheetOpen ? (
             <VenueNudgePad
               className="absolute right-3 z-40 bottom-[5.5rem]"
               onNudge={nudgeSelection}
+            />
+          ) : null}
+          {showSelectionToolbar && toolbarCss ? (
+            <VenueSelectionToolbar
+              x={toolbarCss.x}
+              y={toolbarCss.y}
+              placement={toolbarPlacement}
+              locked={selectionLocked}
+              fullyLocked={selectionFullyLocked}
+              canGroup={selectedElementIds.length > 1}
+              canUngroup={selectionHasGroup(
+                selectedElements,
+                selectedElementIds,
+              )}
+              canAlign={canTidyUp}
+              onToggleLock={toggleSelectionLock}
+              onGroup={groupSelection}
+              onUngroup={ungroupSelection}
+              onAlignCenter={tidyAlignCenter}
+              onDistributeHorizontal={tidyDistributeHorizontal}
+              onFlipHorizontal={() => flipSelection("horizontal")}
+              onFlipVertical={() => flipSelection("vertical")}
+              onDuplicate={() => duplicateSelection(20)}
             />
           ) : null}
         </div>
@@ -3181,7 +3469,7 @@ export function InteractiveVenueMapEditor({
                   className="w-full accent-emerald-500"
                 />
               </Field>
-              <Button type="button" variant="outline" onClick={duplicateSelection}>
+              <Button type="button" variant="outline" onClick={() => duplicateSelection()}>
                 <Copy className="size-4" />
                 Duplicar
               </Button>
@@ -3374,7 +3662,7 @@ export function InteractiveVenueMapEditor({
                   Desagrupar
                 </Button>
               ) : null}
-              <Button type="button" variant="outline" onClick={duplicateSelection}>
+              <Button type="button" variant="outline" onClick={() => duplicateSelection()}>
                 <Copy className="size-4" />
                 Duplicar
               </Button>
@@ -3493,7 +3781,7 @@ export function InteractiveVenueMapEditor({
                   </Button>
                 </div>
               </div>
-              <Button type="button" variant="outline" onClick={duplicateSelection}>
+              <Button type="button" variant="outline" onClick={() => duplicateSelection()}>
                 <Copy className="size-4" />
                 Duplicar selección
               </Button>

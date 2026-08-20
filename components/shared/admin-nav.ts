@@ -1,5 +1,6 @@
 import {
   CalendarDays,
+  CircleHelp,
   ClipboardList,
   Home,
   Landmark,
@@ -47,6 +48,11 @@ export const ORGANIZER_NAV: AdminNavItem[] = [
   { label: "Control de Puerta (Escáner)", href: "/admin/scanner", icon: QrCode },
   { label: "Escáner de Tienda", href: "/admin/store-scanner", icon: ShoppingBag },
   { label: "Mi Perfil", href: "/admin/profile", icon: UserRound },
+  {
+    label: "Preguntas frecuentes",
+    href: "/admin/support-faqs",
+    icon: CircleHelp,
+  },
 ]
 
 const STAFF_NAV_META: AdminNavItem[] = [

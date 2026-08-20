@@ -1,24 +1,16 @@
 import { headers } from "next/headers"
 
+import { getRequestIp } from "@/lib/request-ip"
+
 export type CheckoutRequestContext = {
   ip: string
   ipBucket: string
   userAgent: string
 }
 
-function firstForwardedIp(value: string | null): string | null {
-  if (!value) return null
-  const first = value.split(",")[0]?.trim()
-  return first || null
-}
-
 export async function getCheckoutRequestContext(): Promise<CheckoutRequestContext> {
   const store = await headers()
-  const ip =
-    firstForwardedIp(store.get("x-forwarded-for")) ||
-    store.get("x-real-ip")?.trim() ||
-    store.get("cf-connecting-ip")?.trim() ||
-    "unknown"
+  const ip = await getRequestIp()
   const userAgent = (store.get("user-agent") ?? "").slice(0, 512)
   return {
     ip,
