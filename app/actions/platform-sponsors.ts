@@ -62,7 +62,7 @@ export async function listPlatformSponsorsAdmin(): Promise<PlatformSponsor[]> {
     .order("name", { ascending: true })
 
   if (error) {
-    throw new Error(`No se pudieron listar partners: ${error.message}`)
+    throw new Error(`No se pudieron listar sponsors: ${error.message}`)
   }
 
   return (data ?? []) as PlatformSponsor[]
@@ -117,7 +117,7 @@ export async function createPlatformSponsor(formData: FormData): Promise<Mutatio
       .single()
 
     if (insertError || !inserted) {
-      return { success: false, error: insertError?.message ?? "No se pudo crear el partner." }
+      return { success: false, error: insertError?.message ?? "No se pudo crear el sponsor." }
     }
 
     const path = `platform/${inserted.id}/logo.${prepared.extension}`
@@ -152,7 +152,7 @@ export async function createPlatformSponsor(formData: FormData): Promise<Mutatio
     }
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Error al crear el partner.",
+      error: error instanceof Error ? error.message : "Error al crear el sponsor.",
     }
   }
 }
@@ -167,7 +167,7 @@ export async function updatePlatformSponsor(formData: FormData): Promise<Mutatio
     const isActive = String(formData.get("isActive") ?? "true") === "true"
     const file = formData.get("logo")
 
-    if (!id) return { success: false, error: "Falta el partner." }
+    if (!id) return { success: false, error: "Falta el sponsor." }
     if (name.length < 2) {
       return { success: false, error: "El nombre debe tener al menos 2 caracteres." }
     }
@@ -228,7 +228,7 @@ export async function updatePlatformSponsor(formData: FormData): Promise<Mutatio
     }
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Error al actualizar el partner.",
+      error: error instanceof Error ? error.message : "Error al actualizar el sponsor.",
     }
   }
 }

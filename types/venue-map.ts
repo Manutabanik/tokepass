@@ -189,6 +189,8 @@ export type VenueMapElement = {
   priceMode?: VenuePriceMode
   capacity: number
   seats: VenueMapElementSeat[]
+  /** Zona contenedora (drill-down / aislamiento). */
+  zoneId?: string
   groupId?: string
   groupName?: string
   ringIndex?: number
@@ -436,6 +438,7 @@ function parseElement(raw: unknown): VenueMapElement | null {
     capacity:
       layer === "infrastructure" ? 0 : Math.max(0, asNumber(item.capacity, 0)),
     seats,
+    zoneId: textOrUndefined(item.zoneId ?? item.zone_id ?? item.parentId),
     groupId:
       layer === "infrastructure"
         ? undefined

@@ -1,0 +1,411 @@
+"use client"
+
+import { useEffect, useMemo, useState } from "react"
+import { ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react"
+
+import {
+  elementBelongsToZone,
+  seatBelongsToZone,
+} from "@/lib/seating/venue-map-lod"
+import { cn } from "@/lib/utils"
+import type { InteractiveVenueMap } from "@/types/venue-map"
+
+export type LayerTreeSelection =
+  | { kind: "stage" }
+  | { kind: "sector"; id: string }
+  | { kind: "label"; id: string }
+  | { kind: "aisle"; id: string }
+  | { kind: "element"; id: string }
+  | { kind: "seats"; ids: string[] }
+  | { kind: "zone"; id: string }
+
+type LayerNode = {
+  id: string
+  label: string
+  selection: LayerTreeSelection
+  children?: LayerNode[]
+}
+
+function namesMatch(left: string | undefined, right: string | undefined) {
+  const a = left?.trim().toLowerCase()
+  const b = right?.trim().toLowerCase()
+  return Boolean(a && b && a === b)
+}
+
+function elementLabel(type: string, fallback: string) {
+  if (fallback.trim()) return fallback.trim()
+  if (type === "vip_chair") return "Asiento"
+  if (type === "round_table") return "Mesa redonda"
+  if (type === "long_table") return "Mesa rectangular"
+  if (type === "vip_box") return "Box VIP"
+  if (type === "standing_zone") return "Campo"
+  return "Elemento"
+}
+
+function seatNodeLabel(input: { label?: string; number: number; row?: string }) {
+  if (input.label?.trim()) return input.label.trim()
+  if (input.row?.trim()) return `Fila ${input.row} · Asiento ${input.number}`
+  return `Asiento ${input.number}`
+}
+
+function selectionKey(selection: LayerTreeSelection | null): string {
+  if (!selection) return ""
+  if (selection.kind === "stage") return "stage"
+  if (selection.kind === "seats") return `seats:${selection.ids.join(",")}`
+  return `${selection.kind}:${"id" in selection ? selection.id : ""}`
+}
+
+function currentSelectionKey(
+  selection: LayerTreeSelection | { kind: "elements"; ids: string[] } | null,
+): string {
+  if (!selection) return ""
+  if (selection.kind === "elements") {
+    return selection.ids.length === 1 ? `element:${selection.ids[0]}` : ""
+  }
+  return selectionKey(selection)
+}
+
+function nodeIsSelected(
+  node: LayerNode,
+  selectedKey: string,
+): boolean {
+  if (selectionKey(node.selection) === selectedKey) return true
+  if (node.selection.kind === "seats" && selectedKey.startsWith("seats:")) {
+    const selectedIds = selectedKey.slice(6).split(",")
+    return node.selection.ids.some((id) => selectedIds.includes(id))
+  }
+  return false
+}
+
+function collectOpenIds(nodes: LayerNode[], selectedKey: string, acc: Set<string>) {
+  for (const node of nodes) {
+    const childHit = node.children?.some(
+      (child) =>
+        nodeIsSelected(child, selectedKey) ||
+        Boolean(child.children?.some((nested) => nodeIsSelected(nested, selectedKey))),
+    )
+    if (childHit) acc.add(node.id)
+    if (node.children) collectOpenIds(node.children, selectedKey, acc)
+  }
+}
+
+export function buildVenueLayerTree(map: InteractiveVenueMap): LayerNode[] {
+  const nodes: LayerNode[] = []
+  const claimedElements = new Set<string>()
+  const claimedSectors = new Set<string>()
+
+  for (const zone of map.zones ?? []) {
+    const children: LayerNode[] = []
+
+    for (const sector of map.sectors) {
+      const belongs =
+        sector.id === zone.id ||
+        namesMatch(sector.name, zone.name) ||
+        sector.seats.some((seat) =>
+          seatBelongsToZone(
+            {
+              x: seat.x,
+              y: seat.y,
+              sectorId: sector.id,
+              sectorName: sector.name,
+            },
+            zone,
+          ),
+        )
+      if (!belongs) continue
+      claimedSectors.add(sector.id)
+      for (const seat of sector.seats) {
+        children.push({
+          id: `${sector.id}::${seat.id}`,
+          label: seatNodeLabel(seat),
+          selection: { kind: "seats", ids: [`${sector.id}::${seat.id}`] },
+        })
+      }
+    }
+
+    for (const element of map.elements ?? []) {
+      const explicitZoneId = element.zoneId?.trim()
+      if (explicitZoneId) {
+        if (explicitZoneId !== zone.id) continue
+      } else if (!elementBelongsToZone(element, zone)) {
+        continue
+      }
+      claimedElements.add(element.id)
+      if (element.seats.length > 0 && element.sellMode !== "group") {
+        for (const seat of element.seats) {
+          children.push({
+            id: `${element.id}::${seat.id}`,
+            label: seatNodeLabel(seat),
+            selection: { kind: "seats", ids: [`${element.id}::${seat.id}`] },
+          })
+        }
+      } else {
+        children.push({
+          id: element.id,
+          label: elementLabel(element.type, element.label),
+          selection: { kind: "element", id: element.id },
+        })
+      }
+    }
+
+    nodes.push({
+      id: zone.id,
+      label: zone.name.trim() || "Zona",
+      selection: { kind: "zone", id: zone.id },
+      children,
+    })
+  }
+
+  for (const sector of map.sectors) {
+    if (claimedSectors.has(sector.id)) continue
+    nodes.push({
+      id: sector.id,
+      label: sector.name.trim() || "Sector",
+      selection: { kind: "sector", id: sector.id },
+      children: sector.seats.map((seat) => ({
+        id: `${sector.id}::${seat.id}`,
+        label: seatNodeLabel(seat),
+        selection: { kind: "seats", ids: [`${sector.id}::${seat.id}`] },
+      })),
+    })
+  }
+
+  for (const element of map.elements ?? []) {
+    if (claimedElements.has(element.id)) continue
+    if (element.seats.length > 0 && element.sellMode !== "group") {
+      nodes.push({
+        id: element.id,
+        label: elementLabel(element.type, element.label),
+        selection: { kind: "element", id: element.id },
+        children: element.seats.map((seat) => ({
+          id: `${element.id}::${seat.id}`,
+          label: seatNodeLabel(seat),
+          selection: { kind: "seats", ids: [`${element.id}::${seat.id}`] },
+        })),
+      })
+    } else {
+      nodes.push({
+        id: element.id,
+        label: elementLabel(element.type, element.label),
+        selection: { kind: "element", id: element.id },
+      })
+    }
+  }
+
+  if (map.stage) {
+    nodes.push({
+      id: "stage",
+      label: map.stage.label.trim() || "Escenario",
+      selection: { kind: "stage" },
+    })
+  }
+
+  for (const label of map.labels) {
+    nodes.push({
+      id: label.id,
+      label: label.text.trim() || "Etiqueta",
+      selection: { kind: "label", id: label.id },
+    })
+  }
+
+  for (const aisle of map.aisles) {
+    nodes.push({
+      id: aisle.id,
+      label: "Pasillo",
+      selection: { kind: "aisle", id: aisle.id },
+    })
+  }
+
+  return nodes
+}
+
+export function VenueLayerTree({
+  map,
+  selection,
+  onSelect,
+  collapsed = false,
+  onCollapsedChange,
+  activeZoneId = null,
+  className,
+}: {
+  map: InteractiveVenueMap
+  selection: LayerTreeSelection | { kind: "elements"; ids: string[] } | null
+  onSelect: (next: LayerTreeSelection) => void
+  collapsed?: boolean
+  onCollapsedChange?: (collapsed: boolean) => void
+  activeZoneId?: string | null
+  className?: string
+}) {
+  const nodes = useMemo(() => buildVenueLayerTree(map), [map])
+  const selectedKey = currentSelectionKey(selection)
+  const [openIds, setOpenIds] = useState(() => new Set(nodes.map((node) => node.id)))
+
+  useEffect(() => {
+    if (!selectedKey && !activeZoneId) return
+    setOpenIds((current) => {
+      const next = new Set(current)
+      if (selectedKey) collectOpenIds(nodes, selectedKey, next)
+      if (activeZoneId) next.add(activeZoneId)
+      return next
+    })
+  }, [nodes, selectedKey, activeZoneId])
+
+  function toggle(id: string) {
+    setOpenIds((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  if (collapsed) {
+    return (
+      <aside
+        className={cn(
+          "flex h-full w-12 shrink-0 flex-col items-center border-r border-border bg-card py-2 text-card-foreground",
+          className,
+        )}
+      >
+        <button
+          type="button"
+          title="Expandir estructura"
+          aria-label="Expandir estructura"
+          onClick={() => onCollapsedChange?.(false)}
+          className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          <PanelLeftOpen className="size-4" />
+        </button>
+      </aside>
+    )
+  }
+
+  return (
+    <aside
+      className={cn(
+        "flex h-full w-full shrink-0 flex-col overflow-hidden border-r border-border bg-card text-card-foreground",
+        className,
+      )}
+    >
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
+        <p className="text-xs font-semibold tracking-wide text-foreground uppercase">
+          Estructura del Recinto
+        </p>
+        {onCollapsedChange ? (
+          <button
+            type="button"
+            title="Contraer panel"
+            aria-label="Contraer panel"
+            onClick={() => onCollapsedChange(true)}
+            className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <PanelLeftClose className="size-4" />
+          </button>
+        ) : null}
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2 scrollbar-thin">
+        {nodes.length === 0 ? (
+          <p className="px-2 py-6 text-xs leading-relaxed text-muted-foreground">
+            Todavía no hay zonas ni elementos. Usá la barra de herramientas
+            sobre el lienzo para empezar a dibujar.
+          </p>
+        ) : (
+          <ul className="space-y-0.5">
+            {nodes.map((node) => (
+              <LayerTreeItem
+                key={node.id}
+                node={node}
+                depth={0}
+                openIds={openIds}
+                selectedKey={selectedKey}
+                onToggle={toggle}
+                onSelect={onSelect}
+              />
+            ))}
+          </ul>
+        )}
+      </div>
+    </aside>
+  )
+}
+
+function LayerTreeItem({
+  node,
+  depth,
+  openIds,
+  selectedKey,
+  onToggle,
+  onSelect,
+}: {
+  node: LayerNode
+  depth: number
+  openIds: Set<string>
+  selectedKey: string
+  onToggle: (id: string) => void
+  onSelect: (next: LayerTreeSelection) => void
+}) {
+  const hasChildren = Boolean(node.children?.length)
+  const open = openIds.has(node.id)
+  const selected = nodeIsSelected(node, selectedKey)
+
+  return (
+    <li>
+      <div
+        className="flex items-center gap-0.5"
+        style={{ paddingLeft: depth * 12 }}
+      >
+        {hasChildren ? (
+          <button
+            type="button"
+            aria-label={open ? "Contraer" : "Expandir"}
+            aria-expanded={open}
+            onClick={() => onToggle(node.id)}
+            className="grid size-6 shrink-0 place-items-center rounded text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
+          >
+            <ChevronDown
+              className={cn(
+                "size-3.5 transition-transform",
+                !open && "-rotate-90",
+              )}
+              aria-hidden="true"
+            />
+          </button>
+        ) : (
+          <span className="size-6 shrink-0" />
+        )}
+        <button
+          type="button"
+          onClick={() => onSelect(node.selection)}
+          className={cn(
+            "min-w-0 flex-1 truncate rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+            selected
+              ? "bg-sky-50 font-medium text-sky-700 dark:bg-sky-950/50 dark:text-sky-300"
+              : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900",
+          )}
+        >
+          {hasChildren ? (
+            <span className="mr-1.5 font-mono text-[11px] text-zinc-400">
+              {open ? "[-]" : "[+]"}
+            </span>
+          ) : null}
+          {node.label}
+        </button>
+      </div>
+      {hasChildren && open ? (
+        <ul className="mt-0.5">
+          {node.children!.map((child) => (
+            <LayerTreeItem
+              key={child.id}
+              node={child}
+              depth={depth + 1}
+              openIds={openIds}
+              selectedKey={selectedKey}
+              onToggle={onToggle}
+              onSelect={onSelect}
+            />
+          ))}
+        </ul>
+      ) : null}
+    </li>
+  )
+}

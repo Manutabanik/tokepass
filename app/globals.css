@@ -719,11 +719,25 @@ select:-webkit-autofill {
   animation: tokepass-pulse-subtle 1.8s ease-in-out infinite;
 }
 
+@keyframes venue-map-reveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.venue-map-reveal {
+  animation: venue-map-reveal 350ms ease-out both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-in,
   .animate-pulse-subtle,
   .living-qr-scan-beam,
-  .living-qr-live-ring {
+  .living-qr-live-ring,
+  .venue-map-reveal {
     animation: none;
   }
 }

@@ -26,6 +26,7 @@ const VenueElementShape = memo(function VenueElementShape({
   zoom,
   dimmed = false,
   highlighted = false,
+  isolationDim = false,
   popSelected = true,
 }: {
   element: VenueMapElement
@@ -68,14 +69,16 @@ const VenueElementShape = memo(function VenueElementShape({
   zoom: number
   dimmed?: boolean
   highlighted?: boolean
+  isolationDim?: boolean
   popSelected?: boolean
 }) {
   const lit = selected || highlighted
   const transform =
-    lit && popSelected
+    lit && popSelected && !isolationDim
       ? `translate(${element.x} ${element.y}) scale(1.15) translate(${-element.x} ${-element.y}) rotate(${element.rotation} ${element.x} ${element.y})`
       : `rotate(${element.rotation} ${element.x} ${element.y})`
-  const opacity = (element.opacity ?? 1) * (dimmed && !lit ? 0.7 : 1)
+  const opacity =
+    (element.opacity ?? 1) * (isolationDim ? 0.3 : dimmed && !lit ? 0.7 : 1)
   const labelText = compactVenueElementLabel(element.label, lit ? 99 : zoom)
   const tableLike =
     element.type !== "standing_zone" &&
@@ -88,10 +91,11 @@ const VenueElementShape = memo(function VenueElementShape({
       transform={transform}
       opacity={opacity}
       className={
-        interactive
+        interactive && !isolationDim
           ? "cursor-pointer transition-all duration-200 ease-in-out"
           : "pointer-events-none transition-all duration-200 ease-in-out"
       }
+      style={isolationDim ? { filter: "grayscale(1)" } : undefined}
       onPointerDown={
         interactive
           ? (event) => onElementPointerDown?.(event, element)
@@ -232,6 +236,7 @@ export function VenueMapElementLayer({
   visibleIds = null,
   lodHidden = false,
   highlightedIds = [],
+  isolationDimIds = null,
 }: {
   elements: VenueMapElement[]
   selectedIds?: string[]
@@ -275,6 +280,7 @@ export function VenueMapElementLayer({
   visibleIds?: Set<string> | null
   lodHidden?: boolean
   highlightedIds?: string[]
+  isolationDimIds?: Set<string> | null
 }) {
   const selected = new Set(selectedIds)
   const highlighted = new Set(highlightedIds)
@@ -308,13 +314,13 @@ export function VenueMapElementLayer({
         const isHighlighted =
           highlighted.has(element.id) ||
           element.seats.some((seat) => highlighted.has(seat.id))
+        const isolationDim = Boolean(isolationDimIds?.has(element.id))
+        if (!visible) return null
         return (
           <g
             key={element.id}
             style={{
-              opacity: visible ? 1 : 0,
-              pointerEvents: visible && interactive ? "auto" : "none",
-              transition: "opacity 0.3s ease",
+              pointerEvents: interactive ? "auto" : "none",
             }}
           >
             <VenueElementShape
@@ -345,9 +351,12 @@ export function VenueMapElementLayer({
               }
               showLabels={renderLabels || isSelected || isHighlighted}
               showChairs={renderChairs || isSelected}
-              interactive={visible && interactive}
+              interactive={visible && interactive && !isolationDim}
               zoom={zoom}
-              dimmed={hasSelection && !isSelected && !isHighlighted}
+              dimmed={
+                isolationDim || (hasSelection && !isSelected && !isHighlighted)
+              }
+              isolationDim={isolationDim}
               highlighted={isHighlighted}
               popSelected={popSelected}
             />

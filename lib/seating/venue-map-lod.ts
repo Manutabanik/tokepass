@@ -64,6 +64,8 @@ export function elementBelongsToZone(
   element: VenueMapElement,
   zone: VenueMapZone,
 ): boolean {
+  const explicitZoneId = element.zoneId?.trim()
+  if (explicitZoneId) return explicitZoneId === zone.id
   if (element.groupId?.trim() === zone.id) return true
   if (element.id === zone.id) return true
   if (namesMatch(element.sectorName, zone.name)) return true
@@ -190,7 +192,23 @@ export function elementsInFocusedZone(
   elements: VenueMapElement[],
   zone: VenueMapZone | null,
 ): VenueMapElement[] {
-  if (!zone) return elements
-  const matched = elements.filter((element) => elementBelongsToZone(element, zone))
-  return matched.length > 0 ? matched : elements
+  if (!zone) return []
+  return elements.filter(
+    (element) => isSellableElement(element) && elementBelongsToZone(element, zone),
+  )
+}
+
+export function publicRevealElements(
+  elements: VenueMapElement[] | undefined,
+  zone: VenueMapZone | null,
+): VenueMapElement[] {
+  if (!zone) return []
+  return elementsInFocusedZone(elements ?? [], zone)
+}
+
+export function publicRevealSeats<
+  T extends { x: number; y: number; sectorId: string; sectorName: string },
+>(seats: T[], zone: VenueMapZone | null): T[] {
+  if (!zone) return []
+  return seats.filter((seat) => seatBelongsToZone(seat, zone))
 }

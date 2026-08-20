@@ -18,7 +18,6 @@ import {
   Layers,
   LayoutTemplate,
   Minus,
-  MousePointer,
   Palette,
   PanelRightClose,
   PanelRightOpen,
@@ -50,6 +49,11 @@ import { BuyerViewModal } from "@/components/admin/buyer-view-modal"
 import { ConcentricRingGenerator } from "@/components/admin/concentric-ring-generator"
 import { VenueCanvasContextMenu } from "@/components/admin/venue-canvas-context-menu"
 import { VenueComponentPalette, type PalettePlacement } from "@/components/admin/venue-component-palette"
+import { VenueFloatingToolbar, type FloatingDrawTool } from "@/components/admin/venue-floating-toolbar"
+import {
+  VenueLayerTree,
+  type LayerTreeSelection,
+} from "@/components/admin/venue-layer-tree"
 import { VenueMapBackgroundPanel } from "@/components/admin/venue-map-background-panel"
 import { VenueParametricRulesPanel } from "@/components/admin/venue-parametric-rules-panel"
 import { VenueSetupGuide } from "@/components/admin/venue-setup-guide"
@@ -164,6 +168,7 @@ import {
   clampVenueZoom,
   elementAabb,
   expandViewBoxToContainer,
+  fitViewportToWorldBox,
   flipSelectedElements,
   liveTransformToSvg,
   normalizeDeg,
@@ -211,7 +216,12 @@ import {
   distributeOnArc,
   generateGridArray,
 } from "@/lib/seating/venue-array"
-import { zoneCanvasAabb } from "@/lib/seating/venue-map-lod"
+import {
+  CONTEXT_FOCUS_ANIM_MS,
+  elementBelongsToZone,
+  seatBelongsToZone,
+  zoneCanvasAabb,
+} from "@/lib/seating/venue-map-lod"
 import {
   formatVenueMapSkuErrors,
   validateVenueMapSkuConsistency,
@@ -378,6 +388,14 @@ export function InteractiveVenueMapEditor({
   } | null>(null)
   const [isolationId, setIsolationId] = useState<string | null>(null)
   const isolationIdRef = useRef<string | null>(null)
+  const [activeZoneId, setActiveZoneId] = useState<string | null>(null)
+  const activeZoneIdRef = useRef<string | null>(null)
+  const overviewViewportRef = useRef<{
+    pan: { x: number; y: number }
+    zoom: number
+  } | null>(null)
+  const viewportAnimRef = useRef<number | null>(null)
+  const svgViewBoxRef = useRef(svgViewBox)
   const [seatEditMode, setSeatEditMode] = useState(false)
   const seatEditModeRef = useRef(false)
   const [explicitSaveStatus, setExplicitSaveStatus] = useState<
@@ -443,6 +461,7 @@ export function InteractiveVenueMapEditor({
   }
   useLayoutEffect(() => {
     isolationIdRef.current = isolationId
+    activeZoneIdRef.current = activeZoneId
     workModeRef.current = workMode
     selectionRef.current = selection
     compactChromeRef.current = compactChrome
@@ -451,8 +470,10 @@ export function InteractiveVenueMapEditor({
     mapRef.current = map
     toolRef.current = tool
     polygonDraftRef.current = polygonDraft
+    svgViewBoxRef.current = svgViewBox
   }, [
     isolationId,
+    activeZoneId,
     workMode,
     selection,
     compactChrome,
@@ -461,7 +482,15 @@ export function InteractiveVenueMapEditor({
     map,
     tool,
     polygonDraft,
+    svgViewBox,
   ])
+  useEffect(() => {
+    return () => {
+      if (viewportAnimRef.current != null) {
+        cancelAnimationFrame(viewportAnimRef.current)
+      }
+    }
+  }, [])
   const [customTemplates, setCustomTemplates] = useState<OrganizerVenueTemplate[]>(
     [],
   )
@@ -610,6 +639,9 @@ export function InteractiveVenueMapEditor({
     onChange(parsed, venueMapToSeatingLayout(parsed))
     setLibraryOpen(false)
     setWorkMode(showPrices ? "pricing" : "architecture")
+    setActiveZoneId(null)
+    setIsolationId(null)
+    overviewViewportRef.current = null
   }
 
   function pickBuiltin(id: BuiltinVenueTemplateId) {
@@ -624,6 +656,21 @@ export function InteractiveVenueMapEditor({
     selection?.kind === "zone"
       ? (map.zones ?? []).find((zone) => zone.id === selection.id) ?? null
       : null
+  const activeZone = useMemo(
+    () =>
+      activeZoneId
+        ? (map.zones ?? []).find((zone) => zone.id === activeZoneId) ?? null
+        : null,
+    [activeZoneId, map.zones],
+  )
+  const isolationDimElementIds = useMemo(() => {
+    if (!activeZone) return null
+    const ids = new Set<string>()
+    for (const element of map.elements ?? []) {
+      if (!elementBelongsToZone(element, activeZone)) ids.add(element.id)
+    }
+    return ids
+  }, [activeZone, map.elements])
   const selectedElement =
     selection?.kind === "element"
       ? (map.elements ?? []).find((item) => item.id === selection.id) ?? null
@@ -1413,6 +1460,87 @@ export function InteractiveVenueMapEditor({
     setZoom(next.zoom)
   }
 
+  function easeViewport(t: number) {
+    return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2
+  }
+
+  function animateViewport(to: { pan: { x: number; y: number }; zoom: number }) {
+    if (viewportAnimRef.current != null) {
+      cancelAnimationFrame(viewportAnimRef.current)
+      viewportAnimRef.current = null
+    }
+    const from = {
+      pan: { ...panRef.current },
+      zoom: zoomRef.current,
+    }
+    const started = performance.now()
+    const step = (now: number) => {
+      const t = Math.min(1, (now - started) / CONTEXT_FOCUS_ANIM_MS)
+      const eased = easeViewport(t)
+      applyViewport({
+        zoom: from.zoom + (to.zoom - from.zoom) * eased,
+        pan: {
+          x: from.pan.x + (to.pan.x - from.pan.x) * eased,
+          y: from.pan.y + (to.pan.y - from.pan.y) * eased,
+        },
+      })
+      if (t < 1) {
+        viewportAnimRef.current = requestAnimationFrame(step)
+        return
+      }
+      viewportAnimRef.current = null
+    }
+    viewportAnimRef.current = requestAnimationFrame(step)
+  }
+
+  function enterZoneIsolation(zone: VenueMapZone) {
+    if (preview) return
+    if (toolRef.current === "polygon") return
+    abortTransientGestures()
+    if (!activeZoneIdRef.current) {
+      overviewViewportRef.current = {
+        pan: { ...panRef.current },
+        zoom: zoomRef.current,
+      }
+    }
+    setIsolationId(null)
+    setSeatEditMode(false)
+    setActiveZoneId(zone.id)
+    setSelection({ kind: "zone", id: zone.id })
+    const box = zoneCanvasAabb(zone)
+    if (!box) return
+    animateViewport(
+      fitViewportToWorldBox({
+        box,
+        viewBox: svgViewBoxRef.current,
+      }),
+    )
+  }
+
+  function exitZoneIsolation() {
+    if (!activeZoneIdRef.current && !overviewViewportRef.current) return
+    setActiveZoneId(null)
+    const overview = overviewViewportRef.current
+    overviewViewportRef.current = null
+    if (overview) {
+      animateViewport(overview)
+      return
+    }
+    applyViewport({ pan: { x: 0, y: 0 }, zoom: 1 })
+  }
+
+  function withActiveZoneId<T extends { zoneId?: string }>(item: T): T {
+    const zoneId = activeZoneIdRef.current
+    if (!zoneId) return item
+    return { ...item, zoneId }
+  }
+
+  function withActiveZoneIds<T extends { zoneId?: string }>(items: T[]): T[] {
+    const zoneId = activeZoneIdRef.current
+    if (!zoneId) return items
+    return items.map((item) => ({ ...item, zoneId }))
+  }
+
   function nudgeCanvasZoom(delta: number) {
     const rect = svgRef.current?.getBoundingClientRect()
     const cursor = rect
@@ -1713,11 +1841,16 @@ export function InteractiveVenueMapEditor({
         item.type === nextPlacement.type &&
         item.subtype === nextPlacement.subtype,
     ).length
-    const created = createVenueElement(
-      nextPlacement.type,
-      count,
-      point,
-      nextPlacement.subtype,
+    const created = withActiveZoneId(
+      createVenueElement(
+        nextPlacement.type,
+        count,
+        point,
+        nextPlacement.subtype,
+        activeZoneIdRef.current
+          ? { zoneId: activeZoneIdRef.current }
+          : undefined,
+      ),
     )
     commit({ ...current, elements: [...ensureElements(current), created] })
     setSelection({ kind: "element", id: created.id })
@@ -1895,7 +2028,10 @@ export function InteractiveVenueMapEditor({
     const kept = ensureElements(current).filter(
       (item) => item.groupId !== replaceGroupId,
     )
-    const next = { ...current, elements: [...kept, ...elements] }
+    const next = {
+      ...current,
+      elements: [...kept, ...withActiveZoneIds(elements)],
+    }
     commit(next)
     setSelection({ kind: "elements", ids: elements.map((item) => item.id) })
     setTool("select")
@@ -2003,10 +2139,12 @@ export function InteractiveVenueMapEditor({
       ...values,
       origin: gridArrayOrigin ?? undefined,
     })
-    const numbered = applyMatrixNumbering(
-      created,
-      created.map((item) => item.id),
-      { rowAxis: "letters", aisleMode: "sequential" },
+    const numbered = withActiveZoneIds(
+      applyMatrixNumbering(
+        created,
+        created.map((item) => item.id),
+        { rowAxis: "letters", aisleMode: "sequential" },
+      ),
     )
     commit({
       ...current,
@@ -2480,13 +2618,25 @@ export function InteractiveVenueMapEditor({
 
   function onZonePointerDown(event: React.PointerEvent, zone: VenueMapZone) {
     blurCanvasTypingTarget()
+    if (preview) return
     if (wantsCanvasPan(event)) return
     isolateCanvasPointer(event, { preventGhostClick: true })
     if (event.button !== 0) return
+    if (event.detail >= 2) {
+      cancelLiveTransform()
+      enterZoneIsolation(zone)
+      return
+    }
     setIsolationId(null)
     setSelection({ kind: "zone", id: zone.id })
     requestMobileProperties()
     if (lassoModeRef.current) return
+    if (
+      activeZoneIdRef.current &&
+      activeZoneIdRef.current !== zone.id
+    ) {
+      return
+    }
     if (workModeRef.current !== "pricing") {
       beginGroupMove([], event, zone.id)
     }
@@ -3015,6 +3165,11 @@ export function InteractiveVenueMapEditor({
           }
           return
         }
+        if (activeZoneIdRef.current) {
+          event.preventDefault()
+          exitZoneIsolation()
+          return
+        }
         if (selectionRef.current) {
           event.preventDefault()
           setSelection(null)
@@ -3191,6 +3346,45 @@ export function InteractiveVenueMapEditor({
     setToolsOpen(false)
   }
 
+  function pickFloatingTool(next: FloatingDrawTool) {
+    if (next === "select") {
+      setTool("select")
+      setPlacement(null)
+      return
+    }
+    if (next === "polygon") {
+      pickPaletteItem({ kind: "zone_polygon" })
+      return
+    }
+    if (next === "seat") {
+      pickPaletteItem({ kind: "element", type: "vip_chair" })
+      return
+    }
+    pickPaletteItem({ kind: "element", type: "round_table" })
+  }
+
+  function selectFromLayerTree(next: LayerTreeSelection) {
+    setTool("select")
+    setPlacement(null)
+    setIsolationId(null)
+    if (next.kind === "seats") {
+      enterSeatEdit(next.ids)
+      return
+    }
+    setSeatEditMode(false)
+    setSelection(next)
+  }
+
+  const floatingTool: FloatingDrawTool =
+    tool === "polygon"
+      ? "polygon"
+      : placement?.kind === "element" && placement.type === "vip_chair"
+        ? "seat"
+        : placement?.kind === "element" &&
+            (placement.type === "round_table" || placement.type === "long_table")
+          ? "table"
+          : "select"
+
   const hasPropertiesTarget =
     Boolean(selection) || workMode === "pricing" || workMode === "indexing"
   const propertiesTargetKey =
@@ -3272,29 +3466,6 @@ export function InteractiveVenueMapEditor({
           compactChrome && "hidden",
         )}
       >
-        <ToolButton
-          active={tool === "select"}
-          onClick={() => {
-            setTool("select")
-            setPlacement(null)
-          }}
-          label="Select"
-          showLabel={isStudio ? "md" : true}
-        >
-          <MousePointer className="size-4" />
-        </ToolButton>
-        <ToolButton
-          active={tool === "polygon"}
-          onClick={() => {
-            setWorkMode("architecture")
-            setTool("polygon")
-            setPlacement({ kind: "zone_polygon" })
-          }}
-          label="Trazar zona con lápiz"
-          showLabel={isStudio ? "md" : true}
-        >
-          <PenTool className="size-4" />
-        </ToolButton>
         <ToolButton
           active={false}
           onClick={() => {
@@ -3564,14 +3735,16 @@ export function InteractiveVenueMapEditor({
             : "grid lg:grid-cols-[220px_1fr_280px]",
         )}
       >
-        {(workMode === "architecture" || isWorkspace) && !compactChrome ? (
-          <VenueComponentPalette
-            variant={isStudio ? "studio" : "compact"}
-            active={placement}
-            onPick={pickPaletteItem}
+        {(workMode === "architecture" || isWorkspace || isStudio) &&
+        !compactChrome ? (
+          <VenueLayerTree
+            map={map}
+            selection={selection}
+            onSelect={selectFromLayerTree}
             collapsed={isStudio ? paletteCollapsed : false}
             onCollapsedChange={isStudio ? setPaletteCollapsed : undefined}
-            className={isWorkspace ? "h-full" : undefined}
+            activeZoneId={activeZoneId}
+            className={cn(isStudio ? "w-72" : "w-full", isWorkspace && "h-full")}
           />
         ) : null}
         <div
@@ -3651,14 +3824,17 @@ export function InteractiveVenueMapEditor({
                 height={svgViewBox.height}
                 className="fill-slate-100 dark:fill-zinc-950"
               />
-              <g className={isolationId ? "opacity-50" : undefined}>
+              <g className={isolationId && !activeZoneId ? "opacity-50" : undefined}>
+              <g className={activeZoneId ? "opacity-30 grayscale" : undefined}>
               <VenueMapBackgroundLayer map={renderMap} />
+              </g>
               <VenueMapZoneLayer
                 zones={(renderMap.zones ?? []).filter(
                   (zone) => zone.id !== selectedZone?.id,
                 )}
                 selectedId={null}
                 emphasizeSelected={false}
+                focusedZoneId={activeZoneId}
                 draft={polygonDraft}
                 cursor={tool === "polygon" ? polygonCursor : null}
                 onSelect={
@@ -3671,6 +3847,14 @@ export function InteractiveVenueMapEditor({
                 }
                 onPointerDown={
                   tool === "polygon" ? undefined : onZonePointerDown
+                }
+                onDoubleClick={
+                  tool === "polygon"
+                    ? undefined
+                    : (event, zone) => {
+                        isolateCanvasPointer(event)
+                        enterZoneIsolation(zone)
+                      }
                 }
                 onContextMenu={(event, zone) =>
                   openObjectMenu(event, { kind: "zone", id: zone.id })
@@ -3687,10 +3871,12 @@ export function InteractiveVenueMapEditor({
                   className={cn(
                     "fill-zinc-800/80 stroke-zinc-600",
                     selection?.kind === "aisle" && selection.id === aisle.id && "stroke-emerald-400",
+                    activeZoneId && "pointer-events-none opacity-30 grayscale",
                   )}
                   strokeWidth={1.5}
                   onContextMenu={(event) => openObjectMenu(event, { kind: "aisle", id: aisle.id })}
                   onPointerDown={(event) => {
+                    if (activeZoneId) return
                     if (wantsCanvasPan(event)) return
                     event.stopPropagation()
                     if (event.button !== 0) return
@@ -3702,8 +3888,10 @@ export function InteractiveVenueMapEditor({
               ))}
               {map.stage ? (
                 <g
+                  className={activeZoneId ? "pointer-events-none opacity-30 grayscale" : undefined}
                   onContextMenu={(event) => openObjectMenu(event, { kind: "stage" })}
                   onPointerDown={(event) => {
+                    if (activeZoneId) return
                     if (wantsCanvasPan(event)) return
                     event.stopPropagation()
                     if (event.button !== 0) return
@@ -3744,9 +3932,27 @@ export function InteractiveVenueMapEditor({
                     const active =
                       (selection?.kind === "sector" && selection.id === sector.id) ||
                       (selection?.kind === "seats" && selection.ids.includes(key))
+                    const outsideIsolation = activeZone
+                      ? !seatBelongsToZone(
+                          {
+                            x: seat.x,
+                            y: seat.y,
+                            sectorId: sector.id,
+                            sectorName: sector.name,
+                          },
+                          activeZone,
+                        )
+                      : false
                     return (
-                      <SectorSeatNode
+                      <g
                         key={seat.id}
+                        className={
+                          outsideIsolation
+                            ? "pointer-events-none opacity-30 grayscale"
+                            : undefined
+                        }
+                      >
+                      <SectorSeatNode
                         sector={sector}
                         seat={seat}
                         selected={active}
@@ -3789,6 +3995,7 @@ export function InteractiveVenueMapEditor({
                           event.preventDefault()
                         }}
                       />
+                      </g>
                     )
                   })}
                 </g>
@@ -3801,6 +4008,7 @@ export function InteractiveVenueMapEditor({
                 showSeats={(renderMap.elements?.length ?? 0) < 220}
                 zoom={zoom}
                 popSelected={false}
+                isolationDimIds={isolationDimElementIds}
                 onElementPointerDown={onMapElementPointerDown}
                 onElementPointerEnter={onMapElementPointerEnter}
                 onElementPointerLeave={onMapElementPointerLeave}
@@ -3821,9 +4029,27 @@ export function InteractiveVenueMapEditor({
                     const active =
                       (selection?.kind === "sector" && selection.id === sector.id) ||
                       (selection?.kind === "seats" && selection.ids.includes(key))
+                    const outsideIsolation = activeZone
+                      ? !seatBelongsToZone(
+                          {
+                            x: seat.x,
+                            y: seat.y,
+                            sectorId: sector.id,
+                            sectorName: sector.name,
+                          },
+                          activeZone,
+                        )
+                      : false
                     return [
-                      <SectorSeatNode
+                      <g
                         key={key}
+                        className={
+                          outsideIsolation
+                            ? "pointer-events-none opacity-30 grayscale"
+                            : undefined
+                        }
+                      >
+                      <SectorSeatNode
                         sector={sector}
                         seat={seat}
                         selected={active}
@@ -3865,7 +4091,8 @@ export function InteractiveVenueMapEditor({
                           isolateCanvasPointer(event)
                           event.preventDefault()
                         }}
-                      />,
+                      />
+                      </g>,
                     ]
                   }),
                 )}
@@ -3878,6 +4105,7 @@ export function InteractiveVenueMapEditor({
                     ]}
                     selectedId={selectedZone.id}
                     emphasizeSelected={false}
+                    focusedZoneId={activeZoneId}
                     onSelect={
                       tool === "polygon"
                         ? undefined
@@ -3894,6 +4122,14 @@ export function InteractiveVenueMapEditor({
                             onZonePointerDown(event, zone)
                           }
                     }
+                    onDoubleClick={
+                      tool === "polygon"
+                        ? undefined
+                        : (event, zone) => {
+                            isolateCanvasPointer(event)
+                            enterZoneIsolation(zone)
+                          }
+                    }
                     onContextMenu={(event, zone) =>
                       openObjectMenu(event, { kind: "zone", id: zone.id })
                     }
@@ -3908,6 +4144,7 @@ export function InteractiveVenueMapEditor({
                     showSeats={(renderMap.elements?.length ?? 0) < 220}
                     zoom={zoom}
                     popSelected={false}
+                    isolationDimIds={isolationDimElementIds}
                     onElementPointerDown={onMapElementPointerDown}
                     onElementPointerEnter={onMapElementPointerEnter}
                     onElementPointerLeave={onMapElementPointerLeave}
@@ -3961,7 +4198,7 @@ export function InteractiveVenueMapEditor({
                   pointerEvents="none"
                 />
               ) : null}
-              <g className={isolationId ? "opacity-50" : undefined}>
+              <g className={isolationId && !activeZoneId ? "opacity-50" : undefined}>
               {map.labels.map((label) => (
                 <text
                   key={label.id}
@@ -3969,9 +4206,13 @@ export function InteractiveVenueMapEditor({
                   y={label.y}
                   textAnchor="middle"
                   fill={canvasLabelFill(label.color)}
-                  className="cursor-pointer text-[15px] font-black tracking-[0.22em]"
+                  className={cn(
+                    "cursor-pointer text-[15px] font-black tracking-[0.22em]",
+                    activeZoneId && "pointer-events-none opacity-30 grayscale",
+                  )}
                   onContextMenu={(event) => openObjectMenu(event, { kind: "label", id: label.id })}
                   onPointerDown={(event) => {
+                    if (activeZoneId) return
                     if (wantsCanvasPan(event)) return
                     event.stopPropagation()
                     if (event.button !== 0) return
@@ -3998,6 +4239,22 @@ export function InteractiveVenueMapEditor({
               ) : null}
             </g>
           </svg>
+          {activeZoneId && !preview ? (
+            <button
+              type="button"
+              onClick={exitZoneIsolation}
+              className="absolute top-4 left-4 z-40 rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white shadow-lg hover:bg-zinc-800"
+            >
+              Volver al mapa general
+            </button>
+          ) : null}
+          {!compactChrome && !preview ? (
+            <VenueFloatingToolbar
+              active={floatingTool}
+              onChange={pickFloatingTool}
+              onPlace={pickPaletteItem}
+            />
+          ) : null}
           {isStudio && tool !== "polygon" ? (
             <VenueStudioHud
               map={map}

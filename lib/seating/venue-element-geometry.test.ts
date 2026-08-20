@@ -19,6 +19,17 @@ describe("venue-element-geometry", () => {
     assert.equal(chair.shapeType, "theatre_seat")
   })
 
+  it("asigna zoneId al crear un asiento o mesa", () => {
+    const table = createVenueElement(
+      "round_table",
+      0,
+      { x: 80, y: 80 },
+      undefined,
+      { zoneId: "zona-vip" },
+    )
+    assert.equal(table.zoneId, "zona-vip")
+  })
+
   it("places 8 chairs around a round table", () => {
     const table = createVenueElement("round_table", 0, { x: 200, y: 150 })
     table.chairCount = 8

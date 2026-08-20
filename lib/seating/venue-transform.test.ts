@@ -26,6 +26,7 @@ import {
   translateElements,
   zoomTowardCursor,
   expandViewBoxToContainer,
+  fitViewportToWorldBox,
   fitWorldInViewBox,
   applyLiveToSeats,
   pointsToBounds,
@@ -321,6 +322,17 @@ describe("venue-transform", () => {
     assert.equal(fitted.zoom, 1)
     assert.equal(fitted.pan.x, 200)
     assert.equal(fitted.pan.y, 0)
+  })
+
+  it("centers a world AABB in the current viewBox", () => {
+    const fitted = fitViewportToWorldBox({
+      box: { minX: 100, minY: 100, maxX: 300, maxY: 200 },
+      viewBox: { x: 0, y: 0, width: 800, height: 560 },
+      padding: 0,
+    })
+    assert.equal(fitted.zoom, 3)
+    assert.equal(fitted.pan.x, -200)
+    assert.equal(fitted.pan.y, -170)
   })
 
   it("builds a padded box around selected seats", () => {

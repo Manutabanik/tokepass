@@ -1,28 +1,17 @@
 "use client"
 
-import {
-  Building2,
-  CalendarDays,
-  CircleHelp,
-  Banknote,
-  ClipboardCheck,
-  ClipboardList,
-  MessageSquare,
-  Handshake,
-  LayoutDashboard,
-  Menu,
-  Receipt,
-  Settings,
-  Tags,
-  Users,
-} from "lucide-react"
-import Link from "next/link"
+import { Menu } from "lucide-react"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
 
-import { PwaInstallNavButton } from "@/components/pwa/pwa-install-nav-button"
+import { AdminNavTree } from "@/components/shared/admin-nav-tree"
 import { BrandLogo } from "@/components/shared/brand-logo"
+import { PwaInstallNavButton } from "@/components/pwa/pwa-install-nav-button"
 import { SignOutButton } from "@/components/shared/sign-out-button"
+import {
+  SUPERADMIN_NAV_GROUPS,
+  isSuperAdminNavActive,
+} from "@/components/shared/superadmin-nav"
 import { Button } from "@/components/ui/button"
 import {
   Sheet,
@@ -33,43 +22,11 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
-import { cn } from "@/lib/utils"
 
-export const SUPERADMIN_NAV = [
-  { label: "Resumen", href: "/superadmin", icon: LayoutDashboard },
-  {
-    label: "Solicitudes",
-    href: "/superadmin/applications",
-    icon: ClipboardList,
-  },
-  {
-    label: "Productoras",
-    href: "/superadmin/organizers",
-    icon: Building2,
-  },
-  { label: "Compradores", href: "/superadmin/buyers", icon: Users },
-  { label: "Eventos", href: "/superadmin/events", icon: CalendarDays },
-  {
-    label: "Eventos Pendientes",
-    href: "/superadmin/auditoria",
-    icon: ClipboardCheck,
-  },
-  {
-    label: "Centro de Soporte",
-    href: "/superadmin/soporte",
-    icon: MessageSquare,
-  },
-  {
-    label: "Preguntas frecuentes",
-    href: "/superadmin/faq",
-    icon: CircleHelp,
-  },
-  { label: "Categorías", href: "/superadmin/categories", icon: Tags },
-  { label: "Partners", href: "/superadmin/settings/sponsors", icon: Handshake },
-  { label: "Compras", href: "/superadmin/orders", icon: Receipt },
-  { label: "Finanzas y Payouts", href: "/superadmin/settlements", icon: Banknote },
-  { label: "Ajustes", href: "/superadmin/settings", icon: Settings },
-] as const
+export {
+  SUPERADMIN_NAV,
+  SUPERADMIN_NAV_GROUPS,
+} from "@/components/shared/superadmin-nav"
 
 export function SuperAdminMobileNav({
   userLabel,
@@ -112,38 +69,21 @@ export function SuperAdminMobileNav({
           </div>
         </SheetHeader>
 
-        <nav
-          className="flex-1 space-y-1 overflow-y-auto p-3"
-          aria-label="Menú móvil"
-        >
-          {SUPERADMIN_NAV.map(({ label, href, icon: Icon }) => {
-            const active =
-              href === "/superadmin"
-                ? pathname === href
-                : pathname === href || pathname.startsWith(`${href}/`)
-            return (
-              <Link
-                key={href}
-                href={href}
-                onClick={() => setOpen(false)}
-                className={cn(
-                  "flex min-h-14 items-center gap-3 rounded-xl px-3 py-4 text-base font-medium transition",
-                  active
-                    ? "bg-sky-500/12 text-sky-700 ring-1 ring-inset ring-sky-500/20 dark:text-sky-300 dark:ring-sky-500/15"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                )}
-              >
-                <Icon className="size-6 shrink-0" aria-hidden="true" />
-                {label}
-              </Link>
-            )
-          })}
+        <div className="min-h-0 flex-1 overflow-y-auto p-3 scrollbar-thin">
+          <AdminNavTree
+            groups={SUPERADMIN_NAV_GROUPS}
+            pathname={pathname}
+            accent="sky"
+            isActive={isSuperAdminNavActive}
+            ariaLabel="Menú móvil"
+            onNavigate={() => setOpen(false)}
+          />
           <PwaInstallNavButton
             variant="nav"
-            className="min-h-14 px-3 py-4 text-base"
+            className="mt-3 min-h-14 px-3 py-4 text-base"
             onAction={() => setOpen(false)}
           />
-        </nav>
+        </div>
 
         <SheetFooter className="gap-3">
           <div className="text-left">
@@ -152,7 +92,10 @@ export function SuperAdminMobileNav({
             </p>
             <p className="truncate text-xs text-muted-foreground">{userEmail}</p>
           </div>
-          <SignOutButton className="min-h-12 h-12 w-full justify-center rounded-xl border border-border text-muted-foreground hover:bg-muted hover:text-foreground" />
+          <SignOutButton
+            label="Cerrar Sesión"
+            className="min-h-12 h-12 w-full justify-center rounded-xl border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+          />
         </SheetFooter>
       </SheetContent>
     </Sheet>

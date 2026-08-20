@@ -113,6 +113,44 @@ begin
   delete from public.event_ga_cart_holds
   where event_id = p_event_id;
 
+  -- FKs RESTRICT: hay que soltar cesiones/reventas antes de borrar tickets de prueba.
+  delete from public.ticket_action_consents as c
+  where exists (
+    select 1
+    from public.tickets as t
+    where t.id = c.ticket_id
+      and t.event_id = p_event_id
+      and coalesce(t.is_test, false) = true
+  );
+
+  delete from public.payouts_pending as pay
+  where exists (
+    select 1
+    from public.ticket_resale_listings as l
+    join public.tickets as t on t.id = l.ticket_id
+    where l.id = pay.listing_id
+      and t.event_id = p_event_id
+      and coalesce(t.is_test, false) = true
+  );
+
+  delete from public.ticket_resale_listings as l
+  where exists (
+    select 1
+    from public.tickets as t
+    where t.id = l.ticket_id
+      and t.event_id = p_event_id
+      and coalesce(t.is_test, false) = true
+  );
+
+  delete from public.ticket_transfers as tr
+  where exists (
+    select 1
+    from public.tickets as t
+    where t.event_id = p_event_id
+      and coalesce(t.is_test, false) = true
+      and t.id in (tr.original_ticket_id, tr.new_ticket_id)
+  );
+
   delete from public.tickets as t
   where t.event_id = p_event_id
     and coalesce(t.is_test, false) = true;

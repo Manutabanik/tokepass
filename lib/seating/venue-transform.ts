@@ -257,6 +257,33 @@ export function expandViewBoxToContainer({
   }
 }
 
+/** Center a world-space AABB in the current SVG viewBox. */
+export function fitViewportToWorldBox({
+  box,
+  viewBox,
+  padding = 0.18,
+}: {
+  box: { minX: number; minY: number; maxX: number; maxY: number }
+  viewBox: { x: number; y: number; width: number; height: number }
+  padding?: number
+}): { pan: { x: number; y: number }; zoom: number } {
+  const width = Math.max(8, box.maxX - box.minX)
+  const height = Math.max(8, box.maxY - box.minY)
+  const pad = Number.isFinite(padding) && padding >= 0 ? padding : 0.18
+  const zoom = clampVenueZoom(
+    Math.min(viewBox.width / (width * (1 + pad * 2)), viewBox.height / (height * (1 + pad * 2))),
+  )
+  const cx = (box.minX + box.maxX) / 2
+  const cy = (box.minY + box.maxY) / 2
+  return {
+    zoom,
+    pan: {
+      x: viewBox.x + viewBox.width / 2 - cx * zoom,
+      y: viewBox.y + viewBox.height / 2 - cy * zoom,
+    },
+  }
+}
+
 /** Center the logical world in the current camera without stretching seats. */
 export function fitWorldInViewBox({
   viewWidth,

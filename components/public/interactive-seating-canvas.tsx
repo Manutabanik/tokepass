@@ -61,16 +61,16 @@ import {
   CONTEXT_FOCUS_MAX_SCALE,
   CONTEXT_FOCUS_MIN_SCALE,
   CONTEXT_FOCUS_PADDING,
-  elementBelongsToZone,
   expandSelectionForContext,
   lodCameraTransform,
+  publicRevealElements,
+  publicRevealSeats,
   resolveLodZones,
-  seatBelongsToZone,
   shouldEnableMapLod,
   zoneCanvasAabb,
   type MapLodMode,
 } from "@/lib/seating/venue-map-lod"
-import { isInfrastructureElement, isSellableElement } from "@/types/venue-map"
+import { isInfrastructureElement } from "@/types/venue-map"
 import type {
   InteractiveVenueMap,
   VenueMapElement,
@@ -82,6 +82,7 @@ const MIN_ZOOM = 0.8
 const MAX_ZOOM = 3.5
 const WHEEL_STEP = 0.05
 const ZOOM_ANIM_MS = 160
+const REVEAL_MOUNT_MS = 160
 const HOLD_MINUTES = 10
 const INACTIVITY_MS = 5 * 60 * 1000
 const MIN_HIT_PX = 44
@@ -169,6 +170,7 @@ export function InteractiveSeatingCanvas({
   const [idleOpen, setIdleOpen] = useState(false)
   const [viewMode, setViewMode] = useState<MapLodMode>("macro")
   const [focusedZoneId, setFocusedZoneId] = useState<string | null>(null)
+  const [revealedZoneId, setRevealedZoneId] = useState<string | null>(null)
   const selectedItems = useStorefrontSeatStore((state) => state.selectedItems)
   const selectedSeats = useStorefrontSeatStore((state) => state.layoutSeats)
   const focusedMapIds = useStorefrontSeatStore((state) => state.focusedMapIds)
@@ -236,24 +238,30 @@ export function InteractiveSeatingCanvas({
     [focusedZoneId, lodZones],
   )
   const lodActive = lodEnabled && viewMode === "macro"
-  const microActive = !lodEnabled || viewMode === "micro"
-  const visibleElementIds = useMemo(() => {
-    if (!microActive) return new Set<string>()
-    const sellable = (map.elements ?? []).filter(isSellableElement)
-    if (!focusedZone) return new Set(sellable.map((element) => element.id))
-    const matched = sellable.filter((element) =>
-      elementBelongsToZone(element, focusedZone),
+  const revealReady =
+    !lodEnabled ||
+    (viewMode === "micro" &&
+      Boolean(focusedZone) &&
+      revealedZoneId === focusedZoneId)
+  const revealElements = useMemo(() => {
+    const sellable = (map.elements ?? []).filter(
+      (element) => !isInfrastructureElement(element),
     )
-    const source = matched.length > 0 ? matched : sellable
-    return new Set(source.map((element) => element.id))
-  }, [focusedZone, map.elements, microActive])
+    if (!lodEnabled) return sellable
+    if (!revealReady || !focusedZone) return []
+    return publicRevealElements(sellable, focusedZone)
+  }, [focusedZone, lodEnabled, map.elements, revealReady])
+  const revealSeats = useMemo(() => {
+    if (!lodEnabled) return plotSeats
+    if (!revealReady || !focusedZone) return []
+    return publicRevealSeats(plotSeats, focusedZone)
+  }, [focusedZone, lodEnabled, plotSeats, revealReady])
   const focusedHasMicro = useMemo(() => {
     if (!focusedZone) return false
-    const hasElement = (map.elements ?? [])
-      .filter(isSellableElement)
-      .some((element) => elementBelongsToZone(element, focusedZone))
-    if (hasElement) return true
-    return plotSeats.some((seat) => seatBelongsToZone(seat, focusedZone))
+    return (
+      publicRevealElements(map.elements, focusedZone).length > 0 ||
+      publicRevealSeats(plotSeats, focusedZone).length > 0
+    )
   }, [focusedZone, map.elements, plotSeats])
   const spotlight = liveSelectedItems.length > 0
   const selectionCount = liveSelectedItems.reduce(
@@ -279,6 +287,17 @@ export function InteractiveSeatingCanvas({
     observer.observe(node)
     return () => observer.disconnect()
   }, [])
+
+  useEffect(() => {
+    if (!lodEnabled || viewMode !== "micro" || !focusedZoneId) {
+      setRevealedZoneId(null)
+      return
+    }
+    const timer = window.setTimeout(() => {
+      setRevealedZoneId(focusedZoneId)
+    }, REVEAL_MOUNT_MS)
+    return () => window.clearTimeout(timer)
+  }, [focusedZoneId, lodEnabled, viewMode])
 
   function aabbForItemId(id: string): Aabb | null {
     const element = (map.elements ?? []).find((item) => item.id === id)
@@ -458,14 +477,13 @@ export function InteractiveSeatingCanvas({
   function enterLodZone(zone: VenueMapZone) {
     vibrateTap()
     markActivity()
+    if (focusedZoneId !== zone.id) setRevealedZoneId(null)
     zoomToZone(zone)
     setFocusedZoneId(zone.id)
     setViewMode("micro")
     const hasMicro =
-      (map.elements ?? [])
-        .filter(isSellableElement)
-        .some((element) => elementBelongsToZone(element, zone)) ||
-      plotSeats.some((seat) => seatBelongsToZone(seat, zone))
+      publicRevealElements(map.elements, zone).length > 0 ||
+      publicRevealSeats(plotSeats, zone).length > 0
     if (!hasMicro) selectZoneItem(zone)
   }
 
@@ -474,6 +492,7 @@ export function InteractiveSeatingCanvas({
     transformRef.current?.resetTransform(400, "easeOut")
     setViewMode("macro")
     setFocusedZoneId(null)
+    setRevealedZoneId(null)
   }
 
   function handleZoneClick(zoneId: string, event?: React.SyntheticEvent) {
@@ -481,10 +500,11 @@ export function InteractiveSeatingCanvas({
     if (readOnly || pending) return
     const zone = lodZones.find((item) => item.id === zoneId)
     if (!zone) return
-    if (lodEnabled && viewMode === "macro") {
+    if (lodEnabled && (viewMode === "macro" || zone.id !== focusedZoneId)) {
       enterLodZone(zone)
       return
     }
+    if (lodEnabled && focusedHasMicro) return
     vibrateTap()
     markActivity()
     selectZoneItem(zone)
@@ -833,10 +853,13 @@ export function InteractiveSeatingCanvas({
                 readOnly ? undefined : (zone) => handleZoneClick(zone.id)
               }
             />
+            {revealElements.length > 0 || revealSeats.length > 0 ? (
+            <g
+              key={focusedZoneId ?? "overview"}
+              className={lodEnabled ? "venue-map-reveal" : undefined}
+            >
             <VenueMapElementLayer
-              elements={(map.elements ?? []).filter(
-                (element) => !isInfrastructureElement(element),
-              )}
+              elements={revealElements}
               occupancyBySeatId={occupancy}
               selectedIds={[...selectedElementIds, ...heldSeatIds]}
               selectedSeatIds={[...selectedIds, ...heldSeatIds]}
@@ -844,8 +867,6 @@ export function InteractiveSeatingCanvas({
               spotlight={spotlight}
               showSeats
               zoom={zoom}
-              lodHidden={false}
-              visibleIds={microActive ? visibleElementIds : null}
               interactive={!readOnly}
               onSeatPointerDown={(_event, element, seatId) => {
                 if (element.sellMode === "group") {
@@ -863,7 +884,7 @@ export function InteractiveSeatingCanvas({
                 toggleElement(element)
               }}
             />
-            {[...plotSeats]
+            {[...revealSeats]
               .sort((left, right) => {
                 const leftSelected = selectedIds.has(left.id) ? 1 : 0
                 const rightSelected = selectedIds.has(right.id) ? 1 : 0
@@ -882,23 +903,17 @@ export function InteractiveSeatingCanvas({
               const held = heldSet.has(seat.id)
               const highlighted = focusedMapIds.includes(seat.id)
               const dimmed = spotlight && !selected && !highlighted
-              const seatVisible =
-                microActive &&
-                (!focusedZone ||
-                  seatBelongsToZone(seat, focusedZone) ||
-                  !focusedHasMicro)
               return (
                 <g
                   key={seat.id}
                   id={`venue-sel-${seat.id}`}
                   className={cn(
-                    !readOnly && seatVisible && "cursor-pointer",
+                    !readOnly && "cursor-pointer",
                     (selected || highlighted) && "animate-pulse-subtle",
                   )}
                   style={{
-                    opacity: seatVisible ? (dimmed ? 0.7 : 1) : 0,
-                    pointerEvents: readOnly || !seatVisible ? "none" : "auto",
-                    transition: "opacity 0.3s ease",
+                    opacity: dimmed ? 0.7 : 1,
+                    pointerEvents: readOnly ? "none" : "auto",
                     filter:
                       selected || highlighted
                         ? "drop-shadow(0px 0px 12px rgba(255, 255, 255, 0.8))"
@@ -950,11 +965,22 @@ export function InteractiveSeatingCanvas({
                 </g>
               )
             })}
+            </g>
+            ) : null}
           </g>
         </svg>
         </TransformComponent>
       </div>
       </TransformWrapper>
+      {lodEnabled && viewMode === "micro" && !readOnly ? (
+        <button
+          type="button"
+          onClick={exitLodView}
+          className="absolute top-4 left-4 z-40 rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white shadow-lg hover:bg-zinc-800"
+        >
+          Volver al mapa general
+        </button>
+      ) : null}
     </div>
   )
 
@@ -1169,7 +1195,7 @@ function ExternalMapToolbar({
   onClose?: () => void
 }) {
   const hasSelection = showClear && selectionCount > 0
-  const heading = showLodBack ? "Volver al plano general" : title?.trim()
+  const heading = showLodBack ? "Volver al mapa general" : title?.trim()
   const toolClass =
     "grid size-10 place-items-center rounded-md text-foreground transition-all duration-200 hover:bg-background/80"
 

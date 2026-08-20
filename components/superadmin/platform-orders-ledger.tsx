@@ -1,4 +1,7 @@
+"use client"
+
 import Link from "next/link"
+import { useState } from "react"
 import {
   CircleDollarSign,
   Filter,
@@ -13,6 +16,7 @@ import type {
   PlatformLedgerTotals,
 } from "@/app/actions/superadmin"
 import { OrderStatusBadge } from "@/components/superadmin/badges"
+import { PlatformOrderDetailSheet } from "@/components/superadmin/platform-order-detail-sheet"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -79,6 +83,10 @@ export function PlatformOrdersLedger({
     status: string
   }
 }) {
+  const [selectedOrder, setSelectedOrder] = useState<PlatformLedgerOrder | null>(
+    null,
+  )
+  const [voidedIds, setVoidedIds] = useState<string[]>([])
   const kpis = [
     {
       label: "Total cobrado",
@@ -257,7 +265,17 @@ export function PlatformOrdersLedger({
                   {rows.map((order) => (
                     <TableRow
                       key={order.orderId}
-                      className="border-border hover:bg-muted/50"
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`Abrir compra ${order.orderId.slice(0, 8)}`}
+                      onClick={() => setSelectedOrder(order)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault()
+                          setSelectedOrder(order)
+                        }
+                      }}
+                      className="cursor-pointer border-border hover:bg-muted/50"
                     >
                       <TableCell className="py-4 pl-6 align-top">
                         <div className="flex flex-wrap items-center gap-2">
@@ -307,7 +325,13 @@ export function PlatformOrdersLedger({
                         {formatCurrency(order.organizerNetAmount)}
                       </TableCell>
                       <TableCell className="pr-6 text-right align-top">
-                        <OrderStatusBadge status={order.status} />
+                        <OrderStatusBadge
+                          status={
+                            voidedIds.includes(order.orderId)
+                              ? "refunded"
+                              : order.status
+                          }
+                        />
                       </TableCell>
                     </TableRow>
                   ))}
@@ -355,6 +379,22 @@ export function PlatformOrdersLedger({
           )}
         </CardContent>
       </Card>
+
+      <PlatformOrderDetailSheet
+        order={
+          selectedOrder
+            ? voidedIds.includes(selectedOrder.orderId)
+              ? { ...selectedOrder, status: "refunded" }
+              : selectedOrder
+            : null
+        }
+        onClose={() => setSelectedOrder(null)}
+        onVoided={(orderId) => {
+          setVoidedIds((current) =>
+            current.includes(orderId) ? current : [...current, orderId],
+          )
+        }}
+      />
     </div>
   )
 }

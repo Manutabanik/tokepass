@@ -25,6 +25,7 @@ export function VenueMapZoneLayer({
   onSelect,
   onContextMenu,
   onPointerDown,
+  onDoubleClick,
   selectOnPointerUp = false,
   unavailableIds = [],
   lodMode = null,
@@ -41,6 +42,7 @@ export function VenueMapZoneLayer({
   onSelect?: (zone: VenueMapZone) => void
   onContextMenu?: (event: React.MouseEvent, zone: VenueMapZone) => void
   onPointerDown?: (event: React.PointerEvent, zone: VenueMapZone) => void
+  onDoubleClick?: (event: React.MouseEvent, zone: VenueMapZone) => void
   selectOnPointerUp?: boolean
   unavailableIds?: string[]
   lodMode?: "macro" | "micro" | null
@@ -128,12 +130,13 @@ export function VenueMapZoneLayer({
           onSelect(zone)
         }
 
+        const isolatedOut = Boolean(focusedZoneId) && focusedZoneId !== zone.id
+        const revealFocused = lodMode === "micro" && focusedZoneId === zone.id
         const dimmed = hasSelection && !selected && !highlighted && !soldOut
-        const lodHidden = lodMode === "micro"
         const lodSolid = lodMode === "macro"
-        const zoneInteractive = interactive && !lodHidden
+        const zoneInteractive = interactive && !soldOut && !revealFocused
         const lit = selected || highlighted
-        const pop = emphasizeSelected && lit && !lodSolid
+        const pop = emphasizeSelected && lit && !lodSolid && !focusedZoneId
 
         return (
           <g
@@ -148,20 +151,33 @@ export function VenueMapZoneLayer({
                 : undefined
             }
             className={cn(
-              interactive && !lodHidden ? "cursor-pointer" : undefined,
+              zoneInteractive ? "cursor-pointer" : undefined,
               soldOut && "pointer-events-none",
               pop && "animate-pulse-subtle",
             )}
             style={{
-              opacity: lodHidden ? 0 : dimmed && !lodSolid ? 0.7 : soldOut ? 0.5 : 1,
+              opacity: isolatedOut
+                ? 0.3
+                : dimmed && !lodSolid && !revealFocused
+                  ? 0.7
+                  : soldOut
+                    ? 0.5
+                    : 1,
               pointerEvents: zoneInteractive ? "auto" : "none",
-              transition: "opacity 0.3s ease",
-              filter:
-                pop
+              transition: "opacity 0.3s ease, filter 0.3s ease",
+              filter: isolatedOut
+                ? "grayscale(1)"
+                : pop
                   ? "drop-shadow(0px 0px 12px rgba(255, 255, 255, 0.8))"
                   : undefined,
             }}
             onContextMenu={(event) => onContextMenu?.(event, zone)}
+            onDoubleClick={(event) => {
+              if (!zoneInteractive) return
+              event.stopPropagation()
+              event.preventDefault()
+              onDoubleClick?.(event, zone)
+            }}
             onPointerDown={(event) => {
               if (!zoneInteractive) return
               press.current = { x: event.clientX, y: event.clientY }
@@ -194,7 +210,15 @@ export function VenueMapZoneLayer({
               points={points}
               fill={soldOut ? "#9ca3af" : zone.color || "#22d3ee"}
               fillOpacity={
-                soldOut ? 0.45 : lodSolid ? 0.3 : selected ? 0.62 : 0.28
+                revealFocused
+                  ? 0.06
+                  : soldOut
+                    ? 0.45
+                    : lodSolid
+                      ? 0.3
+                      : selected
+                        ? 0.62
+                        : 0.28
               }
               stroke={
                 soldOut
@@ -207,19 +231,21 @@ export function VenueMapZoneLayer({
               }
               strokeWidth={lodSolid ? 2 : selected ? 3 : 2}
               strokeLinejoin="round"
-              pointerEvents={soldOut || lodHidden ? "none" : "auto"}
+              pointerEvents={soldOut || revealFocused ? "none" : "auto"}
               filter={
-                soldOut || lodHidden || lodSolid
+                soldOut || revealFocused || lodSolid
                   ? undefined
                   : `url(#zone-neon-${glowId})`
               }
               className={cn(
+                "transition-[fill-opacity] duration-300 ease-out",
                 zoneInteractive &&
                   (lodSolid
                     ? "cursor-pointer hover:[fill-opacity:0.45]"
                     : "cursor-pointer hover:[fill-opacity:0.82]"),
               )}
             />
+            {revealFocused ? null : (
             <text
               x={center.x}
               y={center.y}
@@ -231,6 +257,7 @@ export function VenueMapZoneLayer({
             >
               {zone.name}
             </text>
+            )}
           </g>
         )
       })}

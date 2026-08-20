@@ -160,6 +160,7 @@ export function createVenueElement(
   index: number,
   point: { x: number; y: number },
   subtype?: VenueInfraSubtype,
+  extras?: { zoneId?: string },
 ): VenueMapElement {
   const color = ZONE_COLORS[index % ZONE_COLORS.length]!
   const id = `${type}-${crypto.randomUUID().slice(0, 8)}`
@@ -187,6 +188,7 @@ export function createVenueElement(
     priceMode: type === "vip_box" ? "closed_unit" : "per_person",
     capacity: type === "standing_zone" ? 80 : 0,
     seats: [],
+    ...(extras?.zoneId?.trim() ? { zoneId: extras.zoneId.trim() } : {}),
   }
   if (type === "standing_zone") {
     base.width = 160

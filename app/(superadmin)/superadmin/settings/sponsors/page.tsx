@@ -6,7 +6,7 @@ import { PlatformSponsorsAdminPanel } from "@/components/superadmin/platform-spo
 import { PageHeading } from "@/components/superadmin/page-heading"
 
 export const metadata: Metadata = {
-  title: "Partners",
+  title: "Sponsors y Marcas",
 }
 
 export default async function SuperAdminSponsorsPage() {
@@ -16,8 +16,8 @@ export default async function SuperAdminSponsorsPage() {
     <>
       <PageHeading
         eyebrow="Marca"
-        title="Partners globales"
-        description="Logos de empresas que confían en TokePass. Se muestran en la landing pública, en escala de grises hasta el hover."
+        title="Sponsors y Marcas"
+        description="Logos de productoras o marcas que confían en TokePass. Se muestran en el pie de la página pública."
         actions={
           <span className="inline-flex items-center gap-2 rounded-full border border-border bg-muted px-3 py-1.5 text-xs text-muted-foreground">
             <Handshake className="size-3.5" aria-hidden />

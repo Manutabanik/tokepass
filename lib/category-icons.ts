@@ -5,7 +5,9 @@ import {
   Music,
   PartyPopper,
   Sparkles,
+  Star,
   Theater,
+  Ticket,
   Trophy,
   Users,
   type LucideIcon,
@@ -36,9 +38,60 @@ export const CATEGORY_ICON_MAP: Record<string, LucideIcon> = {
   masks: Theater,
   trophy: Trophy,
   music: Music,
+  ticket: Ticket,
+  star: Star,
   users: Users,
   partypopper: PartyPopper,
   party: PartyPopper,
+}
+
+export const CATEGORY_ICON_OPTIONS = [
+  { name: "sparkles", label: "Destacado" },
+  { name: "mic2", label: "Micrófono" },
+  { name: "disc3", label: "Disco" },
+  { name: "music", label: "Música" },
+  { name: "clapperboard", label: "Cine" },
+  { name: "theater", label: "Teatro" },
+  { name: "trophy", label: "Premio" },
+  { name: "ticket", label: "Entrada" },
+  { name: "star", label: "Estrella" },
+  { name: "users", label: "Comunidad" },
+] as const
+
+const ICON_ALIASES: Record<string, string> = {
+  disc: "disc3",
+  mic: "mic2",
+  microphone: "mic2",
+  masks: "theater",
+  party: "partypopper",
+}
+
+export function normalizeCategoryIconName(
+  iconName: string | null | undefined,
+): string {
+  if (!iconName?.trim()) return "sparkles"
+  const key = iconName.trim().toLowerCase().replace(/[\s_-]+/g, "")
+  const canonical = ICON_ALIASES[key] ?? key
+  if (CATEGORY_ICON_OPTIONS.some((option) => option.name === canonical)) {
+    return canonical
+  }
+  return CATEGORY_ICON_MAP[canonical] ? canonical : "sparkles"
+}
+
+export function getCategoryIconPickerOptions(currentName?: string | null) {
+  const selected = currentName?.trim()
+    ? normalizeCategoryIconName(currentName)
+    : "sparkles"
+  const options: { name: string; label: string }[] = CATEGORY_ICON_OPTIONS.map(
+    (option) => ({
+      name: option.name,
+      label: option.label,
+    }),
+  )
+  if (!options.some((option) => option.name === selected)) {
+    options.push({ name: selected, label: selected })
+  }
+  return options
 }
 
 export function resolveCategoryIcon(

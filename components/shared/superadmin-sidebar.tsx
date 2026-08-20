@@ -1,38 +1,41 @@
 "use client"
 
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
 import { useState } from "react"
+import { usePathname } from "next/navigation"
 
-import { PwaInstallNavButton } from "@/components/pwa/pwa-install-nav-button"
+import { AdminNavTree } from "@/components/shared/admin-nav-tree"
 import { BrandLogo } from "@/components/shared/brand-logo"
-import { SUPERADMIN_NAV } from "@/components/shared/superadmin-mobile-nav"
+import { PwaInstallNavButton } from "@/components/pwa/pwa-install-nav-button"
+import { SignOutButton } from "@/components/shared/sign-out-button"
+import {
+  SUPERADMIN_NAV_GROUPS,
+  isSuperAdminNavActive,
+} from "@/components/shared/superadmin-nav"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { getInitials } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
-export function SuperAdminSidebar() {
+export type SuperAdminSidebarUser = {
+  name: string
+  email: string
+}
+
+export function SuperAdminSidebar({ user }: { user: SuperAdminSidebarUser }) {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
+  const initials = getInitials(user.name, user.email)
 
   return (
     <aside
       className={cn(
-        "hidden h-screen shrink-0 border-r border-border bg-card p-4 text-card-foreground transition-[width] duration-300 md:sticky md:top-0 md:flex md:flex-col",
-        collapsed ? "w-20" : "w-72",
+        "sticky top-0 z-30 hidden h-screen flex-shrink-0 flex-col justify-between overflow-hidden border-r border-zinc-200 bg-white scrollbar-thin dark:border-zinc-800 dark:bg-zinc-950 md:flex",
+        collapsed ? "w-20" : "w-64",
       )}
     >
-      <div
-        className={cn(
-          "flex items-center justify-between",
-          collapsed ? "h-10" : "min-h-12",
-        )}
-      >
+      <div className="flex h-14 shrink-0 items-center justify-between px-3">
         {collapsed ? (
-          <BrandLogo
-            markOnly
-            href="/superadmin"
-            className="justify-center"
-          />
+          <BrandLogo markOnly href="/superadmin" className="justify-center" />
         ) : (
           <BrandLogo
             href="/superadmin"
@@ -40,80 +43,66 @@ export function SuperAdminSidebar() {
             className="px-0.5"
           />
         )}
-
         <button
           type="button"
           onClick={() => setCollapsed((current) => !current)}
-          className={cn(
-            "grid size-9 place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground",
-            collapsed && "hidden",
+          className="grid size-9 place-items-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
+          aria-label={collapsed ? "Expandir menú" : "Colapsar sidebar"}
+          title={collapsed ? "Expandir" : "Colapsar"}
+        >
+          {collapsed ? (
+            <PanelLeftOpen className="size-4" />
+          ) : (
+            <PanelLeftClose className="size-4" />
           )}
-          aria-label="Colapsar sidebar"
-          title="Colapsar"
-        >
-          <PanelLeftClose className="size-4" />
         </button>
       </div>
 
-      {collapsed && (
-        <button
-          type="button"
-          onClick={() => setCollapsed(false)}
-          className="mt-3 grid h-9 w-full place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
-          aria-label="Expandir sidebar"
-          title="Expandir"
-        >
-          <PanelLeftOpen className="size-4" />
-        </button>
-      )}
-
-      <div className={cn("mt-8 px-2", collapsed && "sr-only")}>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-          Menú principal
-        </p>
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 scrollbar-thin">
+        <AdminNavTree
+          groups={SUPERADMIN_NAV_GROUPS}
+          pathname={pathname}
+          collapsed={collapsed}
+          accent="sky"
+          isActive={isSuperAdminNavActive}
+          ariaLabel="Menú del panel"
+        />
       </div>
 
-      <nav className="mt-3 space-y-1" aria-label="Menú del panel">
-        {SUPERADMIN_NAV.map(({ label, href, icon: Icon }) => {
-          const active =
-            href === "/superadmin"
-              ? pathname === href
-              : pathname === href || pathname.startsWith(`${href}/`)
-
-          return (
-            <Link
-              key={href}
-              href={href}
-              title={collapsed ? label : undefined}
-              className={cn(
-                "flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition",
-                active
-                  ? "bg-sky-500/12 text-sky-700 ring-1 ring-inset ring-sky-500/20 dark:text-sky-300 dark:ring-sky-500/15"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                collapsed && "justify-center px-0",
-              )}
-            >
-              <Icon className="size-[18px] shrink-0" aria-hidden="true" />
-              <span className={cn(collapsed && "sr-only")}>{label}</span>
-            </Link>
-          )
-        })}
-      </nav>
-
-      <div className="mt-auto px-2 pt-4">
+      <div className="shrink-0 border-t border-zinc-200 p-2 dark:border-zinc-800">
         {collapsed ? (
-          <PwaInstallNavButton variant="icon" className="mx-auto mb-3" />
+          <PwaInstallNavButton variant="icon" className="mx-auto mb-2" />
         ) : (
-          <PwaInstallNavButton variant="sidebar" className="mb-3 px-1" />
+          <PwaInstallNavButton variant="sidebar" className="mb-2 px-1" />
         )}
-        <p
+        <div
           className={cn(
-            "text-[11px] text-muted-foreground",
-            collapsed && "sr-only",
+            "flex items-center gap-2.5 rounded-xl border border-zinc-200 px-2 py-2 dark:border-zinc-800",
+            collapsed && "justify-center border-transparent px-0",
           )}
         >
-          Panel de Control Central
-        </p>
+          <Avatar size="sm">
+            <AvatarFallback className="bg-sky-500/15 text-[10px] text-sky-700 dark:text-sky-300">
+              {initials || "SA"}
+            </AvatarFallback>
+          </Avatar>
+          <span className={cn("min-w-0", collapsed && "sr-only")}>
+            <span className="block truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
+              {user.name}
+            </span>
+            <span className="block truncate text-xs text-zinc-500 dark:text-zinc-400">
+              {user.email}
+            </span>
+          </span>
+        </div>
+        <SignOutButton
+          showLabel={!collapsed}
+          label="Cerrar Sesión"
+          className={cn(
+            "mt-2 w-full rounded-xl border border-zinc-200 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-50",
+            collapsed ? "h-10 justify-center px-0" : "h-10 justify-start px-2.5",
+          )}
+        />
       </div>
     </aside>
   )

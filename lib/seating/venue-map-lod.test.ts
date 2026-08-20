@@ -11,6 +11,8 @@ import {
   expandSelectionForContext,
   lodCameraTransform,
   pointInPolygon,
+  publicRevealElements,
+  publicRevealSeats,
   resolveLodZones,
   shouldEnableMapLod,
   synthesizeLodZones,
@@ -96,6 +98,26 @@ describe("venue-map-lod", () => {
     assert.equal(elementBelongsToZone(outside, vip), false)
   })
 
+  it("prioriza zoneId sobre la posicion espacial", () => {
+    const vip = zone()
+    const linked = createVenueElement(
+      "round_table",
+      0,
+      { x: 700, y: 500 },
+      undefined,
+      { zoneId: "zona-vip" },
+    )
+    const other = createVenueElement(
+      "round_table",
+      1,
+      { x: 200, y: 140 },
+      undefined,
+      { zoneId: "otra-zona" },
+    )
+    assert.equal(elementBelongsToZone(linked, vip), true)
+    assert.equal(elementBelongsToZone(other, vip), false)
+  })
+
   it("puede sintetizar AABB, pero el storefront no los usa", () => {
     const map = emptyVenueMap()
     const a = createVenueElement("round_table", 0, { x: 80, y: 80 })
@@ -143,5 +165,49 @@ describe("venue-map-lod", () => {
     })
     assert.equal(camera.scale <= CONTEXT_FOCUS_MAX_SCALE, true)
     assert.equal(camera.scale >= 1, true)
+  })
+
+  it("en macro no revela inventario; en micro solo el zoneId activo", () => {
+    const vip = zone()
+    const linked = createVenueElement(
+      "round_table",
+      0,
+      { x: 700, y: 500 },
+      undefined,
+      { zoneId: "zona-vip" },
+    )
+    const other = createVenueElement(
+      "vip_chair",
+      1,
+      { x: 20, y: 20 },
+      undefined,
+      { zoneId: "otra-zona" },
+    )
+    other.sectorName = "General"
+    assert.deepEqual(publicRevealElements([linked, other], null).map((item) => item.id), [])
+    assert.deepEqual(
+      publicRevealElements([linked, other], vip).map((item) => item.id),
+      [linked.id],
+    )
+    assert.deepEqual(
+      publicRevealSeats(
+        [
+          {
+            x: 700,
+            y: 500,
+            sectorId: "platea",
+            sectorName: "Platea",
+          },
+          {
+            x: 200,
+            y: 140,
+            sectorId: "zona-vip",
+            sectorName: "VIP",
+          },
+        ],
+        vip,
+      ).map((seat) => seat.sectorId),
+      ["zona-vip"],
+    )
   })
 })

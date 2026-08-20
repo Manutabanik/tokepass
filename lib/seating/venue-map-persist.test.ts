@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
+import { createVenueElement } from "./venue-element-geometry"
 import { emptyVenueMap, parseVenueMap, serializeVenueMap } from "@/types/venue-map"
 
 describe("venue-map persist", () => {
@@ -132,5 +133,30 @@ describe("venue-map persist", () => {
     assert.equal(second?.status, "available")
     assert.equal(persisted.elements[0]?.seats[0]?.status, "blocked")
     assert.equal(persisted.elements[0]?.seats[0]?.price, 5000)
+  })
+
+  it("persiste zoneId de asientos y mesas y acepta aliases", () => {
+    const map = emptyVenueMap()
+    map.elements = [
+      createVenueElement("vip_chair", 0, { x: 120, y: 80 }, undefined, {
+        zoneId: "zona-vip",
+      }),
+    ]
+    const persisted = parseVenueMap(serializeVenueMap(map))
+    assert.equal(persisted.elements[0]?.zoneId, "zona-vip")
+
+    const fromSnake = parseVenueMap({
+      elements: [
+        { id: "m1", type: "round_table", x: 10, y: 20, zone_id: "zona-a" },
+      ],
+    })
+    assert.equal(fromSnake.elements[0]?.zoneId, "zona-a")
+
+    const fromParent = parseVenueMap({
+      elements: [
+        { id: "m2", type: "round_table", x: 10, y: 20, parentId: "zona-b" },
+      ],
+    })
+    assert.equal(fromParent.elements[0]?.zoneId, "zona-b")
   })
 })

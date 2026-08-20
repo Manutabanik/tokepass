@@ -8,7 +8,11 @@ import {
   setEventCategoryActive,
   updateEventCategory,
 } from "@/app/actions/categories"
-import { resolveCategoryIcon } from "@/lib/category-icons"
+import {
+  normalizeCategoryIconName,
+  resolveCategoryIcon,
+} from "@/lib/category-icons"
+import { IconPicker } from "@/components/superadmin/icon-picker"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -66,7 +70,7 @@ export function CategoriesAdminPanel({
     setEditingId(row.id)
     setName(row.name)
     setSlug(row.slug)
-    setIconName(row.icon_name ?? "sparkles")
+    setIconName(normalizeCategoryIconName(row.icon_name))
     setFeedback(null)
   }
 
@@ -136,8 +140,8 @@ export function CategoriesAdminPanel({
               {editingId ? "Editar categoría" : "Nueva categoría"}
             </h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Poné un nombre claro, un identificador corto (sin espacios) y el
-              nombre del ícono (por ejemplo mic2, trophy o theater).
+              Poné un nombre claro, un identificador corto (sin espacios) y
+              elegí el ícono de la lista.
             </p>
           </div>
           <span className="grid size-10 place-items-center rounded-xl border border-border bg-muted text-foreground">
@@ -171,14 +175,9 @@ export function CategoriesAdminPanel({
           </label>
           <label className="space-y-1.5 sm:col-span-1">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Nombre del ícono
+              Ícono
             </span>
-            <Input
-              value={iconName}
-              onChange={(e) => setIconName(e.target.value)}
-              placeholder="clapperboard"
-              className="h-10 border-border bg-background font-mono text-sm text-foreground"
-            />
+            <IconPicker value={iconName} onChange={setIconName} />
           </label>
         </div>
 
