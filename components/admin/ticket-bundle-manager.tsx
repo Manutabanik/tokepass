@@ -105,6 +105,7 @@ export function TicketBundleManager({
         bundleType: value.bundleType,
         bundleItems: value.items,
         promoRule: value.promoRule,
+        admitCount: value.admitCount,
       })
       if (!result.success) {
         toast.error(result.error)

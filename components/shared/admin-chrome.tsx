@@ -44,13 +44,11 @@ export function AdminChrome({
   }
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden bg-background text-foreground">
-      <div className="flex min-h-0 flex-1">
-        {sidebar}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {header}
-          {children}
-        </div>
+    <div className="flex min-h-screen w-full bg-zinc-50 dark:bg-zinc-950">
+      {sidebar}
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+        {header}
+        {children}
       </div>
       {footer}
       {extra}

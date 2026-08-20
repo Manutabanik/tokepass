@@ -11,12 +11,19 @@ import {
 } from "@/lib/finance/organizer-ledger"
 
 describe("organizer paid ledger", () => {
-  it("ignora ordenes pending al calcular GMV, comision y neto", () => {
+  it("ignora ordenes pending, is_test y eventos en borrador", () => {
     const ledger = paidLedgerFromOrders([
       { status: "pending", total_amount: 20000, service_charge: 2000 },
       { status: "failed", total_amount: 8000, service_charge: 800 },
       { status: "paid", total_amount: 5500, service_charge: 500 },
       { status: "PAID", totalAmount: 4500, serviceCharge: 400 },
+      { status: "paid", total_amount: 9000, service_charge: 900, is_test: true },
+      {
+        status: "paid",
+        total_amount: 3000,
+        service_charge: 300,
+        eventStatus: "draft",
+      },
     ])
     assert.equal(ledger.grossRevenue, 10000)
     assert.equal(ledger.tokepassServiceCharge, 900)
@@ -98,6 +105,7 @@ describe("organizer paid ledger", () => {
     assert.match(csv, /tokepass_service_charge/)
     assert.match(csv, /organizer_net_payout/)
     assert.match(csv, /orders\.status=paid/)
+    assert.match(csv, /is_test/)
     const html = buildOrganizerFinancePdfHtml({
       ledger,
       organizerLabel: "Productora Test",
@@ -105,6 +113,6 @@ describe("organizer paid ledger", () => {
     assert.match(html, /status = paid/)
     assert.match(html, /Productora Test/)
     assert.match(html, /organizer_net_payout/)
-    assert.match(html, /Solo ordenes liquidadas/)
+    assert.match(html, /Solo ventas reales de produccion/)
   })
 })

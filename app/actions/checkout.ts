@@ -21,6 +21,7 @@ import {
 } from "@/lib/inventory/active-phase"
 import { isPastEvent, isSoldOut } from "@/lib/event-status"
 import { isSandboxEventStatus } from "@/lib/events/review-status"
+import { orderTestFlags } from "@/lib/finance/order-test-flags"
 import { logger } from "@/lib/logger"
 import { captureCriticalException } from "@/lib/sentry/capture"
 import { getSiteUrl } from "@/lib/mercadopago"
@@ -1287,7 +1288,7 @@ async function persistOrderLegalGate(input: {
     const gate = await admin
       .from("orders")
       .update({
-        is_test: true,
+        ...orderTestFlags(true),
         legal_consent_required: false,
       })
       .eq("id", input.orderId)
@@ -1302,7 +1303,7 @@ async function persistOrderLegalGate(input: {
       })
       await admin
         .from("orders")
-        .update({ is_test: true })
+        .update(orderTestFlags(true))
         .eq("id", input.orderId)
         .eq("buyer_id", input.buyerId)
       const legalOnly = await admin
@@ -2158,7 +2159,7 @@ export async function startCheckoutWithPayment(
         await admin
           .from("orders")
           .update({
-            is_test: true,
+            ...orderTestFlags(true),
             legal_consent_required: false,
           })
           .eq("id", orderId)

@@ -50,6 +50,8 @@ export type OrganizerFinanceSummary = OrganizerPaidLedger & {
   retainedHeld: number
   availableToSettle: number
   platformFeeDebt: number
+  hasTestOrders: boolean
+  includeTest: boolean
   settlements: FinanceSettlement[]
   payoutRequests: FinancePayoutRequest[]
   defaultCbu: string | null
@@ -110,6 +112,8 @@ function mapFinanceSummary(data: unknown): Omit<OrganizerFinanceSummary, "defaul
     retainedHeld: Number(row.retainedHeld ?? 0),
     availableToSettle: Number(row.availableToSettle ?? 0),
     platformFeeDebt: Number(row.platformFeeDebt ?? 0),
+    hasTestOrders: Boolean(row.hasTestOrders),
+    includeTest: Boolean(row.includeTest),
     settlements: settlementsRaw.map((item) => {
       const s = item as Record<string, unknown>
       return {
@@ -142,12 +146,15 @@ function mapFinanceSummary(data: unknown): Omit<OrganizerFinanceSummary, "defaul
   }
 }
 
-export async function getOrganizerFinanceSummary(): Promise<OrganizerFinanceSummary> {
+export async function getOrganizerFinanceSummary(
+  includeTest = false,
+): Promise<OrganizerFinanceSummary> {
   const { supabase, userId } = await requireOrganizer()
 
   const [{ data, error }, { data: application }] = await Promise.all([
     supabase.rpc("get_organizer_finance_summary", {
       p_organizer_id: userId,
+      p_include_test: includeTest,
     }),
     supabase
       .from("organizer_applications")

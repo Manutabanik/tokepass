@@ -22,6 +22,7 @@ export function PriceInput({
   placeholder,
   disabled,
   min = 0,
+  allowEmpty = false,
   onBlur,
   "aria-invalid": ariaInvalid,
 }: {
@@ -33,6 +34,7 @@ export function PriceInput({
   placeholder?: string
   disabled?: boolean
   min?: number
+  allowEmpty?: boolean
   onBlur?: React.FocusEventHandler<HTMLInputElement>
   "aria-invalid"?: boolean
 }) {
@@ -78,10 +80,18 @@ export function PriceInput({
       onBlur={(event) => {
         setFocused(false)
         const numericValue = parsePriceDraft(draft)
-        const next =
-          numericValue == null || Number.isNaN(numericValue)
-            ? min
-            : Math.max(min, numericValue)
+        if (numericValue == null || Number.isNaN(numericValue)) {
+          if (allowEmpty) {
+            onValueChange(undefined)
+            setDraft("")
+          } else {
+            onValueChange(min)
+            setDraft(String(min))
+          }
+          onBlur?.(event)
+          return
+        }
+        const next = Math.max(min, numericValue)
         onValueChange(next)
         setDraft(String(next))
         onBlur?.(event)

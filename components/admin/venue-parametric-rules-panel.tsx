@@ -9,11 +9,22 @@ import { PriceInput } from "@/components/ui/price-input"
 import { VenuePriceModeControl } from "@/components/admin/venue-price-mode-control"
 import { parametricZoneCapacity } from "@/lib/seating/adaptive-seating"
 import { formatCurrency } from "@/lib/format"
+import { cn } from "@/lib/utils"
 import {
   venuePriceModeFromSellMode,
-  venueUnitPriceLabel,
   type VenueMapZone,
 } from "@/types/venue-map"
+
+const SECTOR_COLORS = [
+  "#f97316",
+  "#ec4899",
+  "#f59e0b",
+  "#10b981",
+  "#6366f1",
+  "#06b6d4",
+  "#a3e635",
+  "#e879f9",
+]
 
 export function VenueParametricRulesPanel({
   zone,
@@ -49,39 +60,51 @@ export function VenueParametricRulesPanel({
         </p>
       </div>
 
-      <Field label="Nombre de la zona">
+      <Field label="Nombre del Sector">
         <Input
           ref={nameRef}
           value={zone.name}
           onChange={(event) => onChange({ name: event.target.value })}
+          placeholder="Campo Delantero, VIP Standing, Platea Sur"
         />
       </Field>
 
-      <div className="grid grid-cols-[1fr_auto] gap-2">
-        <Field label="Color">
+      <Field label="Color del Sector">
+        <div className="flex flex-wrap items-center gap-2">
+          {SECTOR_COLORS.map((color) => (
+            <button
+              key={color}
+              type="button"
+              aria-label={`Color ${color}`}
+              onClick={() => onChange({ color })}
+              className={cn(
+                "size-7 rounded-full border-2",
+                zone.color.toLowerCase() === color
+                  ? "border-foreground"
+                  : "border-transparent",
+              )}
+              style={{ backgroundColor: color }}
+            />
+          ))}
           <input
             type="color"
             value={zone.color}
             onChange={(event) => onChange({ color: event.target.value })}
-            className="h-10 w-full cursor-pointer rounded-md border border-input bg-transparent"
+            className="h-8 w-12 cursor-pointer rounded-md border border-input bg-transparent"
+            aria-label="Elegir color personalizado"
           />
-        </Field>
-        <Field
-          label={venueUnitPriceLabel({
-            layoutType: zone.layoutType,
-            sellMode: zone.sellMode,
-            priceMode: zone.priceMode,
-          })}
-        >
-          <PriceInput
-            value={zone.price}
-            onValueChange={(value) => {
-              if (value == null) return
-              onChange({ price: value })
-            }}
-          />
-        </Field>
-      </div>
+        </div>
+      </Field>
+
+      <Field label="Precio Base">
+        <PriceInput
+          value={zone.price}
+          onValueChange={(value) => {
+            if (value == null) return
+            onChange({ price: value })
+          }}
+        />
+      </Field>
 
       <Field label="Tipo de inventario">
         <select
@@ -127,7 +150,7 @@ export function VenueParametricRulesPanel({
       ) : null}
 
       {zone.layoutType === "general" ? (
-        <Field label="Capacidad">
+        <Field label="Capacidad Maxima">
           <Input
             type="number"
             min={1}

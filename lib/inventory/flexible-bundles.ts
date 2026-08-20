@@ -105,6 +105,15 @@ export const PROMO_TEMPLATE_SECOND_HALF: PromoRule = {
   cantidadPaga: 2,
 }
 
+export const PROMO_TEMPLATE_4X3: PromoRule = {
+  tipoDescuento: "X_POR_Y",
+  valorDescuento: 0,
+  cantidadRequerida: 4,
+  cantidadPaga: 3,
+}
+
+export type BundleStockSource = "linked" | "own"
+
 export function defaultPromoRule(): PromoRule {
   return {
     tipoDescuento: "PORCENTAJE",
@@ -267,11 +276,21 @@ export function validateBundleDraft(draft: {
   price: number
   capacity: number
   rule?: PromoRule | null
+  stockSource?: BundleStockSource
+  admitCount?: number
 }): string | null {
   if (draft.name.trim().length < 2) {
     return "Nombrá el combo o abono."
   }
-  if (draft.items.length < 1) {
+  const impliedAccesses = draft.items.reduce(
+    (sum, item) => sum + Math.max(0, Math.floor(item.quantity) || 0),
+    0,
+  )
+  const admitCount = Math.floor(Number(draft.admitCount) || impliedAccesses || 0)
+  if (admitCount < 1) {
+    return "Indicá cuántos accesos otorga cada compra."
+  }
+  if (draft.stockSource !== "own" && draft.items.length < 1) {
     return "Elegí al menos una entrada incluida."
   }
   if (draft.rule) {

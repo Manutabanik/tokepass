@@ -70,6 +70,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { isSandboxEventStatus } from "@/lib/events/review-status"
 import { formatCurrency } from "@/lib/format"
 import { cashChangeDue, cashTenderSuggestions, resolvePosBuyer } from "@/lib/pos-cash"
 import {
@@ -537,7 +538,10 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
         if (failed) break
       }
 
-      if (Object.keys(soldBump).length > 0) {
+      if (
+        Object.keys(soldBump).length > 0 &&
+        !isSandboxEventStatus(selectedEvent?.status)
+      ) {
         setSoldDelta((current) => {
           const next = { ...current }
           for (const [tierId, qty] of Object.entries(soldBump)) {
@@ -855,7 +859,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
   const canSell = Boolean(shift) && !busy
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
+    <div className="flex flex-col bg-background text-foreground">
       <header className="shrink-0 border-b border-border bg-card px-3 py-3 sm:px-4">
         {shift ? (
           <div className="flex flex-wrap items-center gap-2">
@@ -918,8 +922,8 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
         )}
       </header>
 
-      <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,3fr)_minmax(22rem,2fr)]">
-        <section className="min-h-0 overflow-y-auto border-border p-3 sm:p-4 lg:border-r">
+      <div className="grid lg:grid-cols-[minmax(0,3fr)_minmax(22rem,2fr)]">
+        <section className="border-border p-3 sm:p-4 lg:border-r">
           <div className="space-y-2">
             <Label className="text-muted-foreground">Evento activo</Label>
             <Select
@@ -1033,12 +1037,19 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
           </fieldset>
         </section>
 
-        <aside className="flex min-h-0 flex-col border-t border-border bg-card lg:border-t-0">
+        <aside className="flex flex-col justify-between border-t border-border bg-card lg:sticky lg:top-20 lg:h-[calc(100vh-5rem)] lg:border-t-0">
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3 sm:p-4">
             <div>
-              <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-                Carrito
-              </p>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                  Carrito
+                </p>
+                {isSandboxEventStatus(selectedEvent?.status) ? (
+                  <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-100">
+                    Modo Prueba Activo - Sin descuento de aforo real
+                  </span>
+                ) : null}
+              </div>
               {lines.length === 0 ? (
                 <p className="mt-3 text-sm text-muted-foreground">
                   Toca un tipo de entrada o una mesa/butaca del mapa.
@@ -1241,7 +1252,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
             ) : null}
           </div>
 
-          <div className="shrink-0 border-t border-border p-3 sm:p-4">
+          <div className="mt-auto shrink-0 border-t border-border p-3 sm:p-4">
             <button
               type="button"
               disabled={!canSell || lines.length === 0}
@@ -1456,7 +1467,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
       </Dialog>
 
       <Dialog open={voidModal} onOpenChange={setVoidModal}>
-        <DialogContent className="max-h-[90dvh] overflow-y-auto border-border bg-card text-foreground sm:max-w-md">
+        <DialogContent className="border-border bg-card text-foreground sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Anular Venta</DialogTitle>
             <DialogDescription className="text-muted-foreground">
@@ -1526,7 +1537,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
       </Dialog>
 
       <Dialog open={reprintModal} onOpenChange={setReprintModal}>
-        <DialogContent className="max-h-[90dvh] overflow-y-auto border-border bg-card text-foreground sm:max-w-md">
+        <DialogContent className="border-border bg-card text-foreground sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Reimprimir tickets del turno</DialogTitle>
             <DialogDescription className="text-muted-foreground">

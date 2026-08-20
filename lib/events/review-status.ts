@@ -22,6 +22,10 @@ export function isSandboxEventStatus(status: string | null | undefined) {
   )
 }
 
+export function isLiveEventStatus(status: string | null | undefined) {
+  return Boolean(status) && !isSandboxEventStatus(status)
+}
+
 export function canSubmitEventForReview(status: string | null | undefined) {
   return (
     status === "draft" ||

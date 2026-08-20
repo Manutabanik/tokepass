@@ -41,11 +41,10 @@ export default async function SuperAdminLayout({
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <div className="flex min-h-screen">
-        <SuperAdminSidebar />
-        <div className="min-w-0 flex-1">
-          <header className="sticky top-0 z-40 shrink-0 border-b border-border bg-background/85 pt-[max(env(safe-area-inset-top),1rem)] backdrop-blur-xl">
+    <div className="flex min-h-screen w-full bg-zinc-50 dark:bg-zinc-950">
+      <SuperAdminSidebar />
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+          <header className="sticky top-0 z-30 shrink-0 border-b border-zinc-200 bg-white/80 pt-[env(safe-area-inset-top)] backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/80">
             <div className="flex h-16 items-center justify-between px-5 sm:px-8">
               <div className="flex min-w-0 items-center gap-2">
                 <SuperAdminMobileNav
@@ -88,11 +87,10 @@ export default async function SuperAdminLayout({
               </div>
             </div>
           </header>
-          <main className="mx-auto w-full max-w-[1600px] px-5 pt-5 sm:px-8 sm:pt-8 lg:px-10 lg:pt-10 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-10">
+          <main className="mx-auto w-full max-w-[1600px] flex-1 px-5 pt-6 pb-12 sm:px-8 sm:pt-8 lg:px-10">
             {children}
           </main>
         </div>
-      </div>
     </div>
   )
 }

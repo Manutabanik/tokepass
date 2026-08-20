@@ -171,6 +171,16 @@ export async function approveEventForPublication(
     }
   }
 
+  const { error: resetError } = await admin.rpc("reset_event_test_inventory", {
+    p_event_id: eventId,
+  })
+  if (resetError) {
+    return {
+      success: false,
+      error: `No se pudo limpiar el aforo de prueba: ${resetError.message}`,
+    }
+  }
+
   const now = new Date().toISOString()
   const { data: updated, error } = await admin
     .from("events")

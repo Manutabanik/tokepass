@@ -12,11 +12,12 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useMemo, useState, useTransition } from "react"
+import { useEffect, useMemo, useState, useTransition } from "react"
 import { toast } from "sonner"
 
 import {
   exportOrganizerFinanceLedger,
+  getOrganizerFinanceSummary,
   requestPayout,
   type FinancePayoutRequest,
   type OrganizerFinanceSummary,
@@ -33,6 +34,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import { formatCurrency, formatDateTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
@@ -85,17 +87,25 @@ export function OrganizerFinancesDashboard({
   const [cbu, setCbu] = useState(summary.defaultCbu ?? "")
   const [pending, startTransition] = useTransition()
   const [exporting, startExport] = useTransition()
+  const [includeTest, setIncludeTest] = useState(false)
+  const [view, setView] = useState(summary)
+  const [loadingTest, startTestToggle] = useTransition()
 
-  const available = summary.availableToSettle
+  useEffect(() => {
+    setView(summary)
+    setIncludeTest(false)
+  }, [summary])
+
+  const available = view.availableToSettle
   const canRequest = available >= 1
 
   const history = useMemo(() => {
-    const payouts = summary.payoutRequests.map((row) => ({
+    const payouts = view.payoutRequests.map((row) => ({
       kind: "payout" as const,
       ...row,
       sortAt: row.createdAt,
     }))
-    const settlements = summary.settlements.map((row) => ({
+    const settlements = view.settlements.map((row) => ({
       kind: "settlement" as const,
       id: row.id,
       amount: row.netAmount,
@@ -109,7 +119,7 @@ export function OrganizerFinancesDashboard({
     return [...payouts, ...settlements].sort((a, b) =>
       a.sortAt < b.sortAt ? 1 : -1,
     )
-  }, [summary.payoutRequests, summary.settlements])
+  }, [view.payoutRequests, view.settlements])
 
   function exportLedger(kind: "csv" | "pdf") {
     startExport(async () => {
@@ -191,12 +201,39 @@ export function OrganizerFinancesDashboard({
             Recaudación y Retiros
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            Acá ves cuánto recaudaste, qué se queda TokePass y cuánto podés
-            pedir que te transfieran. El saldo retenido se libera cuando termina
-            el evento.
+            La caja muestra solo ventas reales de producción. El saldo
+            disponible y los retiros nunca incluyen pruebas, POS de borrador ni
+            sandbox.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col items-stretch gap-3 sm:items-end">
+          {summary.hasTestOrders ? (
+            <label className="flex items-center justify-end gap-2 text-xs text-muted-foreground">
+              <span>Incluir datos de prueba</span>
+              <Switch
+                checked={includeTest}
+                disabled={loadingTest}
+                onCheckedChange={(checked) => {
+                  const next = Boolean(checked)
+                  setIncludeTest(next)
+                  startTestToggle(async () => {
+                    try {
+                      const nextSummary = await getOrganizerFinanceSummary(next)
+                      setView(nextSummary)
+                    } catch (error) {
+                      setIncludeTest(false)
+                      toast.error(
+                        error instanceof Error
+                          ? error.message
+                          : "No se pudieron cargar los datos de prueba.",
+                      )
+                    }
+                  })
+                }}
+              />
+            </label>
+          ) : null}
+          <div className="flex flex-wrap items-center justify-end gap-2">
           <Button
             type="button"
             variant="outline"
@@ -235,25 +272,30 @@ export function OrganizerFinancesDashboard({
             <ArrowRightLeft className="size-4" aria-hidden="true" />
             Solicitar Retiro
           </Button>
+          </div>
         </div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-3">
         <StatCard
           label="Recaudación Bruta"
-          value={formatCurrency(summary.grossRevenue)}
-          hint={`Online ${formatCurrency(summary.mercadopagoGross)} · Puerta ${formatCurrency(summary.posGross)} · Solo órdenes pagadas`}
+          value={formatCurrency(view.grossRevenue)}
+          hint={
+            includeTest
+              ? `Online ${formatCurrency(view.mercadopagoGross)} · Puerta ${formatCurrency(view.posGross)} · Incluye pruebas`
+              : `Online ${formatCurrency(view.mercadopagoGross)} · Puerta ${formatCurrency(view.posGross)} · Ventas reales (producción)`
+          }
           icon={Banknote}
         />
         <StatCard
           label="Comisión TokePass"
-          value={formatCurrency(summary.tokepassServiceCharge)}
+          value={formatCurrency(view.tokepassServiceCharge)}
           hint="Descontada de tu ganancia"
           icon={Landmark}
         />
         <StatCard
           label="Neto organizador"
-          value={formatCurrency(summary.organizerNetPayout)}
+          value={formatCurrency(view.organizerNetPayout)}
           hint="Bruto menos comisión de la plataforma"
           icon={Wallet}
         />
@@ -262,17 +304,17 @@ export function OrganizerFinancesDashboard({
       <div className="grid gap-3 md:grid-cols-2">
         <StatCard
           label="Saldo Retenido"
-          value={formatCurrency(summary.retainedHeld)}
-          hint="Garantía pre-evento (se libera al finalizar)"
+          value={formatCurrency(view.retainedHeld)}
+          hint="Garantía pre-evento sobre ventas reales"
           icon={Lock}
         />
         <StatCard
           label="Saldo Disponible"
-          value={formatCurrency(summary.availableToSettle)}
+          value={formatCurrency(available)}
           hint={
-            summary.pendingSettlementNet > 0
-              ? `En cola de revisión: ${formatCurrency(summary.pendingSettlementNet)}`
-              : "Listo para solicitar retiro"
+            view.pendingSettlementNet > 0
+              ? `En cola de revisión: ${formatCurrency(view.pendingSettlementNet)}`
+              : "Solo ventas reales confirmadas"
           }
           icon={Wallet}
         />

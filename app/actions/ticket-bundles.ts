@@ -202,6 +202,7 @@ export async function upsertTicketBundle(input: {
   bundleType?: BundleType | null
   bundleItems?: Array<{ tierId: string; quantity: number }>
   promoRule?: PromoRule | null
+  admitCount?: number
 }): Promise<{ success: true; tierId: string } | { success: false; error: string }> {
   const gate = await assertOrganizer(input.eventId)
   if (!gate.ok) return { success: false, error: gate.error }
@@ -276,7 +277,10 @@ export async function upsertTicketBundle(input: {
     day_id: asUuidOrNull(input.dayId, ["all"]),
     visibility: "public" as const,
     layout_type: "general" as const,
-    admit_count: 1,
+    admit_count: Math.max(
+      1,
+      Math.min(50, Math.floor(Number(input.admitCount) || 1)),
+    ),
     tier_type: input.category === "bundle" ? ("bundle" as const) : ("general" as const),
     bundle_type: bundleType,
     promo_discount_type: input.category === "bundle" ? rule.tipoDescuento : null,

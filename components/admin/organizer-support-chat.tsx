@@ -1,12 +1,11 @@
 "use client"
 
-import { LoaderCircle, MessageCircle, Send } from "lucide-react"
+import { LoaderCircle, Send } from "lucide-react"
 import { usePathname } from "next/navigation"
 import { useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { toast } from "sonner"
 
 import {
-  getOrganizerUnreadSupportCount,
   listSupportMessages,
   markSupportThreadRead,
   peekOrganizerSupportSession,
@@ -27,7 +26,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { isAdminFocusedFlow } from "@/lib/navigation/focused-flows"
 import { OPEN_ORGANIZER_SUPPORT_EVENT } from "@/lib/support-events"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
@@ -100,7 +98,6 @@ function ChatBubble({
 export function OrganizerSupportChat() {
   const pathname = usePathname()
   const eventId = useMemo(() => eventIdFromPath(pathname), [pathname])
-  const focused = isAdminFocusedFlow(pathname)
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<ChatMode>("bot")
   const [startedInBot, setStartedInBot] = useState(false)
@@ -109,17 +106,12 @@ export function OrganizerSupportChat() {
   const [threadId, setThreadId] = useState<string | null>(null)
   const [messages, setMessages] = useState<SupportMessageItem[]>([])
   const [draft, setDraft] = useState("")
-  const [unread, setUnread] = useState(0)
   const [readyKey, setReadyKey] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const scroller = useRef<HTMLDivElement>(null)
   const requestKey = open ? (eventId ?? "general") : null
   const loading = requestKey !== null && readyKey !== requestKey
   const lastFaqQuestion = botTurns.at(-1)?.question ?? null
-
-  useEffect(() => {
-    void getOrganizerUnreadSupportCount().then(setUnread)
-  }, [])
 
   useEffect(() => {
     function openFromHelp() {
@@ -168,7 +160,6 @@ export function OrganizerSupportChat() {
         ])
         if (cancelled) return
         setMessages(nextMessages)
-        setUnread(0)
       })
       .catch(() => {
         if (!cancelled) toast.error("No se pudo abrir el chat.")
@@ -257,7 +248,6 @@ export function OrganizerSupportChat() {
           ? current
           : [...current, result.data.message],
       )
-      setUnread(0)
     })
   }
 
@@ -281,32 +271,11 @@ export function OrganizerSupportChat() {
   }
 
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label="Abrir soporte"
-        className={cn(
-          "fixed z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-black/20 transition hover:bg-primary/90",
-          "right-6",
-          focused
-            ? "bottom-6"
-            : "bottom-[calc(5.75rem+env(safe-area-inset-bottom))] lg:bottom-6",
-        )}
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetContent
+        side="right"
+        className="flex h-dvh w-[min(100%,400px)] max-w-[400px] flex-col p-0 sm:w-[400px]"
       >
-        <span className="relative">
-          <MessageCircle className="size-6" aria-hidden="true" />
-          {unread > 0 ? (
-            <span className="absolute -top-1 -right-1 size-2.5 rounded-full bg-amber-400 ring-2 ring-primary" />
-          ) : null}
-        </span>
-      </button>
-
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent
-          side="right"
-          className="h-dvh w-[min(100%,400px)] max-w-[400px] p-0 sm:w-[400px]"
-        >
           <SheetHeader className="pr-12">
             <SheetTitle>Soporte TokePass</SheetTitle>
             <SheetDescription>
@@ -433,6 +402,5 @@ export function OrganizerSupportChat() {
           ) : null}
         </SheetContent>
       </Sheet>
-    </>
   )
 }

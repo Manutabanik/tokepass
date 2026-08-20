@@ -30,6 +30,7 @@ import { toast } from "sonner"
 
 import {
   createCompleteEvent,
+  saveVenueMapOnly,
   updateCompleteEvent,
   type EditableEventData,
 } from "@/app/actions/events"
@@ -835,7 +836,9 @@ export function EventCreationWizard({
         <Form {...form}>
           <form
             className="contents"
-            onSubmit={form.handleSubmit((data) => onSubmit(data, "draft"))}
+            onSubmit={(event) => {
+              event.preventDefault()
+            }}
           >
             <InteractiveVenueMapEditor
               variant="workspace"
@@ -852,40 +855,18 @@ export function EventCreationWizard({
               onAutoSave={(next) => persistWorkspaceMap(next)}
               onSave={async (next) => {
                 persistWorkspaceMap(next)
-                let persisted = false
-                await form.handleSubmit(async (data) => {
-                  persisted = (await onSubmit(data, "draft")) === true
-                })()
-                if (!persisted) {
-                  throw new Error("No se pudo guardar el mapa")
+                const eventId = initialData?.id ?? persistedEventId
+                if (!eventId) {
+                  throw new Error("No hay un evento para guardar el mapa.")
+                }
+                const result = await saveVenueMapOnly(eventId, next)
+                if (!result.success) {
+                  throw new Error(result.error)
                 }
               }}
             />
           </form>
         </Form>
-        {resultMessage?.type === "error" ? (
-          <div className="pointer-events-auto fixed top-16 right-3 left-3 z-[120] md:left-auto md:w-[24rem]">
-            {resultMessage.conflict ? (
-              <WizardConflictBanner
-                title={resultMessage.title}
-                conflict={resultMessage.conflict}
-                onGoToStep={goToWizardStep}
-                onRetry={() => retryLastSave()}
-              />
-            ) : (
-              <ActionableFormError
-                title={resultMessage.title ?? "No se pudieron guardar los cambios"}
-                description={toUserFacingError(resultMessage.text)}
-                onFixField={
-                  resultMessage.field
-                    ? () => focusInvalidFormField(resultMessage.field)
-                    : undefined
-                }
-                onRetry={() => retryLastSave()}
-              />
-            )}
-          </div>
-        ) : null}
         {publishConfirm.open ? (
           <PublishEventConfirmDialog
             eventId={publishConfirm.eventId}

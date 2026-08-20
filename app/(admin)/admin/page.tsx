@@ -61,8 +61,8 @@ export default async function AdminDashboardPage() {
       value: formatCurrency(metrics.grossRevenue),
       helper:
         metrics.grossRevenue > 0
-          ? "Solo órdenes pagadas (libro mayor)"
-          : "Las órdenes pendientes no suman",
+          ? "Solo ventas reales de producción"
+          : "Las órdenes pendientes o de prueba no suman",
       icon: DollarSign,
     },
     {

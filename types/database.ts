@@ -936,6 +936,8 @@ export type Order = {
   updated_at: string
   /** Orden de prueba (preview). Los tickets asociados no valen en puerta. */
   is_test: boolean
+  /** production = dinero real. test = sandbox / evento no publicado. */
+  environment: "production" | "test"
   legal_consent_required: boolean
   terms_accepted: boolean
   terms_accepted_at: string | null
@@ -1422,6 +1424,7 @@ type OrderInsert = Omit<
   | "cashier_shift_id"
   | "cashier_user_id"
   | "is_test"
+  | "environment"
   | "legal_consent_required"
   | "terms_accepted"
   | "terms_accepted_at"
@@ -1453,6 +1456,7 @@ type OrderInsert = Omit<
   cashier_shift_id?: string | null
   cashier_user_id?: string | null
   is_test?: boolean
+  environment?: "production" | "test"
   legal_consent_required?: boolean
   terms_accepted?: boolean
   terms_accepted_at?: string | null
@@ -2994,6 +2998,12 @@ export type Database = {
         }
         Returns: number
       }
+      event_uses_live_stock: {
+        Args: {
+          p_event_id: string
+        }
+        Returns: boolean
+      }
       get_event_tier_live_stock: {
         Args: {
           p_event_id: string
@@ -3227,6 +3237,7 @@ export type Database = {
       organizer_paid_ledger: {
         Args: {
           p_organizer_id: string
+          p_include_test?: boolean
         }
         Returns: Array<{
           gross_revenue: number
@@ -3317,9 +3328,22 @@ export type Database = {
         }
         Returns: number
       }
+      reset_event_test_inventory: {
+        Args: {
+          p_event_id: string
+        }
+        Returns: number
+      }
+      release_test_order_live_stock: {
+        Args: {
+          p_order_id: string
+        }
+        Returns: undefined
+      }
       get_organizer_finance_summary: {
         Args: {
           p_organizer_id: string
+          p_include_test?: boolean
         }
         Returns: Json
       }

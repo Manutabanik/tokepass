@@ -31,7 +31,7 @@ function SheetOverlay({
     <DialogPrimitive.Backdrop
       data-slot="sheet-overlay"
       className={cn(
-        "fixed inset-0 z-[100] bg-black/60 supports-backdrop-filter:backdrop-blur-sm data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
+        "fixed inset-0 z-50 bg-black/60 supports-backdrop-filter:backdrop-blur-sm data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
         className,
       )}
       {...props}
@@ -59,7 +59,7 @@ function SheetContent({
       <DialogPrimitive.Popup
         data-slot="sheet-content"
         className={cn(
-          "fixed z-[100] flex flex-col outline-none duration-200 data-open:animate-in data-closed:animate-out",
+          "fixed z-50 flex min-h-0 flex-col overflow-hidden outline-none duration-200 data-open:animate-in data-closed:animate-out",
           isEdge &&
             "h-dvh w-[min(100%,20rem)] bg-background text-foreground shadow-none",
           side === "left" &&
@@ -67,9 +67,9 @@ function SheetContent({
           side === "right" &&
             "inset-y-0 right-0 border-l border-border data-open:slide-in-from-right data-closed:slide-out-to-right",
           side === "bottom" &&
-            "inset-x-0 bottom-0 max-h-[min(92dvh,100%)] w-full rounded-t-3xl border border-border bg-card text-foreground shadow-2xl data-open:slide-in-from-bottom data-closed:slide-out-to-bottom",
+            "inset-x-0 bottom-0 max-h-[min(90vh,100dvh)] w-full rounded-t-3xl border border-border bg-card text-foreground shadow-2xl data-open:slide-in-from-bottom data-closed:slide-out-to-bottom",
           side === "top" &&
-            "inset-x-0 top-0 max-h-[min(92dvh,100%)] w-full rounded-b-3xl border border-border bg-card text-foreground shadow-2xl data-open:slide-in-from-top data-closed:slide-out-to-top",
+            "inset-x-0 top-0 max-h-[min(90vh,100dvh)] w-full rounded-b-3xl border border-border bg-card text-foreground shadow-2xl data-open:slide-in-from-top data-closed:slide-out-to-top",
           className,
         )}
         {...props}
@@ -82,11 +82,11 @@ function SheetContent({
               <Button
                 variant="ghost"
                 size="icon-sm"
-                className="absolute top-3 right-3 text-muted-foreground hover:text-foreground"
+                className="absolute top-3 right-3 z-20 text-muted-foreground hover:text-foreground"
               />
             }
           >
-            <XIcon />
+            <XIcon className="h-5 w-5" />
             <span className="sr-only">Cerrar</span>
           </DialogPrimitive.Close>
         ) : null}
@@ -100,7 +100,7 @@ function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="sheet-header"
       className={cn(
-        "flex flex-col gap-1.5 border-b border-border p-4",
+        "flex shrink-0 flex-col gap-1.5 border-b border-border p-4",
         className,
       )}
       {...props}
@@ -113,7 +113,7 @@ function SheetFooter({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="sheet-footer"
       className={cn(
-        "mt-auto border-t border-border p-4",
+        "sticky bottom-0 z-10 mt-auto shrink-0 border-t border-border p-4",
         className,
       )}
       {...props}

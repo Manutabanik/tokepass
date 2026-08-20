@@ -10,10 +10,27 @@ function maskToastMessage(value: unknown) {
   return typeof value === "string" ? mapUnknownError(value).message : value
 }
 
+function withSingleToast<T extends (...args: never[]) => unknown>(fn: T): T {
+  return ((...args: never[]) => {
+    toast.dismiss()
+    return fn(...args)
+  }) as T
+}
+
 export function Toaster({ className, ...props }: ToasterProps) {
   useEffect(() => {
     const originalError = toast.error.bind(toast)
+    const originalSuccess = toast.success.bind(toast)
+    const originalWarning = toast.warning.bind(toast)
+    const originalInfo = toast.info.bind(toast)
+    const originalMessage = toast.message.bind(toast)
+
+    toast.success = withSingleToast(originalSuccess)
+    toast.warning = withSingleToast(originalWarning)
+    toast.info = withSingleToast(originalInfo)
+    toast.message = withSingleToast(originalMessage)
     toast.error = ((message, data) => {
+      toast.dismiss()
       const mappedTitle = mapUnknownError(message)
       const rawDescription =
         data && typeof data === "object" ? data.description : undefined
@@ -70,13 +87,17 @@ export function Toaster({ className, ...props }: ToasterProps) {
     }) as typeof toast.error
     return () => {
       toast.error = originalError
+      toast.success = originalSuccess
+      toast.warning = originalWarning
+      toast.info = originalInfo
+      toast.message = originalMessage
     }
   }, [])
 
   return (
     <Sonner
       theme="dark"
-      className={cn("toaster group", className)}
+      className={cn("toaster group z-50", className)}
       toastOptions={{
         classNames: {
           toast:
@@ -87,6 +108,9 @@ export function Toaster({ className, ...props }: ToasterProps) {
         },
       }}
       {...props}
+      position="bottom-left"
+      offset={24}
+      visibleToasts={1}
     />
   )
 }

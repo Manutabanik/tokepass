@@ -4,6 +4,7 @@ import { describe, it } from "node:test"
 import {
   isPosStaffRole,
   normalizePosPaymentMethod,
+  posLiveAvailable,
   POS_STAFF_ROLES,
 } from "@/lib/pos-checkout"
 
@@ -21,5 +22,11 @@ describe("pos checkout staff and payment aliases", () => {
     assert.equal(normalizePosPaymentMethod("card_pos"), "card_pos")
     assert.equal(normalizePosPaymentMethod("transfer"), "transfer_pos")
     assert.equal(normalizePosPaymentMethod("mercadopago"), null)
+  })
+
+  it("no descuenta aforo real en eventos sandbox", () => {
+    assert.equal(posLiveAvailable(100, 40, "draft"), 100)
+    assert.equal(posLiveAvailable(100, 40, "published"), 60)
+    assert.equal(posLiveAvailable(10, 12, "published"), 0)
   })
 })

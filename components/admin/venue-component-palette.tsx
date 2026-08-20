@@ -73,9 +73,9 @@ const PALETTE_TABS: Array<{
       },
       {
         placement: { kind: "zone_polygon" },
-        label: "Trazar zona",
-        shortLabel: "Zona",
-        hint: "Dibujá un polígono. El inventario se genera por filas y mesas.",
+        label: "Trazar zona con lápiz",
+        shortLabel: "Trazar",
+        hint: "Clic en el lienzo para marcar vértices. Enter o el primer punto cierra el sector.",
         icon: PenTool,
       },
     ],
@@ -201,6 +201,7 @@ const INFRA_ITEMS: PaletteItem[] = [
 ]
 
 const PALETTE_SHORTCUTS: PaletteItem[] = [
+  PALETTE_TABS[0]!.items[3]!,
   PALETTE_TABS[1]!.items[0]!,
   PALETTE_TABS[1]!.items[3]!,
   PALETTE_TABS[2]!.items[0]!,
@@ -365,6 +366,23 @@ export function VenueComponentPalette({
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
               {tab.title}
             </p>
+            {tab.id === "shapes" ? (
+              <button
+                type="button"
+                title="Trazar zona con lápiz"
+                aria-label="Trazar zona con lápiz"
+                onClick={() => onPick({ kind: "zone_polygon" })}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm font-semibold transition",
+                  placementKey(active) === "zone_polygon"
+                    ? "border-cyan-500/50 bg-cyan-500/10 text-foreground ring-1 ring-cyan-500/30"
+                    : "border-zinc-200 bg-white text-foreground hover:border-cyan-500/40 hover:bg-muted dark:border-zinc-800 dark:bg-zinc-950",
+                )}
+              >
+                <PenTool className="size-4 shrink-0 text-cyan-500" />
+                Trazar zona con lápiz
+              </button>
+            ) : null}
             {tab.id === "services" && !studio ? (
               <p className="text-sm leading-relaxed text-muted-foreground">
                 Estos dibujos ayudan a ubicarse. El comprador no puede tocarlos
@@ -372,7 +390,12 @@ export function VenueComponentPalette({
               </p>
             ) : null}
             <div className={studio ? "grid grid-cols-2 gap-1.5" : "space-y-2"}>
-              {tab.items.map((item) => (
+              {tab.items
+                .filter(
+                  (item) =>
+                    !(tab.id === "shapes" && item.placement.kind === "zone_polygon"),
+                )
+                .map((item) => (
                 <PaletteButton
                   key={item.label}
                   item={item}

@@ -23,11 +23,13 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { PriceInput } from "@/components/ui/price-input"
 import { formatCurrency } from "@/lib/format"
 import {
   PROMO_DISCOUNT_LABELS,
   PROMO_DISCOUNT_TYPES,
   PROMO_TEMPLATE_2X1,
+  PROMO_TEMPLATE_4X3,
   PROMO_TEMPLATE_SECOND_HALF,
   bundleSavings,
   inferBundleType,
@@ -37,6 +39,7 @@ import {
   regularBundlePrice,
   validateBundleDraft,
   type BundleComponent,
+  type BundleStockSource,
   type BundleType,
   type PromoRule,
 } from "@/lib/inventory/flexible-bundles"
@@ -62,6 +65,8 @@ export type BundleCreatorValue = {
   price: number
   originalPrice: number
   capacity: number
+  admitCount: number
+  stockSource: BundleStockSource
   items: BundleComponent[]
   includesSeating: boolean
   promoRule: PromoRule
@@ -88,7 +93,10 @@ export function BundleCreatorModal({
   onSave,
 }: Props) {
   const [name, setName] = useState("")
-  const [capacity, setCapacity] = useState("50")
+  const [capacity, setCapacity] = useState("")
+  const [admitCount, setAdmitCount] = useState("")
+  const [stockSource, setStockSource] = useState<BundleStockSource>("linked")
+  const [manualPrice, setManualPrice] = useState<number | undefined>(undefined)
   const [items, setItems] = useState<BundleComponent[]>([])
   const [rule, setRule] = useState<PromoRule>(normalizePromoRule(null))
   const [error, setError] = useState<string | null>(null)
@@ -98,7 +106,22 @@ export function BundleCreatorModal({
     setAppliedSeed(seedKey)
     if (open) {
       setName(initial?.name ?? "")
-      setCapacity(String(initial?.capacity ?? 50))
+      setCapacity(
+        initial?.capacity != null && Number.isFinite(initial.capacity)
+          ? String(initial.capacity)
+          : "",
+      )
+      setAdmitCount(
+        initial?.admitCount != null && Number.isFinite(initial.admitCount)
+          ? String(initial.admitCount)
+          : "",
+      )
+      setStockSource(initial?.stockSource ?? "linked")
+      setManualPrice(
+        initial?.price != null && Number.isFinite(initial.price)
+          ? initial.price
+          : undefined,
+      )
       setItems(initial?.items ?? [])
       setRule(
         inferPromoRule({
@@ -142,11 +165,14 @@ export function BundleCreatorModal({
   function applyTemplate(next: PromoRule, label: string) {
     const normalized = normalizePromoRule(next)
     setRule(normalized)
+    setAdmitCount(String(normalized.cantidadRequerida))
     const first =
       selectable.find((option) => option.tierType === "general") ?? selectable[0]
-    if (first) {
+    if (first && stockSource === "linked") {
       setItems([{ tierId: first.id, quantity: normalized.cantidadRequerida }])
       setName((current) => current.trim() || `${label} · ${first.name}`)
+    } else {
+      setName((current) => current.trim() || label)
     }
     setError(null)
   }
@@ -169,20 +195,31 @@ export function BundleCreatorModal({
   }
 
   function submit() {
+    const parsedAccesses = Math.floor(Number(admitCount) || 0)
+    const parsedCapacity = Math.floor(Number(capacity) || 0)
+    const resolvedPrice =
+      stockSource === "own" || manualPrice != null ? Number(manualPrice) : sale
     const draft: BundleCreatorValue = {
       name: name.trim(),
       bundleType,
-      price: sale,
+      price: Number.isFinite(resolvedPrice) ? resolvedPrice : sale,
       originalPrice,
-      capacity: Math.max(1, Math.floor(Number(capacity) || 1)),
-      items,
+      capacity: parsedCapacity,
+      admitCount: parsedAccesses,
+      stockSource,
+      items: stockSource === "own" ? items : items,
       includesSeating: items.some((item) => {
         const option = options.find((row) => row.id === item.tierId)
         return option?.tierType === "seated"
       }),
       promoRule: rule,
     }
-    const invalid = validateBundleDraft({ ...draft, rule })
+    const invalid = validateBundleDraft({
+      ...draft,
+      rule,
+      stockSource,
+      admitCount: parsedAccesses,
+    })
     if (invalid) {
       setError(invalid)
       return
@@ -203,19 +240,76 @@ export function BundleCreatorModal({
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="bundle-name">Nombre del combo</Label>
+            <Label htmlFor="bundle-name">Nombre de la promoción</Label>
             <Input
               id="bundle-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="2x1 General · Viernes"
+              placeholder='Ej: Pack 4x3'
               className="h-11"
             />
           </div>
 
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="bundle-accesses">
+                Cantidad de accesos que otorga
+              </Label>
+              <Input
+                id="bundle-accesses"
+                inputMode="numeric"
+                value={admitCount}
+                onChange={(event) => setAdmitCount(event.target.value)}
+                placeholder="Ej: 4"
+                className="h-11"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="bundle-price">Precio total del combo</Label>
+              <PriceInput
+                id="bundle-price"
+                value={manualPrice}
+                onValueChange={setManualPrice}
+                allowEmpty
+                placeholder="0"
+                className="h-11"
+              />
+              <p className="text-xs text-muted-foreground">
+                Si lo dejás vacío, se usa el precio calculado de la regla.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Origen del stock</Label>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant={stockSource === "linked" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setStockSource("linked")}
+              >
+                Vincular a una entrada
+              </Button>
+              <Button
+                type="button"
+                variant={stockSource === "own" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setStockSource("own")}
+              >
+                Cupo promocional propio
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {stockSource === "linked"
+                ? "Cada venta descuenta el stock de la entrada vinculada (ej. Entrada General)."
+                : "El combo tiene un cupo independiente y no toca otras tarifas."}
+            </p>
+          </div>
+
           <div className="space-y-2">
             <Label>Plantillas rápidas</Label>
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid gap-2 sm:grid-cols-3">
               <Button
                 type="button"
                 variant="outline"
@@ -223,9 +317,22 @@ export function BundleCreatorModal({
                 onClick={() => applyTemplate(PROMO_TEMPLATE_2X1, "2x1")}
               >
                 <span>
-                  <span className="block text-sm font-semibold">Crear 2x1</span>
+                  <span className="block text-sm font-semibold">2x1</span>
                   <span className="block text-xs text-muted-foreground">
                     Llevá 2, pagá 1
+                  </span>
+                </span>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-auto justify-start px-3 py-3 text-left"
+                onClick={() => applyTemplate(PROMO_TEMPLATE_4X3, "Pack 4x3")}
+              >
+                <span>
+                  <span className="block text-sm font-semibold">Pack 4x3</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Pack Amigos
                   </span>
                 </span>
               </Button>
@@ -239,10 +346,10 @@ export function BundleCreatorModal({
               >
                 <span>
                   <span className="block text-sm font-semibold">
-                    50% en la 2ª unidad
+                    Descuento por lote
                   </span>
                   <span className="block text-xs text-muted-foreground">
-                    La segunda entra a mitad de precio
+                    50% en la 2ª unidad
                   </span>
                 </span>
               </Button>
@@ -368,8 +475,12 @@ export function BundleCreatorModal({
             </div>
           ) : null}
 
-          <div className="space-y-2">
-            <Label>Entradas incluidas</Label>
+          <div className={stockSource === "own" ? "space-y-2 opacity-70" : "space-y-2"}>
+            <Label>
+              {stockSource === "linked"
+                ? "Entrada de origen"
+                : "Entradas incluidas (opcional)"}
+            </Label>
             {items.map((item) => {
               const option = options.find((row) => row.id === item.tierId)
               return (
@@ -466,13 +577,15 @@ export function BundleCreatorModal({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="bundle-stock">Límite de stock</Label>
+            <Label htmlFor="bundle-stock">
+              {stockSource === "own" ? "Cupo promocional propio" : "Límite de stock"}
+            </Label>
             <Input
               id="bundle-stock"
-              type="number"
-              min={1}
+              inputMode="numeric"
               value={capacity}
               onChange={(event) => setCapacity(event.target.value)}
+              placeholder="Ej: 50"
               className="h-11"
             />
           </div>

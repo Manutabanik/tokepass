@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache"
 
+import { isSandboxEventStatus } from "@/lib/events/review-status"
 import { findScheduleDay, parseScheduleDays } from "@/lib/event-schedule"
+import { orderTestFlags } from "@/lib/finance/order-test-flags"
 import { assertEventOpsAccess, listOperableEvents } from "@/lib/event-ops-access"
 import { toPosUserError } from "@/lib/errors/commerce-errors"
 import {
@@ -14,6 +16,7 @@ import {
   POS_STAFF_ROLES,
   isPosStaffRole,
   normalizePosPaymentMethod,
+  posLiveAvailable,
 } from "@/lib/pos-checkout"
 import { signedDoorQrOrFallback } from "@/lib/totp-offline"
 import { createClient } from "@/lib/supabase/server"
@@ -51,6 +54,7 @@ export type PosEventOption = {
   title: string
   date: string
   location: string
+  status: string
   qrType: QrType
   hasSupervisorPin: boolean
   tiers: Array<{
@@ -246,6 +250,7 @@ export async function getPosEvents(): Promise<PosEventOption[]> {
       title: event.title,
       date: event.date,
       location: event.location?.trim() || "",
+      status: event.status,
       qrType: event.qr_type === "static" ? "static" : "dynamic",
       hasSupervisorPin,
       tiers: (event.ticket_tiers ?? []).map((tier) => {
@@ -260,7 +265,11 @@ export async function getPosEvents(): Promise<PosEventOption[]> {
           id: tier.id,
           name,
           price,
-          available: Math.max(0, tier.capacity - tier.sold),
+          available: posLiveAvailable(
+            tier.capacity,
+            tier.sold,
+            event.status,
+          ),
           admitCount: Math.max(
             1,
             Number((tier as { admit_count?: number }).admit_count ?? 1),
@@ -605,6 +614,24 @@ export async function createPosSale(input: {
     const rows = (data ?? []) as Row[]
     if (rows.length === 0) {
       return { success: false, error: "La venta no generó tickets." }
+    }
+
+    const { data: eventRow } = await supabase
+      .from("events")
+      .select("status")
+      .eq("id", sale.eventId)
+      .maybeSingle()
+
+    if (eventRow && isSandboxEventStatus(eventRow.status)) {
+      const admin = createAdminClient()
+      await admin
+        .from("orders")
+        .update(orderTestFlags(true))
+        .eq("id", rows[0].order_id)
+      await admin
+        .from("tickets")
+        .update({ is_test: true })
+        .eq("order_id", rows[0].order_id)
     }
 
     const holderName = sale.customerName?.trim() || "Consumidor Final"

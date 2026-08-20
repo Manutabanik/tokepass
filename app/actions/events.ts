@@ -3505,3 +3505,83 @@ export async function updateEventCommercialSettings(
   return { success: true, recalculatedTiers }
 }
 
+export async function saveVenueMapOnly(
+  eventId: string,
+  venueMapData: unknown,
+): Promise<{ success: true } | { success: false; error: string }> {
+  const id = eventId.trim()
+  if (!id) {
+    return { success: false, error: "Evento inválido." }
+  }
+
+  let supabase: Awaited<ReturnType<typeof createClient>>
+  let userId: string
+  try {
+    const session = await requireAuthenticatedUser()
+    supabase = session.supabase
+    userId = session.user.id
+  } catch {
+    return { success: false, error: "Debes iniciar sesión para guardar el mapa." }
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, organizer_approval_status")
+    .eq("id", userId)
+    .maybeSingle()
+
+  const isSuperAdmin = isPlatformOwnerRole(profile?.role)
+  const reader = isSuperAdmin ? createAdminClient() : supabase
+
+  const { data: event, error: eventError } = await reader
+    .from("events")
+    .select("id, organizer_id")
+    .eq("id", id)
+    .maybeSingle()
+
+  if (eventError || !event) {
+    return { success: false, error: "Evento no encontrado." }
+  }
+
+  if (!isSuperAdmin) {
+    const isApprovedOrganizer =
+      profile?.role === "admin" &&
+      profile.organizer_approval_status === "approved"
+    if (!isApprovedOrganizer) {
+      return {
+        success: false,
+        error: "Tu cuenta de organizador no está habilitada para editar eventos.",
+      }
+    }
+    if (event.organizer_id !== userId) {
+      return { success: false, error: "No tenés permiso para editar este evento." }
+    }
+  }
+
+  let payload: Json
+  try {
+    payload = serializeVenueMap(parseVenueMap(venueMapData)) as unknown as Json
+  } catch {
+    return { success: false, error: "El mapa tiene un formato inválido." }
+  }
+
+  const mutationClient =
+    event.organizer_id !== userId ? createAdminClient() : supabase
+
+  const { error } = await mutationClient
+    .from("events")
+    .update({
+      venue_map: payload,
+      updated_at: new Date().toISOString(),
+    } as never)
+    .eq("id", id)
+
+  if (error) {
+    return { success: false, error: "No se pudo guardar el mapa." }
+  }
+
+  revalidatePath(`/admin/events/${id}/edit`)
+  revalidatePath(`/admin/events/${id}`)
+  return { success: true }
+}
+

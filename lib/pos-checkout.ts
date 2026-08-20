@@ -1,3 +1,4 @@
+import { isSandboxEventStatus } from "@/lib/events/review-status"
 import type { EventStaffRole } from "@/types/auth"
 import type { PaymentMethod } from "@/types/database"
 
@@ -24,6 +25,17 @@ export function isPosStaffRole(role: string | null | undefined): boolean {
     value === "cashier" ||
     value === "box_office_cashier"
   )
+}
+
+export function posLiveAvailable(
+  capacity: number,
+  sold: number,
+  eventStatus?: string | null,
+): number {
+  if (isSandboxEventStatus(eventStatus)) {
+    return Math.max(0, Math.floor(Number(capacity) || 0))
+  }
+  return Math.max(0, Math.floor(Number(capacity) || 0) - Math.floor(Number(sold) || 0))
 }
 
 export function normalizePosPaymentMethod(

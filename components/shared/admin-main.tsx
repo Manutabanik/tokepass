@@ -25,11 +25,10 @@ export function AdminMain({ children }: { children: ReactNode }) {
   return (
     <main
       className={cn(
-        "mx-auto min-h-0 w-full max-w-[1600px] flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain",
-        "px-4 pt-4 sm:px-8 sm:pt-8 lg:px-10 lg:pt-10",
+        "mx-auto w-full max-w-[1600px] flex-1 px-4 pt-6 sm:px-8 lg:px-10",
         focused
-          ? "flex min-h-0 flex-col pb-[max(1rem,env(safe-area-inset-bottom))]"
-          : "scroll-pb-24 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-24",
+          ? "flex min-h-[calc(100dvh-5rem)] flex-col pb-4"
+          : "space-y-6 pb-12 max-lg:pb-[calc(5.25rem+env(safe-area-inset-bottom))]",
       )}
     >
       {children}

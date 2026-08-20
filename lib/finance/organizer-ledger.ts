@@ -1,5 +1,6 @@
 /** Canonical paid-order ledger for organizer dashboards and exports. */
 
+import { isSandboxEventStatus } from "@/lib/events/review-status"
 import {
   centsBigIntToMoney,
   formatCentsAsArs,
@@ -25,6 +26,11 @@ export type PaidLedgerOrderLike = {
   totalAmount?: number | string | null
   service_charge?: number | string | null
   serviceCharge?: number | string | null
+  is_test?: boolean | null
+  isTest?: boolean | null
+  environment?: string | null
+  event_status?: string | null
+  eventStatus?: string | null
 }
 
 export type LedgerRecentSale = {
@@ -41,6 +47,21 @@ function toMoney(value: number | string | null | undefined): number {
 
 export function isPaidOrderStatus(status: string | null | undefined): boolean {
   return String(status ?? "").trim().toLowerCase() === "paid"
+}
+
+export function isProductionPaidOrder(
+  order: PaidLedgerOrderLike,
+  includeTest = false,
+): boolean {
+  if (!isPaidOrderStatus(order.status)) return false
+  if (includeTest) return true
+  if (order.is_test === true || order.isTest === true) return false
+  if (String(order.environment ?? "").trim().toLowerCase() === "test") {
+    return false
+  }
+  const eventStatus = order.event_status ?? order.eventStatus
+  if (isSandboxEventStatus(eventStatus)) return false
+  return true
 }
 
 export function paidLedgerToCents(
@@ -81,7 +102,7 @@ export function paidLedgerCentsFromOrders(
   let grossRevenueCents = BigInt(0)
   let tokepassServiceChargeCents = BigInt(0)
   for (const order of orders) {
-    if (!isPaidOrderStatus(order.status)) continue
+    if (!isProductionPaidOrder(order)) continue
     grossRevenueCents += moneyToCentsBigInt(
       order.total_amount ?? order.totalAmount,
     )
@@ -184,7 +205,7 @@ export function buildOrganizerFinanceCsv(
   input: OrganizerFinanceExportInput,
 ): string {
   const cents = paidLedgerToCents(input.ledger)
-  const source = "orders.status=paid"
+  const source = "orders.status=paid AND NOT is_test AND evento publicado"
   const rows: string[][] = [
     [
       "Recaudacion bruta (gross_revenue)",
@@ -239,7 +260,7 @@ export function buildOrganizerFinancePdfHtml(
 <body>
   <h1>Libro mayor de recaudacion</h1>
   <p>${organizer}</p>
-  <p>Solo ordenes liquidadas (status = paid). Las ordenes pending no se incluyen.</p>
+  <p>Solo ventas reales de produccion (status = paid, sin is_test, evento publicado). Las ordenes pending o de prueba no se incluyen.</p>
   <table>
     <thead>
       <tr><th>Concepto</th><th>Monto</th></tr>
@@ -251,7 +272,7 @@ export function buildOrganizerFinancePdfHtml(
       ${extra}
     </tbody>
   </table>
-  <p class="muted">Generado ${escapeHtml(generatedAt)} · Fuente: SUM(orders.total_amount) WHERE status = 'paid'</p>
+  <p class="muted">Generado ${escapeHtml(generatedAt)} · Fuente: SUM(orders.total_amount) WHERE status = 'paid' AND is_test IS NOT TRUE AND evento no sandbox</p>
 </body>
 </html>`
 }

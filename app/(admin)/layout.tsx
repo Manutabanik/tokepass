@@ -125,7 +125,7 @@ export default async function AdminLayout({
         />
       }
       header={
-        <header className="sticky top-0 z-40 shrink-0 border-b border-border bg-background/85 pt-[max(env(safe-area-inset-top),1rem)] backdrop-blur-xl">
+        <header className="sticky top-0 z-30 shrink-0 border-b border-zinc-200 bg-white/80 pt-[env(safe-area-inset-top)] backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/80">
           <div className="flex h-16 items-center justify-between px-4 sm:px-8">
             <div className="flex min-w-0 items-center gap-2 lg:hidden">
               <BrandLogo />
@@ -141,7 +141,6 @@ export default async function AdminLayout({
               </p>
             </div>
             <div className="flex items-center gap-2 sm:gap-3">
-              <DashboardHeaderHelp canChat={isOrganizer} />
               <ThemeToggle />
               <Link
                 href="/admin/scanner"
@@ -150,6 +149,7 @@ export default async function AdminLayout({
                 <ShieldCheck className="size-4" aria-hidden="true" />
                 Escáner
               </Link>
+              <DashboardHeaderHelp canChat={isOrganizer} />
               <div className="hidden text-right sm:block">
                 <p className="max-w-48 truncate text-sm font-medium text-foreground">
                   {userLabel}

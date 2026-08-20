@@ -3,6 +3,7 @@ import { describe, it } from "node:test"
 
 import {
   PROMO_TEMPLATE_2X1,
+  PROMO_TEMPLATE_4X3,
   PROMO_TEMPLATE_SECOND_HALF,
   bundleSavings,
   inferBundleType,
@@ -100,8 +101,34 @@ describe("flexible bundles", () => {
         items: [],
         price: 1000,
         capacity: 10,
+        admitCount: 2,
       }),
       "Elegí al menos una entrada incluida.",
+    )
+  })
+
+  it("permite cupo propio sin vincular otra entrada", () => {
+    assert.equal(
+      validateBundleDraft({
+        name: "Pack Amigos",
+        items: [],
+        price: 30000,
+        capacity: 25,
+        admitCount: 4,
+        stockSource: "own",
+      }),
+      null,
+    )
+  })
+
+  it("calcula 4x3 desde la plantilla", () => {
+    assert.equal(
+      promotionalBundlePrice({
+        items: [{ tierId: "g", quantity: 4 }],
+        unitPriceByTierId: { g: 10000 },
+        rule: PROMO_TEMPLATE_4X3,
+      }),
+      30000,
     )
   })
 })

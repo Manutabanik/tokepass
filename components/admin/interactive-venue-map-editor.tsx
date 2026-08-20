@@ -418,30 +418,27 @@ export function InteractiveVenueMapEditor({
     onSave: onAutoSave,
   })
   const saveBadgeStatus =
-    autosaveStatus === "dirty" || autosaveStatus === "saving"
-      ? autosaveStatus
-      : (explicitSaveStatus ?? autosaveStatus)
+    explicitSaveStatus === "saving" ||
+    explicitSaveStatus === "saved" ||
+    explicitSaveStatus === "error"
+      ? explicitSaveStatus
+      : autosaveStatus === "dirty" || autosaveStatus === "saving"
+        ? autosaveStatus
+        : (explicitSaveStatus ?? autosaveStatus)
+  const mapBusy = saving || explicitSaveStatus === "saving"
 
   async function persistEditorMap() {
     if (!onSave) return
-    const healedTickets = applyMapCapacityToTickets(tickets ?? [], map)
-    const result = validateVenueMapSkuConsistency({
-      map,
-      tickets: healedTickets,
-    })
-    if (!result.ok) {
-      setExplicitSaveStatus("error")
-      toast.error("No se puede guardar el mapa", {
-        description: formatVenueMapSkuErrors(result.errors),
-      })
-      return
-    }
     setExplicitSaveStatus("saving")
     try {
-      await onSave(map)
+      await onSave(mapRef.current)
       setExplicitSaveStatus("saved")
-    } catch {
+      toast.success("Guardado")
+    } catch (error) {
       setExplicitSaveStatus("error")
+      toast.error(
+        error instanceof Error ? error.message : "No se pudo guardar el mapa",
+      )
     }
   }
   useLayoutEffect(() => {
@@ -452,7 +449,19 @@ export function InteractiveVenueMapEditor({
     lassoModeRef.current = lassoMode
     seatEditModeRef.current = seatEditMode
     mapRef.current = map
-  }, [isolationId, workMode, selection, compactChrome, lassoMode, seatEditMode, map])
+    toolRef.current = tool
+    polygonDraftRef.current = polygonDraft
+  }, [
+    isolationId,
+    workMode,
+    selection,
+    compactChrome,
+    lassoMode,
+    seatEditMode,
+    map,
+    tool,
+    polygonDraft,
+  ])
   const [customTemplates, setCustomTemplates] = useState<OrganizerVenueTemplate[]>(
     [],
   )
@@ -475,6 +484,9 @@ export function InteractiveVenueMapEditor({
   const panRef = useRef(pan)
   const zoomRef = useRef(zoom)
   const selectionRef = useRef(selection)
+  const selectedElementIdsRef = useRef<string[]>([])
+  const toolRef = useRef(tool)
+  const polygonDraftRef = useRef(polygonDraft)
   const pendingPointer = useRef<PointerSample | null>(null)
   const pointerFrame = useRef<number | null>(null)
   const marqueeAdditive = useRef(false)
@@ -625,6 +637,7 @@ export function InteractiveVenueMapEditor({
           : [],
     [selection],
   )
+  selectedElementIdsRef.current = selectedElementIds
   const selectedElements = useMemo(() => {
     const ids = new Set(selectedElementIds)
     return (map.elements ?? []).filter((item) => ids.has(item.id))
@@ -1222,6 +1235,7 @@ export function InteractiveVenueMapEditor({
     event: React.PointerEvent,
     element: VenueMapElement,
   ) {
+    blurCanvasTypingTarget()
     if (wantsCanvasPan(event)) return
     isolateCanvasPointer(event, { preventGhostClick: true })
     if (event.button !== 0) return
@@ -1309,7 +1323,17 @@ export function InteractiveVenueMapEditor({
     if (!options?.skipHistory) pushHistory()
     mapRef.current = next
     setMap(next)
+    setExplicitSaveStatus(null)
     onChange(next, venueMapToSeatingLayout(next))
+  }
+
+  function blurCanvasTypingTarget() {
+    const active = document.activeElement
+    if (!(active instanceof HTMLElement)) return
+    if (active === document.body) return
+    if (active.isContentEditable || active.closest("input, textarea, select")) {
+      active.blur()
+    }
   }
 
   function undo() {
@@ -1626,14 +1650,15 @@ export function InteractiveVenueMapEditor({
   }
 
   function closePolygonDraft() {
-    if (polygonDraft.length < 3) {
+    const points = polygonDraftRef.current
+    if (points.length < 3) {
       toast.error("Trazá al menos 3 puntos para cerrar la zona.")
       return
     }
     const current = mapRef.current
     const created = createVenueZone(
       ensureZones(current).length,
-      polygonDraft.map(canvasPointToPercent),
+      points.map(canvasPointToPercent),
     )
     commit({ ...current, zones: [...ensureZones(current), created] })
     setPolygonDraft([])
@@ -2048,46 +2073,89 @@ export function InteractiveVenueMapEditor({
     })
   }
 
+  function removeSeatsByKeys(keys: Set<string>) {
+    if (keys.size === 0) return
+    const current = mapRef.current
+    commit({
+      ...current,
+      sectors: current.sectors
+        .map((sector) => ({
+          ...sector,
+          seats: sector.seats.filter(
+            (seat) => !keys.has(seatKey(sector.id, seat.id)),
+          ),
+        }))
+        .filter((sector) => sector.seats.length > 0),
+      elements: ensureElements(current)
+        .map((item) => ({
+          ...item,
+          seats: item.seats.filter(
+            (seat) => !keys.has(elementSeatKey(item.id, seat.id)),
+          ),
+        }))
+        .filter((item) => item.type !== "vip_chair" || item.seats.length > 0),
+    })
+  }
+
   function deleteSelection() {
-    if (workModeRef.current === "pricing") return
-    if (!selection) return
-    if (selection.kind === "stage") {
-      commit({ ...map, stage: null })
-    } else if (selection.kind === "sector") {
+    const currentSelection = selectionRef.current
+    const current = mapRef.current
+    if (!currentSelection) {
+      const fallbackIds = selectedElementIdsRef.current
+      if (fallbackIds.length === 0) return
+      const ids = new Set(fallbackIds)
       commit({
-        ...map,
-        sectors: map.sectors.filter((sector) => sector.id !== selection.id),
+        ...current,
+        elements: ensureElements(current).filter((item) => !ids.has(item.id)),
       })
-    } else if (selection.kind === "label") {
-      commit({
-        ...map,
-        labels: map.labels.filter((label) => label.id !== selection.id),
-      })
-    } else if (selection.kind === "aisle") {
-      commit({
-        ...map,
-        aisles: map.aisles.filter((aisle) => aisle.id !== selection.id),
-      })
-    } else if (selection.kind === "element") {
-      commit({
-        ...map,
-        elements: ensureElements(map).filter((item) => item.id !== selection.id),
-      })
-    } else if (selection.kind === "elements") {
-      const ids = new Set(selection.ids)
-      commit({
-        ...map,
-        elements: ensureElements(map).filter((item) => !ids.has(item.id)),
-      })
-    } else if (selection.kind === "seats") {
-      patchSelectedSeats({ status: "blocked" })
       setIsolationId(null)
       setSelection(null)
       return
-    } else if (selection.kind === "zone") {
+    }
+    if (currentSelection.kind === "stage") {
+      commit({ ...current, stage: null })
+    } else if (currentSelection.kind === "sector") {
       commit({
-        ...map,
-        zones: ensureZones(map).filter((zone) => zone.id !== selection.id),
+        ...current,
+        sectors: current.sectors.filter(
+          (sector) => sector.id !== currentSelection.id,
+        ),
+      })
+    } else if (currentSelection.kind === "label") {
+      commit({
+        ...current,
+        labels: current.labels.filter((label) => label.id !== currentSelection.id),
+      })
+    } else if (currentSelection.kind === "aisle") {
+      commit({
+        ...current,
+        aisles: current.aisles.filter((aisle) => aisle.id !== currentSelection.id),
+      })
+    } else if (currentSelection.kind === "element") {
+      commit({
+        ...current,
+        elements: ensureElements(current).filter(
+          (item) => item.id !== currentSelection.id,
+        ),
+      })
+    } else if (currentSelection.kind === "elements") {
+      const ids = new Set(currentSelection.ids)
+      commit({
+        ...current,
+        elements: ensureElements(current).filter((item) => !ids.has(item.id)),
+      })
+    } else if (currentSelection.kind === "seats") {
+      removeSeatsByKeys(new Set(currentSelection.ids))
+      setIsolationId(null)
+      setSeatEditMode(false)
+      setSelection(null)
+      return
+    } else if (currentSelection.kind === "zone") {
+      commit({
+        ...current,
+        zones: ensureZones(current).filter(
+          (zone) => zone.id !== currentSelection.id,
+        ),
       })
     }
     setIsolationId(null)
@@ -2292,6 +2360,7 @@ export function InteractiveVenueMapEditor({
     element: VenueMapElement,
     seatId: string,
   ) {
+    blurCanvasTypingTarget()
     if (wantsCanvasPan(event)) return
     isolateCanvasPointer(event, { preventGhostClick: true })
     if (event.button !== 0) return
@@ -2392,6 +2461,7 @@ export function InteractiveVenueMapEditor({
     origY: number,
     id?: string,
   ) {
+    blurCanvasTypingTarget()
     if (workModeRef.current === "pricing") return
     if (lassoModeRef.current) return
     if (wantsCanvasPan(event)) return
@@ -2409,6 +2479,7 @@ export function InteractiveVenueMapEditor({
   }
 
   function onZonePointerDown(event: React.PointerEvent, zone: VenueMapZone) {
+    blurCanvasTypingTarget()
     if (wantsCanvasPan(event)) return
     isolateCanvasPointer(event, { preventGhostClick: true })
     if (event.button !== 0) return
@@ -2423,6 +2494,7 @@ export function InteractiveVenueMapEditor({
 
   function onPointerDown(event: React.PointerEvent<SVGSVGElement>) {
     if (preview) return
+    blurCanvasTypingTarget()
     if (pinchRef.current || pointersRef.current.size > 1) return
     if (wantsCanvasPan(event)) {
       beginCanvasPan(event)
@@ -2852,13 +2924,57 @@ export function InteractiveVenueMapEditor({
 
   useEffect(() => {
     function isTypingTarget(target: EventTarget | null) {
-      if (!(target instanceof HTMLElement)) return false
-      const tag = target.tagName
-      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable
+      const node =
+        target instanceof HTMLElement
+          ? target
+          : document.activeElement instanceof HTMLElement
+            ? document.activeElement
+            : null
+      if (!node) return false
+      if (node.isContentEditable) return true
+      const field = node.closest("input, textarea, select")
+      if (!(field instanceof HTMLElement)) return false
+      if (field.tagName === "TEXTAREA" || field.tagName === "SELECT") return true
+      if (field.tagName !== "INPUT") return false
+      const type = field.getAttribute("type")?.toLowerCase() ?? "text"
+      return (
+        type === "text" ||
+        type === "search" ||
+        type === "email" ||
+        type === "tel" ||
+        type === "url" ||
+        type === "password" ||
+        type === "number" ||
+        type === ""
+      )
     }
 
     function onKeyDown(event: KeyboardEvent) {
-      if (preview || isTypingTarget(event.target)) return
+      if (preview) return
+      const drawingPolygon =
+        toolRef.current === "polygon" || polygonDraftRef.current.length > 0
+      if (drawingPolygon && event.key === "Enter") {
+        event.preventDefault()
+        closePolygonDraft()
+        return
+      }
+      if (drawingPolygon && event.key === "Escape") {
+        event.preventDefault()
+        cancelPolygonDraft()
+        return
+      }
+      if (drawingPolygon && (event.key === "Delete" || event.key === "Backspace")) {
+        event.preventDefault()
+        setPolygonDraft((points) => {
+          if (points.length <= 1) {
+            queueMicrotask(() => cancelPolygonDraft())
+            return []
+          }
+          return points.slice(0, -1)
+        })
+        return
+      }
+      if (isTypingTarget(event.target)) return
       if (event.code === "Space") {
         event.preventDefault()
         spaceHeld.current = true
@@ -2874,7 +2990,7 @@ export function InteractiveVenueMapEditor({
         return
       }
       if (event.key === "Escape") {
-        if (tool === "polygon" || polygonDraft.length > 0) {
+        if (toolRef.current === "polygon" || polygonDraftRef.current.length > 0) {
           event.preventDefault()
           cancelPolygonDraft()
           return
@@ -2906,14 +3022,11 @@ export function InteractiveVenueMapEditor({
           setTool("select")
         }
       }
-      if (event.key === "Enter" && tool === "polygon") {
-        event.preventDefault()
-        closePolygonDraft()
-        return
-      }
-      if ((event.key === "Delete" || event.key === "Backspace") && selection) {
-        event.preventDefault()
-        deleteSelection()
+      if (event.key === "Delete" || event.key === "Backspace") {
+        if (selectionRef.current || selectedElementIdsRef.current.length > 0) {
+          event.preventDefault()
+          deleteSelection()
+        }
         return
       }
       if (event.key === "ArrowUp") {
@@ -2967,10 +3080,10 @@ export function InteractiveVenueMapEditor({
       }
     }
 
-    window.addEventListener("keydown", onKeyDown)
+    window.addEventListener("keydown", onKeyDown, true)
     window.addEventListener("keyup", onKeyUp)
     return () => {
-      window.removeEventListener("keydown", onKeyDown)
+      window.removeEventListener("keydown", onKeyDown, true)
       window.removeEventListener("keyup", onKeyUp)
       spaceHeld.current = false
       shiftHeld.current = false
@@ -3056,9 +3169,12 @@ export function InteractiveVenueMapEditor({
 
   function pickPaletteItem(next: PalettePlacement) {
     if (next.kind === "zone_polygon") {
+      setWorkMode("architecture")
       setPlacement(next)
       setTool("polygon")
       setPolygonDraft([])
+      setPolygonCursor(null)
+      setSelection(null)
       setToolsOpen(false)
       return
     }
@@ -3174,7 +3290,7 @@ export function InteractiveVenueMapEditor({
             setTool("polygon")
             setPlacement({ kind: "zone_polygon" })
           }}
-          label="Trazar zona"
+          label="Trazar zona con lápiz"
           showLabel={isStudio ? "md" : true}
         >
           <PenTool className="size-4" />
@@ -3333,7 +3449,7 @@ export function InteractiveVenueMapEditor({
         {onSave ? (
           <Button
             type="button"
-            disabled={saving}
+            disabled={mapBusy}
             onClick={() => {
               void persistEditorMap()
             }}
@@ -3414,7 +3530,7 @@ export function InteractiveVenueMapEditor({
         {onSave ? (
           <Button
             type="button"
-            disabled={saving}
+            disabled={mapBusy}
             onClick={() => {
               void persistEditorMap()
             }}
@@ -3639,6 +3755,7 @@ export function InteractiveVenueMapEditor({
                           openObjectMenu(event, { kind: "sector", id: sector.id })
                         }
                         onPointerDown={(event) => {
+                          blurCanvasTypingTarget()
                           if (wantsCanvasPan(event)) return
                           isolateCanvasPointer(event, { preventGhostClick: true })
                           if (event.button !== 0) return
@@ -3715,6 +3832,7 @@ export function InteractiveVenueMapEditor({
                           openObjectMenu(event, { kind: "sector", id: sector.id })
                         }
                         onPointerDown={(event) => {
+                          blurCanvasTypingTarget()
                           if (wantsCanvasPan(event)) return
                           isolateCanvasPointer(event, { preventGhostClick: true })
                           if (event.button !== 0) return
@@ -4766,17 +4884,14 @@ export function InteractiveVenueMapEditor({
             </div>
           )}
 
-          {selection && selection.kind !== "seats" ? (
+          {selection ? (
             <Button
               type="button"
-              variant="outline"
-              className="w-full border-red-200 text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
+              className="w-full bg-red-600 text-white hover:bg-red-500"
               onClick={deleteSelection}
             >
-              <Trash2 className="size-4" />
-              {selection.kind === "elements"
-                ? "Eliminar seleccionados"
-                : "Eliminar"}
+              <Trash2 className="h-4 w-4" />
+              Eliminar selección
             </Button>
           ) : null}
 
