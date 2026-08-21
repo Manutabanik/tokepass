@@ -1,95 +1,75 @@
 "use client"
 
-import { ArrowLeft, Smartphone } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
-import { useState, type ReactNode } from "react"
-
-import { Button } from "@/components/ui/button"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
+import type { ReactNode } from "react"
 
 export function EventStudioShell({
   backHref,
   backLabel,
+  eyebrow = "Datos del evento",
+  title,
+  subtitle,
   stepper,
   status,
+  capacity,
   banner,
-  preview,
   dock,
   children,
 }: {
   backHref: string
   backLabel: string
+  eyebrow?: string
+  title: string
+  subtitle: string
   stepper: ReactNode
   status: ReactNode
+  capacity?: ReactNode
   banner?: ReactNode
-  preview: ReactNode
+  preview?: ReactNode
   dock: ReactNode
+  progress?: number
   children: ReactNode
 }) {
-  const [previewOpen, setPreviewOpen] = useState(false)
-
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col overflow-x-hidden bg-background">
-      <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border px-4 sm:px-6">
-        <Link
-          href={backHref}
-          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-1.5 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground"
-        >
-          <ArrowLeft className="size-3.5" />
-          <span className="hidden sm:inline">{backLabel}</span>
-        </Link>
-        <div className="min-w-0 flex-1 overflow-x-hidden">{stepper}</div>
-        <div className="flex shrink-0 items-center gap-2">
-          <div className="hidden sm:block">{status}</div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setPreviewOpen(true)}
-            className="h-8 gap-1.5"
+    <div className="w-full flex-1 overflow-x-hidden bg-background text-foreground">
+      <div className="mx-auto flex w-full max-w-6xl flex-col px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mb-6 flex items-center gap-3">
+          <Link
+            href={backHref}
+            aria-label={backLabel}
+            className="flex size-10 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-white/5 hover:text-foreground"
           >
-            <Smartphone className="size-3.5" aria-hidden="true" />
-            <span className="hidden sm:inline">Vista previa</span>
-          </Button>
+            <ArrowLeft className="size-5" />
+          </Link>
         </div>
-      </header>
 
-      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6 md:p-8">
-        <div className="mx-auto w-full max-w-4xl space-y-8">
-          {banner}
-          <div className="sm:hidden">{status}</div>
-          {children}
-        </div>
-      </div>
+        {banner}
 
-      <footer className="sticky bottom-0 z-20 shrink-0 border-t border-border bg-card/80 p-4 backdrop-blur-md">
-        <div className="mx-auto w-full max-w-4xl pb-[max(0px,env(safe-area-inset-bottom))]">
-          {dock}
-        </div>
-      </footer>
-
-      <Sheet open={previewOpen} onOpenChange={setPreviewOpen}>
-        <SheetContent
-          side="bottom"
-          className="flex max-h-[min(92dvh,100dvh)] flex-col bg-zinc-950 p-0"
-        >
-          <SheetHeader>
-            <SheetTitle>Vista previa</SheetTitle>
-            <SheetDescription>
-              Asi se ve el evento en el celular.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pb-6">
-            {preview}
+        <header className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-bold tracking-[0.18em] text-emerald-400 uppercase">
+              {eyebrow}
+            </p>
+            <h1 className="mt-1 text-3xl font-black tracking-tight text-foreground">
+              {title}
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">{subtitle}</p>
           </div>
-        </SheetContent>
-      </Sheet>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {capacity}
+            {status}
+          </div>
+        </header>
+
+        <div className="mb-8">{stepper}</div>
+
+        <div className="min-w-0">{children}</div>
+
+        <footer className="sticky bottom-0 z-40 mt-8 border-t border-border/40 bg-background/95 py-4 backdrop-blur-md">
+          {dock}
+        </footer>
+      </div>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { Flame, Search } from "lucide-react"
+import { Flame } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
@@ -17,6 +17,7 @@ import { useDebounce } from "@/hooks/use-debounce"
 import type { CatalogEvent } from "@/app/actions/public-events"
 import { EmptyState } from "@/components/discovery/empty-state"
 import { EventCard } from "@/components/discovery/event-card"
+import { SearchBar } from "@/components/discovery/search-bar"
 import { FeaturedHeroSection } from "@/components/public/featured-hero-section"
 import { HeroSection } from "@/components/discovery/hero-section"
 import { OrganizerCtaBanner } from "@/components/discovery/organizer-cta-banner"
@@ -30,7 +31,6 @@ import {
 import type { DiscoveryCategory } from "@/lib/discovery-categories"
 import {
   DEFAULT_DISCOVERY_CATEGORIES,
-  DISCOVERY_DATE_PRESETS,
   catalogFiltersFromSearchParams,
   catalogSearchParams,
   filterCatalogEvents,
@@ -39,10 +39,9 @@ import {
   type DiscoveryDatePreset,
   type DiscoveryFilterDraft,
 } from "@/lib/discovery-filters"
-import type { DiscoveryNicheId } from "@/lib/discovery-niches"
+import { type DiscoveryNicheId } from "@/lib/discovery-niches"
 import type { FeaturedRotationResult } from "@/lib/featured-rotation"
 import { isFeaturedRailEligible } from "@/lib/featured-rotation"
-import { cn } from "@/lib/utils"
 
 const EMPTY_SEARCH_PARAMS = new URLSearchParams()
 
@@ -333,75 +332,27 @@ function DiscoveryHubInner({
       <div className="space-y-6">
         <div className="mx-auto flex max-w-3xl flex-col gap-4 px-4 pt-4 pb-2 md:px-0 md:pt-6">
           <h1 className="text-3xl font-black tracking-tight text-foreground">
-            Buscar eventos
+            Cartelera de eventos
           </h1>
-          <div className="relative w-full">
-            <Search
-              className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar por artista, evento o lugar..."
-              autoComplete="off"
-              autoCorrect="off"
-              spellCheck={false}
-              aria-label="Buscar por artista, evento o lugar"
-              className="w-full rounded-2xl border border-border/50 bg-secondary/50 py-4 pr-4 pl-12 text-base font-medium text-foreground placeholder:text-muted-foreground transition-all focus:ring-2 focus:ring-primary/50 focus:outline-none md:text-sm"
-            />
-          </div>
-          <div
-            className="no-scrollbar flex items-center gap-2 overflow-x-auto pt-1 pb-2"
-            role="tablist"
-            aria-label="Filtros de busqueda"
-          >
-            {categories.map((item) => {
-              const active = categoryId === item.id
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setCategoryId(item.id)}
-                  className={cn(
-                    "inline-flex shrink-0 items-center rounded-full px-3.5 py-2 text-sm font-medium transition-all",
-                    active
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "bg-secondary/30 text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
-                  )}
-                >
-                  {item.label}
-                </button>
-              )
-            })}
-            {DISCOVERY_DATE_PRESETS.filter((preset) => preset.id !== "all").map(
-              (preset) => {
-                const active = datePreset === preset.id
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={active}
-                    onClick={() =>
-                      setDatePreset(active ? "all" : preset.id)
-                    }
-                    className={cn(
-                      "inline-flex shrink-0 items-center rounded-full px-3.5 py-2 text-sm font-medium transition-all",
-                      active
-                        ? "bg-primary text-primary-foreground shadow-sm"
-                        : "bg-secondary/30 text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
-                    )}
-                  >
-                    {preset.label}
-                  </button>
-                )
-              },
-            )}
-          </div>
+          <SearchBar
+            events={events}
+            query={query}
+            onQueryChange={setQuery}
+            city={city}
+            cities={provinces}
+            onCityChange={setCity}
+            locationsLoading={locationsLoading}
+            categoryId={categoryId}
+            onCategoryChange={setCategoryId}
+            tagId={tagId}
+            onTagChange={setTagId}
+            selectedArtistId={artistId}
+            datePreset={datePreset}
+            featuredArtists={resolvedFeaturedArtists}
+            categories={categories}
+            niche={niche}
+            onCommitFilters={commitFilters}
+          />
         </div>
 
         <section
@@ -416,7 +367,7 @@ function DiscoveryHubInner({
   }
 
   return (
-    <div className="space-y-12 bg-transparent sm:space-y-16">
+    <div className="w-full max-w-full space-y-12 overflow-x-hidden bg-transparent sm:space-y-16">
       <HeroSection
         events={events}
         query={query}
@@ -434,7 +385,6 @@ function DiscoveryHubInner({
         featuredArtists={resolvedFeaturedArtists}
         categories={categories}
         niche={niche}
-        onNicheChange={setNiche}
         onCommitFilters={commitFilters}
       />
 
@@ -445,12 +395,12 @@ function DiscoveryHubInner({
       />
 
       <section className="space-y-6" id="discovery-results">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-4">
           <div>
             <div className="flex items-center gap-2">
               <Flame className="h-5 w-5 text-purple-600" aria-hidden="true" />
               <h2 className="text-2xl font-black tracking-tight text-foreground sm:text-3xl">
-                {isBrowsing ? "Resultados" : "Lo más vendido de la semana"}
+                {isBrowsing ? "Resultados" : "Próximos eventos"}
               </h2>
             </div>
             <p className="mt-1.5 text-sm text-muted-foreground">

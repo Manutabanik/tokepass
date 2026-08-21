@@ -211,7 +211,7 @@ export function VenueManagerModal({
     }
     if (
       !window.confirm(
-        `Eliminar "${venue.name}" de forma permanente? Esta acción no se puede deshacer.`,
+        `¿Querés eliminar esto? Se va a borrar "${venue.name}". Esta acción no se puede deshacer.`,
       )
     ) {
       return

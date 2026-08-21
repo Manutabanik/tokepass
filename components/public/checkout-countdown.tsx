@@ -55,9 +55,8 @@ export function CheckoutCountdown({
       if (seconds > 0 || expiredRef.current) return
 
       expiredRef.current = true
-      toast.error("El tiempo de reserva expiró", {
-        description:
-          "Tu cupo se liberó. Volvé a elegir entradas si querés comprar.",
+      toast.error("Se acabó el tiempo de reserva", {
+        description: "Volvé a elegir tus entradas para continuar",
       })
       onExpiredRef.current?.()
       if (variant === "cart") return

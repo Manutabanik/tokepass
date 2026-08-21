@@ -119,8 +119,11 @@ export function EventHeroMediaGallery({
   )
 
   return (
-    <section aria-label="Galería multimedia del evento">
-      <div className="relative aspect-[4/3] w-full max-h-[38dvh] overflow-hidden bg-slate-950 sm:aspect-[16/9] sm:max-h-[460px] md:rounded-2xl">
+    <section
+      aria-label="Galería multimedia del evento"
+      className="w-full max-w-full overflow-x-hidden"
+    >
+      <div className="relative aspect-[4/3] w-full max-w-full max-h-[38dvh] overflow-hidden bg-slate-950 sm:aspect-[16/9] sm:max-h-[460px] md:rounded-2xl">
         <div
           className="no-scrollbar h-full snap-x snap-mandatory overflow-x-auto touch-pan-x select-none"
           ref={emblaRef}

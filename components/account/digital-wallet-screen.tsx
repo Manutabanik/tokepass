@@ -77,16 +77,17 @@ export async function DigitalWalletScreen({
     <section className="space-y-8">
       <header>
         <p className="mb-3 inline-block rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 font-mono text-xs uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-400">
-          Billetera
+          Mis entradas
         </p>
         <h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
           Mis entradas
         </h1>
         <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
+          Donde guardás tus pases.{" "}
           {validCount === 1
-            ? "1 entrada activa en tu billetera."
-            : `${validCount} entradas activas en tu billetera.`}{" "}
-          Living QR · transferí a un amigo o sumá extras.
+            ? "1 entrada activa."
+            : `${validCount} entradas activas.`}{" "}
+          Código de acceso dinámico · pasale la entrada a un amigo o sumá extras.
         </p>
       </header>
 

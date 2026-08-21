@@ -81,19 +81,19 @@ export function AccountProfileForm({
       .join(" ")
 
     if (fullName.length < 2) {
-      toast.error("Ingresá tu nombre y apellido.")
+      toast.error("Escribí tu nombre y apellido tal como figuran en tu DNI")
       return
     }
 
     const dniDigits = dni.replace(/\D/g, "")
     if (dniDigits && (dniDigits.length < 7 || dniDigits.length > 11)) {
-      toast.error("El DNI / CUIL no parece válido. Usá solo números.")
+      toast.error("Ingresá un DNI válido (solo números, sin puntos)")
       return
     }
 
     const phoneDigits = phone.replace(/\D/g, "")
     if (phone.trim() && phoneDigits.length < 8) {
-      toast.error("El teléfono no parece válido. Incluí el código de área.")
+      toast.error("Ingresá un número de celular válido")
       return
     }
 
@@ -103,7 +103,7 @@ export function AccountProfileForm({
         toast.error(result.error)
         return
       }
-      toast.success("Cambios guardados")
+      toast.success("¡Listo! Cambios guardados correctamente")
       router.refresh()
     })
   }

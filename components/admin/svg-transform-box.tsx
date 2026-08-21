@@ -4,24 +4,20 @@ import { RotateCw } from "lucide-react"
 
 import { transformHandleWorldSize } from "@/lib/seating/venue-touch"
 import {
+  handlePoint,
   rotationHandleAnchor,
   type BoundsRect,
   type ResizeHandle,
 } from "@/lib/seating/venue-transform"
 
-const HANDLE: ResizeHandle[] = ["nw", "ne", "sw", "se"]
+const HANDLE: ResizeHandle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"]
 
 function handleCursor(handle: ResizeHandle) {
+  if (handle === "n" || handle === "s") return "cursor-ns-resize"
+  if (handle === "e" || handle === "w") return "cursor-ew-resize"
   return handle === "nw" || handle === "se"
     ? "cursor-nwse-resize"
     : "cursor-nesw-resize"
-}
-
-function handlePoint(bounds: BoundsRect, handle: ResizeHandle) {
-  if (handle === "nw") return { x: bounds.x, y: bounds.y }
-  if (handle === "ne") return { x: bounds.x + bounds.width, y: bounds.y }
-  if (handle === "sw") return { x: bounds.x, y: bounds.y + bounds.height }
-  return { x: bounds.x + bounds.width, y: bounds.y + bounds.height }
 }
 
 export function SvgTransformBox({
@@ -137,8 +133,21 @@ export function SvgTransformBox({
                   width={handleSize}
                   height={handleSize}
                   rx={1.2 / z}
-                  className="pointer-events-none fill-white stroke-primary/50"
+                  className={
+                    hideResize
+                      ? "pointer-events-none fill-white stroke-primary/50"
+                      : `fill-white stroke-primary/50 ${handleCursor(handle)}`
+                  }
                   strokeWidth={stroke}
+                  onPointerDown={
+                    hideResize
+                      ? undefined
+                      : (event) => {
+                          if (event.button !== 0) return
+                          event.stopPropagation()
+                          onResizeStart(handle, event)
+                        }
+                  }
                 />
               </g>
             )

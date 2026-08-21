@@ -28,7 +28,7 @@ export default async function CuentaPerfilPage() {
           Perfil
         </p>
         <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
-          Mis Datos
+          Mis datos personales
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           Foto, DNI y contacto para checkout rápido y respaldo en puerta.

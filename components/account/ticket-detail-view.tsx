@@ -206,7 +206,7 @@ export function TicketDetailView({
       ) : canShowQr ? (
         <div className="rounded-3xl border border-border bg-card p-5 text-center text-card-foreground shadow-2xl shadow-black/20">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
-            {isStatic ? "QR de ingreso" : "Living QR"}
+            {isStatic ? "QR de ingreso" : "Código de acceso dinámico"}
           </p>
           <div className="mx-auto mt-4 aspect-square w-full rounded-2xl bg-white p-4">
             <QrEnlargeTrigger onOpen={() => setScanOpen(true)} className="block h-full w-full">
@@ -242,14 +242,14 @@ export function TicketDetailView({
             <ShieldCheck className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
             {isStatic
               ? "Presentá este código en puerta. También sirve el PDF impreso."
-              : "Abrí esta pantalla al llegar. El código cambia cada 15 segundos."}
+              : "En puerta mostrá esta pantalla. El código se actualiza solo para evitar reventas truchas (no le saques captura de pantalla)."}
           </p>
           {!online ? (
             <p
               role="status"
               className="mt-3 inline-flex rounded-full border border-amber-400/40 bg-amber-500/15 px-3 py-1 text-[11px] font-semibold tracking-wide text-amber-100"
             >
-              Modo sin conexión - QR disponible para lectura
+              Modo sin señal (Tu código sigue funcionando igual)
             </p>
           ) : null}
           {sponsors.length > 0 ? (
@@ -312,7 +312,9 @@ export function TicketDetailView({
         </div>
       ) : (
         <div className="rounded-3xl border border-dashed border-border bg-muted/40 px-5 py-10 text-center text-sm text-muted-foreground">
-          {`Esta entrada ya no muestra QR vivo${ticket.status === "transferred" ? " (fue transferida)" : ""}.`}
+          {ticket.status === "transferred"
+            ? "Esta entrada ya no es tuya: se la transferiste a un amigo."
+            : "Esta entrada ya no muestra el código de acceso."}
         </div>
       )}
 
@@ -329,7 +331,7 @@ export function TicketDetailView({
             ) : (
               <Send className="size-4" aria-hidden="true" />
             )}
-            Enviar a un amigo
+            Enviar por WhatsApp o email
           </Button>
         ) : null}
 

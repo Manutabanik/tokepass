@@ -46,10 +46,10 @@ export function PublicNavbarClient({
 
           <nav
             className="hidden shrink-0 items-center justify-center gap-1 lg:flex lg:gap-2"
-            aria-label="Principal"
+            aria-label="Cartelera de eventos"
           >
             <Link href={exploreHref} className={navLinkClass}>
-              Explorar
+              Descubrir shows
             </Link>
             {!isAuthenticated ? (
               <Link
@@ -99,7 +99,7 @@ export function PublicNavbarClient({
                 )}
               >
                 <UserRound className="size-3.5 shrink-0" aria-hidden="true" />
-                <span className="whitespace-nowrap">Ingresar</span>
+                <span className="whitespace-nowrap">Ingresar a mi cuenta</span>
               </Link>
             )}
           </div>

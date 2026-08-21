@@ -4,6 +4,7 @@ import { describe, it } from "node:test"
 import type { TicketSelectorTier } from "@/components/public/ticket-tier-selector"
 import {
   formatEventCartDate,
+  formatEventDay,
   formatEventDayNumber,
   formatEventMonthShort,
   formatEventWeekdayShort,
@@ -19,6 +20,8 @@ import {
   listCheckoutDayTabs,
   shouldShowCheckoutKindTabs,
   ticketDateCartLabel,
+  ticketDateSectionLabel,
+  ticketDayBadgeLabel,
   ticketMatchesTab,
 } from "./ticket-day-groups"
 
@@ -163,6 +166,37 @@ describe("ticketDateCartLabel", () => {
     assert.equal(
       ticketDateCartLabel(tier({ id: "abono", name: "Abono" }), days),
       "Todos los días",
+    )
+  })
+})
+
+describe("ticket day visibility labels", () => {
+  const dayTicket = tier({
+    id: "vie",
+    name: "General",
+    isFullPass: false,
+    dayId: "d1",
+  })
+
+  it("uses the calendar date for section headers", () => {
+    assert.equal(
+      ticketDateSectionLabel("d1", days),
+      formatEventDay(days[0].start_time),
+    )
+  })
+
+  it("shows a compact date badge on day-specific tickets", () => {
+    assert.equal(
+      ticketDayBadgeLabel(dayTicket, days),
+      formatEventCartDate(days[0].start_time),
+    )
+    assert.equal(
+      ticketDayBadgeLabel(tier({ id: "abono", name: "Abono" }), days),
+      "Todos los días",
+    )
+    assert.equal(
+      ticketDayBadgeLabel(tier({ id: "one", name: "General" }), [days[0]]),
+      null,
     )
   })
 })

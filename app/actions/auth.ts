@@ -56,7 +56,7 @@ function isInvalidLoginCredentials(message: string): boolean {
 function mapAuthErrorMessage(message: string): string {
   const normalized = message.toLowerCase()
   if (isInvalidLoginCredentials(message)) {
-    return "Email o contraseña incorrectos."
+    return "El mail o la contraseña no son correctos. Revisalos y probá otra vez"
   }
   if (normalized.includes("email not confirmed")) {
     return "Confirmá tu email antes de ingresar. Revisá tu bandeja de entrada."
@@ -68,7 +68,7 @@ function mapAuthErrorMessage(message: string): string {
     return "Este email ya está registrado. Iniciá sesión o recuperá tu contraseña."
   }
   if (normalized.includes("password should be at least")) {
-    return "La contraseña debe tener al menos 8 caracteres."
+    return "Tiene que tener al menos 8 caracteres"
   }
   if (normalized.includes("rate limit") || normalized.includes("too many")) {
     return "Demasiados intentos. Esperá un momento e intentá de nuevo."
@@ -77,7 +77,7 @@ function mapAuthErrorMessage(message: string): string {
     return "El registro está temporalmente deshabilitado."
   }
   if (normalized.includes("is invalid") && normalized.includes("email")) {
-    return "Ingresá un email válido."
+    return "Escribí un correo válido (ej: nombre@gmail.com)"
   }
   if (normalized.includes("otp") || normalized.includes("magic")) {
     return "No pudimos enviar el enlace. Revisá el email e intentá de nuevo."
@@ -156,7 +156,7 @@ export async function signUpWithEmail(
 
   if (credentials.password.length < 8) {
     return {
-      error: "La contraseña debe tener al menos 8 caracteres.",
+      error: "Tiene que tener al menos 8 caracteres",
       success: null,
     }
   }
@@ -297,7 +297,7 @@ export async function signUpOrganizerAccount(
 
   if (credentials.password.length < 8) {
     return {
-      error: "La contraseña debe tener al menos 8 caracteres.",
+      error: "Tiene que tener al menos 8 caracteres",
       success: null,
     }
   }

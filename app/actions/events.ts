@@ -100,7 +100,10 @@ import {
   normalizeAccessLink,
   parseDeliveryMode,
 } from "@/lib/events/delivery-mode"
-import { applyMapCapacityToTickets } from "@/lib/seating/venue-map-pricing"
+import {
+  applyMapCapacityToTickets,
+  consolidateEventTicketsForPersist,
+} from "@/lib/seating/venue-map-pricing"
 import {
   listAssignableGeneralSectors,
   logicalSectorId,
@@ -123,6 +126,7 @@ import {
   collectLiveSeatingSectorIds,
   isRelationalIntegrityError,
   reconcileTicketTierIds,
+  resolvePersistableTicketSectorId,
   sanitizeDeepSeatingRefs,
   sanitizeSeatingSectorIds,
   sanitizeTicketTiersForPersist,
@@ -373,6 +377,11 @@ function mapEventFormToRpcPayload(
       (sector) => sector.id,
     ),
   )
+  const liveSectorIds = collectLiveSeatingSectorIds({
+    venueMap: data.venue.venueMap,
+    seatingLayout: data.venue.seatingLayout,
+    extraIds: assignableSectorIds,
+  })
   const includesMap = Boolean(data.venue.includesSeatingMap)
   const capacitySnap = computeEventCapacityFromForm(data)
 
@@ -539,12 +548,14 @@ function mapEventFormToRpcPayload(
       const requestedSectorId = data.basics.hasSeatingPlan
         ? tier.seatingSectorId?.trim() || null
         : null
-      const seatingSectorId =
-        !requestedSectorId
-          ? null
-          : layoutType === "general" && !assignableSectorIds.has(requestedSectorId)
-            ? null
-            : requestedSectorId
+      const seatingSectorId = resolvePersistableTicketSectorId({
+        sectorId: requestedSectorId,
+        layoutType,
+        tierType: tier.tierType,
+        liveSectorIds,
+        assignableSectorIds,
+        venueMap: data.venue.venueMap,
+      })
       return {
         ...(tier.id ? { id: tier.id } : {}),
         name: tier.name,
@@ -984,10 +995,11 @@ function venueMapSkuGuard(
 }
 
 function withHealedMapTickets(data: EventFormValues): EventFormValues {
+  const tickets = consolidateEventTicketsForPersist(data)
   return {
     ...data,
     tickets: applyMapCapacityToTickets(
-      data.tickets,
+      tickets,
       parseVenueMap(data.venue.venueMap),
     ),
   }
@@ -1081,7 +1093,7 @@ async function persistEventIdentityOnly(input: {
   if (title.length < 3) {
     return {
       success: false,
-      error: "El título debe tener al menos 3 caracteres.",
+      error: "Ponéle un nombre a tu evento para poder avanzar",
     }
   }
 
@@ -1160,7 +1172,7 @@ async function persistNewEventIdentityOnly(
   if (title.length < 3) {
     return {
       success: false,
-      error: "El título debe tener al menos 3 caracteres.",
+      error: "Ponéle un nombre a tu evento para poder avanzar",
     }
   }
 

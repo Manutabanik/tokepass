@@ -182,14 +182,13 @@ export function CheckoutSuccessView({
               />
             </span>
             <p className="mt-10 text-sm font-semibold uppercase tracking-[0.18em] text-primary">
-              Confirmando pago
+              Un momento
             </p>
             <h1 className="mt-3 text-3xl font-black tracking-[-0.04em] text-foreground sm:text-4xl">
-              Procesando tu pago
+              Estamos confirmando tu pago
             </h1>
             <p className="mt-4 text-base leading-7 text-muted-foreground">
-              Procesando tu pago de forma segura. Esto puede tomar unos
-              segundos...
+              No cierres ni recargues esta pantalla
             </p>
             <div className="mt-8">
               <PendingSkeleton />
@@ -197,8 +196,9 @@ export function CheckoutSuccessView({
             {timedOut ? (
               <div className="mt-6 space-y-3">
                 <p className="text-sm text-muted-foreground">
-                  Esto esta tardando un poco mas de lo habitual. Si ya pagaste,
-                  tus entradas van a aparecer aca o en tu billetera.
+                  Está tardando un poquito más de lo normal. Si ya se hizo el
+                  débito de tu cuenta, no te preocupes: tu entrada aparece en
+                  &quot;Mis entradas&quot;
                 </p>
                 <Button
                   type="button"
@@ -235,18 +235,16 @@ export function CheckoutSuccessView({
                   Pago confirmado
                 </p>
                 <h1 className="text-4xl font-black tracking-tight text-foreground md:text-5xl">
-                  Ya estas adentro
+                  ¡Pago confirmado! Ya estás adentro
                 </h1>
                 <p className="mx-auto max-w-md text-lg font-medium text-muted-foreground md:text-xl">
-                  Te enviamos las entradas a tu{" "}
-                  <span className="font-bold text-foreground">WhatsApp</span> y
-                  a tu correo electronico.
+                  Te mandamos el comprobante y el acceso a tu mail. También las
+                  tenés guardadas en &quot;Mis entradas&quot;
                 </p>
                 <p className="mx-auto max-w-md text-sm leading-6 text-muted-foreground">
-                  {fulfillment.eventTitle
-                    ? `Tambien podes presentar el Living QR en ${fulfillment.eventTitle}.`
-                    : "Tambien podes presentar el Living QR en puerta."}{" "}
-                  El codigo se renueva solo para evitar capturas de pantalla.
+                  {firstTicket?.deliveryMode === "ONLINE"
+                    ? "El botón para entrar al vivo está en Mis entradas. No hay QR de puerta."
+                    : "En puerta mostrá esta pantalla. El código se actualiza solo para evitar reventas truchas (no le saques captura de pantalla)."}
                 </p>
               </div>
             </div>
@@ -277,7 +275,7 @@ export function CheckoutSuccessView({
               </div>
             ) : (
               <p className="mt-8 text-sm text-muted-foreground">
-                El pago esta acreditado. Abrí tu billetera para ver el QR.
+                Pago acreditado. Abrí tu billetera para ver el QR.
               </p>
             )}
 
@@ -317,15 +315,14 @@ export function CheckoutSuccessView({
             className="w-full"
           >
             <h1 className="text-3xl font-black tracking-[-0.04em] text-foreground">
-              {status === "expired"
-                ? "La reserva expiro"
-                : status === "failed"
-                  ? "No pudimos confirmar el pago"
-                  : "No encontramos esta orden"}
+              {status === "expired" || status === "failed"
+                ? "La reserva expiró o el pago no se completó"
+                : "No encontramos esta orden"}
             </h1>
             <p className="mt-4 text-base leading-7 text-muted-foreground">
-              Si el cobro se hizo, escribinos con el numero de orden. Si no,
-              podes volver a intentar la compra.
+              {status === "expired" || status === "failed"
+                ? "Si te cobraron algo, no vuelvas a pagar: escribinos directamente y lo resolvemos juntos"
+                : "Si el cobro se hizo, escribinos con el número de orden. Si no, podés volver a intentar la compra."}
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
               <Button

@@ -15,6 +15,33 @@ export type VenueMapSeat = {
   rotation?: number
 }
 
+/** Per-row seat counts for asymmetric theatre / amphitheatre layouts. */
+export type VenueRowConfig = {
+  label?: string
+  seatCount: number
+}
+
+export function parseOptionalRowsConfig(raw: unknown): VenueRowConfig[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined
+  const next: VenueRowConfig[] = []
+  for (const [index, item] of raw.entries()) {
+    if (!item || typeof item !== "object") continue
+    const row = item as Record<string, unknown>
+    const seatCount = Math.floor(
+      Number(row.seatCount ?? row.seats ?? row.itemsPerRow ?? row.items_per_row),
+    )
+    if (!Number.isFinite(seatCount) || seatCount < 1) continue
+    const label = String(row.label ?? row.rowLabel ?? row.row_label ?? "")
+      .trim()
+      .slice(0, 24)
+    next.push({
+      label: label || String(index + 1),
+      seatCount: Math.min(80, seatCount),
+    })
+  }
+  return next.length > 0 ? next : undefined
+}
+
 export type VenueMapSector = {
   id: string
   name: string
@@ -27,6 +54,8 @@ export type VenueMapSector = {
   curvature: number
   aisle: boolean
   seats: VenueMapSeat[]
+  /** Optional asymmetric row lengths. `rows` / `seatsPerRow` stay as fallback. */
+  rowsConfig?: VenueRowConfig[]
 }
 
 export type VenueMapStage = {
@@ -35,6 +64,8 @@ export type VenueMapStage = {
   y: number
   width: number
   height: number
+  /** Optional canvas rotation in degrees. Omitted on legacy maps. */
+  rotation?: number
 }
 
 export type VenueMapLabel = {
@@ -253,6 +284,8 @@ export type VenueMapZone = {
   capacityPerUnit: number
   capacity: number
   labelPrefix: string
+  /** Optional asymmetric row lengths for numbered seats. Legacy maps omit it. */
+  rowsConfig?: VenueRowConfig[]
   /** Reserved seats/tables already include venue (GA) access. */
   includesGeneralAccess?: boolean
 }
@@ -597,8 +630,16 @@ function parseVenueZone(raw: unknown): VenueMapZone | null {
   } else if (layoutType === "general") {
     layoutType = "table_combo"
   }
-  const rows = Math.min(80, Math.max(1, asNumber(item.rows, 4)))
-  const itemsPerRow = Math.min(80, Math.max(1, asNumber(item.itemsPerRow ?? item.items_per_row, 10)))
+  const rowsConfig = parseOptionalRowsConfig(item.rowsConfig ?? item.rows_config)
+  const rows = rowsConfig
+    ? Math.min(80, Math.max(1, rowsConfig.length))
+    : Math.min(80, Math.max(1, asNumber(item.rows, 4)))
+  const itemsPerRow = rowsConfig
+    ? Math.min(80, Math.max(1, ...rowsConfig.map((row) => row.seatCount), 1))
+    : Math.min(80, Math.max(1, asNumber(item.itemsPerRow ?? item.items_per_row, 10)))
+  const defaultCapacity = rowsConfig
+    ? rowsConfig.reduce((sum, row) => sum + row.seatCount, 0)
+    : rows * itemsPerRow
   const pricing =
     layoutType === "numbered_seat"
       ? { sellMode: "per_seat" as const, priceMode: "per_person" as const }
@@ -619,8 +660,9 @@ function parseVenueZone(raw: unknown): VenueMapZone | null {
     priceMode: pricing.priceMode,
     rows,
     itemsPerRow,
+    ...(rowsConfig ? { rowsConfig } : {}),
     capacityPerUnit: Math.min(100, Math.max(1, asNumber(item.capacityPerUnit ?? item.capacity_per_unit, 1))),
-    capacity: Math.max(0, asNumber(item.capacity, rows * itemsPerRow)),
+    capacity: Math.max(0, asNumber(item.capacity, defaultCapacity)),
     labelPrefix: String(item.labelPrefix ?? item.label_prefix ?? (layoutType === "numbered_seat" ? "Butaca " : "Mesa ")).slice(0, 24),
     includesGeneralAccess: parseOptionalBoolean(
       item.includesGeneralAccess ?? item.includes_general_access,
@@ -683,6 +725,7 @@ function parsePolygonSector(raw: unknown): VenueMapSector | null {
     if (rotation != null) parsed.rotation = rotation
     return parsed
   })
+  const rowsConfig = parseOptionalRowsConfig(item.rowsConfig ?? item.rows_config)
   return {
     id,
     name,
@@ -695,6 +738,7 @@ function parsePolygonSector(raw: unknown): VenueMapSector | null {
     curvature: Math.min(1, Math.max(0, asNumber(item.curvature, 0))),
     aisle: Boolean(item.aisle),
     seats,
+    ...(rowsConfig ? { rowsConfig } : {}),
   }
 }
 

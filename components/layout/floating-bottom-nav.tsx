@@ -16,13 +16,13 @@ import { cn } from "@/lib/utils"
 const ITEMS = [
   {
     href: "/",
-    label: "Explorar",
+    label: "Descubrir shows",
     icon: Compass,
     match: (path: string) => path === "/",
   },
   {
     href: "/cuenta/entradas",
-    label: "Entradas",
+    label: "Mis entradas",
     icon: Ticket,
     match: (path: string) =>
       path.startsWith("/cuenta/entradas") ||
@@ -75,10 +75,10 @@ export function FloatingBottomNav() {
 
   return createPortal(
     <nav
-      aria-label="Navegacion principal"
+      aria-label="Cartelera de eventos"
       className={cn(
         // Match the public navbar breakpoint (top links appear at `lg`).
-        "pointer-events-auto fixed left-1/2 z-40 flex lg:hidden",
+        "pointer-events-auto fixed left-1/2 z-30 flex max-w-[calc(100vw-1.5rem)] lg:hidden",
         "bottom-[max(env(safe-area-inset-bottom),1rem)]",
         "items-center gap-1 rounded-full border border-white/10 bg-black/80 p-1.5 shadow-2xl backdrop-blur-md",
         "transition-transform duration-300 ease-in-out will-change-transform",

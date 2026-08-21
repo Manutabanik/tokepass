@@ -380,9 +380,9 @@ export function SupportFaqsManager({
       >
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Eliminar pregunta</DialogTitle>
+            <DialogTitle>¿Querés eliminar esto?</DialogTitle>
             <DialogDescription>
-              Se va a borrar “{deleteTarget?.question}”. Esta accion no se
+              Se va a borrar “{deleteTarget?.question}”. Esta acción no se
               puede deshacer.
             </DialogDescription>
           </DialogHeader>
@@ -393,7 +393,7 @@ export function SupportFaqsManager({
               onClick={() => setDeleteTarget(null)}
               disabled={pending}
             >
-              Cancelar
+              Volver atrás
             </Button>
             <Button
               type="button"

@@ -57,7 +57,7 @@ export function toPublicHttpError(raw: unknown): PublicHttpError {
 
   const mapped = mapUnknownError(raw, {
     code: "SAVE_FAILED",
-    title: "No se pudieron guardar los cambios",
+    title: "No pudimos guardar los cambios",
     message: GENERIC_PUBLIC_ERROR,
   })
 

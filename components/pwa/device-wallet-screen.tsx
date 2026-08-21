@@ -57,7 +57,7 @@ export function DeviceWalletScreen() {
             className="inline-flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-100"
           >
             <WifiOff className="size-3.5 shrink-0" aria-hidden="true" />
-            Modo sin conexión - QR disponible para lectura
+            Modo sin señal (Tu código sigue funcionando igual)
           </p>
         ) : (
           <p className="text-sm text-zinc-400">

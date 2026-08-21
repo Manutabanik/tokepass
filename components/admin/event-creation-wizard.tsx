@@ -29,8 +29,8 @@ import {
   type EditableEventData,
 } from "@/app/actions/events"
 import { EventAutosaveIndicator } from "@/components/admin/event-autosave-indicator"
+import { EventCapacityHeader } from "@/components/admin/event-capacity-header"
 import { EventStudioDock } from "@/components/admin/event-studio-dock"
-import { EventLivePreview } from "@/components/admin/events/event-live-preview"
 import { EventStudioDateTimeField } from "@/components/admin/events/event-studio-datetime-field"
 import { EventStudioFlyerField } from "@/components/admin/events/event-studio-flyer-field"
 import { EventStudioPurchaseCapField } from "@/components/admin/events/event-studio-purchase-cap-field"
@@ -53,12 +53,6 @@ import type { ZoneTierPriceDraft } from "@/lib/stores/event-form-store"
 import { useEventFormStore } from "@/lib/stores/event-form-store"
 import { Button } from "@/components/ui/button"
 import {
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
   Form,
   FormDescription,
   FormField,
@@ -67,6 +61,13 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import {
   Tabs,
@@ -77,6 +78,7 @@ import { feePercentageFromRate } from "@/lib/pricing/flexible-pricing"
 import type { VenuePricingMap } from "@/lib/seating/venue-adapter"
 import {
   applyMapCapacityToTickets,
+  consolidateEventTicketsForPersist,
   mapBackedTicketsUnchanged,
   syncMapBackedTickets,
   venueMapToPricingMap,
@@ -153,8 +155,8 @@ import { cn } from "@/lib/utils"
 
 const STEP_META = {
   [WIZARD_STEP_IDENTITY]: {
-    title: "Identidad",
-    description: "Nombre, flyer y categoría",
+    title: "Datos principales",
+    description: "Nombre, flyer y detalles del show",
     icon: Sparkles,
   },
   [WIZARD_STEP_AGENDA]: {
@@ -168,18 +170,16 @@ const STEP_META = {
     icon: MapPin,
   },
   [WIZARD_STEP_TICKETS]: {
-    title: "Entradas",
-    description: "Tarifas y cupos",
+    title: "Entradas y precios",
+    description: "Lotes, abonos y cupos",
     icon: Ticket,
   },
   [WIZARD_STEP_CONFIG]: {
-    title: "Configuración Final",
-    description: "Cobros, privacidad y publicar",
+    title: "Publicar y cobrar",
+    description: "Comisiones y privacidad",
     icon: CreditCard,
   },
 } as const
-
-const COMPACT_STEP_SHELL = "w-full"
 
 const blankTicket = (): EventFormValues["tickets"][number] => ({
   ...createInventoryTicket("general"),
@@ -406,7 +406,7 @@ export function EventCreationWizard({
     setActiveStep(resolvedStep)
     setWizardStep(resolvedStep)
   }
-  if (resolvedStep !== WIZARD_STEP_MAP && isStudioOpen) {
+  if (resolvedStep !== WIZARD_STEP_CONFIG && isStudioOpen) {
     setIsStudioOpen(false)
   }
 
@@ -683,8 +683,8 @@ export function EventCreationWizard({
     if (result.eventId) {
       useEventFormStore.getState().setEventId(result.eventId)
     }
-    setResultMessage({ type: "success", text: "Identidad guardada." })
-    toast.success("Identidad guardada", {
+    setResultMessage({ type: "success", text: "Datos principales guardados." })
+    toast.success("Datos principales guardados", {
       description: "El título y los datos del evento quedaron actualizados.",
     })
   }
@@ -774,7 +774,7 @@ export function EventCreationWizard({
       if (!persist.success) {
         reportPersistError(
           persist.error,
-          "No se pudieron guardar los cambios en el lugar",
+          "No pudimos guardar los cambios. Revisá tu conexión a internet e intentá de nuevo",
         )
         return false
       }
@@ -792,6 +792,10 @@ export function EventCreationWizard({
     }
 
     const editingId = initialData?.id ?? persistedEventId
+    payloadData = {
+      ...payloadData,
+      tickets: consolidateEventTicketsForPersist(payloadData),
+    }
     const liveSectorIds = collectLiveSeatingSectorIds({
       venueMap: payloadData.venue.venueMap,
       seatingLayout: payloadData.venue.seatingLayout,
@@ -841,7 +845,7 @@ export function EventCreationWizard({
         result.error,
         result.title ??
           (isEditing || editingId
-            ? "No se pudieron guardar los cambios"
+            ? "No pudimos guardar los cambios"
             : "No se pudo crear el evento"),
         result.wizardConflict,
         result.code,
@@ -868,7 +872,7 @@ export function EventCreationWizard({
     if (intent === "publish") {
       clearDraft(draftKey)
       toast.success(
-        isEditing ? "Cambios guardados" : "Borrador listo",
+        isEditing ? "¡Listo! Cambios guardados correctamente" : "Borrador listo",
         {
           description: "Confirmá el envío a revisión de TokePass.",
         },
@@ -877,7 +881,7 @@ export function EventCreationWizard({
       return true
     }
 
-    toast.success("Cambios guardados", {
+    toast.success("¡Listo! Cambios guardados correctamente", {
       description: flyerFile
         ? "Borrador con flyer listo. Completá barra y multimedia cuando quieras."
         : "Podés seguir editando en esta pestaña.",
@@ -958,14 +962,23 @@ export function EventCreationWizard({
   const studioSteps = visibleSteps.map((step) => ({
     index: step.index,
     label: step.title,
+    description: step.description,
   }))
   const studioActive = Math.max(0, visibleStepIndexes.indexOf(resolvedStep))
+  const eventDisplayName = watchedTitle || initialData?.title || "evento"
+  const studioTitle = isEditing
+    ? `Editá: ${eventDisplayName}`
+    : watchedTitle
+      ? `Creá: ${watchedTitle}`
+      : "Creá tu evento"
+  const studioSubtitle =
+    "Completá los datos del evento. Los cambios se guardan automáticamente."
 
   return (
     <>
     <Form {...form}>
       <form
-        className="flex h-full min-h-0 w-full flex-1 flex-col overflow-x-hidden"
+        className="flex min-h-full w-full flex-1 flex-col overflow-x-hidden"
         onSubmit={form.handleSubmit(
           (data) => onSubmit(data, "draft"),
           (errors) => {
@@ -995,6 +1008,8 @@ export function EventCreationWizard({
         <EventStudioShell
           backHref={backHref}
           backLabel={backLabel}
+          title={studioTitle}
+          subtitle={studioSubtitle}
           stepper={
             <EventStudioStepper
               steps={studioSteps}
@@ -1003,11 +1018,12 @@ export function EventCreationWizard({
             />
           }
           status={<EventAutosaveIndicator />}
+          capacity={<EventCapacityHeader form={form} />}
           banner={
             impersonationName ? (
               <div
                 role="alert"
-                className="rounded-xl border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-amber-100"
+                className="mb-6 rounded-xl border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-amber-100"
               >
                 <p className="text-sm font-semibold text-amber-200">
                   {workspace ? "Editando" : "Creando"} a nombre de{" "}
@@ -1015,16 +1031,6 @@ export function EventCreationWizard({
                 </p>
               </div>
             ) : null
-          }
-          preview={
-            <EventLivePreview
-              control={form.control}
-              categories={categories}
-              flyerFile={flyerFile}
-              existingFlyerUrl={
-                flyerName ? initialData?.flyerUrl ?? null : null
-              }
-            />
           }
           dock={
             <EventStudioDock
@@ -1058,18 +1064,9 @@ export function EventCreationWizard({
               id="event-wizard-step-0"
               className="animate-in fade-in slide-in-from-right-2 duration-300"
             >
-              <div>
-              <CardHeader className="px-0 pt-2">
-                <CardTitle className="mb-1 text-2xl font-bold text-foreground">
-                  Identidad del evento
-                </CardTitle>
-                <CardDescription className="border-b border-border pb-4 text-sm text-muted-foreground">
-                  Nombre, flyer y categoría. Completá los datos y subí el
-                  flyer sin que se pisen.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid grid-cols-1 items-start gap-6 overflow-x-hidden px-0 py-6 md:grid-cols-12">
-                <div className="min-w-0 space-y-6 md:col-span-7">
+              <div className="flex flex-col gap-y-6">
+              <div className="grid grid-cols-1 items-start gap-8 overflow-x-hidden py-2 lg:grid-cols-12">
+                <div className="min-w-0 space-y-6 lg:col-span-7">
                   <FormField
                     control={form.control}
                     name="basics.title"
@@ -1077,16 +1074,16 @@ export function EventCreationWizard({
                       <FormItem className="space-y-2">
                         <FormLabel
                           htmlFor="event-title"
-                          className="text-sm font-semibold tracking-wide text-muted-foreground uppercase"
+                          className="mb-1.5 text-sm font-semibold text-foreground/90"
                         >
-                          Título del evento
+                          Nombre de tu evento
                         </FormLabel>
                         <Input
                           {...field}
                           id="event-title"
                           data-field="basics.title"
-                          placeholder="Nombre impactante de tu evento"
-                          className="w-full rounded-lg border border-border bg-card p-3 text-base text-foreground md:text-sm"
+                          placeholder="Fiesta del gaucho, Recital en vivo"
+                          className="h-12 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-foreground focus:border-emerald-500"
                         />
                         <FormMessage>{fieldState.error?.message}</FormMessage>
                       </FormItem>
@@ -1098,43 +1095,53 @@ export function EventCreationWizard({
                     name="basics.categoryId"
                     render={({ field, fieldState }) => (
                       <FormItem className="space-y-2">
-                        <FormLabel className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
+                        <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">
                           Categoría
                         </FormLabel>
                         {categories.length === 0 ? (
                           <p className="text-sm text-muted-foreground">
-                            No hay categorias activas.
+                            No hay categorías activas.
                           </p>
                         ) : (
-                          <div
-                          className="flex min-w-0 flex-wrap gap-2"
-                          data-field="basics.categoryId"
+                          <Select
+                            value={field.value || ""}
+                            onValueChange={field.onChange}
+                            items={categories.map((category) => ({
+                              value: category.id,
+                              label: category.name,
+                            }))}
                           >
-                            {categories.map((category) => {
-                              const selected = field.value === category.id
-                              const Icon = resolveCategoryIcon(category.iconName)
-                              return (
-                                <button
-                                  key={category.id}
-                                  type="button"
-                                  onClick={() => field.onChange(category.id)}
-                                  className={cn(
-                                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-base transition md:text-sm",
-                                    selected
-                                      ? "border-emerald-400/60 bg-emerald-500/15 font-semibold text-emerald-200"
-                                      : "border-border bg-card/50 text-muted-foreground hover:border-emerald-500/30 hover:text-foreground",
-                                  )}
-                                >
-                                  <Icon className="size-3.5" />
-                                  {category.name}
-                                </button>
-                              )
-                            })}
-                          </div>
+                            <SelectTrigger
+                              data-field="basics.categoryId"
+                              className="h-12 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm focus:border-emerald-500"
+                            >
+                              <SelectValue placeholder="Elegí una categoría" />
+                            </SelectTrigger>
+                            <SelectContent
+                              alignItemWithTrigger={false}
+                              className="max-h-60 overflow-y-auto rounded-xl border border-white/10 bg-[#0c0d0e]"
+                            >
+                              {categories.map((category) => {
+                                const Icon = resolveCategoryIcon(
+                                  category.iconName,
+                                )
+                                return (
+                                  <SelectItem
+                                    key={category.id}
+                                    value={category.id}
+                                  >
+                                    <span className="inline-flex items-center gap-2">
+                                      <Icon className="size-3.5 shrink-0" />
+                                      {category.name}
+                                    </span>
+                                  </SelectItem>
+                                )
+                              })}
+                            </SelectContent>
+                          </Select>
                         )}
-                        <p className="text-xs text-muted-foreground">
-                          Lista definida por TokePass. No se pueden crear
-                          etiquetas libres.
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          ¿Qué tipo de evento es?
                         </p>
                         <FormMessage>{fieldState.error?.message}</FormMessage>
                       </FormItem>
@@ -1146,8 +1153,8 @@ export function EventCreationWizard({
                     name="basics.ageRestriction"
                     render={({ field, fieldState }) => (
                       <FormItem className="space-y-2">
-                        <FormLabel className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
-                          Restricción de edad
+                        <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">
+                          Público permitido
                         </FormLabel>
                         <div
                           className="flex flex-wrap gap-2"
@@ -1162,9 +1169,9 @@ export function EventCreationWizard({
                                 onClick={() => field.onChange(value)}
                                 className={cn(
                                   "inline-flex min-w-16 items-center justify-center rounded-full border px-3 py-2 text-base font-semibold transition md:text-sm",
-                                  selected
-                                    ? "border-emerald-400/60 bg-emerald-500/15 text-emerald-200"
-                                    : "border-border bg-card/50 text-muted-foreground hover:border-emerald-500/30 hover:text-foreground",
+                                    selected
+                                    ? "border-primary/40 bg-primary/10 text-foreground"
+                                    : "border-border bg-card text-muted-foreground hover:border-primary/30 hover:text-foreground",
                                 )}
                               >
                                 {AGE_RESTRICTION_LABELS[value]}
@@ -1172,14 +1179,222 @@ export function EventCreationWizard({
                             )
                           })}
                         </div>
-                        <FormDescription className="text-xs text-muted-foreground">
-                          Se muestra en la ficha publica. El control de DNI es
-                          responsabilidad de la puerta.
+                        <FormDescription className="text-xs leading-relaxed text-muted-foreground">
+                          Ej: para todo público (ATP) o solo mayores de 18. El
+                          control de DNI es de la puerta.
                         </FormDescription>
                         <FormMessage>{fieldState.error?.message}</FormMessage>
                       </FormItem>
                     )}
                   />
+
+                  <div className="space-y-2">
+                    <p className="mb-1.5 text-sm font-semibold text-foreground/90">
+                      Modalidad
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setEventModality(false)}
+                        className={cn(
+                          "rounded-2xl border px-3 py-3 text-left transition",
+                          !isStreaming
+                            ? "border-emerald-400/50 bg-emerald-500/10"
+                            : "border-white/10 bg-black/40 hover:border-emerald-500/30",
+                        )}
+                      >
+                        <MapPin className="mb-2 size-4 text-emerald-400" />
+                        <span className="block text-sm font-semibold text-foreground">
+                          En un lugar físico / Predio
+                        </span>
+                        <span className="mt-1 block text-xs text-muted-foreground">
+                          Recinto físico y puerta.
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEventModality(true)}
+                        className={cn(
+                          "rounded-2xl border px-3 py-3 text-left transition",
+                          isStreaming
+                            ? "border-emerald-400/50 bg-emerald-500/10"
+                            : "border-white/10 bg-black/40 hover:border-emerald-500/30",
+                        )}
+                      >
+                        <MonitorPlay className="mb-2 size-4 text-emerald-400" />
+                        <span className="block text-sm font-semibold text-foreground">
+                          Por internet / En vivo (Zoom, YouTube, etc.)
+                        </span>
+                        <span className="mt-1 block text-xs text-muted-foreground">
+                          Sin recinto físico.
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="basics.isMultiDay"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-card/40 px-4 py-3">
+                        <div>
+                          <FormLabel className="text-sm font-medium text-foreground">
+                            ¿Es un evento de varios días?
+                          </FormLabel>
+                          <FormDescription className="text-xs text-muted-foreground">
+                            Activalo si dura más de una fecha.
+                          </FormDescription>
+                        </div>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={(checked) => {
+                            field.onChange(checked)
+                            if (checked) {
+                              const current = form.getValues(
+                                "basics.scheduleDays",
+                              )
+                              if (current.length < 2) {
+                                form.setValue(
+                                  "basics.scheduleDays",
+                                  seedTwoScheduleDays(
+                                    form.getValues("basics.date") || "",
+                                  ),
+                                  {
+                                    shouldDirty: true,
+                                    shouldTouch: true,
+                                    shouldValidate: false,
+                                  },
+                                )
+                              }
+                            } else {
+                              const days = form.getValues("basics.scheduleDays")
+                              const first = days[0]
+                              if (first?.startTime) {
+                                form.setValue("basics.date", first.startTime, {
+                                  shouldDirty: true,
+                                })
+                              }
+                              if (first?.endTime) {
+                                form.setValue("basics.endDate", first.endTime, {
+                                  shouldDirty: true,
+                                })
+                              }
+                              form.setValue("basics.scheduleDays", [], {
+                                shouldDirty: true,
+                              })
+                            }
+                          }}
+                          className="data-checked:bg-emerald-500"
+                          aria-label="Evento de varios días"
+                        />
+                      </FormItem>
+                    )}
+                  />
+
+                  {isMultiDay ? (
+                    <ScheduleDaysBuilder control={form.control} />
+                  ) : (
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <FormField
+                        control={form.control}
+                        name="basics.date"
+                        render={({ field, fieldState }) => (
+                          <FormItem>
+                            <FormLabel
+                              htmlFor="event-date"
+                              className="mb-1.5 block text-sm font-semibold text-foreground/90"
+                            >
+                              Apertura y comienzo
+                            </FormLabel>
+                            <EventStudioDateTimeField
+                              id="event-date"
+                              fieldName="basics.date"
+                              value={field.value}
+                              onChange={field.onChange}
+                            />
+                            <FormMessage>{fieldState.error?.message}</FormMessage>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="basics.endDate"
+                        render={({ field, fieldState }) => (
+                          <FormItem>
+                            <FormLabel
+                              htmlFor="event-end-date"
+                              className="mb-1.5 block text-sm font-semibold text-foreground/90"
+                            >
+                              Hora estimada de cierre
+                            </FormLabel>
+                            <EventStudioDateTimeField
+                              id="event-end-date"
+                              fieldName="basics.endDate"
+                              value={field.value}
+                              onChange={field.onChange}
+                            />
+                            <FormDescription className="text-xs text-muted-foreground">
+                              Indicá hasta qué hora la gente va a poder comprar
+                              entradas por la web
+                            </FormDescription>
+                            <FormMessage>{fieldState.error?.message}</FormMessage>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  )}
+
+                  {isStreaming ? (
+                    <div className="space-y-4">
+                      <div className="rounded-2xl border border-white/10 bg-card/40 px-4 py-3 text-sm text-muted-foreground">
+                        El evento se publica como {STREAMING_VENUE_NAME}. No hace
+                        falta recinto ni mapa de asientos.
+                      </div>
+                      <FormField
+                        control={form.control}
+                        name="basics.accessLink"
+                        render={({ field, fieldState }) => (
+                          <FormItem className="space-y-2">
+                            <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">
+                              Link de transmisión
+                            </FormLabel>
+                            <Input
+                              {...field}
+                              type="url"
+                              inputMode="url"
+                              data-field="basics.accessLink"
+                              placeholder="https://zoom.us/j/..."
+                              className="h-12 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-foreground focus:border-emerald-500"
+                            />
+                            <FormDescription className="text-xs text-muted-foreground">
+                              Pegá acá el link de Zoom, YouTube o la sala donde
+                              vas a transmitir el vivo
+                            </FormDescription>
+                            <FormMessage>{fieldState.error?.message}</FormMessage>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="mb-1.5 text-sm font-semibold text-foreground/90">
+                        Ubicación y recinto
+                      </p>
+                      <EventVenueStep
+                        form={form}
+                        eventId={initialData?.id ?? persistedEventId}
+                        venues={venueCatalog}
+                        onVenuesChange={setLocalVenues}
+                        onAppliedVenue={handleApplySavedVenue}
+                        onMapInventoryChange={applyMapInventory}
+                        catalogOrganizerId={
+                          targetOrganizerId ?? initialData?.organizerId ?? null
+                        }
+                        focus="location"
+                        variant="studio"
+                      />
+                    </div>
+                  )}
 
                   <FormField
                     control={form.control}
@@ -1188,19 +1403,19 @@ export function EventCreationWizard({
                       <FormItem>
                         <FormLabel
                           htmlFor="event-description"
-                          className="block font-mono text-xs font-semibold uppercase tracking-wider text-foreground"
+                          className="mb-1.5 block text-sm font-semibold text-foreground/90"
                         >
-                          Descripción
+                          Contá de qué se trata tu evento
                         </FormLabel>
                         <Textarea
                           {...field}
                           id="event-description"
                           data-field="basics.description"
-                          placeholder="Cuenta qué hace única a esta experiencia..."
-                          className="min-h-[160px] w-full resize-y rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 py-3 text-base text-foreground shadow-inner transition-all placeholder:text-slate-500 dark:placeholder:text-muted-foreground dark:placeholder:text-zinc-600 focus:border-emerald-500/60 focus:bg-zinc-100 dark:focus:bg-zinc-900 focus:ring-2 focus:ring-emerald-500/15 focus:outline-none md:text-sm"
+                          placeholder="Contá de qué se trata, el clima y por qué ir."
+                          className="min-h-[160px] w-full resize-y rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-emerald-500"
                         />
                         <FormDescription className="text-muted-foreground">
-                          Este texto será visible en la página de venta.
+                          Aparece en la página principal.
                         </FormDescription>
                         <FormMessage>{fieldState.error?.message}</FormMessage>
                       </FormItem>
@@ -1208,7 +1423,7 @@ export function EventCreationWizard({
                   />
                 </div>
 
-                <div className="min-w-0 space-y-2 md:col-span-5">
+                <div className="min-w-0 space-y-6 lg:col-span-5">
                   <EventStudioFlyerField
                     flyerFile={flyerFile}
                     existingFlyerUrl={
@@ -1236,13 +1451,11 @@ export function EventCreationWizard({
                       })
                     }}
                   />
-                </div>
-                <div className="min-w-0 md:col-span-12">
                   <EventSponsorsManager
                     eventId={initialData?.id ?? persistedEventId}
                   />
                 </div>
-              </CardContent>
+              </div>
               </div>
             </TabsContent>
 
@@ -1250,177 +1463,179 @@ export function EventCreationWizard({
               keepMounted
               value="1"
               id="event-wizard-step-1"
+              className="hidden"
+            />
+
+
+            <TabsContent
+              keepMounted
+              value="2"
+              id="event-wizard-step-2"
+              className={cn(
+                "animate-in fade-in slide-in-from-right-2 duration-300",
+                workspace && "h-full overflow-y-auto",
+              )}
+            >
+              <div className="flex flex-col gap-y-8">
+              <div className="flex flex-col gap-y-2">
+                <h2 className="hidden text-xl font-bold text-foreground sm:block">
+                  Entradas y precios
+                </h2>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  El mapa y las entradas generales suman al cupo por separado.
+                  Una general puede quedar como inventario libre, sin sector.
+                </p>
+              </div>
+              <div className="flex flex-col gap-y-4">
+                {isStreaming ? (
+                  <FormField
+                    control={form.control}
+                    name="basics.accessLink"
+                    render={({ field, fieldState }) => (
+                      <FormItem className="space-y-2 rounded-2xl border border-white/10 bg-card/40 p-4">
+                        <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">
+                          Link de la transmisión
+                        </FormLabel>
+                        <Input
+                          {...field}
+                          type="url"
+                          inputMode="url"
+                          data-field="basics.accessLink"
+                          placeholder="https://zoom.us/j/..."
+                          className="h-12 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-foreground focus:border-emerald-500"
+                        />
+                        <FormDescription className="text-xs text-muted-foreground">
+                          Pegá acá el link de Zoom, YouTube o la sala donde vas
+                          a transmitir el vivo
+                        </FormDescription>
+                        <FormMessage>{fieldState.error?.message}</FormMessage>
+                      </FormItem>
+                    )}
+                  />
+                ) : null}
+                <EventStudioPurchaseCapField form={form} />
+                <UnifiedInventoryPanel
+                  form={form}
+                  eventId={initialData?.id ?? persistedEventId}
+                  feePercentage={feePercentageFromRate(organizerServiceRate)}
+                  fixedFee={platformFixedFee}
+                />
+                <FormMessage>
+                  {form.formState.errors.tickets?.message ??
+                    form.formState.errors.tickets?.root?.message}
+                </FormMessage>
+              </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent
+              keepMounted
+              value="3"
+              id="event-wizard-step-3"
               className="animate-in fade-in slide-in-from-right-2 duration-300"
             >
-              <CardHeader className="px-0 pt-2">
-                <CardTitle className="text-xl text-foreground">
-                  Cita y lugar
-                </CardTitle>
-                <CardDescription className="text-muted-foreground">
-                  Fechas, ubicación y, si hace falta, mapa numerado o agenda.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-7 px-0 py-6">
-                <div className="space-y-2">
-                  <p className="font-mono text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-                    Modalidad
-                  </p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setEventModality(false)}
-                      className={cn(
-                        "rounded-2xl border px-3 py-3 text-left transition",
-                        !isStreaming
-                          ? "border-emerald-400/50 bg-emerald-500/10"
-                          : "border-border bg-card/40 hover:border-emerald-500/30",
-                      )}
-                    >
-                      <MapPin className="mb-2 size-4 text-emerald-400" />
-                      <span className="block text-sm font-semibold text-foreground">
-                        Evento Presencial
-                      </span>
-                      <span className="mt-1 block text-xs text-muted-foreground">
-                        Recinto fisico y puerta.
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEventModality(true)}
-                      className={cn(
-                        "rounded-2xl border px-3 py-3 text-left transition",
-                        isStreaming
-                          ? "border-emerald-400/50 bg-emerald-500/10"
-                          : "border-border bg-card/40 hover:border-emerald-500/30",
-                      )}
-                    >
-                      <MonitorPlay className="mb-2 size-4 text-emerald-400" />
-                      <span className="block text-sm font-semibold text-foreground">
-                        Streaming / Online
-                      </span>
-                      <span className="mt-1 block text-xs text-muted-foreground">
-                        Sin recinto fisico.
-                      </span>
-                    </button>
+              <div className="flex flex-col gap-y-8">
+              <div className="flex flex-col gap-y-4">
+                <h3 className="text-lg font-semibold text-foreground">
+                  Publicar y cobrar
+                </h3>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-2xl bg-muted/20 p-6">
+                    <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                      <CreditCard className="size-4 shrink-0 text-primary" />
+                      Mercado Pago
+                    </p>
+                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                      Pago online con tarjeta, débito y dinero en cuenta.
+                      La comisión se incluye en el precio público.
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-muted/20 p-6">
+                    <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                      <Building2 className="size-4 shrink-0 text-primary" />
+                      Transferencia / POS
+                    </p>
+                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                      En boletería física podés cobrar en efectivo, tarjeta o
+                      transferencia. El evento publicado habilita el POS.
+                    </p>
                   </div>
                 </div>
 
                 <FormField
                   control={form.control}
-                  name="basics.isMultiDay"
+                  name="basics.visibility"
                   render={({ field }) => (
-                    <FormItem className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-card/40 px-4 py-3">
-                      <div>
-                        <FormLabel className="text-sm font-medium text-foreground">
-                          Evento de Multiples Jornadas / Festival
-                        </FormLabel>
-                        <FormDescription className="text-xs text-muted-foreground">
-                          Activalo para varias noches o dias.
-                        </FormDescription>
+                    <FormItem>
+                      <FormLabel className="mb-1.5 block text-sm font-semibold text-foreground/90">
+                        Visibilidad del evento
+                      </FormLabel>
+                      <div className="inline-flex w-full flex-col gap-1 rounded-2xl bg-muted/20 p-1.5 sm:w-auto sm:flex-row">
+                        {(
+                          [
+                            {
+                              value: "public" as const,
+                              label: "Visible en TokePass",
+                              hint: "Aparece en la portada cuando esté a la venta",
+                              icon: Globe2,
+                            },
+                            {
+                              value: "private" as const,
+                              label: "Solo con el link",
+                              hint: "No aparece en portada. Quien tenga el enlace puede entrar",
+                              icon: Lock,
+                            },
+                          ] as const
+                        ).map((option) => {
+                          const selected = field.value === option.value
+                          const Icon = option.icon
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => field.onChange(option.value)}
+                              className={cn(
+                                "flex flex-1 items-center gap-2 rounded-xl px-4 py-2.5 text-left text-sm transition-all",
+                                selected
+                                  ? "bg-background font-medium text-foreground shadow-sm"
+                                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                              )}
+                            >
+                              <Icon
+                                className={cn(
+                                  "size-4 shrink-0",
+                                  selected
+                                    ? "text-primary"
+                                    : "text-muted-foreground",
+                                )}
+                                aria-hidden="true"
+                              />
+                              <span>
+                                <span className="block font-medium">
+                                  {option.label}
+                                </span>
+                                <span className="block text-xs leading-relaxed text-muted-foreground">
+                                  {option.hint}
+                                </span>
+                              </span>
+                            </button>
+                          )
+                        })}
                       </div>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={(checked) => {
-                          field.onChange(checked)
-                          if (checked) {
-                            const current = form.getValues(
-                              "basics.scheduleDays",
-                            )
-                            if (current.length < 2) {
-                              form.setValue(
-                                "basics.scheduleDays",
-                                seedTwoScheduleDays(
-                                  form.getValues("basics.date") || "",
-                                ),
-                                {
-                                  shouldDirty: true,
-                                  shouldTouch: true,
-                                  shouldValidate: false,
-                                },
-                              )
-                            }
-                          } else {
-                            const days = form.getValues("basics.scheduleDays")
-                            const first = days[0]
-                            if (first?.startTime) {
-                              form.setValue("basics.date", first.startTime, {
-                                shouldDirty: true,
-                              })
-                            }
-                            if (first?.endTime) {
-                              form.setValue("basics.endDate", first.endTime, {
-                                shouldDirty: true,
-                              })
-                            }
-                            form.setValue("basics.scheduleDays", [], {
-                              shouldDirty: true,
-                            })
-                          }
-                        }}
-                        className="data-checked:bg-emerald-500"
-                        aria-label="Evento de multiples jornadas o festival"
-                      />
                     </FormItem>
                   )}
                 />
 
-                {isMultiDay ? (
-                  <ScheduleDaysBuilder control={form.control} />
-                ) : (
-                  <div className="grid grid-cols-2 gap-3">
-                    <FormField
-                      control={form.control}
-                      name="basics.date"
-                      render={({ field, fieldState }) => (
-                        <FormItem>
-                          <FormLabel
-                            htmlFor="event-date"
-                            className="block font-mono text-xs font-semibold uppercase tracking-wider text-foreground"
-                          >
-                            Inicio
-                          </FormLabel>
-                          <EventStudioDateTimeField
-                            id="event-date"
-                            fieldName="basics.date"
-                            value={field.value}
-                            onChange={field.onChange}
-                          />
-                          <FormMessage>{fieldState.error?.message}</FormMessage>
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="basics.endDate"
-                      render={({ field, fieldState }) => (
-                        <FormItem>
-                          <FormLabel
-                            htmlFor="event-end-date"
-                            className="block font-mono text-xs font-semibold uppercase tracking-wider text-foreground"
-                          >
-                            Finalizacion
-                          </FormLabel>
-                          <EventStudioDateTimeField
-                            id="event-end-date"
-                            fieldName="basics.endDate"
-                            value={field.value}
-                            onChange={field.onChange}
-                          />
-                          <FormDescription className="text-xs text-muted-foreground">
-                            Debe ser posterior al inicio.
-                          </FormDescription>
-                          <FormMessage>{fieldState.error?.message}</FormMessage>
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                )}
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  Recargar la comisión al comprador o hacértela cargo se
+                  configura en cada entrada del paso 2.
+                </p>
 
                 <FormField
                   control={form.control}
                   name="basics.hasSchedule"
                   render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between gap-4 rounded-2xl border border-border bg-card/40 px-4 py-3">
+                    <FormItem className="flex flex-row items-center justify-between gap-4 rounded-2xl border border-white/10 bg-card/40 px-4 py-3">
                       <div className="min-w-0">
                         <FormLabel className="text-sm font-semibold text-foreground">
                           Cronograma / agenda
@@ -1441,63 +1656,13 @@ export function EventCreationWizard({
                   )}
                 />
 
-                {isStreaming ? (
-                  <div className="space-y-4">
-                    <div className="rounded-2xl border border-border bg-card/40 px-4 py-3 text-sm text-muted-foreground">
-                      El evento se publica como {STREAMING_VENUE_NAME}. No hace
-                      falta recinto ni mapa de asientos.
-                    </div>
-                    <FormField
-                      control={form.control}
-                      name="basics.accessLink"
-                      render={({ field, fieldState }) => (
-                        <FormItem className="space-y-2">
-                          <FormLabel className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
-                            Link de transmisión
-                          </FormLabel>
-                          <Input
-                            {...field}
-                            type="url"
-                            inputMode="url"
-                            data-field="basics.accessLink"
-                            placeholder="https://zoom.us/j/..."
-                            className="w-full rounded-lg border border-border bg-card p-3 text-base text-foreground md:text-sm"
-                          />
-                          <FormDescription className="text-xs text-muted-foreground">
-                            Se muestra en Mis entradas después de pagar. No
-                            aparece en la ficha pública.
-                          </FormDescription>
-                          <FormMessage>{fieldState.error?.message}</FormMessage>
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                ) : (
+                {!isStreaming ? (
                   <>
-                    <div className="space-y-2">
-                      <p className="font-mono text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-                        Ubicacion y recinto
-                      </p>
-                      <EventVenueStep
-                        form={form}
-                        eventId={initialData?.id ?? persistedEventId}
-                        venues={venueCatalog}
-                        onVenuesChange={setLocalVenues}
-                        onAppliedVenue={handleApplySavedVenue}
-                        onMapInventoryChange={applyMapInventory}
-                        catalogOrganizerId={
-                          targetOrganizerId ?? initialData?.organizerId ?? null
-                        }
-                        focus="location"
-                        variant="studio"
-                      />
-                    </div>
-
                     <FormField
                       control={form.control}
                       name="basics.hasSeatingPlan"
                       render={({ field }) => (
-                        <FormItem className="flex flex-row items-center justify-between gap-4 rounded-2xl border border-emerald-500/25 bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent px-4 py-4">
+                        <FormItem className="flex flex-row items-center justify-between gap-4 rounded-2xl border border-white/10 bg-muted/20 px-4 py-4">
                           <div className="flex min-w-0 items-start gap-3">
                             <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/15 text-emerald-300">
                               <Armchair className="size-4" aria-hidden="true" />
@@ -1557,197 +1722,33 @@ export function EventCreationWizard({
                       <Button
                         type="button"
                         size="lg"
-                        className="relative h-12 w-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-base font-semibold text-zinc-950 hover:from-emerald-400 hover:to-cyan-400 md:text-sm"
+                        className="h-12 w-full bg-primary text-base font-semibold text-primary-foreground hover:bg-primary/90 md:text-sm"
                         onClick={() => setIsStudioOpen(true)}
                       >
-                        <span className="absolute -top-2 right-3 rounded-full bg-zinc-950 px-2 py-0.5 text-[10px] font-bold tracking-wide text-emerald-300 uppercase ring-1 ring-emerald-400/40">
-                          Destacado
-                        </span>
-                        Abrir Disenador de Mapa de Recinto
+                        Abrir Diseñador de Mapa de Recinto
                       </Button>
                     ) : null}
                   </>
-                )}
+                ) : null}
+
                 {hasSchedule ? (
                   <AgendaBuilder eventId={initialData?.id ?? persistedEventId} />
                 ) : null}
-              </CardContent>
-              {isStudioOpen ? (
-                <TokepassStudioOverlay
-                  open={isStudioOpen}
-                  closing={isStudioClosing}
-                  onClose={() => void closeStudio()}
-                >
-                  <InteractiveVenueMapEditor
-                    variant="studio"
-                    eventTitle={watchedTitle || initialData?.title || "Evento"}
-                    onEventTitleChange={(title) =>
-                      form.setValue("basics.title", title, {
-                        shouldDirty: true,
-                      })
-                    }
-                    value={parseVenueMap(watchedVenueMap)}
-                    tickets={watchedTickets}
-                    saving={form.formState.isSubmitting || isStudioClosing}
-                    onChange={(next) => persistWorkspaceMap(next)}
-                    onAutoSave={(next) => persistWorkspaceMap(next)}
-                    onSave={async (next) => {
-                      persistWorkspaceMap(next)
-                      const eventId = initialData?.id ?? persistedEventId
-                      if (!eventId) {
-                        throw new Error(
-                          "No hay un evento para guardar el mapa.",
-                        )
-                      }
-                      const result = await saveVenueMapOnly(eventId, next)
-                      if (!result.success) {
-                        throw new Error(result.error)
-                      }
-                    }}
-                  />
-                </TokepassStudioOverlay>
-              ) : null}
-            </TabsContent>
-
-            <TabsContent
-              keepMounted
-              value="2"
-              id="event-wizard-step-2"
-              className={cn(
-                "animate-in fade-in slide-in-from-right-2 duration-300",
-                workspace && "h-full overflow-y-auto",
-              )}
-            >
-              <div className={COMPACT_STEP_SHELL}>
-              <CardHeader className="border-b border-zinc-200 px-0 py-6 dark:border-white/8">
-                <CardTitle className="text-xl text-foreground">
-                  Entradas y combos
-                </CardTitle>
-                <CardDescription className="text-muted-foreground">
-                  El mapa y las entradas generales suman al aforo por separado.
-                  Una general puede quedar como inventario libre, sin sector.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4 px-0 py-7">
-                <EventStudioPurchaseCapField form={form} />
-                <UnifiedInventoryPanel
-                  form={form}
-                  eventId={initialData?.id ?? persistedEventId}
-                  feePercentage={feePercentageFromRate(organizerServiceRate)}
-                  fixedFee={platformFixedFee}
-                />
-                <FormMessage>
-                  {form.formState.errors.tickets?.message ??
-                    form.formState.errors.tickets?.root?.message}
-                </FormMessage>
-              </CardContent>
-              <CardHeader className="border-b border-border px-0 py-4">
-                <CardTitle className="text-lg text-foreground">
-                  Visibilidad
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6 px-0 py-6">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950/50">
-                    <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                      <CreditCard className="size-4 text-emerald-700 dark:text-emerald-400" />
-                      Mercado Pago
-                    </p>
-                    <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                      Pago online con tarjeta, débito y dinero en cuenta.
-                      La comisión se incluye en el precio público.
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950/50">
-                    <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                      <Building2 className="size-4 text-emerald-700 dark:text-emerald-400" />
-                      Transferencia / POS
-                    </p>
-                    <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                      En boletería física podés cobrar en efectivo, tarjeta o
-                      transferencia. El evento publicado habilita el POS.
-                    </p>
-                  </div>
-                </div>
-
-                <FormField
-                  control={form.control}
-                  name="basics.visibility"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="block font-mono text-xs font-semibold uppercase tracking-wider text-foreground">
-                        Visibilidad del evento
-                      </FormLabel>
-                      <div className="inline-flex w-full flex-col gap-1 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/60 p-1.5 sm:w-auto sm:flex-row">
-                        {(
-                          [
-                            {
-                              value: "public" as const,
-                              label: "Evento público",
-                              hint: "Visible en portada TokePass",
-                              icon: Globe2,
-                            },
-                            {
-                              value: "private" as const,
-                              label: "Evento privado",
-                              hint: "Solo con el enlace directo",
-                              icon: Lock,
-                            },
-                          ] as const
-                        ).map((option) => {
-                          const selected = field.value === option.value
-                          const Icon = option.icon
-                          return (
-                            <button
-                              key={option.value}
-                              type="button"
-                              onClick={() => field.onChange(option.value)}
-                              className={cn(
-                                "flex flex-1 items-center gap-2 rounded-xl px-4 py-2.5 text-left text-sm transition-all",
-                                selected
-                                  ? "border border-zinc-300 dark:border-zinc-700/60 bg-zinc-100 dark:bg-zinc-800 font-medium text-foreground shadow-sm"
-                                  : "text-muted-foreground hover:bg-zinc-100 dark:hover:bg-zinc-800/40 hover:text-foreground",
-                              )}
-                            >
-                              <Icon
-                                className={cn(
-                                  "size-4 shrink-0",
-                                  selected
-                                    ? "text-emerald-700 dark:text-emerald-400"
-                                    : "text-muted-foreground",
-                                )}
-                                aria-hidden="true"
-                              />
-                              <span>
-                                <span className="block font-medium">
-                                  {option.label}
-                                </span>
-                                <span className="block text-[11px] text-muted-foreground">
-                                  {option.hint}
-                                </span>
-                              </span>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </FormItem>
-                  )}
-                />
 
                 {resultMessage?.type === "success" ? (
                   <p
                     role="status"
-                    className="rounded-xl bg-emerald-500/10 px-4 py-3 text-sm text-emerald-800 dark:text-emerald-300"
+                    className="rounded-xl bg-primary/10 px-4 py-3 text-sm text-foreground"
                   >
                     {resultMessage.text}
                   </p>
                 ) : null}
-              </CardContent>
+              </div>
               </div>
             </TabsContent>
 
             {resultMessage?.type === "error" ? (
-              <div className="px-4 pb-2 lg:px-8">
+              <div className="min-w-0">
                 {resultMessage.conflict ? (
                   <WizardConflictBanner
                     title={resultMessage.title}
@@ -1757,7 +1758,7 @@ export function EventCreationWizard({
                   />
                 ) : (
                   <ActionableFormError
-                    title={resultMessage.title ?? "No se pudieron guardar los cambios"}
+                    title={resultMessage.title ?? "No pudimos guardar los cambios"}
                     description={toUserFacingError(resultMessage.text)}
                     onFixField={
                       resultMessage.field
@@ -1773,6 +1774,41 @@ export function EventCreationWizard({
               </div>
             ) : null}
         </Tabs>
+          {isStudioOpen ? (
+            <TokepassStudioOverlay
+              open={isStudioOpen}
+              closing={isStudioClosing}
+              onClose={() => void closeStudio()}
+            >
+              <InteractiveVenueMapEditor
+                variant="studio"
+                eventId={initialData?.id ?? persistedEventId}
+                eventTitle={watchedTitle || initialData?.title || "Evento"}
+                onEventTitleChange={(title) =>
+                  form.setValue("basics.title", title, {
+                    shouldDirty: true,
+                  })
+                }
+                value={parseVenueMap(watchedVenueMap)}
+                tickets={watchedTickets}
+                saving={form.formState.isSubmitting || isStudioClosing}
+                onClose={() => void closeStudio()}
+                onChange={(next) => persistWorkspaceMap(next)}
+                onAutoSave={(next) => persistWorkspaceMap(next)}
+                onSave={async (next) => {
+                  persistWorkspaceMap(next)
+                  const eventId = initialData?.id ?? persistedEventId
+                  if (!eventId) {
+                    throw new Error("No hay un evento para guardar el mapa.")
+                  }
+                  const result = await saveVenueMapOnly(eventId, next)
+                  if (!result.success) {
+                    throw new Error(result.error)
+                  }
+                }}
+              />
+            </TokepassStudioOverlay>
+          ) : null}
         </EventStudioShell>
       </form>
     </Form>

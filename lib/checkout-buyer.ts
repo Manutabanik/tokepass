@@ -37,10 +37,10 @@ export const checkoutBuyerFormSchema = z.object({
     .pipe(
       z
         .string()
-        .min(3, "Ingresá el nombre y apellido del asistente.")
+        .min(3, "Escribí tu nombre y apellido tal como figuran en tu DNI")
         .refine(
           (value) => value.split(" ").filter(Boolean).length >= 2,
-          "Ingresá el nombre y apellido del asistente.",
+          "Escribí tu nombre y apellido tal como figuran en tu DNI",
         ),
     ),
   buyerDni: z
@@ -97,7 +97,7 @@ export function getCheckoutBuyerFieldErrors(
     }
   }
   if (Object.keys(errors).length === 0) {
-    errors.buyerName = "Completá nombre, DNI, teléfono y mail del asistente."
+    errors.buyerName = "Falta completar este dato"
   }
   return errors
 }
@@ -115,7 +115,7 @@ export function validateCheckoutBuyer(
   if (!buyer) {
     return {
       ok: false,
-      error: "Completá nombre, DNI, teléfono y mail del asistente.",
+      error: "Falta completar este dato",
     }
   }
 

@@ -54,7 +54,7 @@ export function EventStudioVenueSearch({
             window.setTimeout(() => setOpen(false), 120)
           }}
           placeholder="Buscar un recinto guardado"
-          className="h-11 pl-9 text-base md:text-sm"
+          className="h-12 rounded-xl border-border/60 bg-muted/20 pl-9 text-base transition-all focus:bg-background sm:h-13"
           autoComplete="off"
         />
         {open ? (
@@ -99,7 +99,7 @@ export function EventStudioVenueSearch({
 
       {selected ? (
         <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4">
-          <p className="text-[11px] font-semibold tracking-[0.14em] text-emerald-300 uppercase">
+          <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
             Recinto confirmado
           </p>
           <p className="mt-1 flex items-start gap-2 text-base font-semibold text-foreground">
@@ -121,7 +121,7 @@ export function EventStudioVenueSearch({
         type="button"
         variant="outline"
         onClick={onCreateNew}
-        className="min-h-11 w-full text-base md:text-sm"
+        className="h-12 w-full rounded-xl text-base"
       >
         <Plus />
         Crear un lugar nuevo

@@ -306,8 +306,8 @@ function PlatformOrderDetailSheetBody({
               Anular compra
             </DialogTitle>
             <DialogDescription className="text-muted-foreground">
-              ¿Estás seguro de anular esta compra? Las entradas quedarán
-              invalidadas.
+              ¿Querés anular esta compra? Las entradas quedan invalidadas.
+              Esta acción no se puede deshacer.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
@@ -318,7 +318,7 @@ function PlatformOrderDetailSheetBody({
               onClick={() => setConfirmVoid(false)}
               className="rounded-xl"
             >
-              Cancelar
+              Volver atrás
             </Button>
             <Button
               type="button"

@@ -408,7 +408,8 @@ export function AgendaBuilder({ eventId }: { eventId?: string | null }) {
 
       {missingDays ? (
         <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-5 text-sm text-muted-foreground dark:border-zinc-800 dark:bg-zinc-950/40">
-          Definí las jornadas en Identidad para armar la agenda de cada día.
+          Definí las jornadas en Datos principales para armar la agenda de cada
+          día.
         </div>
       ) : isMultiDay ? (
         <Tabs

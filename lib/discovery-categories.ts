@@ -34,7 +34,7 @@ export type DiscoveryCategory = {
 
 /** Fallback local si la tabla aún no existe / falla el fetch. */
 export const DEFAULT_DISCOVERY_CATEGORIES: DiscoveryCategory[] = [
-  { id: "all", label: "Todos", icon: "sparkles", slug: "all" },
+  { id: "all", label: "Todos los eventos", icon: "sparkles", slug: "all" },
   {
     id: "fiestas",
     label: "Fiestas",

@@ -102,8 +102,8 @@ export function ClaimTicketView({
         </p>
       ) : (
         <p className="mt-4 text-sm text-muted-foreground">
-          Al aceptar, la titularidad pasa a tu cuenta TokePass y el Living QR se
-          genera en tu teléfono.
+          Al aceptar, la titularidad pasa a tu cuenta TokePass y el código de
+          acceso se genera en tu teléfono.
         </p>
       )}
 

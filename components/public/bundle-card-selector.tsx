@@ -1,16 +1,6 @@
 "use client"
 
-import {
-  CalendarDays,
-  Car,
-  Check,
-  Gift,
-  Sparkles,
-  Ticket,
-} from "lucide-react"
-
 import type { TicketSelectorTier } from "@/components/public/ticket-tier-selector"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { formatCurrency, formatTicketPrice } from "@/lib/format"
 import {
@@ -89,89 +79,53 @@ function BundlePromoCard({
   const savings = bundleSavings(bundle.listPrice ?? 0, bundle.price)
   const soldOut = bundle.available <= 0
 
+  const comboLine = bundle.comboItems?.length
+    ? bundle.comboItems
+        .map((item) => `${item.quantity}× ${item.name}`)
+        .join(" · ")
+    : BUNDLE_TYPE_LABELS[type]
+
   return (
     <article
       className={cn(
-        "rounded-2xl border p-4 shadow-[0_0_24px_-12px_rgba(16,185,129,0.55)]",
-        "border-emerald-400/35 bg-emerald-500/5 backdrop-blur-md",
-        selected && "ring-1 ring-emerald-400/50",
+        "flex w-full items-center justify-between gap-4 rounded-2xl border border-white/10 bg-card/60 px-5 py-3.5 transition-all hover:border-white/20",
+        selected && "border-emerald-500/40",
+        soldOut && "opacity-60",
       )}
     >
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <Gift className="size-4 text-emerald-400" />
-            {bundle.name}
-          </p>
-          <p className="mt-1 text-[11px] uppercase tracking-wide text-muted-foreground">
-            {BUNDLE_TYPE_LABELS[type]}
-          </p>
-        </div>
-        {savings.amount > 0 ? (
-          <Badge className="h-auto bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-100">
-            Ahorrás {formatCurrency(savings.amount)}
-          </Badge>
-        ) : null}
-      </div>
-
-      <div className="mt-3 flex items-baseline gap-2">
-        <span className="text-xl font-black tabular-nums text-foreground">
-          {formatTicketPrice(bundle.price)}
-        </span>
-        {bundle.listPrice != null && bundle.listPrice > bundle.price ? (
-          <span className="text-xs text-muted-foreground line-through">
-            {formatCurrency(bundle.listPrice)}
-          </span>
-        ) : null}
-      </div>
-
-      {bundle.comboItems && bundle.comboItems.length > 0 ? (
-        <ul className="mt-3 space-y-1.5">
-          {bundle.comboItems.map((item) => (
-            <li
-              key={`${item.name}-${item.quantity}`}
-              className="flex items-center gap-2 text-xs text-muted-foreground"
-            >
-              <Check className="size-3.5 text-emerald-400" />
-              <ComponentIcon name={item.name} />
-              <span>
-                {item.quantity} × {item.name}
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="mt-3 text-xs text-muted-foreground">
-          Pack promocional con precio unificado.
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <p className="truncate text-base font-bold text-foreground">
+          {bundle.name}
         </p>
-      )}
-
+        <div className="flex min-w-0 items-center gap-2 text-sm font-black text-foreground/90">
+          <span className="tabular-nums">
+            {formatTicketPrice(bundle.price)}
+          </span>
+          {bundle.listPrice != null && bundle.listPrice > bundle.price ? (
+            <span className="text-xs font-medium text-muted-foreground line-through">
+              {formatCurrency(bundle.listPrice)}
+            </span>
+          ) : null}
+          {savings.amount > 0 ? (
+            <span className="text-xs font-semibold text-emerald-400">
+              Ahorrás {formatCurrency(savings.amount)}
+            </span>
+          ) : null}
+          <span className="truncate text-xs font-medium text-muted-foreground">
+            {comboLine}
+          </span>
+        </div>
+      </div>
       <Button
         type="button"
-        className="mt-4 w-full min-h-11 rounded-full bg-emerald-500 font-semibold text-black hover:bg-emerald-400"
+        className="h-9 shrink-0 rounded-xl bg-emerald-500 px-3 text-sm font-semibold text-black hover:bg-emerald-400"
         disabled={isPending || soldOut}
         onClick={onBuy}
       >
-        <Sparkles className="size-4" />
-        {soldOut
-          ? "Agotado"
-          : selected
-            ? "Combo en el carrito"
-            : "Comprar combo promocional"}
+        {soldOut ? "Agotado" : selected ? "En el carrito" : "Agregar"}
       </Button>
     </article>
   )
-}
-
-function ComponentIcon({ name }: { name: string }) {
-  const normalized = name.toLocaleLowerCase("es")
-  if (/(estacion|parking|auto|cochera)/.test(normalized)) {
-    return <Car className="size-3.5" />
-  }
-  if (/(día|dia|jornada|abono|pase)/.test(normalized)) {
-    return <CalendarDays className="size-3.5" />
-  }
-  return <Ticket className="size-3.5" />
 }
 
 export function publicBundlesFromTiers(

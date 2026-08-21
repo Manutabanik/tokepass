@@ -133,11 +133,10 @@ export function SeatSelectionSheet({
   ])
 
   const targetSector = useMemo(() => {
-    const preferred = sectorId
-      ? sectors.find((sector) => sector.id === sectorId)
-      : null
+    if (sectorId) {
+      return sectors.find((sector) => sector.id === sectorId) ?? null
+    }
     return (
-      preferred ??
       sectors.find((item) => item.kind === "numbered" && !item.soldOut) ??
       sectors.find((item) => !item.soldOut) ??
       sectors[0] ??
@@ -145,8 +144,14 @@ export function SeatSelectionSheet({
     )
   }, [sectorId, sectors])
 
+  const targetZone = (context.map?.zones ?? []).find(
+    (zone) => zone.id === (sectorId ?? targetSector?.id),
+  )
+  const selectedSectorName = targetZone?.name ?? targetSector?.name ?? title
+
   const assignMeta = useMemo(() => {
-    if (!context.map || !targetSector) {
+    const sectorKey = targetZone?.id ?? targetSector?.id
+    if (!context.map || !sectorKey) {
       return {
         isTableSector: false,
         capacityPerUnit: 1,
@@ -156,23 +161,28 @@ export function SeatSelectionSheet({
     }
     return resolveSectorAssignMeta(
       context.map,
-      targetSector.id,
+      sectorKey,
       mapSeats,
-      targetSector.name,
+      selectedSectorName,
     )
-  }, [context.map, mapSeats, targetSector])
+  }, [context.map, mapSeats, selectedSectorName, targetSector, targetZone])
 
   const isTableSector = assignMeta.isTableSector
-  const targetZone = (context.map?.zones ?? []).find(
-    (zone) => zone.id === (sectorId ?? targetSector?.id),
-  )
   const seatingType = targetZone
     ? resolveEffectiveSeatingType(targetZone, context.map)
     : targetSector?.seatingType
+  const inventoryType = resolveSectorInventoryType({
+    layoutType: targetZone?.layoutType,
+    isTableSector,
+    seatingType,
+  })
+  const seatsPerTable =
+    targetZone?.capacityPerUnit || assignMeta.capacityPerUnit || 0
   const isGeneralAdmission =
-    seatingType === "GENERAL" ||
-    selectionMode === "counter" ||
-    targetSector?.kind === "ga"
+    inventoryType === "GENERAL_ADMISSION" &&
+    (seatingType === "GENERAL" ||
+      selectionMode === "counter" ||
+      targetSector?.kind === "ga")
   const showFullMap = seatingType === "RESERVED"
   const placeCount = storefrontSelectionCount(selectedItems)
   const placeTotal = storefrontSelectionTotal(selectedItems)
@@ -288,7 +298,7 @@ export function SeatSelectionSheet({
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <SheetTitle className="text-lg font-bold tracking-tight">
-                {title}
+                {selectedSectorName}
               </SheetTitle>
               <SheetDescription className="mt-0.5 text-sm text-muted-foreground">
                 {isGeneralAdmission
@@ -334,28 +344,43 @@ export function SeatSelectionSheet({
                 pending={pending}
                 peopleCount={peopleCount}
                 maxPeople={resolvePurchaseLimit(maxTicketsPerUser) ?? 20}
-                sectorName={targetSector?.name ?? title}
-                unitKind="access"
+                sectorName={selectedSectorName}
+                inventoryType={inventoryType}
+                seatsPerTable={seatsPerTable}
+                unitKind="ticket"
                 onChange={(next) => {
                   setPeopleCount(next)
                   if (targetSector) {
                     context.onAssignZoneQuantity(targetSector.id, next)
+                  } else if (targetZone) {
+                    context.onAssignZoneQuantity(targetZone.id, next)
                   }
                 }}
               />
             ) : (
-              <AccessiblePlaceGrid
-                pending={pending}
-                rows={targetSector?.rows ?? []}
-                emptyMessage={
-                  seatingType === "RESERVED" && targetSector?.soldOut
-                    ? "No hay lugares disponibles en este sector."
-                    : seatingType === "RESERVED"
-                      ? "Este sector no tiene mesas ni sillas configuradas."
-                      : null
-                }
-                onToggle={(seat) => handleTogglePlace(seat.id)}
-              />
+              <div className="flex flex-col items-center">
+                <h3 className="text-center text-lg font-bold text-foreground">
+                  {selectedSectorName}
+                </h3>
+                <SectorInventoryDescription
+                  inventoryType={inventoryType}
+                  seatsPerTable={seatsPerTable}
+                />
+                <div className="mt-4 w-full">
+                  <AccessiblePlaceGrid
+                    pending={pending}
+                    rows={targetSector?.rows ?? []}
+                    emptyMessage={
+                      seatingType === "RESERVED" && targetSector?.soldOut
+                        ? "No hay lugares disponibles en este sector."
+                        : seatingType === "RESERVED"
+                          ? "Este sector no tiene mesas ni sillas configuradas."
+                          : null
+                    }
+                    onToggle={(seat) => handleTogglePlace(seat.id)}
+                  />
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -380,8 +405,8 @@ export function SeatSelectionSheet({
             )}
           >
             {canConfirm
-              ? `Confirmar ${placeCount} ${placeCount === 1 ? "lugar" : "lugares"} · ${formatTicketPrice(placeTotal)}`
-              : "Confirmá al menos un lugar"}
+              ? `Confirmar ${placeCount} ${placeCount === 1 ? "entrada" : "entradas"} · ${formatTicketPrice(placeTotal)}`
+              : "Confirmá al menos una entrada"}
           </Button>
         </div>
       </SheetContent>
@@ -401,19 +426,68 @@ function formatAssistantLine(
     (sum, item) => sum + Math.max(1, Math.floor(item.capacity) || 1),
     0,
   )
-  const accessLabel = accesses === 1 ? "1 acceso" : `${accesses} accesos`
+  const ticketLabel = accesses === 1 ? "1 entrada" : `${accesses} entradas`
   const heading = names.join(" · ") || "Selección"
-  return `${heading} · ${accessLabel} · ${formatTicketPrice(total)}`
+  return `${heading} · ${ticketLabel} · ${formatTicketPrice(total)}`
+}
+
+type SectorInventoryType =
+  | "TABLES"
+  | "SEATED_NUMERATED"
+  | "GENERAL_ADMISSION"
+
+function resolveSectorInventoryType(input: {
+  layoutType?: string | null
+  isTableSector: boolean
+  seatingType?: string | null
+}): SectorInventoryType {
+  if (input.layoutType === "table_combo" || input.isTableSector) {
+    return "TABLES"
+  }
+  if (
+    input.layoutType === "numbered_seat" ||
+    input.seatingType === "RESERVED"
+  ) {
+    return "SEATED_NUMERATED"
+  }
+  return "GENERAL_ADMISSION"
+}
+
+function SectorInventoryDescription({
+  inventoryType,
+  seatsPerTable,
+}: {
+  inventoryType: SectorInventoryType
+  seatsPerTable: number
+}) {
+  return (
+    <div className="mt-2 text-center text-sm text-muted-foreground">
+      {inventoryType === "TABLES" && (
+        <p>
+          Mesa completa. Incluye {seatsPerTable || "X"} sillas exclusivas.
+        </p>
+      )}
+      {inventoryType === "SEATED_NUMERATED" && (
+        <p>Asiento numerado. Elegí tu ubicación en el plano.</p>
+      )}
+      {(inventoryType === "GENERAL_ADMISSION" || !inventoryType) && (
+        <p>
+          Acceso general (sin asiento asignado). Indicá cuántas entradas
+          querés.
+        </p>
+      )}
+    </div>
+  )
 }
 
 function quantityUnitLabel(
   count: number,
-  unitKind: "access" | "person",
+  unitKind: "ticket" | "person",
 ): string {
   if (unitKind === "person") {
     return count === 1 ? "1 persona" : `${count} personas`
   }
-  return count === 1 ? "1 acceso" : `${count} accesos`
+  return count === 1 ? "1 entrada" : `${count} entradas`
 }
 
 function GeneralAdmissionPicker({
@@ -422,24 +496,28 @@ function GeneralAdmissionPicker({
   maxPeople,
   pending,
   unitKind,
+  inventoryType,
+  seatsPerTable,
   onChange,
 }: {
   sectorName: string
   peopleCount: number
   maxPeople: number
   pending: boolean
-  unitKind: "access" | "person"
+  unitKind: "ticket" | "person"
+  inventoryType: SectorInventoryType
+  seatsPerTable: number
   onChange: (next: number) => void
 }) {
   return (
     <div className="flex flex-col items-center gap-4 py-6">
-      <h3 className="mb-2 text-center text-lg font-bold text-gray-900 dark:text-foreground">
+      <h3 className="mb-2 text-center text-lg font-bold text-foreground">
         {sectorName}
       </h3>
-      <p className="text-center text-sm text-muted-foreground">
-        Acceso general. Indicá cuántas{" "}
-        {unitKind === "person" ? "personas" : "entradas"} querés.
-      </p>
+      <SectorInventoryDescription
+        inventoryType={inventoryType}
+        seatsPerTable={seatsPerTable}
+      />
       <div className="flex items-center gap-3 rounded-full bg-secondary/50 px-1 py-1">
         <button
           type="button"

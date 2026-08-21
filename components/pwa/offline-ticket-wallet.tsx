@@ -126,11 +126,12 @@ export function OfflineTicketWallet({
               variant="outline"
               className="rounded-full border-amber-500/40 bg-transparent px-2 py-0 text-[10px] font-semibold uppercase tracking-wide text-amber-200"
             >
-              Modo sin conexión - QR disponible para lectura
+              Modo sin señal (Tu código sigue funcionando igual)
             </Badge>
             <p className="mt-1.5 text-sm leading-5 text-amber-100/90">
               Tu entrada está guardada en tu dispositivo y lista para ser
-              escaneada. El Living QR sigue renovándose sin internet.
+              escaneada. El código de acceso se sigue actualizando sin
+              internet.
             </p>
           </div>
         </div>

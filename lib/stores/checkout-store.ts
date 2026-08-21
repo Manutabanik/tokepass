@@ -320,7 +320,12 @@ export const useCheckoutStore = create<CheckoutState>()(
       },
 
       resetIfOtherEvent: (eventId) => {
-        if (!get().eventId || get().eventId === eventId) return
+        const currentId = get().eventId
+        if (!currentId) {
+          set({ eventId })
+          return
+        }
+        if (currentId === eventId) return
         set({
           eventId,
           eventSlug: null,
@@ -332,7 +337,6 @@ export const useCheckoutStore = create<CheckoutState>()(
           holdExpiresAt: null,
           isGuest: false,
           mode: "undecided",
-          viewMode: "info",
           checkoutStep: "tickets",
           identityOpen: false,
           seatSheetOpen: false,
@@ -529,6 +533,14 @@ export const useCheckoutStore = create<CheckoutState>()(
     {
       name: "tokepass.checkout-intent.v1",
       storage: createJSONStorage(() => localStorage),
+      merge: (persisted, current) => {
+        const saved = (persisted ?? {}) as Partial<CheckoutState>
+        return {
+          ...current,
+          ...saved,
+          viewMode: current.viewMode,
+        }
+      },
       partialize: (state) => ({
         eventId: state.eventId,
         eventSlug: state.eventSlug,

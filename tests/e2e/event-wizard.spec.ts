@@ -72,7 +72,7 @@ test.describe("Wizard de creación — 4 pasos y localStorage", () => {
     await loginOrganizer(page)
     await page.goto("/admin/events/create")
 
-    await expect(page.getByRole("tab", { name: /Identidad/i })).toBeVisible()
+    await expect(page.getByRole("tab", { name: /Datos principales/i })).toBeVisible()
     await expect(page.getByRole("tab", { name: /Mapa y Sectores/i })).toHaveCount(
       0,
     )
@@ -80,13 +80,13 @@ test.describe("Wizard de creación — 4 pasos y localStorage", () => {
       page.getByRole("tab", { name: /Cronograma \/ Artistas/i }),
     ).toHaveCount(0)
     await expect(
-      page.getByRole("tab", { name: /Entradas y combos/i }),
+      page.getByRole("tab", { name: /Entradas y precios/i }),
     ).toBeVisible()
     await expect(
-      page.getByRole("tab", { name: /Configuración Final/i }),
+      page.getByRole("tab", { name: /Publicar y cobrar/i }),
     ).toBeVisible()
 
-    await page.getByRole("tab", { name: /Identidad/i }).click()
+    await page.getByRole("tab", { name: /Datos principales/i }).click()
     await page
       .getByRole("switch", {
         name: /habilitar cronograma \/ agenda del evento/i,

@@ -395,13 +395,13 @@ export function urgencyLabel(event: CatalogEvent): string | null {
   if (event.ticketsLeft != null && event.ticketsLeft <= 0) return null
   if (event.soldRatio != null && event.soldRatio >= 1) return null
   if (event.soldRatio != null && event.soldRatio >= 0.85) {
-    return "Últimas entradas"
+    return "¡Quedan pocas entradas!"
   }
   if (event.ticketsLeft != null && event.ticketsLeft > 0 && event.ticketsLeft <= 40) {
-    return "Últimas entradas"
+    return "¡Quedan pocas entradas!"
   }
   if (event.soldRatio != null && event.soldRatio >= 0.6) {
-    return "Últimas entradas"
+    return "¡Quedan pocas entradas!"
   }
   return null
 }

@@ -57,7 +57,7 @@ const ACCOUNT_LINKS = [
   },
   {
     href: "/cuenta/perfil",
-    label: "Configuración de la cuenta",
+    label: "Mis datos personales",
     icon: Settings,
     notify: false,
   },
@@ -179,7 +179,7 @@ export function AccountAvatarMenu({
               className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-rose-700 disabled:opacity-60 dark:text-rose-300"
             >
               <LogOut className="size-4 shrink-0" aria-hidden="true" />
-              Cerrar Sesión
+              Salir de mi cuenta
             </button>
           </nav>
         </SheetContent>
@@ -241,7 +241,7 @@ export function AccountAvatarMenu({
             className="font-semibold text-rose-700 data-highlighted:bg-rose-500/10 dark:text-rose-300"
           >
             <LogOut className="size-4 shrink-0" aria-hidden="true" />
-            Cerrar Sesión
+            Salir de mi cuenta
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

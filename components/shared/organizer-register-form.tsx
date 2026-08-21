@@ -115,7 +115,7 @@ export function OrganizerRegisterForm({
               type="password"
               autoComplete="new-password"
               minLength={8}
-              placeholder="Mínimo 8 caracteres"
+              placeholder="Tiene que tener al menos 8 caracteres"
               required
               className="h-11"
             />

@@ -72,7 +72,7 @@ describe("freepassRegisterSchema", () => {
     })
     assert.equal(result.success, false)
     if (!result.success) {
-      assert.match(firstZodIssue(result.error), /mail válido/i)
+      assert.match(firstZodIssue(result.error), /email/i)
     }
   })
 })

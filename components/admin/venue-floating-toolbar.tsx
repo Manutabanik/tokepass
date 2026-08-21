@@ -4,6 +4,8 @@ import {
   Armchair,
   CircleDot,
   GripVertical,
+  HandGrab,
+  Minus,
   MousePointer2,
   PenTool,
   Plus,
@@ -24,7 +26,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 
-export type FloatingDrawTool = "select" | "polygon" | "seat" | "table"
+export type FloatingDrawTool = "select" | "pan" | "polygon" | "seat" | "table"
 
 const TOOLS: Array<{
   id: FloatingDrawTool
@@ -32,6 +34,7 @@ const TOOLS: Array<{
   icon: typeof MousePointer2
 }> = [
   { id: "select", label: "Cursor", icon: MousePointer2 },
+  { id: "pan", label: "Mover mapa", icon: HandGrab },
   { id: "polygon", label: "Lapiz de zonas", icon: PenTool },
   { id: "seat", label: "Asiento", icon: Armchair },
   { id: "table", label: "Mesa", icon: CircleDot },
@@ -65,12 +68,18 @@ export function VenueFloatingToolbar({
   onPlace,
   constraintRef,
   className,
+  zoomPercent,
+  onZoomIn,
+  onZoomOut,
 }: {
   active: FloatingDrawTool
   onChange: (tool: FloatingDrawTool) => void
   onPlace?: (placement: PalettePlacement) => void
   constraintRef?: RefObject<HTMLElement | null>
   className?: string
+  zoomPercent?: number
+  onZoomIn?: () => void
+  onZoomOut?: () => void
 }) {
   const dragControls = useDragControls()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -179,6 +188,40 @@ export function VenueFloatingToolbar({
             })}
           </DropdownMenuContent>
         </DropdownMenu>
+      ) : null}
+
+      {onZoomIn && onZoomOut ? (
+        <span className="ml-1 inline-flex items-center gap-0.5 border-l border-border pl-2">
+          <button
+            type="button"
+            title="Alejar"
+            aria-label="Alejar"
+            onPointerDown={stopCanvas}
+            onClick={(event) => {
+              event.stopPropagation()
+              onZoomOut()
+            }}
+            className="inline-flex size-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <Minus className="size-4" aria-hidden="true" />
+          </button>
+          <span className="min-w-10 text-center text-[11px] tabular-nums text-muted-foreground">
+            {zoomPercent ?? 100}%
+          </span>
+          <button
+            type="button"
+            title="Acercar"
+            aria-label="Acercar"
+            onPointerDown={stopCanvas}
+            onClick={(event) => {
+              event.stopPropagation()
+              onZoomIn()
+            }}
+            className="inline-flex size-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <Plus className="size-4" aria-hidden="true" />
+          </button>
+        </span>
       ) : null}
     </motion.div>
   )

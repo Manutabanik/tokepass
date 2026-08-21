@@ -8,7 +8,7 @@ import {
 export const INVENTORY_SYNC_MESSAGE = APP_ERRORS.INVENTORY_SYNC.message
 
 export const GENERIC_PUBLIC_ERROR =
-  "No pudimos completar la operación. Intentá de nuevo."
+  "Tuvimos un problema técnico de nuestro lado. Volvé a intentar en un ratito"
 
 export { containsInternalErrorCode, isSafeUserFacingCopy, mapUnknownError }
 
@@ -21,7 +21,7 @@ export function toUserFacingError(
     : GENERIC_PUBLIC_ERROR
   const message = mapUnknownError(text, {
     code: "SAVE_FAILED",
-    title: "No se pudieron guardar los cambios",
+    title: "No pudimos guardar los cambios",
     message: safeFallback,
   }).message
   if (/^(unknown|error\s*500|internal server error|500)$/i.test(message.trim())) {

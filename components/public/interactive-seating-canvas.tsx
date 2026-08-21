@@ -44,6 +44,13 @@ import {
   storefrontItemFromElement,
   storefrontItemFromZone,
 } from "@/lib/seating/storefront-selection"
+import {
+  BuyerMapZoomDock,
+  SeatTooltip,
+  clampTooltipPosition,
+  resolveBuyerHoverFromTarget,
+  type BuyerMapHoverItem,
+} from "@/components/public/seat-tooltip"
 import { StorefrontSelectionCard } from "@/components/public/storefront-selection-card"
 import { VenueMapBackgroundLayer } from "@/components/venue/venue-map-background-layer"
 import { VenueMapElementLayer } from "@/components/venue/venue-map-element-layer"
@@ -119,6 +126,12 @@ function vibrateTap() {
   }
 }
 
+function buyerMapSurfaceClass(hideChrome: boolean, buyerChrome: boolean) {
+  if (buyerChrome) return "bg-transparent"
+  if (hideChrome) return "bg-background/50"
+  return "bg-background"
+}
+
 export function InteractiveSeatingCanvas({
   map,
   eventId = null,
@@ -143,6 +156,8 @@ export function InteractiveSeatingCanvas({
   onPickElement,
   posStatusColors = false,
   posWorkstation = false,
+  buyerChrome = false,
+  silentHover = false,
 }: {
   map: InteractiveVenueMap
   eventId?: string | null
@@ -168,12 +183,18 @@ export function InteractiveSeatingCanvas({
   onPickElement?: (element: VenueMapElement) => void
   posStatusColors?: boolean
   posWorkstation?: boolean
+  buyerChrome?: boolean
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
+  const tooltipHostRef = useRef<HTMLDivElement>(null)
   const transformRef = useRef<ReactZoomPanPinchContentRef>(null)
   const lastActivity = useRef(0)
+  const touchHoverRef = useRef(false)
+  const touchHoverTimer = useRef<number | null>(null)
 
   const [zoom, setZoom] = useState(1)
+  const [hoveredItem, setHoveredItem] = useState<BuyerMapHoverItem | null>(null)
+  const [hoverPos, setHoverPos] = useState({ x: 16, y: 16 })
   const [wrapWidth, setWrapWidth] = useState(360)
   const [wrapHeight, setWrapHeight] = useState(280)
   const [idleOpen, setIdleOpen] = useState(false)
@@ -226,6 +247,8 @@ export function InteractiveSeatingCanvas({
     () => new Set(selectedSeats.map((seat) => seat.id)),
     [selectedSeats],
   )
+  const hoverSeats = useMemo(() => flattenVenueMapSeats(map), [map])
+  const buyerOccupancy = !posStatusColors
   const selectedElementIds = useMemo(
     () =>
       liveSelectedItems
@@ -294,6 +317,14 @@ export function InteractiveSeatingCanvas({
   const stageLabel = map.stage?.label?.trim() || "ESCENARIO"
   const pxPerUnit = (wrapWidth / VIEW.width) * zoom
   const hitRadius = Math.max(8, MIN_HIT_PX / 2 / Math.max(pxPerUnit, 0.05))
+
+  useEffect(() => {
+    return () => {
+      if (touchHoverTimer.current != null) {
+        window.clearTimeout(touchHoverTimer.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     const node = wrapRef.current
@@ -405,14 +436,19 @@ export function InteractiveSeatingCanvas({
     [readOnly],
   )
   const pinchOptions = useMemo(
-    () => ({ step: 5, allowPanning: !readOnly, disabled: readOnly }),
+    () => ({
+      step: 5,
+      allowPanning: !readOnly,
+      disabled: readOnly,
+    }),
     [readOnly],
   )
   const panningOptions = useMemo(
     () => ({
       disabled: readOnly,
-      velocityDisabled: readOnly,
+      velocityDisabled: false,
       allowLeftClickPan: !readOnly,
+      excluded: ["input", "button", "textarea"],
     }),
     [readOnly],
   )
@@ -448,6 +484,68 @@ export function InteractiveSeatingCanvas({
       (value): value is string => typeof value === "string",
     )
     return resolveVenueUnitPrice(keys, Number(fallback) || 0, priceBySectorId)
+  }
+
+  const hoverLookup = useMemo(() => {
+    const seatById = new Map<string, BuyerMapHoverItem>()
+    for (const seat of hoverSeats) {
+      const item = {
+        sectorName: seat.sectorName,
+        row: seat.row,
+        seatNumber: seat.number,
+        price: resolveVenueUnitPrice(
+          [seat.sectorId, seat.sectorName],
+          Number(seat.price) || 0,
+          priceBySectorId,
+        ),
+      }
+      seatById.set(seat.id, item)
+    }
+    const zoneById = new Map<string, BuyerMapHoverItem>()
+    for (const zone of map.zones ?? []) {
+      zoneById.set(zone.id, {
+        sectorName: zone.name,
+        price: resolveVenueUnitPrice(
+          [zone.id, zone.name],
+          Number(zone.price) || 0,
+          priceBySectorId,
+        ),
+      })
+    }
+    const elementById = new Map<string, BuyerMapHoverItem>()
+    for (const element of map.elements ?? []) {
+      if (isInfrastructureElement(element)) continue
+      elementById.set(element.id, {
+        sectorName: element.sectorName || element.customLabel || element.label || "Sector",
+        price: resolveVenueUnitPrice(
+          [element.id, element.groupId, element.sectorName, element.groupName],
+          Number(element.price) || 0,
+          priceBySectorId,
+        ),
+      })
+    }
+    return { seatById, zoneById, elementById }
+  }, [hoverSeats, map.elements, map.zones, priceBySectorId])
+
+  function updateHoverFromEvent(event: React.PointerEvent) {
+    if (silentHover) return
+    const host = tooltipHostRef.current
+    if (!host) return
+    const item = resolveBuyerHoverFromTarget(event.target, hoverLookup)
+    if (!item) {
+      if (event.pointerType !== "touch") setHoveredItem(null)
+      return
+    }
+    const rect = host.getBoundingClientRect()
+    setHoveredItem(item)
+    setHoverPos(
+      clampTooltipPosition(
+        event.clientX - rect.left,
+        event.clientY - rect.top,
+        rect.width,
+        rect.height,
+      ),
+    )
   }
 
   function applyToggle(item: StorefrontSelectedItem) {
@@ -787,9 +885,14 @@ export function InteractiveSeatingCanvas({
 
   const mapArea = (
       <div
+        ref={tooltipHostRef}
         className={cn(
           "relative min-h-0 min-w-0 flex-1 overflow-hidden",
-          hideChrome ? "h-full w-full bg-muted md:w-full" : "md:w-[70%]",
+          hideChrome
+            ? buyerChrome
+              ? "h-full w-full max-w-[100vw] bg-transparent md:w-full"
+              : "h-full w-full bg-background/50 md:w-full"
+            : "md:w-[70%]",
         hideChrome
           ? showModalActionFooter
             ? "pb-[max(5.75rem,calc(4.75rem+env(safe-area-inset-bottom)))]"
@@ -808,7 +911,7 @@ export function InteractiveSeatingCanvas({
         initialScale={1}
         centerOnInit
         centerZoomedOut
-        limitToBounds
+        limitToBounds={!hideChrome && !buyerChrome}
         smooth
         wheel={wheelOptions}
         pinch={pinchOptions}
@@ -824,27 +927,54 @@ export function InteractiveSeatingCanvas({
       <div
         ref={wrapRef}
         className={cn(
-          "h-full w-full",
-          hideChrome ? "bg-muted" : "bg-background",
+          "h-full w-full overscroll-none",
+          buyerMapSurfaceClass(hideChrome, buyerChrome),
           readOnly ? "pointer-events-none touch-pan-y" : "touch-none",
         )}
       >
         <TransformComponent
           wrapperClass={
-            hideChrome
-              ? "!h-full !w-full !overflow-hidden !bg-muted"
-              : "!h-full !w-full !overflow-hidden !bg-background"
+            buyerChrome
+              ? "!h-full !w-full !overflow-hidden !bg-transparent"
+              : hideChrome
+                ? "!h-full !w-full !overflow-hidden !bg-background/50"
+                : "!h-full !w-full !overflow-hidden !bg-background"
           }
           contentClass={
-            hideChrome ? "!h-full !w-full !bg-muted" : "!h-full !w-full !bg-background"
+            buyerChrome
+              ? "!h-full !w-full !bg-transparent"
+              : hideChrome
+                ? "!h-full !w-full !bg-background/50"
+                : "!h-full !w-full !bg-background"
           }
         >
         <svg
           viewBox={`0 ${-VIEW_TOP_PAD} ${VIEW.width} ${VIEW.height + VIEW_TOP_PAD}`}
           className={cn(
             "h-full w-full select-none",
-            hideChrome ? "bg-muted" : "bg-background",
+            buyerMapSurfaceClass(hideChrome, buyerChrome),
           )}
+          onPointerMove={(event) => {
+            if (event.pointerType === "touch") return
+            updateHoverFromEvent(event)
+          }}
+          onPointerDown={(event) => {
+            if (event.pointerType !== "touch") return
+            touchHoverRef.current = true
+            updateHoverFromEvent(event)
+            if (touchHoverTimer.current != null) {
+              window.clearTimeout(touchHoverTimer.current)
+            }
+            touchHoverTimer.current = window.setTimeout(() => {
+              touchHoverRef.current = false
+              touchHoverTimer.current = null
+              setHoveredItem(null)
+            }, 2200)
+          }}
+          onPointerLeave={() => {
+            if (touchHoverRef.current) return
+            setHoveredItem(null)
+          }}
           role="group"
           aria-label={
             readOnly
@@ -857,7 +987,9 @@ export function InteractiveSeatingCanvas({
             y={-VIEW_TOP_PAD}
             width={VIEW.width}
             height={VIEW.height + VIEW_TOP_PAD}
-            className={hideChrome ? "fill-muted" : "fill-background"}
+            className={
+              buyerChrome || hideChrome ? "fill-transparent" : "fill-background"
+            }
           />
           <g>
             <rect
@@ -927,6 +1059,7 @@ export function InteractiveSeatingCanvas({
               selectOnPointerUp={!readOnly}
               lodMode={lodEnabled ? viewMode : null}
               focusedZoneId={focusedZoneId}
+              buyerOccupancy={buyerOccupancy}
               onSelect={
                 readOnly ? undefined : (zone) => handleZoneClick(zone.id)
               }
@@ -946,6 +1079,7 @@ export function InteractiveSeatingCanvas({
               showSeats
               zoom={zoom}
               interactive={!readOnly}
+              buyerOccupancy={buyerOccupancy}
               onSeatPointerDown={(_event, element, seatId) => {
                 if (element.sellMode === "group") {
                   toggleElement(element)
@@ -985,20 +1119,24 @@ export function InteractiveSeatingCanvas({
               const selected = live === "selected"
               const held = heldSet.has(seat.id)
               const highlighted = focusedMapIds.includes(seat.id)
+              const taken = live === "occupied" || live === "blocked"
               const dimmed = spotlight && !selected && !highlighted
               return (
                 <g
                   key={seat.id}
                   id={`venue-sel-${seat.id}`}
+                  data-seat-id={seat.id}
                   className={cn(
-                    !readOnly && "cursor-pointer",
+                    !readOnly && !taken && "cursor-pointer",
+                    taken && "pointer-events-none",
                     (selected || highlighted) && "animate-pulse-subtle",
                   )}
                   style={{
-                    opacity: dimmed ? 0.7 : 1,
-                    pointerEvents: readOnly ? "none" : "auto",
-                    filter:
-                      selected || highlighted
+                    opacity: taken && !buyerOccupancy ? 0.3 : dimmed ? 0.7 : 1,
+                    pointerEvents: readOnly || taken ? "none" : "auto",
+                    filter: selected
+                      ? "drop-shadow(0px 0px 10px rgba(16, 185, 129, 0.9))"
+                      : highlighted
                         ? "drop-shadow(0px 0px 12px rgba(255, 255, 255, 0.8))"
                         : undefined,
                   }}
@@ -1009,11 +1147,8 @@ export function InteractiveSeatingCanvas({
                     r={hitRadius}
                     fill="transparent"
                     stroke="none"
-                    className={
-                      live === "occupied" || live === "blocked"
-                        ? "cursor-not-allowed"
-                        : "cursor-pointer"
-                    }
+                    data-seat-id={seat.id}
+                    className={taken ? "cursor-not-allowed" : "cursor-pointer"}
                     aria-label={label}
                     tabIndex={-1}
                     onClick={(event) => {
@@ -1024,10 +1159,10 @@ export function InteractiveSeatingCanvas({
                     <title>{label}</title>
                   </circle>
                   <g
-                    opacity={dimmed ? 0.7 : 1}
+                    opacity={taken && !buyerOccupancy ? 0.3 : dimmed ? 0.7 : 1}
                     transform={
                       selected || highlighted
-                        ? `translate(${seat.x} ${seat.y}) scale(1.15) translate(${-seat.x} ${-seat.y})`
+                        ? `translate(${seat.x} ${seat.y}) scale(1.12) translate(${-seat.x} ${-seat.y})`
                         : undefined
                     }
                     className="pointer-events-none transition-all duration-200 ease-in-out"
@@ -1039,8 +1174,9 @@ export function InteractiveSeatingCanvas({
                       height={12}
                       color={posStatusColors ? "#22c55e" : seat.color}
                       selected={selected && !held}
-                      occupied={live === "occupied" || live === "blocked"}
+                      occupied={taken}
                       held={held}
+                      buyerOccupancy={buyerOccupancy}
                       label={String(seat.number)}
                       showLabel={zoom >= 1.35 || selected}
                     />
@@ -1055,6 +1191,16 @@ export function InteractiveSeatingCanvas({
         </TransformComponent>
       </div>
       </TransformWrapper>
+      {!silentHover && hoveredItem ? (
+        <SeatTooltip item={hoveredItem} x={hoverPos.x} y={hoverPos.y} />
+      ) : null}
+      {buyerChrome && !readOnly ? (
+        <BuyerMapZoomDock
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
+          onReset={handleResetView}
+        />
+      ) : null}
       {lodEnabled && viewMode === "micro" && !readOnly ? (
         <button
           type="button"
@@ -1088,7 +1234,8 @@ export function InteractiveSeatingCanvas({
       className={cn(
         "flex w-full flex-col",
         fillParent ? "h-full min-h-0" : "flex-1 min-h-0",
-        hideChrome && "relative bg-muted",
+        hideChrome &&
+          (buyerChrome ? "relative bg-transparent" : "relative bg-background/50"),
       )}
     >
       {readOnly || hideToolbar || posWorkstation ? null : (
@@ -1118,7 +1265,11 @@ export function InteractiveSeatingCanvas({
       <div
         className={cn(
           "relative flex min-h-0 w-full flex-1 flex-col overflow-hidden md:flex-row",
-          hideChrome ? "bg-muted" : "bg-background",
+          hideChrome
+            ? buyerChrome
+              ? "bg-transparent"
+              : "bg-background/50"
+            : "bg-background",
           hideChrome
             ? "rounded-none border-0 shadow-none"
             : "relative min-h-0 w-full flex-1 overflow-hidden rounded-lg border border-border bg-muted/20",

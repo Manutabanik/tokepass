@@ -326,7 +326,7 @@ export function NavbarSearch() {
             className="fixed inset-0 z-[80] flex flex-col bg-white dark:bg-zinc-950 md:hidden"
             role="dialog"
             aria-modal="true"
-            aria-label="Buscar evento o artista"
+            aria-label="Buscá por evento, artista o lugar"
           >
             <form
               onSubmit={submitExplore}
@@ -361,7 +361,7 @@ export function NavbarSearch() {
                   autoComplete="off"
                   autoCorrect="off"
                   spellCheck={false}
-                  placeholder="Buscar evento o artista..."
+                  placeholder="Buscá por evento, artista o lugar..."
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   className="h-12 w-full rounded-full border border-zinc-200 bg-zinc-50 pl-10 pr-4 text-base text-zinc-900 outline-none placeholder:text-zinc-400 focus-visible:border-violet-400 focus-visible:ring-3 focus-visible:ring-violet-400/30 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-500"
@@ -383,7 +383,7 @@ export function NavbarSearch() {
       <div ref={rootRef} className="search-bar relative hidden min-w-0 w-full max-w-md flex-1 md:block">
         <form onSubmit={submitExplore}>
           <label className="sr-only" htmlFor="omni-search-desktop">
-            Buscar evento o artista
+            Buscá por evento, artista o lugar
           </label>
           <div
             className="relative"
@@ -403,7 +403,7 @@ export function NavbarSearch() {
               autoComplete="off"
               autoCorrect="off"
               spellCheck={false}
-              placeholder="Buscar evento o artista..."
+              placeholder="Buscá por evento, artista o lugar..."
               value={query}
               onChange={(event) => {
                 setQuery(event.target.value)

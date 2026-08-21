@@ -68,8 +68,8 @@ export function transformPercentPolygon(
       ? canvas.map((point) => ({ x: point.x + live.dx, y: point.y + live.dy }))
       : live.type === "scale"
         ? canvas.map((point) => ({
-            x: live.ox + (point.x - live.ox) * live.scale,
-            y: live.oy + (point.y - live.oy) * live.scale,
+            x: live.ox + (point.x - live.ox) * (live.scaleX ?? live.scale),
+            y: live.oy + (point.y - live.oy) * (live.scaleY ?? live.scale),
           }))
         : canvas.map((point) =>
             rotatePoint(point.x, point.y, live.cx, live.cy, live.deg),

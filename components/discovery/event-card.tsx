@@ -130,17 +130,17 @@ function EventListCard({
           />
         )}
         <div className="pointer-events-none absolute top-2 left-2 z-20 flex max-w-[calc(100%-0.5rem)] flex-col gap-1">
-          {highlighted ? <FlyerBadge>Destacado</FlyerBadge> : null}
+          {highlighted ? <FlyerBadge>Imperdible</FlyerBadge> : null}
           {urgency ? <FlyerBadge pulse>{urgency}</FlyerBadge> : null}
         </div>
         {soldOut ? (
           <span className="absolute inset-x-1 bottom-1 rounded-md bg-red-600/90 px-1.5 py-0.5 text-center text-[8px] font-black tracking-wider text-white uppercase">
-            Agotado
+            Entradas agotadas
           </span>
         ) : null}
         {finished ? (
           <span className="absolute inset-x-1 bottom-1 rounded-md bg-zinc-800/80 px-1.5 py-0.5 text-center text-[8px] font-black tracking-wider text-white uppercase">
-            Finalizado
+            Este evento ya pasó
           </span>
         ) : null}
       </div>
@@ -166,16 +166,18 @@ function EventListCard({
         <div className="mt-1 flex items-center justify-between gap-2">
           <div className="min-w-0">
             <span className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-              Desde
+              {event.startingPrice === 0 ? "Entrada" : "Entradas desde"}
             </span>
             <span className="whitespace-nowrap text-sm font-black text-foreground md:text-base">
-              {event.startingPrice != null
-                ? formatTicketPrice(event.startingPrice)
-                : "Ver precios"}
+              {event.startingPrice == null
+                ? "Ver precios"
+                : event.startingPrice === 0
+                  ? "gratuita"
+                  : formatTicketPrice(event.startingPrice)}
             </span>
           </div>
           <span className="relative z-0 inline-flex h-12 min-h-[48px] shrink-0 items-center rounded-xl bg-emerald-500 px-5 text-sm font-black text-slate-950 shadow-lg transition-colors duration-300 group-hover:bg-emerald-400">
-            {finished ? "Ver evento" : soldOut ? "Agotado" : "Adquirir"}
+            {finished ? "Ver evento" : soldOut ? "Entradas agotadas" : "Ver entradas"}
           </span>
         </div>
       </div>
@@ -286,17 +288,17 @@ export function EventCard({
 
         {soldOut ? (
           <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-red-600 px-4 py-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-white shadow-lg">
-            AGOTADO
+            Entradas agotadas
           </span>
         ) : null}
         {finished ? (
           <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-zinc-800/80 px-4 py-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-white backdrop-blur-md">
-            FINALIZADO
+            Este evento ya pasó
           </span>
         ) : null}
 
         <div className="pointer-events-none absolute top-3 left-3 z-20 flex max-w-[calc(100%-3.5rem)] flex-wrap gap-1.5">
-          {sponsored || boosted ? <FlyerBadge>Destacado</FlyerBadge> : null}
+          {sponsored || boosted ? <FlyerBadge>Imperdible</FlyerBadge> : null}
           {urgency ? <FlyerBadge pulse>{urgency}</FlyerBadge> : null}
         </div>
       </div>
@@ -328,17 +330,19 @@ export function EventCard({
       <div className="relative z-0 mt-auto flex items-center justify-between gap-2 border-t border-black/5 bg-white/60 p-4 pt-3 backdrop-blur-xl dark:border-white/10 dark:bg-black/60">
         <div className="flex min-w-0 flex-col">
           <span className="text-[10px] font-bold uppercase leading-none tracking-wider text-muted-foreground">
-            Desde
+            {event.startingPrice === 0 ? "Entrada" : "Entradas desde"}
           </span>
           <span className="mt-0.5 whitespace-nowrap text-xl font-black text-foreground drop-shadow-sm">
-            {event.startingPrice != null
-              ? formatTicketPrice(event.startingPrice)
-              : "Ver precios"}
+            {event.startingPrice == null
+              ? "Ver precios"
+              : event.startingPrice === 0
+                ? "gratuita"
+                : formatTicketPrice(event.startingPrice)}
           </span>
         </div>
 
         <span className="relative z-0 inline-flex h-12 min-h-[48px] shrink-0 items-center rounded-xl bg-emerald-500 px-5 text-sm font-black text-slate-950 shadow-lg transition-colors duration-300 group-hover:bg-emerald-400">
-          {finished ? "Ver evento" : soldOut ? "Agotado" : "Adquirir"}
+          {finished ? "Ver evento" : soldOut ? "Entradas agotadas" : "Ver entradas"}
         </span>
       </div>
     </article>

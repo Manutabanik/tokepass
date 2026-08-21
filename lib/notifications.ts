@@ -110,10 +110,12 @@ export async function notifyLivingTicketEmail(
     "https://tokepass.app"
   const ticketUrl = `${siteUrl}/tickets/${payload.ticketId}`
   const message = [
-    `Hola ${payload.holderName},`,
-    `Tu entrada TokePass para ${payload.eventTitle} está lista.`,
+    payload.holderName.trim()
+      ? `¡Hola, ${payload.holderName.trim()}!`
+      : "¡Hola!",
+    "¡Todo listo! Tu compra quedó confirmada. Podés ver tus códigos de acceso directamente desde el botón de abajo o ingresando a la app.",
     `Código: #${payload.ticketCode}`,
-    `Abrí tu Living QR: ${ticketUrl}`,
+    `Ver mis entradas en TokePass: ${ticketUrl}`,
   ].join("\n")
 
   try {
@@ -146,7 +148,7 @@ export async function notifyLivingTicketEmail(
       body: JSON.stringify({
         from: fromEmail,
         to: [payload.toEmail],
-        subject: `Tu entrada TokePass — ${payload.eventTitle}`,
+        subject: `¡Acá están tus entradas para ${payload.eventTitle}!`,
         text: message,
       }),
       signal: AbortSignal.timeout(8000),

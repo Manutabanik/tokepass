@@ -1448,7 +1448,7 @@ async function applyHolderIdentityToOrder(input: {
     }
     return {
       ok: false,
-      error: "No se pudieron guardar los datos del asistente.",
+      error: "No pudimos guardar los cambios. Revisá tu conexión a internet e intentá de nuevo",
     }
   }
 

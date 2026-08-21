@@ -22,7 +22,7 @@ function useHasDocument() {
 type EventStorefrontPurchaseDockProps = {
   price: number | null
   isAvailable: boolean
-  onAcquire: () => void
+  onAcquire: (event: React.MouseEvent) => void
 }
 
 export function EventStorefrontPurchaseDock({
@@ -58,7 +58,7 @@ export function EventStorefrontPurchaseDock({
                 Estado
               </span>
               <span className="block text-lg font-black tracking-tight text-muted-foreground">
-                Agotado
+                Entradas agotadas
               </span>
             </>
           )}
@@ -67,7 +67,11 @@ export function EventStorefrontPurchaseDock({
           <Button
             type="button"
             size="storefront"
-            onClick={onAcquire}
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              onAcquire(event)
+            }}
             className="h-14 max-w-[200px] flex-1 rounded-xl bg-emerald-500 text-lg font-black text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:bg-emerald-400"
           >
             Comprar

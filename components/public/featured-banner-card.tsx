@@ -7,7 +7,6 @@ import {
   EventLineupTeaser,
   EventTypePills,
 } from "@/components/discovery/event-lineup-teaser"
-import { BackgroundGradient } from "@/components/ui/background-gradient"
 import type { DiscoveryCategory } from "@/lib/discovery-categories"
 import {
   eventCardLocationLabel,
@@ -16,7 +15,6 @@ import {
 } from "@/lib/discovery-filters"
 import { formatDiscoveryDateTime, formatTicketPrice } from "@/lib/format"
 import { publicEventPath } from "@/lib/seo/site"
-import { cn } from "@/lib/utils"
 
 export type FeaturedBannerCardProps = {
   event: CatalogEvent
@@ -36,80 +34,75 @@ export function FeaturedBannerCard({
   const genre = eventSecondaryBadge(event)
 
   return (
-    <BackgroundGradient
-      variant="featured"
-      containerClassName="w-full overflow-visible bg-transparent"
-    >
-      <article
-        className={cn(
-          "relative z-10 mx-auto flex w-[min(100%-2rem,80rem)] cursor-pointer flex-col overflow-hidden rounded-3xl border border-border/30 bg-background",
-          "md:flex-row md:items-stretch",
+    <article className="group relative flex w-full min-w-0 flex-col overflow-hidden rounded-3xl border border-white/10 bg-card/40 shadow-[0_0_50px_-12px_rgba(16,185,129,0.15)] backdrop-blur-md md:flex-row">
+      <div className="relative min-h-[250px] w-full shrink-0 overflow-hidden bg-black md:order-2 md:min-h-full md:w-[50%] lg:w-[55%]">
+        {coverUrl ? (
+          <Image
+            src={coverUrl}
+            alt={event.title}
+            fill
+            priority={priority}
+            sizes="(max-width: 1024px) 100vw, 55vw"
+            className="h-full w-full object-cover object-center"
+          />
+        ) : (
+          <div className="absolute inset-0 bg-muted" aria-hidden />
         )}
-      >
-        <div className="relative order-1 aspect-[4/3] w-full overflow-hidden bg-muted md:order-2 md:aspect-[4/3] md:w-1/2 lg:w-7/12">
-          {coverUrl ? (
-            <Image
-              src={coverUrl}
-              alt={event.title}
-              fill
-              priority={priority}
-              sizes="(max-width: 768px) 100vw, 58vw"
-              className="object-cover object-center transition-transform duration-500 group-hover:scale-105"
-            />
-          ) : (
-            <div
-              className="absolute inset-0 bg-muted"
-              aria-hidden
-            />
-          )}
+        <div className="absolute inset-y-0 left-0 z-10 hidden w-24 bg-gradient-to-r from-card/40 to-transparent md:block" />
+      </div>
+
+      <div className="z-10 flex min-h-0 w-full min-w-0 flex-1 flex-col justify-center p-6 sm:p-8 md:order-1 lg:p-10">
+        <div className="min-w-0 space-y-3">
+          <EventTypePills featured category={category} genre={genre} />
+
+          <h2 className="line-clamp-2 break-words text-2xl font-black tracking-tight text-foreground transition-colors group-hover:text-primary lg:text-3xl">
+            <Link
+              href={href}
+              className="before:absolute before:inset-0 before:z-10 focus:outline-none focus-visible:before:ring-2 focus-visible:before:ring-primary/40"
+            >
+              {event.title}
+            </Link>
+          </h2>
+
+          <EventLineupTeaser artists={event.artists} />
+
+          <div className="space-y-2">
+            <p className="flex min-w-0 items-center gap-2 text-sm font-semibold text-emerald-500/90">
+              <Calendar className="size-4 shrink-0" aria-hidden="true" />
+              <span className="min-w-0 truncate">
+                {formatDiscoveryDateTime(event.date)}
+              </span>
+            </p>
+            <p className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+              <MapPin
+                className="size-4 shrink-0 text-emerald-500"
+                aria-hidden="true"
+              />
+              <span className="min-w-0 truncate">{locationLabel}</span>
+            </p>
+          </div>
         </div>
 
-        <div className="order-2 flex w-full flex-col justify-between bg-background p-5 md:order-1 md:w-1/2 md:p-8 lg:w-5/12 lg:p-10">
-          <div className="flex flex-col gap-4 md:gap-5">
-            <EventTypePills featured category={category} genre={genre} />
-
-            <h2 className="line-clamp-2 break-words text-2xl font-black tracking-tight text-foreground transition-colors group-hover:text-primary md:text-3xl lg:text-4xl">
-              <Link
-                href={href}
-                className="before:absolute before:inset-0 before:z-10 focus:outline-none focus-visible:before:ring-2 focus-visible:before:ring-primary/40"
-              >
-                {event.title}
-              </Link>
-            </h2>
-
-            <EventLineupTeaser artists={event.artists} />
-
-            <div className="flex flex-col gap-2">
-              <p className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-500/90">
-                <Calendar className="size-4 shrink-0" aria-hidden="true" />
-                <span>{formatDiscoveryDateTime(event.date)}</span>
-              </p>
-              <p className="inline-flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
-                <MapPin className="size-4 shrink-0 text-emerald-500" aria-hidden="true" />
-                <span className="truncate">{locationLabel}</span>
-              </p>
-            </div>
-          </div>
-
-          <div className="relative z-0 mt-6 flex items-end justify-between gap-3 border-t border-border/20 pt-6">
-            <div className="min-w-0">
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                Desde
-              </span>
-              <span className="mt-0.5 block whitespace-nowrap text-lg font-black text-foreground sm:text-xl">
-                {event.startingPrice != null
-                  ? formatTicketPrice(event.startingPrice)
-                  : "Ver precios"}
-              </span>
-            </div>
-
-            <span className="inline-flex shrink-0 items-center justify-center rounded-2xl bg-emerald-500 px-6 py-3 text-sm font-extrabold text-slate-950 transition-all group-hover:bg-emerald-400">
-              Conseguí tus entradas
-              <Ticket className="ml-2 size-4" aria-hidden="true" />
+        <div className="mt-4 flex w-full min-w-0 shrink-0 flex-row items-center justify-between gap-3 border-t border-border/20 pt-4">
+          <div className="min-w-0">
+            <span className="text-xs font-bold tracking-wider text-muted-foreground uppercase">
+              {event.startingPrice === 0 ? "Entrada" : "Entradas desde"}
             </span>
+            <p className="truncate text-2xl font-black text-foreground">
+              {event.startingPrice == null
+                ? "Ver precios"
+                : event.startingPrice === 0
+                  ? "gratuita"
+                  : formatTicketPrice(event.startingPrice)}
+            </p>
           </div>
+
+          <span className="inline-flex shrink-0 items-center gap-2 rounded-2xl bg-emerald-500 px-3 py-2.5 text-center text-sm font-bold text-slate-950 transition-all group-hover:bg-emerald-400 sm:px-4 sm:py-3 sm:whitespace-nowrap">
+            Ver entradas
+            <Ticket className="size-5 shrink-0" aria-hidden="true" />
+          </span>
         </div>
-      </article>
-    </BackgroundGradient>
+      </div>
+    </article>
   )
 }

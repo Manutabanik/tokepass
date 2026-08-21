@@ -292,7 +292,7 @@ function TierList({
   scheduleDays,
   isPending,
   hasSeatingFlow,
-  variant,
+  variant: _variant,
   onQuantityChange,
   onOpenSeatFlow,
   maxTicketsPerUser = null,
@@ -343,75 +343,70 @@ function TierList({
         const saveAmt = listPrice > tier.price ? listPrice - tier.price : 0
         const savePct = discountPercent(listPrice, tier.price)
 
+        const comboLine = tier.comboItems?.length
+          ? tier.comboItems
+              .map((item) => `${item.quantity}× ${item.name}`)
+              .join(" · ")
+          : null
+
         return (
           <div
             key={tier.id}
             className={cn(
-              "rounded-2xl border bg-card p-4 shadow-sm",
-              quantity > 0
-                ? "border-emerald-300 dark:border-emerald-700"
-                : "border-border",
+              "flex w-full items-center justify-between gap-4 rounded-2xl border border-white/10 bg-card/60 px-5 py-3.5 transition-all hover:border-white/20",
+              quantity > 0 && "border-emerald-500/40",
               soldOut && "opacity-70",
             )}
           >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p
-                  className={cn(
-                    "line-clamp-2 break-words font-semibold text-foreground",
-                    soldOut && "text-muted-foreground line-through",
-                  )}
-                >
-                  {tier.name}
-                </p>
-                {dayLabel ? (
-                  <p className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
-                    {dayLabel}
-                  </p>
-                ) : null}
-                {tier.comboItems && tier.comboItems.length > 0 ? (
-                  <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
-                    {tier.comboItems.map((item) => (
-                      <li key={item.name}>
-                        {item.quantity}× {item.name}
-                      </li>
-                    ))}
-                  </ul>
-                ) : variant === "standard" ? (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Acceso digital con Living QR TokePass
-                  </p>
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <p
+                className={cn(
+                  "truncate text-base font-bold text-foreground",
+                  soldOut && "text-muted-foreground line-through",
+                )}
+              >
+                {tier.name}
+              </p>
+              <div className="flex min-w-0 items-center gap-2 text-sm font-black text-foreground/90">
+                <span className="tabular-nums">
+                  {formatTicketPrice(tier.price)}
+                </span>
+                {saveAmt > 0 ? (
+                  <span className="text-xs font-medium text-muted-foreground line-through">
+                    {formatCurrency(listPrice)}
+                  </span>
                 ) : null}
                 {saveAmt > 0 ? (
-                  <p className="mt-2 text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                  <span className="text-xs font-semibold text-emerald-400">
                     Ahorrás {formatCurrency(saveAmt)}
                     {savePct > 0 ? ` (${savePct}%)` : ""}
-                  </p>
+                  </span>
                 ) : null}
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {soldOut ? "Sin stock" : `${tier.available} disponibles`}
-                  {lowStock && !soldOut ? " · últimas" : ""}
-                </p>
-              </div>
-              <div className="shrink-0 text-right">
-                {saveAmt > 0 ? (
-                  <p className="text-xs text-muted-foreground line-through">
-                    {formatCurrency(listPrice)}
-                  </p>
+                {dayLabel ? (
+                  <span className="text-xs font-semibold text-emerald-400">
+                    {dayLabel}
+                  </span>
                 ) : null}
-                <p className="text-2xl font-black tabular-nums text-foreground">
-                  {formatTicketPrice(tier.price)}
-                </p>
+                {comboLine ? (
+                  <span className="truncate text-xs font-medium text-muted-foreground">
+                    {comboLine}
+                  </span>
+                ) : soldOut ? (
+                  <span className="text-xs font-semibold text-destructive">
+                    Sin stock
+                  </span>
+                ) : lowStock ? (
+                  <span className="text-xs font-semibold text-amber-500">
+                    Pocas disponibles
+                  </span>
+                ) : null}
               </div>
             </div>
 
-            {tier.layoutType === "general" ||
-            isLogicalGeneralSectorId(tier.seatingSectorId) ? (
-              <div className="mt-4 flex items-center justify-between gap-3">
-                <span className="text-sm font-medium text-muted-foreground">
-                  Cantidad
-                </span>
-                <div className="flex items-center gap-3">
+            <div className="flex shrink-0 items-center">
+              {tier.layoutType === "general" ||
+              isLogicalGeneralSectorId(tier.seatingSectorId) ? (
+                <div className="flex h-9 items-center gap-3 rounded-xl border border-white/10 bg-black/40 px-2">
                   <button
                     type="button"
                     disabled={soldOut || quantity === 0 || isPending}
@@ -419,11 +414,11 @@ function TierList({
                       onQuantityChange(tier.id, quantity - 1, maxSelectable)
                     }
                     aria-label={`Quitar ${tier.name}`}
-                    className="inline-flex size-12 items-center justify-center rounded-2xl border border-border bg-muted text-foreground hover:bg-muted/80 disabled:opacity-40"
+                    className="inline-flex size-7 items-center justify-center rounded-md text-foreground hover:bg-white/5 disabled:opacity-40"
                   >
-                    <Minus className="size-5" aria-hidden />
+                    <Minus className="size-3.5" aria-hidden />
                   </button>
-                  <span className="min-w-10 text-center text-2xl font-black tabular-nums">
+                  <span className="min-w-5 text-center text-sm font-bold tabular-nums">
                     {quantity}
                   </span>
                   <button
@@ -433,23 +428,23 @@ function TierList({
                       onQuantityChange(tier.id, quantity + 1, maxSelectable)
                     }
                     aria-label={`Agregar ${tier.name}`}
-                    className="inline-flex size-12 items-center justify-center rounded-2xl border border-primary bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
+                    className="inline-flex size-7 items-center justify-center rounded-md text-foreground hover:bg-white/5 disabled:opacity-40"
                   >
-                    <Plus className="size-5" aria-hidden />
+                    <Plus className="size-3.5" aria-hidden />
                   </button>
                 </div>
-              </div>
-            ) : (
-              <Button
-                type="button"
-                disabled={soldOut || !hasSeatingFlow || isPending}
-                onClick={onOpenSeatFlow}
-                className="mt-4 min-h-12 h-12 w-full rounded-xl"
-              >
-                <Armchair className="size-4" aria-hidden />
-                Elegir {tier.layoutType === "table_combo" ? "mesa" : "asiento"}
-              </Button>
-            )}
+              ) : (
+                <Button
+                  type="button"
+                  disabled={soldOut || !hasSeatingFlow || isPending}
+                  onClick={onOpenSeatFlow}
+                  className="h-9 rounded-xl px-3 text-sm"
+                >
+                  <Armchair className="size-4" aria-hidden />
+                  Elegir {tier.layoutType === "table_combo" ? "mesa" : "asiento"}
+                </Button>
+              )}
+            </div>
           </div>
         )
       })}

@@ -193,7 +193,7 @@ export function VenueLocationPicker({
         <div>
           <Label
             htmlFor="venue-latitude"
-            className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
+            className="mb-1.5 text-sm font-semibold text-foreground/90"
           >
             Latitud
           </Label>
@@ -202,13 +202,13 @@ export function VenueLocationPicker({
             value={coordinates?.latitude.toFixed(6) ?? ""}
             readOnly
             placeholder="—"
-            className="mt-1 h-9 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 font-mono text-xs text-muted-foreground"
+            className="mt-1 h-12 rounded-xl border-border/60 bg-muted/20 px-4 font-mono text-sm text-muted-foreground"
           />
         </div>
         <div>
           <Label
             htmlFor="venue-longitude"
-            className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
+            className="mb-1.5 text-sm font-semibold text-foreground/90"
           >
             Longitud
           </Label>
@@ -217,7 +217,7 @@ export function VenueLocationPicker({
             value={coordinates?.longitude.toFixed(6) ?? ""}
             readOnly
             placeholder="—"
-            className="mt-1 h-9 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 font-mono text-xs text-muted-foreground"
+            className="mt-1 h-12 rounded-xl border-border/60 bg-muted/20 px-4 font-mono text-sm text-muted-foreground"
           />
         </div>
       </div>

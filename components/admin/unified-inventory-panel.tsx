@@ -89,6 +89,7 @@ import { formatCurrency } from "@/lib/format"
 import {
   defaultInventoryDayId,
   formatInventoryDayOption,
+  listEventFormJornadas,
 } from "@/lib/event-schedule"
 import {
   duplicateTicketsFromDay,
@@ -265,7 +266,13 @@ export function UnifiedInventoryPanel({
     }
   }, [eventId, hasSeatingPlan])
   const scheduleDays = form.watch("basics.scheduleDays") ?? []
-  const isMultiDay = Boolean(form.watch("basics.isMultiDay")) || scheduleDays.length >= 2
+  const identityDate = form.watch("basics.date")
+  const eventDates = listEventFormJornadas({
+    scheduleDays,
+    date: identityDate,
+  })
+  const isMultiDay =
+    Boolean(form.watch("basics.isMultiDay")) || eventDates.length >= 2
   const capacity = useEventCapacity(form)
   const manifestRows = useMemo(
     () =>
@@ -343,9 +350,9 @@ export function UnifiedInventoryPanel({
       return
     }
     form.setValue("tickets", result.tickets, { shouldDirty: true })
-    const target = scheduleDays.find((day) => day.id === targetDayId)
+    const target = eventDates.find((day) => day.id === targetDayId)
     const targetLabel = target
-      ? formatInventoryDayOption(target, scheduleDays.indexOf(target))
+      ? formatInventoryDayOption(target, eventDates.indexOf(target))
       : "el día elegido"
     toast.success(
       `Se copiaron ${result.added} tarifa${result.added === 1 ? "" : "s"} a ${targetLabel}.`,
@@ -417,7 +424,7 @@ export function UnifiedInventoryPanel({
           if (primary < 0) {
             append({
               ...createInventoryTicket("general", {
-                dayId: defaultInventoryDayId(scheduleDays),
+                dayId: defaultInventoryDayId(eventDates),
               }),
               name: "Entrada General",
               capacity: aforo.difference,
@@ -445,18 +452,18 @@ export function UnifiedInventoryPanel({
       ) : null}
       {isMultiDay ? (
         <DayTicketCopyBar
-          days={scheduleDays}
+          days={eventDates}
           tickets={tickets}
           onDuplicate={duplicateDayTickets}
         />
       ) : null}
       <div>
         <p className="text-sm font-semibold text-foreground">
-          Inventario general (editable)
+          Entradas a la venta
         </p>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">
           {hasSeatingPlan
-            ? "Campo, extras y combos. El mapa ya reservó su aforo; una general puede quedar libre o ligarse a un sector que no sea del mapa."
+            ? "Campo, extras y combos. El mapa ya reservó su cupo; una general puede quedar libre o ligarse a un sector que no sea del mapa."
             : "Nombre, capacidad y precio. Esta entrada es inventario libre: no depende de un sector."}
         </p>
       </div>
@@ -466,7 +473,7 @@ export function UnifiedInventoryPanel({
         name="ticketsDefaultTab"
         render={({ field }) => (
           <FormItem>
-            <FormLabel className="flex items-center gap-1.5">
+            <FormLabel className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-foreground/90">
               <LayoutGrid className="size-3.5" aria-hidden="true" />
               Tab inicial en la compra
             </FormLabel>
@@ -475,7 +482,7 @@ export function UnifiedInventoryPanel({
               onValueChange={field.onChange}
               items={defaultTabItems}
             >
-              <SelectTrigger className="h-11 w-full max-w-md overflow-hidden">
+              <SelectTrigger className="h-12 rounded-xl text-base w-full max-w-md overflow-hidden">
                 <SelectValue placeholder="Automático">
                   {defaultTabItems.find(
                     (item) => item.value === (field.value ?? "auto"),
@@ -518,7 +525,7 @@ export function UnifiedInventoryPanel({
         onAdd={() =>
           append({
             ...createInventoryTicket("general", {
-              dayId: defaultInventoryDayId(scheduleDays),
+              dayId: defaultInventoryDayId(eventDates),
             }),
             seatingSectorId: null,
           })
@@ -546,8 +553,9 @@ export function UnifiedInventoryPanel({
               }
               onDuplicate={() => duplicate(item.index)}
               onRemove={() => remove(item.index)}
-              capacityLabel="Stock disponible"
-              scheduleDays={isMultiDay ? scheduleDays : []}
+              capacityLabel="¿Cuántas entradas ponés a la venta?"
+              scheduleDays={isMultiDay ? eventDates : []}
+              showJornada={isMultiDay}
               venueRemaining={(() => {
                 const sectorId = tickets[item.index]?.seatingSectorId?.trim()
                 const sector = sectorId
@@ -580,7 +588,7 @@ export function UnifiedInventoryPanel({
         onAdd={() =>
           append({
             ...createInventoryTicket("addon", {
-              dayId: defaultInventoryDayId(scheduleDays),
+              dayId: defaultInventoryDayId(eventDates),
             }),
           })
         }
@@ -601,8 +609,9 @@ export function UnifiedInventoryPanel({
               }
               onDuplicate={() => duplicate(item.index)}
               onRemove={() => remove(item.index)}
-              capacityLabel="Stock disponible"
-              scheduleDays={isMultiDay ? scheduleDays : []}
+              capacityLabel="¿Cuántas entradas ponés a la venta?"
+              scheduleDays={isMultiDay ? eventDates : []}
+              showJornada={isMultiDay}
               feePercentage={feePercentage}
               fixedFee={fixedFee}
               isSponsored={isSponsored}
@@ -642,7 +651,8 @@ export function UnifiedInventoryPanel({
               onDuplicate={() => duplicate(item.index)}
               onRemove={() => remove(item.index)}
               capacityLabel="Cupo promocional"
-              scheduleDays={isMultiDay ? scheduleDays : []}
+              scheduleDays={isMultiDay ? eventDates : []}
+              showJornada={isMultiDay}
               feePercentage={feePercentage}
               fixedFee={fixedFee}
               isSponsored={isSponsored}
@@ -659,7 +669,7 @@ export function UnifiedInventoryPanel({
             ? "Crear combo / abono"
             : "Editar combo / abono"
         }
-        scheduleDays={scheduleDays}
+        scheduleDays={eventDates}
         options={componentOptions}
         initial={
           editingBundleIndex != null
@@ -730,7 +740,7 @@ export function UnifiedInventoryPanel({
             dayId:
               value.bundleType === "multi_day_pass"
                 ? null
-                : defaultInventoryDayId(scheduleDays),
+                : defaultInventoryDayId(eventDates),
           }
           if (editingBundleIndex == null) {
             form.setValue("tickets", [...tickets, nextTicket], {
@@ -774,7 +784,7 @@ function InventoryBlock({
   children: ReactNode
 }) {
   return (
-    <section className="space-y-3 rounded-2xl border border-border bg-muted/40 p-4">
+    <section className="flex flex-col gap-y-4 rounded-2xl bg-muted/20 p-6">
       <div className="flex gap-3">
         <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-800 dark:text-emerald-300">
           <Icon className="size-4" aria-hidden="true" />
@@ -794,7 +804,7 @@ function InventoryBlock({
           type="button"
           variant="outline"
           onClick={onAdd}
-          className="min-h-11 w-full text-base md:text-sm"
+          className="h-12 w-full rounded-xl text-base"
         >
           <Plus className="size-4" />
           {actionLabel}
@@ -861,7 +871,7 @@ function DayTicketCopyBar({
             }}
             items={dayItems}
           >
-            <SelectTrigger className="h-11 w-full">
+            <SelectTrigger className="h-12 rounded-xl text-base w-full">
               <SelectValue placeholder="Día de origen">
                 {dayItems.find((item) => item.value === sourceId)?.label}
               </SelectValue>
@@ -884,7 +894,7 @@ function DayTicketCopyBar({
             }}
             items={targetItems}
           >
-            <SelectTrigger className="h-11 w-full">
+            <SelectTrigger className="h-12 rounded-xl text-base w-full">
               <SelectValue placeholder="Día de destino">
                 {targetItems.find((item) => item.value === targetId)?.label}
               </SelectValue>
@@ -901,7 +911,7 @@ function DayTicketCopyBar({
         <Button
           type="button"
           variant="outline"
-          className="h-11"
+          className="h-12 rounded-xl"
           disabled={!sourceId || !targetId || sourceId === targetId}
           onClick={() => onDuplicate(sourceId, targetId)}
         >
@@ -923,6 +933,7 @@ function InventoryTicketCard({
   onRemove,
   capacityLabel,
   scheduleDays = [],
+  showJornada = scheduleDays.length >= 2,
   venueRemaining,
   logicalSectors = [],
   showSectorSelect = false,
@@ -940,6 +951,7 @@ function InventoryTicketCard({
   onRemove: () => void
   capacityLabel: string
   scheduleDays?: EventFormValues["basics"]["scheduleDays"]
+  showJornada?: boolean
   venueRemaining?: number
   logicalSectors?: ReturnType<typeof listGeneralLogicalSectors>
   showSectorSelect?: boolean
@@ -989,6 +1001,7 @@ function InventoryTicketCard({
           index={index}
           capacityLabel={capacityLabel}
           scheduleDays={scheduleDays}
+          showJornada={showJornada}
           venueRemaining={venueRemaining}
           logicalSectors={logicalSectors}
           showSectorSelect={showSectorSelect}
@@ -1007,6 +1020,7 @@ function InventoryRow({
   showListPrice = false,
   showPhases = false,
   scheduleDays = [],
+  showJornada = scheduleDays.length >= 2,
   venueRemaining,
   capacityExceeded = false,
   logicalSectors = [],
@@ -1019,6 +1033,7 @@ function InventoryRow({
   showListPrice?: boolean
   showPhases?: boolean
   scheduleDays?: EventFormValues["basics"]["scheduleDays"]
+  showJornada?: boolean
   venueRemaining?: number
   capacityExceeded?: boolean
   logicalSectors?: ReturnType<typeof listGeneralLogicalSectors>
@@ -1047,7 +1062,10 @@ function InventoryRow({
   const dayItems = [
     {
       value: TICKET_DAY_ALL,
-      label: "Pase Completo / Todos los dias",
+      label:
+        scheduleDays.length > 0
+          ? "Pase Completo / Todos los dias"
+          : "Pase para todos los días (Evento completo)",
     },
     ...scheduleDays.map((day, dayIndex) => ({
       value: day.id,
@@ -1099,10 +1117,10 @@ function InventoryRow({
           name={`tickets.${index}.name`}
           render={({ field, fieldState }) => (
             <FormItem className="min-w-0 md:col-span-6">
-              <FormLabel>Nombre</FormLabel>
+              <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">Nombre</FormLabel>
               <Input
                 {...field}
-                className="h-11 min-w-0"
+                className="h-12 rounded-xl min-w-0"
                 placeholder="Ej: Entrada General"
               />
               <FormMessage>{fieldState.error?.message}</FormMessage>
@@ -1119,7 +1137,7 @@ function InventoryRow({
               (venueRemaining != null && typed > venueRemaining)
             return (
             <FormItem className="md:col-span-3">
-              <FormLabel>{capacityLabel}</FormLabel>
+              <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">{capacityLabel}</FormLabel>
               <Input
                 type="text"
                 inputMode="numeric"
@@ -1142,7 +1160,7 @@ function InventoryRow({
                 }}
                 placeholder="Ej: 100"
                 aria-invalid={overflow || undefined}
-                className={cn("h-11", overflow && "border-destructive")}
+                className={cn("h-12 rounded-xl", overflow && "border-destructive")}
               />
               {overflow ? (
                 <p className="text-xs text-destructive" role="alert">
@@ -1161,7 +1179,7 @@ function InventoryRow({
           name={`tickets.${index}.minPurchaseLimit`}
           render={({ field, fieldState }) => (
             <FormItem className="md:col-span-3">
-              <FormLabel>Límite mínimo por compra</FormLabel>
+              <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">Límite mínimo por compra</FormLabel>
               <Input
                 type="text"
                 inputMode="numeric"
@@ -1180,7 +1198,7 @@ function InventoryRow({
                   if (typeof parsed === "number" && Number.isNaN(parsed)) return
                   field.onChange(typeof parsed === "number" ? Math.max(1, parsed) : 1)
                 }}
-                className="h-11 text-base md:text-sm"
+                className="h-12 rounded-xl text-base md:text-sm"
               />
               <p className="text-xs text-muted-foreground">
                 Unidades mínimas de esta tarifa por transacción.
@@ -1194,7 +1212,7 @@ function InventoryRow({
           name={`tickets.${index}.maxPurchaseLimit`}
           render={({ field, fieldState }) => (
             <FormItem className="md:col-span-3">
-              <FormLabel>Límite máximo por compra</FormLabel>
+              <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">Límite máximo por compra</FormLabel>
               <Input
                 type="text"
                 inputMode="numeric"
@@ -1214,7 +1232,7 @@ function InventoryRow({
                   if (typeof parsed === "number" && Number.isNaN(parsed)) return
                   field.onChange(typeof parsed === "number" ? parsed : null)
                 }}
-                className="h-11 text-base md:text-sm"
+                className="h-12 rounded-xl text-base md:text-sm"
               />
               <p className="text-xs text-muted-foreground">
                 Tope de unidades de esta tarifa por transacción. Para entradas
@@ -1228,7 +1246,7 @@ function InventoryRow({
         {isBundle ? (
           <div className="md:col-span-3">
             <p className="mb-1.5 text-sm font-medium">Precio promocional</p>
-            <div className="flex h-11 items-baseline gap-2 rounded-md border border-border bg-muted/40 px-3">
+            <div className="flex h-12 items-baseline gap-2 rounded-xl border border-border bg-muted/40 px-3">
               {Number(watchedListPrice) > 0 ? (
                 <span className="text-xs text-muted-foreground line-through">
                   {formatCurrency(Number(watchedListPrice) || 0)}
@@ -1245,7 +1263,7 @@ function InventoryRow({
             name={`tickets.${index}.price`}
             render={({ field, fieldState }) => (
               <FormItem className="md:col-span-3">
-                <FormLabel>Precio ($ ARS)</FormLabel>
+                <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">Precio ($ ARS)</FormLabel>
                 <PriceInput
                   name={`tickets.${index}.price`}
                   aria-invalid={Boolean(fieldState.error)}
@@ -1254,7 +1272,7 @@ function InventoryRow({
                   placeholder="0"
                   allowEmpty
                   disabled={isFree}
-                  className="h-11"
+                  className="h-12 rounded-xl"
                 />
                 <FormMessage>{fieldState.error?.message}</FormMessage>
               </FormItem>
@@ -1281,7 +1299,7 @@ function InventoryRow({
             const selected = field.value?.trim() || UNASSIGNED_SECTOR_VALUE
             return (
               <FormItem>
-                <FormLabel>Elegí el sector</FormLabel>
+                <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">Elegí el sector</FormLabel>
                 <Select
                   value={selected}
                   onValueChange={(value) => {
@@ -1304,7 +1322,7 @@ function InventoryRow({
                   }}
                   items={items}
                 >
-                  <SelectTrigger className="h-11 w-full max-w-md">
+                  <SelectTrigger className="h-12 rounded-xl text-base w-full max-w-md">
                     <SelectValue placeholder={UNASSIGNED_SECTOR_LABEL}>
                       {items.find((item) => item.value === selected)?.label}
                     </SelectValue>
@@ -1328,7 +1346,7 @@ function InventoryRow({
           }}
         />
       ) : null}
-      {scheduleDays.length >= 2 ? (
+      {showJornada ? (
         <FormField
           control={form.control}
           name={`tickets.${index}.dayId`}
@@ -1336,7 +1354,7 @@ function InventoryRow({
             const selected = field.value?.trim() || TICKET_DAY_ALL
             return (
               <FormItem>
-                <FormLabel>Jornada</FormLabel>
+                <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">Jornada</FormLabel>
                 <Select
                   value={selected}
                   onValueChange={(value) =>
@@ -1344,8 +1362,8 @@ function InventoryRow({
                   }
                   items={dayItems}
                 >
-                  <SelectTrigger className="h-11 w-full max-w-md">
-                    <SelectValue placeholder="Elegi la jornada">
+                  <SelectTrigger className="h-12 rounded-xl text-base w-full max-w-md">
+                    <SelectValue placeholder="Seleccionar jornada">
                       {dayItems.find((item) => item.value === selected)?.label}
                     </SelectValue>
                   </SelectTrigger>
@@ -1372,12 +1390,12 @@ function InventoryRow({
         name={`tickets.${index}.description`}
         render={({ field, fieldState }) => (
           <FormItem>
-            <FormLabel>Qué incluye (opcional)</FormLabel>
+            <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">Qué incluye (opcional)</FormLabel>
             <Input
               {...field}
               value={field.value ?? ""}
               maxLength={TICKET_DESCRIPTION_MAX}
-              className="h-11"
+              className="h-12 rounded-xl"
               placeholder="Incluye acceso al patio gastronómico"
             />
             <FormDescription>
@@ -1393,7 +1411,7 @@ function InventoryRow({
         name={`tickets.${index}.highlightBadge`}
         render={({ field }) => (
           <FormItem className="flex flex-row items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
-            <FormLabel className="flex items-center gap-1.5">
+            <FormLabel className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-foreground/90">
               <Sparkles className="size-3.5" aria-hidden="true" />
               Destacar como más vendida
             </FormLabel>
@@ -1413,7 +1431,7 @@ function InventoryRow({
           name={`tickets.${index}.listPrice`}
           render={({ field, fieldState }) => (
             <FormItem>
-              <FormLabel className="flex items-center gap-1.5">
+              <FormLabel className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-foreground/90">
                 <Sparkles className="size-3.5" aria-hidden="true" />
                 Precio de lista (para mostrar ahorro)
               </FormLabel>
@@ -1422,7 +1440,7 @@ function InventoryRow({
                 aria-invalid={Boolean(fieldState.error)}
                 value={field.value ?? undefined}
                 onValueChange={(value) => field.onChange(value ?? null)}
-                className="h-11 max-w-xs"
+                className="h-12 rounded-xl max-w-xs"
               />
               <FormMessage>{fieldState.error?.message}</FormMessage>
             </FormItem>
@@ -1467,7 +1485,7 @@ function InventoryRow({
                   name={`tickets.${index}.phases.${phaseIndex}.name`}
                   render={({ field, fieldState }) => (
                     <FormItem>
-                      <FormLabel>Nombre del lote</FormLabel>
+                      <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">Nombre del lote</FormLabel>
                       <Input
                         {...field}
                         className="h-10"
@@ -1482,7 +1500,7 @@ function InventoryRow({
                   name={`tickets.${index}.phases.${phaseIndex}.price`}
                   render={({ field, fieldState }) => (
                     <FormItem>
-                      <FormLabel>Precio</FormLabel>
+                      <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">Precio</FormLabel>
                       <PriceInput
                         value={field.value}
                         onValueChange={(value) => {
@@ -1504,7 +1522,7 @@ function InventoryRow({
                   name={`tickets.${index}.phases.${phaseIndex}.capacityLimit`}
                   render={({ field, fieldState }) => (
                     <FormItem>
-                      <FormLabel>Límite</FormLabel>
+                      <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">Límite</FormLabel>
                       <Input
                         type="text"
                         inputMode="numeric"

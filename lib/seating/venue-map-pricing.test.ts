@@ -3,6 +3,7 @@ import { describe, it } from "node:test"
 
 import {
   applyMapCapacityToTickets,
+  consolidateEventTicketsForPersist,
   eventNeedsInteractiveCanvas,
   isMapBackedTicket,
   migrateLegacyWizardStep,
@@ -139,6 +140,64 @@ describe("venue-map-pricing", () => {
     assert.equal(next[0]?.capacityPerUnit, 8)
     assert.equal(next[1]?.name, "Estacionamiento")
     assert.equal(isMapBackedTicket(next[1]!), false)
+  })
+
+  it("consolida inventario libre con entradas derivadas del mapa", () => {
+    const map = emptyVenueMap()
+    map.zones = [
+      {
+        id: "zone-campo",
+        name: "Campo",
+        color: "#22d3ee",
+        price: 8000,
+        polygon: [
+          { x: 0, y: 0 },
+          { x: 8, y: 0 },
+          { x: 8, y: 8 },
+        ],
+        layoutType: "general",
+        sellMode: "group",
+        rows: 1,
+        itemsPerRow: 1,
+        capacityPerUnit: 1,
+        capacity: 100,
+        labelPrefix: "",
+      },
+    ]
+    const next = consolidateEventTicketsForPersist({
+      basics: {
+        hasSeatingPlan: true,
+        scheduleDays: [],
+      },
+      venue: { venueMap: map },
+      tickets: [
+        {
+          name: "Estacionamiento",
+          price: 3000,
+          capacity: 80,
+          timeLimit: "",
+          bonusReward: "",
+          dayId: null,
+          visibility: "public",
+          layoutType: "general",
+          seatingSectorId: null,
+          capacityPerUnit: 1,
+          admitCount: 1,
+          tierType: "addon",
+          listPrice: null,
+          bundleItems: [],
+          bundleType: null,
+          promoDiscountType: null,
+          promoDiscountValue: 0,
+          promoRequiredQty: 1,
+          promoPayQty: 1,
+          description: "",
+          highlightBadge: null,
+        },
+      ],
+    } as Parameters<typeof consolidateEventTicketsForPersist>[0])
+    assert.equal(next.some((tier) => tier.seatingSectorId === "zone-campo"), true)
+    assert.equal(next.some((tier) => tier.name === "Estacionamiento"), true)
   })
 
   it("elimina tiers de mapa sin ventas cuando el sector desaparece", () => {

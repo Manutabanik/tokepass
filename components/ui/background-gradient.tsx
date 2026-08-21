@@ -19,7 +19,7 @@ export function BackgroundGradient({
   if (variant === "subtle") {
     return (
       <div
-        className={cn("group relative w-full overflow-visible", containerClassName)}
+        className={cn("group relative w-full max-w-full overflow-hidden", containerClassName)}
       >
         <div
           className="pointer-events-none absolute -inset-2 z-0 rounded-3xl bg-gradient-to-r from-emerald-500/20 via-primary/10 to-purple-500/20 opacity-20 blur-xl transition-opacity duration-500 group-hover:opacity-70"
@@ -33,7 +33,7 @@ export function BackgroundGradient({
   return (
     <div
       className={cn(
-        "group relative w-full overflow-visible py-4",
+        "group relative w-full min-w-0 max-w-full overflow-hidden",
         containerClassName,
       )}
     >

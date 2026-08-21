@@ -152,4 +152,24 @@ describe("multi-day draft coercion", () => {
     })
     assert.equal(coerced.tickets[0]?.dayId, null)
   })
+
+  it("keeps unnamed map-sector tickets so they are not dropped on save", () => {
+    const coerced = coerceDraftEventForm({
+      ...draftWithDays(false, []),
+      tickets: [
+        {
+          name: "  ",
+          price: 8000,
+          capacity: 50,
+          visibility: "public",
+          layoutType: "general",
+          seatingSectorId: "zone-campo",
+          capacityPerUnit: 1,
+          admitCount: 1,
+        },
+      ],
+    })
+    assert.equal(coerced.tickets.length, 1)
+    assert.equal(coerced.tickets[0]?.seatingSectorId, "zone-campo")
+  })
 })

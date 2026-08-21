@@ -1,11 +1,13 @@
 "use client"
 
 import { LoaderCircle, X } from "lucide-react"
+import { usePathname } from "next/navigation"
 
 import {
   closeSpotifyMiniPlayer,
   useSpotifyMiniPlayer,
 } from "@/hooks/use-spotify-mini-player"
+import { isPublicEventStorefrontPath } from "@/lib/navigation/focused-flows"
 import {
   SPOTIFY_ARTIST_EMBED_HEIGHT,
   spotifyArtistEmbedSrc,
@@ -13,11 +15,13 @@ import {
 import { cn, tapFeedbackClass } from "@/lib/utils"
 
 export function SpotifyMiniPlayer() {
+  const pathname = usePathname()
   const { activeArtistSpotifyId, artistName, resolving } = useSpotifyMiniPlayer()
   const src = activeArtistSpotifyId
     ? spotifyArtistEmbedSrc(activeArtistSpotifyId)
     : null
 
+  if (isPublicEventStorefrontPath(pathname)) return null
   if (!src && !resolving) return null
 
   const label = artistName?.trim() || "artista"

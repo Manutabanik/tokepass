@@ -139,7 +139,7 @@ export function ResaleConfirmDialog({
             onClick={() => onOpenChange(false)}
             className="rounded-xl"
           >
-            Cancelar
+            Volver atrás
           </Button>
           <Button
             type="button"

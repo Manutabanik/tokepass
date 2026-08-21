@@ -116,7 +116,7 @@ export function mapDbCategoriesToDiscovery(
 ): DiscoveryCategory[] {
   const all: DiscoveryCategory = {
     id: "all",
-    label: "Todos",
+    label: "Todos los eventos",
     icon: "sparkles",
     iconName: "sparkles",
   }

@@ -24,7 +24,7 @@ import { cn } from "@/lib/utils"
 
 export const ACCOUNT_NAV_LINKS = [
   { href: "/cuenta", label: "Inicio", icon: Home, exact: true },
-  { href: "/cuenta/entradas", label: "Entradas", icon: Ticket, exact: false },
+  { href: "/cuenta/entradas", label: "Mis entradas", icon: Ticket, exact: false },
   { href: "/cuenta/compras", label: "Compras", icon: Receipt, exact: false },
   { href: "/cuenta/favoritos", label: "Favoritos", icon: Heart, exact: false },
   {
@@ -33,7 +33,7 @@ export const ACCOUNT_NAV_LINKS = [
     icon: Bell,
     exact: false,
   },
-  { href: "/cuenta/perfil", label: "Perfil", icon: UserRound, exact: false },
+  { href: "/cuenta/perfil", label: "Mis datos personales", icon: UserRound, exact: false },
 ] as const
 
 export type AccountNavProfile = {
@@ -184,7 +184,7 @@ export function AccountSidebar({ profile }: { profile: AccountNavProfile }) {
         className="mt-auto h-auto w-full justify-start gap-3 rounded-xl px-4 py-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
       >
         <LogOut className="size-4 shrink-0" aria-hidden="true" />
-        Cerrar sesión
+        Salir de mi cuenta
       </Button>
     </aside>
   )

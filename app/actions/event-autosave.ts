@@ -19,6 +19,7 @@ import {
   collectLiveSeatingSectorIds,
   sanitizeEventSubmitPayload,
 } from "@/lib/events/sanitize-ticket-tiers"
+import { consolidateEventTicketsForPersist } from "@/lib/seating/venue-map-pricing"
 
 export type AutosaveEventDraftResult =
   | {
@@ -37,10 +38,13 @@ function sanitizeAutosaveValues(
   values: EventFormValues,
   eventId: string | null,
 ): EventFormValues {
-  const tickets = (values.tickets ?? []).map((tier) => ({
-    ...tier,
-    price: Number.isFinite(Number(tier.price)) ? Number(tier.price) : 0,
-  }))
+  const tickets = consolidateEventTicketsForPersist({
+    ...values,
+    tickets: (values.tickets ?? []).map((tier) => ({
+      ...tier,
+      price: Number.isFinite(Number(tier.price)) ? Number(tier.price) : 0,
+    })),
+  })
   return {
     ...values,
     venue: {
@@ -205,7 +209,7 @@ export async function syncZoneTierPricing(input: {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: "Sesión requerida." }
+  if (!user) return { success: false, error: "Tu sesión venció por seguridad. Volvé a ingresar con tu cuenta" }
 
   const { data: event } = await supabase
     .from("events")

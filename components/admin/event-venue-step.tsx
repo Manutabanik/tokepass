@@ -723,7 +723,7 @@ export function EventVenueStep({
                     label: venue.name,
                   }))}
                 >
-                  <SelectTrigger className="h-11 w-full max-w-full overflow-hidden border-zinc-200 bg-zinc-100 dark:border-white/10 dark:bg-black/20">
+                  <SelectTrigger className="h-12 w-full max-w-full overflow-hidden rounded-xl border-border/60 bg-muted/20 sm:h-13">
                     <SelectValue placeholder="Elegí un lugar" />
                   </SelectTrigger>
                   <SelectContent
@@ -778,6 +778,7 @@ export function EventVenueStep({
               onPersistMap={persistMapToForm}
               canOpenStudio={canDesignMap}
               blockedReason={mapBlockedReason}
+              eventId={eventId}
             />
           ) : null}
 
@@ -811,7 +812,7 @@ export function EventVenueStep({
                       </FormLabel>
                       <FormDescription className="mt-1 text-xs leading-5">
                         Activalo para trazar zonas en el estudio. Precio y
-                        cupo se definen ahí, no en Entradas y combos.
+                        cupo se definen ahí, no en Entradas y precios.
                       </FormDescription>
                     </div>
                   </div>
@@ -872,6 +873,7 @@ export function EventVenueStep({
             onPersistMap={persistMapToForm}
             canOpenStudio={canDesignMap}
             blockedReason={mapBlockedReason}
+            eventId={eventId}
           />
           <div className="space-y-3 rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
             <div className="flex items-center gap-2">
@@ -998,6 +1000,7 @@ function MapStudioFields({
   onPersistMap,
   canOpenStudio = true,
   blockedReason,
+  eventId,
 }: {
   form: UseFormReturn<EventFormValues>
   venueMap: ReturnType<typeof parseVenueMap>
@@ -1005,6 +1008,7 @@ function MapStudioFields({
   studioOpen: boolean
   onOpenStudio: () => void
   onCloseStudio: () => void
+  eventId?: string | null
   onPersistMap: (
     next: ReturnType<typeof parseVenueMap>,
     options?: { syncDrafts?: boolean },
@@ -1033,6 +1037,7 @@ function MapStudioFields({
         }
         value={venueMap}
         tickets={form.watch("tickets")}
+        eventId={eventId}
         onClose={onCloseStudio}
         onSave={(next) => {
           onPersistMap(next, { syncDrafts: true })

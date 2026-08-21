@@ -6,6 +6,7 @@ import type {
   VenueMapSector,
 } from "@/types/venue-map"
 import { emptyVenueMap, isSellableElement } from "@/types/venue-map"
+import { resolveSectorRowsConfig } from "@/lib/seating/venue-rows-config"
 import type { VenueLayoutType, VenueSeatingLayout } from "@/types/venues"
 import {
   expandParametricZone,
@@ -19,27 +20,34 @@ const SEAT_GAP = 18
 const ROW_GAP = 20
 
 export function rebuildSectorSeats(sector: VenueMapSector): VenueMapSeat[] {
-  const rows = Math.min(40, Math.max(1, Math.floor(sector.rows) || 1))
-  const seatsPerRow = Math.min(40, Math.max(1, Math.floor(sector.seatsPerRow) || 1))
+  const rowsConfig = resolveSectorRowsConfig(sector, {
+    maxRows: 40,
+    maxSeats: 40,
+  })
+  const maxSeats = Math.max(1, ...rowsConfig.map((row) => row.seatCount), 1)
   const curvature = Math.min(1, Math.max(0, Number(sector.curvature) || 0))
   const aisle = Boolean(sector.aisle)
   const seats: VenueMapSeat[] = []
-  const half = Math.floor(seatsPerRow / 2)
-  const slots = seatsPerRow + (aisle ? 1 : 0)
   const cx = sector.x
   const cy = sector.y
+  const maxWidth = (maxSeats - 1) * SEAT_GAP + (aisle ? 28 : 0)
 
-  for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
+  rowsConfig.forEach((row, rowIndex) => {
+    const seatCount = row.seatCount
     const rowLabel = String(rowIndex + 1)
     const radius = 70 + rowIndex * ROW_GAP
-    for (let seatIndex = 0; seatIndex < seatsPerRow; seatIndex += 1) {
+    const half = Math.floor(seatCount / 2)
+    const slots = seatCount + (aisle ? 1 : 0)
+    const rowWidth = Math.max(0, seatCount - 1) * SEAT_GAP + (aisle ? 28 : 0)
+    const offsetX = (maxWidth - rowWidth) / 2
+    for (let seatIndex = 0; seatIndex < seatCount; seatIndex += 1) {
       const slot = aisle && seatIndex >= half ? seatIndex + 1 : seatIndex
       const t = slots <= 1 ? 0.5 : slot / (slots - 1)
       let x: number
       let y: number
       if (curvature < 0.02) {
         const aisleGap = aisle && seatIndex >= half ? 28 : 0
-        x = cx + seatIndex * SEAT_GAP + aisleGap
+        x = cx + offsetX + seatIndex * SEAT_GAP + aisleGap
         y = cy + rowIndex * ROW_GAP
       } else {
         const maxAngle = curvature * 0.95
@@ -49,14 +57,14 @@ export function rebuildSectorSeats(sector: VenueMapSector): VenueMapSeat[] {
       }
       seats.push({
         id: `${sector.id}-F${rowLabel}-A${seatIndex + 1}`,
-        row: rowLabel,
+        row: row.label?.trim() || rowLabel,
         number: seatIndex + 1,
         x: Math.round(x * 10) / 10,
         y: Math.round(y * 10) / 10,
         status: "available",
       })
     }
-  }
+  })
 
   return seats
 }
@@ -338,6 +346,13 @@ export function seatingLayoutToVenueMap(
         ...rows.map((row) => row.items.length),
         1,
       )
+      const rowsConfig = rows.map((row, rowIndex) => ({
+        label:
+          String(row.row_label ?? "")
+            .replace(/^Fila\s+/i, "")
+            .trim() || String(rowIndex + 1),
+        seatCount: Math.max(1, row.items.length),
+      }))
       const draft: VenueMapSector = {
         id: sector.id,
         name: sector.sector_name,
@@ -347,19 +362,21 @@ export function seatingLayoutToVenueMap(
         y: 140 + index * 90,
         rows: Math.max(1, rows.length),
         seatsPerRow,
+        rowsConfig,
         curvature: 0,
         aisle: false,
         seats: [],
       }
       const generated = rebuildSectorSeats(draft)
-      const byLabel = new Map(
-        generated.map((seat) => [`${seat.row}-${seat.number}`, seat]),
-      )
-      draft.seats = rows.flatMap((row, rowIndex) =>
-        row.items.map((item, seatIndex) => {
-          const generatedSeat =
-            byLabel.get(`${rowIndex + 1}-${seatIndex + 1}`) ??
-            generated[rowIndex * seatsPerRow + seatIndex]
+      let generatedOffset = 0
+      draft.seats = rows.flatMap((row, rowIndex) => {
+        const slice = generated.slice(
+          generatedOffset,
+          generatedOffset + row.items.length,
+        )
+        generatedOffset += row.items.length
+        return row.items.map((item, seatIndex) => {
+          const generatedSeat = slice[seatIndex]
           return {
             id: item.id,
             row: String(rowIndex + 1),
@@ -368,8 +385,8 @@ export function seatingLayoutToVenueMap(
             y: generatedSeat?.y ?? draft.y + rowIndex * 20,
             status: item.status === "available" ? "available" : "blocked",
           }
-        }),
-      )
+        })
+      })
       return draft
     })
   map.elements = existing?.elements ?? []

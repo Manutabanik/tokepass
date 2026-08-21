@@ -29,7 +29,7 @@ export function FilterPills({
       role="tablist"
       aria-label="Categorías"
     >
-      <div className="flex justify-start gap-2 overflow-x-auto px-4 pb-1 scrollbar-none sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-0">
+      <div className="scrollbar-none flex w-full flex-nowrap items-center gap-2 overflow-x-auto px-4 py-2">
         {categories.map((item) => {
           const Icon = resolveCategoryIcon(item.iconName ?? item.icon) ?? Sparkles
           const active = categoryId === item.id
@@ -41,7 +41,7 @@ export function FilterPills({
               aria-selected={active}
               onClick={() => onCategoryChange(item.id)}
               className={cn(
-                "inline-flex shrink-0 items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium transition-all",
+                "inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full px-4 py-2.5 text-sm font-medium transition-all",
                 active
                   ? cn(
                       "border border-transparent text-white",

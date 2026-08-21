@@ -46,10 +46,41 @@ export function ticketDateLabel(
   scheduleDays: ScheduleDay[] = [],
 ): string {
   const meta = resolveTicketDateMeta(tier)
-  if (meta.isFullPass) return "Todos los días"
+  if (meta.isFullPass) return scheduleDays.length > 1 ? "Todos los días" : ""
+  const day =
+    scheduleDays.find((item) => item.id === meta.dateId) ??
+    (scheduleDays.length === 1 ? scheduleDays[0] : undefined)
+  if (day) return formatEventDay(day.start_time) || day.title?.trim() || ""
+  return ""
+}
+
+/** Encabezado de sección: fecha calendario del día, no el título interno. */
+export function ticketDateSectionLabel(
+  dateId: string | null | undefined,
+  scheduleDays: ScheduleDay[] = [],
+): string {
+  const day = scheduleDays.find((item) => item.id === dateId)
+  if (!day) return ""
+  return formatEventDay(day.start_time) || day.title?.trim() || ""
+}
+
+/** Badge en tarjeta: null si no hay fecha útil (evento de un solo día sin day_id). */
+export function ticketDayBadgeLabel(
+  tier: {
+    dayId?: string | null
+    dateId?: string | null
+    isFullPass?: boolean
+  },
+  scheduleDays: ScheduleDay[] = [],
+): string | null {
+  const meta = resolveTicketDateMeta(tier)
+  if (meta.isFullPass) {
+    return scheduleDays.length > 1 ? "Todos los días" : null
+  }
   const day = scheduleDays.find((item) => item.id === meta.dateId)
-  if (day) return day.title?.trim() || formatEventDay(day.start_time)
-  return meta.dateId ?? "Fecha específica"
+  if (day) return formatEventCartDate(day.start_time)
+  const label = ticketDateLabel(tier, scheduleDays)
+  return label || null
 }
 
 /** Etiqueta corta para carrito y checkout: "Jue 12 Nov". */

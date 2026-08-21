@@ -9,18 +9,16 @@ import {
 import { cn } from "@/lib/utils"
 
 const LABELS: Record<AutosaveStatus, string> = {
-  idle: "Sin cambios pendientes",
+  idle: "Cambios guardados",
   dirty: "Guardando...",
   saving: "Guardando...",
-  saved: "Borrador guardado",
-  error: "No se pudo autoguardar",
+  saved: "Cambios guardados",
+  error: "No pudimos guardar. Intentá de nuevo",
 }
 
 export function EventAutosaveIndicator({ className }: { className?: string }) {
   const status = useEventFormStore((s) => s.autosaveStatus)
   const error = useEventFormStore((s) => s.autosaveError)
-
-  if (status === "idle") return null
 
   return (
     <div

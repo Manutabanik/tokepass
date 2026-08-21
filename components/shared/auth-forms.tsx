@@ -128,7 +128,7 @@ export function AuthForms({
         Acceso rápido
       </span>
       <h1 className="mb-1.5 text-center text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
-        Entrá para comprar
+        Ingresar a mi cuenta
       </h1>
       <p className="mb-8 text-center text-sm text-muted-foreground">
         Google o un enlace al mail. Sin contraseña. Tus entradas quedan en tu

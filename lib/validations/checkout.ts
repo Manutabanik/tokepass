@@ -48,7 +48,7 @@ export const CheckoutBuyerSchema = z.object({
     .pipe(
       z
         .string()
-        .min(1, "Ingresá el nombre del asistente.")
+        .min(1, "Escribí tu nombre completo tal como figura en tu DNI")
         .max(50, "El nombre es demasiado largo."),
     ),
   lastName: z
@@ -57,7 +57,7 @@ export const CheckoutBuyerSchema = z.object({
     .pipe(
       z
         .string()
-        .min(1, "Ingresá el apellido del asistente.")
+        .min(1, "Escribí tu apellido tal como figura en tu DNI")
         .max(50, "El apellido es demasiado largo."),
     ),
   email: z

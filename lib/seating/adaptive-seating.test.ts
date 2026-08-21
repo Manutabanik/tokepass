@@ -146,6 +146,35 @@ describe("adaptive seating engine", () => {
     assert.equal(rows[1]?.items[2]?.id, "zona-vip-R2-I3")
   })
 
+  it("expands numbered seats with an asymmetric rowsConfig", () => {
+    const platea = zone({
+      layoutType: "numbered_seat",
+      sellMode: "per_seat",
+      rows: 3,
+      itemsPerRow: 10,
+      capacityPerUnit: 1,
+      capacity: 150,
+      labelPrefix: "Butaca ",
+      rowsConfig: [
+        { label: "1", seatCount: 20 },
+        { label: "2", seatCount: 50 },
+        { label: "3", seatCount: 80 },
+      ],
+    })
+    const sector = expandParametricZone(platea)
+    assert.equal(expectedParametricUnitCount(platea), 150)
+    assert.equal(parametricZoneSkuUnitCount(platea), 150)
+    assert.equal(sector.rows.length, 3)
+    assert.equal(sector.rows[0]?.items.length, 20)
+    assert.equal(sector.rows[1]?.items.length, 50)
+    assert.equal(sector.rows[2]?.items.length, 80)
+    assert.equal(sector.rows[0]?.items[0]?.id, "zona-vip-R1-I1")
+    assert.equal(sector.rows[2]?.items[79]?.id, "zona-vip-R3-I80")
+    assert.equal(sector.rows[0]?.items[0]?.label, "Butaca 1")
+    assert.equal(sector.rows[1]?.items[0]?.label, "Butaca 21")
+    assert.equal(sector.rows[2]?.items[0]?.label, "Butaca 71")
+  })
+
   it("does not flatten every parametric item until a row is opened", () => {
     const meta = listParametricZoneRowMeta(zone({ rows: 80, itemsPerRow: 80 }))
     assert.equal(meta.length, 80)

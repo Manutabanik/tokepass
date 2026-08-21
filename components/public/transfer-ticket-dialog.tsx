@@ -26,7 +26,7 @@ export function TransferTicketDialog({
   ticketId,
   eventTitle,
   disabled = false,
-  triggerLabel = "Transferir a un amigo",
+  triggerLabel = "Pasarle la entrada a un amigo",
   triggerClassName,
 }: {
   ticketId: string
@@ -58,7 +58,7 @@ export function TransferTicketDialog({
         }
 
         toast.success("Transferencia iniciada", {
-          description: `Pendiente de reclamo por ${result.receiverEmail}. El Living QR quedó oculto.`,
+          description: `Pendiente de reclamo por ${result.receiverEmail}. El código de acceso quedó oculto.`,
         })
         setOpen(false)
         setEmail("")
@@ -99,7 +99,7 @@ export function TransferTicketDialog({
       >
         <DialogContent className="border-border bg-card/90 shadow-2xl shadow-black/20 backdrop-blur-xl sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Transferir a un amigo</DialogTitle>
+            <DialogTitle>Pasarle la entrada a un amigo</DialogTitle>
             <DialogDescription>
               Vas a ceder la titularidad de tu acceso a{" "}
               <span className="font-medium text-foreground">{eventTitle}</span>.
@@ -111,8 +111,8 @@ export function TransferTicketDialog({
             role="status"
             className="rounded-2xl border border-border bg-muted/50 px-3.5 py-3 text-sm leading-5 text-muted-foreground"
           >
-            El Living QR se oculta en tu teléfono hasta que tu amigo reclame la
-            entrada. Podés cancelar mientras el estado sea pendiente.
+            El código de acceso se oculta en tu teléfono hasta que tu amigo
+            reclame la entrada. Podés cancelar mientras el estado sea pendiente.
           </div>
 
           <div className="space-y-2">
@@ -186,7 +186,7 @@ export function CancelTicketTransferButton({
         return
       }
       toast.success("Transferencia cancelada", {
-        description: "El Living QR volvió a tu entrada.",
+        description: "El código de acceso volvió a tu entrada.",
       })
       router.refresh()
     })

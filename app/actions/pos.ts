@@ -201,7 +201,7 @@ async function requirePosSession(): Promise<
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: "Sesión requerida." }
+  if (!user) return { success: false, error: "Tu sesión venció por seguridad. Volvé a ingresar con tu cuenta" }
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -395,7 +395,7 @@ export async function openCashierShift(input: {
     const {
       data: { user },
     } = await supabase.auth.getUser()
-    if (!user) return { success: false, error: "Sesión requerida." }
+    if (!user) return { success: false, error: "Tu sesión venció por seguridad. Volvé a ingresar con tu cuenta" }
 
     const access = await requirePosSession()
     if (!access.success) return access
@@ -408,7 +408,7 @@ export async function openCashierShift(input: {
         success: false,
         error:
           eventAccess.reason === "auth_required"
-            ? "Sesión requerida."
+            ? "Tu sesión venció por seguridad. Volvé a ingresar con tu cuenta"
             : "No tenés permiso para abrir caja en este evento.",
       }
     }
@@ -456,7 +456,7 @@ export async function closeCashierShift(input: {
     const {
       data: { user },
     } = await supabase.auth.getUser()
-    if (!user) return { success: false, error: "Sesión requerida." }
+    if (!user) return { success: false, error: "Tu sesión venció por seguridad. Volvé a ingresar con tu cuenta" }
 
     const access = await requirePosSession()
     if (!access.success) return access
@@ -624,7 +624,7 @@ export async function createPosSale(input: {
     } = await supabase.auth.getUser()
 
     if (!user) {
-      return { success: false, error: "Sesión requerida." }
+      return { success: false, error: "Tu sesión venció por seguridad. Volvé a ingresar con tu cuenta" }
     }
 
     const access = await requirePosSession()
@@ -638,7 +638,7 @@ export async function createPosSale(input: {
         success: false,
         error:
           eventAccess.reason === "auth_required"
-            ? "Sesión requerida."
+            ? "Tu sesión venció por seguridad. Volvé a ingresar con tu cuenta"
             : "No tenés permiso para cobrar en este evento.",
       }
     }

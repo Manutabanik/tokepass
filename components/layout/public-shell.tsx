@@ -38,29 +38,30 @@ export function PublicShell({
   return (
     <div
       className={cn(
-        "flex min-h-dvh flex-col bg-background text-foreground",
+        "flex min-h-dvh w-full max-w-full flex-col bg-background text-foreground",
+        !eventStorefront && !checkoutTunnel && "overflow-x-hidden",
         checkoutTunnel && "relative h-[100dvh] overflow-hidden",
       )}
     >
       {checkoutTunnel ? null : navbar}
       <main
         className={cn(
-          "flex w-full flex-1 flex-col",
+          "flex w-full max-w-full flex-1 flex-col",
           checkoutTunnel
             ? "min-h-0 overflow-hidden"
             : cn(
                 "pt-[calc(4rem+env(safe-area-inset-top)+1rem)]",
                 eventStorefront
-                  ? "overflow-visible pb-0"
-                  : "min-h-0 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0",
+                  ? "overflow-visible pb-24"
+                  : "min-h-0 overflow-x-hidden pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0",
               ),
         )}
       >
         {children}
       </main>
       {checkoutTunnel ? null : footer}
-      {/* Portaled to document.body inside the component to avoid overflow/stacking traps. */}
-      {checkoutTunnel ? null : <FloatingBottomNav />}
+      {/* Hidden on event storefront so it never collides with Adquirir Entradas. */}
+      {checkoutTunnel || eventStorefront ? null : <FloatingBottomNav />}
     </div>
   )
 }

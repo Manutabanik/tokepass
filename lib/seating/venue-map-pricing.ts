@@ -1,3 +1,4 @@
+import { defaultInventoryDayId } from "@/lib/event-schedule"
 import { inferInventoryTierType } from "@/lib/inventory/unified-inventory"
 import type { VenuePricingMap } from "@/lib/seating/venue-adapter"
 import {
@@ -13,7 +14,7 @@ import {
   resolveEffectiveSeatingType,
   resolveSeatingType,
 } from "@/lib/seating/seating-type"
-import type { InteractiveVenueMap } from "@/types/venue-map"
+import { parseVenueMap, type InteractiveVenueMap } from "@/types/venue-map"
 
 export function priceGroupSectorId(group: VenuePriceGroup): string {
   if (group.match.kind === "sector" || group.match.kind === "zone") {
@@ -154,6 +155,27 @@ function furnitureChairCount(element: NonNullable<InteractiveVenueMap["elements"
   return Math.max(1, element.chairCount || element.capacity || 1)
 }
 
+export function layoutTypeForMapSectorId(
+  map: InteractiveVenueMap,
+  sectorId: string,
+): EventFormValues["tickets"][number]["layoutType"] | null {
+  const id = sectorId.trim()
+  if (!id) return null
+  const group = listVenuePriceGroups(map).find(
+    (item) => priceGroupSectorId(item) === id,
+  )
+  if (group) return layoutTypeFromGroup(group, map)
+  const zone = (map.zones ?? []).find((item) => item.id === id)
+  if (zone) {
+    if (resolveSeatingType(zone) === "GENERAL") return "general"
+    if (zone.layoutType === "table_combo") return "table_combo"
+    if (zone.layoutType === "numbered_seat") return "numbered_seat"
+    return "general"
+  }
+  if (map.sectors.some((sector) => sector.id === id)) return "numbered_seat"
+  return null
+}
+
 function layoutTypeFromGroup(
   group: VenuePriceGroup,
   map: InteractiveVenueMap,
@@ -290,6 +312,21 @@ export function syncMapBackedTickets(
   )
 
   return [...nextMap, ...orphanSold, ...commercial]
+}
+
+/** Combina inventario libre + entradas derivadas de sectores del mapa. */
+export function consolidateEventTicketsForPersist(
+  data: Pick<EventFormValues, "tickets" | "basics" | "venue">,
+): EventFormValues["tickets"] {
+  const customTickets = data.tickets ?? []
+  if (!data.basics.hasSeatingPlan) return customTickets
+  return syncMapBackedTickets(
+    customTickets,
+    parseVenueMap(data.venue.venueMap),
+    {
+      defaultDayId: defaultInventoryDayId(data.basics.scheduleDays),
+    },
+  )
 }
 
 export function applyMapCapacityToTickets<

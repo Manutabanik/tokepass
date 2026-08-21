@@ -99,7 +99,7 @@ async function assertEventOrganizer(eventId: string) {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) return { ok: false as const, error: "Sesión requerida." }
+  if (!user) return { ok: false as const, error: "Tu sesión venció por seguridad. Volvé a ingresar con tu cuenta" }
 
   const { data: event } = await supabase
     .from("events")
@@ -571,7 +571,7 @@ async function persistTicketTemplate(input: {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: "Sesión requerida." }
+  if (!user) return { success: false, error: "Tu sesión venció por seguridad. Volvé a ingresar con tu cuenta" }
 
   if (input.templateId) {
     const { data, error } = await supabase

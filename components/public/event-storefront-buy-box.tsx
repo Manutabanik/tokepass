@@ -12,13 +12,15 @@ export function EventStorefrontBuyBox({
   dateLabel,
   venueLabel,
   limited,
+  isOnline = false,
   onAcquire,
 }: {
   price: number | null
   dateLabel: string
   venueLabel: string
   limited: boolean
-  onAcquire: () => void
+  isOnline?: boolean
+  onAcquire: (event: React.MouseEvent) => void
 }) {
   return (
     <div
@@ -35,15 +37,19 @@ export function EventStorefrontBuyBox({
               : "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
           )}
         >
-          {limited ? "Disponibilidad limitada" : "Venta activa"}
+          {limited ? "¡Quedan pocas entradas!" : "Venta activa"}
         </span>
       </div>
 
       <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
-        Entradas desde
+        {price === 0 ? "Precio" : "Entradas desde"}
       </p>
       <p className="mt-1 text-4xl font-black tracking-tight text-foreground tabular-nums">
-        {price != null ? formatTicketPrice(price) : "Consultar"}
+        {price == null
+          ? "Ver entradas"
+          : price === 0
+            ? "Entrada gratuita"
+            : formatTicketPrice(price)}
       </p>
 
       <ul className="mt-5 flex flex-col gap-3 border-t border-border/60 pt-5">
@@ -74,13 +80,17 @@ export function EventStorefrontBuyBox({
       <Button
         type="button"
         size="storefront"
-        onClick={onAcquire}
+        onClick={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          onAcquire(event)
+        }}
         className={cn(
           "mt-6 h-14 w-full rounded-xl bg-emerald-500 text-lg text-slate-950",
           "shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:bg-emerald-400",
         )}
       >
-        Adquirir Entradas
+        {isOnline ? "Elegir acceso" : "Elegir entradas"}
       </Button>
 
       <div className="mt-4 flex flex-col items-center gap-2">
@@ -88,7 +98,7 @@ export function EventStorefrontBuyBox({
           <Lock className="size-3.5 shrink-0" aria-hidden="true" />
           Compra 100% segura y encriptada
         </p>
-        <TokepassGuaranteeBadge variant="full" className="w-full" />
+        <TokepassGuaranteeBadge variant="full" isOnline={isOnline} className="w-full" />
       </div>
     </div>
   )

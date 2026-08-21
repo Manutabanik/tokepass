@@ -310,8 +310,8 @@ export function EventStudioFlyerField({
 
   return (
     <div className="min-w-0 space-y-2">
-      <p className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
-        Flyer principal
+      <p className="mb-1.5 text-sm font-semibold text-foreground/90">
+        Cartel principal del evento
       </p>
       <input
         ref={inputRef}
@@ -344,7 +344,7 @@ export function EventStudioFlyerField({
               type="button"
               variant="outline"
               onClick={() => inputRef.current?.click()}
-              className="min-h-11 flex-1 text-base md:text-sm"
+              className="h-12 flex-1 rounded-xl text-base"
             >
               <Upload />
               Cambiar imagen
@@ -356,7 +356,7 @@ export function EventStudioFlyerField({
                 setLocalError(null)
                 onClear()
               }}
-              className="min-h-11 text-base md:text-sm"
+              className="h-12 rounded-xl text-base"
             >
               <Trash2 />
               Eliminar
@@ -392,16 +392,16 @@ export function EventStudioFlyerField({
           </span>
           <div className="space-y-1">
             <p className="text-sm font-semibold text-foreground">
-              Arrastra el flyer aca
+              Subí una imagen para el cartel principal de tu evento
             </p>
-            <p className="text-xs text-muted-foreground">
-              PNG, JPG o WEBP. Maximo 5MB. Recorte 4:5.
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              PNG, JPG o WEBP. Máximo 5MB. Recorte 4:5.
             </p>
           </div>
           <Button
             type="button"
             onClick={() => inputRef.current?.click()}
-            className="min-h-11 bg-gradient-to-r from-emerald-500 to-cyan-500 text-base font-semibold text-zinc-950 hover:from-emerald-400 hover:to-cyan-400 md:text-sm"
+            className="h-12 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-base font-semibold text-zinc-950 hover:from-emerald-400 hover:to-cyan-400"
           >
             <Upload />
             Subir imagen

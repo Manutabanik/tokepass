@@ -28,6 +28,7 @@ const VenueElementShape = memo(function VenueElementShape({
   highlighted = false,
   isolationDim = false,
   popSelected = true,
+  buyerOccupancy = false,
 }: {
   element: VenueMapElement
   selected: boolean
@@ -71,6 +72,7 @@ const VenueElementShape = memo(function VenueElementShape({
   highlighted?: boolean
   isolationDim?: boolean
   popSelected?: boolean
+  buyerOccupancy?: boolean
 }) {
   const lit = selected || highlighted
   const transform =
@@ -91,6 +93,7 @@ const VenueElementShape = memo(function VenueElementShape({
   return (
     <g
       id={`venue-sel-${element.id}`}
+      data-element-id={element.id}
       transform={transform}
       opacity={opacity}
       className={
@@ -175,6 +178,7 @@ const VenueElementShape = memo(function VenueElementShape({
                 }
               : undefined
           }
+          buyerOccupancy={buyerOccupancy}
         />
       </g>
       {element.type === "standing_zone" && showLabels ? (
@@ -240,6 +244,7 @@ export function VenueMapElementLayer({
   lodHidden = false,
   highlightedIds = [],
   isolationDimIds = null,
+  buyerOccupancy = false,
 }: {
   elements: VenueMapElement[]
   selectedIds?: string[]
@@ -284,6 +289,7 @@ export function VenueMapElementLayer({
   lodHidden?: boolean
   highlightedIds?: string[]
   isolationDimIds?: Set<string> | null
+  buyerOccupancy?: boolean
 }) {
   const selected = new Set(selectedIds)
   const highlighted = new Set(highlightedIds)
@@ -362,6 +368,7 @@ export function VenueMapElementLayer({
               isolationDim={isolationDim}
               highlighted={isHighlighted}
               popSelected={popSelected}
+              buyerOccupancy={buyerOccupancy}
             />
           </g>
         )

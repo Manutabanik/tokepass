@@ -13,11 +13,7 @@ import type {
   DiscoveryDatePreset,
   DiscoveryFilterDraft,
 } from "@/lib/discovery-filters"
-import {
-  DISCOVERY_NICHES,
-  type DiscoveryNicheId,
-} from "@/lib/discovery-niches"
-import { cn } from "@/lib/utils"
+import { type DiscoveryNicheId } from "@/lib/discovery-niches"
 
 type HeroSectionProps = {
   events: CatalogEvent[]
@@ -36,7 +32,6 @@ type HeroSectionProps = {
   featuredArtists?: FeaturedDiscoveryArtist[]
   categories?: DiscoveryCategory[]
   niche: DiscoveryNicheId
-  onNicheChange: (value: DiscoveryNicheId) => void
   onCommitFilters: (draft: DiscoveryFilterDraft) => void
 }
 
@@ -57,7 +52,6 @@ export function HeroSection({
   featuredArtists,
   categories = DEFAULT_DISCOVERY_CATEGORIES,
   niche,
-  onNicheChange,
   onCommitFilters,
 }: HeroSectionProps) {
   const reduceMotion = useReducedMotion()
@@ -76,7 +70,7 @@ export function HeroSection({
   const skipMotion = Boolean(reduceMotion || isMobile)
 
   return (
-    <section className="relative overflow-x-clip pb-4 pt-10 sm:pb-6 sm:pt-14 lg:pt-20">
+    <section className="relative w-full max-w-full overflow-x-hidden pb-4 pt-10 sm:pb-6 sm:pt-14 lg:pt-20">
       <motion.div
         initial={skipMotion ? false : { opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
@@ -100,7 +94,7 @@ export function HeroSection({
         </p>
       </motion.div>
 
-      <div className="mx-auto mt-8 w-full max-w-4xl sm:mt-10">
+      <div className="mx-auto mt-8 w-full min-w-0 max-w-4xl sm:mt-10">
         <SearchBar
           events={events}
           query={query}
@@ -120,30 +114,6 @@ export function HeroSection({
           niche={niche}
           onCommitFilters={onCommitFilters}
         />
-        <div
-          className="mt-4 flex gap-3 overflow-x-auto"
-          role="tablist"
-          aria-label="Nichos"
-        >
-          {DISCOVERY_NICHES.map((item) => {
-            const active = niche === item.id
-            return (
-              <button
-                key={item.id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => onNicheChange(item.id)}
-                className={cn(
-                  "shrink-0 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-medium transition-colors hover:bg-white/10",
-                  active && "bg-white/15",
-                )}
-              >
-                {item.label}
-              </button>
-            )
-          })}
-        </div>
       </div>
     </section>
   )

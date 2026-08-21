@@ -1,4 +1,3 @@
-import { formatEventDayNumber, formatEventWeekdayShort } from "@/lib/format"
 import type { ScheduleDay } from "@/types/events"
 import { TICKET_DAY_ALL, type TicketDayId } from "@/types/tickets"
 
@@ -218,21 +217,77 @@ export function isMultiDaySchedule(days: ScheduleDay[]): boolean {
   return days.length >= 2
 }
 
+function calendarDateFromScheduleStart(value: string): Date | null {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const local = DATETIME_LOCAL_RE.exec(trimmed)
+  if (local) {
+    return new Date(
+      Number(local[1]),
+      Number(local[2]) - 1,
+      Number(local[3]),
+      12,
+      0,
+      0,
+    )
+  }
+  const parsed = parseDateTimeLocal(trimmed)
+  if (!parsed) return null
+  if (/[zZ]$/.test(trimmed) || /[+-]\d{2}:\d{2}$/.test(trimmed)) {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Argentina/Buenos_Aires",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(parsed)
+    const year = Number(parts.find((part) => part.type === "year")?.value)
+    const month = Number(parts.find((part) => part.type === "month")?.value)
+    const day = Number(parts.find((part) => part.type === "day")?.value)
+    if (year && month && day) {
+      return new Date(year, month - 1, day, 12, 0, 0)
+    }
+  }
+  return parsed
+}
+
+export function formatScheduleDayDateLabel(value: string): string {
+  const date = calendarDateFromScheduleStart(value)
+  if (!date) return ""
+  return date.toLocaleDateString("es-AR", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  })
+}
+
+export function listEventFormJornadas(input: {
+  scheduleDays?: ScheduleDayFormValue[] | null
+  date?: string | null
+}): ScheduleDayFormValue[] {
+  const fallback = input.date?.trim() ?? ""
+  return (input.scheduleDays ?? []).map((day) => ({
+    ...day,
+    startTime: day.startTime?.trim() || fallback,
+  }))
+}
+
 export function formatInventoryDayOption(
   day: {
     id?: string
     title?: string | null
     startTime?: string | null
     start_time?: string | null
+    date?: string | null
   },
   index: number,
 ): string {
-  const start = day.startTime?.trim() || day.start_time?.trim() || ""
-  const weekday = start ? formatEventWeekdayShort(start) : ""
-  const dayNumber = start ? formatEventDayNumber(start) : ""
-  const when = [weekday, dayNumber].filter(Boolean).join(" ")
-  const title = day.title?.trim() || `Jornada ${index + 1}`
-  return when ? `${title}: ${when}` : title
+  const start =
+    day.startTime?.trim() ||
+    day.start_time?.trim() ||
+    day.date?.trim() ||
+    ""
+  const when = start ? formatScheduleDayDateLabel(start) : ""
+  return when ? `Día ${index + 1} - ${when}` : `Día ${index + 1}`
 }
 
 export function defaultInventoryDayId(

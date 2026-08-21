@@ -181,7 +181,7 @@ export async function saveOrganizerBankProfile(input: {
     return {
       success: false,
       error:
-        error instanceof Error ? error.message : "No se pudieron guardar los datos.",
+        error instanceof Error ? error.message : "No pudimos guardar los cambios. Revisá tu conexión a internet e intentá de nuevo",
     }
   }
 }

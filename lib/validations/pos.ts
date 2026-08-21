@@ -43,7 +43,10 @@ export const PosSaleInputSchema = z.object({
       const trimmed = value?.trim() ?? ""
       return trimmed.length > 0 ? normalizeEmail(trimmed) : null
     })
-    .refine((value) => value == null || isStrictEmail(value), "Email inválido."),
+    .refine(
+      (value) => value == null || isStrictEmail(value),
+      "Escribí un correo válido (ej: nombre@gmail.com)",
+    ),
   customerDni: optionalText(16),
   customerName: optionalText(80),
   shiftId: uuid,
@@ -127,7 +130,10 @@ export const DeliverPosTicketsSchema = z.object({
       const trimmed = value?.trim() ?? ""
       return trimmed.length > 0 ? normalizeEmail(trimmed) : null
     })
-    .refine((value) => value == null || isStrictEmail(value), "Email inválido."),
+    .refine(
+      (value) => value == null || isStrictEmail(value),
+      "Escribí un correo válido (ej: nombre@gmail.com)",
+    ),
 })
 
 export type PosSaleInput = z.infer<typeof PosSaleInputSchema>

@@ -106,4 +106,18 @@ describe("parametric zone polygons", () => {
     assert.equal(moved[0]?.x, 20)
     assert.equal(moved[0]?.y, 10)
   })
+
+  it("scales a percent polygon independently on X and Y", () => {
+    const scaled = transformPercentPolygon(
+      [
+        { x: 10, y: 10 },
+        { x: 40, y: 10 },
+        { x: 40, y: 40 },
+      ],
+      { type: "scale", ox: 80, oy: 56, scale: 1, scaleX: 2, scaleY: 1 },
+    )
+    assert.equal(scaled[0]?.x, 10)
+    assert.equal(scaled[1]?.x, 70)
+    assert.equal(scaled[0]?.y, 10)
+  })
 })

@@ -259,6 +259,7 @@ type TicketSelectorProps = {
   maxTicketsPerUser?: number | null
   /** Flatten the checkout panel to fill a 100dvh tunnel. */
   fillViewport?: boolean
+  isOnline?: boolean
   onReservationExpired?: () => void
   onLeaveCheckout?: () => void
   renderLayout?: (parts: { map: ReactNode; panel: ReactNode }) => ReactNode
@@ -344,6 +345,7 @@ export function CheckoutTunnel({
   scheduleDays = [],
   maxTicketsPerUser = null,
   fillViewport = false,
+  isOnline = false,
   onReservationExpired,
   onLeaveCheckout,
   renderLayout,
@@ -1945,18 +1947,6 @@ export function CheckoutTunnel({
     })
   }
 
-  function skipExtras() {
-    for (const extra of availableExtras) {
-      if ((quantities[extra.id] ?? 0) > 0) {
-        updateQuantity(extra.id, 0, extra.available)
-      }
-    }
-    void runCheckoutBusy(async () => {
-      setUpsellSkipped(true)
-      await proceedToDetails()
-    })
-  }
-
   function goToPaymentMethods() {
     if (!canProceedFromCart || purchaseLocked) return
     void buyerForm.handleSubmit(
@@ -2546,23 +2536,28 @@ export function CheckoutTunnel({
     )
   }
 
+  const hasSelectedExtras = availableExtras.some(
+    (extra) => (quantities[extra.id] ?? 0) > 0,
+  )
   const stepTitle =
     visibleStep === "tickets"
       ? "Elegí tu entrada"
       : visibleStep === "upsell"
-        ? "Mejorá tu experiencia"
+        ? "¿Sumás algo más a tu visita?"
         : visibleStep === "details"
           ? "Confirmá tus datos"
           : "Confirmá el pago"
   const stepCta =
     visibleStep === "tickets"
       ? canProceedFromCart
-        ? `Continuar con ${totalTickets || liveSelectedItems.length} ${
-            (totalTickets || liveSelectedItems.length) === 1 ? "lugar" : "lugares"
+        ? `Continuar · ${totalTickets || liveSelectedItems.length} ${
+            (totalTickets || liveSelectedItems.length) === 1 ? "entrada" : "entradas"
           }`
         : "Continuar"
       : visibleStep === "upsell"
-        ? "Sumar al pedido y continuar"
+        ? hasSelectedExtras
+          ? "Sumar extras y seguir"
+          : "Seguir sin agregar extras"
         : visibleStep === "details"
           ? finalTotal === 0
             ? "Continuar"
@@ -2570,7 +2565,7 @@ export function CheckoutTunnel({
           : simulatePayment
             ? "Simular Pago (Modo Prueba)"
             : finalTotal === 0
-              ? "Confirmar reserva"
+              ? "Confirmar y emitir"
               : `Confirmar y Pagar ${formatTicketPrice(finalTotal)}`
 
   const seatSelection = hasInteractiveMap
@@ -2630,7 +2625,7 @@ export function CheckoutTunnel({
       />
       <div
         ref={panelBodyRef}
-        className="no-scrollbar flex-1 min-h-0 min-w-0 space-y-6 overflow-x-hidden overflow-y-auto p-4"
+        className="no-scrollbar flex-1 min-h-0 min-w-0 space-y-3 overflow-x-hidden overflow-y-auto p-4"
       >
         <div className="mx-auto w-full max-w-7xl">
           {visibleStep !== "tickets" ? (
@@ -2707,8 +2702,6 @@ export function CheckoutTunnel({
                 quantities={quantities}
                 isPending={controlsLocked}
                 onQuantityChange={updateQuantity}
-                onContinueWithExtras={continueWithExtras}
-                onSkipExtras={skipExtras}
               />
             </motion.div>
           ) : visibleStep === "details" ? (
@@ -2722,6 +2715,7 @@ export function CheckoutTunnel({
             >
               <CheckoutPaymentForm
                 step="details"
+                isOnline={isOnline}
                 eventId={eventId}
                 cartSubtotal={cartSubtotal}
                 ticketsSubtotal={ticketsSubtotal}
@@ -2776,6 +2770,7 @@ export function CheckoutTunnel({
             >
               <CheckoutPaymentForm
                 step="payment"
+                isOnline={isOnline}
                 eventId={eventId}
                 cartSubtotal={cartSubtotal}
                 ticketsSubtotal={ticketsSubtotal}
@@ -2828,12 +2823,15 @@ export function CheckoutTunnel({
         </AnimatePresence>
         </div>
         <div className="hidden min-h-0 lg:col-span-5 lg:block">
+          <div className="lg:sticky lg:top-6">
           <CheckoutSelectionSidebar
             seatSelection={visibleStep === "tickets" ? seatSelection : null}
             maxSelectable={maxTicketsPerUser}
             cta={{
-              label: visibleStep === "tickets" ? "Continuar" : stepCta,
+              label: stepCta,
               showArrow: visibleStep !== "payment",
+              formId:
+                visibleStep === "payment" ? "checkout-payment-form" : undefined,
               pending: checkoutBusy,
               pendingLabel:
                 visibleStep === "payment"
@@ -2858,6 +2856,7 @@ export function CheckoutTunnel({
                 : null
             }
           />
+          </div>
         </div>
         </div>
         </div>
@@ -2866,8 +2865,9 @@ export function CheckoutTunnel({
       <div className="mt-auto flex shrink-0 flex-col gap-3 border-t border-border bg-background p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:flex-row lg:hidden">
         <CheckoutFloatingBar
           variant="panel"
-          actionLabel={
-            visibleStep === "tickets" ? "Continuar" : stepCta
+          actionLabel={stepCta}
+          formId={
+            visibleStep === "payment" ? "checkout-payment-form" : undefined
           }
           showArrow={visibleStep !== "payment"}
           totalAmount={finalTotal}

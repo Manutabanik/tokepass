@@ -1,5 +1,6 @@
 import { assignableLogicalSectorIds } from "@/lib/inventory/logical-sectors"
 import { listVenuePriceGroups } from "@/lib/seating/venue-price-groups"
+import { layoutTypeForMapSectorId } from "@/lib/seating/venue-map-pricing"
 import type { EventFormValues } from "@/lib/validations/event-form"
 import { parseVenueMap } from "@/types/venue-map"
 
@@ -130,6 +131,40 @@ export function detachTicketsFromSeatingPlan(
   return tickets.map((tier) => ({ ...tier, seatingSectorId: null }))
 }
 
+/**
+ * Conserva el sector si es lógico asignable, butaca/mesa del mapa,
+ * o una zona GA del plano visual. Desacopla entradas generales de
+ * sectores numerados para no romper el RPC.
+ */
+export function resolvePersistableTicketSectorId(input: {
+  sectorId: string | null | undefined
+  layoutType?: string | null
+  tierType?: string | null
+  liveSectorIds: Iterable<string>
+  assignableSectorIds: Iterable<string>
+  venueMap?: unknown
+}): string | null {
+  const sectorId = input.sectorId?.trim() || null
+  if (!sectorId) return null
+  const assignable = new Set(
+    [...input.assignableSectorIds].filter((id) => id.trim().length > 0),
+  )
+  if (assignable.has(sectorId)) return sectorId
+  const live = new Set(
+    [...input.liveSectorIds].filter((id) => id.trim().length > 0),
+  )
+  if (!live.has(sectorId)) return null
+  const isSeated =
+    input.layoutType === "numbered_seat" ||
+    input.layoutType === "table_combo" ||
+    input.tierType === "seated"
+  if (isSeated) return sectorId
+  return layoutTypeForMapSectorId(parseVenueMap(input.venueMap), sectorId) ===
+    "general"
+    ? sectorId
+    : null
+}
+
 /** Anula seatingSectorId que no existen en el plano vivo. */
 export function sanitizeSeatingSectorIds(
   tickets: TicketDraft[],
@@ -218,19 +253,17 @@ export function sanitizeEventSubmitPayload(
       extraIds: assignableIds,
     })
   const prepared = data.basics.hasSeatingPlan
-    ? (data.tickets ?? []).map((tier) => {
-        const sectorId = tier.seatingSectorId?.trim() || null
-        if (!sectorId) return { ...tier, seatingSectorId: null }
-        const isSeated =
-          tier.layoutType === "numbered_seat" ||
-          tier.layoutType === "table_combo" ||
-          tier.tierType === "seated"
-        if (isSeated) return tier
-        return {
-          ...tier,
-          seatingSectorId: assignableIds.has(sectorId) ? sectorId : null,
-        }
-      })
+    ? (data.tickets ?? []).map((tier) => ({
+        ...tier,
+        seatingSectorId: resolvePersistableTicketSectorId({
+          sectorId: tier.seatingSectorId,
+          layoutType: tier.layoutType,
+          tierType: tier.tierType,
+          liveSectorIds: live,
+          assignableSectorIds: assignableIds,
+          venueMap: data.venue.venueMap,
+        }),
+      }))
     : detachTicketsFromSeatingPlan(data.tickets ?? [])
   const tickets = sanitizeSeatingSectorIds(
     sanitizeTicketTiersForPersist(prepared, options),

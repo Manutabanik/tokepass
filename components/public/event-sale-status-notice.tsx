@@ -41,12 +41,12 @@ export function EventSaleStatusNotice({
             : "text-red-700 dark:text-red-300",
         )}
       >
-        {finished ? "Finalizado" : "Sold Out"}
+        {finished ? "Este evento ya pasó" : "Entradas agotadas"}
       </p>
       <p className="mt-2 text-base font-semibold leading-6 text-zinc-900 dark:text-white">
         {finished
-          ? "Este evento ya finalizó. ¡Gracias a todos los que participaron!"
-          : "¡Sold Out! Ya no quedan entradas disponibles para este evento."}
+          ? "Este evento ya pasó. Gracias a todos los que participaron."
+          : "Ya no quedan entradas disponibles para este evento."}
       </p>
     </div>
   )

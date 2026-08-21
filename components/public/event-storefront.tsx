@@ -9,7 +9,7 @@ import {
 import { motion, useReducedMotion } from "motion/react"
 import dynamic from "next/dynamic"
 import Link from "next/link"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type MouseEvent } from "react"
 
 import type { EventDetails } from "@/app/actions/public-events"
 import type { ResaleListingPublic } from "@/app/actions/resale"
@@ -124,14 +124,14 @@ function demandLabel(tiers: EventDetails["tiers"]): string | null {
   const active = tiers.filter((tier) => tier.available > 0)
   if (active.length === 0) return null
   const lowest = Math.min(...active.map((tier) => tier.available))
-  if (lowest <= 15) return `Últimas ${lowest} entradas`
+  if (lowest <= 15) return "¡Quedan pocas entradas!"
   const soldRatio =
     tiers.reduce((sum, tier) => sum + tier.sold, 0) /
     Math.max(
       1,
       tiers.reduce((sum, tier) => sum + tier.capacity, 0),
     )
-  if (soldRatio >= 0.65) return "Alta demanda"
+  if (soldRatio >= 0.65) return "¡Quedan pocas entradas!"
   return null
 }
 
@@ -212,7 +212,6 @@ export function EventStorefront({
     () => availableDates[0]?.id ?? event.id,
   )
   const viewMode = useCheckoutStore((state) => state.viewMode)
-  const setViewMode = useCheckoutStore((state) => state.setViewMode)
   const [exitDialogOpen, setExitDialogOpen] = useState(false)
 
   useEffect(() => {
@@ -236,10 +235,21 @@ export function EventStorefront({
 
   useEffect(() => {
     useStorefrontChromeStore.getState().setCheckoutTunnel(showCheckout)
+  }, [showCheckout])
+
+  useEffect(() => {
     return () => {
       useStorefrontChromeStore.getState().setCheckoutTunnel(false)
     }
-  }, [showCheckout])
+  }, [])
+
+  useEffect(() => {
+    const store = useCheckoutStore.getState()
+    if (store.eventId && store.eventId !== event.id) {
+      store.resetIfOtherEvent(event.id)
+      store.setViewMode("info")
+    }
+  }, [event.id])
 
   useEffect(() => {
     const bind = () => useStorefrontSeatStore.getState().bindEvent(event.id)
@@ -257,9 +267,13 @@ export function EventStorefront({
     return checkout.itemsCount > 0 || selectedCount > 0
   }
 
-  function enterCheckout() {
+  function enterCheckout(eventClick?: MouseEvent) {
+    eventClick?.preventDefault()
+    eventClick?.stopPropagation()
+    const store = useCheckoutStore.getState()
+    store.resetIfOtherEvent(event.id)
     useStorefrontChromeStore.getState().setCheckoutTunnel(true)
-    setViewMode("checkout")
+    store.setViewMode("checkout")
   }
 
   function leaveCheckout() {
@@ -312,6 +326,7 @@ export function EventStorefront({
         dateLabel={dateLabel}
         venueLabel={venueLabel}
         limited={Boolean(demand)}
+        isOnline={isOnlineEvent}
         onAcquire={enterCheckout}
       />
     )
@@ -388,11 +403,11 @@ export function EventStorefront({
               <div className="flex flex-wrap items-center gap-1.5 px-4 md:px-0 pt-1">
                 {finished ? (
                   <span className="inline-flex items-center rounded-full border border-border bg-muted/50 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
-                    Finalizado
+                    Este evento ya pasó
                   </span>
                 ) : soldOut ? (
                   <span className="inline-flex items-center rounded-full border border-rose-500/25 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold text-rose-700 dark:text-rose-300">
-                    Agotado
+                    Entradas agotadas
                   </span>
                 ) : null}
 
@@ -433,15 +448,6 @@ export function EventStorefront({
               organizerName={organizerName}
             />
           </motion.div>
-
-          {showInfoCta ? (
-            <motion.div
-              variants={reduceMotion ? undefined : storefrontFade}
-              className="px-4 lg:hidden"
-            >
-              {renderPurchaseAside()}
-            </motion.div>
-          ) : null}
 
           <motion.div
             variants={reduceMotion ? undefined : storefrontFade}
@@ -518,7 +524,7 @@ export function EventStorefront({
               <AccordionContent className="text-muted-foreground">
                 {isOnlineEvent
                   ? "El link de transmisión aparece en Mis entradas después de pagar. No hace falta QR ni presentarse en un recinto."
-                  : "Llevá tu Living QR en el celular con batería. Evitá capturas de pantalla: los códigos dinámicos vencen. La reventa solo es válida a través del marketplace oficial de TokePass."}
+                  : "En puerta mostrá esta pantalla. El código se actualiza solo para evitar reventas truchas (no le saques captura de pantalla)."}
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="refunds">
@@ -596,13 +602,13 @@ export function EventStorefront({
           ) : null}
         </section>
 
-        <TokepassGuaranteeBadge variant="full" />
+        <TokepassGuaranteeBadge variant="full" isOnline={isOnlineEvent} />
       </motion.div>
     )
   }
 
   const asideClassName =
-    "hidden min-w-0 scroll-mt-24 px-4 md:px-0 lg:col-span-4 lg:sticky lg:top-28 lg:z-30 lg:block lg:self-start"
+    "hidden w-full scroll-mt-28 px-4 md:px-0 lg:sticky lg:top-28 lg:z-10 lg:block lg:h-fit lg:w-[400px] lg:shrink-0"
 
   if (showCheckout) {
     return (
@@ -645,6 +651,7 @@ export function EventStorefront({
             defaultTicketTab={event.defaultTicketTab}
             maxTicketsPerUser={event.maxTicketsPerUser}
             fillViewport
+            isOnline={isOnlineEvent}
             onReservationExpired={leaveCheckout}
             onLeaveCheckout={requestLeaveCheckout}
             renderLayout={({ panel }) => panel}
@@ -657,10 +664,10 @@ export function EventStorefront({
             overlayClassName="z-[100]"
           >
             <DialogHeader>
-              <DialogTitle>Cancelar proceso de compra</DialogTitle>
+              <DialogTitle>¿Querés salir?</DialogTitle>
               <DialogDescription>
-                ¿Estás seguro que deseas salir? Los lugares que seleccionaste
-                serán liberados y tu carrito se vaciará.
+                Si salís ahora, se liberan los lugares y se vacía el carrito.
+                Esta acción no se puede deshacer.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
@@ -691,8 +698,8 @@ export function EventStorefront({
     <>
     <div
       className={cn(
-        "relative isolate min-h-screen bg-background text-foreground",
-        showInfoCta ? "pb-28 lg:pb-12" : "pb-8 lg:pb-12",
+        "relative isolate min-h-screen w-full max-w-full bg-background text-foreground",
+        showInfoCta ? "pb-24 lg:pb-12" : "pb-24 lg:pb-12",
       )}
     >
       <div
@@ -729,9 +736,9 @@ export function EventStorefront({
         </div>
       ) : null}
 
-      <div className="relative mx-auto grid w-full max-w-7xl grid-cols-1 items-start gap-8 px-0 md:px-4 lg:grid-cols-12 lg:px-8 lg:py-8">
+      <div className="relative mx-auto flex w-full max-w-7xl flex-col items-start gap-8 px-0 md:px-4 lg:flex-row lg:px-8 lg:py-8">
         <motion.div
-          className="min-w-0 space-y-8 lg:col-span-8 lg:space-y-10"
+          className="min-w-0 w-full flex-1 space-y-8 lg:space-y-10"
           variants={reduceMotion ? undefined : storefrontStagger}
           initial={reduceMotion ? false : "hidden"}
           animate="show"
@@ -775,7 +782,7 @@ export function EventStorefront({
     {showInfoCta && isAvailable ? (
       <FloatingCheckoutDock
         price={teaserPrice}
-        actionLabel={isOnlineEvent ? "Acceder" : "Adquirir Entradas"}
+        actionLabel={isOnlineEvent ? "Elegir acceso" : "Elegir entradas"}
         onAcquire={enterCheckout}
       />
     ) : null}

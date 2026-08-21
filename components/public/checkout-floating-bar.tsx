@@ -31,6 +31,7 @@ export function CheckoutFloatingBar({
   pulseCta: _pulseCta = false,
   prominentCta = false,
   variant = "page",
+  formId,
 }: {
   pending?: boolean
   locked?: boolean
@@ -41,6 +42,7 @@ export function CheckoutFloatingBar({
   showArrow?: boolean
   totalAmount?: number | null
   itemsCount?: number
+  formId?: string
   onPay: () => void
   onEditMap?: () => void
   variant?: "page" | "panel"
@@ -136,11 +138,12 @@ export function CheckoutFloatingBar({
             </button>
           ) : null}
           <Button
-            type="button"
+            type={formId ? "submit" : "button"}
+            form={formId}
             size="storefront"
             disabled={pending || locked || !canContinue}
             aria-busy={pending}
-            onClick={handlePay}
+            onClick={formId ? undefined : handlePay}
             className={cn(
               tapFeedbackClass,
               "h-14 min-w-0 shrink-0 rounded-xl bg-emerald-500 px-5 text-base font-black text-black shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:bg-emerald-400 disabled:scale-100 disabled:opacity-70 md:h-14",
@@ -242,11 +245,18 @@ export function CheckoutFloatingBar({
               </span>
             </div>
             <Button
-              type="button"
+              type={formId ? "submit" : "button"}
+              form={formId}
               size="storefront"
               disabled={pending || locked || !canContinue}
               aria-busy={pending}
-              onClick={handleContinueFromSummary}
+              onClick={() => {
+                if (formId) {
+                  setSummaryOpen(false)
+                  return
+                }
+                handleContinueFromSummary()
+              }}
               className={cn(
                 tapFeedbackClass,
                 "h-14 w-full rounded-xl bg-emerald-500 py-2.5 text-sm font-black text-black hover:bg-emerald-400 disabled:scale-100 disabled:opacity-70",
@@ -258,7 +268,7 @@ export function CheckoutFloatingBar({
                   {pendingLabel}
                 </span>
               ) : (
-                "Continuar a pago"
+                actionLabel
               )}
             </Button>
           </div>

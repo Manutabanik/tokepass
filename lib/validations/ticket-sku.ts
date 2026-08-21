@@ -51,9 +51,9 @@ export function normalizeTicketSectorInput(value: unknown): unknown {
 }
 
 const ticketSkuCapacitySchema = z
-  .number({ error: "Indicá la capacidad de esta entrada." })
+  .number({ error: "Indicá cuántas entradas vas a poner a la venta" })
   .int()
-  .min(1, "La cantidad de personas debe ser mayor a cero.")
+  .min(1, "Indicá cuántas entradas vas a poner a la venta")
 
 /**
  * Contrato de alta de SKU comercial: el sector es opcional.

@@ -24,53 +24,61 @@ export function EventStudioDock({
   onPublish: () => void
 }) {
   return (
-    <div className="flex items-center justify-between gap-3">
+    <div className="flex items-center gap-3">
       <Button
         type="button"
         variant="ghost"
         disabled={!canGoBack || submitting}
         onClick={onBack}
-        className="min-h-11 text-base text-muted-foreground hover:text-foreground md:text-sm"
+        aria-label="Volver al paso anterior"
+        className="h-12 shrink-0 rounded-xl px-3 text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft />
-        Anterior
+        <ArrowLeft className="size-5 shrink-0" />
+        <span className="hidden sm:inline">Volver al paso anterior</span>
       </Button>
-      <div className="flex min-w-0 items-center gap-2">
-        <Button
-          type="submit"
-          variant="outline"
-          disabled={submitting || nextDisabled}
-          className="min-h-11 text-base md:text-sm"
-        >
-          {submitting ? <LoaderCircle className="animate-spin" /> : <Save />}
-          {submitting ? "Guardando..." : "Guardar borrador"}
-        </Button>
-        {!isLast ? (
-          <Button
-            type="button"
-            disabled={nextDisabled || submitting}
-            onClick={onNext}
-            className="min-h-11 bg-gradient-to-r from-emerald-500 to-cyan-500 text-base font-semibold text-zinc-950 hover:from-emerald-400 hover:to-cyan-400 md:text-sm"
-          >
-            Continuar
-            <ArrowRight />
-          </Button>
+      <Button
+        type="submit"
+        variant="outline"
+        disabled={submitting || nextDisabled}
+        className="h-12 shrink-0 rounded-xl border-white/10 bg-black/40 px-4 text-sm font-semibold"
+      >
+        {submitting ? (
+          <LoaderCircle className="size-4 animate-spin" />
         ) : (
-          <Button
-            type="button"
-            disabled={submitting}
-            onClick={onPublish}
-            className="min-h-11 bg-gradient-to-r from-emerald-500 to-cyan-500 text-base font-semibold text-zinc-950 hover:from-emerald-400 hover:to-cyan-400 md:text-sm"
-          >
-            {submitting ? (
-              <LoaderCircle className="animate-spin" />
-            ) : (
-              <Rocket />
-            )}
-            {isEditing ? "Publicar / Guardar" : "Publicar"}
-          </Button>
+          <Save className="size-4 shrink-0" />
         )}
-      </div>
+        Guardar avance
+      </Button>
+      {!isLast ? (
+        <Button
+          type="button"
+          disabled={nextDisabled || submitting}
+          onClick={onNext}
+          className="h-12 flex-1 rounded-xl bg-emerald-500 text-base font-bold text-black hover:bg-emerald-400"
+        >
+          Ir al siguiente paso
+          <ArrowRight className="size-5 shrink-0" />
+        </Button>
+      ) : (
+        <Button
+          type="button"
+          disabled={submitting}
+          onClick={onPublish}
+          aria-label={
+            isEditing
+              ? "Lanzar el evento a la venta"
+              : "Lanzar evento a la venta"
+          }
+          className="h-12 flex-1 rounded-xl bg-purple-600 text-base font-bold text-white hover:bg-purple-500"
+        >
+          {submitting ? (
+            <LoaderCircle className="size-5 animate-spin" />
+          ) : (
+            <Rocket className="size-5 shrink-0" />
+          )}
+          ¡Lanzar evento a la venta!
+        </Button>
+      )}
     </div>
   )
 }

@@ -90,8 +90,8 @@ export const APP_ERRORS: Record<AppErrorCode, AppError> = {
   },
   INVENTORY_SYNC: {
     code: "INVENTORY_SYNC",
-    title: "No se pudieron guardar los cambios",
-    message: "No se pudieron sincronizar las entradas. Intentá guardar de nuevo.",
+    title: "No pudimos guardar los cambios",
+    message: "No pudimos actualizar las entradas. Revisá tu conexión e intentá guardar de nuevo.",
     retryable: true,
     action: { step: 2, label: "Revisar entradas" },
   },
@@ -127,8 +127,8 @@ export const APP_ERRORS: Record<AppErrorCode, AppError> = {
   },
   SESSION_REQUIRED: {
     code: "SESSION_REQUIRED",
-    title: "Sesión requerida",
-    message: "Iniciá sesión para continuar.",
+    title: "Sesión vencida",
+    message: "Tu sesión venció por seguridad. Volvé a ingresar con tu cuenta",
   },
   EVENT_NOT_FOUND: {
     code: "EVENT_NOT_FOUND",
@@ -137,8 +137,8 @@ export const APP_ERRORS: Record<AppErrorCode, AppError> = {
   },
   SAVE_FAILED: {
     code: "SAVE_FAILED",
-    title: "No se pudieron guardar los cambios",
-    message: "No se pudieron guardar los cambios. Revisá los datos e intentá de nuevo.",
+    title: "No pudimos guardar los cambios",
+    message: "No pudimos guardar los cambios. Revisá tu conexión a internet e intentá de nuevo.",
     retryable: true,
     action: { step: 0, label: "Revisar formulario" },
   },
@@ -177,8 +177,8 @@ export const APP_ERRORS: Record<AppErrorCode, AppError> = {
   },
   UNKNOWN: {
     code: "SAVE_FAILED",
-    title: "No se pudieron guardar los cambios",
-    message: "No se pudieron guardar los cambios. Revisá los datos e intentá de nuevo.",
+    title: "No pudimos guardar los cambios",
+    message: "Tuvimos un problema técnico de nuestro lado. Volvé a intentar en un ratito",
     retryable: true,
     action: { step: 0, label: "Revisar formulario" },
   },
@@ -189,17 +189,14 @@ export function wizardStepFromPath(path: ReadonlyArray<PropertyKey>): 0 | 1 | 2 
   const field = String(path[1] ?? "")
   if (root === "lineup") return 4
   if (root === "tickets" || root === "maxTicketsPerUser") return 2
-  if (root === "venue") return 1
+  if (root === "venue") return 0
   if (root === "basics") {
     if (
-      field === "date" ||
-      field === "endDate" ||
-      field === "isMultiDay" ||
-      field === "scheduleDays" ||
       field === "hasSeatingPlan" ||
-      field === "hasSchedule"
+      field === "hasSchedule" ||
+      field === "visibility"
     ) {
-      return 1
+      return 3
     }
     return 0
   }

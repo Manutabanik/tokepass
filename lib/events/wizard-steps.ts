@@ -13,12 +13,12 @@ export type WizardVisibility = {
   editWorkspace?: boolean
 }
 
-export type EditWorkspaceStepKey = "info" | "map" | "pricing"
+export type EditWorkspaceStepKey = "info" | "pricing" | "config"
 
 const STUDIO_STEPS = [
   WIZARD_STEP_IDENTITY,
-  WIZARD_STEP_MAP,
   WIZARD_STEP_TICKETS,
+  WIZARD_STEP_CONFIG,
 ] as const
 
 const EDIT_WORKSPACE_STEP_META: Record<
@@ -27,18 +27,18 @@ const EDIT_WORKSPACE_STEP_META: Record<
 > = {
   [WIZARD_STEP_IDENTITY]: {
     key: "info",
-    title: "Identidad",
-    description: "Nombre, flyer y categoría",
-  },
-  [WIZARD_STEP_MAP]: {
-    key: "map",
-    title: "Cita y lugar",
-    description: "Fechas, horarios y ubicación",
+    title: "Datos principales",
+    description: "Nombre, flyer y detalles del show",
   },
   [WIZARD_STEP_TICKETS]: {
     key: "pricing",
-    title: "Entradas",
-    description: "Tarifas y cupos",
+    title: "Entradas y precios",
+    description: "Lotes, abonos y cupos",
+  },
+  [WIZARD_STEP_CONFIG]: {
+    key: "config",
+    title: "Publicar y cobrar",
+    description: "Comisiones y privacidad",
   },
 }
 
@@ -51,20 +51,14 @@ export function parseEditWorkspaceStep(
     key === "info" ||
     key === "identity" ||
     key === "datos" ||
-    key === "0"
-  ) {
-    return WIZARD_STEP_IDENTITY
-  }
-  if (
+    key === "0" ||
     key === "map" ||
     key === "place" ||
     key === "cita" ||
     key === "lugar" ||
-    key === "architecture" ||
-    key === "arquitectura" ||
     key === "1"
   ) {
-    return WIZARD_STEP_MAP
+    return WIZARD_STEP_IDENTITY
   }
   if (
     key === "pricing" ||
@@ -75,19 +69,31 @@ export function parseEditWorkspaceStep(
   ) {
     return WIZARD_STEP_TICKETS
   }
+  if (
+    key === "config" ||
+    key === "final" ||
+    key === "publish" ||
+    key === "architecture" ||
+    key === "arquitectura" ||
+    key === "3"
+  ) {
+    return WIZARD_STEP_CONFIG
+  }
   return WIZARD_STEP_IDENTITY
 }
 
 export function editWorkspaceStepKey(step: number): EditWorkspaceStepKey {
-  if (step === WIZARD_STEP_MAP) return "map"
   if (step === WIZARD_STEP_TICKETS) return "pricing"
+  if (step === WIZARD_STEP_CONFIG) return "config"
   return "info"
 }
 
 export function editWorkspaceStepMeta(step: number) {
-  if (step === WIZARD_STEP_MAP) return EDIT_WORKSPACE_STEP_META[WIZARD_STEP_MAP]
   if (step === WIZARD_STEP_TICKETS) {
     return EDIT_WORKSPACE_STEP_META[WIZARD_STEP_TICKETS]
+  }
+  if (step === WIZARD_STEP_CONFIG) {
+    return EDIT_WORKSPACE_STEP_META[WIZARD_STEP_CONFIG]
   }
   return EDIT_WORKSPACE_STEP_META[WIZARD_STEP_IDENTITY]
 }
@@ -95,15 +101,15 @@ export function editWorkspaceStepMeta(step: number) {
 /** Orden visual del Event Studio. Los índices internos no se reenumeran. */
 export const WIZARD_DISPLAY_ORDER = [
   WIZARD_STEP_IDENTITY,
-  WIZARD_STEP_MAP,
   WIZARD_STEP_TICKETS,
+  WIZARD_STEP_CONFIG,
 ] as const
 
 export function isWizardStepVisible(step: number): boolean {
   return (
     step === WIZARD_STEP_IDENTITY ||
-    step === WIZARD_STEP_MAP ||
-    step === WIZARD_STEP_TICKETS
+    step === WIZARD_STEP_TICKETS ||
+    step === WIZARD_STEP_CONFIG
   )
 }
 
@@ -118,8 +124,8 @@ export function clampWizardStep(
 ): number {
   void flags
   const bounded = Math.min(WIZARD_STEP_COUNT - 1, Math.max(0, step))
-  if (bounded === WIZARD_STEP_AGENDA) return WIZARD_STEP_MAP
-  if (bounded === WIZARD_STEP_CONFIG) return WIZARD_STEP_TICKETS
+  if (bounded === WIZARD_STEP_AGENDA) return WIZARD_STEP_IDENTITY
+  if (bounded === WIZARD_STEP_MAP) return WIZARD_STEP_IDENTITY
   if (isWizardStepVisible(bounded)) return bounded
   return WIZARD_STEP_IDENTITY
 }

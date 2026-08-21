@@ -93,7 +93,7 @@ type VenueArgentinaSelectorProps = {
 }
 
 const inputClassName = cn(
-  "h-11 rounded-lg border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 text-sm text-foreground",
+  "h-12 rounded-xl border-border/60 bg-muted/20 px-4 text-base text-foreground transition-all focus:bg-background sm:h-13",
   "focus-visible:border-transparent focus-visible:ring-2 focus-visible:ring-emerald-500",
 )
 
@@ -397,7 +397,7 @@ export function VenueArgentinaSelector({
           <div className="space-y-2 sm:col-span-2">
             <Label
               htmlFor="venue-ar-name"
-              className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
+              className="mb-1.5 text-sm font-semibold text-foreground/90"
             >
               Nombre del lugar
             </Label>
@@ -415,7 +415,7 @@ export function VenueArgentinaSelector({
           <div className="space-y-2 sm:col-span-2">
             <Label
               htmlFor="venue-ar-capacity"
-              className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
+              className="mb-1.5 text-sm font-semibold text-foreground/90"
             >
               Cantidad de personas
             </Label>
@@ -442,7 +442,7 @@ export function VenueArgentinaSelector({
         <div className="space-y-2">
           <Label
             htmlFor="venue-ar-province"
-            className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
+            className="mb-1.5 text-sm font-semibold text-foreground/90"
           >
             Provincia
           </Label>
@@ -460,7 +460,7 @@ export function VenueArgentinaSelector({
             >
               <SelectTrigger
                 id="venue-ar-province"
-                className="h-11 w-full max-w-full overflow-hidden border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900"
+                className="h-12 w-full max-w-full overflow-hidden rounded-xl border-border/60 bg-muted/20 sm:h-13"
               >
                 <SelectValue
                   placeholder={
@@ -488,7 +488,7 @@ export function VenueArgentinaSelector({
         <div className="space-y-2">
           <Label
             htmlFor="venue-ar-department"
-            className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
+            className="mb-1.5 text-sm font-semibold text-foreground/90"
           >
             Departamento / Partido
           </Label>
@@ -506,7 +506,7 @@ export function VenueArgentinaSelector({
             >
               <SelectTrigger
                 id="venue-ar-department"
-                className="h-11 w-full max-w-full overflow-hidden border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900"
+                className="h-12 w-full max-w-full overflow-hidden rounded-xl border-border/60 bg-muted/20 sm:h-13"
               >
                 <SelectValue
                   placeholder={
@@ -543,7 +543,7 @@ export function VenueArgentinaSelector({
       <div className="relative z-50 space-y-2">
         <Label
           htmlFor="venue-ar-address"
-          className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
+          className="mb-1.5 text-sm font-semibold text-foreground/90"
         >
           Dirección exacta
         </Label>

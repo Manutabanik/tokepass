@@ -335,6 +335,67 @@ describe("sanitizeEventSubmitPayload", () => {
     assert.equal(next.tickets[1]?.seatingSectorId, "general:pista")
   })
 
+  it("conserva sector_id de una zona GA del mapa visual", () => {
+    const map = emptyVenueMap()
+    map.zones = [
+      {
+        id: "campo",
+        name: "Campo",
+        color: "#22d3ee",
+        price: 8000,
+        polygon: [
+          { x: 0, y: 0 },
+          { x: 10, y: 0 },
+          { x: 10, y: 10 },
+        ],
+        layoutType: "general",
+        sellMode: "group",
+        rows: 1,
+        itemsPerRow: 1,
+        capacityPerUnit: 1,
+        capacity: 200,
+        labelPrefix: "",
+      },
+    ]
+    const next = sanitizeEventSubmitPayload(
+      {
+        basics: {
+          title: "Mapa GA",
+          date: "",
+          endDate: "",
+          description: "",
+          flyerName: null,
+          visibility: "public",
+          isMultiDay: false,
+          scheduleDays: [],
+          categoryId: "",
+          ageRestriction: "atp",
+          hasSeatingPlan: true,
+        },
+        venue: {
+          mode: "new",
+          existingVenueId: null,
+          zoneType: "general_admission",
+          venueName: "Predio",
+          saveVenueForReuse: true,
+          venueMap: map,
+          includesSeatingMap: true,
+        },
+        tickets: [
+          ticket({
+            name: "Campo",
+            seatingSectorId: "campo",
+            layoutType: "general",
+            tierType: "general",
+          }),
+        ],
+        ticketsDefaultTab: "auto",
+      } as EventFormValues,
+      { mode: "create" },
+    )
+    assert.equal(next.tickets[0]?.seatingSectorId, "campo")
+  })
+
   it("deja seatingSectorId en null si el evento no tiene mapa", () => {
     const next = sanitizeEventSubmitPayload(
       {

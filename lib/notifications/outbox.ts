@@ -196,11 +196,9 @@ async function deliverOrderEmail(
   const eventTitle = asString(payload.event_title) || "Evento TokePass"
   const fallback = {
     subject: sanitizeEmailSubject(
-      type === "pos_issue"
-        ? `Tu entrada TokePass — ${eventTitle}`
-        : `Tus entradas para ${eventTitle}`,
+      `¡Acá están tus entradas para ${eventTitle}!`,
     ),
-    text: `Tus entradas para ${eventTitle} ya estan listas. Entra a Mis entradas en TokePass.`,
+    text: `¡Hola! ¡Todo listo! Tu compra quedó confirmada. Podés ver tus códigos de acceso en Mis entradas en TokePass. ¿Tuviste algún problema con tu compra? Respondé a este mail o escribinos por WhatsApp.`,
   }
 
   if (orderId) {

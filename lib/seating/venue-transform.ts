@@ -1,5 +1,10 @@
 import { rotatePoint, rebuildElementSeats, VENUE_SHAPE } from "@/lib/seating/venue-element-geometry"
-import { isInfrastructureElement, type VenueMapElement } from "@/types/venue-map"
+import {
+  isInfrastructureElement,
+  type VenueMapAisle,
+  type VenueMapElement,
+  type VenueMapStage,
+} from "@/types/venue-map"
 
 export type Aabb = {
   minX: number
@@ -15,12 +20,26 @@ export type BoundsRect = {
   height: number
 }
 
-export type ResizeHandle = "nw" | "ne" | "sw" | "se"
+export type ResizeHandle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w"
 
 export type LiveTransform =
   | { type: "move"; dx: number; dy: number }
-  | { type: "scale"; ox: number; oy: number; scale: number }
+  | {
+      type: "scale"
+      ox: number
+      oy: number
+      scale: number
+      scaleX?: number
+      scaleY?: number
+    }
   | { type: "rotate"; cx: number; cy: number; deg: number }
+
+export function liveScaleAxes(live: Extract<LiveTransform, { type: "scale" }>) {
+  return {
+    sx: live.scaleX ?? live.scale,
+    sy: live.scaleY ?? live.scale,
+  }
+}
 
 function roundCoord(value: number) {
   if (!Number.isFinite(value)) return 0
@@ -133,10 +152,11 @@ export function applyLiveToSeats<
       }
     })
   }
+  const { sx, sy } = liveScaleAxes(live)
   return seats.map((seat) => ({
     ...seat,
-    x: roundCoord(live.ox + (seat.x - live.ox) * live.scale),
-    y: roundCoord(live.oy + (seat.y - live.oy) * live.scale),
+    x: roundCoord(live.ox + (seat.x - live.ox) * sx),
+    y: roundCoord(live.oy + (seat.y - live.oy) * sy),
   }))
 }
 
@@ -153,7 +173,8 @@ export function liveTransformToSvg(live: LiveTransform | null): string | undefin
   if (!live) return undefined
   if (live.type === "move") return `translate(${live.dx} ${live.dy})`
   if (live.type === "scale") {
-    return `translate(${live.ox} ${live.oy}) scale(${live.scale}) translate(${-live.ox} ${-live.oy})`
+    const { sx, sy } = liveScaleAxes(live)
+    return `translate(${live.ox} ${live.oy}) scale(${sx} ${sy}) translate(${-live.ox} ${-live.oy})`
   }
   return `rotate(${live.deg} ${live.cx} ${live.cy})`
 }
@@ -167,11 +188,12 @@ export function applyLiveToRect(
     return { ...rect, x: rect.x + live.dx, y: rect.y + live.dy }
   }
   if (live.type === "scale") {
+    const { sx, sy } = liveScaleAxes(live)
     return {
-      x: live.ox + (rect.x - live.ox) * live.scale,
-      y: live.oy + (rect.y - live.oy) * live.scale,
-      width: rect.width * live.scale,
-      height: rect.height * live.scale,
+      x: live.ox + (rect.x - live.ox) * sx,
+      y: live.oy + (rect.y - live.oy) * sy,
+      width: rect.width * sx,
+      height: rect.height * sy,
     }
   }
   const corners = [
@@ -193,10 +215,129 @@ export function resizeOrigin(
   bounds: BoundsRect,
   handle: ResizeHandle,
 ): { x: number; y: number } {
-  if (handle === "nw") return { x: bounds.x + bounds.width, y: bounds.y + bounds.height }
-  if (handle === "ne") return { x: bounds.x, y: bounds.y + bounds.height }
-  if (handle === "sw") return { x: bounds.x + bounds.width, y: bounds.y }
-  return { x: bounds.x, y: bounds.y }
+  const midX = bounds.x + bounds.width / 2
+  const midY = bounds.y + bounds.height / 2
+  const maxX = bounds.x + bounds.width
+  const maxY = bounds.y + bounds.height
+  if (handle === "nw") return { x: maxX, y: maxY }
+  if (handle === "n") return { x: midX, y: maxY }
+  if (handle === "ne") return { x: bounds.x, y: maxY }
+  if (handle === "e") return { x: bounds.x, y: midY }
+  if (handle === "se") return { x: bounds.x, y: bounds.y }
+  if (handle === "s") return { x: midX, y: bounds.y }
+  if (handle === "sw") return { x: maxX, y: bounds.y }
+  return { x: maxX, y: midY }
+}
+
+export function handlePoint(bounds: BoundsRect, handle: ResizeHandle) {
+  const midX = bounds.x + bounds.width / 2
+  const midY = bounds.y + bounds.height / 2
+  if (handle === "nw") return { x: bounds.x, y: bounds.y }
+  if (handle === "n") return { x: midX, y: bounds.y }
+  if (handle === "ne") return { x: bounds.x + bounds.width, y: bounds.y }
+  if (handle === "e") return { x: bounds.x + bounds.width, y: midY }
+  if (handle === "se") return { x: bounds.x + bounds.width, y: bounds.y + bounds.height }
+  if (handle === "s") return { x: midX, y: bounds.y + bounds.height }
+  if (handle === "sw") return { x: bounds.x, y: bounds.y + bounds.height }
+  return { x: bounds.x, y: midY }
+}
+
+export function scaleFromHandlePointer(input: {
+  handle: ResizeHandle
+  origin: { x: number; y: number }
+  startCorner: { x: number; y: number }
+  point: { x: number; y: number }
+  uniform?: boolean
+  startDist?: number
+}): { scale: number; scaleX: number; scaleY: number } {
+  const dx0 = input.startCorner.x - input.origin.x
+  const dy0 = input.startCorner.y - input.origin.y
+  const dx1 = input.point.x - input.origin.x
+  const dy1 = input.point.y - input.origin.y
+  let scaleX = Math.abs(dx0) < 0.001 ? 1 : dx1 / dx0
+  let scaleY = Math.abs(dy0) < 0.001 ? 1 : dy1 / dy0
+  if (input.handle === "n" || input.handle === "s") scaleX = 1
+  if (input.handle === "e" || input.handle === "w") scaleY = 1
+  scaleX = clampScale(Math.abs(scaleX))
+  scaleY = clampScale(Math.abs(scaleY))
+  if (input.uniform) {
+    const dist = Math.hypot(dx1, dy1)
+    const startDist =
+      input.startDist && input.startDist > 0
+        ? input.startDist
+        : Math.hypot(dx0, dy0)
+    const scale = clampScale(dist / Math.max(startDist, 4))
+    return { scale, scaleX: scale, scaleY: scale }
+  }
+  return { scale: (scaleX + scaleY) / 2, scaleX, scaleY }
+}
+
+export function rectAabb(rect: BoundsRect, rotation = 0): Aabb {
+  const cx = rect.x + rect.width / 2
+  const cy = rect.y + rect.height / 2
+  const hw = rect.width / 2
+  const hh = rect.height / 2
+  const corners = [
+    rotatePoint(cx - hw, cy - hh, cx, cy, rotation),
+    rotatePoint(cx + hw, cy - hh, cx, cy, rotation),
+    rotatePoint(cx + hw, cy + hh, cx, cy, rotation),
+    rotatePoint(cx - hw, cy + hh, cx, cy, rotation),
+  ]
+  return {
+    minX: Math.min(...corners.map((corner) => corner.x)),
+    minY: Math.min(...corners.map((corner) => corner.y)),
+    maxX: Math.max(...corners.map((corner) => corner.x)),
+    maxY: Math.max(...corners.map((corner) => corner.y)),
+  }
+}
+
+export function applyLiveToStage(
+  stage: VenueMapStage,
+  live: LiveTransform,
+): VenueMapStage {
+  if (live.type === "move") {
+    return {
+      ...stage,
+      x: roundCoord(stage.x + live.dx),
+      y: roundCoord(stage.y + live.dy),
+    }
+  }
+  if (live.type === "scale") {
+    const { sx, sy } = liveScaleAxes(live)
+    return {
+      ...stage,
+      x: roundCoord(live.ox + (stage.x - live.ox) * sx),
+      y: roundCoord(live.oy + (stage.y - live.oy) * sy),
+      width: Math.max(8, roundCoord(stage.width * sx)),
+      height: Math.max(8, roundCoord(stage.height * sy)),
+    }
+  }
+  const cx0 = stage.x + stage.width / 2
+  const cy0 = stage.y + stage.height / 2
+  const next = rotatePoint(cx0, cy0, live.cx, live.cy, live.deg)
+  return {
+    ...stage,
+    x: roundCoord(next.x - stage.width / 2),
+    y: roundCoord(next.y - stage.height / 2),
+    rotation: normalizeDeg((stage.rotation ?? 0) + live.deg),
+  }
+}
+
+export function applyLiveToAisle(
+  aisle: VenueMapAisle,
+  live: LiveTransform,
+): VenueMapAisle {
+  const next = applyLiveToRect(
+    { x: aisle.x, y: aisle.y, width: aisle.width, height: aisle.height },
+    live,
+  )
+  return {
+    ...aisle,
+    x: roundCoord(next.x),
+    y: roundCoord(next.y),
+    width: Math.max(8, roundCoord(next.width)),
+    height: Math.max(8, roundCoord(next.height)),
+  }
 }
 
 export function clampScale(value: number) {
@@ -401,18 +542,20 @@ export function scaleElements(
   elements: VenueMapElement[],
   origin: { x: number; y: number },
   scale: number,
+  scaleY = scale,
 ): VenueMapElement[] {
-  const safe = clampScale(scale)
+  const sx = clampScale(scale)
+  const sy = clampScale(scaleY)
   return elements.map((element) => {
-    const width = Math.max(8, roundCoord(element.width * safe))
+    const width = Math.max(8, roundCoord(element.width * sx))
     const height =
       element.type === "round_table" || element.type === "vip_chair"
         ? width
-        : Math.max(8, roundCoord(element.height * safe))
+        : Math.max(8, roundCoord(element.height * sy))
     const next = {
       ...element,
-      x: roundCoord(origin.x + (element.x - origin.x) * safe),
-      y: roundCoord(origin.y + (element.y - origin.y) * safe),
+      x: roundCoord(origin.x + (element.x - origin.x) * sx),
+      y: roundCoord(origin.y + (element.y - origin.y) * sy),
       width,
       height,
     }
@@ -507,7 +650,8 @@ export function bakeLiveTransform(
 ): VenueMapElement[] {
   if (live.type === "move") return translateElements(elements, live.dx, live.dy)
   if (live.type === "scale") {
-    return scaleElements(elements, { x: live.ox, y: live.oy }, live.scale)
+    const { sx, sy } = liveScaleAxes(live)
+    return scaleElements(elements, { x: live.ox, y: live.oy }, sx, sy)
   }
   return rotateElementsAround(elements, { x: live.cx, y: live.cy }, live.deg)
 }

@@ -92,7 +92,7 @@ export function PublishEventConfirmDialog({
                   className="size-4 text-emerald-800 dark:text-emerald-300"
                   aria-hidden="true"
                 />
-                Publicar evento
+                Lanzar evento a la venta
               </DialogTitle>
               <DialogDescription className="text-pretty text-sm leading-6 text-muted-foreground">
                 Al publicar, el evento pasa a revisión de TokePass. No se
@@ -124,7 +124,7 @@ export function PublishEventConfirmDialog({
                 className="h-10 w-full text-muted-foreground"
                 onClick={() => handleOpenChange(false)}
               >
-                Cancelar
+                Volver atrás
               </Button>
             </DialogFooter>
           </>

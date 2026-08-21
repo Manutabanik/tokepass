@@ -93,7 +93,7 @@ export function SeatSelectionSplitMap({
 
   return (
     <>
-      <div className="relative h-[min(35vh,13.5rem)] shrink-0 overflow-hidden border-b border-border bg-muted sm:h-64">
+      <div className="relative h-[min(35vh,13.5rem)] shrink-0 overflow-hidden border-b border-border bg-background/50 sm:h-64">
         <div className="h-full min-h-0 w-full">{mapFlow(true)}</div>
         {map ? (
           <button
@@ -116,13 +116,13 @@ export function SeatSelectionSplitMap({
       {portalReady && expanded && map
         ? createPortal(
             <div
-              className="fixed inset-0 z-[100] flex items-center justify-center bg-muted"
+              className="fixed inset-0 z-[100] flex items-center justify-center bg-background"
               role="dialog"
               aria-modal="true"
               aria-label="Mapa del recinto"
             >
-              <div className="flex h-full min-h-0 w-full flex-col bg-muted">
-                <div className="min-h-0 flex-1 bg-muted">{mapFlow(false)}</div>
+              <div className="flex h-full min-h-0 w-full flex-col bg-background/50">
+                <div className="min-h-0 flex-1 bg-background/50">{mapFlow(false)}</div>
               </div>
             </div>,
             document.body,

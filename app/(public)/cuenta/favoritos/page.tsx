@@ -53,7 +53,7 @@ export default async function CuentaFavoritosPage() {
             nativeButton={false}
             render={<Link href="/events" />}
           >
-            Explorar eventos
+            Descubrir shows
           </Button>
         </div>
       ) : (

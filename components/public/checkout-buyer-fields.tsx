@@ -122,7 +122,7 @@ export function CheckoutBuyerFields({
           onChange={(event) =>
             onChange({ ...value, buyerEmail: event.target.value })
           }
-          placeholder="tunombre@email.com"
+          placeholder="nombre@gmail.com"
           className={inputClass(Boolean(emailError), "buyerEmail")}
         />
         {emailSuggestion ? (
@@ -134,6 +134,9 @@ export function CheckoutBuyerFields({
             ¿Quisiste decir {emailSuggestion}?
           </button>
         ) : null}
+        <p className="text-xs text-muted-foreground">
+          Escribí bien tu email para asegurarte de recibir las entradas
+        </p>
         <FieldHint id="buyer-email-error" message={emailError} />
       </div>
 
@@ -156,7 +159,7 @@ export function CheckoutBuyerFields({
             aria-invalid={Boolean(nameError)}
             aria-describedby={nameError ? "buyer-name-error" : undefined}
             onChange={(event) => setNamePart("first", event.target.value)}
-            placeholder="Ana"
+            placeholder="Como figura en tu DNI"
             className={inputClass(Boolean(nameError), "buyerName")}
           />
         </div>
@@ -176,7 +179,7 @@ export function CheckoutBuyerFields({
             value={names.last}
             aria-invalid={Boolean(nameError)}
             onChange={(event) => setNamePart("last", event.target.value)}
-            placeholder="Pérez"
+            placeholder="Como figura en tu DNI"
             className={inputClass(Boolean(nameError), "buyerName")}
           />
         </div>
@@ -208,9 +211,13 @@ export function CheckoutBuyerFields({
               buyerDni: event.target.value.replace(/\D/g, "").slice(0, 8),
             })
           }
-          placeholder="Solo números"
+          placeholder="12345678"
           className={inputClass(Boolean(dniError), "buyerDni")}
         />
+        <p className="text-xs text-muted-foreground">
+          Cada entrada va a llevar el DNI del asistente para el control en
+          puerta
+        </p>
         <FieldHint id="buyer-dni-error" message={dniError} />
       </div>
 
@@ -239,11 +246,11 @@ export function CheckoutBuyerFields({
               buyerPhone: event.target.value.replace(/\D/g, "").slice(0, 15),
             })
           }
-          placeholder="11 2345 6789"
+          placeholder="1112345678"
           className={inputClass(Boolean(phoneError), "buyerPhone")}
         />
         <p className="break-words text-sm whitespace-normal text-foreground/80">
-          Celular argentino. Se guarda como +549...
+          Ingresá tu número con el código de área (ej: 1112345678)
         </p>
         <FieldHint id="buyer-phone-error" message={phoneError} />
       </div>

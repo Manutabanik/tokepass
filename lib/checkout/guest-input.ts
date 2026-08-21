@@ -1,6 +1,8 @@
-export const DNI_ERROR = "El DNI debe tener 7 u 8 dígitos."
-export const PHONE_ERROR = "Ingresá un celular argentino con código de área."
-export const EMAIL_ERROR = "Ingresá un mail válido para la confirmación."
+export const DNI_ERROR = "Ingresá tu DNI sin puntos ni espacios"
+export const PHONE_ERROR =
+  "Ingresá tu número con el código de área (ej: 1112345678)"
+export const EMAIL_ERROR =
+  "Escribí bien tu email para asegurarte de recibir las entradas"
 
 const STRICT_EMAIL_RE =
   /^[a-z0-9](?:[a-z0-9._%+\-]*[a-z0-9])?@[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?(?:\.[a-z]{2,})+$/i

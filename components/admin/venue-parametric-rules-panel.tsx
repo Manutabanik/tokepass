@@ -7,25 +7,20 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { PriceInput } from "@/components/ui/price-input"
 import { VenuePriceModeControl } from "@/components/admin/venue-price-mode-control"
+import { VenueSectorColorPicker } from "@/components/admin/venue-sector-color-field"
+import { VenueRowsConfigEditor } from "@/components/admin/venue-rows-config-editor"
 import { parametricZoneCapacity } from "@/lib/seating/adaptive-seating"
 import { formatCurrency } from "@/lib/format"
-import { cn } from "@/lib/utils"
 import { seatingFieldsForLayoutType } from "@/lib/seating/seating-type"
+import {
+  resizeRowsConfig,
+  resolveZoneRowsConfig,
+  rowsConfigGridFields,
+} from "@/lib/seating/venue-rows-config"
 import {
   venuePriceModeFromSellMode,
   type VenueMapZone,
 } from "@/types/venue-map"
-
-const SECTOR_COLORS = [
-  "#f97316",
-  "#ec4899",
-  "#f59e0b",
-  "#10b981",
-  "#6366f1",
-  "#06b6d4",
-  "#a3e635",
-  "#e879f9",
-]
 
 export function VenueParametricRulesPanel({
   zone,
@@ -38,10 +33,22 @@ export function VenueParametricRulesPanel({
 }) {
   const nameRef = useRef<HTMLInputElement>(null)
   const estimated = parametricZoneCapacity(zone)
+  const isTableInventory = zone.layoutType === "table_combo"
+  const isNumberedSeats = zone.layoutType === "numbered_seat"
+  const numberedRows = isNumberedSeats ? resolveZoneRowsConfig(zone) : []
   const units =
     zone.layoutType === "general"
       ? estimated
-      : Math.max(1, zone.rows) * Math.max(1, zone.itemsPerRow)
+      : isNumberedSeats
+        ? numberedRows.reduce((sum, row) => sum + row.seatCount, 0)
+        : Math.max(1, zone.rows) * Math.max(1, zone.itemsPerRow)
+
+  function emitNumberedRows(nextRows: typeof numberedRows) {
+    onChange({
+      rowsConfig: nextRows,
+      ...rowsConfigGridFields(nextRows),
+    })
+  }
 
   useEffect(() => {
     if (!autoFocusName) return
@@ -71,30 +78,10 @@ export function VenueParametricRulesPanel({
       </Field>
 
       <Field label="Color del Sector">
-        <div className="flex flex-wrap items-center gap-2">
-          {SECTOR_COLORS.map((color) => (
-            <button
-              key={color}
-              type="button"
-              aria-label={`Color ${color}`}
-              onClick={() => onChange({ color })}
-              className={cn(
-                "size-7 rounded-full border-2",
-                zone.color.toLowerCase() === color
-                  ? "border-foreground"
-                  : "border-transparent",
-              )}
-              style={{ backgroundColor: color }}
-            />
-          ))}
-          <input
-            type="color"
-            value={zone.color}
-            onChange={(event) => onChange({ color: event.target.value })}
-            className="h-8 w-12 cursor-pointer rounded-md border border-input bg-transparent"
-            aria-label="Elegir color personalizado"
-          />
-        </div>
+        <VenueSectorColorPicker
+          value={zone.color}
+          onChange={(color) => onChange({ color })}
+        />
       </Field>
 
       <Field label="Precio Base">
@@ -146,7 +133,7 @@ export function VenueParametricRulesPanel({
       </Field>
       ) : null}
 
-      {zone.layoutType === "table_combo" ? (
+      {isTableInventory ? (
         <VenuePriceModeControl
           id={zone.id}
           value={zone.priceMode ?? venuePriceModeFromSellMode(zone.sellMode)}
@@ -168,6 +155,37 @@ export function VenueParametricRulesPanel({
         </Field>
       ) : (
         <>
+          {isNumberedSeats ? (
+            <>
+              <Field label="Cantidad de filas">
+                <div className="relative">
+                  <Rows3
+                    className="pointer-events-none absolute top-1/2 left-2 size-4 -translate-y-1/2 text-cyan-300"
+                    aria-hidden="true"
+                  />
+                  <Input
+                    type="number"
+                    min={1}
+                    max={80}
+                    value={numberedRows.length}
+                    className="pl-8"
+                    onChange={(event) =>
+                      emitNumberedRows(
+                        resizeRowsConfig(
+                          numberedRows,
+                          Number(event.target.value) || 1,
+                        ),
+                      )
+                    }
+                  />
+                </div>
+              </Field>
+              <VenueRowsConfigEditor
+                rowsConfig={numberedRows}
+                onChange={emitNumberedRows}
+              />
+            </>
+          ) : (
           <div className="grid grid-cols-2 gap-2">
             <Field label="Cantidad de filas">
               <div className="relative">
@@ -206,7 +224,8 @@ export function VenueParametricRulesPanel({
               </div>
             </Field>
           </div>
-          {zone.layoutType === "table_combo" ? (
+          )}
+          {isTableInventory ? (
             <Field label="Personas por mesa / tablón">
               <Input
                 type="number"
@@ -231,7 +250,7 @@ export function VenueParametricRulesPanel({
                 value={zone.labelPrefix}
                 className="pl-8"
                 onChange={(event) => onChange({ labelPrefix: event.target.value })}
-                placeholder="Mesa "
+                placeholder={isNumberedSeats ? "Butaca " : "Mesa "}
               />
             </div>
           </Field>

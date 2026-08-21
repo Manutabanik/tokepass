@@ -157,75 +157,76 @@ export function EventStoreUpsell({
                   <article
                     key={item.id}
                     className={cn(
-                      "flex gap-3 rounded-2xl border px-3 py-3",
-                      quantity > 0
-                        ? "border-violet-500/40 bg-violet-500/5"
-                        : "border-zinc-200 dark:border-zinc-800",
+                      "flex w-full items-center justify-between gap-4 rounded-2xl border border-white/10 bg-card/60 px-5 py-3.5 transition-all hover:border-white/20",
+                      quantity > 0 && "border-emerald-500/40",
                       soldOut && "opacity-60",
                     )}
                   >
-                    <div className="relative size-16 shrink-0 overflow-hidden rounded-xl bg-zinc-100 dark:bg-zinc-900">
-                      {item.imageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={item.imageUrl}
-                          alt={item.name}
-                          className="size-full object-cover"
-                        />
-                      ) : (
-                        <span className="grid size-full place-items-center text-zinc-400">
-                          <Icon className="size-5" aria-hidden="true" />
-                        </span>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="font-semibold text-zinc-900 dark:text-white">
-                            {item.name}
-                          </p>
-                          {item.description ? (
-                            <p className="mt-0.5 text-xs text-zinc-500">
-                              {item.description}
-                            </p>
-                          ) : null}
-                          <p className="mt-1 text-xs text-zinc-500">
-                            {soldOut ? "Agotado" : `${item.stock} disponibles`}
-                          </p>
-                        </div>
-                        <p className="shrink-0 font-bold tabular-nums text-zinc-900 dark:text-white">
-                          {formatCurrency(item.price)}
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <div className="relative size-9 shrink-0 overflow-hidden rounded-lg bg-black/40">
+                        {item.imageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={item.imageUrl}
+                            alt={item.name}
+                            className="size-full object-cover"
+                          />
+                        ) : (
+                          <span className="grid size-full place-items-center text-muted-foreground">
+                            <Icon className="size-4" aria-hidden="true" />
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <p className="truncate text-base font-bold text-foreground">
+                          {item.name}
                         </p>
+                        <div className="flex min-w-0 items-center gap-2 text-sm font-black text-foreground/90">
+                          <span className="tabular-nums">
+                            {formatCurrency(item.price)}
+                          </span>
+                          {soldOut ? (
+                            <span className="text-xs font-semibold text-destructive">
+                              Agotado
+                            </span>
+                          ) : item.stock <= 8 ? (
+                            <span className="text-xs font-semibold text-amber-500">
+                              Pocas disponibles
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
-                      <div className="mt-3 flex items-center justify-end gap-2">
-                        <Button
-                          type="button"
-                          size="icon-sm"
-                          variant="outline"
-                          disabled={soldOut || quantity <= 0 || pending}
-                          onClick={() =>
-                            setItemQty(item.id, quantity - 1, max)
-                          }
-                          aria-label={`Quitar ${item.name}`}
-                        >
-                          <Minus />
-                        </Button>
-                        <span className="w-6 text-center font-mono text-sm tabular-nums">
-                          {quantity}
-                        </span>
-                        <Button
-                          type="button"
-                          size="icon-sm"
-                          variant="outline"
-                          disabled={soldOut || quantity >= max || pending}
-                          onClick={() =>
-                            setItemQty(item.id, quantity + 1, max)
-                          }
-                          aria-label={`Sumar ${item.name}`}
-                        >
-                          <Plus />
-                        </Button>
-                      </div>
+                    </div>
+                    <div className="flex h-9 shrink-0 items-center gap-3 rounded-xl border border-white/10 bg-black/40 px-2">
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        disabled={soldOut || quantity <= 0 || pending}
+                        onClick={() =>
+                          setItemQty(item.id, quantity - 1, max)
+                        }
+                        aria-label={`Quitar ${item.name}`}
+                        className="size-7 rounded-md hover:bg-white/5"
+                      >
+                        <Minus className="size-3.5" />
+                      </Button>
+                      <span className="min-w-5 text-center text-sm font-bold tabular-nums">
+                        {quantity}
+                      </span>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        disabled={soldOut || quantity >= max || pending}
+                        onClick={() =>
+                          setItemQty(item.id, quantity + 1, max)
+                        }
+                        aria-label={`Sumar ${item.name}`}
+                        className="size-7 rounded-md hover:bg-white/5"
+                      >
+                        <Plus className="size-3.5" />
+                      </Button>
                     </div>
                   </article>
                 )

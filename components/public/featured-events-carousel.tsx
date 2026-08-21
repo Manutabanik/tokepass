@@ -69,15 +69,15 @@ export function FeaturedEventsCarousel({
 
   return (
     <section
-      className="relative w-full overflow-visible bg-transparent py-8"
+      className="relative w-full max-w-full overflow-x-hidden bg-transparent py-8"
       aria-label="Eventos destacados"
     >
-      <div className="mx-auto mb-5 flex w-[min(100%-2rem,80rem)] items-end justify-between gap-3">
+      <div className="mx-auto mb-5 flex w-full max-w-full items-end justify-between gap-3 px-4">
         <div>
           <div className="flex items-center gap-2">
             <Star className="h-5 w-5 text-violet-600 dark:text-violet-400" aria-hidden="true" />
             <h2 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white sm:text-3xl">
-              Destacados
+              Imperdibles
             </h2>
           </div>
           <p className="mt-1.5 text-sm text-zinc-500 dark:text-zinc-400">
@@ -87,16 +87,17 @@ export function FeaturedEventsCarousel({
       </div>
 
       <div className="relative">
-        <div className="overflow-visible" ref={emblaRef}>
+        <div className="overflow-hidden" ref={emblaRef}>
           <div className="flex touch-pan-y">
             {slides.map((event, index) => (
               <div
                 key={event.id}
                 className={cn(
-                  "min-w-0 shrink-0 grow-0",
+                  "min-w-0 shrink-0 grow-0 px-4",
+                  "min-w-0",
                   slides.length === 1
                     ? "basis-full"
-                    : "basis-[90%] sm:basis-[86%] lg:basis-[82%]",
+                    : "basis-full sm:basis-[86%] lg:basis-[82%]",
                 )}
               >
                 <FeaturedBannerCard

@@ -71,9 +71,9 @@ export function OrderConfirmationEmail({
   accountUrl = DEFAULT_ACCOUNT_URL,
 }: OrderEmailProps) {
   const greeting = customerName.trim()
-    ? `Hola ${customerName.trim()},`
-    : "Hola,"
-  const preview = `Tus entradas para ${eventName} ya estan listas`
+    ? `¡Hola, ${customerName.trim()}!`
+    : "¡Hola!"
+  const preview = `¡Acá están tus entradas para ${eventName}!`
 
   return (
     <Html lang="es">
@@ -82,10 +82,14 @@ export function OrderConfirmationEmail({
       <Body style={styles.body}>
         <Container style={styles.container}>
           <Text style={styles.brand}>TokePass</Text>
-          <Text style={styles.kicker}>Compra confirmada</Text>
-          <Text style={styles.title}>Tus entradas ya estan listas</Text>
+          <Text style={styles.kicker}>Pago confirmado</Text>
+          <Text style={styles.title}>
+            ¡Acá están tus entradas para {eventName}!
+          </Text>
+          <Text style={styles.lead}>{greeting}</Text>
           <Text style={styles.lead}>
-            {greeting} te enviamos cada pase con su QR para {eventName}.
+            ¡Todo listo! Tu compra quedó confirmada. Podés ver tus códigos de
+            acceso directamente desde el botón de abajo o ingresando a la app.
           </Text>
 
           {eventBannerUrl ? (
@@ -138,12 +142,13 @@ export function OrderConfirmationEmail({
           </Section>
 
           <Text style={styles.note}>
-            El QR Living en tu cuenta se actualiza en tiempo real. Llevalo en
-            la app o en la web de TokePass al ingresar.
+            El código de acceso en tu cuenta se actualiza solo. Llevalo en la
+            app o en la web de TokePass al ingresar.
           </Text>
           <Hr style={styles.footerRule} />
           <Text style={styles.footer}>
-            TokePass · Entradas digitales para vivir el evento
+            ¿Tuviste algún problema con tu compra? Respondé a este mail o
+            escribinos por WhatsApp.
           </Text>
         </Container>
       </Body>

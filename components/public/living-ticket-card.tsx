@@ -109,7 +109,7 @@ function TicketActionStack({
         ) : (
           <Send className="size-4" aria-hidden="true" />
         )}
-        Enviar a un amigo
+        Enviar por WhatsApp o email
       </Button>
 
       <StoryFlyerTrigger
@@ -350,12 +350,18 @@ export function LivingTicketCard({
                   <Wifi className="size-3" aria-hidden="true" />
                 )}
                 {offline
-                  ? "Modo sin conexión - QR disponible para lectura"
+                  ? "Modo sin señal (Tu código sigue funcionando igual)"
                   : isStatic
                     ? "QR fijo"
-                    : "Living QR"}
+                    : "Código de acceso dinámico"}
               </span>
             </div>
+            {isStatic ? null : (
+              <p className="mt-3 text-center text-xs leading-5 text-muted-foreground">
+                En puerta mostrá esta pantalla. El código se actualiza solo para
+                evitar reventas truchas (no le saques captura de pantalla).
+              </p>
+            )}
             <QrScanLightbox
               open={scanOpen}
               onOpenChange={setScanOpen}
@@ -417,8 +423,8 @@ export function LivingTicketCard({
         ) : (
           <p className="px-2 py-6 text-center text-sm text-muted-foreground">
             {ticket.status === "transferred"
-              ? "Esta entrada fue transferida. El QR quedó anulado."
-              : "Esta entrada ya no muestra QR vivo en puerta."}
+              ? "Esta entrada ya no es tuya: se la transferiste a un amigo."
+              : "Esta entrada ya no muestra el código de acceso."}
           </p>
         )}
         {ticket.status === "valid" && visualStatus === "active" ? (

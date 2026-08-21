@@ -75,6 +75,15 @@ describe("error handler", () => {
     }
   })
 
+  it("maps Unauthorized and Token expired to session copy", () => {
+    for (const raw of ["Unauthorized", "Token expired", "JWT expired"]) {
+      const mapped = mapUnknownError(raw)
+      assert.equal(mapped.code, "SESSION_REQUIRED")
+      assert.equal(mapped.message, APP_ERRORS.SESSION_REQUIRED.message)
+      assert.doesNotMatch(mapped.message, /unauthorized|token expired|jwt expired/i)
+    }
+  })
+
   it("prefers the human message when the code is UNKNOWN", () => {
     const mapped = mapUnknownError({
       code: "UNKNOWN",
@@ -86,9 +95,10 @@ describe("error handler", () => {
 
   it("routes zod paths to wizard steps", () => {
     assert.equal(wizardStepFromPath(["basics", "title"]), 0)
-    assert.equal(wizardStepFromPath(["basics", "date"]), 1)
-    assert.equal(wizardStepFromPath(["basics", "scheduleDays"]), 1)
-    assert.equal(wizardStepFromPath(["venue", "venueName"]), 1)
+    assert.equal(wizardStepFromPath(["basics", "date"]), 0)
+    assert.equal(wizardStepFromPath(["basics", "scheduleDays"]), 0)
+    assert.equal(wizardStepFromPath(["basics", "visibility"]), 3)
+    assert.equal(wizardStepFromPath(["venue", "venueName"]), 0)
     assert.equal(wizardStepFromPath(["tickets", 0, "dayId"]), 2)
     assert.equal(wizardStepFromPath(["maxTicketsPerUser"]), 2)
     assert.equal(wizardStepFromPath(["lineup", 0, "name"]), 4)

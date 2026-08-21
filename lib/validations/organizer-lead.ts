@@ -17,11 +17,14 @@ export const organizerLeadSchema = z.object({
     .string()
     .trim()
     .transform((value) => normalizeEmail(value))
-    .refine(isStrictEmail, "Ingresá un email válido."),
+    .refine(isStrictEmail, "Escribí un correo válido (ej: nombre@gmail.com)"),
   phone: z
     .string()
     .trim()
-    .refine(isValidArgentineMobile, "Ingresá un celular argentino con código de área.")
+    .refine(
+      isValidArgentineMobile,
+      "Ingresá un número de celular válido",
+    )
     .transform((value) => normalizeArgentineMobile(value) ?? value),
   eventName: z
     .string()

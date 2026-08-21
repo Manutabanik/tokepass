@@ -88,7 +88,7 @@ export function FeaturedHeroSection({
 
   return (
     <section
-      className="relative w-full overflow-visible bg-transparent py-8"
+      className="relative w-full max-w-full overflow-x-hidden bg-transparent py-8"
       aria-label="Eventos destacados"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
@@ -99,12 +99,12 @@ export function FeaturedHeroSection({
         }
       }}
     >
-      <div className="overflow-visible" ref={emblaRef}>
+      <div className="overflow-hidden" ref={emblaRef}>
         <div className="flex">
           {slides.map((event, index) => (
             <div
               key={event.id}
-              className="min-w-0 shrink-0 grow-0 basis-full"
+              className="min-w-0 shrink-0 grow-0 basis-full px-4"
             >
               <FeaturedBannerCard
                 event={event}

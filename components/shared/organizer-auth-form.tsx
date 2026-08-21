@@ -95,7 +95,7 @@ export function OrganizerAuthForm({
               type="password"
               autoComplete="current-password"
               minLength={8}
-              placeholder="Mínimo 8 caracteres"
+              placeholder="Tiene que tener al menos 8 caracteres"
               required
               className="h-11"
             />

@@ -3,7 +3,15 @@ import {
   normalizePolygonToPercent,
   zoneCanvasCentroid,
 } from "@/lib/seating/venue-polygon"
-import type { VenueMapZone, InteractiveVenueMap } from "@/types/venue-map"
+import type {
+  InteractiveVenueMap,
+  VenueMapZone,
+  VenueRowConfig,
+} from "@/types/venue-map"
+import {
+  resolveZoneRowsConfig,
+  totalSeatsFromRowsConfig,
+} from "@/lib/seating/venue-rows-config"
 import { isSellableElement } from "@/types/venue-map"
 import type { VenueLayoutType, VenueSeatingSector } from "@/types/venues"
 
@@ -82,7 +90,7 @@ export function expandParametricZone(
     }
   }
 
-  const { rows, layoutType } = parametricZoneGrid(zone)
+  const { rows, layoutType, rowsConfig } = parametricZoneGrid(zone)
   const unitCapacity =
     layoutType === "numbered_seat"
       ? 1
@@ -97,10 +105,11 @@ export function expandParametricZone(
     capacity_per_unit: unitCapacity,
     rows: Array.from({ length: rows }, (_, rowIndex) => {
       const rowNumber = rowIndex + 1
+      const rowLabel = rowsConfig[rowIndex]?.label?.trim() || `Fila ${rowNumber}`
       return {
         row_id: `${zone.id}-row-${rowNumber}`,
         row_number: rowNumber,
-        row_label: `Fila ${rowNumber}`,
+        row_label: rowLabel.startsWith("Fila ") ? rowLabel : `Fila ${rowLabel}`,
         items: parametricZoneRowItems(zone, rowNumber).map((item) => ({
           id: item.id,
           label: item.label,
@@ -117,12 +126,15 @@ export function parametricZoneCapacity(zone: VenueMapZone): number {
   if (zone.layoutType === "general") {
     return Math.max(0, Math.floor(zone.capacity) || 0)
   }
-  const rows = Math.max(1, Math.floor(zone.rows) || 1)
-  const cols = Math.max(1, Math.floor(zone.itemsPerRow) || 1)
+  const { rows, itemsPerRow, rowsConfig } = parametricZoneGrid(zone)
+  const units =
+    zone.layoutType === "numbered_seat"
+      ? totalSeatsFromRowsConfig(rowsConfig)
+      : rows * itemsPerRow
   if (zone.layoutType === "numbered_seat" && zone.sellMode !== "group") {
-    return rows * cols
+    return units
   }
-  return rows * cols * Math.min(100, Math.max(1, Math.floor(zone.capacityPerUnit) || 1))
+  return units * Math.min(100, Math.max(1, Math.floor(zone.capacityPerUnit) || 1))
 }
 
 export function parametricZoneIsGroupSku(zone: VenueMapZone): boolean {
@@ -243,26 +255,41 @@ export function parametricZoneGrid(zone: VenueMapZone): {
   itemsPerRow: number
   prefix: string
   layoutType: VenueLayoutType
+  rowsConfig: VenueRowConfig[]
 } {
-  const rows = Math.min(80, Math.max(1, Math.floor(zone.rows) || 1))
-  const itemsPerRow = Math.min(80, Math.max(1, Math.floor(zone.itemsPerRow) || 1))
   const layoutType: VenueLayoutType =
     zone.layoutType === "numbered_seat" ? "numbered_seat" : "table_combo"
+  const rowsConfig =
+    layoutType === "numbered_seat"
+      ? resolveZoneRowsConfig(zone)
+      : rowsConfigFromUniform(zone)
+  const rows = rowsConfig.length
+  const itemsPerRow = Math.max(1, ...rowsConfig.map((row) => row.seatCount), 1)
   const rawPrefix = (zone.labelPrefix ?? "").replace(/^\s+/, "")
   const prefix = rawPrefix || (layoutType === "numbered_seat" ? "Butaca " : "Mesa ")
-  return { rows, itemsPerRow, prefix, layoutType }
+  return { rows, itemsPerRow, prefix, layoutType, rowsConfig }
+}
+
+function rowsConfigFromUniform(zone: VenueMapZone): VenueRowConfig[] {
+  const rows = Math.min(80, Math.max(1, Math.floor(zone.rows) || 1))
+  const itemsPerRow = Math.min(80, Math.max(1, Math.floor(zone.itemsPerRow) || 1))
+  return Array.from({ length: rows }, (_, index) => ({
+    label: String(index + 1),
+    seatCount: itemsPerRow,
+  }))
 }
 
 export function listParametricZoneRowMeta(zone: VenueMapZone): ParametricZoneRowMeta[] {
   if (zone.layoutType === "general") return []
-  const { rows, itemsPerRow } = parametricZoneGrid(zone)
-  return Array.from({ length: rows }, (_, rowIndex) => {
+  const { rowsConfig } = parametricZoneGrid(zone)
+  return rowsConfig.map((row, rowIndex) => {
     const rowNumber = rowIndex + 1
+    const rawLabel = row.label?.trim() || String(rowNumber)
     return {
       rowId: `${zone.id}-row-${rowNumber}`,
-      rowLabel: `Fila ${rowNumber}`,
+      rowLabel: rawLabel.startsWith("Fila ") ? rawLabel : `Fila ${rawLabel}`,
       rowNumber,
-      itemCount: itemsPerRow,
+      itemCount: row.seatCount,
     }
   })
 }
@@ -272,11 +299,15 @@ export function parametricZoneRowItems(
   rowNumber: number,
 ): Array<{ id: string; label: string }> {
   if (zone.layoutType === "general") return []
-  const { itemsPerRow, prefix } = parametricZoneGrid(zone)
+  const { prefix, rowsConfig } = parametricZoneGrid(zone)
   const row = Math.min(80, Math.max(1, Math.floor(rowNumber) || 1))
+  const itemsPerRow = rowsConfig[row - 1]?.seatCount ?? 1
+  const numberOffset = rowsConfig
+    .slice(0, row - 1)
+    .reduce((sum, item) => sum + item.seatCount, 0)
   return Array.from({ length: itemsPerRow }, (_, colIndex) => {
     const col = colIndex + 1
-    const number = (row - 1) * itemsPerRow + col
+    const number = numberOffset + col
     return {
       id: parametricZoneItemId(zone.id, row, col),
       label: `${prefix}${number}`,
@@ -294,8 +325,8 @@ export function listParametricZoneRows(zone: VenueMapZone): ParametricStripRow[]
 
 export function expectedParametricUnitCount(zone: VenueMapZone): number {
   if (zone.layoutType === "general") return 0
-  const { rows, itemsPerRow } = parametricZoneGrid(zone)
-  return rows * itemsPerRow
+  const { rowsConfig } = parametricZoneGrid(zone)
+  return totalSeatsFromRowsConfig(rowsConfig)
 }
 
 export function mergeParametricOccupancy(input: {

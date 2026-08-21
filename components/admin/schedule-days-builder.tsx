@@ -34,7 +34,7 @@ export function ScheduleDaysBuilder({
             <CalendarRange className="size-4 text-emerald-700 dark:text-emerald-400" aria-hidden="true" />
             Jornadas del festival
           </h3>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
             Cada noche o día opera como una ventana de acceso independiente.
           </p>
         </div>
@@ -47,7 +47,7 @@ export function ScheduleDaysBuilder({
             className="mb-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/60 p-4"
           >
             <div className="mb-3 flex items-center justify-between gap-2">
-              <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              <p className="text-sm font-semibold text-foreground/90">
                 Jornada {index + 1}
               </p>
               <Button
@@ -71,7 +71,7 @@ export function ScheduleDaysBuilder({
                   <FormItem>
                     <FormLabel
                       htmlFor={`schedule-day-${index}-title`}
-                      className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
+                      className="mb-1.5 text-sm font-semibold text-foreground/90"
                     >
                       Nombre de la jornada
                     </FormLabel>
@@ -83,14 +83,14 @@ export function ScheduleDaysBuilder({
                           ? "Día 1 - Noche de apertura"
                           : "Día 2 - Cierre"
                       }
-                      className="h-10 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950"
+                      className="h-12 rounded-xl border-border/60 bg-muted/20 px-4 text-base transition-all focus:bg-background sm:h-13"
                     />
                     <FormMessage>{fieldState.error?.message}</FormMessage>
                   </FormItem>
                 )}
               />
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <FormField
                   control={control}
                   name={`basics.scheduleDays.${index}.startTime`}
@@ -98,7 +98,7 @@ export function ScheduleDaysBuilder({
                     <FormItem>
                       <FormLabel
                         htmlFor={`schedule-day-${index}-start`}
-                        className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
+                        className="mb-1.5 text-sm font-semibold text-foreground/90"
                       >
                         Inicio
                       </FormLabel>
@@ -119,7 +119,7 @@ export function ScheduleDaysBuilder({
                     <FormItem>
                       <FormLabel
                         htmlFor={`schedule-day-${index}-end`}
-                        className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
+                        className="mb-1.5 text-sm font-semibold text-foreground/90"
                       >
                         Cierre
                       </FormLabel>

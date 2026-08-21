@@ -7,9 +7,12 @@ import type { TicketSelectorTier } from "@/components/public/ticket-tier-selecto
 import { generalTicketMaxQuantity } from "@/lib/checkout/general-ticket-quantity"
 import { resolveStockScarcity } from "@/lib/checkout/stock-scarcity"
 import { resolveTicketHighlightBadge } from "@/lib/checkout/ticket-picker"
+import { ticketDayBadgeLabel } from "@/lib/checkout/ticket-day-groups"
 import { formatTicketPrice } from "@/lib/format"
 import { isLogicalGeneralSectorId } from "@/lib/seating/venue-map-pricing"
+import { Badge } from "@/components/ui/badge"
 import { cn, tapFeedbackClass } from "@/lib/utils"
+import type { ScheduleDay } from "@/types/events"
 
 function logicalSectorLabel(sectorId: string) {
   const slug = sectorId.replace(/^general:/, "").replace(/-/g, " ").trim()
@@ -49,6 +52,7 @@ export function TicketTierList({
   selectedCount,
   maxTicketsPerUser = null,
   isPending,
+  scheduleDays = [],
   onQuantityChange,
   onSelectSeat,
   selectedSeatMap = {},
@@ -59,6 +63,7 @@ export function TicketTierList({
   selectedCount: number
   maxTicketsPerUser?: number | null
   isPending: boolean
+  scheduleDays?: ScheduleDay[]
   onQuantityChange: (tierId: string, quantity: number, max: number) => void
   onSelectSeat?: (tierId: string) => void
   selectedSeatMap?: Record<string, string>
@@ -101,56 +106,63 @@ export function TicketTierList({
             )
             const isMappedTier = Boolean(tier.seatingSectorId && !isLogicalGeneralSectorId(tier.seatingSectorId))
             const selectedSeatName = selectedSeatMap[tier.id]
+            const dateLabel = ticketDayBadgeLabel(tier, scheduleDays)
 
             return (
               <div
                 key={tier.id}
                 className={cn(
-                  "flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-border dark:bg-card",
+                  "flex w-full items-center justify-between gap-4 rounded-2xl border border-white/10 bg-card/60 px-5 py-3.5 transition-all hover:border-white/20",
                   soldOut && "cursor-not-allowed opacity-60",
                   (quantity > 0 || Boolean(selectedSeatName)) &&
                     !soldOut &&
-                    "border-emerald-300 dark:border-emerald-500/40",
+                    "border-emerald-500/40",
                 )}
               >
-                <div className="flex min-w-0 flex-col gap-1.5">
-                  <h4 className="line-clamp-2 break-words text-lg font-bold text-gray-900 dark:text-foreground">
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <h4 className="truncate text-base font-bold text-foreground">
                     {tier.name}
+                    {selectedSeatName ? (
+                      <span className="ml-2 text-xs font-semibold text-emerald-400">
+                        {selectedSeatName}
+                      </span>
+                    ) : null}
                   </h4>
-                  {selectedSeatName ? (
-                    <span className="w-fit rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-100">
-                      {selectedSeatName}
+                  <div className="flex min-w-0 items-center gap-2 text-sm font-black text-foreground/90">
+                    <span className="tabular-nums">
+                      {formatTicketPrice(tier.price)}
                     </span>
-                  ) : null}
-                  <div className="flex flex-wrap items-center gap-1.5">
+                    {dateLabel ? (
+                      <Badge
+                        variant="outline"
+                        className="h-5 border-emerald-500/50 px-1.5 text-[10px] font-semibold text-emerald-400"
+                      >
+                        {dateLabel}
+                      </Badge>
+                    ) : null}
                     {highlight === "bestseller" ? (
-                      <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold uppercase text-amber-900 dark:bg-amber-500/20 dark:text-amber-100">
+                      <span className="text-xs font-semibold text-amber-500">
                         Más vendida
                       </span>
                     ) : null}
                     {custom ? (
-                      <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-bold uppercase text-gray-800 dark:bg-muted dark:text-foreground">
+                      <span className="truncate text-xs font-semibold text-muted-foreground">
                         {custom}
                       </span>
                     ) : null}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <p className="text-xl font-extrabold tabular-nums text-gray-900 dark:text-foreground">
-                      {formatTicketPrice(tier.price)}
-                    </p>
                     {soldOut ? (
                       <span className="text-xs font-semibold text-destructive">
                         Agotado
                       </span>
                     ) : showStock && scarcity.kind === "low" ? (
-                      <span className="text-xs font-medium text-amber-800 dark:text-amber-300">
+                      <span className="text-xs font-semibold text-amber-500">
                         Pocas disponibles
                       </span>
                     ) : null}
                   </div>
                 </div>
 
-                <div className="flex items-center justify-end">
+                <div className="flex shrink-0 items-center">
                   {isMappedTier ? (
                     <Button
                       type="button"
@@ -159,16 +171,16 @@ export function TicketTierList({
                       onClick={() => onSelectSeat?.(tier.id)}
                       className={cn(
                         tapFeedbackClass,
-                        "ml-auto h-9 px-4 font-semibold",
+                        "h-9 px-3 text-sm font-semibold",
                         selectedSeatName
                           ? "border-emerald-600 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-400 dark:text-emerald-300 dark:hover:bg-emerald-500/10"
                           : "bg-emerald-600 text-white hover:bg-emerald-700",
                       )}
                     >
-                      {selectedSeatName ? "Modificar lugares" : "Elegir lugar"}
+                      {selectedSeatName ? "Modificar" : "Elegir lugar"}
                     </Button>
                   ) : (
-                    <div className="ml-auto flex items-center rounded-lg border border-gray-200 bg-gray-50 p-0.5 dark:border-border/50 dark:bg-secondary/80">
+                    <div className="flex h-9 items-center gap-3 rounded-xl border border-white/10 bg-black/40 px-2">
                       <Button
                         type="button"
                         size="icon"
@@ -180,12 +192,12 @@ export function TicketTierList({
                         aria-label={`Quitar ${tier.name}`}
                         className={cn(
                           tapFeedbackClass,
-                          "flex size-11 items-center justify-center rounded-md hover:bg-background",
+                          "size-7 rounded-md hover:bg-white/5",
                         )}
                       >
-                        <Minus className="size-4" aria-hidden="true" />
+                        <Minus className="size-3.5" aria-hidden="true" />
                       </Button>
-                      <span className="min-w-8 text-center text-sm font-bold tabular-nums text-gray-900 dark:text-foreground">
+                      <span className="min-w-5 text-center text-sm font-bold tabular-nums text-foreground">
                         {quantity}
                       </span>
                       <Button
@@ -199,10 +211,10 @@ export function TicketTierList({
                         aria-label={`Agregar ${tier.name}`}
                         className={cn(
                           tapFeedbackClass,
-                          "flex size-11 items-center justify-center rounded-md hover:bg-background",
+                          "size-7 rounded-md hover:bg-white/5",
                         )}
                       >
-                        <Plus className="size-3" aria-hidden="true" />
+                        <Plus className="size-3.5" aria-hidden="true" />
                       </Button>
                     </div>
                   )}

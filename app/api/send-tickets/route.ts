@@ -19,7 +19,7 @@ const bodySchema = z.object({
     .string()
     .trim()
     .transform((value) => normalizeEmail(value))
-    .refine(isStrictEmail, "Email inválido"),
+    .refine(isStrictEmail, "Escribí un correo válido (ej: nombre@gmail.com)"),
   customerName: z.string().trim().min(1),
   orderNumber: z.string().trim().min(1),
   eventName: z.string().trim().min(1),

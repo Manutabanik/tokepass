@@ -43,7 +43,7 @@ export function TransferShareConfirmDialog({
         showCloseButton={!pending}
       >
         <DialogHeader>
-          <DialogTitle>Enviar entrada a un amigo</DialogTitle>
+          <DialogTitle>Pasarle la entrada a un amigo</DialogTitle>
           <DialogDescription>
             Cesión de tu acceso a{" "}
             <span className="font-medium text-foreground">{eventTitle}</span>.
@@ -88,7 +88,7 @@ export function TransferShareConfirmDialog({
             onClick={() => onOpenChange(false)}
             className="rounded-xl"
           >
-            Cancelar
+            Volver atrás
           </Button>
           <Button
             type="button"

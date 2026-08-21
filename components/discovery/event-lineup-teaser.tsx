@@ -29,7 +29,7 @@ export function EventTypePills({
       {featured ? (
         <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-bold tracking-wider text-emerald-500 uppercase">
           <Sparkles className="size-3" aria-hidden="true" />
-          Destacado
+          Imperdible
         </span>
       ) : null}
       {category ? <span className={categoryPillClass}>{category}</span> : null}

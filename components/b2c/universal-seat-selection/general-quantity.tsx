@@ -33,27 +33,27 @@ export function UniversalGeneralQuantity({
         </p>
       </div>
 
-      <div className="flex items-center justify-center gap-5 rounded-2xl border border-zinc-200 bg-white px-6 py-8 dark:border-zinc-800 dark:bg-zinc-900/60">
+      <div className="flex w-full items-center justify-between gap-4 rounded-2xl border border-white/10 bg-card/60 px-5 py-3.5">
         <Button
           type="button"
           size="icon"
-          variant="outline"
+          variant="ghost"
           aria-label="Quitar una"
           disabled={quantity <= min}
           onClick={() => onChange(Math.max(min, quantity - 1))}
-          className="size-14 rounded-2xl border-zinc-300 bg-zinc-50 text-zinc-900 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white dark:hover:bg-zinc-800"
+          className="size-9 rounded-xl border border-white/10 bg-black/40 hover:bg-white/5"
         >
-          <Minus className="size-6" aria-hidden="true" />
+          <Minus className="size-4" aria-hidden="true" />
         </Button>
 
-        <div className="min-w-[4.5rem] text-center">
+        <div className="min-w-0 flex-1 text-center">
           <p
-            className={cn("text-5xl font-black tabular-nums tracking-tight")}
+            className={cn("text-xl font-black tabular-nums tracking-tight")}
             style={{ color: accentColor }}
           >
             {quantity}
           </p>
-          <p className="mt-1 text-xs uppercase tracking-wider text-zinc-500">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             {quantity === 1 ? "entrada" : "entradas"}
           </p>
         </div>
@@ -61,13 +61,13 @@ export function UniversalGeneralQuantity({
         <Button
           type="button"
           size="icon"
-          variant="outline"
+          variant="ghost"
           aria-label="Agregar una"
           disabled={quantity >= max}
           onClick={() => onChange(Math.min(max, quantity + 1))}
-          className="size-14 rounded-2xl border-zinc-300 bg-zinc-50 text-zinc-900 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white dark:hover:bg-zinc-800"
+          className="size-9 rounded-xl border border-white/10 bg-black/40 hover:bg-white/5"
         >
-          <Plus className="size-6" aria-hidden="true" />
+          <Plus className="size-4" aria-hidden="true" />
         </Button>
       </div>
     </section>

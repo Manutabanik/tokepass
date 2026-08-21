@@ -383,7 +383,7 @@ export function OrganizerEventsManager({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-foreground">
               <TriangleAlert className="size-4 text-rose-600 dark:text-rose-300" aria-hidden="true" />
-              Confirmar eliminación
+              ¿Querés eliminar esto?
             </DialogTitle>
             <DialogDescription className="text-muted-foreground">
               {deleteTarget && deleteTarget.ticketsSold > 0
@@ -398,7 +398,7 @@ export function OrganizerEventsManager({
               className="border-border"
               onClick={() => setDeleteTarget(null)}
             >
-              Abortar
+              Volver atrás
             </Button>
             <Button
               type="button"

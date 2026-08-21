@@ -27,12 +27,15 @@ export function EventCapacityHeader({
     >
       <Users className="size-3.5 shrink-0" aria-hidden="true" />
       <span>
-        Capacidad total{" "}
+        Cupo total del evento:{" "}
         <span className="font-semibold tabular-nums">
           {formatNumber(capacity.totalCapacity)}
         </span>
       </span>
-      <span className="hidden text-muted-foreground sm:inline">
+      <span
+        className="hidden text-muted-foreground sm:inline"
+        title="Esta es la cantidad máxima de personas que entran en el lugar"
+      >
         {formatNumber(capacity.generalSectorCapacity)} sectores +{" "}
         {formatNumber(capacity.unboundGeneralCapacity)} libres +{" "}
         {formatNumber(capacity.mapAllocatedCapacity)} mapa

@@ -27,6 +27,27 @@ function sector(patch: Partial<VenueMapSector> = {}): VenueMapSector {
 }
 
 describe("venue-map-geometry", () => {
+  it("places a different seat count on each row", () => {
+    const seats = rebuildSectorSeats(
+      sector({
+        rows: 2,
+        seatsPerRow: 4,
+        rowsConfig: [
+          { label: "1", seatCount: 2 },
+          { label: "2", seatCount: 4 },
+        ],
+      }),
+    )
+    assert.equal(seats.length, 6)
+    assert.equal(seats.filter((seat) => seat.row === "1").length, 2)
+    assert.equal(seats.filter((seat) => seat.row === "2").length, 4)
+    const front = seats.filter((seat) => seat.row === "1")
+    const back = seats.filter((seat) => seat.row === "2")
+    const frontMid = (front[0]!.x + front[1]!.x) / 2
+    const backMid = (back[0]!.x + back[3]!.x) / 2
+    assert.equal(Math.abs(frontMid - backMid) < 0.2, true)
+  })
+
   it("builds a grid of seats with stable ids", () => {
     const seats = rebuildSectorSeats(sector())
     assert.equal(seats.length, 8)

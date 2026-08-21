@@ -65,7 +65,7 @@ export default async function HomePage() {
   }
 
   return (
-    <div className="relative isolate flex min-h-0 flex-1 flex-col overflow-x-clip bg-[#f4f2f8] text-zinc-900 dark:bg-[#030712] dark:text-zinc-100">
+    <div className="relative isolate flex min-h-0 w-full max-w-full flex-1 flex-col overflow-x-hidden bg-background text-foreground">
       <WebsiteSchemaScript />
       <AnimatedBackground />
 

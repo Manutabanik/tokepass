@@ -36,14 +36,15 @@ export function CapacityBudgetBar({
         </span>
         <div className="min-w-0 flex-1">
           <p className="min-w-0 text-sm font-semibold break-words text-foreground">
-            Capacidad total del evento
+            Cupo total del evento
           </p>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            Esta es la cantidad máxima de personas que entran en el lugar.{" "}
             {capacity.totalCapacity > 0
               ? `Mapa ${formatNumber(capacity.mapAllocatedCapacity)} + sectores ${formatNumber(capacity.generalSectorCapacity)} + entradas libres ${formatNumber(capacity.unboundGeneralCapacity)} = ${formatNumber(capacity.totalCapacity)}`
               : hasSeatingPlan
-                ? "El aforo suma el mapa, los sectores generales y cada entrada sin sector. No hace falta inflar un sector ficticio."
-                : "Creá una entrada general: su cupo es el aforo. No requiere un sector."}
+                ? "El cupo suma el mapa, los sectores generales y cada entrada sin sector. No hace falta inflar un sector ficticio."
+                : "Creá una entrada general: su cupo es el del evento. No requiere un sector."}
           </p>
         </div>
       </div>

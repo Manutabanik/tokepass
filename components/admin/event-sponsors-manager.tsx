@@ -50,10 +50,10 @@ export function EventSponsorsManager({
     return (
       <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-5 dark:border-zinc-800 dark:bg-zinc-950/40">
         <p className="text-sm font-semibold text-foreground">
-          Sponsors del evento
+          Marcas o auspiciantes
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
-          Guardá el borrador una vez para poder subir logos de auspiciantes.
+          Guardá el avance una vez para poder subir logos que apoyan tu evento.
         </p>
       </div>
     )
@@ -86,10 +86,10 @@ export function EventSponsorsManager({
     <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-800 dark:bg-zinc-950/40">
       <p className="flex items-center gap-2 font-mono text-xs font-semibold uppercase tracking-wider text-foreground">
         <Handshake className="size-3.5" aria-hidden />
-        Sponsors del evento
+        Marcas o auspiciantes
       </p>
       <p className="mt-1 text-xs text-muted-foreground">
-        PNG o SVG transparente. Aparecen en la ficha pública y en la entrada
+        Logos que apoyan tu evento. Aparecen en la ficha y en la entrada
         digital. Máximo {MAX_EVENT_SPONSORS}.
       </p>
 

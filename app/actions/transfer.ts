@@ -86,7 +86,7 @@ function mapTransferError(
   if (normalized.includes("INVALID_RECEIVER_EMAIL")) {
     return {
       success: false,
-      error: "Ingresá un email válido.",
+      error: "Escribí un correo válido (ej: nombre@gmail.com)",
       code: "invalid_email",
     }
   }

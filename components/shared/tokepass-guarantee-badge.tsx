@@ -3,16 +3,21 @@ import { ShieldCheck } from "lucide-react"
 import { BrandMark } from "@/components/shared/brand-logo"
 import { cn } from "@/lib/utils"
 
-const FULL_COPY =
-  "Garantía TokePass: Entrada nominada vinculada al DNI. Acceso 100% seguro sin intermediarios."
+const PRESENCIAL_COPY =
+  "Entrada nominada vinculada al DNI. Acceso 100% seguro sin intermediarios."
+const ONLINE_COPY = "Acceso nominado. El link llega a tu mail."
 
 export function TokepassGuaranteeBadge({
   variant = "full",
   className,
+  isOnline = false,
 }: {
   variant?: "full" | "compact"
   className?: string
+  isOnline?: boolean
 }) {
+  const detail = isOnline ? ONLINE_COPY : PRESENCIAL_COPY
+  const fullCopy = `Garantía TokePass: ${detail}`
   if (variant === "compact") {
     return (
       <p
@@ -24,7 +29,7 @@ export function TokepassGuaranteeBadge({
         <BrandMark size="sm" className="mt-0.5 size-4 rounded-[0.3rem] ring-0" />
         <span className="min-w-0">
           <ShieldCheck className="mr-1 inline size-3 align-[-2px] text-emerald-600 dark:text-emerald-400" />
-          {FULL_COPY}
+          {fullCopy}
         </span>
       </p>
     )
@@ -43,7 +48,7 @@ export function TokepassGuaranteeBadge({
           <ShieldCheck className="size-3.5 text-emerald-600 dark:text-emerald-400" />
           Garantía TokePass:
         </span>{" "}
-        Entrada nominada vinculada al DNI. Acceso 100% seguro sin intermediarios.
+        {detail}
       </p>
     </div>
   )

@@ -61,7 +61,7 @@ export function CheckoutIdentityDialog({
             onClick={onLogin}
           >
             <LogIn className="size-4" aria-hidden="true" />
-            Ingresar
+            Ingresar a mi cuenta
           </Button>
           <Button
             type="button"

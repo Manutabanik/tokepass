@@ -23,6 +23,7 @@ export function InteractiveVenueMapStudio({
   onClose,
   saving = false,
   tickets,
+  eventId,
 }: {
   open: boolean
   eventTitle: string
@@ -35,6 +36,7 @@ export function InteractiveVenueMapStudio({
   onClose: () => void
   saving?: boolean
   tickets?: VenueMapSkuTicketRef[] | null
+  eventId?: string | null
 }) {
   const [draft, setDraft] = useState(() => parseVenueMap(value))
   const [preview, setPreview] = useState(false)
@@ -70,6 +72,7 @@ export function InteractiveVenueMapStudio({
     <AppTakeover className="overscroll-none text-foreground">
       <InteractiveVenueMapEditor
         variant="studio"
+        eventId={eventId}
         eventTitle={eventTitle}
         value={draft}
         saving={saving}

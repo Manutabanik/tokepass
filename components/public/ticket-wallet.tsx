@@ -418,7 +418,7 @@ export function TicketWallet({
             title="Sin entradas activas"
             description="Cuando compres una entrada, aparece acá lista para presentar en el ingreso."
             ctaHref="/events"
-            ctaLabel="Explorar eventos"
+            ctaLabel="Descubrir shows"
           />
         )}
       </TabsContent>
@@ -494,7 +494,7 @@ export function TicketWallet({
             title="Todavía no tenés extras"
             description="Cuando haya tienda en tus eventos, vas a poder comprar tragos y merch acá."
             ctaHref="/events"
-            ctaLabel="Explorar eventos"
+            ctaLabel="Descubrir shows"
           />
         ) : null}
 

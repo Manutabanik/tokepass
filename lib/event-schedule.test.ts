@@ -6,6 +6,7 @@ import {
   formatInventoryDayOption,
   isFullPassDayId,
   isTicketValidForNow,
+  listEventFormJornadas,
   newScheduleDayId,
   normalizeDayId,
   parseScheduleDays,
@@ -35,6 +36,37 @@ describe("event-schedule", () => {
     assert.equal(defaultInventoryDayId(days), "d1")
     assert.equal(defaultInventoryDayId(days.slice(0, 1)), null)
     assert.match(formatInventoryDayOption(days[0]!, 0), /Día 1/)
+  })
+
+  it("formats jornada options from the live start date, not a stale title", () => {
+    const label = formatInventoryDayOption(
+      {
+        id: "d1",
+        title: "Día 1 - 13 de Noviembre",
+        startTime: "2026-08-21T20:00",
+      },
+      0,
+    )
+    assert.match(label, /^Día 1 - /)
+    assert.match(label, /21/)
+    assert.doesNotMatch(label, /13 de Noviembre/)
+  })
+
+  it("fills empty jornada start times from the identity date", () => {
+    const next = listEventFormJornadas({
+      date: "2026-08-21T20:00",
+      scheduleDays: [
+        { id: "d1", title: "Día 1", startTime: "", endTime: "" },
+        {
+          id: "d2",
+          title: "Día 2",
+          startTime: "2026-08-22T21:00",
+          endTime: "",
+        },
+      ],
+    })
+    assert.equal(next[0]?.startTime, "2026-08-21T20:00")
+    assert.equal(next[1]?.startTime, "2026-08-22T21:00")
   })
 
   it("normalizes abono day ids", () => {

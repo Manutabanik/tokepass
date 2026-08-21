@@ -4,7 +4,14 @@ import { Copy, Minus, Pause, Play, Plus, Trash2 } from "lucide-react"
 import type { ReactNode } from "react"
 import type { UseFormReturn } from "react-hook-form"
 
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 import { Button } from "@/components/ui/button"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   FormField,
   FormItem,
@@ -73,7 +80,7 @@ function StockStepper({
         type="button"
         variant="outline"
         size="icon"
-        className="size-11 shrink-0"
+        className="size-12 shrink-0 rounded-xl"
         onClick={() => onCommit(Math.max(0, value - 1) || undefined)}
         aria-label="Quitar cupo"
       >
@@ -87,7 +94,7 @@ function StockStepper({
         onChange={(event) => onDisplayChange(event.target.value)}
         placeholder="0"
         className={cn(
-          "h-11 w-16 px-1 text-center font-semibold tabular-nums",
+          "h-12 w-16 rounded-xl px-1 text-center font-semibold tabular-nums sm:h-13",
           overflow && "border-destructive",
         )}
       />
@@ -95,7 +102,7 @@ function StockStepper({
         type="button"
         variant="outline"
         size="icon"
-        className="size-11 shrink-0"
+        className="size-12 shrink-0 rounded-xl"
         onClick={() => onCommit(value + 1)}
         aria-label="Sumar cupo"
       >
@@ -111,12 +118,16 @@ function TierPricingSimulator({
   feePercentage,
   fixedFee,
   isSponsored,
+  showPrice = true,
+  showAdvanced = true,
 }: {
   form: UseFormReturn<EventFormValues>
   index: number
   feePercentage: number
   fixedFee: number
   isSponsored: boolean
+  showPrice?: boolean
+  showAdvanced?: boolean
 }) {
   const price = form.watch(`tickets.${index}.price`)
   const basePrice = form.watch(`tickets.${index}.basePrice`)
@@ -168,100 +179,9 @@ function TierPricingSimulator({
   }
 
   return (
-    <div className="space-y-3">
-      <div className="space-y-2">
-        <p className="font-mono text-[10px] tracking-wider text-muted-foreground uppercase">
-          Cobro de comision TokePass ({isSponsored ? 0 : feePercentage}%)
-        </p>
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() =>
-              applyCalculation(
-                "pass_to_customer",
-                calculationMode,
-                calculationMode === "net_income"
-                  ? calculation.organizerNet
-                  : calculation.publicPrice,
-              )
-            }
-            className={cn(
-              "rounded-xl border p-3 text-left text-xs font-medium transition-all",
-              feeStrategy === "pass_to_customer"
-                ? "border-primary bg-primary/10 font-bold text-foreground"
-                : "border-border text-muted-foreground",
-            )}
-          >
-            <span className="block font-semibold">Sumar al cliente</span>
-            <span className="text-[10px] font-normal text-muted-foreground">
-              Transparente. El cargo se refleja en el precio publico.
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-              applyCalculation(
-                "absorb_in_price",
-                calculationMode,
-                calculationMode === "net_income"
-                  ? calculation.organizerNet
-                  : calculation.publicPrice,
-              )
-            }
-            className={cn(
-              "rounded-xl border p-3 text-left text-xs font-medium transition-all",
-              feeStrategy === "absorb_in_price"
-                ? "border-primary bg-primary/10 font-bold text-foreground"
-                : "border-border text-muted-foreground",
-            )}
-          >
-            <span className="block font-semibold">Absorber en el precio</span>
-            <span className="text-[10px] font-normal text-muted-foreground">
-              Precio redondo al publico. La comision se descuenta.
-            </span>
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2">
-        <button
-          type="button"
-          onClick={() =>
-            applyCalculation(
-              feeStrategy,
-              "net_income",
-              calculation.organizerNet,
-            )
-          }
-          className={cn(
-            "rounded-lg border px-3 py-2 text-xs font-semibold transition-all",
-            calculationMode === "net_income"
-              ? "border-primary bg-primary/10 text-foreground"
-              : "border-border text-muted-foreground",
-          )}
-        >
-          Quiero ganar
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            applyCalculation(
-              feeStrategy,
-              "public_price",
-              calculation.publicPrice,
-            )
-          }
-          className={cn(
-            "rounded-lg border px-3 py-2 text-xs font-semibold transition-all",
-            calculationMode === "public_price"
-              ? "border-primary bg-primary/10 text-foreground"
-              : "border-border text-muted-foreground",
-          )}
-        >
-          Precio publico
-        </button>
-      </div>
-
+    <div className="flex flex-col gap-y-4">
+      {showPrice ? (
+        <>
       <FormField
         control={form.control}
         name={
@@ -270,11 +190,11 @@ function TierPricingSimulator({
             : `tickets.${index}.price`
         }
         render={({ field, fieldState }) => (
-          <FormItem>
-            <FormLabel className="font-mono text-[10px] tracking-wider text-muted-foreground uppercase">
+          <FormItem className="flex flex-col gap-y-2">
+            <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">
               {calculationMode === "net_income"
-                ? "Ganancia neta ($)"
-                : "Precio publico ($)"}
+                ? "Lo que te queda a vos por entrada"
+                : "Precio por entrada ($)"}
             </FormLabel>
             <PriceInput
               name={field.name}
@@ -285,7 +205,7 @@ function TierPricingSimulator({
               }}
               placeholder="0"
               allowEmpty
-              className="h-11 font-semibold tabular-nums"
+              className="h-12 rounded-xl border-border/60 bg-muted/20 px-4 font-semibold tabular-nums transition-all focus:bg-background sm:h-13"
             />
             <FormMessage>{fieldState.error?.message}</FormMessage>
           </FormItem>
@@ -300,33 +220,97 @@ function TierPricingSimulator({
           )}
         />
       ) : null}
+        </>
+      ) : null}
 
-      <div className="space-y-2 rounded-xl border border-border/60 bg-muted/30 p-4 text-xs">
-        <div className="flex items-center justify-between text-muted-foreground">
-          <span>Ganancia neta para tu cuenta:</span>
-          <span className="font-bold text-foreground tabular-nums">
-            {formatCurrency(calculation.organizerNet)}
-          </span>
+      {showAdvanced ? (
+        <div className="flex flex-col gap-y-4">
+            <div className="flex flex-col gap-y-2">
+              <p className="mb-1.5 text-sm font-semibold text-foreground/90">
+                Comisión TokePass ({isSponsored ? 0 : feePercentage}%)
+              </p>
+              <Tabs
+                value={feeStrategy}
+                onValueChange={(value) => {
+                  if (
+                    value !== "pass_to_customer" &&
+                    value !== "absorb_in_price"
+                  ) {
+                    return
+                  }
+                  applyCalculation(
+                    value,
+                    calculationMode,
+                    calculationMode === "net_income"
+                      ? calculation.organizerNet
+                      : calculation.publicPrice,
+                  )
+                }}
+              >
+                <TabsList className="grid h-12 w-full grid-cols-2 rounded-xl">
+                  <TabsTrigger
+                    value="pass_to_customer"
+                    title="El cliente paga el precio + el costo de servicio"
+                  >
+                    Recargar la comisión al comprador
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="absorb_in_price"
+                    title="Se descuenta de tu precio de venta, el cliente ve un número redondo"
+                  >
+                    Hacerte cargo de la comisión
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+
+            <Tabs
+              value={calculationMode}
+              onValueChange={(value) => {
+                if (value !== "net_income" && value !== "public_price") return
+                applyCalculation(
+                  feeStrategy,
+                  value,
+                  value === "net_income"
+                    ? calculation.organizerNet
+                    : calculation.publicPrice,
+                )
+              }}
+            >
+              <TabsList className="grid h-12 w-full grid-cols-2 rounded-xl">
+                <TabsTrigger value="public_price">Precio público</TabsTrigger>
+                <TabsTrigger value="net_income">Quiero ganar</TabsTrigger>
+              </TabsList>
+            </Tabs>
+
+            <div className="flex flex-col gap-y-2 rounded-2xl bg-muted/30 p-4 text-xs">
+              <div className="flex items-center justify-between gap-3 text-muted-foreground">
+                <span className="min-w-0">Lo que te queda a vos por entrada</span>
+                <span className="shrink-0 font-bold text-foreground tabular-nums">
+                  {formatCurrency(calculation.organizerNet)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-muted-foreground">
+                <span className="min-w-0">
+                  Comisión ({isSponsored ? 0 : feePercentage}%
+                  {fixedFee > 0 && !isSponsored
+                    ? ` + ${formatCurrency(fixedFee)}`
+                    : ""}
+                  )
+                </span>
+                <span className="shrink-0 font-semibold text-foreground tabular-nums">
+                  {formatCurrency(calculation.serviceFee)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3 border-t border-border/50 pt-2 text-sm font-bold text-foreground">
+                <span className="min-w-0">Precio final</span>
+                <span className="shrink-0 tabular-nums">
+                  {formatCurrency(calculation.publicPrice)}
+                </span>
+              </div>
+            </div>
         </div>
-        <div className="flex items-center justify-between text-muted-foreground">
-          <span>
-            Comision TokePass ({isSponsored ? 0 : feePercentage}%
-            {fixedFee > 0 && !isSponsored
-              ? ` + ${formatCurrency(fixedFee)}`
-              : ""}
-            ):
-          </span>
-          <span className="font-semibold text-foreground tabular-nums">
-            {formatCurrency(calculation.serviceFee)}
-          </span>
-        </div>
-        <div className="flex items-center justify-between border-t border-border pt-2 text-sm font-black text-primary">
-          <span>Precio final de venta:</span>
-          <span className="tabular-nums">
-            {formatCurrency(calculation.publicPrice)}
-          </span>
-        </div>
-      </div>
+      ) : null}
     </div>
   )
 }
@@ -336,7 +320,7 @@ export function TicketWalletCard({
   index,
   onDuplicate,
   onRemove,
-  capacityLabel = "Cupo / Stock",
+  capacityLabel = "¿Cuántas entradas ponés a la venta?",
   venueRemaining,
   feePercentage = 15,
   fixedFee = 0,
@@ -385,211 +369,217 @@ export function TicketWalletCard({
   return (
     <article
       className={cn(
-        "relative overflow-hidden rounded-[22px] border border-border bg-zinc-950/80 shadow-[0_12px_30px_-18px_rgba(0,0,0,0.65)]",
+        "flex flex-col gap-y-5 rounded-2xl bg-card p-6",
         paused && "opacity-70",
       )}
     >
-      <span
-        className={cn("absolute inset-y-0 left-0 w-1.5", accent)}
-        aria-hidden="true"
-      />
-      <span
-        className="absolute top-1/2 -left-2 size-4 -translate-y-1/2 rounded-full bg-background"
-        aria-hidden="true"
-      />
-      <span
-        className="absolute top-1/2 -right-2 size-4 -translate-y-1/2 rounded-full bg-background"
-        aria-hidden="true"
-      />
-
-      <div className="space-y-4 p-4 pl-5">
-        <div className="flex items-start justify-between gap-3">
-          <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-[10px] font-semibold tracking-[0.14em] text-zinc-300 uppercase">
-            {badge.label}
-          </span>
-          <div className="flex shrink-0 items-center gap-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={onDuplicate}
-              className="text-base md:text-sm"
-            >
-              <Copy />
-              Duplicar
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() =>
-                form.setValue(
-                  `tickets.${index}.visibility`,
-                  paused ? "public" : "private",
-                  { shouldDirty: true },
-                )
-              }
-              className="text-base md:text-sm"
-            >
-              {paused ? <Play /> : <Pause />}
-              {paused ? "Activar" : "Pausar"}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={onRemove}
-              className="size-11 text-muted-foreground hover:text-destructive"
-              aria-label="Eliminar tarifa"
-            >
-              <Trash2 />
-            </Button>
-          </div>
-        </div>
-
-        <FormField
-          control={form.control}
-          name={`tickets.${index}.name`}
-          render={({ field, fieldState }) => (
-            <FormItem>
-              <FormLabel className="font-mono text-[10px] tracking-wider text-muted-foreground uppercase">
-                Nombre del pase
-              </FormLabel>
-              <Input
-                {...field}
-                placeholder="Early Bird, Entrada General, Pase VIP"
-                className="h-11 border-0 bg-transparent px-0 text-lg font-semibold shadow-none focus-visible:ring-0"
-              />
-              <FormMessage>{fieldState.error?.message}</FormMessage>
-            </FormItem>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span
+          className={cn(
+            "inline-flex items-center gap-2 rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground",
           )}
-        />
+        >
+          <span className={cn("size-1.5 shrink-0 rounded-full", accent)} />
+          {badge.label}
+        </span>
+        <div className="flex shrink-0 flex-wrap items-center gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onDuplicate}
+            className="text-sm"
+          >
+            <Copy className="shrink-0" />
+            Duplicar
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              form.setValue(
+                `tickets.${index}.visibility`,
+                paused ? "public" : "private",
+                { shouldDirty: true },
+              )
+            }
+            className="text-sm"
+          >
+            {paused ? <Play className="shrink-0" /> : <Pause className="shrink-0" />}
+            {paused ? "Activar" : "Pausar"}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={onRemove}
+            className="size-11 shrink-0 text-muted-foreground hover:text-destructive"
+            aria-label="Eliminar tarifa"
+          >
+            <Trash2 />
+          </Button>
+        </div>
+      </div>
 
+      <FormField
+        control={form.control}
+        name={`tickets.${index}.name`}
+        render={({ field, fieldState }) => (
+          <FormItem className="flex flex-col gap-y-2">
+            <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">
+              Nombre del pase
+            </FormLabel>
+            <Input
+              {...field}
+              placeholder="Early Bird, Entrada General, Pase VIP"
+              className="h-12 rounded-xl border-border/60 bg-muted/20 px-4 text-lg font-semibold transition-all focus:bg-background sm:h-13"
+            />
+            <FormMessage>{fieldState.error?.message}</FormMessage>
+          </FormItem>
+        )}
+      />
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <TierPricingSimulator
           form={form}
           index={index}
           feePercentage={feePercentage}
           fixedFee={fixedFee}
           isSponsored={isSponsored}
+          showAdvanced={false}
         />
-
-        <div className="grid grid-cols-1 gap-3">
-          <FormField
-            control={form.control}
-            name={`tickets.${index}.capacity`}
-            render={({ field, fieldState }) => (
-              <FormItem>
-                <FormLabel className="font-mono text-[10px] tracking-wider text-muted-foreground uppercase">
-                  {capacityLabel}
-                </FormLabel>
-                <StockStepper
-                  value={stock}
-                  overflow={overflow}
-                  display={
-                    field.value == null || Number.isNaN(Number(field.value))
-                      ? ""
-                      : String(field.value)
+        <FormField
+          control={form.control}
+          name={`tickets.${index}.capacity`}
+          render={({ field, fieldState }) => (
+            <FormItem className="flex flex-col gap-y-2">
+              <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">
+                {capacityLabel}
+              </FormLabel>
+              <StockStepper
+                value={stock}
+                overflow={overflow}
+                display={
+                  field.value == null || Number.isNaN(Number(field.value))
+                    ? ""
+                    : String(field.value)
+                }
+                onDisplayChange={(raw) => {
+                  const parsed = parseStrictInt(raw)
+                  if (parsed === "") {
+                    field.onChange(undefined)
+                    return
                   }
-                  onDisplayChange={(raw) => {
-                    const parsed = parseStrictInt(raw)
-                    if (parsed === "") {
-                      field.onChange(undefined)
-                      return
-                    }
-                    if (typeof parsed === "number" && Number.isNaN(parsed)) {
-                      return
-                    }
-                    field.onChange(parsed)
-                  }}
-                  onCommit={(next) => field.onChange(next)}
-                />
-                {overflow ? (
-                  <p className="text-xs text-destructive" role="alert">
-                    El stock supera la capacidad disponible.
-                  </p>
-                ) : null}
-                <FormMessage>{fieldState.error?.message}</FormMessage>
-              </FormItem>
-            )}
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <FormField
-            control={form.control}
-            name={`tickets.${index}.minPurchaseLimit`}
-            render={({ field, fieldState }) => (
-              <FormItem>
-                <FormLabel className="font-mono text-[10px] tracking-wider text-muted-foreground uppercase">
-                  Mínimo por compra
-                </FormLabel>
-                <Input
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  value={
-                    field.value == null || Number.isNaN(Number(field.value))
-                      ? "1"
-                      : String(field.value)
+                  if (typeof parsed === "number" && Number.isNaN(parsed)) {
+                    return
                   }
-                  onChange={(event) => {
-                    const parsed = parseStrictInt(event.target.value)
-                    if (parsed === "") {
-                      field.onChange(1)
-                      return
-                    }
-                    if (typeof parsed === "number" && Number.isNaN(parsed)) {
-                      return
-                    }
-                    field.onChange(
-                      typeof parsed === "number" ? Math.max(1, parsed) : 1,
-                    )
-                  }}
-                  className="h-11 text-base tabular-nums md:text-sm"
-                />
-                <FormMessage>{fieldState.error?.message}</FormMessage>
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name={`tickets.${index}.maxPurchaseLimit`}
-            render={({ field, fieldState }) => (
-              <FormItem>
-                <FormLabel className="font-mono text-[10px] tracking-wider text-muted-foreground uppercase">
-                  Máximo por compra
-                </FormLabel>
-                <Input
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  placeholder="Sin limite"
-                  value={
-                    field.value == null || Number.isNaN(Number(field.value))
-                      ? ""
-                      : String(field.value)
-                  }
-                  onChange={(event) => {
-                    const parsed = parseStrictInt(event.target.value)
-                    if (parsed === "") {
-                      field.onChange(null)
-                      return
-                    }
-                    if (typeof parsed === "number" && Number.isNaN(parsed)) {
-                      return
-                    }
-                    field.onChange(typeof parsed === "number" ? parsed : null)
-                  }}
-                  className="h-11 text-base tabular-nums md:text-sm"
-                />
-                <FormMessage>{fieldState.error?.message}</FormMessage>
-              </FormItem>
-            )}
-          />
-        </div>
-
-        {children}
+                  field.onChange(parsed)
+                }}
+                onCommit={(next) => field.onChange(next)}
+              />
+              {overflow ? (
+                <p className="text-xs text-destructive" role="alert">
+                  El stock supera la capacidad disponible.
+                </p>
+              ) : null}
+              <FormMessage>{fieldState.error?.message}</FormMessage>
+            </FormItem>
+          )}
+        />
       </div>
+
+      <Accordion className="rounded-2xl bg-muted/20 px-4">
+        <AccordionItem value={`limits-${index}`} className="border-0">
+          <AccordionTrigger className="py-3 text-sm text-foreground hover:no-underline">
+            Configuraciones adicionales de venta
+          </AccordionTrigger>
+          <AccordionContent className="flex flex-col gap-y-4 pb-4">
+            <TierPricingSimulator
+              form={form}
+              index={index}
+              feePercentage={feePercentage}
+              fixedFee={fixedFee}
+              isSponsored={isSponsored}
+              showPrice={false}
+            />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name={`tickets.${index}.minPurchaseLimit`}
+                render={({ field, fieldState }) => (
+                  <FormItem className="flex min-w-0 flex-col gap-y-2">
+                    <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">
+                      Límite de entradas por persona
+                    </FormLabel>
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      value={
+                        field.value == null || Number.isNaN(Number(field.value))
+                          ? "1"
+                          : String(field.value)
+                      }
+                      onChange={(event) => {
+                        const parsed = parseStrictInt(event.target.value)
+                        if (parsed === "") {
+                          field.onChange(1)
+                          return
+                        }
+                        if (typeof parsed === "number" && Number.isNaN(parsed)) {
+                          return
+                        }
+                        field.onChange(
+                          typeof parsed === "number" ? Math.max(1, parsed) : 1,
+                        )
+                      }}
+                      className="h-12 rounded-xl border-border/60 bg-muted/20 px-4 text-base tabular-nums transition-all focus:bg-background sm:h-13"
+                    />
+                    <FormMessage>{fieldState.error?.message}</FormMessage>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name={`tickets.${index}.maxPurchaseLimit`}
+                render={({ field, fieldState }) => (
+                  <FormItem className="flex min-w-0 flex-col gap-y-2">
+                    <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">
+                      Máximo por compra
+                    </FormLabel>
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      placeholder="Máximo 4 por compra"
+                      value={
+                        field.value == null || Number.isNaN(Number(field.value))
+                          ? ""
+                          : String(field.value)
+                      }
+                      onChange={(event) => {
+                        const parsed = parseStrictInt(event.target.value)
+                        if (parsed === "") {
+                          field.onChange(null)
+                          return
+                        }
+                        if (typeof parsed === "number" && Number.isNaN(parsed)) {
+                          return
+                        }
+                        field.onChange(typeof parsed === "number" ? parsed : null)
+                      }}
+                      className="h-12 rounded-xl border-border/60 bg-muted/20 px-4 text-base tabular-nums transition-all focus:bg-background sm:h-13"
+                    />
+                    <FormMessage>{fieldState.error?.message}</FormMessage>
+                  </FormItem>
+                )}
+              />
+            </div>
+            {children}
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
     </article>
   )
 }
@@ -605,7 +595,7 @@ export function AddTicketTypeButton({
     <Button
       type="button"
       onClick={onClick}
-      className="h-12 w-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-base font-semibold text-zinc-950 hover:from-emerald-400 hover:to-cyan-400 md:text-sm"
+      className="h-12 w-full bg-primary text-base font-semibold text-primary-foreground hover:bg-primary/90 md:text-sm"
     >
       <Plus className="size-5" />
       {label}

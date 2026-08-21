@@ -18,11 +18,11 @@ export function EventSwimlane({
 
   return (
     <div className={cn("relative", className)}>
-      <div className="flex snap-x snap-mandatory scroll-smooth gap-6 overflow-x-auto scrollbar-hide">
+      <div className="no-scrollbar flex w-full max-w-full snap-x snap-mandatory scroll-smooth gap-4 overflow-x-auto">
         {events.map((event, index) => (
           <div
             key={event.id}
-            className="w-[85vw] flex-none snap-start sm:w-[320px] lg:w-[350px]"
+            className="w-[min(18rem,calc(100%-1.5rem))] shrink-0 snap-start sm:w-80 lg:w-[22rem]"
           >
             <EventCard
               event={event}

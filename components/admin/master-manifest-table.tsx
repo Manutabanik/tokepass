@@ -28,18 +28,18 @@ export function MasterManifestTable({
     <section className="overflow-hidden rounded-2xl border border-border bg-card">
       <div className="border-b border-border px-4 py-3">
         <h3 className="text-sm font-semibold text-foreground">
-          Master Manifest
+          Resumen de capacidad
         </h3>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          Inventario estructural del mapa y entradas comerciales. Cada fuente
-          suma al aforo por su cuenta: no hace falta inflar un sector para
-          crear una general.
+          Control de entradas a la venta. El mapa y las generales suman al
+          cupo por su cuenta: no hace falta inflar un sector para crear una
+          general.
         </p>
       </div>
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Tipo / Origen</TableHead>
+            <TableHead>Tipo de pase</TableHead>
             <TableHead>Nombre</TableHead>
             <TableHead className="text-right">Capacidad</TableHead>
             <TableHead>Estado</TableHead>
@@ -107,7 +107,7 @@ export function MasterManifestTable({
           <TableFooter>
             <TableRow className="hover:bg-transparent">
               <TableCell colSpan={2} className="text-xs text-muted-foreground">
-                Aforo total · mapa {formatNumber(capacity.mapAllocatedCapacity)}{" "}
+                Cupo total · mapa {formatNumber(capacity.mapAllocatedCapacity)}{" "}
                 + sectores {formatNumber(capacity.generalSectorCapacity)} +
                 entradas libres {formatNumber(capacity.unboundGeneralCapacity)}
               </TableCell>

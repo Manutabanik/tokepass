@@ -32,6 +32,7 @@ export function VenueMapZoneLayer({
   focusedZoneId = null,
   highlightedIds = [],
   emphasizeSelected = true,
+  buyerOccupancy = false,
 }: {
   zones: VenueMapZone[]
   selectedId?: string | null
@@ -49,6 +50,7 @@ export function VenueMapZoneLayer({
   focusedZoneId?: string | null
   highlightedIds?: string[]
   emphasizeSelected?: boolean
+  buyerOccupancy?: boolean
 }) {
   const glowId = useId().replace(/:/g, "")
   const press = useRef<{ x: number; y: number } | null>(null)
@@ -208,12 +210,20 @@ export function VenueMapZoneLayer({
             <polygon
               data-zone-id={zone.id}
               points={points}
-              fill={soldOut ? "#9ca3af" : zone.color || "#22d3ee"}
+              fill={
+                soldOut
+                  ? buyerOccupancy
+                    ? "#333333"
+                    : "#9ca3af"
+                  : zone.color || "#22d3ee"
+              }
               fillOpacity={
                 revealFocused
                   ? 0.06
                   : soldOut
-                    ? 0.45
+                    ? buyerOccupancy
+                      ? 0.3
+                      : 0.45
                     : lodSolid
                       ? 0.3
                       : selected
@@ -222,11 +232,15 @@ export function VenueMapZoneLayer({
               }
               stroke={
                 soldOut
-                  ? "#9ca3af"
+                  ? buyerOccupancy
+                    ? "#333333"
+                    : "#9ca3af"
                   : lodSolid
                     ? zone.color || "#67e8f9"
                     : selected
-                      ? "#ffffff"
+                      ? buyerOccupancy
+                        ? "#10b981"
+                        : "#ffffff"
                       : zone.color || "#67e8f9"
               }
               strokeWidth={lodSolid ? 2 : selected ? 3 : 2}

@@ -16,7 +16,7 @@ export const DISCOVERY_NICHES: Array<{
   id: DiscoveryNicheId
   label: string
 }> = [
-  { id: "all", label: "Todos" },
+  { id: "all", label: "Todos los eventos" },
   { id: "entertainment", label: "Entretenimiento" },
   { id: "courses", label: "Cursos & Negocios" },
   { id: "sports", label: "Deportes" },

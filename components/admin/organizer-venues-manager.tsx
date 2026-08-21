@@ -682,7 +682,7 @@ export function OrganizerVenuesManager({
                     onClick={() => {
                       if (
                         !window.confirm(
-                          `¿Eliminar el lugar "${venue.name}"?`,
+                          `¿Querés eliminar esto? Se va a borrar "${venue.name}". Esta acción no se puede deshacer.`,
                         )
                       ) {
                         return

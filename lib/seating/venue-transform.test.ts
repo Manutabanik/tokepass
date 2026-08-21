@@ -29,7 +29,12 @@ import {
   fitViewportToWorldBox,
   fitWorldInViewBox,
   applyLiveToSeats,
+  applyLiveToStage,
+  handlePoint,
+  liveScaleAxes,
   pointsToBounds,
+  rectAabb,
+  scaleFromHandlePointer,
 } from "./venue-transform"
 
 describe("venue-transform", () => {
@@ -80,6 +85,52 @@ describe("venue-transform", () => {
     assert.equal(moved[0]?.y, 45)
     assert.equal(moved[1]?.x - moved[0]!.x, 40)
     assert.equal(moved[1]?.y - moved[0]!.y, 40)
+  })
+
+  it("scales X and Y independently from a corner handle", () => {
+    const next = scaleFromHandlePointer({
+      handle: "se",
+      origin: { x: 0, y: 0 },
+      startCorner: { x: 100, y: 50 },
+      point: { x: 200, y: 100 },
+    })
+    assert.equal(next.scaleX, 2)
+    assert.equal(next.scaleY, 2)
+    const stretch = scaleFromHandlePointer({
+      handle: "e",
+      origin: { x: 0, y: 25 },
+      startCorner: { x: 100, y: 25 },
+      point: { x: 160, y: 80 },
+    })
+    assert.equal(stretch.scaleX, 1.6)
+    assert.equal(stretch.scaleY, 1)
+  })
+
+  it("resizes the default stage rect without inventing extra map keys", () => {
+    const stage = applyLiveToStage(
+      { label: "ESCENARIO", x: 200, y: 24, width: 400, height: 48 },
+      { type: "scale", ox: 200, oy: 24, scale: 1, scaleX: 0.5, scaleY: 2 },
+    )
+    assert.equal(stage.x, 200)
+    assert.equal(stage.y, 24)
+    assert.equal(stage.width, 200)
+    assert.equal(stage.height, 96)
+    assert.equal(stage.label, "ESCENARIO")
+  })
+
+  it("reads independent scale axes from a live transform", () => {
+    const axes = liveScaleAxes({
+      type: "scale",
+      ox: 0,
+      oy: 0,
+      scale: 1.2,
+      scaleX: 2,
+      scaleY: 0.5,
+    })
+    assert.equal(axes.sx, 2)
+    assert.equal(axes.sy, 0.5)
+    assert.equal(handlePoint({ x: 10, y: 20, width: 40, height: 10 }, "e").x, 50)
+    assert.equal(rectAabb({ x: 0, y: 0, width: 20, height: 10 }).maxX, 20)
   })
 
   it("scales from an origin without collapsing size", () => {

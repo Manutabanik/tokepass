@@ -22,7 +22,7 @@ function joinDateTime(date: string, hour: string, minute: string) {
 }
 
 const selectClass =
-  "h-11 min-w-0 rounded-xl border border-border bg-background px-2 text-base text-foreground md:text-sm"
+  "h-12 min-w-0 rounded-xl border border-border/60 bg-muted/20 px-4 text-base text-foreground transition-all focus:bg-background sm:h-13"
 
 export function EventStudioDateTimeField({
   id,

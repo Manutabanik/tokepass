@@ -81,17 +81,17 @@ export const scheduleDaySchema = z.object({
   title: z.string().trim().min(2, "Nombrá la jornada."),
   startTime: z
     .string()
-    .min(1, "Definí el inicio de la jornada.")
+    .min(1, "Elegí la fecha y hora de inicio del evento")
     .refine(
       (value) => parseDateTimeLocal(value) != null,
-      "La hora de inicio no es válida.",
+      "Elegí la fecha y hora de inicio del evento",
     ),
   endTime: z
     .string()
-    .min(1, "Definí el cierre de la jornada.")
+    .min(1, "Elegí la fecha y hora de cierre del evento")
     .refine(
       (value) => parseDateTimeLocal(value) != null,
-      "La hora de cierre no es válida.",
+      "Elegí la fecha y hora de cierre del evento",
     ),
 })
 
@@ -99,12 +99,12 @@ export const ticketPhaseSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().trim().min(2, "Nombrá el lote."),
   price: z
-    .number({ error: "Indicá el precio de este lote." })
-    .min(0, "El precio no puede ser negativo."),
+    .number({ error: "Ingresá un precio válido o marcá la opción de entrada gratuita" })
+    .min(0, "Ingresá un precio válido o marcá la opción de entrada gratuita"),
   capacityLimit: z
-    .number({ error: "Indicá el cupo de este lote." })
+    .number({ error: "Indicá cuántas entradas vas a poner a la venta" })
     .int()
-    .min(1, "El lote necesita al menos 1 entrada."),
+    .min(1, "Indicá cuántas entradas vas a poner a la venta"),
   startTime: z.string().nullable().optional(),
   endTime: z.string().nullable().optional(),
   status: z
@@ -125,8 +125,8 @@ export const ticketTierSchema = z.preprocess(
   isNew: z.boolean().optional(),
   name: z.string().trim().min(2, "Ingresá un nombre para el tipo de entrada."),
   price: z
-    .number({ error: "Indicá el precio de la entrada." })
-    .min(0, "El precio no puede ser negativo."),
+    .number({ error: "Ingresá un precio válido o marcá la opción de entrada gratuita" })
+    .min(0, "Ingresá un precio válido o marcá la opción de entrada gratuita"),
   /** Neto del organizador. El persist lo mapea a ticket_tiers.base_price. */
   basePrice: z.number().min(0).optional(),
   feeStrategy: z.enum(TICKET_FEE_STRATEGIES).optional().default("absorb_in_price"),
@@ -135,9 +135,9 @@ export const ticketTierSchema = z.preprocess(
     .optional()
     .default("public_price"),
   capacity: z
-    .number({ error: "Indicá la capacidad de esta entrada." })
+    .number({ error: "Indicá cuántas entradas vas a poner a la venta" })
     .int()
-    .min(1, "La cantidad de personas debe ser mayor a cero."),
+    .min(1, "Indicá cuántas entradas vas a poner a la venta"),
   sold: z.number().int().min(0).optional(),
   timeLimit: z.string().optional(),
   bonusReward: z.string().trim().optional(),
@@ -198,14 +198,14 @@ const eventFormObject = z
       title: z
         .string()
         .trim()
-        .min(3, "El título debe tener al menos 3 caracteres."),
+        .min(3, "Ponéle un nombre a tu evento para poder avanzar"),
       date: z.string(),
       /** Hora de cierre (solo jornada única). */
       endDate: z.string(),
       description: z
         .string()
         .trim()
-        .min(10, "Describí la experiencia en al menos 10 caracteres.")
+        .min(10, "Tiene que tener al menos 10 caracteres")
         .max(2000, "La descripción es demasiado extensa."),
       flyerName: z.string().nullable(),
       visibility: z.enum(EVENT_VISIBILITY_VALUES),
@@ -213,7 +213,9 @@ const eventFormObject = z
       scheduleDays: z.array(scheduleDaySchema),
       categoryId: z.preprocess(
         (value) => (typeof value === "string" && value.trim() === "" ? null : value),
-        z.string().uuid("Seleccioná una categoría de la lista."),
+        z
+          .string({ error: "Seleccioná una categoría para tu show" })
+          .uuid("Seleccioná una categoría para tu show"),
       ),
       ageRestriction: z.enum(AGE_RESTRICTION_VALUES, {
         error: "Seleccioná la restricción de edad.",
@@ -330,7 +332,7 @@ const eventFormObject = z
           context.addIssue({
             code: "custom",
             path: ["basics", "scheduleDays", index, "endTime"],
-            message: "El cierre debe ser posterior al inicio.",
+            message: "La hora de cierre tiene que ser posterior a la de inicio",
           })
         }
       }
@@ -360,7 +362,7 @@ const eventFormObject = z
         context.addIssue({
           code: "custom",
           path: ["basics", "date"],
-          message: "Seleccioná la fecha y hora de inicio.",
+          message: "Elegí la fecha y hora de inicio del evento",
         })
       }
 
@@ -370,13 +372,13 @@ const eventFormObject = z
         context.addIssue({
           code: "custom",
           path: ["basics", "endDate"],
-          message: "Seleccioná la hora de finalización.",
+          message: "Elegí la fecha y hora de cierre del evento",
         })
       } else if (date && endMs <= dateMs) {
         context.addIssue({
           code: "custom",
           path: ["basics", "endDate"],
-          message: "La finalización debe ser posterior al inicio.",
+          message: "La hora de cierre tiene que ser posterior a la de inicio",
         })
       }
     }
@@ -518,7 +520,10 @@ const draftTicketSchema = z.preprocess(
   ),
   isNew: z.boolean().optional(),
   name: z.string().optional().default(""),
-  price: z.number().min(0, "El precio no puede ser negativo.").optional(),
+  price: z
+    .number()
+    .min(0, "Ingresá un precio válido o marcá la opción de entrada gratuita")
+    .optional(),
   basePrice: z.number().min(0).optional(),
   feeStrategy: z.enum(TICKET_FEE_STRATEGIES).optional().default("absorb_in_price"),
   calculationMode: z
@@ -579,7 +584,7 @@ export const draftEventSchema = z.object({
     title: z
       .string()
       .trim()
-      .min(3, "El título debe tener al menos 3 caracteres."),
+      .min(3, "Ponéle un nombre a tu evento para poder avanzar"),
     date: z.string().optional().default(""),
     endDate: z.string().optional().default(""),
     description: z.string().optional().default(""),
@@ -737,7 +742,10 @@ export function coerceDraftEventForm(
 
   const incomingTickets = (raw.tickets ?? []) as EventFormValues["tickets"]
   const tickets = incomingTickets
-    .filter((tier) => (tier.name ?? "").trim().length >= 2)
+    .filter((tier) => {
+      if ((tier.name ?? "").trim().length >= 2) return true
+      return Boolean(resolveTicketSectorId(tier))
+    })
     .map((tier) => ({
       ...blankDraftTicket(),
       ...tier,

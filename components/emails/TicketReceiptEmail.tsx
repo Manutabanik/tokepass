@@ -34,10 +34,12 @@ export function TicketReceiptEmail({
   logoUrl,
   otpCode,
 }: TicketReceiptEmailProps) {
-  const greeting = buyerName?.trim() ? `Hola ${buyerName.trim()},` : "Hola,"
+  const greeting = buyerName?.trim()
+    ? `¡Hola, ${buyerName.trim()}!`
+    : "¡Hola!"
   const ticketLabel =
     ticketCount === 1 ? "1 entrada" : `${ticketCount} entradas`
-  const preview = `Confirmado: ya tenés tus entradas para ${eventTitle}`
+  const preview = `¡Acá están tus entradas para ${eventTitle}!`
 
   return (
     <Html lang="es">
@@ -58,9 +60,13 @@ export function TicketReceiptEmail({
 
           <Text style={styles.kicker}>Pago confirmado</Text>
           <Text style={styles.title}>
-            ¡Confirmado! Ya tenés tus entradas para {eventTitle}
+            ¡Acá están tus entradas para {eventTitle}!
           </Text>
-          <Text style={styles.lead}>{greeting} tu compra está lista.</Text>
+          <Text style={styles.lead}>{greeting}</Text>
+          <Text style={styles.lead}>
+            ¡Todo listo! Tu compra quedó confirmada. Podés ver tus códigos de
+            acceso directamente desde el botón de abajo o ingresando a la app.
+          </Text>
 
           <Section style={styles.card}>
             <Text style={styles.cardLabel}>Evento</Text>
@@ -81,7 +87,7 @@ export function TicketReceiptEmail({
 
           <Section style={styles.ctaWrap}>
             <Button href={walletUrl} style={styles.button}>
-              Abrir mis entradas
+              Ver mis entradas en TokePass
             </Button>
           </Section>
 
@@ -100,7 +106,8 @@ export function TicketReceiptEmail({
 
           <Hr style={styles.footerRule} />
           <Text style={styles.footer}>
-            TokePass · Entradas digitales para vivir el evento
+            ¿Tuviste algún problema con tu compra? Respondé a este mail o
+            escribinos por WhatsApp.
           </Text>
         </Container>
       </Body>

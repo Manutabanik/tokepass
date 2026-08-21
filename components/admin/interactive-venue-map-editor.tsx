@@ -18,7 +18,6 @@ import {
   Layers,
   LayoutTemplate,
   Minus,
-  Palette,
   PanelRightClose,
   PanelRightOpen,
   Redo,
@@ -35,7 +34,7 @@ import {
   Send,
 } from "lucide-react"
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react"
-import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
 import {
@@ -60,6 +59,8 @@ import {
 } from "@/components/admin/venue-layer-tree"
 import { VenueMapBackgroundPanel } from "@/components/admin/venue-map-background-panel"
 import { VenueParametricRulesPanel } from "@/components/admin/venue-parametric-rules-panel"
+import { VenueRowsConfigEditor } from "@/components/admin/venue-rows-config-editor"
+import { VenueSectorColorPicker } from "@/components/admin/venue-sector-color-field"
 import { VenueSetupGuide } from "@/components/admin/venue-setup-guide"
 import { SvgTransformBox } from "@/components/admin/svg-transform-box"
 import { VenueSelectionToolbar } from "@/components/admin/venue-selection-toolbar"
@@ -92,6 +93,11 @@ import {
 } from "@/components/ui/sheet"
 import { useIsDesktop } from "@/hooks/use-media-query"
 import { useDebouncedAutosave } from "@/hooks/use-debounced-autosave"
+import {
+  UNSAVED_MAP_CHANGES_MESSAGE,
+  useUnsavedChanges,
+} from "@/hooks/use-unsaved-changes"
+import { SaveMapModal } from "@/components/admin/save-map-modal"
 import {
   Dialog,
   DialogContent,
@@ -168,24 +174,29 @@ import {
   alignSelectedToCenter,
   distributeSelectedHorizontally,
   angleAt,
+  applyLiveToAisle,
+  applyLiveToSeats,
+  applyLiveToStage,
   applyMoveSnap,
   applyMoveSnapFromOrigin,
   applyRotateSnap,
-  applyLiveToSeats,
   bakeLiveTransform,
   boundsCenter,
   rotationDeltaFromPointer,
-  clampScale,
   clampVenueZoom,
   elementAabb,
   expandViewBoxToContainer,
   fitViewportToWorldBox,
   flipSelectedElements,
+  handlePoint,
+  liveScaleAxes,
   liveTransformToSvg,
   normalizeDeg,
   pointsToBounds,
+  rectAabb,
   resizeOrigin,
   rotateElementsAround,
+  scaleFromHandlePointer,
   selectionBounds,
   translateElements,
   VENUE_VIEW_PADDING,
@@ -223,6 +234,12 @@ import {
   venueMapToSeatingLayout,
 } from "@/lib/seating/venue-map-geometry"
 import {
+  resizeRowsConfig,
+  resolveSectorRowsConfig,
+  rowsConfigGridFields,
+  resolveZoneRowsConfig,
+} from "@/lib/seating/venue-rows-config"
+import {
   distributeOnArc,
   generateGridArray,
 } from "@/lib/seating/venue-array"
@@ -242,10 +259,12 @@ import {
   venuePriceModeFromSellMode,
   venueUnitPriceLabel,
   type InteractiveVenueMap,
+  type VenueMapAisle,
   type VenueMapElement,
   type VenueMapPoint,
   type VenueMapSeat,
   type VenueMapSector,
+  type VenueMapStage,
   type VenueMapZone,
 } from "@/types/venue-map"
 import type { VenueSeatingLayout } from "@/types/venues"
@@ -268,12 +287,15 @@ type PointerSample = {
   shiftKey: boolean
 }
 
+type TransformTarget = "seats" | "stage" | "aisle"
+
 type TransformDrag =
   | {
       mode: "move"
       ids: string[]
       zoneId?: string
-      target?: "seats"
+      aisleId?: string
+      target?: TransformTarget
       startX: number
       startY: number
       originX: number
@@ -283,17 +305,21 @@ type TransformDrag =
       mode: "scale"
       ids: string[]
       zoneId?: string
-      target?: "seats"
+      aisleId?: string
+      target?: TransformTarget
       ox: number
       oy: number
       startDist: number
+      startCornerX: number
+      startCornerY: number
       handle: ResizeHandle
     }
   | {
       mode: "rotate"
       ids: string[]
       zoneId?: string
-      target?: "seats"
+      aisleId?: string
+      target?: TransformTarget
       cx: number
       cy: number
       startAngle: number
@@ -339,8 +365,9 @@ export function InteractiveVenueMapEditor({
   eventTitle = "Mapa del recinto",
   onEventTitleChange,
   backHref,
-  backLabel = "Volver al Panel",
+  backLabel = "Volver al evento",
   tickets,
+  eventId,
 }: {
   value?: InteractiveVenueMap | null
   onChange: (map: InteractiveVenueMap, seatingLayout: VenueSeatingLayout) => void
@@ -355,7 +382,9 @@ export function InteractiveVenueMapEditor({
   backHref?: string
   backLabel?: string
   tickets?: VenueMapSkuTicketRef[] | null
+  eventId?: string | null
 }) {
+  const router = useRouter()
   const svgRef = useRef<SVGSVGElement>(null)
   const [map, setMap] = useState<InteractiveVenueMap>(
     parseVenueMap(value ?? emptyVenueMap()),
@@ -407,6 +436,8 @@ export function InteractiveVenueMapEditor({
   const [explicitSaveStatus, setExplicitSaveStatus] = useState<
     "saving" | "saved" | "error" | null
   >(null)
+  const [isCanvasDirty, setIsCanvasDirty] = useState(false)
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false)
   const [hoveredGroupId, setHoveredGroupId] = useState<string | null>(null)
   const hoverClearTimer = useRef<number | null>(null)
   const [marquee, setMarquee] = useState<{
@@ -450,6 +481,8 @@ export function InteractiveVenueMapEditor({
         ? autosaveStatus
         : (explicitSaveStatus ?? autosaveStatus)
   const mapBusy = saving || explicitSaveStatus === "saving"
+  const hasUnsavedMapWork = isCanvasDirty || polygonDraft.length > 0
+  useUnsavedChanges(hasUnsavedMapWork)
 
   async function persistEditorMap() {
     if (!onSave) return
@@ -457,6 +490,8 @@ export function InteractiveVenueMapEditor({
     try {
       await onSave(mapRef.current)
       setExplicitSaveStatus("saved")
+      setIsCanvasDirty(false)
+      setIsSaveModalOpen(false)
       toast.success("Guardado")
     } catch (error) {
       setExplicitSaveStatus("error")
@@ -465,31 +500,6 @@ export function InteractiveVenueMapEditor({
       )
     }
   }
-  useLayoutEffect(() => {
-    isolationIdRef.current = isolationId
-    activeZoneIdRef.current = activeZoneId
-    workModeRef.current = workMode
-    selectionRef.current = selection
-    compactChromeRef.current = compactChrome
-    lassoModeRef.current = lassoMode
-    seatEditModeRef.current = seatEditMode
-    mapRef.current = map
-    toolRef.current = tool
-    polygonDraftRef.current = polygonDraft
-    svgViewBoxRef.current = svgViewBox
-  }, [
-    isolationId,
-    activeZoneId,
-    workMode,
-    selection,
-    compactChrome,
-    lassoMode,
-    seatEditMode,
-    map,
-    tool,
-    polygonDraft,
-    svgViewBox,
-  ])
   useEffect(() => {
     return () => {
       if (viewportAnimRef.current != null) {
@@ -515,7 +525,36 @@ export function InteractiveVenueMapEditor({
   const spaceHeld = useRef(false)
   const shiftHeld = useRef(false)
   const [spacePan, setSpacePan] = useState(false)
+  const [handPan, setHandPan] = useState(false)
   const [isPanning, setIsPanning] = useState(false)
+  const handPanRef = useRef(false)
+  useLayoutEffect(() => {
+    isolationIdRef.current = isolationId
+    activeZoneIdRef.current = activeZoneId
+    workModeRef.current = workMode
+    selectionRef.current = selection
+    compactChromeRef.current = compactChrome
+    lassoModeRef.current = lassoMode
+    seatEditModeRef.current = seatEditMode
+    mapRef.current = map
+    toolRef.current = tool
+    polygonDraftRef.current = polygonDraft
+    svgViewBoxRef.current = svgViewBox
+    handPanRef.current = handPan
+  }, [
+    isolationId,
+    activeZoneId,
+    workMode,
+    selection,
+    compactChrome,
+    lassoMode,
+    seatEditMode,
+    map,
+    tool,
+    polygonDraft,
+    svgViewBox,
+    handPan,
+  ])
   const panRef = useRef(pan)
   const zoomRef = useRef(zoom)
   const selectionRef = useRef(selection)
@@ -599,7 +638,7 @@ export function InteractiveVenueMapEditor({
 
   function handleClearMap() {
     const confirmed = window.confirm(
-      "¿Estás seguro de que deseas borrar todo el mapa? Esta acción no se puede deshacer.",
+      "¿Querés eliminar esto? Se va a borrar todo el mapa. Esta acción no se puede deshacer.",
     )
     if (!confirmed) return
     const cleared: InteractiveVenueMap = {
@@ -622,6 +661,7 @@ export function InteractiveVenueMapEditor({
     setRedoCount(0)
     mapRef.current = cleared
     setMap(cleared)
+    setIsCanvasDirty(true)
     onChange(cleared, venueMapToSeatingLayout(cleared))
     setSelection(null)
     setPolygonDraft([])
@@ -642,6 +682,7 @@ export function InteractiveVenueMapEditor({
     setRedoCount(0)
     mapRef.current = parsed
     setMap(parsed)
+    setIsCanvasDirty(true)
     onChange(parsed, venueMapToSeatingLayout(parsed))
     setLibraryOpen(false)
     setWorkMode(showPrices ? "pricing" : "architecture")
@@ -662,6 +703,12 @@ export function InteractiveVenueMapEditor({
     selection?.kind === "zone"
       ? (map.zones ?? []).find((zone) => zone.id === selection.id) ?? null
       : null
+  const selectedAisle =
+    selection?.kind === "aisle"
+      ? map.aisles.find((aisle) => aisle.id === selection.id) ?? null
+      : null
+  const selectedStage =
+    selection?.kind === "stage" && map.stage ? map.stage : null
   const activeZone = useMemo(
     () =>
       activeZoneId
@@ -704,12 +751,14 @@ export function InteractiveVenueMapEditor({
     () => new Set(selectedElementIds),
     [selectedElementIds],
   )
+  const canShowTransform =
+    !preview && tool === "select" && !handPan
   const computedBounds =
-    !preview && tool === "select" && !placement && selectedElements.length > 0
+    canShowTransform && selectedElements.length > 0
       ? selectionBounds(selectedElements)
       : null
   const selectedSeatEntries = useMemo((): SelectedSeatEntry[] => {
-    if (preview || tool !== "select" || placement) return []
+    if (preview || tool !== "select" || handPan) return []
     if (selection?.kind === "sector") {
       const sector = map.sectors.find((item) => item.id === selection.id)
       return (sector?.seats ?? []).map((seat) => ({
@@ -754,7 +803,7 @@ export function InteractiveVenueMapEditor({
       }
       return []
     })
-  }, [map.elements, map.sectors, placement, preview, selection, tool])
+  }, [handPan, map.elements, map.sectors, preview, selection, tool])
   const selectedSeatBounds = useMemo(
     () =>
       selectedSeatEntries.length > 0
@@ -767,18 +816,43 @@ export function InteractiveVenueMapEditor({
     [selectedSeatEntries],
   )
   const selectedZoneBounds =
-    !preview && tool === "select" && !placement && selectedZone
+    canShowTransform && selectedZone
       ? (() => {
           const box = zoneCanvasAabb(selectedZone)
           return box ? aabbToRect(box) : null
         })()
       : null
+  const selectedStageBounds =
+    canShowTransform && selectedStage
+      ? aabbToRect(
+          rectAabb(
+            {
+              x: selectedStage.x,
+              y: selectedStage.y,
+              width: selectedStage.width,
+              height: selectedStage.height,
+            },
+            selectedStage.rotation ?? 0,
+          ),
+        )
+      : null
+  const selectedAisleBounds =
+    canShowTransform && selectedAisle
+      ? {
+          x: selectedAisle.x,
+          y: selectedAisle.y,
+          width: selectedAisle.width,
+          height: selectedAisle.height,
+        }
+      : null
   const transformBounds =
     selectedZoneBounds ??
+    selectedStageBounds ??
+    selectedAisleBounds ??
     selectedSeatBounds ??
     measuredBounds ??
     computedBounds
-  const seatGizmoActive = selectedSeatEntries.length > 0 && selectedElementIds.length === 0
+  const seatGizmoActive = selection?.kind === "seats"
   const geometryLocked = workMode === "pricing"
   const selectionLocked = selectedElements.some((item) => item.isLocked === true)
   const selectionFullyLocked = selectionIsFullyLocked(
@@ -816,9 +890,11 @@ export function InteractiveVenueMapEditor({
     if (
       preview ||
       tool !== "select" ||
-      placement ||
+      handPan ||
       selectedElementIds.length === 0 ||
-      selection?.kind === "zone"
+      selection?.kind === "zone" ||
+      selection?.kind === "stage" ||
+      selection?.kind === "aisle"
     ) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- getBBox is only valid after the SVG commits
       setMeasuredBounds((current) => (current ? null : current))
@@ -870,7 +946,7 @@ export function InteractiveVenueMapEditor({
     })
   }, [
     map.elements,
-    placement,
+    handPan,
     preview,
     selectedElementIds,
     selectedElements,
@@ -904,7 +980,10 @@ export function InteractiveVenueMapEditor({
     if (live.type === "move") {
       return Math.abs(live.dx) < 0.05 && Math.abs(live.dy) < 0.05
     }
-    if (live.type === "scale") return Math.abs(live.scale - 1) < 0.001
+    if (live.type === "scale") {
+      const { sx, sy } = liveScaleAxes(live)
+      return Math.abs(sx - 1) < 0.001 && Math.abs(sy - 1) < 0.001
+    }
     return Math.abs(live.deg) < 0.05
   }
 
@@ -945,6 +1024,26 @@ export function InteractiveVenueMapEditor({
       return
     }
     const current = mapRef.current
+    if (drag.target === "stage" && current.stage) {
+      paintLive(null)
+      commit({
+        ...current,
+        stage: applyLiveToStage(current.stage, snapped),
+      })
+      clearLiveUi()
+      return
+    }
+    if (drag.target === "aisle" && drag.aisleId) {
+      paintLive(null)
+      commit({
+        ...current,
+        aisles: current.aisles.map((aisle) =>
+          aisle.id === drag.aisleId ? applyLiveToAisle(aisle, snapped) : aisle,
+        ),
+      })
+      clearLiveUi()
+      return
+    }
     if (drag.zoneId) {
       paintLive(null)
       commit({
@@ -1009,21 +1108,46 @@ export function InteractiveVenueMapEditor({
     )
   }
 
+  function transformTargetFromSelection(): {
+    zoneId?: string
+    aisleId?: string
+    target?: TransformTarget
+  } {
+    const current = selectionRef.current
+    if (current?.kind === "zone") return { zoneId: current.id }
+    if (current?.kind === "stage") return { target: "stage" }
+    if (current?.kind === "aisle") return { target: "aisle", aisleId: current.id }
+    if (
+      current?.kind === "seats" ||
+      current?.kind === "sector"
+    ) {
+      return { target: "seats" }
+    }
+    return {}
+  }
+
   function beginGroupMove(
     ids: string[],
     event: React.PointerEvent,
     zoneId?: string,
   ) {
     const seatIds = selectedSeatEntries.map((item) => item.key)
-    const usingSeats = !zoneId && ids.length === 0 && seatIds.length > 0
-    if (!zoneId && !usingSeats && idsAreLocked(ids)) return
+    const extras = zoneId ? { zoneId } : transformTargetFromSelection()
+    const usingSeats =
+      extras.target === "seats" ||
+      (!extras.zoneId &&
+        extras.target !== "stage" &&
+        extras.target !== "aisle" &&
+        ids.length === 0 &&
+        seatIds.length > 0)
+    if (!extras.zoneId && !usingSeats && extras.target !== "stage" && extras.target !== "aisle" && idsAreLocked(ids)) return
     const point = pointerToSvg(event)
     capturePointer(event)
     transformDrag.current = {
       mode: "move",
       ids: usingSeats ? seatIds : ids,
-      zoneId,
-      target: usingSeats ? "seats" : undefined,
+      ...extras,
+      target: usingSeats ? "seats" : extras.target,
       startX: point.x,
       startY: point.y,
       originX: transformBounds?.x ?? point.x,
@@ -1038,43 +1162,67 @@ export function InteractiveVenueMapEditor({
     bounds: BoundsRect,
     event: React.PointerEvent,
   ) {
-    if (seatGizmoActive) return
     if (idsAreLocked(selectedElementIds)) return
     const point = pointerToSvg(event)
     const origin = resizeOrigin(bounds, handle)
+    const corner = handlePoint(bounds, handle)
     const startDist = Math.hypot(point.x - origin.x, point.y - origin.y)
     capturePointer(event)
-    const zoneId =
-      selectionRef.current?.kind === "zone" ? selectionRef.current.id : undefined
+    const extras = transformTargetFromSelection()
+    const usingSeats =
+      extras.target === "seats" ||
+      (!extras.zoneId &&
+        extras.target !== "stage" &&
+        extras.target !== "aisle" &&
+        selectedElementIds.length === 0 &&
+        selectedSeatEntries.length > 0)
     transformDrag.current = {
       mode: "scale",
-      ids: selectedElementIds,
-      zoneId,
+      ids: usingSeats
+        ? selectedSeatEntries.map((item) => item.key)
+        : selectedElementIds,
+      ...extras,
+      target: usingSeats ? "seats" : extras.target,
       ox: origin.x,
       oy: origin.y,
       startDist: Math.max(startDist, 4),
+      startCornerX: corner.x,
+      startCornerY: corner.y,
       handle,
     }
-    paintLive({ type: "scale", ox: origin.x, oy: origin.y, scale: 1 })
+    paintLive({
+      type: "scale",
+      ox: origin.x,
+      oy: origin.y,
+      scale: 1,
+      scaleX: 1,
+      scaleY: 1,
+    })
     setScaleHandle(handle)
     setTransformingKind("scale")
   }
 
   function beginRotate(bounds: BoundsRect, event: React.PointerEvent) {
-    const seatIds = selectedSeatEntries.map((item) => item.key)
-    const usingSeats = seatGizmoActive
-    if (!usingSeats && idsAreLocked(selectedElementIds)) return
+    const extras = transformTargetFromSelection()
+    const usingSeats =
+      extras.target === "seats" ||
+      (!extras.zoneId &&
+        extras.target !== "stage" &&
+        extras.target !== "aisle" &&
+        selectedElementIds.length === 0 &&
+        selectedSeatEntries.length > 0)
+    if (!usingSeats && extras.target !== "stage" && extras.target !== "aisle" && extras.zoneId == null && idsAreLocked(selectedElementIds)) return
     const point = pointerToSvg(event)
     const cx = bounds.x + bounds.width / 2
     const cy = bounds.y + bounds.height / 2
     capturePointer(event)
-    const zoneId =
-      selectionRef.current?.kind === "zone" ? selectionRef.current.id : undefined
     transformDrag.current = {
       mode: "rotate",
-      ids: usingSeats ? seatIds : selectedElementIds,
-      zoneId,
-      target: usingSeats ? "seats" : undefined,
+      ids: usingSeats
+        ? selectedSeatEntries.map((item) => item.key)
+        : selectedElementIds,
+      ...extras,
+      target: usingSeats ? "seats" : extras.target,
       cx,
       cy,
       startAngle: angleAt({ x: cx, y: cy }, point),
@@ -1084,7 +1232,11 @@ export function InteractiveVenueMapEditor({
   }
 
   function wantsCanvasPan(event: { button: number; altKey: boolean }) {
-    return event.button === 1 || (event.button === 0 && (event.altKey || spaceHeld.current))
+    return (
+      event.button === 1 ||
+      (event.button === 0 &&
+        (event.altKey || spaceHeld.current || handPanRef.current))
+    )
   }
 
   function armSheetDismissGuard() {
@@ -1151,6 +1303,9 @@ export function InteractiveVenueMapEditor({
 
   function applyElementIds(ids: string[], options?: { isolate?: boolean }) {
     if (!options?.isolate) setIsolationId(null)
+    setHandPan(false)
+    setPlacement(null)
+    setTool("select")
     const next = selectionFromIds(ids)
     if (!next) setSelection(null)
     else if (next.kind === "element") setSelection({ kind: "element", id: next.id! })
@@ -1381,6 +1536,7 @@ export function InteractiveVenueMapEditor({
     if (!options?.skipHistory) pushHistory()
     mapRef.current = next
     setMap(next)
+    setIsCanvasDirty(true)
     setExplicitSaveStatus(null)
     onChange(next, venueMapToSeatingLayout(next))
   }
@@ -1736,9 +1892,22 @@ export function InteractiveVenueMapEditor({
       sectors: current.sectors.map((sector) => {
         if (sector.id !== id) return sector
         const next = { ...sector, ...patch }
+        if (patch.rowsConfig != null) {
+          const grid = rowsConfigGridFields(patch.rowsConfig)
+          next.rows = grid.rows
+          next.seatsPerRow = grid.itemsPerRow
+          next.rowsConfig = patch.rowsConfig
+        } else if (patch.rows != null && next.rowsConfig) {
+          next.rowsConfig = resizeRowsConfig(next.rowsConfig, patch.rows, {
+            maxRows: 40,
+            maxSeats: 40,
+          })
+          next.seatsPerRow = rowsConfigGridFields(next.rowsConfig).itemsPerRow
+        }
         if (
           patch.rows != null ||
           patch.seatsPerRow != null ||
+          patch.rowsConfig != null ||
           patch.curvature != null ||
           patch.aisle != null ||
           patch.x != null ||
@@ -1786,19 +1955,24 @@ export function InteractiveVenueMapEditor({
             next.priceMode ?? venuePriceModeFromSellMode(next.sellMode)
         }
         if (next.layoutType === "general") return next
+        if (next.layoutType === "numbered_seat") {
+          const rowsConfig = resolveZoneRowsConfig(next)
+          return {
+            ...next,
+            ...rowsConfigGridFields(rowsConfig),
+            rowsConfig,
+            capacityPerUnit: 1,
+          }
+        }
         const rows = Math.min(80, Math.max(1, Math.floor(next.rows) || 1))
         const itemsPerRow = Math.min(80, Math.max(1, Math.floor(next.itemsPerRow) || 1))
-        const perUnit =
-          next.layoutType === "numbered_seat"
-            ? 1
-            : Math.min(100, Math.max(1, Math.floor(next.capacityPerUnit) || 1))
+        const perUnit = Math.min(100, Math.max(1, Math.floor(next.capacityPerUnit) || 1))
         return {
           ...next,
           rows,
           itemsPerRow,
           capacityPerUnit: perUnit,
-          capacity:
-            next.layoutType === "numbered_seat" ? rows * itemsPerRow : rows * itemsPerRow * perUnit,
+          capacity: rows * itemsPerRow * perUnit,
         }
       }),
     }, { skipHistory })
@@ -2746,6 +2920,9 @@ export function InteractiveVenueMapEditor({
       return
     }
     setIsolationId(null)
+    setHandPan(false)
+    setPlacement(null)
+    setTool("select")
     setSelection({ kind: "zone", id: zone.id })
     requestMobileProperties()
     if (lassoModeRef.current) return
@@ -2832,12 +3009,24 @@ export function InteractiveVenueMapEditor({
         return
       }
       if (transforming.mode === "scale") {
-        const dist = Math.hypot(point.x - transforming.ox, point.y - transforming.oy)
+        const axes = scaleFromHandlePointer({
+          handle: transforming.handle,
+          origin: { x: transforming.ox, y: transforming.oy },
+          startCorner: {
+            x: transforming.startCornerX,
+            y: transforming.startCornerY,
+          },
+          point,
+          uniform: snapActive(sample.shiftKey),
+          startDist: transforming.startDist,
+        })
         paintLive({
           type: "scale",
           ox: transforming.ox,
           oy: transforming.oy,
-          scale: clampScale(dist / transforming.startDist),
+          scale: axes.scale,
+          scaleX: axes.scaleX,
+          scaleY: axes.scaleY,
         })
         return
       }
@@ -3087,6 +3276,31 @@ export function InteractiveVenueMapEditor({
   const canRedo = redoCount > 0
   const isWorkspace = variant === "workspace"
   const isStudio = variant === "studio" || isWorkspace
+  const eventEditHref = eventId?.trim()
+    ? `/admin/events/${eventId.trim()}/edit?step=2`
+    : null
+
+  function handleLeaveEditor() {
+    if (
+      hasUnsavedMapWork &&
+      !window.confirm(UNSAVED_MAP_CHANGES_MESSAGE)
+    ) {
+      return
+    }
+    if (onClose) {
+      onClose()
+      return
+    }
+    if (eventEditHref) {
+      router.push(eventEditHref)
+      return
+    }
+    if (backHref && backHref !== "/admin" && backHref !== "/admin/events") {
+      router.push(backHref)
+    }
+  }
+
+  const canLeaveEditor = Boolean(onClose || eventEditHref || backHref)
   const canConvertToIndividualSeats =
     Boolean(selectedSector && selectedSector.seats.length > 0) ||
     Boolean(selectedElement?.groupId?.trim()) ||
@@ -3441,6 +3655,7 @@ export function InteractiveVenueMapEditor({
   }
 
   function pickPaletteItem(next: PalettePlacement) {
+    setHandPan(false)
     if (next.kind === "zone_polygon") {
       setWorkMode("architecture")
       setPlacement(next)
@@ -3466,10 +3681,18 @@ export function InteractiveVenueMapEditor({
 
   function pickFloatingTool(next: FloatingDrawTool) {
     if (next === "select") {
+      setHandPan(false)
       setTool("select")
       setPlacement(null)
       return
     }
+    if (next === "pan") {
+      setHandPan(true)
+      setTool("select")
+      setPlacement(null)
+      return
+    }
+    setHandPan(false)
     if (next === "polygon") {
       pickPaletteItem({ kind: "zone_polygon" })
       return
@@ -3482,6 +3705,7 @@ export function InteractiveVenueMapEditor({
   }
 
   function selectFromLayerTree(next: LayerTreeSelection) {
+    setHandPan(false)
     setTool("select")
     setPlacement(null)
     setIsolationId(null)
@@ -3494,14 +3718,16 @@ export function InteractiveVenueMapEditor({
   }
 
   const floatingTool: FloatingDrawTool =
-    tool === "polygon"
-      ? "polygon"
-      : placement?.kind === "element" && placement.type === "vip_chair"
-        ? "seat"
-        : placement?.kind === "element" &&
-            (placement.type === "round_table" || placement.type === "long_table")
-          ? "table"
-          : "select"
+    handPan
+      ? "pan"
+      : tool === "polygon"
+        ? "polygon"
+        : placement?.kind === "element" && placement.type === "vip_chair"
+          ? "seat"
+          : placement?.kind === "element" &&
+              (placement.type === "round_table" || placement.type === "long_table")
+            ? "table"
+            : "select"
 
   const hasPropertiesTarget =
     Boolean(selection) || workMode === "pricing" || workMode === "indexing"
@@ -3550,14 +3776,14 @@ export function InteractiveVenueMapEditor({
           : "flex-wrap gap-2 overflow-hidden px-3 py-2",
       )}
     >
-      {isStudio && onClose ? (
+      {isStudio && canLeaveEditor ? (
         <div className="flex min-w-0 shrink-0 items-center gap-1.5">
           <Button
             type="button"
             variant="ghost"
-            onClick={onClose}
+            onClick={handleLeaveEditor}
             className="h-9 shrink-0 px-2 md:px-3"
-            aria-label="Salir sin guardar"
+            aria-label="Volver al evento"
           >
             <ArrowLeft className="size-4" />
             <span className="hidden md:inline">Salir</span>
@@ -3739,9 +3965,7 @@ export function InteractiveVenueMapEditor({
           <Button
             type="button"
             disabled={mapBusy}
-            onClick={() => {
-              void persistEditorMap()
-            }}
+            onClick={() => setIsSaveModalOpen(true)}
             className="h-9 shrink-0 bg-emerald-500 px-2 font-bold text-black hover:bg-emerald-400 md:px-3"
             aria-label="Guardar cambios"
           >
@@ -3756,19 +3980,11 @@ export function InteractiveVenueMapEditor({
   const workspaceHeader = (
     <header className="z-30 flex h-14 shrink-0 items-center overflow-hidden border-b border-border bg-card px-3 text-card-foreground">
       <div className="flex min-w-0 flex-1 items-center gap-2 pr-3">
-        {backHref ? (
-          <Link
-            href={backHref}
-            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <ArrowLeft className="size-3.5" />
-            <span className="hidden lg:inline">{backLabel}</span>
-          </Link>
-        ) : onClose ? (
+        {canLeaveEditor ? (
           <Button
             type="button"
             variant="ghost"
-            onClick={onClose}
+            onClick={handleLeaveEditor}
             className="h-8 shrink-0 px-1.5 text-xs text-muted-foreground"
           >
             <ArrowLeft className="size-3.5" />
@@ -3820,9 +4036,7 @@ export function InteractiveVenueMapEditor({
           <Button
             type="button"
             disabled={mapBusy}
-            onClick={() => {
-              void persistEditorMap()
-            }}
+            onClick={() => setIsSaveModalOpen(true)}
             className="h-8 shrink-0 bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-500"
           >
             Guardar Cambios
@@ -3871,7 +4085,7 @@ export function InteractiveVenueMapEditor({
             "relative overflow-hidden touch-none overscroll-none select-none bg-slate-100 bg-[radial-gradient(circle_at_1px_1px,#cbd5e1_1px,transparent_0)] bg-[size:20px_20px] dark:bg-zinc-950 dark:bg-[radial-gradient(circle_at_1px_1px,#27272a_1px,transparent_0)]",
             "relative min-h-0 flex-1 overflow-hidden",
             isStudio && "h-full w-full",
-            spacePan && !isPanning && "cursor-grab [&_*]:cursor-grab",
+              (spacePan || handPan) && !isPanning && "cursor-grab [&_*]:cursor-grab",
             isPanning && "cursor-grabbing [&_*]:cursor-grabbing",
           )}
           style={{ touchAction: "none" }}
@@ -3917,14 +4131,18 @@ export function InteractiveVenueMapEditor({
               "w-full touch-none select-none",
               "absolute inset-0 h-full min-h-0",
               tool === "polygon" && "cursor-crosshair",
-              (spacePan || isPanning) && tool !== "polygon" && "cursor-grab",
+              (spacePan || handPan || isPanning) && tool !== "polygon" && "cursor-grab",
               isPanning && "cursor-grabbing",
               transformingKind === "move" && "cursor-grabbing",
               transformingKind === "rotate" && "cursor-grabbing",
               transformingKind === "scale" &&
-                (scaleHandle === "ne" || scaleHandle === "sw"
-                  ? "cursor-nesw-resize"
-                  : "cursor-nwse-resize"),
+                (scaleHandle === "n" || scaleHandle === "s"
+                  ? "cursor-ns-resize"
+                  : scaleHandle === "e" || scaleHandle === "w"
+                    ? "cursor-ew-resize"
+                    : scaleHandle === "ne" || scaleHandle === "sw"
+                      ? "cursor-nesw-resize"
+                      : "cursor-nwse-resize"),
             )}
             onContextMenu={(event) => event.preventDefault()}
             onPointerDown={onPointerDown}
@@ -3977,35 +4195,34 @@ export function InteractiveVenueMapEditor({
                   openObjectMenu(event, { kind: "zone", id: zone.id })
                 }
               />
-              {map.aisles.map((aisle) => (
-                <rect
-                  key={aisle.id}
-                  x={aisle.x}
-                  y={aisle.y}
-                  width={aisle.width}
-                  height={aisle.height}
-                  rx={6}
-                  className={cn(
-                    "fill-zinc-800/80 stroke-zinc-600",
-                    selection?.kind === "aisle" && selection.id === aisle.id && "stroke-emerald-400",
-                    activeZoneId && "pointer-events-none opacity-30 grayscale",
-                  )}
-                  strokeWidth={1.5}
-                  onContextMenu={(event) => openObjectMenu(event, { kind: "aisle", id: aisle.id })}
-                  onPointerDown={(event) => {
-                    if (activeZoneId) return
-                    if (wantsCanvasPan(event)) return
-                    event.stopPropagation()
-                    if (event.button !== 0) return
-                    setIsolationId(null)
-                    setSelection({ kind: "aisle", id: aisle.id })
-                    beginElementDrag("aisle", event, aisle.x, aisle.y, aisle.id)
-                  }}
-                />
-              ))}
-              {map.stage ? (
-                <g
-                  className={activeZoneId ? "pointer-events-none opacity-30 grayscale" : undefined}
+              {map.aisles
+                .filter((aisle) => aisle.id !== selectedAisle?.id)
+                .map((aisle) => (
+                  <VenueAisleNode
+                    key={aisle.id}
+                    aisle={aisle}
+                    selected={false}
+                    dimmed={Boolean(activeZoneId)}
+                    onContextMenu={(event) => openObjectMenu(event, { kind: "aisle", id: aisle.id })}
+                    onPointerDown={(event) => {
+                      if (activeZoneId) return
+                      if (wantsCanvasPan(event)) return
+                      event.stopPropagation()
+                      if (event.button !== 0) return
+                      setIsolationId(null)
+                      setHandPan(false)
+                      setPlacement(null)
+                      setTool("select")
+                      setSelection({ kind: "aisle", id: aisle.id })
+                      beginElementDrag("aisle", event, aisle.x, aisle.y, aisle.id)
+                    }}
+                  />
+                ))}
+              {map.stage && selection?.kind !== "stage" ? (
+                <VenueStageNode
+                  stage={map.stage}
+                  selected={false}
+                  dimmed={Boolean(activeZoneId)}
                   onContextMenu={(event) => openObjectMenu(event, { kind: "stage" })}
                   onPointerDown={(event) => {
                     if (activeZoneId) return
@@ -4013,33 +4230,15 @@ export function InteractiveVenueMapEditor({
                     event.stopPropagation()
                     if (event.button !== 0) return
                     setIsolationId(null)
+                    setHandPan(false)
+                    setPlacement(null)
+                    setTool("select")
                     setSelection({ kind: "stage" })
                     if (map.stage) {
                       beginElementDrag("stage", event, map.stage.x, map.stage.y)
                     }
                   }}
-                >
-                  <rect
-                    x={map.stage.x}
-                    y={map.stage.y}
-                    width={map.stage.width}
-                    height={map.stage.height}
-                    rx={10}
-                    className={cn(
-                      "fill-slate-200 dark:fill-zinc-800",
-                      selection?.kind === "stage" && "stroke-emerald-400",
-                    )}
-                    strokeWidth={selection?.kind === "stage" ? 2 : 0}
-                  />
-                  <text
-                    x={map.stage.x + map.stage.width / 2}
-                    y={map.stage.y + map.stage.height / 2 + 5}
-                    textAnchor="middle"
-                    className="fill-slate-600 text-[13px] font-black tracking-[0.28em] dark:fill-[#e4e4e7]"
-                  >
-                    {map.stage.label}
-                  </text>
-                </g>
+                />
               ) : null}
               {renderMap.sectors.map((sector) => (
                 <g key={sector.id}>
@@ -4139,6 +4338,38 @@ export function InteractiveVenueMapEditor({
               />
               </g>
               <g ref={liveGroupRef}>
+                {selectedAisle ? (
+                  <VenueAisleNode
+                    aisle={selectedAisle}
+                    selected
+                    dimmed={Boolean(activeZoneId)}
+                    onContextMenu={(event) =>
+                      openObjectMenu(event, { kind: "aisle", id: selectedAisle.id })
+                    }
+                    onPointerDown={(event) => {
+                      if (activeZoneId) return
+                      if (wantsCanvasPan(event)) return
+                      event.stopPropagation()
+                      if (event.button !== 0) return
+                      beginGroupMove([], event)
+                    }}
+                  />
+                ) : null}
+                {selectedStage ? (
+                  <VenueStageNode
+                    stage={selectedStage}
+                    selected
+                    dimmed={Boolean(activeZoneId)}
+                    onContextMenu={(event) => openObjectMenu(event, { kind: "stage" })}
+                    onPointerDown={(event) => {
+                      if (activeZoneId) return
+                      if (wantsCanvasPan(event)) return
+                      event.stopPropagation()
+                      if (event.button !== 0) return
+                      beginGroupMove([], event)
+                    }}
+                  />
+                ) : null}
                 {renderMap.sectors.flatMap((sector) =>
                   sector.seats.flatMap((seat) => {
                     const key = seatKey(sector.id, seat.id)
@@ -4282,13 +4513,18 @@ export function InteractiveVenueMapEditor({
                     isRotating={transformingKind === "rotate"}
                     fatFinger={compactChrome}
                     locked={selectionLocked}
-                    hideResize={seatGizmoActive}
+                    hideResize={selection?.kind === "seats"}
                     onMoveStart={(event) => {
                       if (selectedZone) {
                         beginGroupMove([], event, selectedZone.id)
                         return
                       }
-                      if (seatGizmoActive) {
+                      if (
+                        selectedStage ||
+                        selectedAisle ||
+                        seatGizmoActive ||
+                        selectedSeatEntries.length > 0
+                      ) {
                         beginGroupMove([], event)
                         return
                       }
@@ -4365,12 +4601,16 @@ export function InteractiveVenueMapEditor({
               Volver al mapa general
             </button>
           ) : null}
-          {!compactChrome && !preview && !libraryOpen ? (
+          {!preview && !libraryOpen ? (
             <VenueFloatingToolbar
               active={floatingTool}
               onChange={pickFloatingTool}
               onPlace={pickPaletteItem}
               constraintRef={canvasRef}
+              zoomPercent={Math.round(zoom * 100)}
+              onZoomIn={() => nudgeCanvasZoom(0.1)}
+              onZoomOut={() => nudgeCanvasZoom(-0.1)}
+              className={compactChrome ? "top-16" : undefined}
             />
           ) : null}
           {isStudio && tool !== "polygon" ? (
@@ -4682,52 +4922,61 @@ export function InteractiveVenueMapEditor({
                     selectedSector.seats.filter(
                       (seat) => seat.status !== "blocked",
                     ).length ||
-                    selectedSector.rows * selectedSector.seatsPerRow
+                    rowsConfigGridFields(
+                      resolveSectorRowsConfig(selectedSector, {
+                        maxRows: 40,
+                        maxSeats: 40,
+                      }),
+                    ).capacity
                   }
                   readOnly
                 />
               </Field>
-              <Field label="Color">
-                <div className="flex items-center gap-2">
-                  <Palette className="size-4 text-zinc-500" />
-                  <input
-                    type="color"
-                    value={selectedSector.color}
-                    onChange={(event) =>
-                      patchSector(selectedSector.id, { color: event.target.value })
-                    }
-                    className="h-8 w-full cursor-pointer rounded border border-zinc-700 bg-transparent"
-                  />
-                </div>
+              <Field label="Color del Sector">
+                <VenueSectorColorPicker
+                  value={selectedSector.color}
+                  onChange={(color) =>
+                    patchSector(selectedSector.id, { color })
+                  }
+                />
               </Field>
-              <div className="grid grid-cols-2 gap-2">
-                <Field label="Filas">
-                  <Input
-                    type="number"
-                    min={1}
-                    max={40}
-                    value={selectedSector.rows}
-                    onChange={(event) =>
-                      patchSector(selectedSector.id, {
-                        rows: Number(event.target.value) || 1,
-                      })
-                    }
-                  />
-                </Field>
-                <Field label="Asientos / fila">
-                  <Input
-                    type="number"
-                    min={1}
-                    max={40}
-                    value={selectedSector.seatsPerRow}
-                    onChange={(event) =>
-                      patchSector(selectedSector.id, {
-                        seatsPerRow: Number(event.target.value) || 1,
-                      })
-                    }
-                  />
-                </Field>
-              </div>
+              <Field label="Cantidad de filas">
+                <Input
+                  type="number"
+                  min={1}
+                  max={40}
+                  value={
+                    resolveSectorRowsConfig(selectedSector, {
+                      maxRows: 40,
+                      maxSeats: 40,
+                    }).length
+                  }
+                  onChange={(event) => {
+                    const current = resolveSectorRowsConfig(selectedSector, {
+                      maxRows: 40,
+                      maxSeats: 40,
+                    })
+                    patchSector(selectedSector.id, {
+                      rowsConfig: resizeRowsConfig(
+                        current,
+                        Number(event.target.value) || 1,
+                        { maxRows: 40, maxSeats: 40 },
+                      ),
+                    })
+                  }}
+                />
+              </Field>
+              <VenueRowsConfigEditor
+                rowsConfig={resolveSectorRowsConfig(selectedSector, {
+                  maxRows: 40,
+                  maxSeats: 40,
+                })}
+                maxRows={40}
+                maxSeats={40}
+                onChange={(rowsConfig) =>
+                  patchSector(selectedSector.id, { rowsConfig })
+                }
+              />
               <Field label={`Curvatura (${Math.round(selectedSector.curvature * 100)}%)`}>
                 <input
                   type="range"
@@ -4907,21 +5156,14 @@ export function InteractiveVenueMapEditor({
                   }
                 />
               </Field>
-              <Field label="Color">
+              <Field label="Color del Sector">
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Palette className="size-4 text-zinc-500" />
-                    <input
-                      type="color"
-                      value={selectedElement.color}
-                      onChange={(event) =>
-                        patchElement(selectedElement.id, {
-                          color: event.target.value,
-                        })
-                      }
-                      className="h-11 w-full cursor-pointer rounded border border-zinc-700 bg-transparent"
-                    />
-                  </div>
+                  <VenueSectorColorPicker
+                    value={selectedElement.color}
+                    onChange={(color) =>
+                      patchElement(selectedElement.id, { color })
+                    }
+                  />
                   <Button
                     type="button"
                     variant="outline"
@@ -5592,6 +5834,16 @@ export function InteractiveVenueMapEditor({
         />
       ) : null}
 
+      <SaveMapModal
+        open={isSaveModalOpen}
+        onOpenChange={setIsSaveModalOpen}
+        map={map}
+        saving={mapBusy}
+        onConfirm={() => {
+          void persistEditorMap()
+        }}
+      />
+
       <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
         <DialogContent className="border-border bg-card text-foreground sm:max-w-md">
           <DialogHeader>
@@ -5745,6 +5997,85 @@ function StudioInspectorFrame({
         </div>
       </SheetContent>
     </Sheet>
+  )
+}
+
+function VenueStageNode({
+  stage,
+  selected,
+  dimmed,
+  onContextMenu,
+  onPointerDown,
+}: {
+  stage: VenueMapStage
+  selected: boolean
+  dimmed?: boolean
+  onContextMenu: (event: React.MouseEvent) => void
+  onPointerDown: (event: React.PointerEvent) => void
+}) {
+  const cx = stage.x + stage.width / 2
+  const cy = stage.y + stage.height / 2
+  const rotation = stage.rotation ?? 0
+  return (
+    <g
+      className={dimmed ? "pointer-events-none opacity-30 grayscale" : undefined}
+      transform={rotation ? `rotate(${rotation} ${cx} ${cy})` : undefined}
+      onContextMenu={onContextMenu}
+      onPointerDown={onPointerDown}
+    >
+      <rect
+        x={stage.x}
+        y={stage.y}
+        width={stage.width}
+        height={stage.height}
+        rx={10}
+        className={cn(
+          "fill-slate-200 dark:fill-zinc-800",
+          selected && "stroke-emerald-400",
+        )}
+        strokeWidth={selected ? 2 : 0}
+      />
+      <text
+        x={cx}
+        y={cy + 5}
+        textAnchor="middle"
+        className="fill-slate-600 text-[13px] font-black tracking-[0.28em] dark:fill-[#e4e4e7]"
+      >
+        {stage.label}
+      </text>
+    </g>
+  )
+}
+
+function VenueAisleNode({
+  aisle,
+  selected,
+  dimmed,
+  onContextMenu,
+  onPointerDown,
+}: {
+  aisle: VenueMapAisle
+  selected: boolean
+  dimmed?: boolean
+  onContextMenu: (event: React.MouseEvent) => void
+  onPointerDown: (event: React.PointerEvent) => void
+}) {
+  return (
+    <rect
+      x={aisle.x}
+      y={aisle.y}
+      width={aisle.width}
+      height={aisle.height}
+      rx={6}
+      className={cn(
+        "fill-zinc-800/80 stroke-zinc-600",
+        selected && "stroke-emerald-400",
+        dimmed && "pointer-events-none opacity-30 grayscale",
+      )}
+      strokeWidth={1.5}
+      onContextMenu={onContextMenu}
+      onPointerDown={onPointerDown}
+    />
   )
 }
 

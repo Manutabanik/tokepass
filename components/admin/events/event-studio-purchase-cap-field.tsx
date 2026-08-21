@@ -23,12 +23,12 @@ export function EventStudioPurchaseCapField({
       name="maxTicketsPerUser"
       render={({ field, fieldState }) => (
         <FormItem className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950/50">
-          <FormLabel className="font-mono text-xs font-semibold uppercase tracking-wider text-foreground">
-            Tope de compra por usuario
+          <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">
+            Límite de entradas por persona
           </FormLabel>
-          <p className="text-xs leading-5 text-muted-foreground">
-            Fallback para tarifas sin máximo propio. El checkout valida cada
-            tarifa por separado. Vacío = sin tope por defecto.
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Ej: máximo 4 por compra. Si una entrada no tiene su propio tope,
+            usa este. Vacío = sin límite por defecto.
           </p>
           <Input
             type="text"
@@ -51,7 +51,7 @@ export function EventStudioPurchaseCapField({
               }
               field.onChange(typeof parsed === "number" ? parsed : null)
             }}
-            className="mt-2 h-11 max-w-[12rem] text-base tabular-nums md:text-sm"
+            className="mt-2 h-12 max-w-[12rem] rounded-xl border-border/60 bg-muted/20 px-4 text-base tabular-nums transition-all focus:bg-background sm:h-13"
           />
           <FormMessage>{fieldState.error?.message}</FormMessage>
         </FormItem>

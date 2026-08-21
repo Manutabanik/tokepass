@@ -99,21 +99,27 @@ export async function sendOrderTicketsEmail(
 
   const html = await render(OrderConfirmationEmail(emailProps))
   const text = [
-    `Tus entradas para ${payload.eventName} ya estan listas.`,
-    `Hola ${payload.customerName},`,
+    `¡Acá están tus entradas para ${payload.eventName}!`,
+    payload.customerName.trim()
+      ? `¡Hola, ${payload.customerName.trim()}!`
+      : "¡Hola!",
+    "¡Todo listo! Tu compra quedó confirmada. Podés ver tus códigos de acceso directamente desde el botón de abajo o ingresando a la app.",
     `Orden: ${payload.orderNumber}`,
     `Evento: ${payload.eventName}`,
     `Fecha: ${payload.eventDate}`,
     `Lugar: ${payload.eventVenue}`,
     `Total: ${emailProps.totalAmount}`,
     ...payload.tickets.map((ticket) => `${ticket.label}: ${ticket.codeText}`),
-    `Ver entradas: ${accountUrl}`,
+    `Ver mis entradas en TokePass: ${accountUrl}`,
+    "¿Tuviste algún problema con tu compra? Respondé a este mail o escribinos por WhatsApp.",
   ].join("\n")
 
   const data = await sendResendEmail({
     from: resendFromAddress(),
     to: [email],
-    subject: sanitizeEmailSubject(`Tus entradas para ${payload.eventName}`),
+    subject: sanitizeEmailSubject(
+      `¡Acá están tus entradas para ${payload.eventName}!`,
+    ),
     html,
     text,
   })
@@ -196,16 +202,18 @@ export async function sendTicketConfirmationEmail({
   )
 
   const text = [
-    `Confirmado. Ya tenés tus entradas para ${eventDetails.title}.`,
-    buyerName ? `Hola ${buyerName},` : "Hola,",
+    `¡Acá están tus entradas para ${eventDetails.title}!`,
+    buyerName?.trim() ? `¡Hola, ${buyerName.trim()}!` : "¡Hola!",
+    "¡Todo listo! Tu compra quedó confirmada. Podés ver tus códigos de acceso directamente desde el botón de abajo o ingresando a la app.",
     `Evento: ${eventDetails.title}`,
     `Fecha: ${eventDateLabel}`,
     `Lugar: ${eventDetails.location?.trim() || "Online"}`,
     `Entradas: ${ticketCount}`,
     `Total pagado: ${totalPaidLabel}`,
-    `Billetera: ${accessUrl}`,
+    `Ver mis entradas en TokePass: ${accessUrl}`,
     otpCode ? `Codigo de acceso: ${otpCode}` : "",
     "Por motivos de seguridad y para evitar fraudes, tus códigos QR son dinámicos y solo pueden visualizarse desde la plataforma. No se adjuntan PDFs.",
+    "¿Tuviste algún problema con tu compra? Respondé a este mail o escribinos por WhatsApp.",
   ]
     .filter(Boolean)
     .join("\n")
@@ -213,7 +221,9 @@ export async function sendTicketConfirmationEmail({
   await sendResendEmail({
     from,
     to: [email],
-    subject: sanitizeEmailSubject(`Confirmado: tus entradas para ${eventDetails.title}`),
+    subject: sanitizeEmailSubject(
+      `¡Acá están tus entradas para ${eventDetails.title}!`,
+    ),
     html,
     text,
   })

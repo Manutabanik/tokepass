@@ -223,7 +223,7 @@ export async function assignEventStaff(input: {
 
     const email = input.email.trim().toLowerCase()
     if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-      return { success: false, error: "Email inválido." }
+      return { success: false, error: "Escribí un correo válido (ej: nombre@gmail.com)" }
     }
 
     const { supabase, userId, role } = await requireOrganizer()

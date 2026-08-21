@@ -121,13 +121,14 @@ function GuestTicketCard({ ticket }: { ticket: MyTicket }) {
             <ShieldCheck className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
             {isStatic
               ? "Presentá este código en puerta. También sirve el PDF impreso."
-              : "Abrí esta pantalla al llegar. El código cambia cada 15 segundos."}
+              : "En puerta mostrá esta pantalla. El código se actualiza solo para evitar reventas truchas (no le saques captura de pantalla)."}
           </p>
         </div>
       ) : (
         <div className="px-5 py-8 text-center text-sm text-muted-foreground">
-          Esta entrada ya no muestra QR vivo
-          {ticket.status === "transferred" ? " (fue transferida)" : ""}.
+          {ticket.status === "transferred"
+            ? "Esta entrada ya no es tuya: se la transferiste a un amigo."
+            : "Esta entrada ya no muestra el código de acceso."}
         </div>
       )}
     </article>

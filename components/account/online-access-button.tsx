@@ -14,7 +14,8 @@ export function OnlineAccessButton({
   if (!ready) {
     return (
       <p className="rounded-xl border border-border bg-muted/40 px-4 py-3 text-center text-sm text-muted-foreground">
-        El organizador todavía no cargó el link de transmisión.
+        El link de acceso se activa unos minutos antes del evento. Te avisamos
+        por email.
       </p>
     )
   }
@@ -29,7 +30,7 @@ export function OnlineAccessButton({
         "hover:bg-emerald-400",
       )}
     >
-      Acceder a la transmisión
+      Entrar al vivo
     </a>
   )
 }

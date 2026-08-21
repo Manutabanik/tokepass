@@ -28,6 +28,7 @@ export type CheckoutSidebarCta = {
   locked?: boolean
   showArrow?: boolean
   pulse?: boolean // kept for callers; pulse no longer applied to the pay CTA
+  formId?: string
   onClick: () => void
 }
 
@@ -120,7 +121,7 @@ export function CheckoutSelectionSidebar({
     <aside
       className={cn(
         "flex flex-col rounded-3xl border border-border/60 bg-card/60 p-6 shadow-2xl backdrop-blur-xl",
-        "lg:sticky lg:top-20 lg:h-[calc(100vh-120px)] lg:max-h-[calc(100vh-120px)] lg:self-start",
+        "lg:h-[calc(100vh-8rem)] lg:max-h-[calc(100vh-8rem)] lg:self-start",
         className,
       )}
     >
@@ -194,7 +195,8 @@ export function CheckoutSelectionSidebar({
               />
             ) : null}
             <Button
-              type="button"
+              type={cta.formId ? "submit" : "button"}
+              form={cta.formId}
               size="storefront"
               disabled={
                 Boolean(cta.pending) ||
@@ -202,10 +204,14 @@ export function CheckoutSelectionSidebar({
                 Boolean(cta.disabled)
               }
               aria-busy={Boolean(cta.pending)}
-              onClick={() => {
-                if (cta.pending || cta.locked || cta.disabled) return
-                cta.onClick()
-              }}
+              onClick={
+                cta.formId
+                  ? undefined
+                  : () => {
+                      if (cta.pending || cta.locked || cta.disabled) return
+                      cta.onClick()
+                    }
+              }
               className={cn(
                 tapFeedbackClass,
                 "h-14 w-full rounded-xl bg-emerald-500 px-6 text-lg font-black text-black shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:bg-emerald-400 disabled:scale-100 disabled:cursor-not-allowed disabled:opacity-70",

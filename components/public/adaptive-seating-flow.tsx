@@ -114,7 +114,6 @@ export function AdaptiveSeatingFlow({
           eventId={eventId}
           fillParent
           disableIdlePrompt
-          silentHover
           hideChrome
           hideToolbar={compact}
           toolbarTitle={toolbarTitle}

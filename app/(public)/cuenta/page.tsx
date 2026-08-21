@@ -142,7 +142,7 @@ export default async function CuentaHomePage() {
               </p>
             </div>
             <span className="mt-6 inline-flex items-center gap-1 text-sm font-semibold text-emerald-700 dark:text-emerald-300">
-              Explorar eventos
+              Descubrir shows
               <ChevronRight className="size-4" aria-hidden="true" />
             </span>
           </Link>
@@ -167,7 +167,7 @@ export default async function CuentaHomePage() {
       <div className="hidden grid-cols-3 gap-4 lg:grid">
         <OverviewChip
           href="/events"
-          title="Explorar cartelera"
+          title="Cartelera de eventos"
           description="Fiestas, recitales y más"
           icon={Compass}
         />
@@ -191,8 +191,8 @@ export default async function CuentaHomePage() {
           title="Mis entradas"
           description={
             validCount === 1
-              ? "1 entrada activa en tu billetera"
-              : `${validCount} entradas activas en tu billetera`
+              ? "Donde guardás tus pases · 1 entrada activa"
+              : `Donde guardás tus pases · ${validCount} entradas activas`
           }
           icon={Ticket}
           accent="emerald"
@@ -221,21 +221,24 @@ export default async function CuentaHomePage() {
         />
         <PortalCard
           href="/cuenta/perfil"
-          title="Mis Datos"
+          title="Mis datos personales"
           description="Nombre, DNI, teléfono y foto de perfil"
           icon={UserRound}
           accent="violet"
         />
         <PortalCard
           href="/events"
-          title="Explorar eventos"
+          title="Descubrir shows"
           description="Descubrí fiestas, recitales y más"
           icon={Compass}
           accent="sky"
         />
       </div>
 
-      <SignOutButton className="mt-2 h-12 w-full justify-center rounded-2xl border border-border text-muted-foreground hover:bg-muted hover:text-foreground md:w-auto md:min-w-48 md:px-8 lg:hidden" />
+      <SignOutButton
+        label="Salir de mi cuenta"
+        className="mt-2 h-12 w-full justify-center rounded-2xl border border-border text-muted-foreground hover:bg-muted hover:text-foreground md:w-auto md:min-w-48 md:px-8 lg:hidden"
+      />
     </section>
   )
 }

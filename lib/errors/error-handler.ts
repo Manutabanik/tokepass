@@ -100,7 +100,8 @@ const ERROR_RULES: ErrorRule[] = [
   },
   {
     code: "SESSION_REQUIRED",
-    match: /sesión requerida|debes iniciar sesión|iniciá sesión/i,
+    match:
+      /sesión requerida|debes iniciar sesión|iniciá sesión|unauthorized|token expired|jwt expired|sesión venció/i,
   },
   {
     code: "EVENT_NOT_FOUND",
@@ -113,7 +114,7 @@ const ERROR_RULES: ErrorRule[] = [
   {
     code: "SAVE_FAILED",
     match:
-      /duplicate key|unique constraint|null value in column|violates not-null|internal server error|error 500|\bunknown\b/i,
+      /duplicate key|unique constraint|null value in column|violates not-null|internal server error|error 500|error al procesar|\bunknown\b/i,
   },
 ]
 

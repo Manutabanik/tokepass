@@ -69,7 +69,7 @@ async function assertOrganizer(eventId: string) {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) return { ok: false as const, error: "Sesión requerida." }
+  if (!user) return { ok: false as const, error: "Tu sesión venció por seguridad. Volvé a ingresar con tu cuenta" }
 
   const [{ data: event }, { data: profile }] = await Promise.all([
     supabase
