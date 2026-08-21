@@ -3,6 +3,7 @@ import { describe, it } from "node:test"
 
 import { APP_ERRORS, wizardStepFromPath } from "@/lib/errors/app-error"
 import { mapUnknownError } from "@/lib/errors/error-handler"
+import { firstFieldErrorPath } from "@/lib/errors/form-field"
 import { toUserFacingError } from "@/lib/errors/user-facing-error"
 
 describe("error handler", () => {
@@ -85,8 +86,25 @@ describe("error handler", () => {
 
   it("routes zod paths to wizard steps", () => {
     assert.equal(wizardStepFromPath(["basics", "title"]), 0)
+    assert.equal(wizardStepFromPath(["basics", "date"]), 1)
+    assert.equal(wizardStepFromPath(["basics", "scheduleDays"]), 1)
     assert.equal(wizardStepFromPath(["venue", "venueName"]), 1)
     assert.equal(wizardStepFromPath(["tickets", 0, "dayId"]), 2)
     assert.equal(wizardStepFromPath(["lineup", 0, "name"]), 4)
+  })
+
+  it("reads the first react-hook-form error path", () => {
+    assert.equal(
+      firstFieldErrorPath({
+        basics: { title: { type: "too_small", message: "El título debe tener al menos 3 caracteres." } },
+      }),
+      "basics.title",
+    )
+    assert.equal(
+      firstFieldErrorPath({
+        tickets: { root: { type: "too_small", message: "Creá al menos un tipo de entrada." } },
+      }),
+      "tickets",
+    )
   })
 })

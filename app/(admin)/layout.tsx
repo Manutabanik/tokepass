@@ -125,7 +125,7 @@ export default async function AdminLayout({
         />
       }
       header={
-        <header className="sticky top-0 z-30 shrink-0 border-b border-zinc-200 bg-white/80 pt-[env(safe-area-inset-top)] backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/80">
+        <header className="z-30 shrink-0 border-b border-zinc-200 bg-white/80 pt-[env(safe-area-inset-top)] backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/80">
           <div className="flex h-16 items-center justify-between px-4 sm:px-8">
             <div className="flex min-w-0 items-center gap-2 lg:hidden">
               <BrandLogo />

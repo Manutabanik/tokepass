@@ -6,6 +6,7 @@ import {
   isAdminFocusedFlow,
   isPublicEventStorefrontPath,
   isPublicFocusedFlow,
+  isEventStudioPath,
   isVenueMapWorkspace,
 } from "@/lib/navigation/focused-flows"
 
@@ -26,6 +27,9 @@ describe("focused-flows", () => {
     assert.equal(isVenueMapWorkspace("/admin/events/abc/edit/"), true)
     assert.equal(isVenueMapWorkspace("/admin/events/create"), false)
     assert.equal(isVenueMapWorkspace("/admin/events/abc"), false)
+    assert.equal(isEventStudioPath("/admin/events/create"), true)
+    assert.equal(isEventStudioPath("/admin/events/abc/edit"), true)
+    assert.equal(isEventStudioPath("/admin/events/abc"), false)
   })
 
   it("oculta chrome de cuenta en detalle de entrada o compra", () => {

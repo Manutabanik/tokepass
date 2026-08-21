@@ -23,6 +23,7 @@ import {
   VenueArgentinaSelector,
   type VenueArgentinaValue,
 } from "@/components/admin/venue-argentina-selector"
+import { EventStudioVenueSearch } from "@/components/admin/events/event-studio-venue-search"
 import { InteractiveVenueMapStudio } from "@/components/admin/interactive-venue-map-studio"
 import { LogicalSectorsPanel } from "@/components/admin/logical-sectors-panel"
 import { VenueManagerModal } from "@/components/admin/venue-manager-modal"
@@ -108,6 +109,7 @@ type EventVenueStepProps = {
   pricingSlot?: ReactNode
   /** Parte del wizard: ubicación vs. zonas, o todo junto. */
   focus?: "location" | "zones" | "all"
+  variant?: "default" | "studio"
   onMapInventoryChange?: (map: ReturnType<typeof parseVenueMap>) => void
   catalogOrganizerId?: string | null
   eventId?: string | null
@@ -120,6 +122,7 @@ export function EventVenueStep({
   onAppliedVenue,
   pricingSlot,
   focus = "all",
+  variant = "default",
   onMapInventoryChange,
   catalogOrganizerId = null,
   eventId = null,
@@ -139,6 +142,8 @@ export function EventVenueStep({
   const structured = includesSeatingMap
 
   const [managerOpen, setManagerOpen] = useState(false)
+  const [studioCreate, setStudioCreate] = useState(false)
+  const studio = variant === "studio"
 
   const [editingSaved, setEditingSaved] = useState(false)
   const [zoneDrafts, setZoneDrafts] = useState<VenueZoneDraft[]>([
@@ -258,6 +263,7 @@ export function EventVenueStep({
     form.setValue("venue.existingVenueId", null)
     form.setValue("venue.saveVenueForReuse", true)
     setEditingSaved(false)
+    setStudioCreate(true)
     setZoneDrafts([createEmptyZone(structured)])
     setBackgroundUrl(null)
     setVenueMap(emptyVenueMap())
@@ -320,6 +326,7 @@ export function EventVenueStep({
         : zonesToDraft(venue.id, venue.zoneBlueprint, venue.seatingLayout),
     )
     setEditingSaved(false)
+    setStudioCreate(false)
     emitMapInventory(nextMap)
     onAppliedVenue?.(venue)
   }
@@ -492,8 +499,11 @@ export function EventVenueStep({
     else switchToNew()
   }
 
-  const showCreateForm =
-    venueMode === "new" || venueOptions.length === 0 || editingSaved
+  const showCreateForm = studio
+    ? editingSaved ||
+      venueOptions.length === 0 ||
+      (venueMode === "new" && studioCreate)
+    : venueMode === "new" || venueOptions.length === 0 || editingSaved
 
   return (
     <div
@@ -504,7 +514,64 @@ export function EventVenueStep({
         undefined
       }
     >
-      {showLocation ? (
+      {showLocation && studio ? (
+        <div className="space-y-3">
+          <div className="flex items-center justify-end">
+            <button
+              type="button"
+              onClick={() => setManagerOpen(true)}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+            >
+              <Settings2 className="size-3.5" aria-hidden="true" />
+              Gestionar Lugares
+            </button>
+          </div>
+          {!showCreateForm ? (
+            <>
+            <EventStudioVenueSearch
+              venues={venueOptions}
+              selectedId={existingVenueId ?? null}
+              onSelect={applySavedVenue}
+              onCreateNew={switchToNew}
+            />
+            <FormField
+              control={form.control}
+              name="venue.existingVenueId"
+              render={({ fieldState }) => (
+                <div data-field="venue.existingVenueId">
+                  <FormMessage>{fieldState.error?.message}</FormMessage>
+                </div>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="venue.venueName"
+              render={({ fieldState }) => (
+                <div data-field="venue.venueName">
+                  <FormMessage>{fieldState.error?.message}</FormMessage>
+                </div>
+              )}
+            />
+            </>
+          ) : (
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={venueOptions.length === 0}
+              onClick={() => {
+                setStudioCreate(false)
+                form.setValue("venue.mode", "existing")
+                if (!existingVenueId && venueOptions[0]) {
+                  applySavedVenue(venueOptions[0])
+                }
+              }}
+              className="text-base md:text-sm"
+            >
+              Volver a recintos guardados
+            </Button>
+          )}
+        </div>
+      ) : showLocation ? (
       <div className="space-y-2">
       <div className="flex items-center justify-end">
         <button
@@ -574,7 +641,26 @@ export function EventVenueStep({
       ) : null}
 
       {venueMode === "existing" && !editingSaved && selectedVenue ? (
-        <div className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-zinc-100 shadow-sm sm:p-5">
+        <div className={cn(
+          "space-y-4 text-zinc-100 shadow-sm",
+          studio
+            ? "pt-1"
+            : "rounded-2xl border border-zinc-800 bg-zinc-900 p-4 sm:p-5",
+        )}>
+          {studio ? (
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={startEditSavedVenue}
+                className="text-base md:text-sm"
+              >
+                <Pencil className="size-3.5" />
+                Editar datos de este lugar
+              </Button>
+            </div>
+          ) : (
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-base font-semibold text-foreground">
@@ -607,7 +693,9 @@ export function EventVenueStep({
               Editar datos de este lugar
             </Button>
           </div>
+          )}
 
+          {studio ? null : (
           <FormField
             control={form.control}
             name="venue.existingVenueId"
@@ -660,6 +748,7 @@ export function EventVenueStep({
               </FormItem>
             )}
           />
+          )}
 
           {showLocation &&
           selectedVenue.latitude != null &&
@@ -678,7 +767,7 @@ export function EventVenueStep({
             </p>
           ) : null}
 
-          {showZones ? (
+          {showZones && !studio ? (
             <MapStudioFields
               form={form}
               venueMap={venueMap}
@@ -705,7 +794,7 @@ export function EventVenueStep({
             </p>
           ) : null}
 
-          {showZones ? (
+          {showZones && !studio ? (
           <FormField
             control={form.control}
             name="venue.includesSeatingMap"
@@ -770,7 +859,7 @@ export function EventVenueStep({
             </>
           ) : null}
 
-          {showZones ? (
+          {showZones && !studio ? (
             <>
           <LogicalSectorsPanel form={form} />
           <MapStudioFields

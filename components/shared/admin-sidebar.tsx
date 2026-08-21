@@ -43,7 +43,7 @@ export function AdminSidebar({
   return (
     <aside
       className={cn(
-        "hidden h-dvh shrink-0 flex-col overflow-hidden border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 lg:sticky lg:top-0 lg:flex",
+        "hidden h-full shrink-0 flex-col overflow-hidden border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 lg:flex",
         collapsed ? "w-20" : "w-64",
       )}
     >

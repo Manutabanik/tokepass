@@ -270,8 +270,16 @@ export type Event = {
   /** Espejo JSONB de event_schedules (transición). Fuente canónica: tabla relacional. */
   schedule_days: Json
   is_featured: boolean
-  featured_tier: "silver" | "gold" | "platinum" | null
+  featured_tier:
+    | "silver"
+    | "gold"
+    | "platinum"
+    | "flash_3d"
+    | "pro_7d"
+    | "vip_total"
+    | null
   featured_until: string | null
+  storefront_views?: number
   /** Comisión % TokePass (ej. 8.00 = 8%). */
   platform_fee_percentage: number
   /** Cargo fijo ARS por entrada paga (split All-In). */
@@ -421,11 +429,19 @@ export type BoostSubscription = {
   id: string
   event_id: string
   organizer_id: string
-  tier: "silver" | "gold" | "platinum"
+  tier:
+    | "silver"
+    | "gold"
+    | "platinum"
+    | "flash_3d"
+    | "pro_7d"
+    | "vip_total"
   amount_paid: number
   duration_days: number
   payment_status: "pending" | "paid" | "failed" | "refunded"
   payment_id_mp: string | null
+  starts_at: string | null
+  ends_at: string | null
   created_at: string
   updated_at: string
 }
@@ -1217,6 +1233,7 @@ type EventInsert = Omit<
   | "is_featured"
   | "featured_tier"
   | "featured_until"
+  | "storefront_views"
   | "platform_fee_percentage"
   | "platform_fixed_fee"
   | "max_free_tickets"
@@ -1269,6 +1286,7 @@ type EventInsert = Omit<
   is_featured?: boolean
   featured_tier?: Event["featured_tier"]
   featured_until?: string | null
+  storefront_views?: number
   platform_fee_percentage?: number
   platform_fixed_fee?: number
   max_free_tickets?: number
@@ -2147,6 +2165,8 @@ export type Database = {
           duration_days: number
           payment_status?: BoostSubscription["payment_status"]
           payment_id_mp?: string | null
+          starts_at?: string | null
+          ends_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -3851,6 +3871,12 @@ export type Database = {
           p_featured_until: string
         }
         Returns: Json
+      }
+      increment_event_storefront_views: {
+        Args: {
+          p_event_id: string
+        }
+        Returns: undefined
       }
       request_organizer_settlement: {
         Args: {

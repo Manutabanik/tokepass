@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 
 import { canUserSandboxCheckout } from "@/app/actions/checkout"
+import { recordEventStorefrontView } from "@/app/actions/event-storefront-views"
 import type { EventDetails } from "@/app/actions/public-events"
 import type { ResaleListingPublic } from "@/app/actions/resale"
 import { EventStorefront } from "@/components/public/event-storefront"
@@ -42,6 +43,18 @@ export function EventStorefrontSession({
   const [sandboxEligible, setSandboxEligible] = useState(
     Boolean(event.isDraftPreview),
   )
+
+  useEffect(() => {
+    if (event.isDraftPreview) return
+    const key = `tp-storefront-view:${event.id}`
+    try {
+      if (window.sessionStorage.getItem(key)) return
+      window.sessionStorage.setItem(key, "1")
+    } catch {
+      // sessionStorage puede no estar disponible.
+    }
+    void recordEventStorefrontView(event.id)
+  }, [event.id, event.isDraftPreview])
 
   useEffect(() => {
     let cancelled = false

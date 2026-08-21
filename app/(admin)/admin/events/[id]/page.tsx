@@ -22,9 +22,9 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
 
+import { EventBoosterCard } from "@/components/admin/booster/event-booster-card"
 import { DoorAccessPinCard } from "@/components/admin/door-access-pin-card"
 import { EventCommandHeader } from "@/components/admin/event-command-header"
-import { SponsorshipRequestBanner } from "@/components/admin/sponsorship-request-banner"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { formatCurrency, formatEventDate, formatNumber } from "@/lib/format"
@@ -41,10 +41,17 @@ const dressCardClass =
 
 export default async function ManageEventPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ boost?: string }>
 }) {
   const { id } = await params
+  const { boost } = await searchParams
+  const boostHint =
+    boost === "success" || boost === "pending" || boost === "failure"
+      ? boost
+      : null
   const supabase = await createClient()
   const {
     data: { user },
@@ -57,7 +64,7 @@ export default async function ManageEventPage({
     supabase
       .from("events")
       .select(
-        "id, title, date, location, status, organizer_id, is_sponsored_by_tokepass, review_note",
+        "id, title, date, location, status, organizer_id, is_sponsored_by_tokepass, review_note, is_featured, featured_tier, featured_until, storefront_views",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -69,7 +76,7 @@ export default async function ManageEventPage({
     const assisted = await admin
       .from("events")
       .select(
-        "id, title, date, location, status, organizer_id, is_sponsored_by_tokepass, review_note",
+        "id, title, date, location, status, organizer_id, is_sponsored_by_tokepass, review_note, is_featured, featured_tier, featured_until, storefront_views",
       )
       .eq("id", id)
       .maybeSingle()
@@ -202,9 +209,6 @@ export default async function ManageEventPage({
     },
   ]
 
-  const showSponsorshipCta =
-    event.organizer_id === user.id && !event.is_sponsored_by_tokepass
-
   const isAssisting =
     profile?.role === "super_admin" && event.organizer_id !== user.id
 
@@ -263,12 +267,15 @@ export default async function ManageEventPage({
         </div>
       </section>
 
-      {showSponsorshipCta ? (
-        <SponsorshipRequestBanner
-          eventId={event.id}
-          eventTitle={event.title}
-        />
-      ) : null}
+      <EventBoosterCard
+        eventId={event.id}
+        eventTitle={event.title}
+        isFeatured={event.is_featured}
+        featuredUntil={event.featured_until}
+        featuredTier={event.featured_tier}
+        storefrontViews={event.storefront_views ?? 0}
+        boostHint={boostHint}
+      />
 
       <section className="space-y-3">
         <div>

@@ -1,5 +1,5 @@
 import type { CatalogEvent } from "@/app/actions/public-events"
-import { BOOST_TIER_RANK, type BoostTier } from "@/lib/boost-plans"
+import { BOOST_TIER_RANK, type AnyBoostTier } from "@/lib/boost-plans"
 import { isPastEvent } from "@/lib/event-status"
 
 /** Destacado activo solo si flag + fecha futura (expiración automática en consulta). */
@@ -43,9 +43,9 @@ export function compareFeaturedThenDate(a: CatalogEvent, b: CatalogEvent): numbe
 
   if (aActive && bActive) {
     const aRank =
-      BOOST_TIER_RANK[(a.featuredTier as BoostTier | null) ?? "silver"] ?? 0
+      BOOST_TIER_RANK[(a.featuredTier as AnyBoostTier | null) ?? "flash_3d"] ?? 0
     const bRank =
-      BOOST_TIER_RANK[(b.featuredTier as BoostTier | null) ?? "silver"] ?? 0
+      BOOST_TIER_RANK[(b.featuredTier as AnyBoostTier | null) ?? "flash_3d"] ?? 0
     if (aRank !== bRank) return bRank - aRank
   }
 

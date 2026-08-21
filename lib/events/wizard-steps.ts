@@ -9,36 +9,36 @@ export const WIZARD_STEP_COUNT = 5
 export type WizardVisibility = {
   hasSeatingPlan: boolean
   hasSchedule: boolean
-  /** Edición de evento: Info / Arquitectura (si hay mapa) / Tarifas. */
+  /** Edición de evento: mismos 3 pasos del Studio. */
   editWorkspace?: boolean
 }
 
 export type EditWorkspaceStepKey = "info" | "map" | "pricing"
 
-const EDIT_WORKSPACE_STEPS = [
+const STUDIO_STEPS = [
   WIZARD_STEP_IDENTITY,
   WIZARD_STEP_MAP,
   WIZARD_STEP_TICKETS,
 ] as const
 
 const EDIT_WORKSPACE_STEP_META: Record<
-  (typeof EDIT_WORKSPACE_STEPS)[number],
+  (typeof STUDIO_STEPS)[number],
   { key: EditWorkspaceStepKey; title: string; description: string }
 > = {
   [WIZARD_STEP_IDENTITY]: {
     key: "info",
-    title: "Información Básica",
-    description: "Título, fecha y flyer",
+    title: "Identidad",
+    description: "Nombre, flyer y categoría",
   },
   [WIZARD_STEP_MAP]: {
     key: "map",
-    title: "Arquitectura",
-    description: "Mapa, butacas y numeración",
+    title: "Cita y lugar",
+    description: "Fechas, horarios y ubicación",
   },
   [WIZARD_STEP_TICKETS]: {
     key: "pricing",
-    title: "Tarifas / Precios",
-    description: "Entradas y combos",
+    title: "Entradas",
+    description: "Tarifas y cupos",
   },
 }
 
@@ -57,6 +57,9 @@ export function parseEditWorkspaceStep(
   }
   if (
     key === "map" ||
+    key === "place" ||
+    key === "cita" ||
+    key === "lugar" ||
     key === "architecture" ||
     key === "arquitectura" ||
     key === "1"
@@ -89,57 +92,41 @@ export function editWorkspaceStepMeta(step: number) {
   return EDIT_WORKSPACE_STEP_META[WIZARD_STEP_IDENTITY]
 }
 
-/** Orden visual. Los índices internos no se reenumeran para no romper drafts. */
+/** Orden visual del Event Studio. Los índices internos no se reenumeran. */
 export const WIZARD_DISPLAY_ORDER = [
   WIZARD_STEP_IDENTITY,
-  WIZARD_STEP_AGENDA,
   WIZARD_STEP_MAP,
   WIZARD_STEP_TICKETS,
-  WIZARD_STEP_CONFIG,
 ] as const
 
-export function isWizardStepVisible(
-  step: number,
-  flags: WizardVisibility,
-): boolean {
-  if (flags.editWorkspace) {
-    if (step === WIZARD_STEP_MAP) return flags.hasSeatingPlan
-    return step === WIZARD_STEP_IDENTITY || step === WIZARD_STEP_TICKETS
-  }
-  if (step === WIZARD_STEP_MAP) return flags.hasSeatingPlan
-  if (step === WIZARD_STEP_AGENDA) return flags.hasSchedule
+export function isWizardStepVisible(step: number): boolean {
   return (
     step === WIZARD_STEP_IDENTITY ||
-    step === WIZARD_STEP_TICKETS ||
-    step === WIZARD_STEP_CONFIG
+    step === WIZARD_STEP_MAP ||
+    step === WIZARD_STEP_TICKETS
   )
 }
 
-export function visibleWizardSteps(flags: WizardVisibility): number[] {
-  if (flags.editWorkspace) {
-    return EDIT_WORKSPACE_STEPS.filter((step) =>
-      isWizardStepVisible(step, flags),
-    )
-  }
-  return WIZARD_DISPLAY_ORDER.filter((step) => isWizardStepVisible(step, flags))
+export function visibleWizardSteps(flags?: WizardVisibility): number[] {
+  void flags
+  return [...STUDIO_STEPS]
 }
 
 export function clampWizardStep(
   step: number,
-  flags: WizardVisibility,
+  flags?: WizardVisibility,
 ): number {
+  void flags
   const bounded = Math.min(WIZARD_STEP_COUNT - 1, Math.max(0, step))
-  if (isWizardStepVisible(bounded, flags)) return bounded
-  if (flags.editWorkspace) {
-    if (bounded === WIZARD_STEP_CONFIG) return WIZARD_STEP_TICKETS
-    return WIZARD_STEP_IDENTITY
-  }
+  if (bounded === WIZARD_STEP_AGENDA) return WIZARD_STEP_MAP
+  if (bounded === WIZARD_STEP_CONFIG) return WIZARD_STEP_TICKETS
+  if (isWizardStepVisible(bounded)) return bounded
   return WIZARD_STEP_IDENTITY
 }
 
 export function nextWizardStep(
   current: number,
-  flags: WizardVisibility,
+  flags?: WizardVisibility,
 ): number {
   const visible = visibleWizardSteps(flags)
   const from = clampWizardStep(current, flags)
@@ -149,7 +136,7 @@ export function nextWizardStep(
 
 export function prevWizardStep(
   current: number,
-  flags: WizardVisibility,
+  flags?: WizardVisibility,
 ): number {
   const visible = visibleWizardSteps(flags)
   const from = clampWizardStep(current, flags)
@@ -159,7 +146,7 @@ export function prevWizardStep(
 
 export function isLastVisibleWizardStep(
   current: number,
-  flags: WizardVisibility,
+  flags?: WizardVisibility,
 ): boolean {
   const from = clampWizardStep(current, flags)
   return nextWizardStep(from, flags) === from

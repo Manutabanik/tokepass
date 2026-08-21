@@ -5,14 +5,14 @@ import type { ReactNode } from "react"
 
 import {
   isAdminFocusedFlow,
-  isVenueMapWorkspace,
+  isEventStudioPath,
 } from "@/lib/navigation/focused-flows"
 import { cn } from "@/lib/utils"
 
 export function AdminMain({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const focused = isAdminFocusedFlow(pathname)
-  const workspace = isVenueMapWorkspace(pathname)
+  const workspace = isEventStudioPath(pathname)
   const posTerminal =
     pathname.startsWith("/dashboard/pos") || pathname.startsWith("/admin/pos")
   const createWizard =
@@ -30,12 +30,12 @@ export function AdminMain({ children }: { children: ReactNode }) {
   return (
     <main
       className={cn(
-        "mx-auto w-full max-w-[1600px] flex-1 px-4 pt-6 sm:px-8 lg:px-10",
+        "mx-auto w-full min-w-0 max-w-[1600px] flex-1 px-4 pt-6 sm:px-8 lg:px-10",
         posTerminal || createWizard
-          ? "flex min-h-0 flex-1 flex-col overflow-hidden pb-4"
+          ? "flex min-h-0 flex-col overflow-hidden pb-4"
           : focused
-            ? "flex min-h-[calc(100dvh-5rem)] flex-col pb-4"
-            : "space-y-6 pb-12 max-lg:pb-[calc(5.25rem+env(safe-area-inset-bottom))]",
+            ? "flex min-h-0 flex-col overflow-y-auto pb-4"
+            : "min-h-0 space-y-6 overflow-y-auto pb-12 max-lg:pb-[calc(5.25rem+env(safe-area-inset-bottom))]",
       )}
     >
       {children}

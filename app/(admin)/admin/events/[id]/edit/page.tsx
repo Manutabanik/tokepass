@@ -127,6 +127,7 @@ export default async function EditEventPage({
       organizerServiceRate={eventFeeRate(feeConfig)}
       platformFixedFee={eventFixedFee(feeConfig)}
       targetOrganizerId={impersonation?.id ?? null}
+      impersonationName={impersonation?.name ?? null}
       venues={venues}
       categories={categories}
     />

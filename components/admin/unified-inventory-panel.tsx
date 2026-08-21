@@ -3,7 +3,6 @@
 import {
   Armchair,
   Car,
-  Copy,
   Gift,
   Layers,
   LayoutGrid,
@@ -62,6 +61,10 @@ import {
   layoutTypeForInventory,
   type InventoryTierType,
 } from "@/lib/inventory/unified-inventory"
+import {
+  AddTicketTypeButton,
+  TicketWalletCard,
+} from "@/components/admin/events/ticket-tier-form"
 import { AforoBalanceAssistant } from "@/components/admin/aforo-balance-assistant"
 import { CapacityBudgetBar } from "@/components/admin/capacity-budget-bar"
 import { MasterManifestTable } from "@/components/admin/master-manifest-table"
@@ -71,7 +74,6 @@ import {
   computeAforoBalance,
   findPrimaryGeneralIndex,
   scaleTicketStockToLimit,
-  ticketDisplayBadge,
 } from "@/lib/inventory/aforo-balance"
 import {
   asPositiveInt,
@@ -470,7 +472,8 @@ export function UnifiedInventoryPanel({ form, eventId = null }: Props) {
             : "Entradas simples: nombre, cupo y precio. Sin sector ni mapa."
         }
         icon={Ticket}
-        actionLabel="Agregar Tipo de Entrada"
+        actionLabel="Agregar Nuevo Tipo de Entrada"
+        prominentAdd
         onAdd={() =>
           append({
             ...createInventoryTicket("general", {
@@ -709,6 +712,7 @@ function InventoryBlock({
   icon: Icon,
   actionLabel,
   onAdd,
+  prominentAdd = false,
   children,
 }: {
   title: string
@@ -716,34 +720,36 @@ function InventoryBlock({
   icon: typeof Ticket
   actionLabel: string
   onAdd: () => void
+  prominentAdd?: boolean
   children: ReactNode
 }) {
   return (
     <section className="space-y-3 rounded-2xl border border-border bg-muted/40 p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex gap-3">
-          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-800 dark:text-emerald-300">
-            <Icon className="size-4" aria-hidden="true" />
-          </span>
-          <div>
-            <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              {description}
-            </p>
-          </div>
+      <div className="flex gap-3">
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-800 dark:text-emerald-300">
+          <Icon className="size-4" aria-hidden="true" />
+        </span>
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            {description}
+          </p>
         </div>
+      </div>
+      <div className="space-y-3">{children}</div>
+      {prominentAdd ? (
+        <AddTicketTypeButton onClick={onAdd} label={actionLabel} />
+      ) : (
         <Button
           type="button"
           variant="outline"
-          size="sm"
           onClick={onAdd}
-          className="shrink-0"
+          className="min-h-11 w-full text-base md:text-sm"
         >
           <Plus className="size-4" />
           {actionLabel}
         </Button>
-      </div>
-      <div className="space-y-3">{children}</div>
+      )}
     </section>
   )
 }
@@ -777,90 +783,52 @@ function InventoryTicketCard({
   showSectorSelect?: boolean
   showPhases?: boolean
 }) {
-  const name = form.watch(`tickets.${index}.name`)
-  const price = form.watch(`tickets.${index}.price`)
-  const stock = form.watch(`tickets.${index}.capacity`)
-  const tierType = form.watch(`tickets.${index}.tierType`)
-  const layoutType = form.watch(`tickets.${index}.layoutType`)
-  const bundleItems = form.watch(`tickets.${index}.bundleItems`)
-  const badge = ticketDisplayBadge({
-    name,
-    price,
-    tierType,
-    layoutType,
-    bundleItems,
-  })
-  const hasPrice = price != null && !Number.isNaN(Number(price))
-  const hasStock = stock != null && !Number.isNaN(Number(stock))
-
   return (
-    <div className="rounded-xl border border-border bg-card">
-      <div className="flex items-start gap-3 p-3">
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full border border-border bg-muted/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {badge.label}
-            </span>
-            <p className="min-w-0 break-words text-sm font-semibold text-foreground line-clamp-2">
-              {name.trim() || "Nueva tarifa"}
-            </p>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Stock {hasStock ? stock : "sin definir"}
-            {" · "}
-            {hasPrice
-              ? Number(price) === 0
-                ? "Gratuita"
-                : formatCurrency(Number(price))
-              : "Precio sin definir"}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
+    <TicketWalletCard
+      form={form}
+      index={index}
+      onDuplicate={onDuplicate}
+      onRemove={onRemove}
+      capacityLabel={capacityLabel}
+      venueRemaining={venueRemaining}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        {onEdit ? (
           <Button
             type="button"
-            variant="ghost"
+            variant="outline"
             size="sm"
-            onClick={onEdit ?? onToggle}
+            onClick={onEdit}
+            className="text-base md:text-sm"
           >
             <Pencil className="size-3.5" aria-hidden="true" />
-            Editar
+            Editar combo
           </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onDuplicate}
-          >
-            <Copy className="size-3.5" aria-hidden="true" />
-            Duplicar
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-9 text-muted-foreground hover:text-destructive"
-            onClick={onRemove}
-            aria-label="Eliminar tarifa"
-          >
-            <Trash2 className="size-4" />
-          </Button>
-        </div>
+        ) : null}
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onToggle}
+          className="text-base md:text-sm"
+        >
+          {expanded ? "Ocultar opciones" : "Mas opciones"}
+        </Button>
       </div>
       {expanded ? (
-        <div className="border-t border-border p-3">
-          <InventoryRow
-            form={form}
-            index={index}
-            capacityLabel={capacityLabel}
-            scheduleDays={scheduleDays}
-            venueRemaining={venueRemaining}
-            logicalSectors={logicalSectors}
-            showSectorSelect={showSectorSelect}
-            showPhases={showPhases}
-          />
-        </div>
+        <InventoryRow
+          form={form}
+          index={index}
+          capacityLabel={capacityLabel}
+          scheduleDays={scheduleDays}
+          venueRemaining={venueRemaining}
+          logicalSectors={logicalSectors}
+          showSectorSelect={showSectorSelect}
+          showPhases={showPhases}
+          hidePrimaryFields
+        />
       ) : null}
-    </div>
+    </TicketWalletCard>
   )
 }
 
@@ -875,6 +843,7 @@ function InventoryRow({
   capacityExceeded = false,
   logicalSectors = [],
   showSectorSelect = true,
+  hidePrimaryFields = false,
 }: {
   form: UseFormReturn<EventFormValues>
   index: number
@@ -886,6 +855,7 @@ function InventoryRow({
   capacityExceeded?: boolean
   logicalSectors?: ReturnType<typeof listGeneralLogicalSectors>
   showSectorSelect?: boolean
+  hidePrimaryFields?: boolean
 }) {
   const layoutType = form.watch(`tickets.${index}.layoutType`)
   const watchedTierType = form.watch(`tickets.${index}.tierType`)
@@ -950,6 +920,7 @@ function InventoryRow({
           </Button>
         </div>
       )}
+      {hidePrimaryFields ? null : (
       <div className="grid min-w-0 grid-cols-1 items-end gap-4 md:grid-cols-12">
         <FormField
           control={form.control}
@@ -1119,6 +1090,7 @@ function InventoryRow({
           />
         )}
       </div>
+      )}
       {showSectorSelect ? (
         <FormField
           control={form.control}

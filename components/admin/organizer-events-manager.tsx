@@ -31,6 +31,7 @@ import {
 } from "@/app/actions/events"
 import { requestEventCancellationSupport } from "@/app/actions/support"
 import { BoostModal } from "@/components/admin/boost-modal"
+import { getBoostPlan } from "@/lib/boost-plans"
 import { PublishEventConfirmDialog } from "@/components/admin/publish-event-confirm-dialog"
 import { EventStatusBadge } from "@/components/superadmin/badges"
 import { Button } from "@/components/ui/button"
@@ -235,7 +236,9 @@ export function OrganizerEventsManager({
                       {active ? (
                         <Badge className="rounded-full border-0 bg-cyan-400/15 text-cyan-700 dark:text-cyan-200">
                           <Crown className="size-3" aria-hidden="true" />
-                          Boost {event.featured_tier}
+                          Impulso{" "}
+                          {getBoostPlan(event.featured_tier ?? "")?.name ??
+                            event.featured_tier}
                         </Badge>
                       ) : null}
                     </div>

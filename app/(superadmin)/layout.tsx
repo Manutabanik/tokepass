@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 
+import { LockViewport } from "@/components/shared/lock-viewport"
 import { SuperAdminMobileNav } from "@/components/shared/superadmin-mobile-nav"
 import { SuperAdminSidebar } from "@/components/shared/superadmin-sidebar"
 import { SignOutButton } from "@/components/shared/sign-out-button"
@@ -44,9 +45,10 @@ export default async function SuperAdminLayout({
 
   return (
     <div className="flex h-dvh w-full overflow-hidden bg-zinc-50 dark:bg-zinc-950">
+      <LockViewport />
       <SuperAdminSidebar user={{ name: userLabel, email: profile.email }} />
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-30 shrink-0 border-b border-zinc-200 bg-white/80 pt-[env(safe-area-inset-top)] backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/80">
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <header className="z-30 shrink-0 border-b border-zinc-200 bg-white/80 pt-[env(safe-area-inset-top)] backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/80">
             <div className="flex h-16 items-center justify-between px-5 sm:px-8">
               <div className="flex min-w-0 items-center gap-2">
                 <SuperAdminMobileNav
@@ -89,8 +91,10 @@ export default async function SuperAdminLayout({
               </div>
             </div>
           </header>
-          <main className="mx-auto min-h-0 w-full min-w-0 max-w-7xl flex-1 overflow-y-auto p-4 lg:p-8">
-            {children}
+          <main className="min-h-0 w-full min-w-0 flex-1 overflow-y-auto">
+            <div className="mx-auto w-full max-w-7xl p-4 lg:p-8">
+              {children}
+            </div>
           </main>
         </div>
     </div>

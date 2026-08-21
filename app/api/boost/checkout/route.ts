@@ -11,7 +11,7 @@ export const runtime = "nodejs"
 
 const bodySchema = z.object({
   eventId: z.string().uuid(),
-  tier: z.enum(["silver", "gold", "platinum"]),
+  tier: z.enum(["flash_3d", "pro_7d", "vip_total", "silver", "gold", "platinum"]),
 })
 
 export async function POST(request: NextRequest) {
@@ -108,9 +108,9 @@ export async function POST(request: NextRequest) {
           ? { notification_url: `${siteUrl}/api/webhooks/mercadopago` }
           : {}),
         back_urls: {
-          success: `${siteUrl}/admin/events?boost=success&event=${event.id}`,
-          pending: `${siteUrl}/admin/events?boost=pending&event=${event.id}`,
-          failure: `${siteUrl}/admin/events?boost=failure&event=${event.id}`,
+          success: `${siteUrl}/admin/events/${event.id}?boost=success`,
+          pending: `${siteUrl}/admin/events/${event.id}?boost=pending`,
+          failure: `${siteUrl}/admin/events/${event.id}?boost=failure`,
         },
         ...(!localSite ? { auto_return: "approved" as const } : {}),
         items: [

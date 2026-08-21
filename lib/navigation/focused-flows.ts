@@ -4,6 +4,12 @@ export function isVenueMapWorkspace(pathname: string): boolean {
   return /^\/admin\/events\/[^/]+\/edit\/?$/.test(pathname)
 }
 
+export function isEventStudioPath(pathname: string): boolean {
+  if (pathname.startsWith("/admin/events/create")) return true
+  if (pathname.startsWith("/admin/events/new")) return true
+  return isVenueMapWorkspace(pathname)
+}
+
 export function isAdminFocusedFlow(pathname: string): boolean {
   if (pathname.startsWith("/admin/pos")) return true
   if (pathname.startsWith("/dashboard/pos")) return true

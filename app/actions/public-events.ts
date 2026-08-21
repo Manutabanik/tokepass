@@ -93,7 +93,7 @@ export type CatalogEvent = {
   soldRatio: number | null
   ticketsLeft: number | null
   isFeatured: boolean
-  featuredTier: "silver" | "gold" | "platinum" | null
+  featuredTier: Event["featured_tier"]
   featuredUntil: string | null
   isSponsoredByTokePass: boolean
   /** FK event_categories — taxonomía centralizada. */
@@ -211,7 +211,7 @@ type EventListRow = {
   status: Event["status"]
   visibility: Event["visibility"] | null
   is_featured: boolean | null
-  featured_tier: "silver" | "gold" | "platinum" | null
+  featured_tier: Event["featured_tier"]
   featured_until: string | null
   is_sponsored_by_tokepass: boolean | null
   category_id: string | null

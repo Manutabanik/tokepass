@@ -1,3 +1,5 @@
+import type { FieldErrors, FieldPath, FieldValues, UseFormSetError } from "react-hook-form"
+
 import {
   APP_ERRORS,
   FIELD_REVIEW_HINT,
@@ -16,6 +18,55 @@ export function isForbiddenUserCopy(text: string): boolean {
 
 export function fieldFromAppError(error: Pick<AppError, "field" | "action" | "code">): string | undefined {
   return error.field || error.action?.field || APP_ERRORS[error.code as AppErrorCode]?.field
+}
+
+export function applyZodIssuesToForm<TFieldValues extends FieldValues>(
+  setError: UseFormSetError<TFieldValues>,
+  issues: ReadonlyArray<{ path: ReadonlyArray<PropertyKey>; message: string }>,
+) {
+  for (const issue of issues) {
+    const path = issue.path.map(String).join(".")
+    if (!path) continue
+    setError(path as FieldPath<TFieldValues>, {
+      type: "manual",
+      message: issue.message,
+    })
+  }
+}
+
+export function firstFieldErrorPath(errors: FieldErrors): string | null {
+  function walk(node: unknown, prefix: string[]): string | null {
+    if (!node || typeof node !== "object") return null
+    const record = node as Record<string, unknown>
+    if (typeof record.message === "string" && record.message && prefix.length > 0) {
+      return prefix.join(".")
+    }
+    const root = record.root
+    if (
+      root &&
+      typeof root === "object" &&
+      typeof (root as { message?: string }).message === "string" &&
+      (root as { message: string }).message &&
+      prefix.length > 0
+    ) {
+      return prefix.join(".")
+    }
+    for (const [key, value] of Object.entries(record)) {
+      if (
+        key === "message" ||
+        key === "type" ||
+        key === "ref" ||
+        key === "types" ||
+        key === "root"
+      ) {
+        continue
+      }
+      const found = walk(value, [...prefix, key])
+      if (found) return found
+    }
+    return null
+  }
+  return walk(errors, [])
 }
 
 export function focusInvalidFormField(field?: string | null) {

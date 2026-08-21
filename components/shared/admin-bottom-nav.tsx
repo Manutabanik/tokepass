@@ -220,7 +220,7 @@ function AdminBottomNavChrome({
       </nav>
 
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-        <SheetContent side="left" className="p-0 lg:hidden">
+        <SheetContent side="left" className="flex h-dvh flex-col overflow-hidden p-0 lg:hidden">
           <SheetHeader>
             <BrandLogo inverted />
             <SheetTitle className="sr-only">Menú del panel</SheetTitle>

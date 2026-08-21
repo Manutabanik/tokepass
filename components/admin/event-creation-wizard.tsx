@@ -2,26 +2,19 @@
 
 import { zodResolver } from "@hookform/resolvers/zod"
 import {
-  ArrowLeft,
-  ArrowRight,
+  Armchair,
   Building2,
   CalendarClock,
-  Check,
   CreditCard,
   Globe2,
-  IdCard,
-  LoaderCircle,
   Lock,
   MapPin,
-  Rocket,
-  Save,
+  MonitorPlay,
   Sparkles,
   Ticket,
-  UploadCloud,
 } from "lucide-react"
-import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import {
   useForm,
   useWatch,
@@ -36,7 +29,12 @@ import {
   type EditableEventData,
 } from "@/app/actions/events"
 import { EventAutosaveIndicator } from "@/components/admin/event-autosave-indicator"
-import { EventCapacityHeader } from "@/components/admin/event-capacity-header"
+import { EventStudioDock } from "@/components/admin/event-studio-dock"
+import { EventLivePreview } from "@/components/admin/events/event-live-preview"
+import { EventStudioDateTimeField } from "@/components/admin/events/event-studio-datetime-field"
+import { EventStudioFlyerField } from "@/components/admin/events/event-studio-flyer-field"
+import { EventStudioShell } from "@/components/admin/event-studio-shell"
+import { EventStudioStepper } from "@/components/admin/event-studio-stepper"
 import { PublishEventConfirmDialog } from "@/components/admin/publish-event-confirm-dialog"
 import type { OrganizerVenue } from "@/app/actions/venues"
 import { upsertVenue } from "@/app/actions/venues"
@@ -54,7 +52,6 @@ import type { ZoneTierPriceDraft } from "@/lib/stores/event-form-store"
 import { useEventFormStore } from "@/lib/stores/event-form-store"
 import { Button } from "@/components/ui/button"
 import {
-  Card,
   CardContent,
   CardDescription,
   CardHeader,
@@ -69,19 +66,10 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import {
   Tabs,
   TabsContent,
-  TabsList,
-  TabsTrigger,
 } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import type { VenuePricingMap } from "@/lib/seating/venue-adapter"
@@ -113,7 +101,9 @@ import {
 } from "@/lib/errors/error-handler"
 import { FIELD_REVIEW_HINT } from "@/lib/errors/app-error"
 import {
+  applyZodIssuesToForm,
   fieldFromAppError,
+  firstFieldErrorPath,
   focusInvalidFormField,
 } from "@/lib/errors/form-field"
 import { toUserFacingError } from "@/lib/errors/user-facing-error"
@@ -151,12 +141,18 @@ import {
   WIZARD_STEP_TICKETS,
   type WizardVisibility,
 } from "@/lib/events/wizard-steps"
+import { resolveCategoryIcon } from "@/lib/category-icons"
+import {
+  STREAMING_VENUE_LOCATION,
+  STREAMING_VENUE_NAME,
+  isStreamingVenue,
+} from "@/lib/venues/streaming-venue"
 import { cn } from "@/lib/utils"
 
 const STEP_META = {
   [WIZARD_STEP_IDENTITY]: {
     title: "Identidad",
-    description: "Nombre, fechas y banner",
+    description: "Nombre, flyer y categoría",
     icon: Sparkles,
   },
   [WIZARD_STEP_AGENDA]: {
@@ -165,13 +161,13 @@ const STEP_META = {
     icon: CalendarClock,
   },
   [WIZARD_STEP_MAP]: {
-    title: "Mapa y Sectores",
-    description: "Sectores generales y mapa enumerado",
+    title: "Cita y lugar",
+    description: "Fechas, horarios y ubicación",
     icon: MapPin,
   },
   [WIZARD_STEP_TICKETS]: {
-    title: "Entradas y combos",
-    description: "Generales, extras y promociones",
+    title: "Entradas",
+    description: "Tarifas y cupos",
     icon: Ticket,
   },
   [WIZARD_STEP_CONFIG]: {
@@ -181,40 +177,7 @@ const STEP_META = {
   },
 } as const
 
-const COMPACT_STEP_SHELL = "mx-auto w-full max-w-4xl p-4 lg:p-8"
-
-function WorkspaceStepNav({
-  showBack,
-  showNext,
-  onBack,
-  onNext,
-  nextDisabled = false,
-}: {
-  showBack: boolean
-  showNext: boolean
-  onBack: () => void
-  onNext: () => void
-  nextDisabled?: boolean
-}) {
-  return (
-    <div className="mt-8 flex items-center justify-between gap-3 border-t border-border pt-6">
-      {showBack ? (
-        <Button type="button" variant="outline" onClick={onBack}>
-          <ArrowLeft />
-          Atrás
-        </Button>
-      ) : (
-        <span />
-      )}
-      {showNext ? (
-        <Button type="button" onClick={onNext} disabled={nextDisabled}>
-          Siguiente
-          <ArrowRight />
-        </Button>
-      ) : null}
-    </div>
-  )
-}
+const COMPACT_STEP_SHELL = "w-full"
 
 const blankTicket = (): EventFormValues["tickets"][number] => ({
   ...createInventoryTicket("general"),
@@ -277,6 +240,7 @@ export function EventCreationWizard({
   initialStep,
   backHref = "/admin/events",
   backLabel = "Volver al Panel",
+  impersonationName = null,
 }: {
   organizerServiceRate: number
   platformFixedFee?: number
@@ -288,6 +252,7 @@ export function EventCreationWizard({
   initialStep?: number
   backHref?: string
   backLabel?: string
+  impersonationName?: string | null
 }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -330,6 +295,19 @@ export function EventCreationWizard({
   const flyerName = useWatch({ control: form.control, name: "basics.flyerName" })
   const watchedTitle = useWatch({ control: form.control, name: "basics.title" })
   const watchedVenueMap = useWatch({ control: form.control, name: "venue.venueMap" })
+  const watchedVenueName = useWatch({
+    control: form.control,
+    name: "venue.venueName",
+  })
+  const watchedVenueLocation = useWatch({
+    control: form.control,
+    name: "venue.venueLocation",
+  })
+  const isStreaming = isStreamingVenue({
+    venueName: watchedVenueName,
+    venueLocation: watchedVenueLocation,
+  })
+  const venueSnapshotRef = useRef<EventFormValues["venue"] | null>(null)
   const isMultiDay = useWatch({
     control: form.control,
     name: "basics.isMultiDay",
@@ -722,7 +700,10 @@ export function EventCreationWizard({
     if (intent === "publish") {
       const strict = publishEventSchema.safeParse(data)
       if (!strict.success) {
+        form.clearErrors()
+        applyZodIssuesToForm(form.setError, strict.error.issues)
         const first = strict.error.issues[0]
+        const fieldPath = first?.path.map(String).join(".") ?? ""
         const message =
           first?.message ??
           "Completá los datos obligatorios para publicar."
@@ -731,10 +712,12 @@ export function EventCreationWizard({
           description: mapped.message,
         })
         setResultMessage({ type: "error", text: mapped.message })
-        void form.trigger()
         goToWizardStep(
           mapped.action?.step ?? wizardStepFromPath(first?.path ?? []),
         )
+        window.setTimeout(() => {
+          focusInvalidFormField(fieldPath || fieldFromAppError(mapped))
+        }, 80)
         return false
       }
     }
@@ -922,31 +905,64 @@ export function EventCreationWizard({
     }
   }
 
-  const workspaceNav = workspace
-    ? {
-        showBack: resolvedStep !== WIZARD_STEP_IDENTITY,
-        showNext: !isLastVisibleWizardStep(resolvedStep, wizardFlags),
-        onBack: () =>
-          void moveToStep(prevWizardStep(resolvedStep, wizardFlags)),
-        onNext: () =>
-          void moveToStep(nextWizardStep(resolvedStep, wizardFlags)),
+  function setEventModality(online: boolean) {
+    if (online) {
+      if (!isStreaming) {
+        venueSnapshotRef.current = form.getValues("venue")
       }
-    : null
+      form.setValue("venue.mode", "new", { shouldDirty: true })
+      form.setValue("venue.existingVenueId", null, { shouldDirty: true })
+      form.setValue("venue.venueName", STREAMING_VENUE_NAME, {
+        shouldDirty: true,
+      })
+      form.setValue("venue.venueLocation", STREAMING_VENUE_LOCATION, {
+        shouldDirty: true,
+      })
+      form.setValue("venue.venueCity", "", { shouldDirty: true })
+      form.setValue("venue.latitude", null, { shouldDirty: true })
+      form.setValue("venue.longitude", null, { shouldDirty: true })
+      form.setValue("basics.hasSeatingPlan", false, { shouldDirty: true })
+      form.setValue("venue.includesSeatingMap", false, { shouldDirty: true })
+      form.setValue("venue.zoneType", "general_admission", { shouldDirty: true })
+      return
+    }
+    const snapshot = venueSnapshotRef.current
+    if (snapshot && !isStreamingVenue(snapshot)) {
+      form.setValue("venue", snapshot, { shouldDirty: true })
+      return
+    }
+    if (isStreaming) {
+      form.setValue("venue.venueName", "", { shouldDirty: true })
+      form.setValue("venue.venueLocation", "", { shouldDirty: true })
+      form.setValue("venue.mode", "new", { shouldDirty: true })
+      form.setValue("venue.existingVenueId", null, { shouldDirty: true })
+    }
+  }
+
+  const studioSteps = visibleSteps.map((step) => ({
+    index: step.index,
+    label: step.title,
+  }))
+  const studioActive = Math.max(0, visibleStepIndexes.indexOf(resolvedStep))
 
   return (
     <>
     <Form {...form}>
       <form
-        className={cn(
-          "flex min-h-0 flex-1 flex-col overflow-hidden dark text-zinc-100",
-          workspace && "h-full bg-background",
-        )}
+        className="flex h-full min-h-0 flex-1 flex-col overflow-hidden"
         onSubmit={form.handleSubmit(
           (data) => onSubmit(data, "draft"),
-          () => {
-            if (activeStep === 0) {
+          (errors) => {
+            const fieldPath = firstFieldErrorPath(errors)
+            const step = wizardStepFromPath(
+              fieldPath ? fieldPath.split(".") : [],
+            )
+            goToWizardStep(step)
+            window.setTimeout(() => {
+              focusInvalidFormField(fieldPath)
+            }, 80)
+            if (activeStep === 0 || step === 0) {
               toast.error("Revisá el nombre, las fechas o el flyer.")
-              setActiveStep(0)
               return
             }
             const capacity = computeEventCapacityFromForm(form.getValues())
@@ -954,10 +970,63 @@ export function EventCreationWizard({
               const message = eventCapacityOverflowMessage(capacity)
               toast.error("El aforo está excedido", { description: message })
               goToWizardStep(WIZARD_STEP_TICKETS)
+              return
             }
+            toast.error("Revisá los datos obligatorios.")
           },
         )}
       >
+        <EventStudioShell
+          backHref={backHref}
+          backLabel={backLabel}
+          stepper={
+            <EventStudioStepper
+              steps={studioSteps}
+              activeIndex={studioActive}
+              onSelect={(index) => void moveToStep(index)}
+            />
+          }
+          status={<EventAutosaveIndicator />}
+          banner={
+            impersonationName ? (
+              <div
+                role="alert"
+                className="rounded-xl border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-amber-100"
+              >
+                <p className="text-sm font-semibold text-amber-200">
+                  {workspace ? "Editando" : "Creando"} a nombre de{" "}
+                  {impersonationName}
+                </p>
+              </div>
+            ) : null
+          }
+          preview={
+            <EventLivePreview
+              control={form.control}
+              categories={categories}
+              flyerFile={flyerFile}
+              existingFlyerUrl={
+                flyerName ? initialData?.flyerUrl ?? null : null
+              }
+            />
+          }
+          dock={
+            <EventStudioDock
+              canGoBack={resolvedStep !== WIZARD_STEP_IDENTITY}
+              isLast={isLastVisibleWizardStep(resolvedStep, wizardFlags)}
+              isEditing={isEditing}
+              submitting={form.formState.isSubmitting}
+              nextDisabled={inventoryBlocked}
+              onBack={() =>
+                void moveToStep(prevWizardStep(resolvedStep, wizardFlags))
+              }
+              onNext={() =>
+                void moveToStep(nextWizardStep(resolvedStep, wizardFlags))
+              }
+              onPublish={() => void onSubmit(form.getValues(), "publish")}
+            />
+          }
+        >
         <Tabs
           value={String(resolvedStep)}
           onValueChange={(value) => {
@@ -965,141 +1034,26 @@ export function EventCreationWizard({
             if (!Number.isFinite(next) || next === resolvedStep) return
             void moveToStep(next)
           }}
-          className={cn(
-            "flex min-h-0 flex-1 flex-col overflow-hidden",
-            workspace ? "gap-0" : "gap-4",
-          )}
+          className="flex flex-col gap-0"
         >
-          {workspace ? (
-            <header className="z-30 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-card px-3 text-card-foreground">
-              <Link
-                href={backHref}
-                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                <ArrowLeft className="size-3.5" />
-                <span className="hidden lg:inline">{backLabel}</span>
-              </Link>
-              <TabsList
-                aria-label="Pasos de edición"
-                className="h-9 min-w-0 flex-1 justify-center bg-zinc-100 p-0.5 text-muted-foreground dark:bg-zinc-900"
-              >
-                {visibleSteps.map(({ index, title }, visibleIndex) => (
-                  <TabsTrigger
-                    key={title}
-                    value={String(index)}
-                    className="h-8 gap-1.5 px-2.5 text-xs data-active:bg-background data-active:text-foreground sm:px-3 sm:text-[13px]"
-                  >
-                    <span className="font-mono text-[11px] text-muted-foreground">
-                      {visibleIndex + 1}.
-                    </span>
-                    <span className="truncate">{title}</span>
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-              <EventAutosaveIndicator />
-              <Button
-                type="submit"
-                disabled={form.formState.isSubmitting || inventoryBlocked}
-                className="h-8 shrink-0 bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-500"
-              >
-                {form.formState.isSubmitting ? (
-                  <LoaderCircle className="size-3.5 animate-spin" />
-                ) : (
-                  <Save className="size-3.5" />
-                )}
-                Guardar
-              </Button>
-            </header>
-          ) : (
-            <div className="shrink-0 space-y-4">
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <EventCapacityHeader form={form} />
-            <EventAutosaveIndicator />
-          </div>
-          <TabsList
-            className={cn(
-              "flex w-full items-stretch gap-2 overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-900 p-2 text-zinc-100 shadow-lg shadow-black/20 backdrop-blur-md group-data-horizontal/tabs:h-auto sm:grid sm:grid-cols-2 sm:overflow-visible",
-              visibleSteps.length >= 5
-                ? "lg:grid-cols-5"
-                : visibleSteps.length === 4
-                  ? "lg:grid-cols-4"
-                  : "lg:grid-cols-3",
-            )}
-          >
-            {visibleSteps.map(({ index, title, description }, visibleIndex) => {
-              const activePos = visibleStepIndexes.indexOf(resolvedStep)
-              const completed = visibleIndex < activePos
-              const available = true
-
-              return (
-                <TabsTrigger
-                  key={title}
-                  value={String(index)}
-                  disabled={!available}
-                  className="h-auto min-w-0 flex-1 items-center justify-start gap-3 rounded-xl border border-transparent bg-transparent p-3 text-left text-zinc-200 opacity-60 transition-all hover:bg-zinc-800 hover:opacity-100 data-active:border-emerald-500/40 data-active:bg-zinc-800 data-active:text-zinc-100 data-active:opacity-100 data-active:shadow-[0_0_20px_rgba(16,185,129,0.15)]"
-                >
-                  <span
-                    className={cn(
-                      "flex size-8 shrink-0 items-center justify-center rounded-lg bg-zinc-800 font-mono text-sm font-bold text-zinc-400",
-                      completed &&
-                        "border border-emerald-500/20 bg-emerald-500/10 text-emerald-400",
-                      resolvedStep === index &&
-                        "border border-emerald-500/30 bg-emerald-500/20 text-emerald-400",
-                    )}
-                  >
-                    {completed ? (
-                      <Check className="size-4" />
-                    ) : (
-                      visibleIndex + 1
-                    )}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block min-w-0 break-words text-sm font-bold line-clamp-2">
-                      {title}
-                    </span>
-                    <span className="block min-w-0 break-words text-xs text-muted-foreground line-clamp-2">
-                      {description}
-                    </span>
-                  </span>
-                </TabsTrigger>
-              )
-            })}
-          </TabsList>
-            </div>
-          )}
-
-          <Card className={cn(
-            "flex min-h-0 flex-1 flex-col overflow-hidden gap-0 rounded-3xl border border-zinc-800 bg-zinc-950 bg-gradient-to-b from-zinc-900 to-zinc-950 pt-0 pb-0 text-zinc-100 shadow-2xl shadow-black/30 ring-0 max-sm:overflow-x-hidden [&_[data-slot=input]]:rounded-xl [&_[data-slot=input]]:border-zinc-800 [&_[data-slot=input]]:bg-zinc-950 [&_[data-slot=input]]:text-zinc-100 [&_[data-slot=input]]:shadow-inner [&_[data-slot=input]]:placeholder:text-zinc-500 [&_[data-slot=input]:focus-visible]:border-emerald-500/60 [&_[data-slot=input]:focus-visible]:bg-zinc-900 [&_[data-slot=input]:focus-visible]:ring-2 [&_[data-slot=input]:focus-visible]:ring-emerald-500/15 [&_[data-slot=select-trigger]]:rounded-xl [&_[data-slot=select-trigger]]:border-zinc-800 [&_[data-slot=select-trigger]]:bg-zinc-950 [&_[data-slot=select-trigger]]:text-zinc-100 [&_[data-slot=select-trigger]]:shadow-inner [&_[data-slot=select-trigger]:focus-visible]:border-emerald-500/60 [&_[data-slot=select-trigger]:focus-visible]:ring-2 [&_[data-slot=select-trigger]:focus-visible]:ring-emerald-500/15",
-            workspace &&
-              "rounded-none border-0 bg-background shadow-none",
-          )}>
-            <div
-              className={cn(
-                "min-h-0 flex-1 overflow-y-auto p-4 space-y-6",
-                workspace && "overflow-hidden p-0",
-              )}
-            >
             <TabsContent
               keepMounted
               value="0"
               id="event-wizard-step-0"
-              className={cn(
-                "animate-in fade-in slide-in-from-right-2 duration-300",
-                workspace && "h-full overflow-y-auto",
-              )}
+              className="animate-in fade-in slide-in-from-right-2 duration-300"
             >
-              <div className={COMPACT_STEP_SHELL}>
-              <CardHeader className="px-0 pt-6 sm:pt-10">
+              <div>
+              <CardHeader className="px-0 pt-2">
                 <CardTitle className="mb-1 text-2xl font-bold text-foreground">
                   Identidad del evento
                 </CardTitle>
-                <CardDescription className="border-b border-zinc-200 dark:border-zinc-800 pb-6 text-sm text-muted-foreground">
-                  Nombre, descripción, fechas y flyer. La categoría y la edad
-                  también viven acá.
+                <CardDescription className="border-b border-border pb-4 text-sm text-muted-foreground">
+                  Nombre, flyer y categoría. El simulador a la derecha se
+                  actualiza en vivo.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="grid grid-cols-1 items-start gap-6 px-0 py-6 sm:gap-8 sm:py-8 lg:grid-cols-12">
-                <div className="space-y-6 lg:col-span-7">
+              <CardContent className="grid grid-cols-1 items-start gap-6 px-0 py-6">
+                <div className="space-y-6">
                   <FormField
                     control={form.control}
                     name="basics.title"
@@ -1107,15 +1061,16 @@ export function EventCreationWizard({
                       <FormItem>
                         <FormLabel
                           htmlFor="event-title"
-                          className="block font-mono text-xs font-semibold uppercase tracking-wider text-foreground"
+                          className="block font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground"
                         >
-                          Título
+                          Titulo del evento
                         </FormLabel>
                         <Input
                           {...field}
                           id="event-title"
-                          placeholder="Ej. Fiesta de Año Nuevo en el Complejo X"
-                          className="h-12 w-full rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 py-3 text-base text-foreground shadow-inner transition-all placeholder:text-slate-500 dark:placeholder:text-muted-foreground dark:placeholder:text-zinc-600 focus:border-emerald-500/60 focus:bg-zinc-100 dark:focus:bg-zinc-900 focus:ring-2 focus:ring-emerald-500/15 focus:outline-none md:text-sm"
+                          data-field="basics.title"
+                          placeholder="Nombre impactante de tu evento"
+                          className="h-auto w-full rounded-none border-0 border-b border-border bg-transparent px-0 py-2 text-xl font-bold shadow-none placeholder:text-muted-foreground/45 focus-visible:border-emerald-400 focus-visible:ring-0 md:text-2xl"
                         />
                         <FormMessage>{fieldState.error?.message}</FormMessage>
                       </FormItem>
@@ -1127,50 +1082,43 @@ export function EventCreationWizard({
                     name="basics.categoryId"
                     render={({ field, fieldState }) => (
                       <FormItem>
-                        <FormLabel className="block font-mono text-xs font-semibold uppercase tracking-wider text-foreground">
-                          Categoría
+                        <FormLabel className="block font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                          Categoria
                         </FormLabel>
-                        <Select
-                          value={field.value || undefined}
-                          onValueChange={(value) => field.onChange(value ?? "")}
-                          items={[
-                            ...(categories.length === 0
-                              ? [
-                                  {
-                                    value: "__empty",
-                                    label: "No hay categorías activas",
-                                  },
-                                ]
-                              : categories.map((category) => ({
-                                  value: category.id,
-                                  label: category.name,
-                                }))),
-                          ]}
-                        >
-                          <SelectTrigger className="h-12 w-full max-w-full overflow-hidden rounded-xl">
-                            <SelectValue placeholder="Elegí una categoría">
-                              {categories.find((c) => c.id === field.value)
-                                ?.name ?? null}
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            {categories.length === 0 ? (
-                              <SelectItem value="__empty" disabled>
-                                No hay categorías activas
-                              </SelectItem>
-                            ) : (
-                              categories.map((category) => (
-                                <SelectItem key={category.id} value={category.id}>
-                                  <span className="block min-w-0 max-w-full truncate">
-                                    {category.name}
-                                  </span>
-                                </SelectItem>
-                              ))
-                            )}
-                          </SelectContent>
-                        </Select>
+                        {categories.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">
+                            No hay categorias activas.
+                          </p>
+                        ) : (
+                          <div
+                            className="flex flex-wrap gap-2"
+                            data-field="basics.categoryId"
+                          >
+                            {categories.map((category) => {
+                              const selected = field.value === category.id
+                              const Icon = resolveCategoryIcon(category.iconName)
+                              return (
+                                <button
+                                  key={category.id}
+                                  type="button"
+                                  onClick={() => field.onChange(category.id)}
+                                  className={cn(
+                                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-base transition md:text-sm",
+                                    selected
+                                      ? "border-emerald-400/60 bg-emerald-500/15 font-semibold text-emerald-200"
+                                      : "border-border bg-card/50 text-muted-foreground hover:border-emerald-500/30 hover:text-foreground",
+                                  )}
+                                >
+                                  <Icon className="size-3.5" />
+                                  {category.name}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
                         <p className="text-xs text-muted-foreground">
-                          Lista definida por TokePass. No se pueden crear etiquetas libres.
+                          Lista definida por TokePass. No se pueden crear
+                          etiquetas libres.
                         </p>
                         <FormMessage>{fieldState.error?.message}</FormMessage>
                       </FormItem>
@@ -1182,155 +1130,40 @@ export function EventCreationWizard({
                     name="basics.ageRestriction"
                     render={({ field, fieldState }) => (
                       <FormItem>
-                        <FormLabel className="flex items-center gap-1.5 font-mono text-xs font-semibold uppercase tracking-wider text-foreground">
-                          <IdCard className="size-3.5" aria-hidden="true" />
-                          Restricción de edad
+                        <FormLabel className="block font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                          Restriccion de edad
                         </FormLabel>
-                        <Select
-                          value={field.value || undefined}
-                          onValueChange={(value) =>
-                            field.onChange(
-                              value as EventFormValues["basics"]["ageRestriction"],
-                            )
-                          }
-                          items={AGE_RESTRICTION_VALUES.map((value) => ({
-                            value,
-                            label: AGE_RESTRICTION_LABELS[value],
-                          }))}
+                        <div
+                          className="flex flex-wrap gap-2"
+                          data-field="basics.ageRestriction"
                         >
-                          <SelectTrigger className="h-12 w-full max-w-full overflow-hidden rounded-xl">
-                            <SelectValue placeholder="Elegí ATP, +16 o +18">
-                              {field.value
-                                ? AGE_RESTRICTION_LABELS[field.value]
-                                : null}
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            {AGE_RESTRICTION_VALUES.map((value) => (
-                              <SelectItem key={value} value={value}>
+                          {AGE_RESTRICTION_VALUES.map((value) => {
+                            const selected = field.value === value
+                            return (
+                              <button
+                                key={value}
+                                type="button"
+                                onClick={() => field.onChange(value)}
+                                className={cn(
+                                  "inline-flex min-w-16 items-center justify-center rounded-full border px-3 py-2 text-base font-semibold transition md:text-sm",
+                                  selected
+                                    ? "border-emerald-400/60 bg-emerald-500/15 text-emerald-200"
+                                    : "border-border bg-card/50 text-muted-foreground hover:border-emerald-500/30 hover:text-foreground",
+                                )}
+                              >
                                 {AGE_RESTRICTION_LABELS[value]}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                              </button>
+                            )
+                          })}
+                        </div>
                         <FormDescription className="text-xs text-muted-foreground">
-                          Se muestra en la ficha pública. El control de DNI es
+                          Se muestra en la ficha publica. El control de DNI es
                           responsabilidad de la puerta.
                         </FormDescription>
                         <FormMessage>{fieldState.error?.message}</FormMessage>
                       </FormItem>
                     )}
                   />
-
-                  <FormField
-                    control={form.control}
-                    name="basics.isMultiDay"
-                    render={({ field }) => (
-                      <FormItem className="flex items-center justify-between gap-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/50 px-4 py-3">
-                        <div>
-                          <FormLabel className="text-sm font-medium text-foreground">
-                            ¿Varias jornadas / noches?
-                          </FormLabel>
-                          <FormDescription className="text-xs text-muted-foreground">
-                            Activá esto para festivales de múltiples fechas.
-                          </FormDescription>
-                        </div>
-                        <Switch
-                          checked={field.value}
-                          onCheckedChange={(checked) => {
-                            field.onChange(checked)
-                            if (checked) {
-                              const current = form.getValues(
-                                "basics.scheduleDays",
-                              )
-                              if (current.length < 2) {
-                                form.setValue(
-                                  "basics.scheduleDays",
-                                  seedTwoScheduleDays(
-                                    form.getValues("basics.date") || "",
-                                  ),
-                                  {
-                                    shouldDirty: true,
-                                    shouldTouch: true,
-                                    shouldValidate: false,
-                                  },
-                                )
-                              }
-                            } else {
-                              const days = form.getValues("basics.scheduleDays")
-                              const first = days[0]
-                              if (first?.startTime) {
-                                form.setValue("basics.date", first.startTime, {
-                                  shouldDirty: true,
-                                })
-                              }
-                              if (first?.endTime) {
-                                form.setValue("basics.endDate", first.endTime, {
-                                  shouldDirty: true,
-                                })
-                              }
-                              form.setValue("basics.scheduleDays", [], {
-                                shouldDirty: true,
-                              })
-                            }
-                          }}
-                          aria-label="Activar evento multijornada"
-                        />
-                      </FormItem>
-                    )}
-                  />
-
-                  {isMultiDay ? (
-                    <ScheduleDaysBuilder control={form.control} />
-                  ) : (
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <FormField
-                        control={form.control}
-                        name="basics.date"
-                        render={({ field, fieldState }) => (
-                          <FormItem>
-                            <FormLabel
-                              htmlFor="event-date"
-                              className="block font-mono text-xs font-semibold uppercase tracking-wider text-foreground"
-                            >
-                              Fecha y hora de inicio
-                            </FormLabel>
-                            <Input
-                              {...field}
-                              id="event-date"
-                              type="datetime-local"
-                              className="scheme-light dark:scheme-dark h-12 w-full rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 py-3 text-base text-foreground shadow-inner transition-all focus:border-emerald-500/60 focus:bg-zinc-100 dark:focus:bg-zinc-900 focus:ring-2 focus:ring-emerald-500/15 focus:outline-none md:text-sm"
-                            />
-                            <FormMessage>{fieldState.error?.message}</FormMessage>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="basics.endDate"
-                        render={({ field, fieldState }) => (
-                          <FormItem>
-                            <FormLabel
-                              htmlFor="event-end-date"
-                              className="block font-mono text-xs font-semibold uppercase tracking-wider text-foreground"
-                            >
-                              Hora de finalización
-                            </FormLabel>
-                            <Input
-                              {...field}
-                              id="event-end-date"
-                              type="datetime-local"
-                              className="scheme-light dark:scheme-dark h-12 w-full rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 py-3 text-base text-foreground shadow-inner transition-all focus:border-emerald-500/60 focus:bg-zinc-100 dark:focus:bg-zinc-900 focus:ring-2 focus:ring-emerald-500/15 focus:outline-none md:text-sm"
-                            />
-                            <FormDescription className="text-xs text-muted-foreground">
-                              Debe ser posterior al inicio (útil si cruza medianoche).
-                            </FormDescription>
-                            <FormMessage>{fieldState.error?.message}</FormMessage>
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  )}
 
                   <FormField
                     control={form.control}
@@ -1346,6 +1179,7 @@ export function EventCreationWizard({
                         <Textarea
                           {...field}
                           id="event-description"
+                          data-field="basics.description"
                           placeholder="Cuenta qué hace única a esta experiencia..."
                           className="min-h-[160px] w-full resize-y rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 py-3 text-base text-foreground shadow-inner transition-all placeholder:text-slate-500 dark:placeholder:text-muted-foreground dark:placeholder:text-zinc-600 focus:border-emerald-500/60 focus:bg-zinc-100 dark:focus:bg-zinc-900 focus:ring-2 focus:ring-emerald-500/15 focus:outline-none md:text-sm"
                         />
@@ -1356,329 +1190,379 @@ export function EventCreationWizard({
                       </FormItem>
                     )}
                   />
-
-                  <FormField
-                    control={form.control}
-                    name="basics.hasSeatingPlan"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between gap-4 rounded-2xl border border-emerald-500/25 bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent px-4 py-4">
-                        <div className="flex min-w-0 items-start gap-3">
-                          <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
-                            <MapPin className="size-4" aria-hidden="true" />
-                          </span>
-                          <div className="space-y-1">
-                            <FormLabel className="text-sm font-semibold leading-snug text-foreground">
-                              ¿El evento requiere diseño de mapa con
-                              butacas/mesas numeradas?
-                            </FormLabel>
-                            <FormDescription className="text-xs text-muted-foreground">
-                              Si lo activas, aparece el paso Arquitectura. Si no,
-                              pasas directo a Tarifas.
-                            </FormDescription>
-                          </div>
-                        </div>
-                        <Switch
-                          checked={Boolean(field.value)}
-                          onCheckedChange={(checked) => {
-                            field.onChange(checked)
-                            if (!checked) {
-                              form.setValue("venue.includesSeatingMap", false, {
-                                shouldDirty: true,
-                              })
-                              const currentTickets =
-                                form.getValues("tickets") ?? []
-                              if (
-                                currentTickets.some((tier) => tier.seatingSectorId)
-                              ) {
-                                form.setValue(
-                                  "tickets",
-                                  currentTickets.map((tier) => ({
-                                    ...tier,
-                                    seatingSectorId: null,
-                                  })),
-                                  { shouldDirty: true },
-                                )
-                              }
-                            }
-                          }}
-                          className="data-checked:bg-emerald-500"
-                          aria-label="¿El evento requiere diseño de mapa con butacas/mesas numeradas?"
-                        />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="basics.hasSchedule"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between gap-4 rounded-2xl border border-violet-500/25 bg-gradient-to-r from-violet-500/10 via-violet-500/5 to-transparent px-4 py-4">
-                        <div className="flex min-w-0 items-start gap-3">
-                          <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-violet-500/20 bg-violet-500/15 text-violet-700 dark:text-violet-300">
-                            <CalendarClock className="size-4" aria-hidden="true" />
-                          </span>
-                          <div className="space-y-1">
-                            <FormLabel className="text-sm font-semibold leading-snug text-foreground">
-                              ¿Habilitar cronograma / agenda del evento?
-                            </FormLabel>
-                            <FormDescription className="text-xs text-muted-foreground">
-                              Activa esto si tu evento tiene charlas, shows o un
-                              itinerario por horarios.
-                            </FormDescription>
-                          </div>
-                        </div>
-                        <Switch
-                          checked={Boolean(field.value)}
-                          onCheckedChange={(checked) => {
-                            field.onChange(checked)
-                          }}
-                          className="data-checked:bg-violet-500"
-                          aria-label="¿Habilitar cronograma / agenda del evento?"
-                        />
-                      </FormItem>
-                    )}
-                  />
                 </div>
 
-                <FormItem className="flex flex-col gap-4 rounded-2xl border border-zinc-200 dark:border-zinc-800/80 bg-zinc-50 dark:bg-zinc-950/50 p-6 lg:col-span-5 lg:self-stretch">
-                  <FormLabel
-                    htmlFor="event-flyer"
-                    className="block font-mono text-xs font-semibold uppercase tracking-wider text-foreground"
-                  >
-                    Flyer principal
-                  </FormLabel>
-                  <label
-                    htmlFor="event-flyer"
-                    data-field="basics.flyerName"
-                    className="group relative flex min-h-[280px] flex-1 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/40 p-8 text-center transition-all hover:border-emerald-500/50 hover:bg-white dark:hover:bg-zinc-900/80"
-                  >
-                    {initialData?.flyerUrl && !flyerFile ? (
-                      <>
-                        {/* eslint-disable-next-line @next/next/no-img-element -- flyer host may vary; avoid next/image remotePatterns 500 */}
-                        <img
-                          src={initialData.flyerUrl}
-                          alt={`Flyer actual de ${initialData.title}`}
-                          className="absolute inset-0 size-full object-cover opacity-35 transition-opacity group-hover:opacity-20"
-                        />
-                        <span className="absolute inset-0 bg-gradient-to-t from-zinc-900/80 via-zinc-900/30 to-transparent dark:from-zinc-950 dark:via-zinc-950/40 dark:to-transparent" />
-                      </>
-                    ) : null}
-                    <span className="relative z-10">
-                      <span className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800/80 text-foreground shadow-sm transition-all group-hover:border-emerald-500/30 group-hover:bg-emerald-500/15 group-hover:text-emerald-700 dark:text-emerald-400">
-                        <UploadCloud className="size-5" aria-hidden="true" />
-                      </span>
-                      <span className="mb-1.5 block text-sm font-semibold text-zinc-900 transition-colors group-hover:text-emerald-800 dark:text-white dark:group-hover:text-emerald-300">
-                        {flyerName ||
-                          (isEditing
-                            ? "Reemplazar imagen actual"
-                            : "Subir imagen del evento")}
-                      </span>
-                      <span className="mx-auto block max-w-[240px] text-xs leading-relaxed text-muted-foreground">
-                        Tamaño máximo 5MB. Recomendamos formato horizontal
-                        1600x900px (PNG, JPG o WEBP).
-                      </span>
-                    </span>
-                    <Input
-                      id="event-flyer"
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      className="sr-only"
-                      onChange={(event) => {
-                        const file = event.target.files?.[0] ?? null
-                        if (file && file.size > MAX_EVENT_FLYER_BYTES) {
-                          setFlyerFile(null)
-                          setFlyerError(
-                            "El flyer supera los 5MB. Comprimilo o elegí otra imagen.",
-                          )
-                          form.setValue("basics.flyerName", null, {
-                            shouldDirty: true,
-                          })
-                          form.setError("basics.flyerName", {
-                            type: "manual",
-                            message:
-                              "El flyer supera los 5MB. Comprimilo o elegí otra imagen.",
-                          })
-                          event.target.value = ""
-                          return
-                        }
-                        setFlyerError(null)
-                        form.clearErrors("basics.flyerName")
-                        setFlyerFile(file)
-                        form.setValue(
-                          "basics.flyerName",
-                          file?.name ?? null,
-                          { shouldDirty: true },
-                        )
-                      }}
-                    />
-                  </label>
-                  {(flyerError ||
-                    form.formState.errors.basics?.flyerName?.message) && (
-                    <FormMessage>
-                      {flyerError ??
-                        form.formState.errors.basics?.flyerName?.message}
-                    </FormMessage>
-                  )}
-                </FormItem>
+                <EventStudioFlyerField
+                  flyerFile={flyerFile}
+                  existingFlyerUrl={
+                    flyerName ? initialData?.flyerUrl ?? null : null
+                  }
+                  existingTitle={initialData?.title}
+                  error={
+                    flyerError ??
+                    form.formState.errors.basics?.flyerName?.message
+                  }
+                  onFile={(file) => {
+                    setFlyerError(null)
+                    form.clearErrors("basics.flyerName")
+                    setFlyerFile(file)
+                    form.setValue("basics.flyerName", file.name, {
+                      shouldDirty: true,
+                    })
+                  }}
+                  onClear={() => {
+                    setFlyerError(null)
+                    form.clearErrors("basics.flyerName")
+                    setFlyerFile(null)
+                    form.setValue("basics.flyerName", null, {
+                      shouldDirty: true,
+                    })
+                  }}
+                />
                 <div className="lg:col-span-12">
                   <EventSponsorsManager
                     eventId={initialData?.id ?? persistedEventId}
                   />
                 </div>
-                {workspace ? (
-                  <div className="space-y-7 lg:col-span-12">
-                    <EventVenueStep
-                      form={form}
-                      eventId={initialData?.id ?? persistedEventId}
-                      venues={venueCatalog}
-                      onVenuesChange={setLocalVenues}
-                      onAppliedVenue={handleApplySavedVenue}
-                      onMapInventoryChange={applyMapInventory}
-                      catalogOrganizerId={
-                        targetOrganizerId ?? initialData?.organizerId ?? null
-                      }
-                      focus="location"
-                    />
-                    {hasSchedule ? (
-                      <AgendaBuilder
-                        eventId={initialData?.id ?? persistedEventId}
-                      />
-                    ) : null}
-                  </div>
-                ) : null}
               </CardContent>
-              {workspaceNav ? (
-                <WorkspaceStepNav
-                  showBack={workspaceNav.showBack}
-                  showNext={workspaceNav.showNext}
-                  onBack={workspaceNav.onBack}
-                  onNext={workspaceNav.onNext}
-                />
-              ) : null}
               </div>
             </TabsContent>
 
             <TabsContent
               keepMounted
-              value={String(WIZARD_STEP_AGENDA)}
-              id={`event-wizard-step-${WIZARD_STEP_AGENDA}`}
-              className="animate-in fade-in slide-in-from-right-2 duration-300"
-            >
-              <CardHeader className="border-b border-zinc-200 px-4 py-6 dark:border-white/8 lg:px-8">
-                <CardTitle className="text-xl text-foreground">
-                  Cronograma / Artistas
-                </CardTitle>
-                <CardDescription className="text-muted-foreground">
-                  Armá el itinerario por horarios. Un bloque puede ser solo un
-                  título, o incluir una persona o talento de forma opcional.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-7 px-4 py-7 lg:px-8">
-                <AgendaBuilder eventId={initialData?.id ?? persistedEventId} />
-              </CardContent>
-            </TabsContent>
-
-            <TabsContent
-              keepMounted={!workspace}
               value="1"
               id="event-wizard-step-1"
-              className={cn(
-                "animate-in fade-in slide-in-from-right-2 duration-300",
-                workspace && "h-full overflow-y-auto",
-              )}
+              className="animate-in fade-in slide-in-from-right-2 duration-300"
             >
-              {workspace ? (
-                <>
-                  <div className={COMPACT_STEP_SHELL}>
-                    <h2 className="text-2xl font-bold text-foreground">
-                      Arquitectura del Recinto
-                    </h2>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      Diseña butacas, mesas y sectores numerados en TokePass
-                      Studio. El mapa se abre a pantalla completa para no
-                      romper el resto del formulario.
-                    </p>
-                    <Button
-                      type="button"
-                      size="lg"
-                      className="mt-8 h-12 w-full sm:w-auto"
-                      onClick={() => setIsStudioOpen(true)}
-                    >
-                      Abrir Diseñador (TokePass Studio)
-                    </Button>
-                    {workspaceNav ? (
-                      <WorkspaceStepNav
-                        showBack={workspaceNav.showBack}
-                        showNext={workspaceNav.showNext}
-                        onBack={workspaceNav.onBack}
-                        onNext={workspaceNav.onNext}
-                      />
-                    ) : null}
-                  </div>
-                  {isStudioOpen ? (
-                    <TokepassStudioOverlay
-                      open={isStudioOpen}
-                      closing={isStudioClosing}
-                      onClose={() => void closeStudio()}
-                    >
-                      <InteractiveVenueMapEditor
-                        variant="studio"
-                        eventTitle={watchedTitle || initialData?.title || "Evento"}
-                        onEventTitleChange={(title) =>
-                          form.setValue("basics.title", title, {
-                            shouldDirty: true,
-                          })
-                        }
-                        value={parseVenueMap(watchedVenueMap)}
-                        tickets={watchedTickets}
-                        saving={form.formState.isSubmitting || isStudioClosing}
-                        onChange={(next) => persistWorkspaceMap(next)}
-                        onAutoSave={(next) => persistWorkspaceMap(next)}
-                        onSave={async (next) => {
-                          persistWorkspaceMap(next)
-                          const eventId = initialData?.id ?? persistedEventId
-                          if (!eventId) {
-                            throw new Error(
-                              "No hay un evento para guardar el mapa.",
-                            )
-                          }
-                          const result = await saveVenueMapOnly(eventId, next)
-                          if (!result.success) {
-                            throw new Error(result.error)
-                          }
-                        }}
-                      />
-                    </TokepassStudioOverlay>
-                  ) : null}
-                </>
-              ) : (
-                <>
-              <CardHeader className="border-b border-zinc-200 px-4 py-6 dark:border-white/8 lg:px-8">
+              <CardHeader className="px-0 pt-2">
                 <CardTitle className="text-xl text-foreground">
-                  Mapa y sectores
+                  Cita y lugar
                 </CardTitle>
                 <CardDescription className="text-muted-foreground">
-                  Sectores generales por cupo (pista, VIP de pie) y, si hace
-                  falta, el mapa visual de mesas y butacas. La capacidad total
-                  se calcula sola.
+                  Fechas, ubicación y, si hace falta, mapa numerado o agenda.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-7 px-4 py-7 lg:px-8">
-                <EventVenueStep
-                  form={form}
-                  eventId={initialData?.id ?? persistedEventId}
-                  venues={venueCatalog}
-                  onVenuesChange={setLocalVenues}
-                  onAppliedVenue={handleApplySavedVenue}
-                  onMapInventoryChange={applyMapInventory}
-                  catalogOrganizerId={
-                    targetOrganizerId ?? initialData?.organizerId ?? null
-                  }
-                  focus="all"
+              <CardContent className="space-y-7 px-0 py-6">
+                <div className="space-y-2">
+                  <p className="font-mono text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                    Modalidad
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setEventModality(false)}
+                      className={cn(
+                        "rounded-2xl border px-3 py-3 text-left transition",
+                        !isStreaming
+                          ? "border-emerald-400/50 bg-emerald-500/10"
+                          : "border-border bg-card/40 hover:border-emerald-500/30",
+                      )}
+                    >
+                      <MapPin className="mb-2 size-4 text-emerald-400" />
+                      <span className="block text-sm font-semibold text-foreground">
+                        Evento Presencial
+                      </span>
+                      <span className="mt-1 block text-xs text-muted-foreground">
+                        Recinto fisico y puerta.
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEventModality(true)}
+                      className={cn(
+                        "rounded-2xl border px-3 py-3 text-left transition",
+                        isStreaming
+                          ? "border-emerald-400/50 bg-emerald-500/10"
+                          : "border-border bg-card/40 hover:border-emerald-500/30",
+                      )}
+                    >
+                      <MonitorPlay className="mb-2 size-4 text-emerald-400" />
+                      <span className="block text-sm font-semibold text-foreground">
+                        Streaming / Online
+                      </span>
+                      <span className="mt-1 block text-xs text-muted-foreground">
+                        Sin recinto fisico.
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="basics.isMultiDay"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-card/40 px-4 py-3">
+                      <div>
+                        <FormLabel className="text-sm font-medium text-foreground">
+                          Evento de Multiples Jornadas / Festival
+                        </FormLabel>
+                        <FormDescription className="text-xs text-muted-foreground">
+                          Activalo para varias noches o dias.
+                        </FormDescription>
+                      </div>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={(checked) => {
+                          field.onChange(checked)
+                          if (checked) {
+                            const current = form.getValues(
+                              "basics.scheduleDays",
+                            )
+                            if (current.length < 2) {
+                              form.setValue(
+                                "basics.scheduleDays",
+                                seedTwoScheduleDays(
+                                  form.getValues("basics.date") || "",
+                                ),
+                                {
+                                  shouldDirty: true,
+                                  shouldTouch: true,
+                                  shouldValidate: false,
+                                },
+                              )
+                            }
+                          } else {
+                            const days = form.getValues("basics.scheduleDays")
+                            const first = days[0]
+                            if (first?.startTime) {
+                              form.setValue("basics.date", first.startTime, {
+                                shouldDirty: true,
+                              })
+                            }
+                            if (first?.endTime) {
+                              form.setValue("basics.endDate", first.endTime, {
+                                shouldDirty: true,
+                              })
+                            }
+                            form.setValue("basics.scheduleDays", [], {
+                              shouldDirty: true,
+                            })
+                          }
+                        }}
+                        className="data-checked:bg-emerald-500"
+                        aria-label="Evento de multiples jornadas o festival"
+                      />
+                    </FormItem>
+                  )}
                 />
+
+                {isMultiDay ? (
+                  <ScheduleDaysBuilder control={form.control} />
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    <FormField
+                      control={form.control}
+                      name="basics.date"
+                      render={({ field, fieldState }) => (
+                        <FormItem>
+                          <FormLabel
+                            htmlFor="event-date"
+                            className="block font-mono text-xs font-semibold uppercase tracking-wider text-foreground"
+                          >
+                            Inicio
+                          </FormLabel>
+                          <EventStudioDateTimeField
+                            id="event-date"
+                            fieldName="basics.date"
+                            value={field.value}
+                            onChange={field.onChange}
+                          />
+                          <FormMessage>{fieldState.error?.message}</FormMessage>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="basics.endDate"
+                      render={({ field, fieldState }) => (
+                        <FormItem>
+                          <FormLabel
+                            htmlFor="event-end-date"
+                            className="block font-mono text-xs font-semibold uppercase tracking-wider text-foreground"
+                          >
+                            Finalizacion
+                          </FormLabel>
+                          <EventStudioDateTimeField
+                            id="event-end-date"
+                            fieldName="basics.endDate"
+                            value={field.value}
+                            onChange={field.onChange}
+                          />
+                          <FormDescription className="text-xs text-muted-foreground">
+                            Debe ser posterior al inicio.
+                          </FormDescription>
+                          <FormMessage>{fieldState.error?.message}</FormMessage>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                )}
+
+                <FormField
+                  control={form.control}
+                  name="basics.hasSchedule"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between gap-4 rounded-2xl border border-border bg-card/40 px-4 py-3">
+                      <div className="min-w-0">
+                        <FormLabel className="text-sm font-semibold text-foreground">
+                          Cronograma / agenda
+                        </FormLabel>
+                        <FormDescription className="text-xs text-muted-foreground">
+                          Charlas, shows o itinerario por horarios.
+                        </FormDescription>
+                      </div>
+                      <Switch
+                        checked={Boolean(field.value)}
+                        onCheckedChange={(checked) => {
+                          field.onChange(checked)
+                        }}
+                        className="data-checked:bg-violet-500"
+                        aria-label="Habilitar cronograma o agenda del evento"
+                      />
+                    </FormItem>
+                  )}
+                />
+
+                {isStreaming ? (
+                  <div className="rounded-2xl border border-border bg-card/40 px-4 py-3 text-sm text-muted-foreground">
+                    El evento se publica como {STREAMING_VENUE_NAME}. No hace
+                    falta recinto ni mapa de asientos.
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <p className="font-mono text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                        Ubicacion y recinto
+                      </p>
+                      <EventVenueStep
+                        form={form}
+                        eventId={initialData?.id ?? persistedEventId}
+                        venues={venueCatalog}
+                        onVenuesChange={setLocalVenues}
+                        onAppliedVenue={handleApplySavedVenue}
+                        onMapInventoryChange={applyMapInventory}
+                        catalogOrganizerId={
+                          targetOrganizerId ?? initialData?.organizerId ?? null
+                        }
+                        focus="location"
+                        variant="studio"
+                      />
+                    </div>
+
+                    <FormField
+                      control={form.control}
+                      name="basics.hasSeatingPlan"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between gap-4 rounded-2xl border border-emerald-500/25 bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent px-4 py-4">
+                          <div className="flex min-w-0 items-start gap-3">
+                            <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/15 text-emerald-300">
+                              <Armchair className="size-4" aria-hidden="true" />
+                            </span>
+                            <div className="space-y-1">
+                              <FormLabel className="text-sm font-semibold leading-snug text-foreground">
+                                Requiere Mapa de Asientos Numerados
+                              </FormLabel>
+                              <FormDescription className="text-xs text-muted-foreground">
+                                Butacas, mesas o tablones con numeracion.
+                              </FormDescription>
+                            </div>
+                          </div>
+                          <Switch
+                            checked={Boolean(field.value)}
+                            onCheckedChange={(checked) => {
+                              field.onChange(checked)
+                              form.setValue(
+                                "venue.includesSeatingMap",
+                                checked,
+                                { shouldDirty: true },
+                              )
+                              form.setValue(
+                                "venue.zoneType",
+                                checked
+                                  ? "reserved_seating"
+                                  : "general_admission",
+                                { shouldDirty: true },
+                              )
+                              if (!checked) {
+                                const currentTickets =
+                                  form.getValues("tickets") ?? []
+                                if (
+                                  currentTickets.some(
+                                    (tier) => tier.seatingSectorId,
+                                  )
+                                ) {
+                                  form.setValue(
+                                    "tickets",
+                                    currentTickets.map((tier) => ({
+                                      ...tier,
+                                      seatingSectorId: null,
+                                    })),
+                                    { shouldDirty: true },
+                                  )
+                                }
+                              }
+                            }}
+                            className="data-checked:bg-emerald-500"
+                            aria-label="Requiere mapa de asientos numerados"
+                          />
+                        </FormItem>
+                      )}
+                    />
+
+                    {hasSeatingPlan ? (
+                      <Button
+                        type="button"
+                        size="lg"
+                        className="relative h-12 w-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-base font-semibold text-zinc-950 hover:from-emerald-400 hover:to-cyan-400 md:text-sm"
+                        onClick={() => setIsStudioOpen(true)}
+                      >
+                        <span className="absolute -top-2 right-3 rounded-full bg-zinc-950 px-2 py-0.5 text-[10px] font-bold tracking-wide text-emerald-300 uppercase ring-1 ring-emerald-400/40">
+                          Destacado
+                        </span>
+                        Abrir Disenador de Mapa de Recinto
+                      </Button>
+                    ) : null}
+                  </>
+                )}
+                {hasSchedule ? (
+                  <AgendaBuilder eventId={initialData?.id ?? persistedEventId} />
+                ) : null}
               </CardContent>
-                </>
-              )}
+              {isStudioOpen ? (
+                <TokepassStudioOverlay
+                  open={isStudioOpen}
+                  closing={isStudioClosing}
+                  onClose={() => void closeStudio()}
+                >
+                  <InteractiveVenueMapEditor
+                    variant="studio"
+                    eventTitle={watchedTitle || initialData?.title || "Evento"}
+                    onEventTitleChange={(title) =>
+                      form.setValue("basics.title", title, {
+                        shouldDirty: true,
+                      })
+                    }
+                    value={parseVenueMap(watchedVenueMap)}
+                    tickets={watchedTickets}
+                    saving={form.formState.isSubmitting || isStudioClosing}
+                    onChange={(next) => persistWorkspaceMap(next)}
+                    onAutoSave={(next) => persistWorkspaceMap(next)}
+                    onSave={async (next) => {
+                      persistWorkspaceMap(next)
+                      const eventId = initialData?.id ?? persistedEventId
+                      if (!eventId) {
+                        throw new Error(
+                          "No hay un evento para guardar el mapa.",
+                        )
+                      }
+                      const result = await saveVenueMapOnly(eventId, next)
+                      if (!result.success) {
+                        throw new Error(result.error)
+                      }
+                    }}
+                  />
+                </TokepassStudioOverlay>
+              ) : null}
             </TabsContent>
 
             <TabsContent
@@ -1710,34 +1594,12 @@ export function EventCreationWizard({
                     form.formState.errors.tickets?.root?.message}
                 </FormMessage>
               </CardContent>
-              {workspaceNav ? (
-                <WorkspaceStepNav
-                  showBack={workspaceNav.showBack}
-                  showNext={workspaceNav.showNext}
-                  onBack={workspaceNav.onBack}
-                  onNext={workspaceNav.onNext}
-                  nextDisabled={inventoryBlocked}
-                />
-              ) : null}
-              </div>
-            </TabsContent>
-
-            <TabsContent
-              keepMounted
-              value="3"
-              id="event-wizard-step-3"
-              className="animate-in fade-in slide-in-from-right-2 duration-300"
-            >
-              <CardHeader className="border-b border-zinc-200 px-4 py-6 dark:border-white/8 lg:px-8">
-                <CardTitle className="text-xl text-foreground">
-                  Configuración final
+              <CardHeader className="border-b border-border px-0 py-4">
+                <CardTitle className="text-lg text-foreground">
+                  Visibilidad
                 </CardTitle>
-                <CardDescription className="text-muted-foreground">
-                  Medios de pago, privacidad del evento y publicación. El
-                  autoguardado ya dejó el borrador en la nube.
-                </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6 px-4 py-7 lg:px-8">
+              <CardContent className="space-y-6 px-0 py-6">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950/50">
                     <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
@@ -1834,6 +1696,7 @@ export function EventCreationWizard({
                   </p>
                 ) : null}
               </CardContent>
+              </div>
             </TabsContent>
 
             {resultMessage?.type === "error" ? (
@@ -1862,110 +1725,8 @@ export function EventCreationWizard({
                 )}
               </div>
             ) : null}
-            </div>
-
-            <div
-              className={cn(
-                "flex w-full shrink-0 flex-col gap-2 border-t border-zinc-800 bg-background p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-zinc-100",
-                "lg:flex-row lg:items-center lg:justify-between",
-                workspace && "hidden",
-              )}
-            >
-              <div className="flex items-center justify-between gap-2 lg:justify-start">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  disabled={
-                    resolvedStep === WIZARD_STEP_IDENTITY ||
-                    form.formState.isSubmitting
-                  }
-                  onClick={() =>
-                    void moveToStep(prevWizardStep(resolvedStep, wizardFlags))
-                  }
-                  className="min-h-11 min-w-11 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
-                >
-                  <ArrowLeft />
-                  Anterior
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={form.formState.isSubmitting || inventoryBlocked}
-                  variant="ghost"
-                  className="min-h-11 min-w-11 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 lg:hidden"
-                >
-                  {form.formState.isSubmitting ? (
-                    <LoaderCircle className="animate-spin" />
-                  ) : (
-                    <Save />
-                  )}
-                  Guardar
-                </Button>
-              </div>
-
-              {!isLastVisibleWizardStep(resolvedStep, wizardFlags) ? (
-                <div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:items-center">
-                  <Button
-                    key="draft-mid"
-                    type="submit"
-                    disabled={form.formState.isSubmitting || inventoryBlocked}
-                    variant="outline"
-                    className="hidden min-h-11 border-zinc-300 bg-zinc-100 text-base text-zinc-900 hover:bg-zinc-200 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 lg:inline-flex"
-                  >
-                    {form.formState.isSubmitting ? (
-                      <LoaderCircle className="animate-spin" />
-                    ) : (
-                      <Save />
-                    )}
-                    Guardar
-                  </Button>
-                  <Button
-                    key="next"
-                    type="button"
-                    disabled={inventoryBlocked}
-                    onClick={() =>
-                      void moveToStep(nextWizardStep(resolvedStep, wizardFlags))
-                    }
-                    className="min-h-11 w-full bg-violet-600 text-base text-white hover:bg-violet-500 lg:w-auto"
-                  >
-                    Siguiente
-                    <ArrowRight />
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:items-center">
-                  <Button
-                    key="draft"
-                    type="submit"
-                    disabled={form.formState.isSubmitting}
-                    variant="outline"
-                    className="hidden min-h-11 border-zinc-300 bg-zinc-100 text-base text-zinc-900 hover:bg-zinc-200 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 lg:inline-flex"
-                  >
-                    {form.formState.isSubmitting ? (
-                      <LoaderCircle className="animate-spin" />
-                    ) : (
-                      <Save />
-                    )}
-                    {form.formState.isSubmitting ? "Guardando…" : "Guardar"}
-                  </Button>
-                  <Button
-                    key="publish"
-                    type="button"
-                    disabled={form.formState.isSubmitting}
-                    className="min-h-11 w-full bg-emerald-600 text-base text-white hover:bg-emerald-500 lg:w-auto"
-                    onClick={() => void onSubmit(form.getValues(), "publish")}
-                  >
-                    {form.formState.isSubmitting ? (
-                      <LoaderCircle className="animate-spin" />
-                    ) : (
-                      <Rocket />
-                    )}
-                    {form.formState.isSubmitting ? "Guardando…" : "Publicar Evento"}
-                  </Button>
-                </div>
-              )}
-            </div>
-          </Card>
         </Tabs>
+        </EventStudioShell>
       </form>
     </Form>
 

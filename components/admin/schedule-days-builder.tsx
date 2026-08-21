@@ -10,6 +10,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form"
+import { EventStudioDateTimeField } from "@/components/admin/events/event-studio-datetime-field"
 import { Input } from "@/components/ui/input"
 import type { EventFormValues } from "@/lib/validations/event-form"
 import { newScheduleDayId } from "@/lib/event-schedule"
@@ -89,7 +90,7 @@ export function ScheduleDaysBuilder({
                 )}
               />
 
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-2 gap-3">
                 <FormField
                   control={control}
                   name={`basics.scheduleDays.${index}.startTime`}
@@ -101,11 +102,11 @@ export function ScheduleDaysBuilder({
                       >
                         Inicio
                       </FormLabel>
-                      <Input
-                        {...startField}
+                      <EventStudioDateTimeField
                         id={`schedule-day-${index}-start`}
-                        type="datetime-local"
-                        className="scheme-light dark:scheme-dark h-10 border-zinc-200 text-base dark:border-zinc-800 bg-white dark:bg-zinc-950 md:text-sm"
+                        fieldName={`basics.scheduleDays.${index}.startTime`}
+                        value={startField.value}
+                        onChange={startField.onChange}
                       />
                       <FormMessage>{fieldState.error?.message}</FormMessage>
                     </FormItem>
@@ -122,11 +123,11 @@ export function ScheduleDaysBuilder({
                       >
                         Cierre
                       </FormLabel>
-                      <Input
-                        {...endField}
+                      <EventStudioDateTimeField
                         id={`schedule-day-${index}-end`}
-                        type="datetime-local"
-                        className="scheme-light dark:scheme-dark h-10 border-zinc-200 text-base dark:border-zinc-800 bg-white dark:bg-zinc-950 md:text-sm"
+                        fieldName={`basics.scheduleDays.${index}.endTime`}
+                        value={endField.value}
+                        onChange={endField.onChange}
                       />
                       <FormMessage>{fieldState.error?.message}</FormMessage>
                     </FormItem>

@@ -10,9 +10,9 @@ import { cn } from "@/lib/utils"
 
 const LABELS: Record<AutosaveStatus, string> = {
   idle: "Sin cambios pendientes",
-  dirty: "Guardando cambios...",
-  saving: "Guardando cambios...",
-  saved: "Todos los cambios guardados.",
+  dirty: "Guardando...",
+  saving: "Guardando...",
+  saved: "Borrador guardado",
   error: "No se pudo autoguardar",
 }
 
