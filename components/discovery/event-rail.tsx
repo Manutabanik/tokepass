@@ -1,10 +1,9 @@
 "use client"
 
 import type { LucideIcon } from "lucide-react"
-import { motion } from "motion/react"
 
 import type { CatalogEvent } from "@/app/actions/public-events"
-import { EventCard } from "@/components/discovery/event-card"
+import { EventSwimlane } from "@/components/discovery/event-swimlane"
 
 export function EventRail({
   title,
@@ -18,35 +17,22 @@ export function EventRail({
   if (events.length === 0) return null
 
   return (
-    <section className="space-y-4">
-      <div className="flex items-center gap-2.5">
-        <span className="grid size-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-cyan-300 shadow-[0_0_18px_rgba(6,182,212,0.2)]">
-          <Icon className="size-4" aria-hidden="true" />
-        </span>
-        <h2 className="text-lg font-extrabold tracking-tight text-white sm:text-xl">
-          {title}
-        </h2>
+    <section className="space-y-2">
+      <div className="mb-4">
+        <div className="flex items-center gap-2.5">
+          <span className="grid size-9 place-items-center rounded-xl border border-black/5 bg-muted text-cyan-700 shadow-[0_0_18px_rgba(6,182,212,0.15)] dark:border-white/10 dark:bg-white/5 dark:text-cyan-300">
+            <Icon className="size-4" aria-hidden="true" />
+          </span>
+          <h2 className="text-lg font-extrabold tracking-tight text-foreground sm:text-xl">
+            {title}
+          </h2>
+        </div>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {events.length} evento{events.length === 1 ? "" : "s"}
+        </p>
       </div>
 
-      <motion.div
-        className="-mx-4 flex gap-4 overflow-x-auto px-4 pb-2 scrollbar-none sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 lg:grid-cols-3 xl:grid-cols-4"
-        initial="hidden"
-        whileInView="show"
-        viewport={{ once: true, margin: "-40px" }}
-        variants={{
-          hidden: {},
-          show: { transition: { staggerChildren: 0.05 } },
-        }}
-      >
-        {events.map((event, index) => (
-          <div
-            key={event.id}
-            className="w-[min(82vw,20rem)] min-w-0 shrink-0 sm:w-auto sm:max-w-none"
-          >
-            <EventCard event={event} index={index} priority={index < 2} />
-          </div>
-        ))}
-      </motion.div>
+      <EventSwimlane events={events} />
     </section>
   )
 }

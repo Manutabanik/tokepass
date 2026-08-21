@@ -30,23 +30,16 @@ function HeroFlyerSlide({
   finished?: boolean
 }) {
   return (
-    <div className="relative h-full w-full overflow-hidden bg-slate-950">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 scale-110 bg-cover bg-center opacity-35 blur-2xl select-none"
-        style={{ backgroundImage: `url(${url})` }}
+    <div className="relative h-full w-full overflow-hidden bg-muted">
+      {/* eslint-disable-next-line @next/next/no-img-element -- flyer host/blob */}
+      <img
+        src={url}
+        alt={title}
+        className={cn(
+          "h-full w-full object-cover transition-all duration-300",
+          finished && "grayscale-[50%]",
+        )}
       />
-      <div className="relative z-10 flex h-full w-full items-center justify-center p-3">
-        {/* eslint-disable-next-line @next/next/no-img-element -- flyer host/blob */}
-        <img
-          src={url}
-          alt={title}
-          className={cn(
-            "max-h-full max-w-full rounded-xl object-contain shadow-2xl transition-all duration-300",
-            finished && "grayscale-[50%]",
-          )}
-        />
-      </div>
     </div>
   )
 }

@@ -1,4 +1,5 @@
 import { formatTicketPrice } from "@/lib/format"
+import { centsToMoney, moneyToCents } from "@/lib/money/cents"
 
 export type ChargeUnitType = "per_person" | "full_table"
 export type ChargeNoun = "mesa" | "palco" | "lugar"
@@ -50,8 +51,8 @@ export function storefrontLineTotal(item: {
   priceMode?: string | null
 }): number {
   const price = Math.max(0, Number(item.price) || 0)
-  if (isClosedUnitPricing(item)) return price
-  return price * storefrontLinePlaces(item)
+  if (isClosedUnitPricing(item)) return centsToMoney(moneyToCents(price))
+  return centsToMoney(moneyToCents(price) * storefrontLinePlaces(item))
 }
 
 /**

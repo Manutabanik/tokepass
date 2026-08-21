@@ -106,7 +106,7 @@ export function EventFlyer({
       <div
         className={cn(
           "relative h-full w-full overflow-hidden",
-          objectFit === "contain" && "bg-zinc-950",
+          objectFit === "contain" && "bg-muted",
           className,
         )}
       >

@@ -70,6 +70,13 @@ import {
   zoneCanvasAabb,
   type MapLodMode,
 } from "@/lib/seating/venue-map-lod"
+import {
+  listUncontainedSellableElements,
+  mapClickTargetFromElement,
+  mapClickTargetFromZone,
+} from "@/lib/seating/map-click-target"
+import { resolveEffectiveSeatingType } from "@/lib/seating/seating-type"
+import type { MapClickTarget } from "@/types/event-map"
 import { isInfrastructureElement } from "@/types/venue-map"
 import type {
   InteractiveVenueMap,
@@ -135,6 +142,7 @@ export function InteractiveSeatingCanvas({
   onPickSeat,
   onPickElement,
   posStatusColors = false,
+  posWorkstation = false,
 }: {
   map: InteractiveVenueMap
   eventId?: string | null
@@ -159,6 +167,7 @@ export function InteractiveSeatingCanvas({
   onPickSeat?: (seat: InteractiveSelectedSeat) => void
   onPickElement?: (element: VenueMapElement) => void
   posStatusColors?: boolean
+  posWorkstation?: boolean
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const transformRef = useRef<ReactZoomPanPinchContentRef>(null)
@@ -252,14 +261,23 @@ export function InteractiveSeatingCanvas({
       (element) => !isInfrastructureElement(element),
     )
     if (!lodEnabled) return sellable
+    if (viewMode === "macro") return listUncontainedSellableElements(map)
     if (!revealReady || !focusedZone) return []
     return publicRevealElements(sellable, focusedZone)
-  }, [focusedZone, lodEnabled, map.elements, revealReady])
+  }, [focusedZone, lodEnabled, map, revealReady, viewMode])
   const revealSeats = useMemo(() => {
     if (!lodEnabled) return plotSeats
+    if (viewMode === "macro") {
+      const reservedIds = new Set(
+        (map.zones ?? [])
+          .filter((zone) => resolveEffectiveSeatingType(zone, map) === "RESERVED")
+          .map((zone) => zone.id),
+      )
+      return plotSeats.filter((seat) => !reservedIds.has(seat.sectorId))
+    }
     if (!revealReady || !focusedZone) return []
     return publicRevealSeats(plotSeats, focusedZone)
-  }, [focusedZone, lodEnabled, plotSeats, revealReady])
+  }, [focusedZone, lodEnabled, map, plotSeats, revealReady, viewMode])
   const focusedHasMicro = useMemo(() => {
     if (!focusedZone) return false
     return (
@@ -441,16 +459,49 @@ export function InteractiveSeatingCanvas({
     return { ok: true as const, added: result.added }
   }
 
-  function selectZoneItem(zone: VenueMapZone) {
-    const item = storefrontItemFromZone(zone, priceBySectorId)
-    if (!item) return
-    const result = toggleSelectedItem(item, maxSelectable)
-    if (!result.ok) {
-      toast.error(storefrontLimitMessage(result.reason))
+  function selectGeneralZone(zone: VenueMapZone) {
+    if (onSelectZone) {
+      onSelectZone(zone)
       return
     }
-    if (!result.added) return
-    onSelectZone?.(zone)
+    const item = storefrontItemFromZone(zone, priceBySectorId)
+    if (!item) return
+    const result = useStorefrontSeatStore
+      .getState()
+      .incrementSelectedItem(item, maxSelectable)
+    if (!result.ok) {
+      toast.error(storefrontLimitMessage(result.reason))
+    }
+  }
+
+  function handleMapTargetClick(target: MapClickTarget) {
+    if (readOnly || pending) return
+    if (target.type === "SECTOR_GENERAL") {
+      vibrateTap()
+      markActivity()
+      selectGeneralZone(target.zone)
+      return
+    }
+    if (target.type === "SECTOR_NUMERADO") {
+      if (lodEnabled && (viewMode === "macro" || target.zone.id !== focusedZoneId)) {
+        enterLodZone(target.zone)
+        return
+      }
+      vibrateTap()
+      markActivity()
+      onSelectZone?.(target.zone)
+      return
+    }
+    const element = target.element
+    const seatId = target.type === "ASIENTO_LIBRE" ? target.seatId : undefined
+    if (seatId) {
+      const match = plotSeats.find((seat) => seat.id === seatId)
+      if (match) {
+        toggleSeat(match)
+        return
+      }
+    }
+    toggleFreePlace(element, seatId)
   }
 
   function zoomToZone(zone: VenueMapZone) {
@@ -478,6 +529,12 @@ export function InteractiveSeatingCanvas({
   }
 
   function enterLodZone(zone: VenueMapZone) {
+    if (resolveEffectiveSeatingType(zone, map) === "GENERAL") {
+      vibrateTap()
+      markActivity()
+      selectGeneralZone(zone)
+      return
+    }
     vibrateTap()
     markActivity()
     if (focusedZoneId !== zone.id) setRevealedZoneId(null)
@@ -487,7 +544,7 @@ export function InteractiveSeatingCanvas({
     const hasMicro =
       publicRevealElements(map.elements, zone).length > 0 ||
       publicRevealSeats(plotSeats, zone).length > 0
-    if (!hasMicro) selectZoneItem(zone)
+    if (!hasMicro) onSelectZone?.(zone)
   }
 
   function exitLodView() {
@@ -500,17 +557,9 @@ export function InteractiveSeatingCanvas({
 
   function handleZoneClick(zoneId: string, event?: React.SyntheticEvent) {
     event?.stopPropagation()
-    if (readOnly || pending) return
     const zone = lodZones.find((item) => item.id === zoneId)
     if (!zone) return
-    if (lodEnabled && (viewMode === "macro" || zone.id !== focusedZoneId)) {
-      enterLodZone(zone)
-      return
-    }
-    if (lodEnabled && focusedHasMicro) return
-    vibrateTap()
-    markActivity()
-    selectZoneItem(zone)
+    handleMapTargetClick(mapClickTargetFromZone(zone, map))
   }
 
   function toggleSeat(seat: FlattenedVenueSeat) {
@@ -555,13 +604,19 @@ export function InteractiveSeatingCanvas({
     }
   }
 
-  function toggleElement(element: VenueMapElement) {
-    if (readOnly) return
+  function toggleFreePlace(element: VenueMapElement, seatId?: string) {
     const live = (map.elements ?? []).find((item) => item.id === element.id)
-    if (!live || isInfrastructureElement(live) || pending) return
-    if (live.type === "vip_chair") {
+    if (!live || isInfrastructureElement(live)) return
+    if (onPickElement) {
+      vibrateTap()
+      markActivity()
+      onPickElement(live)
+      return
+    }
+    if (live.type === "vip_chair" || seatId) {
       const match = plotSeats.find(
         (seat) =>
+          seat.id === seatId ||
           seat.id === live.seats[0]?.id ||
           seat.id === live.id ||
           seat.sectorId === live.id,
@@ -571,20 +626,40 @@ export function InteractiveSeatingCanvas({
         return
       }
     }
-    if (live.sellMode === "per_seat" && live.type !== "standing_zone") {
-      return
-    }
-    if (onPickElement) {
-      vibrateTap()
-      markActivity()
-      onPickElement(live)
+    if (
+      live.sellMode === "per_seat" &&
+      live.type !== "standing_zone" &&
+      live.type !== "vip_chair" &&
+      !seatId
+    ) {
       return
     }
     const item = storefrontItemFromElement(live, priceBySectorId)
     if (!item) return
     vibrateTap()
     markActivity()
+    if (live.type === "standing_zone") {
+      const result = useStorefrontSeatStore
+        .getState()
+        .incrementSelectedItem(item, maxSelectable)
+      if (!result.ok) {
+        toast.error(storefrontLimitMessage(result.reason))
+      }
+      return
+    }
     applyToggle(item)
+  }
+
+  function toggleElement(element: VenueMapElement) {
+    if (readOnly || pending) return
+    const live = (map.elements ?? []).find((item) => item.id === element.id)
+    if (!live || isInfrastructureElement(live)) return
+    const target = mapClickTargetFromElement(live, map)
+    if (target) {
+      handleMapTargetClick(target)
+      return
+    }
+    toggleFreePlace(live)
   }
 
   const continueLabel = pending
@@ -876,12 +951,17 @@ export function InteractiveSeatingCanvas({
                   toggleElement(element)
                   return
                 }
+                const target = mapClickTargetFromElement(element, map, seatId)
+                if (target) {
+                  handleMapTargetClick(target)
+                  return
+                }
                 const match = plotSeats.find((seat) => seat.id === seatId)
                 if (match) {
                   toggleSeat(match)
                   return
                 }
-                toggleElement(element)
+                toggleFreePlace(element, seatId)
               }}
               onElementPointerDown={(_event, element) => {
                 toggleElement(element)
@@ -1011,7 +1091,7 @@ export function InteractiveSeatingCanvas({
         hideChrome && "relative bg-muted",
       )}
     >
-      {readOnly || hideToolbar ? null : (
+      {readOnly || hideToolbar || posWorkstation ? null : (
       <div
         className={cn(
           hideChrome &&
@@ -1046,6 +1126,13 @@ export function InteractiveSeatingCanvas({
         )}
       >
       {mapArea}
+      {posWorkstation ? (
+        <PosMapZoomDock
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
+          onResetView={handleResetView}
+        />
+      ) : null}
       {hideChrome ? null : panel}
 
       {hideChrome ? null : (
@@ -1169,6 +1256,53 @@ function MapModalActionFooter({
       >
         {label}
       </button>
+    </div>
+  )
+}
+
+function PosMapZoomDock({
+  onZoomIn,
+  onZoomOut,
+  onResetView,
+}: {
+  onZoomIn: () => void
+  onZoomOut: () => void
+  onResetView: () => void
+}) {
+  const toolClass =
+    "inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-foreground transition hover:bg-background"
+
+  return (
+    <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex justify-end p-3">
+      <div className="pointer-events-auto flex flex-wrap items-center gap-1 rounded-2xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur">
+        <button
+          type="button"
+          onClick={onZoomIn}
+          aria-label="Acercar"
+          className={toolClass}
+        >
+          <Plus className="size-4" aria-hidden="true" />
+          Acercar
+        </button>
+        <button
+          type="button"
+          onClick={onZoomOut}
+          aria-label="Alejar"
+          className={toolClass}
+        >
+          <Minus className="size-4" aria-hidden="true" />
+          Alejar
+        </button>
+        <button
+          type="button"
+          onClick={onResetView}
+          aria-label="Recentrar plano"
+          className={toolClass}
+        >
+          <Locate className="size-4" aria-hidden="true" />
+          Recentrar plano
+        </button>
+      </div>
     </div>
   )
 }

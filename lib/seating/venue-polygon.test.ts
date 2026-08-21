@@ -23,8 +23,10 @@ describe("parametric zone polygons", () => {
     assert.equal(polygonLooksLikePixels(zone.polygon), false)
     assert.equal(zone.polygon[0]?.x, 10)
     assert.equal(zone.polygon[0]?.y, 10)
-    assert.equal(zone.rows, 4)
-    assert.equal(zone.itemsPerRow, 10)
+    assert.equal(zone.seatingType, "GENERAL")
+    assert.equal(zone.layoutType, "general")
+    assert.equal(zone.rows, 1)
+    assert.equal(zone.itemsPerRow, 1)
   })
 
   it("does not explode the map JSON into individual tables", () => {

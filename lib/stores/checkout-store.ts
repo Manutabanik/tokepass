@@ -5,6 +5,7 @@ import { persist, createJSONStorage } from "zustand/middleware"
 import { useShallow } from "zustand/react/shallow"
 
 import { ABSOLUTE_MAX_ITEMS_PER_PURCHASE } from "@/lib/checkout-limits"
+import { centsToMoney, moneyToCents } from "@/lib/money/cents"
 import { cartItemCount } from "@/lib/checkout/cart"
 import {
   cartLineAmount,
@@ -36,6 +37,7 @@ export type StorefrontCartLine = {
   id: string
   ticketTierId?: string | null
   name: string
+  displayName?: string
   detail?: string
   dateId?: string | null
   dateLabel?: string
@@ -176,7 +178,11 @@ function generalLineTierId(line: StorefrontCartLine) {
 }
 
 function cartTotalsFromLines(lines: StorefrontCartLine[]) {
-  const totalAmount = lines.reduce((sum, line) => sum + cartLineAmount(line), 0)
+  const totalCents = lines.reduce(
+    (sum, line) => sum + moneyToCents(cartLineAmount(line)),
+    0,
+  )
+  const totalAmount = centsToMoney(totalCents)
   const itemsCount = lines.reduce(
     (sum, line) => sum + Math.max(0, Math.floor(line.quantity) || 0),
     0,

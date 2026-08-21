@@ -42,12 +42,12 @@ export function SpotifyMiniPlayer() {
         </button>
         {src ? (
           <iframe
+            key={src}
             src={src}
             title={`Spotify · ${label}`}
             width="100%"
             height={SPOTIFY_ARTIST_EMBED_HEIGHT}
             allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-            loading="lazy"
             referrerPolicy="strict-origin-when-cross-origin"
             className="block h-20 w-full max-w-sm rounded-xl border-0 bg-black sm:max-w-md"
           />

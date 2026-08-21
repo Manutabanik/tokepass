@@ -19,6 +19,9 @@ function ticket(
   return {
     name: "General",
     price: 1000,
+    basePrice: 1000,
+    feeStrategy: "absorb_in_price",
+    calculationMode: "public_price",
     capacity: 10,
     timeLimit: "",
     bonusReward: "",

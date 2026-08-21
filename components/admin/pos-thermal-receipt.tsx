@@ -30,6 +30,10 @@ export function PosThermalReceiptStack({
           holderDni={receipt.holderDni}
           seatLabel={receipt.seatLabel}
           priceLabel={formatCurrency(receipt.total)}
+          flyerUrl={receipt.flyerUrl}
+          paymentLabel={receipt.paymentLabel}
+          orderId={receipt.orderId}
+          issuedAt={receipt.issuedAt}
         />
       ))}
     </div>

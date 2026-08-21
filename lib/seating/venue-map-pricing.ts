@@ -9,6 +9,10 @@ import {
   type VenuePriceGroup,
 } from "@/lib/seating/venue-price-groups"
 import type { EventFormValues } from "@/lib/validations/event-form"
+import {
+  resolveEffectiveSeatingType,
+  resolveSeatingType,
+} from "@/lib/seating/seating-type"
 import type { InteractiveVenueMap } from "@/types/venue-map"
 
 export function priceGroupSectorId(group: VenuePriceGroup): string {
@@ -62,23 +66,52 @@ export function isMapBackedTicket(tier: {
 }
 
 export function ticketRequiresInteractiveMap(
-  tier: Parameters<typeof isMapBackedTicket>[0],
+  tier: Parameters<typeof isMapBackedTicket>[0] & {
+    seatingType?: string | null
+    seating_type?: string | null
+    map?: InteractiveVenueMap | null
+    sectors?: Array<{ id: string; type?: string; kind?: string }>
+  },
 ): boolean {
-  return isMapBackedTicket(tier)
+  return sectorUsesNumberedMap({
+    seatingSectorId: tier.seatingSectorId ?? tier.seating_sector_id,
+    layoutType: tier.layoutType ?? tier.layout_type,
+    seatingType: tier.seatingType ?? tier.seating_type,
+    map: tier.map,
+    sectors: tier.sectors,
+  })
 }
 
-/** Mesas/butacas van al mapa. Zonas GA van al contador. */
+/** Mesas/butacas van al modal. Zonas GA suman al carrito. */
 export function sectorUsesNumberedMap(input: {
   seatingSectorId?: string | null
   layoutType?: string | null
+  seatingType?: string | null
+  seating_type?: string | null
   map?: InteractiveVenueMap | null
   sectors?: Array<{ id: string; type?: string; kind?: string }>
 }): boolean {
-  const layout = (input.layoutType ?? "").trim()
-  if (layout === "numbered_seat" || layout === "table_combo") return true
-  if (layout === "general") return false
   const sectorId = (input.seatingSectorId ?? "").trim()
-  if (!sectorId || isLogicalGeneralSectorId(sectorId)) return false
+  if (isLogicalGeneralSectorId(sectorId)) return false
+  const zone = input.map?.zones?.find((item) => item.id === sectorId)
+  if (
+    resolveEffectiveSeatingType(
+      {
+        id: sectorId || zone?.id,
+        seatingType: input.seatingType ?? input.seating_type ?? zone?.seatingType,
+        layoutType: input.layoutType ?? zone?.layoutType,
+        type: input.sectors?.find((sector) => sector.id === sectorId)?.type,
+        kind: input.sectors?.find((sector) => sector.id === sectorId)?.kind,
+      },
+      input.map,
+    ) === "GENERAL"
+  ) {
+    return false
+  }
+  const layout = (input.layoutType ?? zone?.layoutType ?? "").trim()
+  if (layout === "general") return false
+  if (layout === "numbered_seat" || layout === "table_combo") return true
+  if (!sectorId) return false
   const listed = input.sectors?.find((sector) => sector.id === sectorId)
   if (listed) {
     if (listed.type === "numbered" || listed.kind === "numbered") return true
@@ -95,7 +128,7 @@ export function eventNeedsInteractiveCanvas(
   tickets: ReadonlyArray<Parameters<typeof isMapBackedTicket>[0]>,
 ): boolean {
   if (!venueMapHasInventory(venueMap)) return false
-  return tickets.some(ticketRequiresInteractiveMap)
+  return tickets.some(isMapBackedTicket)
 }
 
 function groupElements(
@@ -128,7 +161,7 @@ function layoutTypeFromGroup(
   if (group.match.kind === "zone") {
     const zoneId = group.match.id
     const zone = (map.zones ?? []).find((item) => item.id === zoneId)
-    if (!zone || zone.layoutType === "general") return "general"
+    if (!zone || resolveSeatingType(zone) === "GENERAL") return "general"
     return zone.sellMode === "group" || zone.layoutType === "table_combo"
       ? "table_combo"
       : "numbered_seat"
@@ -183,6 +216,9 @@ function blankMapTicket(
     isNew: true,
     name: "Ubicación",
     price: 0,
+    basePrice: 0,
+    feeStrategy: "absorb_in_price",
+    calculationMode: "public_price",
     capacity: 1,
     timeLimit: "",
     bonusReward: "",
@@ -226,6 +262,12 @@ export function syncMapBackedTickets(
     const inheritedId =
       existing?.id && existing.isNew !== true ? existing.id : undefined
     const base = existing ?? blankMapTicket(defaultDayId)
+    const layoutType = layoutTypeFromGroup(group, map)
+    const seatingType = resolveSeatingType({
+      layoutType,
+      seatingType: (map.zones ?? []).find((zone) => zone.id === sectorId)
+        ?.seatingType,
+    })
     return {
       ...base,
       id: inheritedId,
@@ -234,8 +276,8 @@ export function syncMapBackedTickets(
       price: group.price,
       capacity: Math.max(1, group.count),
       seatingSectorId: sectorId,
-      layoutType: layoutTypeFromGroup(group, map),
-      tierType: "seated" as const,
+      layoutType,
+      tierType: seatingType === "GENERAL" ? ("general" as const) : ("seated" as const),
       capacityPerUnit: capacityPerUnitFromGroup(group, map),
     }
   })

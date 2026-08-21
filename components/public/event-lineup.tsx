@@ -47,15 +47,10 @@ function moreArtistsLabel(count: number): string {
   return count === 1 ? "+ 1 artista más" : `+ ${count} artistas más`
 }
 
-function ArtistGridAvatar({
-  artist,
-  size,
-  onResolved,
-}: {
-  artist: EventLineupArtist
-  size: "xs" | "hero"
-  onResolved?: (artistId: string, spotifyId: string) => void
-}) {
+function useArtistSpotifySelect(
+  artist: EventLineupArtist,
+  onResolved?: (artistId: string, spotifyId: string) => void,
+) {
   const name = artist.name?.trim() || "Artista"
   const [resolving, setResolving] = useState(false)
   const requestRef = useRef(0)
@@ -64,7 +59,7 @@ function ArtistGridAvatar({
     spotifyId: artist.spotifyId,
   })
 
-  const handleClick = () => {
+  const selectArtist = () => {
     if (isSpotifyArtistId(artist.spotifyId)) {
       toggleSpotifyMiniPlayer(artist.spotifyId, name, artist.id)
       return
@@ -109,44 +104,53 @@ function ArtistGridAvatar({
       ? `Cerrar reproductor de ${name}`
       : `Escuchar a ${name}`
 
+  return { name, resolving, active, selectArtist, label }
+}
+
+function ArtistPlayBadge({
+  size,
+  active,
+}: {
+  size: "xs" | "hero"
+  active: boolean
+}) {
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      disabled={resolving}
+    <span
       className={cn(
-        tapFeedbackClass,
-        "group relative block cursor-pointer rounded-full transition-transform hover:scale-105",
+        "absolute right-0 bottom-0 rounded-full border-2 border-background text-white shadow-md transition-transform group-hover:scale-110",
+        size === "xs" ? "p-0.5" : "p-1",
+        active ? "bg-emerald-500 animate-pulse" : "bg-emerald-600",
       )}
-      aria-pressed={active}
-      aria-busy={resolving}
-      aria-label={label}
+      aria-hidden="true"
     >
-      <div className="relative inline-block">
-        <ArtistAvatar
-          name={name}
-          imageUrl={artist.imageUrl}
-          size={size}
-          className={cn(
-            resolving && "animate-pulse opacity-70",
-            active &&
-              "ring-2 ring-primary ring-offset-2 ring-offset-background",
-          )}
-        />
-        {resolving ? null : (
-          <span
-            className={cn(
-              "absolute right-0 bottom-0 rounded-full border-2 border-background bg-primary text-primary-foreground shadow-md transition-transform group-hover:scale-110",
-              size === "xs" ? "p-0.5" : "p-1",
-            )}
-            aria-hidden="true"
-          >
-            <Play
-              className={cn(size === "xs" ? "size-2" : "size-3", "fill-current")}
-            />
-          </span>
+      <Play className={cn(size === "xs" ? "size-2" : "size-3", "fill-current")} />
+    </span>
+  )
+}
+
+function ArtistGridAvatarVisual({
+  artist,
+  size,
+  resolving,
+  active,
+}: {
+  artist: EventLineupArtist
+  size: "xs" | "hero"
+  resolving: boolean
+  active: boolean
+}) {
+  const name = artist.name?.trim() || "Artista"
+  return (
+    <div className="relative inline-block">
+      <ArtistAvatar
+        name={name}
+        imageUrl={artist.imageUrl}
+        size={size}
+        className={cn(
+          resolving && "animate-pulse opacity-70",
+          active && "ring-2 ring-emerald-500 ring-offset-2 ring-offset-background",
         )}
-      </div>
+      />
       {resolving ? (
         <span className="absolute inset-0 grid place-items-center rounded-full bg-black/35">
           <LoaderCircle
@@ -154,8 +158,10 @@ function ArtistGridAvatar({
             aria-hidden="true"
           />
         </span>
-      ) : null}
-    </button>
+      ) : (
+        <ArtistPlayBadge size={size} active={active} />
+      )}
+    </div>
   )
 }
 
@@ -166,18 +172,102 @@ function ArtistChip({
   artist: EventLineupArtist
   onResolved?: (artistId: string, spotifyId: string) => void
 }) {
-  const name = artist.name?.trim() || "Artista"
+  const { name, resolving, active, selectArtist, label } = useArtistSpotifySelect(
+    artist,
+    onResolved,
+  )
   const time = formatSlotTime(artist.performanceTime)
+
   return (
-    <li className="flex items-center gap-2 rounded-full border border-border bg-secondary/40 py-1 pr-3 pl-1">
-      <ArtistGridAvatar artist={artist} size="xs" onResolved={onResolved} />
-      <span className="max-w-[10rem] truncate text-sm font-semibold text-foreground">
+    <li>
+      <button
+        type="button"
+        onClick={selectArtist}
+        disabled={resolving}
+        aria-pressed={active}
+        aria-busy={resolving}
+        aria-label={label}
+        className={cn(
+          tapFeedbackClass,
+          "group flex w-full cursor-pointer items-center gap-2 rounded-full border py-1.5 pr-3 pl-1.5 text-left transition-all duration-200 select-none sm:w-auto",
+          active
+            ? "border-emerald-500 bg-emerald-500/10 text-emerald-500 shadow-sm"
+            : "border-border/60 bg-background text-foreground hover:border-border hover:bg-muted/50",
+        )}
+      >
+        <ArtistGridAvatarVisual
+          artist={artist}
+          size="xs"
+          resolving={resolving}
+          active={active}
+        />
+        <span className="max-w-[140px] truncate text-sm font-bold">{name}</span>
+        {time ? (
+          <span
+            className={cn(
+              "text-xs font-medium",
+              active ? "text-emerald-500/80" : "text-muted-foreground",
+            )}
+          >
+            {time}
+          </span>
+        ) : null}
+      </button>
+    </li>
+  )
+}
+
+function FeaturedArtistCard({
+  artist,
+  onResolved,
+}: {
+  artist: EventLineupArtist
+  onResolved?: (artistId: string, spotifyId: string) => void
+}) {
+  const { name, resolving, active, selectArtist, label } = useArtistSpotifySelect(
+    artist,
+    onResolved,
+  )
+  const time = formatSlotTime(artist.performanceTime)
+
+  return (
+    <button
+      type="button"
+      onClick={selectArtist}
+      disabled={resolving}
+      aria-pressed={active}
+      aria-busy={resolving}
+      aria-label={label}
+      className={cn(
+        tapFeedbackClass,
+        "group flex min-w-[90px] max-w-[110px] shrink-0 cursor-pointer snap-start flex-col items-center gap-2 rounded-2xl p-1 transition-transform hover:scale-105",
+      )}
+    >
+      <ArtistGridAvatarVisual
+        artist={artist}
+        size="hero"
+        resolving={resolving}
+        active={active}
+      />
+      <span
+        className={cn(
+          "w-full truncate text-center text-xs font-bold leading-tight",
+          active ? "text-emerald-500" : "text-foreground",
+        )}
+      >
         {name}
       </span>
       {time ? (
-        <span className="text-xs font-medium text-muted-foreground">{time}</span>
+        <span
+          className={cn(
+            "text-[10px] font-semibold",
+            active ? "text-emerald-500/80" : "text-muted-foreground",
+          )}
+        >
+          {time}
+        </span>
       ) : null}
-    </li>
+    </button>
   )
 }
 
@@ -197,30 +287,13 @@ function VisualLineup({
         className="hide-scrollbar flex w-full snap-x snap-mandatory touch-pan-x gap-4 overflow-x-auto overscroll-x-contain pt-7 pb-2"
         aria-label="Grilla de artistas"
       >
-        {featured.map((artist) => {
-          const name = artist.name?.trim() || "Artista"
-          const time = formatSlotTime(artist.performanceTime)
-          return (
-            <div
-              key={artist.id}
-              className="flex min-w-[90px] max-w-[110px] shrink-0 snap-start flex-col items-center gap-2"
-            >
-              <ArtistGridAvatar
-                artist={artist}
-                size="hero"
-                onResolved={onResolved}
-              />
-              <p className="w-full truncate text-center text-xs font-bold leading-tight text-foreground">
-                {name}
-              </p>
-              {time ? (
-                <p className="text-[10px] font-semibold text-muted-foreground">
-                  {time}
-                </p>
-              ) : null}
-            </div>
-          )
-        })}
+        {featured.map((artist) => (
+          <FeaturedArtistCard
+            key={artist.id}
+            artist={artist}
+            onResolved={onResolved}
+          />
+        ))}
         {remainingCount > 0 ? (
           <button
             type="button"

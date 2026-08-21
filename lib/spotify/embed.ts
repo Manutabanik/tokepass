@@ -18,5 +18,5 @@ export function pickSpotifyArtistId(
 export function spotifyArtistEmbedSrc(spotifyId: string): string | null {
   const id = spotifyId.trim()
   if (!isSpotifyArtistId(id)) return null
-  return `https://open.spotify.com/embed/artist/${encodeURIComponent(id)}?utm_source=generator&theme=0`
+  return `https://open.spotify.com/embed/artist/${encodeURIComponent(id)}?utm_source=generator&theme=0&autoplay=1`
 }

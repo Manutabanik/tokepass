@@ -73,6 +73,7 @@ import {
   TabsContent,
 } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
+import { feePercentageFromRate } from "@/lib/pricing/flexible-pricing"
 import type { VenuePricingMap } from "@/lib/seating/venue-adapter"
 import {
   applyMapCapacityToTickets,
@@ -234,6 +235,8 @@ const defaultValues: EventFormValues = {
 }
 
 export function EventCreationWizard({
+  organizerServiceRate,
+  platformFixedFee = 0,
   targetOrganizerId = null,
   venues = [],
   categories = [],
@@ -1593,6 +1596,8 @@ export function EventCreationWizard({
                 <UnifiedInventoryPanel
                   form={form}
                   eventId={initialData?.id ?? persistedEventId}
+                  feePercentage={feePercentageFromRate(organizerServiceRate)}
+                  fixedFee={platformFixedFee}
                 />
                 <FormMessage>
                   {form.formState.errors.tickets?.message ??

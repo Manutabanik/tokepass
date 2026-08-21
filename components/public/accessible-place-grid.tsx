@@ -23,18 +23,21 @@ const SELECTED_GLOW =
 export function AccessiblePlaceGrid({
   rows,
   pending = false,
+  emptyMessage = "No hay lugares disponibles en este sector.",
   onToggle,
 }: {
   rows: AccessibleRowNode[]
   pending?: boolean
+  emptyMessage?: string | null
   onToggle: (seat: AccessibleSeatNode) => void
 }) {
   const chunks = chunkSeatMatrixGroups(groupSeatsForMatrix(rows))
 
   if (chunks.length === 0) {
+    if (!emptyMessage) return null
     return (
       <p className="px-1 py-8 text-center text-sm text-muted-foreground">
-        No hay lugares disponibles en este sector.
+        {emptyMessage}
       </p>
     )
   }

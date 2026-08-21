@@ -309,6 +309,68 @@ export function eventCityLabel(event: CatalogEvent): string {
   return raw.split(",")[0]?.trim() || event.location
 }
 
+const LOCATION_SPLIT = /[,·|/]+/
+const STREAMING_LOCATION_RE = /^(online|streaming)(\s*\/\s*online)?$/i
+
+function isStreamingLocationPart(value: string): boolean {
+  return STREAMING_LOCATION_RE.test(value.trim())
+}
+
+function uniqueLocationParts(
+  ...values: Array<string | null | undefined>
+): string[] {
+  const parts: string[] = []
+  const seen = new Set<string>()
+  for (const value of values) {
+    const raw = value?.trim()
+    if (!raw) continue
+    for (const chunk of raw.split(LOCATION_SPLIT)) {
+      const part = chunk.trim()
+      if (!part) continue
+      const key = part.toLocaleLowerCase("es")
+      if (seen.has(key)) continue
+      seen.add(key)
+      parts.push(part)
+    }
+  }
+  return parts
+}
+
+/** Pie de tarjeta: sin "Online, San Juan · Online". */
+export function eventCardLocationLabel(
+  event: Pick<CatalogEvent, "venueName" | "venueLocation" | "location">,
+): string {
+  const parts = uniqueLocationParts(
+    event.venueName,
+    event.venueLocation,
+    event.location,
+  )
+  if (parts.length === 0) return "Consultar ubicacion"
+
+  const geographic = parts.filter((part) => !isStreamingLocationPart(part))
+  if (geographic.length === 0) return "Online"
+
+  const venue = event.venueName?.trim() ?? ""
+  const venueIsPlace =
+    venue.length > 0 &&
+    !isStreamingLocationPart(venue) &&
+    !/streaming/i.test(venue)
+
+  if (!venueIsPlace) return geographic.join(", ")
+
+  const venueLabel = uniqueLocationParts(venue)
+    .filter((part) => !isStreamingLocationPart(part))
+    .join(", ")
+  if (!venueLabel) return geographic.join(", ")
+
+  const extra = geographic.filter((part) => {
+    const key = part.toLocaleLowerCase("es")
+    return !venueLabel.toLocaleLowerCase("es").includes(key)
+  })
+  if (extra.length === 0) return venueLabel
+  return `${venueLabel}, ${extra[extra.length - 1]}`
+}
+
 export type EventBadgeKind = "urgency" | "live" | "featured" | "sponsored"
 
 export function urgencyLabel(event: CatalogEvent): string | null {
@@ -325,6 +387,25 @@ export function urgencyLabel(event: CatalogEvent): string | null {
     return "Últimas entradas"
   }
   return null
+}
+
+export function eventCategoryLabel(
+  event: Pick<CatalogEvent, "categoryId">,
+  categories: DiscoveryCategory[] = DEFAULT_DISCOVERY_CATEGORIES,
+): string | null {
+  const id = event.categoryId?.trim()
+  if (!id || id === "all") return null
+  return findCategory(categories, id)?.label ?? null
+}
+
+export function eventLineupHeadline(
+  artists: CatalogEvent["artists"],
+): { lead: string; extra: number } | null {
+  const named = (artists ?? [])
+    .map((artist) => artist.name.trim())
+    .filter(Boolean)
+  if (named.length === 0) return null
+  return { lead: named[0] ?? "", extra: named.length - 1 }
 }
 
 export function eventSecondaryBadge(event: CatalogEvent): string | null {

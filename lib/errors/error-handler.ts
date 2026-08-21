@@ -54,6 +54,11 @@ const ERROR_RULES: ErrorRule[] = [
       /jornada obligatoria|seleccionar la jornada|null value in column ["']day_id/i,
   },
   {
+    code: "INCOMPLETE_DAY_TICKETS",
+    match:
+      /Cada jornada necesita al menos una entrada activa|Falta configurar:/i,
+  },
+  {
     code: "INVALID_DAY_SELECTION",
     match:
       /day_id|día seleccionado no es válido|jornada válida|abono completo/i,
@@ -79,7 +84,7 @@ const ERROR_RULES: ErrorRule[] = [
   {
     code: "SEATING_SECTOR_MISMATCH",
     match:
-      /SEATING_SECTOR_NOT_FOUND|mapa y las entradas no coinciden|mapa y los tickets no coinciden|sillas del mapa|Revisá el mapa/i,
+      /SEATING_SECTOR_NOT_FOUND|mapa y las entradas no coinciden|mapa y los tickets no coinciden|sillas del mapa|Revisá el mapa|sector general .+ necesita precio|sector reservado .+ necesita al menos una mesa/i,
   },
   {
     code: "CAPACITY_OVERFLOW",

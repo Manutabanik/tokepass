@@ -85,9 +85,11 @@ import {
 } from "@/lib/pos-cart"
 import { armPosSaleBeep, playPosSaleBeep } from "@/lib/pos-sale-beep"
 import {
+  printAdmissionTicketPdfs,
   printThermalNodeNow,
   printUrlViaHiddenIframe,
 } from "@/lib/pos-thermal-print"
+import { ticketPaymentPrintLabel } from "@/lib/ticket-print"
 import { cn } from "@/lib/utils"
 
 type PayMethod = "cash_pos" | "transfer_pos" | "card_pos"
@@ -211,12 +213,14 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
     !!pinModal ||
     voidModal ||
     !!zReport ||
-    reprintModal
+    reprintModal ||
+    handoffTickets.length > 0
 
   const selectedEvent = useMemo(
     () => catalog.find((event) => event.id === eventId) ?? null,
     [catalog, eventId],
   )
+  const hasMap = Boolean(selectedEvent?.hasInteractiveMap)
 
   const tiers = useMemo(
     () => selectedEvent?.tiers ?? [],
@@ -286,6 +290,12 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
     setTendered(null)
     setCustomTender("")
   }, [])
+
+  useEffect(() => {
+    if (!hasMap && catalogView === "map") {
+      setCatalogView("quick")
+    }
+  }, [hasMap, catalogView])
 
   useEffect(() => {
     if (!eventId) return
@@ -377,10 +387,14 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
   }
 
   function flushThermalPrint(receipts: PosThermalReceipt[]) {
-    setPrintReceipts(receipts)
-    window.requestAnimationFrame(() => {
+    const ids = receipts.map((row) => row.ticketId).filter(Boolean)
+    if (ids.length === 0) return
+    void printAdmissionTicketPdfs(ids).catch(() => {
+      setPrintReceipts(receipts)
       window.requestAnimationFrame(() => {
-        printThermalNodeNow()
+        window.requestAnimationFrame(() => {
+          printThermalNodeNow()
+        })
       })
     })
   }
@@ -474,6 +488,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
 
     startTransition(async () => {
       const issued: Array<{ id: string; totpSecret: string; signedQr?: string }> = []
+      let lastOrderId: string | null = null
       let billed = 0
       const remaining: PosCart = {}
       let failed = false
@@ -525,6 +540,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
 
           leftover -= unit.quantity
           billed += sale.totalAmount
+          lastOrderId = sale.orderId
           soldBump[line.tierId] = (soldBump[line.tierId] ?? 0) + unit.quantity
           issued.push(
             ...sale.tickets.map((ticket) => ({
@@ -554,6 +570,8 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
       const issuedIds = issued.map((ticket) => ticket.id)
       if (issuedIds.length > 0) {
         persistLastTickets(issuedIds)
+        const issuedAt = new Date().toISOString()
+        const paymentLabel = ticketPaymentPrintLabel(payMethod)
         const receipts: PosThermalReceipt[] = issued.map((ticket, index) => {
           const pick = seatPicks[index]
           const line =
@@ -572,6 +590,9 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
             holderName: buyer.name,
             holderDni: buyer.dni,
             seatLabel: pick ? `${pick.sectorName} · ${pick.label}` : null,
+            paymentLabel,
+            orderId: lastOrderId,
+            issuedAt,
           }
         })
         flushThermalPrint(receipts)
@@ -960,56 +981,57 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
             disabled={!canSell}
             className="flex min-h-0 flex-1 flex-col overflow-hidden disabled:opacity-50"
           >
-            <div className="mb-3 grid shrink-0 grid-cols-2 gap-2 px-4 pt-4">
-              <button
-                type="button"
-                onClick={() => setCatalogView("quick")}
-                className={cn(
-                  "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border-2 text-sm font-bold",
-                  catalogView === "quick"
-                    ? "border-emerald-500 bg-emerald-500/10 text-foreground"
-                    : "border-border bg-card text-muted-foreground",
-                )}
-              >
-                <LayoutGrid className="size-4" />
-                Vista Rapida (Botones)
-              </button>
-              <button
-                type="button"
-                onClick={() => setCatalogView("map")}
-                className={cn(
-                  "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border-2 text-sm font-bold",
-                  catalogView === "map"
-                    ? "border-emerald-500 bg-emerald-500/10 text-foreground"
-                    : "border-border bg-card text-muted-foreground",
-                )}
-              >
-                <MapIcon className="size-4" />
-                Vista Mapa (Plano Interactivo)
-              </button>
-            </div>
-            {catalogView === "map" && selectedEvent ? (
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4">
+            {hasMap ? (
+              <div className="mb-3 grid shrink-0 grid-cols-2 gap-2 px-4 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setCatalogView("quick")}
+                  className={cn(
+                    "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition-all",
+                    catalogView === "quick"
+                      ? "bg-emerald-600 text-white shadow-lg"
+                      : "border border-border bg-card text-muted-foreground",
+                  )}
+                >
+                  <LayoutGrid className="size-4" />
+                  Vista Rapida (Botones)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCatalogView("map")}
+                  className={cn(
+                    "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition-all",
+                    catalogView === "map"
+                      ? "bg-emerald-600 text-white shadow-lg"
+                      : "border border-border bg-card text-muted-foreground",
+                  )}
+                >
+                  <MapIcon className="size-4" />
+                  Vista Mapa (Plano Interactivo)
+                </button>
+              </div>
+            ) : (
+              <div className="shrink-0 px-4 pt-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Vista Rapida
+                </p>
+              </div>
+            )}
+            {hasMap && catalogView === "map" && selectedEvent ? (
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
                 <PosSeatingMap
                   event={selectedEvent}
                   heldSeatIds={seatPicks.map((pick) => pick.seatId)}
                   disabled={!canSell}
                   onToggleSeat={toggleMapSeat}
                 />
-                <p className="mt-2 shrink-0 text-xs text-muted-foreground">
-                  Verde: libre · Rojo: ocupado · Amarillo: en cobro
-                </p>
               </div>
-            ) : null}
-            <div
-              className={cn(
-                "min-h-0 overflow-y-auto p-4",
-                catalogView === "map" ? "max-h-48 shrink-0" : "flex-1",
-              )}
-            >
+            ) : (
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
             <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
               {liveTiers.map((tier, index) => {
                 const inCart = cart[tier.id] ?? 0
+                const remaining = Math.max(0, tier.available - inCart)
                 const soldOut = tier.available <= 0
                 return (
                   <button
@@ -1018,7 +1040,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
                     disabled={soldOut}
                     onClick={() => addTier(tier.id)}
                     className={cn(
-                      "flex min-h-36 min-w-0 flex-col items-start justify-between rounded-2xl border-2 bg-card p-4 text-left transition active:scale-[0.98]",
+                      "relative flex min-h-36 min-w-0 flex-col items-start justify-between rounded-2xl border-2 bg-card p-4 text-left transition active:scale-[0.98]",
                       inCart > 0
                         ? "border-emerald-500 bg-emerald-500/10"
                         : "border-border hover:border-emerald-500/50",
@@ -1029,7 +1051,11 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
                       <span className="min-w-0 text-lg font-bold leading-tight break-words text-foreground line-clamp-2">
                         {tier.name}
                       </span>
-                      {index < 9 ? (
+                      {inCart > 0 ? (
+                        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-emerald-600 text-sm font-black tabular-nums text-white">
+                          {inCart}
+                        </span>
+                      ) : index < 9 ? (
                         <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-xs font-black tabular-nums text-muted-foreground">
                           {index + 1}
                         </span>
@@ -1040,15 +1066,20 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
                         ? "Cortesía"
                         : formatCurrency(tier.price)}
                     </p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {Math.max(0, tier.available - inCart)} disponibles
-                      {inCart > 0 ? ` · ${inCart} en carrito` : ""}
-                    </p>
+                    <span className="mt-2 rounded-full bg-muted px-2.5 py-1 text-xs font-semibold tabular-nums text-muted-foreground">
+                      {soldOut ? "Sin stock" : `${remaining} disponibles`}
+                    </span>
                   </button>
                 )
               })}
             </div>
+            {liveTiers.length === 0 ? (
+              <p className="mt-6 text-center text-sm text-muted-foreground">
+                Este evento no tiene tarifas activas para cobrar.
+              </p>
+            ) : null}
             </div>
+            )}
           </fieldset>
         </section>
 
@@ -1067,7 +1098,9 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
               </div>
               {lines.length === 0 ? (
                 <p className="mt-3 text-sm text-muted-foreground">
-                  Toca un tipo de entrada o una mesa/butaca del mapa.
+                  {hasMap
+                    ? "Toca un tipo de entrada o una mesa/butaca del mapa."
+                    : "Toca un tipo de entrada para sumarla al carrito."}
                 </p>
               ) : (
                 <ul className="mt-3 space-y-2">

@@ -77,6 +77,37 @@ describe("venue-element-geometry", () => {
     assert.equal(map.elements[0]?.height, 12)
   })
 
+  it("preserves custom_label and ticket_type_id through parse", () => {
+    const map = parseVenueMap({
+      version: 1,
+      sectors: [],
+      elements: [
+        {
+          id: "mesa-1",
+          type: "round_table",
+          label: "Mesa 1",
+          custom_label: "Mesa VIP Escenario 1",
+          ticket_type_id: "tier-vip",
+          x: 10,
+          y: 10,
+          seats: [
+            {
+              id: "mesa-1-S1",
+              number: 1,
+              custom_label: "Silla Preferencial VIP A",
+            },
+          ],
+        },
+      ],
+    })
+    assert.equal(map.elements[0]?.customLabel, "Mesa VIP Escenario 1")
+    assert.equal(map.elements[0]?.ticketTypeId, "tier-vip")
+    assert.equal(
+      map.elements[0]?.seats[0]?.customLabel,
+      "Silla Preferencial VIP A",
+    )
+  })
+
   it("preserves a locked seating label through parse", () => {
     const map = parseVenueMap({
       version: 1,

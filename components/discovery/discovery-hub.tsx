@@ -276,21 +276,32 @@ function DiscoveryHubInner({
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.25 }}
-          className={
-            variant === "directory"
-              ? "flex flex-col gap-3"
-              : "grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3"
-          }
+          className={variant === "directory" ? "flex flex-col gap-3" : undefined}
         >
-          {gridEvents.map((event, index) => (
-            <EventCard
-              key={event.id}
-              event={event}
-              index={index}
-              priority={index < 3}
-              variant={variant === "directory" ? "list" : "poster"}
-            />
-          ))}
+          {variant === "directory" ? (
+            gridEvents.map((event, index) => (
+              <EventCard
+                key={event.id}
+                event={event}
+                index={index}
+                priority={index < 3}
+                variant="list"
+                categories={categories}
+              />
+            ))
+          ) : (
+            <div className="grid grid-cols-1 items-stretch gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {gridEvents.map((event, index) => (
+                <EventCard
+                  key={event.id}
+                  event={event}
+                  index={index}
+                  priority={index < 4}
+                  categories={categories}
+                />
+              ))}
+            </div>
+          )}
         </motion.div>
       ) : (
         <motion.div
@@ -393,7 +404,7 @@ function DiscoveryHubInner({
   }
 
   return (
-    <div className="space-y-12 sm:space-y-16">
+    <div className="space-y-12 bg-transparent sm:space-y-16">
       <HeroSection
         events={events}
         query={query}
@@ -413,18 +424,22 @@ function DiscoveryHubInner({
         onCommitFilters={commitFilters}
       />
 
-      <FeaturedHeroSection pool={featuredPool} province={city} />
+      <FeaturedHeroSection
+        pool={featuredPool}
+        province={city}
+        categories={categories}
+      />
 
       <section className="space-y-6" id="discovery-results">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <div className="flex items-center gap-2">
               <Flame className="h-5 w-5 text-purple-600" aria-hidden="true" />
-              <h2 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white sm:text-3xl">
+              <h2 className="text-2xl font-black tracking-tight text-foreground sm:text-3xl">
                 {isBrowsing ? "Resultados" : "Lo más vendido de la semana"}
               </h2>
             </div>
-            <p className="mt-1.5 text-sm text-zinc-500 dark:text-zinc-400">
+            <p className="mt-1.5 text-sm text-muted-foreground">
               {resultsSubtitle}
             </p>
           </div>
@@ -442,8 +457,21 @@ function featuredPoolSafe(
   events: CatalogEvent[],
   initialFeatured?: FeaturedRotationResult<CatalogEvent>,
 ) {
-  if (initialFeatured?.pool && initialFeatured.pool.length > 0) {
-    return initialFeatured.pool
-  }
-  return events.filter(isFeaturedRailEligible)
+  const source =
+    initialFeatured?.pool && initialFeatured.pool.length > 0
+      ? initialFeatured.pool
+      : events.filter(isFeaturedRailEligible)
+
+  if (events.length === 0) return source
+
+  const catalogById = new Map(events.map((event) => [event.id, event]))
+  return source.map((event) => {
+    const catalog = catalogById.get(event.id)
+    if (!catalog) return event
+    return {
+      ...event,
+      artists: event.artists.length > 0 ? event.artists : catalog.artists,
+      startingPrice: event.startingPrice ?? catalog.startingPrice,
+    }
+  })
 }

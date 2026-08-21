@@ -159,7 +159,7 @@ export default async function PublicEventPage({
   const seo = eventSeoFromDetails(event)
 
   return (
-    <div className="relative">
+    <div className="relative bg-background">
       {isDraftPreview ? null : <EventSchemaScript {...seo} />}
       <Suspense fallback={null}>
         <EventStorefrontSession

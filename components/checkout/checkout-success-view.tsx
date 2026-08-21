@@ -3,7 +3,7 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
-import { ArrowRight, CheckCircle2, LoaderCircle, Ticket } from "lucide-react"
+import { ArrowRight, CheckCircle2, Download, LoaderCircle, Ticket } from "lucide-react"
 import useEmblaCarousel from "embla-carousel-react"
 
 import type { PurchaseAnalyticsPayload } from "@/app/actions/event-marketing"
@@ -16,6 +16,7 @@ import { LivingTicketCard } from "@/components/public/living-ticket-card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { nextFulfillmentPollDelay } from "@/lib/checkout/fulfillment"
+import { ticketPdfPath } from "@/lib/pdf/ticket-pdf-model"
 import { useCheckoutStore } from "@/lib/stores/checkout-store"
 import { cn } from "@/lib/utils"
 
@@ -130,6 +131,13 @@ export function CheckoutSuccessView({
 
   const tickets = fulfillment.tickets
   const firstTicket = tickets[0]
+  const pdfHref = firstTicket
+    ? ticketPdfPath(firstTicket.id, {
+        size: "a4",
+        download: true,
+        ids: tickets.map((ticket) => ticket.id),
+      })
+    : null
   const [emblaRef] = useEmblaCarousel({
     align: "center",
     loop: tickets.length > 1,
@@ -214,21 +222,34 @@ export function CheckoutSuccessView({
             className="relative w-full"
           >
             <SuccessBurst />
-            <span className="relative mx-auto grid size-24 place-items-center rounded-full bg-emerald-500 text-white shadow-2xl shadow-emerald-500/30">
-              <CheckCircle2 className="size-14" strokeWidth={2.25} aria-hidden="true" />
-            </span>
-            <p className="mt-10 text-sm font-semibold uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400">
-              Pago confirmado
-            </p>
-            <h1 className="mt-3 text-3xl font-black tracking-[-0.04em] text-foreground sm:text-4xl">
-              Tus entradas estan listas
-            </h1>
-            <p className="mt-4 text-base leading-7 text-muted-foreground">
-              {fulfillment.eventTitle
-                ? `Ya podes presentar el Living QR en ${fulfillment.eventTitle}.`
-                : "Ya podes presentar el Living QR en puerta."}{" "}
-              El codigo se renueva solo para evitar capturas de pantalla.
-            </p>
+            <div className="flex min-h-[40vh] flex-col items-center justify-center space-y-6 px-4 text-center">
+              <div className="mb-2 flex size-20 items-center justify-center rounded-full bg-emerald-500/20">
+                <CheckCircle2
+                  className="size-12 text-emerald-500"
+                  strokeWidth={3}
+                  aria-hidden="true"
+                />
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400">
+                  Pago confirmado
+                </p>
+                <h1 className="text-4xl font-black tracking-tight text-foreground md:text-5xl">
+                  Ya estas adentro
+                </h1>
+                <p className="mx-auto max-w-md text-lg font-medium text-muted-foreground md:text-xl">
+                  Te enviamos las entradas a tu{" "}
+                  <span className="font-bold text-foreground">WhatsApp</span> y
+                  a tu correo electronico.
+                </p>
+                <p className="mx-auto max-w-md text-sm leading-6 text-muted-foreground">
+                  {fulfillment.eventTitle
+                    ? `Tambien podes presentar el Living QR en ${fulfillment.eventTitle}.`
+                    : "Tambien podes presentar el Living QR en puerta."}{" "}
+                  El codigo se renueva solo para evitar capturas de pantalla.
+                </p>
+              </div>
+            </div>
 
             {tickets.length > 0 ? (
               <div className="mt-8 w-full">
@@ -260,25 +281,32 @@ export function CheckoutSuccessView({
               </p>
             )}
 
-            <div className="mx-auto mt-8 flex w-full max-w-md flex-col gap-3">
+            <div className="mx-auto mt-8 flex w-full max-w-sm flex-col gap-3 pt-2">
+              {pdfHref ? (
+                <a
+                  href={pdfHref}
+                  className="inline-flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 text-lg font-black text-black shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-colors hover:bg-emerald-400"
+                >
+                  <Download className="size-5" aria-hidden="true" />
+                  Descargar entradas ahora
+                </a>
+              ) : null}
               {firstTicket ? (
                 <WalletPassButtons
                   ticketId={firstTicket.id}
                   flyerUrl={firstTicket.flyerUrl}
                   appleWalletEnabled={appleWalletEnabled}
                   googleWalletEnabled={googleWalletEnabled}
-                  alwaysShowPdf
+                  hidePdf
                 />
               ) : null}
-              <Button
-                size="lg"
-                className="h-12 rounded-full px-6"
-                nativeButton={false}
-                render={<Link href="/cuenta/entradas" />}
+              <Link
+                href="/cuenta/entradas"
+                className="inline-flex h-12 items-center justify-center gap-2 text-sm font-medium text-emerald-600 transition-colors hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300"
               >
-                <Ticket aria-hidden="true" />
+                <Ticket className="size-4" aria-hidden="true" />
                 Ir a mis entradas
-              </Button>
+              </Link>
             </div>
           </motion.div>
         ) : (

@@ -14,6 +14,16 @@ describe("cartLineDisplayName", () => {
     )
   })
 
+  it("prefers the printed displayName over the raw name", () => {
+    assert.equal(
+      cartLineDisplayName({
+        name: "Mesa 4",
+        displayName: "Mesa VIP Escenario 1",
+      }),
+      "Mesa VIP Escenario 1",
+    )
+  })
+
   it("leaves the name unchanged when there is no date", () => {
     assert.equal(
       cartLineDisplayName({ name: "General" }),
@@ -43,5 +53,9 @@ describe("cartLineAmount", () => {
   it("multiplies unit price by quantity", () => {
     assert.equal(cartLineAmount({ price: 15000, quantity: 3 }), 45000)
     assert.equal(cartLineAmount({ price: 15000, quantity: 0 }), 0)
+  })
+
+  it("keeps decimal money in integer cents", () => {
+    assert.equal(cartLineAmount({ price: 10.1, quantity: 3 }), 30.3)
   })
 })

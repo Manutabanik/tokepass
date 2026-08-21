@@ -5,7 +5,7 @@ import { motion } from "motion/react"
 import Image from "next/image"
 
 import type { CatalogEvent } from "@/app/actions/public-events"
-import { EventCard } from "@/components/discovery/event-card"
+import { EventSwimlane } from "@/components/discovery/event-swimlane"
 
 export function EmptyState({
   fallbackEvents,
@@ -59,11 +59,7 @@ export function EmptyState({
             <Sparkles className="size-4 text-violet-300" aria-hidden="true" />
             Recomendados para vos
           </p>
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {fallbackEvents.slice(0, 6).map((event, index) => (
-              <EventCard key={event.id} event={event} index={index} />
-            ))}
-          </div>
+          <EventSwimlane events={fallbackEvents.slice(0, 6)} />
         </div>
       ) : null}
     </motion.div>

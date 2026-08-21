@@ -37,6 +37,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  serverExternalPackages: ["@react-pdf/renderer", "qrcode"],
   experimental: {
     // Event flyers are capped at 5 MB in the action itself. Leave headroom for
     // multipart encoding while still bounding request memory usage.

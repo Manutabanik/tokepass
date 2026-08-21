@@ -12,6 +12,7 @@ import {
   parametricZoneCapacity,
 } from "@/lib/seating/adaptive-seating"
 import { elementSeatLabel } from "@/lib/seating/venue-element-geometry"
+import { getVenueSeatDisplayName, venueElementTicketLabel } from "@/lib/map-utils"
 import { venueElementSelectionName } from "@/lib/seating/storefront-selection"
 
 const SEAT_GAP = 18
@@ -99,11 +100,11 @@ function serializeStandaloneElement(element: VenueMapElement) {
         {
           row_id: `${element.id}-group`,
           row_number: 1,
-          row_label: element.label,
+          row_label: venueElementTicketLabel(element) || element.label,
           items: [
             {
               id: element.id,
-              label: element.label,
+              label: venueElementTicketLabel(element) || element.label,
               capacity: Math.max(1, activeSeats.length || 1),
               status: "available" as const,
             },
@@ -127,7 +128,7 @@ function serializeStandaloneElement(element: VenueMapElement) {
         row_label: element.label,
         items: element.seats.map((seat) => ({
           id: seat.id,
-          label: elementSeatLabel(element, seat.number),
+          label: elementSeatLabel(element, seat.number, seat),
           capacity: 1,
           status:
             seat.status === "available"
@@ -174,7 +175,7 @@ function serializeElementGroup(groupId: string, members: VenueMapElement[]) {
           row_label: `Fila ${ring + 1}`,
           items: items.map((item) => ({
             id: item.id,
-            label: item.label,
+            label: venueElementTicketLabel(item) || item.label,
             capacity: elementUnitCapacity(item),
             status: "available" as const,
           })),
@@ -201,14 +202,14 @@ function serializeElementGroup(groupId: string, members: VenueMapElement[]) {
             ? [
                 {
                   id: item.id,
-                  label: item.label,
+                  label: venueElementTicketLabel(item) || item.label,
                   capacity: elementUnitCapacity(item),
                   status: "available" as const,
                 },
               ]
             : item.seats.map((seat) => ({
                 id: seat.id,
-                label: elementSeatLabel(item, seat.number),
+                label: elementSeatLabel(item, seat.number, seat),
                 capacity: 1,
                 status:
                   seat.status === "blocked"
@@ -237,7 +238,10 @@ export function venueMapToSeatingLayout(
       row_label: `Fila ${rowLabel}`,
       items: rowSeats.map((seat) => ({
         id: seat.id,
-        label: `${rowLabel}-${seat.number}`,
+        label:
+          seat.customLabel?.trim() ||
+          seat.label?.trim() ||
+          `${rowLabel}-${seat.number}`,
         capacity: 1,
         status:
           seat.status === "blocked"
@@ -423,7 +427,7 @@ export function flattenVenueMapSeats(map: InteractiveVenueMap): FlattenedVenueSe
       return [
         {
           id: element.id,
-          row: element.label,
+          row: venueElementTicketLabel(element) || element.label,
           number: 0,
           x: element.x,
           y: element.y,
@@ -439,16 +443,17 @@ export function flattenVenueMapSeats(map: InteractiveVenueMap): FlattenedVenueSe
     }
     return element.seats.map((seat) => ({
       id: seat.id,
-      row: element.label,
+      row: venueElementTicketLabel(element) || element.label,
       number: seat.number,
       x: seat.x,
       y: seat.y,
       sectorId: elementInventorySectorId(element),
-      sectorName: element.groupName || element.label,
+      sectorName: element.sectorName || element.groupName || element.label,
       color: element.color,
       price: seat.price ?? element.price,
       mapStatus: seat.status,
       source: "element" as const,
+      label: getVenueSeatDisplayName(element, seat),
     }))
   })
   return [...fromSectors, ...fromElements]
@@ -468,7 +473,7 @@ function flattenSellableElement(
     return [
       {
         id: element.id,
-        row: element.label,
+        row: venueElementTicketLabel(element) || element.label,
         number: 0,
         x: element.x,
         y: element.y,
@@ -484,16 +489,17 @@ function flattenSellableElement(
   }
   return element.seats.map((seat) => ({
     id: seat.id,
-    row: element.label,
+    row: venueElementTicketLabel(element) || element.label,
     number: seat.number,
     x: seat.x,
     y: seat.y,
     sectorId,
     sectorName,
     color: element.color,
-    price: element.price,
+    price: seat.price ?? element.price,
     mapStatus: seat.status,
     source: "element" as const,
+    label: getVenueSeatDisplayName(element, seat),
   }))
 }
 

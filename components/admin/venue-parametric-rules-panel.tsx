@@ -10,6 +10,7 @@ import { VenuePriceModeControl } from "@/components/admin/venue-price-mode-contr
 import { parametricZoneCapacity } from "@/lib/seating/adaptive-seating"
 import { formatCurrency } from "@/lib/format"
 import { cn } from "@/lib/utils"
+import { seatingFieldsForLayoutType } from "@/lib/seating/seating-type"
 import {
   venuePriceModeFromSellMode,
   type VenueMapZone,
@@ -106,40 +107,44 @@ export function VenueParametricRulesPanel({
         />
       </Field>
 
+      <Field label="Modalidad del sector">
+        <select
+          value={zone.seatingType ?? (zone.layoutType === "general" ? "GENERAL" : "RESERVED")}
+          onChange={(event) => {
+            const seatingType = event.target.value === "RESERVED" ? "RESERVED" : "GENERAL"
+            onChange(
+              seatingFieldsForLayoutType(
+                seatingType === "GENERAL"
+                  ? "general"
+                  : zone.layoutType === "numbered_seat"
+                    ? "numbered_seat"
+                    : "table_combo",
+              ),
+            )
+          }}
+          className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
+        >
+          <option value="GENERAL">Entrada general (aforo)</option>
+          <option value="RESERVED">Numerado (mesas y sillas)</option>
+        </select>
+      </Field>
+
+      {(zone.seatingType ?? (zone.layoutType === "general" ? "GENERAL" : "RESERVED")) ===
+      "RESERVED" ? (
       <Field label="Tipo de inventario">
         <select
-          value={zone.layoutType}
+          value={zone.layoutType === "numbered_seat" ? "numbered_seat" : "table_combo"}
           onChange={(event) => {
             const layoutType = event.target.value as VenueMapZone["layoutType"]
-            onChange({
-              layoutType,
-              sellMode:
-                layoutType === "table_combo"
-                  ? "group"
-                  : layoutType === "numbered_seat"
-                    ? "per_seat"
-                    : zone.sellMode,
-              priceMode:
-                layoutType === "table_combo"
-                  ? "closed_unit"
-                  : layoutType === "numbered_seat"
-                    ? "per_person"
-                    : zone.priceMode ?? venuePriceModeFromSellMode(zone.sellMode),
-              labelPrefix:
-                layoutType === "numbered_seat"
-                  ? "Butaca "
-                  : layoutType === "general"
-                    ? "Campo "
-                    : "Mesa ",
-            })
+            onChange(seatingFieldsForLayoutType(layoutType === "numbered_seat" ? "numbered_seat" : "table_combo"))
           }}
           className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
         >
           <option value="table_combo">Mesas / tablones</option>
           <option value="numbered_seat">Butacas numeradas</option>
-          <option value="general">Campo general (cupo)</option>
         </select>
       </Field>
+      ) : null}
 
       {zone.layoutType === "table_combo" ? (
         <VenuePriceModeControl

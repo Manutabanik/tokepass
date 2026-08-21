@@ -227,16 +227,17 @@ export function CheckoutPaymentForm({
           }
           aria-busy={confirmPending}
           onClick={onConfirmPay}
+          size="storefront"
           className={cn(
             tapFeedbackClass,
-            "mt-6 h-auto w-full rounded-xl bg-primary py-4 text-center text-lg font-bold text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50",
+            "mt-6 h-14 w-full rounded-xl bg-emerald-500 py-4 text-center text-lg font-black text-black shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:bg-emerald-400 disabled:scale-100 disabled:cursor-not-allowed disabled:opacity-70",
           )}
         >
           {confirmPending ? (
-            <>
-              <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-              {finalTotal === 0 ? "Confirmando reserva" : "Preparando pago"}
-            </>
+            <span className="flex items-center gap-2">
+              <LoaderCircle className="size-5 animate-spin" aria-hidden="true" />
+              {finalTotal === 0 ? "Confirmando reserva" : "Procesando pago..."}
+            </span>
           ) : finalTotal === 0 ? (
             "Confirmar reserva"
           ) : (

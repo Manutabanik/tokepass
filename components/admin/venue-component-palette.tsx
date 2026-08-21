@@ -31,6 +31,7 @@ export type PalettePlacement =
   | { kind: "grid_array" }
   | { kind: "rings" }
   | { kind: "zone_polygon" }
+  | { kind: "label" }
   | { kind: "element"; type: VenueElementType; subtype?: VenueInfraSubtype }
 
 type PaletteItem = {
@@ -496,5 +497,6 @@ function placementKey(placement: PalettePlacement | null): string {
   if (placement.kind === "grid_array") return "grid_array"
   if (placement.kind === "rings") return "rings"
   if (placement.kind === "zone_polygon") return "zone_polygon"
+  if (placement.kind === "label") return "label"
   return `${placement.type}:${placement.subtype ?? ""}`
 }

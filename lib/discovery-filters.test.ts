@@ -4,6 +4,9 @@ import { describe, it } from "node:test"
 import type { CatalogEvent } from "@/app/actions/public-events"
 import {
   catalogFiltersFromSearchParams,
+  eventCardLocationLabel,
+  eventCategoryLabel,
+  eventLineupHeadline,
   exploreCatalogPath,
   filterCatalogEvents,
 } from "@/lib/discovery-filters"
@@ -128,6 +131,99 @@ describe("filterCatalogEvents", () => {
     assert.equal(
       filterCatalogEvents(dated, { datePreset: "month", now }).length,
       1,
+    )
+  })
+})
+
+describe("eventCardLocationLabel", () => {
+  it("drops repeated Online tokens and keeps the city", () => {
+    assert.equal(
+      eventCardLocationLabel(
+        event({
+          id: "online-sj",
+          title: "Stream",
+          venueName: "Online",
+          venueLocation: "Online, San Juan",
+          location: "Online, San Juan",
+        }),
+      ),
+      "San Juan",
+    )
+  })
+
+  it("cleans a composed Online, city · Online label", () => {
+    assert.equal(
+      eventCardLocationLabel(
+        event({
+          id: "composed",
+          title: "Stream",
+          venueName: "Online, San Juan",
+          venueLocation: "Online",
+          location: "Online, San Juan · Online",
+        }),
+      ),
+      "San Juan",
+    )
+  })
+
+  it("shows Online once for streaming venues without a city", () => {
+    assert.equal(
+      eventCardLocationLabel(
+        event({
+          id: "stream",
+          title: "Live",
+          venueName: "Streaming / Online",
+          venueLocation: "Online",
+          location: "Online",
+        }),
+      ),
+      "Online",
+    )
+  })
+
+  it("does not repeat a city already present in the venue name", () => {
+    assert.equal(
+      eventCardLocationLabel(
+        event({
+          id: "club",
+          title: "Club",
+          venueName: "Niceto Club",
+          venueLocation: "Palermo, CABA",
+          location: "Palermo, CABA",
+        }),
+      ),
+      "Niceto Club, CABA",
+    )
+  })
+})
+
+describe("eventCategoryLabel", () => {
+  it("resolves the catalog category label and ignores all", () => {
+    assert.equal(
+      eventCategoryLabel(event({ id: "e", title: "Show", categoryId: "recitales" })),
+      "Recitales",
+    )
+    assert.equal(
+      eventCategoryLabel(event({ id: "e2", title: "Show", categoryId: "all" })),
+      null,
+    )
+    assert.equal(
+      eventCategoryLabel(event({ id: "e3", title: "Show", categoryId: null })),
+      null,
+    )
+  })
+})
+
+describe("eventLineupHeadline", () => {
+  it("names the lead artist and remaining count", () => {
+    assert.equal(eventLineupHeadline([]), null)
+    assert.deepEqual(
+      eventLineupHeadline([
+        { id: "a1", name: "Chaqueño Palavecino", imageUrl: null },
+        { id: "a2", name: "Soledad", imageUrl: null },
+        { id: "a3", name: "Los Nocheros", imageUrl: null },
+      ]),
+      { lead: "Chaqueño Palavecino", extra: 2 },
     )
   })
 })

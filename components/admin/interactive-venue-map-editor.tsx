@@ -38,7 +38,10 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } 
 import Link from "next/link"
 import { toast } from "sonner"
 
-import { VenueBulkEditPanel } from "@/components/admin/venue-bulk-edit-panel"
+import {
+  VenueBulkEditPanel,
+  VenueTicketTypeSelect,
+} from "@/components/admin/venue-bulk-edit-panel"
 import { GridArrayDialog } from "@/components/admin/grid-array-dialog"
 import { LabelOverrideDialog } from "@/components/admin/label-override-dialog"
 import { VenueHeatmapPanel } from "@/components/admin/venue-heatmap-panel"
@@ -137,7 +140,9 @@ import {
 import {
   applyBulkElementCapacity,
   applyBulkElementColor,
+  applyBulkElementCustomLabel,
   applyBulkElementPrice,
+  applyBulkElementTicketType,
   selectSimilarElementIds,
 } from "@/lib/seating/studio-bulk-edit"
 import {
@@ -335,6 +340,7 @@ export function InteractiveVenueMapEditor({
   onEventTitleChange,
   backHref,
   backLabel = "Volver al Panel",
+  tickets,
 }: {
   value?: InteractiveVenueMap | null
   onChange: (map: InteractiveVenueMap, seatingLayout: VenueSeatingLayout) => void
@@ -1649,15 +1655,16 @@ export function InteractiveVenueMapEditor({
     setIsPanning(false)
   }
 
-  function addSector() {
-    const color = ZONE_COLORS[map.sectors.length % ZONE_COLORS.length]!
+  function addSector(point?: { x: number; y: number }) {
+    const current = mapRef.current
+    const color = ZONE_COLORS[current.sectors.length % ZONE_COLORS.length]!
     const draft: VenueMapSector = {
       id: newId("sec"),
-      name: `Sector ${map.sectors.length + 1}`,
+      name: `Sector ${current.sectors.length + 1}`,
       color,
       price: 0,
-      x: 220,
-      y: 160 + map.sectors.length * 28,
+      x: point?.x ?? 220,
+      y: point?.y ?? 160 + current.sectors.length * 28,
       rows: 6,
       seatsPerRow: 12,
       curvature: 0.45,
@@ -1665,14 +1672,15 @@ export function InteractiveVenueMapEditor({
       seats: [],
     }
     draft.seats = rebuildSectorSeats(draft)
-    commit({ ...map, sectors: [...map.sectors, draft] })
+    commit({ ...current, sectors: [...current.sectors, draft] })
     setSelection({ kind: "sector", id: draft.id })
     setTool("select")
   }
 
   function addStage() {
+    const current = mapRef.current
     commit({
-      ...map,
+      ...current,
       stage: {
         label: "ESCENARIO",
         x: 200,
@@ -1685,15 +1693,22 @@ export function InteractiveVenueMapEditor({
     setTool("select")
   }
 
-  function addLabel() {
+  function addLabel(point?: { x: number; y: number }) {
+    const current = mapRef.current
     const presets = ["PLATEA BAJA", "PULLMAN", "GRADAS", "PALCOS"]
-    const text = presets[map.labels.length % presets.length]!
+    const text = presets[current.labels.length % presets.length]!
     const id = newId("lbl")
     commit({
-      ...map,
+      ...current,
       labels: [
-        ...map.labels,
-        { id, text, x: 320, y: 100 + map.labels.length * 24, color: "#e4e4e7" },
+        ...current.labels,
+        {
+          id,
+          text,
+          x: point?.x ?? 320,
+          y: point?.y ?? 100 + current.labels.length * 24,
+          color: "#e4e4e7",
+        },
       ],
     })
     setSelection({ kind: "label", id })
@@ -1701,11 +1716,12 @@ export function InteractiveVenueMapEditor({
   }
 
   function addAisle() {
+    const current = mapRef.current
     const id = newId("aisle")
     commit({
-      ...map,
+      ...current,
       aisles: [
-        ...map.aisles,
+        ...current.aisles,
         { id, x: 390, y: 120, width: 20, height: 280 },
       ],
     })
@@ -1746,6 +1762,11 @@ export function InteractiveVenueMapEditor({
       zones: ensureZones(current).map((zone) => {
         if (zone.id !== id) return zone
         const next = { ...zone, ...patch }
+        if (patch.layoutType != null || patch.seatingType != null) {
+          next.seatingType =
+            next.seatingType ??
+            (next.layoutType === "general" ? "GENERAL" : "RESERVED")
+        }
         if (next.layoutType === "numbered_seat") {
           next.sellMode = "per_seat"
           next.priceMode = "per_person"
@@ -1827,7 +1848,12 @@ export function InteractiveVenueMapEditor({
     }
     const current = mapRef.current
     if (nextPlacement.kind === "seat_block") {
-      addSector()
+      addSector(point)
+      setPlacement(null)
+      return
+    }
+    if (nextPlacement.kind === "label") {
+      addLabel(point)
       setPlacement(null)
       return
     }
@@ -1842,6 +1868,7 @@ export function InteractiveVenueMapEditor({
       setPlacement(null)
       return
     }
+    if (nextPlacement.kind !== "element") return
     const count = ensureElements(current).filter(
       (item) =>
         item.type === nextPlacement.type &&
@@ -2062,6 +2089,34 @@ export function InteractiveVenueMapEditor({
       return
     }
     setSelection({ kind: "elements", ids })
+  }
+
+  function batchCustomLabel(customLabel: string) {
+    const current = mapRef.current
+    commit({
+      ...current,
+      elements: applyBulkElementCustomLabel(
+        ensureElements(current),
+        selectedElementIds,
+        customLabel,
+      ),
+    })
+  }
+
+  function batchTicketType(ticket: {
+    id: string
+    name?: string
+    price?: number
+  }) {
+    const current = mapRef.current
+    commit({
+      ...current,
+      elements: applyBulkElementTicketType(
+        ensureElements(current),
+        selectedElementIds,
+        ticket,
+      ),
+    })
   }
 
   function batchPrice(price: number) {
@@ -2529,6 +2584,8 @@ export function InteractiveVenueMapEditor({
       rotation?: number
       price?: number
       label?: string
+      customLabel?: string
+      ticketTypeId?: string
       row?: string
     },
   ) {
@@ -2561,6 +2618,8 @@ export function InteractiveVenueMapEditor({
     rotation?: number
     price?: number
     label?: string
+    customLabel?: string
+    ticketTypeId?: string
     row?: string
   }) {
     if (selection?.kind === "seats") {
@@ -2611,6 +2670,7 @@ export function InteractiveVenueMapEditor({
     const parsedNumber = parseSeatNumberInput(current.number)
     patchElement(selectedElement.id, {
       label: current.label,
+      customLabel: current.label,
       labelLocked: true,
       seats: selectedElement.seats.map((seat, index) =>
         index === 0
@@ -4305,11 +4365,12 @@ export function InteractiveVenueMapEditor({
               Volver al mapa general
             </button>
           ) : null}
-          {!compactChrome && !preview ? (
+          {!compactChrome && !preview && !libraryOpen ? (
             <VenueFloatingToolbar
               active={floatingTool}
               onChange={pickFloatingTool}
               onPlace={pickPaletteItem}
+              constraintRef={canvasRef}
             />
           ) : null}
           {isStudio && tool !== "polygon" ? (
@@ -4785,12 +4846,13 @@ export function InteractiveVenueMapEditor({
             </div>
           ) : selectedElement ? (
             <div className="space-y-3">
-              <Field label="Nombre / etiqueta">
+              <Field label="Etiqueta personalizada (boleto)">
                 <Input
                   value={selectedElement.label}
                   onChange={(event) =>
                     patchElement(selectedElement.id, {
                       label: event.target.value,
+                      customLabel: event.target.value.trim() || undefined,
                       labelLocked: true,
                     })
                   }
@@ -4830,6 +4892,19 @@ export function InteractiveVenueMapEditor({
                     if (value == null) return
                     patchElement(selectedElement.id, { price: value })
                   }}
+                />
+              </Field>
+              <Field label="Tipo de ticket">
+                <VenueTicketTypeSelect
+                  tickets={tickets}
+                  value={selectedElement.ticketTypeId}
+                  onChange={(ticket) =>
+                    patchElement(selectedElement.id, {
+                      ticketTypeId: ticket.id,
+                      ...(ticket.name ? { sectorName: ticket.name } : {}),
+                      ...(ticket.price != null ? { price: ticket.price } : {}),
+                    })
+                  }
                 />
               </Field>
               <Field label="Color">
@@ -4982,9 +5057,12 @@ export function InteractiveVenueMapEditor({
                 elements={selectedElements}
                 allElements={ensureElements(map)}
                 selectedIds={selectedElementIds}
+                tickets={tickets}
                 onPrice={batchPrice}
                 onColor={batchColor}
                 onCapacity={batchCapacity}
+                onCustomLabel={batchCustomLabel}
+                onTicketType={batchTicketType}
                 onApplyElements={applySelectedElements}
                 showNumbering={false}
               />
@@ -5127,18 +5205,22 @@ export function InteractiveVenueMapEditor({
             <div className="space-y-4">
               {singleSeat ? (
                 <>
-                  <Field label="Identificador">
+                  <Field label="Etiqueta personalizada (boleto)">
                     <Input
                       value={
+                        singleSeat.seat.customLabel ??
                         singleSeat.seat.label ??
                         (singleSeat.source === "sector"
                           ? `Fila ${singleSeat.seat.row} - Asiento ${singleSeat.seat.number}`
                           : `${singleSeat.element.label} - Asiento ${singleSeat.seat.number}`)
                       }
                       onChange={(event) =>
-                        patchSelectedSeats({ label: event.target.value })
+                        patchSelectedSeats({
+                          label: event.target.value,
+                          customLabel: event.target.value.trim() || undefined,
+                        })
                       }
-                      aria-label="Identificador de ubicacion"
+                      aria-label="Etiqueta personalizada de ubicacion"
                       className="h-9"
                     />
                   </Field>
@@ -5160,6 +5242,18 @@ export function InteractiveVenueMapEditor({
                         if (value == null) return
                         patchSelectedSeats({ price: value })
                       }}
+                    />
+                  </Field>
+                  <Field label="Tipo de ticket">
+                    <VenueTicketTypeSelect
+                      tickets={tickets}
+                      value={singleSeat.seat.ticketTypeId}
+                      onChange={(ticket) =>
+                        patchSelectedSeats({
+                          ticketTypeId: ticket.id,
+                          ...(ticket.price != null ? { price: ticket.price } : {}),
+                        })
+                      }
                     />
                   </Field>
                   <AdvancedPositionSettings>
@@ -5191,9 +5285,36 @@ export function InteractiveVenueMapEditor({
                 </>
               ) : (
                 <div className="space-y-4">
+                  <Field label="Etiqueta personalizada (boleto)">
+                    <Input
+                      placeholder="Ej. Silla Preferencial VIP A"
+                      onBlur={(event) => {
+                        const next = event.target.value.trim()
+                        if (!next) return
+                        patchSelectedSeats({ label: next, customLabel: next })
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter") return
+                        const next = event.currentTarget.value.trim()
+                        if (!next) return
+                        patchSelectedSeats({ label: next, customLabel: next })
+                      }}
+                    />
+                  </Field>
                   <Field label="Estado">
                     <SeatStatusControl
                       onChange={(status) => patchSelectedSeats({ status })}
+                    />
+                  </Field>
+                  <Field label="Tipo de ticket">
+                    <VenueTicketTypeSelect
+                      tickets={tickets}
+                      onChange={(ticket) =>
+                        patchSelectedSeats({
+                          ticketTypeId: ticket.id,
+                          ...(ticket.price != null ? { price: ticket.price } : {}),
+                        })
+                      }
                     />
                   </Field>
                   <Field label="Precio">

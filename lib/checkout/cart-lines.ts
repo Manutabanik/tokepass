@@ -1,14 +1,18 @@
+import { centsToMoney, moneyToCents } from "@/lib/money/cents"
+
 export const CART_TICKET_LINE_PREFIX = "ticket:"
 
 export function cartLineDisplayName(line: {
   name: string
+  displayName?: string | null
   dateLabel?: string | null
 }): string {
+  const label = line.displayName?.trim() || line.name
   const date = line.dateLabel?.trim()
-  if (!date) return line.name
+  if (!date) return label
   const suffix = `(${date})`
-  if (line.name.includes(suffix)) return line.name
-  return `${line.name} ${suffix}`
+  if (label.includes(suffix)) return label
+  return `${label} ${suffix}`
 }
 
 export function cartTicketLineId(tierId: string, dateId?: string | null) {
@@ -29,5 +33,5 @@ export function cartLineAmount(line: {
   const unit = Number(line.price)
   const quantity = Math.max(0, Math.floor(Number(line.quantity)) || 0)
   if (!Number.isFinite(unit) || unit <= 0 || quantity <= 0) return 0
-  return unit * quantity
+  return centsToMoney(moneyToCents(unit) * quantity)
 }

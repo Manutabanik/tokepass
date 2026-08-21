@@ -1,8 +1,42 @@
 import { rebuildElementSeats } from "@/lib/seating/venue-element-geometry"
+import type { VenueMapSkuTicketRef } from "@/lib/seating/venue-map-sku-consistency"
 import {
   isInfrastructureElement,
   type VenueMapElement,
 } from "@/types/venue-map"
+
+export type VenueTicketTypeOption = {
+  id: string
+  name: string
+  price?: number
+}
+
+export function venueTicketTypeOptions(
+  tickets: VenueMapSkuTicketRef[] | null | undefined,
+): VenueTicketTypeOption[] {
+  const seen = new Set<string>()
+  const options: VenueTicketTypeOption[] = []
+  for (const ticket of tickets ?? []) {
+    const id = (
+      ticket.id ??
+      ticket.seatingSectorId ??
+      ticket.seating_sector_id ??
+      ticket.name ??
+      ""
+    )
+      .toString()
+      .trim()
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    const name = ticket.name?.trim() || "Entrada"
+    const price =
+      ticket.price != null && Number.isFinite(Number(ticket.price))
+        ? Number(ticket.price)
+        : undefined
+    options.push({ id, name, ...(price != null ? { price } : {}) })
+  }
+  return options
+}
 
 export function normalizeVenueColor(color: string): string {
   return color.trim().toLowerCase()
@@ -74,6 +108,51 @@ export function applyBulkElementCapacity(
     next.capacity = next.chairCount
     next.seats = rebuildElementSeats(next)
     return next
+  })
+}
+
+export function applyBulkElementCustomLabel(
+  elements: VenueMapElement[],
+  selectedIds: string[],
+  customLabel: string,
+): VenueMapElement[] {
+  const ids = new Set(selectedIds)
+  const nextLabel = customLabel.trim().slice(0, 80)
+  if (!nextLabel) return elements
+  return elements.map((item) =>
+    ids.has(item.id) && !isInfrastructureElement(item)
+      ? {
+          ...item,
+          customLabel: nextLabel,
+          label: nextLabel,
+          labelLocked: true,
+        }
+      : item,
+  )
+}
+
+export function applyBulkElementTicketType(
+  elements: VenueMapElement[],
+  selectedIds: string[],
+  ticket: { id: string; name?: string | null; price?: number | null },
+): VenueMapElement[] {
+  const ids = new Set(selectedIds)
+  const ticketTypeId = ticket.id.trim()
+  if (!ticketTypeId) return elements
+  const sectorName = ticket.name?.trim()
+  const price =
+    ticket.price != null && Number.isFinite(Number(ticket.price))
+      ? Number(ticket.price)
+      : undefined
+  return elements.map((item) => {
+    if (!ids.has(item.id) || isInfrastructureElement(item)) return item
+    return {
+      ...item,
+      ticketTypeId,
+      ...(sectorName ? { sectorName } : {}),
+      ...(price != null ? { price } : {}),
+      seats: item.seats.map((seat) => ({ ...seat, ticketTypeId })),
+    }
   })
 }
 

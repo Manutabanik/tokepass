@@ -1,5 +1,9 @@
 import { isFullPassDayId, normalizeDayId } from "@/lib/event-schedule"
 import {
+  isDaySpecificTicket,
+  isPassOrComboTicket,
+} from "@/lib/inventory/day-ticket-coverage"
+import {
   formatEventCartDate,
   formatEventDay,
   formatEventDayNumber,
@@ -113,11 +117,11 @@ export function listCheckoutDateCards(
 }
 
 export function hasDaySpecificTickets(tiers: TicketSelectorTier[] = []): boolean {
-  return tiers.some((tier) => !resolveTicketDateMeta(tier).isFullPass)
+  return tiers.some((tier) => isDaySpecificTicket(tier))
 }
 
 export function hasFullPassTickets(tiers: TicketSelectorTier[] = []): boolean {
-  return tiers.some((tier) => resolveTicketDateMeta(tier).isFullPass)
+  return tiers.some((tier) => isPassOrComboTicket(tier))
 }
 
 export function shouldShowCheckoutKindTabs(
@@ -149,24 +153,29 @@ export function ticketMatchesTab(
   activeTabId: string,
   options?: { treatFullPassAsAnyDay?: boolean },
 ): boolean {
-  const meta = resolveTicketDateMeta(tier)
-  if (activeTabId === FULL_PASS_TAB_ID) return meta.isFullPass
-  if (meta.dateId === activeTabId) return true
-  return Boolean(options?.treatFullPassAsAnyDay && meta.isFullPass)
+  const passOrCombo = isPassOrComboTicket(tier)
+  if (activeTabId === FULL_PASS_TAB_ID) return passOrCombo
+  if (passOrCombo) return Boolean(options?.treatFullPassAsAnyDay)
+  return resolveTicketDateMeta(tier).dateId === activeTabId
 }
 
 export function listCheckoutDayTabs(
   scheduleDays: ScheduleDay[] = [],
   tiers: TicketSelectorTier[] = [],
 ): TicketDayGroup[] {
+  const dayTickets = tiers.filter((tier) => isDaySpecificTicket(tier))
   if (scheduleDays.length > 0) {
-    return scheduleDays.map((day) => ({
-      dateId: day.id,
-      dateLabel: day.title?.trim() || formatEventDay(day.start_time),
-      tickets: [],
-    }))
+    return scheduleDays
+      .map((day) => ({
+        dateId: day.id,
+        dateLabel: day.title?.trim() || formatEventDay(day.start_time),
+        tickets: dayTickets.filter(
+          (tier) => resolveTicketDateMeta(tier).dateId === day.id,
+        ),
+      }))
+      .filter((group) => group.tickets.length > 0)
   }
-  return groupTicketsByDate(tiers, scheduleDays).ticketsByDate
+  return groupTicketsByDate(dayTickets, scheduleDays).ticketsByDate
 }
 
 export function isSamePriceAnyDay(

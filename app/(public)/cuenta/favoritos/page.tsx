@@ -68,13 +68,12 @@ export default async function CuentaFavoritosPage() {
                   {event.flyerUrl ? (
                     <Image
                       src={event.flyerUrl}
-                      alt=""
+                      alt={event.title}
                       fill
                       sizes="(max-width: 640px) 100vw, 50vw"
                       className="object-cover"
                     />
                   ) : null}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
                 </div>
                 <div className="space-y-1 p-4">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">

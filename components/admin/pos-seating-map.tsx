@@ -14,6 +14,7 @@ import type { PosSeatPick } from "@/lib/pos-cart"
 import { resolveTierIdForUniversalSector } from "@/lib/seating/venue-adapter"
 import { flattenVenueMapSeats } from "@/lib/seating/venue-map-geometry"
 import { occupancyFromSeatingUnits } from "@/lib/seating/venue-map-occupancy"
+import { classifyZoneClick } from "@/lib/seating/map-click-target"
 import {
   storefrontItemFromElement,
   storefrontItemFromZone,
@@ -131,12 +132,14 @@ export function PosSeatingMap({
   }
 
   return (
-    <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg">
+    <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-muted/30">
       <InteractiveSeatingCanvas
         map={map}
         eventId={event.id}
         fillParent
         hideChrome
+        hideToolbar
+        posWorkstation
         disableIdlePrompt
         silentHover
         pending={disabled}
@@ -171,6 +174,10 @@ export function PosSeatingMap({
           else toast.error("No hay tipo de entrada para ese sector.")
         }}
         onSelectZone={(zone) => {
+          if (classifyZoneClick(zone, map) === "SECTOR_NUMERADO") {
+            toast.error("Elegí una mesa o silla de este sector.")
+            return
+          }
           const item = storefrontItemFromZone(zone, priceBySectorId)
           if (!item) return
           const pick = resolvePick(
@@ -184,6 +191,20 @@ export function PosSeatingMap({
           else toast.error("No hay tipo de entrada para ese sector.")
         }}
       />
+      <div className="pointer-events-none absolute bottom-3 left-3 z-20 flex flex-wrap gap-2">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card/95 px-2.5 py-1 text-[11px] font-semibold text-foreground shadow-sm">
+          <span className="size-2.5 rounded-full bg-emerald-500" aria-hidden="true" />
+          Libre
+        </span>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card/95 px-2.5 py-1 text-[11px] font-semibold text-foreground shadow-sm">
+          <span className="size-2.5 rounded-full bg-red-500/80" aria-hidden="true" />
+          Ocupado
+        </span>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/70 bg-card/95 px-2.5 py-1 text-[11px] font-semibold text-foreground shadow-sm">
+          <span className="size-2.5 rounded-full border border-amber-200 bg-amber-400 shadow-[0_0_8px_rgba(250,204,21,0.85)]" aria-hidden="true" />
+          En carrito
+        </span>
+      </div>
     </div>
   )
 }

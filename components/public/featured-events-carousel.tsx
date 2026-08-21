@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 
 import type { CatalogEvent } from "@/app/actions/public-events"
 import { FeaturedBannerCard } from "@/components/public/featured-banner-card"
+import type { DiscoveryCategory } from "@/lib/discovery-categories"
 import { Button } from "@/components/ui/button"
 import {
   FEATURED_CAROUSEL_LIMIT,
@@ -16,9 +17,11 @@ import { cn } from "@/lib/utils"
 export function FeaturedEventsCarousel({
   pool,
   province = "todas",
+  categories,
 }: {
   pool: CatalogEvent[]
   province?: string
+  categories?: DiscoveryCategory[]
 }) {
   const slides = useMemo(() => {
     return pool
@@ -66,10 +69,10 @@ export function FeaturedEventsCarousel({
 
   return (
     <section
-      className="relative mx-auto w-full max-w-7xl overflow-hidden px-4 py-6"
+      className="relative w-full overflow-visible bg-transparent py-8"
       aria-label="Eventos destacados"
     >
-      <div className="mb-5 flex items-end justify-between gap-3 px-1">
+      <div className="mx-auto mb-5 flex w-[min(100%-2rem,80rem)] items-end justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
             <Star className="h-5 w-5 text-violet-600 dark:text-violet-400" aria-hidden="true" />
@@ -84,19 +87,23 @@ export function FeaturedEventsCarousel({
       </div>
 
       <div className="relative">
-        <div className="overflow-hidden" ref={emblaRef}>
+        <div className="overflow-visible" ref={emblaRef}>
           <div className="flex touch-pan-y">
             {slides.map((event, index) => (
               <div
                 key={event.id}
                 className={cn(
-                  "min-w-0 shrink-0 grow-0 px-2",
+                  "min-w-0 shrink-0 grow-0",
                   slides.length === 1
-                    ? "basis-full px-0"
+                    ? "basis-full"
                     : "basis-[90%] sm:basis-[86%] lg:basis-[82%]",
                 )}
               >
-                <FeaturedBannerCard event={event} priority={index === 0} />
+                <FeaturedBannerCard
+                  event={event}
+                  priority={index === 0}
+                  categories={categories}
+                />
               </div>
             ))}
           </div>

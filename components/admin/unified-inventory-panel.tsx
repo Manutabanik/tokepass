@@ -3,6 +3,7 @@
 import {
   Armchair,
   Car,
+  Copy,
   Gift,
   Layers,
   LayoutGrid,
@@ -16,6 +17,7 @@ import {
 import type { ReactNode } from "react"
 import { useEffect, useMemo, useState } from "react"
 import type { UseFormReturn } from "react-hook-form"
+import { toast } from "sonner"
 
 import {
   listEventGeneralSectors,
@@ -88,6 +90,10 @@ import {
   defaultInventoryDayId,
   formatInventoryDayOption,
 } from "@/lib/event-schedule"
+import {
+  duplicateTicketsFromDay,
+  scheduleDaysMissingTicketsMessage,
+} from "@/lib/inventory/day-ticket-coverage"
 import { cn } from "@/lib/utils"
 import { isMapBackedTicket } from "@/lib/seating/venue-map-pricing"
 import {
@@ -114,6 +120,9 @@ export function createInventoryTicket(
     isNew: true,
     name: "",
     price: undefined as unknown as number,
+    basePrice: undefined,
+    feeStrategy: "absorb_in_price",
+    calculationMode: "public_price",
     capacity: undefined as unknown as number,
     timeLimit: "",
     bonusReward: "",
@@ -142,6 +151,9 @@ export function createInventoryTicket(
 type Props = {
   form: UseFormReturn<EventFormValues>
   eventId?: string | null
+  feePercentage?: number
+  fixedFee?: number
+  isSponsored?: boolean
 }
 
 function mergeEventSectors(
@@ -169,7 +181,13 @@ function mergeEventSectors(
   return [...merged.values()]
 }
 
-export function UnifiedInventoryPanel({ form, eventId = null }: Props) {
+export function UnifiedInventoryPanel({
+  form,
+  eventId = null,
+  feePercentage = 15,
+  fixedFee = 0,
+  isSponsored = false,
+}: Props) {
   const watchedTickets = form.watch("tickets")
   const tickets = useMemo(() => watchedTickets ?? [], [watchedTickets])
   const hasSeatingPlan = Boolean(form.watch("basics.hasSeatingPlan"))
@@ -318,6 +336,22 @@ export function UnifiedInventoryPanel({ form, eventId = null }: Props) {
     })
   }
 
+  function duplicateDayTickets(sourceDayId: string, targetDayId: string) {
+    const result = duplicateTicketsFromDay(tickets, sourceDayId, targetDayId)
+    if (result.error || result.added === 0) {
+      toast.error(result.error ?? "No se pudieron copiar las tarifas.")
+      return
+    }
+    form.setValue("tickets", result.tickets, { shouldDirty: true })
+    const target = scheduleDays.find((day) => day.id === targetDayId)
+    const targetLabel = target
+      ? formatInventoryDayOption(target, scheduleDays.indexOf(target))
+      : "el día elegido"
+    toast.success(
+      `Se copiaron ${result.added} tarifa${result.added === 1 ? "" : "s"} a ${targetLabel}.`,
+    )
+  }
+
   const grouped = tickets
     .map((tier, index) => {
       const tierType = inferInventoryTierType({
@@ -408,6 +442,13 @@ export function UnifiedInventoryPanel({ form, eventId = null }: Props) {
       <CapacityBudgetBar form={form} />
       {typeof form.formState.errors.tickets?.message === "string" ? (
         <FormMessage>{form.formState.errors.tickets.message}</FormMessage>
+      ) : null}
+      {isMultiDay ? (
+        <DayTicketCopyBar
+          days={scheduleDays}
+          tickets={tickets}
+          onDuplicate={duplicateDayTickets}
+        />
       ) : null}
       <div>
         <p className="text-sm font-semibold text-foreground">
@@ -523,6 +564,9 @@ export function UnifiedInventoryPanel({ form, eventId = null }: Props) {
               logicalSectors={hasSeatingPlan ? dropdownSectors : []}
               showSectorSelect={hasSeatingPlan}
               showPhases
+              feePercentage={feePercentage}
+              fixedFee={fixedFee}
+              isSponsored={isSponsored}
             />
           ))
         )}
@@ -559,6 +603,9 @@ export function UnifiedInventoryPanel({ form, eventId = null }: Props) {
               onRemove={() => remove(item.index)}
               capacityLabel="Stock disponible"
               scheduleDays={isMultiDay ? scheduleDays : []}
+              feePercentage={feePercentage}
+              fixedFee={fixedFee}
+              isSponsored={isSponsored}
             />
           ))
         )}
@@ -596,6 +643,9 @@ export function UnifiedInventoryPanel({ form, eventId = null }: Props) {
               onRemove={() => remove(item.index)}
               capacityLabel="Cupo promocional"
               scheduleDays={isMultiDay ? scheduleDays : []}
+              feePercentage={feePercentage}
+              fixedFee={fixedFee}
+              isSponsored={isSponsored}
             />
           ))
         )}
@@ -754,6 +804,115 @@ function InventoryBlock({
   )
 }
 
+function DayTicketCopyBar({
+  days,
+  tickets,
+  onDuplicate,
+}: {
+  days: EventFormValues["basics"]["scheduleDays"]
+  tickets: EventFormValues["tickets"]
+  onDuplicate: (sourceDayId: string, targetDayId: string) => void
+}) {
+  const [sourceId, setSourceId] = useState(days[0]?.id ?? "")
+  const [targetId, setTargetId] = useState(days[1]?.id ?? days[0]?.id ?? "")
+  const uncoveredMessage = scheduleDaysMissingTicketsMessage(days, tickets)
+
+  useEffect(() => {
+    const ids = new Set(days.map((day) => day.id))
+    if (!ids.has(sourceId) && days[0]?.id) setSourceId(days[0].id)
+    if (!ids.has(targetId)) {
+      setTargetId(days.find((day) => day.id !== sourceId)?.id ?? days[0]?.id ?? "")
+    }
+  }, [days, sourceId, targetId])
+
+  const dayItems = days.map((day, index) => ({
+    value: day.id,
+    label: formatInventoryDayOption(day, index),
+  }))
+  const targetItems = dayItems.filter((item) => item.value !== sourceId)
+  const sourceLabel =
+    dayItems.find((item) => item.value === sourceId)?.label ?? "este día"
+
+  if (days.length < 2) return null
+
+  return (
+    <div className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
+      <div>
+        <p className="text-sm font-semibold text-foreground">
+          Duplicar tickets entre días
+        </p>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+          Copiá las tarifas de un día a otro para no cargarlas de nuevo. Los
+          abonos y combos no se duplican.
+        </p>
+      </div>
+      {uncoveredMessage ? (
+        <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
+          {uncoveredMessage}
+        </p>
+      ) : null}
+      <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+        <div className="space-y-1.5">
+          <p className="text-sm font-medium">Desde</p>
+          <Select
+            value={sourceId}
+            onValueChange={(value) => {
+              if (value) setSourceId(value)
+            }}
+            items={dayItems}
+          >
+            <SelectTrigger className="h-11 w-full">
+              <SelectValue placeholder="Día de origen">
+                {dayItems.find((item) => item.value === sourceId)?.label}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {dayItems.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <p className="text-sm font-medium">Hacia</p>
+          <Select
+            value={targetId}
+            onValueChange={(value) => {
+              if (value) setTargetId(value)
+            }}
+            items={targetItems}
+          >
+            <SelectTrigger className="h-11 w-full">
+              <SelectValue placeholder="Día de destino">
+                {targetItems.find((item) => item.value === targetId)?.label}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {targetItems.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-11"
+          disabled={!sourceId || !targetId || sourceId === targetId}
+          onClick={() => onDuplicate(sourceId, targetId)}
+        >
+          <Copy className="size-4" aria-hidden="true" />
+          Duplicar tickets de {sourceLabel}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 function InventoryTicketCard({
   form,
   index,
@@ -768,6 +927,9 @@ function InventoryTicketCard({
   logicalSectors = [],
   showSectorSelect = false,
   showPhases = false,
+  feePercentage = 15,
+  fixedFee = 0,
+  isSponsored = false,
 }: {
   form: UseFormReturn<EventFormValues>
   index: number
@@ -782,6 +944,9 @@ function InventoryTicketCard({
   logicalSectors?: ReturnType<typeof listGeneralLogicalSectors>
   showSectorSelect?: boolean
   showPhases?: boolean
+  feePercentage?: number
+  fixedFee?: number
+  isSponsored?: boolean
 }) {
   return (
     <TicketWalletCard
@@ -791,6 +956,9 @@ function InventoryTicketCard({
       onRemove={onRemove}
       capacityLabel={capacityLabel}
       venueRemaining={venueRemaining}
+      feePercentage={feePercentage}
+      fixedFee={fixedFee}
+      isSponsored={isSponsored}
     >
       <div className="flex flex-wrap items-center gap-2">
         {onEdit ? (
@@ -903,6 +1071,9 @@ function InventoryRow({
                 form.setValue(`tickets.${index}.price`, undefined as unknown as number, {
                   shouldDirty: true,
                 })
+                form.setValue(`tickets.${index}.basePrice`, undefined, {
+                  shouldDirty: true,
+                })
               }
             }}
           >
@@ -914,6 +1085,7 @@ function InventoryRow({
             size="sm"
             onClick={() => {
               form.setValue(`tickets.${index}.price`, 0, { shouldDirty: true })
+              form.setValue(`tickets.${index}.basePrice`, 0, { shouldDirty: true })
             }}
           >
             Gratuita / Cortesía

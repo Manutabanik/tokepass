@@ -20,6 +20,9 @@ function ticket(
   return {
     name: patch.name ?? "Entrada",
     price: patch.price ?? 0,
+    basePrice: patch.basePrice ?? patch.price ?? 0,
+    feeStrategy: patch.feeStrategy ?? "absorb_in_price",
+    calculationMode: patch.calculationMode ?? "public_price",
     capacity: patch.capacity,
     timeLimit: "",
     bonusReward: "",

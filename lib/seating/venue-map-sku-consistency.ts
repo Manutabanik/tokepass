@@ -11,7 +11,9 @@ import {
 export type VenueSkuLayoutType = "general" | "table_combo" | "numbered_seat"
 
 export type VenueMapSkuTicketRef = {
+  id?: string | null
   name?: string | null
+  price?: number | null
   seatingSectorId?: string | null
   seating_sector_id?: string | null
   layoutType?: string | null

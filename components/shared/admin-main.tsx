@@ -21,7 +21,7 @@ export function AdminMain({ children }: { children: ReactNode }) {
 
   if (workspace) {
     return (
-      <main className="flex h-full min-h-0 w-full max-w-full flex-1 flex-col overflow-hidden bg-background text-foreground">
+      <main className="flex h-full min-h-0 w-full max-w-full flex-1 flex-col overflow-x-hidden overflow-y-hidden bg-background text-foreground">
         {children}
       </main>
     )

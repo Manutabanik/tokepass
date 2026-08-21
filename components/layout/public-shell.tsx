@@ -45,14 +45,14 @@ export function PublicShell({
       {checkoutTunnel ? null : navbar}
       <main
         className={cn(
-          "flex min-h-0 w-full flex-1 flex-col",
+          "flex w-full flex-1 flex-col",
           checkoutTunnel
-            ? "overflow-hidden"
+            ? "min-h-0 overflow-hidden"
             : cn(
                 "pt-[calc(4rem+env(safe-area-inset-top)+1rem)]",
                 eventStorefront
-                  ? "pb-0"
-                  : "pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0",
+                  ? "overflow-visible pb-0"
+                  : "min-h-0 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0",
               ),
         )}
       >

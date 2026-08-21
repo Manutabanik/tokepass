@@ -14,6 +14,7 @@ export const APP_ERROR_CODES = [
   "SAVE_FAILED",
   "INVALID_PROMO_PRICE",
   "MISSING_SCHEDULE_DAY",
+  "INCOMPLETE_DAY_TICKETS",
   "FLYER_TOO_LARGE",
   "UNKNOWN",
 ] as const
@@ -153,6 +154,15 @@ export const APP_ERRORS: Record<AppErrorCode, AppError> = {
     code: "MISSING_SCHEDULE_DAY",
     title: "Error en jornadas",
     message: "Falta seleccionar la jornada obligatoria.",
+    field: "tickets",
+    action: { step: 2, label: "Corregir campo", field: "tickets" },
+    retryable: true,
+  },
+  INCOMPLETE_DAY_TICKETS: {
+    code: "INCOMPLETE_DAY_TICKETS",
+    title: "Error en jornadas",
+    message:
+      "Cada jornada necesita al menos una entrada activa. Duplicá las tarifas o creá tickets para las fechas vacías.",
     field: "tickets",
     action: { step: 2, label: "Corregir campo", field: "tickets" },
     retryable: true,

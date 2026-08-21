@@ -90,27 +90,26 @@ export default async function CuentaHomePage() {
               {nextTicket.flyerUrl ? (
                 <Image
                   src={nextTicket.flyerUrl}
-                  alt=""
+                  alt={nextTicket.eventTitle}
                   fill
                   sizes="(max-width: 1024px) 100vw, 640px"
                   className="object-cover transition duration-500 group-hover:scale-[1.03]"
                 />
               ) : (
-                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/20 via-background to-violet-500/20" />
+                <div className="absolute inset-0 bg-muted" />
               )}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
-              <div className="absolute inset-x-0 bottom-0 p-5 text-white">
-                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300">
-                  Próximo evento
-                </p>
-                <h2 className="mt-1 line-clamp-2 text-xl font-extrabold tracking-tight">
-                  {nextTicket.eventTitle}
-                </h2>
-                <p className="mt-1 text-sm text-white/80">
-                  {formatEventDay(nextTicket.eventDate)} ·{" "}
-                  {formatEventTime(nextTicket.eventDate)}
-                </p>
-              </div>
+            </div>
+            <div className="space-y-1 px-5 pt-4">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400">
+                Próximo evento
+              </p>
+              <h2 className="line-clamp-2 text-xl font-extrabold tracking-tight text-foreground">
+                {nextTicket.eventTitle}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {formatEventDay(nextTicket.eventDate)} ·{" "}
+                {formatEventTime(nextTicket.eventDate)}
+              </p>
             </div>
             <div className="flex items-center justify-between gap-3 px-5 py-3.5">
               <p className="text-sm text-muted-foreground">

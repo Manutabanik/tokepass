@@ -70,13 +70,39 @@ function seat(
   return { id, number, x, y, status: "available" }
 }
 
+function mergePreservedSeatFields(
+  next: VenueMapElementSeat[],
+  previous: VenueMapElementSeat[] | undefined,
+): VenueMapElementSeat[] {
+  if (!previous || previous.length === 0) return next
+  const byId = new Map(previous.map((item) => [item.id, item]))
+  const byNumber = new Map(previous.map((item) => [item.number, item]))
+  return next.map((seat) => {
+    const old = byId.get(seat.id) ?? byNumber.get(seat.number)
+    if (!old) return seat
+    return {
+      ...seat,
+      status: old.status,
+      ...(old.label ? { label: old.label } : {}),
+      ...(old.customLabel ? { customLabel: old.customLabel } : {}),
+      ...(old.ticketTypeId ? { ticketTypeId: old.ticketTypeId } : {}),
+      ...(old.row ? { row: old.row } : {}),
+      ...(old.price != null ? { price: old.price } : {}),
+      ...(old.rotation != null ? { rotation: old.rotation } : {}),
+    }
+  })
+}
+
 export function rebuildElementSeats(element: VenueMapElement): VenueMapElementSeat[] {
   const prefix = element.id
   if (element.type === "infrastructure" || element.type === "standing_zone") {
     return []
   }
   if (element.type === "vip_chair") {
-    return [seat(`${prefix}-S1`, 1, element.x, element.y)]
+    return mergePreservedSeatFields(
+      [seat(`${prefix}-S1`, 1, element.x, element.y)],
+      element.seats,
+    )
   }
   if (element.type === "round_table") {
     const count = Math.min(12, Math.max(2, Math.floor(element.chairCount) || 8))
@@ -97,7 +123,7 @@ export function rebuildElementSeats(element: VenueMapElement): VenueMapElementSe
         ),
       )
     }
-    return seats
+    return mergePreservedSeatFields(seats, element.seats)
   }
   if (element.type === "long_table") {
     const sideA = Math.min(12, Math.max(1, Math.floor(element.sideA) || 4))
@@ -132,7 +158,7 @@ export function rebuildElementSeats(element: VenueMapElement): VenueMapElementSe
       seats.push(seat(`${prefix}-S${number}`, number, local.x, local.y))
       number += 1
     }
-    return seats
+    return mergePreservedSeatFields(seats, element.seats)
   }
   if (element.type === "vip_box") {
     const count = Math.min(12, Math.max(2, Math.floor(element.chairCount) || 6))
@@ -150,7 +176,7 @@ export function rebuildElementSeats(element: VenueMapElement): VenueMapElementSe
       )
       seats.push(seat(`${prefix}-S${index + 1}`, index + 1, local.x, local.y))
     }
-    return seats
+    return mergePreservedSeatFields(seats, element.seats)
   }
   return []
 }
@@ -267,15 +293,23 @@ export function cloneVenueElement(
     y: element.y + offset,
     seats: [],
   }
-  copy.seats = rebuildElementSeats(copy)
+  copy.seats = rebuildElementSeats({ ...copy, seats: element.seats })
   return copy
 }
 
-export function elementSeatLabel(element: VenueMapElement, number: number): string {
-  if (element.type === "round_table") return `${element.label} - Silla ${number}`
-  if (element.type === "long_table") return `${element.label} - Asiento ${number}`
-  if (element.type === "vip_box") return `${element.label} - Lugar ${number}`
-  return `${element.label}`
+export function elementSeatLabel(
+  element: VenueMapElement,
+  number: number,
+  seat?: VenueMapElementSeat,
+): string {
+  const customSeat = seat?.customLabel?.trim() || seat?.label?.trim()
+  if (customSeat) return customSeat
+  const tableName = element.customLabel?.trim() || element.label
+  if (element.type === "vip_chair") return tableName
+  if (element.type === "round_table") return `${tableName} - Silla ${number}`
+  if (element.type === "long_table") return `${tableName} - Asiento ${number}`
+  if (element.type === "vip_box") return `${tableName} - Lugar ${number}`
+  return tableName
 }
 
 export function formatVenuePriceArs(value: number): string {

@@ -13,12 +13,18 @@ import {
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { PriceInput } from "@/components/ui/price-input"
+import { formatCurrency } from "@/lib/format"
 import { ticketDisplayBadge } from "@/lib/inventory/aforo-balance"
 import {
   asPositiveInt,
   parseStrictInt,
 } from "@/lib/inventory/capacity-budget"
 import { inferInventoryTierType } from "@/lib/inventory/unified-inventory"
+import {
+  calculateTierPricing,
+  type TicketCalculationMode,
+  type TicketFeeStrategy,
+} from "@/lib/pricing/flexible-pricing"
 import type { EventFormValues } from "@/lib/validations/event-form"
 import { cn } from "@/lib/utils"
 
@@ -99,6 +105,232 @@ function StockStepper({
   )
 }
 
+function TierPricingSimulator({
+  form,
+  index,
+  feePercentage,
+  fixedFee,
+  isSponsored,
+}: {
+  form: UseFormReturn<EventFormValues>
+  index: number
+  feePercentage: number
+  fixedFee: number
+  isSponsored: boolean
+}) {
+  const price = form.watch(`tickets.${index}.price`)
+  const basePrice = form.watch(`tickets.${index}.basePrice`)
+  const feeStrategy =
+    form.watch(`tickets.${index}.feeStrategy`) ?? "absorb_in_price"
+  const calculationMode =
+    form.watch(`tickets.${index}.calculationMode`) ?? "public_price"
+
+  const inputValue =
+    calculationMode === "net_income"
+      ? Number(basePrice ?? price) || 0
+      : Number(price) || 0
+
+  const calculation = calculateTierPricing({
+    inputValue,
+    feePercentage,
+    fixedFee,
+    feeStrategy,
+    calculationMode,
+    sponsored: isSponsored,
+  })
+
+  function applyCalculation(
+    nextStrategy: TicketFeeStrategy,
+    nextMode: TicketCalculationMode,
+    nextInput: number | undefined,
+  ) {
+    const calc = calculateTierPricing({
+      inputValue: nextInput ?? 0,
+      feePercentage,
+      fixedFee,
+      feeStrategy: nextStrategy,
+      calculationMode: nextMode,
+      sponsored: isSponsored,
+    })
+    form.setValue(`tickets.${index}.feeStrategy`, nextStrategy, {
+      shouldDirty: true,
+    })
+    form.setValue(`tickets.${index}.calculationMode`, nextMode, {
+      shouldDirty: true,
+    })
+    form.setValue(`tickets.${index}.price`, calc.publicPrice, {
+      shouldDirty: true,
+      shouldValidate: true,
+    })
+    form.setValue(`tickets.${index}.basePrice`, calc.organizerNet, {
+      shouldDirty: true,
+    })
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <p className="font-mono text-[10px] tracking-wider text-muted-foreground uppercase">
+          Cobro de comision TokePass ({isSponsored ? 0 : feePercentage}%)
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() =>
+              applyCalculation(
+                "pass_to_customer",
+                calculationMode,
+                calculationMode === "net_income"
+                  ? calculation.organizerNet
+                  : calculation.publicPrice,
+              )
+            }
+            className={cn(
+              "rounded-xl border p-3 text-left text-xs font-medium transition-all",
+              feeStrategy === "pass_to_customer"
+                ? "border-primary bg-primary/10 font-bold text-foreground"
+                : "border-border text-muted-foreground",
+            )}
+          >
+            <span className="block font-semibold">Sumar al cliente</span>
+            <span className="text-[10px] font-normal text-muted-foreground">
+              Transparente. El cargo se refleja en el precio publico.
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              applyCalculation(
+                "absorb_in_price",
+                calculationMode,
+                calculationMode === "net_income"
+                  ? calculation.organizerNet
+                  : calculation.publicPrice,
+              )
+            }
+            className={cn(
+              "rounded-xl border p-3 text-left text-xs font-medium transition-all",
+              feeStrategy === "absorb_in_price"
+                ? "border-primary bg-primary/10 font-bold text-foreground"
+                : "border-border text-muted-foreground",
+            )}
+          >
+            <span className="block font-semibold">Absorber en el precio</span>
+            <span className="text-[10px] font-normal text-muted-foreground">
+              Precio redondo al publico. La comision se descuenta.
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={() =>
+            applyCalculation(
+              feeStrategy,
+              "net_income",
+              calculation.organizerNet,
+            )
+          }
+          className={cn(
+            "rounded-lg border px-3 py-2 text-xs font-semibold transition-all",
+            calculationMode === "net_income"
+              ? "border-primary bg-primary/10 text-foreground"
+              : "border-border text-muted-foreground",
+          )}
+        >
+          Quiero ganar
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            applyCalculation(
+              feeStrategy,
+              "public_price",
+              calculation.publicPrice,
+            )
+          }
+          className={cn(
+            "rounded-lg border px-3 py-2 text-xs font-semibold transition-all",
+            calculationMode === "public_price"
+              ? "border-primary bg-primary/10 text-foreground"
+              : "border-border text-muted-foreground",
+          )}
+        >
+          Precio publico
+        </button>
+      </div>
+
+      <FormField
+        control={form.control}
+        name={
+          calculationMode === "net_income"
+            ? `tickets.${index}.basePrice`
+            : `tickets.${index}.price`
+        }
+        render={({ field, fieldState }) => (
+          <FormItem>
+            <FormLabel className="font-mono text-[10px] tracking-wider text-muted-foreground uppercase">
+              {calculationMode === "net_income"
+                ? "Ganancia neta ($)"
+                : "Precio publico ($)"}
+            </FormLabel>
+            <PriceInput
+              name={field.name}
+              aria-invalid={Boolean(fieldState.error)}
+              value={field.value}
+              onValueChange={(value) => {
+                applyCalculation(feeStrategy, calculationMode, value)
+              }}
+              placeholder="0"
+              allowEmpty
+              className="h-11 font-semibold tabular-nums"
+            />
+            <FormMessage>{fieldState.error?.message}</FormMessage>
+          </FormItem>
+        )}
+      />
+      {calculationMode === "net_income" ? (
+        <FormField
+          control={form.control}
+          name={`tickets.${index}.price`}
+          render={({ fieldState }) => (
+            <FormMessage>{fieldState.error?.message}</FormMessage>
+          )}
+        />
+      ) : null}
+
+      <div className="space-y-2 rounded-xl border border-border/60 bg-muted/30 p-4 text-xs">
+        <div className="flex items-center justify-between text-muted-foreground">
+          <span>Ganancia neta para tu cuenta:</span>
+          <span className="font-bold text-foreground tabular-nums">
+            {formatCurrency(calculation.organizerNet)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between text-muted-foreground">
+          <span>
+            Comision TokePass ({isSponsored ? 0 : feePercentage}%
+            {fixedFee > 0 && !isSponsored
+              ? ` + ${formatCurrency(fixedFee)}`
+              : ""}
+            ):
+          </span>
+          <span className="font-semibold text-foreground tabular-nums">
+            {formatCurrency(calculation.serviceFee)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between border-t border-border pt-2 text-sm font-black text-primary">
+          <span>Precio final de venta:</span>
+          <span className="tabular-nums">
+            {formatCurrency(calculation.publicPrice)}
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function TicketWalletCard({
   form,
   index,
@@ -106,6 +338,9 @@ export function TicketWalletCard({
   onRemove,
   capacityLabel = "Cupo / Stock",
   venueRemaining,
+  feePercentage = 15,
+  fixedFee = 0,
+  isSponsored = false,
   children,
 }: {
   form: UseFormReturn<EventFormValues>
@@ -114,6 +349,9 @@ export function TicketWalletCard({
   onRemove: () => void
   capacityLabel?: string
   venueRemaining?: number
+  feePercentage?: number
+  fixedFee?: number
+  isSponsored?: boolean
   children?: ReactNode
 }) {
   const name = form.watch(`tickets.${index}.name`)
@@ -227,28 +465,15 @@ export function TicketWalletCard({
           )}
         />
 
-        <div className="grid grid-cols-2 gap-3">
-          <FormField
-            control={form.control}
-            name={`tickets.${index}.price`}
-            render={({ field, fieldState }) => (
-              <FormItem>
-                <FormLabel className="font-mono text-[10px] tracking-wider text-muted-foreground uppercase">
-                  Precio ($)
-                </FormLabel>
-                <PriceInput
-                  name={`tickets.${index}.price`}
-                  aria-invalid={Boolean(fieldState.error)}
-                  value={field.value}
-                  onValueChange={(value) => field.onChange(value ?? undefined)}
-                  placeholder="0"
-                  allowEmpty
-                  className="h-11 font-semibold tabular-nums"
-                />
-                <FormMessage>{fieldState.error?.message}</FormMessage>
-              </FormItem>
-            )}
-          />
+        <TierPricingSimulator
+          form={form}
+          index={index}
+          feePercentage={feePercentage}
+          fixedFee={fixedFee}
+          isSponsored={isSponsored}
+        />
+
+        <div className="grid grid-cols-1 gap-3">
           <FormField
             control={form.control}
             name={`tickets.${index}.capacity`}

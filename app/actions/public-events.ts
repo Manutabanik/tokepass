@@ -332,12 +332,18 @@ const EVENT_LIST_SELECT =
   "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location, capacity), ticket_tiers(price, capacity, sold, visibility), profiles!events_organizer_id_fkey(full_name)"
 
 const EVENT_ARTISTS_EMBED =
+  "event_artists(artist_id, artists(id, name, image_url, spotify_id))"
+const EVENT_ARTISTS_EMBED_BASIC =
   "event_artists(artist_id, artists(id, name, image_url))"
 const EVENT_ARTISTS_INNER_EMBED =
+  "event_artists!inner(artist_id, artists(id, name, image_url, spotify_id))"
+const EVENT_ARTISTS_INNER_EMBED_BASIC =
   "event_artists!inner(artist_id, artists(id, name, image_url))"
 const EVENT_LIST_SELECT_WITH_LINEUP = `${EVENT_LIST_SELECT}, lineup`
 const EVENT_LIST_SELECT_WITH_ARTISTS = `${EVENT_LIST_SELECT_WITH_LINEUP}, ${EVENT_ARTISTS_EMBED}`
+const EVENT_LIST_SELECT_WITH_ARTISTS_BASIC = `${EVENT_LIST_SELECT_WITH_LINEUP}, ${EVENT_ARTISTS_EMBED_BASIC}`
 const EVENT_LIST_SELECT_BY_ARTIST = `${EVENT_LIST_SELECT_WITH_LINEUP}, ${EVENT_ARTISTS_INNER_EMBED}`
+const EVENT_LIST_SELECT_BY_ARTIST_BASIC = `${EVENT_LIST_SELECT_WITH_LINEUP}, ${EVENT_ARTISTS_INNER_EMBED_BASIC}`
 
 function resolveCatalogLimit(limit?: number) {
   const requested = limit ?? CATALOG_PAGE_SIZE
@@ -404,8 +410,16 @@ export async function getPublishedEvents(
   const orFilter = needle ? buildCatalogSearchOr(needle, artistEventIds) : null
 
   const selects = filterByArtist
-    ? [EVENT_LIST_SELECT_BY_ARTIST, EVENT_LIST_SELECT_WITH_LINEUP]
-    : [EVENT_LIST_SELECT_WITH_ARTISTS, EVENT_LIST_SELECT_WITH_LINEUP]
+    ? [
+        EVENT_LIST_SELECT_BY_ARTIST,
+        EVENT_LIST_SELECT_BY_ARTIST_BASIC,
+        EVENT_LIST_SELECT_WITH_LINEUP,
+      ]
+    : [
+        EVENT_LIST_SELECT_WITH_ARTISTS,
+        EVENT_LIST_SELECT_WITH_ARTISTS_BASIC,
+        EVENT_LIST_SELECT_WITH_LINEUP,
+      ]
 
   for (const [index, select] of selects.entries()) {
     const usingArtistJoin = select.includes("event_artists")
@@ -591,16 +605,37 @@ export async function getFeaturedEvents(options?: {
 }): Promise<FeaturedRotationResult<CatalogEvent>> {
   const supabase = createPublicClient()
   const province = options?.province?.trim().toLowerCase() ?? ""
+  const selects = [
+    EVENT_LIST_SELECT_WITH_ARTISTS,
+    EVENT_LIST_SELECT_WITH_ARTISTS_BASIC,
+    EVENT_LIST_SELECT_WITH_LINEUP,
+    EVENT_LIST_SELECT,
+  ]
 
-  const { data, error } = await supabase
-    .from("events")
-    .select(
-      "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location, capacity), ticket_tiers(price, capacity, sold, visibility), profiles!events_organizer_id_fkey(full_name)",
-    )
-    .eq("status", "published")
-    .eq("visibility", "public")
-    .gte("date", startOfTodayIso())
-    .or("is_sponsored_by_tokepass.eq.true,is_featured.eq.true")
+  let data: unknown[] | null = null
+  let error: { message?: string } | null = null
+
+  for (const select of selects) {
+    const result = await supabase
+      .from("events")
+      .select(select)
+      .eq("status", "published")
+      .eq("visibility", "public")
+      .gte("date", startOfTodayIso())
+      .or("is_sponsored_by_tokepass.eq.true,is_featured.eq.true")
+
+    if (!result.error) {
+      data = result.data
+      error = null
+      break
+    }
+
+    error = result.error
+    const retryable =
+      isMissingArtistSchema(result.error.message) ||
+      /lineup|schema cache|PGRST204|42703/i.test(result.error.message)
+    if (!retryable) break
+  }
 
   if (error) {
     logger.error({

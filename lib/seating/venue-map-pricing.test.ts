@@ -252,6 +252,8 @@ describe("venue-map-pricing", () => {
     const created = next.find((tier) => tier.seatingSectorId === "zone-viva")
     assert.equal(created?.id, undefined)
     assert.equal(created?.isNew, true)
+    assert.equal(created?.tierType, "general")
+    assert.equal(created?.layoutType, "general")
   })
 
   it("canoniza mesa group a table_combo y per_seat a numbered_seat", () => {
@@ -460,6 +462,42 @@ describe("venue-map-pricing", () => {
         seatingSectorId: "platea",
         sectors: [{ id: "platea", type: "numbered" }],
       }),
+      true,
+    )
+    const emptyReserved = emptyVenueMap()
+    emptyReserved.zones = [
+      {
+        id: "campo",
+        name: "Campo",
+        color: "#22d3ee",
+        price: 8000,
+        polygon: [
+          { x: 0, y: 0 },
+          { x: 10, y: 0 },
+          { x: 10, y: 10 },
+        ],
+        layoutType: "table_combo",
+        seatingType: "RESERVED",
+        sellMode: "group",
+        rows: 4,
+        itemsPerRow: 10,
+        capacityPerUnit: 8,
+        capacity: 40,
+        labelPrefix: "Mesa ",
+      },
+    ]
+    assert.equal(
+      sectorUsesNumberedMap({
+        seatingSectorId: "campo",
+        layoutType: "table_combo",
+        map: emptyReserved,
+      }),
+      false,
+    )
+    assert.equal(
+      eventNeedsInteractiveCanvas(emptyReserved, [
+        { seatingSectorId: "campo", layoutType: "general", tierType: "general" },
+      ]),
       true,
     )
   })

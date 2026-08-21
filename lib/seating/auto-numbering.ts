@@ -43,7 +43,7 @@ function applySeatNumber(
   label: string,
   sequence: number,
 ): VenueMapElement {
-  return {
+  const next: VenueMapElement = {
     ...element,
     label,
     seats: element.seats.map((seat, seatIndex) =>
@@ -52,6 +52,8 @@ function applySeatNumber(
         : seat,
     ),
   }
+  delete next.customLabel
+  return next
 }
 
 export function sortElementsForNumbering(
@@ -270,7 +272,7 @@ export function applyLabelOverride(
   if (!nextLabel) return elements
   return elements.map((element) =>
     element.id === id
-      ? { ...element, label: nextLabel, labelLocked: true }
+      ? { ...element, label: nextLabel, customLabel: nextLabel, labelLocked: true }
       : element,
   )
 }

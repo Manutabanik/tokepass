@@ -40,7 +40,7 @@ export function ImmersiveCheckoutShell({
             aria-label="Volver a la selección"
             onClick={onDismissPay}
             className={cn(
-              "absolute inset-0 z-20 bg-black/40 transition-opacity duration-300 ease-in-out",
+              "absolute inset-0 z-20 bg-black/80 backdrop-blur-md transition-opacity duration-500 ease-in-out",
               paying ? "opacity-100" : "pointer-events-none opacity-0",
             )}
           />

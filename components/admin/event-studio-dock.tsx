@@ -43,7 +43,7 @@ export function EventStudioDock({
           className="min-h-11 text-base md:text-sm"
         >
           {submitting ? <LoaderCircle className="animate-spin" /> : <Save />}
-          {submitting ? "Guardando..." : "Guardar"}
+          {submitting ? "Guardando..." : "Guardar borrador"}
         </Button>
         {!isLast ? (
           <Button

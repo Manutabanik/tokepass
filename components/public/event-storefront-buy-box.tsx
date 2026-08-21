@@ -3,6 +3,7 @@
 import { Calendar, Lock, MapPin } from "lucide-react"
 
 import { TokepassGuaranteeBadge } from "@/components/shared/tokepass-guarantee-badge"
+import { Button } from "@/components/ui/button"
 import { formatTicketPrice } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
@@ -22,7 +23,7 @@ export function EventStorefrontBuyBox({
   return (
     <div
       className={cn(
-        "hidden w-full flex-col self-start rounded-2xl border border-border/50 bg-card/70 p-6 shadow-2xl backdrop-blur-xl lg:sticky lg:top-24 lg:flex",
+        "flex w-full flex-col rounded-2xl border border-black/5 bg-white/60 p-6 shadow-xl backdrop-blur-2xl dark:border-white/10 dark:bg-black/40 dark:shadow-2xl",
       )}
     >
       <div className="mb-5">
@@ -70,18 +71,17 @@ export function EventStorefrontBuyBox({
         ) : null}
       </ul>
 
-      <button
+      <Button
         type="button"
+        size="storefront"
         onClick={onAcquire}
         className={cn(
-          "mt-6 w-full rounded-xl bg-primary py-4 text-center text-lg font-bold text-primary-foreground",
-          "shadow-[0_0_20px_color-mix(in_srgb,var(--primary)_30%,transparent)]",
-          "transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary/90",
-          "hover:shadow-[0_0_30px_color-mix(in_srgb,var(--primary)_50%,transparent)]",
+          "mt-6 h-14 w-full rounded-xl bg-emerald-500 text-lg text-slate-950",
+          "shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:bg-emerald-400",
         )}
       >
         Adquirir Entradas
-      </button>
+      </Button>
 
       <div className="mt-4 flex flex-col items-center gap-2">
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">

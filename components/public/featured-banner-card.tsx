@@ -1,91 +1,115 @@
 import Image from "next/image"
 import Link from "next/link"
-import { Calendar, MapPin, Sparkles, Ticket } from "lucide-react"
+import { Calendar, MapPin, Ticket } from "lucide-react"
 
 import type { CatalogEvent } from "@/app/actions/public-events"
-import { TokepassGuaranteeBadge } from "@/components/shared/tokepass-guarantee-badge"
-import { Button } from "@/components/ui/button"
-import { eventCityLabel } from "@/lib/discovery-filters"
-import { formatDiscoveryDateTime } from "@/lib/format"
+import {
+  EventLineupTeaser,
+  EventTypePills,
+} from "@/components/discovery/event-lineup-teaser"
+import { BackgroundGradient } from "@/components/ui/background-gradient"
+import type { DiscoveryCategory } from "@/lib/discovery-categories"
+import {
+  eventCardLocationLabel,
+  eventCategoryLabel,
+  eventSecondaryBadge,
+} from "@/lib/discovery-filters"
+import { formatDiscoveryDateTime, formatTicketPrice } from "@/lib/format"
 import { publicEventPath } from "@/lib/seo/site"
 import { cn } from "@/lib/utils"
 
 export type FeaturedBannerCardProps = {
   event: CatalogEvent
   priority?: boolean
+  categories?: DiscoveryCategory[]
 }
 
 export function FeaturedBannerCard({
   event,
   priority = false,
+  categories,
 }: FeaturedBannerCardProps) {
   const coverUrl = event.imageUrl
-  const place = event.venueName ?? event.location
-  const city = eventCityLabel(event)
   const href = publicEventPath(event)
-  const locationLabel =
-    city && city !== place ? `${place} · ${city}` : place
+  const locationLabel = eventCardLocationLabel(event)
+  const category = eventCategoryLabel(event, categories)
+  const genre = eventSecondaryBadge(event)
 
   return (
-    <article
-      className={cn(
-        "relative mx-auto flex w-full max-w-7xl flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-xl",
-        "md:flex-row md:items-stretch",
-      )}
+    <BackgroundGradient
+      variant="featured"
+      containerClassName="w-full overflow-visible bg-transparent"
     >
-      <div className="relative order-1 aspect-[4/3] w-full overflow-hidden md:order-2 md:aspect-[4/3] md:w-1/2 lg:w-7/12">
-        {coverUrl ? (
-          <Image
-            src={coverUrl}
-            alt={event.title}
-            fill
-            priority={priority}
-            sizes="(max-width: 768px) 100vw, 58vw"
-            className="object-cover object-center"
-          />
-        ) : (
-          <div
-            className="absolute inset-0 bg-gradient-to-br from-emerald-950 via-card to-zinc-900"
-            aria-hidden
-          />
+      <article
+        className={cn(
+          "relative z-10 mx-auto flex w-[min(100%-2rem,80rem)] cursor-pointer flex-col overflow-hidden rounded-3xl border border-border/30 bg-background",
+          "md:flex-row md:items-stretch",
         )}
-      </div>
-
-      <div className="order-2 flex w-full flex-col justify-center space-y-4 bg-card p-5 dark:bg-card md:order-1 md:w-1/2 md:space-y-6 md:p-8 lg:w-5/12 lg:p-10">
-        <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-bold tracking-wider text-emerald-500 uppercase">
-          <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-          Destacado
-        </span>
-
-        <h2 className="line-clamp-2 break-words text-2xl font-black tracking-tight text-foreground dark:text-white md:text-3xl lg:text-4xl">
-          <Link href={href} className="hover:underline">
-            {event.title}
-          </Link>
-        </h2>
-
-        <div className="flex flex-col gap-2">
-          <p className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-            <Calendar className="size-4 shrink-0 text-emerald-500" aria-hidden="true" />
-            <span>{formatDiscoveryDateTime(event.date)}</span>
-          </p>
-          <p className="inline-flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
-            <MapPin className="size-4 shrink-0 text-emerald-500" aria-hidden="true" />
-            <span className="truncate">{locationLabel}</span>
-          </p>
+      >
+        <div className="relative order-1 aspect-[4/3] w-full overflow-hidden bg-muted md:order-2 md:aspect-[4/3] md:w-1/2 lg:w-7/12">
+          {coverUrl ? (
+            <Image
+              src={coverUrl}
+              alt={event.title}
+              fill
+              priority={priority}
+              sizes="(max-width: 768px) 100vw, 58vw"
+              className="object-cover object-center transition-transform duration-500 group-hover:scale-105"
+            />
+          ) : (
+            <div
+              className="absolute inset-0 bg-muted"
+              aria-hidden
+            />
+          )}
         </div>
 
-        <TokepassGuaranteeBadge variant="full" />
+        <div className="order-2 flex w-full flex-col justify-between bg-background p-5 md:order-1 md:w-1/2 md:p-8 lg:w-5/12 lg:p-10">
+          <div className="flex flex-col gap-4 md:gap-5">
+            <EventTypePills featured category={category} genre={genre} />
 
-        <Button
-          size="lg"
-          className="h-auto w-full rounded-2xl bg-emerald-500 py-6 font-extrabold text-black shadow-lg hover:bg-emerald-400 md:w-auto"
-          nativeButton={false}
-          render={<Link href={href} />}
-        >
-          Conseguí tus entradas
-          <Ticket className="ml-2 h-5 w-5" aria-hidden="true" />
-        </Button>
-      </div>
-    </article>
+            <h2 className="line-clamp-2 break-words text-2xl font-black tracking-tight text-foreground transition-colors group-hover:text-primary md:text-3xl lg:text-4xl">
+              <Link
+                href={href}
+                className="before:absolute before:inset-0 before:z-10 focus:outline-none focus-visible:before:ring-2 focus-visible:before:ring-primary/40"
+              >
+                {event.title}
+              </Link>
+            </h2>
+
+            <EventLineupTeaser artists={event.artists} />
+
+            <div className="flex flex-col gap-2">
+              <p className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-500/90">
+                <Calendar className="size-4 shrink-0" aria-hidden="true" />
+                <span>{formatDiscoveryDateTime(event.date)}</span>
+              </p>
+              <p className="inline-flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+                <MapPin className="size-4 shrink-0 text-emerald-500" aria-hidden="true" />
+                <span className="truncate">{locationLabel}</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="relative z-0 mt-6 flex items-end justify-between gap-3 border-t border-border/20 pt-6">
+            <div className="min-w-0">
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Desde
+              </span>
+              <span className="mt-0.5 block whitespace-nowrap text-lg font-black text-foreground sm:text-xl">
+                {event.startingPrice != null
+                  ? formatTicketPrice(event.startingPrice)
+                  : "Ver precios"}
+              </span>
+            </div>
+
+            <span className="inline-flex shrink-0 items-center justify-center rounded-2xl bg-emerald-500 px-6 py-3 text-sm font-extrabold text-slate-950 transition-all group-hover:bg-emerald-400">
+              Conseguí tus entradas
+              <Ticket className="ml-2 size-4" aria-hidden="true" />
+            </span>
+          </div>
+        </div>
+      </article>
+    </BackgroundGradient>
   )
 }

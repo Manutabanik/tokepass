@@ -26,6 +26,10 @@ import {
 } from "@/lib/artists"
 import { parseEventLineup } from "@/lib/event-lineup"
 import {
+  persistTicketDayId,
+  scheduleDaysMissingTicketsMessage,
+} from "@/lib/inventory/day-ticket-coverage"
+import {
   isMultiDaySchedule,
   normalizeScheduleDaysFromForm,
   parseDateTimeLocal,
@@ -55,6 +59,10 @@ import {
   ticketCategoryForInventory,
 } from "@/lib/inventory/unified-inventory"
 import { allInBreakdown } from "@/lib/pricing/all-in"
+import {
+  calculateTierPricing,
+  inferTicketFeeStrategy,
+} from "@/lib/pricing/flexible-pricing"
 import {
   defaultEventFeeConfig,
   eventFeeRate,
@@ -448,12 +456,21 @@ function mapEventFormToRpcPayload(
     zones,
     tiers: data.tickets.map((tier) => {
       // Form `price` is the public All-In price. Split uses event fee config.
-      const dayId = !data.basics.isMultiDay
-        ? null
-        : remapBoundDayId(
-            asUuidOrNull(tier.dayId, ["all"]),
-            scheduleDays.map((day) => day.id),
-          )
+      const dayId = persistTicketDayId(
+        {
+          dayId: asUuidOrNull(tier.dayId, ["all"]),
+          name: tier.name,
+          visibility: tier.visibility,
+          tierType: tier.tierType,
+          layoutType: tier.layoutType,
+          bundleType: tier.bundleType,
+          bundleItems: tier.bundleItems,
+        },
+        {
+          isMultiDay: Boolean(data.basics.isMultiDay),
+          validDayIds: scheduleDays.map((day) => day.id),
+        },
+      )
       const tierType = inferInventoryTierType({
         tierType: tier.tierType,
         layoutType: tier.layoutType,
@@ -484,11 +501,32 @@ function mapEventFormToRpcPayload(
               rule: bundleRule,
             })
           : tier.price
-      const breakdown = allInBreakdown(
-        computedSale,
-        eventFeeRate(feeConfig),
-        eventFixedFee(feeConfig),
-      )
+      const rate = eventFeeRate(feeConfig)
+      const fixed = eventFixedFee(feeConfig)
+      const breakdown =
+        bundleRule != null
+          ? allInBreakdown(computedSale, rate, fixed)
+          : (() => {
+              const mode = tier.calculationMode ?? "public_price"
+              const strategy = tier.feeStrategy ?? "absorb_in_price"
+              const inputValue =
+                mode === "net_income"
+                  ? Number(tier.basePrice ?? computedSale) || 0
+                  : Number(computedSale) || 0
+              const calc = calculateTierPricing({
+                inputValue,
+                feePercentage: feeConfig.platformFeePercentage,
+                fixedFee: fixed,
+                feeStrategy: strategy,
+                calculationMode: mode,
+                sponsored: feeConfig.isSponsoredByTokePass,
+              })
+              return {
+                basePrice: calc.organizerNet,
+                platformFee: calc.serviceFee,
+                publicPrice: calc.publicPrice,
+              }
+            })()
       const layoutType = layoutTypeForInventory(tierType, tier.layoutType)
       const requestedSectorId = data.basics.hasSeatingPlan
         ? tier.seatingSectorId?.trim() || null
@@ -1946,7 +1984,7 @@ export async function getEventForEditing(
     const reader = isSuperAdmin ? createAdminClient() : supabase
 
     const eventSelectWithAgenda =
-      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, has_schedule, max_tickets_per_user, updated_at"
+      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, has_schedule, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, is_sponsored_by_tokepass, updated_at"
     const eventSelectWithPicker =
       "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, max_tickets_per_user, updated_at"
     const eventSelectWithPlace =
@@ -2098,10 +2136,31 @@ export async function getEventForEditing(
         ? null
         : Number(venue.longitude)
 
+    const ticketFeePercentage = Number(
+      (event as { platform_fee_percentage?: number | null })
+        .platform_fee_percentage ?? 15,
+    )
+    const ticketFixedFee = Number(
+      (event as { platform_fixed_fee?: number | null }).platform_fixed_fee ?? 0,
+    )
+    const ticketSponsored = Boolean(
+      (event as { is_sponsored_by_tokepass?: boolean | null })
+        .is_sponsored_by_tokepass,
+    )
+
     const ticketValues: EventFormValues["tickets"] = (tiers ?? []).map((tier) => ({
       id: tier.id,
       name: String(tier.name ?? "Entrada"),
       price: Number(tier.price) || 0,
+      basePrice: Number(tier.base_price) || 0,
+      feeStrategy: inferTicketFeeStrategy({
+        publicPrice: Number(tier.price) || 0,
+        organizerNet: Number(tier.base_price) || 0,
+        feePercentage: ticketFeePercentage,
+        fixedFee: ticketFixedFee,
+        sponsored: ticketSponsored,
+      }),
+      calculationMode: "public_price",
       capacity: Math.max(1, Number(tier.capacity) || 1),
       sold: Math.max(0, Number(tier.sold) || 0),
       timeLimit: tier.time_limit ?? "",
@@ -2961,7 +3020,7 @@ export async function publishEvent(
   const { data: event, error: eventError } = await reader
     .from("events")
     .select(
-      "id, organizer_id, status, date, location, venue_id, venues(id, name, location)",
+      "id, organizer_id, status, date, location, venue_id, schedule_days, venues(id, name, location)",
     )
     .eq("id", eventId)
     .maybeSingle()
@@ -3012,7 +3071,7 @@ export async function publishEvent(
 
   const { data: tiers, error: tiersError } = await mutationClient
     .from("ticket_tiers")
-    .select("id, name, price, capacity")
+    .select("id, name, price, capacity, day_id, visibility, tier_type, bundle_type")
     .eq("event_id", eventId)
 
   if (tiersError) {
@@ -3022,6 +3081,21 @@ export async function publishEvent(
   const sellable = (tiers ?? []).filter((tier) => Number(tier.capacity) > 0)
   if (sellable.length === 0) {
     return persistFailure({ code: "MISSING_TICKETS" })
+  }
+
+  const uncoveredDays = scheduleDaysMissingTicketsMessage(
+    parseScheduleDays((event as { schedule_days?: unknown }).schedule_days),
+    (tiers ?? []).map((tier) => ({
+      name: tier.name,
+      dayId: tier.day_id,
+      visibility: tier.visibility,
+      capacity: tier.capacity,
+      tierType: tier.tier_type,
+      bundleType: tier.bundle_type,
+    })),
+  )
+  if (uncoveredDays) {
+    return persistFailure({ code: "INCOMPLETE_DAY_TICKETS" })
   }
 
   let purgedTestTickets = 0

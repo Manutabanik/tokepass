@@ -27,7 +27,12 @@ describe("discovery artists", () => {
       eventArtists: [
         {
           artist_id: "a1",
-          artists: { id: "a1", name: "Nathy Peluso", image_url: "https://cdn/n.jpg" },
+          artists: {
+            id: "a1",
+            name: "Nathy Peluso",
+            image_url: "https://cdn/n.jpg",
+            spotify_id: "0eHQ9o50hj6ZXyrqmx1rJg",
+          },
         },
       ],
       lineupJson: [{ name: "Otro" }],
@@ -35,6 +40,7 @@ describe("discovery artists", () => {
     assert.equal(artists.length, 1)
     assert.equal(artists[0]?.id, "a1")
     assert.equal(artists[0]?.name, "Nathy Peluso")
+    assert.equal(artists[0]?.spotifyId, "0eHQ9o50hj6ZXyrqmx1rJg")
   })
 
   it("ranks artists with the most active events first", () => {

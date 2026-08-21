@@ -51,6 +51,7 @@ import {
   type CheckoutKindTab,
 } from "@/lib/checkout/ticket-day-groups"
 import { flattenSeatsForAvailability } from "@/lib/seating/venue-map-geometry"
+import { classifyZoneClick } from "@/lib/seating/map-click-target"
 import {
   sectorUsesNumberedMap,
   ticketRequiresInteractiveMap,
@@ -95,7 +96,11 @@ type Props = {
 
 const SYNTHETIC_MAP_TIER_ID = "__interactive-map__"
 
-function tierRequiresMap(tier: TicketSelectorTier): boolean {
+function tierRequiresMap(
+  tier: TicketSelectorTier,
+  map?: SeatSelectionContext["map"],
+  sectors?: SeatSelectionContext["sectors"],
+): boolean {
   return ticketRequiresInteractiveMap({
     seatingSectorId: tier.seatingSectorId,
     layoutType: tier.layoutType,
@@ -105,6 +110,8 @@ function tierRequiresMap(tier: TicketSelectorTier): boolean {
       tierId: `${tier.id}-${index}`,
       quantity: item.quantity,
     })),
+    map,
+    sectors,
   })
 }
 
@@ -156,7 +163,9 @@ export function EventCheckoutSelector({
     })
     return type !== "bundle"
   })
-  const hasSeatedRow = listTiers.some(tierRequiresMap)
+  const hasSeatedRow = listTiers.some((tier) =>
+    tierRequiresMap(tier, seatSelection?.map, seatSelection?.sectors),
+  )
   const showSyntheticMapRow = hasInteractiveMap && !hasSeatedRow
   const hasInventory =
     listTiers.length > 0 ||
@@ -189,7 +198,11 @@ export function EventCheckoutSelector({
     const tier = listTiers.find((item) => item.id === category.id)
     if (tier) {
       const soldOut = resolveCategoryAvailability({
-        requiresMap: tierRequiresMap(tier),
+        requiresMap: tierRequiresMap(
+          tier,
+          seatSelection?.map,
+          seatSelection?.sectors,
+        ),
         stock: tier.available,
         categoryId: tier.id,
         seatingSectorId: tier.seatingSectorId ?? category.sectorId,
@@ -209,26 +222,46 @@ export function EventCheckoutSelector({
       if (soldOut) return
     }
     if (hasInteractiveMap && seatSelection) {
+      const sectorId = category.sectorId ?? tier?.seatingSectorId ?? null
+      const zone = sectorId
+        ? (seatSelection.map?.zones ?? []).find((item) => item.id === sectorId)
+        : undefined
       const numbered =
         category.id === SYNTHETIC_MAP_TIER_ID ||
-        sectorUsesNumberedMap({
-          seatingSectorId: category.sectorId ?? tier?.seatingSectorId,
-          layoutType: tier?.layoutType,
-          map: seatSelection.map,
-          sectors: seatSelection.sectors,
-        })
-      setSeatSheetMode(numbered ? "map" : "counter")
+        (zone
+          ? classifyZoneClick(zone, seatSelection.map) === "SECTOR_NUMERADO"
+          : sectorUsesNumberedMap({
+              seatingSectorId: sectorId,
+              layoutType: tier?.layoutType,
+              map: seatSelection.map,
+              sectors: seatSelection.sectors,
+            }))
+      if (!numbered) {
+        if (zone) {
+          seatSelection.onSelectZone(zone)
+          return
+        }
+        if (tier) {
+          const cap = purchaseCapForTier({
+            layoutType: tier.layoutType,
+            maxPurchaseLimit: tier.maxPurchaseLimit,
+            fallbackMax: maxTicketsPerUser,
+          })
+          onQuantityChange(
+            tier.id,
+            Math.min(cap, (quantities[tier.id] ?? 0) + 1),
+            Math.min(cap, Math.max(0, tier.available)),
+          )
+        }
+        return
+      }
+      setSeatSheetMode("map")
       setActiveSeatCategory({
         id: category.id,
         name: category.name,
-        sectorId: category.sectorId ?? null,
+        sectorId,
       })
-      if (numbered && category.sectorId && seatSelection.map) {
-        const zone = (seatSelection.map.zones ?? []).find(
-          (item) => item.id === category.sectorId,
-        )
-        if (zone) seatSelection.onSelectZone(zone)
-      }
+      if (zone) seatSelection.onSelectZone(zone)
       setIsSeatSelectionOpen(true)
       return
     }
@@ -279,6 +312,8 @@ export function EventCheckoutSelector({
       <div className="flex flex-col gap-6">
         <TicketSelectionList
             listTiers={listTiers}
+            allTiers={tiers}
+            bundleTiers={grouped.bundle}
             quantities={quantities}
             isPending={isPending}
             focusedTierId={focusedTierId}
@@ -293,6 +328,7 @@ export function EventCheckoutSelector({
             showSyntheticMapRow={showSyntheticMapRow}
             seatSelection={seatSelection}
             onQuantityChange={onQuantityChange}
+            onPurchaseIntent={onPurchaseIntent}
             onOpenSeatSelection={openSeatSelection}
           />
         </div>
@@ -302,7 +338,9 @@ export function EventCheckoutSelector({
           open={isSeatSelectionOpen}
           onOpenChange={setIsSeatSelectionOpen}
           title={activeSeatCategory?.name ?? "Seleccionar lugares"}
-          sectorId={activeSeatCategory?.sectorId}
+          sectorId={
+            activeSeatCategory?.sectorId ?? seatSelection.selectedZoneId
+          }
           pending={isPending}
           maxTicketsPerUser={maxTicketsPerUser}
           context={seatSelection}
@@ -312,24 +350,14 @@ export function EventCheckoutSelector({
 
       <InclusionWarning visible={showInclusionWarning} />
 
-      {grouped.bundle.length > 0 ? (
-        <BundleCardSelector
-          bundles={grouped.bundle}
-          quantities={quantities}
-          isPending={isPending}
-          onBuy={(tierId) => {
-            const bundle = grouped.bundle.find((row) => row.id === tierId)
-            onQuantityChange(tierId, 1, Math.max(0, bundle?.available ?? 1))
-            onPurchaseIntent?.()
-          }}
-        />
-      ) : null}
     </section>
   )
 }
 
 function TicketSelectionList({
   listTiers,
+  allTiers,
+  bundleTiers,
   quantities,
   isPending,
   focusedTierId,
@@ -344,9 +372,12 @@ function TicketSelectionList({
   showSyntheticMapRow,
   seatSelection,
   onQuantityChange,
+  onPurchaseIntent,
   onOpenSeatSelection,
 }: {
   listTiers: TicketSelectorTier[]
+  allTiers: TicketSelectorTier[]
+  bundleTiers: TicketSelectorTier[]
   quantities: Record<string, number>
   isPending: boolean
   focusedTierId: string | null
@@ -361,6 +392,7 @@ function TicketSelectionList({
   showSyntheticMapRow: boolean
   seatSelection: SeatSelectionContext | null
   onQuantityChange: (tierId: string, quantity: number, max: number) => void
+  onPurchaseIntent?: () => void
   onOpenSeatSelection: (category: {
     id: string
     name: string
@@ -368,26 +400,26 @@ function TicketSelectionList({
   }) => void
 }) {
   const dateCards = useMemo(
-    () => listCheckoutDateCards(scheduleDays, listTiers),
-    [listTiers, scheduleDays],
+    () => listCheckoutDateCards(scheduleDays, allTiers),
+    [allTiers, scheduleDays],
   )
-  const showKindTabs = shouldShowCheckoutKindTabs(listTiers, scheduleDays)
+  const showKindTabs = shouldShowCheckoutKindTabs(allTiers, scheduleDays)
   const samePriceAnyDay = useMemo(
     () => isSamePriceAnyDay(listTiers, scheduleDays),
     [listTiers, scheduleDays],
   )
-  const initialKind = defaultCheckoutKindTab(listTiers)
-  const initialDateId = defaultCheckoutDateId(dateCards, listTiers)
+  const initialKind = defaultCheckoutKindTab(allTiers)
+  const initialDateId = defaultCheckoutDateId(dateCards, allTiers)
   const [kindTab, setKindTab] = useState<CheckoutKindTab>(initialKind)
   const [uncontrolledDateId, setUncontrolledDateId] = useState<string | null>(
     initialDateId,
   )
   const reduceMotion = useReducedMotion()
-  const defaultKind = defaultCheckoutKindTab(listTiers)
+  const defaultKind = defaultCheckoutKindTab(allTiers)
   if (!showKindTabs && kindTab !== defaultKind) {
     setKindTab(defaultKind)
   }
-  const nextDate = defaultCheckoutDateId(dateCards, listTiers)
+  const nextDate = defaultCheckoutDateId(dateCards, allTiers)
   const dateIsControlled = typeof onSelectedDateIdChange === "function"
   const activeDateId = dateIsControlled
     ? (selectedDateId ?? nextDate)
@@ -410,17 +442,20 @@ function TicketSelectionList({
   const showDateCards = kindTab === "days" && dateCards.length > 1
 
   const displayedTickets = useMemo(() => {
-    if (!showKindTabs && !showDateCards) return listTiers
     if (kindTab === "passes") {
       return listTiers.filter((tier) => ticketMatchesTab(tier, FULL_PASS_TAB_ID))
     }
-    if (!activeDateId) return listTiers
-    return listTiers.filter((tier) =>
-      ticketMatchesTab(tier, activeDateId, {
-        treatFullPassAsAnyDay: !showKindTabs,
-      }),
-    )
+    if (!showKindTabs && !showDateCards) {
+      return listTiers.filter((tier) => !ticketMatchesTab(tier, FULL_PASS_TAB_ID))
+    }
+    if (!activeDateId) {
+      return listTiers.filter((tier) => !ticketMatchesTab(tier, FULL_PASS_TAB_ID))
+    }
+    return listTiers.filter((tier) => ticketMatchesTab(tier, activeDateId))
   }, [activeDateId, kindTab, listTiers, showDateCards, showKindTabs])
+  const showBundles =
+    bundleTiers.length > 0 && (kindTab === "passes" || !showKindTabs)
+  const noDayFunctions = kindTab === "days" && dateCards.length === 0
 
   const listKey =
     kindTab === "passes" ? "passes" : (activeDateId ?? "days")
@@ -432,8 +467,11 @@ function TicketSelectionList({
   )
   const occupancyBySeatId = seatSelection?.occupancyBySeatId ?? {}
 
+  const ticketNeedsSeatModal = (tier: TicketSelectorTier) =>
+    tierRequiresMap(tier, seatSelection?.map, seatSelection?.sectors)
+
   function renderTierCard(tier: TicketSelectorTier) {
-    const requiresMap = tierRequiresMap(tier)
+    const requiresMap = ticketNeedsSeatModal(tier)
     const selectedPlaces = requiresMap
       ? selectedPlacesForCategory(selectedItems, tier.seatingSectorId)
       : []
@@ -589,11 +627,15 @@ function TicketSelectionList({
           transition={{ duration: 0.3, ease: "easeInOut" }}
           className="z-0 flex flex-col gap-3 pb-32"
         >
-          {displayedTickets.length > 0 ? (
+          {noDayFunctions ? (
+            <p className="text-sm text-muted-foreground">
+              No hay funciones individuales disponibles para este evento.
+            </p>
+          ) : displayedTickets.length > 0 || showBundles ? (
             (() => {
-              const mapTickets = displayedTickets.filter(tierRequiresMap)
+              const mapTickets = displayedTickets.filter(ticketNeedsSeatModal)
               const generalTickets = displayedTickets.filter(
-                (tier) => !tierRequiresMap(tier),
+                (tier) => !ticketNeedsSeatModal(tier),
               )
               return (
                 <div className="flex flex-col gap-3">
@@ -614,6 +656,22 @@ function TicketSelectionList({
                       maxTicketsPerUser={maxTicketsPerUser}
                       isPending={isPending}
                       onQuantityChange={onQuantityChange}
+                    />
+                  ) : null}
+                  {showBundles ? (
+                    <BundleCardSelector
+                      bundles={bundleTiers}
+                      quantities={quantities}
+                      isPending={isPending}
+                      onBuy={(tierId) => {
+                        const bundle = bundleTiers.find((row) => row.id === tierId)
+                        onQuantityChange(
+                          tierId,
+                          1,
+                          Math.max(0, bundle?.available ?? 1),
+                        )
+                        onPurchaseIntent?.()
+                      }}
                     />
                   ) : null}
                 </div>

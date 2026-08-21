@@ -18,6 +18,8 @@ import {
   normalizePosPaymentMethod,
   posLiveAvailable,
 } from "@/lib/pos-checkout"
+import { posEventHasInteractiveMap } from "@/lib/pos-map"
+import { ticketPaymentPrintLabel } from "@/lib/ticket-print"
 import { signedDoorQrOrFallback } from "@/lib/totp-offline"
 import { createClient } from "@/lib/supabase/server"
 import {
@@ -57,6 +59,7 @@ export type PosEventOption = {
   status: string
   qrType: QrType
   hasSupervisorPin: boolean
+  hasInteractiveMap: boolean
   tiers: Array<{
     id: string
     name: string
@@ -86,6 +89,10 @@ export type PosThermalReceipt = {
   holderName: string
   holderDni: string | null
   seatLabel: string | null
+  flyerUrl?: string | null
+  paymentLabel?: string | null
+  orderId?: string | null
+  issuedAt?: string | null
 }
 
 export type PosReprintRow = {
@@ -224,6 +231,73 @@ async function requirePosSession(): Promise<
   return { success: true, userId: user.id }
 }
 
+async function loadPosInteractiveMapFlags(
+  eventIds: string[],
+): Promise<Map<string, boolean>> {
+  const flags = new Map<string, boolean>()
+  if (eventIds.length === 0) return flags
+
+  const supabase = await createClient()
+  const rich = await supabase
+    .from("events")
+    .select("id, venue_id, venue_map")
+    .in("id", eventIds)
+
+  let rows: Array<{
+    id: string
+    venue_id?: string | null
+    venue_map?: unknown
+  }> = (rich.data ?? []) as Array<{
+    id: string
+    venue_id?: string | null
+    venue_map?: unknown
+  }>
+  if (
+    rich.error &&
+    /venue_map|schema cache|PGRST204|42703/i.test(rich.error.message)
+  ) {
+    const fallback = await supabase
+      .from("events")
+      .select("id, venue_id")
+      .in("id", eventIds)
+    rows = (fallback.data ?? []) as Array<{
+      id: string
+      venue_id?: string | null
+      venue_map?: unknown
+    }>
+  }
+
+  const venueIds = [
+    ...new Set(
+      rows
+        .map((row) => (row as { venue_id?: string | null }).venue_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ]
+  const venueMaps = new Map<string, unknown>()
+  if (venueIds.length > 0) {
+    const { data: venues } = await supabase
+      .from("venues")
+      .select("id, venue_map")
+      .in("id", venueIds)
+    for (const venue of venues ?? []) {
+      venueMaps.set(venue.id, (venue as { venue_map?: unknown }).venue_map)
+    }
+  }
+
+  for (const row of rows) {
+    const venueId = (row as { venue_id?: string | null }).venue_id
+    flags.set(
+      row.id,
+      posEventHasInteractiveMap(
+        (row as { venue_map?: unknown }).venue_map,
+        venueId ? venueMaps.get(venueId) : null,
+      ),
+    )
+  }
+  return flags
+}
+
 export async function getPosEvents(): Promise<PosEventOption[]> {
   const rows = await listOperableEvents({ roles: [...POS_STAFF_ROLES] })
 
@@ -242,6 +316,7 @@ export async function getPosEvents(): Promise<PosEventOption[]> {
       )
     }
   }
+  const mapByEvent = await loadPosInteractiveMapFlags(eventIds)
 
   return rows.map((event) => {
     const hasSupervisorPin = pinByEvent.get(event.id) ?? false
@@ -253,6 +328,7 @@ export async function getPosEvents(): Promise<PosEventOption[]> {
       status: event.status,
       qrType: event.qr_type === "static" ? "static" : "dynamic",
       hasSupervisorPin,
+      hasInteractiveMap: mapByEvent.get(event.id) ?? false,
       tiers: (event.ticket_tiers ?? []).map((tier) => {
         const name = tier.name
         const price = Number(tier.price)
@@ -680,7 +756,7 @@ export async function deliverPosTickets(input: {
   const phone = parsed.data.phone
   const email = parsed.data.email
   if (!phone && !email) {
-    return { success: false, error: "Ingresá WhatsApp, SMS o email." }
+    return { success: false, error: "Ingresá WhatsApp o email." }
   }
   try {
     const admin = createAdminClient()
@@ -969,6 +1045,8 @@ export async function listShiftReprintReceipts(
       name?: string
       price?: number | null
     } | null
+    const orderId = row.order_id as string
+    const parent = orders.find((item) => item.orderId === orderId)
     const receipt: PosThermalReceipt = {
       ticketId: row.id as string,
       qrPayload: signedDoorQrOrFallback(
@@ -983,8 +1061,10 @@ export async function listShiftReprintReceipts(
       holderName: (row.holder_name as string | null) ?? "Consumidor Final",
       holderDni: (row.holder_dni as string | null) ?? null,
       seatLabel: null,
+      orderId,
+      issuedAt: parent?.createdAt ?? null,
+      paymentLabel: ticketPaymentPrintLabel(parent?.paymentMethod),
     }
-    const orderId = row.order_id as string
     const list = receiptsByOrder.get(orderId) ?? []
     list.push(receipt)
     receiptsByOrder.set(orderId, list)

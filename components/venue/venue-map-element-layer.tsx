@@ -79,7 +79,10 @@ const VenueElementShape = memo(function VenueElementShape({
       : `rotate(${element.rotation} ${element.x} ${element.y})`
   const opacity =
     (element.opacity ?? 1) * (isolationDim ? 0.3 : dimmed && !lit ? 0.7 : 1)
-  const labelText = compactVenueElementLabel(element.label, lit ? 99 : zoom)
+  const labelText = compactVenueElementLabel(
+    element.customLabel || element.label,
+    lit ? 99 : zoom,
+  )
   const tableLike =
     element.type !== "standing_zone" &&
     element.type !== "vip_chair" &&

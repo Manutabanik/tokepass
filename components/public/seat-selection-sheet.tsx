@@ -32,6 +32,7 @@ import type {
   UniversalSector,
   SeatStatus,
 } from "@/lib/seating/universal-seat-types"
+import { resolveEffectiveSeatingType } from "@/lib/seating/seating-type"
 import { flattenSeatsForAvailability } from "@/lib/seating/venue-map-geometry"
 import {
   storefrontSelectionCount,
@@ -162,10 +163,17 @@ export function SeatSelectionSheet({
   }, [context.map, mapSeats, targetSector])
 
   const isTableSector = assignMeta.isTableSector
+  const targetZone = (context.map?.zones ?? []).find(
+    (zone) => zone.id === (sectorId ?? targetSector?.id),
+  )
+  const seatingType = targetZone
+    ? resolveEffectiveSeatingType(targetZone, context.map)
+    : targetSector?.seatingType
   const isGeneralAdmission =
+    seatingType === "GENERAL" ||
     selectionMode === "counter" ||
-    (selectionMode !== "map" && targetSector?.kind === "ga")
-  const showFullMap = !isGeneralAdmission
+    targetSector?.kind === "ga"
+  const showFullMap = seatingType === "RESERVED"
   const placeCount = storefrontSelectionCount(selectedItems)
   const placeTotal = storefrontSelectionTotal(selectedItems)
   const canConfirm = placeCount > 0
@@ -173,11 +181,12 @@ export function SeatSelectionSheet({
   const emptyPrompt = isTableSector
     ? "Seleccioná una mesa en la lista o en el mapa."
     : "Seleccioná un lugar en la lista o en el mapa."
-  const assignZoneQuantity = context.onAssignZoneQuantity
-  const targetSectorId = targetSector?.id ?? null
-
   useEffect(() => {
     if (!open) return
+    if (seatingType === "GENERAL") {
+      onOpenChange(false)
+      return
+    }
     const timer = window.setTimeout(() => {
       const store = useStorefrontSeatStore.getState()
       const existing = storefrontSelectionCount(store.selectedItems)
@@ -185,12 +194,9 @@ export function SeatSelectionSheet({
       setPeopleCount(nextCount)
       const ids = store.selectedItems.map((item) => item.id)
       if (ids.length > 0) store.pulseFocus(ids)
-      if (isGeneralAdmission && targetSectorId) {
-        assignZoneQuantity(targetSectorId, nextCount)
-      }
     }, 0)
     return () => window.clearTimeout(timer)
-  }, [open, isGeneralAdmission, targetSectorId, assignZoneQuantity])
+  }, [open, seatingType, onOpenChange])
 
   function handleTogglePlace(seatId: string) {
     if (pending || !context.map) return
@@ -341,6 +347,13 @@ export function SeatSelectionSheet({
               <AccessiblePlaceGrid
                 pending={pending}
                 rows={targetSector?.rows ?? []}
+                emptyMessage={
+                  seatingType === "RESERVED" && targetSector?.soldOut
+                    ? "No hay lugares disponibles en este sector."
+                    : seatingType === "RESERVED"
+                      ? "Este sector no tiene mesas ni sillas configuradas."
+                      : null
+                }
                 onToggle={(seat) => handleTogglePlace(seat.id)}
               />
             )}

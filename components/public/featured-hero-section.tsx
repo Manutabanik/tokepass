@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 
 import type { CatalogEvent } from "@/app/actions/public-events"
 import { FeaturedBannerCard } from "@/components/public/featured-banner-card"
+import type { DiscoveryCategory } from "@/lib/discovery-categories"
 import { Button } from "@/components/ui/button"
 import {
   FEATURED_CAROUSEL_LIMIT,
@@ -19,9 +20,11 @@ const AUTOPLAY_MS = 6500
 export function FeaturedHeroSection({
   pool,
   province = "todas",
+  categories,
 }: {
   pool: CatalogEvent[]
   province?: string
+  categories?: DiscoveryCategory[]
 }) {
   const reduceMotion = useReducedMotion()
   const slides = useMemo(() => {
@@ -85,7 +88,7 @@ export function FeaturedHeroSection({
 
   return (
     <section
-      className="relative mx-auto w-full max-w-7xl px-4 py-8"
+      className="relative w-full overflow-visible bg-transparent py-8"
       aria-label="Eventos destacados"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
@@ -96,14 +99,18 @@ export function FeaturedHeroSection({
         }
       }}
     >
-      <div className="overflow-hidden" ref={emblaRef}>
+      <div className="overflow-visible" ref={emblaRef}>
         <div className="flex">
           {slides.map((event, index) => (
             <div
               key={event.id}
               className="min-w-0 shrink-0 grow-0 basis-full"
             >
-              <FeaturedBannerCard event={event} priority={index === 0} />
+              <FeaturedBannerCard
+                event={event}
+                priority={index === 0}
+                categories={categories}
+              />
             </div>
           ))}
         </div>

@@ -91,9 +91,9 @@ export default async function RootLayout({
     <html
       lang="es"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full overflow-x-hidden antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full overflow-x-clip antialiased`}
     >
-      <body className="flex min-h-dvh flex-col overflow-x-hidden bg-background text-foreground antialiased">
+      <body className="flex min-h-dvh flex-col overflow-x-clip bg-background text-foreground antialiased">
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

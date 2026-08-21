@@ -1,5 +1,7 @@
 import type { VenueLayoutType } from "@/types/venues"
 
+export type { SeatingType } from "@/types/venue-map"
+
 export type EventVisibility = "public" | "private" | "guest_list_only"
 
 export type EventAccessConfiguration = {

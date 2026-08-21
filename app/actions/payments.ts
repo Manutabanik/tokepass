@@ -2,7 +2,7 @@
 
 import { Preference } from "mercadopago"
 
-import { resolveCheckoutExpiresAt } from "@/lib/checkout-hold"
+import { resolveOrderHoldExpiresAt } from "@/lib/checkout-hold"
 import { logger } from "@/lib/logger"
 import { normalizeCheckoutBuyer } from "@/lib/checkout-buyer"
 import {
@@ -193,7 +193,7 @@ export async function createPaymentPreference(
     }
   }
 
-  // Preferencia MP: expires + expiration_date_to = fin del hold (máx. now+8m;
+  // Preferencia MP: expires + expiration_date_to = fin del hold (máx. now+10m;
   // seating usa reserved_until si es más corto). Preference API field name.
   const seatingExpirations = rows
     .map((row) => row.seating_unit?.reserved_until)
@@ -204,7 +204,10 @@ export async function createPaymentPreference(
           new Date(a).getTime() <= new Date(b).getTime() ? a : b,
         )
       : null
-  const checkoutExpiresAt = resolveCheckoutExpiresAt(earliestSeating).getTime()
+  const checkoutExpiresAt = resolveOrderHoldExpiresAt(
+    order.created_at,
+    earliestSeating,
+  ).getTime()
 
   if (checkoutExpiresAt <= Date.now()) {
     return {
@@ -308,7 +311,7 @@ export async function createPaymentPreference(
         ...(!localSite ? { auto_return: "approved" as const } : {}),
         // notification_url localhost es inalcanzable para MP; omitir en local.
         ...(!localSite ? { notification_url: urls.notificationUrl } : {}),
-        // Preference API: expires + expiration_date_to (= now+8m o reserved_until).
+        // Preference API: expires + expiration_date_to (= created_at+10m o reserved_until).
         expires: true,
         expiration_date_to: new Date(checkoutExpiresAt).toISOString(),
         metadata: {

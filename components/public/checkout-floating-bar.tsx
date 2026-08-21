@@ -22,13 +22,13 @@ export function CheckoutFloatingBar({
   hidden = false,
   disabled = false,
   actionLabel,
-  pendingLabel = "Procesando",
+  pendingLabel = "Procesando pago...",
   showArrow = false,
   totalAmount,
   itemsCount,
   onPay,
   onEditMap,
-  pulseCta = false,
+  pulseCta: _pulseCta = false,
   prominentCta = false,
   variant = "page",
 }: {
@@ -137,22 +137,22 @@ export function CheckoutFloatingBar({
           ) : null}
           <Button
             type="button"
+            size="storefront"
             disabled={pending || locked || !canContinue}
             aria-busy={pending}
             onClick={handlePay}
             className={cn(
               tapFeedbackClass,
-              "h-12 min-h-[44px] min-w-0 shrink-0 rounded-xl bg-primary px-5 text-base font-bold text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90 md:h-14",
+              "h-14 min-w-0 shrink-0 rounded-xl bg-emerald-500 px-5 text-base font-black text-black shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:bg-emerald-400 disabled:scale-100 disabled:opacity-70 md:h-14",
               prominentCta && "lg:w-full",
-              !canContinue && "cursor-not-allowed opacity-50",
-              pulseCta && canContinue && "animate-pulse",
+              !canContinue && "cursor-not-allowed opacity-70",
             )}
           >
             {pending ? (
-              <>
-                <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+              <span className="flex items-center gap-2">
+                <LoaderCircle className="size-5 animate-spin" aria-hidden="true" />
                 {pendingLabel}
-              </>
+              </span>
             ) : (
               <>
                 {actionLabel}
@@ -243,19 +243,20 @@ export function CheckoutFloatingBar({
             </div>
             <Button
               type="button"
+              size="storefront"
               disabled={pending || locked || !canContinue}
               aria-busy={pending}
               onClick={handleContinueFromSummary}
               className={cn(
                 tapFeedbackClass,
-                "h-11 w-full rounded-xl bg-primary py-2.5 text-sm font-bold text-primary-foreground hover:bg-primary/90",
+                "h-14 w-full rounded-xl bg-emerald-500 py-2.5 text-sm font-black text-black hover:bg-emerald-400 disabled:scale-100 disabled:opacity-70",
               )}
             >
               {pending ? (
-                <>
-                  <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+                <span className="flex items-center gap-2">
+                  <LoaderCircle className="size-5 animate-spin" aria-hidden="true" />
                   {pendingLabel}
-                </>
+                </span>
               ) : (
                 "Continuar a pago"
               )}

@@ -124,19 +124,18 @@ export function TicketDetailView({
 
       <article className="relative overflow-hidden rounded-2xl border border-border bg-card">
         {ticket.isTest ? <TestTicketWatermark /> : null}
-        <div className="relative isolate h-44 overflow-hidden bg-zinc-950">
+        <div className="relative isolate h-44 overflow-hidden bg-muted">
           {ticket.flyerUrl ? (
             <Image
               src={ticket.flyerUrl}
-              alt=""
+              alt={ticket.eventTitle}
               fill
               priority
               sizes="(max-width: 640px) 100vw, 512px"
               className="object-cover"
             />
           ) : null}
-          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-black/15" />
-          <span className="absolute top-3 right-3 z-20">
+          <span className="absolute top-3 right-3 z-20 rounded-xl bg-black/40 p-1 shadow-lg backdrop-blur-md">
             <BrandMark size="sm" className="size-8 rounded-[0.55rem] ring-0" />
           </span>
         </div>

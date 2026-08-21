@@ -347,7 +347,7 @@ export function EventStorefront({
   function renderDiscoveryColumn() {
     return (
       <motion.div
-        className="min-w-0 overflow-x-clip lg:col-span-7"
+        className="min-w-0"
         variants={reduceMotion ? undefined : storefrontStagger}
       >
         <div className="flex flex-col gap-8 md:gap-10">
@@ -459,7 +459,7 @@ export function EventStorefront({
   function renderDetailsColumn() {
     return (
       <motion.div
-        className="min-w-0 space-y-8 overflow-x-clip px-4 pb-6 md:px-0 lg:col-span-7 lg:col-start-1"
+        className="min-w-0 space-y-8 px-4 pb-6 md:px-0"
         variants={reduceMotion ? undefined : storefrontFade}
       >
         <EventResaleListings
@@ -582,7 +582,7 @@ export function EventStorefront({
   }
 
   const asideClassName =
-    "min-w-0 scroll-mt-24 px-4 pb-6 md:px-0 lg:sticky lg:top-24 lg:z-30 lg:col-span-5 lg:col-start-8 lg:row-span-full lg:row-start-1 lg:flex lg:max-h-[calc(100vh-6rem)] lg:flex-col lg:self-start lg:pb-0"
+    "hidden min-w-0 scroll-mt-24 px-4 md:px-0 lg:col-span-4 lg:sticky lg:top-28 lg:z-30 lg:block lg:self-start"
 
   if (showCheckout) {
     return (
@@ -647,6 +647,7 @@ export function EventStorefront({
               <Button
                 type="button"
                 variant="outline"
+                size="storefront"
                 onClick={() => setExitDialogOpen(false)}
               >
                 Continuar Comprando
@@ -654,6 +655,7 @@ export function EventStorefront({
               <Button
                 type="button"
                 variant="destructive"
+                size="storefront"
                 onClick={leaveCheckout}
               >
                 Sí, salir y cancelar
@@ -666,14 +668,28 @@ export function EventStorefront({
   }
 
   return (
+    <>
     <div
       className={cn(
-        "relative min-h-screen overflow-x-visible bg-background text-foreground",
+        "relative isolate min-h-screen bg-background text-foreground",
         showInfoCta
-          ? "pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-12"
+          ? "pb-32 lg:pb-12"
           : "pb-8 lg:pb-12",
       )}
     >
+      <div
+        className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
+        aria-hidden="true"
+      >
+        {event.imageUrl ? (
+          <img
+            src={event.imageUrl}
+            alt=""
+            className="absolute inset-0 h-full w-full scale-125 object-cover opacity-40 blur-[80px] md:scale-150 md:opacity-30 md:blur-[120px]"
+          />
+        ) : null}
+        <div className="absolute inset-0 bg-white/80 dark:bg-[#09090b]/70" />
+      </div>
       {event.isDraftPreview ? <SandboxBanner /> : null}
       <AnalyticsTracker
         config={event.pixels}
@@ -682,8 +698,9 @@ export function EventStorefront({
         contentIds={[event.id]}
         value={startingPrice ?? undefined}
       />
+      <div className="relative z-10">
       {event.isSponsoredByTokePass && viewMode === "info" ? (
-        <div className="border-b border-amber-500/35 bg-gradient-to-r from-amber-500/15 via-background to-amber-500/15">
+        <div className="border-b border-amber-500/35 bg-gradient-to-r from-amber-500/15 via-transparent to-amber-500/15">
           <div className="mx-auto flex max-w-3xl items-center justify-center gap-2 px-4 py-2.5 text-center">
             <Sparkles className="size-3.5 text-amber-600 dark:text-amber-300" aria-hidden="true" />
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-800 dark:text-amber-100">
@@ -694,44 +711,39 @@ export function EventStorefront({
         </div>
       ) : null}
 
-      <motion.div
-        className="relative mx-auto grid max-w-6xl grid-cols-1 items-start gap-8 px-0 md:px-4 lg:grid-cols-12 lg:px-8 lg:py-8"
-        variants={reduceMotion ? undefined : storefrontStagger}
-        initial={reduceMotion ? false : "hidden"}
-        animate="show"
-      >
-        {finished ? (
-          <>
-            {renderDiscoveryColumn()}
-            <aside id="tickets" className={asideClassName}>
+      <div className="relative mx-auto grid w-full max-w-7xl grid-cols-1 items-start gap-8 px-0 md:px-4 lg:grid-cols-12 lg:px-8 lg:py-8">
+        <motion.div
+          className="min-w-0 space-y-8 lg:col-span-8 lg:space-y-10"
+          variants={reduceMotion ? undefined : storefrontStagger}
+          initial={reduceMotion ? false : "hidden"}
+          animate="show"
+        >
+          {renderDiscoveryColumn()}
+          {finished ? (
+            <div className="px-4 md:px-0 lg:hidden">
               <EventSaleStatusNotice state="finished" />
-            </aside>
-            {renderDetailsColumn()}
-          </>
-        ) : soldOut ? (
-          <>
-            {renderDiscoveryColumn()}
-            <aside id="tickets" className={asideClassName}>
+            </div>
+          ) : null}
+          {soldOut ? (
+            <div className="px-4 md:px-0 lg:hidden">
               <EventSaleStatusNotice state="sold_out" />
-            </aside>
-            {renderDetailsColumn()}
-          </>
-        ) : (
-          <>
-            {renderDiscoveryColumn()}
-            <aside
-              id="tickets"
-              className={cn(asideClassName, "hidden lg:flex")}
-            >
-              {renderPurchaseAside()}
-            </aside>
-            {renderDetailsColumn()}
-          </>
-        )}
-      </motion.div>
+            </div>
+          ) : null}
+          {renderDetailsColumn()}
+        </motion.div>
+        <aside id="tickets" className={asideClassName}>
+          {finished ? (
+            <EventSaleStatusNotice state="finished" />
+          ) : soldOut ? (
+            <EventSaleStatusNotice state="sold_out" />
+          ) : (
+            renderPurchaseAside()
+          )}
+        </aside>
+      </div>
 
       {viewMode === "info" && (event.sponsors?.length ?? 0) > 0 ? (
-        <div className="mx-auto max-w-6xl px-4 pb-8">
+        <div className="mx-auto max-w-7xl px-4 pb-8">
           <SponsorGrid
             heading="Auspician este evento:"
             sponsors={event.sponsors ?? []}
@@ -740,13 +752,15 @@ export function EventStorefront({
         </div>
       ) : null}
 
-      {showInfoCta ? (
-        <EventStorefrontPurchaseDock
-          price={teaserPrice}
-          isAvailable={isAvailable}
-          onAcquire={enterCheckout}
-        />
-      ) : null}
+      </div>
     </div>
+    {showInfoCta ? (
+      <EventStorefrontPurchaseDock
+        price={teaserPrice}
+        isAvailable={isAvailable}
+        onAcquire={enterCheckout}
+      />
+    ) : null}
+    </>
   )
 }

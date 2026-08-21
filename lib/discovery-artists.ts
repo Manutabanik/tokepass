@@ -8,6 +8,7 @@ export type CatalogEventArtist = {
   id: string
   name: string
   imageUrl: string | null
+  spotifyId?: string | null
 }
 
 export type FeaturedDiscoveryArtist = CatalogEventArtist & {
@@ -52,6 +53,7 @@ function uniqueArtists(artists: CatalogEventArtist[]): CatalogEventArtist[] {
       id,
       name,
       imageUrl: artist.imageUrl?.trim() || null,
+      spotifyId: artist.spotifyId?.trim() || null,
     })
   }
   return out
@@ -67,6 +69,7 @@ export function mapCatalogEventArtists(input: {
       id: artist.id,
       name: artist.name,
       imageUrl: artist.imageUrl,
+      spotifyId: artist.spotifyId,
     }),
   )
   if (fromJoin.length > 0) return uniqueArtists(fromJoin)
@@ -76,6 +79,7 @@ export function mapCatalogEventArtists(input: {
       id: artist.id,
       name: artist.name,
       imageUrl: artist.imageUrl,
+      spotifyId: artist.spotifyId,
     })),
   )
 }

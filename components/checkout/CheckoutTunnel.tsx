@@ -148,6 +148,7 @@ import {
   seatingLayoutToVenueMap,
   venueMapToSeatingLayout,
 } from "@/lib/seating/venue-map-geometry"
+import { classifyZoneClick } from "@/lib/seating/map-click-target"
 import {
   eventNeedsInteractiveCanvas,
   ticketRequiresInteractiveMap,
@@ -770,6 +771,7 @@ export function CheckoutTunnel({
             return {
               id,
               name: hold.label?.trim() || "Lugar reservado",
+              displayName: hold.label?.trim() || "Lugar reservado",
               type: "table",
               price: 0,
               capacity: 1,
@@ -1059,6 +1061,7 @@ export function CheckoutTunnel({
           return {
             id,
             name: hold.label?.trim() || "Lugar reservado",
+            displayName: hold.label?.trim() || "Lugar reservado",
             type: "table",
             price: 0,
             capacity: 1,
@@ -1325,7 +1328,8 @@ export function CheckoutTunnel({
       return {
         id: item.id,
         ticketTierId: dateSource?.id ?? null,
-        name: item.name,
+        name: item.displayName?.trim() || item.name,
+        displayName: item.displayName?.trim() || item.name,
         detail: formatSelectionChargeDetail({
           type: item.type,
           name: item.name,
@@ -2002,26 +2006,13 @@ export function CheckoutTunnel({
 
   function handleImmersiveZoneSelect(zone: VenueMapZone) {
     if (purchaseLocked || soldOutZoneIds.includes(zone.id)) return
-    const item = storefrontItemFromZone(zone, priceBySectorId)
-    if (!item) return
-    const result = useStorefrontSeatStore.getState().toggleSelectedItem(
-      item,
-      selectionCapForItem(item),
-    )
-    if (!result.ok) {
-      toast.error(storefrontLimitMessage(result.reason))
+    if (classifyZoneClick(zone, liveMap) === "SECTOR_NUMERADO") {
+      focusSelectedZone(zone)
+      useCheckoutStore.getState().setSeatSheetOpen(true)
       return
     }
-    if (!result.added) {
-      if (focusedZoneId === zone.id) setFocusedZoneId(null)
-      return
-    }
-    fireAddToCartPixels({
-      contentIds: [zone.id],
-      value: zone.price ?? 0,
-      numItems: 1,
-    })
-    focusSelectedZone(zone)
+    const previous = selectedItems.find((item) => item.id === zone.id)
+    applyZoneQuantity(zone.id, (previous?.capacity ?? 0) + 1)
   }
 
   function applyZoneQuantity(sectorId: string, quantity: number) {
@@ -2033,12 +2024,13 @@ export function CheckoutTunnel({
       liveMap?.sectors.find((item) => item.id === sectorId)?.name ??
       ""
     if (zone) {
+      const fromZone = storefrontItemFromZone(zone, priceBySectorId)
       const result = useStorefrontSeatStore.getState().upsertSelectedItem(
         {
           id: zone.id,
-          name: zone.name,
+          name: fromZone?.name ?? zone.name,
           type: "zone",
-          price: zone.price,
+          price: fromZone?.price ?? zone.price,
           capacity: Math.max(1, quantity),
           sectorId: zone.id,
           color: zone.color,
@@ -2845,8 +2837,8 @@ export function CheckoutTunnel({
                 visibleStep === "payment"
                   ? simulatePayment
                     ? "Simulando pago"
-                    : "Preparando pago"
-                  : "Procesando",
+                    : "Procesando pago..."
+                  : "Procesando pago...",
               disabled:
                 (visibleStep === "tickets" && !canProceedFromCart) ||
                 (visibleStep === "payment" && !acceptedTerms),
@@ -2883,9 +2875,7 @@ export function CheckoutTunnel({
             (visibleStep === "payment" && !acceptedTerms)
           }
           pending={checkoutBusy}
-          pendingLabel={
-            visibleStep === "payment" ? "Preparando pago" : "Procesando"
-          }
+          pendingLabel="Procesando pago..."
           locked={purchaseLocked}
           pulseCta={highlightContinue}
           prominentCta={

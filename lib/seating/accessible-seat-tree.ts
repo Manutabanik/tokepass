@@ -5,6 +5,7 @@ import {
   type FlattenedVenueSeat,
 } from "@/lib/seating/venue-map-geometry"
 import { resolveLiveVenueSeatStatus } from "@/lib/seating/venue-map-occupancy"
+import { resolveEffectiveSeatingType, type SeatingType } from "@/lib/seating/seating-type"
 import type { InteractiveVenueMap } from "@/types/venue-map"
 import {
   findBestAvailableSeats,
@@ -31,6 +32,7 @@ export type AccessibleSectorNode = {
   color: string
   price: number
   kind: "ga" | "numbered"
+  seatingType: SeatingType
   soldOut: boolean
   availableCount: number
   isTableSector: boolean
@@ -73,6 +75,7 @@ export function buildAccessibleSeatTree(input: {
         selected,
         soldOut: soldOut.has(zone.id),
         map: input.map,
+        seatingInput: zone,
       }),
     )
   }
@@ -127,6 +130,7 @@ function toSectorNode(input: {
   selected: Set<string>
   soldOut: boolean
   map: InteractiveVenueMap
+  seatingInput?: { seatingType?: string; layoutType?: string }
 }): AccessibleSectorNode {
   const rowsMap = new Map<string, AccessibleSeatNode[]>()
   for (const seat of input.seats) {
@@ -167,12 +171,23 @@ function toSectorNode(input: {
     input.name,
   )
 
+  const seatingType = resolveEffectiveSeatingType(
+    {
+      id: input.id,
+      seatingType: input.seatingInput?.seatingType,
+      layoutType: input.seatingInput?.layoutType,
+      seats: input.seats,
+    },
+    input.map,
+  )
+
   return {
     id: input.id,
     name: input.name,
     color: input.color,
     price: input.price,
-    kind: rows.length > 0 ? "numbered" : "ga",
+    kind: seatingType === "GENERAL" ? "ga" : "numbered",
+    seatingType,
     soldOut: input.soldOut || (rows.length > 0 && availableCount === 0),
     availableCount,
     isTableSector: tableMeta.isTableSector,

@@ -11,7 +11,7 @@ describe("spotify artist embed", () => {
   it("builds the compact dark theme artist embed url", () => {
     assert.equal(
       spotifyArtistEmbedSrc("0eHQ9o50hj6ZXyrqmx1rJg"),
-      "https://open.spotify.com/embed/artist/0eHQ9o50hj6ZXyrqmx1rJg?utm_source=generator&theme=0",
+      "https://open.spotify.com/embed/artist/0eHQ9o50hj6ZXyrqmx1rJg?utm_source=generator&theme=0&autoplay=1",
     )
   })
 

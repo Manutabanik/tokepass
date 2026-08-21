@@ -8,6 +8,9 @@ export type VenueMapSeat = {
   y: number
   status: VenueMapSeatStatus
   label?: string
+  /** Etiqueta impresa en carrito y boleto. Si existe, pisa el nombre generado. */
+  customLabel?: string
+  ticketTypeId?: string
   price?: number
   rotation?: number
 }
@@ -155,6 +158,9 @@ export type VenueMapElementSeat = {
   y: number
   status: VenueMapSeatStatus
   label?: string
+  /** Ej: "Silla Preferencial VIP A". Se imprime tal cual en el boleto. */
+  customLabel?: string
+  ticketTypeId?: string
   row?: string
   price?: number
   rotation?: number
@@ -199,11 +205,35 @@ export type VenueMapElement = {
   labelLocked?: boolean
   /** When true, drag / resize / rotate are disabled. */
   isLocked?: boolean
+  /** Ej: "Mesa VIP Escenario". Si existe, pisa el nombre generado en carrito y boleto. */
+  customLabel?: string
+  /** Tipo de entrada del evento (`ticket_tiers.id` o id de borrador). */
+  ticketTypeId?: string
 }
 
 export type VenueMapPoint = { x: number; y: number }
 
 export type VenueZoneLayoutType = "general" | "table_combo" | "numbered_seat"
+
+/** Entrada por aforo vs contenedor de mesas/sillas numeradas. */
+export const SEATING_TYPES = ["GENERAL", "RESERVED"] as const
+export type SeatingType = (typeof SEATING_TYPES)[number]
+
+export function parseSeatingType(value: unknown): SeatingType | null {
+  const raw = String(value ?? "")
+    .trim()
+    .toUpperCase()
+  if (raw === "GENERAL" || raw === "RESERVED") return raw
+  return null
+}
+
+export function seatingTypeFromLayoutType(
+  layoutType: VenueZoneLayoutType | string | null | undefined,
+): SeatingType {
+  return layoutType === "numbered_seat" || layoutType === "table_combo"
+    ? "RESERVED"
+    : "GENERAL"
+}
 
 /** Polígono paramétrico. El JSON también acepta `points` o `x,y,width,height`. */
 export type VenueMapZone = {
@@ -213,6 +243,8 @@ export type VenueMapZone = {
   price: number
   polygon: VenueMapPoint[]
   layoutType: VenueZoneLayoutType
+  /** GENERAL = aforo del polígono. RESERVED = mesas/sillas hijas. */
+  seatingType?: SeatingType
   sellMode: VenueSellMode
   /** Explicit price semantics. `closed_unit` <=> `sellMode: "group"`. */
   priceMode?: VenuePriceMode
@@ -388,19 +420,26 @@ function parseElement(raw: unknown): VenueMapElement | null {
       ? []
       : Array.isArray(item.seats)
         ? item.seats.map((seat, index) => {
-            const price = parseOptionalSeatNumber(seat.price)
-            const rotation = parseOptionalSeatNumber(seat.rotation)
+            const raw = seat as Record<string, unknown>
+            const price = parseOptionalSeatNumber(raw.price)
+            const rotation = parseOptionalSeatNumber(raw.rotation)
             return {
-              id: String(seat.id ?? `${item.id}-S${index + 1}`),
-              number: asNumber(seat.number, index + 1),
-              x: asNumber(seat.x, 0),
-              y: asNumber(seat.y, 0),
-              status: parseSeatStatus(seat.status),
-              ...(typeof seat.label === "string" && seat.label.trim()
-                ? { label: seat.label.trim().slice(0, 40) }
+              id: String(raw.id ?? `${item.id}-S${index + 1}`),
+              number: asNumber(raw.number, index + 1),
+              x: asNumber(raw.x, 0),
+              y: asNumber(raw.y, 0),
+              status: parseSeatStatus(raw.status),
+              ...(typeof raw.label === "string" && raw.label.trim()
+                ? { label: raw.label.trim().slice(0, 40) }
                 : {}),
-              ...(typeof seat.row === "string" && seat.row.trim()
-                ? { row: seat.row.trim().slice(0, 24) }
+              ...(parseCustomLabel(raw)
+                ? { customLabel: parseCustomLabel(raw) }
+                : {}),
+              ...(parseTicketTypeId(raw)
+                ? { ticketTypeId: parseTicketTypeId(raw) }
+                : {}),
+              ...(typeof raw.row === "string" && raw.row.trim()
+                ? { row: raw.row.trim().slice(0, 24) }
                 : {}),
               ...(price != null ? { price: Math.max(0, price) } : {}),
               ...(rotation != null ? { rotation } : {}),
@@ -461,6 +500,8 @@ function parseElement(raw: unknown): VenueMapElement | null {
     ...(parseOptionalBoolean(item.isLocked ?? item.is_locked)
       ? { isLocked: true as const }
       : {}),
+    ...(parseCustomLabel(item) ? { customLabel: parseCustomLabel(item) } : {}),
+    ...(parseTicketTypeId(item) ? { ticketTypeId: parseTicketTypeId(item) } : {}),
   }
 }
 
@@ -468,6 +509,19 @@ function textOrUndefined(value: unknown, max = 80): string | undefined {
   if (typeof value !== "string") return undefined
   const trimmed = value.trim()
   return trimmed ? trimmed.slice(0, max) : undefined
+}
+
+function parseCustomLabel(item: Record<string, unknown>): string | undefined {
+  return textOrUndefined(
+    item.customLabel ??
+      item.custom_label ??
+      item.displayName ??
+      item.display_name,
+  )
+}
+
+function parseTicketTypeId(item: Record<string, unknown>): string | undefined {
+  return textOrUndefined(item.ticketTypeId ?? item.ticket_type_id)
 }
 
 function parseOptionalInt(value: unknown): number | undefined {
@@ -520,11 +574,29 @@ function parseVenueZone(raw: unknown): VenueMapZone | null {
     .filter((point): point is VenueMapPoint => Boolean(point))
   const polygon = fromPoints.length >= 3 ? fromPoints : rectToPolygon(item)
   if (polygon.length < 3) return null
-  const layoutRaw = String(item.layoutType ?? item.layout_type ?? "table_combo")
-  const layoutType: VenueZoneLayoutType =
-    layoutRaw === "general" || layoutRaw === "numbered_seat"
-      ? layoutRaw
-      : "table_combo"
+  const explicitSeating = parseSeatingType(
+    item.seatingType ?? item.seating_type,
+  )
+  const layoutRaw = String(item.layoutType ?? item.layout_type ?? "")
+  let layoutType: VenueZoneLayoutType
+  if (
+    layoutRaw === "general" ||
+    layoutRaw === "numbered_seat" ||
+    layoutRaw === "table_combo"
+  ) {
+    layoutType = layoutRaw
+  } else if (explicitSeating === "RESERVED") {
+    layoutType = "table_combo"
+  } else {
+    layoutType = "general"
+  }
+  const seatingType =
+    explicitSeating ?? seatingTypeFromLayoutType(layoutType)
+  if (seatingType === "GENERAL") {
+    layoutType = "general"
+  } else if (layoutType === "general") {
+    layoutType = "table_combo"
+  }
   const rows = Math.min(80, Math.max(1, asNumber(item.rows, 4)))
   const itemsPerRow = Math.min(80, Math.max(1, asNumber(item.itemsPerRow ?? item.items_per_row, 10)))
   const pricing =
@@ -533,7 +605,7 @@ function parseVenueZone(raw: unknown): VenueMapZone | null {
       : resolveVenuePricing({
           sellMode: item.sellMode ?? item.sell_mode,
           priceMode: item.priceMode ?? item.price_mode,
-          fallback: layoutType === "table_combo" ? "group" : "group",
+          fallback: layoutType === "table_combo" ? "group" : "per_seat",
         })
   return {
     id: String(item.id ?? `zone-${Math.random().toString(36).slice(2, 8)}`),
@@ -542,6 +614,7 @@ function parseVenueZone(raw: unknown): VenueMapZone | null {
     price: Math.max(0, asNumber(item.price, 0)),
     polygon: polygonToPercent(polygon),
     layoutType,
+    seatingType,
     sellMode: pricing.sellMode,
     priceMode: pricing.priceMode,
     rows,
@@ -602,6 +675,10 @@ function parsePolygonSector(raw: unknown): VenueMapSector | null {
     if (typeof row.label === "string" && row.label.trim()) {
       parsed.label = row.label.trim().slice(0, 40)
     }
+    const customLabel = parseCustomLabel(row)
+    if (customLabel) parsed.customLabel = customLabel
+    const ticketTypeId = parseTicketTypeId(row)
+    if (ticketTypeId) parsed.ticketTypeId = ticketTypeId
     if (price != null) parsed.price = Math.max(0, price)
     if (rotation != null) parsed.rotation = rotation
     return parsed

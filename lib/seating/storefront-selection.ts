@@ -9,19 +9,50 @@ import type {
 } from "@/types/venue-map"
 import { venuePriceModeFromSellMode } from "@/types/venue-map"
 import { storefrontLineTotal } from "@/lib/checkout/charge-unit"
+import {
+  getSeatDisplayName,
+  getVenueElementDisplayName,
+  getVenueSeatDisplayName,
+} from "@/lib/map-utils"
+import type { EventSeat, EventTable } from "@/types/event-map"
+import {
+  generalAdmissionLabel,
+  reservedPlaceLabel,
+  resolveSeatingType,
+} from "@/lib/seating/seating-type"
+
+/** Guarda en el carrito la etiqueta que después se imprime en el boleto. */
+export function addSelectedSeatToCartItem(
+  seat: EventSeat,
+  table?: EventTable,
+  sectorName?: string,
+): StorefrontSelectedItem {
+  const displayName = getSeatDisplayName(seat, table, sectorName)
+  return {
+    id: seat.id,
+    name: displayName,
+    displayName,
+    type: "seat",
+    price: seat.price,
+    capacity: 1,
+    sectorId: seat.sector_id || table?.sector_id,
+    row: seat.row_label,
+    number:
+      typeof seat.seat_number === "number"
+        ? seat.seat_number
+        : Number(seat.seat_number) || undefined,
+    sellMode: "per_seat",
+    priceMode: "per_person",
+  }
+}
 
 export function venueElementSelectionName(
   element: Pick<
     VenueMapElement,
-    "label" | "sectorName" | "groupName" | "type"
+    "customLabel" | "label" | "sectorName" | "groupName" | "type"
   >,
 ): string {
-  const sector = element.sectorName?.trim() || element.groupName?.trim() || ""
-  const label = element.label?.trim() || ""
-  if (sector && label && sector !== label && !label.startsWith(`${sector} `)) {
-    return `${sector} · ${label}`
-  }
-  return label || sector
+  return getVenueElementDisplayName(element)
 }
 
 export function venueElementSelectionType(
@@ -55,6 +86,7 @@ export function storefrontItemFromElement(
   return {
     id: element.id,
     name,
+    displayName: name,
     type: venueElementSelectionType(element),
     price: resolveVenueUnitPrice(
       [element.id, element.groupId, element.sectorName, element.groupName],
@@ -75,9 +107,14 @@ export function storefrontItemFromZone(
 ): StorefrontSelectedItem | null {
   const name = zone.name?.trim()
   if (!name) return null
+  const cartName =
+    resolveSeatingType(zone) === "GENERAL"
+      ? generalAdmissionLabel(name)
+      : name
   return {
     id: zone.id,
-    name,
+    name: cartName,
+    displayName: cartName,
     type: "zone",
     price: resolveVenueUnitPrice([zone.id, zone.name], zone.price, priceBySectorId),
     capacity: 1,
@@ -88,6 +125,40 @@ export function storefrontItemFromZone(
   }
 }
 
+export function storefrontItemFromElementSeat(
+  element: VenueMapElement,
+  seat: VenueMapElement["seats"][number],
+  priceBySectorId: Record<string, number> = {},
+): StorefrontSelectedItem | null {
+  const name = getVenueSeatDisplayName(element, seat)
+  if (!name) return null
+  return {
+    id: seat.id,
+    name,
+    displayName: name,
+    type: "seat",
+    price: resolveVenueUnitPrice(
+      [
+        seat.ticketTypeId,
+        element.ticketTypeId,
+        element.id,
+        element.groupId,
+        element.sectorName,
+        element.groupName,
+      ],
+      seat.price ?? element.price,
+      priceBySectorId,
+    ),
+    capacity: 1,
+    sectorId: element.groupId?.trim() || element.id,
+    color: element.color,
+    row: seat.row ?? element.label,
+    number: seat.number,
+    sellMode: "per_seat",
+    priceMode: "per_person",
+  }
+}
+
 export function resolveStorefrontItemFromMap(
   map: InteractiveVenueMap,
   selectedId: string,
@@ -95,6 +166,11 @@ export function resolveStorefrontItemFromMap(
 ): StorefrontSelectedItem | null {
   const element = (map.elements ?? []).find((item) => item.id === selectedId)
   if (element) return storefrontItemFromElement(element, priceBySectorId)
+  for (const furniture of map.elements ?? []) {
+    const seat = furniture.seats.find((item) => item.id === selectedId)
+    if (!seat) continue
+    return storefrontItemFromElementSeat(furniture, seat, priceBySectorId)
+  }
   const zone = (map.zones ?? []).find((item) => item.id === selectedId)
   if (zone) return storefrontItemFromZone(zone, priceBySectorId)
   for (const sector of map.sectors) {
@@ -103,13 +179,21 @@ export function resolveStorefrontItemFromMap(
     const sectorName = sector.name?.trim()
     const row = seat.row?.trim()
     if (!sectorName || !row) return null
+    const name =
+      seat.customLabel?.trim() ||
+      reservedPlaceLabel({
+        sectorName,
+        row,
+        number: seat.number,
+      })
     return {
       id: seat.id,
-      name: `${sectorName} · Fila ${row} · ${seat.number}`,
+      name,
+      displayName: name,
       type: "seat",
       price: resolveVenueUnitPrice(
-        [sector.id, sector.name],
-        sector.price,
+        [seat.ticketTypeId, sector.id, sector.name],
+        seat.price ?? sector.price,
         priceBySectorId,
       ),
       capacity: 1,
@@ -137,6 +221,7 @@ export function hydrateStorefrontItemsFromMap(
     return {
       ...item,
       name: live.name,
+      displayName: live.displayName ?? live.name,
       price: live.price,
       capacity: live.capacity || item.capacity,
       color: live.color ?? item.color,
@@ -166,7 +251,7 @@ export function dedupeStorefrontItemsById(
 
 function sectorLabelFromItem(item: StorefrontSelectedItem): string {
   const parts = item.name
-    .split(" · ")
+    .split(/\s[·-]\s/)
     .map((part) => part.trim())
     .filter(Boolean)
   if (parts.length >= 2 && !/^fila\b/i.test(parts[0] ?? "")) {
@@ -279,8 +364,8 @@ export function formatStorefrontSelectionGroups(
     const first = byId.get(group.ids[0] ?? "")
     return {
       key,
-      label: `${group.sector} · Fila ${group.row} - Asientos: ${nums}`,
-      placeLabel: `Fila ${group.row} · Asientos ${nums}`,
+      label: `${sectorBadgeLabel(group.sector)} - Fila ${group.row}, Sillas ${nums}`,
+      placeLabel: `Fila ${group.row}, Sillas ${nums}`,
       sectorLabel: sectorBadgeLabel(group.sector),
       color: group.color ?? first?.color ?? null,
       chairsLabel: chairsCopy(group.ids.length),
@@ -332,10 +417,10 @@ export function buyerElementCapacity(element: VenueMapElement): number {
 }
 
 export function buyerElementTitle(
-  element: Pick<VenueMapElement, "type" | "label">,
+  element: Pick<VenueMapElement, "type" | "label" | "customLabel">,
 ): string {
   const type = buyerElementTypeName(element)
-  const label = element.label?.trim() || ""
+  const label = element.customLabel?.trim() || element.label?.trim() || ""
   if (!label) return type
   if (label.toLowerCase().includes(type.toLowerCase())) return label
   if (/^\d+$/.test(label)) return `${type} ${label}`
@@ -367,7 +452,7 @@ export function storefrontFocusCard(
       item.name.split(" · ")[0] ||
       "Sector"
     return {
-      title: buyerElementTitle(element),
+      title: element.customLabel?.trim() || buyerElementTitle(element),
       sector: sector.toLowerCase().startsWith("sector")
         ? sector
         : `Sector ${sector}`,

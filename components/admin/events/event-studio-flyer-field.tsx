@@ -309,8 +309,8 @@ export function EventStudioFlyerField({
   }
 
   return (
-    <div className="space-y-3">
-      <p className="block font-mono text-xs font-semibold tracking-wider text-foreground uppercase">
+    <div className="min-w-0 space-y-2">
+      <p className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
         Flyer principal
       </p>
       <input
@@ -326,8 +326,8 @@ export function EventStudioFlyerField({
       />
 
       {hasPreview ? (
-        <div className="overflow-hidden rounded-2xl border border-border bg-zinc-950">
-          <div className="relative aspect-[4/5] w-full">
+        <div className="overflow-hidden rounded-xl border border-border bg-card">
+          <div className="aspect-[4/5] w-full overflow-hidden bg-slate-950">
             {/* eslint-disable-next-line @next/next/no-img-element -- flyer host/blob */}
             <img
               src={previewUrl ?? ""}
@@ -336,7 +336,7 @@ export function EventStudioFlyerField({
                   ? `Flyer de ${existingTitle}`
                   : "Flyer del evento"
               }
-              className="absolute inset-0 size-full object-cover"
+              className="h-full w-full object-cover"
             />
           </div>
           <div className="flex items-center gap-2 border-t border-white/10 p-3">
@@ -381,10 +381,10 @@ export function EventStudioFlyerField({
             validateAndCrop(event.dataTransfer.files?.[0] ?? null)
           }}
           className={cn(
-            "flex min-h-[240px] flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed px-6 py-8 text-center transition",
+            "relative flex aspect-[4/5] w-full flex-col items-center justify-center gap-4 overflow-hidden rounded-xl border-2 border-dashed bg-card p-4 text-center transition",
             dragOver
               ? "border-emerald-400 bg-emerald-500/10"
-              : "border-border/80 bg-card/40 hover:border-emerald-500/40 hover:bg-card",
+              : "border-border hover:border-emerald-500/40",
           )}
         >
           <span className="grid size-14 place-items-center rounded-2xl border border-border bg-background text-emerald-500">

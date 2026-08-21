@@ -23,12 +23,14 @@ export function LivingTicketQR({
   className,
   size = 208,
   variant = "card",
+  compact = false,
 }: {
   ticketId: string
   totpSecret?: string
   className?: string
   size?: number
   variant?: "card" | "scan"
+  compact?: boolean
 }) {
   const secret = totpSecret || ticketId
   const isScan = variant === "scan"
@@ -74,13 +76,14 @@ export function LivingTicketQR({
     <div
       className={cn(
         "text-center",
-        "mx-auto w-full max-w-sm",
+        compact ? "mx-auto w-full" : "mx-auto w-full max-w-sm",
         className,
       )}
     >
       <div
         className={cn(
-          "relative mx-auto grid w-full select-none place-items-center",
+          "relative mx-auto grid select-none place-items-center",
+          compact ? "size-40" : "w-full",
         )}
         onContextMenu={(event) => event.preventDefault()}
       >
@@ -90,9 +93,11 @@ export function LivingTicketQR({
         <div
           className={cn(
             "relative aspect-square w-full bg-white p-4",
+            compact && "rounded-xl p-2 shadow-inner",
             isScan
               ? "p-0"
               : "pointer-events-none rounded-[1.35rem] shadow-[0_0_32px_rgba(255,255,255,0.08)]",
+            compact && isScan && "p-2",
           )}
           style={isScan ? { colorScheme: "light" } : undefined}
         >
@@ -134,6 +139,11 @@ export function LivingTicketQR({
         </div>
       </div>
 
+      {compact && isScan ? (
+        <p className="mt-1 text-[11px] font-medium tabular-nums text-muted-foreground">
+          Se renueva en {remainingSeconds}s
+        </p>
+      ) : (
       <div className={cn("space-y-2.5", isScan ? "mt-5" : "mt-4")}>
         <Progress
           value={progress}
@@ -159,6 +169,7 @@ export function LivingTicketQR({
           </p>
         )}
       </div>
+      )}
     </div>
   )
 }

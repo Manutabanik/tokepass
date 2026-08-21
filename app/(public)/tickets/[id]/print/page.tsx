@@ -55,7 +55,7 @@ export default async function TicketPrintPage({
         ) : (
           <span />
         )}
-        <PrintTicketActions autoPrint={autoPrint} />
+        <PrintTicketActions ticketId={id} autoPrint={autoPrint} />
       </div>
 
       <PrintableTicketView

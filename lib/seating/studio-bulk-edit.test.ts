@@ -5,7 +5,9 @@ import { applySequentialLabels } from "@/lib/seating/auto-numbering"
 import {
   applyBulkElementCapacity,
   applyBulkElementColor,
+  applyBulkElementCustomLabel,
   applyBulkElementPrice,
+  applyBulkElementTicketType,
   selectSimilarElementIds,
 } from "@/lib/seating/studio-bulk-edit"
 import type { VenueMapElement } from "@/types/venue-map"
@@ -70,6 +72,32 @@ describe("studio-bulk-edit", () => {
     const next = applyBulkElementCapacity(elements, ["a"], 10)
     assert.equal(next[0]?.chairCount, 10)
     assert.equal(next[0]?.seats.length, 10)
+  })
+
+  it("aplica etiqueta personalizada y bloquea la numeración", () => {
+    const elements = [table("a", "#111111"), table("b", "#222222")]
+    const next = applyBulkElementCustomLabel(
+      elements,
+      ["a", "b"],
+      "Mesa VIP Escenario 1",
+    )
+    assert.equal(next[0]?.customLabel, "Mesa VIP Escenario 1")
+    assert.equal(next[0]?.label, "Mesa VIP Escenario 1")
+    assert.equal(next[0]?.labelLocked, true)
+    assert.equal(next[1]?.customLabel, "Mesa VIP Escenario 1")
+  })
+
+  it("asigna tipo de ticket, precio y sector", () => {
+    const elements = [table("a", "#111111"), table("b", "#222222")]
+    const next = applyBulkElementTicketType(elements, ["a"], {
+      id: "tier-vip",
+      name: "VIP",
+      price: 45000,
+    })
+    assert.equal(next[0]?.ticketTypeId, "tier-vip")
+    assert.equal(next[0]?.sectorName, "VIP")
+    assert.equal(next[0]?.price, 45000)
+    assert.equal(next[1]?.ticketTypeId, undefined)
   })
 
   it("numera en el orden de selectedIds", () => {

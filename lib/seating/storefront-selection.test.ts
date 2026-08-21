@@ -3,6 +3,7 @@ import { describe, it } from "node:test"
 
 import { emptyVenueMap } from "@/types/venue-map"
 import {
+  addSelectedSeatToCartItem,
   buyerElementTitle,
   dedupeStorefrontItemsById,
   formatStorefrontSelectionGroups,
@@ -14,6 +15,35 @@ import {
 } from "@/lib/seating/storefront-selection"
 
 describe("storefront-selection", () => {
+  it("guarda displayName al agregar una silla al carrito", () => {
+    const item = addSelectedSeatToCartItem(
+      {
+        id: "s-1",
+        seat_number: 2,
+        price: 20000,
+        is_available: true,
+        custom_label: "Silla Preferencial VIP A",
+      },
+      { id: "t-1", table_number: 4, custom_label: "Mesa VIP Escenario", seats: [] },
+      "VIP",
+    )
+    assert.equal(item.name, "Silla Preferencial VIP A")
+    assert.equal(item.displayName, "Silla Preferencial VIP A")
+    assert.equal(item.price, 20000)
+  })
+
+  it("usa customLabel como nombre de carrito e impresión", () => {
+    assert.equal(
+      venueElementSelectionName({
+        type: "round_table",
+        label: "Mesa 4",
+        sectorName: "VIP",
+        customLabel: "Mesa VIP Escenario 1",
+      }),
+      "Mesa VIP Escenario 1",
+    )
+  })
+
   it("arma el label desde el elemento del mapa, no desde Fila 1", () => {
     assert.equal(
       venueElementSelectionName({
@@ -22,7 +52,7 @@ describe("storefront-selection", () => {
         sectorName: "Grada Amarilla",
         groupName: "Grada Amarilla",
       }),
-      "Grada Amarilla · Mesa 18",
+      "Sector Grada Amarilla - Mesa 18",
     )
   })
 
@@ -55,7 +85,8 @@ describe("storefront-selection", () => {
     ]
     const item = resolveStorefrontItemFromMap(map, "tbl-18")
     assert.equal(item?.id, "tbl-18")
-    assert.equal(item?.name, "Grada Amarilla · Mesa 18")
+    assert.equal(item?.name, "Sector Grada Amarilla - Mesa 18")
+    assert.equal(item?.displayName, "Sector Grada Amarilla - Mesa 18")
     assert.equal(item?.price, 12500)
     assert.equal(item?.type, "table")
     assert.equal(item?.capacity, 6)
@@ -101,7 +132,7 @@ describe("storefront-selection", () => {
       ],
       map,
     )
-    assert.equal(next[0]?.name, "Platea · Mesa 18")
+    assert.equal(next[0]?.name, "Sector Platea - Mesa 18")
     assert.equal(next[0]?.price, 8000)
     assert.equal(next[0]?.type, "table")
   })
@@ -162,7 +193,7 @@ describe("storefront-selection", () => {
     assert.equal(groups.length, 1)
     assert.equal(
       groups[0]?.label,
-      "Grada Amarilla · Fila 1 - Asientos: 1, 2, 3",
+      "Sector Grada Amarilla - Fila 1, Sillas 1, 2, 3",
     )
     assert.deepEqual(groups[0]?.ids, ["a", "b", "c", "d"])
   })

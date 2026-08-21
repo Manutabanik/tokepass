@@ -350,14 +350,15 @@ export function createVenueZone(
     color: preset.color,
     price: 0,
     polygon: normalizePolygonToPercent(polygon),
-    layoutType: "table_combo",
-    sellMode: "group",
-    priceMode: "closed_unit",
-    rows: 4,
-    itemsPerRow: 10,
-    capacityPerUnit: 8,
-    capacity: 40,
-    labelPrefix: "Mesa ",
+    seatingType: "GENERAL",
+    layoutType: "general",
+    sellMode: "per_seat",
+    priceMode: "per_person",
+    rows: 1,
+    itemsPerRow: 1,
+    capacityPerUnit: 1,
+    capacity: 100,
+    labelPrefix: "Campo ",
   }
 }
 

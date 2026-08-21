@@ -42,6 +42,7 @@ export function WalletPassButtons({
   appleWalletEnabled = false,
   googleWalletEnabled = false,
   alwaysShowPdf = false,
+  hidePdf = false,
   className,
 }: {
   ticketId: string
@@ -50,6 +51,7 @@ export function WalletPassButtons({
   appleWalletEnabled?: boolean
   googleWalletEnabled?: boolean
   alwaysShowPdf?: boolean
+  hidePdf?: boolean
   className?: string
 }) {
   const [busy, setBusy] = useState(false)
@@ -166,7 +168,7 @@ export function WalletPassButtons({
         </button>
       ) : null}
 
-      {target === "pdf" || alwaysShowPdf ? (
+      {!hidePdf && (target === "pdf" || alwaysShowPdf) ? (
         <button
           type="button"
           disabled={disabled || busy}

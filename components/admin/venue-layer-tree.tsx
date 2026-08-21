@@ -42,7 +42,13 @@ function elementLabel(type: string, fallback: string) {
   return "Elemento"
 }
 
-function seatNodeLabel(input: { label?: string; number: number; row?: string }) {
+function seatNodeLabel(input: {
+  label?: string
+  customLabel?: string
+  number: number
+  row?: string
+}) {
+  if (input.customLabel?.trim()) return input.customLabel.trim()
   if (input.label?.trim()) return input.label.trim()
   if (input.row?.trim()) return `Fila ${input.row} · Asiento ${input.number}`
   return `Asiento ${input.number}`
@@ -142,7 +148,7 @@ export function buildVenueLayerTree(map: InteractiveVenueMap): LayerNode[] {
       } else {
         children.push({
           id: element.id,
-          label: elementLabel(element.type, element.label),
+          label: elementLabel(element.type, element.customLabel || element.label),
           selection: { kind: "element", id: element.id },
         })
       }
@@ -175,7 +181,7 @@ export function buildVenueLayerTree(map: InteractiveVenueMap): LayerNode[] {
     if (element.seats.length > 0 && element.sellMode !== "group") {
       nodes.push({
         id: element.id,
-        label: elementLabel(element.type, element.label),
+        label: elementLabel(element.type, element.customLabel || element.label),
         selection: { kind: "element", id: element.id },
         children: element.seats.map((seat) => ({
           id: `${element.id}::${seat.id}`,
@@ -186,7 +192,7 @@ export function buildVenueLayerTree(map: InteractiveVenueMap): LayerNode[] {
     } else {
       nodes.push({
         id: element.id,
-        label: elementLabel(element.type, element.label),
+        label: elementLabel(element.type, element.customLabel || element.label),
         selection: { kind: "element", id: element.id },
       })
     }

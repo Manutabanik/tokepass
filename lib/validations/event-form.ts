@@ -14,7 +14,15 @@ import {
   BUNDLE_TYPES,
   PROMO_DISCOUNT_TYPES,
 } from "@/lib/inventory/flexible-bundles"
+import {
+  isPassOrComboTicket,
+  scheduleDaysMissingTicketsMessage,
+} from "@/lib/inventory/day-ticket-coverage"
 import { INVENTORY_TIER_TYPES } from "@/lib/inventory/unified-inventory"
+import {
+  TICKET_CALCULATION_MODES,
+  TICKET_FEE_STRATEGIES,
+} from "@/lib/pricing/flexible-pricing"
 import {
   normalizeScheduleDaysFromForm,
   parseDateTimeLocal,
@@ -31,7 +39,9 @@ import {
   normalizeTicketSectorInput,
   resolveTicketSectorId,
 } from "@/lib/validations/ticket-sku"
+import { validateSectorModalities } from "@/lib/seating/seating-type"
 import { EVENT_VISIBILITY_VALUES } from "@/types/events"
+import { parseVenueMap } from "@/types/venue-map"
 import { TICKET_TIER_VISIBILITY_VALUES } from "@/types/tickets"
 
 /** ATP = Apta Todo Público. */
@@ -113,6 +123,13 @@ export const ticketTierSchema = z.preprocess(
   price: z
     .number({ error: "Indicá el precio de la entrada." })
     .min(0, "El precio no puede ser negativo."),
+  /** Neto del organizador. El persist lo mapea a ticket_tiers.base_price. */
+  basePrice: z.number().min(0).optional(),
+  feeStrategy: z.enum(TICKET_FEE_STRATEGIES).optional().default("absorb_in_price"),
+  calculationMode: z
+    .enum(TICKET_CALCULATION_MODES)
+    .optional()
+    .default("public_price"),
   capacity: z
     .number({ error: "Indicá la capacidad de esta entrada." })
     .int()
@@ -311,7 +328,26 @@ const eventFormObject = z
           })
         }
       }
-    } else {
+    }
+
+    const scheduledDays = data.basics.isMultiDay
+      ? data.basics.scheduleDays
+      : []
+    if (scheduledDays.length >= 2) {
+      const uncoveredDays = scheduleDaysMissingTicketsMessage(
+        scheduledDays,
+        data.tickets,
+      )
+      if (uncoveredDays) {
+        context.addIssue({
+          code: "custom",
+          path: ["tickets"],
+          message: uncoveredDays,
+        })
+      }
+    }
+
+    if (!data.basics.isMultiDay) {
       const date = data.basics.date?.trim() ?? ""
       const dateMs = parseDateTimeLocal(date)?.getTime() ?? NaN
       if (!date || Number.isNaN(dateMs)) {
@@ -407,6 +443,18 @@ const eventFormObject = z
       }
     }
 
+    if (data.venue.includesSeatingMap || data.venue.venueMap) {
+      for (const issue of validateSectorModalities(
+        parseVenueMap(data.venue.venueMap),
+      )) {
+        context.addIssue({
+          code: "custom",
+          path: ["venue", "venueMap"],
+          message: issue.message,
+        })
+      }
+    }
+
     if (
       data.basics.hasSeatingPlan &&
       !hasBlueprintZones &&
@@ -448,7 +496,13 @@ const draftTicketSchema = z.preprocess(
   ),
   isNew: z.boolean().optional(),
   name: z.string().optional().default(""),
-  price: z.number().optional(),
+  price: z.number().min(0, "El precio no puede ser negativo.").optional(),
+  basePrice: z.number().min(0).optional(),
+  feeStrategy: z.enum(TICKET_FEE_STRATEGIES).optional().default("absorb_in_price"),
+  calculationMode: z
+    .enum(TICKET_CALCULATION_MODES)
+    .optional()
+    .default("public_price"),
   capacity: z.number().int().optional(),
   sold: z.number().int().min(0).optional(),
   timeLimit: z.string().optional(),
@@ -587,6 +641,9 @@ function blankDraftTicket(): EventFormValues["tickets"][number] {
   return {
     name: "Borrador",
     price: 0,
+    basePrice: 0,
+    feeStrategy: "absorb_in_price",
+    calculationMode: "public_price",
     capacity: 1,
     timeLimit: "",
     bonusReward: "",
@@ -662,6 +719,9 @@ export function coerceDraftEventForm(
       ...tier,
       name: tier.name.trim(),
       price: Number.isFinite(tier.price) ? Number(tier.price) : 0,
+      basePrice: Number.isFinite(tier.basePrice) ? Number(tier.basePrice) : 0,
+      feeStrategy: tier.feeStrategy ?? "absorb_in_price",
+      calculationMode: tier.calculationMode ?? "public_price",
       capacity:
         Number.isFinite(tier.capacity) && Number(tier.capacity) >= 1
           ? Number(tier.capacity)
@@ -692,9 +752,11 @@ export function coerceDraftEventForm(
       promoPayQty: Math.max(0, Math.floor(Number(tier.promoPayQty) || 1)),
       description: (tier.description ?? "").trim().slice(0, TICKET_DESCRIPTION_MAX),
       highlightBadge: tier.highlightBadge === "bestseller" ? "bestseller" : null,
-      dayId: isMultiDay
-        ? remapBoundDayId(asUuidOrNull(tier.dayId, ["all"]), validDayIds)
-        : null,
+      dayId: isPassOrComboTicket(tier)
+        ? null
+        : isMultiDay
+          ? remapBoundDayId(asUuidOrNull(tier.dayId, ["all"]), validDayIds)
+          : null,
       phases: tier.phases ?? [],
     }))
 

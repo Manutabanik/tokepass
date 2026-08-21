@@ -136,7 +136,11 @@ export function TicketTierSelector({
             label="Todas"
             onClick={() => setDayFilter("all")}
           />
-          {days.map((day) => (
+          {days
+            .filter((day) =>
+              grouped.standard.some((tier) => tier.dayId === day.id),
+            )
+            .map((day) => (
             <DayChip
               key={day.id}
               active={dayFilter === day.id}

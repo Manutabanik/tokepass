@@ -113,51 +113,44 @@ export function EventLivePreview({
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <div className="relative aspect-[4/5] w-full bg-zinc-900">
+            <div className="relative aspect-[4/5] w-full bg-muted">
               {flyerUrl || existingFlyerUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element -- blob/public flyer
                 <img
                   src={flyerUrl ?? existingFlyerUrl ?? ""}
-                  alt=""
+                  alt={eventTitle}
                   className="absolute inset-0 size-full object-cover"
                 />
               ) : (
-                <div className="absolute inset-0 overflow-hidden">
-                  <div className="tokepass-aurora absolute -inset-10 bg-gradient-to-br from-emerald-600/70 via-zinc-900 to-violet-700/70" />
-                  <div className="tokepass-aurora tokepass-aurora-magenta absolute -right-8 -bottom-10 size-56 rounded-full bg-fuchsia-600/30 blur-3xl" />
-                  <div className="tokepass-aurora tokepass-aurora-cyan absolute -top-8 -left-6 size-48 rounded-full bg-cyan-400/20 blur-3xl" />
-                  <div className="absolute inset-0 grid place-items-center">
-                    <p className="text-xs font-medium tracking-wide text-zinc-300">
-                      Flyer del evento
-                    </p>
-                  </div>
+                <div className="absolute inset-0 grid place-items-center bg-muted">
+                  <p className="text-xs font-medium tracking-wide text-muted-foreground">
+                    Flyer del evento
+                  </p>
                 </div>
               )}
-              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-zinc-950 via-zinc-950/75 to-transparent px-4 pt-20 pb-4">
-                <p className="text-[10px] font-semibold tracking-[0.22em] text-emerald-400 uppercase">
-                  TokePass
-                </p>
-                <h2 className="font-heading mt-1 line-clamp-3 text-[1.7rem] leading-[1.08] font-extrabold tracking-tight text-white">
-                  {eventTitle}
-                </h2>
-                {categoryName || ageLabel ? (
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {categoryName ? (
-                      <span className="rounded-full border border-white/15 bg-white/10 px-2.5 py-1 text-[11px] font-medium text-zinc-100">
-                        {categoryName}
-                      </span>
-                    ) : null}
-                    {ageLabel ? (
-                      <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-300">
-                        {ageLabel}
-                      </span>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
             </div>
 
             <div className="space-y-3 px-4 pt-4 pb-8">
+              <p className="text-[10px] font-semibold tracking-[0.22em] text-emerald-400 uppercase">
+                TokePass
+              </p>
+              <h2 className="font-heading line-clamp-3 text-[1.7rem] leading-[1.08] font-extrabold tracking-tight text-white">
+                {eventTitle}
+              </h2>
+              {categoryName || ageLabel ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {categoryName ? (
+                    <span className="rounded-full border border-white/15 bg-white/10 px-2.5 py-1 text-[11px] font-medium text-zinc-100">
+                      {categoryName}
+                    </span>
+                  ) : null}
+                  {ageLabel ? (
+                    <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-300">
+                      {ageLabel}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
               <p className="flex items-start gap-2 text-sm text-zinc-200">
                 <CalendarDays className="mt-0.5 size-4 shrink-0 text-emerald-400" />
                 <span className="min-w-0 break-words">{when}</span>

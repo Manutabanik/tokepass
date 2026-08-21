@@ -68,7 +68,8 @@ export function FavoriteToggleButton({
         disabled={pending}
         onClick={handleClick}
         className={cn(
-          "min-h-12 rounded-xl border-white/15 bg-white/5 text-white hover:bg-white/10",
+          "min-h-12 rounded-xl border-white/15 bg-white/5 text-white transition-all duration-300 hover:scale-105 hover:bg-white/10 active:scale-90",
+          favorited && "border-red-500/30 shadow-[0_0_15px_rgba(239,68,68,0.35)]",
           className,
         )}
         aria-pressed={favorited}
@@ -77,7 +78,11 @@ export function FavoriteToggleButton({
           <LoaderCircle className="animate-spin" />
         ) : (
           <Heart
-            className={cn("size-4", favorited && "fill-rose-500 text-rose-500")}
+            className={cn(
+              "size-4 transition-transform duration-300",
+              favorited &&
+                "fill-red-500 text-red-500 motion-safe:animate-favorite-pop",
+            )}
           />
         )}
         {favorited ? "En favoritos" : "Guardar favorito"}
@@ -94,9 +99,12 @@ export function FavoriteToggleButton({
       aria-label={favorited ? "Quitar de favoritos" : "Guardar favorito"}
       aria-pressed={favorited}
       className={cn(
+        "transition-all duration-300 hover:scale-110 active:scale-75",
         tone === "bar"
           ? "size-10 rounded-full border border-border bg-background p-2.5 text-foreground shadow-none hover:bg-muted"
-          : "size-12 rounded-full border-0 bg-black/45 text-white shadow-lg shadow-black/30 backdrop-blur-md hover:bg-black/60",
+          : "size-12 rounded-full border border-white/10 bg-black/40 p-2.5 text-white shadow-lg shadow-black/30 backdrop-blur-md hover:bg-black/60",
+        favorited &&
+          "text-red-500 shadow-[0_0_15px_rgba(239,68,68,0.4)]",
         className,
       )}
       onClick={handleClick}
@@ -106,8 +114,9 @@ export function FavoriteToggleButton({
       ) : (
         <Heart
           className={cn(
-            "size-5",
-            favorited && "fill-rose-700 text-rose-700",
+            "size-5 transition-transform duration-300",
+            favorited &&
+              "scale-110 fill-current text-red-500 drop-shadow-md motion-safe:animate-favorite-pop",
           )}
           aria-hidden="true"
         />

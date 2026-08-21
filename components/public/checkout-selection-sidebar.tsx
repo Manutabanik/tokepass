@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowRight, LoaderCircle, ScanSearch } from "lucide-react"
+import { ArrowRight, Loader2, ScanSearch } from "lucide-react"
 import { useEffect, useState, useSyncExternalStore } from "react"
 import { createPortal } from "react-dom"
 
@@ -27,7 +27,7 @@ export type CheckoutSidebarCta = {
   disabled?: boolean
   locked?: boolean
   showArrow?: boolean
-  pulse?: boolean
+  pulse?: boolean // kept for callers; pulse no longer applied to the pay CTA
   onClick: () => void
 }
 
@@ -195,6 +195,7 @@ export function CheckoutSelectionSidebar({
             ) : null}
             <Button
               type="button"
+              size="storefront"
               disabled={
                 Boolean(cta.pending) ||
                 Boolean(cta.locked) ||
@@ -207,23 +208,15 @@ export function CheckoutSelectionSidebar({
               }}
               className={cn(
                 tapFeedbackClass,
-                "h-14 w-full rounded-2xl bg-primary px-6 text-base font-bold text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50",
-                cta.disabled && "cursor-not-allowed opacity-50",
-                cta.pulse &&
-                  !cta.disabled &&
-                  !cta.pending &&
-                  !cta.locked &&
-                  "animate-pulse",
+                "h-14 w-full rounded-xl bg-emerald-500 px-6 text-lg font-black text-black shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:bg-emerald-400 disabled:scale-100 disabled:cursor-not-allowed disabled:opacity-70",
+                cta.disabled && "cursor-not-allowed opacity-70",
               )}
             >
               {cta.pending ? (
-                <>
-                  <LoaderCircle
-                    className="size-4 animate-spin"
-                    aria-hidden="true"
-                  />
-                  {cta.pendingLabel ?? "Procesando"}
-                </>
+                <span className="flex items-center gap-2">
+                  <Loader2 className="size-5 animate-spin" aria-hidden="true" />
+                  {cta.pendingLabel ?? "Procesando pago..."}
+                </span>
               ) : (
                 <>
                   <span className="min-w-0 truncate">{cta.label}</span>

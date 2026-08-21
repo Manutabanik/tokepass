@@ -13,7 +13,7 @@ export function HeaderInfoBlock({
 
   return (
     <header className={cn("px-4 md:px-0", className)}>
-      <h1 className="mt-5 mb-1 line-clamp-2 break-words text-4xl font-black leading-[1.05] tracking-tighter text-foreground lg:mt-8 lg:text-6xl">
+      <h1 className="mt-5 mb-1 line-clamp-2 break-words text-3xl font-black leading-tight tracking-tight text-foreground drop-shadow-sm sm:text-4xl lg:mt-8 lg:text-6xl dark:drop-shadow-lg">
         {title}
       </h1>
       {subtitle ? (

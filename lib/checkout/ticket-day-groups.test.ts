@@ -13,6 +13,7 @@ import {
   checkoutDateCardParts,
   defaultCheckoutDateId,
   defaultCheckoutKindTab,
+  FULL_PASS_TAB_ID,
   isSamePriceAnyDay,
   listCheckoutDateCards,
   listCheckoutDayTabs,
@@ -48,12 +49,22 @@ function tier(
 }
 
 describe("listCheckoutDayTabs", () => {
-  it("renders every configured day even when tickets are full-pass only", () => {
-    const tabs = listCheckoutDayTabs(days, [])
+  it("hides days that have no day-specific tickets", () => {
+    const tabs = listCheckoutDayTabs(days, [
+      tier({ id: "vie", name: "Viernes", isFullPass: false, dayId: "d1" }),
+      tier({ id: "abono", name: "Abono", isFullPass: true }),
+    ])
     assert.deepEqual(
       tabs.map((tab) => tab.dateId),
-      ["d1", "d2"],
+      ["d1"],
     )
+  })
+
+  it("hides every day tab when only combos or full-pass tickets exist", () => {
+    const tabs = listCheckoutDayTabs(days, [
+      tier({ id: "abono", name: "Abono", isFullPass: true }),
+    ])
+    assert.deepEqual(tabs, [])
   })
 })
 
@@ -67,9 +78,18 @@ describe("isSamePriceAnyDay", () => {
 })
 
 describe("ticketMatchesTab", () => {
-  it("shows full-pass tickets on a day tab when they apply to any day", () => {
+  it("keeps full-pass and combo tickets off day tabs unless explicitly allowed", () => {
     const pass = tier({ id: "a", name: "General", isFullPass: true })
+    const combo = tier({
+      id: "pack",
+      name: "Pack",
+      isFullPass: false,
+      dayId: "d1",
+      tierType: "bundle",
+    })
     assert.equal(ticketMatchesTab(pass, "d1"), false)
+    assert.equal(ticketMatchesTab(combo, "d1"), false)
+    assert.equal(ticketMatchesTab(combo, FULL_PASS_TAB_ID), true)
     assert.equal(
       ticketMatchesTab(pass, "d1", { treatFullPassAsAnyDay: true }),
       true,
@@ -87,7 +107,15 @@ describe("progressive disclosure tabs", () => {
   const pass = tier({ id: "abono", name: "Abono", isFullPass: true })
 
   it("shows kind tabs only when the event has days and passes", () => {
+    const combo = tier({
+      id: "pack",
+      name: "Pack",
+      isFullPass: false,
+      dayId: "d1",
+      tierType: "bundle",
+    })
     assert.equal(shouldShowCheckoutKindTabs([dayTicket, pass], days), true)
+    assert.equal(shouldShowCheckoutKindTabs([dayTicket, combo], days), true)
     assert.equal(shouldShowCheckoutKindTabs([dayTicket], days), false)
     assert.equal(shouldShowCheckoutKindTabs([pass], days), false)
   })

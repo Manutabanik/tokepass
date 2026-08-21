@@ -120,9 +120,18 @@ export function synthesizeLodZones(map: InteractiveVenueMap): VenueMapZone[] {
         color: head.color || "#22d3ee",
         price: head.price,
         polygon: aabbToPercentPolygon(box),
-        layoutType: "table_combo" as const,
-        sellMode: "group" as const,
-        priceMode: "closed_unit" as const,
+        seatingType: members.every((item) => item.type === "standing_zone")
+          ? ("GENERAL" as const)
+          : ("RESERVED" as const),
+        layoutType: members.every((item) => item.type === "standing_zone")
+          ? ("general" as const)
+          : ("table_combo" as const),
+        sellMode: members.every((item) => item.type === "standing_zone")
+          ? ("per_seat" as const)
+          : ("group" as const),
+        priceMode: members.every((item) => item.type === "standing_zone")
+          ? ("per_person" as const)
+          : ("closed_unit" as const),
         rows: 1,
         itemsPerRow: members.length,
         capacityPerUnit: 1,

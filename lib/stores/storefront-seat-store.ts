@@ -8,6 +8,7 @@ import {
   type StorefrontLimitReason,
 } from "@/lib/checkout-limits"
 import { storefrontLineTotal } from "@/lib/checkout/charge-unit"
+import { reservedPlaceLabel } from "@/lib/seating/seating-type"
 
 export type StorefrontViewMode = "map" | "list"
 
@@ -16,6 +17,8 @@ export type StorefrontSelectedItemType = "seat" | "table" | "zone" | "standing"
 export type StorefrontSelectedItem = {
   id: string
   name: string
+  /** Etiqueta formateada que se imprime en el ticket (Boletería). */
+  displayName?: string
   type: StorefrontSelectedItemType
   price: number
   capacity: number
@@ -61,6 +64,10 @@ type StorefrontSeatState = {
     item: StorefrontSelectedItem,
     maxCount?: number | null,
   ) => StorefrontToggleResult
+  incrementSelectedItem: (
+    item: StorefrontSelectedItem,
+    maxCount?: number | null,
+  ) => StorefrontToggleResult
   removeSelectedItem: (id: string) => void
   patchSelectedItem: (id: string, patch: Partial<StorefrontSelectedItem>) => void
   clearSelectedItems: () => void
@@ -87,12 +94,15 @@ function selectionCount(items: StorefrontSelectedItem[]) {
 function layoutSeatToItem(seat: StorefrontLayoutSeat): StorefrontSelectedItem {
   const name =
     seat.label?.trim() ||
-    [seat.sectorName.trim(), `Fila ${seat.row}`, String(seat.number)]
-      .filter((part) => part.length > 0)
-      .join(" · ")
+    reservedPlaceLabel({
+      sectorName: seat.sectorName,
+      row: seat.row,
+      number: seat.number,
+    })
   return {
     id: seat.id,
     name,
+    displayName: name,
     type: "seat",
     price: seat.price,
     capacity: 1,
@@ -219,6 +229,19 @@ export const useStorefrontSeatStore = create<StorefrontSeatState>()(
     const without = current.filter((entry) => entry.id !== item.id)
     set(withDerived([...without, nextItem]))
     return { ok: true, added: !current.some((entry) => entry.id === item.id) }
+  },
+
+  incrementSelectedItem: (item, maxCount) => {
+    const current = get().selectedItems
+    const existing = current.find((entry) => entry.id === item.id)
+    return get().upsertSelectedItem(
+      {
+        ...existing,
+        ...item,
+        capacity: (existing ? itemCapacity(existing) : 0) + 1,
+      },
+      maxCount,
+    )
   },
 
   removeSelectedItem: (id) => {

@@ -298,12 +298,14 @@ select:-webkit-autofill {
   }
 }
 
-.scrollbar-none {
+.scrollbar-none,
+.scrollbar-hide {
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
 
-.scrollbar-none::-webkit-scrollbar {
+.scrollbar-none::-webkit-scrollbar,
+.scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
 
@@ -335,7 +337,7 @@ select:-webkit-autofill {
   width: 80mm;
   max-width: 80mm;
   margin: 0 auto;
-  padding: 0;
+  padding: 3mm 3.5mm;
   background: #fff;
   color: #000;
 }
@@ -345,92 +347,178 @@ select:-webkit-autofill {
   font-family: ui-sans-serif, system-ui, sans-serif;
 }
 
-.print-ticket-brand {
+.print-ticket-header {
+  padding-bottom: 2.5mm;
+  border-bottom: 1px solid #000;
+}
+
+.print-ticket-flyer {
+  display: block;
+  width: 100%;
+  height: 20mm;
+  margin: 0 0 2mm;
+  object-fit: cover;
+  filter: grayscale(1) contrast(1.25);
+  background: #fff;
+}
+
+.print-ticket-event-name {
   margin: 0;
-  padding: 1mm 0 0;
-  font-size: 8pt;
-  font-weight: 800;
-  letter-spacing: 0.18em;
+  font-size: 12pt;
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
   text-transform: uppercase;
 }
 
-.print-ticket-tier {
-  margin: 1.5mm 1mm 0;
-  padding: 0;
-  font-size: 26pt;
+.print-ticket-hero {
+  margin: 2.5mm 0;
+  padding: 2.5mm 2mm;
+  background: #000;
+  color: #fff;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+.print-ticket-hero-kicker {
+  margin: 0;
+  font-size: 7pt;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.print-ticket-hero-tier {
+  margin: 1mm 0 0;
+  font-size: 16pt;
   font-weight: 900;
   line-height: 0.95;
-  letter-spacing: -0.03em;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
 }
 
-.print-ticket-seat {
-  margin: 1mm 1mm 0;
-  padding: 0;
-  font-size: 14pt;
+.print-ticket-hero-sector {
+  display: inline-block;
+  margin: 1.5mm 0 0;
+  padding: 0.7mm 2mm;
+  background: #fff;
+  color: #000;
+  font-size: 8pt;
   font-weight: 800;
-  line-height: 1.05;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.print-ticket-when-block {
+  padding: 2mm 0;
+  border-bottom: 1px dashed #000;
 }
 
 .print-ticket-when,
+.print-ticket-time,
 .print-ticket-venue {
-  margin: 1.5mm 1mm 0;
+  margin: 0;
   padding: 0;
-  font-size: 16pt;
-  font-weight: 900;
-  line-height: 1.05;
+  font-weight: 800;
+  line-height: 1.15;
   text-transform: uppercase;
+}
+
+.print-ticket-when {
+  font-size: 9pt;
+}
+
+.print-ticket-time,
+.print-ticket-venue {
+  margin-top: 0.8mm;
+  font-size: 8pt;
+}
+
+.print-ticket-qr-block {
+  padding: 2.5mm 0;
+  border-bottom: 1px solid #000;
 }
 
 .print-qr-quiet {
   display: flex;
   justify-content: center;
-  margin: 2mm 0 0;
-  padding: 3mm;
+  margin: 0 auto;
+  padding: 2mm;
+  width: fit-content;
   background: #fff;
+  border: 2px solid #000;
 }
 
 .print-ticket-qr {
   display: block;
-  width: 46mm;
-  height: 46mm;
+  width: 36mm;
+  height: 36mm;
+  max-width: 300px;
+  max-height: 300px;
   background: #fff;
   shape-rendering: crispEdges;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
 
-.print-ticket-event,
-.print-ticket-holder,
-.print-ticket-dni,
-.print-ticket-price,
 .print-ticket-code {
-  margin: 1mm 2mm 0;
+  margin: 1.5mm 0 0;
   padding: 0;
-  line-height: 1.15;
-}
-
-.print-ticket-event {
+  font-family: ui-monospace, monospace;
   font-size: 9pt;
-  font-weight: 600;
-}
-
-.print-ticket-holder {
-  font-size: 10pt;
-  font-weight: 700;
-}
-
-.print-ticket-dni,
-.print-ticket-price,
-.print-ticket-code {
-  font-size: 9pt;
+  font-weight: 800;
+  letter-spacing: 0.16em;
   font-variant-numeric: tabular-nums;
 }
 
-.print-ticket-code {
-  font-family: ui-monospace, monospace;
+.print-ticket-audit {
+  padding: 2mm 0;
+  border-bottom: 1px dashed #000;
+  text-align: left;
+  font-size: 7.5pt;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.print-ticket-audit-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 2mm;
+  margin: 0 0 0.8mm;
+}
+
+.print-ticket-audit-meta {
+  margin: 1mm 0 0;
+  text-align: center;
+  font-size: 7pt;
+  font-weight: 700;
+}
+
+.print-ticket-brand-foot {
+  padding-top: 2.5mm;
+  text-align: center;
+}
+
+.print-ticket-wordmark {
+  display: block;
+  width: 42mm;
+  height: 8mm;
+  margin: 0 auto;
+}
+
+.print-ticket-domain {
+  margin: 1mm 0 0;
+  font-size: 8pt;
+  font-weight: 800;
   letter-spacing: 0.12em;
-  padding-bottom: 2mm;
+}
+
+.print-ticket-legal {
+  margin: 0.6mm 0 0;
+  font-size: 6.5pt;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .stub-divider {
@@ -470,12 +558,16 @@ select:-webkit-autofill {
     display: none !important;
   }
 
-  /* El boleto de colección usa header/footer internos: no ocultarlos. */
+  /* El boleto de colección y el termico usan header/footer internos. */
   .ticket-print-card,
   .ticket-print-card header,
   .ticket-print-card footer,
   .ticket-print-banner,
-  .ticket-print-footer {
+  .ticket-print-footer,
+  .print-ticket header,
+  .print-ticket footer,
+  .print-ticket-header,
+  .print-ticket-brand-foot {
     display: block !important;
   }
 
@@ -530,11 +622,33 @@ select:-webkit-autofill {
     padding: 0;
   }
 
+  body:has(#printable-ticket):not(:has(.ticket-print-card)):not(.pos-thermal-printing) * {
+    visibility: hidden;
+  }
+
+  body:has(#printable-ticket):not(:has(.ticket-print-card)):not(.pos-thermal-printing)
+    #printable-ticket,
+  body:has(#printable-ticket):not(:has(.ticket-print-card)):not(.pos-thermal-printing)
+    #printable-ticket * {
+    visibility: visible;
+  }
+
+  body:has(#printable-ticket):not(:has(.ticket-print-card)):not(.pos-thermal-printing)
+    #printable-ticket {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 80mm !important;
+    margin: 0;
+    padding: 0;
+    background: #fff;
+  }
+
   .print-ticket {
     width: 80mm !important;
     max-width: 80mm !important;
     margin: 0 !important;
-    padding: 0 !important;
+    padding: 3mm 3.5mm !important;
     box-shadow: none !important;
     border: none !important;
     background: #fff !important;
@@ -556,19 +670,20 @@ select:-webkit-autofill {
     max-width: 58mm !important;
   }
 
-  .print-width-58 .print-ticket-tier {
-    font-size: 20pt;
+  .print-width-58 .print-ticket-hero-tier {
+    font-size: 13pt;
   }
 
   .print-width-58 .print-ticket-when,
   .print-width-58 .print-ticket-venue {
-    font-size: 13pt;
+    font-size: 8pt;
   }
 
   .print-ticket-qr {
-    width: 44mm !important;
-    height: 44mm !important;
-    max-width: none !important;
+    width: 36mm !important;
+    height: 36mm !important;
+    max-width: 300px !important;
+    max-height: 300px !important;
   }
 
   .print-ticket-pass:not(.ticket-print-card) {
@@ -721,6 +836,25 @@ select:-webkit-autofill {
 
 .animate-pulse-subtle {
   animation: tokepass-pulse-subtle 1.35s ease-in-out infinite;
+}
+
+@keyframes tokepass-favorite-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.28);
+  }
+  70% {
+    transform: scale(0.9);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.animate-favorite-pop {
+  animation: tokepass-favorite-pop 0.45s ease-out;
 }
 
 @keyframes living-qr-scan-beam {

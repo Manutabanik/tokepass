@@ -118,4 +118,38 @@ describe("multi-day draft coercion", () => {
     assert.equal(coerced.tickets[0]?.dayId, liveDay)
     assert.equal(coerced.tickets[1]?.dayId, null)
   })
+
+  it("clears dayId on combo / full-pass tickets", () => {
+    const liveDay = "11111111-1111-4111-8111-111111111111"
+    const coerced = coerceDraftEventForm({
+      ...draftWithDays(true, [
+        {
+          id: liveDay,
+          title: "Día 1",
+          startTime: "2026-11-14T20:00",
+          endTime: "2026-11-15T04:00",
+        },
+        {
+          id: "22222222-2222-4222-8222-222222222222",
+          title: "Día 2",
+          startTime: "2026-11-15T20:00",
+          endTime: "2026-11-16T04:00",
+        },
+      ]),
+      tickets: [
+        {
+          name: "Abono",
+          price: 20000,
+          capacity: 50,
+          visibility: "public",
+          layoutType: "general",
+          capacityPerUnit: 1,
+          admitCount: 1,
+          dayId: liveDay,
+          tierType: "bundle",
+        },
+      ],
+    })
+    assert.equal(coerced.tickets[0]?.dayId, null)
+  })
 })
