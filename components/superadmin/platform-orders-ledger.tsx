@@ -117,7 +117,7 @@ export function PlatformOrdersLedger({
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {kpis.map(({ label, value, helper, icon: Icon, accent, wrap, ...rest }) => {
           const featured = "featured" in rest && rest.featured
           return (
@@ -277,9 +277,9 @@ export function PlatformOrdersLedger({
                       }}
                       className="cursor-pointer border-border hover:bg-muted/50"
                     >
-                      <TableCell className="py-4 pl-6 align-top">
+                      <TableCell className="min-w-[150px] max-w-[250px] py-4 pl-6 align-top">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-mono text-xs text-foreground">
+                          <p className="truncate font-mono text-xs text-foreground">
                             #{order.orderId.slice(0, 8)}
                           </p>
                           {order.paymentMethod === "test_sandbox" ? (
@@ -298,7 +298,7 @@ export function PlatformOrdersLedger({
                           {paymentMethodLabel(order.paymentMethod)}
                         </p>
                       </TableCell>
-                      <TableCell className="align-top">
+                      <TableCell className="min-w-[150px] max-w-[250px] align-top">
                         <p className="truncate font-medium text-foreground">
                           {order.organizerName}
                         </p>

@@ -30,6 +30,7 @@ describe("guest checkout input", () => {
     assert.equal(normalizeArgentineMobile("1123456789"), "+5491123456789")
     assert.equal(normalizeArgentineMobile("+54 9 11 2345-6789"), "+5491123456789")
     assert.equal(normalizeArgentineMobile("5491123456789"), "+5491123456789")
+    assert.equal(normalizeArgentineMobile("2645067363"), "+5492645067363")
     assert.equal(normalizeArgentineMobile("123"), null)
   })
 })

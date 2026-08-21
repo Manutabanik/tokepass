@@ -213,7 +213,7 @@ export function SearchBar({
               sideOffset={10}
               align="start"
               className={cn(
-                "z-50 max-h-56 w-[min(100vw-2rem,18rem)] overflow-y-auto rounded-xl shadow-md",
+                "z-[60] max-h-56 w-[min(100vw-2rem,18rem)] overflow-y-auto rounded-xl shadow-md",
                 "border border-zinc-200 bg-white text-zinc-900",
                 "dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100",
               )}
@@ -271,7 +271,7 @@ export function SearchBar({
               sideOffset={10}
               align="start"
               className={cn(
-                "z-50 max-h-56 w-[min(100vw-2rem,18rem)] overflow-y-auto rounded-xl shadow-md",
+                "z-[60] max-h-56 w-[min(100vw-2rem,18rem)] overflow-y-auto rounded-xl shadow-md",
                 "border border-zinc-200 bg-white text-zinc-900",
                 "dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100",
               )}

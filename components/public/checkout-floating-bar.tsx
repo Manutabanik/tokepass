@@ -30,6 +30,7 @@ export function CheckoutFloatingBar({
   onEditMap,
   pulseCta = false,
   prominentCta = false,
+  variant = "page",
 }: {
   pending?: boolean
   locked?: boolean
@@ -93,8 +94,11 @@ export function CheckoutFloatingBar({
       {/* Barra Flotante Inferior Mobile */}
       <div
         className={cn(
-          "fixed right-0 bottom-0 left-0 z-50 flex items-center justify-between border-t border-gray-200 bg-white p-4 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)] lg:hidden dark:border-border dark:bg-card dark:shadow-[0_-10px_24px_-6px_rgba(0,0,0,0.45)]",
-          "pb-[max(1.5rem,env(safe-area-inset-bottom))]",
+          "flex items-center justify-between border-t border-border bg-background p-4",
+          "pb-[max(1rem,env(safe-area-inset-bottom))]",
+          variant === "panel"
+            ? "min-w-0 flex-1 shrink-0 border-0 bg-transparent p-0 pb-0"
+            : "fixed inset-x-0 bottom-0 z-50 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)] lg:hidden dark:shadow-[0_-10px_24px_-6px_rgba(0,0,0,0.45)]",
         )}
       >
         <div
@@ -138,7 +142,7 @@ export function CheckoutFloatingBar({
             onClick={handlePay}
             className={cn(
               tapFeedbackClass,
-              "h-12 min-w-0 shrink-0 rounded-xl bg-primary px-5 text-base font-bold text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90 md:h-14",
+              "h-12 min-h-[44px] min-w-0 shrink-0 rounded-xl bg-primary px-5 text-base font-bold text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90 md:h-14",
               prominentCta && "lg:w-full",
               !canContinue && "cursor-not-allowed opacity-50",
               pulseCta && canContinue && "animate-pulse",

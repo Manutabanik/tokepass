@@ -66,7 +66,7 @@ export default async function EventStorePage({
     .order("created_at", { ascending: false })
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8">
+    <div className="mx-auto w-full max-w-6xl space-y-8 p-4 sm:p-6">
       <div>
         <Link
           href={`/admin/events/${eventId}`}

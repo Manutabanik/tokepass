@@ -113,7 +113,7 @@ export default async function SuperAdminDashboardPage() {
         <EventAuditWorkbench events={tower.pendingEvents} />
       </section>
 
-      <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {kpis.map(({ label, value, helper, icon: Icon, accent }) => (
           <Card key={label} className="border-border bg-card py-0 text-card-foreground">
             <CardContent className="px-5 py-5">
@@ -152,7 +152,9 @@ export default async function SuperAdminDashboardPage() {
                   key={organizer.id}
                   className="rounded-xl border border-border bg-muted/40 p-4"
                 >
-                  <p className="font-semibold text-foreground">{organizer.name}</p>
+                  <p className="min-w-0 truncate font-semibold text-foreground">
+                    {organizer.name}
+                  </p>
                   <p className="mt-1 truncate text-sm text-muted-foreground">
                     {organizer.email}
                   </p>
@@ -186,18 +188,18 @@ export default async function SuperAdminDashboardPage() {
                 <TableBody>
                   {organizers.map((organizer) => (
                     <TableRow key={organizer.id} className="border-border hover:bg-muted/50">
-                      <TableCell className="py-4 pl-6">
-                        <div className="flex items-center gap-3">
+                      <TableCell className="min-w-[150px] max-w-[250px] py-4 pl-6">
+                        <div className="flex min-w-0 items-center gap-3">
                           <span className="grid size-9 shrink-0 place-items-center rounded-full bg-sky-500/15 text-xs font-medium text-sky-700 dark:text-sky-300">
                             {getInitials(organizer.name, organizer.email)}
                           </span>
-                          <span className="font-medium text-foreground">
+                          <span className="min-w-0 truncate font-medium text-foreground">
                             {organizer.name}
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {organizer.email}
+                      <TableCell className="min-w-[150px] max-w-[250px] text-muted-foreground">
+                        <span className="block truncate">{organizer.email}</span>
                       </TableCell>
                       <TableCell className="text-right tabular-nums text-foreground">
                         {formatNumber(organizer.activeEvents)}

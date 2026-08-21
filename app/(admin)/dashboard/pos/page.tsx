@@ -33,7 +33,7 @@ export default async function DashboardPosPage() {
   }
 
   return (
-    <div className="-mx-4 -mt-6 sm:-mx-8 lg:-mx-10">
+    <div className="-mx-4 -mt-6 -mb-4 flex min-h-0 flex-1 flex-col overflow-hidden sm:-mx-8 lg:-mx-10">
       <ClientErrorBoundary homeHref="/admin" homeLabel="Ir al inicio">
         <PosTerminal events={events} />
       </ClientErrorBoundary>

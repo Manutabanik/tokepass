@@ -191,6 +191,8 @@ function blankMapTicket(
     layoutType: "numbered_seat",
     seatingSectorId: null,
     capacityPerUnit: 1,
+    minPurchaseLimit: 1,
+    maxPurchaseLimit: null,
     admitCount: 1,
     tierType: "seated",
     listPrice: null,

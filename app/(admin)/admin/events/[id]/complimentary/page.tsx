@@ -13,7 +13,8 @@ import { createClient } from "@/lib/supabase/server"
 
 export const metadata: Metadata = {
   title: "Emitir cortesías",
-  description: "Emisión masiva de cortesías por CSV o lote innombrado.",
+  description:
+    "Emisión individual con envío por email o WhatsApp, o lotes masivos por CSV.",
 }
 
 export default async function EventComplimentaryPage({
@@ -50,13 +51,12 @@ export default async function EventComplimentaryPage({
     getEventStoreItemsForCombo(eventId),
   ])
 
-  // Prefetch combo for first tier (client will refresh on change)
   if (tiers[0]) {
     await getTierComboItems(tiers[0].id)
   }
 
   return (
-    <main className="mx-auto w-full max-w-lg space-y-6 px-4 py-8 sm:px-6">
+    <main className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">
       <Link
         href={`/admin/events/${eventId}`}
         className="inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-foreground"
@@ -74,19 +74,18 @@ export default async function EventComplimentaryPage({
           Emitir cortesías
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {event.title} · CSV nominado o lote para imprimir. Hasta 3.000 QRs por
-          tanda.
+          {event.title} · Envío 1 a 1 o lotes masivos. Hasta 3.000 QRs por tanda.
         </p>
       </header>
 
       <ComplimentaryIssuer
         eventId={eventId}
         tiers={tiers}
-        storeItems={storeItems.map((i) => ({
-          id: i.id,
-          name: i.name,
-          price: Number(i.price),
-          stock: Number(i.stock),
+        storeItems={storeItems.map((item) => ({
+          id: item.id,
+          name: item.name,
+          price: Number(item.price),
+          stock: Number(item.stock),
         }))}
       />
     </main>

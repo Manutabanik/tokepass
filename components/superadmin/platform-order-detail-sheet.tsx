@@ -57,23 +57,32 @@ function supportStatusLabel(status: PlatformLedgerOrder["status"]) {
   return null
 }
 
-export function PlatformOrderDetailSheet({
-  order,
-  onClose,
-  onVoided,
-}: {
+type PlatformOrderDetailSheetProps = {
   order: PlatformLedgerOrder | null
   onClose: () => void
   onVoided: (orderId: string) => void
-}) {
+}
+
+export function PlatformOrderDetailSheet(props: PlatformOrderDetailSheetProps) {
+  return (
+    <PlatformOrderDetailSheetBody
+      key={props.order?.orderId ?? "closed"}
+      {...props}
+    />
+  )
+}
+
+function PlatformOrderDetailSheetBody({
+  order,
+  onClose,
+  onVoided,
+}: PlatformOrderDetailSheetProps) {
   const [detail, setDetail] = useState<PlatformOrderDetail | null>(null)
   const [loading, startLoad] = useTransition()
   const [acting, startAction] = useTransition()
   const [confirmVoid, setConfirmVoid] = useState(false)
 
   useEffect(() => {
-    setDetail(null)
-    setConfirmVoid(false)
     if (!order) return
     startLoad(async () => {
       const result = await getPlatformOrderDetail(order.orderId)

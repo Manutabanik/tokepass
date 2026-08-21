@@ -28,59 +28,87 @@ export function GuestListClaimForm({
   const [fullName, setFullName] = useState("")
   const [email, setEmail] = useState("")
   const [phone, setPhone] = useState("")
+  const [formError, setFormError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const [done, setDone] = useState(false)
 
   function handleClaimExisting() {
     if (!initialEntryId) return
+    setFormError(null)
     startTransition(async () => {
-      const result = await claimFreePass(initialEntryId)
-      if (!result.success) {
-        if (result.error === "auth_required") {
-          router.push(
-            `/login?next=/lists/claim/${meta.id}?entry=${initialEntryId}`,
-          )
+      try {
+        const result = await claimFreePass(initialEntryId)
+        if (!result.success) {
+          if (result.error === "auth_required") {
+            router.push(
+              `/login?next=/lists/claim/${meta.id}?entry=${initialEntryId}`,
+            )
+            return
+          }
+          setFormError(result.error)
+          toast.error(result.error)
           return
         }
-        toast.error(result.error)
-        return
+        toast.success("FreePass canjeado", {
+          description: "Ya está en tu billetera TokePass.",
+        })
+        router.push("/cuenta/entradas")
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "No se pudo canjear el FreePass."
+        setFormError(message)
+        toast.error(message)
       }
-      toast.success("FreePass canjeado", {
-        description: "Ya está en tu billetera TokePass.",
-      })
-      router.push("/cuenta/entradas")
     })
   }
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
+    setFormError(null)
     startTransition(async () => {
-      const result = await registerPublicGuest({
-        listId: meta.id,
-        fullName,
-        email,
-        phone,
-      })
+      try {
+        const result = await registerPublicGuest({
+          listId: meta.id,
+          fullName,
+          email,
+          phone,
+          whatsapp: phone,
+        })
 
-      if (!result.success) {
-        toast.error(result.error)
-        return
+        if (!result.success) {
+          setFormError(result.error)
+          toast.error(result.error)
+          return
+        }
+
+        setDone(true)
+
+        if (result.data.ticketId) {
+          if (isAuthenticated) {
+            toast.success("Asistencia confirmada. FreePass en tu billetera.")
+            router.push("/cuenta/entradas")
+            return
+          }
+          toast.success("Asistencia confirmada", {
+            description:
+              "Tu FreePass quedó vinculado a este email. Ingresá con la misma cuenta para ver el QR.",
+          })
+          return
+        }
+
+        toast.success("Te anotaste en la lista", {
+          description: "Ingresá con el mismo email para canjear el QR.",
+        })
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "No se pudo confirmar la asistencia."
+        setFormError(message)
+        toast.error(message)
       }
-
-      setDone(true)
-
-      if (result.data.ticketId) {
-        toast.success("¡Listo! FreePass en tu billetera")
-        router.push("/cuenta/entradas")
-        return
-      }
-
-      toast.success("Te anotaste en la lista", {
-        description: "Ingresá para canjear el QR de tu entrada.",
-      })
-      router.push(
-        `/login?next=/lists/claim/${meta.id}?entry=${result.data.entryId}`,
-      )
     })
   }
 
@@ -170,8 +198,8 @@ export function GuestListClaimForm({
           className="h-11"
         />
         <p className="text-xs text-zinc-500">
-          El FreePass queda vinculado a este email. Debés ingresar con la misma
-          cuenta para canjearlo.
+          El FreePass queda vinculado a este email. Si más tarde ingresás, usá
+          la misma cuenta para ver el QR.
         </p>
       </div>
       <div className="space-y-2">
@@ -180,10 +208,24 @@ export function GuestListClaimForm({
           id="phone"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
-          placeholder="+54 9 11 …"
+          inputMode="tel"
+          autoComplete="tel"
+          placeholder="2645067363"
           className="h-11"
         />
+        <p className="text-xs text-zinc-500">
+          Acepta número local argentino, con o sin código de país.
+        </p>
       </div>
+
+      {formError ? (
+        <div
+          role="alert"
+          className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-700 dark:text-red-300"
+        >
+          {formError}
+        </div>
+      ) : null}
 
       <Button
         type="submit"

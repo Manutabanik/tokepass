@@ -507,6 +507,10 @@ export type TicketTier = {
   description: string | null
   /** Badge opcional. bestseller = Más vendida. */
   highlight_badge: "bestseller" | null
+  /** Unidades mínimas de este SKU por transacción. */
+  min_purchase_limit: number
+  /** Tope de unidades de este SKU por transacción. NULL = fallback del evento. */
+  max_purchase_limit: number | null
   created_at: string
   updated_at: string
 }
@@ -1108,6 +1112,8 @@ export type GuestList = {
   name: string
   max_guests: number
   valid_until: string
+  used_guests: number
+  promoter_id: string | null
   created_at: string
   updated_at: string
 }
@@ -1334,6 +1340,8 @@ type TicketTierInsert = Omit<
   | "promo_pay_qty"
   | "description"
   | "highlight_badge"
+  | "min_purchase_limit"
+  | "max_purchase_limit"
   | "total_capacity"
   | "created_at"
   | "updated_at"
@@ -1343,6 +1351,8 @@ type TicketTierInsert = Omit<
   total_capacity?: number
   description?: string | null
   highlight_badge?: TicketTier["highlight_badge"]
+  min_purchase_limit?: number
+  max_purchase_limit?: number | null
   base_price?: number
   platform_fee?: number
   time_limit?: string | null
@@ -1606,10 +1616,15 @@ type OrganizerSettlementInsert = Omit<
   updated_at?: string
 }
 
-type GuestListInsert = Omit<GuestList, "id" | "created_at" | "updated_at"> & {
+type GuestListInsert = Omit<
+  GuestList,
+  "id" | "created_at" | "updated_at" | "used_guests" | "promoter_id"
+> & {
   id?: string
   created_at?: string
   updated_at?: string
+  used_guests?: number
+  promoter_id?: string | null
 }
 
 type GuestListEntryInsert = Omit<
@@ -3783,7 +3798,7 @@ export type Database = {
       claim_guest_list_entry: {
         Args: {
           p_entry_id: string
-          p_owner_id: string
+          p_owner_id?: string | null
         }
         Returns: string
       }

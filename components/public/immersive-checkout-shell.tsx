@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react"
 
+import { AppTakeover } from "@/components/ui/app-takeover"
 import { cn } from "@/lib/utils"
 
 export function ImmersiveCheckoutShell({
@@ -24,7 +25,7 @@ export function ImmersiveCheckoutShell({
   const showList = view === "list" && Boolean(list)
 
   return (
-    <div className="fixed inset-0 z-[60] flex h-[100dvh] w-full flex-col overflow-hidden bg-background md:flex-row">
+    <AppTakeover className="md:flex-row">
       <div className="relative flex h-[45dvh] w-full flex-shrink-0 flex-col md:h-full md:flex-1">
         {toolbar ? (
           <div className="hidden shrink-0 border-b border-border bg-background px-3 py-2 md:block">
@@ -56,6 +57,6 @@ export function ImmersiveCheckoutShell({
       >
         {panel}
       </div>
-    </div>
+    </AppTakeover>
   )
 }

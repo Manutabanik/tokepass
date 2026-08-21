@@ -124,6 +124,7 @@ export function OrganizerApplicationsPanel({
 
       {/* Desktop table */}
       <div className="hidden overflow-hidden rounded-2xl border border-border bg-card md:block">
+        <div className="w-full overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-border bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
@@ -140,12 +141,12 @@ export function OrganizerApplicationsPanel({
                 key={row.id}
                 className="border-b border-border hover:bg-muted/50"
               >
-                <td className="px-5 py-4 font-medium text-foreground">
-                  {row.company_name}
+                <td className="min-w-[150px] max-w-[250px] px-5 py-4 font-medium text-foreground">
+                  <span className="block truncate">{row.company_name}</span>
                 </td>
-                <td className="px-5 py-4 text-muted-foreground">
-                  <p>{row.applicantName ?? "Sin nombre"}</p>
-                  <p className="text-xs text-muted-foreground">
+                <td className="min-w-[150px] max-w-[250px] px-5 py-4 text-muted-foreground">
+                  <p className="truncate">{row.applicantName ?? "Sin nombre"}</p>
+                  <p className="truncate text-xs text-muted-foreground">
                     {row.applicantEmail}
                   </p>
                 </td>
@@ -170,6 +171,7 @@ export function OrganizerApplicationsPanel({
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       <Sheet

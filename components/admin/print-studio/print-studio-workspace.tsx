@@ -32,12 +32,14 @@ import { formatEventDate } from "@/lib/format"
 export function PrintStudioWorkspace({
   eventId,
   eventTitle,
+  flyerUrl,
   tiers,
   templates,
   batches,
 }: {
   eventId: string
   eventTitle: string
+  flyerUrl?: string | null
   tiers: ComplimentaryTierOption[]
   templates: TicketTemplateRow[]
   batches: TicketPrintBatchRow[]
@@ -51,6 +53,7 @@ export function PrintStudioWorkspace({
       <TemplateDesigner
         eventId={eventId}
         eventTitle={eventTitle}
+        flyerUrl={flyerUrl}
         template={editing === "new" ? null : editing}
         onClose={() => setEditing(null)}
         onSaved={() => {
@@ -72,7 +75,7 @@ export function PrintStudioWorkspace({
             <Printer className="size-8" aria-hidden="true" />
             Lotes e impresión
           </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
+          <p className="mt-2 line-clamp-2 break-words text-sm text-muted-foreground">
             {eventTitle}. Plantillas en milímetros reales y emisión de lotes
             físicos o acreditaciones.
           </p>
@@ -121,7 +124,9 @@ export function PrintStudioWorkspace({
                 <TableBody>
                   {batches.map((batch) => (
                     <TableRow key={batch.id}>
-                      <TableCell className="font-medium">{batch.name}</TableCell>
+                      <TableCell className="min-w-0 max-w-[150px] font-medium sm:max-w-[250px]">
+                        <span className="block truncate">{batch.name}</span>
+                      </TableCell>
                       <TableCell>
                         <StatusPill
                           label={printBatchStatusLabel(batch.status, batch.issuedCount)}
@@ -197,7 +202,9 @@ export function PrintStudioWorkspace({
                       {item.pageWidthMm} x {item.pageHeightMm} mm
                     </div>
                   </div>
-                  <h3 className="font-bold text-foreground">{item.name}</h3>
+                  <h3 className="min-w-0 truncate font-bold text-foreground">
+                    {item.name}
+                  </h3>
                   <p className="mt-1 text-sm text-muted-foreground">
                     {printTemplateMediumLabel(item.medium)} · {item.pageWidthMm} x{" "}
                     {item.pageHeightMm} mm

@@ -62,7 +62,8 @@ export default async function CreateEventPage({
   const organizerServiceRate = DEFAULT_PLATFORM_FEE_PERCENTAGE / 100
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 sm:gap-8">
+    <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col overflow-hidden">
+      <div className="shrink-0 space-y-6 pb-4 sm:space-y-8">
       <Link
         href={impersonation ? "/superadmin" : "/admin/events"}
         className="inline-flex w-fit items-center gap-2 text-sm text-muted-foreground transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-foreground"
@@ -100,7 +101,9 @@ export default async function CreateEventPage({
           barra, galería y difusión desde el panel del evento.
         </p>
       </header>
+      </div>
 
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <EventCreationWizard
         organizerServiceRate={organizerServiceRate}
         platformFixedFee={DEFAULT_PLATFORM_FIXED_FEE}
@@ -108,6 +111,7 @@ export default async function CreateEventPage({
         venues={venues}
         categories={categories}
       />
+      </div>
     </div>
   )
 }

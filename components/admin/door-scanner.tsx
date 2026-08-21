@@ -19,6 +19,7 @@ import {
 import { DoorScannerSessionChrome } from "@/components/admin/door-scanner-session"
 import { DoorScannerSetup } from "@/components/admin/door-scanner-setup"
 import { EmergencyTicketSearch } from "@/components/admin/emergency-ticket-search"
+import { AppTakeover } from "@/components/ui/app-takeover"
 import { TotemRestOverlay } from "@/components/admin/totem-validator-view"
 import {
   fetchEventAdmissionSnapshot,
@@ -998,11 +999,8 @@ export function DoorScanner({
   }
 
   return (
-    <div
-      className={cn(
-        "fixed inset-0 z-[80] flex flex-col bg-black text-white",
-        isTotemMode && "select-none",
-      )}
+    <AppTakeover
+      className={cn("bg-black text-white", isTotemMode && "select-none")}
     >
       <DoorScannerSessionChrome
         isTotem={isTotemMode}
@@ -1052,10 +1050,14 @@ export function DoorScanner({
               sound={false}
               scanDelay={150}
               allowMultiple={false}
-              paused={isPending || overlay != null}
+              paused={isPending || overlay != null || searchOpen}
+              classNames={{
+                container: "relative z-0 h-full w-full overflow-hidden",
+                video: "pointer-events-none",
+              }}
               styles={{
                 container: { width: "100%", height: "100%" },
-                video: { objectFit: "cover" },
+                video: { objectFit: "cover", pointerEvents: "none" },
               }}
               components={{ finder: false, torch: false }}
             />
@@ -1084,6 +1086,6 @@ export function DoorScanner({
         />
       ) : null}
       {overlay ? <ScanResultOverlay state={overlay} /> : null}
-    </div>
+    </AppTakeover>
   )
 }

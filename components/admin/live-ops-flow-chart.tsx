@@ -20,7 +20,7 @@ type Props = {
 export function LiveOpsFlowChart({ buckets }: Props) {
   if (buckets.length === 0) {
     return (
-      <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 px-4 text-center text-sm text-muted-foreground">
+      <div className="flex h-[min(18rem,50dvh)] items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 px-4 text-center text-sm text-muted-foreground">
         El flujo horario aparece cuando empiecen los ingresos.
       </div>
     )
@@ -32,8 +32,8 @@ export function LiveOpsFlowChart({ buckets }: Props) {
   }))
 
   return (
-    <div className="h-72 w-full min-w-0">
-      <ResponsiveContainer width="100%" height={288} debounce={200}>
+    <div className="h-[min(18rem,50dvh)] min-w-0 w-full">
+      <ResponsiveContainer width="100%" height="100%" debounce={200}>
         <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id="liveOpsFlowFill" x1="0" y1="0" x2="0" y2="1">

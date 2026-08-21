@@ -238,11 +238,15 @@ export function InteractiveSeatingCanvas({
     [focusedZoneId, lodZones],
   )
   const lodActive = lodEnabled && viewMode === "macro"
+  const visibleRevealedZoneId =
+    lodEnabled && viewMode === "micro" && focusedZoneId
+      ? revealedZoneId
+      : null
   const revealReady =
     !lodEnabled ||
     (viewMode === "micro" &&
       Boolean(focusedZone) &&
-      revealedZoneId === focusedZoneId)
+      visibleRevealedZoneId === focusedZoneId)
   const revealElements = useMemo(() => {
     const sellable = (map.elements ?? []).filter(
       (element) => !isInfrastructureElement(element),
@@ -290,7 +294,6 @@ export function InteractiveSeatingCanvas({
 
   useEffect(() => {
     if (!lodEnabled || viewMode !== "micro" || !focusedZoneId) {
-      setRevealedZoneId(null)
       return
     }
     const timer = window.setTimeout(() => {
@@ -1004,7 +1007,7 @@ export function InteractiveSeatingCanvas({
     <div
       className={cn(
         "flex w-full flex-col",
-        fillParent ? "h-full min-h-0" : "h-auto",
+        fillParent ? "h-full min-h-0" : "flex-1 min-h-0",
         hideChrome && "relative bg-muted",
       )}
     >
@@ -1013,7 +1016,7 @@ export function InteractiveSeatingCanvas({
         className={cn(
           hideChrome &&
             !onCloseMap &&
-            "absolute inset-x-0 top-0 z-20 px-3 pt-2",
+            "absolute inset-x-0 top-0 z-10 px-3 pt-2",
         )}
       >
       <ExternalMapToolbar
@@ -1038,9 +1041,8 @@ export function InteractiveSeatingCanvas({
           hideChrome ? "bg-muted" : "bg-background",
           hideChrome
             ? "rounded-none border-0 shadow-none"
-            : fillParent
-              ? "rounded-2xl border border-border"
-              : "h-[600px] rounded-3xl border border-border shadow-2xl md:h-[650px]",
+            : "relative min-h-0 w-full flex-1 overflow-hidden rounded-lg border border-border bg-muted/20",
+          !hideChrome && !fillParent && "min-h-[min(70dvh,36rem)]",
         )}
       >
       {mapArea}
@@ -1049,7 +1051,7 @@ export function InteractiveSeatingCanvas({
       {hideChrome ? null : (
       <div
         className={cn(
-          "absolute inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 px-3 py-2.5 backdrop-blur-xl md:hidden pb-[max(0.65rem,env(safe-area-inset-bottom))]",
+          "absolute inset-x-0 bottom-0 z-10 border-t border-border bg-background/95 px-3 py-2.5 backdrop-blur-xl md:hidden pb-[max(0.65rem,env(safe-area-inset-bottom))]",
           selectedZoneId && "hidden",
         )}
       >
@@ -1154,7 +1156,7 @@ function MapModalActionFooter({
     : "Volver al resumen"
 
   return (
-    <div className="absolute bottom-0 left-0 z-50 flex w-full justify-center border-t border-border bg-background/80 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-lg">
+    <div className="absolute bottom-0 left-0 z-10 flex w-full justify-center border-t border-border bg-background/80 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-lg">
       <button
         type="button"
         onClick={onClose}

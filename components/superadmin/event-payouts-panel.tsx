@@ -169,6 +169,7 @@ export function EventPayoutsPanel({
       </div>
 
       <div className="hidden overflow-hidden rounded-2xl border border-border bg-card md:block">
+        <div className="w-full overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-border bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
@@ -183,9 +184,11 @@ export function EventPayoutsPanel({
           <tbody>
             {initialRows.map((row) => (
               <tr key={row.id} className="border-b border-border align-top">
-                <td className="px-5 py-4">
-                  <p className="font-medium text-foreground">{row.eventTitle}</p>
-                  <p className="text-xs text-muted-foreground">
+                <td className="min-w-[150px] max-w-[250px] px-5 py-4">
+                  <p className="truncate font-medium text-foreground">
+                    {row.eventTitle}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
                     {row.organizerName}
                   </p>
                   <div className="mt-2">
@@ -244,6 +247,7 @@ export function EventPayoutsPanel({
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       <Dialog

@@ -44,8 +44,8 @@ export function EventPurchaseLimitsForm({
       toast.success("Límite actualizado", {
         description:
           result.data.maxTicketsPerUser != null
-            ? `Máximo ${result.data.maxTicketsPerUser} lugares por comprador.`
-            : "Este evento no tiene límite de compra por usuario.",
+            ? `Tope por defecto: ${result.data.maxTicketsPerUser} unidades por tarifa.`
+            : "Sin tope por defecto. Cada tarifa define su propio límite.",
       })
       router.refresh()
     })
@@ -62,18 +62,19 @@ export function EventPurchaseLimitsForm({
         </span>
         <div>
           <h2 className="text-lg font-bold text-foreground">
-            Límite de compra por usuario
+            Tope por defecto del evento
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Tope de entradas o mesas por comprador en cada transacción. Dejá el
-            campo vacío para permitir compras sin límite.
+            Fallback para tarifas que no tienen un máximo propio. El checkout
+            valida cada SKU por separado: 2 mesas no se suman como 16
+            personas. Dejá el campo vacío para sin límite por defecto.
           </p>
         </div>
       </div>
 
       <div className="space-y-2">
         <Label htmlFor="max-tickets-per-user">
-          Límite de entradas/mesas por usuario por transacción
+          Máximo por tarifa cuando no tiene tope propio
         </Label>
         <Input
           id="max-tickets-per-user"
@@ -88,8 +89,8 @@ export function EventPurchaseLimitsForm({
           disabled={pending}
         />
         <p className="text-xs text-muted-foreground">
-          Vacío o 0 equivale a sin límites. El checkout B2C oculta el badge y
-          no bloquea la suma de ítems.
+          Vacío o 0 equivale a sin límite por defecto. Configurá mínimos y
+          máximos por tarifa en Inventario.
         </p>
       </div>
 

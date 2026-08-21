@@ -2,7 +2,7 @@
 
 import { ChevronDown } from "lucide-react"
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 
 import {
   isAdminNavActive,
@@ -30,19 +30,14 @@ export function AdminNavTree({
   ariaLabel?: string
 }) {
   const [openIds, setOpenIds] = useState(() => new Set(groups.map((group) => group.id)))
-
-  useEffect(() => {
-    const activeGroup = groups.find((group) =>
-      group.items.some((item) => isActive(pathname, item.href)),
-    )
-    if (!activeGroup) return
-    setOpenIds((current) => {
-      if (current.has(activeGroup.id)) return current
-      const next = new Set(current)
-      next.add(activeGroup.id)
-      return next
-    })
-  }, [groups, isActive, pathname])
+  const activeGroup = groups.find((group) =>
+    group.items.some((item) => isActive(pathname, item.href)),
+  )
+  if (activeGroup && !openIds.has(activeGroup.id)) {
+    const next = new Set(openIds)
+    next.add(activeGroup.id)
+    setOpenIds(next)
+  }
 
   function toggle(id: string) {
     setOpenIds((current) => {

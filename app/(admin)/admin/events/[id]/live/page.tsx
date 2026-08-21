@@ -34,8 +34,7 @@ export default async function EventLiveOpsPage({
   }
 
   return (
-    <main className="min-h-[calc(100vh-4rem)] bg-background text-foreground">
-      <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-8 sm:px-6">
+    <div className="mx-auto w-full max-w-6xl space-y-6 bg-background p-4 text-foreground sm:p-6">
         <Link
           href={`/admin/events/${id}`}
           className="inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-foreground"
@@ -58,7 +57,6 @@ export default async function EventLiveOpsPage({
         </header>
 
         <LiveOpsDashboard eventId={id} initial={snapshot.data} />
-      </div>
-    </main>
+    </div>
   )
 }

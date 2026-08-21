@@ -115,7 +115,7 @@ export function PosSeatingMap({
 
   if (loading) {
     return (
-      <div className="flex min-h-72 items-center justify-center rounded-2xl border border-dashed border-border">
+      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-lg border border-dashed border-border">
         <LoaderCircle className="size-6 animate-spin text-muted-foreground" />
       </div>
     )
@@ -123,7 +123,7 @@ export function PosSeatingMap({
 
   if (!map) {
     return (
-      <div className="rounded-2xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
+      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-lg border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
         Este evento no tiene un plano interactivo. Usa la vista rapida de
         entradas.
       </div>
@@ -131,7 +131,7 @@ export function PosSeatingMap({
   }
 
   return (
-    <div className="flex h-[min(70vh,36rem)] flex-col">
+    <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg">
       <InteractiveSeatingCanvas
         map={map}
         eventId={event.id}

@@ -57,7 +57,7 @@ export function FeaturedBannerCard({
           Destacado
         </span>
 
-        <h2 className="text-2xl font-black tracking-tight text-foreground dark:text-white md:text-3xl lg:text-4xl">
+        <h2 className="line-clamp-2 break-words text-2xl font-black tracking-tight text-foreground dark:text-white md:text-3xl lg:text-4xl">
           <Link href={href} className="hover:underline">
             {event.title}
           </Link>

@@ -41,6 +41,8 @@ export type TicketSelectorTier = {
   layoutType: "general" | "table_combo" | "numbered_seat"
   seatingSectorId?: string | null
   capacityPerUnit: number
+  minPurchaseLimit?: number | null
+  maxPurchaseLimit?: number | null
   category?: TicketTierCategory | string | null
   listPrice?: number | null
   comboItems?: Array<{ name: string; quantity: number }>
@@ -352,7 +354,7 @@ function TierList({
               <div className="min-w-0">
                 <p
                   className={cn(
-                    "font-semibold text-foreground",
+                    "line-clamp-2 break-words font-semibold text-foreground",
                     soldOut && "text-muted-foreground line-through",
                   )}
                 >

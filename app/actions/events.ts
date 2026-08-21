@@ -296,6 +296,8 @@ export type CreateCompleteEventRpcPayload = {
     /** Alias de seating_sector_id. NULL = SKU flotante. */
     sector_id?: string | null
     capacity_per_unit: number
+    min_purchase_limit?: number
+    max_purchase_limit?: number | null
     admit_count?: number
     total_capacity?: number
   }>
@@ -513,6 +515,14 @@ function mapEventFormToRpcPayload(
         sector_id: seatingSectorId,
         capacity_per_unit:
           layoutType === "general" ? 1 : tier.capacityPerUnit,
+        min_purchase_limit: Math.max(
+          1,
+          Math.floor(Number(tier.minPurchaseLimit) || 1),
+        ),
+        max_purchase_limit:
+          tier.maxPurchaseLimit == null || Number(tier.maxPurchaseLimit) <= 0
+            ? null
+            : Math.floor(Number(tier.maxPurchaseLimit)),
         admit_count:
           layoutType === "general"
             ? Math.max(1, Math.min(50, tier.admitCount ?? 1))
@@ -1322,6 +1332,14 @@ async function syncTierAdmitCounts(
       )
     const patch = {
       admit_count: admit,
+      min_purchase_limit: Math.max(
+        1,
+        Math.floor(Number(match.minPurchaseLimit) || 1),
+      ),
+      max_purchase_limit:
+        match.maxPurchaseLimit == null || Number(match.maxPurchaseLimit) <= 0
+          ? null
+          : Math.floor(Number(match.maxPurchaseLimit)),
       tier_type: tierType,
       category: ticketCategoryForInventory(tierType),
       list_price:
@@ -1398,7 +1416,7 @@ async function syncTierAdmitCounts(
       .eq("id", tier.id)
     if (
       withCopy.error &&
-      /description|highlight_badge|promo_discount|schema cache|PGRST204|42703/i.test(
+      /description|highlight_badge|min_purchase_limit|max_purchase_limit|promo_discount|schema cache|PGRST204|42703/i.test(
         withCopy.error.message,
       )
     ) {
@@ -1407,13 +1425,19 @@ async function syncTierAdmitCounts(
         promo_discount_value: omittedValue,
         promo_required_qty: omittedRequired,
         promo_pay_qty: omittedPay,
+        min_purchase_limit: omittedMin,
+        max_purchase_limit: omittedMax,
         ...safePatch
       } = patch as typeof patch & {
         promo_discount_type?: string | null
         promo_discount_value?: number
         promo_required_qty?: number
         promo_pay_qty?: number
+        min_purchase_limit?: number
+        max_purchase_limit?: number | null
       }
+      void omittedMin
+      void omittedMax
       void omittedType
       void omittedValue
       void omittedRequired
@@ -1960,7 +1984,7 @@ export async function getEventForEditing(
     }
 
     const ticketSelectWithCopy =
-      "id, name, price, base_price, platform_fee, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, admit_count, category, list_price, tier_type, bundle_items, bundle_type, promo_discount_type, promo_discount_value, promo_required_qty, promo_pay_qty, description, highlight_badge"
+      "id, name, price, base_price, platform_fee, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, admit_count, category, list_price, tier_type, bundle_items, bundle_type, promo_discount_type, promo_discount_value, promo_required_qty, promo_pay_qty, description, highlight_badge, min_purchase_limit, max_purchase_limit"
     const ticketSelectCore =
       "id, name, price, base_price, platform_fee, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, admit_count, category, list_price, tier_type, bundle_items, bundle_type"
 
@@ -1973,7 +1997,7 @@ export async function getEventForEditing(
           .order("created_at")
         if (
           rich.error &&
-          /description|highlight_badge|promo_discount|schema cache|PGRST204|42703/i.test(
+          /description|highlight_badge|min_purchase_limit|max_purchase_limit|promo_discount|schema cache|PGRST204|42703/i.test(
             rich.error.message,
           )
         ) {
@@ -2086,6 +2110,18 @@ export async function getEventForEditing(
         venueZones,
       ),
       capacityPerUnit: Math.max(1, Number(tier.capacity_per_unit ?? 1) || 1),
+      minPurchaseLimit: Math.max(
+        1,
+        Number((tier as { min_purchase_limit?: number }).min_purchase_limit ?? 1) ||
+          1,
+      ),
+      maxPurchaseLimit: (() => {
+        const raw = Number(
+          (tier as { max_purchase_limit?: number | null }).max_purchase_limit,
+        )
+        if (!Number.isFinite(raw) || raw <= 0) return null
+        return Math.floor(raw)
+      })(),
       admitCount: Math.max(
         1,
         Number((tier as { admit_count?: number }).admit_count ?? 1) || 1,

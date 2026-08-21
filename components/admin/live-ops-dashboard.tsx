@@ -29,7 +29,7 @@ const LiveOpsFlowChart = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex h-72 items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 text-sm text-muted-foreground">
+      <div className="flex h-[min(18rem,50dvh)] items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 text-sm text-muted-foreground">
         Cargando gráfico…
       </div>
     ),
@@ -80,10 +80,10 @@ function OccupancyRing({
         : "stroke-sky-500 dark:stroke-sky-400"
 
   return (
-    <div className="relative mx-auto flex size-[220px] items-center justify-center">
+    <div className="relative mx-auto aspect-square w-full max-w-[13.75rem]">
       <svg
-        width={size}
-        height={size}
+        width="100%"
+        height="100%"
         viewBox={`0 0 ${size} ${size}`}
         className="-rotate-90"
         aria-hidden
@@ -364,7 +364,7 @@ export function LiveOpsDashboard({ eventId, initial }: Props) {
         </div>
 
         {/* Sección C — Feed */}
-        <aside className="rounded-2xl border border-border bg-card p-5 xl:sticky xl:top-4 xl:self-start">
+        <aside className="rounded-2xl border border-border bg-card p-5 xl:sticky xl:top-20 xl:self-start">
           <div className="mb-4 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <Radio className="size-4 text-emerald-600 dark:text-emerald-200" aria-hidden />
@@ -381,7 +381,7 @@ export function LiveOpsDashboard({ eventId, initial }: Props) {
               Todavía no hay ingresos registrados.
             </p>
           ) : (
-            <ul className="max-h-[min(42rem,70vh)] space-y-2 overflow-y-auto pr-1">
+            <ul className="max-h-[min(42rem,calc(100dvh-8rem))] space-y-2 overflow-y-auto pr-1">
               <AnimatePresence initial={false}>
                 {metrics.feed.map((entry) => (
                   <motion.li

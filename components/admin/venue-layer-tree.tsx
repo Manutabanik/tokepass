@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react"
 
 import {
@@ -239,16 +239,18 @@ export function VenueLayerTree({
   const nodes = useMemo(() => buildVenueLayerTree(map), [map])
   const selectedKey = currentSelectionKey(selection)
   const [openIds, setOpenIds] = useState(() => new Set(nodes.map((node) => node.id)))
+  const expandKey = `${selectedKey ?? ""}:${activeZoneId ?? ""}`
+  const [expandedFor, setExpandedFor] = useState(expandKey)
 
-  useEffect(() => {
-    if (!selectedKey && !activeZoneId) return
+  if ((selectedKey || activeZoneId) && expandKey !== expandedFor) {
+    setExpandedFor(expandKey)
     setOpenIds((current) => {
       const next = new Set(current)
       if (selectedKey) collectOpenIds(nodes, selectedKey, next)
       if (activeZoneId) next.add(activeZoneId)
       return next
     })
-  }, [nodes, selectedKey, activeZoneId])
+  }
 
   function toggle(id: string) {
     setOpenIds((current) => {

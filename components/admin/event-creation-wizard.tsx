@@ -378,15 +378,7 @@ export function EventCreationWizard({
   const setWizardStep = useEventFormStore((s) => s.setWizardStep)
 
   useEffect(() => {
-    if (workspace) {
-      const resolved = clampWizardStep(
-        initialStep ?? WIZARD_STEP_IDENTITY,
-        { hasSeatingPlan, hasSchedule, editWorkspace: true },
-      )
-      setActiveStep(resolved)
-      setWizardStep(resolved)
-      return
-    }
+    if (workspace) return
     const apply = () => {
       const store = useEventFormStore.getState()
       const persisted =
@@ -423,18 +415,15 @@ export function EventCreationWizard({
     setActiveStep(resolvedStep)
     setWizardStep(resolvedStep)
   }
+  if (resolvedStep !== WIZARD_STEP_MAP && isStudioOpen) {
+    setIsStudioOpen(false)
+  }
 
   useEffect(() => {
     if (!workspace) return
     const key = editWorkspaceStepKey(resolvedStep)
     router.replace(`${pathname}?step=${key}`, { scroll: false })
   }, [workspace, resolvedStep, pathname, router])
-
-  useEffect(() => {
-    if (resolvedStep !== WIZARD_STEP_MAP) {
-      setIsStudioOpen(false)
-    }
-  }, [resolvedStep])
 
   const inventoryBlocked =
     resolvedStep === WIZARD_STEP_TICKETS &&
@@ -949,8 +938,8 @@ export function EventCreationWizard({
     <Form {...form}>
       <form
         className={cn(
-          "dark text-zinc-100",
-          workspace && "flex h-full min-h-0 flex-col overflow-hidden bg-background",
+          "flex min-h-0 flex-1 flex-col overflow-hidden dark text-zinc-100",
+          workspace && "h-full bg-background",
         )}
         onSubmit={form.handleSubmit(
           (data) => onSubmit(data, "draft"),
@@ -977,8 +966,8 @@ export function EventCreationWizard({
             void moveToStep(next)
           }}
           className={cn(
-            "flex flex-col gap-8",
-            workspace && "min-h-0 flex-1 gap-0 overflow-hidden",
+            "flex min-h-0 flex-1 flex-col overflow-hidden",
+            workspace ? "gap-0" : "gap-4",
           )}
         >
           {workspace ? (
@@ -1022,14 +1011,14 @@ export function EventCreationWizard({
               </Button>
             </header>
           ) : (
-            <>
+            <div className="shrink-0 space-y-4">
           <div className="flex flex-wrap items-center justify-end gap-2">
             <EventCapacityHeader form={form} />
             <EventAutosaveIndicator />
           </div>
           <TabsList
             className={cn(
-              "flex w-full items-stretch gap-2 overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-900 p-2 text-zinc-100 shadow-lg shadow-black/20 backdrop-blur-md group-data-horizontal/tabs:h-auto max-sm:snap-x max-sm:snap-mandatory sm:grid sm:grid-cols-2 sm:overflow-visible",
+              "flex w-full items-stretch gap-2 overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-900 p-2 text-zinc-100 shadow-lg shadow-black/20 backdrop-blur-md group-data-horizontal/tabs:h-auto sm:grid sm:grid-cols-2 sm:overflow-visible",
               visibleSteps.length >= 5
                 ? "lg:grid-cols-5"
                 : visibleSteps.length === 4
@@ -1047,7 +1036,7 @@ export function EventCreationWizard({
                   key={title}
                   value={String(index)}
                   disabled={!available}
-                  className="h-auto min-w-[15.5rem] shrink-0 snap-start items-center justify-start gap-3 rounded-xl border border-transparent bg-transparent p-3 text-left text-zinc-200 opacity-60 transition-all hover:bg-zinc-800 hover:opacity-100 data-active:border-emerald-500/40 data-active:bg-zinc-800 data-active:text-zinc-100 data-active:opacity-100 data-active:shadow-[0_0_20px_rgba(16,185,129,0.15)] sm:min-w-0"
+                  className="h-auto min-w-0 flex-1 items-center justify-start gap-3 rounded-xl border border-transparent bg-transparent p-3 text-left text-zinc-200 opacity-60 transition-all hover:bg-zinc-800 hover:opacity-100 data-active:border-emerald-500/40 data-active:bg-zinc-800 data-active:text-zinc-100 data-active:opacity-100 data-active:shadow-[0_0_20px_rgba(16,185,129,0.15)]"
                 >
                   <span
                     className={cn(
@@ -1065,10 +1054,10 @@ export function EventCreationWizard({
                     )}
                   </span>
                   <span className="min-w-0">
-                    <span className="block truncate text-sm font-bold">
+                    <span className="block min-w-0 break-words text-sm font-bold line-clamp-2">
                       {title}
                     </span>
-                    <span className="block truncate text-xs text-muted-foreground">
+                    <span className="block min-w-0 break-words text-xs text-muted-foreground line-clamp-2">
                       {description}
                     </span>
                   </span>
@@ -1076,14 +1065,20 @@ export function EventCreationWizard({
               )
             })}
           </TabsList>
-            </>
+            </div>
           )}
 
           <Card className={cn(
-            "gap-0 rounded-3xl border border-zinc-800 bg-zinc-950 bg-gradient-to-b from-zinc-900 to-zinc-950 pt-0 pb-32 text-zinc-100 shadow-2xl shadow-black/30 ring-0 max-sm:overflow-x-hidden lg:pb-0 [&_[data-slot=input]]:rounded-xl [&_[data-slot=input]]:border-zinc-800 [&_[data-slot=input]]:bg-zinc-950 [&_[data-slot=input]]:text-zinc-100 [&_[data-slot=input]]:shadow-inner [&_[data-slot=input]]:placeholder:text-zinc-500 [&_[data-slot=input]:focus-visible]:border-emerald-500/60 [&_[data-slot=input]:focus-visible]:bg-zinc-900 [&_[data-slot=input]:focus-visible]:ring-2 [&_[data-slot=input]:focus-visible]:ring-emerald-500/15 [&_[data-slot=select-trigger]]:rounded-xl [&_[data-slot=select-trigger]]:border-zinc-800 [&_[data-slot=select-trigger]]:bg-zinc-950 [&_[data-slot=select-trigger]]:text-zinc-100 [&_[data-slot=select-trigger]]:shadow-inner [&_[data-slot=select-trigger]:focus-visible]:border-emerald-500/60 [&_[data-slot=select-trigger]:focus-visible]:ring-2 [&_[data-slot=select-trigger]:focus-visible]:ring-emerald-500/15",
+            "flex min-h-0 flex-1 flex-col overflow-hidden gap-0 rounded-3xl border border-zinc-800 bg-zinc-950 bg-gradient-to-b from-zinc-900 to-zinc-950 pt-0 pb-0 text-zinc-100 shadow-2xl shadow-black/30 ring-0 max-sm:overflow-x-hidden [&_[data-slot=input]]:rounded-xl [&_[data-slot=input]]:border-zinc-800 [&_[data-slot=input]]:bg-zinc-950 [&_[data-slot=input]]:text-zinc-100 [&_[data-slot=input]]:shadow-inner [&_[data-slot=input]]:placeholder:text-zinc-500 [&_[data-slot=input]:focus-visible]:border-emerald-500/60 [&_[data-slot=input]:focus-visible]:bg-zinc-900 [&_[data-slot=input]:focus-visible]:ring-2 [&_[data-slot=input]:focus-visible]:ring-emerald-500/15 [&_[data-slot=select-trigger]]:rounded-xl [&_[data-slot=select-trigger]]:border-zinc-800 [&_[data-slot=select-trigger]]:bg-zinc-950 [&_[data-slot=select-trigger]]:text-zinc-100 [&_[data-slot=select-trigger]]:shadow-inner [&_[data-slot=select-trigger]:focus-visible]:border-emerald-500/60 [&_[data-slot=select-trigger]:focus-visible]:ring-2 [&_[data-slot=select-trigger]:focus-visible]:ring-emerald-500/15",
             workspace &&
-              "flex min-h-0 flex-1 flex-col overflow-hidden rounded-none border-0 bg-background pb-0 shadow-none",
+              "rounded-none border-0 bg-background shadow-none",
           )}>
+            <div
+              className={cn(
+                "min-h-0 flex-1 overflow-y-auto p-4 space-y-6",
+                workspace && "overflow-hidden p-0",
+              )}
+            >
             <TabsContent
               keepMounted
               value="0"
@@ -1120,7 +1115,7 @@ export function EventCreationWizard({
                           {...field}
                           id="event-title"
                           placeholder="Ej. Fiesta de Año Nuevo en el Complejo X"
-                          className="h-12 w-full rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 py-3 text-sm text-foreground shadow-inner transition-all placeholder:text-slate-500 dark:placeholder:text-muted-foreground dark:placeholder:text-zinc-600 focus:border-emerald-500/60 focus:bg-zinc-100 dark:focus:bg-zinc-900 focus:ring-2 focus:ring-emerald-500/15 focus:outline-none"
+                          className="h-12 w-full rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 py-3 text-base text-foreground shadow-inner transition-all placeholder:text-slate-500 dark:placeholder:text-muted-foreground dark:placeholder:text-zinc-600 focus:border-emerald-500/60 focus:bg-zinc-100 dark:focus:bg-zinc-900 focus:ring-2 focus:ring-emerald-500/15 focus:outline-none md:text-sm"
                         />
                         <FormMessage>{fieldState.error?.message}</FormMessage>
                       </FormItem>
@@ -1304,7 +1299,7 @@ export function EventCreationWizard({
                               {...field}
                               id="event-date"
                               type="datetime-local"
-                              className="scheme-light dark:scheme-dark h-12 w-full rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 py-3 text-sm text-foreground shadow-inner transition-all focus:border-emerald-500/60 focus:bg-zinc-100 dark:focus:bg-zinc-900 focus:ring-2 focus:ring-emerald-500/15 focus:outline-none"
+                              className="scheme-light dark:scheme-dark h-12 w-full rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 py-3 text-base text-foreground shadow-inner transition-all focus:border-emerald-500/60 focus:bg-zinc-100 dark:focus:bg-zinc-900 focus:ring-2 focus:ring-emerald-500/15 focus:outline-none md:text-sm"
                             />
                             <FormMessage>{fieldState.error?.message}</FormMessage>
                           </FormItem>
@@ -1325,7 +1320,7 @@ export function EventCreationWizard({
                               {...field}
                               id="event-end-date"
                               type="datetime-local"
-                              className="scheme-light dark:scheme-dark h-12 w-full rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 py-3 text-sm text-foreground shadow-inner transition-all focus:border-emerald-500/60 focus:bg-zinc-100 dark:focus:bg-zinc-900 focus:ring-2 focus:ring-emerald-500/15 focus:outline-none"
+                              className="scheme-light dark:scheme-dark h-12 w-full rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 py-3 text-base text-foreground shadow-inner transition-all focus:border-emerald-500/60 focus:bg-zinc-100 dark:focus:bg-zinc-900 focus:ring-2 focus:ring-emerald-500/15 focus:outline-none md:text-sm"
                             />
                             <FormDescription className="text-xs text-muted-foreground">
                               Debe ser posterior al inicio (útil si cruza medianoche).
@@ -1352,7 +1347,7 @@ export function EventCreationWizard({
                           {...field}
                           id="event-description"
                           placeholder="Cuenta qué hace única a esta experiencia..."
-                          className="min-h-[160px] w-full resize-y rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 py-3 text-sm text-foreground shadow-inner transition-all placeholder:text-slate-500 dark:placeholder:text-muted-foreground dark:placeholder:text-zinc-600 focus:border-emerald-500/60 focus:bg-zinc-100 dark:focus:bg-zinc-900 focus:ring-2 focus:ring-emerald-500/15 focus:outline-none"
+                          className="min-h-[160px] w-full resize-y rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 py-3 text-base text-foreground shadow-inner transition-all placeholder:text-slate-500 dark:placeholder:text-muted-foreground dark:placeholder:text-zinc-600 focus:border-emerald-500/60 focus:bg-zinc-100 dark:focus:bg-zinc-900 focus:ring-2 focus:ring-emerald-500/15 focus:outline-none md:text-sm"
                         />
                         <FormDescription className="text-muted-foreground">
                           Este texto será visible en la página de venta.
@@ -1867,12 +1862,12 @@ export function EventCreationWizard({
                 )}
               </div>
             ) : null}
+            </div>
 
             <div
               className={cn(
-                "fixed inset-x-0 bottom-0 z-50 flex w-full flex-col gap-2 border-t border-zinc-800 bg-zinc-950/95 px-4 pt-3 text-zinc-100 backdrop-blur-xl",
-                "pb-[max(0.75rem,env(safe-area-inset-bottom))]",
-                "lg:static lg:z-auto lg:flex-row lg:items-center lg:justify-between lg:bg-transparent lg:px-6 lg:py-5 lg:pb-5 lg:backdrop-blur-none",
+                "flex w-full shrink-0 flex-col gap-2 border-t border-zinc-800 bg-background p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-zinc-100",
+                "lg:flex-row lg:items-center lg:justify-between",
                 workspace && "hidden",
               )}
             >

@@ -34,8 +34,8 @@ export function CheckoutIdentityDialog({
       }}
     >
       <DialogContent
-        overlayClassName="isolate z-[90]"
-        className="z-[90] border-border bg-card text-card-foreground sm:max-w-md"
+        overlayClassName="isolate z-[100]"
+        className="z-[100] border-border bg-card text-card-foreground sm:max-w-md"
       >
         <DialogHeader>
           <DialogTitle className="text-lg font-bold text-foreground">

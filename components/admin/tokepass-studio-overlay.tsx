@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react"
 import { useEffect, useSyncExternalStore, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 
+import { AppTakeover } from "@/components/ui/app-takeover"
 import { Button } from "@/components/ui/button"
 
 export function TokepassStudioOverlay({
@@ -38,13 +39,13 @@ export function TokepassStudioOverlay({
   if (!open || !mounted) return null
 
   return createPortal(
-    <div className="fixed inset-0 z-50 h-screen w-screen overflow-hidden bg-background">
+    <AppTakeover>
       <Button
         type="button"
         variant="destructive"
         disabled={closing}
         onClick={onClose}
-        className="absolute top-4 left-4 z-[60]"
+        className="absolute top-4 left-4 z-10"
       >
         <ArrowLeft />
         Guardar y Cerrar Estudio
@@ -52,7 +53,7 @@ export function TokepassStudioOverlay({
       <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
         {children}
       </div>
-    </div>,
+    </AppTakeover>,
     document.body,
   )
 }

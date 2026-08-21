@@ -74,7 +74,10 @@ export function EmergencyTicketSearch({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85dvh] overflow-hidden border-zinc-200 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white sm:max-w-md">
+      <DialogContent
+        overlayClassName="z-[100]"
+        className="z-[100] max-h-[85dvh] overflow-hidden border-zinc-200 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white sm:max-w-md"
+      >
         <DialogHeader>
           <DialogTitle>Buscar por DNI / Nombre</DialogTitle>
           <DialogDescription className="text-muted-foreground">

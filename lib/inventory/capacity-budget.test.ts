@@ -28,6 +28,8 @@ function ticket(
     layoutType: "general",
     seatingSectorId: null,
     capacityPerUnit: 1,
+    minPurchaseLimit: 1,
+    maxPurchaseLimit: null,
     admitCount: 1,
     tierType: patch.tierType,
     listPrice: null,

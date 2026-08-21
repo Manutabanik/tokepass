@@ -43,7 +43,7 @@ export function VenueStudioHud({
   return (
     <div
       className={cn(
-        "pointer-events-none absolute bottom-4 left-1/2 z-50 -translate-x-1/2",
+        "pointer-events-none absolute bottom-4 left-1/2 z-10 -translate-x-1/2",
         className,
       )}
     >

@@ -50,11 +50,21 @@ export function FaqHelpModal({
   const [faqs, setFaqs] = useState<SupportFaqItem[]>([])
   const [loading, setLoading] = useState(false)
   const [openIds, setOpenIds] = useState<Set<string>>(new Set())
+  const [faqSession, setFaqSession] = useState(0)
+  const [openArmed, setOpenArmed] = useState(false)
+
+  if (open && !openArmed) {
+    setOpenArmed(true)
+    setLoading(true)
+    setFaqSession((current) => current + 1)
+  }
+  if (!open && openArmed) {
+    setOpenArmed(false)
+  }
 
   useEffect(() => {
     if (!open) return
     let cancelled = false
-    setLoading(true)
     void listActiveSupportFaqs()
       .then((rows) => {
         if (!cancelled) setFaqs(rows.filter((item) => item.isActive))
@@ -65,7 +75,7 @@ export function FaqHelpModal({
     return () => {
       cancelled = true
     }
-  }, [open])
+  }, [open, faqSession])
 
   const filtered = useMemo(() => {
     const needle = normalizeQuery(query)

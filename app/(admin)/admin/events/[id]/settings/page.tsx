@@ -39,7 +39,7 @@ export default async function EventPurchaseSettingsPage({
   }
 
   return (
-    <main className="mx-auto w-full max-w-2xl space-y-6 px-4 py-8 sm:px-6">
+    <main className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">
       <Link
         href={`/admin/events/${id}`}
         className="inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-foreground"
@@ -53,7 +53,8 @@ export default async function EventPurchaseSettingsPage({
           Ajustes de compra
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {settings.eventTitle} · límite de entradas o mesas por usuario.
+          {settings.eventTitle} · tope por defecto si una tarifa no define su
+          máximo.
         </p>
       </header>
 

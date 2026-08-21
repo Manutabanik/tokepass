@@ -29,7 +29,7 @@ export function SuperAdminSidebar({ user }: { user: SuperAdminSidebarUser }) {
   return (
     <aside
       className={cn(
-        "sticky top-0 z-30 hidden h-screen flex-shrink-0 flex-col justify-between overflow-hidden border-r border-zinc-200 bg-white scrollbar-thin dark:border-zinc-800 dark:bg-zinc-950 md:flex",
+        "sticky top-0 z-30 hidden h-dvh flex-shrink-0 flex-col justify-between overflow-hidden border-r border-zinc-200 bg-white scrollbar-thin dark:border-zinc-800 dark:bg-zinc-950 md:flex",
         collapsed ? "w-20" : "w-64",
       )}
     >

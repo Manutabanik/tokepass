@@ -221,8 +221,8 @@ export function SupportFaqsManager({
                       </Button>
                     </div>
                   </TableCell>
-                  <TableCell className="max-w-[22rem] whitespace-normal font-medium text-foreground">
-                    {faq.question}
+                  <TableCell className="min-w-[150px] max-w-[250px] font-medium text-foreground">
+                    <span className="block truncate">{faq.question}</span>
                   </TableCell>
                   <TableCell>{faqCategoryLabel(faq.category)}</TableCell>
                   <TableCell>

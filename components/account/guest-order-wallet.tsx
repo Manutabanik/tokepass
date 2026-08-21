@@ -42,7 +42,9 @@ function GuestTicketCard({ ticket }: { ticket: MyTicket }) {
         </span>
       </div>
       <div className="space-y-3 px-5 pt-4">
-        <h2 className="text-xl font-black tracking-tight">{ticket.eventTitle}</h2>
+        <h2 className="min-w-0 break-words text-xl font-black tracking-tight">
+          {ticket.eventTitle}
+        </h2>
         <p className="flex items-start gap-2 text-sm">
           <Calendar className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
           <span>
@@ -76,8 +78,8 @@ function GuestTicketCard({ ticket }: { ticket: MyTicket }) {
 
       {canShowQr ? (
         <div className="p-5 text-center">
-          <div className="mx-auto w-full max-w-[220px] rounded-2xl bg-white p-2">
-            <QrEnlargeTrigger onOpen={() => setScanOpen(true)} className="w-full">
+          <div className="mx-auto aspect-square w-full max-w-sm rounded-2xl bg-white p-4">
+            <QrEnlargeTrigger onOpen={() => setScanOpen(true)} className="block h-full w-full">
               {isStatic ? (
                 <StaticSignedQR
                   ticketId={ticket.id}

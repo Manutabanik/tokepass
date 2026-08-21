@@ -86,12 +86,12 @@ export function CartSummary({
               }
             >
               {compact ? (
-                <p className="min-w-0 truncate text-xs font-medium text-foreground">
+                <p className="min-w-0 line-clamp-2 break-words text-xs font-medium text-foreground">
                   {qtyLabel}
                 </p>
               ) : (
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-foreground">
+                  <p className="line-clamp-2 break-words text-sm font-semibold text-foreground">
                     {displayName}
                   </p>
                   {item.quantity > 1 ? (

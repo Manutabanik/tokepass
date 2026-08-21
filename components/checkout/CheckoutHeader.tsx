@@ -13,7 +13,6 @@ import { cn } from "@/lib/utils"
 export function CheckoutHeader({
   step,
   holdExpiresAt = null,
-  maxTicketsPerUser = null,
   onBack,
   backLabel,
   safeAreaTop = true,
@@ -26,14 +25,14 @@ export function CheckoutHeader({
   /** False when a banner already consumes the notch (draft preview). */
   safeAreaTop?: boolean
 }) {
-  const showLimit = step === "tickets" && (maxTicketsPerUser ?? 0) > 0 && !holdExpiresAt
+  const showLimit = step === "tickets" && !holdExpiresAt
   const meta = checkoutStepMeta(step)
   const timer = holdExpiresAt ? (
     <CheckoutHoldClock expiresAt={holdExpiresAt} />
   ) : null
 
   return (
-    <header className="sticky top-0 z-50 w-full flex-none border-b border-border/50 bg-background/98 backdrop-blur-xl">
+    <header className="sticky top-0 z-30 w-full shrink-0 flex-none border-b border-border/50 bg-background/98 backdrop-blur-xl">
       {/* Vista Mobile: Padding equilibrado para no solapar con la barra del navegador */}
       <div 
         className="flex w-full items-center justify-between gap-2 px-4 pb-2.5 md:hidden"
@@ -67,7 +66,7 @@ export function CheckoutHeader({
                 !showLimit && "invisible",
               )}
             >
-              {showLimit ? `Máx. ${maxTicketsPerUser}` : "—"}
+              {showLimit ? "Tope por tarifa" : "—"}
             </span>
           )}
         </div>
@@ -98,7 +97,7 @@ export function CheckoutHeader({
                 !showLimit && "invisible",
               )}
             >
-              {showLimit ? `Máx. ${maxTicketsPerUser} lugares` : "—"}
+              {showLimit ? "Tope por tarifa" : "—"}
             </span>
           )}
         </div>

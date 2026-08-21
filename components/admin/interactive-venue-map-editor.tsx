@@ -217,7 +217,6 @@ import {
   venueMapHasInventory,
   venueMapToSeatingLayout,
 } from "@/lib/seating/venue-map-geometry"
-import { applyMapCapacityToTickets } from "@/lib/seating/venue-map-pricing"
 import {
   distributeOnArc,
   generateGridArray,
@@ -228,11 +227,7 @@ import {
   seatBelongsToZone,
   zoneCanvasAabb,
 } from "@/lib/seating/venue-map-lod"
-import {
-  formatVenueMapSkuErrors,
-  validateVenueMapSkuConsistency,
-  type VenueMapSkuTicketRef,
-} from "@/lib/seating/venue-map-sku-consistency"
+import { type VenueMapSkuTicketRef } from "@/lib/seating/venue-map-sku-consistency"
 import { cn } from "@/lib/utils"
 import {
   emptyVenueMap,
@@ -340,7 +335,6 @@ export function InteractiveVenueMapEditor({
   onEventTitleChange,
   backHref,
   backLabel = "Volver al Panel",
-  tickets,
 }: {
   value?: InteractiveVenueMap | null
   onChange: (map: InteractiveVenueMap, seatingLayout: VenueSeatingLayout) => void
@@ -693,7 +687,9 @@ export function InteractiveVenueMapEditor({
           : [],
     [selection],
   )
-  selectedElementIdsRef.current = selectedElementIds
+  useEffect(() => {
+    selectedElementIdsRef.current = selectedElementIds
+  }, [selectedElementIds])
   const selectedElements = useMemo(() => {
     const ids = new Set(selectedElementIds)
     return (map.elements ?? []).filter((item) => ids.has(item.id))
@@ -1482,8 +1478,9 @@ export function InteractiveVenueMapEditor({
       pan: { ...panRef.current },
       zoom: zoomRef.current,
     }
-    const started = performance.now()
+    let started: number | null = null
     const step = (now: number) => {
+      if (started == null) started = now
       const t = Math.min(1, (now - started) / CONTEXT_FOCUS_ANIM_MS)
       const eased = easeViewport(t)
       applyViewport({
@@ -3812,9 +3809,8 @@ export function InteractiveVenueMapEditor({
           ref={canvasRef}
           className={cn(
             "relative overflow-hidden touch-none overscroll-none select-none bg-slate-100 bg-[radial-gradient(circle_at_1px_1px,#cbd5e1_1px,transparent_0)] bg-[size:20px_20px] dark:bg-zinc-950 dark:bg-[radial-gradient(circle_at_1px_1px,#27272a_1px,transparent_0)]",
-            isStudio
-              ? "relative h-full min-h-0 w-full flex-1"
-              : "min-h-[420px]",
+            "relative min-h-0 flex-1 overflow-hidden",
+            isStudio && "h-full w-full",
             spacePan && !isPanning && "cursor-grab [&_*]:cursor-grab",
             isPanning && "cursor-grabbing [&_*]:cursor-grabbing",
           )}
@@ -3859,7 +3855,7 @@ export function InteractiveVenueMapEditor({
             preserveAspectRatio="xMidYMid meet"
             className={cn(
               "w-full touch-none select-none",
-              isStudio ? "absolute inset-0 h-full" : "h-[min(70vh,560px)]",
+              "absolute inset-0 h-full min-h-0",
               tool === "polygon" && "cursor-crosshair",
               (spacePan || isPanning) && tool !== "polygon" && "cursor-grab",
               isPanning && "cursor-grabbing",
@@ -5304,7 +5300,7 @@ export function InteractiveVenueMapEditor({
       {compactChrome ? (
         <>
           {!mobileSheetOpen ? (
-            <div className="absolute bottom-4 left-1/2 z-50 flex w-[calc(100%-1.5rem)] -translate-x-1/2 justify-center overflow-x-auto pb-[env(safe-area-inset-bottom)] hide-scrollbar">
+            <div className="absolute bottom-4 left-1/2 z-10 flex w-[calc(100%-1.5rem)] -translate-x-1/2 justify-center overflow-x-auto pb-[env(safe-area-inset-bottom)] hide-scrollbar">
               <VenueMobileFabBar
                 showAdd={workMode === "architecture"}
                 showProperties={hasPropertiesTarget}
@@ -5324,7 +5320,7 @@ export function InteractiveVenueMapEditor({
             <SheetContent
               side="bottom"
               overlayClassName="bg-black/20"
-              className="h-[48dvh] max-h-[48dvh] gap-0 p-0"
+              className="h-auto max-h-[min(48dvh,calc(100dvh-6rem))] gap-0 p-0"
             >
               <div className="mx-auto mt-2 h-1.5 w-10 rounded-full bg-muted" />
               <SheetHeader>
@@ -5347,7 +5343,7 @@ export function InteractiveVenueMapEditor({
             <SheetContent
               side="bottom"
               overlayClassName="bg-black/20"
-              className="h-[48dvh] max-h-[48dvh] gap-0 p-0"
+              className="h-auto max-h-[min(48dvh,calc(100dvh-6rem))] gap-0 p-0"
             >
               <div className="mx-auto mt-2 h-1.5 w-10 rounded-full bg-muted" />
               <SheetHeader>
@@ -5558,7 +5554,7 @@ function StudioInspectorFrame({
     return (
       <aside
         ref={propertiesRef}
-        className="flex flex-col space-y-4 overflow-y-auto border-t border-border bg-card p-4 text-card-foreground lg:max-h-[min(70vh,560px)] lg:border-t-0 lg:border-l"
+        className="flex min-h-0 flex-1 flex-col space-y-4 overflow-y-auto border-t border-border bg-card p-4 text-card-foreground lg:border-t-0 lg:border-l"
       >
         {children}
       </aside>
@@ -5610,7 +5606,7 @@ function StudioInspectorFrame({
         overlayClassName="bg-black/50"
         initialFocus={false}
         finalFocus={false}
-        className="h-[48dvh] max-h-[48dvh] gap-0 border-border bg-card p-0 text-card-foreground"
+        className="h-auto max-h-[min(48dvh,calc(100dvh-6rem))] gap-0 border-border bg-card p-0 text-card-foreground"
       >
         <div className="mx-auto mt-2 h-1.5 w-10 rounded-full bg-muted" />
         <SheetHeader>

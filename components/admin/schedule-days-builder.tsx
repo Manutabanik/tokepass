@@ -105,7 +105,7 @@ export function ScheduleDaysBuilder({
                         {...startField}
                         id={`schedule-day-${index}-start`}
                         type="datetime-local"
-                        className="scheme-light dark:scheme-dark h-10 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950"
+                        className="scheme-light dark:scheme-dark h-10 border-zinc-200 text-base dark:border-zinc-800 bg-white dark:bg-zinc-950 md:text-sm"
                       />
                       <FormMessage>{fieldState.error?.message}</FormMessage>
                     </FormItem>
@@ -126,7 +126,7 @@ export function ScheduleDaysBuilder({
                         {...endField}
                         id={`schedule-day-${index}-end`}
                         type="datetime-local"
-                        className="scheme-light dark:scheme-dark h-10 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950"
+                        className="scheme-light dark:scheme-dark h-10 border-zinc-200 text-base dark:border-zinc-800 bg-white dark:bg-zinc-950 md:text-sm"
                       />
                       <FormMessage>{fieldState.error?.message}</FormMessage>
                     </FormItem>

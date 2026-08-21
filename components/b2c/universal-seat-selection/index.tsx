@@ -295,7 +295,9 @@ export function UniversalSeatSelectionFlow({
             <div
               className={cn(
                 "flex items-center justify-center border border-white/10 bg-zinc-950",
-                takeover ? "h-full min-h-0 flex-1" : "h-[600px] rounded-3xl md:h-[650px]",
+                takeover
+                  ? "h-full min-h-0 flex-1"
+                  : "relative min-h-0 w-full flex-1 overflow-hidden rounded-lg border border-white/10 bg-zinc-950 min-h-[min(70dvh,36rem)]",
               )}
             >
               <LoaderCircle className="size-6 animate-spin text-emerald-400" />

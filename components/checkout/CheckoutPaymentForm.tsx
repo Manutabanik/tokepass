@@ -376,10 +376,10 @@ function PaymentTicketRow({ item }: { item: StorefrontCartLine }) {
   return (
     <li className="flex min-w-0 items-start justify-between gap-3">
       <div className="min-w-0">
-        <p className="truncate text-sm font-semibold text-card-foreground">
+        <p className="line-clamp-2 break-words text-sm font-semibold text-card-foreground">
           {name}
         </p>
-        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+        <p className="mt-0.5 line-clamp-2 break-words text-xs text-muted-foreground">
           {lineAccessLabel(item)}
         </p>
       </div>

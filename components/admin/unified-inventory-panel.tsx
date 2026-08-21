@@ -120,6 +120,8 @@ export function createInventoryTicket(
     layoutType: layoutTypeForInventory(tierType),
     seatingSectorId: null,
     capacityPerUnit: 1,
+    minPurchaseLimit: 1,
+    maxPurchaseLimit: null,
     admitCount: 1,
     tierType,
     listPrice: tierType === "bundle" ? 0 : null,
@@ -799,7 +801,7 @@ function InventoryTicketCard({
             <span className="rounded-full border border-border bg-muted/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
               {badge.label}
             </span>
-            <p className="truncate text-sm font-semibold text-foreground">
+            <p className="min-w-0 break-words text-sm font-semibold text-foreground line-clamp-2">
               {name.trim() || "Nueva tarifa"}
             </p>
           </div>
@@ -1010,6 +1012,75 @@ function InventoryRow({
             </FormItem>
             )
           }}
+        />
+        <FormField
+          control={form.control}
+          name={`tickets.${index}.minPurchaseLimit`}
+          render={({ field, fieldState }) => (
+            <FormItem className="md:col-span-3">
+              <FormLabel>Límite mínimo por compra</FormLabel>
+              <Input
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                value={
+                  field.value == null || Number.isNaN(Number(field.value))
+                    ? "1"
+                    : String(field.value)
+                }
+                onChange={(event) => {
+                  const parsed = parseStrictInt(event.target.value)
+                  if (parsed === "") {
+                    field.onChange(1)
+                    return
+                  }
+                  if (typeof parsed === "number" && Number.isNaN(parsed)) return
+                  field.onChange(typeof parsed === "number" ? Math.max(1, parsed) : 1)
+                }}
+                className="h-11 text-base md:text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                Unidades mínimas de esta tarifa por transacción.
+              </p>
+              <FormMessage>{fieldState.error?.message}</FormMessage>
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name={`tickets.${index}.maxPurchaseLimit`}
+          render={({ field, fieldState }) => (
+            <FormItem className="md:col-span-3">
+              <FormLabel>Límite máximo por compra</FormLabel>
+              <Input
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                placeholder="Sin límite propio"
+                value={
+                  field.value == null || Number.isNaN(Number(field.value))
+                    ? ""
+                    : String(field.value)
+                }
+                onChange={(event) => {
+                  const parsed = parseStrictInt(event.target.value)
+                  if (parsed === "") {
+                    field.onChange(null)
+                    return
+                  }
+                  if (typeof parsed === "number" && Number.isNaN(parsed)) return
+                  field.onChange(typeof parsed === "number" ? parsed : null)
+                }}
+                className="h-11 text-base md:text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                Tope de unidades de esta tarifa por transacción. Para entradas
+                mide tickets; para mesas o combos mide unidades de mesas. Dejar
+                en blanco para sin límite.
+              </p>
+              <FormMessage>{fieldState.error?.message}</FormMessage>
+            </FormItem>
+          )}
         />
         {isBundle ? (
           <div className="md:col-span-3">

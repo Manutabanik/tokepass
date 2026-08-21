@@ -113,7 +113,7 @@ export function TicketDetailView({
   const venue = ticketVenueLine(ticket)
 
   return (
-    <div className="mx-auto w-full max-w-lg space-y-6 py-6">
+    <div className="mx-auto w-full max-w-sm space-y-6 py-6">
       <Link
         href="/cuenta/entradas"
         className="inline-flex min-h-12 items-center gap-2 text-sm font-medium text-muted-foreground transition hover:text-foreground"
@@ -194,8 +194,8 @@ export function TicketDetailView({
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
             {isStatic ? "QR de ingreso" : "Living QR"}
           </p>
-          <div className="mx-auto mt-4 w-full max-w-[220px] rounded-2xl bg-white p-2">
-            <QrEnlargeTrigger onOpen={() => setScanOpen(true)} className="w-full">
+          <div className="mx-auto mt-4 aspect-square w-full rounded-2xl bg-white p-4">
+            <QrEnlargeTrigger onOpen={() => setScanOpen(true)} className="block h-full w-full">
               {isStatic ? (
                 <StaticSignedQR
                   ticketId={ticket.id}

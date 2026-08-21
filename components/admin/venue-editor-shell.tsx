@@ -24,7 +24,7 @@ export function VenueEditorShell({
   return (
     <div
       className={cn(
-        "flex h-[100dvh] w-screen flex-col overflow-hidden bg-background text-foreground",
+        "flex h-dvh w-full flex-col overflow-hidden bg-background text-foreground",
         className,
       )}
     >

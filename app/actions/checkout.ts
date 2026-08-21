@@ -51,7 +51,6 @@ import { consumeNamedRateLimit } from "@/lib/security/distributed-rate-limit"
 import { assertWaitingRoomCheckoutPass } from "@/lib/waiting-room/assert-checkout-pass"
 import {
   CHECKOUT_BUSY_ERROR,
-  assertGuestTicketCap,
   checkoutFailuresBlocked,
   persistCheckoutSecurityEvent,
   persistOrderCustomerPhone,
@@ -77,6 +76,7 @@ import {
   toReserveRpcItem,
 } from "@/lib/checkout/hybrid-cart"
 import { toCheckoutUserError } from "@/lib/errors/commerce-errors"
+import { assertCartTierPurchaseLimits } from "@/lib/checkout-limits"
 import {
   CheckoutEventIdSchema,
   CheckoutLayoutHoldSchema,
@@ -143,6 +143,16 @@ function mapReserveRpcError(
       success: false,
       error:
         "Alcanzaste el máximo de entradas por persona para este evento.",
+    }
+  }
+
+  if (
+    normalized.includes("tier_purchase_max_exceeded") ||
+    normalized.includes("tier_purchase_min_exceeded")
+  ) {
+    return {
+      success: false,
+      error: message.replace(/^TIER_PURCHASE_(MAX|MIN)_EXCEEDED:\s*/i, ""),
     }
   }
 
@@ -1059,6 +1069,40 @@ export async function lockTickets(
     return { success: false, error: "out_of_stock" }
   }
 
+  const [{ data: holdEvent }, { data: holdTiers }] = await Promise.all([
+    access.db
+      .from("events")
+      .select("max_tickets_per_user")
+      .eq("id", eventId)
+      .maybeSingle(),
+    access.db
+      .from("ticket_tiers")
+      .select("id, name, min_purchase_limit, max_purchase_limit")
+      .eq("event_id", eventId)
+      .in(
+        "id",
+        payload.map((item) => item.tier_id),
+      ),
+  ])
+  const holdCap = assertCartTierPurchaseLimits({
+    items: payload.map((item) => ({
+      tierId: item.tier_id,
+      quantity: item.quantity,
+    })),
+    tiers: (holdTiers ?? []).map((tier) => ({
+      id: tier.id,
+      name: tier.name,
+      minPurchaseLimit: (tier as { min_purchase_limit?: number | null })
+        .min_purchase_limit,
+      maxPurchaseLimit: (tier as { max_purchase_limit?: number | null })
+        .max_purchase_limit,
+    })),
+    fallbackMax: holdEvent?.max_tickets_per_user,
+  })
+  if (!holdCap.ok) {
+    return { success: false, error: holdCap.error }
+  }
+
   const { data, error } = await access.db.rpc("hold_ga_tickets_for_cart", {
     p_event_id: eventId,
     p_owner_id: user.id,
@@ -1731,7 +1775,6 @@ export async function startCheckoutWithPayment(
   }
   const cartItems = resolvedCart.items
   const seatingItems = cartItems.filter((item) => isMappedCheckoutItem(item))
-  const cartQuantity = cartItems.reduce((sum, item) => sum + item.quantity, 0)
 
   const user = earlyUser
 
@@ -1752,7 +1795,9 @@ export async function startCheckoutWithPayment(
       .maybeSingle(),
     db
       .from("ticket_tiers")
-      .select("capacity, sold, visibility")
+      .select(
+        "id, name, capacity, sold, visibility, min_purchase_limit, max_purchase_limit",
+      )
       .eq("event_id", payload.eventId),
   ])
 
@@ -1771,16 +1816,28 @@ export async function startCheckoutWithPayment(
     return { success: false, error: EVENT_SOLD_OUT_ERROR }
   }
 
-  const identityCap = await assertGuestTicketCap({
-    eventId: payload.eventId,
-    dni: buyer.buyerDni,
-    email: buyer.buyerEmail,
-    quantity: cartQuantity,
-    maxTicketsPerUser: eventRow?.max_tickets_per_user,
+  const skuCap = assertCartTierPurchaseLimits({
+    items: cartItems.map((item) => ({
+      tierId: checkoutItemTierId(item),
+      quantity: item.quantity,
+    })),
+    tiers: (eventTiers ?? []).map((tier) => ({
+      id: "id" in tier && typeof tier.id === "string" ? tier.id : "",
+      name: "name" in tier && typeof tier.name === "string" ? tier.name : "",
+      minPurchaseLimit:
+        "min_purchase_limit" in tier
+          ? (tier.min_purchase_limit as number | null)
+          : 1,
+      maxPurchaseLimit:
+        "max_purchase_limit" in tier
+          ? (tier.max_purchase_limit as number | null)
+          : null,
+    })),
+    fallbackMax: eventRow?.max_tickets_per_user,
   })
-  if (!identityCap.ok) {
+  if (!skuCap.ok) {
     await recordCheckoutFailure(ctx)
-    return { success: false, error: identityCap.error }
+    return { success: false, error: skuCap.error }
   }
 
   // Progressive profiling: DNI + teléfono permanentes en el perfil.

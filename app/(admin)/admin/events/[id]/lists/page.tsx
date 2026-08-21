@@ -104,7 +104,7 @@ export default async function EventGuestListsPage({
   ]
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8">
+    <div className="mx-auto w-full max-w-6xl space-y-8 p-4 sm:p-6">
       <div>
         <Link
           href="/admin/lists"

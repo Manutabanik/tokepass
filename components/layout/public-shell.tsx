@@ -38,16 +38,16 @@ export function PublicShell({
   return (
     <div
       className={cn(
-        "flex min-h-screen flex-col bg-background text-foreground",
+        "flex min-h-dvh flex-col bg-background text-foreground",
         checkoutTunnel && "relative h-[100dvh] overflow-hidden",
       )}
     >
       {checkoutTunnel ? null : navbar}
       <main
         className={cn(
-          "relative z-20 flex-1",
+          "flex min-h-0 w-full flex-1 flex-col",
           checkoutTunnel
-            ? "min-h-0 overflow-hidden"
+            ? "overflow-hidden"
             : cn(
                 "pt-[calc(4rem+env(safe-area-inset-top)+1rem)]",
                 eventStorefront

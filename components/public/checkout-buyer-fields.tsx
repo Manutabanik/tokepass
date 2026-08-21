@@ -22,7 +22,7 @@ type CheckoutBuyerFieldsProps = {
 }
 
 const fieldInputClass =
-  "h-12 w-full min-w-0 rounded-xl border border-border bg-secondary/30 px-4 text-[16px] text-foreground placeholder:text-muted-foreground transition-all focus-visible:ring-2 focus-visible:ring-primary/50 md:h-14 md:text-base"
+  "h-12 w-full min-w-0 rounded-xl border border-border bg-secondary/30 px-4 text-base text-foreground placeholder:text-muted-foreground transition-all focus-visible:ring-2 focus-visible:ring-primary/50 md:h-14 md:text-sm"
 
 function fieldMessage(
   errors: CheckoutBuyerFieldsProps["errors"],
@@ -92,7 +92,12 @@ export function CheckoutBuyerFields({
   }
 
   return (
-    <div className={cn("flex min-w-0 flex-col gap-5", className)}>
+    <div
+      className={cn(
+        "flex min-w-0 flex-col gap-5 rounded-2xl border border-border bg-card p-4 sm:p-5",
+        className,
+      )}
+    >
       <div className="min-w-0 space-y-1.5">
         <Label
           htmlFor={CHECKOUT_BUYER_FIELD_IDS.buyerEmail}

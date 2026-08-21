@@ -40,7 +40,7 @@ export function StaticSignedQR({
   return (
     <div
       className={cn(
-        "pointer-events-none mx-auto w-fit select-none rounded-[1.35rem] bg-white p-3.5 shadow-sm",
+        "pointer-events-none mx-auto aspect-square w-full max-w-sm select-none rounded-[1.35rem] bg-white p-4 shadow-sm",
         className,
       )}
     >
@@ -51,13 +51,11 @@ export function StaticSignedQR({
           level="H"
           bgColor="#ffffff"
           fgColor="#000000"
-          className="mx-auto h-auto w-full bg-white"
+          className="mx-auto h-full w-full bg-white"
+          style={{ width: "100%", height: "100%" }}
         />
       ) : (
-        <div
-          className="animate-pulse rounded-xl bg-zinc-100"
-          style={{ width: size, height: size }}
-        />
+        <div className="aspect-square w-full animate-pulse rounded-xl bg-zinc-100" />
       )}
     </div>
   )

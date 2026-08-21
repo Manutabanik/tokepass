@@ -112,21 +112,23 @@ export function OrganizersDirectory({
                 key={org.id}
                 className="border-border hover:bg-muted/50"
               >
-                <TableCell className="py-4 pl-6">
-                  <div className="flex items-center gap-3">
-                    <span className="grid size-9 place-items-center rounded-full bg-violet-500/10 text-xs font-medium text-violet-700 dark:text-violet-300">
+                <TableCell className="min-w-[150px] max-w-[250px] py-4 pl-6">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="grid size-9 shrink-0 place-items-center rounded-full bg-violet-500/10 text-xs font-medium text-violet-700 dark:text-violet-300">
                       {getInitials(org.name, org.email)}
                     </span>
-                    <div>
-                      <p className="font-medium text-foreground">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-foreground">
                         {org.companyName ?? org.name}
                       </p>
-                      <p className="text-xs text-muted-foreground">{org.email}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {org.email}
+                      </p>
                     </div>
                   </div>
                 </TableCell>
-                <TableCell className="font-mono text-xs text-muted-foreground">
-                  {org.cuitCuil ?? "—"}
+                <TableCell className="min-w-[150px] max-w-[250px] font-mono text-xs text-muted-foreground">
+                  <span className="block truncate">{org.cuitCuil ?? "—"}</span>
                 </TableCell>
                 <TableCell className="text-foreground">
                   {formatNumber(org.totalEvents)}

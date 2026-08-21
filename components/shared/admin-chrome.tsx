@@ -20,9 +20,15 @@ export function AdminChrome({
 }) {
   const pathname = usePathname()
   const workspace = isVenueMapWorkspace(pathname)
+  const posTerminal =
+    pathname.startsWith("/dashboard/pos") || pathname.startsWith("/admin/pos")
+  const createWizard =
+    pathname.startsWith("/admin/events/create") ||
+    pathname.startsWith("/admin/events/new")
+  const lockViewport = posTerminal || createWizard
 
   useLayoutEffect(() => {
-    if (!workspace) return
+    if (!workspace && !lockViewport) return
     const root = document.documentElement
     const body = document.body
     const previousRoot = root.style.overflow
@@ -33,7 +39,7 @@ export function AdminChrome({
       root.style.overflow = previousRoot
       body.style.overflow = previousBody
     }
-  }, [workspace])
+  }, [lockViewport, workspace])
 
   if (workspace) {
     return (
@@ -44,9 +50,21 @@ export function AdminChrome({
   }
 
   return (
-    <div className="flex min-h-screen w-full bg-zinc-50 dark:bg-zinc-950">
+    <div
+      className={
+        lockViewport
+          ? "flex h-dvh w-full overflow-hidden bg-zinc-50 dark:bg-zinc-950"
+          : "flex min-h-screen w-full bg-zinc-50 dark:bg-zinc-950"
+      }
+    >
       {sidebar}
-      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+      <div
+        className={
+          lockViewport
+            ? "flex h-dvh min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+            : "flex min-h-screen min-w-0 flex-1 flex-col"
+        }
+      >
         {header}
         {children}
       </div>

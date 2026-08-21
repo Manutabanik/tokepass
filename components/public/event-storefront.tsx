@@ -39,6 +39,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Badge } from "@/components/ui/badge"
+import { AppTakeover } from "@/components/ui/app-takeover"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -145,9 +146,11 @@ export function EventStorefront({
   previewKey = null,
 }: EventStorefrontProps) {
   const [event, setEvent] = useState(initialEvent)
-  useEffect(() => {
+  const [eventBaseline, setEventBaseline] = useState(initialEvent)
+  if (initialEvent !== eventBaseline) {
+    setEventBaseline(initialEvent)
     setEvent(initialEvent)
-  }, [initialEvent])
+  }
   useEventCatalogRealtime(event.id, {
     onEventUpdate: (row) => {
       setEvent((current) => applyEventCatalogRow(current, row))
@@ -320,6 +323,12 @@ export function EventStorefront({
         layoutType: tier.layout_type,
         seatingSectorId: tier.seating_sector_id,
         capacityPerUnit: tier.capacity_per_unit,
+        minPurchaseLimit:
+          (tier as { min_purchase_limit?: number | null }).min_purchase_limit ??
+          1,
+        maxPurchaseLimit:
+          (tier as { max_purchase_limit?: number | null }).max_purchase_limit ??
+          null,
         category: tier.category,
         listPrice: tier.list_price,
         comboItems: event.comboItemsByTier[tier.id] ?? [],
@@ -577,7 +586,7 @@ export function EventStorefront({
 
   if (showCheckout) {
     return (
-      <div className="flex h-[100dvh] flex-col overflow-hidden bg-background text-foreground">
+      <AppTakeover className="text-foreground">
         {event.isDraftPreview ? <SandboxBanner /> : null}
         <AnalyticsTracker
           config={event.pixels}
@@ -624,8 +633,8 @@ export function EventStorefront({
         <Dialog open={exitDialogOpen} onOpenChange={setExitDialogOpen}>
           <DialogContent
             showCloseButton={false}
-            className="z-[110] sm:max-w-md"
-            overlayClassName="z-[110]"
+            className="z-[100] sm:max-w-md"
+            overlayClassName="z-[100]"
           >
             <DialogHeader>
               <DialogTitle>Cancelar proceso de compra</DialogTitle>
@@ -652,7 +661,7 @@ export function EventStorefront({
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </div>
+      </AppTakeover>
     )
   }
 
@@ -660,7 +669,9 @@ export function EventStorefront({
     <div
       className={cn(
         "relative min-h-screen overflow-x-visible bg-background text-foreground",
-        showInfoCta ? "pb-32 lg:pb-12" : "pb-8 lg:pb-12",
+        showInfoCta
+          ? "pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-12"
+          : "pb-8 lg:pb-12",
       )}
     >
       {event.isDraftPreview ? <SandboxBanner /> : null}

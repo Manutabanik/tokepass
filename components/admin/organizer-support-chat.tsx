@@ -274,7 +274,7 @@ export function OrganizerSupportChat() {
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetContent
         side="right"
-        className="flex h-dvh w-[min(100%,400px)] max-w-[400px] flex-col p-0 sm:w-[400px]"
+        className="flex h-dvh w-full flex-col p-0 sm:max-w-md"
       >
           <SheetHeader className="pr-12">
             <SheetTitle>Soporte TokePass</SheetTitle>

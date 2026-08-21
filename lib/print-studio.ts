@@ -66,6 +66,18 @@ export function printBatchNeedsGuests(mode: PrintBatchMode): boolean {
   return mode === "named" || mode === "seated"
 }
 
+export const PRINT_STUDIO_DEMO_QR = "TPS.DEMO.12345678"
+export const PRINT_STUDIO_DEMO_HOLDER = "CARLOS MENDOZA"
+export const PRINT_STUDIO_DEMO_ROLE = "TÉCNICA / ESCENARIO"
+export const PRINT_STUDIO_DEMO_COMPANY = "SONIDO XYZ"
+export const PRINT_STUDIO_STUB_MM = 30
+export const PRINT_STUDIO_BRAND_MARK = "/brand/tokepass-mark.png"
+export const ACCREDITATION_OPERATIONAL_TIER_NAME = "Acreditaciones (operativo)"
+
+export function printChannelUsesCommercialStock(channel: string): boolean {
+  return channel !== "accreditation"
+}
+
 export const SCREEN_DPI = 96
 export const MM_PER_INCH = 25.4
 export const MM_TO_PX_96DPI = SCREEN_DPI / MM_PER_INCH

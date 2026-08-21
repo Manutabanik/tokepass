@@ -74,14 +74,13 @@ export function LivingTicketQR({
     <div
       className={cn(
         "text-center",
-        isScan ? "w-full" : "mx-auto w-full max-w-[260px]",
+        "mx-auto w-full max-w-sm",
         className,
       )}
     >
       <div
         className={cn(
-          "relative mx-auto grid select-none place-items-center",
-          isScan && "w-full",
+          "relative mx-auto grid w-full select-none place-items-center",
         )}
         onContextMenu={(event) => event.preventDefault()}
       >
@@ -90,14 +89,15 @@ export function LivingTicketQR({
         )}
         <div
           className={cn(
+            "relative aspect-square w-full bg-white p-4",
             isScan
-              ? "relative aspect-square w-full bg-white p-0"
-              : "pointer-events-none relative rounded-[1.35rem] bg-white p-3.5 shadow-[0_0_32px_rgba(255,255,255,0.08)]",
+              ? "p-0"
+              : "pointer-events-none rounded-[1.35rem] shadow-[0_0_32px_rgba(255,255,255,0.08)]",
           )}
           style={isScan ? { colorScheme: "light" } : undefined}
         >
           {token ? (
-            <div className="relative overflow-hidden rounded-[inherit] bg-white">
+            <div className="relative h-full w-full overflow-hidden rounded-[inherit] bg-white">
               <QRCodeSVG
                 value={token}
                 size={size}
@@ -105,7 +105,8 @@ export function LivingTicketQR({
                 includeMargin={false}
                 bgColor="#ffffff"
                 fgColor="#000000"
-                className={cn("mx-auto bg-white", isScan && "h-auto w-full")}
+                className="mx-auto h-full w-full bg-white"
+                style={{ width: "100%", height: "100%" }}
               />
               {isScan ? null : (
                 <>
@@ -126,9 +127,8 @@ export function LivingTicketQR({
             <div
               className={cn(
                 "animate-pulse rounded-xl bg-zinc-100",
-                isScan && "aspect-square w-full",
+                "aspect-square w-full",
               )}
-              style={isScan ? undefined : { width: size, height: size }}
             />
           )}
         </div>

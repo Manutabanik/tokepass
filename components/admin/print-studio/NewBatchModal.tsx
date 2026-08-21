@@ -135,7 +135,7 @@ export function NewBatchModal({
 
   function nextStep() {
     if (step === 1 && !channel) return
-    if (step === 2 && !tierId) {
+    if (step === 2 && channel !== "accreditation" && !tierId) {
       toast.error("Elegí una tarifa / sector.")
       return
     }
@@ -179,7 +179,7 @@ export function NewBatchModal({
     startTransition(async () => {
       const result = await createPrintBatch({
         eventId,
-        tierId,
+        tierId: channel === "accreditation" ? undefined : tierId,
         templateId: templateId === "none" ? null : templateId,
         name: batchName,
         mode: channel === "accreditation"
@@ -285,31 +285,38 @@ export function NewBatchModal({
 
         {step === 2 ? (
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Sector / tarifa</Label>
-              <Select value={tierId} onValueChange={(value) => value && setTierId(value)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Elegí una tarifa" />
-                </SelectTrigger>
-                <SelectContent>
-                  {tiers.map((tier) => (
-                    <SelectItem key={tier.id} value={tier.id}>
-                      {tier.name} · {tier.available} disponibles
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {selectedTier ? (
-                <p className="text-xs text-muted-foreground">
-                  Cupo {selectedTier.sold}/{selectedTier.capacity}. El lote consume
-                  inventario de esta tarifa.
-                </p>
-              ) : (
-                <p className="text-xs text-destructive">
-                  Este evento no tiene tarifas. Creá una antes de emitir.
-                </p>
-              )}
-            </div>
+            {channel === "accreditation" ? (
+              <p className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-900 dark:text-emerald-100">
+                Las acreditaciones usan un SKU operativo interno. No descuentan
+                cupo de las tarifas a la venta.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                <Label>Sector / tarifa</Label>
+                <Select value={tierId} onValueChange={(value) => value && setTierId(value)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Elegí una tarifa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tiers.map((tier) => (
+                      <SelectItem key={tier.id} value={tier.id}>
+                        {tier.name} · {tier.available} disponibles
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedTier ? (
+                  <p className="text-xs text-muted-foreground">
+                    Cupo {selectedTier.sold}/{selectedTier.capacity}. El lote consume
+                    inventario de esta tarifa.
+                  </p>
+                ) : (
+                  <p className="text-xs text-destructive">
+                    Este evento no tiene tarifas. Creá una antes de emitir.
+                  </p>
+                )}
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Plantilla de diseño</Label>
               <Select
@@ -539,7 +546,7 @@ export function NewBatchModal({
           <Button
             type="button"
             onClick={step === maxStep ? confirmIssue : nextStep}
-            disabled={pending || (step === 2 && !tierId)}
+            disabled={pending || (step === 2 && channel !== "accreditation" && !tierId)}
           >
             {pending ? (
               <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />

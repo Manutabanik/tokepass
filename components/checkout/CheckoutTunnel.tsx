@@ -48,6 +48,7 @@ import { CheckoutPaymentForm } from "@/components/checkout/CheckoutPaymentForm"
 import { CheckoutTicketList } from "@/components/checkout/CheckoutTicketList"
 import { CheckoutTimer } from "@/components/checkout/CheckoutTimer"
 import { CheckoutFloatingBar } from "@/components/public/checkout-floating-bar"
+import { AppTakeover } from "@/components/ui/app-takeover"
 import { CheckoutSelectionSidebar } from "@/components/public/checkout-selection-sidebar"
 import { type CheckoutFlowStep } from "@/components/public/checkout-stepper"
 import {
@@ -78,8 +79,9 @@ import {
   ABSOLUTE_MAX_ITEMS_PER_PURCHASE,
   MAX_TABLES_PER_PURCHASE,
   MAX_TICKETS_PER_PURCHASE,
-  purchaseCapForLayout,
+  purchaseCapForTier,
   resolvePurchaseLimit,
+  skuPurchaseMaxMessage,
   storefrontLimitMessage,
 } from "@/lib/checkout-limits"
 import { minReservedUntil } from "@/lib/checkout-hold"
@@ -664,10 +666,11 @@ export function CheckoutTunnel({
           (item) => item.type === "table" && resolveItemTierId(item) === tierId,
         )
         const max = Math.min(
-          purchaseCapForLayout(
-            drivenByTable ? "table_combo" : tier?.layoutType,
-            maxTicketsPerUser,
-          ),
+          purchaseCapForTier({
+            layoutType: drivenByTable ? "table_combo" : tier?.layoutType,
+            maxPurchaseLimit: tier?.maxPurchaseLimit,
+            fallbackMax: maxTicketsPerUser,
+          }),
           Math.max(0, tier?.available ?? target),
         )
         const clamped = Math.min(target, max)
@@ -1224,7 +1227,11 @@ export function CheckoutTunnel({
             quantity,
             subtotal: quantity * tier.price,
             maxSelectable: Math.min(
-              purchaseCapForLayout(tier.layoutType, maxTicketsPerUser),
+              purchaseCapForTier({
+                layoutType: tier.layoutType,
+                maxPurchaseLimit: tier.maxPurchaseLimit,
+                fallbackMax: maxTicketsPerUser,
+              }),
               Math.max(0, tier.available),
             ),
           }
@@ -1473,15 +1480,18 @@ export function CheckoutTunnel({
     if (purchaseLocked) return
     const currentQty = quantities[tierId] ?? 0
     const clamped = Math.min(Math.max(0, next), max)
-    const limit = resolvePurchaseLimit(maxTicketsPerUser)
-    if (limit != null && clamped > currentQty) {
-      const otherCount = Math.max(0, totalTickets - currentQty)
-      if (otherCount + clamped > limit) {
-        toast.error(storefrontLimitMessage())
-        return
-      }
-    }
     const tier = displayTiers.find((item) => item.id === tierId)
+    const skuMax = purchaseCapForTier({
+      layoutType: tier?.layoutType,
+      maxPurchaseLimit: tier?.maxPurchaseLimit,
+      fallbackMax: maxTicketsPerUser,
+    })
+    if (clamped > currentQty && clamped > skuMax) {
+      toast.error(
+        skuPurchaseMaxMessage(tier?.name?.trim() || "esta tarifa", skuMax),
+      )
+      return
+    }
     const result = useCheckoutStore.getState().setGeneralQuantity({
       ticketTierId: tierId,
       name: tier?.name ?? "",
@@ -1979,13 +1989,24 @@ export function CheckoutTunnel({
     })
   }
 
+  function selectionCapForItem(item: StorefrontSelectedItem) {
+    const tierId = resolveItemTierId(item)
+    const tier = displayTiers.find((row) => row.id === tierId)
+    return purchaseCapForTier({
+      layoutType:
+        item.type === "table" ? "table_combo" : tier?.layoutType,
+      maxPurchaseLimit: tier?.maxPurchaseLimit,
+      fallbackMax: maxTicketsPerUser,
+    })
+  }
+
   function handleImmersiveZoneSelect(zone: VenueMapZone) {
     if (purchaseLocked || soldOutZoneIds.includes(zone.id)) return
     const item = storefrontItemFromZone(zone, priceBySectorId)
     if (!item) return
     const result = useStorefrontSeatStore.getState().toggleSelectedItem(
       item,
-      maxTicketsPerUser,
+      selectionCapForItem(item),
     )
     if (!result.ok) {
       toast.error(storefrontLimitMessage(result.reason))
@@ -2024,7 +2045,14 @@ export function CheckoutTunnel({
           sellMode: zone.sellMode,
           priceMode: zone.priceMode ?? venuePriceModeFromSellMode(zone.sellMode),
         },
-        maxTicketsPerUser,
+        selectionCapForItem({
+          id: zone.id,
+          name: zone.name,
+          type: "zone",
+          price: zone.price,
+          capacity: Math.max(1, quantity),
+          sectorId: zone.id,
+        }),
       )
       if (!result.ok) {
         toast.error(storefrontLimitMessage(result.reason))
@@ -2054,12 +2082,20 @@ export function CheckoutTunnel({
     updateQuantity(
       tierId,
       Math.min(
-        purchaseCapForLayout(tier.layoutType, maxTicketsPerUser),
+        purchaseCapForTier({
+          layoutType: tier.layoutType,
+          maxPurchaseLimit: tier.maxPurchaseLimit,
+          fallbackMax: maxTicketsPerUser,
+        }),
         Math.max(1, quantity),
         tier.available,
       ),
       Math.min(
-        purchaseCapForLayout(tier.layoutType, maxTicketsPerUser),
+        purchaseCapForTier({
+          layoutType: tier.layoutType,
+          maxPurchaseLimit: tier.maxPurchaseLimit,
+          fallbackMax: maxTicketsPerUser,
+        }),
         Math.max(0, tier.available),
       ),
     )
@@ -2125,7 +2161,7 @@ export function CheckoutTunnel({
     for (const table of tables) {
       const item = storefrontItemFromElement(table, priceBySectorId)
       if (!item) continue
-      const result = store.upsertSelectedItem(item, maxTicketsPerUser)
+      const result = store.upsertSelectedItem(item, selectionCapForItem(item))
       if (!result.ok) {
         toast.error(storefrontLimitMessage(result.reason))
         break
@@ -2313,7 +2349,11 @@ export function CheckoutTunnel({
         tierId,
         selectionPayload.quantity,
         Math.min(
-          purchaseCapForLayout(tier?.layoutType, maxTicketsPerUser),
+          purchaseCapForTier({
+            layoutType: tier?.layoutType,
+            maxPurchaseLimit: tier?.maxPurchaseLimit,
+            fallbackMax: maxTicketsPerUser,
+          }),
           Math.max(0, tier?.available ?? 0),
         ),
       )
@@ -2477,7 +2517,7 @@ export function CheckoutTunnel({
 
   const seatFlowOverlay =
     showSeatFlow && !hasInteractiveMap ? (
-      <div className="fixed inset-0 z-[80] flex h-dvh w-screen flex-col overflow-hidden overscroll-none bg-background">
+      <AppTakeover className="z-[100] overscroll-none">
         <AdaptiveSeatingFlow
           key={selectedDayId ?? "all"}
           takeover
@@ -2498,7 +2538,7 @@ export function CheckoutTunnel({
           onLoadSectorUnits={loadSectorUnits}
           onLoadAllUnits={loadAllUnits}
         />
-      </div>
+      </AppTakeover>
     ) : null
 
   if (tiers.length === 0) {
@@ -2578,34 +2618,29 @@ export function CheckoutTunnel({
         eventId={eventId}
         onAcknowledged={handleHoldExpiredAck}
       />
+      <CheckoutHeader
+        step={visibleStep}
+        holdExpiresAt={showReservationTimer ? holdExpiresAt : null}
+        maxTicketsPerUser={maxTicketsPerUser}
+        safeAreaTop={!isDraftPreview}
+        onBack={
+          visibleStep === "tickets" && onLeaveCheckout
+            ? onLeaveCheckout
+            : goBackStep
+        }
+        backLabel={
+          visibleStep === "tickets" && onLeaveCheckout
+            ? "Volver al evento"
+            : "Volver"
+        }
+      />
       <div
         ref={panelBodyRef}
-        className="no-scrollbar min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto"
+        className="no-scrollbar flex-1 min-h-0 min-w-0 space-y-6 overflow-x-hidden overflow-y-auto p-4"
       >
-        <CheckoutHeader
-          step={visibleStep}
-          holdExpiresAt={showReservationTimer ? holdExpiresAt : null}
-          maxTicketsPerUser={maxTicketsPerUser}
-          safeAreaTop={!isDraftPreview}
-          onBack={
-            visibleStep === "tickets" && onLeaveCheckout
-              ? onLeaveCheckout
-              : goBackStep
-          }
-          backLabel={
-            visibleStep === "tickets" && onLeaveCheckout
-              ? "Volver al evento"
-              : "Volver"
-          }
-        />
-        <div
-          className={cn(
-            "mx-auto w-full max-w-7xl px-4 pt-1 sm:px-6 lg:px-8 lg:pt-6 lg:pb-10",
-            visibleStep === "payment" ? "pb-8" : "pb-36",
-          )}
-        >
+        <div className="mx-auto w-full max-w-7xl">
           {visibleStep !== "tickets" ? (
-            <h2 className="mb-3 pt-2 text-lg font-black text-foreground md:mb-4 md:text-xl">
+            <h2 className="mb-3 line-clamp-2 break-words pt-2 text-lg font-black text-foreground md:mb-4 md:text-xl">
               {stepTitle}
             </h2>
           ) : null}
@@ -2834,17 +2869,19 @@ export function CheckoutTunnel({
         </div>
       </div>
 
-      <div className="mt-auto flex-none lg:hidden">
+      <div className="mt-auto flex shrink-0 flex-col gap-3 border-t border-border bg-background p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:flex-row lg:hidden">
         <CheckoutFloatingBar
           variant="panel"
-          hidden={visibleStep === "payment"}
           actionLabel={
             visibleStep === "tickets" ? "Continuar" : stepCta
           }
           showArrow={visibleStep !== "payment"}
           totalAmount={finalTotal}
           itemsCount={Math.max(totalTickets, liveSelectedItems.length)}
-          disabled={visibleStep === "tickets" && !canProceedFromCart}
+          disabled={
+            (visibleStep === "tickets" && !canProceedFromCart) ||
+            (visibleStep === "payment" && !acceptedTerms)
+          }
           pending={checkoutBusy}
           pendingLabel={
             visibleStep === "payment" ? "Preparando pago" : "Procesando"

@@ -845,11 +845,13 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
 
   if (catalog.length === 0) {
     return (
-      <div className="rounded-3xl border border-dashed border-border bg-card px-5 py-12 text-center">
+      <div className="flex h-[calc(100dvh-4rem-env(safe-area-inset-top))] min-h-0 flex-col overflow-hidden">
+      <div className="m-4 rounded-3xl border border-dashed border-border bg-card px-5 py-12 text-center">
         <Ticket className="mx-auto size-8 text-muted-foreground" />
         <p className="mt-3 text-sm text-muted-foreground">
           No hay eventos disponibles para cobrar en puerta.
         </p>
+      </div>
       </div>
     )
   }
@@ -859,7 +861,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
   const canSell = Boolean(shift) && !busy
 
   return (
-    <div className="flex flex-col bg-background text-foreground">
+    <div className="flex h-[calc(100dvh-4rem-env(safe-area-inset-top))] min-h-0 flex-1 flex-col overflow-hidden bg-background text-foreground">
       <header className="shrink-0 border-b border-border bg-card px-3 py-3 sm:px-4">
         {shift ? (
           <div className="flex flex-wrap items-center gap-2">
@@ -922,9 +924,9 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
         )}
       </header>
 
-      <div className="grid lg:grid-cols-[minmax(0,3fr)_minmax(22rem,2fr)]">
-        <section className="border-border p-3 sm:p-4 lg:border-r">
-          <div className="space-y-2">
+      <div className="grid min-h-0 flex-1 overflow-hidden max-lg:grid-rows-[minmax(0,1fr)_minmax(13rem,42%)] lg:grid-cols-[minmax(0,1fr)_minmax(20rem,24rem)]">
+        <section className="flex min-h-0 flex-col overflow-hidden border-border lg:border-r">
+          <div className="shrink-0 space-y-2 p-4 pb-0">
             <Label className="text-muted-foreground">Evento activo</Label>
             <Select
               value={eventId}
@@ -934,15 +936,18 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
                 label: event.title,
               }))}
             >
-              <SelectTrigger className="h-14 w-full max-w-full overflow-hidden rounded-2xl border-border bg-card text-base text-foreground">
-                <SelectValue placeholder="Elegí evento">
+              <SelectTrigger className="h-auto min-h-14 w-full max-w-full overflow-hidden whitespace-normal rounded-2xl border-border bg-card text-base text-foreground *:data-[slot=select-value]:line-clamp-2 *:data-[slot=select-value]:whitespace-normal *:data-[slot=select-value]:break-words">
+                <SelectValue
+                  placeholder="Elegí evento"
+                  className="min-w-0 whitespace-normal break-words line-clamp-2"
+                >
                   {selectedEvent?.title ?? null}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {catalog.map((event) => (
                   <SelectItem key={event.id} value={event.id}>
-                    <span className="block max-w-[220px] truncate sm:max-w-[420px]">
+                    <span className="block min-w-0 max-w-[220px] break-words line-clamp-2 sm:max-w-[420px]">
                       {event.title}
                     </span>
                   </SelectItem>
@@ -951,8 +956,11 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
             </Select>
           </div>
 
-          <fieldset disabled={!canSell} className="mt-4 disabled:opacity-50">
-            <div className="mb-3 grid grid-cols-2 gap-2">
+          <fieldset
+            disabled={!canSell}
+            className="flex min-h-0 flex-1 flex-col overflow-hidden disabled:opacity-50"
+          >
+            <div className="mb-3 grid shrink-0 grid-cols-2 gap-2 px-4 pt-4">
               <button
                 type="button"
                 onClick={() => setCatalogView("quick")}
@@ -981,19 +989,25 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
               </button>
             </div>
             {catalogView === "map" && selectedEvent ? (
-              <div className="mb-4">
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4">
                 <PosSeatingMap
                   event={selectedEvent}
                   heldSeatIds={seatPicks.map((pick) => pick.seatId)}
                   disabled={!canSell}
                   onToggleSeat={toggleMapSeat}
                 />
-                <p className="mt-2 text-xs text-muted-foreground">
+                <p className="mt-2 shrink-0 text-xs text-muted-foreground">
                   Verde: libre · Rojo: ocupado · Amarillo: en cobro
                 </p>
               </div>
             ) : null}
-            <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+            <div
+              className={cn(
+                "min-h-0 overflow-y-auto p-4",
+                catalogView === "map" ? "max-h-48 shrink-0" : "flex-1",
+              )}
+            >
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
               {liveTiers.map((tier, index) => {
                 const inCart = cart[tier.id] ?? 0
                 const soldOut = tier.available <= 0
@@ -1004,19 +1018,19 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
                     disabled={soldOut}
                     onClick={() => addTier(tier.id)}
                     className={cn(
-                      "flex min-h-36 flex-col items-start justify-between rounded-2xl border-2 bg-card p-4 text-left transition active:scale-[0.98]",
+                      "flex min-h-36 min-w-0 flex-col items-start justify-between rounded-2xl border-2 bg-card p-4 text-left transition active:scale-[0.98]",
                       inCart > 0
                         ? "border-emerald-500 bg-emerald-500/10"
                         : "border-border hover:border-emerald-500/50",
                       soldOut && "cursor-not-allowed opacity-40",
                     )}
                   >
-                    <div className="flex w-full items-start justify-between gap-2">
-                      <span className="text-lg font-bold leading-tight text-foreground">
+                    <div className="flex w-full min-w-0 items-start justify-between gap-2">
+                      <span className="min-w-0 text-lg font-bold leading-tight break-words text-foreground line-clamp-2">
                         {tier.name}
                       </span>
                       {index < 9 ? (
-                        <span className="rounded-md bg-muted px-1.5 py-0.5 text-xs font-black tabular-nums text-muted-foreground">
+                        <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-xs font-black tabular-nums text-muted-foreground">
                           {index + 1}
                         </span>
                       ) : null}
@@ -1034,10 +1048,11 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
                 )
               })}
             </div>
+            </div>
           </fieldset>
         </section>
 
-        <aside className="flex flex-col justify-between border-t border-border bg-card lg:sticky lg:top-20 lg:h-[calc(100vh-5rem)] lg:border-t-0">
+        <aside className="flex h-full min-h-0 flex-col border-t border-border bg-card lg:border-t-0">
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3 sm:p-4">
             <div>
               <div className="flex flex-wrap items-start justify-between gap-2">
@@ -1062,7 +1077,9 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
                       className="flex items-center justify-between gap-3 rounded-2xl border border-border px-3 py-3"
                     >
                       <div className="min-w-0">
-                        <p className="truncate font-semibold">{line.tier.name}</p>
+                        <p className="min-w-0 break-words font-semibold line-clamp-2">
+                          {line.tier.name}
+                        </p>
                         {posSeatPicksForTier(seatPicks, line.tierId).length > 0 ? (
                           <p className="truncate text-xs text-muted-foreground">
                             {posSeatPicksForTier(seatPicks, line.tierId)
@@ -1168,17 +1185,6 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
               </div>
             ) : null}
 
-            <div className="rounded-2xl border border-border px-4 py-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">
-                  Total · {itemCount} {itemCount === 1 ? "ítem" : "ítems"}
-                </span>
-                <span className="text-3xl font-black tabular-nums">
-                  {formatCurrency(total)}
-                </span>
-              </div>
-            </div>
-
             <div className="grid gap-2">
               <PayMethodButton
                 active={payMethod === "cash_pos"}
@@ -1252,7 +1258,15 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
             ) : null}
           </div>
 
-          <div className="mt-auto shrink-0 border-t border-border p-3 sm:p-4">
+          <div className="shrink-0 border-t border-border bg-background p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <span className="min-w-0 text-sm text-muted-foreground">
+                Total · {itemCount} {itemCount === 1 ? "ítem" : "ítems"}
+              </span>
+              <span className="text-3xl font-black tabular-nums">
+                {formatCurrency(total)}
+              </span>
+            </div>
             <button
               type="button"
               disabled={!canSell || lines.length === 0}

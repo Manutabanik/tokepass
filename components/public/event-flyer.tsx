@@ -57,7 +57,9 @@ function FlyerImage({
 }) {
   const [useNative, setUseNative] = useState(() => !shouldOptimizeFlyerSrc(src))
   const imageClass =
-    objectFit === "contain" ? "object-contain" : "object-cover"
+    objectFit === "contain"
+      ? "object-contain object-center"
+      : "object-cover object-center"
 
   if (useNative) {
     return (

@@ -84,7 +84,7 @@ export function PromoterDashboardClient({
 
   if (!metrics) {
     return (
-      <div className="mx-auto w-full max-w-md space-y-6 px-4 py-10">
+      <div className="mx-auto w-full max-w-md flex-1 space-y-6 px-4 pt-10 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-emerald-400">
             Promotores y RRPP
@@ -125,7 +125,7 @@ export function PromoterDashboardClient({
   }
 
   return (
-    <div className="mx-auto w-full max-w-md space-y-5 px-4 pb-12 pt-8">
+    <div className="mx-auto w-full max-w-md flex-1 space-y-5 px-4 pt-8 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <header>
         <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-emerald-400">
           Mini dashboard
@@ -144,7 +144,7 @@ export function PromoterDashboardClient({
         <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-300/80">
           Tu código
         </p>
-        <p className="mt-2 text-4xl font-black tracking-[-0.03em] text-white">
+        <p className="mt-2 break-all text-3xl font-bold tracking-[-0.03em] text-white sm:text-4xl">
           {metrics.referralCode}
         </p>
         <p className="mt-3 break-all text-xs leading-5 text-zinc-400">
@@ -179,7 +179,7 @@ export function PromoterDashboardClient({
             <CardDescription className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
               Clics / visitas
             </CardDescription>
-            <CardTitle className="text-5xl font-black tracking-[-0.05em] text-white">
+            <CardTitle className="text-4xl font-black tabular-nums tracking-[-0.05em] text-white sm:text-5xl">
               {metrics.clickCount}
             </CardTitle>
           </CardHeader>
@@ -195,7 +195,7 @@ export function PromoterDashboardClient({
             <CardDescription className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
               Ventas totales
             </CardDescription>
-            <CardTitle className="text-5xl font-black tracking-[-0.05em] text-white">
+            <CardTitle className="text-4xl font-black tabular-nums tracking-[-0.05em] text-white sm:text-5xl">
               {metrics.ticketsSold}
             </CardTitle>
           </CardHeader>
@@ -209,7 +209,7 @@ export function PromoterDashboardClient({
             <CardDescription className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-400/80">
               Tu comisión estimada
             </CardDescription>
-            <CardTitle className="text-5xl font-black tracking-[-0.05em] text-emerald-400">
+            <CardTitle className="text-4xl font-black tabular-nums tracking-[-0.05em] text-emerald-400 sm:text-5xl">
               {formatCurrency(metrics.estimatedCommission)}
             </CardTitle>
           </CardHeader>

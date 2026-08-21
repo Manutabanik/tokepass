@@ -48,8 +48,8 @@ export function DoorScannerSessionChrome({
   onToggleTorch: () => void
 }) {
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <header className="shrink-0 space-y-2 px-4 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))]">
+    <div className="relative z-0 flex h-full min-h-0 flex-col">
+      <header className="relative z-30 shrink-0 space-y-2 px-4 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))] pointer-events-auto">
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
             <span
@@ -91,20 +91,22 @@ export function DoorScannerSessionChrome({
           </p>
         ) : null}
         {!isTotem ? (
-          <button
-            type="button"
-            onClick={onSearch}
-            className="flex min-h-12 w-full items-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 text-left text-sm font-semibold text-white/80"
-          >
-            <Search className="size-4 shrink-0" aria-hidden="true" />
-            Buscar por DNI o Nombre
-          </button>
+          <div className="relative z-30 w-full pointer-events-auto">
+            <button
+              type="button"
+              onClick={onSearch}
+              className="flex min-h-12 w-full items-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 text-left text-sm font-semibold text-white/80"
+            >
+              <Search className="size-4 shrink-0" aria-hidden="true" />
+              Buscar por DNI o Nombre
+            </button>
+          </div>
         ) : null}
       </header>
 
       <div
         data-gate-scanner
-        className="relative mx-3 min-h-0 flex-[0.85] overflow-hidden rounded-[1.6rem] bg-zinc-950"
+        className="relative z-0 mx-3 min-h-0 flex-1 isolate overflow-hidden rounded-[1.6rem] bg-zinc-950 [transform:translateZ(0)] [&_canvas]:pointer-events-none [&_video]:pointer-events-none"
       >
         {camera}
         {!isTotem ? <NeonFocusFrame /> : null}
@@ -112,7 +114,7 @@ export function DoorScannerSessionChrome({
       </div>
 
       {!isTotem ? (
-        <div className="flex shrink-0 items-center justify-between gap-3 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+        <div className="relative z-30 flex shrink-0 items-center justify-between gap-3 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 pointer-events-auto">
           <button
             type="button"
             onClick={onToggleTorch}
@@ -142,7 +144,7 @@ export function DoorScannerSessionChrome({
           </button>
         </div>
       ) : (
-        <div className="flex shrink-0 justify-center px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+        <div className="relative z-30 flex shrink-0 justify-center px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 pointer-events-auto">
           <p className="font-mono text-lg font-black tabular-nums text-white/70">
             {admittedCount} ingresados
           </p>

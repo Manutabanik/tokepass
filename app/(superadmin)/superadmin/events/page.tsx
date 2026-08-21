@@ -75,25 +75,25 @@ export default async function SuperAdminEventsPage() {
                     key={event.id}
                     className="border-border hover:bg-muted/50"
                   >
-                    <TableCell className="max-w-72 py-4 pl-6">
+                    <TableCell className="min-w-[150px] max-w-[250px] py-4 pl-6">
                       <Link
                         href={`/superadmin/events/${event.id}`}
-                        className="group block"
+                        className="group block min-w-0"
                       >
-                        <p className="flex items-center gap-1 truncate font-medium text-foreground group-hover:text-primary">
-                          {event.title}
+                        <p className="flex min-w-0 items-center gap-1 font-medium text-foreground group-hover:text-primary">
+                          <span className="truncate">{event.title}</span>
                           <ChevronRight
                             className="size-3.5 shrink-0 text-muted-foreground group-hover:text-sky-700 dark:group-hover:text-sky-300"
                             aria-hidden="true"
                           />
                         </p>
-                        <p className="mt-1 flex items-center gap-1 truncate text-xs text-muted-foreground">
-                          <MapPin className="size-3" aria-hidden="true" />
-                          {event.location}
+                        <p className="mt-1 flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+                          <MapPin className="size-3 shrink-0" aria-hidden="true" />
+                          <span className="truncate">{event.location}</span>
                         </p>
                       </Link>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="min-w-[150px] max-w-[250px]">
                       <p className="truncate text-sm text-foreground">
                         {event.organizerName}
                       </p>

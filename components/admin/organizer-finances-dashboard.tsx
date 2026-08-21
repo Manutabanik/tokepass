@@ -12,7 +12,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect, useMemo, useState, useTransition } from "react"
+import { useMemo, useState, useTransition } from "react"
 import { toast } from "sonner"
 
 import {
@@ -89,12 +89,14 @@ export function OrganizerFinancesDashboard({
   const [exporting, startExport] = useTransition()
   const [includeTest, setIncludeTest] = useState(false)
   const [view, setView] = useState(summary)
+  const [summarySnapshot, setSummarySnapshot] = useState(summary)
   const [loadingTest, startTestToggle] = useTransition()
 
-  useEffect(() => {
+  if (summary !== summarySnapshot) {
+    setSummarySnapshot(summary)
     setView(summary)
     setIncludeTest(false)
-  }, [summary])
+  }
 
   const available = view.availableToSettle
   const canRequest = available >= 1

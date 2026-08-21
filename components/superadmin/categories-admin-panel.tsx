@@ -240,18 +240,18 @@ export function CategoriesAdminPanel({
                   key={row.id}
                   className="border-border hover:bg-muted/50"
                 >
-                  <TableCell className="py-3.5 pl-5">
-                    <div className="flex items-center gap-3">
-                      <span className="grid size-9 place-items-center rounded-lg bg-white/5 text-foreground">
+                  <TableCell className="min-w-[150px] max-w-[250px] py-3.5 pl-5">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-white/5 text-foreground">
                         <Icon className="size-4" aria-hidden />
                       </span>
-                      <span className="font-medium text-foreground">
+                      <span className="min-w-0 truncate font-medium text-foreground">
                         {row.name}
                       </span>
                     </div>
                   </TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground">
-                    {row.slug}
+                  <TableCell className="min-w-[150px] max-w-[250px] font-mono text-xs text-muted-foreground">
+                    <span className="block truncate">{row.slug}</span>
                   </TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">
                     {row.icon_name ?? "—"}

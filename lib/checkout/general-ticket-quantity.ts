@@ -1,4 +1,4 @@
-import { purchaseCapForLayout } from "@/lib/checkout-limits"
+import { purchaseCapForTier } from "@/lib/checkout-limits"
 import { isLogicalGeneralSectorId } from "@/lib/seating/venue-map-pricing"
 
 export type GeneralQuantityTier = {
@@ -7,6 +7,8 @@ export type GeneralQuantityTier = {
   layoutType?: string | null
   seatingSectorId?: string | null
   capacityPerUnit?: number | null
+  minPurchaseLimit?: number | null
+  maxPurchaseLimit?: number | null
 }
 
 export function generalTicketMaxQuantity(input: {
@@ -16,13 +18,11 @@ export function generalTicketMaxQuantity(input: {
   selectedCount: number
   maxTicketsPerUser?: number | null
 }): number {
-  const currentQty = Math.max(0, input.quantities[input.tier.id] ?? 0)
-  const purchaseCap = purchaseCapForLayout(
-    input.tier.layoutType,
-    input.maxTicketsPerUser,
-  )
-  const otherSelected = Math.max(0, input.selectedCount - currentQty)
-  const userLeft = Math.max(0, purchaseCap - otherSelected)
+  const purchaseCap = purchaseCapForTier({
+    layoutType: input.tier.layoutType,
+    maxPurchaseLimit: input.tier.maxPurchaseLimit,
+    fallbackMax: input.maxTicketsPerUser,
+  })
   const lotLeft = Math.max(0, Math.floor(Number(input.tier.available)) || 0)
   const sectorId = input.tier.seatingSectorId?.trim() || ""
   let sectorLeft = lotLeft
@@ -41,5 +41,5 @@ export function generalTicketMaxQuantity(input: {
     )
     sectorLeft = Math.max(0, sectorAvailable - otherQty)
   }
-  return Math.max(0, Math.min(userLeft, lotLeft, sectorLeft))
+  return Math.max(0, Math.min(purchaseCap, lotLeft, sectorLeft))
 }

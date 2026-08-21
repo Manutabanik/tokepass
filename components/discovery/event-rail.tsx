@@ -41,7 +41,7 @@ export function EventRail({
         {events.map((event, index) => (
           <div
             key={event.id}
-            className="w-[82vw] max-w-[320px] shrink-0 sm:w-auto sm:max-w-none"
+            className="w-[min(82vw,20rem)] min-w-0 shrink-0 sm:w-auto sm:max-w-none"
           >
             <EventCard event={event} index={index} priority={index < 2} />
           </div>

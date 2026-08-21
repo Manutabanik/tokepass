@@ -1,6 +1,7 @@
 "use client"
 
 import { LoaderCircle, Move, Ruler, Save, X } from "lucide-react"
+import { QRCodeSVG } from "qrcode.react"
 import {
   useEffect,
   useMemo,
@@ -35,6 +36,12 @@ import {
   parseTemplateLayout,
   previewScaleToFit,
   PRINT_MEDIUM_PRESETS,
+  PRINT_STUDIO_BRAND_MARK,
+  PRINT_STUDIO_DEMO_COMPANY,
+  PRINT_STUDIO_DEMO_HOLDER,
+  PRINT_STUDIO_DEMO_QR,
+  PRINT_STUDIO_DEMO_ROLE,
+  PRINT_STUDIO_STUB_MM,
   PRINT_TEMPLATE_ZONE_LABELS,
   screenPxToMm,
   type PrintMediumPresetId,
@@ -98,12 +105,14 @@ function applyPreset(
 export function TemplateDesigner({
   eventId,
   eventTitle,
+  flyerUrl,
   template,
   onClose,
   onSaved,
 }: {
   eventId: string
   eventTitle: string
+  flyerUrl?: string | null
   template?: TicketTemplateRow | null
   onClose: () => void
   onSaved: (id: string) => void
@@ -140,7 +149,18 @@ export function TemplateDesigner({
   const scale = previewScaleToFit(state.widthMm, state.heightMm, avail.w, avail.h)
   const pageW = mmToScreenPx(state.widthMm) * scale
   const pageH = mmToScreenPx(state.heightMm) * scale
-  const flapX = state.layout.flapMm > 0 ? mmToScreenPx(state.layout.flapMm) * scale : 0
+  const showStub =
+    state.presetId === "carton_150" || state.presetId === "carton_flap"
+  const stubX = mmToScreenPx(PRINT_STUDIO_STUB_MM) * scale
+  const resolvedBanner = state.assets.bannerUrl || flyerUrl || ""
+  const resolvedLogo =
+    state.assets.logoUrl || flyerUrl || PRINT_STUDIO_BRAND_MARK
+  const stockTexture =
+    preset.medium === "thermal_80" || preset.medium === "thermal_58"
+      ? "bg-[linear-gradient(180deg,rgba(255,255,255,0.55),rgba(255,255,255,0.12))]"
+      : preset.medium === "badge"
+        ? "bg-[radial-gradient(circle_at_20%_0%,rgba(255,255,255,0.28),transparent_42%)]"
+        : "bg-[repeating-linear-gradient(135deg,rgba(255,255,255,0.07)_0,rgba(255,255,255,0.07)_1px,transparent_1px,transparent_4px)]"
 
   const zones = useMemo(
     () =>
@@ -270,10 +290,10 @@ export function TemplateDesigner({
         </div>
       </header>
 
-      <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="flex flex-col gap-6 lg:flex-row">
         <div
           ref={stageRef}
-          className="min-h-[560px] overflow-auto bg-[radial-gradient(circle_at_1px_1px,rgba(148,163,184,0.28)_1px,transparent_0)] [background-size:16px_16px] p-4 dark:bg-[radial-gradient(circle_at_1px_1px,rgba(148,163,184,0.16)_1px,transparent_0)]"
+          className="min-h-[min(560px,70dvh)] min-w-0 flex-1 overflow-auto bg-[radial-gradient(circle_at_1px_1px,rgba(148,163,184,0.28)_1px,transparent_0)] [background-size:16px_16px] p-4 dark:bg-[radial-gradient(circle_at_1px_1px,rgba(148,163,184,0.16)_1px,transparent_0)]"
         >
           <div
             className="relative mx-auto"
@@ -314,15 +334,18 @@ export function TemplateDesigner({
             </div>
 
             <div
-              className="absolute overflow-hidden rounded-md border border-zinc-400 shadow-xl dark:border-zinc-600"
+              className={cn(
+                "absolute overflow-hidden rounded-lg border border-gray-200/20 shadow-2xl ring-1 ring-black/15",
+                stockTexture,
+              )}
               style={{
                 top: RULER_PX,
                 left: RULER_PX,
                 width: pageW,
                 height: pageH,
                 backgroundColor: state.layout.backgroundColor,
-                backgroundImage: state.assets.bannerUrl
-                  ? `linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.08)), url(${state.assets.bannerUrl})`
+                backgroundImage: resolvedBanner
+                  ? `linear-gradient(180deg, rgba(8,8,8,0.18), rgba(8,8,8,0.08)), url(${resolvedBanner})`
                   : undefined,
                 backgroundSize: "cover",
                 backgroundPosition: "center",
@@ -332,56 +355,63 @@ export function TemplateDesigner({
               onPointerCancel={onPointerUp}
             >
               <div
-                className="pointer-events-none absolute inset-x-0 top-0 h-2"
+                className="pointer-events-none absolute inset-x-0 top-0 h-1.5"
                 style={{ backgroundColor: state.layout.primaryColor }}
               />
-              {flapX > 0 ? (
+              {showStub ? (
                 <div
-                  className="pointer-events-none absolute inset-y-0 border-r border-dashed border-zinc-500/80"
-                  style={{ left: flapX }}
+                  className="pointer-events-none absolute inset-y-0 border-r border-dashed border-gray-400"
+                  style={{ left: stubX }}
                   aria-hidden="true"
                 >
-                  <span className="absolute top-1 left-1 text-[8px] font-semibold uppercase tracking-wider text-zinc-600">
-                    Solapa {state.layout.flapMm} mm
+                  <span className="absolute top-1.5 left-1 text-[8px] font-semibold uppercase tracking-[0.16em] text-zinc-600">
+                    Troquel {PRINT_STUDIO_STUB_MM} mm
                   </span>
                 </div>
               ) : null}
 
               {zones
                 .filter((zone) => zone.enabled)
-                .map((zone) => (
-                  <button
-                    key={zone.id}
-                    type="button"
-                    onPointerDown={(event) => onPointerDown(zone.id, event)}
-                    className={cn(
-                      "absolute cursor-grab overflow-hidden rounded-sm border border-dashed text-left active:cursor-grabbing",
-                      selectedZone === zone.id
-                        ? "z-20 border-emerald-500 bg-white/80 ring-2 ring-emerald-400/70 dark:bg-zinc-950/70"
-                        : "z-10 border-zinc-400/70 bg-white/55 dark:bg-zinc-950/40",
-                    )}
-                    style={{
-                      left: mmToScreenPx(zone.xMm) * scale,
-                      top: mmToScreenPx(zone.yMm) * scale,
-                      width: mmToScreenPx(zone.widthMm) * scale,
-                      height: mmToScreenPx(zone.heightMm) * scale,
-                      color: state.layout.primaryColor,
-                    }}
-                    aria-label={`${PRINT_TEMPLATE_ZONE_LABELS[zone.id]} ${zone.xMm.toFixed(0)} mm, ${zone.yMm.toFixed(0)} mm`}
-                  >
-                    <ZonePreview
-                      zone={zone}
-                      eventTitle={eventTitle}
-                      layout={state.layout}
-                      assets={state.assets}
-                    />
-                  </button>
-                ))}
+                .map((zone) => {
+                  const zoneW = mmToScreenPx(zone.widthMm) * scale
+                  const zoneH = mmToScreenPx(zone.heightMm) * scale
+                  return (
+                    <button
+                      key={zone.id}
+                      type="button"
+                      onPointerDown={(event) => onPointerDown(zone.id, event)}
+                      className={cn(
+                        "absolute cursor-grab overflow-hidden rounded-sm border border-transparent text-left active:cursor-grabbing",
+                        selectedZone === zone.id
+                          ? "z-20 border-dashed border-emerald-400 ring-2 ring-emerald-400/50"
+                          : "z-10 hover:border-white/40",
+                      )}
+                      style={{
+                        left: mmToScreenPx(zone.xMm) * scale,
+                        top: mmToScreenPx(zone.yMm) * scale,
+                        width: zoneW,
+                        height: zoneH,
+                        color: state.layout.primaryColor,
+                      }}
+                      aria-label={`${PRINT_TEMPLATE_ZONE_LABELS[zone.id]} ${zone.xMm.toFixed(0)} mm, ${zone.yMm.toFixed(0)} mm`}
+                    >
+                      <ZonePreview
+                        zone={zone}
+                        eventTitle={eventTitle}
+                        layout={state.layout}
+                        logoUrl={resolvedLogo}
+                        sponsorUrls={state.assets.sponsorUrls}
+                        widthPx={zoneW}
+                        heightPx={zoneH}
+                      />
+                    </button>
+                  )
+                })}
             </div>
           </div>
         </div>
 
-        <aside className="max-h-[80vh] space-y-4 overflow-y-auto border-t border-border p-4 lg:border-t-0 lg:border-l">
+        <aside className="w-full shrink-0 space-y-4 overflow-y-auto border-t border-border p-4 lg:max-h-[80vh] lg:w-80 lg:border-t-0 lg:border-l">
           <div className="space-y-2">
             <Label htmlFor="template-name">Nombre</Label>
             <Input
@@ -582,56 +612,54 @@ function ZonePreview({
   zone,
   eventTitle,
   layout,
-  assets,
+  logoUrl,
+  sponsorUrls,
+  widthPx,
+  heightPx,
 }: {
   zone: PrintTemplateZone
   eventTitle: string
   layout: PrintTemplateLayout
-  assets: PrintTemplateAssets
+  logoUrl: string
+  sponsorUrls: string[]
+  widthPx: number
+  heightPx: number
 }) {
   if (zone.id === "qr") {
+    const size = Math.max(28, Math.floor(Math.min(widthPx, heightPx) * 0.92))
     return (
-      <div className="grid h-full w-full place-items-center bg-white p-[8%]">
-        <svg viewBox="0 0 21 21" className="h-full w-full text-zinc-950" aria-hidden="true">
-          <rect width="21" height="21" fill="white" />
-          <rect x="1" y="1" width="6" height="6" fill="currentColor" />
-          <rect x="14" y="1" width="6" height="6" fill="currentColor" />
-          <rect x="1" y="14" width="6" height="6" fill="currentColor" />
-          <rect x="3" y="3" width="2" height="2" fill="white" />
-          <rect x="16" y="3" width="2" height="2" fill="white" />
-          <rect x="3" y="16" width="2" height="2" fill="white" />
-          <rect x="9" y="3" width="2" height="2" fill="currentColor" />
-          <rect x="12" y="9" width="3" height="2" fill="currentColor" />
-          <rect x="9" y="12" width="2" height="4" fill="currentColor" />
-          <rect x="14" y="14" width="2" height="2" fill="currentColor" />
-        </svg>
+      <div className="grid h-full w-full place-items-center bg-white p-[6%] shadow-sm">
+        <QRCodeSVG
+          value={PRINT_STUDIO_DEMO_QR}
+          size={size}
+          level="M"
+          includeMargin={false}
+          bgColor="#ffffff"
+          fgColor="#111111"
+          className="h-full w-full"
+        />
       </div>
     )
   }
 
   if (zone.id === "logo") {
-    return assets.logoUrl ? (
+    return (
       // Preview accepts organizer-supplied hosts outside next/image remotePatterns.
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={assets.logoUrl} alt="" className="h-full w-full object-contain" />
-    ) : (
-      <span className="grid h-full place-items-center px-1 text-[9px] font-semibold uppercase tracking-wide opacity-70">
-        Logo
-      </span>
+      <img src={logoUrl} alt="" className="h-full w-full object-contain drop-shadow-sm" />
     )
   }
 
   if (zone.id === "sponsors") {
-    if (assets.sponsorUrls.length === 0) {
+    if (sponsorUrls.length === 0) {
       return (
-        <span className="grid h-full place-items-center px-1 text-[8px] uppercase tracking-wide opacity-70">
-          Sponsors
-        </span>
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={PRINT_STUDIO_BRAND_MARK} alt="" className="h-full w-full object-contain opacity-80" />
       )
     }
     return (
-      <div className="flex h-full items-center gap-1 px-1">
-        {assets.sponsorUrls.slice(0, 4).map((url) => (
+      <div className="flex h-full items-center gap-1 bg-white/70 px-1">
+        {sponsorUrls.slice(0, 4).map((url) => (
           // eslint-disable-next-line @next/next/no-img-element
           <img key={url} src={url} alt="" className="h-full max-w-[28%] object-contain" />
         ))}
@@ -641,10 +669,7 @@ function ZonePreview({
 
   if (zone.id === "folio") {
     return (
-      <span
-        className="block h-full px-1 text-[10px] font-black leading-tight tracking-wide"
-        style={{ color: layout.secondaryColor }}
-      >
+      <span className="flex h-full items-center font-mono text-[11px] font-bold tracking-[0.14em] text-zinc-900">
         {formatPrintFolioPreview("A", 1)}
       </span>
     )
@@ -652,33 +677,40 @@ function ZonePreview({
 
   if (zone.id === "holder") {
     return (
-      <span className="block h-full px-1 text-[10px] font-semibold leading-tight">
-        Juan Pérez
-      </span>
+      <div className="flex h-full flex-col justify-center leading-none">
+        <span className="font-black tracking-[0.14em] text-[11px] text-zinc-950">
+          {PRINT_STUDIO_DEMO_HOLDER}
+        </span>
+      </div>
     )
   }
 
   if (zone.id === "role") {
     return (
-      <span
-        className="block h-full px-1 text-[10px] font-black uppercase tracking-wider"
-        style={{ color: layout.secondaryColor }}
-      >
-        Técnica
-      </span>
+      <div className="flex h-full items-center">
+        <span
+          className="rounded-sm px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.16em] text-white shadow-sm"
+          style={{ backgroundColor: layout.secondaryColor }}
+        >
+          {PRINT_STUDIO_DEMO_ROLE} - {PRINT_STUDIO_DEMO_COMPANY}
+        </span>
+      </div>
     )
   }
 
   if (zone.id === "eventTitle") {
     return (
-      <span className="block h-full overflow-hidden px-1 text-[10px] font-black leading-tight">
+      <span
+        className="block h-full overflow-hidden px-0.5 text-[11px] font-black leading-tight tracking-tight"
+        style={{ color: layout.primaryColor }}
+      >
         {eventTitle}
       </span>
     )
   }
 
   return (
-    <span className="block h-full overflow-hidden px-1 text-[7px] leading-tight opacity-80">
+    <span className="block h-full overflow-hidden text-[6.5px] leading-tight tracking-wide text-zinc-700/90">
       {layout.disclaimerText}
     </span>
   )

@@ -19,6 +19,20 @@ export const PURCHASE_LIMIT_REACHED_MESSAGE =
 
 export type StorefrontLimitReason = "ticket_limit" | "table_limit"
 
+export type PurchaseLimitTier = {
+  id: string
+  name: string
+  minPurchaseLimit?: number | null
+  maxPurchaseLimit?: number | null
+}
+
+type StorefrontLimitItem = {
+  id: string
+  type: string
+  capacity: number
+  sectorId?: string
+}
+
 export function isTableLikeSelection(type: string | null | undefined): boolean {
   return type === "table"
 }
@@ -32,6 +46,54 @@ export function resolvePurchaseLimit(
   return n
 }
 
+export function resolveTierPurchaseMin(
+  minPurchaseLimit?: number | null,
+): number {
+  const n = Math.floor(Number(minPurchaseLimit))
+  if (!Number.isFinite(n) || n <= 0) return 1
+  return Math.min(n, ABSOLUTE_MAX_ITEMS_PER_PURCHASE)
+}
+
+export function resolveTierPurchaseMax(input: {
+  maxPurchaseLimit?: number | null
+  fallbackMax?: number | null
+}): number | null {
+  const tierMax = resolvePurchaseLimit(input.maxPurchaseLimit)
+  if (tierMax != null) {
+    return Math.min(tierMax, ABSOLUTE_MAX_ITEMS_PER_PURCHASE)
+  }
+  const fallback = resolvePurchaseLimit(input.fallbackMax)
+  if (fallback != null) {
+    return Math.min(fallback, ABSOLUTE_MAX_ITEMS_PER_PURCHASE)
+  }
+  return null
+}
+
+export function purchaseCapForTier(input: {
+  layoutType?: string | null
+  maxPurchaseLimit?: number | null
+  fallbackMax?: number | null
+}): number {
+  const resolved = resolveTierPurchaseMax({
+    maxPurchaseLimit: input.maxPurchaseLimit,
+    fallbackMax: input.fallbackMax,
+  })
+  if (resolved != null) return resolved
+  if (input.layoutType === "table_combo") return MAX_TABLE_TICKETS_PER_PURCHASE
+  return ABSOLUTE_MAX_ITEMS_PER_PURCHASE
+}
+
+/** @deprecated Prefer purchaseCapForTier. Mantiene el fallback de layout. */
+export function purchaseCapForLayout(
+  layoutType?: string | null,
+  maxTicketsPerUser?: number | null,
+): number {
+  return purchaseCapForTier({
+    layoutType,
+    fallbackMax: maxTicketsPerUser,
+  })
+}
+
 export function tableLimitMessage(maxTables = MAX_TABLES_PER_PURCHASE): string {
   return `Para reservar más de ${maxTables} tablones, comunicate con la organización`
 }
@@ -40,34 +102,54 @@ export function ticketLimitMessage(maxTickets = MAX_TICKETS_PER_PURCHASE): strin
   return `Podés reservar hasta ${maxTickets} entradas individuales por compra.`
 }
 
+export function skuPurchaseMaxMessage(tierName: string, max: number): string {
+  return `No podés agregar más de ${max} unidades de ${tierName} por compra.`
+}
+
+export function skuPurchaseMinMessage(tierName: string, min: number): string {
+  return `Debés agregar al menos ${min} unidades de ${tierName} por compra.`
+}
+
 export function storefrontLimitMessage(
   reason?: StorefrontLimitReason,
+  details?: { tierName?: string; max?: number },
 ): string {
+  if (
+    details?.tierName &&
+    details.max != null &&
+    Number.isFinite(details.max)
+  ) {
+    return skuPurchaseMaxMessage(details.tierName, details.max)
+  }
   if (reason === "table_limit") return tableLimitMessage()
   if (reason === "ticket_limit") return ticketLimitMessage()
   return PURCHASE_LIMIT_REACHED_MESSAGE
 }
 
-function selectionUnits(item: { type: string; capacity: number }): number {
-  if (isTableLikeSelection(item.type)) return 1
-  return Math.max(1, Math.floor(item.capacity) || 1)
+function skuSelectionKey(item: StorefrontLimitItem): string {
+  return `${item.type}:${item.sectorId?.trim() || ""}`
 }
 
 export function evaluateStorefrontSelectionLimit(input: {
-  current: Array<{ id: string; type: string; capacity: number }>
-  next: { id: string; type: string; capacity: number }
+  current: StorefrontLimitItem[]
+  next: StorefrontLimitItem
   replacingId?: string | null
   maxTicketsPerUser?: number | null
+  maxPurchaseLimit?: number | null
 }): { ok: true } | { ok: false; reason: StorefrontLimitReason } {
-  const limit = resolvePurchaseLimit(input.maxTicketsPerUser)
+  const limit = resolveTierPurchaseMax({
+    maxPurchaseLimit: input.maxPurchaseLimit,
+    fallbackMax: input.maxTicketsPerUser,
+  })
   if (limit == null) return { ok: true }
 
   const replacing = input.replacingId?.trim() || input.next.id
-  const others = input.current.filter((item) => item.id !== replacing)
-  const currentCount = others.reduce((sum, item) => sum + selectionUnits(item), 0)
-  const nextCount = selectionUnits(input.next)
+  const nextKey = skuSelectionKey(input.next)
+  const currentCount = input.current.filter(
+    (item) => item.id !== replacing && skuSelectionKey(item) === nextKey,
+  ).length
 
-  if (currentCount + nextCount > limit) {
+  if (currentCount + 1 > limit) {
     return {
       ok: false,
       reason: isTableLikeSelection(input.next.type)
@@ -78,12 +160,36 @@ export function evaluateStorefrontSelectionLimit(input: {
   return { ok: true }
 }
 
-export function purchaseCapForLayout(
-  layoutType?: string | null,
-  maxTicketsPerUser?: number | null,
-): number {
-  const resolved = resolvePurchaseLimit(maxTicketsPerUser)
-  if (resolved != null) return resolved
-  if (layoutType === "table_combo") return MAX_TABLE_TICKETS_PER_PURCHASE
-  return ABSOLUTE_MAX_ITEMS_PER_PURCHASE
+export function assertCartTierPurchaseLimits(input: {
+  items: Array<{ tierId: string; quantity: number }>
+  tiers: PurchaseLimitTier[]
+  fallbackMax?: number | null
+}): { ok: true } | { ok: false; error: string } {
+  const qtyByTier = new Map<string, number>()
+  for (const item of input.items) {
+    const tierId = item.tierId.trim()
+    const qty = Math.max(0, Math.floor(Number(item.quantity)) || 0)
+    if (!tierId || qty <= 0) continue
+    qtyByTier.set(tierId, (qtyByTier.get(tierId) ?? 0) + qty)
+  }
+
+  const tiers = new Map(input.tiers.map((tier) => [tier.id, tier]))
+
+  for (const [tierId, quantity] of qtyByTier) {
+    const tier = tiers.get(tierId)
+    if (!tier) continue
+    const min = resolveTierPurchaseMin(tier.minPurchaseLimit)
+    const max = resolveTierPurchaseMax({
+      maxPurchaseLimit: tier.maxPurchaseLimit,
+      fallbackMax: input.fallbackMax,
+    })
+    const name = tier.name.trim() || "esta tarifa"
+    if (quantity < min) {
+      return { ok: false, error: skuPurchaseMinMessage(name, min) }
+    }
+    if (max != null && quantity > max) {
+      return { ok: false, error: skuPurchaseMaxMessage(name, max) }
+    }
+  }
+  return { ok: true }
 }

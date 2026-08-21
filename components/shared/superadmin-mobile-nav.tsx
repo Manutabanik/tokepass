@@ -53,7 +53,11 @@ export function SuperAdminMobileNav({
       >
         <Menu className="size-6" strokeWidth={2.25} />
       </SheetTrigger>
-      <SheetContent side="left" className="p-0 md:hidden">
+      <SheetContent
+        side="left"
+        overlayClassName="z-[70]"
+        className="z-[70] flex h-dvh flex-col p-0 md:hidden"
+      >
         <SheetHeader>
           <BrandLogo href="/superadmin" />
           <SheetTitle className="sr-only">Navegación</SheetTitle>

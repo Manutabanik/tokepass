@@ -236,7 +236,7 @@ export function LivingTicketCard({
       </div>
 
       <div className="space-y-3 px-5 pt-4">
-        <h2 className="text-xl font-black leading-tight tracking-tight text-foreground">
+        <h2 className="min-w-0 break-words text-xl font-black leading-tight tracking-tight text-foreground">
           {ticket.eventTitle}
         </h2>
         <dl className="space-y-2 text-sm">
@@ -308,7 +308,7 @@ export function LivingTicketCard({
             className="w-full"
             onContextMenu={(event) => event.preventDefault()}
           >
-            <QrEnlargeTrigger onOpen={() => setScanOpen(true)} className="mx-auto w-fit">
+            <QrEnlargeTrigger onOpen={() => setScanOpen(true)} className="mx-auto block w-full max-w-sm">
               {isStatic ? (
                 <StaticSignedQR
                   ticketId={ticket.id}

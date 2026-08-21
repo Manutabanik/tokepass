@@ -47,6 +47,12 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+  /* Layer contract (Phase 0/1). Prefer these over ad-hoc z-[N]. */
+  --z-index-base: 0;
+  --z-index-chrome: 50;
+  --z-index-modal: 70;
+  --z-index-fullscreen: 80;
+  --z-index-critical: 100;
 }
 
 :root {
@@ -130,6 +136,22 @@
     @apply font-sans;
   }
 }
+
+/*
+  TokePass layer contract (Phase 0 / 1)
+  Theme utilities: z-base, z-chrome, z-fullscreen, z-critical.
+  Reserved scale — prefer these over ad-hoc z-[N]:
+    z-base        0     content, maps
+    z-sticky     30     admin headers (reserved)
+    z-nav        40     bottom nav (reserved)
+    z-chrome     50     navbar, docks, page toasts
+    z-overlay    60     PWA banners, light takeovers (reserved)
+    z-modal      70     Dialog / Sheet default (reserved)
+    z-fullscreen 80     checkout tunnel, scanner, search overlay
+    z-feedback   90     scan result, identity (reserved)
+    z-critical  100     door search, payment sheets
+    z-system   9999     navigation progress (reserved)
+*/
 
 ::selection {
   background: color-mix(in oklch, oklch(0.541 0.281 293.009) 28%, transparent);

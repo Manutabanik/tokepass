@@ -326,7 +326,7 @@ function DiscoveryHubInner({
               autoCorrect="off"
               spellCheck={false}
               aria-label="Buscar por artista, evento o lugar"
-              className="w-full rounded-2xl border border-border/50 bg-secondary/50 py-4 pr-4 pl-12 font-medium text-foreground placeholder:text-muted-foreground transition-all focus:ring-2 focus:ring-primary/50 focus:outline-none"
+              className="w-full rounded-2xl border border-border/50 bg-secondary/50 py-4 pr-4 pl-12 text-base font-medium text-foreground placeholder:text-muted-foreground transition-all focus:ring-2 focus:ring-primary/50 focus:outline-none md:text-sm"
             />
           </div>
           <div

@@ -209,7 +209,7 @@ export default async function ManageEventPage({
     profile?.role === "super_admin" && event.organizer_id !== user.id
 
   return (
-    <main className="mx-auto w-full max-w-5xl space-y-8 px-4 py-8 sm:px-6">
+    <main className="mx-auto w-full max-w-6xl space-y-8 p-4 sm:p-6">
       <Link
         href={isAssisting ? `/superadmin/events/${id}` : "/admin/events"}
         className="inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-foreground"

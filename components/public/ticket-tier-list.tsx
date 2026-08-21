@@ -114,7 +114,7 @@ export function TicketTierList({
                 )}
               >
                 <div className="flex min-w-0 flex-col gap-1.5">
-                  <h4 className="truncate text-lg font-bold text-gray-900 dark:text-foreground">
+                  <h4 className="line-clamp-2 break-words text-lg font-bold text-gray-900 dark:text-foreground">
                     {tier.name}
                   </h4>
                   {selectedSeatName ? (
@@ -171,7 +171,7 @@ export function TicketTierList({
                     <div className="ml-auto flex items-center rounded-lg border border-gray-200 bg-gray-50 p-0.5 dark:border-border/50 dark:bg-secondary/80">
                       <Button
                         type="button"
-                        size="icon-sm"
+                        size="icon"
                         variant="ghost"
                         disabled={minusDisabled}
                         onClick={() =>
@@ -180,17 +180,17 @@ export function TicketTierList({
                         aria-label={`Quitar ${tier.name}`}
                         className={cn(
                           tapFeedbackClass,
-                          "flex size-7 items-center justify-center rounded-md hover:bg-background",
+                          "flex size-11 items-center justify-center rounded-md hover:bg-background",
                         )}
                       >
-                        <Minus className="size-3" aria-hidden="true" />
+                        <Minus className="size-4" aria-hidden="true" />
                       </Button>
-                      <span className="w-6 text-center text-xs font-bold tabular-nums text-gray-900 dark:text-foreground">
+                      <span className="min-w-8 text-center text-sm font-bold tabular-nums text-gray-900 dark:text-foreground">
                         {quantity}
                       </span>
                       <Button
                         type="button"
-                        size="icon-sm"
+                        size="icon"
                         variant="ghost"
                         disabled={plusDisabled}
                         onClick={() =>
@@ -199,7 +199,7 @@ export function TicketTierList({
                         aria-label={`Agregar ${tier.name}`}
                         className={cn(
                           tapFeedbackClass,
-                          "flex size-7 items-center justify-center rounded-md hover:bg-background",
+                          "flex size-11 items-center justify-center rounded-md hover:bg-background",
                         )}
                       >
                         <Plus className="size-3" aria-hidden="true" />

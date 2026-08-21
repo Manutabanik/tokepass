@@ -152,6 +152,7 @@ export function PlatformPayoutsPanel({
 
       {/* Desktop table */}
       <div className="hidden overflow-hidden rounded-2xl border border-border bg-card md:block">
+        <div className="w-full overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-border bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
@@ -169,12 +170,18 @@ export function PlatformPayoutsPanel({
                 key={row.id}
                 className="border-b border-border hover:bg-muted/50"
               >
-                <td className="px-5 py-4">
-                  <p className="font-medium text-foreground">{row.organizerName}</p>
-                  <p className="text-xs text-muted-foreground">{row.organizerEmail}</p>
+                <td className="min-w-[150px] max-w-[250px] px-5 py-4">
+                  <p className="truncate font-medium text-foreground">
+                    {row.organizerName}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {row.organizerEmail}
+                  </p>
                 </td>
-                <td className="px-5 py-4 text-muted-foreground">
-                  {row.eventTitle ?? "Retiro general"}
+                <td className="min-w-[150px] max-w-[250px] px-5 py-4 text-muted-foreground">
+                  <span className="block truncate">
+                    {row.eventTitle ?? "Retiro general"}
+                  </span>
                 </td>
                 <td className="px-5 py-4 font-mono font-semibold text-emerald-700 dark:text-emerald-300">
                   {formatCurrency(row.amount)}
@@ -230,6 +237,7 @@ export function PlatformPayoutsPanel({
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       <Dialog

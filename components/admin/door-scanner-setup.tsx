@@ -4,6 +4,7 @@ import { LoaderCircle, LogOut, Monitor, Smartphone } from "lucide-react"
 
 import { endDoorGuestSession } from "@/app/actions/door-access"
 import type { ScannerEventOption } from "@/app/actions/scanner"
+import { AppTakeover } from "@/components/ui/app-takeover"
 import { Button } from "@/components/ui/button"
 import type { ScannerAccessMode } from "@/lib/scanner/access-mode"
 import type { ScannerGate } from "@/lib/scanner/gate"
@@ -54,8 +55,8 @@ export function DoorScannerSetup({
   const canStart = Boolean(eventId && gateId) && pinOk && !isStarting
 
   return (
-    <div className="fixed inset-0 z-[80] flex flex-col bg-[#05050a] text-white">
-      <div className="mx-auto flex h-full w-full max-w-lg flex-col justify-center px-5 py-10">
+    <AppTakeover className="bg-[#05050a] text-white">
+      <div className="mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col justify-center overflow-y-auto px-5 py-10">
         <p className="text-center text-[11px] font-bold uppercase tracking-[0.22em] text-fuchsia-300">
           Control de Puerta
         </p>
@@ -239,6 +240,6 @@ export function DoorScannerSetup({
           </button>
         ) : null}
       </div>
-    </div>
+    </AppTakeover>
   )
 }

@@ -5,6 +5,10 @@ import { revalidatePath } from "next/cache"
 import { assertGuestListRateLimit, getClientIpBucket } from "@/app/actions/event-staff"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import {
+  firstZodIssue,
+  freepassRegisterSchema,
+} from "@/lib/validations/freepass"
 
 export type GuestListStatus = "pending" | "claimed" | "checked_in"
 
@@ -206,7 +210,7 @@ export async function addGuestsToList(input: {
     const cleaned = input.guests
       .map((guest) => ({
         fullName: guest.fullName.trim(),
-        email: guest.email?.trim() || null,
+        email: guest.email?.trim().toLowerCase() || null,
         phone: guest.phone?.trim() || null,
       }))
       .filter((guest) => guest.fullName.length > 0)
@@ -215,27 +219,30 @@ export async function addGuestsToList(input: {
       return { success: false, error: "No hay invitados para agregar." }
     }
 
+    const admin = createAdminClient()
     const entryIds: string[] = []
     for (const guest of cleaned) {
-      const { data: entryId, error } = await supabase.rpc(
+      const { data: entryId, error } = await admin.rpc(
         "register_guest_list_entry",
         {
           p_list_id: input.listId,
           p_full_name: guest.fullName,
           p_email: guest.email,
           p_phone: guest.phone,
+          p_client_key: `organizer:${userId}`,
         },
       )
 
       if (error) {
+        const mapped = mapFreepassSubmitError(error, "No se pudo agregar el invitado.")
         if (entryIds.length > 0) {
           revalidateGuestPaths(list.event_id, input.listId)
           return {
             success: false,
-            error: `${error.message} (se agregaron ${entryIds.length} antes del límite).`,
+            error: `${mapped} (se agregaron ${entryIds.length} antes del límite).`,
           }
         }
-        return { success: false, error: error.message }
+        return { success: false, error: mapped }
       }
 
       if (entryId) entryIds.push(String(entryId))
@@ -286,32 +293,82 @@ export async function claimFreePass(
     )
 
     if (error || !ticketId) {
-      const message = error?.message ?? "No se pudo canjear el FreePass."
-      if (message.includes("EMAIL_MISMATCH")) {
-        return {
-          success: false,
-          error:
-            "Este FreePass está vinculado a otro email. Ingresá con la cuenta correcta.",
-        }
-      }
-      if (message.includes("EMAIL_REQUIRED")) {
-        return {
-          success: false,
-          error: "La cortesía no tiene email. Registrá de nuevo con tu email.",
-        }
-      }
+      const message = mapFreepassSubmitError(error, "No se pudo canjear el FreePass.")
+      console.error("[FREEPASS_CLAIM_ERROR]", {
+        entryId,
+        code: error && typeof error === "object" && "code" in error ? error.code : null,
+        message: error instanceof Error ? error.message : error,
+      })
       return { success: false, error: message }
     }
 
     revalidatePath("/cuenta/entradas")
     return { success: true, data: { ticketId: String(ticketId) } }
   } catch (error) {
+    console.error("[FREEPASS_CLAIM_ERROR]", error)
     return {
       success: false,
-      error:
-        error instanceof Error ? error.message : "Error al canjear FreePass.",
+      error: mapFreepassSubmitError(error, "Error al canjear FreePass."),
     }
   }
+}
+
+function failFreepass(error: string): ActionFail {
+  return { success: false, error }
+}
+
+function mapFreepassSubmitError(error: unknown, fallback: string): string {
+  const record = error as {
+    message?: unknown
+    code?: unknown
+    details?: unknown
+    hint?: unknown
+  } | null
+  const raw =
+    (typeof record?.message === "string" && record.message) ||
+    (error instanceof Error ? error.message : "") ||
+    ""
+  const code = typeof record?.code === "string" ? record.code : ""
+  const details = typeof record?.details === "string" ? record.details : ""
+  const combined = `${raw} ${code} ${details}`.toLowerCase()
+
+  if (combined.includes("email_required")) {
+    return "El email es obligatorio y debe ser válido."
+  }
+  if (combined.includes("email_already_registered") || combined.includes("23505")) {
+    return "Ese email ya confirmó asistencia en esta lista."
+  }
+  if (combined.includes("email_mismatch")) {
+    return "Este FreePass está vinculado a otro email. Ingresá con la cuenta correcta."
+  }
+  if (combined.includes("rate_limited")) {
+    return "Demasiados intentos. Probá más tarde."
+  }
+  if (combined.includes("lista completa") || combined.includes("no quedan cupos")) {
+    return "Lista completa: no quedan cupos."
+  }
+  if (combined.includes("ya venció") || combined.includes("horario")) {
+    return "El horario de esta lista ya venció."
+  }
+  if (combined.includes("lista no encontrada") || combined.includes("p0002")) {
+    return "No encontramos esa lista. Pedí el enlace de nuevo al RRPP."
+  }
+  if (combined.includes("nombre inválido") || combined.includes("nombre es obligatorio")) {
+    return "Ingresá tu nombre completo."
+  }
+  if (combined.includes("used_guests") || combined.includes("has no field")) {
+    return "Error de cupo de lista (used_guests). Aplicá la migración p138 en Supabase."
+  }
+  if (combined.includes("forbidden") || combined.includes("42501")) {
+    return "No se pudo registrar: el servidor no tiene permiso para emitir la lista."
+  }
+  if (combined.includes("could not find the function") || combined.includes("pgrst202")) {
+    return "No se encontró la función de registro de listas. Aplicá la migración p138 en Supabase."
+  }
+  if (raw.trim()) {
+    return code ? `${raw.trim()} (${code})` : raw.trim()
+  }
+  return fallback
 }
 
 export async function registerPublicGuest(input: {
@@ -319,24 +376,31 @@ export async function registerPublicGuest(input: {
   fullName: string
   email?: string
   phone?: string
+  whatsapp?: string
+  promoterId?: string | null
 }): Promise<
   ActionResult<{ entryId: string; ticketId: string | null; remaining: number }>
 > {
   try {
-    const email = input.email?.trim().toLowerCase()
-    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-      return {
-        success: false,
-        error: "El email es obligatorio para reclamar el FreePass.",
-      }
+    const parsed = freepassRegisterSchema.safeParse({
+      listId: input.listId,
+      fullName: input.fullName,
+      email: input.email ?? "",
+      phone: input.phone ?? input.whatsapp ?? "",
+      promoterId: input.promoterId,
+    })
+    if (!parsed.success) {
+      return failFreepass(firstZodIssue(parsed.error))
     }
 
+    const { listId, fullName, email, phone, promoterId } = parsed.data
+
     const rate = await assertGuestListRateLimit({
-      listId: input.listId,
+      listId,
       email,
     })
     if (!rate.ok) {
-      return { success: false, error: rate.error }
+      return failFreepass(rate.error)
     }
 
     const admin = createAdminClient()
@@ -346,38 +410,42 @@ export async function registerPublicGuest(input: {
     const { data: entryId, error } = await admin.rpc(
       "register_guest_list_entry",
       {
-        p_list_id: input.listId,
-        p_full_name: input.fullName,
+        p_list_id: listId,
+        p_full_name: fullName,
         p_email: email,
-        p_phone: input.phone?.trim() || null,
+        p_phone: phone,
         p_client_key: clientKey,
       },
     )
 
     if (error || !entryId) {
-      const message = error?.message ?? "No se pudo registrar en la lista."
-      if (message.includes("EMAIL_REQUIRED")) {
-        return {
-          success: false,
-          error: "El email es obligatorio para reclamar el FreePass.",
-        }
+      console.error("[FREEPASS_SUBMIT_ERROR]", {
+        stage: "register_guest_list_entry",
+        listId,
+        code: error?.code ?? null,
+        message: error?.message ?? null,
+        details: error?.details ?? null,
+        hint: error?.hint ?? null,
+      })
+      return failFreepass(
+        mapFreepassSubmitError(error, "No se pudo registrar en la lista."),
+      )
+    }
+
+    if (promoterId) {
+      const { error: promoterError } = await admin
+        .from("guest_lists")
+        .update({ promoter_id: promoterId })
+        .eq("id", listId)
+        .is("promoter_id", null)
+      if (promoterError) {
+        console.error("[FREEPASS_SUBMIT_ERROR]", {
+          stage: "promoter_id",
+          listId,
+          code: promoterError.code,
+          message: promoterError.message,
+        })
       }
-      if (
-        message.includes("EMAIL_ALREADY_REGISTERED") ||
-        message.includes("23505")
-      ) {
-        return {
-          success: false,
-          error: "Ese email ya reclamó un pase en esta lista.",
-        }
-      }
-      if (message.includes("RATE_LIMITED")) {
-        return {
-          success: false,
-          error: "Demasiados intentos. Probá más tarde.",
-        }
-      }
-      return { success: false, error: message }
     }
 
     const supabase = await createClient()
@@ -385,29 +453,51 @@ export async function registerPublicGuest(input: {
       data: { user },
     } = await supabase.auth.getUser()
 
-    let ticketId: string | null = null
+    const ownerId =
+      user?.id && user.email?.trim().toLowerCase() === email ? user.id : null
 
-    if (user) {
-      const claim = await claimFreePass(String(entryId))
-      if (claim.success) {
-        ticketId = claim.data.ticketId
-      }
+    const { data: claimedTicketId, error: claimError } = await admin.rpc(
+      "claim_guest_list_entry",
+      {
+        p_entry_id: String(entryId),
+        p_owner_id: ownerId,
+      },
+    )
+
+    if (claimError) {
+      console.error("[FREEPASS_SUBMIT_ERROR]", {
+        stage: "claim_guest_list_entry",
+        listId,
+        entryId,
+        code: claimError.code,
+        message: claimError.message,
+        details: claimError.details,
+        hint: claimError.hint,
+      })
     }
 
-    const publicMeta = await getGuestListPublic(input.listId)
+    const ticketId = claimedTicketId ? String(claimedTicketId) : null
+
+    const publicMeta = await getGuestListPublic(listId)
 
     await dispatchGuestPassNotification({
-      fullName: input.fullName.trim(),
+      fullName,
       email,
-      phone: input.phone,
+      phone,
       eventTitle: publicMeta?.eventTitle ?? "Evento TokePass",
       listName: publicMeta?.name ?? "Lista",
-      claimUrl: ticketId
-        ? undefined
-        : `/lists/claim/${input.listId}?entry=${entryId}`,
+      claimUrl: ticketId ? undefined : `/lists/claim/${listId}?entry=${entryId}`,
     })
 
-    revalidatePath(`/lists/claim/${input.listId}`)
+    try {
+      revalidatePath(`/lists/claim/${listId}`)
+    } catch (revalidateError) {
+      console.error("[FREEPASS_SUBMIT_ERROR]", {
+        stage: "revalidate",
+        listId,
+        error: revalidateError,
+      })
+    }
 
     return {
       success: true,
@@ -418,13 +508,10 @@ export async function registerPublicGuest(input: {
       },
     }
   } catch (error) {
-    return {
-      success: false,
-      error:
-        error instanceof Error
-          ? error.message
-          : "Error al registrarte en la lista.",
-    }
+    console.error("[FREEPASS_SUBMIT_ERROR]", error)
+    return failFreepass(
+      mapFreepassSubmitError(error, "Error al registrarte en la lista."),
+    )
   }
 }
 

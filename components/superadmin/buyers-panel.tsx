@@ -67,7 +67,9 @@ export function BuyersPanel({ buyers }: { buyers: BuyerRow[] }) {
             key={buyer.id}
             className="rounded-2xl border border-border bg-card p-4 text-card-foreground"
           >
-            <p className="text-lg font-bold text-foreground">{buyer.name}</p>
+            <p className="min-w-0 truncate text-lg font-bold text-foreground">
+              {buyer.name}
+            </p>
             <p className="mt-1 truncate text-sm text-muted-foreground">
               {buyer.email}
             </p>
@@ -104,6 +106,7 @@ export function BuyersPanel({ buyers }: { buyers: BuyerRow[] }) {
 
       {/* Desktop table */}
       <div className="hidden overflow-hidden rounded-2xl border border-border bg-card md:block">
+        <div className="w-full overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-border bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
@@ -121,9 +124,13 @@ export function BuyersPanel({ buyers }: { buyers: BuyerRow[] }) {
                 key={buyer.id}
                 className="border-b border-border hover:bg-muted/50"
               >
-                <td className="px-5 py-4">
-                  <p className="font-medium text-foreground">{buyer.name}</p>
-                  <p className="text-xs text-muted-foreground">{buyer.email}</p>
+                <td className="min-w-[150px] max-w-[250px] px-5 py-4">
+                  <p className="truncate font-medium text-foreground">
+                    {buyer.name}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {buyer.email}
+                  </p>
                 </td>
                 <td className="px-5 py-4 font-mono text-xs text-muted-foreground">
                   {buyer.dni ?? "—"}
@@ -150,6 +157,7 @@ export function BuyersPanel({ buyers }: { buyers: BuyerRow[] }) {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       <Sheet

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 
 import {
+  ACCREDITATION_OPERATIONAL_TIER_NAME,
   isPrintBatchChannel,
   isPrintBatchMode,
   isPrintTemplateMedium,
@@ -10,12 +11,14 @@ import {
   normalizePrintSeriesCode,
   PRINT_BATCH_MAX_TICKETS,
   printBatchNeedsGuests,
+  printChannelUsesCommercialStock,
   type PrintBatchChannel,
   type PrintBatchMode,
   type PrintTemplateMedium,
 } from "@/lib/print-studio"
 import { writeSecurityAuditLog } from "@/lib/security/audit-log"
 import { isEventUuid } from "@/lib/seo/site"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import type { Json } from "@/types/database"
 
@@ -31,7 +34,7 @@ export type PrintBatchGuest = {
 
 export type CreatePrintBatchParams = {
   eventId: string
-  tierId: string
+  tierId?: string
   templateId?: string | null
   name: string
   mode: PrintBatchMode
@@ -120,11 +123,64 @@ async function assertEventOrganizer(eventId: string) {
 }
 
 function revalidatePrintStudioPaths(eventId: string) {
-  revalidatePath(`/admin/events/${eventId}`)
-  revalidatePath(`/admin/events/${eventId}/tickets`)
-  revalidatePath(`/admin/events/${eventId}/print`)
-  revalidatePath(`/admin/events/${eventId}/print-studio`)
-  revalidatePath(`/admin/events/${eventId}/accreditations`)
+  try {
+    revalidatePath(`/admin/events/${eventId}`)
+    revalidatePath(`/admin/events/${eventId}/tickets`)
+    revalidatePath(`/admin/events/${eventId}/print-studio`)
+  } catch {
+    // Revalidate must never break the action payload / RSC flight.
+  }
+}
+
+function failPrintBatch(error: string): Extract<CreatePrintBatchResult, { success: false }> {
+  return { success: false, error }
+}
+
+async function ensureAccreditationTier(
+  eventId: string,
+  writer: Awaited<ReturnType<typeof createClient>>,
+): Promise<{ ok: true; tierId: string } | { ok: false; error: string }> {
+  const { data: existing } = await writer
+    .from("ticket_tiers")
+    .select("id")
+    .eq("event_id", eventId)
+    .eq("visibility", "private")
+    .eq("tier_type", "addon")
+    .eq("name", ACCREDITATION_OPERATIONAL_TIER_NAME)
+    .limit(1)
+    .maybeSingle()
+
+  if (existing?.id) return { ok: true, tierId: existing.id }
+
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from("ticket_tiers")
+    .insert({
+      event_id: eventId,
+      name: ACCREDITATION_OPERATIONAL_TIER_NAME,
+      price: 0,
+      base_price: 0,
+      platform_fee: 0,
+      capacity: 100000,
+      total_capacity: 100000,
+      sold: 0,
+      visibility: "private",
+      layout_type: "general",
+      tier_type: "addon",
+      category: "special",
+      admit_count: 1,
+      capacity_per_unit: 1,
+    })
+    .select("id")
+    .single()
+
+  if (error || !data) {
+    return {
+      ok: false,
+      error: error?.message ?? "No se pudo crear el SKU operativo de acreditaciones.",
+    }
+  }
+  return { ok: true, tierId: data.id }
 }
 
 function mapPrintBatchError(message: string): string {
@@ -192,38 +248,55 @@ function mapPrintBatchSuccess(
 export async function createPrintBatch(
   params: CreatePrintBatchParams,
 ): Promise<CreatePrintBatchResult> {
-  if (!isEventUuid(params.eventId) || !isEventUuid(params.tierId)) {
-    return { success: false, error: "Evento o tipo de entrada inválido." }
+  try {
+    return await issuePrintBatch(params)
+  } catch (error) {
+    return failPrintBatch(
+      error instanceof Error
+        ? mapPrintBatchError(error.message)
+        : "No se pudo emitir el lote.",
+    )
+  }
+}
+
+async function issuePrintBatch(
+  params: CreatePrintBatchParams,
+): Promise<CreatePrintBatchResult> {
+  if (!isEventUuid(params.eventId)) {
+    return failPrintBatch("Evento inválido.")
+  }
+  if (
+    printChannelUsesCommercialStock(params.channel) &&
+    !isEventUuid(params.tierId ?? "")
+  ) {
+    return failPrintBatch("Evento o tipo de entrada inválido.")
   }
   if (params.templateId && !isEventUuid(params.templateId)) {
-    return { success: false, error: "Plantilla inválida." }
+    return failPrintBatch("Plantilla inválida.")
   }
   if (!isPrintBatchMode(params.mode)) {
-    return { success: false, error: "Modo de lote inválido." }
+    return failPrintBatch("Modo de lote inválido.")
   }
   if (!isPrintBatchChannel(params.channel)) {
-    return { success: false, error: "Canal de emisión inválido." }
+    return failPrintBatch("Canal de emisión inválido.")
   }
   if (params.mode === "accreditation" && params.channel !== "accreditation") {
-    return {
-      success: false,
-      error: "El modo acreditación requiere el canal accreditation.",
-    }
+    return failPrintBatch("El modo acreditación requiere el canal accreditation.")
   }
 
   const name = normalizePrintBatchName(params.name)
   if (!name) {
-    return { success: false, error: "El nombre del lote debe tener entre 2 y 80 caracteres." }
+    return failPrintBatch("El nombre del lote debe tener entre 2 y 80 caracteres.")
   }
 
   const seriesCode = normalizePrintSeriesCode(params.seriesCode)
   if (!seriesCode) {
-    return { success: false, error: "La serie debe ser alfanumérica (hasta 8 caracteres)." }
+    return failPrintBatch("La serie debe ser alfanumérica (hasta 8 caracteres).")
   }
 
   const seqStart = Math.floor(params.seqStart ?? 1)
   if (!Number.isFinite(seqStart) || seqStart < 1) {
-    return { success: false, error: "El folio inicial debe ser un entero mayor a 0." }
+    return failPrintBatch("El folio inicial debe ser un entero mayor a 0.")
   }
 
   const guests = (params.guests ?? [])
@@ -239,23 +312,22 @@ export async function createPrintBatch(
     .filter((guest) => guest.nombre || guest.apellido || guest.dni || guest.email)
 
   if (guests.some((guest) => guest.seating_unit_id && !isEventUuid(guest.seating_unit_id))) {
-    return { success: false, error: "Hay un asiento o unidad con identificador inválido." }
+    return failPrintBatch("Hay un asiento o unidad con identificador inválido.")
   }
 
   const unnamedCount = Math.floor(params.count ?? 0)
   const units = guests.length > 0 ? guests.length : unnamedCount
 
   if (printBatchNeedsGuests(params.mode) && guests.length < 1) {
-    return { success: false, error: "Cargá al menos un titular para este modo." }
+    return failPrintBatch("Cargá al menos un titular para este modo.")
   }
   if (units < 1) {
-    return { success: false, error: "Indicá cuántas entradas generar." }
+    return failPrintBatch("Indicá cuántas entradas generar.")
   }
   if (units > PRINT_BATCH_MAX_TICKETS) {
-    return {
-      success: false,
-      error: `Máximo ${PRINT_BATCH_MAX_TICKETS.toLocaleString("es-AR")} entradas por lote.`,
-    }
+    return failPrintBatch(
+      `Máximo ${PRINT_BATCH_MAX_TICKETS.toLocaleString("es-AR")} entradas por lote.`,
+    )
   }
 
   if (params.channel === "accreditation") {
@@ -265,20 +337,26 @@ export async function createPrintBatch(
         ? guests.some((guest) => !guest.staff_role && !defaultRole)
         : !defaultRole
     if (missingRole) {
-      return {
-        success: false,
-        error: "Las acreditaciones necesitan un rol (Técnica, Prensa, VIP o Producción).",
-      }
+      return failPrintBatch(
+        "Las acreditaciones necesitan un rol (Técnica, Prensa, VIP o Producción).",
+      )
     }
   }
 
   const gate = await assertEventOrganizer(params.eventId)
-  if (!gate.ok) return { success: false, error: gate.error }
+  if (!gate.ok) return failPrintBatch(gate.error)
+
+  let tierId = params.tierId ?? ""
+  if (!printChannelUsesCommercialStock(params.channel)) {
+    const operational = await ensureAccreditationTier(params.eventId, gate.supabase)
+    if (!operational.ok) return failPrintBatch(operational.error)
+    tierId = operational.tierId
+  }
 
   const { data, error } = await gate.supabase.rpc("issue_print_batch_tx", {
     p_event_id: params.eventId,
     p_staff_id: gate.user.id,
-    p_tier_id: params.tierId,
+    p_tier_id: tierId,
     p_template_id: params.templateId ?? null,
     p_name: name,
     p_mode: params.mode,
@@ -292,15 +370,14 @@ export async function createPrintBatch(
   })
 
   if (error || !data) {
-    return {
-      success: false,
-      error: mapPrintBatchError(error?.message ?? "No se pudo emitir el lote."),
-    }
+    return failPrintBatch(
+      mapPrintBatchError(error?.message ?? "No se pudo emitir el lote."),
+    )
   }
 
   const result = mapPrintBatchSuccess(data)
   if (!result) {
-    return { success: false, error: "La emisión no devolvió un lote válido." }
+    return failPrintBatch("La emisión no devolvió un lote válido.")
   }
 
   await writeSecurityAuditLog({
@@ -311,7 +388,7 @@ export async function createPrintBatch(
     details: {
       mode: params.mode,
       channel: params.channel,
-      tierId: params.tierId,
+      tierId,
       templateId: params.templateId ?? null,
       batchId: result.batchId,
       orderId: result.orderId,
@@ -321,7 +398,16 @@ export async function createPrintBatch(
   })
 
   revalidatePrintStudioPaths(params.eventId)
-  return result
+  return {
+    success: true,
+    batchId: result.batchId,
+    orderId: result.orderId,
+    issuedCount: result.issuedCount,
+    seqStart: result.seqStart,
+    seqEnd: result.seqEnd,
+    seriesCode: result.seriesCode,
+    ticketIds: result.ticketIds,
+  }
 }
 
 const TEMPLATE_SELECT =
@@ -380,6 +466,27 @@ export async function createTicketTemplate(input: {
 }
 
 export async function saveTicketTemplate(input: {
+  eventId?: string
+  templateId?: string | null
+  name: string
+  medium?: PrintTemplateMedium
+  pageWidthMm?: number
+  pageHeightMm?: number
+  dpi?: number
+  layoutJson?: Json
+  assetsJson?: Json
+}): Promise<{ success: true; id: string } | { success: false; error: string }> {
+  try {
+    return await persistTicketTemplate(input)
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "No se pudo guardar la plantilla.",
+    }
+  }
+}
+
+async function persistTicketTemplate(input: {
   eventId?: string
   templateId?: string | null
   name: string

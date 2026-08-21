@@ -140,6 +140,15 @@ export const ticketTierSchema = z.preprocess(
   layoutType: z.enum(["general", "table_combo", "numbered_seat"]),
   seatingSectorId: optionalSectorKey,
   capacityPerUnit: z.number().int().min(1).max(100),
+  minPurchaseLimit: z.number().int().min(1).max(200).optional().default(1),
+  maxPurchaseLimit: z
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .nullable()
+    .optional()
+    .default(null),
   /** QRs independientes por unidad (mesa). */
   admitCount: z.number().int().min(1).max(50),
   tierType: z.enum(INVENTORY_TIER_TYPES).optional().default("general"),
@@ -244,6 +253,20 @@ const eventFormObject = z
         })
       }
       tierNames.add(normalizedName)
+      const minLimit = Math.max(1, Number(tier.minPurchaseLimit) || 1)
+      const maxLimit = tier.maxPurchaseLimit
+      if (
+        maxLimit != null &&
+        Number.isFinite(Number(maxLimit)) &&
+        Number(maxLimit) > 0 &&
+        minLimit > Number(maxLimit)
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["tickets", index, "maxPurchaseLimit"],
+          message: "El máximo por compra no puede ser menor que el mínimo.",
+        })
+      }
 
       const usesMap =
         Boolean(data.basics.hasSeatingPlan) &&
@@ -437,6 +460,15 @@ const draftTicketSchema = z.preprocess(
     .default("general"),
   seatingSectorId: optionalSectorKey,
   capacityPerUnit: z.number().int().min(1).max(100).optional().default(1),
+  minPurchaseLimit: z.number().int().min(1).max(200).optional().default(1),
+  maxPurchaseLimit: z
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .nullable()
+    .optional()
+    .default(null),
   admitCount: z.number().int().min(1).max(50).optional().default(1),
   tierType: z.enum(INVENTORY_TIER_TYPES).optional().default("general"),
   listPrice: z.number().min(0).nullable().optional(),
@@ -551,6 +583,8 @@ function blankDraftTicket(): EventFormValues["tickets"][number] {
     layoutType: "general",
     seatingSectorId: null,
     capacityPerUnit: 1,
+    minPurchaseLimit: 1,
+    maxPurchaseLimit: null,
     admitCount: 1,
     tierType: "general",
     listPrice: null,
@@ -624,6 +658,11 @@ export function coerceDraftEventForm(
           : "general",
       visibility: tier.visibility ?? "public",
       capacityPerUnit: tier.capacityPerUnit ?? 1,
+      minPurchaseLimit: Math.max(1, Math.floor(Number(tier.minPurchaseLimit) || 1)),
+      maxPurchaseLimit:
+        tier.maxPurchaseLimit == null || Number(tier.maxPurchaseLimit) <= 0
+          ? null
+          : Math.floor(Number(tier.maxPurchaseLimit)),
       admitCount: tier.admitCount ?? 1,
       seatingSectorId: resolveTicketSectorId(tier),
       tierType: tier.tierType ?? "general",

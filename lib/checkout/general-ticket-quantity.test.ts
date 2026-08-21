@@ -4,13 +4,14 @@ import { describe, it } from "node:test"
 import { generalTicketMaxQuantity } from "./general-ticket-quantity"
 
 describe("generalTicketMaxQuantity", () => {
-  it("caps by lot stock and per-user limit", () => {
+  it("caps by lot stock and the SKU max, not a shared cart sum", () => {
     const max = generalTicketMaxQuantity({
       tier: {
         id: "early",
         available: 8,
         layoutType: "general",
         seatingSectorId: "general:pista",
+        maxPurchaseLimit: 6,
       },
       siblings: [
         {
@@ -20,8 +21,8 @@ describe("generalTicketMaxQuantity", () => {
         },
       ],
       quantities: {},
-      selectedCount: 0,
-      maxTicketsPerUser: 6,
+      selectedCount: 4,
+      maxTicketsPerUser: 10,
     })
     assert.equal(max, 6)
   })

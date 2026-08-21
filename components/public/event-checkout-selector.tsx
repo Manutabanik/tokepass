@@ -33,7 +33,7 @@ import {
   isQuantityInventoryType,
   type InventoryTierType,
 } from "@/lib/inventory/unified-inventory"
-import { resolvePurchaseLimit } from "@/lib/checkout-limits"
+import { purchaseCapForTier } from "@/lib/checkout-limits"
 import { resolveCategoryAvailability } from "@/lib/checkout/category-stock"
 import {
   displayChargePrice,
@@ -738,7 +738,6 @@ function UnifiedTicketCard({
   isPending,
   focused,
   maxTicketsPerUser,
-  selectedCount,
   requiresMap,
   mapLoading,
   includesGeneralAccess,
@@ -772,10 +771,11 @@ function UnifiedTicketCard({
 }) {
   const sale = resolveSalePhases(tier.phases)
   const current = sale.current
-  const limit = resolvePurchaseLimit(maxTicketsPerUser)
-  const otherSelected = Math.max(0, selectedCount - quantity)
-  const remaining =
-    limit == null ? Number.POSITIVE_INFINITY : Math.max(0, limit - otherSelected)
+  const remaining = purchaseCapForTier({
+    layoutType: tier.layoutType,
+    maxPurchaseLimit: tier.maxPurchaseLimit,
+    fallbackMax: maxTicketsPerUser,
+  })
   const max = Math.min(Math.max(0, tier.available), remaining)
   const highlight = resolveTicketHighlightBadge(tier, siblingTiers)
   const unitPrice = current?.price ?? tier.price
@@ -834,7 +834,7 @@ function UnifiedTicketCard({
       )}
     >
       <div className="min-w-0 space-y-1.5">
-        <h4 className="truncate text-lg font-bold text-gray-900 dark:text-foreground">
+        <h4 className="line-clamp-2 break-words text-lg font-bold text-gray-900 dark:text-foreground">
           {tier.name}
         </h4>
         <p className="text-xl font-extrabold tabular-nums text-gray-900 dark:text-foreground">
@@ -983,7 +983,6 @@ export function QuantityList({
   onQuantityChange,
   action = "stepper",
   maxTicketsPerUser = null,
-  selectedCount = 0,
 }: {
   tiers: TicketSelectorTier[]
   quantities: Record<string, number>
@@ -1000,10 +999,11 @@ export function QuantityList({
         const sale = resolveSalePhases(tier.phases)
         const current = sale.current
         const quantity = quantities[tier.id] ?? 0
-        const limit = resolvePurchaseLimit(maxTicketsPerUser)
-        const otherSelected = Math.max(0, selectedCount - quantity)
-        const remaining =
-          limit == null ? Number.POSITIVE_INFINITY : Math.max(0, limit - otherSelected)
+        const remaining = purchaseCapForTier({
+          layoutType: tier.layoutType,
+          maxPurchaseLimit: tier.maxPurchaseLimit,
+          fallbackMax: maxTicketsPerUser,
+        })
         const max = Math.min(Math.max(0, tier.available), remaining)
         const description = tier.description?.trim() || ""
         const highlight = resolveTicketHighlightBadge(tier, tiers)
@@ -1021,7 +1021,9 @@ export function QuantityList({
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-lg font-bold text-gray-900 dark:text-foreground">{tier.name}</p>
+                  <p className="line-clamp-2 break-words text-lg font-bold text-gray-900 dark:text-foreground">
+                    {tier.name}
+                  </p>
                   {highlight === "bestseller" ? (
                     <Badge
                       variant="secondary"
@@ -1139,31 +1141,31 @@ function Stepper({
     <div className="flex items-center rounded-xl bg-secondary/60 p-1">
       <Button
         type="button"
-        size="icon-sm"
+        size="icon"
         variant="ghost"
         disabled={disabled || value <= 0}
         onClick={() => onChange(value - 1)}
         aria-label="Quitar"
         className={cn(
           tapFeedbackClass,
-          "flex size-8 items-center justify-center rounded-full hover:bg-background",
+          "flex size-11 items-center justify-center rounded-full hover:bg-background",
         )}
       >
-        <Minus className="size-3.5" />
+        <Minus className="size-4" />
       </Button>
-      <span className="w-4 text-center text-sm font-bold tabular-nums text-foreground">
+      <span className="min-w-8 text-center text-sm font-bold tabular-nums text-foreground">
         {value}
       </span>
       <Button
         type="button"
-        size="icon-sm"
+        size="icon"
         variant="ghost"
         disabled={disabled || value >= max}
         onClick={() => onChange(value + 1)}
         aria-label="Agregar"
         className={cn(
           tapFeedbackClass,
-          "flex size-8 items-center justify-center rounded-full hover:bg-background",
+          "flex size-11 items-center justify-center rounded-full hover:bg-background",
         )}
       >
         <Plus className="size-3.5" />

@@ -31,9 +31,9 @@ export default async function RrppDashboardPage() {
   }
 
   return (
-    <div className="dark min-h-screen bg-zinc-950 text-zinc-100">
+    <div className="relative flex min-h-dvh flex-col overflow-x-hidden bg-zinc-950 text-zinc-100 dark">
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.22),transparent_55%)]"
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-72 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.22),transparent_55%)]"
         aria-hidden="true"
       />
       <PromoterDashboardClient metrics={metrics} />

@@ -78,7 +78,7 @@ function EventListCard({
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         )}
       >
-        <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-secondary md:h-32 md:w-32">
+        <div className="relative aspect-square w-24 shrink-0 overflow-hidden rounded-xl bg-secondary md:w-32">
           {event.imageUrl ? (
             <Image
               src={event.imageUrl}
@@ -87,7 +87,7 @@ function EventListCard({
               priority={priority}
               sizes="(max-width: 768px) 96px, 128px"
               className={cn(
-                "object-cover transition-transform duration-500 group-hover:scale-105",
+                "h-full w-full object-cover object-center transition-transform duration-500 group-hover:scale-105",
                 finished && "grayscale-[50%]",
               )}
             />
@@ -236,7 +236,7 @@ export function EventCard({
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40",
         )}
       >
-        <div className="relative aspect-[16/10] w-full overflow-hidden">
+        <div className="relative aspect-[4/3] w-full overflow-hidden md:aspect-video">
           {event.imageUrl ? (
             <Image
               src={event.imageUrl}
@@ -245,7 +245,7 @@ export function EventCard({
               priority={priority}
               sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, 30vw"
               className={cn(
-                "object-cover transition-transform duration-500 group-hover:scale-[1.04]",
+                "h-full w-full object-cover object-center transition-transform duration-500 group-hover:scale-[1.04]",
                 finished && "grayscale-[50%]",
               )}
             />
@@ -293,12 +293,12 @@ export function EventCard({
           </div>
         </div>
 
-        <div className="flex flex-1 flex-col gap-3 p-4 sm:p-5">
-          <p className="text-xs font-medium uppercase tracking-[0.14em] text-zinc-500 dark:text-zinc-400">
+        <div className="flex min-w-0 flex-1 flex-col gap-3 p-4 sm:p-5">
+          <p className="truncate text-xs font-medium uppercase tracking-[0.14em] text-zinc-500 dark:text-zinc-400">
             {formatDiscoveryDateTime(event.date)}
           </p>
 
-          <h3 className="line-clamp-2 text-lg font-bold leading-snug text-zinc-900 dark:text-white">
+          <h3 className="truncate text-lg font-bold leading-snug text-zinc-900 dark:text-white">
             {event.title}
           </h3>
 

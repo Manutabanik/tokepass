@@ -5,6 +5,7 @@ import { createPortal } from "react-dom"
 
 import { BuyerViewModal } from "@/components/admin/buyer-view-modal"
 import { InteractiveVenueMapEditor } from "@/components/admin/interactive-venue-map-editor"
+import { AppTakeover } from "@/components/ui/app-takeover"
 import { venueMapToSeatingLayout } from "@/lib/seating/venue-map-geometry"
 import type { VenueMapSkuTicketRef } from "@/lib/seating/venue-map-sku-consistency"
 import { parseVenueMap, type InteractiveVenueMap } from "@/types/venue-map"
@@ -66,7 +67,7 @@ export function InteractiveVenueMapStudio({
   if (!open || !mounted) return null
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex h-[100dvh] w-screen flex-col overflow-hidden overscroll-none bg-background text-foreground">
+    <AppTakeover className="overscroll-none text-foreground">
       <InteractiveVenueMapEditor
         variant="studio"
         eventTitle={eventTitle}
@@ -97,7 +98,7 @@ export function InteractiveVenueMapStudio({
         venueLabel={venueLabel}
         onClose={() => setPreview(false)}
       />
-    </div>,
+    </AppTakeover>,
     document.body,
   )
 }

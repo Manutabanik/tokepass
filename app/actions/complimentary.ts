@@ -2,9 +2,19 @@
 
 import { revalidatePath } from "next/cache"
 
+import { ticketDisplayCode } from "@/lib/admin/issued-tickets"
+import {
+  notifyLivingTicketEmail,
+  notifyPosTicketIssued,
+} from "@/lib/notifications"
+import {
+  requeuePosIssueNotifications,
+  scheduleNotificationOutboxDrain,
+} from "@/lib/notifications/outbox"
 import { writeSecurityAuditLog } from "@/lib/security/audit-log"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import { sanitizeFreepassWhatsapp } from "@/lib/validations/freepass"
 
 export type ComplimentaryTierOption = {
   id: string
@@ -25,6 +35,9 @@ export type ComplimentaryBatchResult =
       ticketsIssued: number
       admitCount: number
       ticketIds: string[]
+      sentEmail?: boolean
+      sentWhatsApp?: boolean
+      notifyError?: string
     }
   | { success: false; error: string }
 
@@ -346,10 +359,137 @@ function mapBatchError(message: string): string {
   if (lower.includes("sold out")) {
     return "No hay cupo suficiente en ese tipo de entrada."
   }
-  if (lower.includes("dni_required")) {
-    return "Todas las filas nominadas necesitan DNI válido (7 a 11 dígitos)."
+  if (lower.includes("dni_required") || lower.includes("dni_invalid")) {
+    return "Si cargás DNI, usá 7 a 11 dígitos."
   }
   return message
+}
+
+async function dispatchComplimentaryNotifications(input: {
+  eventTitle: string
+  orderId: string
+  ticketIds: string[]
+  guests: NamedGuestRow[]
+  sendEmail: boolean
+  sendWhatsApp: boolean
+}): Promise<{ sentEmail: boolean; sentWhatsApp: boolean; notifyError?: string }> {
+  const first = input.guests[0]
+  const email = first?.email?.trim().toLowerCase() ?? ""
+  const phone = sanitizeFreepassWhatsapp(first?.telefono ?? "")
+  const holderName = [first?.nombre, first?.apellido]
+    .map((part) => part?.trim())
+    .filter(Boolean)
+    .join(" ")
+    .trim() || "Invitado"
+
+  let sentEmail = false
+  let sentWhatsApp = false
+  const errors: string[] = []
+
+  if (input.sendEmail) {
+    if (!email || !email.includes("@")) {
+      errors.push("Marcaste email pero el destinatario no tiene un mail válido.")
+    } else {
+      try {
+        for (const ticketId of input.ticketIds) {
+          await notifyLivingTicketEmail({
+            toEmail: email,
+            holderName,
+            eventTitle: input.eventTitle,
+            ticketId,
+            ticketCode: ticketDisplayCode(ticketId),
+          })
+        }
+        sentEmail = true
+      } catch (error) {
+        errors.push(
+          error instanceof Error
+            ? error.message
+            : "No se pudo enviar el email de la cortesía.",
+        )
+      }
+    }
+  }
+
+  if (input.sendWhatsApp) {
+    if (!phone) {
+      errors.push("Marcaste WhatsApp pero el número no es válido.")
+    } else {
+      try {
+        await notifyPosTicketIssued({
+          eventTitle: input.eventTitle,
+          quantity: input.ticketIds.length,
+          ticketIds: input.ticketIds,
+          phone,
+          email: email || null,
+        })
+        await requeuePosIssueNotifications({
+          orderId: input.orderId,
+          eventTitle: input.eventTitle,
+          ticketIds: input.ticketIds,
+          phone,
+          email: email || null,
+        })
+        scheduleNotificationOutboxDrain()
+        sentWhatsApp = true
+      } catch (error) {
+        errors.push(
+          error instanceof Error
+            ? error.message
+            : "No se pudo encolar el WhatsApp de la cortesía.",
+        )
+      }
+    }
+  }
+
+  return {
+    sentEmail,
+    sentWhatsApp,
+    notifyError: errors.length > 0 ? errors.join(" ") : undefined,
+  }
+}
+
+export async function issueComplimentaryBatch(input: {
+  eventId: string
+  tierId: string
+  guests: NamedGuestRow[]
+  sendEmail?: boolean
+  sendWhatsApp?: boolean
+}): Promise<ComplimentaryBatchResult> {
+  try {
+    const issued = await issueComplimentaryNamed({
+      eventId: input.eventId,
+      tierId: input.tierId,
+      guests: input.guests,
+    })
+    if (!issued.success) return issued
+
+    const gate = await assertEventOrganizer(input.eventId)
+    const eventTitle = gate.ok ? gate.event.title : "Evento TokePass"
+    const notify = await dispatchComplimentaryNotifications({
+      eventTitle,
+      orderId: issued.orderId,
+      ticketIds: issued.ticketIds,
+      guests: input.guests,
+      sendEmail: Boolean(input.sendEmail),
+      sendWhatsApp: Boolean(input.sendWhatsApp),
+    })
+
+    return {
+      ...issued,
+      sentEmail: notify.sentEmail,
+      sentWhatsApp: notify.sentWhatsApp,
+      notifyError: notify.notifyError,
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? mapBatchError(error.message)
+          : "No se pudo emitir la cortesía.",
+    }
+  }
 }
 
 function mapBatchSuccess(

@@ -88,7 +88,7 @@ export function EventHeroMediaGallery({
 
   return (
     <section aria-label="Galería multimedia del evento">
-      <div className="group relative aspect-video w-full overflow-hidden rounded-none bg-zinc-950 md:rounded-2xl">
+      <div className="group relative aspect-[4/5] w-full overflow-hidden bg-muted sm:aspect-video md:rounded-2xl">
         <div
           className="no-scrollbar h-full snap-x snap-mandatory overflow-x-auto touch-pan-x select-none"
           ref={emblaRef}
@@ -101,8 +101,11 @@ export function EventHeroMediaGallery({
                 imageUrl={imageUrl}
                 priority
                 sizes="100vw"
-                objectFit="cover"
-                className={finished ? "grayscale-[50%]" : undefined}
+                objectFit="contain"
+                className={cn(
+                  "object-center",
+                  finished && "grayscale-[50%]",
+                )}
               />
             </div>
             {hasVideo ? (

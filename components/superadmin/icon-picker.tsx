@@ -14,6 +14,19 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
+function CategoryIconMark({
+  name,
+  className,
+}: {
+  name: string
+  className?: string
+}) {
+  return createElement(resolveCategoryIcon(name), {
+    className,
+    "aria-hidden": true,
+  })
+}
+
 export function IconPicker({
   value,
   onChange,
@@ -27,7 +40,6 @@ export function IconPicker({
 }) {
   const options = getCategoryIconPickerOptions(value)
   const selected = options.find((option) => option.name === value) ?? options[0]
-  const SelectedIcon = resolveCategoryIcon(selected.name)
   const items = options.map((option) => ({
     value: option.name,
     label: option.label,
@@ -45,7 +57,7 @@ export function IconPicker({
       <SelectTrigger id={id} className="h-10 w-full">
         <SelectValue placeholder="Elegí un ícono">
           <span className="flex min-w-0 items-center gap-2">
-            <SelectedIcon className="size-4 shrink-0" aria-hidden="true" />
+            <CategoryIconMark name={selected.name} className="size-4 shrink-0" />
             <span className="truncate">{selected.label}</span>
           </span>
         </SelectValue>

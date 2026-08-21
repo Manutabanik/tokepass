@@ -324,7 +324,7 @@ export function MobileFilterSheet({
                       placeholder="Buscar artista por nombre..."
                       autoComplete="off"
                       autoCorrect="off"
-                      className="min-w-0 flex-1 border-0 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                      className="min-w-0 flex-1 border-0 bg-transparent text-base text-foreground outline-none placeholder:text-muted-foreground md:text-sm"
                     />
                   </label>
                   {visibleArtists.length > 0 ? (

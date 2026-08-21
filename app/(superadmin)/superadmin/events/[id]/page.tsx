@@ -112,7 +112,7 @@ export default async function SuperAdminEventDetailPage({
         </Card>
       ) : null}
 
-      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Card className="border border-border bg-card py-0 text-card-foreground">
           <CardContent className="px-5 py-5">
             <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
