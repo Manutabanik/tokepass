@@ -33,6 +33,7 @@ import { EventStudioDock } from "@/components/admin/event-studio-dock"
 import { EventLivePreview } from "@/components/admin/events/event-live-preview"
 import { EventStudioDateTimeField } from "@/components/admin/events/event-studio-datetime-field"
 import { EventStudioFlyerField } from "@/components/admin/events/event-studio-flyer-field"
+import { EventStudioPurchaseCapField } from "@/components/admin/events/event-studio-purchase-cap-field"
 import { EventStudioShell } from "@/components/admin/event-studio-shell"
 import { EventStudioStepper } from "@/components/admin/event-studio-stepper"
 import { PublishEventConfirmDialog } from "@/components/admin/publish-event-confirm-dialog"
@@ -229,6 +230,7 @@ const defaultValues: EventFormValues = {
   tickets: [blankTicket()],
   ticketsDefaultTab: "auto",
   lineup: [],
+  maxTicketsPerUser: null,
 }
 
 export function EventCreationWizard({
@@ -949,7 +951,7 @@ export function EventCreationWizard({
     <>
     <Form {...form}>
       <form
-        className="flex h-full min-h-0 flex-1 flex-col overflow-hidden"
+        className="flex h-full min-h-0 w-full flex-1 flex-col overflow-x-hidden"
         onSubmit={form.handleSubmit(
           (data) => onSubmit(data, "draft"),
           (errors) => {
@@ -1034,7 +1036,7 @@ export function EventCreationWizard({
             if (!Number.isFinite(next) || next === resolvedStep) return
             void moveToStep(next)
           }}
-          className="flex flex-col gap-0"
+          className="flex flex-col gap-0 overflow-x-hidden"
         >
             <TabsContent
               keepMounted
@@ -1048,29 +1050,29 @@ export function EventCreationWizard({
                   Identidad del evento
                 </CardTitle>
                 <CardDescription className="border-b border-border pb-4 text-sm text-muted-foreground">
-                  Nombre, flyer y categoría. El simulador a la derecha se
-                  actualiza en vivo.
+                  Nombre, flyer y categoría. Completá los datos y subí el
+                  flyer sin que se pisen.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="grid grid-cols-1 items-start gap-6 px-0 py-6">
-                <div className="space-y-6">
+              <CardContent className="grid grid-cols-1 items-start gap-6 overflow-x-hidden px-0 py-6 md:grid-cols-12">
+                <div className="min-w-0 space-y-6 md:col-span-7">
                   <FormField
                     control={form.control}
                     name="basics.title"
                     render={({ field, fieldState }) => (
-                      <FormItem>
+                      <FormItem className="space-y-2">
                         <FormLabel
                           htmlFor="event-title"
-                          className="block font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+                          className="text-sm font-semibold tracking-wide text-muted-foreground uppercase"
                         >
-                          Titulo del evento
+                          Título del evento
                         </FormLabel>
                         <Input
                           {...field}
                           id="event-title"
                           data-field="basics.title"
                           placeholder="Nombre impactante de tu evento"
-                          className="h-auto w-full rounded-none border-0 border-b border-border bg-transparent px-0 py-2 text-xl font-bold shadow-none placeholder:text-muted-foreground/45 focus-visible:border-emerald-400 focus-visible:ring-0 md:text-2xl"
+                          className="w-full rounded-lg border border-border bg-card p-3 text-base text-foreground md:text-sm"
                         />
                         <FormMessage>{fieldState.error?.message}</FormMessage>
                       </FormItem>
@@ -1081,9 +1083,9 @@ export function EventCreationWizard({
                     control={form.control}
                     name="basics.categoryId"
                     render={({ field, fieldState }) => (
-                      <FormItem>
-                        <FormLabel className="block font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                          Categoria
+                      <FormItem className="space-y-2">
+                        <FormLabel className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
+                          Categoría
                         </FormLabel>
                         {categories.length === 0 ? (
                           <p className="text-sm text-muted-foreground">
@@ -1091,8 +1093,8 @@ export function EventCreationWizard({
                           </p>
                         ) : (
                           <div
-                            className="flex flex-wrap gap-2"
-                            data-field="basics.categoryId"
+                          className="flex min-w-0 flex-wrap gap-2"
+                          data-field="basics.categoryId"
                           >
                             {categories.map((category) => {
                               const selected = field.value === category.id
@@ -1129,9 +1131,9 @@ export function EventCreationWizard({
                     control={form.control}
                     name="basics.ageRestriction"
                     render={({ field, fieldState }) => (
-                      <FormItem>
-                        <FormLabel className="block font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                          Restriccion de edad
+                      <FormItem className="space-y-2">
+                        <FormLabel className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
+                          Restricción de edad
                         </FormLabel>
                         <div
                           className="flex flex-wrap gap-2"
@@ -1192,34 +1194,36 @@ export function EventCreationWizard({
                   />
                 </div>
 
-                <EventStudioFlyerField
-                  flyerFile={flyerFile}
-                  existingFlyerUrl={
-                    flyerName ? initialData?.flyerUrl ?? null : null
-                  }
-                  existingTitle={initialData?.title}
-                  error={
-                    flyerError ??
-                    form.formState.errors.basics?.flyerName?.message
-                  }
-                  onFile={(file) => {
-                    setFlyerError(null)
-                    form.clearErrors("basics.flyerName")
-                    setFlyerFile(file)
-                    form.setValue("basics.flyerName", file.name, {
-                      shouldDirty: true,
-                    })
-                  }}
-                  onClear={() => {
-                    setFlyerError(null)
-                    form.clearErrors("basics.flyerName")
-                    setFlyerFile(null)
-                    form.setValue("basics.flyerName", null, {
-                      shouldDirty: true,
-                    })
-                  }}
-                />
-                <div className="lg:col-span-12">
+                <div className="min-w-0 space-y-2 md:col-span-5">
+                  <EventStudioFlyerField
+                    flyerFile={flyerFile}
+                    existingFlyerUrl={
+                      flyerName ? initialData?.flyerUrl ?? null : null
+                    }
+                    existingTitle={initialData?.title}
+                    error={
+                      flyerError ??
+                      form.formState.errors.basics?.flyerName?.message
+                    }
+                    onFile={(file) => {
+                      setFlyerError(null)
+                      form.clearErrors("basics.flyerName")
+                      setFlyerFile(file)
+                      form.setValue("basics.flyerName", file.name, {
+                        shouldDirty: true,
+                      })
+                    }}
+                    onClear={() => {
+                      setFlyerError(null)
+                      form.clearErrors("basics.flyerName")
+                      setFlyerFile(null)
+                      form.setValue("basics.flyerName", null, {
+                        shouldDirty: true,
+                      })
+                    }}
+                  />
+                </div>
+                <div className="min-w-0 md:col-span-12">
                   <EventSponsorsManager
                     eventId={initialData?.id ?? persistedEventId}
                   />
@@ -1585,6 +1589,7 @@ export function EventCreationWizard({
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 px-0 py-7">
+                <EventStudioPurchaseCapField form={form} />
                 <UnifiedInventoryPanel
                   form={form}
                   eventId={initialData?.id ?? persistedEventId}

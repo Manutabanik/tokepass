@@ -9,7 +9,6 @@ import {
   Pencil,
   Printer,
   QrCode,
-  Settings,
   Share2,
   ShoppingBag,
   Ticket,
@@ -186,13 +185,6 @@ export default async function ManageEventPage({
       label: "Cupones y descuentos",
       description: "Códigos promocionales con porcentaje o monto fijo.",
       icon: TicketPercent,
-    },
-    {
-      href: `/admin/events/${id}/settings`,
-      label: "Límites de compra",
-      description:
-        "Tope de entradas o mesas por usuario. Vacío = sin límite.",
-      icon: Settings,
     },
     {
       href: `/admin/events/${id}/live`,

@@ -72,6 +72,7 @@ import {
   type DraftEventFormValues,
   type EventFormValues,
 } from "@/lib/validations/event-form"
+import { resolvePurchaseLimit } from "@/lib/checkout-limits"
 import { asUuidOrNull } from "@/lib/validations/relation-id"
 import type { Database, Event, EventStatus, Json, Venue } from "@/types/database"
 import { computeEventCapacityFromForm } from "@/lib/inventory/capacity-budget"
@@ -851,6 +852,26 @@ function applyFormSeatingSectorSanitizer(
     },
     live,
   )
+}
+
+async function persistEventMaxTicketsPerUser(
+  client: SupabaseClient<Database>,
+  eventId: string,
+  raw: number | null | undefined,
+): Promise<string | null> {
+  if (raw === undefined) return null
+  const nextLimit = resolvePurchaseLimit(raw)
+  if (nextLimit != null && nextLimit > 200) {
+    return "El tope de compra por usuario no puede superar 200."
+  }
+  const { error } = await client
+    .from("events")
+    .update({
+      max_tickets_per_user: nextLimit,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", eventId)
+  return error?.message ?? null
 }
 
 function persistFailure(error: unknown): {
@@ -1925,13 +1946,13 @@ export async function getEventForEditing(
     const reader = isSuperAdmin ? createAdminClient() : supabase
 
     const eventSelectWithAgenda =
-      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, has_schedule, updated_at"
+      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, has_schedule, max_tickets_per_user, updated_at"
     const eventSelectWithPicker =
-      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, updated_at"
+      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, max_tickets_per_user, updated_at"
     const eventSelectWithPlace =
-      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, province, department, venue_map, updated_at"
+      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, province, department, venue_map, max_tickets_per_user, updated_at"
     const eventSelectCore =
-      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, venue_map, updated_at"
+      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, venue_map, max_tickets_per_user, updated_at"
 
     let eventQuery = await reader
       .from("events")
@@ -2329,6 +2350,9 @@ export async function getEventForEditing(
           eventId,
           (event as { lineup?: unknown }).lineup,
         ),
+        maxTicketsPerUser: resolvePurchaseLimit(
+          (event as { max_tickets_per_user?: number | null }).max_tickets_per_user,
+        ),
       },
       zoneTierPricing: (pricingRows ?? []).map((row) => ({
         id: row.id,
@@ -2553,6 +2577,14 @@ export async function createCompleteEvent(
     () => undefined,
   )
   await persistEventSchedule(rpcClient, String(eventId), formValues)
+  const purchaseLimitError = await persistEventMaxTicketsPerUser(
+    rpcClient,
+    String(eventId),
+    formValues.maxTicketsPerUser,
+  )
+  if (purchaseLimitError) {
+    return persistFailure(purchaseLimitError)
+  }
   const venueId = await persistEventVenueFields(
     rpcClient,
     String(eventId),
@@ -2718,6 +2750,14 @@ export async function updateCompleteEvent(
   }
   await persistLogicalEventZones(mutationClient, eventId, formValues)
   if (formValues.tickets.length === 0) {
+    const purchaseLimitError = await persistEventMaxTicketsPerUser(
+      mutationClient,
+      eventId,
+      formValues.maxTicketsPerUser,
+    )
+    if (purchaseLimitError) {
+      return persistFailure(purchaseLimitError)
+    }
     revalidatePath(`/admin/events/${eventId}`)
     revalidatePath(`/admin/events/${eventId}/edit`)
     return { success: true, eventId, venueId }
@@ -2793,6 +2833,14 @@ export async function updateCompleteEvent(
   })
 
   if (rpcResult.error && isRelationalIntegrityError(rpcResult.error.message)) {
+    const purchaseLimitError = await persistEventMaxTicketsPerUser(
+      mutationClient,
+      eventId,
+      formValues.maxTicketsPerUser,
+    )
+    if (purchaseLimitError) {
+      return persistFailure(purchaseLimitError)
+    }
     return { success: true, eventId, venueId }
   }
 
@@ -2823,6 +2871,14 @@ export async function updateCompleteEvent(
     ends_at: event.ends_at,
     schedule_days: event.schedule_days,
   })
+  const purchaseLimitError = await persistEventMaxTicketsPerUser(
+    mutationClient,
+    eventId,
+    formValues.maxTicketsPerUser,
+  )
+  if (purchaseLimitError) {
+    return persistFailure(purchaseLimitError)
+  }
 
   const materializeError = await resyncEventSeatingUnitsAfterMapSave(
     mutationClient,
@@ -3531,7 +3587,6 @@ export async function updateEventCommercialSettings(
   }
 
   revalidatePath(`/admin/events/${eventId}`)
-  revalidatePath(`/admin/events/${eventId}/settings`)
   revalidatePath(`/admin/events/${eventId}/edit`)
   revalidatePath(`/events/${eventId}`)
   revalidatePath(`/superadmin/events/${eventId}`)

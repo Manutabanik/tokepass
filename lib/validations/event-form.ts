@@ -240,6 +240,13 @@ const eventFormObject = z
       .min(1, "Creá al menos un tipo de entrada."),
     ticketsDefaultTab: z.enum(DEFAULT_TICKET_TABS).optional().default("auto"),
     lineup: z.array(lineupDraftItemSchema).optional().default([]),
+    maxTicketsPerUser: z
+      .number()
+      .int()
+      .min(1, "El tope de compra debe ser al menos 1.")
+      .max(200, "El tope de compra no puede superar 200.")
+      .nullable()
+      .optional(),
   })
   .superRefine((data, context) => {
     const tierNames = new Set<string>()
@@ -555,6 +562,13 @@ export const draftEventSchema = z.object({
   tickets: z.array(draftTicketSchema).optional().default([]),
   ticketsDefaultTab: z.enum(DEFAULT_TICKET_TABS).optional().default("auto"),
   lineup: z.array(lineupDraftItemSchema).optional().default([]),
+  maxTicketsPerUser: z
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .nullable()
+    .optional(),
 })
 
 export type EventFormValues = z.infer<typeof publishEventSchema>
@@ -769,5 +783,11 @@ export function coerceDraftEventForm(
         ? raw.ticketsDefaultTab
         : "auto",
     lineup: Array.isArray(raw.lineup) ? raw.lineup : [],
+    maxTicketsPerUser:
+      raw.maxTicketsPerUser === undefined
+        ? undefined
+        : raw.maxTicketsPerUser == null || Number(raw.maxTicketsPerUser) <= 0
+          ? null
+          : Math.floor(Number(raw.maxTicketsPerUser)),
   } as EventFormValues
 }

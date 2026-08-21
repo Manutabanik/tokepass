@@ -88,8 +88,8 @@ export async function updateEventPurchaseLimits(
 
     if (error) return { success: false, error: error.message }
 
-    revalidatePath(`/admin/events/${eventId}/settings`)
     revalidatePath(`/admin/events/${eventId}`)
+    revalidatePath(`/admin/events/${eventId}/edit`)
     revalidatePath(`/events/${eventId}`)
 
     return {

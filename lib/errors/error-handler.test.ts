@@ -90,6 +90,7 @@ describe("error handler", () => {
     assert.equal(wizardStepFromPath(["basics", "scheduleDays"]), 1)
     assert.equal(wizardStepFromPath(["venue", "venueName"]), 1)
     assert.equal(wizardStepFromPath(["tickets", 0, "dayId"]), 2)
+    assert.equal(wizardStepFromPath(["maxTicketsPerUser"]), 2)
     assert.equal(wizardStepFromPath(["lineup", 0, "name"]), 4)
   })
 

@@ -178,7 +178,7 @@ export function wizardStepFromPath(path: ReadonlyArray<PropertyKey>): 0 | 1 | 2 
   const root = String(path[0] ?? "")
   const field = String(path[1] ?? "")
   if (root === "lineup") return 4
-  if (root === "tickets") return 2
+  if (root === "tickets" || root === "maxTicketsPerUser") return 2
   if (root === "venue") return 1
   if (root === "basics") {
     if (
