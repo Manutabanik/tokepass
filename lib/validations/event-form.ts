@@ -43,6 +43,10 @@ import { validateSectorModalities } from "@/lib/seating/seating-type"
 import { EVENT_VISIBILITY_VALUES } from "@/types/events"
 import { parseVenueMap } from "@/types/venue-map"
 import { TICKET_TIER_VISIBILITY_VALUES } from "@/types/tickets"
+import {
+  EVENT_DELIVERY_MODES,
+  normalizeAccessLink,
+} from "@/lib/events/delivery-mode"
 
 /** ATP = Apta Todo Público. */
 export const AGE_RESTRICTION_VALUES = ["atp", "16", "18"] as const
@@ -216,6 +220,8 @@ const eventFormObject = z
       }),
       hasSeatingPlan: z.boolean().optional().default(false),
       hasSchedule: z.boolean().optional().default(false),
+      deliveryMode: z.enum(EVENT_DELIVERY_MODES).optional().default("PRESENCIAL"),
+      accessLink: z.string().optional().default(""),
     }),
     venue: z.object({
       mode: z.enum(["existing", "new"]),
@@ -375,7 +381,18 @@ const eventFormObject = z
       }
     }
 
-    if (data.basics.hasSeatingPlan) {
+    if (data.basics.deliveryMode === "ONLINE") {
+      const link = (data.basics.accessLink ?? "").trim()
+      if (link && !normalizeAccessLink(link)) {
+        context.addIssue({
+          code: "custom",
+          path: ["basics", "accessLink"],
+          message: "Ingresá un link http(s) válido.",
+        })
+      }
+    }
+
+    if (data.basics.deliveryMode !== "ONLINE" && data.basics.hasSeatingPlan) {
       if (data.venue.venueName.trim().length < 2) {
         context.addIssue({
           code: "custom",
@@ -401,7 +418,7 @@ const eventFormObject = z
       venueMap: data.venue.venueMap,
       zones: data.venue.zones,
     })
-    if (capacitySnap.exceeded) {
+    if (data.basics.deliveryMode !== "ONLINE" && capacitySnap.exceeded) {
       context.addIssue({
         code: "custom",
         path: ["tickets"],
@@ -424,6 +441,7 @@ const eventFormObject = z
         })
       }
 
+      if (data.basics.deliveryMode === "ONLINE") continue
       if (tier.layoutType !== "general") continue
       const sector = findLogicalSector(data.venue.zones, tier.seatingSectorId)
       if (!sector) continue
@@ -443,7 +461,10 @@ const eventFormObject = z
       }
     }
 
-    if (data.venue.includesSeatingMap || data.venue.venueMap) {
+    if (
+      data.basics.deliveryMode !== "ONLINE" &&
+      (data.venue.includesSeatingMap || data.venue.venueMap)
+    ) {
       for (const issue of validateSectorModalities(
         parseVenueMap(data.venue.venueMap),
       )) {
@@ -456,6 +477,7 @@ const eventFormObject = z
     }
 
     if (
+      data.basics.deliveryMode !== "ONLINE" &&
       data.basics.hasSeatingPlan &&
       !hasBlueprintZones &&
       !usesSeatingMap
@@ -572,6 +594,8 @@ export const draftEventSchema = z.object({
       .default(""),
     hasSeatingPlan: z.boolean().optional().default(false),
     hasSchedule: z.boolean().optional().default(false),
+    deliveryMode: z.enum(EVENT_DELIVERY_MODES).optional().default("PRESENCIAL"),
+    accessLink: z.string().optional().default(""),
   }),
   venue: z
     .object({
@@ -802,6 +826,9 @@ export function coerceDraftEventForm(
       ageRestriction: age,
       hasSeatingPlan: Boolean(raw.basics.hasSeatingPlan),
       hasSchedule: Boolean(raw.basics.hasSchedule),
+      deliveryMode:
+        raw.basics.deliveryMode === "ONLINE" ? "ONLINE" : "PRESENCIAL",
+      accessLink: raw.basics.accessLink ?? "",
     },
     venue: {
       mode:

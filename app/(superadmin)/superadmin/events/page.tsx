@@ -89,7 +89,7 @@ export default async function SuperAdminEventsPage() {
                         </p>
                         <p className="mt-1 flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
                           <MapPin className="size-3 shrink-0" aria-hidden="true" />
-                          <span className="truncate">{event.location}</span>
+                          <span className="truncate">{event.location?.trim() || "Online"}</span>
                         </p>
                       </Link>
                     </TableCell>

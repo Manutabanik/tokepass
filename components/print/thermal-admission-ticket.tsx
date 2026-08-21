@@ -8,7 +8,7 @@ import { ticketOrderIdShort, ticketPrintCode } from "@/lib/ticket-print"
 export type ThermalAdmissionTicketProps = {
   eventTitle: string
   eventDate: string
-  eventLocation: string
+  eventLocation: string | null
   tierName: string
   qrPayload: string
   ticketCode: string
@@ -46,7 +46,7 @@ export function ThermalAdmissionTicket({
 }: ThermalAdmissionTicketProps) {
   const dateLabel = eventDate ? formatEventDay(eventDate) : ""
   const timeLabel = eventDate ? formatEventTime(eventDate) : ""
-  const venue = eventLocation.trim()
+  const venue = (eventLocation ?? "").trim() || "Online"
   const code = ticketPrintCode(ticketCode)
   const orderShort = ticketOrderIdShort(orderId)
   const issuedLabel = issuedAt ? formatDateTime(issuedAt) : ""

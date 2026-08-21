@@ -121,7 +121,7 @@ function groupTicketsByEvent(tickets: MyTicket[]): TicketEventGroup[] {
       eventId: ticket.eventId,
       eventTitle: ticket.eventTitle,
       eventDate: ticket.eventDate,
-      eventLocation: ticket.venueName ?? ticket.eventLocation,
+      eventLocation: ticket.venueName ?? ticket.eventLocation ?? "Online",
       flyerUrl: ticket.flyerUrl,
       tickets: [ticket],
     })

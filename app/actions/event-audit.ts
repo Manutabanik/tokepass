@@ -37,7 +37,7 @@ export type AuditEventRow = {
   organizerId: string
   title: string
   date: string
-  location: string
+  location: string | null
   flyerUrl: string | null
   imageUrl: string | null
   reviewNote: string | null
@@ -55,7 +55,7 @@ type AuditQueryRow = {
   organizer_id: string
   title: string
   date: string
-  location: string
+  location: string | null
   flyer_url: string | null
   image_url: string | null
   review_note: string | null

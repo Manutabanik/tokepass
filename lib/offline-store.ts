@@ -21,7 +21,9 @@ export type OfflineEventData = {
   eventDate: string
   ends_at?: string | null
   doorsOpenAt?: string
-  eventLocation: string
+  eventLocation: string | null
+  deliveryMode?: "PRESENCIAL" | "ONLINE"
+  accessLink?: string | null
   flyerUrl: string | null
   socialShareImageUrl?: string | null
   organizerName?: string | null
@@ -57,7 +59,7 @@ export type OfflineTicketRecord = {
   totp_secret: string
   event_data: OfflineEventData
   status: TicketStatus
-  qr_code: string
+  qr_code: string | null
   transfer_count: number
   max_transfers_allowed: number
   created_at: string
@@ -296,6 +298,8 @@ export function ticketToOfflineRecord(
       ends_at: ticket.endsAt,
       doorsOpenAt: ticket.doorsOpenAt,
       eventLocation: ticket.eventLocation,
+      deliveryMode: ticket.deliveryMode,
+      accessLink: ticket.accessLink,
       flyerUrl: ticket.flyerUrl,
       socialShareImageUrl: ticket.socialShareImageUrl,
       organizerName: ticket.organizerName,
@@ -340,6 +344,8 @@ export function offlineRecordToTicket(record: OfflineTicketRecord): MyTicket {
       record.event_data.activeResaleListingId
         ? ""
         : record.totp_secret,
+    deliveryMode: record.event_data.deliveryMode ?? "PRESENCIAL",
+    accessLink: record.event_data.accessLink ?? null,
     transferCount: record.transfer_count ?? 0,
     maxTransfersAllowed: record.max_transfers_allowed ?? 1,
     createdAt: record.created_at,

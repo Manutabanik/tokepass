@@ -193,3 +193,41 @@ export function assertCartTierPurchaseLimits(input: {
   }
   return { ok: true }
 }
+
+export function assertCartRemainingStock(input: {
+  items: Array<{ tierId: string; quantity: number }>
+  tiers: Array<{
+    id: string
+    name?: string | null
+    capacity?: number | null
+    sold?: number | null
+  }>
+}): { ok: true } | { ok: false; error: string } {
+  const qtyByTier = new Map<string, number>()
+  for (const item of input.items) {
+    const tierId = item.tierId.trim()
+    const qty = Math.max(0, Math.floor(Number(item.quantity)) || 0)
+    if (!tierId || qty <= 0) continue
+    qtyByTier.set(tierId, (qtyByTier.get(tierId) ?? 0) + qty)
+  }
+
+  const tiers = new Map(input.tiers.map((tier) => [tier.id, tier]))
+  for (const [tierId, quantity] of qtyByTier) {
+    const tier = tiers.get(tierId)
+    if (!tier) continue
+    const capacity = Math.max(0, Math.floor(Number(tier.capacity)) || 0)
+    const sold = Math.max(0, Math.floor(Number(tier.sold)) || 0)
+    const remaining = Math.max(0, capacity - sold)
+    if (quantity > remaining) {
+      const name = tier.name?.trim() || "esta tarifa"
+      return {
+        ok: false,
+        error:
+          remaining <= 0
+            ? `${name} se agotó.`
+            : `Solo quedan ${remaining} de ${name}.`,
+      }
+    }
+  }
+  return { ok: true }
+}

@@ -30,7 +30,7 @@ export type TicketPdfSource = {
   qrPayload: string
   eventTitle: string
   eventDate: string
-  eventLocation: string
+  eventLocation: string | null
   tierName: string
   holderName: string
   holderDni: string | null
@@ -128,7 +128,7 @@ export function mapPrintableTicketToPdfModel(
     ticketTierName: ticket.tierName,
     sectorName: ticketPdfSectorName(ticket),
     eventDateFormatted,
-    eventLocationName: ticket.eventLocation.trim(),
+    eventLocationName: (ticket.eventLocation ?? "").trim() || "Online",
     qrDataUri: assets.qrDataUri,
     qrPayload: ticket.qrPayload,
     ticketCode: ticketPrintCode(ticket.id),

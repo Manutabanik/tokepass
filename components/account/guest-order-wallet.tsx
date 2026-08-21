@@ -15,11 +15,16 @@ import { BrandMark } from "@/components/shared/brand-logo"
 import { formatEventDay, formatEventTime } from "@/lib/format"
 import { ticketBackupCode } from "@/lib/ticket-print"
 import { ticketSectorLabel, ticketVenueLine } from "@/lib/ticket-stub"
+import { eventAccessTimeLabel, isOnlineDelivery } from "@/lib/events/delivery-mode"
+import { OnlineAccessButton } from "@/components/account/online-access-button"
 
 function GuestTicketCard({ ticket }: { ticket: MyTicket }) {
   const [scanOpen, setScanOpen] = useState(false)
-  const canShowQr = ticket.status === "valid" && Boolean(ticket.totpSecret)
+  const onlineEvent = isOnlineDelivery(ticket.deliveryMode)
+  const canShowQr =
+    !onlineEvent && ticket.status === "valid" && Boolean(ticket.totpSecret)
   const isStatic = ticket.qrType === "static"
+  const totpSecret = ticket.totpSecret ?? ""
   const doorsAt = ticket.doorsOpenAt || ticket.eventDate
   const sector = ticketSectorLabel(ticket)
   const venue = ticketVenueLine(ticket)
@@ -51,7 +56,8 @@ function GuestTicketCard({ ticket }: { ticket: MyTicket }) {
               {formatEventDay(ticket.eventDate)}
             </span>
             <span className="text-xs text-muted-foreground">
-              Puertas {formatEventTime(doorsAt)}
+              {eventAccessTimeLabel(ticket.deliveryMode)}{" "}
+              {formatEventTime(doorsAt)}
             </span>
           </span>
         </p>
@@ -75,21 +81,25 @@ function GuestTicketCard({ ticket }: { ticket: MyTicket }) {
         {sector}
       </div>
 
-      {canShowQr ? (
+      {onlineEvent && ticket.status === "valid" ? (
+        <div className="p-5">
+          <OnlineAccessButton href={ticket.accessLink} />
+        </div>
+      ) : canShowQr ? (
         <div className="p-5 text-center">
           <div className="mx-auto aspect-square w-full max-w-sm rounded-2xl bg-white p-4">
             <QrEnlargeTrigger onOpen={() => setScanOpen(true)} className="block h-full w-full">
               {isStatic ? (
                 <StaticSignedQR
                   ticketId={ticket.id}
-                  totpSecret={ticket.totpSecret}
+                  totpSecret={totpSecret}
                   size={200}
                   className="w-full max-w-none p-0 shadow-none"
                 />
               ) : (
                 <LivingTicketQR
                   ticketId={ticket.id}
-                  totpSecret={ticket.totpSecret}
+                  totpSecret={totpSecret}
                   size={200}
                 />
               )}
@@ -100,7 +110,7 @@ function GuestTicketCard({ ticket }: { ticket: MyTicket }) {
             onOpenChange={setScanOpen}
             isStatic={isStatic}
             ticketId={ticket.id}
-            totpSecret={ticket.totpSecret}
+            totpSecret={totpSecret}
             holderName={ticket.holderName}
             holderDni={ticket.holderDni}
           />

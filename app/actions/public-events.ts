@@ -73,6 +73,8 @@ import { parseVenueMap, type InteractiveVenueMap } from "@/types/venue-map"
 import { effectiveSeatingUnitStatus } from "@/lib/seating/venue-map-occupancy"
 import type { EventPixelConfig } from "@/lib/analytics/pixels"
 import type { PublicSponsor } from "@/lib/sponsors"
+import type { EventDeliveryMode } from "@/types/database"
+import { parseDeliveryMode } from "@/lib/events/delivery-mode"
 
 export type CatalogEvent = {
   id: string
@@ -82,7 +84,7 @@ export type CatalogEvent = {
   date: string
   endsAt: string | null
   scheduleDays: ScheduleDay[]
-  location: string
+  location: string | null
   imageUrl: string | null
   status: Event["status"]
   venueName: string | null
@@ -98,6 +100,7 @@ export type CatalogEvent = {
   isSponsoredByTokePass: boolean
   /** FK event_categories — taxonomía centralizada. */
   categoryId: string | null
+  deliveryMode: EventDeliveryMode
   /** Lineup público (`event_artists` o JSON `events.lineup`). */
   artists: CatalogEventArtist[]
 }
@@ -109,8 +112,9 @@ export type EventDetails = {
   description: string | null
   date: string
   endsAt: string | null
-  location: string
+  location: string | null
   imageUrl: string | null
+  deliveryMode: EventDeliveryMode
   /** 1.91:1 para WhatsApp/Meta. Si falta, el SEO usa el flyer. */
   socialShareImageUrl: string | null
   status: Event["status"]
@@ -205,7 +209,7 @@ type EventListRow = {
   date: string
   ends_at: string | null
   schedule_days: unknown
-  location: string
+  location: string | null
   image_url: string | null
   flyer_url: string | null
   status: Event["status"]
@@ -215,6 +219,7 @@ type EventListRow = {
   featured_until: string | null
   is_sponsored_by_tokepass: boolean | null
   category_id: string | null
+  delivery_mode?: EventDeliveryMode | null
   venues: { name: string; location: string; capacity?: number | null } | null
   ticket_tiers: {
     price: number
@@ -233,10 +238,11 @@ type EventDetailRow = {
   title: string
   description: string | null
   date: string
-  location: string
+  location: string | null
   image_url: string | null
   flyer_url: string | null
   social_share_image_url?: string | null
+  delivery_mode?: EventDeliveryMode | null
   status: Event["status"]
   visibility: Event["visibility"] | null
   organizer_id?: string
@@ -330,6 +336,7 @@ function startOfTodayIso(): string {
 
 const EVENT_LIST_SELECT =
   "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location, capacity), ticket_tiers(price, capacity, sold, visibility), profiles!events_organizer_id_fkey(full_name)"
+const EVENT_LIST_SELECT_WITH_DELIVERY = `${EVENT_LIST_SELECT}, delivery_mode`
 
 const EVENT_ARTISTS_EMBED =
   "event_artists(artist_id, artists(id, name, image_url, spotify_id))"
@@ -339,7 +346,8 @@ const EVENT_ARTISTS_INNER_EMBED =
   "event_artists!inner(artist_id, artists(id, name, image_url, spotify_id))"
 const EVENT_ARTISTS_INNER_EMBED_BASIC =
   "event_artists!inner(artist_id, artists(id, name, image_url))"
-const EVENT_LIST_SELECT_WITH_LINEUP = `${EVENT_LIST_SELECT}, lineup`
+const EVENT_LIST_SELECT_WITH_LINEUP = `${EVENT_LIST_SELECT_WITH_DELIVERY}, lineup`
+const EVENT_LIST_SELECT_WITH_LINEUP_LEGACY = `${EVENT_LIST_SELECT}, lineup`
 const EVENT_LIST_SELECT_WITH_ARTISTS = `${EVENT_LIST_SELECT_WITH_LINEUP}, ${EVENT_ARTISTS_EMBED}`
 const EVENT_LIST_SELECT_WITH_ARTISTS_BASIC = `${EVENT_LIST_SELECT_WITH_LINEUP}, ${EVENT_ARTISTS_EMBED_BASIC}`
 const EVENT_LIST_SELECT_BY_ARTIST = `${EVENT_LIST_SELECT_WITH_LINEUP}, ${EVENT_ARTISTS_INNER_EMBED}`
@@ -414,11 +422,15 @@ export async function getPublishedEvents(
         EVENT_LIST_SELECT_BY_ARTIST,
         EVENT_LIST_SELECT_BY_ARTIST_BASIC,
         EVENT_LIST_SELECT_WITH_LINEUP,
+        EVENT_LIST_SELECT_WITH_LINEUP_LEGACY,
+        EVENT_LIST_SELECT,
       ]
     : [
         EVENT_LIST_SELECT_WITH_ARTISTS,
         EVENT_LIST_SELECT_WITH_ARTISTS_BASIC,
         EVENT_LIST_SELECT_WITH_LINEUP,
+        EVENT_LIST_SELECT_WITH_LINEUP_LEGACY,
+        EVENT_LIST_SELECT,
       ]
 
   for (const [index, select] of selects.entries()) {
@@ -588,6 +600,7 @@ function mapEventListRow(event: EventListRow): CatalogEvent {
     featuredUntil: stillActive ? featuredUntil : null,
     isSponsoredByTokePass: Boolean(event.is_sponsored_by_tokepass),
     categoryId: event.category_id ?? null,
+    deliveryMode: parseDeliveryMode(event.delivery_mode),
     artists: mapCatalogEventArtists({
       eventArtists: event.event_artists,
       lineupJson: event.lineup,
@@ -609,6 +622,7 @@ export async function getFeaturedEvents(options?: {
     EVENT_LIST_SELECT_WITH_ARTISTS,
     EVENT_LIST_SELECT_WITH_ARTISTS_BASIC,
     EVENT_LIST_SELECT_WITH_LINEUP,
+    EVENT_LIST_SELECT_WITH_LINEUP_LEGACY,
     EVENT_LIST_SELECT,
   ]
 
@@ -654,7 +668,7 @@ export async function getFeaturedEvents(options?: {
   if (province && province !== "todas") {
     mapped = mapped.filter((event) => {
       const place =
-        `${event.venueLocation ?? ""} ${event.location} ${event.venueName ?? ""}`.toLowerCase()
+        `${event.venueLocation ?? ""} ${event.location ?? ""} ${event.venueName ?? ""}`.toLowerCase()
       return place.includes(province)
     })
   }
@@ -938,7 +952,7 @@ async function loadEventDetails(
   if (!resolvedId) return null
 
   const eventSelectWithPicker =
-    "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, social_share_image_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, lineup, default_ticket_tab, venue_id, has_seating_plan, venue_map, venues(id, name, location, address, city, capacity, max_capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, bundle_items, bundle_type, description, highlight_badge, min_purchase_limit, max_purchase_limit), profiles!events_organizer_id_fkey(full_name)"
+    "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, social_share_image_url, status, visibility, schedule_days, organizer_id, category_id, delivery_mode, is_sponsored_by_tokepass, max_free_tickets, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, lineup, default_ticket_tab, venue_id, has_seating_plan, venue_map, venues(id, name, location, address, city, capacity, max_capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, bundle_items, bundle_type, description, highlight_badge, min_purchase_limit, max_purchase_limit), profiles!events_organizer_id_fkey(full_name)"
   const eventSelectCore =
     "id, slug, created_at, title, description, date, ends_at, location, image_url, flyer_url, status, visibility, schedule_days, organizer_id, category_id, is_sponsored_by_tokepass, max_free_tickets, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, meta_pixel_id, meta_pixel_enabled, tiktok_pixel_id, tiktok_pixel_enabled, ga4_measurement_id, ga4_enabled, promo_video_url, gallery_urls, venue_id, has_seating_plan, venue_map, venues(id, name, location, address, city, capacity, max_capacity, seating_background_url, seating_layout, venue_map, latitude, longitude), ticket_tiers(id, name, price, list_price, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, category, tier_type, bundle_items, bundle_type), profiles!events_organizer_id_fkey(full_name)"
 
@@ -955,7 +969,7 @@ async function loadEventDetails(
 
   if (
     error &&
-    /default_ticket_tab|highlight_badge|min_purchase_limit|max_purchase_limit|ticket_tiers.*description|venue_map|lineup|max_capacity|has_seating_plan|social_share_image_url|schema cache|PGRST204|42703/i.test(
+    /default_ticket_tab|highlight_badge|min_purchase_limit|max_purchase_limit|ticket_tiers.*description|venue_map|lineup|max_capacity|has_seating_plan|social_share_image_url|delivery_mode|access_link|schema cache|PGRST204|42703/i.test(
       error.message,
     )
   ) {
@@ -1146,6 +1160,7 @@ async function loadEventDetails(
     endsAt: event.ends_at ?? null,
     location: event.location,
     imageUrl: event.flyer_url ?? event.image_url,
+    deliveryMode: parseDeliveryMode(event.delivery_mode),
     socialShareImageUrl: event.social_share_image_url?.trim() || null,
     status: event.status,
     visibility:
@@ -1187,8 +1202,8 @@ async function loadEventDetails(
       : hasInteractiveVenueMap(venueMap)
         ? {
             id: event.venue_id ?? event.id,
-            name: event.location,
-            location: event.location,
+            name: event.location ?? "Online",
+            location: event.location ?? "Online",
             address: null,
             city: null,
             capacity: 0,
@@ -1531,7 +1546,7 @@ function relatedMatchScore(
   const needle = province?.trim().toLowerCase() ?? ""
   if (needle) {
     const place =
-      `${event.venueLocation ?? ""} ${event.location} ${event.venueName ?? ""}`.toLowerCase()
+      `${event.venueLocation ?? ""} ${event.location ?? ""} ${event.venueName ?? ""}`.toLowerCase()
     if (place.includes(needle)) score += 1
   }
   return score

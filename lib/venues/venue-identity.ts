@@ -18,5 +18,8 @@ export function canPersistCatalogVenueName(
   name: string | null | undefined,
 ): boolean {
   const normalized = normalizeExactVenueName(name)
-  return normalized.length >= 2 && !isDraftPlaceholderVenueName(normalized)
+  if (normalized.length < 2 || isDraftPlaceholderVenueName(normalized)) {
+    return false
+  }
+  return normalized.toLowerCase() !== "streaming / online"
 }

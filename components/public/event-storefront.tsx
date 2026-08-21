@@ -16,7 +16,7 @@ import type { ResaleListingPublic } from "@/app/actions/resale"
 import { EventDateSelector } from "@/components/public/event-date-selector"
 import { EventActionBar } from "@/components/public/event-action-bar"
 import { EventStorefrontBuyBox } from "@/components/public/event-storefront-buy-box"
-import { EventStorefrontPurchaseDock } from "@/components/public/event-storefront-purchase-dock"
+import { FloatingCheckoutDock } from "@/components/public/floating-checkout-dock"
 import { AnalyticsTracker } from "@/components/public/analytics-tracker"
 import { EventAboutExpandable } from "@/components/public/event-about-expandable"
 import { EventExperienceGallery } from "@/components/public/event-experience-gallery"
@@ -175,8 +175,13 @@ export function EventStorefront({
     !finished &&
     eventNeedsInteractiveCanvas(event.venue?.venue_map, event.tiers)
   const demand = finished || soldOut ? null : demandLabel(event.tiers)
-  const venueName = event.venue?.name ?? event.location
-  const address = event.venue?.location ?? event.location
+  const isOnlineEvent = event.deliveryMode === "ONLINE"
+  const venueName = isOnlineEvent
+    ? "Transmisión online"
+    : (event.venue?.name ?? event.location)
+  const address = isOnlineEvent
+    ? "Online"
+    : (event.venue?.location ?? event.location)
   const description =
     event.description?.trim() ||
     "El organizador todavía no cargó una descripción detallada."
@@ -291,10 +296,14 @@ export function EventStorefront({
   }, [event.tiers, selectedDate])
 
   function renderPurchaseAside() {
-    const dateLabel =
+    const dateLabel = [
+      isOnlineEvent ? "Inicio de transmisión" : null,
       availableDates.find((day) => day.id === selectedDate)?.label ||
-      formatEventDay(event.date)
-    const city = event.venue?.city?.trim() || ""
+        formatEventDay(event.date),
+    ]
+      .filter(Boolean)
+      .join(" · ")
+    const city = isOnlineEvent ? "" : event.venue?.city?.trim() || ""
     const venueLabel = [venueName, city].filter(Boolean).join(" · ")
 
     return (
@@ -370,7 +379,7 @@ export function EventStorefront({
               title={event.title}
               showBackLink={showBackLink}
               date={event.date}
-              location={address}
+              location={address ?? undefined}
               details={event.description}
             />
             
@@ -425,6 +434,15 @@ export function EventStorefront({
             />
           </motion.div>
 
+          {showInfoCta ? (
+            <motion.div
+              variants={reduceMotion ? undefined : storefrontFade}
+              className="px-4 lg:hidden"
+            >
+              {renderPurchaseAside()}
+            </motion.div>
+          ) : null}
+
           <motion.div
             variants={reduceMotion ? undefined : storefrontFade}
             className="px-4 md:px-0"
@@ -467,12 +485,14 @@ export function EventStorefront({
           currentUserId={currentUserId}
         />
 
-        <EventLocationPanel
-          venueName={venueName}
-          address={address}
-          latitude={event.venue?.latitude ?? null}
-          longitude={event.venue?.longitude ?? null}
-        />
+        {isOnlineEvent ? null : (
+          <EventLocationPanel
+            venueName={venueName ?? ""}
+            address={address ?? ""}
+            latitude={event.venue?.latitude ?? null}
+            longitude={event.venue?.longitude ?? null}
+          />
+        )}
 
         <EventExperienceGallery urls={event.galleryUrls} />
 
@@ -486,9 +506,9 @@ export function EventStorefront({
                 Restricciones y edad
               </AccordionTrigger>
               <AccordionContent className="text-muted-foreground">
-                Verificá la política de edad del organizador en puerta. Si el
-                evento es +18, deberás presentar DNI vigente. TokePass no
-                garantiza el ingreso si no cumplís los requisitos del lugar.
+                {isOnlineEvent
+                  ? "Verificá la política de edad del organizador antes del inicio de transmisión. Si el evento es +18, el anfitrión puede pedir DNI."
+                  : "Verificá la política de edad del organizador en puerta. Si el evento es +18, deberás presentar DNI vigente. TokePass no garantiza el ingreso si no cumplís los requisitos del lugar."}
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="bring">
@@ -496,9 +516,9 @@ export function EventStorefront({
                 Qué llevar y qué no llevar
               </AccordionTrigger>
               <AccordionContent className="text-muted-foreground">
-                Llevá tu Living QR en el celular con batería. Evitá capturas
-                de pantalla: los códigos dinámicos vencen. La reventa solo es
-                válida a través del marketplace oficial de TokePass.
+                {isOnlineEvent
+                  ? "El link de transmisión aparece en Mis entradas después de pagar. No hace falta QR ni presentarse en un recinto."
+                  : "Llevá tu Living QR en el celular con batería. Evitá capturas de pantalla: los códigos dinámicos vencen. La reventa solo es válida a través del marketplace oficial de TokePass."}
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="refunds">
@@ -672,9 +692,7 @@ export function EventStorefront({
     <div
       className={cn(
         "relative isolate min-h-screen bg-background text-foreground",
-        showInfoCta
-          ? "pb-32 lg:pb-12"
-          : "pb-8 lg:pb-12",
+        showInfoCta ? "pb-28 lg:pb-12" : "pb-8 lg:pb-12",
       )}
     >
       <div
@@ -754,10 +772,10 @@ export function EventStorefront({
 
       </div>
     </div>
-    {showInfoCta ? (
-      <EventStorefrontPurchaseDock
+    {showInfoCta && isAvailable ? (
+      <FloatingCheckoutDock
         price={teaserPrice}
-        isAvailable={isAvailable}
+        actionLabel={isOnlineEvent ? "Acceder" : "Adquirir Entradas"}
         onAcquire={enterCheckout}
       />
     ) : null}

@@ -94,6 +94,12 @@ import {
   canPersistCatalogVenueName,
   normalizeExactVenueName,
 } from "@/lib/venues/venue-identity"
+import { isStreamingVenue } from "@/lib/venues/streaming-venue"
+import {
+  isOnlineDelivery,
+  normalizeAccessLink,
+  parseDeliveryMode,
+} from "@/lib/events/delivery-mode"
 import { applyMapCapacityToTickets } from "@/lib/seating/venue-map-pricing"
 import {
   listAssignableGeneralSectors,
@@ -405,7 +411,9 @@ function mapEventFormToRpcPayload(
     province: data.venue.province,
     city: data.venue.venueCity,
   })
-  const location = place.display || data.venue.venueName
+  const location = isOnlineDelivery(data.basics.deliveryMode)
+    ? ""
+    : place.display || data.venue.venueName
 
   const incomingDays = data.basics.isMultiDay
     ? normalizeScheduleDaysFromForm(data.basics.scheduleDays ?? [])
@@ -613,6 +621,20 @@ async function persistEventVenueFields(
   data: EventFormValues,
   options?: { allowCreate?: boolean },
 ): Promise<string | null> {
+  if (isOnlineDelivery(data.basics.deliveryMode)) {
+    await persistEventDeliveryProfile(client, eventId, data)
+    await client
+      .from("events")
+      .update({
+        venue_id: null,
+        location: null,
+        has_seating_plan: false,
+        updated_at: new Date().toISOString(),
+      } as never)
+      .eq("id", eventId)
+    return null
+  }
+
   const { data: eventRow } = await client
     .from("events")
     .select("id, venue_id, organizer_id")
@@ -988,12 +1010,47 @@ function identityAgeRestriction(
 }
 
 const OPTIONAL_EVENT_FLAG_COLUMNS_RE =
-  /has_seating_plan|has_schedule|schema cache|PGRST204|42703/i
+  /has_seating_plan|has_schedule|delivery_mode|access_link|schema cache|PGRST204|42703/i
+
+async function persistEventDeliveryProfile(
+  client: SupabaseClient<Database>,
+  eventId: string,
+  formValues: EventFormValues | DraftEventFormValues,
+) {
+  const deliveryMode = parseDeliveryMode(formValues.basics.deliveryMode)
+  const online = deliveryMode === "ONLINE"
+  const patch: Record<string, unknown> = {
+    delivery_mode: deliveryMode,
+    access_link: online
+      ? normalizeAccessLink(formValues.basics.accessLink)
+      : null,
+    updated_at: new Date().toISOString(),
+  }
+  if (online) {
+    patch.location = null
+    patch.has_seating_plan = false
+  }
+  const { error } = await client
+    .from("events")
+    .update(patch as never)
+    .eq("id", eventId)
+  if (error && OPTIONAL_EVENT_FLAG_COLUMNS_RE.test(error.message)) {
+    await client
+      .from("events")
+      .update({
+        location: online ? null : undefined,
+        updated_at: patch.updated_at,
+      } as never)
+      .eq("id", eventId)
+  }
+}
 
 function stripOptionalEventFlags<T extends Record<string, unknown>>(payload: T): T {
   const next = { ...payload }
   delete (next as { has_seating_plan?: boolean }).has_seating_plan
   delete (next as { has_schedule?: boolean }).has_schedule
+  delete (next as { delivery_mode?: unknown }).delivery_mode
+  delete (next as { access_link?: unknown }).access_link
   return next
 }
 
@@ -1043,6 +1100,13 @@ async function persistEventIdentityOnly(input: {
     flyer_url: flyerUrl,
     has_seating_plan: Boolean(input.formValues.basics.hasSeatingPlan),
     has_schedule: Boolean(input.formValues.basics.hasSchedule),
+    delivery_mode: parseDeliveryMode(input.formValues.basics.deliveryMode),
+    access_link: isOnlineDelivery(input.formValues.basics.deliveryMode)
+      ? normalizeAccessLink(input.formValues.basics.accessLink)
+      : null,
+    ...(isOnlineDelivery(input.formValues.basics.deliveryMode)
+      ? { location: null, has_seating_plan: false }
+      : {}),
     updated_at: new Date().toISOString(),
   }
   const { error: updateError } = await input.mutationClient
@@ -1190,7 +1254,11 @@ async function persistNewEventIdentityOnly(
     description: raw.basics.description ?? "",
     visibility: raw.basics.visibility ?? "public",
     status: "draft" as const,
-    location: "",
+    location: isOnlineDelivery(raw.basics.deliveryMode) ? null : "",
+    delivery_mode: parseDeliveryMode(raw.basics.deliveryMode),
+    access_link: isOnlineDelivery(raw.basics.deliveryMode)
+      ? normalizeAccessLink(raw.basics.accessLink)
+      : null,
     // `events.date` es NOT NULL. Solo se escribe una fecha real si el
     // usuario la cargo; si no, se usa now() como ancla de columna y no
     // se persiste schedule ni ends_at inventados.
@@ -1984,7 +2052,7 @@ export async function getEventForEditing(
     const reader = isSuperAdmin ? createAdminClient() : supabase
 
     const eventSelectWithAgenda =
-      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, has_schedule, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, is_sponsored_by_tokepass, updated_at"
+      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, has_schedule, delivery_mode, access_link, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, is_sponsored_by_tokepass, updated_at"
     const eventSelectWithPicker =
       "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, max_tickets_per_user, updated_at"
     const eventSelectWithPlace =
@@ -2332,12 +2400,31 @@ export async function getEventForEditing(
           hasSchedule: Boolean(
             (event as { has_schedule?: boolean | null }).has_schedule,
           ),
+          deliveryMode: (() => {
+            const stored = parseDeliveryMode(
+              (event as { delivery_mode?: unknown }).delivery_mode,
+            )
+            if (stored === "ONLINE") return stored
+            if (
+              isStreamingVenue({
+                venueName: venue?.name,
+                venueLocation: venue?.location ?? event.location,
+              })
+            ) {
+              return "ONLINE"
+            }
+            return stored
+          })(),
+          accessLink:
+            typeof (event as { access_link?: unknown }).access_link === "string"
+              ? String((event as { access_link?: unknown }).access_link)
+              : "",
         },
         venue: {
           mode: event.venue_id ? "existing" : "new",
           existingVenueId: event.venue_id,
           zoneType: firstZone?.type ?? "general_admission",
-          venueName: venue?.name ?? event.location,
+          venueName: venue?.name ?? event.location ?? "",
           venueLocation: composeVenuePlace({
             street:
               (typeof venue?.address === "string" && venue.address.trim()) ||
@@ -2650,6 +2737,7 @@ export async function createCompleteEvent(
     formValues,
     { allowCreate: !draftMode },
   )
+  await persistEventDeliveryProfile(rpcClient, String(eventId), formValues)
 
   const materializeError = await resyncEventSeatingUnitsAfterMapSave(
     rpcClient,
@@ -2804,6 +2892,7 @@ export async function updateCompleteEvent(
     formValues,
     { allowCreate: !draftMode },
   )
+  await persistEventDeliveryProfile(mutationClient, eventId, formValues)
   if (venueId) {
     formValues.venue.existingVenueId = venueId
   }
@@ -3020,7 +3109,7 @@ export async function publishEvent(
   const { data: event, error: eventError } = await reader
     .from("events")
     .select(
-      "id, organizer_id, status, date, location, venue_id, schedule_days, venues(id, name, location)",
+      "id, organizer_id, status, date, location, venue_id, schedule_days, delivery_mode, venues(id, name, location)",
     )
     .eq("id", eventId)
     .maybeSingle()
@@ -3058,11 +3147,14 @@ export async function publishEvent(
   }
 
   const venue = event.venues as { id: string; name: string; location: string } | null
+  const onlineEvent = isOnlineDelivery(
+    (event as { delivery_mode?: unknown }).delivery_mode,
+  )
   const hasVenue =
     Boolean(event.venue_id && venue?.name?.trim() && venue?.location?.trim()) ||
     Boolean(event.location?.trim() && event.location.trim().length >= 3)
 
-  if (!hasVenue) {
+  if (!onlineEvent && !hasVenue) {
     return persistFailure({ code: "ERROR_FALTA_UBICACION" })
   }
 

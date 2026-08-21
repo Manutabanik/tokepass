@@ -248,7 +248,7 @@ export function OrganizerEventsManager({
                     </p>
                     <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
                       <MapPin className="size-3.5" aria-hidden="true" />
-                      {event.venues?.name ?? event.location}
+                      {event.venues?.name ?? event.location?.trim() ?? "Online"}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {event.ticketsSold > 0

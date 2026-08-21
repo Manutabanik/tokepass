@@ -66,7 +66,7 @@ export function walletGoogleId(issuerId: string, suffix: string): string {
 export function buildWalletPassFields(ticket: MyTicket): WalletPassFields {
   const origin = getSeoOrigin()
   const seating = walletSeatingLabel(ticket)
-  const venue = ticket.venueName?.trim() || ticket.eventLocation
+  const venue = ticket.venueName?.trim() || ticket.eventLocation || "Online"
   const barcode = walletBarcodeValue(ticket)
 
   return {
@@ -76,7 +76,7 @@ export function buildWalletPassFields(ticket: MyTicket): WalletPassFields {
     eventTitle: ticket.eventTitle,
     holderName: ticket.holderName?.trim() || "Titular",
     venueName: venue,
-    location: ticket.eventLocation,
+    location: ticket.eventLocation ?? "Online",
     tierName: seating ? `${ticket.tierName} · ${seating}` : ticket.tierName,
     seatingLabel: seating,
     eventDateIso: toArgentinaIso8601(ticket.eventDate),

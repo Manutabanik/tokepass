@@ -154,7 +154,7 @@ export async function getMassRefundPreview(
     eventId: row.id,
     eventTitle: row.title,
     eventDate: row.date,
-    eventLocation: row.location,
+    eventLocation: row.location?.trim() || "Online",
     eventStatus: row.status,
     organizerId: row.organizer_id,
     organizerName:

@@ -24,6 +24,7 @@ export type DiscoveryCategory = {
   id: string
   label: string
   icon: DiscoveryCategoryIcon
+  slug?: string
   /** Nombre Lucide crudo desde DB (prioridad sobre `icon`). */
   iconName?: string | null
   /** @deprecated Preferí match exacto por `CatalogEvent.categoryId`. */
@@ -33,7 +34,7 @@ export type DiscoveryCategory = {
 
 /** Fallback local si la tabla aún no existe / falla el fetch. */
 export const DEFAULT_DISCOVERY_CATEGORIES: DiscoveryCategory[] = [
-  { id: "all", label: "Todos", icon: "sparkles" },
+  { id: "all", label: "Todos", icon: "sparkles", slug: "all" },
   {
     id: "fiestas",
     label: "Fiestas",

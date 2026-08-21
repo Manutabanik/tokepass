@@ -13,6 +13,11 @@ import type {
   DiscoveryDatePreset,
   DiscoveryFilterDraft,
 } from "@/lib/discovery-filters"
+import {
+  DISCOVERY_NICHES,
+  type DiscoveryNicheId,
+} from "@/lib/discovery-niches"
+import { cn } from "@/lib/utils"
 
 type HeroSectionProps = {
   events: CatalogEvent[]
@@ -30,6 +35,8 @@ type HeroSectionProps = {
   datePreset?: DiscoveryDatePreset
   featuredArtists?: FeaturedDiscoveryArtist[]
   categories?: DiscoveryCategory[]
+  niche: DiscoveryNicheId
+  onNicheChange: (value: DiscoveryNicheId) => void
   onCommitFilters: (draft: DiscoveryFilterDraft) => void
 }
 
@@ -49,6 +56,8 @@ export function HeroSection({
   datePreset,
   featuredArtists,
   categories = DEFAULT_DISCOVERY_CATEGORIES,
+  niche,
+  onNicheChange,
   onCommitFilters,
 }: HeroSectionProps) {
   const reduceMotion = useReducedMotion()
@@ -79,15 +88,15 @@ export function HeroSection({
         className="mx-auto flex max-w-4xl flex-col items-center px-5 text-center"
       >
         <h1 className="text-balance text-4xl font-black leading-[1.05] tracking-tight text-zinc-900 sm:text-5xl dark:text-white lg:text-7xl lg:leading-none">
-          <span className="block lg:inline">Tu próxima gran noche </span>
+          <span className="block lg:inline">Tu próxima gran experiencia </span>
           <span className="mt-1 block bg-gradient-to-r from-violet-600 via-fuchsia-500 to-cyan-500 bg-clip-text pb-1 text-transparent sm:mt-1.5 dark:from-violet-400 dark:via-fuchsia-400 dark:to-cyan-400 dark:drop-shadow-[0_0_35px_rgba(168,85,247,0.45)] lg:mt-0 lg:inline">
             empieza acá.
           </span>
         </h1>
 
         <p className="mx-auto mt-5 max-w-xl text-pretty text-base leading-relaxed text-zinc-600 sm:mt-6 dark:text-slate-300/90 lg:text-lg">
-          Descubrí las mejores fiestas, festivales y recitales de tu ciudad.
-          Asegurá tu lugar en 2 clicks y llevá tu entrada 100% offline.
+          Descubrí eventos, capacitaciones y espectáculos. Asegurá tu lugar
+          presencial o virtual.
         </p>
       </motion.div>
 
@@ -108,8 +117,33 @@ export function HeroSection({
           datePreset={datePreset}
           featuredArtists={featuredArtists}
           categories={categories}
+          niche={niche}
           onCommitFilters={onCommitFilters}
         />
+        <div
+          className="mt-4 flex gap-3 overflow-x-auto"
+          role="tablist"
+          aria-label="Nichos"
+        >
+          {DISCOVERY_NICHES.map((item) => {
+            const active = niche === item.id
+            return (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => onNicheChange(item.id)}
+                className={cn(
+                  "shrink-0 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-medium transition-colors hover:bg-white/10",
+                  active && "bg-white/15",
+                )}
+              >
+                {item.label}
+              </button>
+            )
+          })}
+        </div>
       </div>
     </section>
   )

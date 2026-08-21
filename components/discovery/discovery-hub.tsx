@@ -39,6 +39,7 @@ import {
   type DiscoveryDatePreset,
   type DiscoveryFilterDraft,
 } from "@/lib/discovery-filters"
+import type { DiscoveryNicheId } from "@/lib/discovery-niches"
 import type { FeaturedRotationResult } from "@/lib/featured-rotation"
 import { isFeaturedRailEligible } from "@/lib/featured-rotation"
 import { cn } from "@/lib/utils"
@@ -119,6 +120,7 @@ function DiscoveryHubInner({
     category: urlFilters.categoryId,
     artist: urlFilters.artistId,
     when: urlFilters.datePreset,
+    niche: urlFilters.niche,
   }).toString()
   const [query, setQuery] = useState(
     enableUrlSync ? urlFilters.query : initialQuery,
@@ -138,6 +140,9 @@ function DiscoveryHubInner({
       ? urlFilters.datePreset
       : parseDatePreset(initialDatePreset),
   )
+  const [niche, setNiche] = useState<DiscoveryNicheId>(
+    enableUrlSync ? urlFilters.niche : "all",
+  )
   const debouncedQuery = useDebounce(query, 450)
 
   useLayoutEffect(() => {
@@ -148,6 +153,7 @@ function DiscoveryHubInner({
       setCategoryId(urlFilters.categoryId)
       setArtistId(urlFilters.artistId)
       setDatePreset(urlFilters.datePreset)
+      setNiche(urlFilters.niche)
     })
   }, [
     enableUrlSync,
@@ -155,6 +161,7 @@ function DiscoveryHubInner({
     urlFilters.categoryId,
     urlFilters.datePreset,
     urlFilters.location,
+    urlFilters.niche,
     urlFilters.query,
   ])
 
@@ -180,6 +187,7 @@ function DiscoveryHubInner({
       category: categoryId,
       artist: artistId,
       when: datePreset,
+      niche,
     })
     if (nextParams.toString() === urlKey) return
 
@@ -190,6 +198,7 @@ function DiscoveryHubInner({
     categoryId,
     city,
     datePreset,
+    niche,
     debouncedQuery,
     enableUrlSync,
     pathname,
@@ -236,8 +245,9 @@ function DiscoveryHubInner({
         artistId,
         datePreset,
         categories,
+        niche,
       }),
-    [events, query, categoryId, tagId, city, artistId, datePreset, categories],
+    [events, query, categoryId, tagId, city, artistId, datePreset, categories, niche],
   )
 
   function commitFilters(draft: DiscoveryFilterDraft) {
@@ -248,6 +258,7 @@ function DiscoveryHubInner({
       setCity(draft.city)
       setArtistId(draft.artistId)
       setDatePreset(draft.datePreset)
+      setNiche(draft.niche ?? "all")
     })
   }
 
@@ -257,7 +268,8 @@ function DiscoveryHubInner({
     tagId != null ||
     city !== "todas" ||
     Boolean(artistId) ||
-    datePreset !== "all"
+    datePreset !== "all" ||
+    niche !== "all"
 
   const gridEvents = isBrowsing ? filtered : events
 
@@ -421,6 +433,8 @@ function DiscoveryHubInner({
         datePreset={datePreset}
         featuredArtists={resolvedFeaturedArtists}
         categories={categories}
+        niche={niche}
+        onNicheChange={setNiche}
         onCommitFilters={commitFilters}
       />
 

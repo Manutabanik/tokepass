@@ -203,6 +203,8 @@ const defaultValues: EventFormValues = {
     ageRestriction: "" as unknown as EventFormValues["basics"]["ageRestriction"],
     hasSeatingPlan: false,
     hasSchedule: false,
+    deliveryMode: "PRESENCIAL",
+    accessLink: "",
   },
   venue: {
     mode: "new",
@@ -308,10 +310,16 @@ export function EventCreationWizard({
     control: form.control,
     name: "venue.venueLocation",
   })
-  const isStreaming = isStreamingVenue({
-    venueName: watchedVenueName,
-    venueLocation: watchedVenueLocation,
+  const watchedDeliveryMode = useWatch({
+    control: form.control,
+    name: "basics.deliveryMode",
   })
+  const isStreaming =
+    watchedDeliveryMode === "ONLINE" ||
+    isStreamingVenue({
+      venueName: watchedVenueName,
+      venueLocation: watchedVenueLocation,
+    })
   const venueSnapshotRef = useRef<EventFormValues["venue"] | null>(null)
   const isMultiDay = useWatch({
     control: form.control,
@@ -911,6 +919,9 @@ export function EventCreationWizard({
   }
 
   function setEventModality(online: boolean) {
+    form.setValue("basics.deliveryMode", online ? "ONLINE" : "PRESENCIAL", {
+      shouldDirty: true,
+    })
     if (online) {
       if (!isStreaming) {
         venueSnapshotRef.current = form.getValues("venue")
@@ -1431,9 +1442,35 @@ export function EventCreationWizard({
                 />
 
                 {isStreaming ? (
-                  <div className="rounded-2xl border border-border bg-card/40 px-4 py-3 text-sm text-muted-foreground">
-                    El evento se publica como {STREAMING_VENUE_NAME}. No hace
-                    falta recinto ni mapa de asientos.
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border border-border bg-card/40 px-4 py-3 text-sm text-muted-foreground">
+                      El evento se publica como {STREAMING_VENUE_NAME}. No hace
+                      falta recinto ni mapa de asientos.
+                    </div>
+                    <FormField
+                      control={form.control}
+                      name="basics.accessLink"
+                      render={({ field, fieldState }) => (
+                        <FormItem className="space-y-2">
+                          <FormLabel className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
+                            Link de transmisión
+                          </FormLabel>
+                          <Input
+                            {...field}
+                            type="url"
+                            inputMode="url"
+                            data-field="basics.accessLink"
+                            placeholder="https://zoom.us/j/..."
+                            className="w-full rounded-lg border border-border bg-card p-3 text-base text-foreground md:text-sm"
+                          />
+                          <FormDescription className="text-xs text-muted-foreground">
+                            Se muestra en Mis entradas después de pagar. No
+                            aparece en la ficha pública.
+                          </FormDescription>
+                          <FormMessage>{fieldState.error?.message}</FormMessage>
+                        </FormItem>
+                      )}
+                    />
                   </div>
                 ) : (
                   <>

@@ -83,7 +83,7 @@ export default async function CuentaFavoritosPage() {
                     {event.title}
                   </h2>
                   <p className="truncate text-sm text-muted-foreground">
-                    {event.location}
+                    {event.location?.trim() || "Online"}
                   </p>
                 </div>
               </Link>

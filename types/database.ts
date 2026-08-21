@@ -16,6 +16,7 @@ export type EventStatus =
   | "completed"
   | "archived"
 export type QrType = "dynamic" | "static"
+export type EventDeliveryMode = "PRESENCIAL" | "ONLINE"
 export type PaymentProvider =
   | "mercadopago"
   | "payway"
@@ -257,7 +258,7 @@ export type Event = {
   title: string
   description: string | null
   date: string
-  location: string
+  location: string | null
   image_url: string | null
   flyer_url: string | null
   status: EventStatus
@@ -305,6 +306,10 @@ export type Event = {
   gallery_urls: string[] | null
   /** Flyer vertical 9:16 para Stories post-compra (opcional). */
   social_share_image_url: string | null
+  /** PRESENCIAL = puerta/QR. ONLINE = transmisión virtual. */
+  delivery_mode: EventDeliveryMode
+  /** URL de acceso post-compra (Zoom/Meet/LMS). */
+  access_link: string | null
   /** Taxonomía centralizada (Super Admin). */
   category_id: string | null
   /** ATP | +16 | +18 (enum DB: atp, 16, 18). */
@@ -536,8 +541,8 @@ export type Ticket = {
   event_id: string
   tier_id: string
   owner_id: string | null
-  qr_code: string
-  totp_secret: string
+  qr_code: string | null
+  totp_secret: string | null
   status: TicketStatus
   order_id: string | null
   seat_id: string | null
@@ -1225,6 +1230,9 @@ type EventInsert = Omit<
   | "image_url"
   | "flyer_url"
   | "venue_id"
+  | "location"
+  | "delivery_mode"
+  | "access_link"
   | "status"
   | "max_tickets_per_user"
   | "qr_type"
@@ -1268,6 +1276,9 @@ type EventInsert = Omit<
   | "updated_at"
 > & {
   id?: string
+  location?: string | null
+  delivery_mode?: EventDeliveryMode
+  access_link?: string | null
   default_ticket_tab?: Event["default_ticket_tab"]
   has_schedule?: boolean
   lineup?: Json | null
@@ -1404,6 +1415,7 @@ type TicketInsert = Omit<
   | "max_admissions"
   | "admissions_used"
   | "is_dynamic_qr"
+  | "qr_code"
   | "totp_secret"
   | "max_transfers_allowed"
   | "transfer_count"
@@ -1437,7 +1449,8 @@ type TicketInsert = Omit<
   max_admissions?: number
   admissions_used?: number
   is_dynamic_qr?: boolean
-  totp_secret?: string
+  qr_code?: string | null
+  totp_secret?: string | null
   max_transfers_allowed?: number
   transfer_count?: number
   transferred_from_id?: string | null

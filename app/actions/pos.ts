@@ -726,9 +726,9 @@ export async function createPosSale(input: {
       paymentMethod,
       tickets: rows.map((row) => ({
         id: row.ticket_id,
-        totpSecret: row.totp_secret,
-        signedQr: signedDoorQrOrFallback(row.ticket_id, row.totp_secret),
-        qrCode: row.qr_code,
+        totpSecret: row.totp_secret ?? "",
+        signedQr: signedDoorQrOrFallback(row.ticket_id, row.totp_secret ?? ""),
+        qrCode: row.qr_code ?? "",
         printPath: `/tickets/${row.ticket_id}/print`,
         holderName,
         holderDni: dni,
@@ -1249,15 +1249,14 @@ export async function getPrintableTicket(
 
   const venueRaw = row.events.venues
   const venueName = (Array.isArray(venueRaw) ? venueRaw[0] : venueRaw)?.name?.trim()
+  const place = row.events.location?.trim() || "Online"
   const eventLocation =
-    venueName && venueName !== row.events.location
-      ? `${venueName} · ${row.events.location}`
-      : row.events.location
+    venueName && venueName !== place ? `${venueName} · ${place}` : place
 
   return {
     id: row.id,
-    totpSecret: row.totp_secret,
-    qrPayload: signedDoorQrOrFallback(row.id, row.totp_secret),
+    totpSecret: row.totp_secret ?? "",
+    qrPayload: signedDoorQrOrFallback(row.id, row.totp_secret ?? ""),
     status: row.status,
     tierName: row.ticket_tiers?.name ?? "Entrada",
     holderName,

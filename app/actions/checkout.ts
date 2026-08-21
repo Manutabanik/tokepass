@@ -76,7 +76,10 @@ import {
   toReserveRpcItem,
 } from "@/lib/checkout/hybrid-cart"
 import { toCheckoutUserError } from "@/lib/errors/commerce-errors"
-import { assertCartTierPurchaseLimits } from "@/lib/checkout-limits"
+import {
+  assertCartRemainingStock,
+  assertCartTierPurchaseLimits,
+} from "@/lib/checkout-limits"
 import {
   CheckoutEventIdSchema,
   CheckoutLayoutHoldSchema,
@@ -1838,6 +1841,24 @@ export async function startCheckoutWithPayment(
   if (!skuCap.ok) {
     await recordCheckoutFailure(ctx)
     return { success: false, error: skuCap.error }
+  }
+
+  const stockCap = assertCartRemainingStock({
+    items: cartItems.map((item) => ({
+      tierId: checkoutItemTierId(item),
+      quantity: item.quantity,
+    })),
+    tiers: (eventTiers ?? []).map((tier) => ({
+      id: "id" in tier && typeof tier.id === "string" ? tier.id : "",
+      name: "name" in tier && typeof tier.name === "string" ? tier.name : "",
+      capacity:
+        "capacity" in tier ? (tier.capacity as number | null) : null,
+      sold: "sold" in tier ? (tier.sold as number | null) : null,
+    })),
+  })
+  if (!stockCap.ok) {
+    await recordCheckoutFailure(ctx)
+    return { success: false, error: stockCap.error }
   }
 
   // Progressive profiling: DNI + teléfono permanentes en el perfil.

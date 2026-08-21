@@ -19,6 +19,7 @@ function sampleEvent(): EventDetails {
     date: "2026-09-01T00:00:00.000Z",
     endsAt: null,
     location: "CABA",
+    deliveryMode: "PRESENCIAL",
     imageUrl: null,
     socialShareImageUrl: null,
     status: "published",

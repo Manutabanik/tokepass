@@ -35,6 +35,7 @@ import {
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import type { MyTicket } from "@/app/actions/tickets"
+import { parseDeliveryMode } from "@/lib/events/delivery-mode"
 import type { OrderStatus, TicketStatus } from "@/types/database"
 
 const MAX_OTP_ATTEMPTS = 5
@@ -143,14 +144,14 @@ export async function listGuestOrderTickets(): Promise<GuestTicketPreview[]> {
 }
 
 const GUEST_TICKET_DETAIL_SELECT =
-  "id, status, order_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, holder_name, holder_dni, ticket_tiers(name, bonus_reward, day_id, price), events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, social_share_image_url, schedule_days, venues(name))"
+  "id, status, order_id, qr_code, totp_secret, transfer_count, max_transfers_allowed, created_at, is_dynamic_qr, max_admissions, admissions_used, is_test, holder_name, holder_dni, ticket_tiers(name, bonus_reward, day_id, price), events(id, title, date, ends_at, location, flyer_url, image_url, qr_type, social_share_image_url, schedule_days, delivery_mode, access_link, venues(name))"
 
 type GuestTicketDetailRow = {
   id: string
   status: TicketStatus
   order_id: string
-  qr_code: string
-  totp_secret: string
+  qr_code: string | null
+  totp_secret: string | null
   transfer_count: number
   max_transfers_allowed: number
   created_at: string
@@ -170,12 +171,14 @@ type GuestTicketDetailRow = {
         title: string
         date: string
         ends_at?: string | null
-        location: string
+        location: string | null
         flyer_url?: string | null
         image_url?: string | null
         qr_type?: string | null
         social_share_image_url?: string | null
         schedule_days?: unknown
+        delivery_mode?: string | null
+        access_link?: string | null
         venues?: { name?: string | null } | { name?: string | null }[] | null
       }
     | {
@@ -183,12 +186,14 @@ type GuestTicketDetailRow = {
         title: string
         date: string
         ends_at?: string | null
-        location: string
+        location: string | null
         flyer_url?: string | null
         image_url?: string | null
         qr_type?: string | null
         social_share_image_url?: string | null
         schedule_days?: unknown
+        delivery_mode?: string | null
+        access_link?: string | null
         venues?: { name?: string | null } | { name?: string | null }[] | null
       }[]
     | null
@@ -207,8 +212,10 @@ function mapGuestTicketRow(row: GuestTicketDetailRow, revealQr: boolean): MyTick
   return {
     id: row.id,
     status: row.status,
-    qrCode: revealQr ? row.qr_code : "",
-    totpSecret: revealQr ? row.totp_secret : "",
+    qrCode: revealQr ? row.qr_code : null,
+    totpSecret: revealQr ? row.totp_secret : null,
+    deliveryMode: parseDeliveryMode(events.delivery_mode),
+    accessLink: events.access_link?.trim() || null,
     transferCount: row.transfer_count,
     maxTransfersAllowed: row.max_transfers_allowed,
     createdAt: row.created_at,
@@ -229,7 +236,7 @@ function mapGuestTicketRow(row: GuestTicketDetailRow, revealQr: boolean): MyTick
     doorsOpenAt:
       findScheduleDay(scheduleDays, tier?.day_id ?? undefined)?.start_time ??
       resolveEventAnchorDate(scheduleDays, events.date),
-    eventLocation: events.location,
+    eventLocation: events.location?.trim() || "Online",
     flyerUrl: events.flyer_url ?? events.image_url ?? null,
     socialShareImageUrl: events.social_share_image_url ?? null,
     organizerName: null,

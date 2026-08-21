@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import {
+  assertCartRemainingStock,
   assertCartTierPurchaseLimits,
   evaluateStorefrontSelectionLimit,
   purchaseCapForTier,
@@ -99,5 +100,23 @@ describe("tier purchase limits", () => {
       }),
       2,
     )
+  })
+})
+
+describe("assertCartRemainingStock", () => {
+  it("rejects quantity above remaining capacity", () => {
+    const result = assertCartRemainingStock({
+      items: [{ tierId: "pista", quantity: 6 }],
+      tiers: [{ id: "pista", name: "Pista", capacity: 10, sold: 5 }],
+    })
+    assert.equal(result.ok, false)
+  })
+
+  it("allows quantity within remaining capacity", () => {
+    const result = assertCartRemainingStock({
+      items: [{ tierId: "pista", quantity: 5 }],
+      tiers: [{ id: "pista", name: "Pista", capacity: 10, sold: 5 }],
+    })
+    assert.equal(result.ok, true)
   })
 })

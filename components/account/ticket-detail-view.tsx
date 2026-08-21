@@ -41,6 +41,8 @@ import { getTicketsOffline } from "@/lib/offline-store"
 import type { PublicSponsor } from "@/lib/sponsors"
 import { ticketSectorLabel, ticketVenueLine } from "@/lib/ticket-stub"
 import { ticketBackupCode } from "@/lib/ticket-print"
+import { eventAccessTimeLabel, isOnlineDelivery } from "@/lib/events/delivery-mode"
+import { OnlineAccessButton } from "@/components/account/online-access-button"
 
 export function TicketDetailView({
   ticket: initialTicket,
@@ -86,8 +88,13 @@ export function TicketDetailView({
     transfer.optimisticVisual ?? resale.optimisticVisual ?? ticket.visualStatus
   const transferPending = visualStatus === "transfer_pending"
   const resalePending = visualStatus === "resale_pending"
+  const onlineEvent = isOnlineDelivery(ticket.deliveryMode)
   const canShowQr =
-    ticket.status === "valid" && otpUnlocked && visualStatus === "active"
+    !onlineEvent &&
+    ticket.status === "valid" &&
+    otpUnlocked &&
+    visualStatus === "active" &&
+    Boolean(ticket.totpSecret)
   const isStatic = ticket.qrType === "static"
   const canTransfer =
     ticket.status === "valid" &&
@@ -96,10 +103,11 @@ export function TicketDetailView({
     online &&
     visualStatus === "active"
 
+  const mapsQuery = ticket.venueName
+    ? `${ticket.venueName}, ${ticket.eventLocation ?? ""}`
+    : (ticket.eventLocation ?? "")
   const mapsHref = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-    ticket.venueName
-      ? `${ticket.venueName}, ${ticket.eventLocation}`
-      : ticket.eventLocation,
+    mapsQuery,
   )}`
 
   const seatingLabel = [
@@ -108,6 +116,7 @@ export function TicketDetailView({
   ]
     .filter(Boolean)
     .join(" · ")
+  const totpSecret = ticket.totpSecret ?? ""
   const doorsAt = ticket.doorsOpenAt || ticket.eventDate
   const sector = ticketSectorLabel(ticket)
   const venue = ticketVenueLine(ticket)
@@ -150,7 +159,8 @@ export function TicketDetailView({
                 {formatEventDay(ticket.eventDate)}
               </span>
               <span className="text-xs text-muted-foreground">
-                Puertas {formatEventTime(doorsAt)}
+                {eventAccessTimeLabel(ticket.deliveryMode)}{" "}
+                {formatEventTime(doorsAt)}
               </span>
             </span>
           </p>
@@ -188,6 +198,11 @@ export function TicketDetailView({
             router.refresh()
           }}
         />
+      ) : onlineEvent &&
+        ticket.status === "valid" &&
+        otpUnlocked &&
+        visualStatus === "active" ? (
+        <OnlineAccessButton href={ticket.accessLink} />
       ) : canShowQr ? (
         <div className="rounded-3xl border border-border bg-card p-5 text-center text-card-foreground shadow-2xl shadow-black/20">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
@@ -198,14 +213,14 @@ export function TicketDetailView({
               {isStatic ? (
                 <StaticSignedQR
                   ticketId={ticket.id}
-                  totpSecret={ticket.totpSecret}
+                  totpSecret={totpSecret}
                   size={200}
                   className="w-full max-w-none p-0 shadow-none"
                 />
               ) : (
                 <LivingTicketQR
                   ticketId={ticket.id}
-                  totpSecret={ticket.totpSecret}
+                  totpSecret={totpSecret}
                   size={200}
                 />
               )}
@@ -216,7 +231,7 @@ export function TicketDetailView({
             onOpenChange={setScanOpen}
             isStatic={isStatic}
             ticketId={ticket.id}
-            totpSecret={ticket.totpSecret}
+            totpSecret={totpSecret}
             holderName={ticket.holderName}
             holderDni={ticket.holderDni}
           />
@@ -318,7 +333,7 @@ export function TicketDetailView({
           </Button>
         ) : null}
 
-        {ticket.status === "valid" && visualStatus === "active" ? (
+        {ticket.status === "valid" && visualStatus === "active" && !onlineEvent ? (
           <>
             <WalletPassButtons
               ticketId={ticket.id}
@@ -338,7 +353,7 @@ export function TicketDetailView({
               data={{
                 eventTitle: ticket.eventTitle,
                 eventDate: ticket.eventDate,
-                eventLocation: ticket.venueName ?? ticket.eventLocation,
+                eventLocation: ticket.venueName ?? ticket.eventLocation ?? "Online",
                 imageUrl: ticket.flyerUrl,
                 customStoryUrl: ticket.socialShareImageUrl,
                 mode: "buyer",
@@ -366,17 +381,19 @@ export function TicketDetailView({
           </>
         ) : null}
 
-        <Button
-          className="min-h-12 w-full rounded-2xl"
-          variant="outline"
-          nativeButton={false}
-          render={
-            <a href={mapsHref} target="_blank" rel="noreferrer" />
-          }
-        >
-          <MapPin className="size-4" />
-          Ver ubicación en el mapa
-        </Button>
+        {onlineEvent ? null : (
+          <Button
+            className="min-h-12 w-full rounded-2xl"
+            variant="outline"
+            nativeButton={false}
+            render={
+              <a href={mapsHref} target="_blank" rel="noreferrer" />
+            }
+          >
+            <MapPin className="size-4" />
+            Ver ubicación en el mapa
+          </Button>
+        )}
 
         <Button
           className="min-h-12 w-full rounded-2xl"
@@ -391,7 +408,11 @@ export function TicketDetailView({
       <section className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
         <h2 className="text-sm font-semibold text-foreground">Términos de acceso</h2>
         <ul className="mt-2 list-disc space-y-1.5 pl-4 leading-relaxed">
-          <li>El primer escaneo válido en puerta otorga el ingreso.</li>
+          <li>
+            {onlineEvent
+              ? "El acceso a la transmisión se habilita con el link de esta entrada."
+              : "El primer escaneo válido en puerta otorga el ingreso."}
+          </li>
           <li>
             La entrada es personal. Transferila solo desde TokePass.
           </li>

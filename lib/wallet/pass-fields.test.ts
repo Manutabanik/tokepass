@@ -18,6 +18,8 @@ function sampleTicket(overrides: Partial<MyTicket> = {}): MyTicket {
     visualStatus: "active",
     qrCode: "qr-code-value",
     totpSecret: "a".repeat(48),
+    deliveryMode: "PRESENCIAL",
+    accessLink: null,
     transferCount: 0,
     maxTransfersAllowed: 1,
     createdAt: "2026-08-01T12:00:00.000Z",

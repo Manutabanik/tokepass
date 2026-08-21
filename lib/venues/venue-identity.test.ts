@@ -17,5 +17,6 @@ describe("venue-identity", () => {
     assert.equal(isDraftPlaceholderVenueName(" por definir "), true)
     assert.equal(canPersistCatalogVenueName("Por definir"), false)
     assert.equal(canPersistCatalogVenueName("Estadio Central"), true)
+    assert.equal(canPersistCatalogVenueName("Streaming / Online"), false)
   })
 })

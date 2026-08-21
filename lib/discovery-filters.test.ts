@@ -32,6 +32,7 @@ function event(partial: Partial<CatalogEvent> & Pick<CatalogEvent, "id" | "title
     featuredUntil: null,
     isSponsoredByTokePass: false,
     categoryId: null,
+    deliveryMode: "PRESENCIAL",
     artists: [],
     ...partial,
   }
@@ -237,6 +238,10 @@ describe("exploreCatalogPath", () => {
       exploreCatalogPath({ artist: "a1", when: "weekend" }),
       "/?artist=a1&when=weekend",
     )
+    assert.equal(
+      exploreCatalogPath({ niche: "courses" }),
+      "/?niche=courses",
+    )
   })
 
   it("reads catalog filters from search params", () => {
@@ -247,6 +252,7 @@ describe("exploreCatalogPath", () => {
       categoryId: "all",
       artistId: "",
       datePreset: "today",
+      niche: "all",
     })
   })
 })

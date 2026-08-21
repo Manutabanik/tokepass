@@ -26,6 +26,7 @@ import type {
   DiscoveryDatePreset,
   DiscoveryFilterDraft,
 } from "@/lib/discovery-filters"
+import type { DiscoveryNicheId } from "@/lib/discovery-niches"
 import { datePresetLabel } from "@/lib/discovery-filters"
 import { cn } from "@/lib/utils"
 
@@ -45,6 +46,7 @@ type SearchBarProps = {
   datePreset?: DiscoveryDatePreset
   featuredArtists?: FeaturedDiscoveryArtist[]
   categories?: DiscoveryCategory[]
+  niche?: DiscoveryNicheId
   onCommitFilters: (draft: DiscoveryFilterDraft) => void
 }
 
@@ -78,6 +80,7 @@ export function SearchBar({
   datePreset = "all",
   featuredArtists = [],
   categories = DEFAULT_DISCOVERY_CATEGORIES,
+  niche = "all",
   onCommitFilters,
 }: SearchBarProps) {
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -142,6 +145,7 @@ export function SearchBar({
         datePreset={datePreset}
         featuredArtists={featuredArtists}
         categories={categories}
+        niche={niche}
         onCommit={onCommitFilters}
         onApply={scrollToResults}
       />

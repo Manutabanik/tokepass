@@ -11,8 +11,9 @@ export function ticketSectorLabel(ticket: {
 }
 
 export function ticketVenueLine(ticket: Pick<MyTicket, "venueName" | "eventLocation">) {
-  if (ticket.venueName && ticket.venueName !== ticket.eventLocation) {
-    return `${ticket.venueName} · ${ticket.eventLocation}`
+  const location = ticket.eventLocation?.trim() || ""
+  if (ticket.venueName && ticket.venueName !== location) {
+    return location ? `${ticket.venueName} · ${location}` : ticket.venueName
   }
-  return ticket.venueName || ticket.eventLocation
+  return ticket.venueName || location || "Online"
 }

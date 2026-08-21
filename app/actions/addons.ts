@@ -292,7 +292,7 @@ export async function getMyStoreRedemptions(): Promise<MyStoreRedemption[]> {
         eventId: event.id,
         eventTitle: event.title,
         eventDate: event.date,
-        eventLocation: event.location,
+        eventLocation: event.location?.trim() || "Online",
       } satisfies MyStoreRedemption
     })
     .filter((row): row is MyStoreRedemption => row !== null)

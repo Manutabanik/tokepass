@@ -22,7 +22,7 @@ export type EventSeoInput = {
   date: string
   endsAt: string | null
   createdAt?: string | null
-  location: string
+  location: string | null
   imageUrl: string | null
   socialShareImageUrl?: string | null
   venueName: string | null
@@ -53,7 +53,7 @@ function venueLine(event: EventSeoInput): string {
 function locality(event: EventSeoInput): string {
   if (event.venueCity?.trim()) return event.venueCity.trim()
   if (event.cityHint?.trim()) return event.cityHint.trim()
-  const fromLocation = (event.venueLocation || event.location)
+  const fromLocation = (event.venueLocation || event.location || "")
     .split(",")[0]
     ?.trim()
   return fromLocation || "Argentina"
@@ -61,7 +61,7 @@ function locality(event: EventSeoInput): string {
 
 function region(event: EventSeoInput): string {
   if (event.venueRegion?.trim()) return event.venueRegion.trim()
-  const bits = (event.venueLocation || event.location)
+  const bits = (event.venueLocation || event.location || "")
     .split(",")
     .map((part) => part.trim())
     .filter(Boolean)
@@ -241,7 +241,7 @@ export function eventSeoFromDetails(event: {
   date: string
   endsAt: string | null
   createdAt?: string | null
-  location: string
+  location: string | null
   imageUrl: string | null
   socialShareImageUrl?: string | null
   status?: string | null

@@ -47,7 +47,7 @@ function AuditDetail({ event }: { event: AuditEventRow }) {
         </p>
         <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
           <MapPin className="size-3.5 shrink-0" aria-hidden="true" />
-          {event.location}
+          {event.location?.trim() || "Online"}
         </p>
       </div>
       <div className="rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm">

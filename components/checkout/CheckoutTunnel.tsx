@@ -1353,7 +1353,9 @@ export function CheckoutTunnel({
         const meta = resolveTicketDateMeta(tier)
         const quantity = Math.max(0, tier.quantity)
         const unitPrice =
-          quantity > 0 ? tier.subtotal / quantity : tier.price
+          quantity > 0
+            ? centsToMoney(Math.round(moneyToCents(tier.subtotal) / quantity))
+            : tier.price
         return {
           id: cartTicketLineId(tier.id, meta.dateId),
           ticketTierId: tier.id,

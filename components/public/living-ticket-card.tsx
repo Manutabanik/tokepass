@@ -45,6 +45,8 @@ import { formatEventDay, formatEventTime } from "@/lib/format"
 import { storyCategoryLabel } from "@/lib/story-canvas"
 import { ticketSectorLabel, ticketVenueLine } from "@/lib/ticket-stub"
 import { cn } from "@/lib/utils"
+import { eventAccessTimeLabel, isOnlineDelivery } from "@/lib/events/delivery-mode"
+import { OnlineAccessButton } from "@/components/account/online-access-button"
 
 function isVipTier(tierName: string): boolean {
   return /\bvip\b/i.test(tierName)
@@ -58,7 +60,7 @@ function storyFlyerData(ticket: MyTicket) {
   return {
     eventTitle: ticket.eventTitle,
     eventDate: ticket.eventDate,
-    eventLocation: ticket.venueName ?? ticket.eventLocation,
+    eventLocation: ticket.venueName ?? ticket.eventLocation ?? "Online",
     imageUrl: ticket.flyerUrl,
     customStoryUrl: ticket.socialShareImageUrl,
     mode: "buyer" as const,
@@ -169,9 +171,12 @@ export function LivingTicketCard({
   const isFree = Number(ticket.tierPrice) === 0
   const transferPending = visualStatus === "transfer_pending"
   const resalePending = visualStatus === "resale_pending"
+  const onlineEvent = isOnlineDelivery(ticket.deliveryMode)
   const canShowLiveQr =
+    !onlineEvent &&
     ticket.status === "valid" &&
     visualStatus === "active" &&
+    Boolean(ticket.totpSecret) &&
     (showQr ||
       Boolean(ticket.pendingTransfer) ||
       Boolean(ticket.activeResaleListingId))
@@ -192,6 +197,7 @@ export function LivingTicketCard({
     !offline &&
     visualStatus === "active"
 
+  const totpSecret = ticket.totpSecret ?? ""
   const doorsAt = ticket.doorsOpenAt || ticket.eventDate
   const sector = sequenceLabel?.toUpperCase() || ticketSectorLabel(ticket)
   const venue = ticketVenueLine(ticket)
@@ -247,7 +253,8 @@ export function LivingTicketCard({
                 {formatEventDay(ticket.eventDate)}
               </dd>
               <p className="text-xs text-muted-foreground">
-                Puertas {formatEventTime(doorsAt)}
+                {eventAccessTimeLabel(ticket.deliveryMode)}{" "}
+                {formatEventTime(doorsAt)}
               </p>
             </div>
           </div>
@@ -302,7 +309,13 @@ export function LivingTicketCard({
       <div className="stub-divider" aria-hidden="true" />
 
       <div className="flex flex-1 flex-col items-center px-5 pb-4 pt-1">
-        {canShowLiveQr ? (
+        {onlineEvent &&
+        ticket.status === "valid" &&
+        visualStatus === "active" ? (
+          <div className="w-full pt-2">
+            <OnlineAccessButton href={ticket.accessLink} />
+          </div>
+        ) : canShowLiveQr ? (
           <div
             className="w-full"
             onContextMenu={(event) => event.preventDefault()}
@@ -311,13 +324,13 @@ export function LivingTicketCard({
               {isStatic ? (
                 <StaticSignedQR
                   ticketId={ticket.id}
-                  totpSecret={ticket.totpSecret}
+                  totpSecret={totpSecret}
                   size={200}
                 />
               ) : (
                 <LivingTicketQR
                   ticketId={ticket.id}
-                  totpSecret={ticket.totpSecret}
+                  totpSecret={totpSecret}
                   size={200}
                 />
               )}
@@ -348,7 +361,7 @@ export function LivingTicketCard({
               onOpenChange={setScanOpen}
               isStatic={isStatic}
               ticketId={ticket.id}
-              totpSecret={ticket.totpSecret}
+              totpSecret={totpSecret}
               holderName={ticket.holderName}
               holderDni={ticket.holderDni}
             />

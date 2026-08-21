@@ -8,6 +8,11 @@ import {
 } from "@/lib/discovery-categories"
 import { isPastEvent } from "@/lib/event-status"
 import { publicEventPath } from "@/lib/seo/site"
+import {
+  eventMatchesNiche,
+  parseDiscoveryNiche,
+  type DiscoveryNicheId,
+} from "@/lib/discovery-niches"
 
 export type { DiscoveryMoodId, DiscoveryCategory }
 export {
@@ -54,6 +59,7 @@ export type ExploreCatalogQuery = {
   category?: string | null
   artist?: string | null
   when?: string | null
+  niche?: string | null
 }
 
 /** Query string de la cartelera en Inicio (`q`, `location`, `category`, `artist`, `when`). */
@@ -66,11 +72,13 @@ export function catalogSearchParams(
   const category = params.category?.trim() ?? ""
   const artist = params.artist?.trim() ?? ""
   const when = parseDatePreset(params.when)
+  const niche = parseDiscoveryNiche(params.niche)
   if (q) qs.set("q", q)
   if (location && location !== "todas") qs.set("location", location)
   if (category && category !== "all") qs.set("category", category)
   if (artist) qs.set("artist", artist)
   if (when !== "all") qs.set("when", when)
+  if (niche !== "all") qs.set("niche", niche)
   return qs
 }
 
@@ -87,6 +95,7 @@ export function catalogFiltersFromSearchParams(params: {
   categoryId: string
   artistId: string
   datePreset: DiscoveryDatePreset
+  niche: DiscoveryNicheId
 } {
   return {
     query: params.get("q")?.trim() ?? "",
@@ -94,6 +103,7 @@ export function catalogFiltersFromSearchParams(params: {
     categoryId: params.get("category")?.trim() || "all",
     artistId: params.get("artist")?.trim() || "",
     datePreset: parseDatePreset(params.get("when")),
+    niche: parseDiscoveryNiche(params.get("niche")),
   }
 }
 
@@ -150,7 +160,7 @@ export function matchesDatePreset(
 }
 
 export function eventPlaceHaystack(event: CatalogEvent): string {
-  return `${event.venueLocation ?? ""} ${event.location} ${event.venueName ?? ""}`.toLowerCase()
+  return `${event.venueLocation ?? ""} ${event.location ?? ""} ${event.venueName ?? ""}`.toLowerCase()
 }
 
 export function matchesProvince(event: CatalogEvent, province: string): boolean {
@@ -177,6 +187,7 @@ export type DiscoveryFilterDraft = {
   city: string
   artistId: string
   datePreset: DiscoveryDatePreset
+  niche: DiscoveryNicheId
 }
 
 /** Eventos de hoy (00:00 → 23:59:59 local). */
@@ -206,7 +217,7 @@ export function isThisWeekend(dateIso: string): boolean {
 
 function catalogSearchHaystack(event: CatalogEvent): string {
   const artistNames = (event.artists ?? []).map((artist) => artist.name).join(" ")
-  return `${event.title} ${event.description ?? ""} ${event.location} ${event.organizerName ?? ""} ${event.venueName ?? ""} ${artistNames}`.toLowerCase()
+  return `${event.title} ${event.description ?? ""} ${event.location ?? ""} ${event.organizerName ?? ""} ${event.venueName ?? ""} ${artistNames}`.toLowerCase()
 }
 
 function matchesKeyword(event: CatalogEvent, keys: string[]): boolean {
@@ -227,6 +238,7 @@ export function filterCatalogEvents(
     datePreset?: DiscoveryDatePreset
     now?: Date
     categories?: DiscoveryCategory[]
+    niche?: DiscoveryNicheId
   },
 ): CatalogEvent[] {
   const q = options.query?.trim().toLowerCase() ?? ""
@@ -249,6 +261,10 @@ export function filterCatalogEvents(
     if (!matchesProvince(event, options.city ?? "")) return false
 
     if (!matchesDatePreset(event.date, datePreset, options.now)) return false
+
+    if (!eventMatchesNiche(event, options.niche ?? "all", categories)) {
+      return false
+    }
 
     if (!category || category.id === "all") return true
 
@@ -297,7 +313,7 @@ export function pickUpcoming(events: CatalogEvent[], limit = 8): CatalogEvent[] 
 export function extractCities(events: CatalogEvent[]): string[] {
   const set = new Set<string>()
   for (const event of events) {
-    const raw = event.venueLocation ?? event.location
+    const raw = event.venueLocation ?? event.location ?? ""
     const city = raw.split(",")[0]?.trim()
     if (city) set.add(city)
   }
@@ -305,8 +321,8 @@ export function extractCities(events: CatalogEvent[]): string[] {
 }
 
 export function eventCityLabel(event: CatalogEvent): string {
-  const raw = event.venueLocation ?? event.location
-  return raw.split(",")[0]?.trim() || event.location
+  const raw = event.venueLocation ?? event.location ?? ""
+  return raw.split(",")[0]?.trim() || event.location || "Online"
 }
 
 const LOCATION_SPLIT = /[,·|/]+/
@@ -338,8 +354,9 @@ function uniqueLocationParts(
 
 /** Pie de tarjeta: sin "Online, San Juan · Online". */
 export function eventCardLocationLabel(
-  event: Pick<CatalogEvent, "venueName" | "venueLocation" | "location">,
+  event: Pick<CatalogEvent, "venueName" | "venueLocation" | "location" | "deliveryMode">,
 ): string {
+  if (event.deliveryMode === "ONLINE") return "Online"
   const parts = uniqueLocationParts(
     event.venueName,
     event.venueLocation,

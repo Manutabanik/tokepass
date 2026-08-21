@@ -10,6 +10,7 @@ import {
   Ticket,
   Trophy,
   Users,
+  GraduationCap,
   type LucideIcon,
 } from "lucide-react"
 
@@ -43,6 +44,8 @@ export const CATEGORY_ICON_MAP: Record<string, LucideIcon> = {
   users: Users,
   partypopper: PartyPopper,
   party: PartyPopper,
+  graduationcap: GraduationCap,
+  graduation: GraduationCap,
 }
 
 export const CATEGORY_ICON_OPTIONS = [
@@ -56,6 +59,7 @@ export const CATEGORY_ICON_OPTIONS = [
   { name: "ticket", label: "Entrada" },
   { name: "star", label: "Estrella" },
   { name: "users", label: "Comunidad" },
+  { name: "graduationcap", label: "Cursos" },
 ] as const
 
 const ICON_ALIASES: Record<string, string> = {
@@ -122,6 +126,7 @@ export function mapDbCategoriesToDiscovery(
     ...rows.map((row) => ({
       id: row.id,
       label: row.name,
+      slug: row.slug,
       icon: (row.iconName?.trim().toLowerCase() ||
         "sparkles") as DiscoveryCategory["icon"],
       iconName: row.iconName,

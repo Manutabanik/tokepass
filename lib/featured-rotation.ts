@@ -7,7 +7,7 @@ type FeaturedEligibleItem = {
   isFeatured?: boolean | null
   featuredUntil?: string | null
   venueLocation?: string | null
-  location: string
+  location: string | null
   venueName?: string | null
 }
 
@@ -24,8 +24,8 @@ export function fisherYatesShuffle<T>(items: T[]): T[] {
 }
 
 function provinceLabel(event: FeaturedEligibleItem): string {
-  const raw = event.venueLocation ?? event.location
-  return raw.split(",")[0]?.trim() || event.location
+  const raw = event.venueLocation ?? event.location ?? ""
+  return raw.split(",")[0]?.trim() || event.location || "Online"
 }
 
 export function matchesFeaturedProvince(
@@ -35,7 +35,7 @@ export function matchesFeaturedProvince(
   const city = province?.trim().toLowerCase() ?? ""
   if (!city || city === "todas") return true
   const place =
-    `${event.venueLocation ?? ""} ${event.location} ${event.venueName ?? ""} ${provinceLabel(event)}`.toLowerCase()
+    `${event.venueLocation ?? ""} ${event.location ?? ""} ${event.venueName ?? ""} ${provinceLabel(event)}`.toLowerCase()
   return place.includes(city)
 }
 

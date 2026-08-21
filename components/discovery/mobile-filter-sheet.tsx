@@ -40,6 +40,7 @@ import {
   type DiscoveryDatePreset,
   type DiscoveryFilterDraft,
 } from "@/lib/discovery-filters"
+import type { DiscoveryNicheId } from "@/lib/discovery-niches"
 import { cn } from "@/lib/utils"
 
 type MobileFilterSheetProps = {
@@ -56,6 +57,7 @@ type MobileFilterSheetProps = {
   datePreset: DiscoveryDatePreset
   featuredArtists?: FeaturedDiscoveryArtist[]
   categories?: DiscoveryCategory[]
+  niche?: DiscoveryNicheId
   onCommit: (draft: DiscoveryFilterDraft) => void
   onApply: () => void
 }
@@ -83,6 +85,7 @@ export function MobileFilterSheet({
   datePreset,
   featuredArtists = [],
   categories = DEFAULT_DISCOVERY_CATEGORIES,
+  niche = "all",
   onCommit,
   onApply,
 }: MobileFilterSheetProps) {
@@ -93,6 +96,7 @@ export function MobileFilterSheet({
     city,
     artistId: selectedArtistId,
     datePreset,
+    niche,
   }))
   const [artistSearch, setArtistSearch] = useState("")
   const wasOpen = useRef(false)
@@ -106,11 +110,12 @@ export function MobileFilterSheet({
         city,
         artistId: selectedArtistId,
         datePreset,
+        niche,
       })
       setArtistSearch("")
     }
     wasOpen.current = open
-  }, [open, query, categoryId, tagId, city, selectedArtistId, datePreset])
+  }, [open, query, categoryId, tagId, city, selectedArtistId, datePreset, niche])
 
   const debouncedQuery = useDebounce(draft.query, 200)
   const debouncedArtistSearch = useDebounce(artistSearch, 200)
@@ -124,6 +129,7 @@ export function MobileFilterSheet({
         city: draft.city,
         artistId: draft.artistId,
         datePreset: draft.datePreset,
+        niche: draft.niche,
         categories,
       }).length,
     [events, debouncedQuery, draft, categories],

@@ -227,7 +227,7 @@ export default async function ManageEventPage({
       <EventCommandHeader
         eventId={event.id}
         title={event.title}
-        subtitle={`${formatEventDate(event.date)} · ${event.location}`}
+        subtitle={`${formatEventDate(event.date)} · ${event.location?.trim() || "Online"}`}
         status={event.status}
         isSponsored={Boolean(event.is_sponsored_by_tokepass)}
         reviewNote={event.review_note}
