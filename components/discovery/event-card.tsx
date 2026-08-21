@@ -241,38 +241,30 @@ export function EventCard({
     )
   }
 
+  const priceLabel =
+    event.startingPrice == null
+      ? "Ver precios"
+      : formatTicketPrice(event.startingPrice)
+
   return (
     <article
       className={cn(
-        "group relative flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-2xl bg-card transition-all duration-300 hover:shadow-lg",
-        highlighted
-          ? "border-2 border-emerald-500/40 dark:border-emerald-500/50"
-          : "border border-border/60 hover:border-border",
+        "group relative flex cursor-pointer flex-col rounded-3xl border border-white/5 bg-muted/20 p-2.5 transition-all duration-300",
+        "hover:-translate-y-1 hover:border-emerald-500/30 hover:bg-muted/40 hover:shadow-2xl hover:shadow-emerald-500/10",
+        highlighted && "border-emerald-500/30",
       )}
       style={{ animationDelay: `${Math.min(index * 40, 200)}ms` }}
     >
-      <div className="absolute top-3 right-3 z-20 pointer-events-auto">
-        {favReady ? (
-          <FavoriteToggleButton
-            key={`${event.id}-${favorited ? "1" : "0"}`}
-            eventId={event.id}
-            initiallyFavorited={favorited}
-            className="relative z-20 size-11 shadow-md"
-          />
-        ) : (
-          <span className="block size-11 rounded-full bg-black/30" />
-        )}
-      </div>
-      <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted md:aspect-video">
+      <div className="relative aspect-[4/5] w-full overflow-hidden rounded-2xl bg-muted">
         {event.imageUrl ? (
           <Image
             src={event.imageUrl}
             alt={event.title}
             fill
             priority={priority}
-            sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, 30vw"
+            sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, (max-width: 1280px) 30vw, 22vw"
             className={cn(
-              "h-full w-full object-cover object-center transition-transform duration-700 ease-out group-hover:scale-105",
+              "object-cover transition-transform duration-500 group-hover:scale-105",
               finished && "grayscale-[50%]",
             )}
           />
@@ -286,64 +278,67 @@ export function EventCard({
           />
         )}
 
+        <div
+          className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20"
+          aria-hidden
+        />
+
+        <div className="absolute top-3 left-3 z-10 flex max-w-[calc(100%-3.5rem)] flex-wrap gap-1.5">
+          {highlighted ? (
+            <span className="rounded-full bg-emerald-500 px-2.5 py-1 text-[10px] font-bold tracking-wider text-black uppercase">
+              Imperdible
+            </span>
+          ) : null}
+          {category ? (
+            <span className="rounded-full border border-white/10 bg-black/60 px-2.5 py-1 text-[10px] font-bold tracking-wider text-white uppercase backdrop-blur-md">
+              {category}
+            </span>
+          ) : null}
+          {urgency ? <FlyerBadge pulse>{urgency}</FlyerBadge> : null}
+        </div>
+
+        {favReady ? (
+          <FavoriteToggleButton
+            key={`${event.id}-${favorited ? "1" : "0"}`}
+            eventId={event.id}
+            initiallyFavorited={favorited}
+            className="absolute top-3 right-3 z-20 size-9 p-2 text-white/80 shadow-none hover:text-red-500"
+          />
+        ) : (
+          <span className="absolute top-3 right-3 z-20 block size-9 rounded-full border border-white/10 bg-black/50 backdrop-blur-md" />
+        )}
+
         {soldOut ? (
-          <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-red-600 px-4 py-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-white shadow-lg">
+          <span className="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full bg-red-600 px-4 py-1.5 text-[11px] font-black tracking-[0.16em] text-white uppercase shadow-lg">
             Entradas agotadas
           </span>
         ) : null}
         {finished ? (
-          <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-zinc-800/80 px-4 py-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-white backdrop-blur-md">
+          <span className="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full bg-zinc-800/80 px-4 py-1.5 text-[11px] font-black tracking-[0.16em] text-white uppercase backdrop-blur-md">
             Este evento ya pasó
           </span>
         ) : null}
 
-        <div className="pointer-events-none absolute top-3 left-3 z-20 flex max-w-[calc(100%-3.5rem)] flex-wrap gap-1.5">
-          {sponsored || boosted ? <FlyerBadge>Imperdible</FlyerBadge> : null}
-          {urgency ? <FlyerBadge pulse>{urgency}</FlyerBadge> : null}
+        <div className="absolute right-3 bottom-3 z-10">
+          <span className="rounded-xl bg-emerald-500 px-3 py-1.5 text-xs font-black text-black shadow-lg">
+            {priceLabel}
+          </span>
         </div>
       </div>
 
-      <div className="flex min-w-0 flex-1 flex-col gap-2 p-4 sm:p-5">
-        <EventTypePills category={category} genre={secondary} className="gap-1.5" />
-
-        <p className="truncate text-xs font-bold uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+      <div className="px-3 pt-3 pb-1">
+        <p className="truncate text-xs font-bold tracking-wider text-emerald-400 uppercase">
           {formatDiscoveryDateTime(event.date)}
         </p>
-
-        <h3 className="line-clamp-2 text-xl font-black leading-tight text-foreground drop-shadow-sm dark:drop-shadow-lg">
+        <h3 className="line-clamp-1 text-base font-bold text-foreground transition-colors group-hover:text-emerald-400 md:text-lg">
           <Link href={publicEventPath(event)} className={overlayLinkClass}>
             {event.title}
           </Link>
         </h3>
-
-        <EventLineupTeaser artists={event.artists} compact />
-
-        <p className="flex items-start gap-1.5 text-sm font-medium text-muted-foreground">
-          <MapPin
-            className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <span className="min-w-0 truncate">{locationLabel}</span>
+        <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+          <MapPin className="size-3 shrink-0" aria-hidden="true" />
+          <span className="line-clamp-1">{locationLabel}</span>
         </p>
-      </div>
-
-      <div className="relative z-0 mt-auto flex items-center justify-between gap-2 border-t border-black/5 bg-white/60 p-4 pt-3 backdrop-blur-xl dark:border-white/10 dark:bg-black/60">
-        <div className="flex min-w-0 flex-col">
-          <span className="text-[10px] font-bold uppercase leading-none tracking-wider text-muted-foreground">
-            {event.startingPrice === 0 ? "Entrada" : "Entradas desde"}
-          </span>
-          <span className="mt-0.5 whitespace-nowrap text-xl font-black text-foreground drop-shadow-sm">
-            {event.startingPrice == null
-              ? "Ver precios"
-              : event.startingPrice === 0
-                ? "gratuita"
-                : formatTicketPrice(event.startingPrice)}
-          </span>
-        </div>
-
-        <span className="relative z-0 inline-flex h-12 min-h-[48px] shrink-0 items-center rounded-xl bg-emerald-500 px-5 text-sm font-black text-slate-950 shadow-lg transition-colors duration-300 group-hover:bg-emerald-400">
-          {finished ? "Ver evento" : soldOut ? "Entradas agotadas" : "Ver entradas"}
-        </span>
       </div>
     </article>
   )

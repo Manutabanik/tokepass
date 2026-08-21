@@ -24,6 +24,8 @@ function ticket(
     calculationMode: "public_price",
     capacity: 10,
     timeLimit: "",
+    saleStartsAt: "",
+    saleEndsAt: "",
     bonusReward: "",
     dayId: null,
     visibility: "public",

@@ -48,6 +48,7 @@ export function SelectionLedger({
               onMouseLeave={() => setFocusedMapIds([])}
             >
               <div className="mb-1 flex items-start justify-between gap-2">
+                {group.sectorLabel ? (
                 <span
                   className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wider text-white uppercase"
                   style={{ backgroundColor: accent }}
@@ -58,6 +59,9 @@ export function SelectionLedger({
                   />
                   {group.sectorLabel}
                 </span>
+                ) : (
+                  <span />
+                )}
                 <button
                   type="button"
                   onClick={() => {

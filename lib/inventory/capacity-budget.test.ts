@@ -6,6 +6,7 @@ import {
   occupiesVenueBudget,
   parseStrictInt,
   phaseLimitSum,
+  ticketInventorySignature,
   ticketPhasesExceedParent,
   venueCapacityBudget,
 } from "@/lib/inventory/capacity-budget"
@@ -25,6 +26,8 @@ function ticket(
     calculationMode: patch.calculationMode ?? "public_price",
     capacity: patch.capacity,
     timeLimit: "",
+    saleStartsAt: "",
+    saleEndsAt: "",
     bonusReward: "",
     dayId: null,
     visibility: "public",
@@ -143,6 +146,22 @@ describe("capacity-budget", () => {
     assert.equal(snap.exceeded, false)
   })
 
+  it("sin plano, el cupo es solo la suma de entradas generales", () => {
+    const general = ticket({
+      tierType: "general",
+      capacity: 80,
+      seatingSectorId: null,
+    })
+    const snap = computeEventCapacity({
+      tickets: [general],
+      venueMap: standingMap(376),
+      hasSeatingPlan: false,
+    })
+    assert.equal(snap.mapAllocatedCapacity, 0)
+    assert.equal(snap.unboundGeneralCapacity, 80)
+    assert.equal(snap.totalCapacity, 80)
+  })
+
   it("permite un evento solo con entradas generales, sin sectores ni mapa", () => {
     const general = ticket({
       tierType: "general",
@@ -155,6 +174,20 @@ describe("capacity-budget", () => {
     assert.equal(snap.totalCapacity, 500)
     assert.equal(snap.totalAllocated, 500)
     assert.equal(snap.exceeded, false)
+  })
+
+  it("suma el cupo de cada general y no el length del array", () => {
+    const tickets = [
+      ticket({ tierType: "general", capacity: 10000, seatingSectorId: null }),
+    ]
+    const snap = computeEventCapacity({ tickets })
+    assert.equal(tickets.length, 1)
+    assert.equal(snap.unboundGeneralCapacity, 10000)
+    assert.equal(snap.totalCapacity, 10000)
+    assert.notEqual(
+      ticketInventorySignature([{ capacity: 1, tierType: "general" }]),
+      ticketInventorySignature([{ capacity: 10000, tierType: "general" }]),
+    )
   })
 
   it("suma mapa + sectores + entradas libres sin doble conteo", () => {

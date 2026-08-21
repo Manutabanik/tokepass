@@ -29,6 +29,7 @@ import {
   remapBoundDayId,
   scheduleDaysToFormValues,
 } from "@/lib/event-schedule"
+import { parseSaleInstant } from "@/lib/inventory/ticket-sale-window"
 import {
   asUuidOrNull,
   optionalDayId,
@@ -140,6 +141,10 @@ export const ticketTierSchema = z.preprocess(
     .min(1, "Indicá cuántas entradas vas a poner a la venta"),
   sold: z.number().int().min(0).optional(),
   timeLimit: z.string().optional(),
+  /** datetime-local. Vacío = inmediato. */
+  saleStartsAt: z.string().optional().default(""),
+  /** datetime-local. Vacío = hasta la fecha del evento. */
+  saleEndsAt: z.string().optional().default(""),
   bonusReward: z.string().trim().optional(),
   description: z
     .string()
@@ -189,6 +194,16 @@ export const ticketTierSchema = z.preprocess(
   promoRequiredQty: z.number().int().min(1).max(50).optional().default(1),
   promoPayQty: z.number().int().min(0).max(50).optional().default(1),
   phases: z.array(ticketPhaseSchema).optional().default([]),
+  }).superRefine((tier, context) => {
+    const start = parseSaleInstant(tier.saleStartsAt)
+    const end = parseSaleInstant(tier.saleEndsAt)
+    if (start && end && end.getTime() <= start.getTime()) {
+      context.addIssue({
+        code: "custom",
+        path: ["saleEndsAt"],
+        message: "El fin de venta debe ser posterior al inicio.",
+      })
+    }
   }),
 )
 
@@ -417,8 +432,9 @@ const eventFormObject = z
       Boolean(data.venue.includesSeatingMap)
     const capacitySnap = computeEventCapacity({
       tickets: data.tickets,
-      venueMap: data.venue.venueMap,
-      zones: data.venue.zones,
+      venueMap: data.basics.hasSeatingPlan ? data.venue.venueMap : null,
+      zones: data.basics.hasSeatingPlan ? data.venue.zones : null,
+      hasSeatingPlan: Boolean(data.basics.hasSeatingPlan),
     })
     if (data.basics.deliveryMode !== "ONLINE" && capacitySnap.exceeded) {
       context.addIssue({
@@ -464,6 +480,7 @@ const eventFormObject = z
     }
 
     if (
+      data.basics.hasSeatingPlan &&
       data.basics.deliveryMode !== "ONLINE" &&
       (data.venue.includesSeatingMap || data.venue.venueMap)
     ) {
@@ -533,6 +550,8 @@ const draftTicketSchema = z.preprocess(
   capacity: z.number().int().optional(),
   sold: z.number().int().min(0).optional(),
   timeLimit: z.string().optional(),
+  saleStartsAt: z.string().optional().default(""),
+  saleEndsAt: z.string().optional().default(""),
   bonusReward: z.string().trim().optional(),
   description: z.string().optional().default(""),
   highlightBadge: z
@@ -675,6 +694,8 @@ function blankDraftTicket(): EventFormValues["tickets"][number] {
     calculationMode: "public_price",
     capacity: 1,
     timeLimit: "",
+    saleStartsAt: "",
+    saleEndsAt: "",
     bonusReward: "",
     description: "",
     highlightBadge: null,
@@ -770,6 +791,8 @@ export function coerceDraftEventForm(
           ? null
           : Math.floor(Number(tier.maxPurchaseLimit)),
       admitCount: tier.admitCount ?? 1,
+      saleStartsAt: tier.saleStartsAt ?? "",
+      saleEndsAt: tier.saleEndsAt ?? "",
       seatingSectorId: resolveTicketSectorId(tier),
       tierType: tier.tierType ?? "general",
       listPrice: tier.listPrice ?? null,

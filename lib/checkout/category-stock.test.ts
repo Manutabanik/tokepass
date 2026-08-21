@@ -95,6 +95,19 @@ describe("isCategorySoldOut", () => {
     )
   })
 
+  it("marks a mapped category sold out when the ready map has no stock", () => {
+    assert.equal(
+      isCategorySoldOut({
+        requiresMap: true,
+        stock: 0,
+        seatingSectorId: "grada-naranja",
+        seats: [],
+        mapReady: true,
+      }),
+      true,
+    )
+  })
+
   it("matches zone-grouped tables by sector name", () => {
     const seats = [
       seat({

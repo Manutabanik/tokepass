@@ -33,6 +33,7 @@ export type EventCapacityInput = {
   tickets?: readonly CapacityTicket[] | null
   venueMap?: unknown
   zones?: EventFormValues["venue"]["zones"] | null
+  hasSeatingPlan?: boolean
   baseVenueCapacity?: number | null
   customMaxCapacity?: number | null
   exceptTicketIndex?: number
@@ -51,6 +52,22 @@ export type EventCapacitySnapshot = {
   remaining: number
   overflow: number
   exceeded: boolean
+}
+
+/** Firma reactiva: cambia cuando se edita el cupo, no cuando solo cambia el length del array. */
+export function ticketInventorySignature(
+  tickets: readonly CapacityTicket[] | null | undefined,
+): string {
+  return (tickets ?? [])
+    .map((tier) =>
+      [
+        asPositiveInt(tier.capacity),
+        tier.tierType ?? "",
+        tier.layoutType ?? "",
+        (tier.seatingSectorId ?? "").trim(),
+      ].join(":"),
+    )
+    .join("|")
 }
 
 export function asPositiveInt(value: unknown): number {
@@ -136,15 +153,16 @@ export function computeEventCapacity(
   input: EventCapacityInput,
 ): EventCapacitySnapshot {
   const tickets: readonly CapacityTicket[] = input.tickets ?? []
-  const mapAllocatedCapacity = venueMapCapacity(parseVenueMap(input.venueMap))
-  const declaredSectors = listAssignableGeneralSectors(
-    input.zones,
-    input.venueMap,
-  )
-  const declaredSectorCapacity = assignableGeneralSectorCapacity(
-    input.zones,
-    input.venueMap,
-  )
+  const includeMap = input.hasSeatingPlan !== false
+  const mapAllocatedCapacity = includeMap
+    ? venueMapCapacity(parseVenueMap(input.venueMap))
+    : 0
+  const declaredSectors = includeMap
+    ? listAssignableGeneralSectors(input.zones, input.venueMap)
+    : []
+  const declaredSectorCapacity = includeMap
+    ? assignableGeneralSectorCapacity(input.zones, input.venueMap)
+    : 0
   const declaredIds = new Set(declaredSectors.map((sector) => sector.id))
 
   const generalAllocatedCapacity = tickets.reduce((sum, tier, index) => {
@@ -207,10 +225,15 @@ export function computeEventCapacityFromForm(
     | null
     | undefined,
 ): EventCapacitySnapshot {
+  const hasSeatingPlan =
+    values && "basics" in values
+      ? Boolean((values as EventFormValues).basics?.hasSeatingPlan)
+      : undefined
   return computeEventCapacity({
     tickets: values?.tickets,
-    venueMap: values?.venue?.venueMap,
-    zones: values?.venue?.zones,
+    venueMap: hasSeatingPlan === false ? null : values?.venue?.venueMap,
+    zones: hasSeatingPlan === false ? null : values?.venue?.zones,
+    hasSeatingPlan,
   })
 }
 

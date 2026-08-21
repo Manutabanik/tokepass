@@ -39,6 +39,7 @@ import {
 } from "@/lib/seating/venue-map-occupancy"
 import {
   hydrateStorefrontItemsFromMap,
+  isTablePurchaseSku,
   resolveVenueUnitPrice,
   storefrontFocusCard,
   storefrontItemFromElement,
@@ -243,10 +244,18 @@ export function InteractiveSeatingCanvas({
     [liveOccupancy, occupancyBySeatId],
   )
   const heldSet = useMemo(() => new Set(heldSeatIds), [heldSeatIds])
-  const selectedIds = useMemo(
-    () => new Set(selectedSeats.map((seat) => seat.id)),
-    [selectedSeats],
-  )
+  const selectedIds = useMemo(() => {
+    const ids = new Set(selectedSeats.map((seat) => seat.id))
+    for (const item of liveSelectedItems) {
+      if (item.type !== "table") continue
+      ids.add(item.id)
+      const element = (map.elements ?? []).find((entry) => entry.id === item.id)
+      for (const seat of element?.seats ?? []) {
+        if (seat.id) ids.add(seat.id)
+      }
+    }
+    return ids
+  }, [liveSelectedItems, map.elements, selectedSeats])
   const hoverSeats = useMemo(() => flattenVenueMapSeats(map), [map])
   const buyerOccupancy = !posStatusColors
   const selectedElementIds = useMemo(
@@ -670,6 +679,22 @@ export function InteractiveSeatingCanvas({
       held: heldSet.has(seat.id),
     })
     if (live === "blocked" || live === "occupied") return
+
+    const tableElement = (map.elements ?? []).find(
+      (element) =>
+        isTablePurchaseSku(element) &&
+        (element.id === seat.sectorId ||
+          element.seats.some((entry) => entry.id === seat.id)),
+    )
+    if (tableElement && !onPickSeat) {
+      const item = storefrontItemFromElement(tableElement, priceBySectorId)
+      if (item) {
+        vibrateTap()
+        markActivity()
+        applyToggle(item)
+        return
+      }
+    }
 
     vibrateTap()
     markActivity()

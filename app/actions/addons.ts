@@ -581,6 +581,7 @@ export async function createEventItem(input: {
     .single()
 
   if (error || !data) {
+    console.error("SUPABASE_ERROR:", error)
     if (imageUrl) {
       const path = imageUrl.split("/event-flyers/")[1]
       if (path) await supabase.storage.from("event-flyers").remove([path])

@@ -1,6 +1,6 @@
 "use server"
 
-import { revalidatePath } from "next/cache"
+import { revalidatePath, revalidateTag } from "next/cache"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 import {
@@ -29,6 +29,11 @@ import {
   persistTicketDayId,
   scheduleDaysMissingTicketsMessage,
 } from "@/lib/inventory/day-ticket-coverage"
+import {
+  isMissingSaleWindowSchema,
+  saleWindowToFormValue,
+  saleWindowToIso,
+} from "@/lib/inventory/ticket-sale-window"
 import {
   isMultiDaySchedule,
   normalizeScheduleDaysFromForm,
@@ -124,7 +129,6 @@ import {
 } from "@/lib/seating/venue-map-sku-consistency"
 import {
   collectLiveSeatingSectorIds,
-  isRelationalIntegrityError,
   reconcileTicketTierIds,
   resolvePersistableTicketSectorId,
   sanitizeDeepSeatingRefs,
@@ -319,6 +323,10 @@ export type CreateCompleteEventRpcPayload = {
     max_purchase_limit?: number | null
     admit_count?: number
     total_capacity?: number
+    tier_type?: string
+    bundle_type?: string | null
+    bundle_items?: Array<{ tier_id: string; quantity: number }>
+    list_price?: number | null
   }>
   rrpp_commission: number | null
   addons_enabled: boolean
@@ -361,6 +369,11 @@ function formDateToIso(value: string | null | undefined, fallback: string): stri
   return parseDateTimeLocal(value ?? "")?.toISOString() ?? fallback
 }
 
+function positiveInventoryCapacity(value: unknown): number {
+  const parsed = Math.floor(Number(value))
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1
+}
+
 function mapEventFormToRpcPayload(
   data: EventFormValues,
   feeConfig: EventFeeConfig,
@@ -395,7 +408,7 @@ function mapEventFormToRpcPayload(
       ? logicalZones.map((zone) => ({
           name: zone.name,
           type: zone.type,
-          capacity: zone.capacity,
+          capacity: positiveInventoryCapacity(zone.capacity),
           rows: zone.type === "reserved_seating" ? zone.rows ?? null : null,
           seats_per_row:
             zone.type === "reserved_seating" ? zone.seatsPerRow ?? null : null,
@@ -556,14 +569,17 @@ function mapEventFormToRpcPayload(
         assignableSectorIds,
         venueMap: data.venue.venueMap,
       })
+      const capacity = positiveInventoryCapacity(tier.capacity)
       return {
         ...(tier.id ? { id: tier.id } : {}),
         name: tier.name,
         price: breakdown.publicPrice,
         base_price: breakdown.basePrice,
         platform_fee: breakdown.platformFee,
-        capacity: tier.capacity,
+        capacity,
         time_limit: tier.timeLimit?.trim() ? tier.timeLimit : null,
+        sale_starts_at: saleWindowToIso(tier.saleStartsAt),
+        sale_ends_at: saleWindowToIso(tier.saleEndsAt),
         bonus_reward: tier.bonusReward?.trim() ? tier.bonusReward : null,
         zone_index: zoneIndexForSectorId(logicalZones, seatingSectorId),
         day_id: dayId,
@@ -585,7 +601,23 @@ function mapEventFormToRpcPayload(
           layoutType === "general"
             ? Math.max(1, Math.min(50, tier.admitCount ?? 1))
             : 1,
-        total_capacity: tier.capacity,
+        total_capacity: capacity,
+        tier_type: tierType,
+        bundle_type:
+          tierType === "bundle"
+            ? inferBundleType({
+                bundleType: tier.bundleType,
+                dayId: dayId,
+                items: tier.bundleItems ?? [],
+              })
+            : null,
+        bundle_items: serializeBundleItems(
+          (tier.bundleItems ?? []).map((item) => ({
+            tierId: item.tierId,
+            quantity: item.quantity,
+          })),
+        ),
+        list_price: tier.listPrice ?? null,
       }
     }),
     rrpp_commission: null,
@@ -631,10 +663,11 @@ async function persistEventVenueFields(
   eventId: string,
   data: EventFormValues,
   options?: { allowCreate?: boolean },
-): Promise<string | null> {
+): Promise<{ venueId: string | null; error?: string }> {
   if (isOnlineDelivery(data.basics.deliveryMode)) {
-    await persistEventDeliveryProfile(client, eventId, data)
-    await client
+    const deliveryError = await persistEventDeliveryProfile(client, eventId, data)
+    if (deliveryError) return { venueId: null, error: deliveryError }
+    const { error } = await client
       .from("events")
       .update({
         venue_id: null,
@@ -643,7 +676,10 @@ async function persistEventVenueFields(
         updated_at: new Date().toISOString(),
       } as never)
       .eq("id", eventId)
-    return null
+    if (error && !OPTIONAL_EVENT_FLAG_COLUMNS_RE.test(error.message)) {
+      return { venueId: null, error: error.message }
+    }
+    return { venueId: null }
   }
 
   const { data: eventRow } = await client
@@ -717,10 +753,15 @@ async function persistEventVenueFields(
       updated.error &&
       /max_capacity|schema cache|PGRST204|42703/i.test(updated.error.message)
     ) {
-      await client
+      const retry = await client
         .from("venues")
         .update({ ...venuePatch, capacity: officialCapacity } as never)
         .eq("id", venueId)
+      if (retry.error) {
+        return { venueId, error: retry.error.message }
+      }
+    } else if (updated.error) {
+      return { venueId, error: updated.error.message }
     }
   } else if (
     !creatingNewCatalogVenue &&
@@ -766,6 +807,8 @@ async function persistEventVenueFields(
       )
     ) {
       venueId = await findVenueIdByExactName(client, organizerId, venueName)
+    } else if (created.error) {
+      return { venueId: null, error: created.error.message }
     } else {
       venueId = created.data?.id ?? null
     }
@@ -810,7 +853,15 @@ async function persistEventVenueFields(
         withPlace.error.message,
       )
     ) {
-      await client.from("events").update(eventCore as never).eq("id", eventId)
+      const coreWrite = await client
+        .from("events")
+        .update(eventCore as never)
+        .eq("id", eventId)
+      if (coreWrite.error) {
+        return { venueId, error: coreWrite.error.message }
+      }
+    } else if (withPlace.error) {
+      return { venueId, error: withPlace.error.message }
     }
   } else if (
     withPicker.error &&
@@ -818,10 +869,18 @@ async function persistEventVenueFields(
       withPicker.error.message,
     )
   ) {
-    await client.from("events").update(eventCore as never).eq("id", eventId)
+    const coreWrite = await client
+      .from("events")
+      .update(eventCore as never)
+      .eq("id", eventId)
+    if (coreWrite.error) {
+      return { venueId, error: coreWrite.error.message }
+    }
+  } else if (withPicker.error) {
+    return { venueId, error: withPicker.error.message }
   }
 
-  return venueId
+  return { venueId }
 }
 
 async function persistEventSchedule(
@@ -829,13 +888,13 @@ async function persistEventSchedule(
   eventId: string,
   data: EventFormValues,
   existing?: { date?: string | null; ends_at?: string | null; schedule_days?: unknown },
-): Promise<void> {
+): Promise<string | null> {
   const incomingDays = data.basics.isMultiDay
     ? normalizeScheduleDaysFromForm(data.basics.scheduleDays ?? [])
     : []
 
   if (data.basics.isMultiDay && incomingDays.length === 0) {
-    return
+    return null
   }
 
   const scheduleDays = data.basics.isMultiDay ? incomingDays : []
@@ -849,7 +908,7 @@ async function persistEventSchedule(
       ? parseDateTimeLocal(data.basics.endDate)?.toISOString() ?? null
       : null
 
-  await client
+  const { error } = await client
     .from("events")
     .update({
       schedule_days: scheduleDays,
@@ -857,6 +916,11 @@ async function persistEventSchedule(
       ends_at: endsAt,
     } as never)
     .eq("id", eventId)
+  if (error) {
+    console.error("SUPABASE_ERROR:", error)
+    return error.message
+  }
+  return null
 }
 
 async function loadPersistedSeatingSectorIds(
@@ -945,6 +1009,42 @@ async function persistEventMaxTicketsPerUser(
   return error?.message ?? null
 }
 
+async function revalidatePersistedEvent(
+  client: SupabaseClient<Database>,
+  eventId: string,
+) {
+  const { data } = await client
+    .from("events")
+    .select("slug")
+    .eq("id", eventId)
+    .maybeSingle()
+  const slug = String(data?.slug ?? "").trim()
+  revalidatePath("/admin/events")
+  revalidatePath(`/admin/events/${eventId}`)
+  revalidatePath(`/admin/events/${eventId}/edit`)
+  revalidatePath(`/events/${eventId}`)
+  revalidatePath(`/events/preview/${eventId}`)
+  revalidatePath("/events")
+  revalidatePath("/eventos")
+  if (slug) {
+    revalidatePath(`/eventos/${slug}`)
+    revalidatePath(`/e/${slug}`)
+    revalidateTag(`event-${slug}`, "max")
+    revalidateTag(`event-gate-${slug}`, "max")
+  }
+  revalidateTag("catalog-events", "max")
+}
+
+function persistErrorMessage(error: unknown): string {
+  if (typeof error === "string" && error.trim()) return error.trim()
+  if (error instanceof Error && error.message.trim()) return error.message.trim()
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === "string" && message.trim()) return message.trim()
+  }
+  return mapUnknownError(error).message
+}
+
 function persistFailure(error: unknown): {
   success: false
   error: string
@@ -953,19 +1053,26 @@ function persistFailure(error: unknown): {
   field?: string
   wizardConflict?: WizardConflict
 } {
+  console.error("SUPABASE_ERROR:", error)
+  logger.error({
+    context: "event-persist",
+    message: "SUPABASE_ERROR",
+    error,
+  })
+  const exact = persistErrorMessage(error)
   const mapped = mapUnknownError(error)
   const code = mapped.code === "UNKNOWN" ? "SAVE_FAILED" : mapped.code
   const field = fieldFromAppError(mapped)
   return {
     success: false,
-    error: mapped.message,
+    error: exact || mapped.message,
     code,
     title: mapped.title,
     ...(field ? { field } : {}),
     ...(mapped.action
       ? {
           wizardConflict: {
-            summary: mapped.message,
+            summary: exact || mapped.message,
             actions: [mapped.action],
           },
         }
@@ -1028,7 +1135,7 @@ async function persistEventDeliveryProfile(
   client: SupabaseClient<Database>,
   eventId: string,
   formValues: EventFormValues | DraftEventFormValues,
-) {
+): Promise<string | null> {
   const deliveryMode = parseDeliveryMode(formValues.basics.deliveryMode)
   const online = deliveryMode === "ONLINE"
   const patch: Record<string, unknown> = {
@@ -1047,14 +1154,24 @@ async function persistEventDeliveryProfile(
     .update(patch as never)
     .eq("id", eventId)
   if (error && OPTIONAL_EVENT_FLAG_COLUMNS_RE.test(error.message)) {
-    await client
+    const retry = await client
       .from("events")
       .update({
         location: online ? null : undefined,
         updated_at: patch.updated_at,
       } as never)
       .eq("id", eventId)
+    if (retry.error) {
+      console.error("SUPABASE_ERROR:", retry.error)
+      return retry.error.message
+    }
+    return null
   }
+  if (error) {
+    console.error("SUPABASE_ERROR:", error)
+    return error.message
+  }
+  return null
 }
 
 function stripOptionalEventFlags<T extends Record<string, unknown>>(payload: T): T {
@@ -1138,19 +1255,20 @@ async function persistEventIdentityOnly(input: {
     return persistFailure(updateError.message)
   }
 
-  await persistEventSchedule(
+  const scheduleError = await persistEventSchedule(
     input.mutationClient,
     input.eventId,
     input.formValues as EventFormValues,
     input.existing,
   )
-  await persistEventLineupSnapshot(
+  if (scheduleError) return persistFailure(scheduleError)
+  const lineupError = await persistEventLineupSnapshot(
     input.eventId,
     input.formValues.lineup ?? [],
-  ).catch(() => undefined)
+  )
+  if (!lineupError.success) return persistFailure(lineupError.error)
 
-  revalidatePath(`/admin/events/${input.eventId}`)
-  revalidatePath(`/admin/events/${input.eventId}/edit`)
+  await revalidatePersistedEvent(input.mutationClient, input.eventId)
 
   return {
     success: true,
@@ -1318,31 +1436,26 @@ async function persistNewEventIdentityOnly(
   const eventId = String(created.data.id)
 
   if (hasUserSchedule) {
-    await persistEventSchedule(mutationClient, eventId, raw as EventFormValues)
+    const scheduleError = await persistEventSchedule(
+      mutationClient,
+      eventId,
+      raw as EventFormValues,
+    )
+    if (scheduleError) return persistFailure(scheduleError)
   }
 
   if ((raw.lineup ?? []).length > 0) {
-    await persistEventLineupSnapshot(eventId, raw.lineup ?? []).catch(
-      () => undefined,
+    const lineupError = await persistEventLineupSnapshot(
+      eventId,
+      raw.lineup ?? [],
     )
+    if (!lineupError.success) return persistFailure(lineupError.error)
   }
 
   revalidatePath(`/admin/events/${eventId}`)
   revalidatePath(`/admin/events/${eventId}/edit`)
 
   return { success: true, eventId, venueId: null }
-}
-
-function stripRpcSeatingSectorIds(
-  payload: CreateCompleteEventRpcPayload,
-): CreateCompleteEventRpcPayload {
-  return {
-    ...payload,
-    tiers: payload.tiers.map((tier) => ({
-      ...tier,
-      seating_sector_id: null,
-    })),
-  }
 }
 
 async function runSeatingRpcWithRetry<T>(input: {
@@ -1355,46 +1468,24 @@ async function runSeatingRpcWithRetry<T>(input: {
 }): Promise<{ data: T; error: { message: string } | null }> {
   try {
     const first = await input.execute(input.payload)
-    if (!first.error || !isRelationalIntegrityError(first.error.message)) {
-      return first
-    }
-    logger.error({
-      context: `${input.context}_retry`,
-      event_id: input.eventId,
-      error: first.error,
-    })
-    const second = await input.execute(stripRpcSeatingSectorIds(input.payload))
-    if (second.error && isRelationalIntegrityError(second.error.message)) {
+    if (first.error) {
+      console.error("SUPABASE_ERROR:", first.error)
       logger.error({
-        context: `${input.context}_absorbed`,
+        context: input.context,
         event_id: input.eventId,
-        error: second.error,
+        error: first.error,
       })
     }
-    return second
+    return first
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    if (!isRelationalIntegrityError(message)) {
-      return { data: null as T, error: { message } }
-    }
+    console.error("SUPABASE_ERROR:", error)
     logger.error({
-      context: `${input.context}_catch_retry`,
+      context: input.context,
       event_id: input.eventId,
       error,
     })
-    try {
-      return await input.execute(stripRpcSeatingSectorIds(input.payload))
-    } catch (retryError) {
-      return {
-        data: null as T,
-        error: {
-          message:
-            retryError instanceof Error
-              ? retryError.message
-              : String(retryError),
-        },
-      }
-    }
+    return { data: null as T, error: { message } }
   }
 }
 
@@ -1421,17 +1512,45 @@ async function resyncEventSeatingUnitsAfterMapSave(
   return materializeEventSeatingUnits(client, eventId)
 }
 
+async function assertPersistedInventoryCapacity(
+  client: SupabaseClient<Database>,
+  eventId: string,
+): Promise<string | null> {
+  const { data: tiers, error } = await client
+    .from("ticket_tiers")
+    .select("id, name, capacity")
+    .eq("event_id", eventId)
+  if (error) {
+    console.error("SUPABASE_ERROR:", error)
+    return error.message
+  }
+  const broken = (tiers ?? []).filter(
+    (tier) => tier.capacity == null || Number(tier.capacity) < 1,
+  )
+  if (broken.length > 0) {
+    return `El inventario quedó sin stock en: ${broken
+      .map((tier) => tier.name)
+      .join(", ")}. El guardado se abortó.`
+  }
+  return null
+}
+
 async function syncTierAdmitCounts(
   eventId: string,
   tickets: EventFormValues["tickets"],
-) {
+): Promise<string | null> {
   const admin = createAdminClient()
-  const { data: tiers } = await admin
+  const { data: tiers, error: tiersLoadError } = await admin
     .from("ticket_tiers")
     .select("id, name")
     .eq("event_id", eventId)
 
-  if (!tiers?.length) return
+  if (tiersLoadError) {
+    console.error("SUPABASE_ERROR:", tiersLoadError)
+    return tiersLoadError.message
+  }
+
+  if (!tiers?.length) return null
 
   for (const tier of tiers) {
     const match =
@@ -1581,9 +1700,16 @@ async function syncTierAdmitCounts(
       void omittedValue
       void omittedRequired
       void omittedPay
-      await admin.from("ticket_tiers").update(safePatch).eq("id", tier.id)
+      const retry = await admin
+        .from("ticket_tiers")
+        .update(safePatch)
+        .eq("id", tier.id)
+      if (retry.error) return retry.error.message
+    } else if (withCopy.error) {
+      return withCopy.error.message
     }
   }
+  return null
 }
 
 function isMissingPhasesTable(message: string) {
@@ -1593,14 +1719,18 @@ function isMissingPhasesTable(message: string) {
 async function syncTicketTierPhases(
   eventId: string,
   tickets: EventFormValues["tickets"],
-) {
+): Promise<string | null> {
   const admin = createAdminClient()
   const { data: tiers, error: tiersError } = await admin
     .from("ticket_tiers")
     .select("id, name")
     .eq("event_id", eventId)
 
-  if (tiersError || !tiers?.length) return
+  if (tiersError) {
+    console.error("SUPABASE_ERROR:", tiersError)
+    return tiersError.message
+  }
+  if (!tiers?.length) return null
 
   const { data: existing, error: existingError } = await admin
     .from("ticket_tier_phases")
@@ -1611,8 +1741,9 @@ async function syncTicketTierPhases(
     )
 
   if (existingError) {
-    if (isMissingPhasesTable(existingError.message)) return
-    return
+    if (isMissingPhasesTable(existingError.message)) return null
+    console.error("SUPABASE_ERROR:", existingError)
+    return existingError.message
   }
 
   const keepIds = new Set<string>()
@@ -1655,7 +1786,11 @@ async function syncTicketTierPhases(
           .update(patch)
           .eq("id", phase.id)
           .eq("tier_id", tier.id)
-        if (!error) keepIds.add(phase.id)
+        if (error) {
+          console.error("SUPABASE_ERROR:", error)
+          return error.message
+        }
+        keepIds.add(phase.id)
         continue
       }
 
@@ -1664,7 +1799,11 @@ async function syncTicketTierPhases(
         .insert({ ...patch, tier_id: tier.id })
         .select("id")
         .maybeSingle()
-      if (!error && created?.id) keepIds.add(created.id)
+      if (error) {
+        console.error("SUPABASE_ERROR:", error)
+        return error.message
+      }
+      if (created?.id) keepIds.add(created.id)
     }
   }
 
@@ -1685,6 +1824,42 @@ async function syncTicketTierPhases(
   await admin.rpc("heal_ticket_tier_phases", {
     p_event_id: eventId,
   })
+  return null
+}
+
+async function syncTicketSaleWindows(
+  eventId: string,
+  tickets: EventFormValues["tickets"],
+): Promise<string | null> {
+  const admin = createAdminClient()
+  const { data: tiers, error: tiersError } = await admin
+    .from("ticket_tiers")
+    .select("id, name")
+    .eq("event_id", eventId)
+
+  if (tiersError) {
+    console.error("SUPABASE_ERROR:", tiersError)
+    return tiersError.message
+  }
+
+  for (const tier of tiers ?? []) {
+    const match =
+      tickets.find((item) => item.id && item.id === tier.id) ??
+      tickets.find((item) => item.name.trim() === tier.name.trim())
+    const { error } = await admin
+      .from("ticket_tiers")
+      .update({
+        sale_starts_at: saleWindowToIso(match?.saleStartsAt),
+        sale_ends_at: saleWindowToIso(match?.saleEndsAt),
+      })
+      .eq("id", tier.id)
+    if (error) {
+      if (isMissingSaleWindowSchema(error.message)) return null
+      console.error("SUPABASE_ERROR:", error)
+      return error.message
+    }
+  }
+  return null
 }
 
 function parseAgeRestriction(raw: unknown): AgeRestriction {
@@ -1933,15 +2108,19 @@ async function persistLogicalEventZones(
   client: SupabaseClient<Database>,
   eventId: string,
   data: EventFormValues,
-): Promise<void> {
+): Promise<string | null> {
   const zones = normalizeLogicalSectors(data.venue.zones).filter(
     (zone) => zone.type === "general_admission",
   )
 
-  const { data: existing } = await client
+  const { data: existing, error: existingError } = await client
     .from("event_zones")
     .select("id, name, type")
     .eq("event_id", eventId)
+  if (existingError) {
+    console.error("SUPABASE_ERROR:", existingError)
+    return existingError.message
+  }
 
   const keepNames = new Set(
     zones.map((zone) => zone.name.trim().toLocaleLowerCase("es")),
@@ -1950,14 +2129,18 @@ async function persistLogicalEventZones(
     if (row.type && row.type !== "general_admission") continue
     const key = String(row.name).trim().toLocaleLowerCase("es")
     if (keepNames.has(key)) continue
-    await client
+    const { error } = await client
       .from("event_zones")
       .delete()
       .eq("id", row.id)
       .eq("event_id", eventId)
+    if (error) {
+      console.error("SUPABASE_ERROR:", error)
+      return error.message
+    }
   }
 
-  if (zones.length === 0) return
+  if (zones.length === 0) return null
 
   const byName = new Map(
     (existing ?? [])
@@ -1972,24 +2155,33 @@ async function persistLogicalEventZones(
     const key = zone.name.trim().toLocaleLowerCase("es")
     const currentId = byName.get(key)
     if (currentId) {
-      await client
+      const { error } = await client
         .from("event_zones")
         .update({
-          capacity: zone.capacity,
+          capacity: positiveInventoryCapacity(zone.capacity),
           type: zone.type,
           updated_at: new Date().toISOString(),
         } as never)
         .eq("id", currentId)
         .eq("event_id", eventId)
+      if (error) {
+        console.error("SUPABASE_ERROR:", error)
+        return error.message
+      }
       continue
     }
-    await client.from("event_zones").insert({
+    const { error } = await client.from("event_zones").insert({
       event_id: eventId,
       name: zone.name,
       type: zone.type,
-      capacity: zone.capacity,
+      capacity: positiveInventoryCapacity(zone.capacity),
     } as never)
+    if (error) {
+      console.error("SUPABASE_ERROR:", error)
+      return error.message
+    }
   }
+  return null
 }
 
 async function loadEditableLineup(
@@ -2123,7 +2315,7 @@ export async function getEventForEditing(
     }
 
     const ticketSelectWithCopy =
-      "id, name, price, base_price, platform_fee, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, admit_count, category, list_price, tier_type, bundle_items, bundle_type, promo_discount_type, promo_discount_value, promo_required_qty, promo_pay_qty, description, highlight_badge, min_purchase_limit, max_purchase_limit"
+      "id, name, price, base_price, platform_fee, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, admit_count, category, list_price, tier_type, bundle_items, bundle_type, promo_discount_type, promo_discount_value, promo_required_qty, promo_pay_qty, description, highlight_badge, min_purchase_limit, max_purchase_limit, sale_starts_at, sale_ends_at"
     const ticketSelectCore =
       "id, name, price, base_price, platform_fee, capacity, sold, time_limit, bonus_reward, day_id, visibility, layout_type, seating_sector_id, capacity_per_unit, admit_count, category, list_price, tier_type, bundle_items, bundle_type"
 
@@ -2136,7 +2328,7 @@ export async function getEventForEditing(
           .order("created_at")
         if (
           rich.error &&
-          /description|highlight_badge|min_purchase_limit|max_purchase_limit|promo_discount|schema cache|PGRST204|42703/i.test(
+          /description|highlight_badge|min_purchase_limit|max_purchase_limit|promo_discount|sale_starts_at|sale_ends_at|schema cache|PGRST204|42703/i.test(
             rich.error.message,
           )
         ) {
@@ -2244,6 +2436,12 @@ export async function getEventForEditing(
       capacity: Math.max(1, Number(tier.capacity) || 1),
       sold: Math.max(0, Number(tier.sold) || 0),
       timeLimit: tier.time_limit ?? "",
+      saleStartsAt: saleWindowToFormValue(
+        (tier as { sale_starts_at?: string | null }).sale_starts_at,
+      ),
+      saleEndsAt: saleWindowToFormValue(
+        (tier as { sale_ends_at?: string | null }).sale_ends_at,
+      ),
       bonusReward: tier.bonus_reward ?? "",
       description:
         typeof (tier as { description?: string | null }).description === "string"
@@ -2686,6 +2884,13 @@ export async function createCompleteEvent(
       }
     }
     rpcPayload = mapEventFormToRpcPayload(formValues, feeConfig, flyerUrl)
+    console.info("[event-persist] create payload", {
+      tickets: rpcPayload.tiers.length,
+      lineup: formValues.lineup?.length ?? 0,
+      combos: formValues.tickets.filter((tier) => tier.tierType === "bundle").length,
+      addons: formValues.tickets.filter((tier) => tier.tierType === "addon").length,
+      zones: rpcPayload.zones.length,
+    })
   } catch (error) {
     return persistFailure(
       error instanceof Error
@@ -2729,12 +2934,28 @@ export async function createCompleteEvent(
     }
   }
 
-  await syncTierAdmitCounts(String(eventId), formValues.tickets)
-  await syncTicketTierPhases(String(eventId), formValues.tickets)
-  await persistEventLineupSnapshot(String(eventId), formValues.lineup ?? []).catch(
-    () => undefined,
+  const admitError = await syncTierAdmitCounts(String(eventId), formValues.tickets)
+  if (admitError) {
+    return persistFailure(admitError)
+  }
+  const phasesError = await syncTicketTierPhases(String(eventId), formValues.tickets)
+  if (phasesError) return persistFailure(phasesError)
+  const saleWindowError = await syncTicketSaleWindows(
+    String(eventId),
+    formValues.tickets,
   )
-  await persistEventSchedule(rpcClient, String(eventId), formValues)
+  if (saleWindowError) return persistFailure(saleWindowError)
+  const lineupError = await persistEventLineupSnapshot(
+    String(eventId),
+    formValues.lineup ?? [],
+  )
+  if (!lineupError.success) return persistFailure(lineupError.error)
+  const scheduleError = await persistEventSchedule(
+    rpcClient,
+    String(eventId),
+    formValues,
+  )
+  if (scheduleError) return persistFailure(scheduleError)
   const purchaseLimitError = await persistEventMaxTicketsPerUser(
     rpcClient,
     String(eventId),
@@ -2743,27 +2964,45 @@ export async function createCompleteEvent(
   if (purchaseLimitError) {
     return persistFailure(purchaseLimitError)
   }
-  const venueId = await persistEventVenueFields(
+  const venuePersist = await persistEventVenueFields(
     rpcClient,
     String(eventId),
     formValues,
     { allowCreate: !draftMode },
   )
-  await persistEventDeliveryProfile(rpcClient, String(eventId), formValues)
+  if (venuePersist.error) {
+    return persistFailure(venuePersist.error)
+  }
+  const venueId = venuePersist.venueId
+  const deliveryError = await persistEventDeliveryProfile(
+    rpcClient,
+    String(eventId),
+    formValues,
+  )
+  if (deliveryError) return persistFailure(deliveryError)
+  const zonesError = await persistLogicalEventZones(
+    rpcClient,
+    String(eventId),
+    formValues,
+  )
+  if (zonesError) return persistFailure(zonesError)
 
   const materializeError = await resyncEventSeatingUnitsAfterMapSave(
     rpcClient,
     String(eventId),
   )
-  if (materializeError && !isRelationalIntegrityError(materializeError)) {
+  if (materializeError) {
     return persistFailure(materializeError)
   }
+  const capacityError = await assertPersistedInventoryCapacity(
+    rpcClient,
+    String(eventId),
+  )
+  if (capacityError) return persistFailure(capacityError)
 
+  await revalidatePersistedEvent(rpcClient, String(eventId))
   if (!draftMode) {
     revalidatePath("/admin")
-    revalidatePath("/admin/events")
-    revalidatePath(`/admin/events/${String(eventId)}`)
-    revalidatePath("/events")
     revalidatePath("/")
     revalidatePath("/superadmin")
     revalidatePath("/super-admin")
@@ -2898,30 +3137,39 @@ export async function updateCompleteEvent(
   const skuError = venueMapSkuGuard(formValues)
   if (skuError) return skuError
 
-  const venueId = await persistEventVenueFields(
+  const healedTicketCount = formValues.tickets.length
+  const venuePersist = await persistEventVenueFields(
     mutationClient,
     eventId,
     formValues,
     { allowCreate: !draftMode },
   )
-  await persistEventDeliveryProfile(mutationClient, eventId, formValues)
+  if (venuePersist.error) {
+    return persistFailure(venuePersist.error)
+  }
+  const venueId = venuePersist.venueId
+  const deliveryError = await persistEventDeliveryProfile(
+    mutationClient,
+    eventId,
+    formValues,
+  )
+  if (deliveryError) return persistFailure(deliveryError)
   if (venueId) {
     formValues.venue.existingVenueId = venueId
   }
-  await persistLogicalEventZones(mutationClient, eventId, formValues)
-  if (formValues.tickets.length === 0) {
-    const purchaseLimitError = await persistEventMaxTicketsPerUser(
-      mutationClient,
-      eventId,
-      formValues.maxTicketsPerUser,
-    )
-    if (purchaseLimitError) {
-      return persistFailure(purchaseLimitError)
-    }
-    revalidatePath(`/admin/events/${eventId}`)
-    revalidatePath(`/admin/events/${eventId}/edit`)
-    return { success: true, eventId, venueId }
+  const materializeBeforeTickets = await resyncEventSeatingUnitsAfterMapSave(
+    mutationClient,
+    eventId,
+  )
+  if (materializeBeforeTickets) {
+    return persistFailure(materializeBeforeTickets)
   }
+  const zonesError = await persistLogicalEventZones(
+    mutationClient,
+    eventId,
+    formValues,
+  )
+  if (zonesError) return persistFailure(zonesError)
   const persistedSectors = await loadPersistedSeatingSectorIds(
     mutationClient,
     eventId,
@@ -2931,6 +3179,28 @@ export async function updateCompleteEvent(
     ...normalizeLogicalSectors(formValues.venue.zones).map((zone) => zone.id),
   ])
   formValues.tickets = sanitized.tickets
+  if (formValues.tickets.length === 0) {
+    if (healedTicketCount > 0) {
+      return persistFailure(
+        "El inventario no se pudo guardar: las entradas se vaciaron al validar sectores. Revisá el mapa y los combos.",
+      )
+    }
+    const lineupOnlyError = await persistEventLineupSnapshot(
+      eventId,
+      formValues.lineup ?? [],
+    )
+    if (!lineupOnlyError.success) return persistFailure(lineupOnlyError.error)
+    const purchaseLimitError = await persistEventMaxTicketsPerUser(
+      mutationClient,
+      eventId,
+      formValues.maxTicketsPerUser,
+    )
+    if (purchaseLimitError) {
+      return persistFailure(purchaseLimitError)
+    }
+    await revalidatePersistedEvent(mutationClient, eventId)
+    return { success: true, eventId, venueId }
+  }
 
   const flyerEntry = formData.get("flyer")
   let uploadedFlyerUrl: string | null = null
@@ -2968,6 +3238,14 @@ export async function updateCompleteEvent(
         schedule_days: event.schedule_days,
       },
     )
+    console.info("[event-persist] update payload", {
+      eventId,
+      tickets: rpcPayload.tiers.length,
+      lineup: formValues.lineup?.length ?? 0,
+      combos: formValues.tickets.filter((tier) => tier.tierType === "bundle").length,
+      addons: formValues.tickets.filter((tier) => tier.tierType === "addon").length,
+      zones: rpcPayload.zones.length,
+    })
   } catch (error) {
     return persistFailure(
       error instanceof Error
@@ -2992,18 +3270,6 @@ export async function updateCompleteEvent(
     },
   })
 
-  if (rpcResult.error && isRelationalIntegrityError(rpcResult.error.message)) {
-    const purchaseLimitError = await persistEventMaxTicketsPerUser(
-      mutationClient,
-      eventId,
-      formValues.maxTicketsPerUser,
-    )
-    if (purchaseLimitError) {
-      return persistFailure(purchaseLimitError)
-    }
-    return { success: true, eventId, venueId }
-  }
-
   if (rpcResult.error) {
     if (uploadedFlyerUrl) {
       const path = uploadedFlyerUrl.split("/event-flyers/")[1]
@@ -3021,16 +3287,25 @@ export async function updateCompleteEvent(
 
   const updatedId = rpcResult.data
 
-  await syncTierAdmitCounts(eventId, formValues.tickets)
-  await syncTicketTierPhases(eventId, formValues.tickets)
-  await persistEventLineupSnapshot(eventId, formValues.lineup ?? []).catch(
-    () => undefined,
+  const admitSyncError = await syncTierAdmitCounts(eventId, formValues.tickets)
+  if (admitSyncError) {
+    return persistFailure(admitSyncError)
+  }
+  const phasesError = await syncTicketTierPhases(eventId, formValues.tickets)
+  if (phasesError) return persistFailure(phasesError)
+  const saleWindowError = await syncTicketSaleWindows(eventId, formValues.tickets)
+  if (saleWindowError) return persistFailure(saleWindowError)
+  const lineupError = await persistEventLineupSnapshot(
+    eventId,
+    formValues.lineup ?? [],
   )
-  await persistEventSchedule(mutationClient, eventId, formValues, {
+  if (!lineupError.success) return persistFailure(lineupError.error)
+  const scheduleError = await persistEventSchedule(mutationClient, eventId, formValues, {
     date: event.date,
     ends_at: event.ends_at,
     schedule_days: event.schedule_days,
   })
+  if (scheduleError) return persistFailure(scheduleError)
   const purchaseLimitError = await persistEventMaxTicketsPerUser(
     mutationClient,
     eventId,
@@ -3044,17 +3319,18 @@ export async function updateCompleteEvent(
     mutationClient,
     eventId,
   )
-  if (materializeError && !isRelationalIntegrityError(materializeError)) {
+  if (materializeError) {
     return persistFailure(materializeError)
   }
+  const capacityError = await assertPersistedInventoryCapacity(
+    mutationClient,
+    eventId,
+  )
+  if (capacityError) return persistFailure(capacityError)
 
+  await revalidatePersistedEvent(mutationClient, eventId)
   if (!draftMode) {
     revalidatePath("/admin")
-    revalidatePath("/admin/events")
-    revalidatePath(`/admin/events/${eventId}`)
-    revalidatePath(`/admin/events/${eventId}/edit`)
-    revalidatePath("/events")
-    revalidatePath(`/events/${eventId}`)
     revalidatePath("/")
   }
 
@@ -3837,20 +4113,63 @@ export async function saveVenueMapOnly(
   const mutationClient =
     event.organizer_id !== userId ? createAdminClient() : supabase
 
-  const { error } = await mutationClient
+  const parsedMap = parseVenueMap(venueMapData)
+  const seatingLayout = venueMapToSeatingLayout(parsedMap) as unknown as Json
+  const now = new Date().toISOString()
+  const { data: eventRow, error: eventReadError } = await mutationClient
     .from("events")
-    .update({
-      venue_map: payload,
-      updated_at: new Date().toISOString(),
-    } as never)
+    .select("venue_id")
     .eq("id", id)
-
-  if (error) {
-    return { success: false, error: "No se pudo guardar el mapa." }
+    .maybeSingle()
+  if (eventReadError) {
+    return { success: false, error: eventReadError.message }
   }
 
-  revalidatePath(`/admin/events/${id}/edit`)
-  revalidatePath(`/admin/events/${id}`)
+  const mapPatch = {
+    venue_map: payload,
+    has_seating_plan: true,
+    updated_at: now,
+  }
+  const { error } = await mutationClient
+    .from("events")
+    .update(mapPatch as never)
+    .eq("id", id)
+
+  if (error && OPTIONAL_EVENT_FLAG_COLUMNS_RE.test(error.message)) {
+    const retry = await mutationClient
+      .from("events")
+      .update({
+        venue_map: payload,
+        updated_at: now,
+      } as never)
+      .eq("id", id)
+    if (retry.error) {
+      return { success: false, error: retry.error.message }
+    }
+  } else if (error) {
+    return { success: false, error: error.message }
+  }
+
+  if (eventRow?.venue_id) {
+    const venueWrite = await mutationClient
+      .from("venues")
+      .update({
+        venue_map: payload,
+        seating_layout: seatingLayout,
+        updated_at: now,
+      } as never)
+      .eq("id", eventRow.venue_id)
+    if (venueWrite.error) {
+      return { success: false, error: venueWrite.error.message }
+    }
+  }
+
+  const materializeError = await materializeEventSeatingUnits(mutationClient, id)
+  if (materializeError) {
+    return { success: false, error: materializeError }
+  }
+
+  await revalidatePersistedEvent(mutationClient, id)
   return { success: true }
 }
 

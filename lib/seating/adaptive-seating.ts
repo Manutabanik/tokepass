@@ -363,11 +363,11 @@ export function mergeParametricOccupancy(input: {
 }
 
 const ZONE_PRESETS = [
-  { name: "Sector Naranja", color: "#f97316" },
-  { name: "Sector Lima", color: "#a3e635" },
-  { name: "Sector Cian", color: "#22d3ee" },
-  { name: "Sector Magenta", color: "#e879f9" },
-  { name: "Sector Oro", color: "#facc15" },
+  { name: "Zona 1", color: "#f97316" },
+  { name: "Zona 2", color: "#a3e635" },
+  { name: "Zona 3", color: "#22d3ee" },
+  { name: "Zona 4", color: "#e879f9" },
+  { name: "Zona 5", color: "#facc15" },
 ] as const
 
 export function createVenueZone(

@@ -76,11 +76,19 @@ export async function autosaveEventDraft(input: {
 
   const parsed = draftEventSchema.safeParse(values)
   if (!parsed.success) {
-    return { ok: true, eventId: input.eventId ?? "", mode: "skipped" }
+    const issue = parsed.error.issues[0]
+    console.error("SUPABASE_ERROR:", parsed.error)
+    return {
+      ok: false,
+      error:
+        issue?.message ??
+        "El borrador no se pudo validar. Revisá sectores, combos y el mapa.",
+    }
   }
 
+  console.info("[event-autosave] persist payload", parsed.data)
   const formData = new FormData()
-  formData.set("payload", JSON.stringify(values))
+  formData.set("payload", JSON.stringify(parsed.data))
   formData.set("draftMode", "1")
   if (input.targetOrganizerId) {
     formData.set("targetOrganizerId", input.targetOrganizerId)
@@ -110,11 +118,15 @@ export async function autosaveEventDraft(input: {
   }
 
   if (input.zoneTierPricing && input.zoneTierPricing.length > 0) {
-    await syncZoneTierPricing({
+    const pricing = await syncZoneTierPricing({
       eventId,
       rows: input.zoneTierPricing,
       revalidate: false,
     })
+    if (!pricing.success) {
+      console.error("SUPABASE_ERROR:", pricing.error)
+      return { ok: false, error: pricing.error }
+    }
   }
 
   return {

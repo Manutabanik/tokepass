@@ -1,6 +1,7 @@
 import "server-only"
 
 import { expandIndividualAccessTickets } from "@/lib/email/order-ticket-payload"
+import { buildDynamicQrPatch, type PaidTicketQrRow } from "@/lib/tickets/ensure-dynamic-qr"
 import { logger } from "@/lib/logger"
 import { moneyAmountsEqual } from "@/lib/money/cents"
 import { scheduleNotificationOutboxDrain } from "@/lib/notifications/outbox"
@@ -45,6 +46,34 @@ function asPaymentProvider(
   provider: SupportedPaymentProvider,
 ): PaymentProvider {
   return provider
+}
+
+async function ensurePaidOrderDynamicQrs(orderId: string): Promise<void> {
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from("tickets")
+    .select(
+      "id, qr_code, totp_secret, is_dynamic_qr, status, events(qr_type, delivery_mode)",
+    )
+    .eq("order_id", orderId)
+    .eq("status", "valid")
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  for (const row of (data ?? []) as PaidTicketQrRow[]) {
+    const patch = buildDynamicQrPatch(row)
+    if (!patch) continue
+    const { error: updateError } = await admin
+      .from("tickets")
+      .update(patch)
+      .eq("id", row.id)
+      .eq("order_id", orderId)
+    if (updateError) {
+      throw new Error(updateError.message)
+    }
+  }
 }
 
 export async function processPaidOrderNotification(
@@ -203,6 +232,17 @@ export async function processPaidOrderNotification(
         error,
       })
     }
+
+    void ensurePaidOrderDynamicQrs(orderId).catch((error) => {
+      logger.error({
+        context: "payments/confirm-order",
+        message: "dynamic_qr_generate_failed",
+        orderId,
+        provider,
+        transactionId,
+        error,
+      })
+    })
   }
 
   scheduleNotificationOutboxDrain()

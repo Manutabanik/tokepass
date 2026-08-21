@@ -81,6 +81,8 @@ function sampleEvent(): EventDetails {
         bundle_type: null,
         description: null,
         highlight_badge: null,
+        sale_starts_at: null,
+        sale_ends_at: null,
         available: 80,
         phases: [],
       },

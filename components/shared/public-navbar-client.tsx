@@ -2,16 +2,12 @@
 
 import { UserRound } from "lucide-react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
 
 import { AccountAvatarMenu } from "@/components/account/account-avatar-menu"
 import { BrandLogo } from "@/components/shared/brand-logo"
 import { NavbarSearch } from "@/components/shared/navbar-search"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { cn } from "@/lib/utils"
-
-const navLinkClass =
-  "shrink-0 whitespace-nowrap rounded-full px-3 py-2 text-sm font-medium text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white"
 
 export function PublicNavbarClient({
   isAuthenticated,
@@ -26,10 +22,6 @@ export function PublicNavbarClient({
   userInitials?: string
   avatarUrl?: string | null
 }) {
-  const pathname = usePathname()
-  const isHome = pathname === "/"
-  const exploreHref = isHome ? "#discovery-results" : "/"
-
   return (
     <>
       <header
@@ -39,39 +31,32 @@ export function PublicNavbarClient({
           "pt-[max(env(safe-area-inset-top),1rem)]",
         )}
       >
-        <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-3 px-4 lg:px-8">
-          <div className="flex min-w-0 flex-1 items-center">
-            <BrandLogo href="/" size="header" className="min-w-0 truncate" />
+        <div className="mx-auto flex h-16 w-full max-w-7xl items-center gap-2 px-4 sm:gap-3 lg:px-8">
+          <div className="flex shrink-0 items-center">
+            <BrandLogo
+              href="/"
+              size="header"
+              markOnly
+              className="sm:hidden"
+            />
+            <BrandLogo
+              href="/"
+              size="header"
+              className="hidden min-w-0 truncate sm:inline-flex"
+            />
           </div>
 
-          <nav
-            className="hidden shrink-0 items-center justify-center gap-1 lg:flex lg:gap-2"
-            aria-label="Cartelera de eventos"
-          >
-            <Link href={exploreHref} className={navLinkClass}>
-              Descubrir shows
-            </Link>
-            {!isAuthenticated ? (
-              <Link
-                href="/login?next=/cuenta/entradas"
-                className={navLinkClass}
-              >
-                Mis Entradas
-              </Link>
-            ) : null}
+          <div className="flex min-w-0 flex-1 justify-center">
+            <NavbarSearch />
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             <Link
               href="/organizar-eventos"
-              className={cn(
-                navLinkClass,
-                "border border-violet-300/70 text-violet-700 hover:bg-violet-50 dark:border-violet-400/40 dark:text-violet-200 dark:hover:bg-violet-500/10",
-              )}
+              className="hidden whitespace-nowrap rounded-full px-3 py-2 text-sm font-medium text-violet-700 transition hover:bg-violet-50 lg:inline-flex dark:text-violet-200 dark:hover:bg-violet-500/10"
             >
-              Organizar Eventos
+              Organizar
             </Link>
-          </nav>
-
-          <div className="flex min-w-0 items-center gap-3">
-            <NavbarSearch />
 
             <ThemeToggle
               className={cn(
@@ -93,13 +78,14 @@ export function PublicNavbarClient({
               <Link
                 href="/login"
                 className={cn(
-                  "inline-flex h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-sm font-semibold text-white sm:h-10 sm:px-4",
+                  "inline-flex h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 text-sm font-semibold text-white sm:h-10 sm:px-4",
                   "bg-gradient-to-r from-violet-600 to-fuchsia-600",
                   "shadow-sm transition hover:from-violet-500 hover:to-fuchsia-500",
                 )}
               >
                 <UserRound className="size-3.5 shrink-0" aria-hidden="true" />
-                <span className="whitespace-nowrap">Ingresar a mi cuenta</span>
+                <span className="sm:hidden">Ingresar</span>
+                <span className="hidden sm:inline">Ingresar a mi cuenta</span>
               </Link>
             )}
           </div>

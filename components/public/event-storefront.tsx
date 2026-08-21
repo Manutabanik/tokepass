@@ -31,7 +31,6 @@ import { SponsorGrid } from "@/components/public/sponsor-grid"
 import { OrganizerAvatar } from "@/components/public/organizer-avatar"
 import { ProducerFollowButton } from "@/components/public/producer-follow-button"
 import { SandboxBanner } from "@/components/public/sandbox-banner"
-import { eventNeedsInteractiveCanvas } from "@/lib/seating/venue-map-pricing"
 import {
   Accordion,
   AccordionContent,
@@ -171,9 +170,7 @@ export function EventStorefront({
   })
   const finished = saleState === "finished"
   const soldOut = saleState === "sold_out"
-  const hasInteractiveMap =
-    !finished &&
-    eventNeedsInteractiveCanvas(event.venue?.venue_map, event.tiers)
+  const hasInteractiveMap = !finished && event.hasInteractiveMap
   const demand = finished || soldOut ? null : demandLabel(event.tiers)
   const isOnlineEvent = event.deliveryMode === "ONLINE"
   const venueName = isOnlineEvent
@@ -272,6 +269,7 @@ export function EventStorefront({
     eventClick?.stopPropagation()
     const store = useCheckoutStore.getState()
     store.resetIfOtherEvent(event.id)
+    store.clearCart()
     useStorefrontChromeStore.getState().setCheckoutTunnel(true)
     store.setViewMode("checkout")
   }
@@ -361,6 +359,8 @@ export function EventStorefront({
         description: tier.description,
         highlightBadge: tier.highlight_badge,
         sold: tier.sold,
+        saleStartsAt: tier.sale_starts_at ?? null,
+        saleEndsAt: tier.sale_ends_at ?? null,
         phases: tier.phases ?? [],
       })),
     [event.comboItemsByTier, event.tiers],
@@ -608,7 +608,7 @@ export function EventStorefront({
   }
 
   const asideClassName =
-    "hidden w-full scroll-mt-28 px-4 md:px-0 lg:sticky lg:top-28 lg:z-10 lg:block lg:h-fit lg:w-[400px] lg:shrink-0"
+    "hidden w-full scroll-mt-28 lg:block lg:w-[400px] xl:w-[450px] shrink-0 sticky top-28 h-fit z-20"
 
   if (showCheckout) {
     return (

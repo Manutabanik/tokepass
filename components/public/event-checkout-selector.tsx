@@ -29,17 +29,23 @@ import { resolveStockScarcity } from "@/lib/checkout/stock-scarcity"
 import { formatTicketPrice } from "@/lib/format"
 import { resolveSalePhases } from "@/lib/inventory/active-phase"
 import {
+  resolveTicketSaleState,
+  ticketSaleWindowLabel,
+} from "@/lib/inventory/ticket-sale-window"
+import {
   inferInventoryTierType,
   isQuantityInventoryType,
   type InventoryTierType,
 } from "@/lib/inventory/unified-inventory"
 import { purchaseCapForTier } from "@/lib/checkout-limits"
 import { resolveCategoryAvailability } from "@/lib/checkout/category-stock"
+import { selectableTicketStock } from "@/lib/checkout/ticket-stock"
 import {
   displayChargePrice,
   resolveChargeUnit,
 } from "@/lib/checkout/charge-unit"
 import { resolveSectorAssignMeta } from "@/lib/seating/assign-best-seats"
+import { resolveTicketSectorName } from "@/lib/seating/storefront-selection"
 import {
   FULL_PASS_TAB_ID,
   defaultCheckoutDateId,
@@ -60,7 +66,6 @@ import {
   sectorUsesNumberedMap,
   ticketRequiresInteractiveMap,
 } from "@/lib/seating/venue-map-pricing"
-import { InteractiveMapViewer } from "@/components/public/interactive-map-viewer"
 import { TicketTierList } from "@/components/public/ticket-tier-list"
 import { cn, tapFeedbackClass } from "@/lib/utils"
 import type { ScheduleDay } from "@/types/events"
@@ -202,13 +207,14 @@ export function EventCheckoutSelector({
   }) {
     const tier = listTiers.find((item) => item.id === category.id)
     if (tier) {
+      const requiresMap = tierRequiresMap(
+        tier,
+        seatSelection?.map,
+        seatSelection?.sectors,
+      )
       const soldOut = resolveCategoryAvailability({
-        requiresMap: tierRequiresMap(
-          tier,
-          seatSelection?.map,
-          seatSelection?.sectors,
-        ),
-        stock: tier.available,
+        requiresMap,
+        stock: selectableTicketStock(tier),
         categoryId: tier.id,
         seatingSectorId: tier.seatingSectorId ?? category.sectorId,
         categoryName: tier.name,
@@ -225,6 +231,7 @@ export function EventCheckoutSelector({
         mapReady: Boolean(seatSelection?.map) && !mapLoading,
       }).isSoldOut
       if (soldOut) return
+      if (!requiresMap && selectableTicketStock(tier) <= 0) return
     }
     if (hasInteractiveMap && seatSelection) {
       const sectorId = category.sectorId ?? tier?.seatingSectorId ?? null
@@ -247,6 +254,8 @@ export function EventCheckoutSelector({
           return
         }
         if (tier) {
+          const stock = selectableTicketStock(tier)
+          if (stock <= 0) return
           const cap = purchaseCapForTier({
             layoutType: tier.layoutType,
             maxPurchaseLimit: tier.maxPurchaseLimit,
@@ -254,8 +263,8 @@ export function EventCheckoutSelector({
           })
           onQuantityChange(
             tier.id,
-            Math.min(cap, (quantities[tier.id] ?? 0) + 1),
-            Math.min(cap, Math.max(0, tier.available)),
+            Math.min(cap, stock, (quantities[tier.id] ?? 0) + 1),
+            Math.min(cap, stock),
           )
         }
         return
@@ -317,21 +326,6 @@ export function EventCheckoutSelector({
         </div>
       ) : null}
 
-      {hasInteractiveMap && seatSelection?.map ? (
-        <InteractiveMapViewer
-          map={seatSelection.map}
-          eventId={seatSelection.eventId}
-          occupancyBySeatId={seatSelection.occupancyBySeatId}
-          priceBySectorId={seatSelection.priceBySectorId}
-          pending={isPending}
-          selectedZoneId={seatSelection.selectedZoneId}
-          unavailableZoneIds={seatSelection.unavailableZoneIds}
-          heldSeatIds={seatSelection.heldSeatIds}
-          maxSelectable={maxTicketsPerUser ?? undefined}
-          onSelectZone={seatSelection.onSelectZone}
-        />
-      ) : null}
-
       <div className="flex flex-col gap-3">
         <TicketSelectionList
             listTiers={listTiers}
@@ -349,6 +343,7 @@ export function EventCheckoutSelector({
             selectedDateId={selectedDateId}
             onSelectedDateIdChange={onSelectedDateIdChange}
             showSyntheticMapRow={showSyntheticMapRow}
+            hasInteractiveMap={hasInteractiveMap}
             seatSelection={seatSelection}
             onQuantityChange={onQuantityChange}
             onPurchaseIntent={onPurchaseIntent}
@@ -356,7 +351,7 @@ export function EventCheckoutSelector({
           />
         </div>
 
-      {seatSelection ? (
+      {hasInteractiveMap && seatSelection ? (
         <SeatSelectionSheet
           open={isSeatSelectionOpen}
           onOpenChange={setIsSeatSelectionOpen}
@@ -373,6 +368,7 @@ export function EventCheckoutSelector({
             seatSelection.selectedZoneId ?? activeSeatCategory?.sectorId
           }
           pending={isPending}
+          loading={mapLoading}
           maxTicketsPerUser={maxTicketsPerUser}
           context={seatSelection}
           selectionMode={seatSheetMode}
@@ -401,6 +397,7 @@ function TicketSelectionList({
   selectedDateId,
   onSelectedDateIdChange,
   showSyntheticMapRow,
+  hasInteractiveMap,
   seatSelection,
   onQuantityChange,
   onPurchaseIntent,
@@ -421,6 +418,7 @@ function TicketSelectionList({
   selectedDateId: string | null
   onSelectedDateIdChange?: (dateId: string) => void
   showSyntheticMapRow: boolean
+  hasInteractiveMap: boolean
   seatSelection: SeatSelectionContext | null
   onQuantityChange: (tierId: string, quantity: number, max: number) => void
   onPurchaseIntent?: () => void
@@ -521,6 +519,7 @@ function TicketSelectionList({
   const occupancyBySeatId = seatSelection?.occupancyBySeatId ?? {}
 
   const ticketNeedsSeatModal = (tier: TicketSelectorTier) =>
+    hasInteractiveMap &&
     tierRequiresMap(tier, seatSelection?.map, seatSelection?.sectors)
 
   function renderTierCard(tier: TicketSelectorTier) {
@@ -720,7 +719,18 @@ function TicketSelectionList({
                           maxTicketsPerUser={maxTicketsPerUser}
                           isPending={isPending}
                           scheduleDays={scheduleDays}
+                          venueMap={seatMap}
+                          hasInteractiveMap={hasInteractiveMap}
                           onQuantityChange={onQuantityChange}
+                          onSelectSeat={(tierId) => {
+                            const tier = listTiers.find((item) => item.id === tierId)
+                            if (!tier) return
+                            onOpenSeatSelection({
+                              id: tier.id,
+                              name: tier.name,
+                              sectorId: tier.seatingSectorId,
+                            })
+                          }}
                         />
                       ) : null}
                     </div>
@@ -823,6 +833,10 @@ function PlaceActionButton({
   )
 }
 
+function isPlaceholderSectorBadge(label: string) {
+  return /^(sector\s+)?(naranja|lima|cian|magenta|oro)$/i.test(label.trim())
+}
+
 function ticketCardBadges({
   chargeBadge,
   includesGeneralAccess,
@@ -851,7 +865,7 @@ function ticketCardBadges({
     badges.push({ key: "highlight", label: "Más vendida", tone: "highlight" })
   }
   const custom = tier.badgeText?.trim() || tier.bonusReward?.trim() || ""
-  if (custom) {
+  if (custom && !isPlaceholderSectorBadge(custom)) {
     badges.push({ key: "custom", label: custom, tone: "custom" })
   }
   return badges
@@ -899,12 +913,22 @@ function UnifiedTicketCard({
 }) {
   const sale = resolveSalePhases(tier.phases)
   const current = sale.current
+  const saleState = resolveTicketSaleState({
+    available: tier.available,
+    capacity: tier.capacity,
+    sold: tier.sold,
+    saleStartsAt: tier.saleStartsAt,
+    saleEndsAt: tier.saleEndsAt,
+  })
+  const saleLabel = ticketSaleWindowLabel(saleState)
+  const windowClosed = saleState.kind !== "active"
   const remaining = purchaseCapForTier({
     layoutType: tier.layoutType,
     maxPurchaseLimit: tier.maxPurchaseLimit,
     fallbackMax: maxTicketsPerUser,
   })
-  const max = Math.min(Math.max(0, tier.available), remaining)
+  const skuLeft = selectableTicketStock(tier)
+  const max = Math.min(skuLeft, remaining)
   const highlight = resolveTicketHighlightBadge(tier, siblingTiers)
   const unitPrice = current?.price ?? tier.price
   const sectorMeta =
@@ -933,7 +957,7 @@ function UnifiedTicketCard({
   )
   const availability = resolveCategoryAvailability({
     requiresMap,
-    stock: tier.available,
+    stock: skuLeft,
     categoryId: tier.id,
     seatingSectorId: tier.seatingSectorId,
     categoryName: tier.name,
@@ -942,7 +966,13 @@ function UnifiedTicketCard({
     summaryAvailable: summary?.available,
     mapReady,
   })
-  const isSoldOut = availability.isSoldOut
+  const isSoldOut =
+    saleState.kind === "sold_out" ||
+    (requiresMap ? availability.isSoldOut : skuLeft <= 0)
+  const inactive = isSoldOut || windowClosed
+  const sectorName = requiresMap
+    ? resolveTicketSectorName(tier, venueMap)
+    : null
   const badges = ticketCardBadges({
     chargeBadge: charge.badge,
     includesGeneralAccess,
@@ -955,10 +985,10 @@ function UnifiedTicketCard({
     <div
       className={cn(
         "flex w-full items-center justify-between gap-4 rounded-2xl border border-white/10 bg-card/60 px-5 py-3.5 transition-all hover:border-white/20",
-        isSoldOut && "cursor-not-allowed opacity-70",
-        focused && !isSoldOut && "ring-1 ring-primary/30",
-        highlight === "bestseller" && !isSoldOut && "border-amber-500/35",
-        selectedPlaces.length > 0 && !isSoldOut && "border-emerald-500/40",
+        inactive && "cursor-not-allowed opacity-70",
+        focused && !inactive && "ring-1 ring-primary/30",
+        highlight === "bestseller" && !inactive && "border-amber-500/35",
+        selectedPlaces.length > 0 && !inactive && "border-emerald-500/40",
       )}
     >
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -973,6 +1003,14 @@ function UnifiedTicketCard({
               className="h-5 border-emerald-500/50 px-1.5 text-[10px] font-semibold text-emerald-400"
             >
               {dateLabel}
+            </Badge>
+          ) : null}
+          {sectorName ? (
+            <Badge
+              variant="outline"
+              className="h-5 px-1.5 text-[10px] font-semibold text-muted-foreground"
+            >
+              {sectorName}
             </Badge>
           ) : null}
           {badges.map((badge) => (
@@ -990,9 +1028,14 @@ function UnifiedTicketCard({
               {badge.label}
             </span>
           ))}
-          {isSoldOut ? (
-            <span className="text-xs font-semibold text-destructive">
-              Agotado
+          {inactive && saleLabel ? (
+            <span
+              className={cn(
+                "text-xs font-semibold",
+                isSoldOut ? "text-destructive" : "text-muted-foreground",
+              )}
+            >
+              {saleLabel}
             </span>
           ) : showStock ? (
             <StockHint
@@ -1007,9 +1050,13 @@ function UnifiedTicketCard({
         </div>
       </div>
       <div className="flex shrink-0 items-center">
-        {isSoldOut ? (
-          <Button type="button" disabled className="h-9 px-3 text-sm font-semibold">
-            Agotado
+        {inactive ? (
+          <Button type="button" disabled className="h-9 px-3 text-sm font-semibold text-muted-foreground">
+            {saleState.kind === "upcoming"
+              ? "Próximamente"
+              : saleState.kind === "ended"
+                ? "Finalizado"
+                : "Agotado"}
           </Button>
         ) : requiresMap ? (
           <PlaceActionButton
@@ -1116,7 +1163,8 @@ export function QuantityList({
           maxPurchaseLimit: tier.maxPurchaseLimit,
           fallbackMax: maxTicketsPerUser,
         })
-        const max = Math.min(Math.max(0, tier.available), remaining)
+        const max = Math.min(selectableTicketStock(tier), remaining)
+        const soldOut = max <= 0
         const description = tier.description?.trim() || ""
         const highlight = resolveTicketHighlightBadge(tier, tiers)
         const unitPrice = current?.price ?? tier.price
@@ -1128,7 +1176,8 @@ export function QuantityList({
               "w-full rounded-2xl border border-white/10 bg-card/60 px-5 py-3.5 transition-all hover:border-white/20",
               focusedTierId === tier.id && "ring-1 ring-primary/30",
               highlight === "bestseller" && "border-amber-500/35",
-              quantity > 0 && "border-emerald-500/40",
+              quantity > 0 && !soldOut && "border-emerald-500/40",
+              soldOut && "cursor-not-allowed opacity-60",
             )}
           >
             <div className="flex items-center justify-between gap-4">
@@ -1154,18 +1203,32 @@ export function QuantityList({
                       {description}
                     </span>
                   ) : null}
-                  <StockHint
-                    available={tier.available}
-                    capacity={tier.capacity}
-                    sold={tier.sold}
-                  />
+                  {soldOut ? (
+                    <span className="text-xs font-semibold text-destructive">
+                      Agotado
+                    </span>
+                  ) : (
+                    <StockHint
+                      available={max}
+                      capacity={tier.capacity}
+                      sold={tier.sold}
+                    />
+                  )}
                 </div>
               </div>
               <div className="flex shrink-0 items-center">
-                {action === "add" ? (
+                {soldOut ? (
                   <Button
                     type="button"
-                    disabled={isPending || max === 0}
+                    disabled
+                    className="h-9 px-3 text-sm font-semibold"
+                  >
+                    Agotado
+                  </Button>
+                ) : action === "add" ? (
+                  <Button
+                    type="button"
+                    disabled={isPending}
                     onClick={() =>
                       onQuantityChange(tier.id, Math.min(max, quantity + 1), max)
                     }
@@ -1177,8 +1240,11 @@ export function QuantityList({
                   <Stepper
                     value={quantity}
                     max={max}
-                    disabled={isPending || max === 0}
-                    onChange={(next) => onQuantityChange(tier.id, next, max)}
+                    disabled={isPending}
+                    onChange={(next) => {
+                      if (max <= 0) return
+                      onQuantityChange(tier.id, next, max)
+                    }}
                   />
                 )}
               </div>
@@ -1269,8 +1335,11 @@ function Stepper({
         type="button"
         size="icon"
         variant="ghost"
-        disabled={disabled || value >= max}
-        onClick={() => onChange(value + 1)}
+        disabled={disabled || max <= 0 || value >= max}
+        onClick={() => {
+          if (max <= 0) return
+          onChange(value + 1)
+        }}
         aria-label="Agregar"
         className={cn(tapFeedbackClass, "size-7 rounded-md hover:bg-white/5")}
       >

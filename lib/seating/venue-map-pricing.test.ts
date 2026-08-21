@@ -107,6 +107,8 @@ describe("venue-map-pricing", () => {
           price: 3000,
           capacity: 80,
           timeLimit: "",
+          saleStartsAt: "",
+          saleEndsAt: "",
           bonusReward: "",
           dayId: null,
           visibility: "public",
@@ -176,6 +178,8 @@ describe("venue-map-pricing", () => {
           price: 3000,
           capacity: 80,
           timeLimit: "",
+          saleStartsAt: "",
+          saleEndsAt: "",
           bonusReward: "",
           dayId: null,
           visibility: "public",
@@ -232,6 +236,8 @@ describe("venue-map-pricing", () => {
           capacity: 30,
           sold: 0,
           timeLimit: "",
+          saleStartsAt: "",
+          saleEndsAt: "",
           bonusReward: "",
           dayId: null,
           visibility: "public",
@@ -258,6 +264,8 @@ describe("venue-map-pricing", () => {
           capacity: 10,
           sold: 3,
           timeLimit: "",
+          saleStartsAt: "",
+          saleEndsAt: "",
           bonusReward: "",
           dayId: null,
           visibility: "public",
@@ -282,6 +290,8 @@ describe("venue-map-pricing", () => {
           price: 15000,
           capacity: 20,
           timeLimit: "",
+          saleStartsAt: "",
+          saleEndsAt: "",
           bonusReward: "",
           dayId: null,
           visibility: "public",
@@ -495,6 +505,14 @@ describe("venue-map-pricing", () => {
       eventNeedsInteractiveCanvas(null, [
         { seatingSectorId: "zona-vip", layoutType: "numbered_seat" },
       ]),
+      false,
+    )
+    assert.equal(
+      eventNeedsInteractiveCanvas(
+        map,
+        [{ seatingSectorId: "zona-vip", layoutType: "numbered_seat" }],
+        { hasSeatingPlan: false },
+      ),
       false,
     )
   })

@@ -79,6 +79,7 @@ import {
 } from "@/lib/inventory/aforo-balance"
 import {
   asPositiveInt,
+  ticketInventorySignature,
   createBlankPhase,
   generalRemainingForTicket,
   parseStrictInt,
@@ -146,6 +147,8 @@ export function createInventoryTicket(
     description: "",
     highlightBadge: null,
     phases: [],
+    saleStartsAt: "",
+    saleEndsAt: "",
   }
 }
 
@@ -190,7 +193,8 @@ export function UnifiedInventoryPanel({
   isSponsored = false,
 }: Props) {
   const watchedTickets = form.watch("tickets")
-  const tickets = useMemo(() => watchedTickets ?? [], [watchedTickets])
+  const ticketStockKey = ticketInventorySignature(watchedTickets)
+  const tickets = form.getValues("tickets") ?? watchedTickets ?? []
   const hasSeatingPlan = Boolean(form.watch("basics.hasSeatingPlan"))
   const venueMap = form.watch("venue.venueMap")
   const draftSectors = listAssignableGeneralSectors(
@@ -280,7 +284,7 @@ export function UnifiedInventoryPanel({
         tickets,
         venueMap,
       }),
-    [tickets, venueMap],
+    [ticketStockKey, tickets, venueMap],
   )
   const dropdownSectors = useMemo(
     () => excludeMapOwnedSectors(logicalSectors, venueMap),
@@ -301,7 +305,7 @@ export function UnifiedInventoryPanel({
         zones: venueZones,
         venueCapacity,
       }),
-    [tickets, venueCapacity, venueMap, venueZones],
+    [ticketStockKey, tickets, venueCapacity, venueMap, venueZones],
   )
 
   function append(ticket: EventFormValues["tickets"][number]) {

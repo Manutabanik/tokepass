@@ -19,7 +19,6 @@ import { EmptyState } from "@/components/discovery/empty-state"
 import { EventCard } from "@/components/discovery/event-card"
 import { SearchBar } from "@/components/discovery/search-bar"
 import { FeaturedHeroSection } from "@/components/public/featured-hero-section"
-import { HeroSection } from "@/components/discovery/hero-section"
 import { OrganizerCtaBanner } from "@/components/discovery/organizer-cta-banner"
 import { publishDiscoveryControls } from "@/components/discovery/discovery-controls-store"
 import { useArgentinaProvinces } from "@/hooks/use-argentina-provinces"
@@ -143,6 +142,14 @@ function DiscoveryHubInner({
     enableUrlSync ? urlFilters.niche : "all",
   )
   const debouncedQuery = useDebounce(query, 450)
+  const isBrowsing =
+    query.trim().length > 0 ||
+    categoryId !== "all" ||
+    tagId != null ||
+    city !== "todas" ||
+    Boolean(artistId) ||
+    datePreset !== "all" ||
+    niche !== "all"
 
   useLayoutEffect(() => {
     if (!enableUrlSync) return
@@ -172,9 +179,10 @@ function DiscoveryHubInner({
       cities: provinces,
       onCityChange: setCity,
       events,
+      hasActiveFilters: isBrowsing,
     })
     return () => publishDiscoveryControls(null)
-  }, [query, city, provinces, events])
+  }, [query, city, provinces, events, isBrowsing])
 
   useEffect(() => {
     if (!enableUrlSync) return
@@ -260,15 +268,6 @@ function DiscoveryHubInner({
       setNiche(draft.niche ?? "all")
     })
   }
-
-  const isBrowsing =
-    query.trim().length > 0 ||
-    categoryId !== "all" ||
-    tagId != null ||
-    city !== "todas" ||
-    Boolean(artistId) ||
-    datePreset !== "all" ||
-    niche !== "all"
 
   const gridEvents = isBrowsing ? filtered : events
 
@@ -366,33 +365,37 @@ function DiscoveryHubInner({
     )
   }
 
-  return (
-    <div className="w-full max-w-full space-y-12 overflow-x-hidden bg-transparent sm:space-y-16">
-      <HeroSection
-        events={events}
-        query={query}
-        onQueryChange={setQuery}
-        city={city}
-        cities={provinces}
-        onCityChange={setCity}
-        locationsLoading={locationsLoading}
-        categoryId={categoryId}
-        onCategoryChange={setCategoryId}
-        tagId={tagId}
-        onTagChange={setTagId}
-        selectedArtistId={artistId}
-        datePreset={datePreset}
-        featuredArtists={resolvedFeaturedArtists}
-        categories={categories}
-        niche={niche}
-        onCommitFilters={commitFilters}
-      />
+  const searchFilters = (
+    <SearchBar
+      hideTrigger
+      events={events}
+      query={query}
+      onQueryChange={setQuery}
+      city={city}
+      cities={provinces}
+      onCityChange={setCity}
+      locationsLoading={locationsLoading}
+      categoryId={categoryId}
+      onCategoryChange={setCategoryId}
+      tagId={tagId}
+      onTagChange={setTagId}
+      selectedArtistId={artistId}
+      datePreset={datePreset}
+      featuredArtists={resolvedFeaturedArtists}
+      categories={categories}
+      niche={niche}
+      onCommitFilters={commitFilters}
+    />
+  )
 
+  return (
+    <div className="w-full max-w-full space-y-10 overflow-x-hidden bg-transparent sm:space-y-12">
       <FeaturedHeroSection
         pool={featuredPool}
         province={city}
         categories={categories}
       />
+      {searchFilters}
 
       <section className="space-y-6" id="discovery-results">
         <div className="flex flex-col gap-4">

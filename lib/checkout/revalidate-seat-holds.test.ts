@@ -5,6 +5,7 @@ import { HIGH_DEMAND_LOCK_TIMEOUT } from "./lock-timeout"
 import {
   earliestHoldExpiry,
   filterSelectedItemsByHolds,
+  isBuyerSoldOutToast,
   isCheckoutStockConflict,
   rehydrateSelectedItemsFromHolds,
 } from "./revalidate-seat-holds"
@@ -103,6 +104,12 @@ describe("revalidate seat holds", () => {
     assert.equal(isCheckoutStockConflict("409 Conflict"), true)
     assert.equal(isCheckoutStockConflict("auth_required"), false)
     assert.equal(isCheckoutStockConflict(HIGH_DEMAND_LOCK_TIMEOUT), false)
+  })
+
+  it("maps buyer-facing sold-out toasts without B2B save copy", () => {
+    assert.equal(isBuyerSoldOutToast("out_of_stock"), true)
+    assert.equal(isBuyerSoldOutToast("Entradas agotadas"), true)
+    assert.equal(isBuyerSoldOutToast("auth_required"), false)
   })
 
   it("picks the earliest hold expiry", () => {

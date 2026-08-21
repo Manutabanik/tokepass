@@ -4,6 +4,19 @@ import type { StorefrontSelectedItem } from "@/lib/stores/storefront-seat-store"
 export const CHECKOUT_STOCK_TAKEN_MESSAGE =
   "Lo sentimos, las entradas que elegiste se agotaron en este instante. Por favor, seleccioná otra ubicación o día."
 
+export const CHECKOUT_SOLD_OUT_TITLE = "Entradas agotadas"
+export const CHECKOUT_SOLD_OUT_DESCRIPTION =
+  "Lo sentimos, estas entradas se acaban de agotar. Por favor, elegí otra opción."
+
+export function isBuyerSoldOutToast(error: string): boolean {
+  const normalized = error.trim().toLowerCase()
+  if (!normalized) return false
+  if (normalized === "out_of_stock" || normalized === "conflict") return true
+  return /agotad|sold out|out_of_stock|sin stock|stock insuficiente/.test(
+    normalized,
+  )
+}
+
 export function isCheckoutStockConflict(error: string): boolean {
   if (error === HIGH_DEMAND_LOCK_TIMEOUT) return false
   const normalized = error.toLowerCase()

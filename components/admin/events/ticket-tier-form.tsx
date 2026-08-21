@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -468,21 +469,81 @@ export function TicketWalletCard({
                 onDisplayChange={(raw) => {
                   const parsed = parseStrictInt(raw)
                   if (parsed === "") {
+                    form.setValue(`tickets.${index}.capacity`, undefined as unknown as number, {
+                      shouldDirty: true,
+                      shouldTouch: true,
+                    })
                     field.onChange(undefined)
                     return
                   }
                   if (typeof parsed === "number" && Number.isNaN(parsed)) {
                     return
                   }
+                  form.setValue(`tickets.${index}.capacity`, parsed, {
+                    shouldDirty: true,
+                    shouldTouch: true,
+                  })
                   field.onChange(parsed)
                 }}
-                onCommit={(next) => field.onChange(next)}
+                onCommit={(next) => {
+                  form.setValue(
+                    `tickets.${index}.capacity`,
+                    next as EventFormValues["tickets"][number]["capacity"],
+                    { shouldDirty: true, shouldTouch: true },
+                  )
+                  field.onChange(next)
+                }}
               />
               {overflow ? (
                 <p className="text-xs text-destructive" role="alert">
                   El stock supera la capacidad disponible.
                 </p>
               ) : null}
+              <FormMessage>{fieldState.error?.message}</FormMessage>
+            </FormItem>
+          )}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <FormField
+          control={form.control}
+          name={`tickets.${index}.saleStartsAt`}
+          render={({ field, fieldState }) => (
+            <FormItem className="flex flex-col gap-y-2">
+              <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">
+                Inicio de venta
+              </FormLabel>
+              <Input
+                type="datetime-local"
+                value={field.value ?? ""}
+                onChange={field.onChange}
+                className="h-12 rounded-xl border-border/60 bg-muted/20 px-4 text-base transition-all focus:bg-background sm:h-13"
+              />
+              <FormDescription>
+                Dejá vacío para vender desde ahora.
+              </FormDescription>
+              <FormMessage>{fieldState.error?.message}</FormMessage>
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name={`tickets.${index}.saleEndsAt`}
+          render={({ field, fieldState }) => (
+            <FormItem className="flex flex-col gap-y-2">
+              <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">
+                Fin de venta
+              </FormLabel>
+              <Input
+                type="datetime-local"
+                value={field.value ?? ""}
+                onChange={field.onChange}
+                className="h-12 rounded-xl border-border/60 bg-muted/20 px-4 text-base transition-all focus:bg-background sm:h-13"
+              />
+              <FormDescription>
+                Dejá vacío para vender hasta la fecha del evento.
+              </FormDescription>
               <FormMessage>{fieldState.error?.message}</FormMessage>
             </FormItem>
           )}

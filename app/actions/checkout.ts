@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 
 import { resolveCheckoutExpiresAt } from "@/lib/checkout-hold"
+import { assertPendingOrderStillReservable } from "@/lib/checkout/assert-order-stock"
 import { releaseWaitingRoomPassFromCookies } from "@/lib/waiting-room/release"
 import {
   type CheckoutBuyerInfo,
@@ -19,6 +20,11 @@ import {
   type PhaseRolloverInfo,
   type PublicTicketPhase,
 } from "@/lib/inventory/active-phase"
+import {
+  isMissingSaleWindowSchema,
+  resolveTicketSaleState,
+  ticketSaleWindowError,
+} from "@/lib/inventory/ticket-sale-window"
 import { isPastEvent, isSoldOut } from "@/lib/event-status"
 import { isSandboxEventStatus } from "@/lib/events/review-status"
 import { orderTestFlags } from "@/lib/finance/order-test-flags"
@@ -532,6 +538,60 @@ async function evaluateCartPhaseRollover(
       priced.available,
       PHASE_ROLLOVER_MESSAGE,
     )
+  }
+
+  return null
+}
+
+async function evaluateCartSaleWindows(
+  supabase: CheckoutSupabase,
+  eventId: string,
+  items: CheckoutCartItem[],
+): Promise<CheckoutResult | null> {
+  const tierIds = [
+    ...new Set(
+      items
+        .map((item) => checkoutItemTierId(item))
+        .filter((id) => id.length > 0),
+    ),
+  ]
+  if (tierIds.length === 0) return null
+
+  const { data, error } = await supabase
+    .from("ticket_tiers")
+    .select("id, capacity, sold, sale_starts_at, sale_ends_at")
+    .eq("event_id", eventId)
+    .in("id", tierIds)
+
+  if (error) {
+    if (isMissingSaleWindowSchema(error.message)) return null
+    logger.error({
+      context: "checkout/sale-window",
+      message: "ticket_sale_window_load_failed",
+      error: error.message,
+    })
+    return {
+      success: false,
+      error: "No se pudo validar la ventana de venta.",
+    }
+  }
+
+  const now = Date.now()
+  for (const item of items) {
+    const tierId = checkoutItemTierId(item)
+    const row = (data ?? []).find((tier) => tier.id === tierId)
+    if (!row) continue
+    const state = resolveTicketSaleState({
+      capacity: row.capacity,
+      sold: row.sold,
+      saleStartsAt: (row as { sale_starts_at?: string | null }).sale_starts_at,
+      saleEndsAt: (row as { sale_ends_at?: string | null }).sale_ends_at,
+      now,
+    })
+    const message = ticketSaleWindowError(state)
+    if (message) {
+      return { success: false, error: message }
+    }
   }
 
   return null
@@ -1106,6 +1166,21 @@ export async function lockTickets(
     return { success: false, error: holdCap.error }
   }
 
+  const saleGate = await evaluateCartSaleWindows(
+    access.db,
+    eventId,
+    payload.map((item) => ({
+      type: "general" as const,
+      ticket_tier_id: item.tier_id,
+      ticketTierId: item.tier_id,
+      tierId: item.tier_id,
+      quantity: item.quantity,
+    })),
+  )
+  if (saleGate && !saleGate.success) {
+    return { success: false, error: saleGate.error }
+  }
+
   const { data, error } = await access.db.rpc("hold_ga_tickets_for_cart", {
     p_event_id: eventId,
     p_owner_id: user.id,
@@ -1448,7 +1523,7 @@ async function applyHolderIdentityToOrder(input: {
     }
     return {
       ok: false,
-      error: "No pudimos guardar los cambios. Revisá tu conexión a internet e intentá de nuevo",
+      error: "No se pudo completar tu compra. Intentá de nuevo.",
     }
   }
 
@@ -1938,6 +2013,13 @@ export async function startCheckoutWithPayment(
       quantityItems.length === 1 &&
       cartItems.length === 1
 
+    const saleGate = await evaluateCartSaleWindows(
+      db,
+      payload.eventId,
+      cartItems,
+    )
+    if (saleGate) return saleGate
+
     const phaseGate = await evaluateCartPhaseRollover(
       db,
       payload.eventId,
@@ -2343,6 +2425,12 @@ export async function startCheckoutWithPayment(
         provider === "mercadopago"
           ? urls.notificationUrl
           : `${siteUrl.replace(/\/$/, "")}/api/webhooks/${provider}`
+
+      const stockGate = await assertPendingOrderStillReservable(db, orderId)
+      if (!stockGate.ok) {
+        await cleanupPendingOrder(orderId)
+        return { success: false, error: stockGate.error }
+      }
 
       try {
         await expireCheckoutPreferenceOnOrder(orderId)

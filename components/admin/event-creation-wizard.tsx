@@ -24,7 +24,6 @@ import { toast } from "sonner"
 
 import {
   createCompleteEvent,
-  saveVenueMapOnly,
   updateCompleteEvent,
   type EditableEventData,
 } from "@/app/actions/events"
@@ -689,6 +688,56 @@ export function EventCreationWizard({
     })
   }
 
+  function buildConsolidatedPayload(data: EventFormValues): EventFormValues {
+    const editingId = initialData?.id ?? persistedEventId
+    let next: EventFormValues = {
+      ...data,
+      tickets: consolidateEventTicketsForPersist(data),
+    }
+    const liveSectorIds = collectLiveSeatingSectorIds({
+      venueMap: next.venue.venueMap,
+      seatingLayout: next.venue.seatingLayout,
+      extraIds: assignableLogicalSectorIds(
+        next.venue.zones,
+        next.venue.venueMap,
+      ),
+    })
+    next = sanitizeEventSubmitPayload(next, {
+      mode: editingId ? "update" : "create",
+      persistedIds: (initialData?.values.tickets ?? [])
+        .map((tier) => tier.id)
+        .filter((id): id is string => Boolean(id)),
+      liveSectorIds,
+    })
+    return {
+      ...next,
+      tickets: applyMapCapacityToTickets(
+        next.tickets,
+        parseVenueMap(next.venue.venueMap),
+      ),
+    }
+  }
+
+  async function persistInventoryDraft(data: EventFormValues) {
+    const eventId = initialData?.id ?? persistedEventId
+    if (!eventId) {
+      return {
+        success: false as const,
+        error: "No hay un evento para guardar el inventario.",
+      }
+    }
+    const payloadData = buildConsolidatedPayload(data)
+    console.info("[event-wizard] persist payload", payloadData)
+    const formData = new FormData()
+    formData.set("payload", JSON.stringify(payloadData))
+    formData.set("draftMode", "1")
+    formData.set("eventId", eventId)
+    if (targetOrganizerId) {
+      formData.set("targetOrganizerId", targetOrganizerId)
+    }
+    return updateCompleteEvent(formData)
+  }
+
   async function onSubmit(
     data: EventFormValues,
     intent: "draft" | "publish" = "draft",
@@ -792,10 +841,9 @@ export function EventCreationWizard({
     }
 
     const editingId = initialData?.id ?? persistedEventId
-    payloadData = {
-      ...payloadData,
-      tickets: consolidateEventTicketsForPersist(payloadData),
-    }
+    payloadData = buildConsolidatedPayload(payloadData)
+    console.info("[event-wizard] persist payload", payloadData)
+    form.setValue("tickets", payloadData.tickets, { shouldDirty: false })
     const liveSectorIds = collectLiveSeatingSectorIds({
       venueMap: payloadData.venue.venueMap,
       seatingLayout: payloadData.venue.seatingLayout,
@@ -804,21 +852,6 @@ export function EventCreationWizard({
         payloadData.venue.venueMap,
       ),
     })
-    payloadData = sanitizeEventSubmitPayload(payloadData, {
-      mode: editingId ? "update" : "create",
-      persistedIds: (initialData?.values.tickets ?? [])
-        .map((tier) => tier.id)
-        .filter((id): id is string => Boolean(id)),
-      liveSectorIds,
-    })
-    payloadData = {
-      ...payloadData,
-      tickets: applyMapCapacityToTickets(
-        payloadData.tickets,
-        parseVenueMap(payloadData.venue.venueMap),
-      ),
-    }
-    form.setValue("tickets", payloadData.tickets, { shouldDirty: false })
 
     const formData = new FormData()
     formData.set("payload", JSON.stringify(payloadData))
@@ -857,12 +890,19 @@ export function EventCreationWizard({
     // Persiste matriz Zona × Tier
     if (zoneTierPricing.length > 0) {
       const { syncZoneTierPricing } = await import("@/app/actions/event-autosave")
-      await syncZoneTierPricing({
+      const pricingResult = await syncZoneTierPricing({
         eventId: result.eventId,
         rows: zoneTierPricing.filter(
           (row) => !row.sectorKey || liveSectorIds.has(row.sectorKey),
         ),
       })
+      if (!pricingResult.success) {
+        reportPersistError(
+          pricingResult.error,
+          "El evento se guardó, pero falló la matriz de precios por zona",
+        )
+        return false
+      }
     }
 
     if (result.eventId) {
@@ -905,16 +945,12 @@ export function EventCreationWizard({
     try {
       const map = parseVenueMap(form.getValues("venue.venueMap"))
       persistWorkspaceMap(map)
-      flushAutosave()
-      const eventId = initialData?.id ?? persistedEventId
-      if (eventId) {
-        const result = await saveVenueMapOnly(eventId, map)
-        if (!result.success) {
-          toast.error("No se pudo guardar el mapa", {
-            description: result.error,
-          })
-          return
-        }
+      const result = await persistInventoryDraft(form.getValues())
+      if (!result.success) {
+        toast.error("No se pudo guardar el mapa", {
+          description: result.error,
+        })
+        return
       }
       setIsStudioOpen(false)
     } finally {
@@ -1669,10 +1705,10 @@ export function EventCreationWizard({
                             </span>
                             <div className="space-y-1">
                               <FormLabel className="text-sm font-semibold leading-snug text-foreground">
-                                Requiere Mapa de Asientos Numerados
+                                ¿Este evento tiene plano de asientos numerados?
                               </FormLabel>
                               <FormDescription className="text-xs text-muted-foreground">
-                                Butacas, mesas o tablones con numeracion.
+                                Activá solo si hay butacas, mesas o tablones con número. Si no, el evento es admisión general.
                               </FormDescription>
                             </div>
                           </div>
@@ -1797,11 +1833,7 @@ export function EventCreationWizard({
                 onAutoSave={(next) => persistWorkspaceMap(next)}
                 onSave={async (next) => {
                   persistWorkspaceMap(next)
-                  const eventId = initialData?.id ?? persistedEventId
-                  if (!eventId) {
-                    throw new Error("No hay un evento para guardar el mapa.")
-                  }
-                  const result = await saveVenueMapOnly(eventId, next)
+                  const result = await persistInventoryDraft(form.getValues())
                   if (!result.success) {
                     throw new Error(result.error)
                   }

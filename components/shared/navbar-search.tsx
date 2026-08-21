@@ -1,8 +1,8 @@
 "use client"
 
-import { CalendarDays, MapPin, Search, X } from "lucide-react"
+import { CalendarDays, MapPin, Search, SlidersHorizontal, X } from "lucide-react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import {
   useCallback,
   useEffect,
@@ -28,6 +28,7 @@ import {
 import { exploreCatalogPath } from "@/lib/discovery-filters"
 import { publicEventPath } from "@/lib/seo/site"
 import { usePublicSearchUiStore } from "@/lib/stores/public-search-ui-store"
+import { useDiscoveryControls } from "@/components/discovery/discovery-controls-store"
 import { cn, tapFeedbackClass } from "@/lib/utils"
 
 const EMPTY_RESULTS: OmniSearchResult = { events: [], artists: [] }
@@ -215,13 +216,25 @@ function EventResultRow({
   )
 }
 
+function scrollToResults() {
+  document.getElementById("discovery-results")?.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+  })
+}
+
 export function NavbarSearch() {
   const router = useRouter()
+  const pathname = usePathname()
+  const discovery = useDiscoveryControls()
+  const requestFilters = usePublicSearchUiStore((state) => state.requestFilters)
   const listId = useId()
   const rootRef = useRef<HTMLDivElement>(null)
   const mobileInputRef = useRef<HTMLInputElement>(null)
 
-  const [query, setQuery] = useState("")
+  const [localQuery, setLocalQuery] = useState("")
+  const query = discovery?.query ?? localQuery
+  const setQuery = discovery?.onQueryChange ?? setLocalQuery
   const [open, setOpen] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const searchOpenTick = usePublicSearchUiStore((state) => state.openTick)
@@ -239,12 +252,12 @@ export function NavbarSearch() {
   const showLoading = typedReady && query.trim() !== fetchedFor
 
   const dismiss = useCallback(() => {
-    setQuery("")
+    if (!discovery) setLocalQuery("")
     setResults(EMPTY_RESULTS)
     setFetchedFor("")
     setOpen(false)
     setMobileOpen(false)
-  }, [])
+  }, [discovery])
 
   useLockBodyScroll(mobileOpen)
 
@@ -307,8 +320,24 @@ export function NavbarSearch() {
   function submitExplore(event: FormEvent) {
     event.preventDefault()
     const needle = query.trim()
+    if (discovery && pathname === "/") {
+      if (needle) discovery.onQueryChange(needle)
+      setOpen(false)
+      setMobileOpen(false)
+      scrollToResults()
+      return
+    }
     dismiss()
     router.push(exploreCatalogPath({ q: needle }))
+  }
+
+  function openFilterModal() {
+    setOpen(false)
+    setMobileOpen(false)
+    requestFilters()
+    if (pathname !== "/") {
+      router.push(exploreCatalogPath({ q: localQuery }))
+    }
   }
 
   const resultsProps = {
@@ -361,13 +390,22 @@ export function NavbarSearch() {
                   autoComplete="off"
                   autoCorrect="off"
                   spellCheck={false}
-                  placeholder="Buscá por evento, artista o lugar..."
+                  placeholder="Buscá eventos, artistas o lugares..."
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  className="h-12 w-full rounded-full border border-zinc-200 bg-zinc-50 pl-10 pr-4 text-base text-zinc-900 outline-none placeholder:text-zinc-400 focus-visible:border-violet-400 focus-visible:ring-3 focus-visible:ring-violet-400/30 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-500"
+                  className="h-12 w-full rounded-full border border-zinc-200 bg-zinc-50 pl-10 pr-12 text-base text-zinc-900 outline-none placeholder:text-zinc-400 focus-visible:border-violet-400 focus-visible:ring-3 focus-visible:ring-violet-400/30 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-500"
                   aria-autocomplete="list"
                   aria-controls={listId}
                 />
+                <button
+                  type="button"
+                  onClick={openFilterModal}
+                  className="absolute top-1/2 right-1.5 grid size-9 -translate-y-1/2 place-items-center rounded-full text-emerald-400 hover:bg-zinc-100 dark:hover:bg-white/5"
+                  aria-label="Filtrar eventos"
+                  title="Filtrar eventos"
+                >
+                  <SlidersHorizontal className="size-4" />
+                </button>
               </div>
             </form>
             <div className="min-h-0 flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
@@ -380,46 +418,59 @@ export function NavbarSearch() {
 
   return (
     <>
-      <div ref={rootRef} className="search-bar relative hidden min-w-0 w-full max-w-md flex-1 md:block">
+      <div ref={rootRef} className="search-bar relative min-w-0 w-full max-w-md flex-1">
         <form onSubmit={submitExplore}>
           <label className="sr-only" htmlFor="omni-search-desktop">
-            Buscá por evento, artista o lugar
+            Buscá eventos, artistas o lugares
           </label>
           <div
-            className="relative"
+            className="relative flex items-center rounded-full border border-white/10 bg-muted/40 px-4 py-2 text-sm shadow-sm transition-colors hover:bg-muted/60 focus-within:border-emerald-400/40 focus-within:ring-3 focus-within:ring-emerald-400/20"
             role="combobox"
             aria-expanded={open}
             aria-controls={listId}
             aria-haspopup="listbox"
           >
             <Search
-              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400"
+              className="mr-2 size-4 shrink-0 text-muted-foreground"
               aria-hidden="true"
             />
             <input
               id="omni-search-desktop"
-              type="search"
+              type="text"
               name="omni-search"
               autoComplete="off"
               autoCorrect="off"
               spellCheck={false}
-              placeholder="Buscá por evento, artista o lugar..."
+              placeholder="Buscá eventos, artistas o lugares..."
               value={query}
               onChange={(event) => {
                 setQuery(event.target.value)
                 setOpen(true)
               }}
               onFocus={() => setOpen(true)}
-              className="h-10 w-full min-w-0 rounded-full border border-zinc-200 bg-zinc-50 pl-9 pr-3 text-base text-zinc-900 outline-none placeholder:text-zinc-400 focus-visible:border-violet-400 focus-visible:ring-3 focus-visible:ring-violet-400/30 md:text-sm dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-500"
+              className="w-full border-none bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
               aria-autocomplete="list"
               aria-controls={listId}
             />
+            <button
+              type="button"
+              onClick={openFilterModal}
+              title="Filtrar eventos"
+              aria-haspopup="dialog"
+              aria-label="Filtrar eventos"
+              className={cn(
+                "ml-2 flex items-center gap-1 rounded-full border-l border-white/10 p-1.5 pl-3 text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground",
+                discovery?.hasActiveFilters && "text-emerald-400",
+              )}
+            >
+              <SlidersHorizontal className="size-4 text-emerald-400" />
+            </button>
           </div>
         </form>
 
         {open ? (
           <div
-            className="absolute right-0 z-[60] mt-2 w-[min(28rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl dark:border-white/10 dark:bg-zinc-950"
+            className="absolute left-1/2 z-[60] mt-2 w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl dark:border-white/10 dark:bg-zinc-950"
             role="presentation"
           >
             <SearchResults {...resultsProps} />

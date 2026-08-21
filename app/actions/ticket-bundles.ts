@@ -1,6 +1,6 @@
 "use server"
 
-import { revalidatePath } from "next/cache"
+import { revalidatePath, revalidateTag } from "next/cache"
 
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
@@ -389,6 +389,9 @@ export async function upsertTicketBundle(input: {
   revalidatePath(`/admin/events/${input.eventId}`)
   revalidatePath(`/admin/events/${input.eventId}/tiers`)
   revalidatePath(`/admin/events/${input.eventId}/edit`)
+  revalidatePath(`/events/${input.eventId}`)
+  revalidatePath("/eventos")
+  revalidateTag("catalog-events", "max")
 
   await writeSecurityAuditLog({
     actorId: gate.user.id,

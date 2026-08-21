@@ -3,6 +3,7 @@
 import { Preference } from "mercadopago"
 
 import { resolveOrderHoldExpiresAt } from "@/lib/checkout-hold"
+import { assertPendingOrderStillReservable } from "@/lib/checkout/assert-order-stock"
 import { logger } from "@/lib/logger"
 import { normalizeCheckoutBuyer } from "@/lib/checkout-buyer"
 import {
@@ -216,6 +217,13 @@ export async function createPaymentPreference(
         earliestSeating
           ? "La reserva de ubicación venció. Elegí tu ubicación nuevamente."
           : "El tiempo para pagar esta orden venció. Volvé a armar el carrito.",
+    }
+  }
+
+  if (!isStoreOnlyOrder) {
+    const stockGate = await assertPendingOrderStillReservable(supabase, orderId)
+    if (!stockGate.ok) {
+      return { success: false, error: stockGate.error }
     }
   }
 

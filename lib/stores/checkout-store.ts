@@ -531,14 +531,25 @@ export const useCheckoutStore = create<CheckoutState>()(
       },
     }),
     {
-      name: "tokepass.checkout-intent.v1",
+      name: "tokepass.checkout-intent.v2",
       storage: createJSONStorage(() => localStorage),
       merge: (persisted, current) => {
         const saved = (persisted ?? {}) as Partial<CheckoutState>
         return {
           ...current,
-          ...saved,
+          eventId: saved.eventId ?? current.eventId,
+          eventSlug: saved.eventSlug ?? current.eventSlug,
+          mode: saved.mode ?? current.mode,
+          isGuest: saved.isGuest || saved.mode === "guest" || current.isGuest,
+          buyer: saved.buyer ?? current.buyer,
           viewMode: current.viewMode,
+          quantities: {},
+          selectedSeat: null,
+          holdExpiresAt: null,
+          lines: [],
+          totalAmount: 0,
+          itemsCount: 0,
+          subtotal: 0,
         }
       },
       partialize: (state) => ({
@@ -546,12 +557,7 @@ export const useCheckoutStore = create<CheckoutState>()(
         eventSlug: state.eventSlug,
         mode: state.mode,
         isGuest: state.isGuest || state.mode === "guest",
-        pendingAction: state.pendingAction,
-        quantities: state.quantities,
-        selectedSeat: state.selectedSeat,
         buyer: state.buyer,
-        subtotal: state.subtotal,
-        holdExpiresAt: state.holdExpiresAt,
       }),
       onRehydrateStorage: () => (state) => {
         if (!state) return

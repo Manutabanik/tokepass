@@ -80,7 +80,9 @@ export function applyEventCatalogRow(
   }
   return {
     ...next,
-    hasInteractiveMap: eventNeedsInteractiveCanvas(parsed, next.tiers),
+    hasInteractiveMap:
+      event.hasInteractiveMap &&
+      eventNeedsInteractiveCanvas(parsed, next.tiers),
     venue: {
       ...event.venue,
       venue_map: parsed,

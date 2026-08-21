@@ -2,7 +2,7 @@
 
 import { ArrowRight, MapPin, Search, SlidersHorizontal } from "lucide-react"
 import { motion, useReducedMotion } from "motion/react"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import {
   MobileSearchTrigger,
@@ -21,6 +21,7 @@ import type {
 } from "@/lib/discovery-filters"
 import type { DiscoveryNicheId } from "@/lib/discovery-niches"
 import { datePresetLabel } from "@/lib/discovery-filters"
+import { usePublicSearchUiStore } from "@/lib/stores/public-search-ui-store"
 import { cn } from "@/lib/utils"
 
 type SearchBarProps = {
@@ -41,6 +42,8 @@ type SearchBarProps = {
   categories?: DiscoveryCategory[]
   niche?: DiscoveryNicheId
   onCommitFilters: (draft: DiscoveryFilterDraft) => void
+  /** Solo monta el modal; el trigger vive en el Header. */
+  hideTrigger?: boolean
 }
 
 function scrollToResults() {
@@ -71,9 +74,18 @@ export function SearchBar({
   categories = DEFAULT_DISCOVERY_CATEGORIES,
   niche = "all",
   onCommitFilters,
+  hideTrigger = false,
 }: SearchBarProps) {
   const [filterOpen, setFilterOpen] = useState(false)
+  const filterPending = usePublicSearchUiStore((state) => state.filterPending)
+  const consumeFilters = usePublicSearchUiStore((state) => state.consumeFilters)
   const reduceMotion = useReducedMotion()
+
+  useEffect(() => {
+    if (!filterPending) return
+    setFilterOpen(true)
+    consumeFilters()
+  }, [consumeFilters, filterPending])
 
   const category = findCategory(categories, categoryId)
   const cityLabel = locationLabel(city, cities)
@@ -99,6 +111,29 @@ export function SearchBar({
     />
   )
 
+  const filterModal = (
+    <SearchFilterModal
+      open={filterOpen}
+      onOpenChange={setFilterOpen}
+      events={events}
+      query={query}
+      city={city}
+      cities={cities}
+      locationsLoading={locationsLoading}
+      categoryId={categoryId}
+      tagId={tagId}
+      selectedArtistId={selectedArtistId}
+      datePreset={datePreset}
+      featuredArtists={featuredArtists}
+      categories={categories}
+      niche={niche}
+      onCommit={onCommitFilters}
+      onApply={scrollToResults}
+    />
+  )
+
+  if (hideTrigger) return filterModal
+
   return (
     <motion.div
       initial={reduceMotion ? false : { opacity: 0, y: 14 }}
@@ -115,24 +150,7 @@ export function SearchBar({
         summary={mobileSummary}
       />
 
-      <SearchFilterModal
-        open={filterOpen}
-        onOpenChange={setFilterOpen}
-        events={events}
-        query={query}
-        city={city}
-        cities={cities}
-        locationsLoading={locationsLoading}
-        categoryId={categoryId}
-        tagId={tagId}
-        selectedArtistId={selectedArtistId}
-        datePreset={datePreset}
-        featuredArtists={featuredArtists}
-        categories={categories}
-        niche={niche}
-        onCommit={onCommitFilters}
-        onApply={scrollToResults}
-      />
+      {filterModal}
 
       <button
         type="button"

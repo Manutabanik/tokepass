@@ -114,7 +114,7 @@ describe("formatSelectionChargeDetail", () => {
         sellMode: "group",
         priceMode: "closed_unit",
       }),
-      "1 Mesa (6 personas incluidas) = $ 58.824",
+      "1x Mesa completa (Incluye 6 accesos)",
     )
   })
 
@@ -128,7 +128,7 @@ describe("formatSelectionChargeDetail", () => {
         sellMode: "per_seat",
         priceMode: "per_person",
       }),
-      "4 lugares \u00d7 $ 58.824/persona = $ 235.296",
+      "1x Mesa completa (Incluye 4 accesos)",
     )
   })
 })
@@ -146,15 +146,17 @@ describe("storefrontLineTotal", () => {
     )
   })
 
-  it("multiplies per-person tables by chairs", () => {
+  it("charges a TABLES SKU once even if chairs are listed", () => {
     assert.equal(
       storefrontLineTotal({
         price: 58824,
         capacity: 6,
+        type: "table",
+        inventoryType: "TABLES",
         sellMode: "per_seat",
         priceMode: "per_person",
       }),
-      352944,
+      58824,
     )
   })
 })
@@ -172,15 +174,16 @@ describe("storefrontLineSkuQuantity", () => {
     )
   })
 
-  it("sends chair count for per-person tables", () => {
+  it("sends 1 SKU unit for TABLES", () => {
     assert.equal(
       storefrontLineSkuQuantity({
         type: "table",
         capacity: 6,
+        inventoryType: "TABLES",
         sellMode: "per_seat",
         priceMode: "per_person",
       }),
-      6,
+      1,
     )
   })
 })

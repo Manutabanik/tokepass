@@ -10,6 +10,7 @@ import {
   type BundleType,
 } from "@/lib/inventory/flexible-bundles"
 import { inferInventoryTierType } from "@/lib/inventory/unified-inventory"
+import { isTicketSoldOut } from "@/lib/checkout/ticket-stock"
 import { cn } from "@/lib/utils"
 
 export type PublicBundleCard = TicketSelectorTier & {
@@ -77,7 +78,7 @@ function BundlePromoCard({
     })),
   })
   const savings = bundleSavings(bundle.listPrice ?? 0, bundle.price)
-  const soldOut = bundle.available <= 0
+  const soldOut = isTicketSoldOut(bundle)
 
   const comboLine = bundle.comboItems?.length
     ? bundle.comboItems

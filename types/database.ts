@@ -507,6 +507,10 @@ export type TicketTier = {
    * (Master Manifest): la entrada vive con su propio max_capacity.
    */
   seating_sector_id: string | null
+  /** Inicio de venta del lote. NULL = inmediato. */
+  sale_starts_at: string | null
+  /** Fin de venta del lote. NULL = hasta la fecha del evento. */
+  sale_ends_at: string | null
   capacity_per_unit: number
   /** QRs independientes por unidad vendida (mesa/agrupación). */
   admit_count: number
@@ -1356,6 +1360,8 @@ type TicketTierInsert = Omit<
   | "visibility"
   | "layout_type"
   | "seating_sector_id"
+  | "sale_starts_at"
+  | "sale_ends_at"
   | "capacity_per_unit"
   | "admit_count"
   | "category"
@@ -1391,6 +1397,8 @@ type TicketTierInsert = Omit<
   visibility?: TicketTier["visibility"]
   layout_type?: TicketTier["layout_type"]
   seating_sector_id?: string | null
+  sale_starts_at?: string | null
+  sale_ends_at?: string | null
   capacity_per_unit?: number
   admit_count?: number
   category?: TicketTier["category"]

@@ -127,7 +127,9 @@ export function sectorUsesNumberedMap(input: {
 export function eventNeedsInteractiveCanvas(
   venueMap: InteractiveVenueMap | null | undefined,
   tickets: ReadonlyArray<Parameters<typeof isMapBackedTicket>[0]>,
+  options?: { hasSeatingPlan?: boolean | null },
 ): boolean {
+  if (options?.hasSeatingPlan === false) return false
   if (!venueMapHasInventory(venueMap)) return false
   return tickets.some(isMapBackedTicket)
 }
@@ -243,6 +245,8 @@ function blankMapTicket(
     calculationMode: "public_price",
     capacity: 1,
     timeLimit: "",
+    saleStartsAt: "",
+    saleEndsAt: "",
     bonusReward: "",
     dayId,
     visibility: "public",

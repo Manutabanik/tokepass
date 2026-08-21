@@ -63,6 +63,18 @@ export function venueElementSelectionType(
   return "table"
 }
 
+export function isTablePurchaseSku(
+  element: Pick<VenueMapElement, "type" | "sellMode" | "priceMode">,
+): boolean {
+  return (
+    element.type === "round_table" ||
+    element.type === "long_table" ||
+    element.type === "vip_box" ||
+    element.sellMode === "group" ||
+    element.priceMode === "closed_unit"
+  )
+}
+
 export function resolveVenueUnitPrice(
   keys: Array<string | null | undefined>,
   fallback: number,
@@ -83,21 +95,31 @@ export function storefrontItemFromElement(
 ): StorefrontSelectedItem | null {
   const name = venueElementSelectionName(element)
   if (!name) return null
+  const tableSku = isTablePurchaseSku(element)
+  const type = tableSku ? "table" : venueElementSelectionType(element)
   return {
     id: element.id,
     name,
     displayName: name,
-    type: venueElementSelectionType(element),
+    type,
     price: resolveVenueUnitPrice(
       [element.id, element.groupId, element.sectorName, element.groupName],
       element.price,
       priceBySectorId,
     ),
     capacity: buyerElementCapacity(element),
-    sectorId: element.groupId?.trim() || element.id,
+    sectorId: element.groupId?.trim() || element.zoneId?.trim() || element.id,
+    sectorName: element.sectorName?.trim() || element.groupName?.trim() || undefined,
     color: element.color,
-    sellMode: element.sellMode,
-    priceMode: element.priceMode ?? venuePriceModeFromSellMode(element.sellMode),
+    sellMode: tableSku ? "group" : element.sellMode,
+    priceMode: tableSku
+      ? "closed_unit"
+      : (element.priceMode ?? venuePriceModeFromSellMode(element.sellMode)),
+    inventoryType: tableSku
+      ? "TABLES"
+      : type === "seat"
+        ? "SEATED_NUMERATED"
+        : "GENERAL_ADMISSION",
   }
 }
 
@@ -119,9 +141,11 @@ export function storefrontItemFromZone(
     price: resolveVenueUnitPrice([zone.id, zone.name], zone.price, priceBySectorId),
     capacity: 1,
     sectorId: zone.id,
+    sectorName: name,
     color: zone.color,
     sellMode: zone.sellMode,
     priceMode: zone.priceMode ?? venuePriceModeFromSellMode(zone.sellMode),
+    inventoryType: "GENERAL_ADMISSION",
   }
 }
 
@@ -156,6 +180,8 @@ export function storefrontItemFromElementSeat(
     number: seat.number,
     sellMode: "per_seat",
     priceMode: "per_person",
+    inventoryType: "SEATED_NUMERATED",
+    sectorName: element.sectorName?.trim() || undefined,
   }
 }
 
@@ -274,7 +300,7 @@ export type StorefrontSelectionGroup = {
   key: string
   label: string
   placeLabel: string
-  sectorLabel: string
+  sectorLabel: string | null
   color: string | null
   chairsLabel: string | null
   ids: string[]
@@ -301,10 +327,10 @@ function splitSelectionName(item: StorefrontSelectedItem): {
   return { sector: sectorLabelFromItem(item), place: item.name }
 }
 
-function sectorBadgeLabel(sector: string): string {
+function sectorBadgeLabel(sector: string): string | null {
   const trimmed = sector.trim()
-  if (!trimmed) return "Sector"
-  return /^sector\b/i.test(trimmed) ? trimmed : `Sector ${trimmed}`
+  if (!trimmed) return null
+  return trimmed
 }
 
 export function formatStorefrontSelectionGroups(
@@ -346,12 +372,27 @@ export function formatStorefrontSelectionGroups(
       seatGroups.set(key, group)
       continue
     }
+    if (item.type === "table" || item.inventoryType === "TABLES") {
+      const seats = Math.max(1, Math.floor(item.capacity) || 1)
+      const tableLabel = `Mesa completa (Incluye ${seats} accesos)`
+      others.push({
+        key: item.id,
+        label: tableLabel,
+        placeLabel: tableLabel,
+        sectorLabel: item.sectorName?.trim() || sectorBadgeLabel(splitSelectionName(item).sector),
+        color: item.color ?? null,
+        chairsLabel: `Incluye ${seats} accesos`,
+        ids: [item.id],
+        price: linePrice,
+      })
+      continue
+    }
     const split = splitSelectionName(item)
     others.push({
       key: item.id,
       label: item.name,
       placeLabel: split.place,
-      sectorLabel: sectorBadgeLabel(split.sector),
+      sectorLabel: item.sectorName?.trim() || sectorBadgeLabel(split.sector),
       color: item.color ?? null,
       chairsLabel: chairsCopy(item.capacity),
       ids: [item.id],
@@ -362,11 +403,15 @@ export function formatStorefrontSelectionGroups(
   const seatLines = [...seatGroups.entries()].map(([key, group]) => {
     const nums = [...group.numbers].sort((a, b) => a - b).join(", ")
     const first = byId.get(group.ids[0] ?? "")
+    const sectorLabel =
+      first?.sectorName?.trim() || sectorBadgeLabel(group.sector)
     return {
       key,
-      label: `${sectorBadgeLabel(group.sector)} - Fila ${group.row}, Sillas ${nums}`,
+      label: sectorLabel
+        ? `${sectorLabel} - Fila ${group.row}, Sillas ${nums}`
+        : `Fila ${group.row}, Sillas ${nums}`,
       placeLabel: `Fila ${group.row}, Sillas ${nums}`,
-      sectorLabel: sectorBadgeLabel(group.sector),
+      sectorLabel,
       color: group.color ?? first?.color ?? null,
       chairsLabel: chairsCopy(group.ids.length),
       ids: group.ids,
@@ -375,6 +420,21 @@ export function formatStorefrontSelectionGroups(
   })
 
   return [...seatLines, ...others]
+}
+
+export function resolveTicketSectorName(
+  tier: { seatingSectorId?: string | null },
+  map?: {
+    zones?: Array<{ id: string; name?: string | null }>
+    sectors?: Array<{ id: string; name?: string | null }>
+  } | null,
+): string | null {
+  const sectorId = tier.seatingSectorId?.trim()
+  if (!sectorId) return null
+  const zone = (map?.zones ?? []).find((item) => item.id === sectorId)
+  const sector = (map?.sectors ?? []).find((item) => item.id === sectorId)
+  const name = zone?.name?.trim() || sector?.name?.trim() || ""
+  return name || null
 }
 
 export function formatStorefrontSelectionLabel(

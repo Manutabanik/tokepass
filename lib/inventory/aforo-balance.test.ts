@@ -24,6 +24,8 @@ function ticket(
     calculationMode: patch.calculationMode ?? "public_price",
     capacity: patch.capacity,
     timeLimit: "",
+    saleStartsAt: "",
+    saleEndsAt: "",
     bonusReward: "",
     dayId: null,
     visibility: "public",

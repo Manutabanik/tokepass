@@ -1,4 +1,12 @@
+import {
+  CHECKOUT_SOLD_OUT_DESCRIPTION,
+  isBuyerSoldOutToast,
+} from "@/lib/checkout/revalidate-seat-holds"
 import { GENERIC_PUBLIC_ERROR, toUserFacingError } from "@/lib/errors/user-facing-error"
+import {
+  TICKET_SALE_ENDED_ERROR,
+  TICKET_SALE_UPCOMING_ERROR,
+} from "@/lib/inventory/ticket-sale-window"
 
 export const POS_GENERIC_ERROR = "No se pudo completar la venta."
 export const CHECKOUT_GENERIC_ERROR =
@@ -74,6 +82,12 @@ export function toCheckoutUserError(
   raw: unknown,
   fallback = CHECKOUT_GENERIC_ERROR,
 ): string {
+  const text = textFromUnknown(raw)
+  if (text === "auth_required" || text === "phase_rollover") return text
+  if (text === TICKET_SALE_ENDED_ERROR || text === TICKET_SALE_UPCOMING_ERROR) {
+    return text
+  }
+  if (isBuyerSoldOutToast(text)) return CHECKOUT_SOLD_OUT_DESCRIPTION
   return toUserFacingError(raw, fallback)
 }
 

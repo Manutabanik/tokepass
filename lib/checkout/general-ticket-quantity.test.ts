@@ -53,4 +53,21 @@ describe("generalTicketMaxQuantity", () => {
     })
     assert.equal(max, 6)
   })
+
+  it("disables selection when capacity minus sold is zero", () => {
+    const max = generalTicketMaxQuantity({
+      tier: {
+        id: "early",
+        available: 5,
+        capacity: 10,
+        sold: 10,
+        layoutType: "general",
+      },
+      siblings: [],
+      quantities: {},
+      selectedCount: 0,
+      maxTicketsPerUser: 10,
+    })
+    assert.equal(max, 0)
+  })
 })

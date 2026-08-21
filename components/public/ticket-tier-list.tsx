@@ -9,18 +9,21 @@ import { resolveStockScarcity } from "@/lib/checkout/stock-scarcity"
 import { resolveTicketHighlightBadge } from "@/lib/checkout/ticket-picker"
 import { ticketDayBadgeLabel } from "@/lib/checkout/ticket-day-groups"
 import { formatTicketPrice } from "@/lib/format"
+import {
+  resolveTicketSaleState,
+  ticketSaleWindowLabel,
+} from "@/lib/inventory/ticket-sale-window"
 import { isLogicalGeneralSectorId } from "@/lib/seating/venue-map-pricing"
+import { resolveTicketSectorName } from "@/lib/seating/storefront-selection"
+import type { InteractiveVenueMap } from "@/types/venue-map"
 import { Badge } from "@/components/ui/badge"
 import { cn, tapFeedbackClass } from "@/lib/utils"
 import type { ScheduleDay } from "@/types/events"
 
-function logicalSectorLabel(sectorId: string) {
-  const slug = sectorId.replace(/^general:/, "").replace(/-/g, " ").trim()
-  if (!slug) return "Entrada general"
-  return slug.replace(/(^|\s)\S/g, (char) => char.toUpperCase())
-}
-
-function groupGeneralTiers(tiers: TicketSelectorTier[]) {
+function groupGeneralTiers(
+  tiers: TicketSelectorTier[],
+  venueMap?: InteractiveVenueMap | null,
+) {
   const groups: Array<{
     key: string
     label: string
@@ -38,7 +41,10 @@ function groupGeneralTiers(tiers: TicketSelectorTier[]) {
     index.set(key, groups.length)
     groups.push({
       key,
-      label: key === "__ungrouped__" ? "" : logicalSectorLabel(key),
+      label:
+        key === "__ungrouped__"
+          ? ""
+          : resolveTicketSectorName({ seatingSectorId: key }, venueMap) ?? "",
       tiers: [tier],
     })
   }
@@ -56,6 +62,8 @@ export function TicketTierList({
   onQuantityChange,
   onSelectSeat,
   selectedSeatMap = {},
+  venueMap = null,
+  hasInteractiveMap = false,
 }: {
   tiers: TicketSelectorTier[]
   siblingTiers?: TicketSelectorTier[]
@@ -67,10 +75,13 @@ export function TicketTierList({
   onQuantityChange: (tierId: string, quantity: number, max: number) => void
   onSelectSeat?: (tierId: string) => void
   selectedSeatMap?: Record<string, string>
+  venueMap?: InteractiveVenueMap | null
+  hasInteractiveMap?: boolean
 }) {
   const pool = siblingTiers ?? tiers
-  const groups = groupGeneralTiers(tiers)
+  const groups = groupGeneralTiers(tiers, hasInteractiveMap ? venueMap : null)
   const showGroupLabels =
+    hasInteractiveMap &&
     groups.filter((group) => group.label.length > 0).length > 1
 
   if (tiers.length === 0) return null
@@ -93,29 +104,50 @@ export function TicketTierList({
               selectedCount,
               maxTicketsPerUser,
             })
-            const soldOut = tier.available <= 0 || max <= 0
-            const plusDisabled = isPending || soldOut || quantity >= max
-            const minusDisabled = isPending || soldOut || quantity <= 0
+            const saleState = resolveTicketSaleState({
+              available: tier.available,
+              capacity: tier.capacity,
+              sold: tier.sold,
+              saleStartsAt: tier.saleStartsAt,
+              saleEndsAt: tier.saleEndsAt,
+            })
+            const saleLabel = ticketSaleWindowLabel(saleState)
+            const windowClosed = saleState.kind !== "active"
+            const soldOut = saleState.kind === "sold_out" || max <= 0
+            const inactive = soldOut || windowClosed
+            const plusDisabled =
+              isPending || inactive || quantity >= max
+            const minusDisabled = isPending || inactive || quantity <= 0
             const highlight = resolveTicketHighlightBadge(tier, pool)
-            const custom = tier.badgeText?.trim() || ""
+            const custom = /^(sector\s+)?(naranja|lima|cian|magenta|oro)$/i.test(
+              (tier.badgeText ?? "").trim(),
+            )
+              ? ""
+              : tier.badgeText?.trim() || ""
             const showStock = tier.showRemainingStock !== false
             const scarcity = resolveStockScarcity(
               tier.available,
               tier.capacity,
               tier.sold,
             )
-            const isMappedTier = Boolean(tier.seatingSectorId && !isLogicalGeneralSectorId(tier.seatingSectorId))
+            const needsPlacePicker =
+              hasInteractiveMap &&
+              (tier.layoutType === "table_combo" ||
+                tier.layoutType === "numbered_seat")
             const selectedSeatName = selectedSeatMap[tier.id]
             const dateLabel = ticketDayBadgeLabel(tier, scheduleDays)
+            const sectorName = hasInteractiveMap
+              ? resolveTicketSectorName(tier, venueMap)
+              : null
 
             return (
               <div
                 key={tier.id}
                 className={cn(
                   "flex w-full items-center justify-between gap-4 rounded-2xl border border-white/10 bg-card/60 px-5 py-3.5 transition-all hover:border-white/20",
-                  soldOut && "cursor-not-allowed opacity-60",
+                  inactive && "cursor-not-allowed opacity-60",
                   (quantity > 0 || Boolean(selectedSeatName)) &&
-                    !soldOut &&
+                    !inactive &&
                     "border-emerald-500/40",
                 )}
               >
@@ -140,6 +172,14 @@ export function TicketTierList({
                         {dateLabel}
                       </Badge>
                     ) : null}
+                    {sectorName ? (
+                      <Badge
+                        variant="outline"
+                        className="h-5 px-1.5 text-[10px] font-semibold text-muted-foreground"
+                      >
+                        {sectorName}
+                      </Badge>
+                    ) : null}
                     {highlight === "bestseller" ? (
                       <span className="text-xs font-semibold text-amber-500">
                         Más vendida
@@ -150,9 +190,16 @@ export function TicketTierList({
                         {custom}
                       </span>
                     ) : null}
-                    {soldOut ? (
-                      <span className="text-xs font-semibold text-destructive">
-                        Agotado
+                    {inactive && saleLabel ? (
+                      <span
+                        className={cn(
+                          "text-xs font-semibold",
+                          soldOut
+                            ? "text-destructive"
+                            : "text-muted-foreground",
+                        )}
+                      >
+                        {saleLabel}
                       </span>
                     ) : showStock && scarcity.kind === "low" ? (
                       <span className="text-xs font-semibold text-amber-500">
@@ -163,11 +210,23 @@ export function TicketTierList({
                 </div>
 
                 <div className="flex shrink-0 items-center">
-                  {isMappedTier ? (
+                  {inactive ? (
+                    <Button
+                      type="button"
+                      disabled
+                      className="h-9 px-3 text-sm font-semibold text-muted-foreground"
+                    >
+                      {saleState.kind === "upcoming"
+                        ? "Próximamente"
+                        : saleState.kind === "ended"
+                          ? "Finalizado"
+                          : "Agotado"}
+                    </Button>
+                  ) : needsPlacePicker ? (
                     <Button
                       type="button"
                       variant={selectedSeatName ? "outline" : "default"}
-                      disabled={soldOut || isPending}
+                      disabled={isPending}
                       onClick={() => onSelectSeat?.(tier.id)}
                       className={cn(
                         tapFeedbackClass,

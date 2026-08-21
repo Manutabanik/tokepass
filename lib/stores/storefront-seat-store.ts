@@ -7,12 +7,17 @@ import {
   evaluateStorefrontSelectionLimit,
   type StorefrontLimitReason,
 } from "@/lib/checkout-limits"
-import { storefrontLineTotal } from "@/lib/checkout/charge-unit"
+import { isClosedUnitPricing, storefrontLineTotal } from "@/lib/checkout/charge-unit"
 import { reservedPlaceLabel } from "@/lib/seating/seating-type"
 
 export type StorefrontViewMode = "map" | "list"
 
 export type StorefrontSelectedItemType = "seat" | "table" | "zone" | "standing"
+
+export type StorefrontInventoryType =
+  | "TABLES"
+  | "SEATED_NUMERATED"
+  | "GENERAL_ADMISSION"
 
 export type StorefrontSelectedItem = {
   id: string
@@ -23,11 +28,13 @@ export type StorefrontSelectedItem = {
   price: number
   capacity: number
   sectorId?: string
+  sectorName?: string
   color?: string
   row?: string
   number?: number
   sellMode?: "per_seat" | "group"
   priceMode?: "closed_unit" | "per_person"
+  inventoryType?: StorefrontInventoryType
 }
 
 export type StorefrontLayoutSeat = {
@@ -87,8 +94,22 @@ function itemCapacity(item: StorefrontSelectedItem) {
   return Math.max(1, Math.floor(item.capacity) || 1)
 }
 
+function purchaseUnitCount(item: StorefrontSelectedItem) {
+  if (
+    item.inventoryType === "TABLES" ||
+    item.type === "table" ||
+    isClosedUnitPricing(item)
+  ) {
+    return 1
+  }
+  if (item.type === "seat" || item.inventoryType === "SEATED_NUMERATED") {
+    return 1
+  }
+  return itemCapacity(item)
+}
+
 function selectionCount(items: StorefrontSelectedItem[]) {
-  return items.reduce((sum, item) => sum + itemCapacity(item), 0)
+  return items.reduce((sum, item) => sum + purchaseUnitCount(item), 0)
 }
 
 function layoutSeatToItem(seat: StorefrontLayoutSeat): StorefrontSelectedItem {
@@ -112,6 +133,7 @@ function layoutSeatToItem(seat: StorefrontLayoutSeat): StorefrontSelectedItem {
     number: seat.number,
     sellMode: "per_seat",
     priceMode: "per_person",
+    inventoryType: "SEATED_NUMERATED",
   }
 }
 
@@ -263,8 +285,17 @@ export const useStorefrontSeatStore = create<StorefrontSeatState>()(
   },
 
   clearSelectedItems: () => {
-    if (get().selectedItems.length === 0) return
-    set(withDerived([]))
+    if (
+      get().selectedItems.length === 0 &&
+      get().focusedMapIds.length === 0
+    ) {
+      return
+    }
+    set({
+      ...withDerived([]),
+      focusedMapIds: [],
+      focusTick: 0,
+    })
   },
 
   toggleLayoutSeat: (seat, maxCount) => {
@@ -308,19 +339,17 @@ export const useStorefrontSeatStore = create<StorefrontSeatState>()(
   },
 }),
     {
-      name: "tokepass.seat-intent.v1",
+      name: "tokepass.seat-intent.v2",
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         eventId: state.eventId,
-        selectedItems: state.selectedItems,
       }),
       merge: (persisted, current) => {
         const stored = (persisted ?? {}) as Partial<StorefrontSeatState>
-        const items = stored.selectedItems ?? current.selectedItems
         return {
           ...current,
-          ...stored,
-          ...withDerived(items),
+          eventId: stored.eventId ?? current.eventId,
+          ...withDerived([]),
         }
       },
     },

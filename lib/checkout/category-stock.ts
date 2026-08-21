@@ -113,10 +113,12 @@ export function resolveCategoryAvailability(input: CategoryStockInput) {
     }
   }
 
+  const available = Math.max(0, Number(input.stock) || 0)
+  const mapPending = input.requiresMap && input.mapReady === false
   return {
-    available: Math.max(0, input.stock),
+    available,
     matchedCount: 0,
-    isSoldOut: false,
+    isSoldOut: mapPending ? false : available <= 0,
   }
 }
 

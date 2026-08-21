@@ -11,6 +11,7 @@ export type DiscoveryControlsState = {
   cities: string[]
   onCityChange: (value: string) => void
   events: CatalogEvent[]
+  hasActiveFilters: boolean
 }
 
 let controls: DiscoveryControlsState | null = null

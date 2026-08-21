@@ -49,9 +49,17 @@ export function storefrontLineTotal(item: {
   capacity?: number | null
   sellMode?: string | null
   priceMode?: string | null
+  type?: string | null
+  inventoryType?: string | null
 }): number {
   const price = Math.max(0, Number(item.price) || 0)
-  if (isClosedUnitPricing(item)) return centsToMoney(moneyToCents(price))
+  if (
+    item.inventoryType === "TABLES" ||
+    item.type === "table" ||
+    isClosedUnitPricing(item)
+  ) {
+    return centsToMoney(moneyToCents(price))
+  }
   return centsToMoney(moneyToCents(price) * storefrontLinePlaces(item))
 }
 
@@ -65,7 +73,9 @@ export function storefrontLineSkuQuantity(item: {
   capacity?: number | null
   sellMode?: string | null
   priceMode?: string | null
+  inventoryType?: string | null
 }): number {
+  if (item.inventoryType === "TABLES" || item.type === "table") return 1
   if (item.type === "seat") return 1
   if (isClosedUnitPricing(item)) return 1
   return storefrontLinePlaces(item)
@@ -171,8 +181,14 @@ export function formatSelectionChargeDetail(input: {
   const isTable = input.type === "table" || (capacity > 1 && input.type !== "seat")
   const sellMode = input.sellMode === "group" ? "group" : "per_seat"
   const priceMode = input.priceMode ?? (sellMode === "group" ? "closed_unit" : "per_person")
+  const closed = isClosedUnitPricing({ sellMode, priceMode })
 
   if (isTable) {
+    const seats = capacity
+    if (closed || input.type === "table") {
+      const nounLabel = noun === "palco" ? "Palco completo" : "Mesa completa"
+      return `1x ${nounLabel} (Incluye ${seats} accesos)`
+    }
     return formatChargeFormula({
       units: quantity,
       unitType: "full_table",

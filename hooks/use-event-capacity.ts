@@ -1,7 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
-import type { UseFormReturn } from "react-hook-form"
+import { useWatch, type UseFormReturn } from "react-hook-form"
 
 import {
   computeEventCapacity,
@@ -12,17 +11,28 @@ import type { EventFormValues } from "@/lib/validations/event-form"
 export function useEventCapacity(
   form: UseFormReturn<EventFormValues>,
 ): EventCapacitySnapshot {
-  const tickets = form.watch("tickets")
-  const venueMap = form.watch("venue.venueMap")
-  const zones = form.watch("venue.zones")
-
-  return useMemo(
-    () =>
-      computeEventCapacity({
-        tickets,
-        venueMap,
-        zones,
-      }),
-    [tickets, venueMap, zones],
+  const tickets = useWatch({ control: form.control, name: "tickets" }) ?? []
+  const capacityFields = tickets.map(
+    (_, index) => `tickets.${index}.capacity` as const,
   )
+  useWatch({
+    control: form.control,
+    name: capacityFields,
+    disabled: capacityFields.length === 0,
+  })
+  const venueMap = useWatch({ control: form.control, name: "venue.venueMap" })
+  const zones = useWatch({ control: form.control, name: "venue.zones" })
+  const hasSeatingPlan = Boolean(
+    useWatch({ control: form.control, name: "basics.hasSeatingPlan" }),
+  )
+  const liveTickets = form.getValues("tickets") ?? tickets
+
+  return computeEventCapacity({
+    tickets: liveTickets,
+    venueMap: hasSeatingPlan
+      ? (form.getValues("venue.venueMap") ?? venueMap)
+      : null,
+    zones: hasSeatingPlan ? (form.getValues("venue.zones") ?? zones) : null,
+    hasSeatingPlan,
+  })
 }

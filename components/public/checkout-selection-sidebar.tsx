@@ -201,14 +201,22 @@ export function CheckoutSelectionSidebar({
               disabled={
                 Boolean(cta.pending) ||
                 Boolean(cta.locked) ||
-                Boolean(cta.disabled)
+                Boolean(cta.disabled) ||
+                (cartLines.length === 0 && placeCount === 0)
               }
               aria-busy={Boolean(cta.pending)}
               onClick={
                 cta.formId
                   ? undefined
                   : () => {
-                      if (cta.pending || cta.locked || cta.disabled) return
+                      if (
+                        cta.pending ||
+                        cta.locked ||
+                        cta.disabled ||
+                        (cartLines.length === 0 && placeCount === 0)
+                      ) {
+                        return
+                      }
                       cta.onClick()
                     }
               }

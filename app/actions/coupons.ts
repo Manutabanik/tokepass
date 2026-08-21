@@ -189,6 +189,7 @@ export async function createPromoCode(input: {
     }
 
     if (error) {
+      console.error("SUPABASE_ERROR:", error)
       if (error.code === "23505") {
         return { success: false, error: "Ya existe ese código en este evento." }
       }
@@ -200,6 +201,7 @@ export async function createPromoCode(input: {
 
     return { success: true, data: data as PromoCodeRow }
   } catch (error) {
+    console.error("SUPABASE_ERROR:", error)
     return {
       success: false,
       error:

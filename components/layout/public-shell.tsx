@@ -39,7 +39,7 @@ export function PublicShell({
     <div
       className={cn(
         "flex min-h-dvh w-full max-w-full flex-col bg-background text-foreground",
-        !eventStorefront && !checkoutTunnel && "overflow-x-hidden",
+        !eventStorefront && !checkoutTunnel && "overflow-x-clip",
         checkoutTunnel && "relative h-[100dvh] overflow-hidden",
       )}
     >
@@ -53,7 +53,7 @@ export function PublicShell({
                 "pt-[calc(4rem+env(safe-area-inset-top)+1rem)]",
                 eventStorefront
                   ? "overflow-visible pb-24"
-                  : "min-h-0 overflow-x-hidden pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0",
+                  : "min-h-0 overflow-x-clip pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0",
               ),
         )}
       >

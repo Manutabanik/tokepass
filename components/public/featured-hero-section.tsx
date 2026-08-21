@@ -8,14 +8,13 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import type { CatalogEvent } from "@/app/actions/public-events"
 import { FeaturedBannerCard } from "@/components/public/featured-banner-card"
 import type { DiscoveryCategory } from "@/lib/discovery-categories"
-import { Button } from "@/components/ui/button"
 import {
   FEATURED_CAROUSEL_LIMIT,
   matchesFeaturedProvince,
 } from "@/lib/featured-rotation"
 import { cn } from "@/lib/utils"
 
-const AUTOPLAY_MS = 6500
+const AUTOPLAY_MS = 5000
 
 export function FeaturedHeroSection({
   pool,
@@ -37,11 +36,14 @@ export function FeaturedHeroSection({
   const [emblaRef, emblaApi] = useEmblaCarousel({
     align: "center",
     loop: canLoop,
+    skipSnaps: false,
     duration: 22,
   })
   const [selected, setSelected] = useState(0)
   const [progress, setProgress] = useState(0)
-  const [paused, setPaused] = useState(false)
+  const [hovered, setHovered] = useState(false)
+  const [interacting, setInteracting] = useState(false)
+  const paused = hovered || interacting
 
   const onSelect = useCallback(() => {
     if (!emblaApi) return
@@ -60,6 +62,18 @@ export function FeaturedHeroSection({
       emblaApi.off("reInit", onSelect)
     }
   }, [emblaApi, onSelect, slides.length])
+
+  useEffect(() => {
+    if (!emblaApi || !canLoop) return
+    const onPointerDown = () => setInteracting(true)
+    const onPointerUp = () => setInteracting(false)
+    emblaApi.on("pointerDown", onPointerDown)
+    emblaApi.on("pointerUp", onPointerUp)
+    return () => {
+      emblaApi.off("pointerDown", onPointerDown)
+      emblaApi.off("pointerUp", onPointerUp)
+    }
+  }, [emblaApi, canLoop])
 
   useEffect(() => {
     if (!canLoop || paused || reduceMotion) return
@@ -88,82 +102,101 @@ export function FeaturedHeroSection({
 
   return (
     <section
-      className="relative w-full max-w-full overflow-x-hidden bg-transparent py-8"
+      className="relative w-full max-w-full overflow-x-hidden bg-transparent pt-0 pb-4"
       aria-label="Eventos destacados"
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-      onFocusCapture={() => setPaused(true)}
+      aria-roledescription="carousel"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocusCapture={() => setHovered(true)}
       onBlurCapture={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-          setPaused(false)
+          setHovered(false)
         }
       }}
     >
-      <div className="overflow-hidden" ref={emblaRef}>
-        <div className="flex">
-          {slides.map((event, index) => (
-            <div
-              key={event.id}
-              className="min-w-0 shrink-0 grow-0 basis-full px-4"
-            >
-              <FeaturedBannerCard
-                event={event}
-                priority={index === 0}
-                categories={categories}
-              />
-            </div>
-          ))}
+      <div className="relative">
+        <div className="overflow-hidden" ref={emblaRef}>
+          <div className="flex touch-pan-y">
+            {slides.map((event, index) => (
+              <div
+                key={event.id}
+                className={cn(
+                  "min-w-0 px-2 transition-opacity duration-500 ease-out",
+                  slides.length === 1
+                    ? "flex-[0_0_100%]"
+                    : "flex-[0_0_90%] md:flex-[0_0_85%] lg:flex-[0_0_80%]",
+                  index === selected ? "opacity-100" : "opacity-55",
+                )}
+              >
+                <FeaturedBannerCard
+                  event={event}
+                  priority={index === 0}
+                  categories={categories}
+                />
+              </div>
+            ))}
+          </div>
         </div>
+
+        {canLoop ? (
+          <>
+            <button
+              type="button"
+              onClick={scrollPrev}
+              className="absolute top-1/2 left-2 z-30 hidden size-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/50 text-white shadow-xl backdrop-blur-md transition hover:bg-black/70 md:flex"
+              aria-label="Evento anterior"
+            >
+              <ChevronLeft className="size-5" />
+            </button>
+            <button
+              type="button"
+              onClick={scrollNext}
+              className="absolute top-1/2 right-2 z-30 hidden size-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/50 text-white shadow-xl backdrop-blur-md transition hover:bg-black/70 md:flex"
+              aria-label="Siguiente evento"
+            >
+              <ChevronRight className="size-5" />
+            </button>
+          </>
+        ) : null}
       </div>
 
       {canLoop ? (
-        <div className="mt-4 flex items-center justify-center gap-3">
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            onClick={scrollPrev}
-            className="size-10 rounded-full border-border bg-card"
-            aria-label="Evento anterior"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </Button>
-          <div className="flex max-w-xs flex-1 gap-1.5">
-            {slides.map((event, index) => (
+        <div
+          className="mt-5 flex items-center justify-center gap-2"
+          role="tablist"
+          aria-label="Eventos del carrusel"
+        >
+          {slides.map((event, index) => {
+            const isActive = index === selected
+            return (
               <button
                 key={event.id}
                 type="button"
+                role="tab"
                 aria-label={`Ir a ${event.title}`}
-                aria-current={index === selected}
+                aria-current={isActive}
                 onClick={() => emblaApi?.scrollTo(index)}
-                className="h-1 flex-1 overflow-hidden rounded-full bg-muted"
+                className={cn(
+                  "overflow-hidden rounded-full transition-all duration-300",
+                  isActive
+                    ? "h-1.5 w-8 bg-foreground/15"
+                    : "size-1.5 bg-foreground/30 hover:bg-foreground/55",
+                )}
               >
-                <span
-                  className={cn(
-                    "block h-full rounded-full bg-emerald-500 transition-all duration-300",
-                  )}
-                  style={{
-                    width:
-                      index < selected
-                        ? "100%"
-                        : index === selected
-                          ? `${Math.round(progress * 100)}%`
-                          : "0%",
-                  }}
-                />
+                {isActive ? (
+                  <span
+                    className="block h-full rounded-full bg-emerald-500"
+                    style={{
+                      width:
+                        reduceMotion || paused
+                          ? "100%"
+                          : `${Math.round(progress * 100)}%`,
+                    }}
+                  />
+                ) : null}
               </button>
-            ))}
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            onClick={scrollNext}
-            className="size-10 rounded-full border-border bg-card"
-            aria-label="Siguiente evento"
-          >
-            <ChevronRight className="h-5 w-5" />
-          </Button>
+            )
+          })}
         </div>
       ) : null}
     </section>

@@ -19,7 +19,7 @@ import { cn, tapFeedbackClass } from "@/lib/utils"
 export { CART_TICKET_LINE_PREFIX, cartTicketLineId, parseCartTicketLineId }
 
 export function CartSummary({
-  items,
+  items: _items,
   className,
   heading = "Tu Selección",
   showClear = true,
@@ -31,10 +31,12 @@ export function CartSummary({
   showClear?: boolean
   compact?: boolean
 }) {
+  const liveLines = useCheckoutStore((state) => state.lines)
+  const rows = liveLines
   const removeItem = useCheckoutStore((state) => state.removeItem)
   const clearCart = useCheckoutStore((state) => state.clearCart)
 
-  if (items.length === 0) return null
+  if (rows.length === 0) return null
 
   return (
     <div className={cn("flex min-h-0 flex-col", className)}>
@@ -71,7 +73,7 @@ export function CartSummary({
             : "no-scrollbar gap-2 overflow-y-auto",
         )}
       >
-        {items.map((item) => {
+        {rows.map((item) => {
           const displayName = cartLineDisplayName(item)
           const dateLabel = item.dateLabel?.trim() || ""
           const qtyLabel = `${item.quantity}x ${displayName}`

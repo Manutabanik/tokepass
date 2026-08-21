@@ -16,6 +16,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { isFullPassDayId } from "@/lib/event-schedule"
 import { formatCurrency, formatEventDay, formatTicketPrice } from "@/lib/format"
 import { generalTicketMaxQuantity } from "@/lib/checkout/general-ticket-quantity"
+import {
+  resolveTicketSaleState,
+  ticketSaleWindowLabel,
+} from "@/lib/inventory/ticket-sale-window"
 import { isLogicalGeneralSectorId } from "@/lib/seating/venue-map-pricing"
 import type { TicketHighlightBadge } from "@/lib/checkout/ticket-picker"
 import type { PublicTicketPhase } from "@/lib/inventory/active-phase"
@@ -51,6 +55,8 @@ export type TicketSelectorTier = {
   description?: string | null
   highlightBadge?: TicketHighlightBadge | null
   sold?: number
+  saleStartsAt?: string | null
+  saleEndsAt?: string | null
   phases?: PublicTicketPhase[]
   showRemainingStock?: boolean | null
   showAccessCount?: boolean | null
@@ -329,8 +335,17 @@ function TierList({
           ),
           maxTicketsPerUser,
         })
-        const soldOut = tier.available <= 0
-        const lowStock = !soldOut && tier.available <= 8
+        const saleState = resolveTicketSaleState({
+          available: tier.available,
+          capacity: tier.capacity,
+          sold: tier.sold,
+          saleStartsAt: tier.saleStartsAt,
+          saleEndsAt: tier.saleEndsAt,
+        })
+        const saleLabel = ticketSaleWindowLabel(saleState)
+        const soldOut = saleState.kind === "sold_out" || maxSelectable <= 0
+        const inactive = soldOut || saleState.kind !== "active"
+        const lowStock = !inactive && tier.available <= 8
         const day = scheduleDays.find((item) => item.id === tier.dayId)
         const dayLabel = isFullPassDayId(tier.dayId)
           ? scheduleDays.length > 1
@@ -354,15 +369,15 @@ function TierList({
             key={tier.id}
             className={cn(
               "flex w-full items-center justify-between gap-4 rounded-2xl border border-white/10 bg-card/60 px-5 py-3.5 transition-all hover:border-white/20",
-              quantity > 0 && "border-emerald-500/40",
-              soldOut && "opacity-70",
+              quantity > 0 && !inactive && "border-emerald-500/40",
+              inactive && "opacity-70",
             )}
           >
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <p
                 className={cn(
                   "truncate text-base font-bold text-foreground",
-                  soldOut && "text-muted-foreground line-through",
+                  inactive && "text-muted-foreground",
                 )}
               >
                 {tier.name}
@@ -391,9 +406,14 @@ function TierList({
                   <span className="truncate text-xs font-medium text-muted-foreground">
                     {comboLine}
                   </span>
-                ) : soldOut ? (
-                  <span className="text-xs font-semibold text-destructive">
-                    Sin stock
+                ) : inactive && saleLabel ? (
+                  <span
+                    className={cn(
+                      "text-xs font-semibold",
+                      soldOut ? "text-destructive" : "text-muted-foreground",
+                    )}
+                  >
+                    {saleLabel}
                   </span>
                 ) : lowStock ? (
                   <span className="text-xs font-semibold text-amber-500">
@@ -404,12 +424,24 @@ function TierList({
             </div>
 
             <div className="flex shrink-0 items-center">
-              {tier.layoutType === "general" ||
-              isLogicalGeneralSectorId(tier.seatingSectorId) ? (
+              {inactive ? (
+                <Button
+                  type="button"
+                  disabled
+                  className="h-9 rounded-xl px-3 text-sm font-semibold text-muted-foreground"
+                >
+                  {saleState.kind === "upcoming"
+                    ? "Próximamente"
+                    : saleState.kind === "ended"
+                      ? "Finalizado"
+                      : "Agotado"}
+                </Button>
+              ) : tier.layoutType === "general" ||
+                isLogicalGeneralSectorId(tier.seatingSectorId) ? (
                 <div className="flex h-9 items-center gap-3 rounded-xl border border-white/10 bg-black/40 px-2">
                   <button
                     type="button"
-                    disabled={soldOut || quantity === 0 || isPending}
+                    disabled={quantity === 0 || isPending}
                     onClick={() =>
                       onQuantityChange(tier.id, quantity - 1, maxSelectable)
                     }
@@ -423,7 +455,7 @@ function TierList({
                   </span>
                   <button
                     type="button"
-                    disabled={soldOut || quantity >= maxSelectable || isPending}
+                    disabled={quantity >= maxSelectable || isPending}
                     onClick={() =>
                       onQuantityChange(tier.id, quantity + 1, maxSelectable)
                     }
@@ -436,7 +468,7 @@ function TierList({
               ) : (
                 <Button
                   type="button"
-                  disabled={soldOut || !hasSeatingFlow || isPending}
+                  disabled={!hasSeatingFlow || isPending}
                   onClick={onOpenSeatFlow}
                   className="h-9 rounded-xl px-3 text-sm"
                 >

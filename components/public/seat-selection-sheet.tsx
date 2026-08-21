@@ -1,11 +1,10 @@
 "use client"
 
-import { Minus, Plus, X } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { Component, type ErrorInfo, type ReactNode, useEffect, useMemo, useState } from "react"
+import { Minus, Plus } from "lucide-react"
 import { toast } from "sonner"
 
-import { AccessiblePlaceGrid } from "@/components/public/accessible-place-grid"
-import { SeatSelectionSplitMap } from "@/components/public/seat-selection-split-map"
+import { InteractiveMapViewer } from "@/components/public/interactive-map-viewer"
 import { Button } from "@/components/ui/button"
 import {
   Sheet,
@@ -14,16 +13,28 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useLockBodyScroll } from "@/hooks/use-lock-body-scroll"
 import {
   resolvePurchaseLimit,
   storefrontLimitMessage,
 } from "@/lib/checkout-limits"
 import { formatTicketPrice } from "@/lib/format"
+import { logger } from "@/lib/logger"
+import {
+  compactSeatToken,
+  groupSeatsForMatrix,
+} from "@/lib/seating/accessible-seat-matrix"
+import type {
+  AccessibleRowNode,
+  AccessibleSeatNode,
+} from "@/lib/seating/accessible-seat-tree"
 import { buildAccessibleSeatTree } from "@/lib/seating/accessible-seat-tree"
 import { resolveSectorAssignMeta } from "@/lib/seating/assign-best-seats"
 import {
   formatStorefrontSelectionGroups,
+  isTablePurchaseSku,
   storefrontItemFromElement,
   storefrontItemFromZone,
 } from "@/lib/seating/storefront-selection"
@@ -33,7 +44,10 @@ import type {
   SeatStatus,
 } from "@/lib/seating/universal-seat-types"
 import { resolveEffectiveSeatingType } from "@/lib/seating/seating-type"
-import { flattenSeatsForAvailability } from "@/lib/seating/venue-map-geometry"
+import {
+  elementInventorySectorId,
+  flattenSeatsForAvailability,
+} from "@/lib/seating/venue-map-geometry"
 import {
   storefrontSelectionCount,
   storefrontSelectionTotal,
@@ -72,10 +86,53 @@ export function selectedPlacesForCategory(
   items: StorefrontSelectedItem[],
   sectorId?: string | null,
 ) {
-  const relevant = sectorId
-    ? items.filter((item) => item.sectorId === sectorId)
-    : items
-  return relevant.map((item) => item.name).filter((name) => name.trim().length > 0)
+  const sector = sectorId?.trim()
+  if (!sector) return []
+  return items
+    .filter((item) => item.sectorId === sector || item.id === sector)
+    .map((item) => {
+      if (item.type === "table" || item.inventoryType === "TABLES") {
+        const seats = Math.max(1, Math.floor(item.capacity) || 1)
+        return `Mesa completa (Incluye ${seats} accesos)`
+      }
+      return item.displayName?.trim() || item.name
+    })
+    .filter((name) => name.trim().length > 0)
+}
+
+class SeatModalErrorBoundary extends Component<
+  { children: ReactNode },
+  { error: Error | null }
+> {
+  state = { error: null as Error | null }
+
+  static getDerivedStateFromError(error: Error) {
+    return { error }
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    logger.error({
+      context: "seat-selection-sheet",
+      message: "seat_modal_inner_error",
+      error,
+      componentStack: info.componentStack,
+    })
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 py-10 text-center">
+        <p className="text-sm font-semibold text-foreground">
+          No pudimos cargar los lugares.
+        </p>
+        <p className="text-sm text-muted-foreground">
+          Cerrá esta ventana y volvé a intentar. La cruz, ESC o el fondo oscuro
+          siguen funcionando.
+        </p>
+      </div>
+    )
+  }
 }
 
 export function SeatSelectionSheet({
@@ -84,6 +141,7 @@ export function SeatSelectionSheet({
   title,
   sectorId = null,
   pending = false,
+  loading = false,
   maxTicketsPerUser = null,
   context,
   selectionMode = "auto",
@@ -93,38 +151,132 @@ export function SeatSelectionSheet({
   title: string
   sectorId?: string | null
   pending?: boolean
+  loading?: boolean
   maxTicketsPerUser?: number | null
   context: SeatSelectionContext
   selectionMode?: "auto" | "map" | "counter"
+}) {
+  const selectedItems = useStorefrontSeatStore((state) => state.selectedItems)
+  const placeCount = storefrontSelectionCount(selectedItems)
+  const placeTotal = storefrontSelectionTotal(selectedItems)
+  const canConfirm = placeCount > 0
+
+  useLockBodyScroll(open)
+
+  function handleConfirm() {
+    if (!canConfirm || pending) return
+    context.onConfirmed()
+    onOpenChange(false)
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="bottom"
+        showCloseButton
+        overlayClassName="z-[100]"
+        className={cn(
+          "z-[100] flex h-[100dvh] max-h-[100dvh] flex-col gap-0 overflow-hidden rounded-none p-0",
+          "lg:inset-x-auto lg:bottom-auto lg:left-1/2 lg:top-1/2 lg:h-[min(88dvh,840px)] lg:max-h-[88dvh] lg:w-[min(56rem,94vw)] lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-3xl",
+        )}
+      >
+        <SheetHeader className="shrink-0 border-b border-border px-4 py-3 pr-14 text-left">
+          <SheetTitle className="text-lg font-bold tracking-tight">
+            {title}
+          </SheetTitle>
+          <SheetDescription className="mt-0.5 text-sm text-muted-foreground">
+            Elegí un lugar de la lista o miralo en el mapa. Podés cerrar en
+            cualquier momento.
+          </SheetDescription>
+        </SheetHeader>
+
+        <SeatModalErrorBoundary>
+          <SeatSelectionModalInner
+            open={open}
+            title={title}
+            sectorId={sectorId}
+            pending={pending}
+            loading={loading}
+            maxTicketsPerUser={maxTicketsPerUser}
+            context={context}
+            selectionMode={selectionMode}
+          />
+        </SeatModalErrorBoundary>
+
+        <div className="sticky bottom-0 z-10 mt-auto shrink-0 border-t border-border bg-card px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+          {canConfirm ? (
+            <p className="mb-3 text-center text-sm font-semibold leading-snug text-foreground">
+              {formatAssistantLine(selectedItems, placeTotal)}
+            </p>
+          ) : (
+            <p className="mb-3 text-center text-sm text-muted-foreground">
+              Seleccioná un lugar para continuar.
+            </p>
+          )}
+          <Button
+            type="button"
+            disabled={!canConfirm || pending}
+            onClick={handleConfirm}
+            className={cn(
+              tapFeedbackClass,
+              "h-auto w-full rounded-2xl bg-emerald-600 py-3.5 text-base font-bold text-white hover:bg-emerald-700",
+            )}
+          >
+            Confirmar selección
+          </Button>
+        </div>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+function SeatSelectionModalInner({
+  open,
+  title,
+  sectorId,
+  pending,
+  loading,
+  maxTicketsPerUser,
+  context,
+  selectionMode,
+}: {
+  open: boolean
+  title: string
+  sectorId?: string | null
+  pending: boolean
+  loading: boolean
+  maxTicketsPerUser: number | null
+  context: SeatSelectionContext
+  selectionMode: "auto" | "map" | "counter"
 }) {
   const selectedItems = useStorefrontSeatStore((state) => state.selectedItems)
   const selectedUnitIds = useMemo(
     () => selectedItems.map((item) => item.id),
     [selectedItems],
   )
-  const [mapExpanded, setMapExpanded] = useState(false)
-  const [wasOpen, setWasOpen] = useState(open)
-  if (open !== wasOpen) {
-    setWasOpen(open)
-    setMapExpanded(open)
-  }
   const [peopleCount, setPeopleCount] = useState(1)
 
-  useLockBodyScroll(open)
-
-  const mapSeats = useMemo(
-    () => (context.map ? flattenSeatsForAvailability(context.map) : []),
-    [context.map],
-  )
+  const mapSeats = useMemo(() => {
+    if (!context.map) return []
+    try {
+      return flattenSeatsForAvailability(context.map)
+    } catch {
+      return []
+    }
+  }, [context.map])
 
   const sectors = useMemo(() => {
     if (!context.map) return []
-    return buildAccessibleSeatTree({
-      map: context.map,
-      occupancyBySeatId: context.occupancyBySeatId,
-      selectedSeatIds: selectedUnitIds,
-      unavailableZoneIds: context.unavailableZoneIds,
-    })
+    try {
+      return buildAccessibleSeatTree({
+        map: context.map,
+        occupancyBySeatId: context.occupancyBySeatId,
+        selectedSeatIds: selectedUnitIds,
+        unavailableZoneIds: context.unavailableZoneIds,
+      })
+    } catch {
+      return []
+    }
   }, [
     context.map,
     context.occupancyBySeatId,
@@ -148,6 +300,7 @@ export function SeatSelectionSheet({
     (zone) => zone.id === (sectorId ?? targetSector?.id),
   )
   const selectedSectorName = targetZone?.name ?? targetSector?.name ?? title
+  const focusedSectorId = targetZone?.id ?? targetSector?.id ?? sectorId ?? null
 
   const assignMeta = useMemo(() => {
     const sectorKey = targetZone?.id ?? targetSector?.id
@@ -183,39 +336,60 @@ export function SeatSelectionSheet({
     (seatingType === "GENERAL" ||
       selectionMode === "counter" ||
       targetSector?.kind === "ga")
-  const showFullMap = seatingType === "RESERVED"
-  const placeCount = storefrontSelectionCount(selectedItems)
-  const placeTotal = storefrontSelectionTotal(selectedItems)
-  const canConfirm = placeCount > 0
-  const assistantLine = formatAssistantLine(selectedItems, placeTotal)
-  const emptyPrompt = isTableSector
-    ? "Seleccioná una mesa en la lista o en el mapa."
-    : "Seleccioná un lugar en la lista o en el mapa."
+
+  const fallbackPrice =
+    (focusedSectorId ? context.priceBySectorId[focusedSectorId] : undefined) ??
+    targetZone?.price ??
+    targetSector?.price ??
+    0
+
+  const quickPlaces = useMemo(
+    () =>
+      buildQuickPlaces({
+        rows: targetSector?.rows ?? [],
+        inventoryType,
+        sellMode: assignMeta.sellMode,
+        unitNoun: assignMeta.unitNoun,
+        fallbackPrice,
+      }),
+    [
+      assignMeta.sellMode,
+      assignMeta.unitNoun,
+      fallbackPrice,
+      inventoryType,
+      targetSector?.rows,
+    ],
+  )
+
+  const focusedMap = useMemo(() => {
+    if (!context.map || !focusedSectorId) return context.map
+    return isolateSectorMap(context.map, focusedSectorId)
+  }, [context.map, focusedSectorId])
+
+  const isLoadingPlaces = loading || (open && !context.map)
+
   useEffect(() => {
     if (!open) return
-    if (seatingType === "GENERAL") {
-      onOpenChange(false)
-      return
-    }
     const timer = window.setTimeout(() => {
       const store = useStorefrontSeatStore.getState()
       const existing = storefrontSelectionCount(store.selectedItems)
-      const nextCount = Math.max(1, existing || 1)
-      setPeopleCount(nextCount)
+      setPeopleCount(Math.max(1, existing || 1))
       const ids = store.selectedItems.map((item) => item.id)
       if (ids.length > 0) store.pulseFocus(ids)
     }, 0)
     return () => window.clearTimeout(timer)
-  }, [open, seatingType, onOpenChange])
+  }, [open])
 
   function handleTogglePlace(seatId: string) {
     if (pending || !context.map) return
     const store = useStorefrontSeatStore.getState()
     const element = (context.map.elements ?? []).find((item) => item.id === seatId)
-    if (
-      element &&
-      (element.sellMode === "group" || element.type === "standing_zone")
-    ) {
+    const tableParent = (context.map.elements ?? []).find(
+      (item) =>
+        isTablePurchaseSku(item) &&
+        (item.id === seatId || item.seats.some((seat) => seat.id === seatId)),
+    )
+    if (element && (isTablePurchaseSku(element) || element.type === "standing_zone")) {
       const item = storefrontItemFromElement(element, context.priceBySectorId)
       if (!item) return
       const result = store.toggleSelectedItem(item, maxTicketsPerUser)
@@ -224,6 +398,17 @@ export function SeatSelectionSheet({
         return
       }
       store.pulseFocus([element.id])
+      return
+    }
+    if (tableParent) {
+      const item = storefrontItemFromElement(tableParent, context.priceBySectorId)
+      if (!item) return
+      const result = store.toggleSelectedItem(item, maxTicketsPerUser)
+      if (!result.ok) {
+        toast.error(storefrontLimitMessage(result.reason))
+        return
+      }
+      store.pulseFocus([tableParent.id])
       return
     }
 
@@ -262,155 +447,232 @@ export function SeatSelectionSheet({
     store.pulseFocus([source.id])
   }
 
-  function handleConfirm() {
-    if (!canConfirm) return
-    context.onConfirmed()
-    onOpenChange(false)
+  if (isGeneralAdmission) {
+    return (
+      <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+        <GeneralAdmissionPicker
+          pending={pending}
+          peopleCount={peopleCount}
+          maxPeople={resolvePurchaseLimit(maxTicketsPerUser) ?? 20}
+          sectorName={selectedSectorName}
+          inventoryType={inventoryType}
+          seatsPerTable={seatsPerTable}
+          unitKind="ticket"
+          onChange={(next) => {
+            setPeopleCount(next)
+            if (targetSector) {
+              context.onAssignZoneQuantity(targetSector.id, next)
+            } else if (targetZone) {
+              context.onAssignZoneQuantity(targetZone.id, next)
+            }
+          }}
+        />
+      </div>
+    )
   }
 
   return (
-    <Sheet
-      open={open}
-      onOpenChange={(next) => {
-        if (!next && mapExpanded) {
-          setMapExpanded(false)
-          return
-        }
-        onOpenChange(next)
-      }}
+    <Tabs
+      key={`${open}-${focusedSectorId ?? "sector"}`}
+      defaultValue="lista"
+      className="flex min-h-0 flex-1 flex-col gap-0"
     >
-      <SheetContent
-        side="bottom"
-        showCloseButton={false}
-        overlayClassName="z-[100]"
-        className={cn(
-          "z-[100] flex flex-col gap-0 overflow-hidden rounded-none p-0",
-          isGeneralAdmission
-            ? "h-auto max-h-[min(36rem,90dvh)]"
-            : "h-[100dvh] max-h-[100dvh]",
-          "lg:inset-x-auto lg:bottom-auto lg:left-1/2 lg:top-1/2 lg:max-h-[88dvh] lg:w-[min(56rem,94vw)] lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-3xl",
-          isGeneralAdmission
-            ? "lg:h-auto"
-            : "lg:h-[min(88dvh,840px)]",
-        )}
-      >
-        <SheetHeader className="shrink-0 border-b border-border px-4 py-3 text-left">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <SheetTitle className="text-lg font-bold tracking-tight">
-                {selectedSectorName}
-              </SheetTitle>
-              <SheetDescription className="mt-0.5 text-sm text-muted-foreground">
-                {isGeneralAdmission
-                  ? "Indicá cuántas entradas querés."
-                  : "El mapa de arriba muestra dónde queda el lugar que elijas abajo."}
-              </SheetDescription>
-            </div>
-            <button
-              type="button"
-              onClick={() => onOpenChange(false)}
-              className="grid size-10 shrink-0 place-items-center rounded-full text-muted-foreground transition-all duration-200 hover:bg-secondary hover:text-foreground"
-              aria-label="Cerrar"
-            >
-              <X className="size-5" aria-hidden="true" />
-            </button>
-          </div>
-        </SheetHeader>
-
-        <div className="flex min-h-0 flex-1 flex-col">
-          {showFullMap ? (
-            <SeatSelectionSplitMap
-              map={context.map}
-              eventId={context.eventId}
-              eventTitle={context.eventTitle}
-              pending={pending}
-              maxSelectable={maxTicketsPerUser}
-              selectedZoneId={context.selectedZoneId}
-              unavailableZoneIds={context.unavailableZoneIds}
-              occupancyBySeatId={context.occupancyBySeatId}
-              heldSeatIds={context.heldSeatIds}
-              priceBySectorId={context.priceBySectorId}
-              sectors={context.sectors}
-              expanded={mapExpanded}
-              onExpandedChange={setMapExpanded}
-              onSelectZone={context.onSelectZone}
-              onContinue={context.onUniversalContinue}
-            />
-          ) : null}
-
-          <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
-            {isGeneralAdmission ? (
-              <GeneralAdmissionPicker
-                pending={pending}
-                peopleCount={peopleCount}
-                maxPeople={resolvePurchaseLimit(maxTicketsPerUser) ?? 20}
-                sectorName={selectedSectorName}
-                inventoryType={inventoryType}
-                seatsPerTable={seatsPerTable}
-                unitKind="ticket"
-                onChange={(next) => {
-                  setPeopleCount(next)
-                  if (targetSector) {
-                    context.onAssignZoneQuantity(targetSector.id, next)
-                  } else if (targetZone) {
-                    context.onAssignZoneQuantity(targetZone.id, next)
-                  }
-                }}
-              />
-            ) : (
-              <div className="flex flex-col items-center">
-                <h3 className="text-center text-lg font-bold text-foreground">
-                  {selectedSectorName}
-                </h3>
-                <SectorInventoryDescription
-                  inventoryType={inventoryType}
-                  seatsPerTable={seatsPerTable}
-                />
-                <div className="mt-4 w-full">
-                  <AccessiblePlaceGrid
-                    pending={pending}
-                    rows={targetSector?.rows ?? []}
-                    emptyMessage={
-                      seatingType === "RESERVED" && targetSector?.soldOut
-                        ? "No hay lugares disponibles en este sector."
-                        : seatingType === "RESERVED"
-                          ? "Este sector no tiene mesas ni sillas configuradas."
-                          : null
-                    }
-                    onToggle={(seat) => handleTogglePlace(seat.id)}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="sticky bottom-0 z-10 mt-auto shrink-0 border-t border-border bg-card px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
-          {canConfirm ? (
-            <p className="mb-3 text-center text-lg font-bold leading-snug text-foreground">
-              {assistantLine}
-            </p>
-          ) : (
-            <p className="mb-3 text-center text-sm text-muted-foreground">
-              {emptyPrompt}
-            </p>
-          )}
-          <Button
-            type="button"
-            disabled={!canConfirm || pending}
-            onClick={handleConfirm}
-            className={cn(
-              tapFeedbackClass,
-              "h-auto w-full rounded-2xl py-3.5 text-base font-bold transition-all duration-200",
-            )}
+      <div className="shrink-0 border-b border-border px-4 pt-3">
+        <TabsList className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-muted/50 p-1 text-muted-foreground">
+          <TabsTrigger
+            value="lista"
+            className="inline-flex h-full w-full flex-1 items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium shadow-none after:hidden data-active:border-transparent data-active:bg-background data-active:text-foreground data-active:shadow-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm dark:data-active:border-transparent"
           >
-            {canConfirm
-              ? `Confirmar ${placeCount} ${placeCount === 1 ? "entrada" : "entradas"} · ${formatTicketPrice(placeTotal)}`
-              : "Confirmá al menos una entrada"}
-          </Button>
+            Selección rápida
+          </TabsTrigger>
+          <TabsTrigger
+            value="mapa"
+            className="inline-flex h-full w-full flex-1 items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium shadow-none after:hidden data-active:border-transparent data-active:bg-background data-active:text-foreground data-active:shadow-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm dark:data-active:border-transparent"
+          >
+            Ver en el mapa
+          </TabsTrigger>
+        </TabsList>
+      </div>
+
+      <TabsContent
+        value="lista"
+        className="no-scrollbar mt-0 min-h-0 flex-1 overflow-y-auto overscroll-contain p-4"
+      >
+        <div className="mb-4 text-center">
+          <h3 className="text-lg font-bold text-foreground">
+            {selectedSectorName}
+          </h3>
+          <SectorInventoryDescription
+            inventoryType={inventoryType}
+            seatsPerTable={seatsPerTable}
+          />
         </div>
-      </SheetContent>
-    </Sheet>
+        {isLoadingPlaces ? (
+          <QuickPlaceSkeleton />
+        ) : quickPlaces.length === 0 ? (
+          <p className="px-1 py-10 text-center text-sm text-muted-foreground">
+            No hay lugares disponibles
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {quickPlaces.map((place) => (
+              <button
+                key={place.id}
+                type="button"
+                disabled={pending}
+                aria-pressed={place.selected}
+                onClick={() => handleTogglePlace(place.id)}
+                className={cn(
+                  tapFeedbackClass,
+                  "flex min-h-12 items-center justify-between gap-3 rounded-xl border-2 px-4 py-3 text-left font-semibold transition-all",
+                  place.selected
+                    ? "border-emerald-500 bg-emerald-600 text-white"
+                    : "border-border bg-card text-foreground hover:border-emerald-500/60",
+                  pending && "pointer-events-none opacity-60",
+                )}
+              >
+                <span className="truncate">{place.label}</span>
+                <span className="shrink-0 tabular-nums">
+                  {formatTicketPrice(place.price)}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </TabsContent>
+
+      <TabsContent
+        value="mapa"
+        className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden p-3"
+      >
+        {isLoadingPlaces ? (
+          <Skeleton className="h-full min-h-[16rem] w-full rounded-xl" />
+        ) : focusedMap ? (
+          <InteractiveMapViewer
+            map={focusedMap}
+            eventId={context.eventId}
+            occupancyBySeatId={context.occupancyBySeatId}
+            priceBySectorId={context.priceBySectorId}
+            pending={pending}
+            selectedZoneId={focusedSectorId}
+            unavailableZoneIds={context.unavailableZoneIds}
+            heldSeatIds={context.heldSeatIds}
+            maxSelectable={maxTicketsPerUser ?? undefined}
+            onSelectZone={context.onSelectZone}
+            className="h-full min-h-[16rem] md:h-full"
+          />
+        ) : (
+          <p className="flex h-full items-center justify-center px-4 text-center text-sm text-muted-foreground">
+            El plano no está disponible.
+          </p>
+        )}
+      </TabsContent>
+    </Tabs>
+  )
+}
+
+type QuickPlace = {
+  id: string
+  label: string
+  price: number
+  selected: boolean
+}
+
+function buildQuickPlaces(input: {
+  rows: AccessibleRowNode[]
+  inventoryType: SectorInventoryType
+  sellMode: "per_seat" | "group"
+  unitNoun: "mesa" | "palco"
+  fallbackPrice: number
+}): QuickPlace[] {
+  if (input.inventoryType === "TABLES") {
+    return groupSeatsForMatrix(input.rows).flatMap((group) => {
+      const selectable = group.seats.filter(isSelectablePlace)
+      if (selectable.length === 0) return []
+      const price = selectable[0]?.price || input.fallbackPrice
+      const label = formatTablePlaceLabel(group.title, input.unitNoun)
+      if (input.sellMode === "group") {
+        return [
+          {
+            id: selectable[0]!.id,
+            label,
+            price,
+            selected: selectable.some((seat) => seat.status === "selected"),
+          },
+        ]
+      }
+      return selectable.map((seat) => ({
+        id: seat.id,
+        label: `${label} · ${unpaddedToken(seat)}`,
+        price: seat.price || input.fallbackPrice,
+        selected: seat.status === "selected",
+      }))
+    })
+  }
+
+  return input.rows.flatMap((row) =>
+    row.seats.filter(isSelectablePlace).map((seat) => ({
+      id: seat.id,
+      label: formatNumberedPlaceLabel(row.label, seat),
+      price: seat.price || input.fallbackPrice,
+      selected: seat.status === "selected",
+    })),
+  )
+}
+
+function isSelectablePlace(seat: AccessibleSeatNode) {
+  return seat.status === "available" || seat.status === "selected"
+}
+
+function unpaddedToken(seat: AccessibleSeatNode) {
+  return compactSeatToken(seat.label, seat.number).replace(/^0+(?=\d)/, "")
+}
+
+function formatTablePlaceLabel(title: string, unitNoun: "mesa" | "palco") {
+  const trimmed = title.trim()
+  if (/mesa|palco/i.test(trimmed)) return trimmed
+  const noun = unitNoun === "palco" ? "Palco" : "Mesa"
+  return `${noun} ${trimmed.replace(/^fila\s+/i, "")}`.trim()
+}
+
+function formatNumberedPlaceLabel(rowLabel: string, seat: AccessibleSeatNode) {
+  const seatName = seat.label.trim() || `Asiento ${seat.number}`
+  const row = rowLabel.trim()
+  if (!row || row === seatName) return seatName
+  if (/^fila\b/i.test(row)) return `${row} · ${seatName}`
+  return `Fila ${row} · ${seatName}`
+}
+
+function isolateSectorMap(
+  map: InteractiveVenueMap,
+  sectorId: string,
+): InteractiveVenueMap {
+  const zones = (map.zones ?? []).filter((zone) => zone.id === sectorId)
+  if (zones.length === 0) return map
+  return {
+    ...map,
+    zones,
+    sectors: map.sectors.filter((sector) => sector.id === sectorId),
+    elements: (map.elements ?? []).filter((element) => {
+      if (element.category !== "commercial") return true
+      const zoneId = element.zoneId?.trim()
+      if (!zoneId) return true
+      return (
+        zoneId === sectorId ||
+        element.groupId === sectorId ||
+        elementInventorySectorId(element) === sectorId
+      )
+    }),
+  }
+}
+
+function QuickPlaceSkeleton() {
+  return (
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+      {Array.from({ length: 6 }, (_, index) => (
+        <Skeleton key={index} className="h-12 w-full rounded-xl" />
+      ))}
+    </div>
   )
 }
 

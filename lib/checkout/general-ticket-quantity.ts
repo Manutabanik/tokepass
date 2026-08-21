@@ -1,9 +1,12 @@
 import { purchaseCapForTier } from "@/lib/checkout-limits"
+import { selectableTicketStock } from "@/lib/checkout/ticket-stock"
 import { isLogicalGeneralSectorId } from "@/lib/seating/venue-map-pricing"
 
 export type GeneralQuantityTier = {
   id: string
   available: number
+  capacity?: number | null
+  sold?: number | null
   layoutType?: string | null
   seatingSectorId?: string | null
   capacityPerUnit?: number | null
@@ -23,7 +26,7 @@ export function generalTicketMaxQuantity(input: {
     maxPurchaseLimit: input.tier.maxPurchaseLimit,
     fallbackMax: input.maxTicketsPerUser,
   })
-  const lotLeft = Math.max(0, Math.floor(Number(input.tier.available)) || 0)
+  const lotLeft = selectableTicketStock(input.tier)
   const sectorId = input.tier.seatingSectorId?.trim() || ""
   let sectorLeft = lotLeft
   if (isLogicalGeneralSectorId(sectorId)) {
@@ -31,7 +34,7 @@ export function generalTicketMaxQuantity(input: {
       (tier) => (tier.seatingSectorId ?? "").trim() === sectorId,
     )
     const sectorAvailable = inSector.reduce(
-      (sum, tier) => sum + Math.max(0, Math.floor(Number(tier.available)) || 0),
+      (sum, tier) => sum + selectableTicketStock(tier),
       0,
     )
     const otherQty = inSector.reduce(

@@ -52,11 +52,18 @@ async function requireOrganizerSession() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, organizer_approval_status")
     .eq("id", user.id)
     .maybeSingle()
 
   if (profile?.role === "super_admin") {
+    return { ok: true as const, supabase }
+  }
+
+  if (
+    profile?.role === "admin" &&
+    profile.organizer_approval_status === "approved"
+  ) {
     return { ok: true as const, supabase }
   }
 
@@ -97,6 +104,25 @@ async function requireEventOrganizer(eventId: string) {
   }
 
   return { ok: true as const, supabase, event }
+}
+
+function logSupabaseError(error: unknown, context: string) {
+  console.error("SUPABASE_ERROR:", error)
+  logger.error({
+    context,
+    message: "SUPABASE_ERROR",
+    error,
+  })
+}
+
+function supabaseErrorMessage(error: unknown, fallback: string) {
+  if (typeof error === "string" && error.trim()) return error.trim()
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === "string" && message.trim()) return message.trim()
+  }
+  if (error instanceof Error && error.message.trim()) return error.message.trim()
+  return fallback
 }
 
 function revalidateLineup(eventId: string, slug?: string | null) {
@@ -506,8 +532,12 @@ export async function searchSpotifyArtists(
     }
 
     const result = await searchSpotifyCatalog(needle, { limit: 5 })
+    if (!result.ok) {
+      console.error("SPOTIFY_ERROR:", "search_rejected_or_token_expired")
+    }
     return { success: true, data: result.items }
   } catch (error) {
+    console.error("SPOTIFY_ERROR:", error)
     logger.error({
       context: "artists",
       message: "search_spotify_artists_unexpected",
@@ -550,11 +580,24 @@ export async function createArtist(data: {
     }
 
     const spotifyId = normalizeSpotifyId(data.spotifyId)
-    const topTrack = await resolveTopTrack({
-      spotifyId,
-      previewUrl: pastedPreview,
-      trackName: data.topTrackName,
-    })
+    let topTrack: SpotifyTopTrack = {
+      previewUrl: pastedPreview ?? null,
+      trackName: data.topTrackName?.trim() || null,
+    }
+    try {
+      topTrack = await resolveTopTrack({
+        spotifyId,
+        previewUrl: pastedPreview,
+        trackName: data.topTrackName,
+      })
+    } catch (error) {
+      console.error("SPOTIFY_ERROR:", error)
+      logger.error({
+        context: "artists",
+        message: "spotify_top_track_isolated",
+        error,
+      })
+    }
 
     const payload = {
       name,
@@ -619,22 +662,20 @@ export async function createArtist(data: {
           error: "Ya existe un artista con ese identificador de Spotify.",
         }
       }
-      logger.error({
-        context: "artists",
-        message: "create_artist_failed",
-        error: inserted.error,
-      })
-      return { success: false, error: "No se pudo crear el artista." }
+      logSupabaseError(inserted.error, "create_artist_failed")
+      return {
+        success: false,
+        error: supabaseErrorMessage(inserted.error, "No se pudo crear el artista."),
+      }
     }
 
     return { success: true, data: mapArtistHit(inserted.data) }
   } catch (error) {
-    logger.error({
-      context: "artists",
-      message: "create_artist_unexpected",
-      error,
-    })
-    return { success: false, error: "No se pudo crear el artista." }
+    logSupabaseError(error, "create_artist_unexpected")
+    return {
+      success: false,
+      error: supabaseErrorMessage(error, "No se pudo crear el artista."),
+    }
   }
 }
 
@@ -751,13 +792,11 @@ export async function addArtistToLineup(
           error: "Ese artista ya está en la grilla de este evento.",
         }
       }
-      logger.error({
-        context: "artists",
-        message: "add_artist_to_lineup_failed",
-        event_id: access.event.id,
-        error,
-      })
-      return { success: false, error: "No se pudo sumar el artista a la grilla." }
+      logSupabaseError(error, "add_artist_to_lineup_failed")
+      return {
+        success: false,
+        error: supabaseErrorMessage(error, "No se pudo sumar el artista a la grilla."),
+      }
     }
 
     revalidateLineup(access.event.id, access.event.slug)
@@ -849,6 +888,64 @@ export async function removeArtistFromLineup(
   }
 }
 
+async function ensurePersistedArtist(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  item: LineupDraftItem,
+): Promise<{ id: string } | { error: string }> {
+  if (item.artistId && isArtistUuid(item.artistId)) {
+    const existing = await selectArtistRow(supabase, {
+      column: "id",
+      value: item.artistId,
+    })
+    if (existing.data?.id) return { id: existing.data.id }
+  }
+
+  const spotifyId = normalizeSpotifyId(item.spotifyId)
+  if (spotifyId) {
+    const bySpotify = await selectArtistRow(supabase, {
+      column: "spotify_id",
+      value: spotifyId,
+    })
+    if (bySpotify.data?.id) return { id: bySpotify.data.id }
+  }
+
+  const name = normalizeArtistName(item.name) ?? item.name.trim()
+  if (!name) {
+    return { error: "Hay un artista sin nombre en la grilla." }
+  }
+
+  const imageUrl = normalizeOptionalUrl(item.imageUrl)
+  const payload = {
+    name,
+    image_url: imageUrl === undefined ? null : imageUrl,
+    spotify_id: spotifyId,
+  }
+  const inserted = await supabase
+    .from("artists")
+    .insert(payload as never)
+    .select("id")
+    .single()
+
+  if (inserted.error) {
+    if (inserted.error.code === "23505" && spotifyId) {
+      const again = await selectArtistRow(supabase, {
+        column: "spotify_id",
+        value: spotifyId,
+      })
+      if (again.data?.id) return { id: again.data.id }
+    }
+    logSupabaseError(inserted.error, "ensure_persisted_artist")
+    return {
+      error: supabaseErrorMessage(inserted.error, "No se pudo crear el artista."),
+    }
+  }
+
+  if (!inserted.data?.id) {
+    return { error: "La base no devolvió el ID del artista." }
+  }
+  return { id: inserted.data.id }
+}
+
 export async function persistEventLineupSnapshot(
   eventId: string,
   lineup: LineupDraftItem[],
@@ -860,56 +957,182 @@ export async function persistEventLineupSnapshot(
     const access = await requireEventOrganizer(eventId)
     if (!access.ok) return { success: false, error: access.error }
 
+    const resolvedEventId = access.event.id
     const payload = serializeLineupForEvent(lineup)
     const { error } = await access.supabase
       .from("events")
       .update({ lineup: payload })
-      .eq("id", access.event.id)
+      .eq("id", resolvedEventId)
 
     if (error && !/lineup|schema cache|PGRST204|42703/i.test(error.message)) {
-      logger.error({
-        context: "artists",
-        message: "persist_lineup_json_failed",
-        event_id: access.event.id,
-        error,
-      })
-      return { success: false, error: "No se pudo guardar la grilla de artistas." }
+      logSupabaseError(error, "persist_lineup_json_failed")
+      return {
+        success: false,
+        error: supabaseErrorMessage(error, "No se pudo guardar la grilla de artistas."),
+      }
     }
 
     const ordered = lineup.map((item, index) => ({ ...item, order: index }))
-    for (const item of ordered) {
-      if (!item.lineupEntryId || !isArtistUuid(item.lineupEntryId)) continue
-      const base = {
-        sort_order: item.order,
-        stage: item.stage?.trim() || null,
-      }
-      const { error: rowError } = await access.supabase
-        .from("event_artists")
-        .update({
-          ...base,
-          is_headliner: Boolean(item.isHeadliner),
-        })
-        .eq("id", item.lineupEntryId)
-        .eq("event_id", access.event.id)
+    const linked: Array<{
+      artistId: string
+      item: LineupDraftItem
+      index: number
+    }> = []
 
-      if (rowError && isMissingHeadlinerColumn(rowError.message)) {
-        await access.supabase
-          .from("event_artists")
-          .update(base)
-          .eq("id", item.lineupEntryId)
-          .eq("event_id", access.event.id)
+    for (const [index, item] of ordered.entries()) {
+      const ensured = await ensurePersistedArtist(access.supabase, item)
+      if ("error" in ensured) return { success: false, error: ensured.error }
+      linked.push({ artistId: ensured.id, item, index })
+    }
+
+    const existing = await access.supabase
+      .from("event_artists")
+      .select("id, artist_id")
+      .eq("event_id", resolvedEventId)
+
+    if (existing.error) {
+      logSupabaseError(existing.error, "list_event_artists_failed")
+      return {
+        success: false,
+        error: supabaseErrorMessage(
+          existing.error,
+          "No se pudo leer la grilla de artistas.",
+        ),
       }
     }
 
-    revalidateLineup(access.event.id, access.event.slug)
+    const keepArtistIds = new Set(linked.map((row) => row.artistId))
+    const stale = (existing.data ?? []).filter(
+      (row) => !keepArtistIds.has(row.artist_id),
+    )
+    if (stale.length > 0) {
+      const { error: deleteError } = await access.supabase
+        .from("event_artists")
+        .delete()
+        .eq("event_id", resolvedEventId)
+        .in(
+          "id",
+          stale.map((row) => row.id),
+        )
+      if (deleteError) {
+        logSupabaseError(deleteError, "delete_stale_event_artists")
+        return {
+          success: false,
+          error: supabaseErrorMessage(
+            deleteError,
+            "No se pudieron quitar artistas de la grilla.",
+          ),
+        }
+      }
+    }
+
+    const byArtistId = new Map(
+      (existing.data ?? []).map((row) => [row.artist_id, row.id]),
+    )
+    const knownRowIds = new Set((existing.data ?? []).map((row) => row.id))
+
+    for (const row of linked) {
+      const time = toPerformanceIso(row.item.performanceTime || null)
+      const base = {
+        event_id: resolvedEventId,
+        artist_id: row.artistId,
+        sort_order: row.index,
+        stage: row.item.stage?.trim() || null,
+        performance_time: time === undefined ? null : time,
+      }
+      const existingId =
+        (row.item.lineupEntryId && knownRowIds.has(row.item.lineupEntryId)
+          ? row.item.lineupEntryId
+          : null) ??
+        byArtistId.get(row.artistId) ??
+        null
+
+      if (existingId) {
+        const { error: rowError } = await access.supabase
+          .from("event_artists")
+          .update({
+            ...base,
+            is_headliner: Boolean(row.item.isHeadliner),
+          })
+          .eq("id", existingId)
+          .eq("event_id", resolvedEventId)
+
+        if (rowError && isMissingHeadlinerColumn(rowError.message)) {
+          const retry = await access.supabase
+            .from("event_artists")
+            .update(base)
+            .eq("id", existingId)
+            .eq("event_id", resolvedEventId)
+          if (retry.error) {
+            logSupabaseError(retry.error, "update_event_artist_legacy")
+            return {
+              success: false,
+              error: supabaseErrorMessage(
+                retry.error,
+                "No se pudo actualizar el artista en la grilla.",
+              ),
+            }
+          }
+        } else if (rowError) {
+          logSupabaseError(rowError, "update_event_artist")
+          return {
+            success: false,
+            error: supabaseErrorMessage(
+              rowError,
+              "No se pudo actualizar el artista en la grilla.",
+            ),
+          }
+        }
+        continue
+      }
+
+      const inserted = await access.supabase
+        .from("event_artists")
+        .insert({
+          ...base,
+          is_headliner: Boolean(row.item.isHeadliner),
+        })
+        .select("id")
+        .single()
+
+      if (inserted.error && isMissingHeadlinerColumn(inserted.error.message)) {
+        const retry = await access.supabase
+          .from("event_artists")
+          .insert(base)
+          .select("id")
+          .single()
+        if (retry.error) {
+          logSupabaseError(retry.error, "insert_event_artist_legacy")
+          return {
+            success: false,
+            error: supabaseErrorMessage(
+              retry.error,
+              "No se pudo vincular el artista al evento.",
+            ),
+          }
+        }
+        continue
+      }
+
+      if (inserted.error) {
+        logSupabaseError(inserted.error, "insert_event_artist")
+        return {
+          success: false,
+          error: supabaseErrorMessage(
+            inserted.error,
+            "No se pudo vincular el artista al evento.",
+          ),
+        }
+      }
+    }
+
+    revalidateLineup(resolvedEventId, access.event.slug)
     return { success: true, data: { count: payload.length } }
   } catch (error) {
-    logger.error({
-      context: "artists",
-      message: "persist_lineup_unexpected",
-      event_id: eventId,
-      error,
-    })
-    return { success: false, error: "No se pudo guardar la grilla de artistas." }
+    logSupabaseError(error, "persist_lineup_unexpected")
+    return {
+      success: false,
+      error: supabaseErrorMessage(error, "No se pudo guardar la grilla de artistas."),
+    }
   }
 }

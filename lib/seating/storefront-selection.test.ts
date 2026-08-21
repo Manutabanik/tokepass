@@ -193,7 +193,7 @@ describe("storefront-selection", () => {
     assert.equal(groups.length, 1)
     assert.equal(
       groups[0]?.label,
-      "Sector Grada Amarilla - Fila 1, Sillas 1, 2, 3",
+      "Grada Amarilla - Fila 1, Sillas 1, 2, 3",
     )
     assert.deepEqual(groups[0]?.ids, ["a", "b", "c", "d"])
   })
@@ -215,7 +215,7 @@ describe("storefront-selection", () => {
         capacity: 1,
       },
     ])
-    assert.equal(label, "Grada Amarilla · Mesa 18")
+    assert.equal(label, "Mesa completa (Incluye 1 accesos)")
   })
 
   it("arma el titulo de comprador como Tipo + Numero", () => {
@@ -292,7 +292,7 @@ describe("storefront-selection", () => {
     assert.equal(groups[0]?.price, 58824)
   })
 
-  it("multiplica el precio por persona de una mesa por las sillas", () => {
+  it("cuenta una mesa TABLES como un solo SKU aunque tenga sillas", () => {
     const groups = formatStorefrontSelectionGroups([
       {
         id: "tbl-1",
@@ -300,10 +300,12 @@ describe("storefront-selection", () => {
         type: "table",
         price: 58824,
         capacity: 6,
+        inventoryType: "TABLES",
         sellMode: "per_seat",
         priceMode: "per_person",
       },
     ])
-    assert.equal(groups[0]?.price, 352944)
+    assert.equal(groups[0]?.price, 58824)
+    assert.equal(groups[0]?.placeLabel, "Mesa completa (Incluye 6 accesos)")
   })
 })
