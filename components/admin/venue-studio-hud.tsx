@@ -1,6 +1,6 @@
 "use client"
 
-import { LayoutGrid, MapPinned, Minus, Plus, RotateCcw, Users } from "lucide-react"
+import { LayoutGrid, MapPinned, Users } from "lucide-react"
 
 import { venueMapCapacity } from "@/lib/seating/venue-map-geometry"
 import { cn } from "@/lib/utils"
@@ -26,24 +26,16 @@ function studioInventory(map: InteractiveVenueMap) {
 export function VenueStudioHud({
   map,
   className,
-  zoomPercent,
-  onZoomIn,
-  onZoomOut,
-  onZoomReset,
 }: {
   map: InteractiveVenueMap
   className?: string
-  zoomPercent?: number
-  onZoomIn?: () => void
-  onZoomOut?: () => void
-  onZoomReset?: () => void
 }) {
   const stats = studioInventory(map)
 
   return (
     <div
       className={cn(
-        "pointer-events-none absolute bottom-4 left-1/2 z-10 -translate-x-1/2",
+        "pointer-events-none absolute bottom-6 left-4 z-10",
         className,
       )}
     >
@@ -60,37 +52,6 @@ export function VenueStudioHud({
           <MapPinned className="size-3.5 shrink-0" aria-hidden="true" />
           {stats.zones} {stats.zones === 1 ? "zona" : "zonas"}
         </span>
-        {onZoomIn && onZoomOut && onZoomReset ? (
-          <span className="pointer-events-auto inline-flex shrink-0 items-center gap-1 border-l border-border pl-3">
-            <button
-              type="button"
-              onClick={onZoomOut}
-              className="grid size-7 place-items-center rounded-md hover:bg-muted"
-              aria-label="Alejar"
-            >
-              <Minus className="size-3.5" />
-            </button>
-            <span className="min-w-10 text-center tabular-nums">
-              {zoomPercent ?? 100}%
-            </span>
-            <button
-              type="button"
-              onClick={onZoomIn}
-              className="grid size-7 place-items-center rounded-md hover:bg-muted"
-              aria-label="Acercar"
-            >
-              <Plus className="size-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={onZoomReset}
-              className="grid size-7 place-items-center rounded-md hover:bg-muted"
-              aria-label="Restablecer zoom"
-            >
-              <RotateCcw className="size-3.5" />
-            </button>
-          </span>
-        ) : null}
       </div>
     </div>
   )

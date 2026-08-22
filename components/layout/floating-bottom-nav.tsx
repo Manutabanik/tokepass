@@ -16,13 +16,13 @@ import { cn } from "@/lib/utils"
 const ITEMS = [
   {
     href: "/",
-    label: "Descubrir shows",
+    label: "Explorar",
     icon: Compass,
     match: (path: string) => path === "/",
   },
   {
     href: "/cuenta/entradas",
-    label: "Mis entradas",
+    label: "Entradas",
     icon: Ticket,
     match: (path: string) =>
       path.startsWith("/cuenta/entradas") ||

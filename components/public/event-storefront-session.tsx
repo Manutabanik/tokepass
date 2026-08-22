@@ -81,7 +81,7 @@ export function EventStorefrontSession({
           .maybeSingle(),
         event.isDraftPreview
           ? Promise.resolve(true)
-          : canUserSandboxCheckout(event.id, previewKey),
+          : canUserSandboxCheckout(event.id, previewKey).catch(() => false),
       ])
       if (cancelled) return
       setInitialBuyer({
@@ -93,7 +93,10 @@ export function EventStorefrontSession({
       setSandboxEligible(Boolean(event.isDraftPreview) || sandbox)
     }
 
-    void loadSession()
+    void loadSession().catch(() => {
+      if (cancelled) return
+      setSandboxEligible(Boolean(event.isDraftPreview))
+    })
     return () => {
       cancelled = true
     }

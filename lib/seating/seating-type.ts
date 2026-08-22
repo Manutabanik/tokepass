@@ -2,7 +2,6 @@ import { pointInPolygon } from "@/lib/seating/venue-map-lod"
 import {
   isSellableElement,
   parseSeatingType,
-  seatingTypeFromLayoutType,
   type InteractiveVenueMap,
   type SeatingType,
   type VenueMapZone,
@@ -77,12 +76,26 @@ export function resolveSeatingType(input: SeatingTypeInput): SeatingType {
   return "GENERAL"
 }
 
+function zoneHasParametricReservedGrid(zone: VenueMapZone): boolean {
+  if (resolveSeatingType(zone) !== "RESERVED") return false
+  if (zone.layoutType === "general") return false
+  if ((zone.rowsConfig ?? []).some((row) => (row.seatCount ?? 0) > 0)) {
+    return true
+  }
+  const rows = Math.floor(Number(zone.rows) || 0)
+  const items = Math.floor(Number(zone.itemsPerRow) || 0)
+  return rows >= 1 && items >= 1
+}
+
 export function hasAssignedReservedPlaces(
   map: InteractiveVenueMap | null | undefined,
   sectorId?: string | null,
 ): boolean {
   const id = (sectorId ?? "").trim()
   if (!id || !map) return false
+
+  const zone = map.zones.find((item) => item.id === id)
+  if (zone && zoneHasParametricReservedGrid(zone)) return true
 
   const sector = map.sectors.find((item) => item.id === id)
   if (sector?.seats.some((seat) => seat.status !== "blocked")) return true
@@ -103,7 +116,6 @@ export function hasAssignedReservedPlaces(
     }
   }
 
-  const zone = map.zones.find((item) => item.id === id)
   if (zone && resolveSeatingType(zone) === "RESERVED") {
     return (map.elements ?? []).some(
       (element) =>
@@ -117,7 +129,7 @@ export function hasAssignedReservedPlaces(
 
 /**
  * Buyer-facing modality. A RESERVED sector without mesas/sillas
- * behaves as GENERAL so checkout never opens an empty seat modal.
+ * (ni grilla paramétrica) se trata como GENERAL para no abrir un modal vacío.
  */
 export function resolveEffectiveSeatingType(
   input: SeatingTypeInput & { id?: string | null },

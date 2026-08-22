@@ -99,6 +99,20 @@ describe("map-click-target", () => {
     )
   })
 
+  it("abre el mapa para una grilla paramétrica sin mesas dibujadas", () => {
+    const map = emptyVenueMap()
+    map.zones = [
+      {
+        ...reservedZone(),
+        rows: 4,
+        itemsPerRow: 10,
+        capacityPerUnit: 8,
+        capacity: 320,
+      },
+    ]
+    assert.equal(classifyZoneClick(map.zones[0]!, map), "SECTOR_NUMERADO")
+  })
+
   it("no trata una mesa dentro del polígono reservado como libre", () => {
     const map = emptyVenueMap()
     map.zones = [reservedZone()]

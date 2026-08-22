@@ -29,32 +29,55 @@ export type NormalizedCheckoutBuyer = {
   buyerPhone: string
 }
 
-export const checkoutBuyerFormSchema = z.object({
-  buyerName: z
-    .string()
-    .trim()
-    .transform((value) => value.replace(/\s+/g, " "))
-    .pipe(
-      z
-        .string()
-        .min(3, "Escribí tu nombre y apellido tal como figuran en tu DNI")
-        .refine(
-          (value) => value.split(" ").filter(Boolean).length >= 2,
-          "Escribí tu nombre y apellido tal como figuran en tu DNI",
-        ),
-    ),
-  buyerDni: z
-    .string()
-    .transform((value) => normalizeDni(value))
-    .refine(isValidDni, DNI_ERROR),
-  buyerPhone: z
-    .string()
-    .transform((value) => normalizeArgentineMobile(value) ?? "")
-    .refine((value) => value.length > 0, PHONE_ERROR),
-  buyerEmail: z
-    .string()
-    .transform((value) => normalizeEmail(value))
-    .refine(isStrictEmail, EMAIL_ERROR),
+export type CheckoutBuyerValidationOptions = {
+  requirePhone?: boolean
+}
+
+const buyerNameSchema = z
+  .string()
+  .trim()
+  .transform((value) => value.replace(/\s+/g, " "))
+  .pipe(
+    z
+      .string()
+      .min(3, "Escribí tu nombre y apellido tal como figuran en tu DNI")
+      .refine(
+        (value) => value.split(" ").filter(Boolean).length >= 2,
+        "Escribí tu nombre y apellido tal como figuran en tu DNI",
+      ),
+  )
+
+const buyerPhoneOptionalSchema = z
+  .string()
+  .transform((value) => normalizeArgentineMobile(value) ?? "")
+
+const buyerPhoneRequiredSchema = buyerPhoneOptionalSchema.refine(
+  (value) => value.length > 0,
+  PHONE_ERROR,
+)
+
+export function checkoutBuyerFormSchemaFor(
+  options?: CheckoutBuyerValidationOptions,
+) {
+  const requirePhone = options?.requirePhone !== false
+  return z.object({
+    buyerName: buyerNameSchema,
+    buyerDni: z
+      .string()
+      .transform((value) => normalizeDni(value))
+      .refine(isValidDni, DNI_ERROR),
+    buyerPhone: requirePhone
+      ? buyerPhoneRequiredSchema
+      : buyerPhoneOptionalSchema,
+    buyerEmail: z
+      .string()
+      .transform((value) => normalizeEmail(value))
+      .refine(isStrictEmail, EMAIL_ERROR),
+  })
+}
+
+export const checkoutBuyerFormSchema = checkoutBuyerFormSchemaFor({
+  requirePhone: true,
 })
 
 export type CheckoutBuyerFormValues = z.infer<typeof checkoutBuyerFormSchema>
@@ -75,8 +98,9 @@ export function normalizeCheckoutBuyer(
 
 export function getCheckoutBuyerFieldErrors(
   input: Partial<CheckoutBuyerInfo> | null | undefined,
+  options?: CheckoutBuyerValidationOptions,
 ): Partial<Record<CheckoutBuyerField, string>> {
-  const parsed = checkoutBuyerFormSchema.safeParse({
+  const parsed = checkoutBuyerFormSchemaFor(options).safeParse({
     buyerName: input?.buyerName ?? "",
     buyerDni: input?.buyerDni ?? "",
     buyerPhone: input?.buyerPhone ?? "",
@@ -104,8 +128,9 @@ export function getCheckoutBuyerFieldErrors(
 
 export function validateCheckoutBuyer(
   input: Partial<CheckoutBuyerInfo> | null | undefined,
+  options?: CheckoutBuyerValidationOptions,
 ): { ok: true; buyer: NormalizedCheckoutBuyer } | { ok: false; error: string } {
-  const errors = getCheckoutBuyerFieldErrors(input)
+  const errors = getCheckoutBuyerFieldErrors(input, options)
   const firstField = firstCheckoutBuyerErrorField(errors)
   if (firstField && errors[firstField]) {
     return { ok: false, error: errors[firstField] }

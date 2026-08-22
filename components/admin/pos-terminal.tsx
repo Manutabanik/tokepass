@@ -291,11 +291,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
     setCustomTender("")
   }, [])
 
-  useEffect(() => {
-    if (!hasMap && catalogView === "map") {
-      setCatalogView("quick")
-    }
-  }, [hasMap, catalogView])
+  const resolvedCatalogView = hasMap ? catalogView : "quick"
 
   useEffect(() => {
     if (!eventId) return
@@ -988,7 +984,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
                   onClick={() => setCatalogView("quick")}
                   className={cn(
                     "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition-all",
-                    catalogView === "quick"
+                    resolvedCatalogView === "quick"
                       ? "bg-emerald-600 text-white shadow-lg"
                       : "border border-border bg-card text-muted-foreground",
                   )}
@@ -1001,7 +997,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
                   onClick={() => setCatalogView("map")}
                   className={cn(
                     "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition-all",
-                    catalogView === "map"
+                    resolvedCatalogView === "map"
                       ? "bg-emerald-600 text-white shadow-lg"
                       : "border border-border bg-card text-muted-foreground",
                   )}
@@ -1017,7 +1013,7 @@ export function PosTerminal({ events }: { events: PosEventOption[] }) {
                 </p>
               </div>
             )}
-            {hasMap && catalogView === "map" && selectedEvent ? (
+            {hasMap && resolvedCatalogView === "map" && selectedEvent ? (
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
                 <PosSeatingMap
                   event={selectedEvent}

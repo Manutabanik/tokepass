@@ -1,8 +1,6 @@
 import { isFullPassDayId, normalizeDayId } from "@/lib/event-schedule"
-import {
-  isDaySpecificTicket,
-  isPassOrComboTicket,
-} from "@/lib/inventory/day-ticket-coverage"
+import { isComboOrPassOffer } from "@/lib/checkout/ticket-offer-kind"
+import { isDaySpecificTicket } from "@/lib/inventory/day-ticket-coverage"
 import {
   formatEventCartDate,
   formatEventDay,
@@ -152,7 +150,7 @@ export function hasDaySpecificTickets(tiers: TicketSelectorTier[] = []): boolean
 }
 
 export function hasFullPassTickets(tiers: TicketSelectorTier[] = []): boolean {
-  return tiers.some((tier) => isPassOrComboTicket(tier))
+  return tiers.some((tier) => isComboOrPassOffer(tier))
 }
 
 export function shouldShowCheckoutKindTabs(
@@ -166,7 +164,9 @@ export function shouldShowCheckoutKindTabs(
 export function defaultCheckoutKindTab(
   tiers: TicketSelectorTier[] = [],
 ): CheckoutKindTab {
-  return hasDaySpecificTickets(tiers) ? "days" : "passes"
+  if (hasDaySpecificTickets(tiers)) return "days"
+  if (hasFullPassTickets(tiers)) return "passes"
+  return "days"
 }
 
 export function defaultCheckoutDateId(
@@ -184,7 +184,7 @@ export function ticketMatchesTab(
   activeTabId: string,
   options?: { treatFullPassAsAnyDay?: boolean },
 ): boolean {
-  const passOrCombo = isPassOrComboTicket(tier)
+  const passOrCombo = isComboOrPassOffer(tier)
   if (activeTabId === FULL_PASS_TAB_ID) return passOrCombo
   if (passOrCombo) return Boolean(options?.treatFullPassAsAnyDay)
   return resolveTicketDateMeta(tier).dateId === activeTabId

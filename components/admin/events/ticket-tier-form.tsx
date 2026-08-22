@@ -33,6 +33,10 @@ import {
   type TicketCalculationMode,
   type TicketFeeStrategy,
 } from "@/lib/pricing/flexible-pricing"
+import {
+  STUDIO_CONTROL_CLASS,
+  STUDIO_LABEL_CLASS,
+} from "@/lib/admin/studio-form-styles"
 import type { EventFormValues } from "@/lib/validations/event-form"
 import { cn } from "@/lib/utils"
 
@@ -192,7 +196,7 @@ function TierPricingSimulator({
         }
         render={({ field, fieldState }) => (
           <FormItem className="flex flex-col gap-y-2">
-            <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">
+            <FormLabel className={STUDIO_LABEL_CLASS}>
               {calculationMode === "net_income"
                 ? "Lo que te queda a vos por entrada"
                 : "Precio por entrada ($)"}
@@ -206,7 +210,7 @@ function TierPricingSimulator({
               }}
               placeholder="0"
               allowEmpty
-              className="h-12 rounded-xl border-border/60 bg-muted/20 px-4 font-semibold tabular-nums transition-all focus:bg-background sm:h-13"
+              className={cn(STUDIO_CONTROL_CLASS, "font-semibold tabular-nums")}
             />
             <FormMessage>{fieldState.error?.message}</FormMessage>
           </FormItem>
@@ -227,7 +231,7 @@ function TierPricingSimulator({
       {showAdvanced ? (
         <div className="flex flex-col gap-y-4">
             <div className="flex flex-col gap-y-2">
-              <p className="mb-1.5 text-sm font-semibold text-foreground/90">
+              <p className={STUDIO_LABEL_CLASS}>
                 Comisión TokePass ({isSponsored ? 0 : feePercentage}%)
               </p>
               <Tabs
@@ -428,13 +432,13 @@ export function TicketWalletCard({
         name={`tickets.${index}.name`}
         render={({ field, fieldState }) => (
           <FormItem className="flex flex-col gap-y-2">
-            <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">
+            <FormLabel className={STUDIO_LABEL_CLASS}>
               Nombre del pase
             </FormLabel>
             <Input
               {...field}
               placeholder="Early Bird, Entrada General, Pase VIP"
-              className="h-12 rounded-xl border-border/60 bg-muted/20 px-4 text-lg font-semibold transition-all focus:bg-background sm:h-13"
+              className={cn(STUDIO_CONTROL_CLASS, "text-lg font-semibold")}
             />
             <FormMessage>{fieldState.error?.message}</FormMessage>
           </FormItem>
@@ -455,7 +459,7 @@ export function TicketWalletCard({
           name={`tickets.${index}.capacity`}
           render={({ field, fieldState }) => (
             <FormItem className="flex flex-col gap-y-2">
-              <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">
+              <FormLabel className={STUDIO_LABEL_CLASS}>
                 {capacityLabel}
               </FormLabel>
               <StockStepper
@@ -511,14 +515,14 @@ export function TicketWalletCard({
           name={`tickets.${index}.saleStartsAt`}
           render={({ field, fieldState }) => (
             <FormItem className="flex flex-col gap-y-2">
-              <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">
+              <FormLabel className={STUDIO_LABEL_CLASS}>
                 Inicio de venta
               </FormLabel>
               <Input
                 type="datetime-local"
                 value={field.value ?? ""}
                 onChange={field.onChange}
-                className="h-12 rounded-xl border-border/60 bg-muted/20 px-4 text-base transition-all focus:bg-background sm:h-13"
+                className={STUDIO_CONTROL_CLASS}
               />
               <FormDescription>
                 Dejá vacío para vender desde ahora.
@@ -532,14 +536,14 @@ export function TicketWalletCard({
           name={`tickets.${index}.saleEndsAt`}
           render={({ field, fieldState }) => (
             <FormItem className="flex flex-col gap-y-2">
-              <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">
+              <FormLabel className={STUDIO_LABEL_CLASS}>
                 Fin de venta
               </FormLabel>
               <Input
                 type="datetime-local"
                 value={field.value ?? ""}
                 onChange={field.onChange}
-                className="h-12 rounded-xl border-border/60 bg-muted/20 px-4 text-base transition-all focus:bg-background sm:h-13"
+                className={STUDIO_CONTROL_CLASS}
               />
               <FormDescription>
                 Dejá vacío para vender hasta la fecha del evento.
@@ -570,7 +574,7 @@ export function TicketWalletCard({
                 name={`tickets.${index}.minPurchaseLimit`}
                 render={({ field, fieldState }) => (
                   <FormItem className="flex min-w-0 flex-col gap-y-2">
-                    <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">
+                    <FormLabel className={STUDIO_LABEL_CLASS}>
                       Límite de entradas por persona
                     </FormLabel>
                     <Input
@@ -595,7 +599,7 @@ export function TicketWalletCard({
                           typeof parsed === "number" ? Math.max(1, parsed) : 1,
                         )
                       }}
-                      className="h-12 rounded-xl border-border/60 bg-muted/20 px-4 text-base tabular-nums transition-all focus:bg-background sm:h-13"
+                      className={cn(STUDIO_CONTROL_CLASS, "tabular-nums")}
                     />
                     <FormMessage>{fieldState.error?.message}</FormMessage>
                   </FormItem>
@@ -606,7 +610,7 @@ export function TicketWalletCard({
                 name={`tickets.${index}.maxPurchaseLimit`}
                 render={({ field, fieldState }) => (
                   <FormItem className="flex min-w-0 flex-col gap-y-2">
-                    <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">
+                    <FormLabel className={STUDIO_LABEL_CLASS}>
                       Máximo por compra
                     </FormLabel>
                     <Input
@@ -630,7 +634,7 @@ export function TicketWalletCard({
                         }
                         field.onChange(typeof parsed === "number" ? parsed : null)
                       }}
-                      className="h-12 rounded-xl border-border/60 bg-muted/20 px-4 text-base tabular-nums transition-all focus:bg-background sm:h-13"
+                      className={cn(STUDIO_CONTROL_CLASS, "tabular-nums")}
                     />
                     <FormMessage>{fieldState.error?.message}</FormMessage>
                   </FormItem>

@@ -80,10 +80,12 @@ export function SearchBar({
   const filterPending = usePublicSearchUiStore((state) => state.filterPending)
   const consumeFilters = usePublicSearchUiStore((state) => state.consumeFilters)
   const reduceMotion = useReducedMotion()
+  if (filterPending && !filterOpen) {
+    setFilterOpen(true)
+  }
 
   useEffect(() => {
     if (!filterPending) return
-    setFilterOpen(true)
     consumeFilters()
   }, [consumeFilters, filterPending])
 
@@ -228,7 +230,7 @@ export function SearchBar({
               "bg-primary shadow-sm transition hover:bg-primary/90",
             )}
           >
-            Descubrir shows
+            Explorar
             <ArrowRight className="size-4 shrink-0" aria-hidden="true" />
           </span>
         </span>

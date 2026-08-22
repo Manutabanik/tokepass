@@ -1,6 +1,6 @@
 "use server"
 
-import { revalidatePath } from "next/cache"
+import { revalidatePublicEventCache } from "@/lib/events/revalidate-public-event"
 
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
@@ -68,6 +68,7 @@ export async function autosaveEventDraft(input: {
   zoneTierPricing?: ZoneTierPriceDraft[]
   targetOrganizerId?: string | null
   identityOnly?: boolean
+  flyer?: File | null
 }): Promise<AutosaveEventDraftResult> {
   const values = sanitizeAutosaveValues(input.values, input.eventId)
   if (!hasMinimumDraftContent(values)) {
@@ -95,6 +96,9 @@ export async function autosaveEventDraft(input: {
   }
   if (input.identityOnly) {
     formData.set("identityOnly", "1")
+  }
+  if (input.flyer && input.flyer.size > 0) {
+    formData.set("flyer", input.flyer)
   }
 
   let eventId = input.eventId
@@ -225,7 +229,7 @@ export async function syncZoneTierPricing(input: {
 
   const { data: event } = await supabase
     .from("events")
-    .select("id, organizer_id")
+    .select("id, organizer_id, slug")
     .eq("id", input.eventId)
     .maybeSingle()
 
@@ -357,8 +361,10 @@ export async function syncZoneTierPricing(input: {
   }
 
   if (input.revalidate !== false) {
-    revalidatePath(`/admin/events/${input.eventId}`)
-    revalidatePath(`/e/${input.eventId}`)
+    revalidatePublicEventCache({
+      eventId: input.eventId,
+      slug: event.slug,
+    })
   }
 
   await writeSecurityAuditLog({

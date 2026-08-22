@@ -1,6 +1,6 @@
 "use client"
 
-import { LoaderCircle, Play } from "lucide-react"
+import { LoaderCircle, Pause, Play } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
@@ -14,6 +14,10 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
+import {
+  stopArtistPreview,
+  useArtistPreview,
+} from "@/hooks/use-artist-preview"
 import {
   beginSpotifyMiniPlayerResolve,
   closeSpotifyMiniPlayer,
@@ -30,9 +34,17 @@ import {
   type EventLineupSlot,
 } from "@/lib/event-lineup"
 import { formatEventTime } from "@/lib/format"
-import type { ScheduleDay } from "@/types/events"
 import { isSpotifyArtistId } from "@/lib/spotify/embed"
+import { isPlayablePreviewUrl } from "@/lib/spotify/map"
+import type { ScheduleDay } from "@/types/events"
 import { cn, tapFeedbackClass } from "@/lib/utils"
+
+type LineupAudioResolved = {
+  artistId: string
+  previewUrl?: string
+  trackName?: string | null
+  spotifyId?: string
+}
 
 function formatSlotTime(value: string | null | undefined): string {
   const raw = value?.trim()
@@ -47,61 +59,89 @@ function moreArtistsLabel(count: number): string {
   return count === 1 ? "+ 1 artista más" : `+ ${count} artistas más`
 }
 
-function useArtistSpotifySelect(
+function useArtistPreviewSelect(
   artist: EventLineupArtist,
-  onResolved?: (artistId: string, spotifyId: string) => void,
+  onResolved?: (update: LineupAudioResolved) => void,
 ) {
   const name = artist.name?.trim() || "Artista"
-  const [resolving, setResolving] = useState(false)
-  const requestRef = useRef(0)
-  const active = useIsSpotifyMiniPlayerActive({
+  const { playing, toggle } = useArtistPreview(artist.id)
+  const spotifyActive = useIsSpotifyMiniPlayerActive({
     id: artist.id,
     spotifyId: artist.spotifyId,
   })
+  const [resolving, setResolving] = useState(false)
+  const [localSpotifyId, setLocalSpotifyId] = useState(artist.spotifyId)
+  const requestRef = useRef(0)
+  const previewUrl = isPlayablePreviewUrl(artist.topTrackPreviewUrl)
+    ? artist.topTrackPreviewUrl
+    : null
+  const spotifyId = isSpotifyArtistId(artist.spotifyId)
+    ? artist.spotifyId
+    : localSpotifyId
+  const active = playing || spotifyActive
 
-  const selectArtist = () => {
-    if (isSpotifyArtistId(artist.spotifyId)) {
-      toggleSpotifyMiniPlayer(artist.spotifyId, name, artist.id)
+  const openSpotifyPlayer = async () => {
+    stopArtistPreview()
+    if (isSpotifyArtistId(spotifyId)) {
+      toggleSpotifyMiniPlayer(spotifyId, name, artist.id)
       return
     }
 
     const token = ++requestRef.current
     setResolving(true)
     beginSpotifyMiniPlayerResolve(artist.id, name)
-    void resolveArtistSpotifyId(artist.id, name)
-      .then((result) => {
-        if (token !== requestRef.current) return
-        if (!result.success) {
-          closeSpotifyMiniPlayer()
-          toast.error(result.error)
-          return
-        }
-        if (!isSpotifyArtistId(result.data.spotifyId)) {
-          closeSpotifyMiniPlayer()
-          toast.error("No encontramos este artista en Spotify.")
-          return
-        }
-        onResolved?.(artist.id, result.data.spotifyId)
-        setActiveSpotifyId(result.data.spotifyId, {
-          artistId: artist.id,
-          artistName: name,
-        })
-      })
-      .catch(() => {
-        if (token !== requestRef.current) return
+    try {
+      const result = await resolveArtistSpotifyId(artist.id, name)
+      if (token !== requestRef.current) return
+      if (!result.success) {
         closeSpotifyMiniPlayer()
-        toast.error("No se pudo abrir el reproductor.")
+        toast.error(result.error)
+        return
+      }
+      if (!isSpotifyArtistId(result.data.spotifyId)) {
+        closeSpotifyMiniPlayer()
+        toast.error("No encontramos este artista en Spotify.")
+        return
+      }
+      setLocalSpotifyId(result.data.spotifyId)
+      onResolved?.({ artistId: artist.id, spotifyId: result.data.spotifyId })
+      setActiveSpotifyId(result.data.spotifyId, {
+        artistId: artist.id,
+        artistName: name,
       })
-      .finally(() => {
-        if (token !== requestRef.current) return
-        setResolving(false)
-      })
+    } catch (error) {
+      if (token !== requestRef.current) return
+      console.error("Error al abrir Spotify:", error)
+      closeSpotifyMiniPlayer()
+      toast.error("No se pudo abrir el reproductor.")
+    } finally {
+      if (token === requestRef.current) setResolving(false)
+    }
+  }
+
+  const selectArtist = async () => {
+    if (playing) {
+      await toggle(previewUrl ?? "", name)
+      return
+    }
+    if (spotifyActive) {
+      closeSpotifyMiniPlayer()
+      return
+    }
+
+    if (previewUrl) {
+      closeSpotifyMiniPlayer()
+      await toggle(previewUrl, name)
+      return
+    }
+
+    await openSpotifyPlayer()
   }
 
   const label = resolving
     ? `Buscando a ${name} en Spotify`
     : active
-      ? `Cerrar reproductor de ${name}`
+      ? `Pausar a ${name}`
       : `Escuchar a ${name}`
 
   return { name, resolving, active, selectArtist, label }
@@ -123,7 +163,11 @@ function ArtistPlayBadge({
       )}
       aria-hidden="true"
     >
-      <Play className={cn(size === "xs" ? "size-2" : "size-3", "fill-current")} />
+      {active ? (
+        <Pause className={cn(size === "xs" ? "size-2" : "size-3", "fill-current")} />
+      ) : (
+        <Play className={cn(size === "xs" ? "size-2" : "size-3", "fill-current")} />
+      )}
     </span>
   )
 }
@@ -170,9 +214,9 @@ function ArtistChip({
   onResolved,
 }: {
   artist: EventLineupArtist
-  onResolved?: (artistId: string, spotifyId: string) => void
+  onResolved?: (update: LineupAudioResolved) => void
 }) {
-  const { name, resolving, active, selectArtist, label } = useArtistSpotifySelect(
+  const { name, resolving, active, selectArtist, label } = useArtistPreviewSelect(
     artist,
     onResolved,
   )
@@ -222,9 +266,9 @@ function FeaturedArtistCard({
   onResolved,
 }: {
   artist: EventLineupArtist
-  onResolved?: (artistId: string, spotifyId: string) => void
+  onResolved?: (update: LineupAudioResolved) => void
 }) {
-  const { name, resolving, active, selectArtist, label } = useArtistSpotifySelect(
+  const { name, resolving, active, selectArtist, label } = useArtistPreviewSelect(
     artist,
     onResolved,
   )
@@ -276,7 +320,7 @@ function VisualLineup({
   onResolved,
 }: {
   artists: EventLineupArtist[]
-  onResolved?: (artistId: string, spotifyId: string) => void
+  onResolved?: (update: LineupAudioResolved) => void
 }) {
   const [open, setOpen] = useState(false)
   const { featured, remainingCount } = visibleLineupArtists(artists)
@@ -390,6 +434,7 @@ export function EventLineup({
 
   useEffect(() => {
     return () => {
+      stopArtistPreview()
       closeSpotifyMiniPlayer()
     }
   }, [])
@@ -430,11 +475,18 @@ export function EventLineup({
               {visibleArtists.length > 0 ? (
                 <VisualLineup
                   artists={visibleArtists}
-                  onResolved={(artistId, spotifyId) => {
+                  onResolved={(update) => {
                     setArtists((current) =>
                       current.map((artist) =>
-                        artist.id === artistId
-                          ? { ...artist, spotifyId }
+                        artist.id === update.artistId
+                          ? {
+                              ...artist,
+                              topTrackPreviewUrl:
+                                update.previewUrl ?? artist.topTrackPreviewUrl,
+                              topTrackName:
+                                update.trackName ?? artist.topTrackName,
+                              spotifyId: update.spotifyId ?? artist.spotifyId,
+                            }
                           : artist,
                       ),
                     )

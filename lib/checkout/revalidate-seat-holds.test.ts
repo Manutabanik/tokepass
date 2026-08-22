@@ -3,10 +3,23 @@ import { describe, it } from "node:test"
 
 import { HIGH_DEMAND_LOCK_TIMEOUT } from "./lock-timeout"
 import {
+  GENERAL_STOCK_UNAVAILABLE,
+  SEAT_SELECTION_REQUIRED,
+  SEAT_SELECTION_REQUIRED_MESSAGE,
+  SEAT_UNAVAILABLE,
+  SECTOR_NOT_CONFIGURED,
+  encodeGeneralStockUnavailable,
+  isGeneralStockUnavailableError,
+  isSeatUnavailableError,
+  parseGeneralStockUnavailable,
   earliestHoldExpiry,
   filterSelectedItemsByHolds,
   isBuyerSoldOutToast,
+  isCheckoutConnectionNoise,
   isCheckoutStockConflict,
+  isSeatSelectionRequiredError,
+  isSectorNotConfiguredError,
+  layoutRequiresSeatSelection,
   rehydrateSelectedItemsFromHolds,
 } from "./revalidate-seat-holds"
 import type { StorefrontSelectedItem } from "@/lib/stores/storefront-seat-store"
@@ -100,10 +113,45 @@ describe("revalidate seat holds", () => {
 
   it("detects concurrency stock conflicts", () => {
     assert.equal(isCheckoutStockConflict("out_of_stock"), true)
-    assert.equal(isCheckoutStockConflict("SEATING_UNIT_UNAVAILABLE"), true)
+    assert.equal(isCheckoutStockConflict("SEATING_UNIT_UNAVAILABLE"), false)
+    assert.equal(isSeatUnavailableError("SEATING_UNIT_UNAVAILABLE"), true)
     assert.equal(isCheckoutStockConflict("409 Conflict"), true)
     assert.equal(isCheckoutStockConflict("auth_required"), false)
     assert.equal(isCheckoutStockConflict(HIGH_DEMAND_LOCK_TIMEOUT), false)
+    assert.equal(isCheckoutStockConflict(SECTOR_NOT_CONFIGURED), false)
+    assert.equal(isSectorNotConfiguredError(SECTOR_NOT_CONFIGURED), true)
+    assert.equal(isBuyerSoldOutToast(SECTOR_NOT_CONFIGURED), false)
+    assert.equal(isCheckoutStockConflict(SEAT_SELECTION_REQUIRED), false)
+    assert.equal(isBuyerSoldOutToast(SEAT_SELECTION_REQUIRED), false)
+    assert.equal(isBuyerSoldOutToast(SEAT_SELECTION_REQUIRED_MESSAGE), false)
+    assert.equal(isSeatSelectionRequiredError(SEAT_SELECTION_REQUIRED), true)
+    assert.equal(
+      isCheckoutConnectionNoise(
+        "No pudimos guardar los cambios. Revisá tu conexión a internet e intentá de nuevo.",
+      ),
+      true,
+    )
+    assert.equal(
+      isCheckoutStockConflict(
+        "No pudimos guardar los cambios. Revisá tu conexión a internet e intentá de nuevo.",
+      ),
+      false,
+    )
+    assert.equal(isCheckoutStockConflict(SEAT_UNAVAILABLE), false)
+    assert.equal(isCheckoutStockConflict(encodeGeneralStockUnavailable("Estacionamiento Auto")), false)
+    assert.equal(isBuyerSoldOutToast(SEAT_UNAVAILABLE), false)
+    assert.equal(isBuyerSoldOutToast(GENERAL_STOCK_UNAVAILABLE), false)
+    assert.equal(isBuyerSoldOutToast("ERR_NO_STOCK"), false)
+    assert.equal(isSeatUnavailableError(SEAT_UNAVAILABLE), true)
+    assert.equal(isSeatUnavailableError("ERR_SEAT_TAKEN"), true)
+    assert.equal(isGeneralStockUnavailableError(GENERAL_STOCK_UNAVAILABLE), true)
+    assert.equal(isGeneralStockUnavailableError("ERR_NO_STOCK"), true)
+    assert.match(
+      parseGeneralStockUnavailable("GENERAL_STOCK_UNAVAILABLE:Estacionamiento Auto") ?? "",
+      /Estacionamiento Auto/,
+    )
+    assert.equal(layoutRequiresSeatSelection("table_combo"), true)
+    assert.equal(layoutRequiresSeatSelection("general"), false)
   })
 
   it("maps buyer-facing sold-out toasts without B2B save copy", () => {

@@ -36,7 +36,10 @@ function FormLabel({ className, ...props }: ComponentProps<typeof Label>) {
   return (
     <Label
       data-slot="form-label"
-      className={cn("text-sm text-zinc-300", className)}
+      className={cn(
+        "mb-1.5 text-sm font-bold text-slate-800 dark:text-zinc-200",
+        className,
+      )}
       {...props}
     />
   )
@@ -46,7 +49,10 @@ function FormDescription({ className, ...props }: ComponentProps<"p">) {
   return (
     <p
       data-slot="form-description"
-      className={cn("text-xs leading-5 text-zinc-500", className)}
+      className={cn(
+        "text-xs leading-5 text-slate-500 dark:text-zinc-400",
+        className,
+      )}
       {...props}
     />
   )

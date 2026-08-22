@@ -11,25 +11,21 @@ import {
   Group,
   Ungroup,
   ArrowLeft,
+  ChevronDown,
   CircleDot,
   Copy,
   Eye,
   Info,
-  Layers,
   LayoutTemplate,
   Minus,
+  MousePointer2,
   PanelRightClose,
   PanelRightOpen,
-  Redo,
+  Plus,
   Save,
   Square,
   Trash2,
-  Type,
-  Undo,
   Wand2,
-  ZoomIn,
-  ZoomOut,
-  Armchair,
   PenTool,
   Send,
 } from "lucide-react"
@@ -45,7 +41,6 @@ import { GridArrayDialog } from "@/components/admin/grid-array-dialog"
 import { LabelOverrideDialog } from "@/components/admin/label-override-dialog"
 import { VenueHeatmapPanel } from "@/components/admin/venue-heatmap-panel"
 import { VenueWorkModeTabs, type VenueWorkMode } from "@/components/admin/venue-work-mode-tabs"
-import { VenueAutosaveBadge } from "@/components/admin/venue-autosave-badge"
 import { AutoNumberingPanel } from "@/components/admin/auto-numbering-panel"
 import { VenueManualEditPanel } from "@/components/admin/venue-manual-edit-panel"
 import { BuyerViewModal } from "@/components/admin/buyer-view-modal"
@@ -61,7 +56,6 @@ import { VenueMapBackgroundPanel } from "@/components/admin/venue-map-background
 import { VenueParametricRulesPanel } from "@/components/admin/venue-parametric-rules-panel"
 import { VenueRowsConfigEditor } from "@/components/admin/venue-rows-config-editor"
 import { VenueSectorColorPicker } from "@/components/admin/venue-sector-color-field"
-import { VenueSetupGuide } from "@/components/admin/venue-setup-guide"
 import { SvgTransformBox } from "@/components/admin/svg-transform-box"
 import { VenueSelectionToolbar } from "@/components/admin/venue-selection-toolbar"
 import { VenueMobileFabBar } from "@/components/admin/venue-mobile-fab-bar"
@@ -85,6 +79,12 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -92,12 +92,10 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { useIsDesktop } from "@/hooks/use-media-query"
-import { useDebouncedAutosave } from "@/hooks/use-debounced-autosave"
 import {
   UNSAVED_MAP_CHANGES_MESSAGE,
   useUnsavedChanges,
 } from "@/hooks/use-unsaved-changes"
-import { SaveMapModal } from "@/components/admin/save-map-modal"
 import {
   Dialog,
   DialogContent,
@@ -357,7 +355,6 @@ export function InteractiveVenueMapEditor({
   value,
   onChange,
   onSave,
-  onAutoSave,
   onClose,
   onPreview,
   saving = false,
@@ -372,7 +369,6 @@ export function InteractiveVenueMapEditor({
   value?: InteractiveVenueMap | null
   onChange: (map: InteractiveVenueMap, seatingLayout: VenueSeatingLayout) => void
   onSave?: (map: InteractiveVenueMap) => void | Promise<void>
-  onAutoSave?: (map: InteractiveVenueMap) => void | Promise<void>
   onClose?: () => void
   onPreview?: () => void
   saving?: boolean
@@ -437,7 +433,6 @@ export function InteractiveVenueMapEditor({
     "saving" | "saved" | "error" | null
   >(null)
   const [isCanvasDirty, setIsCanvasDirty] = useState(false)
-  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false)
   const [hoveredGroupId, setHoveredGroupId] = useState<string | null>(null)
   const hoverClearTimer = useRef<number | null>(null)
   const [marquee, setMarquee] = useState<{
@@ -467,22 +462,10 @@ export function InteractiveVenueMapEditor({
   const [lassoMode, setLassoMode] = useState(false)
   const isDesktop = useIsDesktop()
   const compactChrome = !isDesktop
-  const autosaveStatus = useDebouncedAutosave({
-    value: map,
-    delayMs: 3000,
-    onSave: onAutoSave,
-  })
-  const saveBadgeStatus =
-    explicitSaveStatus === "saving" ||
-    explicitSaveStatus === "saved" ||
-    explicitSaveStatus === "error"
-      ? explicitSaveStatus
-      : autosaveStatus === "dirty" || autosaveStatus === "saving"
-        ? autosaveStatus
-        : (explicitSaveStatus ?? autosaveStatus)
   const mapBusy = saving || explicitSaveStatus === "saving"
-  const hasUnsavedMapWork = isCanvasDirty || polygonDraft.length > 0
-  useUnsavedChanges(hasUnsavedMapWork)
+  const hasUnsavedChanges = isCanvasDirty || polygonDraft.length > 0
+  const hasUnsavedMapWork = hasUnsavedChanges
+  useUnsavedChanges(hasUnsavedChanges)
 
   async function persistEditorMap() {
     if (!onSave) return
@@ -491,7 +474,6 @@ export function InteractiveVenueMapEditor({
       await onSave(mapRef.current)
       setExplicitSaveStatus("saved")
       setIsCanvasDirty(false)
-      setIsSaveModalOpen(false)
       toast.success("Guardado")
     } catch (error) {
       setExplicitSaveStatus("error")
@@ -3362,10 +3344,29 @@ export function InteractiveVenueMapEditor({
       return { title: text || "Etiqueta", detail: "Texto de nivel" }
     }
     return {
-      title: "Predio",
-      detail: "Foto aérea y medidas del recinto.",
+      title: "Inspector",
+      detail: "Seleccioná un sector, mesa o silla para editarla.",
     }
   })()
+  const selectedNode = singleSeat
+    ? ({ kind: "seat" } as const)
+    : selectedZone
+      ? ({ kind: "zone" } as const)
+      : selectedSector
+        ? ({ kind: "sector" } as const)
+        : selectedElement && selectedElementIds.length === 1
+          ? ({ kind: "element" } as const)
+          : selectedElementIds.length > 1
+            ? ({ kind: "elements" } as const)
+            : selection?.kind === "seats"
+              ? ({ kind: "seats" } as const)
+              : selection?.kind === "stage"
+                ? ({ kind: "stage" } as const)
+                : selection?.kind === "label"
+                  ? ({ kind: "label" } as const)
+                  : selection?.kind === "aisle"
+                    ? ({ kind: "aisle" } as const)
+                    : null
   const orientationState = (() => {
     if (workMode !== "architecture") return null
     if (seatGizmoActive && selectedSeatEntries.length > 0) {
@@ -3767,213 +3768,29 @@ export function InteractiveVenueMapEditor({
         }
       : toolbarTopCss
 
-  const toolbar = (
-    <div
-      className={cn(
-        "z-20 flex w-full items-center border-b border-border bg-card text-card-foreground",
-        isStudio
-          ? "min-h-14 shrink-0 flex-nowrap gap-2 overflow-x-auto px-2 py-1.5 hide-scrollbar"
-          : "flex-wrap gap-2 overflow-hidden px-3 py-2",
-      )}
+  const saveChangesButton = onSave ? (
+    <Button
+      type="button"
+      disabled={mapBusy || !hasUnsavedChanges}
+      onClick={() => {
+        void persistEditorMap()
+      }}
+      className="h-8 shrink-0 bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-40"
     >
-      {isStudio && canLeaveEditor ? (
-        <div className="flex min-w-0 shrink-0 items-center gap-1.5">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={handleLeaveEditor}
-            className="h-9 shrink-0 px-2 md:px-3"
-            aria-label="Volver al evento"
-          >
-            <ArrowLeft className="size-4" />
-            <span className="hidden md:inline">Salir</span>
-          </Button>
-          <p className="hidden max-w-[7rem] truncate text-sm font-semibold text-foreground sm:block md:max-w-[160px]">
-            {eventTitle}
-          </p>
-        </div>
-      ) : null}
+      <Save className="size-3.5" />
+      Guardar Cambios
+    </Button>
+  ) : null
 
+  const toolbar = (
+    <div className="z-20 flex w-full flex-wrap items-center gap-2 overflow-hidden border-b border-border bg-card px-3 py-2 text-card-foreground">
       <VenueWorkModeTabs
+        layout="stepper"
         value={workMode}
         onChange={setStudioWorkMode}
         className={cn("min-w-0 shrink-0", compactChrome && "hidden")}
       />
-      <VenueAutosaveBadge status={saveBadgeStatus} />
-
-      <div
-        data-slot="button-group"
-        className={cn(
-          "inline-flex min-w-0 items-center rounded-lg border border-zinc-800 bg-zinc-950 p-0.5",
-          isStudio && "scrollbar-none overflow-x-auto",
-          !isStudio && "flex-wrap gap-1 border-0 bg-transparent p-0",
-          compactChrome && "hidden",
-        )}
-      >
-        <ToolButton
-          active={false}
-          onClick={() => {
-            const rect = svgRef.current?.getBoundingClientRect()
-            const cursor = rect
-              ? clientToViewBox(
-                  rect.left + rect.width / 2,
-                  rect.top + rect.height / 2,
-                )
-              : { x: CANVAS.width / 2, y: CANVAS.height / 2 }
-            applyViewport(
-              zoomTowardCursor({
-                pan: panRef.current,
-                zoom: zoomRef.current,
-                nextZoom: clampVenueZoom(zoomRef.current - 0.1),
-                cursor,
-              }),
-            )
-          }}
-          label="Zoom -"
-          showLabel={false}
-        >
-          <ZoomOut className="size-4" />
-        </ToolButton>
-        <ToolButton
-          active={false}
-          onClick={() => {
-            const rect = svgRef.current?.getBoundingClientRect()
-            const cursor = rect
-              ? clientToViewBox(
-                  rect.left + rect.width / 2,
-                  rect.top + rect.height / 2,
-                )
-              : { x: CANVAS.width / 2, y: CANVAS.height / 2 }
-            applyViewport(
-              zoomTowardCursor({
-                pan: panRef.current,
-                zoom: zoomRef.current,
-                nextZoom: clampVenueZoom(zoomRef.current + 0.1),
-                cursor,
-              }),
-            )
-          }}
-          label="Zoom +"
-          showLabel={false}
-        >
-          <ZoomIn className="size-4" />
-        </ToolButton>
-        <ToolButton
-          active={false}
-          onClick={undo}
-          label="Deshacer"
-          disabled={!canUndo}
-          showLabel={false}
-        >
-          <Undo className="size-4" />
-        </ToolButton>
-        <ToolButton
-          active={false}
-          onClick={redo}
-          label="Rehacer"
-          disabled={!canRedo}
-          showLabel={false}
-        >
-          <Redo className="size-4" />
-        </ToolButton>
-        {!isStudio ? (
-          <>
-            <ToolButton active={false} onClick={addStage} label="Escenario">
-              <Square className="size-4" />
-            </ToolButton>
-            <ToolButton active={false} onClick={addSector} label="Bloque de asientos">
-              <Armchair className="size-4" />
-            </ToolButton>
-            <ToolButton
-              active={showRings}
-              onClick={() => setShowRings((value) => !value)}
-              label="Gradería anular"
-            >
-              <Layers className="size-4" />
-            </ToolButton>
-            <ToolButton active={false} onClick={addAisle} label="Pasillo">
-              <Minus className="size-4" />
-            </ToolButton>
-            <ToolButton active={false} onClick={addLabel} label="Etiqueta de nivel">
-              <Type className="size-4" />
-            </ToolButton>
-            <ToolButton active={false} onClick={() => duplicateSelection()} label="Duplicar">
-              <Copy className="size-4" />
-            </ToolButton>
-          </>
-        ) : null}
-      </div>
-
-      <div
-        className={cn(
-          "flex min-w-0 items-center gap-1.5",
-          isStudio
-            ? "ml-auto shrink-0 flex-nowrap justify-end"
-            : "ml-auto flex-wrap",
-        )}
-      >
-        {isStudio ? (
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-9 shrink-0 px-2 md:px-3"
-              onClick={handleClearMap}
-              aria-label="Limpiar mapa"
-            >
-              <Trash2 className="size-4 md:mr-2" />
-              <span className="hidden md:inline">Limpiar Mapa</span>
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-9 shrink-0 px-2 md:px-3"
-              onClick={() => setLibraryOpen(true)}
-              aria-label="Plantillas"
-            >
-              <LayoutTemplate className="size-4 md:mr-2" />
-              <span className="hidden md:inline">Plantillas</span>
-            </Button>
-            <VenueSetupGuide compact />
-            <Button
-              type="button"
-              variant="outline"
-              className="h-9 shrink-0 px-2 md:px-3"
-              disabled={pendingTemplates}
-              aria-label="Guardar como mi plantilla"
-              onClick={() => {
-                setTemplateName(eventTitle || "Mi recinto")
-                setSaveOpen(true)
-              }}
-            >
-              <Save className="size-4 md:mr-2" />
-              <span className="hidden md:inline">Mi plantilla</span>
-            </Button>
-          </>
-        ) : null}
-        <Button
-          type="button"
-          variant="outline"
-          className="h-9 shrink-0 px-2 md:px-3"
-          onClick={openPreview}
-          aria-label="Vista previa del comprador"
-        >
-          <Eye className="size-4 text-emerald-500 md:mr-2" />
-          <span className="hidden md:inline">Vista Previa del Comprador</span>
-        </Button>
-        {onSave ? (
-          <Button
-            type="button"
-            disabled={mapBusy}
-            onClick={() => setIsSaveModalOpen(true)}
-            className="h-9 shrink-0 bg-emerald-500 px-2 font-bold text-black hover:bg-emerald-400 md:px-3"
-            aria-label="Guardar cambios"
-          >
-            <Save className="size-4 md:mr-2" />
-            <span className="hidden md:inline">Guardar Cambios</span>
-          </Button>
-        ) : null}
-      </div>
+      <div className="ml-auto flex items-center gap-1.5">{saveChangesButton}</div>
     </div>
   )
 
@@ -3988,60 +3805,31 @@ export function InteractiveVenueMapEditor({
             className="h-8 shrink-0 px-1.5 text-xs text-muted-foreground"
           >
             <ArrowLeft className="size-3.5" />
-            <span className="hidden lg:inline">{backLabel}</span>
+            <span className="hidden lg:inline">{backLabel === "Volver al evento" ? "Salir" : backLabel}</span>
           </Button>
         ) : null}
-        <Input
-          value={eventTitle}
-          readOnly={!onEventTitleChange}
-          onChange={(event) => onEventTitleChange?.(event.target.value)}
-          aria-label="Nombre del evento"
-          className="h-8 min-w-0 max-w-[12rem] truncate border-transparent bg-transparent px-1.5 text-sm font-semibold shadow-none focus-visible:border-border"
-        />
-        <VenueAutosaveBadge status={saveBadgeStatus} />
+        {onEventTitleChange ? (
+          <Input
+            value={eventTitle}
+            onChange={(event) => onEventTitleChange(event.target.value)}
+            aria-label="Nombre del evento"
+            className="h-8 min-w-0 max-w-[14rem] truncate border-transparent bg-transparent px-1.5 text-sm font-semibold shadow-none focus-visible:border-border"
+          />
+        ) : (
+          <p className="truncate text-sm font-semibold text-foreground">
+            {eventTitle}
+          </p>
+        )}
       </div>
-      <div className="flex shrink-0 justify-center px-2">
+      <div className={cn("flex shrink-0 justify-center px-2", compactChrome && "hidden")}>
         <VenueWorkModeTabs
           layout="stepper"
           value={workMode}
           onChange={setStudioWorkMode}
         />
       </div>
-      <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 pl-3">
-        <Button
-          type="button"
-          variant="ghost"
-          className="h-8 shrink-0 px-2 text-xs text-muted-foreground hover:text-foreground"
-          onClick={() => setLibraryOpen(true)}
-        >
-          Plantillas
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          className="h-8 shrink-0 px-2 text-xs text-muted-foreground hover:text-foreground"
-          onClick={handleClearMap}
-        >
-          Limpiar
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          className="h-8 shrink-0 px-2.5 text-xs"
-          onClick={openPreview}
-        >
-          Vista Previa
-        </Button>
-        {onSave ? (
-          <Button
-            type="button"
-            disabled={mapBusy}
-            onClick={() => setIsSaveModalOpen(true)}
-            className="h-8 shrink-0 bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-500"
-          >
-            Guardar Cambios
-          </Button>
-        ) : null}
+      <div className="flex min-w-0 flex-1 items-center justify-end pl-3">
+        {saveChangesButton}
       </div>
     </header>
   )
@@ -4058,7 +3846,7 @@ export function InteractiveVenueMapEditor({
       )}
       data-field="venue.venueMap"
     >
-      {isWorkspace && !compactChrome ? workspaceHeader : toolbar}
+      {isStudio ? workspaceHeader : toolbar}
 
       <div
         className={cn(
@@ -4607,21 +4395,93 @@ export function InteractiveVenueMapEditor({
               onChange={pickFloatingTool}
               onPlace={pickPaletteItem}
               constraintRef={canvasRef}
-              zoomPercent={Math.round(zoom * 100)}
-              onZoomIn={() => nudgeCanvasZoom(0.1)}
-              onZoomOut={() => nudgeCanvasZoom(-0.1)}
               className={compactChrome ? "top-16" : undefined}
             />
+          ) : null}
+          {!preview && !libraryOpen ? (
+            <div className="absolute top-4 right-4 z-40">
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-card/85 px-3 text-xs font-semibold text-foreground shadow-lg backdrop-blur-md hover:bg-card"
+                  onPointerDown={(event) => event.stopPropagation()}
+                >
+                  Herramientas
+                  <ChevronDown className="size-3.5" aria-hidden="true" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-48">
+                  <DropdownMenuItem onClick={addStage}>
+                    <Square className="size-4" />
+                    Agregar escenario
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={addAisle}>
+                    <Minus className="size-4" />
+                    Agregar pasillo
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setLibraryOpen(true)}
+                  >
+                    <LayoutTemplate className="size-4" />
+                    Plantillas
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setTemplateName(eventTitle || "Mi recinto")
+                      setSaveOpen(true)
+                    }}
+                    disabled={pendingTemplates}
+                  >
+                    <Save className="size-4" />
+                    Guardar como plantilla
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={openPreview}>
+                    <Eye className="size-4" />
+                    Vista previa del comprador
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleClearMap}>
+                    <Trash2 className="size-4" />
+                    Limpiar Mapa
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           ) : null}
           {isStudio && tool !== "polygon" ? (
             <VenueStudioHud
               map={map}
-              className={compactChrome ? "top-3 bottom-auto" : undefined}
-              zoomPercent={Math.round(zoom * 100)}
-              onZoomIn={() => nudgeCanvasZoom(0.1)}
-              onZoomOut={() => nudgeCanvasZoom(-0.1)}
-              onZoomReset={() => applyViewport({ pan: { x: 0, y: 0 }, zoom: 1 })}
+              className={compactChrome ? "top-3 bottom-auto left-1/2 -translate-x-1/2" : undefined}
             />
+          ) : null}
+          {!preview ? (
+            <div
+              className={cn(
+                "pointer-events-none absolute left-1/2 z-40 -translate-x-1/2",
+                compactChrome ? "bottom-24" : "bottom-6",
+              )}
+            >
+              <div className="pointer-events-auto inline-flex items-center gap-1 rounded-full border border-border bg-card/80 px-2 py-1 text-foreground shadow-lg backdrop-blur-md">
+                <button
+                  type="button"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={() => nudgeCanvasZoom(-0.1)}
+                  className="grid size-8 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                  aria-label="Alejar"
+                >
+                  <Minus className="size-3.5" />
+                </button>
+                <span className="min-w-12 text-center text-xs font-semibold tabular-nums">
+                  {Math.round(zoom * 100)}%
+                </span>
+                <button
+                  type="button"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={() => nudgeCanvasZoom(0.1)}
+                  className="grid size-8 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                  aria-label="Acercar"
+                >
+                  <Plus className="size-3.5" />
+                </button>
+              </div>
+            </div>
           ) : null}
           {compactChrome && lassoMode && tool === "select" ? (
             <div className="pointer-events-none absolute top-14 left-1/2 z-20 -translate-x-1/2 rounded-full border border-sky-400/40 bg-zinc-950/90 px-3 py-1.5 text-xs text-sky-100">
@@ -4699,7 +4559,7 @@ export function InteractiveVenueMapEditor({
                 : "Editá el elemento. El plano queda visible arriba."
           }
         >
-          {isStudio ? (
+          {isStudio && (workMode !== "architecture" || selectedNode) ? (
             <div className="hidden shrink-0 border-b border-border px-4 py-3 md:block">
               <p className="text-sm font-semibold text-foreground">
                 {inspectorHeadline.title}
@@ -4708,7 +4568,7 @@ export function InteractiveVenueMapEditor({
                 {inspectorHeadline.detail}
               </p>
             </div>
-          ) : (
+          ) : isStudio ? null : (
             <div className="hidden md:block">
               <p className="text-[11px] font-bold tracking-[0.2em] text-zinc-500 uppercase">
                 Propiedades
@@ -4897,125 +4757,152 @@ export function InteractiveVenueMapEditor({
             />
           ) : selectedSector ? (
             <div className="space-y-3">
-              <Field label="Zona">
-                <Input
-                  value={selectedSector.name}
-                  onChange={(event) =>
-                    patchSector(selectedSector.id, { name: event.target.value })
-                  }
-                />
-              </Field>
-              <Field label="Precio (ARS)">
-                <PriceInput
-                  value={selectedSector.price}
-                  onValueChange={(value) => {
-                    if (value == null) return
-                    patchSector(selectedSector.id, { price: value })
-                  }}
-                />
-              </Field>
-              <Field label="Capacidad">
-                <Input
-                  type="number"
-                  min={1}
-                  value={
-                    selectedSector.seats.filter(
-                      (seat) => seat.status !== "blocked",
-                    ).length ||
-                    rowsConfigGridFields(
-                      resolveSectorRowsConfig(selectedSector, {
+              <Accordion
+                multiple
+                defaultValue={["datos", "distribucion"]}
+                className="rounded-xl border border-border px-3"
+              >
+                <AccordionItem value="datos" className="border-border">
+                  <AccordionTrigger className="py-2.5 text-xs font-semibold tracking-wide uppercase hover:no-underline">
+                    Datos
+                  </AccordionTrigger>
+                  <AccordionContent className="space-y-3 pb-3">
+                    <Field label="Zona">
+                      <Input
+                        value={selectedSector.name}
+                        onChange={(event) =>
+                          patchSector(selectedSector.id, { name: event.target.value })
+                        }
+                      />
+                    </Field>
+                    <Field label="Color del Sector">
+                      <VenueSectorColorPicker
+                        value={selectedSector.color}
+                        onChange={(color) =>
+                          patchSector(selectedSector.id, { color })
+                        }
+                      />
+                    </Field>
+                  </AccordionContent>
+                </AccordionItem>
+                <AccordionItem value="distribucion" className="border-border">
+                  <AccordionTrigger className="py-2.5 text-xs font-semibold tracking-wide uppercase hover:no-underline">
+                    Distribución
+                  </AccordionTrigger>
+                  <AccordionContent className="space-y-3 pb-3">
+                    <Field label="Capacidad">
+                      <Input
+                        type="number"
+                        min={1}
+                        value={
+                          selectedSector.seats.filter(
+                            (seat) => seat.status !== "blocked",
+                          ).length ||
+                          rowsConfigGridFields(
+                            resolveSectorRowsConfig(selectedSector, {
+                              maxRows: 40,
+                              maxSeats: 40,
+                            }),
+                          ).capacity
+                        }
+                        readOnly
+                      />
+                    </Field>
+                    <Field label="Cantidad de filas">
+                      <Input
+                        type="number"
+                        min={1}
+                        max={40}
+                        value={
+                          resolveSectorRowsConfig(selectedSector, {
+                            maxRows: 40,
+                            maxSeats: 40,
+                          }).length
+                        }
+                        onChange={(event) => {
+                          const current = resolveSectorRowsConfig(selectedSector, {
+                            maxRows: 40,
+                            maxSeats: 40,
+                          })
+                          patchSector(selectedSector.id, {
+                            rowsConfig: resizeRowsConfig(
+                              current,
+                              Number(event.target.value) || 1,
+                              { maxRows: 40, maxSeats: 40 },
+                            ),
+                          })
+                        }}
+                      />
+                    </Field>
+                    <VenueRowsConfigEditor
+                      rowsConfig={resolveSectorRowsConfig(selectedSector, {
                         maxRows: 40,
                         maxSeats: 40,
-                      }),
-                    ).capacity
-                  }
-                  readOnly
-                />
-              </Field>
-              <Field label="Color del Sector">
-                <VenueSectorColorPicker
-                  value={selectedSector.color}
-                  onChange={(color) =>
-                    patchSector(selectedSector.id, { color })
-                  }
-                />
-              </Field>
-              <Field label="Cantidad de filas">
-                <Input
-                  type="number"
-                  min={1}
-                  max={40}
-                  value={
-                    resolveSectorRowsConfig(selectedSector, {
-                      maxRows: 40,
-                      maxSeats: 40,
-                    }).length
-                  }
-                  onChange={(event) => {
-                    const current = resolveSectorRowsConfig(selectedSector, {
-                      maxRows: 40,
-                      maxSeats: 40,
-                    })
-                    patchSector(selectedSector.id, {
-                      rowsConfig: resizeRowsConfig(
-                        current,
-                        Number(event.target.value) || 1,
-                        { maxRows: 40, maxSeats: 40 },
-                      ),
-                    })
-                  }}
-                />
-              </Field>
-              <VenueRowsConfigEditor
-                rowsConfig={resolveSectorRowsConfig(selectedSector, {
-                  maxRows: 40,
-                  maxSeats: 40,
-                })}
-                maxRows={40}
-                maxSeats={40}
-                onChange={(rowsConfig) =>
-                  patchSector(selectedSector.id, { rowsConfig })
-                }
-              />
-              <Field label={`Curvatura (${Math.round(selectedSector.curvature * 100)}%)`}>
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={selectedSector.curvature}
-                  onChange={(event) =>
-                    patchSector(selectedSector.id, {
-                      curvature: Number(event.target.value),
-                    })
-                  }
-                  className="w-full accent-emerald-500"
-                />
-              </Field>
-              <label className="flex items-center gap-2 text-sm text-foreground">
-                <input
-                  type="checkbox"
-                  checked={selectedSector.aisle}
-                  onChange={(event) =>
-                    patchSector(selectedSector.id, { aisle: event.target.checked })
-                  }
-                />
-                Pasillo central
-              </label>
-              <Button
-                type="button"
-                className="w-full bg-emerald-600 text-white hover:bg-emerald-500"
-                onClick={() => {
-                  const first = selectedSector.seats[0]
-                  enterSeatEdit(
-                    first
-                      ? [seatKey(selectedSector.id, first.id)]
-                      : [],
-                  )
-                }}
-              >
-                Editar asientos individuales
-              </Button>
+                      })}
+                      maxRows={40}
+                      maxSeats={40}
+                      onChange={(rowsConfig) =>
+                        patchSector(selectedSector.id, { rowsConfig })
+                      }
+                    />
+                    <Field label={`Curvatura (${Math.round(selectedSector.curvature * 100)}%)`}>
+                      <input
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={selectedSector.curvature}
+                        onChange={(event) =>
+                          patchSector(selectedSector.id, {
+                            curvature: Number(event.target.value),
+                          })
+                        }
+                        className="w-full accent-emerald-500"
+                      />
+                    </Field>
+                    <label className="flex items-center gap-2 text-sm text-foreground">
+                      <input
+                        type="checkbox"
+                        checked={selectedSector.aisle}
+                        onChange={(event) =>
+                          patchSector(selectedSector.id, { aisle: event.target.checked })
+                        }
+                      />
+                      Pasillo central
+                    </label>
+                    <Button
+                      type="button"
+                      className="w-full bg-emerald-600 text-white hover:bg-emerald-500"
+                      onClick={() => {
+                        const first = selectedSector.seats[0]
+                        enterSeatEdit(
+                          first
+                            ? [seatKey(selectedSector.id, first.id)]
+                            : [],
+                        )
+                      }}
+                    >
+                      Editar asientos individuales
+                    </Button>
+                  </AccordionContent>
+                </AccordionItem>
+                <AccordionItem value="tarifas" className="border-border">
+                  <AccordionTrigger className="py-2.5 text-xs font-semibold tracking-wide uppercase hover:no-underline">
+                    Tarifas
+                  </AccordionTrigger>
+                  <AccordionContent className="space-y-3 pb-3">
+                    <Field label="Precio (ARS)">
+                      <PriceInput
+                        value={selectedSector.price}
+                        onValueChange={(value) => {
+                          if (value == null) return
+                          patchSector(selectedSector.id, { price: value })
+                        }}
+                      />
+                    </Field>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
             </div>
           ) : selectedElement && isInfrastructureElement(selectedElement) ? (
             <div className="space-y-3">
@@ -5447,6 +5334,10 @@ export function InteractiveVenueMapEditor({
             <div className="space-y-4">
               {singleSeat ? (
                 <>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    Edición individual de esta silla. Los cambios no alteran el
+                    resto del sector.
+                  </p>
                   <Field label="Etiqueta personalizada (boleto)">
                     <Input
                       value={
@@ -5576,21 +5467,35 @@ export function InteractiveVenueMapEditor({
                 className="w-full border-red-200 text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
                 onClick={() => patchSelectedSeats({ status: "blocked" })}
               >
-                Inhabilitar
+                {singleSeat ? "Deshabilitar solo esta silla" : "Inhabilitar"}
               </Button>
               <Button type="button" variant="ghost" className="w-full text-muted-foreground" onClick={restoreSelectedSeats}>
-                Reactivar seleccionadas
+                {singleSeat ? "Reactivar esta silla" : "Reactivar seleccionadas"}
               </Button>
             </div>
           ) : (
             <div className="space-y-4">
-              {!isStudio ? (
+              {isStudio && tool !== "polygon" ? (
+                <div className="flex flex-col items-center justify-center px-4 py-16 text-center">
+                  <MousePointer2
+                    className="size-8 text-muted-foreground/40"
+                    aria-hidden="true"
+                  />
+                  <p className="mt-3 text-sm font-medium text-foreground">
+                    Nada seleccionado
+                  </p>
+                  <p className="mt-1 max-w-[16rem] text-xs leading-relaxed text-muted-foreground">
+                    Elegí un sector, mesa o silla en el explorador o en el mapa
+                    para ver sus propiedades.
+                  </p>
+                </div>
+              ) : !isStudio ? (
                 <p className="text-sm leading-relaxed text-muted-foreground">
                   Arrastrá componentes al plano. Clic izquierdo abre la ficha.
                   Clic derecho duplica, gira o borra.
                 </p>
               ) : null}
-              {isStudio ? (
+              {!isStudio ? (
                 <>
                   <VenueMapBackgroundPanel
                     map={map}
@@ -5834,16 +5739,6 @@ export function InteractiveVenueMapEditor({
         />
       ) : null}
 
-      <SaveMapModal
-        open={isSaveModalOpen}
-        onOpenChange={setIsSaveModalOpen}
-        map={map}
-        saving={mapBusy}
-        onConfirm={() => {
-          void persistEditorMap()
-        }}
-      />
-
       <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
         <DialogContent className="border-border bg-card text-foreground sm:max-w-md">
           <DialogHeader>
@@ -6076,44 +5971,6 @@ function VenueAisleNode({
       onContextMenu={onContextMenu}
       onPointerDown={onPointerDown}
     />
-  )
-}
-
-function ToolButton({
-  active,
-  onClick,
-  label,
-  children,
-  disabled = false,
-  showLabel = false,
-}: {
-  active: boolean
-  onClick: () => void
-  label: string
-  children: React.ReactNode
-  disabled?: boolean
-  showLabel?: boolean | "md"
-}) {
-  return (
-    <Button
-      type="button"
-      variant={active ? "secondary" : "outline"}
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        "h-9 shrink-0 gap-1.5 border-zinc-700 bg-zinc-800/50 px-2 text-zinc-200 hover:bg-zinc-800 hover:text-zinc-100 md:px-3",
-        active && "border-zinc-600 bg-zinc-800 text-zinc-100 ring-1 ring-emerald-500/40",
-      )}
-    >
-      {children}
-      {showLabel === true ? (
-        <span>{label}</span>
-      ) : showLabel === "md" ? (
-        <span className="hidden md:inline">{label}</span>
-      ) : (
-        <span className="sr-only">{label}</span>
-      )}
-    </Button>
   )
 }
 

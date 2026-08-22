@@ -58,6 +58,7 @@ import { VenueMapElementLayer } from "@/components/venue/venue-map-element-layer
 import { VenueMapZoneLayer } from "@/components/venue/venue-map-zone-layer"
 import { TheatreSeatSymbol } from "@/components/admin/venue-svg-symbols"
 import {
+  storefrontSelectionCount,
   storefrontSelectionTotal,
   useStorefrontSeatStore,
   type StorefrontSelectedItem,
@@ -310,18 +311,8 @@ export function InteractiveSeatingCanvas({
     if (!revealReady || !focusedZone) return []
     return publicRevealSeats(plotSeats, focusedZone)
   }, [focusedZone, lodEnabled, map, plotSeats, revealReady, viewMode])
-  const focusedHasMicro = useMemo(() => {
-    if (!focusedZone) return false
-    return (
-      publicRevealElements(map.elements, focusedZone).length > 0 ||
-      publicRevealSeats(plotSeats, focusedZone).length > 0
-    )
-  }, [focusedZone, map.elements, plotSeats])
   const spotlight = liveSelectedItems.length > 0
-  const selectionCount = liveSelectedItems.reduce(
-    (sum, item) => sum + Math.max(1, Math.floor(item.capacity) || 1),
-    0,
-  )
+  const selectionCount = storefrontSelectionCount(liveSelectedItems)
   const subtotal = storefrontSelectionTotal(liveSelectedItems)
   const stageLabel = map.stage?.label?.trim() || "ESCENARIO"
   const pxPerUnit = (wrapWidth / VIEW.width) * zoom
@@ -1274,7 +1265,7 @@ export function InteractiveSeatingCanvas({
       <ExternalMapToolbar
         title={toolbarTitle}
         showLodBack={lodEnabled && viewMode === "micro"}
-        selectionCount={liveSelectedItems.length}
+        selectionCount={selectionCount}
         showClear={!readOnly}
         onExitLod={exitLodView}
         onZoomIn={handleZoomIn}

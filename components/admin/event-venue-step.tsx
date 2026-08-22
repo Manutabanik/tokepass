@@ -68,6 +68,12 @@ import {
 import { composeVenuePlace } from "@/lib/venues/compose-location"
 import type { EventFormValues } from "@/lib/validations/event-form"
 import { RELATION_UUID_RE } from "@/lib/validations/relation-id"
+import {
+  STUDIO_CONTROL_CLASS,
+  STUDIO_MODALITY_ACTIVE_CLASS,
+  STUDIO_MODALITY_IDLE_CLASS,
+  STUDIO_SELECT_CONTENT_CLASS,
+} from "@/lib/admin/studio-form-styles"
 import { cn } from "@/lib/utils"
 import { emptyVenueMap, parseVenueMap } from "@/types/venue-map"
 
@@ -598,10 +604,10 @@ export function EventVenueStep({
             if (!existingVenueId && venueOptions[0]) applySavedVenue(venueOptions[0])
           }}
           className={cn(
-            "rounded-2xl border px-4 py-3 text-left text-sm transition disabled:opacity-40",
+            "rounded-2xl px-4 py-3 text-left text-sm font-semibold transition disabled:opacity-40",
             venueMode === "existing" && !editingSaved
-              ? "border-emerald-800 bg-emerald-950/40 text-emerald-200"
-              : "border-zinc-700 bg-zinc-800/50 text-zinc-400",
+              ? STUDIO_MODALITY_ACTIVE_CLASS
+              : STUDIO_MODALITY_IDLE_CLASS,
           )}
         >
           Elegir un lugar guardado
@@ -613,10 +619,10 @@ export function EventVenueStep({
           type="button"
           onClick={switchToNew}
           className={cn(
-            "rounded-2xl border px-4 py-3 text-left text-sm transition",
+            "rounded-2xl px-4 py-3 text-left text-sm font-semibold transition",
             showCreateForm && (venueMode === "new" || editingSaved)
-              ? "border-emerald-800 bg-emerald-950/40 text-emerald-200"
-              : "border-zinc-700 bg-zinc-800/50 text-zinc-400",
+              ? STUDIO_MODALITY_ACTIVE_CLASS
+              : STUDIO_MODALITY_IDLE_CLASS,
           )}
         >
           Crear un lugar nuevo
@@ -642,10 +648,10 @@ export function EventVenueStep({
 
       {venueMode === "existing" && !editingSaved && selectedVenue ? (
         <div className={cn(
-          "space-y-4 text-zinc-100 shadow-sm",
+          "space-y-4 text-slate-900 shadow-sm dark:text-zinc-100",
           studio
             ? "pt-1"
-            : "rounded-2xl border border-zinc-800 bg-zinc-900 p-4 sm:p-5",
+            : "rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 dark:border-zinc-800 dark:bg-zinc-900",
         )}>
           {studio ? (
             <div className="flex justify-end">
@@ -723,12 +729,12 @@ export function EventVenueStep({
                     label: venue.name,
                   }))}
                 >
-                  <SelectTrigger className="h-12 w-full max-w-full overflow-hidden rounded-xl border-border/60 bg-muted/20 sm:h-13">
+                  <SelectTrigger className={cn(STUDIO_CONTROL_CLASS, "max-w-full overflow-hidden")}>
                     <SelectValue placeholder="Elegí un lugar" />
                   </SelectTrigger>
                   <SelectContent
                     alignItemWithTrigger={false}
-                    className="max-h-60 overflow-y-auto w-full z-50 bg-popover border rounded-xl shadow-2xl"
+                    className={cn(STUDIO_SELECT_CONTENT_CLASS, "z-50 w-full")}
                   >
                     {venueOptions.map((venue) => (
                       <SelectItem key={venue.id} value={venue.id}>
@@ -787,7 +793,7 @@ export function EventVenueStep({
       ) : null}
 
       {showCreateForm ? (
-        <div className="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-zinc-100 shadow-sm sm:p-5">
+        <div className="space-y-6 rounded-2xl border border-slate-200 bg-white p-4 text-slate-900 shadow-sm sm:p-5 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">
           {editingSaved ? (
             <p className="text-sm text-emerald-800 dark:text-emerald-300/90">
               Estás editando un lugar guardado. Los cambios se aplican a futuros
@@ -800,7 +806,7 @@ export function EventVenueStep({
             control={form.control}
             name="venue.includesSeatingMap"
             render={({ field }) => (
-              <FormItem className="rounded-2xl border border-zinc-800 bg-zinc-950/60 px-4 py-4">
+              <FormItem className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 dark:border-zinc-800 dark:bg-zinc-950/60">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex gap-3">
                     <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-800 dark:text-emerald-300">
@@ -875,7 +881,7 @@ export function EventVenueStep({
             blockedReason={mapBlockedReason}
             eventId={eventId}
           />
-          <div className="space-y-3 rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
+          <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-zinc-800 dark:bg-zinc-950/60">
             <div className="flex items-center gap-2">
               <ImageIcon className="size-4 text-emerald-700 dark:text-emerald-400" />
               <Label className="text-sm text-foreground">
@@ -894,7 +900,7 @@ export function EventVenueStep({
                 />
               </div>
             ) : null}
-            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-700 bg-zinc-950/60 px-4 py-6 text-sm text-zinc-400 hover:border-emerald-500/40 hover:text-emerald-200">
+            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-6 text-sm text-slate-500 hover:border-emerald-500/40 hover:text-emerald-600 dark:border-zinc-700 dark:bg-zinc-950/60 dark:text-zinc-400 dark:hover:text-emerald-200">
               {pendingUpload ? (
                 <LoaderCircle className="size-4 animate-spin" />
               ) : (
@@ -921,9 +927,9 @@ export function EventVenueStep({
             control={form.control}
             name="venue.saveVenueForReuse"
             render={({ field }) => (
-              <FormItem className="flex flex-row items-start justify-between gap-3 rounded-2xl border border-zinc-800 bg-zinc-950/60 px-4 py-3">
+              <FormItem className="flex flex-row items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-950/60">
                 <div className="space-y-1">
-                  <FormLabel className="text-sm font-medium text-zinc-100">
+                  <FormLabel className="mb-0 text-sm font-medium text-slate-800 dark:text-zinc-100">
                     Guardar este lugar para futuros eventos
                   </FormLabel>
                   <FormDescription className="text-xs text-muted-foreground">
@@ -947,7 +953,7 @@ export function EventVenueStep({
                 variant="outline"
                 disabled={pendingSave}
                 onClick={persistVenueNow}
-                className="border-emerald-800 bg-emerald-950/40 text-emerald-200"
+                className="border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
               >
                 {pendingSave ? (
                   <LoaderCircle className="size-4 animate-spin" />
@@ -1044,7 +1050,6 @@ function MapStudioFields({
           onCloseStudio()
         }}
         onChange={(next) => onPersistMap(next)}
-        onAutoSave={(next) => onPersistMap(next)}
       />
     </div>
   )

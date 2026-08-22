@@ -63,10 +63,23 @@ export function PosTicketHandoffDialog({
   initialPhone?: string
   onClose: () => void
 }) {
-  const [phone, setPhone] = useState(initialPhone ?? "")
+  const [phone, setPhone] = useState(() =>
+    formatWhatsappInput(initialPhone ?? ""),
+  )
   const [email, setEmail] = useState("")
   const [channel, setChannel] = useState<"whatsapp" | "email">("whatsapp")
   const [activeIndex, setActiveIndex] = useState(0)
+  const resetToken = open ? `open:${initialPhone ?? ""}` : "closed"
+  const [appliedToken, setAppliedToken] = useState(resetToken)
+  if (appliedToken !== resetToken) {
+    setAppliedToken(resetToken)
+    if (open) {
+      setPhone(formatWhatsappInput(initialPhone ?? ""))
+      setEmail("")
+      setChannel("whatsapp")
+      setActiveIndex(0)
+    }
+  }
   const [isPending, startTransition] = useTransition()
   const current = tickets[activeIndex] ?? tickets[0]
   const siteOrigin =
@@ -82,14 +95,6 @@ export function PosTicketHandoffDialog({
     const text = `Tu entrada TokePass para ${eventTitle}. Abri el QR:\n${links}`
     return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`
   }, [eventTitle, phone, siteOrigin, tickets])
-
-  useEffect(() => {
-    if (!open) return
-    setPhone(formatWhatsappInput(initialPhone ?? ""))
-    setEmail("")
-    setChannel("whatsapp")
-    setActiveIndex(0)
-  }, [open, initialPhone])
 
   useEffect(() => {
     if (!open) return

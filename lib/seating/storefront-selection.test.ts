@@ -137,6 +137,48 @@ describe("storefront-selection", () => {
     assert.equal(next[0]?.type, "table")
   })
 
+  it("conserva la cantidad elegida al hidratar una zona general", () => {
+    const map = emptyVenueMap()
+    map.zones = [
+      {
+        id: "campo",
+        name: "Campo",
+        color: "#22c55e",
+        price: 50000,
+        polygon: [
+          { x: 0, y: 0 },
+          { x: 40, y: 0 },
+          { x: 40, y: 40 },
+          { x: 0, y: 40 },
+        ],
+        layoutType: "general",
+        seatingType: "GENERAL",
+        sellMode: "per_seat",
+        rows: 0,
+        itemsPerRow: 0,
+        capacityPerUnit: 1,
+        capacity: 200,
+        labelPrefix: "",
+      },
+    ]
+    const next = hydrateStorefrontItemsFromMap(
+      [
+        {
+          id: "campo",
+          name: "Campo",
+          type: "zone",
+          price: 50000,
+          capacity: 3,
+          inventoryType: "GENERAL_ADMISSION",
+        },
+      ],
+      map,
+    )
+    assert.equal(next[0]?.capacity, 3)
+    assert.equal(next[0]?.type, "zone")
+    assert.equal(next[0]?.price, 50000)
+  })
+
   it("descarta ids duplicados al hidratar", () => {
     const next = dedupeStorefrontItemsById([
       { id: "s-1", name: "A", type: "seat", price: 10, capacity: 1, row: "1", number: 1 },

@@ -64,7 +64,7 @@ export const cachedEventDetails = cache((slug: string) =>
     ["event-details", slug],
     { 
       revalidate: 30,
-      tags: ["catalog-events", `event-${slug}`],
+      tags: ["catalog-events", `event-${slug}`, `event-gate-${slug}`],
     },
   )(),
 )

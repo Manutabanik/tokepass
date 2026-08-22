@@ -12,6 +12,10 @@ import {
 } from "@/components/ui/form"
 import { EventStudioDateTimeField } from "@/components/admin/events/event-studio-datetime-field"
 import { Input } from "@/components/ui/input"
+import {
+  STUDIO_CONTROL_CLASS,
+  STUDIO_LABEL_CLASS,
+} from "@/lib/admin/studio-form-styles"
 import type { EventFormValues } from "@/lib/validations/event-form"
 import { newScheduleDayId } from "@/lib/event-schedule"
 
@@ -47,7 +51,7 @@ export function ScheduleDaysBuilder({
             className="mb-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/60 p-4"
           >
             <div className="mb-3 flex items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-foreground/90">
+              <p className={STUDIO_LABEL_CLASS}>
                 Jornada {index + 1}
               </p>
               <Button
@@ -71,7 +75,7 @@ export function ScheduleDaysBuilder({
                   <FormItem>
                     <FormLabel
                       htmlFor={`schedule-day-${index}-title`}
-                      className="mb-1.5 text-sm font-semibold text-foreground/90"
+                      className={STUDIO_LABEL_CLASS}
                     >
                       Nombre de la jornada
                     </FormLabel>
@@ -83,7 +87,7 @@ export function ScheduleDaysBuilder({
                           ? "Día 1 - Noche de apertura"
                           : "Día 2 - Cierre"
                       }
-                      className="h-12 rounded-xl border-border/60 bg-muted/20 px-4 text-base transition-all focus:bg-background sm:h-13"
+                      className={STUDIO_CONTROL_CLASS}
                     />
                     <FormMessage>{fieldState.error?.message}</FormMessage>
                   </FormItem>
@@ -98,7 +102,7 @@ export function ScheduleDaysBuilder({
                     <FormItem>
                       <FormLabel
                         htmlFor={`schedule-day-${index}-start`}
-                        className="mb-1.5 text-sm font-semibold text-foreground/90"
+                        className={STUDIO_LABEL_CLASS}
                       >
                         Inicio
                       </FormLabel>
@@ -119,7 +123,7 @@ export function ScheduleDaysBuilder({
                     <FormItem>
                       <FormLabel
                         htmlFor={`schedule-day-${index}-end`}
-                        className="mb-1.5 text-sm font-semibold text-foreground/90"
+                        className={STUDIO_LABEL_CLASS}
                       >
                         Cierre
                       </FormLabel>

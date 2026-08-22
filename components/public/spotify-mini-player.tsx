@@ -21,14 +21,19 @@ export function SpotifyMiniPlayer() {
     ? spotifyArtistEmbedSrc(activeArtistSpotifyId)
     : null
 
-  if (isPublicEventStorefrontPath(pathname)) return null
   if (!src && !resolving) return null
 
   const label = artistName?.trim() || "artista"
+  const eventStorefront = isPublicEventStorefrontPath(pathname)
 
   return (
     <div
-      className="no-print fixed right-4 bottom-[7.5rem] left-4 z-30 lg:right-auto lg:bottom-6 lg:left-1/2 lg:w-[min(calc(100vw-1.5rem),28rem)] lg:-translate-x-1/2"
+      className={cn(
+        "no-print fixed right-4 left-4 z-40 lg:right-auto lg:bottom-6 lg:left-1/2 lg:w-[min(calc(100vw-1.5rem),28rem)] lg:-translate-x-1/2",
+        eventStorefront
+          ? "bottom-[calc(6.75rem+env(safe-area-inset-bottom))]"
+          : "bottom-[7.5rem]",
+      )}
       role="region"
       aria-label={`Reproductor de ${label}`}
     >

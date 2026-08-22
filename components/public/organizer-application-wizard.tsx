@@ -14,6 +14,7 @@ import {
 import Link from "next/link"
 import { useState } from "react"
 import { useForm } from "react-hook-form"
+import { toast } from "sonner"
 
 import { submitOrganizerApplication } from "@/app/actions/organizer-kyb"
 import { Button } from "@/components/ui/button"
@@ -51,7 +52,7 @@ export function OrganizerApplicationWizard({
   const form = useForm<OrganizerApplicationFormValues>({
     resolver: zodResolver(organizerApplicationSchema),
     defaultValues,
-    mode: "onBlur",
+    mode: "onChange",
   })
 
   if (initialStatus === "pending" || done) {
@@ -104,6 +105,10 @@ export function OrganizerApplicationWizard({
     const result = await submitOrganizerApplication(values)
     if (!result.success) {
       setError(result.error)
+      toast.error(result.error, {
+        description: "Revisá los datos marcados e intentá de nuevo.",
+        duration: 5000,
+      })
       return
     }
     setDone(true)
@@ -251,7 +256,7 @@ export function OrganizerApplicationWizard({
         )}
 
         {error ? (
-          <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-800 dark:text-red-200">
+          <p role="alert" className="text-xs font-medium text-red-500">
             {error}
           </p>
         ) : null}

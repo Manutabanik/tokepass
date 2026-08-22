@@ -3,6 +3,12 @@
 import { useEffect, useRef } from "react"
 import { Hash, Rows3, Table2 } from "lucide-react"
 
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { PriceInput } from "@/components/ui/price-input"
@@ -57,225 +63,234 @@ export function VenueParametricRulesPanel({
   }, [autoFocusName, zone.id])
 
   return (
-    <div className="space-y-3 rounded-xl border border-cyan-400/35 bg-cyan-400/8 p-3 ring-1 ring-cyan-300/15">
-      <div>
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-cyan-300">
-          Reglas de generación
-        </p>
-        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-          Solo se guarda el polígono y estas reglas. El mapa no crea cientos de
-          mesas dibujadas.
-        </p>
-      </div>
+    <Accordion
+      multiple
+      defaultValue={["datos", "distribucion"]}
+      className="rounded-xl border border-border px-3"
+    >
+      <AccordionItem value="datos" className="border-border">
+        <AccordionTrigger className="py-2.5 text-xs font-semibold tracking-wide uppercase hover:no-underline">
+          Datos
+        </AccordionTrigger>
+        <AccordionContent className="space-y-3 pb-3">
+          <Field label="Nombre del Sector">
+            <Input
+              ref={nameRef}
+              value={zone.name}
+              onChange={(event) => onChange({ name: event.target.value })}
+              placeholder="Campo Delantero, VIP Standing, Platea Sur"
+            />
+          </Field>
+          <Field label="Color del Sector">
+            <VenueSectorColorPicker
+              value={zone.color}
+              onChange={(color) => onChange({ color })}
+            />
+          </Field>
+          <Field label="Modalidad del sector">
+            <select
+              value={zone.seatingType ?? (zone.layoutType === "general" ? "GENERAL" : "RESERVED")}
+              onChange={(event) => {
+                const seatingType = event.target.value === "RESERVED" ? "RESERVED" : "GENERAL"
+                onChange(
+                  seatingFieldsForLayoutType(
+                    seatingType === "GENERAL"
+                      ? "general"
+                      : zone.layoutType === "numbered_seat"
+                        ? "numbered_seat"
+                        : "table_combo",
+                  ),
+                )
+              }}
+              className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
+            >
+              <option value="GENERAL">Entrada general (aforo)</option>
+              <option value="RESERVED">Numerado (mesas y sillas)</option>
+            </select>
+          </Field>
+          {(zone.seatingType ?? (zone.layoutType === "general" ? "GENERAL" : "RESERVED")) ===
+          "RESERVED" ? (
+            <Field label="Tipo de inventario">
+              <select
+                value={zone.layoutType === "numbered_seat" ? "numbered_seat" : "table_combo"}
+                onChange={(event) => {
+                  const layoutType = event.target.value as VenueMapZone["layoutType"]
+                  onChange(seatingFieldsForLayoutType(layoutType === "numbered_seat" ? "numbered_seat" : "table_combo"))
+                }}
+                className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
+              >
+                <option value="table_combo">Mesas / tablones</option>
+                <option value="numbered_seat">Butacas numeradas</option>
+              </select>
+            </Field>
+          ) : null}
+        </AccordionContent>
+      </AccordionItem>
 
-      <Field label="Nombre del Sector">
-        <Input
-          ref={nameRef}
-          value={zone.name}
-          onChange={(event) => onChange({ name: event.target.value })}
-          placeholder="Campo Delantero, VIP Standing, Platea Sur"
-        />
-      </Field>
-
-      <Field label="Color del Sector">
-        <VenueSectorColorPicker
-          value={zone.color}
-          onChange={(color) => onChange({ color })}
-        />
-      </Field>
-
-      <Field label="Precio Base">
-        <PriceInput
-          value={zone.price}
-          onValueChange={(value) => {
-            if (value == null) return
-            onChange({ price: value })
-          }}
-        />
-      </Field>
-
-      <Field label="Modalidad del sector">
-        <select
-          value={zone.seatingType ?? (zone.layoutType === "general" ? "GENERAL" : "RESERVED")}
-          onChange={(event) => {
-            const seatingType = event.target.value === "RESERVED" ? "RESERVED" : "GENERAL"
-            onChange(
-              seatingFieldsForLayoutType(
-                seatingType === "GENERAL"
-                  ? "general"
-                  : zone.layoutType === "numbered_seat"
-                    ? "numbered_seat"
-                    : "table_combo",
-              ),
-            )
-          }}
-          className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
-        >
-          <option value="GENERAL">Entrada general (aforo)</option>
-          <option value="RESERVED">Numerado (mesas y sillas)</option>
-        </select>
-      </Field>
-
-      {(zone.seatingType ?? (zone.layoutType === "general" ? "GENERAL" : "RESERVED")) ===
-      "RESERVED" ? (
-      <Field label="Tipo de inventario">
-        <select
-          value={zone.layoutType === "numbered_seat" ? "numbered_seat" : "table_combo"}
-          onChange={(event) => {
-            const layoutType = event.target.value as VenueMapZone["layoutType"]
-            onChange(seatingFieldsForLayoutType(layoutType === "numbered_seat" ? "numbered_seat" : "table_combo"))
-          }}
-          className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
-        >
-          <option value="table_combo">Mesas / tablones</option>
-          <option value="numbered_seat">Butacas numeradas</option>
-        </select>
-      </Field>
-      ) : null}
-
-      {isTableInventory ? (
-        <VenuePriceModeControl
-          id={zone.id}
-          value={zone.priceMode ?? venuePriceModeFromSellMode(zone.sellMode)}
-          onChange={(next) => onChange(next)}
-        />
-      ) : null}
-
-      {zone.layoutType === "general" ? (
-        <Field label="Capacidad Maxima">
-          <Input
-            type="number"
-            min={1}
-            max={100000}
-            value={zone.capacity}
-            onChange={(event) =>
-              onChange({ capacity: Number(event.target.value) || 1 })
-            }
-          />
-        </Field>
-      ) : (
-        <>
-          {isNumberedSeats ? (
+      <AccordionItem value="distribucion" className="border-border">
+        <AccordionTrigger className="py-2.5 text-xs font-semibold tracking-wide uppercase hover:no-underline">
+          Distribución
+        </AccordionTrigger>
+        <AccordionContent className="space-y-3 pb-3">
+          {zone.layoutType === "general" ? (
+            <Field label="Capacidad Maxima">
+              <Input
+                type="number"
+                min={1}
+                max={100000}
+                value={zone.capacity}
+                onChange={(event) =>
+                  onChange({ capacity: Number(event.target.value) || 1 })
+                }
+              />
+            </Field>
+          ) : (
             <>
-              <Field label="Cantidad de filas">
+              {isNumberedSeats ? (
+                <>
+                  <Field label="Cantidad de filas">
+                    <div className="relative">
+                      <Rows3
+                        className="pointer-events-none absolute top-1/2 left-2 size-4 -translate-y-1/2 text-cyan-300"
+                        aria-hidden="true"
+                      />
+                      <Input
+                        type="number"
+                        min={1}
+                        max={80}
+                        value={numberedRows.length}
+                        className="pl-8"
+                        onChange={(event) =>
+                          emitNumberedRows(
+                            resizeRowsConfig(
+                              numberedRows,
+                              Number(event.target.value) || 1,
+                            ),
+                          )
+                        }
+                      />
+                    </div>
+                  </Field>
+                  <VenueRowsConfigEditor
+                    rowsConfig={numberedRows}
+                    onChange={emitNumberedRows}
+                  />
+                </>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Cantidad de filas">
+                    <div className="relative">
+                      <Rows3
+                        className="pointer-events-none absolute top-1/2 left-2 size-4 -translate-y-1/2 text-cyan-300"
+                        aria-hidden="true"
+                      />
+                      <Input
+                        type="number"
+                        min={1}
+                        max={80}
+                        value={zone.rows}
+                        className="pl-8"
+                        onChange={(event) =>
+                          onChange({ rows: Number(event.target.value) || 1 })
+                        }
+                      />
+                    </div>
+                  </Field>
+                  <Field label="Mesas por fila">
+                    <div className="relative">
+                      <Table2
+                        className="pointer-events-none absolute top-1/2 left-2 size-4 -translate-y-1/2 text-cyan-300"
+                        aria-hidden="true"
+                      />
+                      <Input
+                        type="number"
+                        min={1}
+                        max={80}
+                        value={zone.itemsPerRow}
+                        className="pl-8"
+                        onChange={(event) =>
+                          onChange({ itemsPerRow: Number(event.target.value) || 1 })
+                        }
+                      />
+                    </div>
+                  </Field>
+                </div>
+              )}
+              {isTableInventory ? (
+                <Field label="Personas por mesa / tablón">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={zone.capacityPerUnit}
+                    onChange={(event) =>
+                      onChange({
+                        capacityPerUnit: Number(event.target.value) || 1,
+                      })
+                    }
+                  />
+                </Field>
+              ) : null}
+              <Field label="Numeración">
                 <div className="relative">
-                  <Rows3
+                  <Hash
                     className="pointer-events-none absolute top-1/2 left-2 size-4 -translate-y-1/2 text-cyan-300"
                     aria-hidden="true"
                   />
                   <Input
-                    type="number"
-                    min={1}
-                    max={80}
-                    value={numberedRows.length}
+                    value={zone.labelPrefix}
                     className="pl-8"
-                    onChange={(event) =>
-                      emitNumberedRows(
-                        resizeRowsConfig(
-                          numberedRows,
-                          Number(event.target.value) || 1,
-                        ),
-                      )
-                    }
+                    onChange={(event) => onChange({ labelPrefix: event.target.value })}
+                    placeholder={isNumberedSeats ? "Butaca " : "Mesa "}
                   />
                 </div>
               </Field>
-              <VenueRowsConfigEditor
-                rowsConfig={numberedRows}
-                onChange={emitNumberedRows}
-              />
             </>
-          ) : (
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="Cantidad de filas">
-              <div className="relative">
-                <Rows3
-                  className="pointer-events-none absolute top-1/2 left-2 size-4 -translate-y-1/2 text-cyan-300"
-                  aria-hidden="true"
-                />
-                <Input
-                  type="number"
-                  min={1}
-                  max={80}
-                  value={zone.rows}
-                  className="pl-8"
-                  onChange={(event) =>
-                    onChange({ rows: Number(event.target.value) || 1 })
-                  }
-                />
-              </div>
-            </Field>
-            <Field label="Mesas por fila">
-              <div className="relative">
-                <Table2
-                  className="pointer-events-none absolute top-1/2 left-2 size-4 -translate-y-1/2 text-cyan-300"
-                  aria-hidden="true"
-                />
-                <Input
-                  type="number"
-                  min={1}
-                  max={80}
-                  value={zone.itemsPerRow}
-                  className="pl-8"
-                  onChange={(event) =>
-                    onChange({ itemsPerRow: Number(event.target.value) || 1 })
-                  }
-                />
-              </div>
-            </Field>
-          </div>
           )}
-          {isTableInventory ? (
-            <Field label="Personas por mesa / tablón">
-              <Input
-                type="number"
-                min={1}
-                max={100}
-                value={zone.capacityPerUnit}
-                onChange={(event) =>
-                  onChange({
-                    capacityPerUnit: Number(event.target.value) || 1,
-                  })
-                }
-              />
-            </Field>
-          ) : null}
-          <Field label="Numeración">
-            <div className="relative">
-              <Hash
-                className="pointer-events-none absolute top-1/2 left-2 size-4 -translate-y-1/2 text-cyan-300"
-                aria-hidden="true"
-              />
-              <Input
-                value={zone.labelPrefix}
-                className="pl-8"
-                onChange={(event) => onChange({ labelPrefix: event.target.value })}
-                placeholder={isNumberedSeats ? "Butaca " : "Mesa "}
-              />
-            </div>
-          </Field>
-        </>
-      )}
+          <p className="rounded-lg bg-muted/60 px-3 py-2 text-sm text-muted-foreground">
+            Inventario estimado:{" "}
+            <span className="font-semibold text-foreground">
+              {units} {zone.layoutType === "numbered_seat" ? "butacas" : zone.layoutType === "general" ? "accesos" : "unidades"}
+            </span>
+            {zone.layoutType === "table_combo" ? (
+              <>
+                {" "}
+                · {estimated} personas
+              </>
+            ) : null}
+          </p>
+        </AccordionContent>
+      </AccordionItem>
 
-      <p className="rounded-lg bg-background/70 px-3 py-2 text-sm text-muted-foreground">
-        Inventario estimado:{" "}
-        <span className="font-semibold text-foreground">
-          {units} {zone.layoutType === "numbered_seat" ? "butacas" : zone.layoutType === "general" ? "accesos" : "unidades"}
-        </span>
-        {zone.layoutType === "table_combo" ? (
-          <>
-            {" "}
-            · {estimated} personas
-          </>
-        ) : null}
-        {zone.price > 0 ? (
-          <>
-            {" "}
-            · {formatCurrency(zone.price)}
-          </>
-        ) : null}
-      </p>
-    </div>
+      <AccordionItem value="tarifas" className="border-border">
+        <AccordionTrigger className="py-2.5 text-xs font-semibold tracking-wide uppercase hover:no-underline">
+          Tarifas
+        </AccordionTrigger>
+        <AccordionContent className="space-y-3 pb-3">
+          <Field label="Precio Base">
+            <PriceInput
+              value={zone.price}
+              onValueChange={(value) => {
+                if (value == null) return
+                onChange({ price: value })
+              }}
+            />
+          </Field>
+          {isTableInventory ? (
+            <VenuePriceModeControl
+              id={zone.id}
+              value={zone.priceMode ?? venuePriceModeFromSellMode(zone.sellMode)}
+              onChange={(next) => onChange(next)}
+            />
+          ) : null}
+          {zone.price > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Precio publicado: {formatCurrency(zone.price)}
+            </p>
+          ) : null}
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
   )
 }
 

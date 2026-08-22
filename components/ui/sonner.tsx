@@ -3,11 +3,6 @@
 import { useEffect } from "react"
 import { toast, Toaster as Sonner, type ToasterProps } from "sonner"
 
-import {
-  CHECKOUT_SOLD_OUT_DESCRIPTION,
-  CHECKOUT_SOLD_OUT_TITLE,
-  isBuyerSoldOutToast,
-} from "@/lib/checkout/revalidate-seat-holds"
 import { isAppErrorCode } from "@/lib/errors/app-error"
 import { dispatchGuidedError, mapUnknownError } from "@/lib/errors/error-handler"
 import { cn } from "@/lib/utils"
@@ -40,14 +35,6 @@ export function Toaster({ className, ...props }: ToasterProps) {
       const rawTitle = typeof message === "string" ? message.trim() : ""
       const rawDescription =
         data && typeof data === "object" ? data.description : undefined
-      if (
-        isBuyerSoldOutToast(rawTitle) ||
-        (typeof rawDescription === "string" && isBuyerSoldOutToast(rawDescription))
-      ) {
-        return originalError(CHECKOUT_SOLD_OUT_TITLE, {
-          description: CHECKOUT_SOLD_OUT_DESCRIPTION,
-        })
-      }
       const mappedTitle = mapUnknownError(message)
       const mappedDescription =
         typeof rawDescription === "string"

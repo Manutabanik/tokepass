@@ -21,6 +21,15 @@ const seatId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
 const seatedTierId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
 
 describe("CheckoutPayloadSchema mixed inventory", () => {
+  it("allows a free-order buyer without phone", () => {
+    const parsed = CheckoutPayloadSchema.safeParse({
+      eventId,
+      buyer: { ...buyer, phone: "" },
+      items: [{ tierId: generalId, quantity: 1 }],
+    })
+    assert.equal(parsed.success, true)
+  })
+
   it("allows one numbered seat plus general and addon lines", () => {
     const parsed = CheckoutPayloadSchema.safeParse({
       eventId,
@@ -121,6 +130,45 @@ describe("CheckoutPayloadSchema mixed inventory", () => {
     assert.equal(parsed.data.items?.[1]?.seatingUnitId, seatId)
   })
 
+  it("allows a map zone without seat_id", () => {
+    const parsed = CheckoutPayloadSchema.safeParse({
+      eventId,
+      buyer,
+      items: [
+        {
+          type: "general",
+          ticket_tier_id: generalId,
+          quantity: 3,
+          sectorKey: "campo",
+          has_map: true,
+          is_numbered: false,
+        },
+      ],
+    })
+    assert.equal(parsed.success, true)
+    if (!parsed.success) return
+    assert.equal(parsed.data.items?.[0]?.type, "general")
+    assert.equal(parsed.data.items?.[0]?.seat_id, undefined)
+    assert.equal(parsed.data.items?.[0]?.is_numbered, false)
+  })
+
+  it("allows a general zone sent as mapped without seat_id", () => {
+    const parsed = CheckoutPayloadSchema.safeParse({
+      eventId,
+      buyer,
+      items: [
+        {
+          type: "mapped",
+          ticket_tier_id: generalId,
+          quantity: 1,
+          has_map: true,
+          is_numbered: false,
+        },
+      ],
+    })
+    assert.equal(parsed.success, true)
+  })
+
   it("rejects a mapped item without seat_id or element_id", () => {
     const parsed = CheckoutPayloadSchema.safeParse({
       eventId,
@@ -136,14 +184,7 @@ describe("CheckoutPayloadSchema mixed inventory", () => {
     assert.equal(parsed.success, false)
   })
 
-  it("rejects a 9-digit DNI and a missing phone", () => {
-    const withoutPhone = CheckoutPayloadSchema.safeParse({
-      eventId,
-      buyer: { ...buyer, phone: "" },
-      items: [{ tierId: generalId, quantity: 1 }],
-    })
-    assert.equal(withoutPhone.success, false)
-
+  it("rejects a 9-digit DNI", () => {
     const longDni = CheckoutPayloadSchema.safeParse({
       eventId,
       buyer: { ...buyer, dni: "123456789" },

@@ -119,6 +119,7 @@ export function CheckoutPaymentForm({
           shakeSignal={fieldShake}
           onChange={onBuyerChange}
           disabled={controlsLocked}
+          requirePhone={finalTotal > 0}
         />
       </form>
     )

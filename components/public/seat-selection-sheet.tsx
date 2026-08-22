@@ -1,9 +1,9 @@
 "use client"
 
-import { Component, type ErrorInfo, type ReactNode, useEffect, useMemo, useState } from "react"
-import { Minus, Plus } from "lucide-react"
+import { Component, type ErrorInfo, type ReactNode, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 
+import { QuantityCounter } from "@/components/public/quantity-counter"
 import { InteractiveMapViewer } from "@/components/public/interactive-map-viewer"
 import { Button } from "@/components/ui/button"
 import {
@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useLockBodyScroll } from "@/hooks/use-lock-body-scroll"
 import {
+  mapPlaceSelectionCap,
   resolvePurchaseLimit,
   storefrontLimitMessage,
 } from "@/lib/checkout-limits"
@@ -44,6 +45,7 @@ import type {
   SeatStatus,
 } from "@/lib/seating/universal-seat-types"
 import { resolveEffectiveSeatingType } from "@/lib/seating/seating-type"
+import { sectorUsesNumberedMap } from "@/lib/seating/venue-map-pricing"
 import {
   elementInventorySectorId,
   flattenSeatsForAvailability,
@@ -78,6 +80,7 @@ export type SeatSelectionContext = {
     sectorId: string
     sectorName: string
     available: number
+    total?: number
     tierId?: string | null
   }>
 }
@@ -159,12 +162,38 @@ export function SeatSelectionSheet({
   const selectedItems = useStorefrontSeatStore((state) => state.selectedItems)
   const placeCount = storefrontSelectionCount(selectedItems)
   const placeTotal = storefrontSelectionTotal(selectedItems)
-  const canConfirm = placeCount > 0
+  const numberedSector = sectorUsesNumberedMap({
+    seatingSectorId: sectorId,
+    map: context.map,
+    sectors: context.sectors,
+  })
+  const numberedPlaces = selectedItems.filter(
+    (item) => item.type === "seat" || item.type === "table",
+  )
+  const zoneCount = storefrontSelectionCount(
+    selectedItems.filter(
+      (item) => item.type === "zone" || item.type === "standing",
+    ),
+  )
+  const selectedQuantity =
+    numberedSector && zoneCount <= 0
+      ? numberedPlaces.length
+      : Math.max(placeCount, zoneCount)
+  const isValidSelection = selectedQuantity > 0
 
   useLockBodyScroll(open)
 
   function handleConfirm() {
-    if (!canConfirm || pending) return
+    if (pending) return
+    if (numberedSector && zoneCount <= 0) {
+      if (numberedPlaces.length === 0) {
+        toast.error("Debes seleccionar un asiento o mesa específica.")
+        return
+      }
+    } else if (selectedQuantity <= 0) {
+      toast.error("Debes indicar cuántas entradas querés para esta zona.")
+      return
+    }
     context.onConfirmed()
     onOpenChange(false)
   }
@@ -204,7 +233,7 @@ export function SeatSelectionSheet({
         </SeatModalErrorBoundary>
 
         <div className="sticky bottom-0 z-10 mt-auto shrink-0 border-t border-border bg-card px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
-          {canConfirm ? (
+          {isValidSelection ? (
             <p className="mb-3 text-center text-sm font-semibold leading-snug text-foreground">
               {formatAssistantLine(selectedItems, placeTotal)}
             </p>
@@ -215,14 +244,16 @@ export function SeatSelectionSheet({
           )}
           <Button
             type="button"
-            disabled={!canConfirm || pending}
+            disabled={!isValidSelection || pending}
             onClick={handleConfirm}
             className={cn(
               tapFeedbackClass,
               "h-auto w-full rounded-2xl bg-emerald-600 py-3.5 text-base font-bold text-white hover:bg-emerald-700",
             )}
           >
-            Confirmar selección
+            {isValidSelection
+              ? `Confirmar ${selectedQuantity} ${selectedQuantity === 1 ? "lugar" : "lugares"}`
+              : "Seleccioná un lugar para continuar"}
           </Button>
         </div>
       </SheetContent>
@@ -288,12 +319,7 @@ function SeatSelectionModalInner({
     if (sectorId) {
       return sectors.find((sector) => sector.id === sectorId) ?? null
     }
-    return (
-      sectors.find((item) => item.kind === "numbered" && !item.soldOut) ??
-      sectors.find((item) => !item.soldOut) ??
-      sectors[0] ??
-      null
-    )
+    return null
   }, [sectorId, sectors])
 
   const targetZone = (context.map?.zones ?? []).find(
@@ -321,6 +347,11 @@ function SeatSelectionModalInner({
   }, [context.map, mapSeats, selectedSectorName, targetSector, targetZone])
 
   const isTableSector = assignMeta.isTableSector
+  const placeSelectionCap = mapPlaceSelectionCap({
+    layoutType: targetZone?.layoutType ?? (isTableSector ? "table_combo" : null),
+    fallbackMax: maxTicketsPerUser,
+    isTable: isTableSector,
+  })
   const seatingType = targetZone
     ? resolveEffectiveSeatingType(targetZone, context.map)
     : targetSector?.seatingType
@@ -331,11 +362,34 @@ function SeatSelectionModalInner({
   })
   const seatsPerTable =
     targetZone?.capacityPerUnit || assignMeta.capacityPerUnit || 0
-  const isGeneralAdmission =
-    inventoryType === "GENERAL_ADMISSION" &&
-    (seatingType === "GENERAL" ||
-      selectionMode === "counter" ||
+  const isGaSector =
+    Boolean(focusedSectorId) &&
+    (inventoryType === "GENERAL_ADMISSION" ||
+      seatingType === "GENERAL" ||
       targetSector?.kind === "ga")
+  const isGeneralAdmission = isGaSector && selectionMode === "counter"
+  const zoneAvailable = (() => {
+    const summary = context.sectorSummaries?.find(
+      (row) =>
+        row.sectorId === focusedSectorId ||
+        (selectedSectorName &&
+          row.sectorName.trim().toLowerCase() ===
+            selectedSectorName.trim().toLowerCase()),
+    )
+    if (typeof summary?.available === "number") {
+      return Math.max(0, summary.available)
+    }
+    const capacity = Math.floor(Number(targetZone?.capacity) || 0)
+    return capacity > 0 ? capacity : null
+  })()
+  const maxPeople = Math.max(
+    0,
+    Math.min(
+      resolvePurchaseLimit(maxTicketsPerUser) ?? 20,
+      zoneAvailable ?? resolvePurchaseLimit(maxTicketsPerUser) ?? 20,
+    ),
+  )
+  const hasZoneStock = maxPeople > 0
 
   const fallbackPrice =
     (focusedSectorId ? context.priceBySectorId[focusedSectorId] : undefined) ??
@@ -362,23 +416,58 @@ function SeatSelectionModalInner({
   )
 
   const focusedMap = useMemo(() => {
-    if (!context.map || !focusedSectorId) return context.map
+    if (!context.map) return context.map
+    if (!sectorId || !focusedSectorId) return context.map
     return isolateSectorMap(context.map, focusedSectorId)
-  }, [context.map, focusedSectorId])
+  }, [context.map, focusedSectorId, sectorId])
 
   const isLoadingPlaces = loading || (open && !context.map)
+  const assignZoneQuantity = context.onAssignZoneQuantity
+  const assignZoneQuantityRef = useRef(assignZoneQuantity)
+  const seededSectorRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!open) return
+    assignZoneQuantityRef.current = assignZoneQuantity
+  }, [assignZoneQuantity])
+
+  useEffect(() => {
+    if (!open) {
+      seededSectorRef.current = null
+      return
+    }
     const timer = window.setTimeout(() => {
       const store = useStorefrontSeatStore.getState()
-      const existing = storefrontSelectionCount(store.selectedItems)
-      setPeopleCount(Math.max(1, existing || 1))
+      const scopedItems = focusedSectorId
+        ? store.selectedItems.filter(
+            (item) =>
+              item.id === focusedSectorId ||
+              item.sectorId === focusedSectorId,
+          )
+        : store.selectedItems
+      const existing = storefrontSelectionCount(scopedItems)
+      const nextQty = Math.max(1, existing || 1)
+      setPeopleCount(nextQty)
       const ids = store.selectedItems.map((item) => item.id)
       if (ids.length > 0) store.pulseFocus(ids)
+      if (
+        (selectionMode === "counter" || isGaSector) &&
+        existing <= 0 &&
+        focusedSectorId &&
+        hasZoneStock &&
+        seededSectorRef.current !== focusedSectorId
+      ) {
+        seededSectorRef.current = focusedSectorId
+        assignZoneQuantityRef.current(focusedSectorId, 1)
+      }
     }, 0)
     return () => window.clearTimeout(timer)
-  }, [open])
+  }, [
+    focusedSectorId,
+    hasZoneStock,
+    isGaSector,
+    open,
+    selectionMode,
+  ])
 
   function handleTogglePlace(seatId: string) {
     if (pending || !context.map) return
@@ -392,7 +481,7 @@ function SeatSelectionModalInner({
     if (element && (isTablePurchaseSku(element) || element.type === "standing_zone")) {
       const item = storefrontItemFromElement(element, context.priceBySectorId)
       if (!item) return
-      const result = store.toggleSelectedItem(item, maxTicketsPerUser)
+      const result = store.toggleSelectedItem(item, placeSelectionCap)
       if (!result.ok) {
         toast.error(storefrontLimitMessage(result.reason))
         return
@@ -403,7 +492,7 @@ function SeatSelectionModalInner({
     if (tableParent) {
       const item = storefrontItemFromElement(tableParent, context.priceBySectorId)
       if (!item) return
-      const result = store.toggleSelectedItem(item, maxTicketsPerUser)
+      const result = store.toggleSelectedItem(item, placeSelectionCap)
       if (!result.ok) {
         toast.error(storefrontLimitMessage(result.reason))
         return
@@ -416,7 +505,7 @@ function SeatSelectionModalInner({
     if (zone) {
       const item = storefrontItemFromZone(zone, context.priceBySectorId)
       if (!item) return
-      const result = store.toggleSelectedItem(item, maxTicketsPerUser)
+      const result = store.toggleSelectedItem(item, placeSelectionCap)
       if (!result.ok) {
         toast.error(storefrontLimitMessage(result.reason))
         return
@@ -438,7 +527,7 @@ function SeatSelectionModalInner({
         color: source.color,
         label: source.label,
       },
-      maxTicketsPerUser,
+      placeSelectionCap,
     )
     if (!result.ok) {
       toast.error(storefrontLimitMessage(result.reason))
@@ -450,23 +539,29 @@ function SeatSelectionModalInner({
   if (isGeneralAdmission) {
     return (
       <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
-        <GeneralAdmissionPicker
-          pending={pending}
-          peopleCount={peopleCount}
-          maxPeople={resolvePurchaseLimit(maxTicketsPerUser) ?? 20}
-          sectorName={selectedSectorName}
-          inventoryType={inventoryType}
-          seatsPerTable={seatsPerTable}
-          unitKind="ticket"
-          onChange={(next) => {
-            setPeopleCount(next)
-            if (targetSector) {
-              context.onAssignZoneQuantity(targetSector.id, next)
-            } else if (targetZone) {
-              context.onAssignZoneQuantity(targetZone.id, next)
-            }
-          }}
-        />
+        {hasZoneStock ? (
+          <GeneralAdmissionPicker
+            pending={pending}
+            peopleCount={peopleCount}
+            maxPeople={maxPeople}
+            sectorName={selectedSectorName}
+            inventoryType={inventoryType}
+            seatsPerTable={seatsPerTable}
+            unitKind="ticket"
+            onChange={(next) => {
+              setPeopleCount(next)
+              if (targetSector) {
+                context.onAssignZoneQuantity(targetSector.id, next)
+              } else if (targetZone) {
+                context.onAssignZoneQuantity(targetZone.id, next)
+              }
+            }}
+          />
+        ) : (
+          <p className="px-1 py-10 text-center text-sm text-muted-foreground">
+            No hay lugares disponibles
+          </p>
+        )}
       </div>
     )
   }
@@ -474,7 +569,7 @@ function SeatSelectionModalInner({
   return (
     <Tabs
       key={`${open}-${focusedSectorId ?? "sector"}`}
-      defaultValue="lista"
+      defaultValue={selectionMode === "map" ? "mapa" : "lista"}
       className="flex min-h-0 flex-1 flex-col gap-0"
     >
       <div className="shrink-0 border-b border-border px-4 pt-3">
@@ -498,6 +593,34 @@ function SeatSelectionModalInner({
         value="lista"
         className="no-scrollbar mt-0 min-h-0 flex-1 overflow-y-auto overscroll-contain p-4"
       >
+        {isGaSector && hasZoneStock ? (
+          <GeneralAdmissionPicker
+            pending={pending}
+            peopleCount={peopleCount}
+            maxPeople={maxPeople}
+            sectorName={selectedSectorName}
+            inventoryType={inventoryType}
+            seatsPerTable={seatsPerTable}
+            unitKind="ticket"
+            onChange={(next) => {
+              setPeopleCount(next)
+              if (targetSector) {
+                context.onAssignZoneQuantity(targetSector.id, next)
+              } else if (targetZone) {
+                context.onAssignZoneQuantity(targetZone.id, next)
+              }
+            }}
+          />
+        ) : isGaSector ? (
+          <p className="px-1 py-10 text-center text-sm text-muted-foreground">
+            No hay lugares disponibles
+          </p>
+        ) : !focusedSectorId ? (
+          <p className="px-1 py-10 text-center text-sm text-muted-foreground">
+            Elegí un sector en el mapa para continuar.
+          </p>
+        ) : (
+          <>
         <div className="mb-4 text-center">
           <h3 className="text-lg font-bold text-foreground">
             {selectedSectorName}
@@ -539,6 +662,8 @@ function SeatSelectionModalInner({
             ))}
           </div>
         )}
+          </>
+        )}
       </TabsContent>
 
       <TabsContent
@@ -557,7 +682,7 @@ function SeatSelectionModalInner({
             selectedZoneId={focusedSectorId}
             unavailableZoneIds={context.unavailableZoneIds}
             heldSeatIds={context.heldSeatIds}
-            maxSelectable={maxTicketsPerUser ?? undefined}
+            maxSelectable={placeSelectionCap}
             onSelectZone={context.onSelectZone}
             className="h-full min-h-[16rem] md:h-full"
           />
@@ -684,10 +809,7 @@ function formatAssistantLine(
   const names = groups
     .map((group) => group.placeLabel || group.label)
     .filter((name) => name.trim().length > 0)
-  const accesses = items.reduce(
-    (sum, item) => sum + Math.max(1, Math.floor(item.capacity) || 1),
-    0,
-  )
+  const accesses = storefrontSelectionCount(items)
   const ticketLabel = accesses === 1 ? "1 entrada" : `${accesses} entradas`
   const heading = names.join(" · ") || "Selección"
   return `${heading} · ${ticketLabel} · ${formatTicketPrice(total)}`
@@ -780,34 +902,18 @@ function GeneralAdmissionPicker({
         inventoryType={inventoryType}
         seatsPerTable={seatsPerTable}
       />
-      <div className="flex items-center gap-3 rounded-full bg-secondary/50 px-1 py-1">
-        <button
-          type="button"
-          disabled={pending || peopleCount <= 1}
-          onClick={() => onChange(Math.max(1, peopleCount - 1))}
-          className={cn(
-            tapFeedbackClass,
-            "flex size-12 items-center justify-center rounded-full hover:bg-background disabled:opacity-40",
-          )}
-          aria-label="Quitar"
-        >
-          <Minus className="size-4" />
-        </button>
-        <span className="min-w-16 text-center text-lg font-black tabular-nums">
+      <div className="flex flex-col items-center gap-2">
+        <QuantityCounter
+          quantity={peopleCount}
+          min={1}
+          max={maxPeople}
+          disabled={pending}
+          onDecrease={() => onChange(Math.max(1, peopleCount - 1))}
+          onIncrease={() => onChange(Math.min(maxPeople, peopleCount + 1))}
+        />
+        <p className="text-sm font-semibold text-muted-foreground">
           {quantityUnitLabel(peopleCount, unitKind)}
-        </span>
-        <button
-          type="button"
-          disabled={pending || peopleCount >= maxPeople}
-          onClick={() => onChange(Math.min(maxPeople, peopleCount + 1))}
-          className={cn(
-            tapFeedbackClass,
-            "flex size-12 items-center justify-center rounded-full hover:bg-background disabled:opacity-40",
-          )}
-          aria-label="Agregar"
-        >
-          <Plus className="size-4" />
-        </button>
+        </p>
       </div>
     </div>
   )

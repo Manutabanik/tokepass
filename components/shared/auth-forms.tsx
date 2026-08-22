@@ -2,8 +2,9 @@
 
 import { LoaderCircle, Mail } from "lucide-react"
 import Link from "next/link"
-import { useActionState } from "react"
+import { useActionState, useEffect } from "react"
 import { useFormStatus } from "react-dom"
+import { toast } from "sonner"
 
 import {
   signInWithGoogle,
@@ -21,7 +22,7 @@ const initialState: AuthActionState = {
 }
 
 const AUTH_INPUT_CLASS =
-  "h-12 min-h-12 rounded-xl border-border bg-background px-4 py-3.5 text-base text-foreground placeholder:text-muted-foreground focus-visible:border-violet-500/80 focus-visible:ring-2 focus-visible:ring-violet-500/20"
+  "h-12 min-h-12 rounded-xl border-border bg-background px-4 py-3.5 text-base text-foreground placeholder:text-muted-foreground focus-visible:border-violet-500/80 focus-visible:ring-2 focus-visible:ring-violet-500/20 aria-invalid:border-red-500 aria-invalid:ring-2 aria-invalid:ring-red-500/20"
 
 function MagicLinkSubmit() {
   const { pending } = useFormStatus()
@@ -75,12 +76,18 @@ function GoogleSubmitButton() {
 }
 
 function ActionMessage({ state }: { state: AuthActionState }) {
+  useEffect(() => {
+    if (state.error) {
+      toast.error(state.error, { duration: 5000 })
+    }
+    if (state.success) {
+      toast.success(state.success, { duration: 5000 })
+    }
+  }, [state.error, state.success])
+
   if (state.error) {
     return (
-      <p
-        role="alert"
-        className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-sm text-red-700 dark:text-red-300"
-      >
+      <p role="alert" className="text-xs font-medium text-red-500">
         {state.error}
       </p>
     )
@@ -88,10 +95,7 @@ function ActionMessage({ state }: { state: AuthActionState }) {
 
   if (state.success) {
     return (
-      <p
-        role="status"
-        className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2.5 text-sm text-emerald-800 dark:text-emerald-300"
-      >
+      <p role="status" className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
         {state.success}
       </p>
     )
@@ -169,6 +173,7 @@ export function AuthForms({
               placeholder="tu@email.com"
               autoComplete="email"
               required
+              aria-invalid={Boolean(visibleState.error)}
               className={AUTH_INPUT_CLASS}
             />
           </div>

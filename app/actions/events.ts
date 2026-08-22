@@ -1,6 +1,7 @@
 "use server"
 
-import { revalidatePath, revalidateTag } from "next/cache"
+import { revalidatePath } from "next/cache"
+import { revalidatePublicEventCache } from "@/lib/events/revalidate-public-event"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 import {
@@ -25,10 +26,10 @@ import {
   performanceTimeToInput,
 } from "@/lib/artists"
 import { parseEventLineup } from "@/lib/event-lineup"
+import { persistTicketDayId } from "@/lib/inventory/day-ticket-coverage"
 import {
-  persistTicketDayId,
-  scheduleDaysMissingTicketsMessage,
-} from "@/lib/inventory/day-ticket-coverage"
+  validateEventCompleteness as runEventPublishCheck,
+} from "@/lib/events/validate-event-publish"
 import {
   isMissingSaleWindowSchema,
   saleWindowToFormValue,
@@ -39,7 +40,6 @@ import {
   normalizeScheduleDaysFromForm,
   parseDateTimeLocal,
   parseScheduleDays,
-  remapBoundDayId,
   scheduleDaysToFormValues,
   toDatetimeLocalInput,
 } from "@/lib/event-schedule"
@@ -89,7 +89,11 @@ import { resolvePurchaseLimit } from "@/lib/checkout-limits"
 import { asUuidOrNull } from "@/lib/validations/relation-id"
 import type { Database, Event, EventStatus, Json, Venue } from "@/types/database"
 import { computeEventCapacityFromForm } from "@/lib/inventory/capacity-budget"
-import { parseVenueMap, serializeVenueMap } from "@/types/venue-map"
+import {
+  parseVenueMap,
+  serializeVenueMap,
+  type InteractiveVenueMap,
+} from "@/types/venue-map"
 import {
   venueMapHasInventory,
   venueMapToSeatingLayout,
@@ -108,7 +112,10 @@ import {
 import {
   applyMapCapacityToTickets,
   consolidateEventTicketsForPersist,
+  layoutTypeForMapSectorId,
+  priceGroupSectorId,
 } from "@/lib/seating/venue-map-pricing"
+import { listVenuePriceGroups } from "@/lib/seating/venue-price-groups"
 import {
   listAssignableGeneralSectors,
   logicalSectorId,
@@ -122,6 +129,7 @@ import { writeSecurityAuditLog } from "@/lib/security/audit-log"
 import { mapUnknownError } from "@/lib/errors/error-handler"
 import type { AppErrorCode } from "@/lib/errors/app-error"
 import { fieldFromAppError } from "@/lib/errors/form-field"
+import { actionHintFromError } from "@/lib/errors/guided-action"
 import {
   summarizeVenueMapSkuConflicts,
   validateVenueMapSkuConsistency,
@@ -327,6 +335,9 @@ export type CreateCompleteEventRpcPayload = {
     bundle_type?: string | null
     bundle_items?: Array<{ tier_id: string; quantity: number }>
     list_price?: number | null
+    is_free?: boolean
+    is_active?: boolean
+    event_day_id?: string | null
   }>
   rrpp_commission: number | null
   addons_enabled: boolean
@@ -372,6 +383,11 @@ function formDateToIso(value: string | null | undefined, fallback: string): stri
 function positiveInventoryCapacity(value: unknown): number {
   const parsed = Math.floor(Number(value))
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 1
+}
+
+function persistablePublicPrice(value: unknown): number {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0
 }
 
 function mapEventFormToRpcPayload(
@@ -570,10 +586,12 @@ function mapEventFormToRpcPayload(
         venueMap: data.venue.venueMap,
       })
       const capacity = positiveInventoryCapacity(tier.capacity)
+      const publicPrice = persistablePublicPrice(breakdown.publicPrice)
+      const isActive = (tier.visibility ?? "public") !== "private"
       return {
         ...(tier.id ? { id: tier.id } : {}),
         name: tier.name,
-        price: breakdown.publicPrice,
+        price: publicPrice,
         base_price: breakdown.basePrice,
         platform_fee: breakdown.platformFee,
         capacity,
@@ -583,7 +601,10 @@ function mapEventFormToRpcPayload(
         bonus_reward: tier.bonusReward?.trim() ? tier.bonusReward : null,
         zone_index: zoneIndexForSectorId(logicalZones, seatingSectorId),
         day_id: dayId,
+        event_day_id: dayId,
         visibility: tier.visibility ?? "public",
+        is_free: publicPrice === 0,
+        is_active: isActive,
         layout_type: layoutType,
         seating_sector_id: seatingSectorId,
         sector_id: seatingSectorId,
@@ -883,6 +904,55 @@ async function persistEventVenueFields(
   return { venueId }
 }
 
+/** Paso 1 / autosave de identidad: lugar y dirección, sin tocar mapa ni aforo. */
+async function persistEventIdentityVenueLabel(
+  client: SupabaseClient<Database>,
+  eventId: string,
+  data: EventFormValues,
+  currentVenueId: string | null,
+): Promise<string | null> {
+  if (isOnlineDelivery(data.basics.deliveryMode)) {
+    return persistEventDeliveryProfile(client, eventId, data)
+  }
+  const place = composeVenuePlace({
+    street: data.venue.venueLocation,
+    department: data.venue.department,
+    province: data.venue.province,
+    city: data.venue.venueCity,
+  })
+  const venueName = normalizeExactVenueName(data.venue.venueName)
+  const location = place.display || venueName
+  const venueId =
+    data.venue.existingVenueId?.trim() || currentVenueId || null
+  if (!location && !venueId) return null
+
+  const patch = {
+    ...(location ? { location } : {}),
+    ...(venueId ? { venue_id: venueId } : {}),
+    province: data.venue.province?.trim() || null,
+    department: data.venue.department?.trim() || null,
+    updated_at: new Date().toISOString(),
+  }
+  const written = await client.from("events").update(patch as never).eq("id", eventId)
+  if (
+    written.error &&
+    /province|department|schema cache|PGRST204|42703/i.test(written.error.message)
+  ) {
+    const retry = await client
+      .from("events")
+      .update({
+        ...(location ? { location } : {}),
+        ...(venueId ? { venue_id: venueId } : {}),
+        updated_at: patch.updated_at,
+      } as never)
+      .eq("id", eventId)
+    if (retry.error) return retry.error.message
+    return null
+  }
+  if (written.error) return written.error.message
+  return null
+}
+
 async function persistEventSchedule(
   client: SupabaseClient<Database>,
   eventId: string,
@@ -1012,27 +1082,18 @@ async function persistEventMaxTicketsPerUser(
 async function revalidatePersistedEvent(
   client: SupabaseClient<Database>,
   eventId: string,
+  previousSlug?: string | null,
 ) {
   const { data } = await client
     .from("events")
     .select("slug")
     .eq("id", eventId)
     .maybeSingle()
-  const slug = String(data?.slug ?? "").trim()
-  revalidatePath("/admin/events")
-  revalidatePath(`/admin/events/${eventId}`)
-  revalidatePath(`/admin/events/${eventId}/edit`)
-  revalidatePath(`/events/${eventId}`)
-  revalidatePath(`/events/preview/${eventId}`)
-  revalidatePath("/events")
-  revalidatePath("/eventos")
-  if (slug) {
-    revalidatePath(`/eventos/${slug}`)
-    revalidatePath(`/e/${slug}`)
-    revalidateTag(`event-${slug}`, "max")
-    revalidateTag(`event-gate-${slug}`, "max")
-  }
-  revalidateTag("catalog-events", "max")
+  revalidatePublicEventCache({
+    eventId,
+    slug: data?.slug,
+    previousSlug,
+  })
 }
 
 function persistErrorMessage(error: unknown): string {
@@ -1051,6 +1112,7 @@ function persistFailure(error: unknown): {
   code: AppErrorCode
   title?: string
   field?: string
+  actionHint?: string
   wizardConflict?: WizardConflict
 } {
   console.error("SUPABASE_ERROR:", error)
@@ -1069,6 +1131,7 @@ function persistFailure(error: unknown): {
     code,
     title: mapped.title,
     ...(field ? { field } : {}),
+    actionHint: actionHintFromError(mapped),
     ...(mapped.action
       ? {
           wizardConflict: {
@@ -1268,12 +1331,23 @@ async function persistEventIdentityOnly(input: {
   )
   if (!lineupError.success) return persistFailure(lineupError.error)
 
+  const formValues = input.formValues as EventFormValues
+  const venueLabelError = await persistEventIdentityVenueLabel(
+    input.mutationClient,
+    input.eventId,
+    formValues,
+    input.venueId,
+  )
+  if (venueLabelError) return persistFailure(venueLabelError)
+  const venueId =
+    formValues.venue.existingVenueId?.trim() || input.venueId
+
   await revalidatePersistedEvent(input.mutationClient, input.eventId)
 
   return {
     success: true,
     eventId: input.eventId,
-    venueId: input.venueId,
+    venueId,
   }
 }
 
@@ -1510,6 +1584,118 @@ async function resyncEventSeatingUnitsAfterMapSave(
   eventId: string,
 ): Promise<string | null> {
   return materializeEventSeatingUnits(client, eventId)
+}
+
+function normalizeSectorLabel(value: string | null | undefined) {
+  return (value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/^sector\s+/, "")
+}
+
+async function syncMapBackedTiersAfterMapSave(
+  client: SupabaseClient<Database>,
+  eventId: string,
+  map: InteractiveVenueMap,
+): Promise<string | null> {
+  if (!venueMapHasInventory(map)) return null
+  const { data: tiers, error } = await client
+    .from("ticket_tiers")
+    .select("id, name, seating_sector_id, layout_type, capacity, sold, capacity_per_unit")
+    .eq("event_id", eventId)
+  if (error) return error.message
+
+  const groups = listVenuePriceGroups(map)
+  const linked = (tiers ?? []).map((tier) => {
+    const existing = (tier.seating_sector_id ?? "").trim()
+    if (existing) {
+      return { ...tier, seatingSectorId: existing }
+    }
+    const name = normalizeSectorLabel(tier.name)
+    const group = groups.find(
+      (item) => normalizeSectorLabel(item.name) === name,
+    )
+    return {
+      ...tier,
+      seatingSectorId: group ? priceGroupSectorId(group) : null,
+    }
+  })
+
+  const healed = applyMapCapacityToTickets(linked, map)
+  for (const tier of healed) {
+    const sectorId = (tier.seatingSectorId ?? "").trim()
+    if (!sectorId) continue
+    const layoutType =
+      layoutTypeForMapSectorId(map, sectorId) ?? tier.layout_type
+    if (layoutType !== "numbered_seat" && layoutType !== "table_combo") {
+      continue
+    }
+    const sold = Math.max(0, Number(tier.sold) || 0)
+    const capacity = Math.max(1, Number(tier.capacity) || 1, sold)
+    const { error: updateError } = await client
+      .from("ticket_tiers")
+      .update({
+        seating_sector_id: sectorId,
+        layout_type: layoutType,
+        capacity,
+        capacity_per_unit: Math.max(1, Number(tier.capacity_per_unit) || 1),
+      } as never)
+      .eq("id", tier.id)
+      .eq("event_id", eventId)
+    if (updateError) return updateError.message
+  }
+  return null
+}
+
+async function syncTicketCapacityFromSeatingUnits(
+  client: SupabaseClient<Database>,
+  eventId: string,
+): Promise<string | null> {
+  const [{ data: units, error: unitsError }, { data: tiers, error: tiersError }] =
+    await Promise.all([
+      client
+        .from("event_seating_units")
+        .select("sector_id, capacity_per_unit")
+        .eq("event_id", eventId),
+      client
+        .from("ticket_tiers")
+        .select("id, seating_sector_id, layout_type, capacity, sold")
+        .eq("event_id", eventId),
+    ])
+  if (unitsError) return unitsError.message
+  if (tiersError) return tiersError.message
+  if (!units?.length) return null
+
+  const placesBySector = new Map<string, number>()
+  for (const unit of units) {
+    const sectorId = unit.sector_id?.trim()
+    if (!sectorId) continue
+    placesBySector.set(
+      sectorId,
+      (placesBySector.get(sectorId) ?? 0) +
+        Math.max(1, Number(unit.capacity_per_unit) || 1),
+    )
+  }
+
+  for (const tier of tiers ?? []) {
+    const sectorId = tier.seating_sector_id?.trim()
+    if (!sectorId) continue
+    if (tier.layout_type !== "numbered_seat" && tier.layout_type !== "table_combo") {
+      continue
+    }
+    const generated = placesBySector.get(sectorId)
+    if (generated == null || generated <= 0) continue
+    const sold = Math.max(0, Number(tier.sold) || 0)
+    const nextCapacity = Math.max(generated, sold)
+    if (nextCapacity === Number(tier.capacity)) continue
+    const { error } = await client
+      .from("ticket_tiers")
+      .update({ capacity: nextCapacity } as never)
+      .eq("id", tier.id)
+      .eq("event_id", eventId)
+    if (error) return error.message
+  }
+  return null
 }
 
 async function assertPersistedInventoryCapacity(
@@ -1917,7 +2103,7 @@ async function uploadEventFlyer(
   const { error: uploadError } = await supabase.storage
     .from("event-flyers")
     .upload(path, bytesToBlob(bytes, contentType), {
-      cacheControl: "3600",
+      cacheControl: "60",
       upsert: false,
       contentType,
     })
@@ -1946,6 +2132,7 @@ export type CreateCompleteEventResult =
       code?: AppErrorCode
       title?: string
       field?: string
+      actionHint?: string
       wizardConflict?: WizardConflict
     }
 
@@ -2994,6 +3181,11 @@ export async function createCompleteEvent(
   if (materializeError) {
     return persistFailure(materializeError)
   }
+  const seatingCapacityError = await syncTicketCapacityFromSeatingUnits(
+    rpcClient,
+    String(eventId),
+  )
+  if (seatingCapacityError) return persistFailure(seatingCapacityError)
   const capacityError = await assertPersistedInventoryCapacity(
     rpcClient,
     String(eventId),
@@ -3322,6 +3514,11 @@ export async function updateCompleteEvent(
   if (materializeError) {
     return persistFailure(materializeError)
   }
+  const seatingCapacityError = await syncTicketCapacityFromSeatingUnits(
+    mutationClient,
+    eventId,
+  )
+  if (seatingCapacityError) return persistFailure(seatingCapacityError)
   const capacityError = await assertPersistedInventoryCapacity(
     mutationClient,
     eventId,
@@ -3358,7 +3555,27 @@ export async function updateCompleteEvent(
 
 export type PublishEventResult =
   | { success: true; purgedTestTickets?: number; status: EventStatus }
-  | { success: false; error: string; code?: AppErrorCode }
+  | {
+      success: false
+      error: string
+      code?: AppErrorCode
+      missingFields?: string[]
+    }
+
+export async function validateEventCompleteness(eventId: string) {
+  if (!eventId?.trim()) {
+    return { canPublish: false, missingFields: ["Evento inválido."] }
+  }
+  const { supabase, user } = await requireAuthenticatedUser()
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle()
+  const reader =
+    profile?.role === "super_admin" ? createAdminClient() : supabase
+  return runEventPublishCheck(eventId, reader)
+}
 
 /**
  * El organizador envía el evento a auditoría (`pending_approval`).
@@ -3397,7 +3614,7 @@ export async function publishEvent(
   const { data: event, error: eventError } = await reader
     .from("events")
     .select(
-      "id, organizer_id, status, date, location, venue_id, schedule_days, delivery_mode, venues(id, name, location)",
+      "id, organizer_id, status, date, title, location, venue_id, flyer_url, image_url, schedule_days, delivery_mode, venues(id, name, location)",
     )
     .eq("id", eventId)
     .maybeSingle()
@@ -3434,48 +3651,19 @@ export async function publishEvent(
     return persistFailure({ code: "INVALID_EVENT_DATE" })
   }
 
-  const venue = event.venues as { id: string; name: string; location: string } | null
-  const onlineEvent = isOnlineDelivery(
-    (event as { delivery_mode?: unknown }).delivery_mode,
-  )
-  const hasVenue =
-    Boolean(event.venue_id && venue?.name?.trim() && venue?.location?.trim()) ||
-    Boolean(event.location?.trim() && event.location.trim().length >= 3)
-
-  if (!onlineEvent && !hasVenue) {
-    return persistFailure({ code: "ERROR_FALTA_UBICACION" })
-  }
-
   const mutationClient =
     event.organizer_id !== user.id ? createAdminClient() : supabase
 
-  const { data: tiers, error: tiersError } = await mutationClient
-    .from("ticket_tiers")
-    .select("id, name, price, capacity, day_id, visibility, tier_type, bundle_type")
-    .eq("event_id", eventId)
-
-  if (tiersError) {
-    return persistFailure(tiersError.message)
-  }
-
-  const sellable = (tiers ?? []).filter((tier) => Number(tier.capacity) > 0)
-  if (sellable.length === 0) {
-    return persistFailure({ code: "MISSING_TICKETS" })
-  }
-
-  const uncoveredDays = scheduleDaysMissingTicketsMessage(
-    parseScheduleDays((event as { schedule_days?: unknown }).schedule_days),
-    (tiers ?? []).map((tier) => ({
-      name: tier.name,
-      dayId: tier.day_id,
-      visibility: tier.visibility,
-      capacity: tier.capacity,
-      tierType: tier.tier_type,
-      bundleType: tier.bundle_type,
-    })),
-  )
-  if (uncoveredDays) {
-    return persistFailure({ code: "INCOMPLETE_DAY_TICKETS" })
+  const completeness = await runEventPublishCheck(eventId, mutationClient)
+  if (!completeness.canPublish) {
+    return {
+      success: false,
+      error:
+        completeness.missingFields.join(" ") ||
+        "El evento todavía tiene datos pendientes.",
+      code: "INCOMPLETE_DAY_TICKETS",
+      missingFields: completeness.missingFields,
+    }
   }
 
   let purgedTestTickets = 0
@@ -3514,10 +3702,8 @@ export async function publishEvent(
     }
   }
 
+  await revalidatePersistedEvent(mutationClient, eventId)
   revalidatePath("/admin")
-  revalidatePath("/admin/events")
-  revalidatePath(`/admin/events/${eventId}`)
-  revalidatePath(`/events/preview/${eventId}`)
   revalidatePath("/superadmin/events")
   revalidatePath("/superadmin/auditoria")
   revalidatePath("/superadmin")
@@ -3625,13 +3811,8 @@ export async function updateEventSalesStatus(
 }
 
 function revalidateEventSalesPaths(eventId: string) {
+  revalidatePublicEventCache({ eventId, slug: eventId })
   revalidatePath("/admin")
-  revalidatePath("/admin/events")
-  revalidatePath(`/admin/events/${eventId}`)
-  revalidatePath("/events")
-  revalidatePath(`/events/${eventId}`)
-  revalidatePath(`/events/preview/${eventId}`)
-  revalidatePath("/")
   revalidatePath("/superadmin/events")
 }
 
@@ -4164,9 +4345,25 @@ export async function saveVenueMapOnly(
     }
   }
 
+  const healError = await syncMapBackedTiersAfterMapSave(
+    mutationClient,
+    id,
+    parsedMap,
+  )
+  if (healError) {
+    return { success: false, error: healError }
+  }
+
   const materializeError = await materializeEventSeatingUnits(mutationClient, id)
   if (materializeError) {
     return { success: false, error: materializeError }
+  }
+  const capacitySyncError = await syncTicketCapacityFromSeatingUnits(
+    mutationClient,
+    id,
+  )
+  if (capacitySyncError) {
+    return { success: false, error: capacitySyncError }
   }
 
   await revalidatePersistedEvent(mutationClient, id)

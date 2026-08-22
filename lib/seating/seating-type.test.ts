@@ -40,7 +40,7 @@ describe("seating-type", () => {
     )
   })
 
-  it("trata un reservado vacío como GENERAL en checkout", () => {
+  it("trata la grilla paramétrica de mesas como lugares asignados", () => {
     const map = emptyVenueMap()
     map.zones = [
       {
@@ -60,6 +60,36 @@ describe("seating-type", () => {
         itemsPerRow: 10,
         capacityPerUnit: 8,
         capacity: 40,
+        labelPrefix: "Mesa ",
+      },
+    ]
+    assert.equal(hasAssignedReservedPlaces(map, "campo"), true)
+    assert.equal(
+      resolveEffectiveSeatingType({ ...map.zones[0]!, id: "campo" }, map),
+      "RESERVED",
+    )
+  })
+
+  it("trata un reservado sin grilla ni mobiliario como GENERAL", () => {
+    const map = emptyVenueMap()
+    map.zones = [
+      {
+        id: "campo",
+        name: "Campo",
+        color: "#22d3ee",
+        price: 8000,
+        polygon: [
+          { x: 0, y: 0 },
+          { x: 10, y: 0 },
+          { x: 10, y: 10 },
+        ],
+        layoutType: "table_combo",
+        seatingType: "RESERVED",
+        sellMode: "group",
+        rows: 0,
+        itemsPerRow: 0,
+        capacityPerUnit: 8,
+        capacity: 0,
         labelPrefix: "Mesa ",
       },
     ]
@@ -179,9 +209,8 @@ describe("seating-type", () => {
       },
     ]
     const issues = validateSectorModalities(map)
-    assert.equal(issues.length, 2)
+    assert.equal(issues.length, 1)
     assert.match(issues[0]!.message, /Pista necesita precio y capacidad/)
-    assert.match(issues[1]!.message, /Platea necesita al menos una mesa/)
   })
 
   it("parsea un polígono sin layout como GENERAL", () => {

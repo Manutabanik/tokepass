@@ -292,14 +292,18 @@ const eventFormObject = z
     const tierNames = new Set<string>()
     for (const [index, tier] of data.tickets.entries()) {
       const normalizedName = tier.name.trim().toLocaleLowerCase("es")
-      if (tierNames.has(normalizedName)) {
+      const nameScope = isPassOrComboTicket(tier)
+        ? "pass"
+        : (tier.dayId?.trim() || "none")
+      const nameKey = `${nameScope}::${normalizedName}`
+      if (tierNames.has(nameKey)) {
         context.addIssue({
           code: "custom",
           path: ["tickets", index, "name"],
-          message: "Los nombres de las entradas deben ser únicos.",
+          message: "Los nombres de las entradas deben ser únicos en la misma jornada.",
         })
       }
-      tierNames.add(normalizedName)
+      tierNames.add(nameKey)
       const minLimit = Math.max(1, Number(tier.minPurchaseLimit) || 1)
       const maxLimit = tier.maxPurchaseLimit
       if (

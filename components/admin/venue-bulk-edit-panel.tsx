@@ -1,7 +1,7 @@
 "use client"
 
 import { Palette } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 
 import { AutoNumberingPanel } from "@/components/admin/auto-numbering-panel"
 import { Input } from "@/components/ui/input"
@@ -126,10 +126,14 @@ export function VenueBulkEditPanel({
   )
     ? (elements[0]?.customLabel || elements[0]?.label || "")
     : ""
+  const selectionKey = selectedIds.join("|")
+  const labelSyncKey = `${selectionKey}:${sharedCustomLabel}`
+  const [appliedLabelKey, setAppliedLabelKey] = useState(labelSyncKey)
   const [labelDraft, setLabelDraft] = useState(sharedCustomLabel)
-  useEffect(() => {
+  if (appliedLabelKey !== labelSyncKey) {
+    setAppliedLabelKey(labelSyncKey)
     setLabelDraft(sharedCustomLabel)
-  }, [sharedCustomLabel, selectedIds.join("|")])
+  }
 
   const sharedTicketTypeId = elements.every(
     (item) => item.ticketTypeId === elements[0]?.ticketTypeId,

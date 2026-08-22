@@ -418,7 +418,25 @@ export function NavbarSearch() {
 
   return (
     <>
-      <div ref={rootRef} className="search-bar relative min-w-0 w-full max-w-md flex-1">
+      <button
+        type="button"
+        onClick={() => setMobileOpen(true)}
+        className={cn(
+          tapFeedbackClass,
+          "inline-flex size-11 shrink-0 items-center justify-center rounded-full text-zinc-600 md:hidden",
+          "hover:bg-zinc-100 hover:text-zinc-900",
+          "dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-white",
+        )}
+        aria-label="Buscar eventos"
+        aria-expanded={mobileOpen}
+      >
+        <Search className="size-5" aria-hidden="true" />
+      </button>
+
+      <div
+        ref={rootRef}
+        className="search-bar relative hidden min-w-0 w-full max-w-xl flex-1 md:block"
+      >
         <form onSubmit={submitExplore}>
           <label className="sr-only" htmlFor="omni-search-desktop">
             Buscá eventos, artistas o lugares
@@ -459,11 +477,11 @@ export function NavbarSearch() {
               aria-haspopup="dialog"
               aria-label="Filtrar eventos"
               className={cn(
-                "ml-2 flex items-center gap-1 rounded-full border-l border-white/10 p-1.5 pl-3 text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground",
+                "ml-2 flex items-center gap-1 rounded-full border-l border-white/10 p-1.5 pl-3 text-muted-foreground transition-colors hover:bg-emerald-500/10 hover:text-emerald-400",
                 discovery?.hasActiveFilters && "text-emerald-400",
               )}
             >
-              <SlidersHorizontal className="size-4 text-emerald-400" />
+              <SlidersHorizontal className="size-4" />
             </button>
           </div>
         </form>

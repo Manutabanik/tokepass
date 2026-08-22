@@ -14,7 +14,11 @@ export function eventInventoryFingerprint(values: EventFormValues): string {
       capacityPerUnit: tier.capacityPerUnit,
       capacity: tier.capacity,
       name: tier.name,
-      price: tier.price,
+      price: Number.isFinite(Number(tier.price)) ? Number(tier.price) : 0,
+      visibility: tier.visibility ?? "public",
+      dayId: tier.dayId ?? null,
+      tierType: tier.tierType ?? null,
+      bundleType: tier.bundleType ?? null,
     })),
   })
 }

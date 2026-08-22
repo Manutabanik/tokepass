@@ -40,6 +40,7 @@ export function toReserveRpcItem(
   } = {},
 ) {
   const mapped = isMappedCheckoutItem(item)
+  const isNumbered = item.isNumbered ?? item.is_numbered
   return {
     type: mapped ? "mapped" : "general",
     ticket_tier_id: checkoutItemTierId(item),
@@ -48,9 +49,13 @@ export function toReserveRpcItem(
     sector_key: item.sectorKey ?? input.sectorKey ?? null,
     table_number: item.tableNumber ?? null,
     zone_id: item.zoneId ?? null,
-    seating_unit_id: checkoutItemSeatId(item),
-    seat_id: checkoutItemSeatId(item),
-    element_id: checkoutItemElementId(item),
+    seating_unit_id: mapped ? checkoutItemSeatId(item) : null,
+    seat_id: mapped ? checkoutItemSeatId(item) : null,
+    element_id: mapped ? checkoutItemElementId(item) : null,
+    has_map: item.hasMap ?? item.has_map ?? null,
+    is_numbered: isNumbered ?? mapped,
+    hasMap: item.hasMap ?? item.has_map ?? null,
+    isNumbered: isNumbered ?? mapped,
     phase_id: input.phaseId ?? null,
   }
 }

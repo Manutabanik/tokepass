@@ -108,6 +108,34 @@ describe("isCategorySoldOut", () => {
     )
   })
 
+  it("treats a ready map sector with no seats or zone as unconfigured", () => {
+    const result = resolveCategoryAvailability({
+      requiresMap: true,
+      stock: 12,
+      seatingSectorId: "sector-lima",
+      seats: [],
+      mapReady: true,
+      mapSectorIds: ["otra-zona"],
+    })
+    assert.equal(result.isSoldOut, true)
+    assert.equal(result.isUnconfigured, true)
+    assert.equal(result.available, 0)
+  })
+
+  it("keeps a mapped GA zone selectable when the zone exists on the map", () => {
+    const result = resolveCategoryAvailability({
+      requiresMap: true,
+      stock: 8,
+      seatingSectorId: "sector-lima",
+      seats: [],
+      mapReady: true,
+      mapSectorIds: ["sector-lima"],
+    })
+    assert.equal(result.isUnconfigured, false)
+    assert.equal(result.isSoldOut, false)
+    assert.equal(result.available, 8)
+  })
+
   it("matches zone-grouped tables by sector name", () => {
     const seats = [
       seat({

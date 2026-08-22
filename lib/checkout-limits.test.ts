@@ -5,6 +5,7 @@ import {
   assertCartRemainingStock,
   assertCartTierPurchaseLimits,
   evaluateStorefrontSelectionLimit,
+  mapPlaceSelectionCap,
   purchaseCapForTier,
   resolveTierPurchaseMax,
   resolveTierPurchaseMin,
@@ -99,6 +100,17 @@ describe("tier purchase limits", () => {
         fallbackMax: 10,
       }),
       2,
+    )
+  })
+
+  it("allows several tables when the event has no explicit 1-place lock", () => {
+    assert.equal(
+      mapPlaceSelectionCap({ layoutType: "table_combo", fallbackMax: null }),
+      4,
+    )
+    assert.equal(
+      mapPlaceSelectionCap({ isTable: true, fallbackMax: 6 }),
+      6,
     )
   })
 })

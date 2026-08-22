@@ -1,7 +1,11 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
-import { isTicketSoldOut, selectableTicketStock } from "./ticket-stock"
+import {
+  isTicketCardBlocked,
+  isTicketSoldOut,
+  selectableTicketStock,
+} from "./ticket-stock"
 
 describe("selectableTicketStock", () => {
   it("treats missing or invalid available as zero", () => {
@@ -26,5 +30,13 @@ describe("selectableTicketStock", () => {
       selectableTicketStock({ available: 2, capacity: 100, sold: 10 }),
       2,
     )
+  })
+})
+
+describe("isTicketCardBlocked", () => {
+  it("blocks inactive or zero-stock tickets including $0 SKUs", () => {
+    assert.equal(isTicketCardBlocked({ available: 0, isActive: true }), true)
+    assert.equal(isTicketCardBlocked({ available: 3, isActive: false }), true)
+    assert.equal(isTicketCardBlocked({ available: 1, isActive: true }), false)
   })
 })

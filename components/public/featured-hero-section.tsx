@@ -34,7 +34,7 @@ export function FeaturedHeroSection({
 
   const canLoop = slides.length > 1
   const [emblaRef, emblaApi] = useEmblaCarousel({
-    align: "center",
+    align: "start",
     loop: canLoop,
     skipSnaps: false,
     duration: 22,
@@ -102,7 +102,7 @@ export function FeaturedHeroSection({
 
   return (
     <section
-      className="relative w-full max-w-full overflow-x-hidden bg-transparent pt-0 pb-6 md:pb-8"
+      className="relative my-4 w-full max-w-full bg-transparent p-0"
       aria-label="Eventos destacados"
       aria-roledescription="carousel"
       onMouseEnter={() => setHovered(true)}
@@ -120,13 +120,7 @@ export function FeaturedHeroSection({
             {slides.map((event, index) => (
               <div
                 key={event.id}
-                className={cn(
-                  "min-w-0 snap-center px-1.5 transition-opacity duration-500 ease-out",
-                  slides.length === 1
-                    ? "flex-[0_0_100%]"
-                    : "flex-[0_0_100%] md:flex-[0_0_85%] lg:flex-[0_0_80%]",
-                  index === selected ? "opacity-100" : "opacity-60",
-                )}
+                className="min-w-0 flex-[0_0_100%]"
               >
                 <FeaturedBannerCard
                   event={event}

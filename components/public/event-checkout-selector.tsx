@@ -5,12 +5,11 @@ import {
   CalendarDays,
   Clock,
   Info,
-  Minus,
-  Plus,
 } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useMemo, useState } from "react"
 
+import { QuantityCounter } from "@/components/public/quantity-counter"
 import { BundleCardSelector } from "@/components/public/bundle-card-selector"
 import {
   SeatSelectionSheet,
@@ -18,20 +17,17 @@ import {
   type SeatSelectionContext,
 } from "@/components/public/seat-selection-sheet"
 import type { TicketSelectorTier } from "@/components/public/ticket-tier-selector"
+import { useCheckoutStore } from "@/lib/stores/checkout-store"
 import {
   useStorefrontSeatStore,
   type StorefrontSelectedItem,
 } from "@/lib/stores/storefront-seat-store"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { resolveTicketHighlightBadge } from "@/lib/checkout/ticket-picker"
 import { resolveStockScarcity } from "@/lib/checkout/stock-scarcity"
 import { formatTicketPrice } from "@/lib/format"
 import { resolveSalePhases } from "@/lib/inventory/active-phase"
-import {
-  resolveTicketSaleState,
-  ticketSaleWindowLabel,
-} from "@/lib/inventory/ticket-sale-window"
+import { resolveTicketSaleState } from "@/lib/inventory/ticket-sale-window"
 import {
   inferInventoryTierType,
   isQuantityInventoryType,
@@ -39,13 +35,16 @@ import {
 } from "@/lib/inventory/unified-inventory"
 import { purchaseCapForTier } from "@/lib/checkout-limits"
 import { resolveCategoryAvailability } from "@/lib/checkout/category-stock"
-import { selectableTicketStock } from "@/lib/checkout/ticket-stock"
+import {
+  SOLD_OUT_TICKET_CARD_CLASS,
+  isTicketCardBlocked,
+  selectableTicketStock,
+} from "@/lib/checkout/ticket-stock"
 import {
   displayChargePrice,
   resolveChargeUnit,
 } from "@/lib/checkout/charge-unit"
 import { resolveSectorAssignMeta } from "@/lib/seating/assign-best-seats"
-import { resolveTicketSectorName } from "@/lib/seating/storefront-selection"
 import {
   FULL_PASS_TAB_ID,
   defaultCheckoutDateId,
@@ -55,17 +54,14 @@ import {
   listCheckoutDateCards,
   shouldShowCheckoutKindTabs,
   ticketDateSectionLabel,
-  ticketDayBadgeLabel,
   ticketMatchesTab,
   type CheckoutKindTab,
   type TicketDayGroup,
 } from "@/lib/checkout/ticket-day-groups"
 import { flattenSeatsForAvailability } from "@/lib/seating/venue-map-geometry"
 import { classifyZoneClick } from "@/lib/seating/map-click-target"
-import {
-  sectorUsesNumberedMap,
-  ticketRequiresInteractiveMap,
-} from "@/lib/seating/venue-map-pricing"
+import { isMapBackedTicket } from "@/lib/seating/venue-map-pricing"
+import type { VenueMapZone } from "@/types/venue-map"
 import { TicketTierList } from "@/components/public/ticket-tier-list"
 import { cn, tapFeedbackClass } from "@/lib/utils"
 import type { ScheduleDay } from "@/types/events"
@@ -106,12 +102,8 @@ type Props = {
 
 const SYNTHETIC_MAP_TIER_ID = "__interactive-map__"
 
-function tierRequiresMap(
-  tier: TicketSelectorTier,
-  map?: SeatSelectionContext["map"],
-  sectors?: SeatSelectionContext["sectors"],
-): boolean {
-  return ticketRequiresInteractiveMap({
+function tierRequiresMap(tier: TicketSelectorTier): boolean {
+  return isMapBackedTicket({
     seatingSectorId: tier.seatingSectorId,
     layoutType: tier.layoutType,
     tierType: tier.tierType,
@@ -120,8 +112,6 @@ function tierRequiresMap(
       tierId: `${tier.id}-${index}`,
       quantity: item.quantity,
     })),
-    map,
-    sectors,
   })
 }
 
@@ -138,7 +128,6 @@ export function EventCheckoutSelector({
   onQuantityChange,
   onOpenSeatFlow,
   onPurchaseIntent,
-  onClearSeat,
   maxTicketsPerUser = null,
   selectedCount = 0,
   seatSelection = null,
@@ -174,8 +163,26 @@ export function EventCheckoutSelector({
     return type !== "bundle"
   })
   const hasSeatedRow = listTiers.some((tier) =>
-    tierRequiresMap(tier, seatSelection?.map, seatSelection?.sectors),
+    tierRequiresMap(tier),
   )
+  const mapSeatSelection = useMemo(() => {
+    if (!seatSelection) return null
+    return {
+      ...seatSelection,
+      onSelectZone: (zone: VenueMapZone) => {
+        seatSelection.onSelectZone(zone)
+        const numbered =
+          classifyZoneClick(zone, seatSelection.map) === "SECTOR_NUMERADO"
+        setSeatSheetMode(numbered ? "map" : "counter")
+        setActiveSeatCategory({
+          id: zone.id,
+          name: zone.name,
+          sectorId: zone.id,
+        })
+        setIsSeatSelectionOpen(true)
+      },
+    }
+  }, [seatSelection, setIsSeatSelectionOpen])
   const showSyntheticMapRow = hasInteractiveMap && !hasSeatedRow
   const hasInventory =
     listTiers.length > 0 ||
@@ -206,13 +213,18 @@ export function EventCheckoutSelector({
     sectorId?: string | null
   }) {
     const tier = listTiers.find((item) => item.id === category.id)
+    const requiresMap = !tier
+      ? true
+      : tierRequiresMap(tier)
     if (tier) {
-      const requiresMap = tierRequiresMap(
-        tier,
-        seatSelection?.map,
-        seatSelection?.sectors,
+      const summary = seatSelection?.sectorSummaries?.find(
+        (row) =>
+          row.tierId === tier.id ||
+          row.sectorId === (tier.seatingSectorId ?? category.sectorId) ||
+          row.sectorName.trim().toLowerCase() ===
+            tier.name.trim().toLowerCase(),
       )
-      const soldOut = resolveCategoryAvailability({
+      const availability = resolveCategoryAvailability({
         requiresMap,
         stock: selectableTicketStock(tier),
         categoryId: tier.id,
@@ -222,60 +234,27 @@ export function EventCheckoutSelector({
           ? flattenSeatsForAvailability(seatSelection.map)
           : [],
         occupancyBySeatId: seatSelection?.occupancyBySeatId,
-        summaryAvailable: seatSelection?.sectorSummaries?.find(
-          (row) =>
-            row.tierId === tier.id ||
-            row.sectorId === (tier.seatingSectorId ?? category.sectorId) ||
-            row.sectorName.trim().toLowerCase() === tier.name.trim().toLowerCase(),
-        )?.available,
+        summaryAvailable: summary?.available,
+        summaryTotal: summary?.total,
+        mapSectorIds: seatSelection?.map?.zones?.map((zone) => zone.id) ?? [],
         mapReady: Boolean(seatSelection?.map) && !mapLoading,
-      }).isSoldOut
-      if (soldOut) return
+      })
+      if (
+        availability.isSoldOut ||
+        availability.isUnconfigured ||
+        isTicketCardBlocked(tier)
+      ) {
+        return
+      }
       if (!requiresMap && selectableTicketStock(tier) <= 0) return
     }
     if (hasInteractiveMap && seatSelection) {
-      const sectorId = category.sectorId ?? tier?.seatingSectorId ?? null
-      const zone = sectorId
-        ? (seatSelection.map?.zones ?? []).find((item) => item.id === sectorId)
-        : undefined
-      const numbered =
-        category.id === SYNTHETIC_MAP_TIER_ID ||
-        (zone
-          ? classifyZoneClick(zone, seatSelection.map) === "SECTOR_NUMERADO"
-          : sectorUsesNumberedMap({
-              seatingSectorId: sectorId,
-              layoutType: tier?.layoutType,
-              map: seatSelection.map,
-              sectors: seatSelection.sectors,
-            }))
-      if (!numbered) {
-        if (zone) {
-          seatSelection.onSelectZone(zone)
-          return
-        }
-        if (tier) {
-          const stock = selectableTicketStock(tier)
-          if (stock <= 0) return
-          const cap = purchaseCapForTier({
-            layoutType: tier.layoutType,
-            maxPurchaseLimit: tier.maxPurchaseLimit,
-            fallbackMax: maxTicketsPerUser,
-          })
-          onQuantityChange(
-            tier.id,
-            Math.min(cap, stock, (quantities[tier.id] ?? 0) + 1),
-            Math.min(cap, stock),
-          )
-        }
-        return
-      }
       setSeatSheetMode("map")
       setActiveSeatCategory({
         id: category.id,
         name: category.name,
-        sectorId,
+        sectorId: tier?.seatingSectorId ?? category.sectorId ?? null,
       })
-      if (zone) seatSelection.onSelectZone(zone)
       setIsSeatSelectionOpen(true)
       return
     }
@@ -315,7 +294,7 @@ export function EventCheckoutSelector({
             type="button"
             variant="outline"
             disabled={isPending}
-            onClick={onClearSeat}
+            onClick={() => onOpenSeatFlow()}
             className={cn(
               tapFeedbackClass,
               "h-9 shrink-0 border-emerald-600 px-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 dark:border-emerald-400 dark:text-emerald-300 dark:hover:bg-emerald-500/10",
@@ -351,26 +330,34 @@ export function EventCheckoutSelector({
           />
         </div>
 
-      {hasInteractiveMap && seatSelection ? (
+      {hasInteractiveMap && mapSeatSelection ? (
         <SeatSelectionSheet
           open={isSeatSelectionOpen}
-          onOpenChange={setIsSeatSelectionOpen}
+          onOpenChange={(open) => {
+            setIsSeatSelectionOpen(open)
+            if (!open) {
+              setSeatSheetMode("map")
+              setActiveSeatCategory(null)
+            }
+          }}
           title={
-            (seatSelection.selectedZoneId
-              ? seatSelection.map?.zones.find(
-                  (zone) => zone.id === seatSelection.selectedZoneId,
+            activeSeatCategory?.name ??
+            (mapSeatSelection.selectedZoneId
+              ? mapSeatSelection.map?.zones.find(
+                  (zone) => zone.id === mapSeatSelection.selectedZoneId,
                 )?.name
               : null) ??
-            activeSeatCategory?.name ??
             "Seleccionar lugares"
           }
           sectorId={
-            seatSelection.selectedZoneId ?? activeSeatCategory?.sectorId
+            activeSeatCategory?.sectorId ??
+            mapSeatSelection.selectedZoneId ??
+            null
           }
           pending={isPending}
           loading={mapLoading}
           maxTicketsPerUser={maxTicketsPerUser}
-          context={seatSelection}
+          context={mapSeatSelection}
           selectionMode={seatSheetMode}
         />
       ) : null}
@@ -520,7 +507,7 @@ function TicketSelectionList({
 
   const ticketNeedsSeatModal = (tier: TicketSelectorTier) =>
     hasInteractiveMap &&
-    tierRequiresMap(tier, seatSelection?.map, seatSelection?.sectors)
+    tierRequiresMap(tier)
 
   function renderTierCard(tier: TicketSelectorTier) {
     const requiresMap = ticketNeedsSeatModal(tier)
@@ -531,7 +518,6 @@ function TicketSelectionList({
       <UnifiedTicketCard
         key={tier.id}
         tier={tier}
-        dateLabel={ticketDayBadgeLabel(tier, scheduleDays)}
         siblingTiers={listTiers}
         quantity={quantities[tier.id] ?? 0}
         isPending={isPending}
@@ -564,7 +550,7 @@ function TicketSelectionList({
     <div className="flex w-full items-center justify-between gap-4 rounded-2xl border border-white/10 bg-card/60 px-5 py-3.5 transition-all hover:border-white/20">
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <h4 className="truncate text-base font-bold text-foreground">
-          Asientos numerados
+          Ubicaciones en mapa
           {includesGeneralAccess ? (
             <span className="ml-2 text-xs font-semibold text-emerald-400">
               Incluye acceso
@@ -586,7 +572,7 @@ function TicketSelectionList({
           onClick={() =>
             onOpenSeatSelection({
               id: SYNTHETIC_MAP_TIER_ID,
-              name: "Asientos numerados",
+              name: "Ubicaciones en mapa",
             })
           }
         />
@@ -721,6 +707,7 @@ function TicketSelectionList({
                           scheduleDays={scheduleDays}
                           venueMap={seatMap}
                           hasInteractiveMap={hasInteractiveMap}
+                          sectorSummaries={seatSelection?.sectorSummaries}
                           onQuantityChange={onQuantityChange}
                           onSelectSeat={(tierId) => {
                             const tier = listTiers.find((item) => item.id === tierId)
@@ -815,7 +802,7 @@ function PlaceActionButton({
         variant="outline"
         disabled={disabled}
         onClick={onClick}
-        className="ml-auto h-9 border-emerald-600 px-4 font-semibold text-emerald-700 hover:bg-emerald-50 dark:border-emerald-400 dark:text-emerald-300 dark:hover:bg-emerald-500/10"
+        className="ml-auto h-10 whitespace-nowrap border-emerald-600 px-4 text-xs font-extrabold text-emerald-700 hover:bg-emerald-50 dark:border-emerald-400 dark:text-emerald-300 dark:hover:bg-emerald-500/10"
       >
         Modificar lugares
       </Button>
@@ -826,21 +813,15 @@ function PlaceActionButton({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="ml-auto h-9 bg-emerald-600 px-4 font-semibold text-white hover:bg-emerald-700"
+      className="ml-auto h-10 whitespace-nowrap bg-emerald-500 px-4 text-xs font-extrabold text-black hover:bg-emerald-400"
     >
-      Elegir lugar
+      Elegir en plano
     </Button>
   )
 }
 
-function isPlaceholderSectorBadge(label: string) {
-  return /^(sector\s+)?(naranja|lima|cian|magenta|oro)$/i.test(label.trim())
-}
-
 function ticketCardBadges({
   chargeBadge,
-  includesGeneralAccess,
-  highlight,
   tier,
 }: {
   chargeBadge: string | null
@@ -848,32 +829,16 @@ function ticketCardBadges({
   highlight: ReturnType<typeof resolveTicketHighlightBadge>
   tier: TicketSelectorTier
 }) {
-  const badges: Array<{ key: string; label: string; tone: "charge" | "access" | "highlight" | "custom" }> =
-    []
+  const badges: Array<{ key: string; label: string }> = []
   const showAccessCount = tier.showAccessCount !== false
-  if (showAccessCount && chargeBadge) {
-    badges.push({ key: "charge", label: chargeBadge, tone: "charge" })
-  }
-  const chargeImpliesAccess = /incluye/i.test(chargeBadge ?? "")
-  const organizerWantsAccess =
-    tier.includesAccess === true ||
-    (tier.includesAccess !== false && includesGeneralAccess)
-  if (organizerWantsAccess && !chargeImpliesAccess) {
-    badges.push({ key: "access", label: "Incluye acceso", tone: "access" })
-  }
-  if (highlight === "bestseller") {
-    badges.push({ key: "highlight", label: "Más vendida", tone: "highlight" })
-  }
-  const custom = tier.badgeText?.trim() || tier.bonusReward?.trim() || ""
-  if (custom && !isPlaceholderSectorBadge(custom)) {
-    badges.push({ key: "custom", label: custom, tone: "custom" })
+  if (showAccessCount && /incluye/i.test(chargeBadge ?? "")) {
+    badges.push({ key: "charge", label: chargeBadge!.trim() })
   }
   return badges
 }
 
 function UnifiedTicketCard({
   tier,
-  dateLabel = null,
   siblingTiers,
   quantity,
   isPending,
@@ -892,7 +857,6 @@ function UnifiedTicketCard({
   onOpenSeatSelection,
 }: {
   tier: TicketSelectorTier
-  dateLabel?: string | null
   siblingTiers: TicketSelectorTier[]
   quantity: number
   isPending: boolean
@@ -920,7 +884,6 @@ function UnifiedTicketCard({
     saleStartsAt: tier.saleStartsAt,
     saleEndsAt: tier.saleEndsAt,
   })
-  const saleLabel = ticketSaleWindowLabel(saleState)
   const windowClosed = saleState.kind !== "active"
   const remaining = purchaseCapForTier({
     layoutType: tier.layoutType,
@@ -964,15 +927,16 @@ function UnifiedTicketCard({
     seats: mapSeats,
     occupancyBySeatId,
     summaryAvailable: summary?.available,
+    summaryTotal: summary?.total,
+    mapSectorIds: venueMap?.zones?.map((zone) => zone.id) ?? [],
     mapReady,
   })
   const isSoldOut =
     saleState.kind === "sold_out" ||
+    isTicketCardBlocked(tier) ||
+    availability.isUnconfigured ||
     (requiresMap ? availability.isSoldOut : skuLeft <= 0)
   const inactive = isSoldOut || windowClosed
-  const sectorName = requiresMap
-    ? resolveTicketSectorName(tier, venueMap)
-    : null
   const badges = ticketCardBadges({
     chargeBadge: charge.badge,
     includesGeneralAccess,
@@ -980,62 +944,56 @@ function UnifiedTicketCard({
     tier,
   })
   const showStock = tier.showRemainingStock !== false
+  const ticketErrorId = useCheckoutStore((state) => state.ticketErrorId)
+  const ticketErrorMessage = useCheckoutStore((state) => state.ticketErrorMessage)
+  const isError =
+    ticketErrorId === tier.id ||
+    (Boolean(ticketErrorId) && ticketErrorId === tier.seatingSectorId)
 
   return (
     <div
       className={cn(
-        "flex w-full items-center justify-between gap-4 rounded-2xl border border-white/10 bg-card/60 px-5 py-3.5 transition-all hover:border-white/20",
-        inactive && "cursor-not-allowed opacity-70",
-        focused && !inactive && "ring-1 ring-primary/30",
-        highlight === "bestseller" && !inactive && "border-amber-500/35",
-        selectedPlaces.length > 0 && !inactive && "border-emerald-500/40",
+        "flex w-full flex-col rounded-2xl border p-4 transition-all",
+        isError
+          ? "border-red-500/50 bg-red-500/5"
+          : "border-white/10 bg-card",
+        "min-h-[80px]",
+        isSoldOut && SOLD_OUT_TICKET_CARD_CLASS,
+        inactive && !isSoldOut && "cursor-not-allowed opacity-70",
+        focused && !inactive && !isError && "ring-1 ring-primary/30",
+        selectedPlaces.length > 0 && !inactive && !isError && "border-emerald-500/40",
       )}
     >
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <h4 className="truncate text-base font-bold text-foreground">
+      <div className="flex w-full items-center justify-between gap-3">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <h4
+          className={cn(
+            "truncate text-base leading-tight font-extrabold text-foreground",
+            isSoldOut && "text-muted-foreground line-through",
+          )}
+        >
           {tier.name}
         </h4>
-        <div className="flex min-w-0 items-center gap-2 text-sm font-black text-foreground/90">
-          <span className="tabular-nums">{formatTicketPrice(shownPrice)}</span>
-          {dateLabel ? (
-            <Badge
-              variant="outline"
-              className="h-5 border-emerald-500/50 px-1.5 text-[10px] font-semibold text-emerald-400"
-            >
-              {dateLabel}
-            </Badge>
-          ) : null}
-          {sectorName ? (
-            <Badge
-              variant="outline"
-              className="h-5 px-1.5 text-[10px] font-semibold text-muted-foreground"
-            >
-              {sectorName}
-            </Badge>
-          ) : null}
+        <div className="mt-0.5 flex flex-wrap items-center gap-2">
+          <span
+            className={cn(
+              "shrink-0 whitespace-nowrap text-base font-black tabular-nums text-foreground",
+              isSoldOut && "text-muted-foreground line-through",
+            )}
+          >
+            {shownPrice === 0 ? "Gratis" : formatTicketPrice(shownPrice)}
+          </span>
           {badges.map((badge) => (
             <span
               key={badge.key}
-              className={cn(
-                "truncate text-xs font-semibold",
-                badge.tone === "highlight"
-                  ? "text-amber-500"
-                  : badge.tone === "access" || badge.tone === "charge"
-                    ? "text-emerald-400"
-                    : "text-muted-foreground",
-              )}
+              className="shrink-0 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-extrabold text-emerald-400 uppercase"
             >
               {badge.label}
             </span>
           ))}
-          {inactive && saleLabel ? (
-            <span
-              className={cn(
-                "text-xs font-semibold",
-                isSoldOut ? "text-destructive" : "text-muted-foreground",
-              )}
-            >
-              {saleLabel}
+          {isSoldOut ? (
+            <span className="shrink-0 text-[10px] font-bold text-red-500">
+              Agotado
             </span>
           ) : showStock ? (
             <StockHint
@@ -1049,7 +1007,7 @@ function UnifiedTicketCard({
           ) : null}
         </div>
       </div>
-      <div className="flex shrink-0 items-center">
+      <div className="flex shrink-0 items-center justify-end pl-2">
         {inactive ? (
           <Button type="button" disabled className="h-9 px-3 text-sm font-semibold text-muted-foreground">
             {saleState.kind === "upcoming"
@@ -1072,11 +1030,20 @@ function UnifiedTicketCard({
             disabled={isPending || isSoldOut || max === 0}
             onChange={(next) => {
               if (isSoldOut || availability.available <= 0) return
+              if (isError) useCheckoutStore.getState().clearTicketError()
               onQuantityChange(tier.id, next, max)
             }}
           />
         )}
       </div>
+      </div>
+      {isError ? (
+        <span className="mt-2 flex items-center gap-1 text-xs font-medium text-red-400">
+          <AlertCircle className="size-3.5 shrink-0" aria-hidden />
+          {ticketErrorMessage ||
+            "Stock insuficiente para la cantidad seleccionada."}
+        </span>
+      ) : null}
     </div>
   )
 }
@@ -1164,7 +1131,10 @@ export function QuantityList({
           fallbackMax: maxTicketsPerUser,
         })
         const max = Math.min(selectableTicketStock(tier), remaining)
-        const soldOut = max <= 0
+        const soldOut =
+          max <= 0 ||
+          selectableTicketStock(tier) <= 0 ||
+          isTicketCardBlocked(tier)
         const description = tier.description?.trim() || ""
         const highlight = resolveTicketHighlightBadge(tier, tiers)
         const unitPrice = current?.price ?? tier.price
@@ -1177,16 +1147,26 @@ export function QuantityList({
               focusedTierId === tier.id && "ring-1 ring-primary/30",
               highlight === "bestseller" && "border-amber-500/35",
               quantity > 0 && !soldOut && "border-emerald-500/40",
-              soldOut && "cursor-not-allowed opacity-60",
+              soldOut && SOLD_OUT_TICKET_CARD_CLASS,
             )}
           >
             <div className="flex items-center justify-between gap-4">
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <p className="truncate text-base font-bold text-foreground">
+                <p
+                  className={cn(
+                    "truncate text-base font-bold text-foreground",
+                    soldOut && "text-muted-foreground line-through",
+                  )}
+                >
                   {tier.name}
                 </p>
                 <div className="flex min-w-0 items-center gap-2 text-sm font-black text-foreground/90">
-                  <span className="tabular-nums">
+                  <span
+                    className={cn(
+                      "tabular-nums",
+                      soldOut && "text-muted-foreground line-through",
+                    )}
+                  >
                     {formatTicketPrice(unitPrice)}
                   </span>
                   {highlight === "bestseller" ? (
@@ -1204,7 +1184,7 @@ export function QuantityList({
                     </span>
                   ) : null}
                   {soldOut ? (
-                    <span className="text-xs font-semibold text-destructive">
+                    <span className="text-xs font-bold text-red-500">
                       Agotado
                     </span>
                   ) : (
@@ -1316,36 +1296,16 @@ function Stepper({
   onChange: (next: number) => void
 }) {
   return (
-    <div className="flex h-9 items-center gap-3 rounded-xl border border-white/10 bg-black/40 px-2">
-      <Button
-        type="button"
-        size="icon"
-        variant="ghost"
-        disabled={disabled || value <= 0}
-        onClick={() => onChange(value - 1)}
-        aria-label="Quitar"
-        className={cn(tapFeedbackClass, "size-7 rounded-md hover:bg-white/5")}
-      >
-        <Minus className="size-3.5" />
-      </Button>
-      <span className="min-w-5 text-center text-sm font-bold tabular-nums text-foreground">
-        {value}
-      </span>
-      <Button
-        type="button"
-        size="icon"
-        variant="ghost"
-        disabled={disabled || max <= 0 || value >= max}
-        onClick={() => {
-          if (max <= 0) return
-          onChange(value + 1)
-        }}
-        aria-label="Agregar"
-        className={cn(tapFeedbackClass, "size-7 rounded-md hover:bg-white/5")}
-      >
-        <Plus className="size-3.5" />
-      </Button>
-    </div>
+    <QuantityCounter
+      quantity={value}
+      max={max}
+      disabled={disabled}
+      onDecrease={() => onChange(value - 1)}
+      onIncrease={() => {
+        if (max <= 0) return
+        onChange(value + 1)
+      }}
+    />
   )
 }
 

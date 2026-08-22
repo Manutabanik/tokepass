@@ -2,7 +2,10 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import { APP_ERRORS, wizardStepFromPath } from "@/lib/errors/app-error"
-import { mapUnknownError } from "@/lib/errors/error-handler"
+import {
+  containsInternalErrorCode,
+  mapUnknownError,
+} from "@/lib/errors/error-handler"
 import { firstFieldErrorPath } from "@/lib/errors/form-field"
 import { toUserFacingError } from "@/lib/errors/user-facing-error"
 
@@ -29,6 +32,17 @@ describe("error handler", () => {
       mapUnknownError({ code: "MISSING_TICKETS" }).message,
       APP_ERRORS.MISSING_TICKETS.message,
     )
+  })
+
+  it("does not treat checkout stock codes as internal leaks", () => {
+    assert.equal(containsInternalErrorCode("GENERAL_STOCK_UNAVAILABLE"), false)
+    assert.equal(
+      containsInternalErrorCode("GENERAL_STOCK_UNAVAILABLE:General"),
+      false,
+    )
+    assert.equal(containsInternalErrorCode("SEAT_UNAVAILABLE"), false)
+    assert.equal(containsInternalErrorCode("ERR_NO_STOCK"), false)
+    assert.equal(containsInternalErrorCode("ERR_SEAT_TAKEN"), false)
   })
 
   it("never returns raw postgres codes", () => {

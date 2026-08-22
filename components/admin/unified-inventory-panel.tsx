@@ -31,6 +31,14 @@ import {
 
 import { Button } from "@/components/ui/button"
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
   FormDescription,
   FormField,
   FormItem,
@@ -67,6 +75,7 @@ import {
   AddTicketTypeButton,
   TicketWalletCard,
 } from "@/components/admin/events/ticket-tier-form"
+import { TicketMatrixEditor } from "@/components/admin/ticket-matrix-editor"
 import { AforoBalanceAssistant } from "@/components/admin/aforo-balance-assistant"
 import { CapacityBudgetBar } from "@/components/admin/capacity-budget-bar"
 import { MasterManifestTable } from "@/components/admin/master-manifest-table"
@@ -79,7 +88,6 @@ import {
 } from "@/lib/inventory/aforo-balance"
 import {
   asPositiveInt,
-  ticketInventorySignature,
   createBlankPhase,
   generalRemainingForTicket,
   parseStrictInt,
@@ -96,6 +104,11 @@ import {
   duplicateTicketsFromDay,
   scheduleDaysMissingTicketsMessage,
 } from "@/lib/inventory/day-ticket-coverage"
+import {
+  STUDIO_CONTROL_CLASS,
+  STUDIO_LABEL_CLASS,
+  STUDIO_SELECT_CONTENT_CLASS,
+} from "@/lib/admin/studio-form-styles"
 import { cn } from "@/lib/utils"
 import { isMapBackedTicket } from "@/lib/seating/venue-map-pricing"
 import {
@@ -113,6 +126,8 @@ import {
 } from "@/lib/inventory/master-manifest"
 import { TICKET_DAY_ALL } from "@/types/tickets"
 import type { EventFormValues } from "@/lib/validations/event-form"
+
+const EMPTY_FORM_TICKETS: EventFormValues["tickets"] = []
 
 export function createInventoryTicket(
   tierType: InventoryTierType,
@@ -193,8 +208,7 @@ export function UnifiedInventoryPanel({
   isSponsored = false,
 }: Props) {
   const watchedTickets = form.watch("tickets")
-  const ticketStockKey = ticketInventorySignature(watchedTickets)
-  const tickets = form.getValues("tickets") ?? watchedTickets ?? []
+  const tickets = form.getValues("tickets") ?? watchedTickets ?? EMPTY_FORM_TICKETS
   const hasSeatingPlan = Boolean(form.watch("basics.hasSeatingPlan"))
   const venueMap = form.watch("venue.venueMap")
   const draftSectors = listAssignableGeneralSectors(
@@ -284,7 +298,7 @@ export function UnifiedInventoryPanel({
         tickets,
         venueMap,
       }),
-    [ticketStockKey, tickets, venueMap],
+    [tickets, venueMap],
   )
   const dropdownSectors = useMemo(
     () => excludeMapOwnedSectors(logicalSectors, venueMap),
@@ -305,7 +319,7 @@ export function UnifiedInventoryPanel({
         zones: venueZones,
         venueCapacity,
       }),
-    [ticketStockKey, tickets, venueCapacity, venueMap, venueZones],
+    [tickets, venueCapacity, venueMap, venueZones],
   )
 
   function append(ticket: EventFormValues["tickets"][number]) {
@@ -451,25 +465,30 @@ export function UnifiedInventoryPanel({
         }}
       />
       <CapacityBudgetBar form={form} />
+      {isMultiDay ? (
+        <TicketMatrixEditor form={form} days={eventDates} />
+      ) : null}
       {typeof form.formState.errors.tickets?.message === "string" ? (
         <FormMessage>{form.formState.errors.tickets.message}</FormMessage>
       ) : null}
-      {isMultiDay ? (
-        <DayTicketCopyBar
-          days={eventDates}
-          tickets={tickets}
-          onDuplicate={duplicateDayTickets}
-        />
-      ) : null}
-      <div>
-        <p className="text-sm font-semibold text-foreground">
-          Entradas a la venta
-        </p>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          {hasSeatingPlan
-            ? "Campo, extras y combos. El mapa ya reservó su cupo; una general puede quedar libre o ligarse a un sector que no sea del mapa."
-            : "Nombre, capacidad y precio. Esta entrada es inventario libre: no depende de un sector."}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-foreground">
+            Entradas a la venta
+          </p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            {hasSeatingPlan
+              ? "Campo, extras y combos. El mapa ya reservó su cupo; una general puede quedar libre o ligarse a un sector que no sea del mapa."
+              : "Nombre, capacidad y precio. Esta entrada es inventario libre: no depende de un sector."}
+          </p>
+        </div>
+        {isMultiDay ? (
+          <DayTicketCopyBar
+            days={eventDates}
+            tickets={tickets}
+            onDuplicate={duplicateDayTickets}
+          />
+        ) : null}
       </div>
 
       <FormField
@@ -516,6 +535,7 @@ export function UnifiedInventoryPanel({
         </p>
       ) : null}
 
+      {isMultiDay ? null : (
       <InventoryBlock
         title="Entradas generales y capacidad de campo"
         description={
@@ -583,6 +603,7 @@ export function UnifiedInventoryPanel({
           ))
         )}
       </InventoryBlock>
+      )}
 
       <InventoryBlock
         title="Adicionales y servicios"
@@ -827,103 +848,125 @@ function DayTicketCopyBar({
   tickets: EventFormValues["tickets"]
   onDuplicate: (sourceDayId: string, targetDayId: string) => void
 }) {
-  const [sourceId, setSourceId] = useState(days[0]?.id ?? "")
-  const [targetId, setTargetId] = useState(days[1]?.id ?? days[0]?.id ?? "")
+  const [open, setOpen] = useState(false)
+  const [sourceIdState, setSourceId] = useState(days[0]?.id ?? "")
+  const [targetIdState, setTargetId] = useState(days[1]?.id ?? days[0]?.id ?? "")
   const uncoveredMessage = scheduleDaysMissingTicketsMessage(days, tickets)
-
-  useEffect(() => {
-    const ids = new Set(days.map((day) => day.id))
-    if (!ids.has(sourceId) && days[0]?.id) setSourceId(days[0].id)
-    if (!ids.has(targetId)) {
-      setTargetId(days.find((day) => day.id !== sourceId)?.id ?? days[0]?.id ?? "")
-    }
-  }, [days, sourceId, targetId])
+  const dayIds = new Set(days.map((day) => day.id))
+  const sourceId = dayIds.has(sourceIdState)
+    ? sourceIdState
+    : (days[0]?.id ?? "")
+  const targetId = dayIds.has(targetIdState)
+    ? targetIdState
+    : (days.find((day) => day.id !== sourceId)?.id ?? days[0]?.id ?? "")
 
   const dayItems = days.map((day, index) => ({
     value: day.id,
     label: formatInventoryDayOption(day, index),
   }))
   const targetItems = dayItems.filter((item) => item.value !== sourceId)
-  const sourceLabel =
-    dayItems.find((item) => item.value === sourceId)?.label ?? "este día"
+  const canCopy = Boolean(sourceId && targetId && sourceId !== targetId)
 
   if (days.length < 2) return null
 
   return (
-    <div className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
-      <div>
-        <p className="text-sm font-semibold text-foreground">
-          Duplicar tickets entre días
+    <Dialog open={open} onOpenChange={setOpen}>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={() => setOpen(true)}
+        className="shrink-0 gap-1.5 border-slate-200 text-xs text-muted-foreground hover:bg-slate-100 dark:border-white/10 dark:hover:bg-white/5"
+      >
+        <Copy className="size-3.5" aria-hidden="true" />
+        Copiar tarifas entre días
+      </Button>
+      <DialogContent className="border-border bg-card text-card-foreground sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>¿Copiar tarifas de un día a otro?</DialogTitle>
+          <DialogDescription>
+            Las tarifas del día origen se agregarán al día destino. Las
+            entradas ya creadas no se eliminarán.
+          </DialogDescription>
+        </DialogHeader>
+        <p className="text-xs leading-5 text-muted-foreground">
+          Los abonos y combos no se duplican.
         </p>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          Copiá las tarifas de un día a otro para no cargarlas de nuevo. Los
-          abonos y combos no se duplican.
-        </p>
-      </div>
-      {uncoveredMessage ? (
-        <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
-          {uncoveredMessage}
-        </p>
-      ) : null}
-      <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-        <div className="space-y-1.5">
-          <p className="text-sm font-medium">Desde</p>
-          <Select
-            value={sourceId}
-            onValueChange={(value) => {
-              if (value) setSourceId(value)
-            }}
-            items={dayItems}
-          >
-            <SelectTrigger className="h-12 rounded-xl text-base w-full">
-              <SelectValue placeholder="Día de origen">
-                {dayItems.find((item) => item.value === sourceId)?.label}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {dayItems.map((item) => (
-                <SelectItem key={item.value} value={item.value}>
-                  {item.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {uncoveredMessage ? (
+          <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
+            {uncoveredMessage}
+          </p>
+        ) : null}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <p className={STUDIO_LABEL_CLASS}>Desde</p>
+            <Select
+              value={sourceId}
+              onValueChange={(value) => {
+                if (value) setSourceId(value)
+              }}
+              items={dayItems}
+            >
+              <SelectTrigger className={STUDIO_CONTROL_CLASS}>
+                <SelectValue placeholder="Día de origen">
+                  {dayItems.find((item) => item.value === sourceId)?.label}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent className={STUDIO_SELECT_CONTENT_CLASS}>
+                {dayItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <p className={STUDIO_LABEL_CLASS}>Hacia</p>
+            <Select
+              value={targetId}
+              onValueChange={(value) => {
+                if (value) setTargetId(value)
+              }}
+              items={targetItems}
+            >
+              <SelectTrigger className={STUDIO_CONTROL_CLASS}>
+                <SelectValue placeholder="Día de destino">
+                  {targetItems.find((item) => item.value === targetId)?.label}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent className={STUDIO_SELECT_CONTENT_CLASS}>
+                {targetItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-        <div className="space-y-1.5">
-          <p className="text-sm font-medium">Hacia</p>
-          <Select
-            value={targetId}
-            onValueChange={(value) => {
-              if (value) setTargetId(value)
-            }}
-            items={targetItems}
+        <DialogFooter className="mt-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setOpen(false)}
           >
-            <SelectTrigger className="h-12 rounded-xl text-base w-full">
-              <SelectValue placeholder="Día de destino">
-                {targetItems.find((item) => item.value === targetId)?.label}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {targetItems.map((item) => (
-                <SelectItem key={item.value} value={item.value}>
-                  {item.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          className="h-12 rounded-xl"
-          disabled={!sourceId || !targetId || sourceId === targetId}
-          onClick={() => onDuplicate(sourceId, targetId)}
-        >
-          <Copy className="size-4" aria-hidden="true" />
-          Duplicar tickets de {sourceLabel}
-        </Button>
-      </div>
-    </div>
+            Cancelar
+          </Button>
+          <Button
+            type="button"
+            disabled={!canCopy}
+            onClick={() => {
+              onDuplicate(sourceId, targetId)
+              setOpen(false)
+            }}
+            className="bg-emerald-500 text-black hover:bg-emerald-400"
+          >
+            Copiar tarifas
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

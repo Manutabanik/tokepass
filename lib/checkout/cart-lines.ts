@@ -2,6 +2,18 @@ import { centsToMoney, moneyToCents } from "@/lib/money/cents"
 
 export const CART_TICKET_LINE_PREFIX = "ticket:"
 
+/** Coerce API/state values before any money or quantity math. */
+export function toCartNumber(value: unknown): number {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0
+  if (typeof value === "string" && value.trim() === "") return 0
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+export function cartLineQuantity(quantity: unknown): number {
+  return Math.max(0, Math.floor(toCartNumber(quantity)))
+}
+
 export function cartLineDisplayName(line: {
   name: string
   displayName?: string | null
@@ -27,11 +39,11 @@ export function parseCartTicketLineId(id: string): string | null {
 }
 
 export function cartLineAmount(line: {
-  price: number
-  quantity: number
+  price: unknown
+  quantity: unknown
 }): number {
-  const unit = Number(line.price)
-  const quantity = Math.max(0, Math.floor(Number(line.quantity)) || 0)
-  if (!Number.isFinite(unit) || unit <= 0 || quantity <= 0) return 0
+  const unit = toCartNumber(line.price)
+  const quantity = cartLineQuantity(line.quantity)
+  if (unit <= 0 || quantity <= 0) return 0
   return centsToMoney(moneyToCents(unit) * quantity)
 }

@@ -1,5 +1,8 @@
 import { pointInPolygon } from "@/lib/seating/venue-map-lod"
-import { resolveSeatingType } from "@/lib/seating/seating-type"
+import {
+  hasAssignedReservedPlaces,
+  resolveSeatingType,
+} from "@/lib/seating/seating-type"
 import type { MapClickTarget, MapElementType } from "@/types/event-map"
 import {
   isSellableElement,
@@ -51,17 +54,9 @@ export function classifyZoneClick(
   zone: VenueMapZone,
   map?: InteractiveVenueMap | null,
 ): Extract<MapElementType, "SECTOR_GENERAL" | "SECTOR_NUMERADO"> {
-  return resolveSeatingType(zone) === "RESERVED" &&
-    (map
-      ? (map.elements ?? []).some((element) =>
-          reservedZoneContainsElement(zone, element),
-        ) ||
-        (map.sectors ?? []).some(
-          (sector) =>
-            sector.id === zone.id &&
-            sector.seats.some((seat) => seat.status !== "blocked"),
-        )
-      : true)
+  if (resolveSeatingType(zone) !== "RESERVED") return "SECTOR_GENERAL"
+  if (!map) return "SECTOR_NUMERADO"
+  return hasAssignedReservedPlaces(map, zone.id)
     ? "SECTOR_NUMERADO"
     : "SECTOR_GENERAL"
 }

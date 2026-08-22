@@ -9,7 +9,8 @@ import {
 import { motion, useReducedMotion } from "motion/react"
 import dynamic from "next/dynamic"
 import Link from "next/link"
-import { useEffect, useMemo, useState, type MouseEvent } from "react"
+import { usePathname, useRouter } from "next/navigation"
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
 
 import type { EventDetails } from "@/app/actions/public-events"
 import type { ResaleListingPublic } from "@/app/actions/resale"
@@ -56,13 +57,17 @@ import {
 import { releaseWaitingRoomPass } from "@/app/actions/waiting-room"
 import { useCheckoutStore } from "@/lib/stores/checkout-store"
 import { useStorefrontChromeStore } from "@/lib/stores/storefront-chrome-store"
-import { useStorefrontSeatStore } from "@/lib/stores/storefront-seat-store"
+import {
+  storefrontSelectionCount,
+  useStorefrontSeatStore,
+} from "@/lib/stores/storefront-seat-store"
 import {
   formatEventDay,
   formatEventDayMonthNumeric,
   formatEventWeekdayShort,
 } from "@/lib/format"
-import { isFullPassDayId, normalizeDayId } from "@/lib/event-schedule"
+import { publicTicketOfferKind } from "@/lib/checkout/ticket-offer-kind"
+import { normalizeDayId } from "@/lib/event-schedule"
 import { deriveEventSaleState } from "@/lib/event-status"
 import { publicProducerPath } from "@/lib/seo/site"
 import { useEventCatalogRealtime } from "@/hooks/use-event-catalog-realtime"
@@ -144,6 +149,9 @@ export function EventStorefront({
   sandboxEligible = false,
   previewKey = null,
 }: EventStorefrontProps) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const publishedSlugRef = useRef(initialEvent.slug)
   const [event, setEvent] = useState(initialEvent)
   const [eventBaseline, setEventBaseline] = useState(initialEvent)
   if (initialEvent !== eventBaseline) {
@@ -158,6 +166,19 @@ export function EventStorefront({
       setEvent((current) => applyTicketTierCatalogRow(current, change, row))
     },
   }, "storefront")
+
+  useEffect(() => {
+    const nextSlug = event.slug?.trim()
+    const previousSlug = publishedSlugRef.current?.trim()
+    if (!nextSlug || !previousSlug || nextSlug === previousSlug) return
+    publishedSlugRef.current = nextSlug
+    const currentKey = pathname.match(/\/eventos\/([^/]+)/)?.[1]
+    if (!currentKey || currentKey === nextSlug) return
+    router.replace(
+      pathname.replace(`/eventos/${currentKey}`, `/eventos/${nextSlug}`),
+    )
+  }, [event.slug, pathname, router])
+
   const startingPrice =
     event.tiers.length > 0
       ? Math.min(...event.tiers.map((tier) => tier.price))
@@ -259,8 +280,9 @@ export function EventStorefront({
 
   function hasActiveCheckoutCart() {
     const checkout = useCheckoutStore.getState()
-    const selectedCount =
-      useStorefrontSeatStore.getState().selectedItems.length
+    const selectedCount = storefrontSelectionCount(
+      useStorefrontSeatStore.getState().selectedItems,
+    )
     return checkout.itemsCount > 0 || selectedCount > 0
   }
 
@@ -337,11 +359,21 @@ export function EventStorefront({
         name: tier.name,
         price: tier.price,
         available: tier.available,
+        isActive: (tier.visibility ?? "public") !== "private",
         capacity: tier.capacity,
         bonusReward: tier.bonus_reward,
         dayId: tier.day_id,
         dateId: normalizeDayId(tier.day_id),
-        isFullPass: isFullPassDayId(tier.day_id),
+        isFullPass:
+          publicTicketOfferKind({
+            name: tier.name,
+            dayId: tier.day_id,
+            tierType: tier.tier_type,
+            bundleType: tier.bundle_type,
+            category: tier.category,
+            layoutType: tier.layout_type,
+            comboItems: event.comboItemsByTier[tier.id] ?? [],
+          }) === "PASS",
         layoutType: tier.layout_type,
         seatingSectorId: tier.seating_sector_id,
         capacityPerUnit: tier.capacity_per_unit,
@@ -707,6 +739,8 @@ export function EventStorefront({
         aria-hidden="true"
       >
         {event.imageUrl ? (
+          // Decorative blur layer; next/image would change the wash.
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={event.imageUrl}
             alt=""

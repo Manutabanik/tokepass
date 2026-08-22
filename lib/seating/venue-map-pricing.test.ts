@@ -138,7 +138,7 @@ describe("venue-map-pricing", () => {
     assert.equal(next[0]?.price, 12000)
     assert.equal(next[0]?.tierType, "seated")
     assert.equal(next[0]?.layoutType, "table_combo")
-    assert.equal(next[0]?.capacity, 6)
+    assert.equal(next[0]?.capacity, 48)
     assert.equal(next[0]?.capacityPerUnit, 8)
     assert.equal(next[1]?.name, "Estacionamiento")
     assert.equal(isMapBackedTicket(next[1]!), false)
@@ -437,6 +437,7 @@ describe("venue-map-pricing", () => {
     )
     assert.equal(next[0]?.layoutType, "table_combo")
     assert.equal(next[0]?.capacityPerUnit, 8)
+    assert.equal(next[0]?.capacity, 8)
   })
 
   it("migra el paso persistido del wizard de 5 a 4", () => {
@@ -569,13 +570,78 @@ describe("venue-map-pricing", () => {
         layoutType: "table_combo",
         map: emptyReserved,
       }),
-      false,
+      true,
+    )
+    assert.equal(
+      ticketRequiresInteractiveMap({
+        seatingSectorId: "campo",
+        layoutType: "general",
+        tierType: "general",
+        map: emptyReserved,
+      }),
+      true,
     )
     assert.equal(
       eventNeedsInteractiveCanvas(emptyReserved, [
         { seatingSectorId: "campo", layoutType: "general", tierType: "general" },
       ]),
       true,
+    )
+    assert.equal(
+      eventNeedsInteractiveCanvas(
+        emptyReserved,
+        [{ seatingSectorId: "campo", layoutType: "general" }],
+        { hasSeatingPlan: false },
+      ),
+      true,
+    )
+  })
+
+  it("no pide modal de asientos para una zona GA aunque el ticket diga numbered", () => {
+    const map = emptyVenueMap()
+    map.zones = [
+      {
+        id: "zona-1",
+        name: "Zona 1",
+        color: "#22d3ee",
+        price: 5000,
+        polygon: [
+          { x: 0, y: 0 },
+          { x: 10, y: 0 },
+          { x: 10, y: 10 },
+        ],
+        layoutType: "general",
+        seatingType: "GENERAL",
+        sellMode: "per_seat",
+        rows: 0,
+        itemsPerRow: 0,
+        capacityPerUnit: 1,
+        capacity: 200,
+        labelPrefix: "Campo ",
+      },
+    ]
+    assert.equal(
+      sectorUsesNumberedMap({
+        seatingSectorId: "zona-1",
+        layoutType: "numbered_seat",
+        map,
+      }),
+      false,
+    )
+    assert.equal(
+      ticketRequiresInteractiveMap({
+        seatingSectorId: "zona-1",
+        layoutType: "numbered_seat",
+        map,
+      }),
+      false,
+    )
+    assert.equal(
+      sectorUsesNumberedMap({
+        layoutType: "numbered_seat",
+        map,
+      }),
+      false,
     )
   })
 })

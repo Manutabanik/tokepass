@@ -25,3 +25,13 @@ export function selectableTicketStock(tier: TicketStockInput): number {
 export function isTicketSoldOut(tier: TicketStockInput): boolean {
   return selectableTicketStock(tier) <= 0
 }
+
+export function isTicketCardBlocked(
+  tier: TicketStockInput & { isActive?: boolean | null },
+): boolean {
+  if (tier.isActive === false) return true
+  return isTicketSoldOut(tier)
+}
+
+export const SOLD_OUT_TICKET_CARD_CLASS =
+  "cursor-not-allowed opacity-50 pointer-events-none grayscale"

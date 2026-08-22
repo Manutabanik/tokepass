@@ -52,34 +52,38 @@ export function CheckoutTicketList({
   const selectedSeat = useCheckoutStore((state) => state.selectedSeat)
   const seatSheetOpen = useCheckoutStore((state) => state.seatSheetOpen)
 
+  const selector = (
+    <EventCheckoutSelector
+      tiers={tiers}
+      quantities={quantities}
+      isPending={isPending}
+      hasSeatingFlow={hasSeatingFlow}
+      hasInteractiveMap={hasInteractiveMap}
+      scheduleDays={scheduleDays}
+      maxTicketsPerUser={maxTicketsPerUser}
+      selectedCount={selectedCount}
+      includesGeneralAccess={includesGeneralAccess}
+      focusedTierId={focusedTierId}
+      mapLoading={mapLoading}
+      selectedSeat={selectedSeat as SelectedNumberedSeat | null}
+      selectedPlaceCount={selectedPlaceCount}
+      onQuantityChange={onQuantityChange}
+      onOpenSeatFlow={onOpenSeatFlow}
+      seatSelection={hasInteractiveMap ? seatSelection : null}
+      onPurchaseIntent={onPurchaseIntent}
+      onClearSeat={onClearSeat}
+      seatSheetOpen={hasInteractiveMap ? seatSheetOpen : false}
+      onSeatSheetOpenChange={(open) =>
+        useCheckoutStore.getState().setSeatSheetOpen(open)
+      }
+      selectedDateId={selectedDateId}
+      onSelectedDateIdChange={onSelectedDateIdChange}
+    />
+  )
+
   return (
     <div className="mx-auto flex min-h-0 w-full flex-col">
-      <EventCheckoutSelector
-        tiers={tiers}
-        quantities={quantities}
-        isPending={isPending}
-        hasSeatingFlow={hasSeatingFlow}
-        hasInteractiveMap={hasInteractiveMap}
-        scheduleDays={scheduleDays}
-        maxTicketsPerUser={maxTicketsPerUser}
-        selectedCount={selectedCount}
-        includesGeneralAccess={includesGeneralAccess}
-        focusedTierId={focusedTierId}
-        mapLoading={mapLoading}
-        selectedSeat={selectedSeat as SelectedNumberedSeat | null}
-        selectedPlaceCount={selectedPlaceCount}
-        onQuantityChange={onQuantityChange}
-        onOpenSeatFlow={onOpenSeatFlow}
-        seatSelection={seatSelection}
-        onPurchaseIntent={onPurchaseIntent}
-        onClearSeat={onClearSeat}
-        seatSheetOpen={seatSheetOpen}
-        onSeatSheetOpenChange={(open) =>
-          useCheckoutStore.getState().setSeatSheetOpen(open)
-        }
-        selectedDateId={selectedDateId}
-        onSelectedDateIdChange={onSelectedDateIdChange}
-      />
+      {selector}
     </div>
   )
 }

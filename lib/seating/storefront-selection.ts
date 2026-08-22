@@ -43,6 +43,7 @@ export function addSelectedSeatToCartItem(
         : Number(seat.seat_number) || undefined,
     sellMode: "per_seat",
     priceMode: "per_person",
+    isMappedSelection: true,
   }
 }
 
@@ -120,6 +121,7 @@ export function storefrontItemFromElement(
       : type === "seat"
         ? "SEATED_NUMERATED"
         : "GENERAL_ADMISSION",
+    isMappedSelection: true,
   }
 }
 
@@ -146,6 +148,7 @@ export function storefrontItemFromZone(
     sellMode: zone.sellMode,
     priceMode: zone.priceMode ?? venuePriceModeFromSellMode(zone.sellMode),
     inventoryType: "GENERAL_ADMISSION",
+    isMappedSelection: true,
   }
 }
 
@@ -182,6 +185,7 @@ export function storefrontItemFromElementSeat(
     priceMode: "per_person",
     inventoryType: "SEATED_NUMERATED",
     sectorName: element.sectorName?.trim() || undefined,
+    isMappedSelection: true,
   }
 }
 
@@ -244,12 +248,22 @@ export function hydrateStorefrontItemsFromMap(
   return unique.map((item) => {
     const live = resolveStorefrontItemFromMap(map, item.id, priceBySectorId)
     if (!live) return item
+    const liveCapacity = Math.max(0, Math.floor(Number(live.capacity) || 0))
+    const selectedCapacity = Math.max(0, Math.floor(Number(item.capacity) || 0))
+    const isQuantityZone =
+      live.type === "zone" ||
+      item.type === "zone" ||
+      live.inventoryType === "GENERAL_ADMISSION" ||
+      item.inventoryType === "GENERAL_ADMISSION"
     return {
       ...item,
+      ...live,
       name: live.name,
       displayName: live.displayName ?? live.name,
-      price: live.price,
-      capacity: live.capacity || item.capacity,
+      price: Number(live.price),
+      capacity: isQuantityZone
+        ? Math.max(1, selectedCapacity, liveCapacity)
+        : liveCapacity || selectedCapacity || 1,
       color: live.color ?? item.color,
       type: live.type,
       sectorId: live.sectorId ?? item.sectorId,
@@ -257,6 +271,7 @@ export function hydrateStorefrontItemsFromMap(
       number: live.number ?? item.number,
       sellMode: live.sellMode ?? item.sellMode,
       priceMode: live.priceMode ?? item.priceMode,
+      inventoryType: live.inventoryType ?? item.inventoryType,
     }
   })
 }

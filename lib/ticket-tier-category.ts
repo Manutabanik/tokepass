@@ -1,3 +1,5 @@
+import { publicTicketOfferKind } from "@/lib/checkout/ticket-offer-kind"
+
 export const TICKET_TIER_CATEGORIES = [
   "standard",
   "bundle",
@@ -27,6 +29,9 @@ export function inferTicketTierCategory(input: {
   layoutType?: string | null
   hasComboItems?: boolean
   isMultiDay?: boolean
+  tierType?: string | null
+  bundleType?: string | null
+  isFullPass?: boolean
 }): TicketTierCategory {
   const parsed = parseTicketTierCategory(input.category)
   if (parsed !== "standard") return parsed
@@ -39,7 +44,19 @@ export function inferTicketTierCategory(input: {
   }
   if (input.hasComboItems) return "bundle"
   if (input.layoutType === "table_combo") return "bundle"
-  if (input.isMultiDay && !input.dayId) return "bundle"
+  if (
+    publicTicketOfferKind({
+      name: input.name,
+      dayId: input.dayId,
+      layoutType: input.layoutType,
+      tierType: input.tierType,
+      bundleType: input.bundleType,
+      isFullPass: input.isFullPass,
+      comboItems: input.hasComboItems ? [{}] : [],
+    }) !== "SINGLE_DAY"
+  ) {
+    return "bundle"
+  }
   return "standard"
 }
 

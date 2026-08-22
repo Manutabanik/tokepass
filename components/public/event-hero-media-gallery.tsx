@@ -33,6 +33,7 @@ function HeroFlyerSlide({
     <div className="relative h-full w-full overflow-hidden bg-muted">
       {/* eslint-disable-next-line @next/next/no-img-element -- flyer host/blob */}
       <img
+        key={url}
         src={url}
         alt={title}
         className={cn(

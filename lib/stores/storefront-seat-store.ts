@@ -35,6 +35,8 @@ export type StorefrontSelectedItem = {
   sellMode?: "per_seat" | "group"
   priceMode?: "closed_unit" | "per_person"
   inventoryType?: StorefrontInventoryType
+  ticketTierId?: string
+  isMappedSelection?: boolean
 }
 
 export type StorefrontLayoutSeat = {
@@ -134,6 +136,7 @@ function layoutSeatToItem(seat: StorefrontLayoutSeat): StorefrontSelectedItem {
     sellMode: "per_seat",
     priceMode: "per_person",
     inventoryType: "SEATED_NUMERATED",
+    isMappedSelection: true,
   }
 }
 

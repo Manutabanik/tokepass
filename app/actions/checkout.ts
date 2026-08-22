@@ -9,6 +9,7 @@ import {
   type CheckoutBuyerInfo,
   type NormalizedCheckoutBuyer,
 } from "@/lib/checkout-buyer"
+import { PHONE_ERROR } from "@/lib/checkout/guest-input"
 import {
   applyActivePhaseToTier,
   decidePhaseCart,
@@ -43,6 +44,22 @@ import {
   invalidateStaleCheckoutPreferences,
 } from "@/lib/payments/stale-preferences"
 import { issueCheckoutFulfillmentCookie } from "@/lib/checkout/fulfillment-cookie"
+import { checkoutActionFailure } from "@/lib/checkout/checkout-feedback"
+import {
+  ERR_NO_STOCK,
+  ERR_SEAT_TAKEN,
+  GENERAL_STOCK_UNAVAILABLE,
+  SEAT_SELECTION_REQUIRED,
+  SEAT_UNAVAILABLE,
+  SECTOR_NOT_CONFIGURED,
+  encodeGeneralStockUnavailable,
+  layoutRequiresSeatSelection,
+} from "@/lib/checkout/revalidate-seat-holds"
+import {
+  generalTierRemaining,
+  partitionMixedCartItems,
+  tierIsNumbered,
+} from "@/lib/checkout/mixed-cart"
 import {
   HIGH_DEMAND_LOCK_TIMEOUT,
   isHighDemandLockError,
@@ -69,7 +86,7 @@ import {
   LEGAL_CONSENT_REQUIRED_ERROR,
 } from "@/lib/legal/terms"
 import { normalizePreviewKey } from "@/lib/preview/sandbox"
-import { createAdminClient } from "@/lib/supabase/admin"
+import { createAdminClient, tryCreateAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import type { PaymentProvider } from "@/types/database"
 import {
@@ -121,7 +138,14 @@ export type CheckoutResult =
     }
   | {
       success: false
-      error: "auth_required" | "out_of_stock" | "phase_rollover" | string
+      error:
+        | "auth_required"
+        | "out_of_stock"
+        | "phase_rollover"
+        | typeof SECTOR_NOT_CONFIGURED
+        | string
+      code?: string
+      ticketId?: string
       phaseRollover?: PhaseRolloverInfo
     }
 
@@ -177,28 +201,64 @@ function mapReserveRpcError(
     return { success: false, error: LEGAL_CONSENT_REQUIRED_ERROR }
   }
 
-  if (normalized.includes("seating_unit_not_materialized")) {
-    return { success: false, error: "not_materialized" }
+  if (
+    normalized.includes("seating_unit_not_materialized") ||
+    normalized.includes("seating_sector_empty") ||
+    normalized.includes("seating_sector_not_found") ||
+    normalized.includes("seating_layout_not_found") ||
+    normalized.includes("seating_layout_type_mismatch") ||
+    normalized.includes("sector_not_configured")
+  ) {
+    return { success: false, error: SECTOR_NOT_CONFIGURED }
   }
 
   if (
-    normalized.includes("seating_unit_unavailable") ||
+    normalized.includes("seat_unavailable") ||
+    normalized.includes("seating_unit_unavailable")
+  ) {
+    return {
+      success: false,
+      error: SEAT_UNAVAILABLE,
+      code: ERR_SEAT_TAKEN,
+    }
+  }
+
+  if (
+    normalized.includes("general_stock_unavailable") ||
+    normalized.includes("err_no_stock")
+  ) {
+    return {
+      success: false,
+      error: GENERAL_STOCK_UNAVAILABLE,
+      code: ERR_NO_STOCK,
+    }
+  }
+
+  if (
     normalized.includes("inventory_conflict_409") ||
     normalized.includes("409") ||
     normalized.includes("conflict")
   ) {
-    return { success: false, error: "out_of_stock" }
+    return { success: false, error: "out_of_stock", code: ERR_NO_STOCK }
   }
 
   if (
     normalized.includes("bundle_child_unavailable") ||
     normalized.includes("bundle_child_invalid_or_exhausted")
   ) {
-    return { success: false, error: "out_of_stock" }
+    return { success: false, error: "out_of_stock", code: ERR_NO_STOCK }
   }
 
   if (normalized.includes("agotad")) {
     return { success: false, error: EVENT_SOLD_OUT_ERROR }
+  }
+
+  if (
+    /could not find the function|function .+ does not exist|pgrst202|schema cache/i.test(
+      normalized,
+    )
+  ) {
+    return null
   }
 
   if (
@@ -211,7 +271,7 @@ function mapReserveRpcError(
     normalized.includes("not published") ||
     normalized.includes("not found")
   ) {
-    return { success: false, error: "out_of_stock" }
+    return { success: false, error: "out_of_stock", code: ERR_NO_STOCK }
   }
 
   return null
@@ -323,8 +383,8 @@ async function resolveCheckoutEventAccess(input: {
   previewKey?: string | null
 }): Promise<CheckoutEventAccess> {
   const userClient = await createClient()
-  const admin = createAdminClient() as CheckoutSupabase
-  const { data: event } = await admin
+  const admin = tryCreateAdminClient() as CheckoutSupabase | null
+  const { data: event } = await (admin ?? userClient)
     .from("events")
     .select("id, slug, organizer_id, status")
     .eq("id", input.eventId)
@@ -369,6 +429,10 @@ async function resolveCheckoutEventAccess(input: {
       ok: false,
       error: "Este evento no admite compras de prueba en su estado actual.",
     }
+  }
+
+  if (!admin) {
+    return { ok: false, error: "No se pudo verificar el evento." }
   }
 
   const key = normalizePreviewKey(input.previewKey)
@@ -664,7 +728,7 @@ async function resolveMappedSeatingUnits(
   items: CheckoutCartItem[],
 ): Promise<
   | { ok: true; items: CheckoutCartItem[] }
-  | { ok: false; error: "out_of_stock" }
+  | { ok: false; error: typeof SEAT_UNAVAILABLE | typeof SEAT_SELECTION_REQUIRED }
 > {
   const next = items.map((item) => ({ ...item }))
   for (const item of next) {
@@ -677,14 +741,14 @@ async function resolveMappedSeatingUnits(
       continue
     }
     const elementId = checkoutItemElementId(item)
-    if (!elementId) return { ok: false, error: "out_of_stock" }
+    if (!elementId) return { ok: false, error: SEAT_SELECTION_REQUIRED }
     const { data } = await supabase
       .from("event_seating_units")
       .select("id")
       .eq("event_id", eventId)
       .eq("layout_item_id", elementId)
       .maybeSingle()
-    if (!data?.id) return { ok: false, error: "out_of_stock" }
+    if (!data?.id) return { ok: false, error: SEAT_UNAVAILABLE }
     item.seatingUnitId = data.id
     item.seatId = data.id
     item.seat_id = data.id
@@ -838,9 +902,7 @@ export async function holdSeatingUnitForCart(
   if (error) {
     const mapped = mapReserveRpcError(reserveRpcErrorText(error))
     if (mapped) {
-      return mapped.success
-        ? { success: false, error: "out_of_stock" }
-        : { success: false, error: mapped.error }
+      return { success: false, error: mapped.error }
     }
     logger.error({
       context: "checkout/cart-hold",
@@ -942,9 +1004,7 @@ export async function holdSeatingUnitForCartByLayoutItem(
   if (error) {
     const mapped = mapReserveRpcError(reserveRpcErrorText(error))
     if (mapped) {
-      return mapped.success
-        ? { success: false, error: "out_of_stock" }
-        : { success: false, error: mapped.error }
+      return { success: false, error: mapped.error }
     }
     logger.error({
       context: "checkout/cart-hold",
@@ -1057,11 +1117,26 @@ export type LockTicketsItem = {
   ticketTierId?: string
   tierId: string
   quantity: number
+  seatingUnitId?: string
+  seat_id?: string
+  seatingIds?: string[]
 }
 
 export type LockTicketsResult =
   | { success: true; reservedUntil: string }
-  | { success: false; error: "auth_required" | "out_of_stock" | string }
+  | {
+      success: false
+      error:
+        | "auth_required"
+        | "out_of_stock"
+        | typeof SECTOR_NOT_CONFIGURED
+        | typeof SEAT_SELECTION_REQUIRED
+        | typeof SEAT_UNAVAILABLE
+        | typeof GENERAL_STOCK_UNAVAILABLE
+        | string
+      code?: string
+      ticketId?: string
+    }
 
 export async function lockTickets(
   eventId: string,
@@ -1073,8 +1148,38 @@ export async function lockTickets(
     return { success: false, error: formatCheckoutPayloadError(parsed.error) }
   }
   eventId = parsed.data.eventId
-  items = parsed.data.items
 
+  try {
+    return await executeLockTickets(eventId, parsed.data.items, previewKey)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error ?? "")
+    const mapped = mapReserveRpcError(message)
+    if (mapped) {
+      return {
+        success: false,
+        error: mapped.error,
+        code: mapped.code,
+        ticketId: mapped.ticketId,
+      }
+    }
+    logger.error({
+      context: "checkout/mixed-hold",
+      message: "lock_tickets_unhandled",
+      eventId,
+      error: message,
+    })
+    return {
+      success: false,
+      error: "No se pudo reservar el stock. Probá de nuevo.",
+    }
+  }
+}
+
+async function executeLockTickets(
+  eventId: string,
+  cartItemsInput: CheckoutCartItem[],
+  previewKey?: string | null,
+): Promise<LockTicketsResult> {
   const supabase = await createClient()
   const {
     data: { user },
@@ -1111,45 +1216,123 @@ export async function lockTickets(
     }
   }
 
-  const payload = items
-    .filter((item) => item.type !== "mapped")
-    .map((item) => {
-      const tierId = (
-        item.ticket_tier_id ||
-        item.ticketTierId ||
-        item.tierId
-      ).trim()
-      return {
-        type: "general" as const,
-        ticket_tier_id: tierId,
-        tier_id: tierId,
-        quantity: Math.max(0, Math.floor(item.quantity)),
-      }
-    })
-    .filter((item) => item.tier_id.length > 0 && item.quantity > 0)
+  const cartItems = cartItemsInput
+  const allTierIds = [
+    ...new Set(cartItems.map((item) => checkoutItemTierId(item))),
+  ]
 
-  if (payload.length === 0) {
-    return { success: false, error: "out_of_stock" }
-  }
-
-  const [{ data: holdEvent }, { data: holdTiers }] = await Promise.all([
+  const [eventRes, tiersRes, stockRes] = await Promise.all([
     access.db
       .from("events")
-      .select("max_tickets_per_user")
+      .select("max_tickets_per_user, has_seating_plan")
       .eq("id", eventId)
       .maybeSingle(),
     access.db
       .from("ticket_tiers")
-      .select("id, name, min_purchase_limit, max_purchase_limit")
+      .select(
+        "id, name, min_purchase_limit, max_purchase_limit, seating_sector_id, layout_type",
+      )
       .eq("event_id", eventId)
-      .in(
-        "id",
-        payload.map((item) => item.tier_id),
-      ),
+      .in("id", allTierIds),
+    access.db.rpc("get_event_tier_live_stock", { p_event_id: eventId }),
   ])
+  const holdEvent = eventRes.data
+  const holdTiers = tiersRes.data
+  const mappedSectors = (holdTiers ?? [])
+    .filter(
+      (tier) =>
+        Boolean(tier.seating_sector_id?.trim()) &&
+        layoutRequiresSeatSelection(tier.layout_type),
+    )
+    .map((tier) => String(tier.seating_sector_id).trim())
+  const sectorsToInspect = [...new Set(mappedSectors)]
+  const linkedSectors = new Set<string>()
+  if (sectorsToInspect.length > 0) {
+    const { data: unitRows } = await access.db
+      .from("event_seating_units")
+      .select("sector_id")
+      .eq("event_id", eventId)
+      .in("sector_id", sectorsToInspect)
+    for (const row of unitRows ?? []) {
+      if (row.sector_id) linkedSectors.add(row.sector_id)
+    }
+    if (mappedSectors.some((sectorId) => !linkedSectors.has(sectorId))) {
+      return { success: false, error: SECTOR_NOT_CONFIGURED }
+    }
+  }
+
+  const { mapItems, generalItems } = partitionMixedCartItems({
+    items: cartItems,
+    tiers: (holdTiers ?? []).map((tier) => ({
+      id: tier.id,
+      name: tier.name,
+      layoutType: tier.layout_type,
+      seatingSectorId: tier.seating_sector_id,
+      hasMap: Boolean(tier.seating_sector_id?.trim() || holdEvent?.has_seating_plan),
+      isNumbered: layoutRequiresSeatSelection(tier.layout_type),
+    })),
+    linkedSectorIds: linkedSectors,
+  })
+  const numberedMapItems = mapItems.filter((item) => {
+    const tier = (holdTiers ?? []).find(
+      (row) => row.id === checkoutItemTierId(item),
+    )
+    return (
+      item.isNumbered !== false &&
+      item.is_numbered !== false &&
+      tierIsNumbered({
+        layoutType: tier?.layout_type,
+        isNumbered: item.isNumbered ?? item.is_numbered,
+      })
+    )
+  })
+  const zoneGeneralItems = [
+    ...generalItems,
+    ...mapItems.filter((item) => !numberedMapItems.includes(item)),
+  ]
+
+  for (const item of numberedMapItems) {
+    if (!checkoutItemSeatId(item) && !checkoutItemElementId(item)) {
+      return checkoutActionFailure(
+        "ERR_SEAT_REQUIRED",
+        SEAT_SELECTION_REQUIRED,
+        checkoutItemTierId(item),
+      )
+    }
+  }
+
+  const liveStockReady = !stockRes.error && Array.isArray(stockRes.data)
+  const remainingByTier = new Map(
+    (stockRes.data ?? []).map((row) => [
+      row.tier_id,
+      generalTierRemaining({
+        capacity: row.capacity,
+        sold: row.sold,
+      }),
+    ]),
+  )
+  const nameByTier = new Map(
+    (holdTiers ?? []).map((tier) => [tier.id, tier.name?.trim() || ""]),
+  )
+  for (const item of zoneGeneralItems) {
+    const tierId = checkoutItemTierId(item)
+    const remaining = remainingByTier.get(tierId)
+    if (liveStockReady && remaining != null && remaining < item.quantity) {
+      return checkoutActionFailure(
+        ERR_NO_STOCK,
+        encodeGeneralStockUnavailable(nameByTier.get(tierId), tierId),
+        tierId,
+      )
+    }
+  }
+
+  if (numberedMapItems.length === 0 && zoneGeneralItems.length === 0) {
+    return checkoutActionFailure(ERR_NO_STOCK, "out_of_stock")
+  }
+
   const holdCap = assertCartTierPurchaseLimits({
-    items: payload.map((item) => ({
-      tierId: item.tier_id,
+    items: cartItems.map((item) => ({
+      tierId: checkoutItemTierId(item),
       quantity: item.quantity,
     })),
     tiers: (holdTiers ?? []).map((tier) => ({
@@ -1169,34 +1352,92 @@ export async function lockTickets(
   const saleGate = await evaluateCartSaleWindows(
     access.db,
     eventId,
-    payload.map((item) => ({
-      type: "general" as const,
-      ticket_tier_id: item.tier_id,
-      ticketTierId: item.tier_id,
-      tierId: item.tier_id,
-      quantity: item.quantity,
-    })),
+    cartItems,
   )
   if (saleGate && !saleGate.success) {
     return { success: false, error: saleGate.error }
   }
 
-  const { data, error } = await access.db.rpc("hold_ga_tickets_for_cart", {
+  const rpcItems = cartItems.map((item) => toReserveRpcItem(item))
+  const mixed = await access.db.rpc("hold_mixed_cart_for_checkout", {
     p_event_id: eventId,
     p_owner_id: user.id,
-    p_items: payload,
+    p_items: rpcItems,
   })
+  const mixedMissing = Boolean(
+    mixed.error &&
+      /could not find|schema cache|does not exist|pgrst202|42883|hold_mixed_cart/i.test(
+        mixed.error.message,
+      ),
+  )
+
+  let data = mixed.data
+  let error = mixedMissing ? null : mixed.error
+
+  if (mixedMissing) {
+    if (zoneGeneralItems.length > 0) {
+      const gaPayload = zoneGeneralItems
+        .map((item) => ({
+          type: "general" as const,
+          ticket_tier_id: checkoutItemTierId(item),
+          tier_id: checkoutItemTierId(item),
+          quantity: item.quantity,
+        }))
+      if (gaPayload.length > 0) {
+        const ga = await access.db.rpc("hold_ga_tickets_for_cart", {
+          p_event_id: eventId,
+          p_owner_id: user.id,
+          p_items: gaPayload,
+        })
+        data = ga.data
+        error = ga.error
+      }
+    }
+    if (!error) {
+      for (const item of numberedMapItems) {
+        const seatId = checkoutItemSeatId(item)
+        if (!seatId) {
+          return { success: false, error: SEAT_SELECTION_REQUIRED }
+        }
+        const held = await access.db.rpc("hold_seating_unit_for_cart", {
+          p_event_id: eventId,
+          p_owner_id: user.id,
+          p_seating_unit_id: seatId,
+        })
+        if (held.error) {
+          error = held.error
+          break
+        }
+        const heldRow = Array.isArray(held.data) ? held.data[0] : held.data
+        if (heldRow?.reserved_until && !data) {
+          data = [{ reserved_until: heldRow.reserved_until }]
+        }
+      }
+    }
+  }
 
   if (error) {
     const mapped = mapReserveRpcError(reserveRpcErrorText(error))
     if (mapped) {
-      return mapped.success
-        ? { success: false, error: "out_of_stock" }
-        : { success: false, error: mapped.error }
+      if (mapped.error === "out_of_stock" && zoneGeneralItems.length > 0) {
+        const tierId = checkoutItemTierId(zoneGeneralItems[0]!)
+        const name = nameByTier.get(tierId)
+        return checkoutActionFailure(
+          ERR_NO_STOCK,
+          encodeGeneralStockUnavailable(name, tierId),
+          tierId,
+        )
+      }
+      return {
+        success: false,
+        error: mapped.error,
+        code: mapped.code,
+        ticketId: mapped.ticketId,
+      }
     }
     logger.error({
-      context: "checkout/ga-hold",
-      message: "hold_ga_tickets_for_cart_failed",
+      context: "checkout/mixed-hold",
+      message: "hold_mixed_cart_failed",
       eventId,
       error: error.message,
     })
@@ -1208,8 +1449,16 @@ export async function lockTickets(
 
   const row = Array.isArray(data) ? data[0] : data
   const reservedUntil = row?.reserved_until
+  if (!reservedUntil && mapItems.length === 0) {
+    const tierId = checkoutItemTierId(generalItems[0]!)
+    return checkoutActionFailure(
+      ERR_NO_STOCK,
+      encodeGeneralStockUnavailable(nameByTier.get(tierId), tierId),
+      tierId,
+    )
+  }
   if (!reservedUntil) {
-    return { success: false, error: "out_of_stock" }
+    return checkoutActionFailure(ERR_SEAT_TAKEN, SEAT_UNAVAILABLE)
   }
 
   return { success: true, reservedUntil }
@@ -1814,18 +2063,6 @@ export async function startCheckoutWithPayment(
   const useSandbox = access.useSandbox || Boolean(payload.sandbox)
   const db = access.db
 
-  const captcha = useSandbox
-    ? ({ ok: true, provider: "none", score: null } as const)
-    : await verifyCheckoutCaptcha({
-        token: options?.captchaToken,
-        ip: ctx.ip,
-        skip: false,
-      })
-  if (!captcha.ok) {
-    await recordCheckoutFailure(ctx)
-    return { success: false, error: captcha.error || CHECKOUT_VERIFY_ERROR }
-  }
-
   const room = await assertCheckoutWaitingRoom({
     eventId: access.eventId,
     eventSlug: access.eventSlug,
@@ -1849,7 +2086,7 @@ export async function startCheckoutWithPayment(
   )
   if (!resolvedCart.ok) {
     await recordCheckoutFailure(ctx)
-    return { success: false, error: "out_of_stock" }
+    return { success: false, error: resolvedCart.error }
   }
   const cartItems = resolvedCart.items
   const seatingItems = cartItems.filter((item) => isMappedCheckoutItem(item))
@@ -1919,7 +2156,9 @@ export async function startCheckoutWithPayment(
   }
 
   const stockCap = assertCartRemainingStock({
-    items: cartItems.map((item) => ({
+    items: cartItems
+      .filter((item) => !isMappedCheckoutItem(item))
+      .map((item) => ({
       tierId: checkoutItemTierId(item),
       quantity: item.quantity,
     })),
@@ -1933,7 +2172,26 @@ export async function startCheckoutWithPayment(
   })
   if (!stockCap.ok) {
     await recordCheckoutFailure(ctx)
-    return { success: false, error: stockCap.error }
+    const general = cartItems.find((item) => !isMappedCheckoutItem(item))
+    const generalName = (eventTiers ?? []).find(
+      (tier) =>
+        "id" in tier &&
+        general != null &&
+        tier.id === checkoutItemTierId(general),
+    )
+    const label =
+      generalName && "name" in generalName && typeof generalName.name === "string"
+        ? generalName.name
+        : null
+    const stockTierId =
+      general && "ticket_tier_id" in general
+        ? checkoutItemTierId(general)
+        : undefined
+    return checkoutActionFailure(
+      ERR_NO_STOCK,
+      encodeGeneralStockUnavailable(label, stockTierId),
+      stockTierId,
+    )
   }
 
   // Progressive profiling: DNI + teléfono permanentes en el perfil.
@@ -1983,6 +2241,28 @@ export async function startCheckoutWithPayment(
   if (!quoted.ok) {
     await recordCheckoutFailure(ctx)
     return { success: false, error: quoted.error }
+  }
+
+  const isFreeOrder = quoted.total === 0
+  if (!isFreeOrder && !buyer.buyerPhone.trim()) {
+    await recordCheckoutFailure(ctx)
+    return { success: false, error: PHONE_ERROR }
+  }
+
+  let captchaProvider: string | null = "none"
+  let captchaScore: number | null = null
+  if (!useSandbox && !isFreeOrder) {
+    const captcha = await verifyCheckoutCaptcha({
+      token: options?.captchaToken,
+      ip: ctx.ip,
+      skip: false,
+    })
+    if (!captcha.ok) {
+      await recordCheckoutFailure(ctx)
+      return { success: false, error: captcha.error || CHECKOUT_VERIFY_ERROR }
+    }
+    captchaProvider = captcha.provider
+    captchaScore = captcha.score
   }
 
   const rpcItems = cartItems.map((item) => {
@@ -2221,8 +2501,8 @@ export async function startCheckoutWithPayment(
       ctx,
       deviceHash: options?.deviceHash,
       dwellMs: options?.dwellMs,
-      captchaProvider: captcha.provider,
-      captchaScore: captcha.score,
+      captchaProvider,
+      captchaScore,
     })
 
     const cleanPromoId = payload.promoCodeId
@@ -2295,7 +2575,7 @@ export async function startCheckoutWithPayment(
       eventId: payload.eventId,
       buyerId: user.id,
       sandbox: useSandbox,
-      termsAccepted: payload.termsAccepted !== false,
+      termsAccepted: isFreeOrder ? true : payload.termsAccepted !== false,
     })
     if (!legalGate.ok) {
       await cleanupPendingOrder(orderId)
@@ -2622,12 +2902,16 @@ export async function canUserSandboxCheckout(
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) return false
-  const allowed = await assertSandboxCheckoutAllowed(
-    eventId,
-    user.id,
-    previewKey,
-  )
-  return allowed.ok
+  try {
+    const allowed = await assertSandboxCheckoutAllowed(
+      eventId,
+      user.id,
+      previewKey,
+    )
+    return allowed.ok
+  } catch {
+    return false
+  }
 }
 
 /**

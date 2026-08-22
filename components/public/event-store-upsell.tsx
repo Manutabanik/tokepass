@@ -2,8 +2,6 @@
 
 import {
   LoaderCircle,
-  Minus,
-  Plus,
   ShoppingBag,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
@@ -14,6 +12,7 @@ import {
   startStoreCheckout,
   type EventItem,
 } from "@/app/actions/addons"
+import { QuantityCounter } from "@/components/public/quantity-counter"
 import { Button } from "@/components/ui/button"
 import { formatCurrency } from "@/lib/format"
 import { redirectToCheckoutPaymentOrToast } from "@/lib/checkout-redirect"
@@ -197,37 +196,19 @@ export function EventStoreUpsell({
                         </div>
                       </div>
                     </div>
-                    <div className="flex h-9 shrink-0 items-center gap-3 rounded-xl border border-white/10 bg-black/40 px-2">
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="ghost"
-                        disabled={soldOut || quantity <= 0 || pending}
-                        onClick={() =>
-                          setItemQty(item.id, quantity - 1, max)
-                        }
-                        aria-label={`Quitar ${item.name}`}
-                        className="size-7 rounded-md hover:bg-white/5"
-                      >
-                        <Minus className="size-3.5" />
-                      </Button>
-                      <span className="min-w-5 text-center text-sm font-bold tabular-nums">
-                        {quantity}
-                      </span>
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="ghost"
-                        disabled={soldOut || quantity >= max || pending}
-                        onClick={() =>
-                          setItemQty(item.id, quantity + 1, max)
-                        }
-                        aria-label={`Sumar ${item.name}`}
-                        className="size-7 rounded-md hover:bg-white/5"
-                      >
-                        <Plus className="size-3.5" />
-                      </Button>
-                    </div>
+                    <QuantityCounter
+                      quantity={quantity}
+                      max={max}
+                      disabled={soldOut || pending}
+                      onDecrease={() =>
+                        setItemQty(item.id, quantity - 1, max)
+                      }
+                      onIncrease={() =>
+                        setItemQty(item.id, quantity + 1, max)
+                      }
+                      decreaseLabel={`Quitar ${item.name}`}
+                      increaseLabel={`Sumar ${item.name}`}
+                    />
                   </article>
                 )
               })}

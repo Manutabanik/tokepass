@@ -541,6 +541,37 @@ export function flattenSeatsForAvailability(
       extras.push(seat)
     }
   }
+  for (const zone of map.zones ?? []) {
+    if (zone.layoutType === "general") continue
+    const hasMaterializedPlaces = (map.elements ?? []).some(
+      (element) =>
+        isSellableElement(element) &&
+        (element.groupId === zone.id || element.id === zone.id),
+    )
+    if (hasMaterializedPlaces) continue
+    const expanded = expandParametricZone(zone)
+    let index = 0
+    for (const row of expanded.rows) {
+      for (const item of row.items) {
+        if (seen.has(item.id)) continue
+        seen.add(item.id)
+        extras.push({
+          id: item.id,
+          row: row.row_label,
+          number: ++index,
+          x: 0,
+          y: 0,
+          sectorId: zone.id,
+          sectorName: zone.name,
+          color: zone.color,
+          price: zone.price,
+          mapStatus: "available",
+          source: "sector",
+          label: item.label,
+        })
+      }
+    }
+  }
   return [...base, ...extras]
 }
 

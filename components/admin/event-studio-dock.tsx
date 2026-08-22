@@ -3,6 +3,8 @@
 import { ArrowLeft, ArrowRight, LoaderCircle, Rocket, Save } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { STUDIO_SECONDARY_BUTTON_CLASS } from "@/lib/admin/studio-form-styles"
+import { cn } from "@/lib/utils"
 
 export function EventStudioDock({
   canGoBack,
@@ -40,7 +42,7 @@ export function EventStudioDock({
         type="submit"
         variant="outline"
         disabled={submitting || nextDisabled}
-        className="h-12 shrink-0 rounded-xl border-white/10 bg-black/40 px-4 text-sm font-semibold"
+        className={cn(STUDIO_SECONDARY_BUTTON_CLASS, "h-12 shrink-0 px-4 text-sm")}
       >
         {submitting ? (
           <LoaderCircle className="size-4 animate-spin" />

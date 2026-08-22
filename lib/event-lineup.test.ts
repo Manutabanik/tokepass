@@ -83,6 +83,20 @@ describe("parseEventLineup", () => {
       false,
     )
   })
+
+  it("parses spotify_preview_url aliases as the artist preview", () => {
+    const parsed = parseEventLineup([
+      {
+        name: "Nathy Peluso",
+        spotify_preview_url: "https://p.scdn.co/mp3-preview/nathy",
+      },
+    ])
+    assert.equal(
+      parsed.artists[0]?.topTrackPreviewUrl,
+      "https://p.scdn.co/mp3-preview/nathy",
+    )
+    assert.equal(hasArtistAudioPreview(parsed.artists[0]!), true)
+  })
 })
 
 describe("eventArtistsToLineup", () => {

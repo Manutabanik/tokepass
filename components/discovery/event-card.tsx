@@ -156,12 +156,14 @@ export function EventCard({
   priority = false,
   index = 0,
   variant = "poster",
+  className,
 }: {
   event: CatalogEvent
   priority?: boolean
   index?: number
   variant?: "poster" | "list"
   categories?: DiscoveryCategory[]
+  className?: string
 }) {
   const urgency = urgencyLabel(event)
   const locationLabel = eventCardLocationLabel(event)
@@ -202,6 +204,7 @@ export function EventCard({
     )
   }
 
+  const href = publicEventPath(event)
   const priceLabel =
     event.startingPrice == null
       ? "Ver precios"
@@ -212,71 +215,92 @@ export function EventCard({
   return (
     <article
       className={cn(
-        "group relative flex cursor-pointer flex-col touch-pan-x rounded-2xl border border-white/5 bg-card/40 p-2 transition-all duration-300",
-        "hover:-translate-y-1 hover:border-emerald-500/30 hover:bg-card/80",
-        highlighted && "border-emerald-500/30",
+        "group relative aspect-[4/5] w-[85vw] max-w-[320px] flex-none cursor-pointer snap-center overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-950 shadow-xl transition-all duration-300",
+        "hover:border-emerald-500/30 hover:shadow-emerald-500/10",
+        "md:aspect-[3/4] md:w-full md:max-w-none",
+        highlighted && "border-emerald-500/40",
+        className,
       )}
       style={{ animationDelay: `${Math.min(index * 40, 200)}ms` }}
     >
-      <div className="relative aspect-[3/4] w-full overflow-hidden rounded-xl bg-muted">
-        {event.imageUrl ? (
-          <Image
-            src={event.imageUrl}
-            alt={event.title}
-            fill
-            priority={priority}
-            sizes="(max-width: 768px) 210px, 250px"
-            className={cn(
-              "object-cover transition-transform duration-500 group-hover:scale-105",
-              finished && "grayscale-[50%]",
-            )}
-          />
-        ) : (
-          <div
-            className={cn(
-              "absolute inset-0 bg-gradient-to-br",
-              gradientForId(event.id),
-              finished && "grayscale-[50%]",
-            )}
-          />
-        )}
+      {event.imageUrl ? (
+        <Image
+          src={event.imageUrl}
+          alt={event.title}
+          fill
+          priority={priority}
+          sizes="(max-width: 768px) 85vw, (max-width: 1024px) 33vw, 25vw"
+          className={cn(
+            "h-full w-full object-cover object-center transition-transform duration-500 group-hover:scale-105",
+            finished && "grayscale-[50%]",
+          )}
+        />
+      ) : (
+        <div
+          className={cn(
+            "absolute inset-0 bg-gradient-to-br",
+            gradientForId(event.id),
+            finished && "grayscale-[50%]",
+          )}
+        />
+      )}
 
+      <div
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-2/3 bg-gradient-to-t from-black via-black/90 to-transparent"
+        aria-hidden="true"
+      />
+
+      <div className="absolute top-4 right-4 z-30">
         {favReady ? (
           <FavoriteToggleButton
             key={`${event.id}-${favorited ? "1" : "0"}`}
             eventId={event.id}
             initiallyFavorited={favorited}
-            className="absolute top-2 right-2 z-20 size-8 p-1.5 text-white/80 shadow-none hover:text-red-500"
+            className="size-8 p-1.5 text-white/80 shadow-none hover:text-red-500"
           />
         ) : (
-          <span className="absolute top-2 right-2 z-20 block size-8 rounded-full bg-black/40 backdrop-blur-md" />
+          <span className="block size-8 rounded-full bg-black/40 backdrop-blur-md" />
         )}
-
-        {soldOut || finished ? (
-          <span className="absolute inset-x-2 bottom-10 z-10 rounded-md bg-black/70 px-2 py-1 text-center text-[9px] font-black tracking-wider text-white uppercase">
-            {soldOut ? "Agotadas" : "Finalizado"}
-          </span>
-        ) : null}
-
-        <div className="absolute right-2 bottom-2 z-10">
-          <span className="rounded-lg bg-emerald-500 px-2.5 py-1 text-[10px] font-black text-black shadow-md">
-            {priceLabel}
-          </span>
-        </div>
       </div>
 
-      <div className="px-1 pt-2 pb-0.5">
-        <p className="truncate text-[11px] font-bold text-emerald-400 uppercase">
-          {formatDiscoveryDate(event.date)}
-        </p>
-        <h3 className="line-clamp-1 text-sm font-bold text-foreground transition-colors group-hover:text-emerald-400">
-          <Link href={publicEventPath(event)} className={overlayLinkClass}>
-            {event.title}
+      {soldOut || finished ? (
+        <span className="absolute top-4 left-4 z-30 rounded-md bg-black/70 px-2 py-1 text-[9px] font-black tracking-wider text-white uppercase">
+          {soldOut ? "Agotadas" : "Finalizado"}
+        </span>
+      ) : null}
+
+      <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col justify-end p-5">
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-bold tracking-wide text-emerald-400 uppercase">
+            {formatDiscoveryDate(event.date)}
+          </span>
+          <h3 className="line-clamp-2 text-xl leading-tight font-black text-white md:text-lg">
+            <Link href={href} className={overlayLinkClass}>
+              {event.title}
+            </Link>
+          </h3>
+          <p className="flex items-center gap-1 text-xs font-medium text-white/80">
+            <MapPin className="size-3 shrink-0" aria-hidden="true" />
+            <span className="truncate">{locationLabel}</span>
+          </p>
+        </div>
+
+        <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-4">
+          <div className="flex min-w-0 flex-col">
+            <span className="mb-0.5 text-[10px] font-semibold tracking-wider text-white/50 uppercase">
+              Precio
+            </span>
+            <span className="truncate text-sm font-black text-white md:text-base">
+              {priceLabel}
+            </span>
+          </div>
+          <Link
+            href={href}
+            className="relative z-30 shrink-0 rounded-xl bg-emerald-500 px-4 py-2.5 text-xs font-extrabold text-black shadow-[0_0_15px_rgba(16,185,129,0.25)] transition-all hover:bg-emerald-400 active:scale-95 md:text-sm"
+          >
+            {soldOut ? "Ver evento" : finished ? "Ver evento" : "Comprar ➔"}
           </Link>
-        </h3>
-        <p className="line-clamp-1 text-[11px] text-muted-foreground">
-          {locationLabel}
-        </p>
+        </div>
       </div>
     </article>
   )

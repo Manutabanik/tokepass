@@ -41,7 +41,6 @@ import { upsertVenue } from "@/app/actions/venues"
 import { EventSponsorsManager } from "@/components/admin/event-sponsors-manager"
 import { AgendaBuilder } from "@/components/admin/agenda-builder"
 import { EventVenueStep } from "@/components/admin/event-venue-step"
-import { WizardConflictBanner } from "@/components/admin/wizard-conflict-banner"
 import {
   createInventoryTicket,
   UnifiedInventoryPanel,
@@ -95,7 +94,6 @@ import {
 } from "@/lib/inventory/capacity-budget"
 import { assignableLogicalSectorIds } from "@/lib/inventory/logical-sectors"
 import { useEventCapacity } from "@/hooks/use-event-capacity"
-import { ActionableFormError } from "@/components/admin/actionable-form-error"
 import {
   GUIDED_ERROR_EVENT,
   mapUnknownError,
@@ -128,6 +126,7 @@ import {
   type EventFormValues,
 } from "@/lib/validations/event-form"
 import { defaultInventoryDayId, seedTwoScheduleDays } from "@/lib/event-schedule"
+import { uncoveredScheduleDays } from "@/lib/inventory/day-ticket-coverage"
 import {
   clampWizardStep,
   editWorkspaceStepKey,
@@ -151,6 +150,13 @@ import {
   isStreamingVenue,
 } from "@/lib/venues/streaming-venue"
 import { cn } from "@/lib/utils"
+import {
+  STUDIO_CONTROL_CLASS,
+  STUDIO_LABEL_CLASS,
+  STUDIO_MODALITY_ACTIVE_CLASS,
+  STUDIO_MODALITY_IDLE_CLASS,
+  STUDIO_SELECT_CONTENT_CLASS,
+} from "@/lib/admin/studio-form-styles"
 
 const STEP_META = {
   [WIZARD_STEP_IDENTITY]: {
@@ -290,7 +296,7 @@ export function EventCreationWizard({
 
   const form = useForm<EventFormValues>({
     resolver: zodResolver(draftEventSchema) as Resolver<EventFormValues>,
-    mode: "onTouched",
+    mode: "onChange",
     reValidateMode: "onChange",
     shouldUnregister: false,
     defaultValues: initialData?.values ?? defaultValues,
@@ -349,7 +355,13 @@ export function EventCreationWizard({
   })
 
   const draftKey = initialData ? `edit:${initialData.id}` : "create"
-  const { persistedEventId, flushAutosave } = useEventFormAutosave({
+  const {
+    persistedEventId,
+    flushAutosave,
+    cancelPendingAutosave,
+    waitForInFlightAutosave,
+    markSaved,
+  } = useEventFormAutosave({
     form,
     draftKey,
     eventId: initialData?.id ?? null,
@@ -359,6 +371,7 @@ export function EventCreationWizard({
     zoneTierPricing,
     onZoneTierPricingChange: setZoneTierPricing,
     targetOrganizerId,
+    flyerFile,
     serverUpdatedAt: initialData?.updatedAt
       ? Date.parse(initialData.updatedAt)
       : null,
@@ -415,9 +428,15 @@ export function EventCreationWizard({
     router.replace(`${pathname}?step=${key}`, { scroll: false })
   }, [workspace, resolvedStep, pathname, router])
 
+  const scheduleDaysForGuard =
+    useWatch({ control: form.control, name: "basics.scheduleDays" }) ?? []
   const inventoryBlocked =
     resolvedStep === WIZARD_STEP_TICKETS &&
-    (capacitySnapshot.exceeded || ticketsHavePhaseOverflow(watchedTickets ?? []))
+    (capacitySnapshot.exceeded ||
+      ticketsHavePhaseOverflow(watchedTickets ?? []) ||
+      (scheduleDaysForGuard.length >= 2 &&
+        uncoveredScheduleDays(scheduleDaysForGuard, watchedTickets ?? [])
+          .length > 0))
 
   function applyMapInventory(map: ReturnType<typeof parseVenueMap>) {
     const pricing = venueMapToPricingMap(map)
@@ -516,41 +535,20 @@ export function EventCreationWizard({
   }
 
   function showWizardConflict(conflict: WizardConflict, title: string, field?: string) {
-    setResultMessage({
-      type: "error",
-      title,
-      text: conflict.summary,
-      field,
-      conflict,
-    })
+    const primary = conflict.actions[0]
     toast.error(title, {
-      duration: 14000,
-      description: (
-        <div className="space-y-2">
-          <p>{conflict.summary}</p>
-          <div className="flex flex-col gap-1">
-            {conflict.actions.map((action) => (
-              <button
-                key={`${action.step}-${action.label}`}
-                type="button"
-                className="h-10 min-h-10 rounded-full border border-white/20 px-3 text-left text-xs font-semibold text-zinc-100"
-                onClick={() =>
-                  goToWizardStep(action.step, conflict.sectorId, action.field ?? field)
-                }
-              >
-                {action.label}
-              </button>
-            ))}
-            <button
-              type="button"
-              className="h-10 min-h-10 rounded-full border border-white/20 px-3 text-left text-xs font-semibold text-zinc-100"
-              onClick={() => retryLastSave()}
-            >
-              Reintentar guardado
-            </button>
-          </div>
-        </div>
-      ),
+      duration: 5000,
+      description: conflict.summary,
+      action: primary
+        ? {
+            label: primary.label,
+            onClick: () =>
+              goToWizardStep(primary.step, conflict.sectorId, primary.field ?? field),
+          }
+        : {
+            label: "Reintentar",
+            onClick: () => retryLastSave(),
+          },
     })
   }
 
@@ -560,6 +558,7 @@ export function EventCreationWizard({
     wizardConflict?: WizardConflict,
     code?: string,
     field?: string,
+    actionHint?: string,
   ) {
     const mapped = mapUnknownError({
       code,
@@ -568,7 +567,6 @@ export function EventCreationWizard({
       field,
     })
     const resolvedField = field ?? fieldFromAppError(mapped)
-    const safeTitle = toUserFacingError(mapped.title || title)
     const safeMessage = toUserFacingError(mapped.message)
     if (resolvedField) {
       form.setError(resolvedField as never, {
@@ -583,7 +581,7 @@ export function EventCreationWizard({
         ? { summary: mapped.message, actions: [mapped.action] }
         : null)
     if (conflict) {
-      showWizardConflict(conflict, safeTitle, resolvedField)
+      showWizardConflict(conflict, toUserFacingError(mapped.title || title), resolvedField)
       window.setTimeout(() => {
         if (mapped.action) {
           goToWizardStep(mapped.action.step, conflict.sectorId, resolvedField)
@@ -593,45 +591,31 @@ export function EventCreationWizard({
       }, 80)
       return
     }
-    setResultMessage({
-      type: "error",
-      title: safeTitle,
-      text: safeMessage,
-      field: resolvedField,
+    toast.error(safeMessage, {
+      duration: 5000,
+      description:
+        actionHint?.trim() || mapped.actionHint || FIELD_REVIEW_HINT,
+      action:
+        resolvedField || mapped.action
+          ? {
+              label: mapped.action?.label ?? "Corregir campo",
+              onClick: () => {
+                if (mapped.action) {
+                  goToWizardStep(mapped.action.step, undefined, resolvedField)
+                  return
+                }
+                focusInvalidFormField(resolvedField)
+              },
+            }
+          : {
+              label: "Reintentar",
+              onClick: () => retryLastSave(),
+            },
     })
-    toast.error(safeTitle, {
-      duration: 14000,
-      description: (
-        <div className="space-y-2">
-          <p>{safeMessage}</p>
-          <div className="flex flex-col gap-1">
-            {resolvedField || mapped.action ? (
-              <button
-                type="button"
-                className="h-10 min-h-10 rounded-full border border-white/20 px-3 text-left text-xs font-semibold text-zinc-100"
-                onClick={() => {
-                  if (mapped.action) {
-                    goToWizardStep(mapped.action.step, undefined, resolvedField)
-                    return
-                  }
-                  focusInvalidFormField(resolvedField)
-                }}
-              >
-                Corregir campo
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className="h-10 min-h-10 rounded-full border border-white/20 px-3 text-left text-xs font-semibold text-zinc-100"
-              onClick={() => retryLastSave()}
-            >
-              Reintentar guardado
-            </button>
-          </div>
-        </div>
-      ),
-    })
-    window.setTimeout(() => focusInvalidFormField(resolvedField), 80)
+    window.setTimeout(() => {
+      if (resolvedField) form.setFocus(resolvedField as never)
+      focusInvalidFormField(resolvedField)
+    }, 80)
   }
 
   async function onSaveIdentity(data: EventFormValues) {
@@ -682,6 +666,7 @@ export function EventCreationWizard({
     if (result.eventId) {
       useEventFormStore.getState().setEventId(result.eventId)
     }
+    markSaved(data)
     setResultMessage({ type: "success", text: "Datos principales guardados." })
     toast.success("Datos principales guardados", {
       description: "El título y los datos del evento quedaron actualizados.",
@@ -719,6 +704,8 @@ export function EventCreationWizard({
   }
 
   async function persistInventoryDraft(data: EventFormValues) {
+    cancelPendingAutosave()
+    await waitForInFlightAutosave()
     const eventId = initialData?.id ?? persistedEventId
     if (!eventId) {
       return {
@@ -735,13 +722,17 @@ export function EventCreationWizard({
     if (targetOrganizerId) {
       formData.set("targetOrganizerId", targetOrganizerId)
     }
-    return updateCompleteEvent(formData)
+    const result = await updateCompleteEvent(formData)
+    if (result.success) markSaved(payloadData)
+    return result
   }
 
   async function onSubmit(
     data: EventFormValues,
     intent: "draft" | "publish" = "draft",
   ): Promise<boolean> {
+    cancelPendingAutosave()
+    await waitForInFlightAutosave()
     setResultMessage(null)
 
     if (intent === "draft" && activeStep === 0 && !workspace) {
@@ -754,7 +745,6 @@ export function EventCreationWizard({
       const message = eventCapacityOverflowMessage(capacity)
       form.setError("tickets", { type: "manual", message })
       toast.error("El aforo está excedido", { description: message })
-      setResultMessage({ type: "error", text: message })
       goToWizardStep(2)
       return false
     }
@@ -773,7 +763,6 @@ export function EventCreationWizard({
         toast.error("Todavía no se puede publicar", {
           description: mapped.message,
         })
-        setResultMessage({ type: "error", text: mapped.message })
         goToWizardStep(
           mapped.action?.step ?? wizardStepFromPath(first?.path ?? []),
         )
@@ -789,6 +778,10 @@ export function EventCreationWizard({
         "El flyer supera los 5MB. Comprimilo o elegí otra imagen."
       setFlyerError(message)
       form.setError("basics.flyerName", { type: "manual", message })
+      toast.error(message, {
+        description: "Usá un JPG o PNG de menos de 5 MB.",
+        duration: 5000,
+      })
       setActiveStep(0)
       return false
     }
@@ -821,10 +814,10 @@ export function EventCreationWizard({
           : undefined,
       })
       if (!persist.success) {
-        reportPersistError(
-          persist.error,
-          "No pudimos guardar los cambios. Revisá tu conexión a internet e intentá de nuevo",
-        )
+      reportPersistError(
+        persist.error,
+        "No pudimos guardar los cambios. Revisá tu conexión a internet e intentá de nuevo",
+      )
         return false
       }
       payloadData = {
@@ -883,6 +876,7 @@ export function EventCreationWizard({
         result.wizardConflict,
         result.code,
         result.field,
+        result.actionHint,
       )
       return false
     }
@@ -908,6 +902,7 @@ export function EventCreationWizard({
     if (result.eventId) {
       useEventFormStore.getState().setEventId(result.eventId)
     }
+    markSaved(payloadData)
 
     if (intent === "publish") {
       clearDraft(draftKey)
@@ -1053,7 +1048,7 @@ export function EventCreationWizard({
               onSelect={(index) => void moveToStep(index)}
             />
           }
-          status={<EventAutosaveIndicator />}
+          status={<EventAutosaveIndicator onRetry={() => void flushAutosave()} />}
           capacity={<EventCapacityHeader form={form} />}
           banner={
             impersonationName ? (
@@ -1110,7 +1105,7 @@ export function EventCreationWizard({
                       <FormItem className="space-y-2">
                         <FormLabel
                           htmlFor="event-title"
-                          className="mb-1.5 text-sm font-semibold text-foreground/90"
+                          className={STUDIO_LABEL_CLASS}
                         >
                           Nombre de tu evento
                         </FormLabel>
@@ -1118,8 +1113,9 @@ export function EventCreationWizard({
                           {...field}
                           id="event-title"
                           data-field="basics.title"
+                          aria-invalid={Boolean(fieldState.error)}
                           placeholder="Fiesta del gaucho, Recital en vivo"
-                          className="h-12 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-foreground focus:border-emerald-500"
+                          className={STUDIO_CONTROL_CLASS}
                         />
                         <FormMessage>{fieldState.error?.message}</FormMessage>
                       </FormItem>
@@ -1131,7 +1127,7 @@ export function EventCreationWizard({
                     name="basics.categoryId"
                     render={({ field, fieldState }) => (
                       <FormItem className="space-y-2">
-                        <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">
+                        <FormLabel className={STUDIO_LABEL_CLASS}>
                           Categoría
                         </FormLabel>
                         {categories.length === 0 ? (
@@ -1149,13 +1145,13 @@ export function EventCreationWizard({
                           >
                             <SelectTrigger
                               data-field="basics.categoryId"
-                              className="h-12 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm focus:border-emerald-500"
+                              className={STUDIO_CONTROL_CLASS}
                             >
                               <SelectValue placeholder="Elegí una categoría" />
                             </SelectTrigger>
                             <SelectContent
                               alignItemWithTrigger={false}
-                              className="max-h-60 overflow-y-auto rounded-xl border border-white/10 bg-[#0c0d0e]"
+                              className={STUDIO_SELECT_CONTENT_CLASS}
                             >
                               {categories.map((category) => {
                                 const Icon = resolveCategoryIcon(
@@ -1189,7 +1185,7 @@ export function EventCreationWizard({
                     name="basics.ageRestriction"
                     render={({ field, fieldState }) => (
                       <FormItem className="space-y-2">
-                        <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">
+                        <FormLabel className={STUDIO_LABEL_CLASS}>
                           Público permitido
                         </FormLabel>
                         <div
@@ -1225,7 +1221,7 @@ export function EventCreationWizard({
                   />
 
                   <div className="space-y-2">
-                    <p className="mb-1.5 text-sm font-semibold text-foreground/90">
+                    <p className={STUDIO_LABEL_CLASS}>
                       Modalidad
                     </p>
                     <div className="grid grid-cols-2 gap-3">
@@ -1233,14 +1229,14 @@ export function EventCreationWizard({
                         type="button"
                         onClick={() => setEventModality(false)}
                         className={cn(
-                          "rounded-2xl border px-3 py-3 text-left transition",
+                          "rounded-2xl px-3 py-3 text-left transition",
                           !isStreaming
-                            ? "border-emerald-400/50 bg-emerald-500/10"
-                            : "border-white/10 bg-black/40 hover:border-emerald-500/30",
+                            ? STUDIO_MODALITY_ACTIVE_CLASS
+                            : STUDIO_MODALITY_IDLE_CLASS,
                         )}
                       >
                         <MapPin className="mb-2 size-4 text-emerald-400" />
-                        <span className="block text-sm font-semibold text-foreground">
+                        <span className="block text-sm font-semibold">
                           En un lugar físico / Predio
                         </span>
                         <span className="mt-1 block text-xs text-muted-foreground">
@@ -1251,14 +1247,14 @@ export function EventCreationWizard({
                         type="button"
                         onClick={() => setEventModality(true)}
                         className={cn(
-                          "rounded-2xl border px-3 py-3 text-left transition",
+                          "rounded-2xl px-3 py-3 text-left transition",
                           isStreaming
-                            ? "border-emerald-400/50 bg-emerald-500/10"
-                            : "border-white/10 bg-black/40 hover:border-emerald-500/30",
+                            ? STUDIO_MODALITY_ACTIVE_CLASS
+                            : STUDIO_MODALITY_IDLE_CLASS,
                         )}
                       >
                         <MonitorPlay className="mb-2 size-4 text-emerald-400" />
-                        <span className="block text-sm font-semibold text-foreground">
+                        <span className="block text-sm font-semibold">
                           Por internet / En vivo (Zoom, YouTube, etc.)
                         </span>
                         <span className="mt-1 block text-xs text-muted-foreground">
@@ -1272,9 +1268,9 @@ export function EventCreationWizard({
                     control={form.control}
                     name="basics.isMultiDay"
                     render={({ field }) => (
-                      <FormItem className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-card/40 px-4 py-3">
+                      <FormItem className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/40">
                         <div>
-                          <FormLabel className="text-sm font-medium text-foreground">
+                          <FormLabel className="mb-0 text-sm font-bold text-slate-800 dark:text-zinc-200">
                             ¿Es un evento de varios días?
                           </FormLabel>
                           <FormDescription className="text-xs text-muted-foreground">
@@ -1338,7 +1334,7 @@ export function EventCreationWizard({
                           <FormItem>
                             <FormLabel
                               htmlFor="event-date"
-                              className="mb-1.5 block text-sm font-semibold text-foreground/90"
+                              className={cn(STUDIO_LABEL_CLASS, "block")}
                             >
                               Apertura y comienzo
                             </FormLabel>
@@ -1347,6 +1343,7 @@ export function EventCreationWizard({
                               fieldName="basics.date"
                               value={field.value}
                               onChange={field.onChange}
+                              invalid={Boolean(fieldState.error)}
                             />
                             <FormMessage>{fieldState.error?.message}</FormMessage>
                           </FormItem>
@@ -1359,7 +1356,7 @@ export function EventCreationWizard({
                           <FormItem>
                             <FormLabel
                               htmlFor="event-end-date"
-                              className="mb-1.5 block text-sm font-semibold text-foreground/90"
+                              className={cn(STUDIO_LABEL_CLASS, "block")}
                             >
                               Hora estimada de cierre
                             </FormLabel>
@@ -1368,6 +1365,7 @@ export function EventCreationWizard({
                               fieldName="basics.endDate"
                               value={field.value}
                               onChange={field.onChange}
+                              invalid={Boolean(fieldState.error)}
                             />
                             <FormDescription className="text-xs text-muted-foreground">
                               Indicá hasta qué hora la gente va a poder comprar
@@ -1382,7 +1380,7 @@ export function EventCreationWizard({
 
                   {isStreaming ? (
                     <div className="space-y-4">
-                      <div className="rounded-2xl border border-white/10 bg-card/40 px-4 py-3 text-sm text-muted-foreground">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
                         El evento se publica como {STREAMING_VENUE_NAME}. No hace
                         falta recinto ni mapa de asientos.
                       </div>
@@ -1391,7 +1389,7 @@ export function EventCreationWizard({
                         name="basics.accessLink"
                         render={({ field, fieldState }) => (
                           <FormItem className="space-y-2">
-                            <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">
+                            <FormLabel className={STUDIO_LABEL_CLASS}>
                               Link de transmisión
                             </FormLabel>
                             <Input
@@ -1399,8 +1397,9 @@ export function EventCreationWizard({
                               type="url"
                               inputMode="url"
                               data-field="basics.accessLink"
+                              aria-invalid={Boolean(fieldState.error)}
                               placeholder="https://zoom.us/j/..."
-                              className="h-12 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-foreground focus:border-emerald-500"
+                              className={STUDIO_CONTROL_CLASS}
                             />
                             <FormDescription className="text-xs text-muted-foreground">
                               Pegá acá el link de Zoom, YouTube o la sala donde
@@ -1413,7 +1412,7 @@ export function EventCreationWizard({
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      <p className="mb-1.5 text-sm font-semibold text-foreground/90">
+                      <p className={STUDIO_LABEL_CLASS}>
                         Ubicación y recinto
                       </p>
                       <EventVenueStep
@@ -1439,7 +1438,7 @@ export function EventCreationWizard({
                       <FormItem>
                         <FormLabel
                           htmlFor="event-description"
-                          className="mb-1.5 block text-sm font-semibold text-foreground/90"
+                          className={cn(STUDIO_LABEL_CLASS, "block")}
                         >
                           Contá de qué se trata tu evento
                         </FormLabel>
@@ -1448,7 +1447,7 @@ export function EventCreationWizard({
                           id="event-description"
                           data-field="basics.description"
                           placeholder="Contá de qué se trata, el clima y por qué ir."
-                          className="min-h-[160px] w-full resize-y rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-emerald-500"
+                          className={cn(STUDIO_CONTROL_CLASS, "min-h-[160px] h-auto resize-y py-3")}
                         />
                         <FormDescription className="text-muted-foreground">
                           Aparece en la página principal.
@@ -1528,8 +1527,8 @@ export function EventCreationWizard({
                     control={form.control}
                     name="basics.accessLink"
                     render={({ field, fieldState }) => (
-                      <FormItem className="space-y-2 rounded-2xl border border-white/10 bg-card/40 p-4">
-                        <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">
+                      <FormItem className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
+                        <FormLabel className={STUDIO_LABEL_CLASS}>
                           Link de la transmisión
                         </FormLabel>
                         <Input
@@ -1537,8 +1536,9 @@ export function EventCreationWizard({
                           type="url"
                           inputMode="url"
                           data-field="basics.accessLink"
+                          aria-invalid={Boolean(fieldState.error)}
                           placeholder="https://zoom.us/j/..."
-                          className="h-12 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-foreground focus:border-emerald-500"
+                          className={STUDIO_CONTROL_CLASS}
                         />
                         <FormDescription className="text-xs text-muted-foreground">
                           Pegá acá el link de Zoom, YouTube o la sala donde vas
@@ -1603,7 +1603,7 @@ export function EventCreationWizard({
                   name="basics.visibility"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="mb-1.5 block text-sm font-semibold text-foreground/90">
+                      <FormLabel className={cn(STUDIO_LABEL_CLASS, "block")}>
                         Visibilidad del evento
                       </FormLabel>
                       <div className="inline-flex w-full flex-col gap-1 rounded-2xl bg-muted/20 p-1.5 sm:w-auto sm:flex-row">
@@ -1671,9 +1671,9 @@ export function EventCreationWizard({
                   control={form.control}
                   name="basics.hasSchedule"
                   render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between gap-4 rounded-2xl border border-white/10 bg-card/40 px-4 py-3">
+                    <FormItem className="flex flex-row items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/40">
                       <div className="min-w-0">
-                        <FormLabel className="text-sm font-semibold text-foreground">
+                        <FormLabel className="mb-0 text-sm font-bold text-slate-800 dark:text-zinc-200">
                           Cronograma / agenda
                         </FormLabel>
                         <FormDescription className="text-xs text-muted-foreground">
@@ -1698,13 +1698,13 @@ export function EventCreationWizard({
                       control={form.control}
                       name="basics.hasSeatingPlan"
                       render={({ field }) => (
-                        <FormItem className="flex flex-row items-center justify-between gap-4 rounded-2xl border border-white/10 bg-muted/20 px-4 py-4">
+                        <FormItem className="flex flex-row items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 dark:border-zinc-800 dark:bg-zinc-900/40">
                           <div className="flex min-w-0 items-start gap-3">
-                            <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/15 text-emerald-300">
+                            <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/15 text-emerald-600 dark:text-emerald-300">
                               <Armchair className="size-4" aria-hidden="true" />
                             </span>
                             <div className="space-y-1">
-                              <FormLabel className="text-sm font-semibold leading-snug text-foreground">
+                              <FormLabel className="mb-0 text-sm font-bold leading-snug text-slate-800 dark:text-zinc-200">
                                 ¿Este evento tiene plano de asientos numerados?
                               </FormLabel>
                               <FormDescription className="text-xs text-muted-foreground">
@@ -1783,32 +1783,6 @@ export function EventCreationWizard({
               </div>
             </TabsContent>
 
-            {resultMessage?.type === "error" ? (
-              <div className="min-w-0">
-                {resultMessage.conflict ? (
-                  <WizardConflictBanner
-                    title={resultMessage.title}
-                    conflict={resultMessage.conflict}
-                    onGoToStep={goToWizardStep}
-                    onRetry={() => retryLastSave()}
-                  />
-                ) : (
-                  <ActionableFormError
-                    title={resultMessage.title ?? "No pudimos guardar los cambios"}
-                    description={toUserFacingError(resultMessage.text)}
-                    onFixField={
-                      resultMessage.field
-                        ? () => {
-                            if (resultMessage.conflict) return
-                            focusInvalidFormField(resultMessage.field)
-                          }
-                        : undefined
-                    }
-                    onRetry={() => retryLastSave()}
-                  />
-                )}
-              </div>
-            ) : null}
         </Tabs>
           {isStudioOpen ? (
             <TokepassStudioOverlay
@@ -1830,7 +1804,6 @@ export function EventCreationWizard({
                 saving={form.formState.isSubmitting || isStudioClosing}
                 onClose={() => void closeStudio()}
                 onChange={(next) => persistWorkspaceMap(next)}
-                onAutoSave={(next) => persistWorkspaceMap(next)}
                 onSave={async (next) => {
                   persistWorkspaceMap(next)
                   const result = await persistInventoryDraft(form.getValues())

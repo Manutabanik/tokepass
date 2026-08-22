@@ -126,6 +126,36 @@ describe("progressive disclosure tabs", () => {
   it("defaults to the days tab when day tickets exist", () => {
     assert.equal(defaultCheckoutKindTab([dayTicket, pass]), "days")
     assert.equal(defaultCheckoutKindTab([pass]), "passes")
+    assert.equal(
+      defaultCheckoutKindTab([
+        tier({
+          id: "gen",
+          name: "General",
+          isFullPass: false,
+          dayId: null,
+          tierType: "general",
+        }),
+      ]),
+      "days",
+    )
+  })
+
+  it("hides Combos y Promos when the event has no combo or pass offers", () => {
+    assert.equal(
+      shouldShowCheckoutKindTabs(
+        [
+          tier({
+            id: "gen",
+            name: "General",
+            isFullPass: false,
+            dayId: "d1",
+            tierType: "general",
+          }),
+        ],
+        days,
+      ),
+      false,
+    )
   })
 
   it("preselects the first date that actually has tickets", () => {

@@ -31,6 +31,7 @@ export type AppError = {
   code: AppErrorCode
   title: string
   message: string
+  actionHint?: string
   action?: GuidedErrorAction
   field?: string
   retryable?: boolean
@@ -60,6 +61,7 @@ export const APP_ERRORS: Record<AppErrorCode, AppError> = {
     code: "ERROR_FALTA_UBICACION",
     title: "Error en el lugar",
     message: "Completá los datos del lugar antes de continuar.",
+    actionHint: "Buscá la dirección o escribí el nombre del recinto.",
     field: "venue.venueName",
     action: { step: 1, label: "Corregir campo", field: "venue.venueName" },
     retryable: true,
@@ -76,6 +78,7 @@ export const APP_ERRORS: Record<AppErrorCode, AppError> = {
     code: "MISSING_TICKETS",
     title: "Error en entradas",
     message: "Configurá al menos un tipo de entrada con stock.",
+    actionHint: "Creá una entrada con precio y cupo mayor a 0.",
     field: "tickets",
     action: { step: 2, label: "Corregir campo", field: "tickets" },
     retryable: true,
@@ -139,6 +142,7 @@ export const APP_ERRORS: Record<AppErrorCode, AppError> = {
     code: "SAVE_FAILED",
     title: "No pudimos guardar los cambios",
     message: "No pudimos guardar los cambios. Revisá tu conexión a internet e intentá de nuevo.",
+    actionHint: "Revisá tu conexión e intentá guardar de nuevo.",
     retryable: true,
     action: { step: 0, label: "Revisar formulario" },
   },
@@ -162,7 +166,7 @@ export const APP_ERRORS: Record<AppErrorCode, AppError> = {
     code: "INCOMPLETE_DAY_TICKETS",
     title: "Error en jornadas",
     message:
-      "Cada jornada necesita al menos una entrada activa. Duplicá las tarifas o creá tickets para las fechas vacías.",
+      "Hay un día sin tarifas activas. Asigná un precio y cupo, o deshabilitá la venta de ese día.",
     field: "tickets",
     action: { step: 2, label: "Corregir campo", field: "tickets" },
     retryable: true,
@@ -171,6 +175,7 @@ export const APP_ERRORS: Record<AppErrorCode, AppError> = {
     code: "FLYER_TOO_LARGE",
     title: "Error en identidad",
     message: "El flyer supera los 5MB. Comprimilo o elegí otra imagen.",
+    actionHint: "Usá un JPG o PNG de menos de 5 MB.",
     field: "basics.flyerName",
     action: { step: 0, label: "Corregir campo", field: "basics.flyerName" },
     retryable: true,

@@ -64,4 +64,17 @@ describe("checkout buyer field errors", () => {
     assert.ok(errors.buyerDni)
     assert.ok(errors.buyerPhone)
   })
+
+  it("allows a free checkout without phone", () => {
+    const input = {
+      buyerName: "Ana Pérez",
+      buyerDni: "30111222",
+      buyerPhone: "",
+      buyerEmail: "ana@tokepass.com",
+    }
+    const errors = getCheckoutBuyerFieldErrors(input, { requirePhone: false })
+    assert.deepEqual(errors, {})
+    const result = validateCheckoutBuyer(input, { requirePhone: false })
+    assert.equal(result.ok, true)
+  })
 })

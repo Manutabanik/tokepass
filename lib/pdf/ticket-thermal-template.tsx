@@ -285,6 +285,8 @@ function TicketBody({
           </View>
         ) : null}
         {ticket.eventFlyerSrc ? (
+          // react-pdf Image has no HTML alt; flyer is identified by the title below.
+          // eslint-disable-next-line jsx-a11y/alt-text
           <Image
             src={ticket.eventFlyerSrc}
             style={compact ? thermal.eventFlyer58 : thermal.eventFlyer}
@@ -319,6 +321,7 @@ function TicketBody({
       </View>
 
       <View style={thermal.qrContainer}>
+        {/* eslint-disable-next-line jsx-a11y/alt-text -- react-pdf QR, code is printed below */}
         <Image
           src={ticket.qrDataUri}
           style={compact ? thermal.qrImage58 : thermal.qrImage}

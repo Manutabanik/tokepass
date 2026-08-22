@@ -5,7 +5,7 @@ import {
   getPublicOrganizerProfile,
   getPublishedEventsByOrganizer,
 } from "@/app/actions/public-events"
-import { EventCard } from "@/components/discovery/event-card"
+import { EventsCarousel } from "@/components/discovery/events-carousel"
 import { OrganizerAvatar } from "@/components/public/organizer-avatar"
 import { ProducerFollowButton } from "@/components/public/producer-follow-button"
 import { isEventUuid, publicProducerUrl } from "@/lib/seo/site"
@@ -105,15 +105,8 @@ export default async function PublicProducerPage({ params }: ProducerPageProps) 
               Esta productora no tiene shows publicados por ahora.
             </p>
           ) : (
-            <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {events.map((event, index) => (
-                <EventCard
-                  key={event.id}
-                  event={event}
-                  index={index}
-                  priority={index < 2}
-                />
-              ))}
+            <div className="mt-5">
+              <EventsCarousel events={events} />
             </div>
           )}
         </section>

@@ -97,7 +97,7 @@ export default async function CuentaComprasPage() {
             nativeButton={false}
             render={<Link href="/events" />}
           >
-            Descubrir shows
+            Explorar
           </Button>
         </div>
       ) : (

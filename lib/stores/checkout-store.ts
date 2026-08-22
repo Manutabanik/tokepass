@@ -5,10 +5,13 @@ import { persist, createJSONStorage } from "zustand/middleware"
 import { useShallow } from "zustand/react/shallow"
 
 import { ABSOLUTE_MAX_ITEMS_PER_PURCHASE } from "@/lib/checkout-limits"
-import { centsToMoney, moneyToCents } from "@/lib/money/cents"
-import { cartItemCount } from "@/lib/checkout/cart"
 import {
-  cartLineAmount,
+  cartItemCount,
+  sumCartAmounts,
+  sumCartQuantities,
+  toCartNumber,
+} from "@/lib/checkout/cart"
+import {
   cartTicketLineId,
   parseCartTicketLineId,
 } from "@/lib/checkout/cart-lines"
@@ -46,6 +49,8 @@ export type StorefrontCartLine = {
   price: number
   seatId?: string | null
   elementId?: string | null
+  sectorId?: string | null
+  isMappedSelection?: boolean
 }
 
 export type AddToCartInput = {
@@ -84,6 +89,8 @@ type CheckoutState = {
   viewMode: CheckoutViewMode
   identityOpen: boolean
   seatSheetOpen: boolean
+  ticketErrorId: string | null
+  ticketErrorMessage: string | null
   totalAmount: number
   itemsCount: number
   lines: StorefrontCartLine[]
@@ -107,6 +114,8 @@ type CheckoutState = {
   setViewMode: (viewMode: CheckoutViewMode) => void
   setIdentityOpen: (identityOpen: boolean) => void
   setSeatSheetOpen: (seatSheetOpen: boolean) => void
+  setTicketError: (ticketId: string | null, message?: string | null) => void
+  clearTicketError: () => void
   setQuantities: (
     quantities:
       | Record<string, number>
@@ -178,15 +187,8 @@ function generalLineTierId(line: StorefrontCartLine) {
 }
 
 function cartTotalsFromLines(lines: StorefrontCartLine[]) {
-  const totalCents = lines.reduce(
-    (sum, line) => sum + moneyToCents(cartLineAmount(line)),
-    0,
-  )
-  const totalAmount = centsToMoney(totalCents)
-  const itemsCount = lines.reduce(
-    (sum, line) => sum + Math.max(0, Math.floor(line.quantity) || 0),
-    0,
-  )
+  const totalAmount = sumCartAmounts(lines)
+  const itemsCount = sumCartQuantities(lines)
   return { totalAmount, itemsCount, subtotal: totalAmount }
 }
 
@@ -249,6 +251,8 @@ export const useCheckoutStore = create<CheckoutState>()(
       viewMode: "info",
       identityOpen: false,
       seatSheetOpen: false,
+      ticketErrorId: null,
+      ticketErrorMessage: null,
       totalAmount: 0,
       itemsCount: 0,
       lines: [],
@@ -360,6 +364,22 @@ export const useCheckoutStore = create<CheckoutState>()(
 
       setSeatSheetOpen: (seatSheetOpen) => set({ seatSheetOpen }),
 
+      setTicketError: (ticketId, message = null) => {
+        const nextMessage = ticketId ? message ?? null : null
+        if (
+          get().ticketErrorId === ticketId &&
+          get().ticketErrorMessage === nextMessage
+        ) {
+          return
+        }
+        set({ ticketErrorId: ticketId, ticketErrorMessage: nextMessage })
+      },
+
+      clearTicketError: () => {
+        if (!get().ticketErrorId && !get().ticketErrorMessage) return
+        set({ ticketErrorId: null, ticketErrorMessage: null })
+      },
+
       setQuantities: (quantities) => {
         const next =
           typeof quantities === "function"
@@ -405,19 +425,28 @@ export const useCheckoutStore = create<CheckoutState>()(
       addToCart: (input) => {
         const seatId = input.seatId?.trim() || null
         const elementId = input.elementId?.trim() || null
+        const unitPrice = toCartNumber(input.price)
         const maxQuantity = Math.max(
           0,
-          Math.floor(input.maxQuantity ?? ABSOLUTE_MAX_ITEMS_PER_PURCHASE) || 0,
+          Math.floor(toCartNumber(input.maxQuantity ?? ABSOLUTE_MAX_ITEMS_PER_PURCHASE)),
         )
         if (seatId || elementId) {
           const id = seatId || elementId!
+          const existing = get().lines.find((line) => line.id === id)
+          const incomingQty =
+            input.quantity == null
+              ? null
+              : Math.max(1, Math.floor(toCartNumber(input.quantity)))
+          const quantity = seatId
+            ? 1
+            : incomingQty ?? (existing ? existing.quantity + 1 : 1)
           const others = get().lines.filter((line) => line.id !== id)
           const line: StorefrontCartLine = {
             id,
             ticketTierId: input.ticketTierId,
             name: input.name,
-            quantity: 1,
-            price: input.price,
+            quantity,
+            price: unitPrice,
             seatId,
             elementId,
           }
@@ -432,22 +461,22 @@ export const useCheckoutStore = create<CheckoutState>()(
                   sectorKey: null,
                   tableNumber: null,
                   label: input.name,
-                  price: input.price,
+                  price: unitPrice,
                 }
               : get().selectedSeat,
           })
-          return { ok: true, quantity: 1 }
+          return { ok: true, quantity }
         }
 
         const currentQty = get().quantities[input.ticketTierId] ?? 0
-        const delta = input.quantity == null ? 1 : Math.floor(input.quantity)
+        const delta = input.quantity == null ? 1 : Math.floor(toCartNumber(input.quantity))
         const nextQty = Math.max(0, currentQty + delta)
         if (nextQty > maxQuantity) return { ok: false, reason: "limit" }
         const quantities = { ...get().quantities, [input.ticketTierId]: nextQty }
         const lines = upsertGeneralLine(get().lines, {
           ticketTierId: input.ticketTierId,
           name: input.name,
-          price: input.price,
+          price: unitPrice,
           quantity: nextQty,
         })
         set({ quantities, lines, ...cartTotalsFromLines(lines) })
@@ -459,14 +488,14 @@ export const useCheckoutStore = create<CheckoutState>()(
           0,
           Math.floor(input.maxQuantity ?? ABSOLUTE_MAX_ITEMS_PER_PURCHASE) || 0,
         )
-        const requested = Math.floor(input.quantity)
+        const requested = Math.floor(toCartNumber(input.quantity))
         if (requested > maxQuantity) return { ok: false, reason: "limit" }
         const nextQty = Math.min(Math.max(0, requested), maxQuantity)
         const quantities = { ...get().quantities, [input.ticketTierId]: nextQty }
         const lines = upsertGeneralLine(get().lines, {
           ticketTierId: input.ticketTierId,
           name: input.name,
-          price: input.price,
+          price: toCartNumber(input.price),
           quantity: nextQty,
         })
         set({ quantities, lines, ...cartTotalsFromLines(lines) })
@@ -517,6 +546,8 @@ export const useCheckoutStore = create<CheckoutState>()(
           holdExpiresAt: null,
           checkoutStep: "tickets",
           seatSheetOpen: false,
+          ticketErrorId: null,
+          ticketErrorMessage: null,
         })
       },
 
@@ -579,9 +610,10 @@ export function useActiveCheckoutSelection(eventId: string) {
       if (state.eventId !== eventId) {
         return { active: false, itemCount: 0, subtotal: 0 }
       }
-      const itemCount = cartItemCount(
-        state.quantities,
-        Boolean(state.selectedSeat),
+      const itemCount = Math.max(
+        cartItemCount(state.quantities, Boolean(state.selectedSeat)),
+        sumCartQuantities(state.lines),
+        state.itemsCount,
       )
       return { active: itemCount > 0, itemCount, subtotal: state.subtotal }
     }),

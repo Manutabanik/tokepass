@@ -32,21 +32,15 @@ export function PublicNavbarClient({
         )}
       >
         <div className="mx-auto flex h-16 w-full max-w-7xl items-center gap-2 px-4 sm:gap-3 lg:px-8">
-          <div className="flex shrink-0 items-center">
+          <div className="flex min-w-0 shrink-0 items-center">
             <BrandLogo
               href="/"
               size="header"
-              markOnly
-              className="sm:hidden"
-            />
-            <BrandLogo
-              href="/"
-              size="header"
-              className="hidden min-w-0 truncate sm:inline-flex"
+              className="min-w-0"
             />
           </div>
 
-          <div className="flex min-w-0 flex-1 justify-center">
+          <div className="flex min-w-0 flex-1 items-center justify-end md:justify-center">
             <NavbarSearch />
           </div>
 

@@ -1,17 +1,22 @@
 import { eventNeedsInteractiveCanvas } from "@/lib/seating/venue-map-pricing"
 import { hasInteractiveVenueMap } from "@/lib/seating/venue-map-geometry"
+import { parseScheduleDays } from "@/lib/event-schedule"
 import { parseVenueMap } from "@/types/venue-map"
 import type { EventDetails } from "@/app/actions/public-events"
 import type { TicketSelectorTier } from "@/components/public/ticket-tier-selector"
 
 export type EventCatalogEventRow = {
   id?: string
+  slug?: string | null
   title?: string
   description?: string | null
   status?: EventDetails["status"]
   location?: string
+  date?: string
+  ends_at?: string | null
   image_url?: string | null
   flyer_url?: string | null
+  schedule_days?: unknown
   venue_map?: unknown
 }
 
@@ -25,6 +30,7 @@ export type EventCatalogTierRow = {
   visibility?: "public" | "private" | string
   list_price?: number | null
   seating_sector_id?: string | null
+  day_id?: string | null
 }
 
 export type EventCatalogTierChange = "INSERT" | "UPDATE" | "DELETE"
@@ -44,12 +50,15 @@ export function ticketSelectorPatchFromRow(
   const listPrice = row.list_price === undefined ? undefined : finiteNumber(row.list_price)
   const available =
     capacity != null && sold != null ? Math.max(0, capacity - sold) : undefined
+  const isActive =
+    row.visibility === undefined ? undefined : row.visibility !== "private"
   return {
     ...(row.name?.trim() ? { name: row.name.trim() } : {}),
     ...(price != null ? { price } : {}),
     ...(capacity != null ? { capacity } : {}),
     ...(sold != null ? { sold } : {}),
     ...(available != null ? { available } : {}),
+    ...(isActive !== undefined ? { isActive, ...(isActive ? {} : { available: 0 }) } : {}),
     ...(listPrice !== undefined ? { listPrice } : {}),
     ...(row.seating_sector_id !== undefined
       ? { seatingSectorId: row.seating_sector_id }
@@ -62,13 +71,23 @@ export function applyEventCatalogRow(
   row: EventCatalogEventRow,
 ): EventDetails {
   const title = row.title?.trim()
+  const flyerChanged =
+    row.flyer_url !== undefined || row.image_url !== undefined
   const next: EventDetails = {
     ...event,
+    ...(row.slug?.trim() ? { slug: row.slug.trim() } : {}),
     ...(title ? { title } : {}),
     ...(row.description !== undefined ? { description: row.description } : {}),
     ...(typeof row.location === "string" ? { location: row.location } : {}),
-    ...(row.image_url !== undefined
-      ? { imageUrl: row.image_url ?? row.flyer_url ?? event.imageUrl }
+    ...(typeof row.date === "string" && row.date.trim()
+      ? { date: row.date }
+      : {}),
+    ...(row.ends_at !== undefined ? { endsAt: row.ends_at } : {}),
+    ...(flyerChanged
+      ? { imageUrl: row.flyer_url ?? row.image_url ?? event.imageUrl }
+      : {}),
+    ...(row.schedule_days !== undefined
+      ? { scheduleDays: parseScheduleDays(row.schedule_days) }
       : {}),
     ...(row.status ? { status: row.status } : {}),
   }
@@ -98,7 +117,7 @@ export function applyTicketTierCatalogRow(
   const tierId = row.id?.trim()
   if (!tierId) return event
 
-  if (change === "DELETE") {
+  if (change === "DELETE" || row.visibility === "private") {
     return {
       ...event,
       tiers: event.tiers.filter((tier) => tier.id !== tierId),
@@ -109,7 +128,41 @@ export function applyTicketTierCatalogRow(
   }
 
   const idx = event.tiers.findIndex((tier) => tier.id === tierId)
-  if (idx < 0) return event
+  if (idx < 0) {
+    if (change !== "INSERT") return event
+    const capacity = finiteNumber(row.capacity) ?? 0
+    const sold = finiteNumber(row.sold) ?? 0
+    const price = finiteNumber(row.price) ?? 0
+    const inserted = {
+      id: tierId,
+      name: row.name?.trim() || "Entrada",
+      price,
+      capacity,
+      sold,
+      time_limit: null,
+      bonus_reward: null,
+      day_id: row.day_id ?? null,
+      visibility: "public" as const,
+      layout_type: "general" as const,
+      seating_sector_id: row.seating_sector_id ?? null,
+      capacity_per_unit: 1,
+      category: "standard" as const,
+      list_price: row.list_price ?? null,
+      tier_type: "general" as const,
+      bundle_items: [],
+      bundle_type: null,
+      description: null,
+      highlight_badge: null,
+      sale_starts_at: null,
+      sale_ends_at: null,
+      available: Math.max(0, capacity - sold),
+      phases: [],
+    }
+    return {
+      ...event,
+      tiers: [...event.tiers, inserted],
+    }
+  }
 
   const current = event.tiers[idx]!
   const capacity = finiteNumber(row.capacity) ?? current.capacity
@@ -123,6 +176,11 @@ export function applyTicketTierCatalogRow(
     capacity,
     sold,
     available: Math.max(0, capacity - sold),
+    visibility:
+      row.visibility === "public" || row.visibility === "private"
+        ? row.visibility
+        : current.visibility,
+    day_id: row.day_id === undefined ? current.day_id : row.day_id,
     list_price:
       row.list_price === undefined ? current.list_price : row.list_price,
     seating_sector_id:

@@ -35,16 +35,16 @@ describe("day ticket coverage", () => {
 
   it("a full-pass covers every jornada even without a day ticket", () => {
     const tickets = [
-      { name: "Abono", dayId: null, visibility: "public" },
-      { name: "Sábado pausado", dayId: "d2", visibility: "private" },
+      { name: "Abono", dayId: null, visibility: "public", price: 0, capacity: 10 },
+      { name: "Sábado pausado", dayId: "d2", visibility: "private", price: 0, capacity: 10 },
     ]
     assert.deepEqual(uncoveredScheduleDays(days, tickets), [])
   })
 
   it("flags schedule days that lack an active ticket or pass", () => {
     const tickets = [
-      { name: "Viernes", dayId: "d1", visibility: "public" },
-      { name: "Sábado pausado", dayId: "d2", visibility: "private" },
+      { name: "Viernes", dayId: "d1", visibility: "public", price: 0, capacity: 20 },
+      { name: "Sábado pausado", dayId: "d2", visibility: "private", price: 0, capacity: 20 },
     ]
     assert.deepEqual(
       uncoveredScheduleDays(days, tickets).map((day) => day.id),
@@ -53,6 +53,16 @@ describe("day ticket coverage", () => {
     assert.match(
       scheduleDaysMissingTicketsMessage(days, tickets) ?? "",
       /Sábado/,
+    )
+  })
+
+  it("does not treat a zero-stock public ticket as coverage", () => {
+    const tickets = [
+      { name: "Viernes", dayId: "d1", visibility: "public", price: 5000, capacity: 0 },
+    ]
+    assert.deepEqual(
+      uncoveredScheduleDays(days, tickets).map((day) => day.id),
+      ["d1", "d2"],
     )
   })
 

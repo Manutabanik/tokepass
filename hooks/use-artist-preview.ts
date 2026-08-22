@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useSyncExternalStore } from "react"
+import { toast } from "sonner"
 
 import { isPlayablePreviewUrl } from "@/lib/spotify/map"
 
@@ -58,41 +59,64 @@ export function stopArtistPreview() {
   }
 }
 
-export function toggleArtistPreview(artistId: string, url: string) {
+export async function toggleArtistPreview(
+  artistId: string,
+  url: string,
+  artistName?: string,
+) {
   const source = url.trim()
-  if (!isPlayablePreviewUrl(source)) return
+  if (!isPlayablePreviewUrl(source)) {
+    toast.error("Audio no disponible", {
+      description: `No hay una vista previa disponible para ${artistName?.trim() || "este artista"}`,
+    })
+    return
+  }
 
   if (state.artistId === artistId && state.playing && audio) {
     audio.pause()
-    state = { artistId, playing: false }
+    state = IDLE
     emit()
     return
   }
 
   if (audio) {
-    silence(audio)
-    audio = null
+    releaseAudio()
   }
 
   const next = new Audio(source)
   next.preload = "auto"
   next.setAttribute("playsinline", "true")
   next.setAttribute("webkit-playsinline", "true")
+
   const onDone = () => {
     if (audio !== next) return
-    audio = null
+    releaseAudio()
     state = IDLE
     emit()
   }
+
   next.addEventListener("ended", onDone)
-  next.addEventListener("error", onDone)
+  next.addEventListener("error", () => {
+    onDone()
+    toast.error("Error de reproducción", {
+      description: "No se pudo reproducir la vista previa de este artista.",
+    })
+  })
+
   audio = next
   state = { artistId, playing: true }
   emit()
-  void next.play().catch(() => {
+
+  try {
+    await next.play()
+  } catch (error) {
+    console.error("Error al reproducir audio:", error)
     if (audio !== next) return
     onDone()
-  })
+    toast.error("Error de reproducción", {
+      description: "No se pudo reproducir la vista previa de este artista.",
+    })
+  }
 }
 
 export function useArtistPreview(artistId: string) {
@@ -100,8 +124,8 @@ export function useArtistPreview(artistId: string) {
   const playing = current.playing && current.artistId === artistId
 
   const toggle = useCallback(
-    (url: string) => {
-      toggleArtistPreview(artistId, url)
+    async (url: string, artistName?: string) => {
+      await toggleArtistPreview(artistId, url, artistName)
     },
     [artistId],
   )

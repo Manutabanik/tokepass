@@ -2,8 +2,9 @@
 
 import { LoaderCircle, ShieldCheck } from "lucide-react"
 import Link from "next/link"
-import { useActionState } from "react"
+import { useActionState, useEffect } from "react"
 import { useFormStatus } from "react-dom"
+import { toast } from "sonner"
 
 import { signInWithEmail, type AuthActionState } from "@/app/actions/auth"
 import { BrandLogo } from "@/components/shared/brand-logo"
@@ -47,6 +48,9 @@ export function OrganizerAuthForm({
 }) {
   const [state, loginAction] = useActionState(signInWithEmail, initialState)
   const visibleError = state.error || initialError
+  useEffect(() => {
+    if (visibleError) toast.error(visibleError, { duration: 5000 })
+  }, [visibleError])
   const safeNext =
     nextPath?.startsWith("/") && !nextPath.startsWith("//") ? nextPath : null
 

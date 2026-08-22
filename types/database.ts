@@ -536,6 +536,10 @@ export type TicketTier = {
   min_purchase_limit: number
   /** Tope de unidades de este SKU por transacción. NULL = fallback del evento. */
   max_purchase_limit: number | null
+  /** Derivado: price === 0. */
+  is_free?: boolean
+  /** Derivado: visibility !== private. */
+  is_active?: boolean
   created_at: string
   updated_at: string
 }
@@ -1378,6 +1382,8 @@ type TicketTierInsert = Omit<
   | "min_purchase_limit"
   | "max_purchase_limit"
   | "total_capacity"
+  | "is_free"
+  | "is_active"
   | "created_at"
   | "updated_at"
 > & {
@@ -1410,6 +1416,8 @@ type TicketTierInsert = Omit<
   promo_discount_value?: number
   promo_required_qty?: number
   promo_pay_qty?: number
+  is_free?: boolean
+  is_active?: boolean
   created_at?: string
   updated_at?: string
 }
@@ -3161,6 +3169,16 @@ export type Database = {
         Returns: string
       }
       hold_ga_tickets_for_cart: {
+        Args: {
+          p_event_id: string
+          p_owner_id: string
+          p_items: Json
+        }
+        Returns: {
+          reserved_until: string
+        }[]
+      }
+      hold_mixed_cart_for_checkout: {
         Args: {
           p_event_id: string
           p_owner_id: string

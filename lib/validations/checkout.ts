@@ -13,7 +13,6 @@ const MAX_SEATING_UNITS_PER_PURCHASE = Math.max(
 import {
   DNI_ERROR,
   EMAIL_ERROR,
-  PHONE_ERROR,
   isStrictEmail,
   isValidDni,
   normalizeArgentineMobile,
@@ -70,8 +69,7 @@ export const CheckoutBuyerSchema = z.object({
     .refine(isValidDni, DNI_ERROR),
   phone: z
     .string()
-    .transform((value) => normalizeArgentineMobile(value) ?? "")
-    .refine((value) => value.length > 0, PHONE_ERROR),
+    .transform((value) => normalizeArgentineMobile(value) ?? ""),
 })
 
 const CheckoutLegacyBuyerSchema = z
@@ -126,6 +124,7 @@ function normalizeIncomingCartItem(raw: unknown) {
     Array.isArray(item.seatingIds) ? item.seatingIds[0] : undefined,
   )
   const elementId = firstString(item.element_id, item.elementId)
+  const zoneIdRaw = firstString(item.zoneId, item.zone_id)
   const explicitType = asTrimmedString(item.type)
   const isMapped =
     explicitType === "mapped" ||
@@ -144,10 +143,30 @@ function normalizeIncomingCartItem(raw: unknown) {
     elementId,
     element_id: elementId,
     seatingIds: item.seatingIds,
-    sectorKey: item.sectorKey,
+    sectorKey: firstString(item.sectorKey, item.sector_id, item.sectorId),
     tableNumber: item.tableNumber,
-    zoneId: item.zoneId,
+    zoneId:
+      zoneIdRaw && UUID_RE.test(zoneIdRaw) ? zoneIdRaw : undefined,
+    hasMap: asBoolean(item.hasMap, item.has_map),
+    isNumbered: asBoolean(item.isNumbered, item.is_numbered),
+    has_map: asBoolean(item.has_map, item.hasMap),
+    is_numbered: asBoolean(item.is_numbered, item.isNumbered),
+    isMappedSelection: asBoolean(
+      item.isMappedSelection,
+      item.is_mapped_selection,
+    ),
+    is_mapped_selection: asBoolean(
+      item.is_mapped_selection,
+      item.isMappedSelection,
+    ),
   }
+}
+
+function asBoolean(...values: unknown[]): boolean | undefined {
+  for (const value of values) {
+    if (typeof value === "boolean") return value
+  }
+  return undefined
 }
 
 export const CheckoutGeneralItemSchema = z.object({
@@ -169,6 +188,12 @@ export const CheckoutGeneralItemSchema = z.object({
   seat_id: z.string().uuid(UUID_ERROR).optional(),
   elementId: z.string().trim().max(200).optional(),
   element_id: z.string().trim().max(200).optional(),
+  hasMap: z.boolean().optional(),
+  isNumbered: z.boolean().optional(),
+  has_map: z.boolean().optional(),
+  is_numbered: z.boolean().optional(),
+  isMappedSelection: z.boolean().optional(),
+  is_mapped_selection: z.boolean().optional(),
 })
 
 export const CheckoutMappedItemSchema = z
@@ -187,8 +212,15 @@ export const CheckoutMappedItemSchema = z
     seat_id: z.string().uuid(UUID_ERROR).optional(),
     elementId: z.string().trim().min(1).max(200).optional(),
     element_id: z.string().trim().min(1).max(200).optional(),
+    hasMap: z.boolean().optional(),
+    isNumbered: z.boolean().optional(),
+    has_map: z.boolean().optional(),
+    is_numbered: z.boolean().optional(),
+    isMappedSelection: z.boolean().optional(),
+    is_mapped_selection: z.boolean().optional(),
   })
   .superRefine((item, ctx) => {
+    if (item.isNumbered === false || item.is_numbered === false) return
     const seat =
       item.seatingUnitId ||
       item.seatId ||
@@ -369,6 +401,12 @@ export type CheckoutCartItemInput = {
   seat_id?: string
   elementId?: string
   element_id?: string
+  hasMap?: boolean
+  isNumbered?: boolean
+  has_map?: boolean
+  is_numbered?: boolean
+  isMappedSelection?: boolean
+  is_mapped_selection?: boolean
 }
 export type CheckoutAddonItem = CheckoutPayload["addons"][number]
 

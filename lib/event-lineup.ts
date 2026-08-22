@@ -81,6 +81,8 @@ function readPreviewUrl(row: Record<string, unknown>): string | null {
     text(row.top_track_preview_url) ||
     text(row.previewUrl) ||
     text(row.preview_url) ||
+    text(row.spotify_preview_url) ||
+    text(row.spotifyPreviewUrl) ||
     null
   )
 }

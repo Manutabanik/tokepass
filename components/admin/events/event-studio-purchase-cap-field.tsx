@@ -9,8 +9,13 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
+import {
+  STUDIO_CONTROL_CLASS,
+  STUDIO_LABEL_CLASS,
+} from "@/lib/admin/studio-form-styles"
 import { parseStrictInt } from "@/lib/inventory/capacity-budget"
 import type { EventFormValues } from "@/lib/validations/event-form"
+import { cn } from "@/lib/utils"
 
 export function EventStudioPurchaseCapField({
   form,
@@ -23,7 +28,7 @@ export function EventStudioPurchaseCapField({
       name="maxTicketsPerUser"
       render={({ field, fieldState }) => (
         <FormItem className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950/50">
-          <FormLabel className="mb-1.5 text-sm font-semibold text-foreground/90">
+          <FormLabel className={STUDIO_LABEL_CLASS}>
             Límite de entradas por persona
           </FormLabel>
           <p className="text-xs leading-relaxed text-muted-foreground">
@@ -51,7 +56,8 @@ export function EventStudioPurchaseCapField({
               }
               field.onChange(typeof parsed === "number" ? parsed : null)
             }}
-            className="mt-2 h-12 max-w-[12rem] rounded-xl border-border/60 bg-muted/20 px-4 text-base tabular-nums transition-all focus:bg-background sm:h-13"
+            aria-invalid={Boolean(fieldState.error)}
+            className={cn(STUDIO_CONTROL_CLASS, "mt-2 max-w-[12rem] tabular-nums")}
           />
           <FormMessage>{fieldState.error?.message}</FormMessage>
         </FormItem>

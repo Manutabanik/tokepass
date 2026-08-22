@@ -407,7 +407,10 @@ function MacroSeatingFlow({
       unitPrice: seat.price,
       groupId: `${seat.sectorId}-row-${seat.row}`,
       groupName: `Fila ${seat.row}`,
-      seats: [{ id: seat.id, label: `${seat.row}-${seat.number}` }],
+      seats: seats.map((item) => ({
+        id: item.id,
+        label: `${item.row}-${item.number}`,
+      })),
     })
   }
 

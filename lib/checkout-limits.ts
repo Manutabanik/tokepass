@@ -83,6 +83,24 @@ export function purchaseCapForTier(input: {
   return ABSOLUTE_MAX_ITEMS_PER_PURCHASE
 }
 
+/** Tope de mesas/butacas en el canvas. Nunca queda hardcodeado en 1. */
+export function mapPlaceSelectionCap(input: {
+  layoutType?: string | null
+  maxPurchaseLimit?: number | null
+  fallbackMax?: number | null
+  isTable?: boolean
+}): number {
+  const resolved = resolveTierPurchaseMax({
+    maxPurchaseLimit: input.maxPurchaseLimit,
+    fallbackMax: input.fallbackMax,
+  })
+  if (resolved != null) return Math.max(1, resolved)
+  if (input.isTable || input.layoutType === "table_combo") {
+    return MAX_TABLES_PER_PURCHASE
+  }
+  return MAX_TICKETS_PER_PURCHASE
+}
+
 /** @deprecated Prefer purchaseCapForTier. Mantiene el fallback de layout. */
 export function purchaseCapForLayout(
   layoutType?: string | null,

@@ -80,7 +80,7 @@ export function AccountNotificationsPanel() {
             nativeButton={false}
             render={<Link href="/events" />}
           >
-            Descubrir shows
+            Explorar
           </Button>
         </div>
       ) : (

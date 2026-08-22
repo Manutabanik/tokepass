@@ -19,7 +19,6 @@ import { cn, tapFeedbackClass } from "@/lib/utils"
 export { CART_TICKET_LINE_PREFIX, cartTicketLineId, parseCartTicketLineId }
 
 export function CartSummary({
-  items: _items,
   className,
   heading = "Tu Selección",
   showClear = true,
@@ -76,7 +75,8 @@ export function CartSummary({
         {rows.map((item) => {
           const displayName = cartLineDisplayName(item)
           const dateLabel = item.dateLabel?.trim() || ""
-          const qtyLabel = `${item.quantity}x ${displayName}`
+          const unitPrice = formatTicketPrice(item.price)
+          const qtyLabel = `${item.quantity}x ${displayName} — ${unitPrice}`
 
           return (
             <li

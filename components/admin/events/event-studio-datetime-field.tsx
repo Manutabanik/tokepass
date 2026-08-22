@@ -1,5 +1,6 @@
 "use client"
 
+import { STUDIO_CONTROL_CLASS } from "@/lib/admin/studio-form-styles"
 import { cn } from "@/lib/utils"
 
 const HOURS = Array.from({ length: 24 }, (_, hour) =>
@@ -21,14 +22,14 @@ function joinDateTime(date: string, hour: string, minute: string) {
   return `${date}T${hour || "00"}:${minute || "00"}`
 }
 
-const selectClass =
-  "h-12 min-w-0 rounded-xl border border-border/60 bg-muted/20 px-4 text-base text-foreground transition-all focus:bg-background sm:h-13"
+const selectClass = cn(STUDIO_CONTROL_CLASS, "min-w-0")
 
 export function EventStudioDateTimeField({
   id,
   fieldName,
   value,
   onChange,
+  invalid = false,
   dateLabel = "Fecha",
   timeLabel = "Hora",
 }: {
@@ -36,6 +37,7 @@ export function EventStudioDateTimeField({
   fieldName?: string
   value: string
   onChange: (next: string) => void
+  invalid?: boolean
   dateLabel?: string
   timeLabel?: string
 }) {
@@ -67,6 +69,7 @@ export function EventStudioDateTimeField({
             type="date"
             value={parts.date}
             onChange={(event) => update({ date: event.target.value })}
+            aria-invalid={invalid || undefined}
             className={cn(selectClass, "w-full px-3")}
           />
         </label>
@@ -77,6 +80,7 @@ export function EventStudioDateTimeField({
               value={parts.hour}
               onChange={(event) => update({ hour: event.target.value })}
               className={cn(selectClass, "w-full")}
+              aria-invalid={invalid || undefined}
               aria-label={`${timeLabel} hora`}
             >
               <option value="">HH</option>

@@ -12,8 +12,8 @@ import {
 import type { EventFormValues } from "@/lib/validations/event-form"
 import type { VenuePricingMap } from "@/lib/seating/venue-adapter"
 
-/** Autoguardado de edición: mínimo 1000ms para no disparar POSTs en cada tecla. */
-const DEBOUNCE_MS = 1500
+/** Autoguardado de edición: 1s después de que el usuario deja de escribir. */
+const DEBOUNCE_MS = 1000
 
 function sanitizeFormValues(values: EventFormValues): EventFormValues {
   return {
@@ -56,6 +56,7 @@ export function useEventFormAutosave(input: {
   targetOrganizerId?: string | null
   enabled?: boolean
   serverUpdatedAt?: number | null
+  flyerFile?: File | null
 }) {
   const {
     form,
@@ -69,6 +70,7 @@ export function useEventFormAutosave(input: {
     targetOrganizerId = null,
     enabled = true,
     serverUpdatedAt = null,
+    flyerFile = null,
   } = input
 
   const hydrateSession = useEventFormStore((s) => s.hydrateSession)
@@ -82,13 +84,15 @@ export function useEventFormAutosave(input: {
   const readyRef = useRef(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const savingRef = useRef(false)
+  const queuedRef = useRef(false)
   const skipWatchRef = useRef(false)
   const lastSavedKeyRef = useRef<string | null>(null)
+  const flyerRef = useRef<File | null>(flyerFile)
   const inventoryFingerprintRef = useRef(
     eventInventoryFingerprint(initialValues),
   )
   const scheduleSaveRef = useRef<() => void>(() => {})
-  const flushAutosaveRef = useRef<() => void>(() => {})
+  const flushAutosaveRef = useRef<() => void | Promise<void>>(() => {})
   const latestRef = useRef({
     values: initialValues,
     venuePricingMap,
@@ -102,6 +106,10 @@ export function useEventFormAutosave(input: {
     latestRef.current.enabled = enabled
     latestRef.current.targetOrganizerId = targetOrganizerId
   }, [enabled, targetOrganizerId])
+
+  useEffect(() => {
+    flyerRef.current = flyerFile
+  }, [flyerFile])
 
   useEffect(() => {
     let cancelled = false
@@ -164,14 +172,14 @@ export function useEventFormAutosave(input: {
 
   async function runAutosave() {
     if (!readyRef.current || !latestRef.current.enabled) return
-    if (savingRef.current) return
+    if (savingRef.current) {
+      queuedRef.current = true
+      return
+    }
     const snapshot = latestRef.current
     const values = sanitizeFormValues(snapshot.values)
     const payloadKey = JSON.stringify(values)
-    if (
-      snapshot.eventId &&
-      lastSavedKeyRef.current === payloadKey
-    ) {
+    if (snapshot.eventId && lastSavedKeyRef.current === payloadKey) {
       setAutosaveStatus("saved")
       return
     }
@@ -187,6 +195,7 @@ export function useEventFormAutosave(input: {
         zoneTierPricing: snapshot.zoneTierPricing,
         targetOrganizerId: snapshot.targetOrganizerId,
         identityOnly,
+        flyer: flyerRef.current,
       })
       if (!result.ok) {
         setAutosaveStatus("error", result.error)
@@ -230,7 +239,32 @@ export function useEventFormAutosave(input: {
       )
     } finally {
       savingRef.current = false
+      if (queuedRef.current) {
+        queuedRef.current = false
+        await runAutosave()
+      }
     }
+  }
+
+  function cancelPendingAutosave() {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+    queuedRef.current = false
+  }
+
+  async function waitForInFlightAutosave() {
+    cancelPendingAutosave()
+    while (savingRef.current) {
+      await new Promise((resolve) => window.setTimeout(resolve, 40))
+    }
+  }
+
+  function markSaved(values: EventFormValues) {
+    lastSavedKeyRef.current = JSON.stringify(sanitizeFormValues(values))
+    inventoryFingerprintRef.current = eventInventoryFingerprint(values)
+    setAutosaveStatus("saved")
   }
 
   function scheduleSave() {
@@ -242,13 +276,10 @@ export function useEventFormAutosave(input: {
     }, DEBOUNCE_MS)
   }
 
-  function flushAutosave() {
+  async function flushAutosave() {
     if (!readyRef.current) return
-    if (timerRef.current) {
-      clearTimeout(timerRef.current)
-      timerRef.current = null
-    }
-    void runAutosave()
+    cancelPendingAutosave()
+    await runAutosave()
   }
 
   useEffect(() => {
@@ -305,5 +336,8 @@ export function useEventFormAutosave(input: {
   return {
     persistedEventId: storeEventId ?? eventId,
     flushAutosave,
+    cancelPendingAutosave,
+    waitForInFlightAutosave,
+    markSaved,
   }
 }

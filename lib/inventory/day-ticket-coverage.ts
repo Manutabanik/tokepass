@@ -11,6 +11,7 @@ export type DayCoverageTicket = {
   name?: string | null
   dayId?: string | null
   visibility?: string | null
+  price?: number | null
   capacity?: number | null
   sold?: number | null
   isFullPass?: boolean
@@ -50,11 +51,18 @@ export function isDaySpecificTicket(ticket: DayCoverageTicket): boolean {
   return !isPassOrComboTicket(ticket) && Boolean(normalizeDayId(ticket.dayId))
 }
 
+export function ticketHasSellableOffer(ticket: DayCoverageTicket): boolean {
+  const price = Number(ticket.price)
+  const capacity = Math.floor(Number(ticket.capacity))
+  return Number.isFinite(price) && price >= 0 && Number.isFinite(capacity) && capacity > 0
+}
+
 export function ticketCoversScheduleDay(
   ticket: DayCoverageTicket,
   dayId: string,
 ): boolean {
   if (!isActiveInventoryTicket(ticket)) return false
+  if (!ticketHasSellableOffer(ticket)) return false
   if (isPassOrComboTicket(ticket)) return true
   return normalizeDayId(ticket.dayId) === dayId
 }
@@ -68,14 +76,36 @@ export function persistTicketDayId(
   return remapBoundDayId(ticket.dayId, options.validDayIds)
 }
 
+export function uncoveredRegisteredDays<T extends { id: string }>(
+  days: T[],
+  tickets: DayCoverageTicket[],
+): T[] {
+  if (days.length === 0) return []
+  return days.filter(
+    (day) => !tickets.some((ticket) => ticketCoversScheduleDay(ticket, day.id)),
+  )
+}
+
 export function uncoveredScheduleDays<T extends { id: string }>(
   days: T[],
   tickets: DayCoverageTicket[],
 ): T[] {
   if (days.length < 2) return []
-  return days.filter(
-    (day) => !tickets.some((ticket) => ticketCoversScheduleDay(ticket, day.id)),
-  )
+  return uncoveredRegisteredDays(days, tickets)
+}
+
+export function scheduleDayGuardLabel(
+  day: { title?: string | null },
+  index: number,
+): string {
+  return day.title?.trim() || `Día ${index + 1}`
+}
+
+export function scheduleDayMissingTicketsMessage(
+  day: { title?: string | null },
+  index: number,
+): string {
+  return `Atención: El ${scheduleDayGuardLabel(day, index)} no tiene tarifas activas. Asigna un precio o deshabilita la venta para ese día.`
 }
 
 export function scheduleDaysMissingTicketsMessage(
@@ -84,11 +114,14 @@ export function scheduleDaysMissingTicketsMessage(
 ): string | null {
   const uncovered = uncoveredScheduleDays(days, tickets)
   if (uncovered.length === 0) return null
-  const labels = uncovered.map((day) => {
-    const index = days.findIndex((item) => item.id === day.id)
-    return day.title?.trim() || `Jornada ${index + 1}`
-  })
-  return `Cada jornada necesita al menos una entrada activa. Falta configurar: ${labels.join(", ")}.`
+  return uncovered
+    .map((day) =>
+      scheduleDayMissingTicketsMessage(
+        day,
+        days.findIndex((item) => item.id === day.id),
+      ),
+    )
+    .join(" ")
 }
 
 export function duplicateTicketsFromDay<T extends DayCoverageTicket>(

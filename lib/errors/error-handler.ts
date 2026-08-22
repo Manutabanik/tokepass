@@ -56,7 +56,7 @@ const ERROR_RULES: ErrorRule[] = [
   {
     code: "INCOMPLETE_DAY_TICKETS",
     match:
-      /Cada jornada necesita al menos una entrada activa|Falta configurar:/i,
+      /Cada jornada necesita al menos una entrada activa|Falta configurar:|no tiene tarifas activas|Asigna un precio o deshabilita la venta/i,
   },
   {
     code: "INVALID_DAY_SELECTION",
@@ -118,11 +118,17 @@ const ERROR_RULES: ErrorRule[] = [
   },
 ]
 
+const PUBLIC_CHECKOUT_CODE =
+  /^(SEAT_UNAVAILABLE|SEAT_SELECTION_REQUIRED|GENERAL_STOCK_UNAVAILABLE|SECTOR_NOT_CONFIGURED|ERR_NO_STOCK|ERR_SEAT_TAKEN|ERR_SEAT_REQUIRED)(:.*)?$/i
+
 export function containsInternalErrorCode(text: string): boolean {
   const trimmed = text.trim()
   if (!trimmed) return false
+  if (PUBLIC_CHECKOUT_CODE.test(trimmed)) return false
   if (ONLY_INTERNAL_CODE.test(trimmed)) return true
-  if (SCREAMING_SNAKE.test(trimmed)) return true
+  if (SCREAMING_SNAKE.test(trimmed) && !PUBLIC_CHECKOUT_CODE.test(trimmed.split(":")[0] ?? "")) {
+    return true
+  }
   if (isRelationalIntegrityError(trimmed)) return true
   if (POSTGRES_OR_POSTGREST.test(trimmed)) return true
   if (RAW_SQL_LEAK.test(trimmed)) return true

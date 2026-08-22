@@ -44,5 +44,6 @@ describe("cartHasPurchasableItems", () => {
     assert.equal(cartHasPurchasableItems({ quantities: { a: 0 }, selectedCount: 0 }), false)
     assert.equal(cartHasPurchasableItems({ quantities: { a: 2 }, selectedCount: 0 }), true)
     assert.equal(cartHasPurchasableItems({ quantities: {}, selectedCount: 1 }), true)
+    assert.equal(cartHasPurchasableItems({ quantities: { lima: 1 }, selectedCount: 0 }), true)
   })
 })

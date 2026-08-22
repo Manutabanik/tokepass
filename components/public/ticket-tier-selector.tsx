@@ -5,22 +5,25 @@ import {
   Armchair,
   CalendarDays,
   Flame,
-  Minus,
-  Plus,
   Ticket,
 } from "lucide-react"
 import { useMemo, useState } from "react"
 
+import { QuantityCounter } from "@/components/public/quantity-counter"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { isFullPassDayId } from "@/lib/event-schedule"
 import { formatCurrency, formatEventDay, formatTicketPrice } from "@/lib/format"
 import { generalTicketMaxQuantity } from "@/lib/checkout/general-ticket-quantity"
 import {
+  SOLD_OUT_TICKET_CARD_CLASS,
+  isTicketCardBlocked,
+} from "@/lib/checkout/ticket-stock"
+import {
   resolveTicketSaleState,
   ticketSaleWindowLabel,
 } from "@/lib/inventory/ticket-sale-window"
-import { isLogicalGeneralSectorId } from "@/lib/seating/venue-map-pricing"
+import { isMapBackedTicket } from "@/lib/seating/venue-map-pricing"
 import type { TicketHighlightBadge } from "@/lib/checkout/ticket-picker"
 import type { PublicTicketPhase } from "@/lib/inventory/active-phase"
 import type { InventoryTierType } from "@/lib/inventory/unified-inventory"
@@ -37,6 +40,7 @@ export type TicketSelectorTier = {
   name: string
   price: number
   available: number
+  isActive?: boolean
   capacity?: number
   bonusReward?: string | null
   dayId?: string | null
@@ -103,6 +107,9 @@ export function TicketTierSelector({
         layoutType: tier.layoutType,
         hasComboItems: (tier.comboItems?.length ?? 0) > 0,
         isMultiDay: multiDayEvent,
+        tierType: tier.tierType,
+        bundleType: tier.bundleType,
+        isFullPass: tier.isFullPass,
       })
       buckets[category].push(tier)
     }
@@ -298,7 +305,6 @@ function TierList({
   scheduleDays,
   isPending,
   hasSeatingFlow,
-  variant: _variant,
   onQuantityChange,
   onOpenSeatFlow,
   maxTicketsPerUser = null,
@@ -343,7 +349,10 @@ function TierList({
           saleEndsAt: tier.saleEndsAt,
         })
         const saleLabel = ticketSaleWindowLabel(saleState)
-        const soldOut = saleState.kind === "sold_out" || maxSelectable <= 0
+        const soldOut =
+          saleState.kind === "sold_out" ||
+          maxSelectable <= 0 ||
+          isTicketCardBlocked(tier)
         const inactive = soldOut || saleState.kind !== "active"
         const lowStock = !inactive && tier.available <= 8
         const day = scheduleDays.find((item) => item.id === tier.dayId)
@@ -370,20 +379,27 @@ function TierList({
             className={cn(
               "flex w-full items-center justify-between gap-4 rounded-2xl border border-white/10 bg-card/60 px-5 py-3.5 transition-all hover:border-white/20",
               quantity > 0 && !inactive && "border-emerald-500/40",
-              inactive && "opacity-70",
+              soldOut && SOLD_OUT_TICKET_CARD_CLASS,
+              inactive && !soldOut && "opacity-70",
             )}
           >
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <p
                 className={cn(
                   "truncate text-base font-bold text-foreground",
-                  inactive && "text-muted-foreground",
+                  soldOut && "text-muted-foreground line-through",
+                  inactive && !soldOut && "text-muted-foreground",
                 )}
               >
                 {tier.name}
               </p>
               <div className="flex min-w-0 items-center gap-2 text-sm font-black text-foreground/90">
-                <span className="tabular-nums">
+                <span
+                  className={cn(
+                    "tabular-nums",
+                    soldOut && "text-muted-foreground line-through",
+                  )}
+                >
                   {formatTicketPrice(tier.price)}
                 </span>
                 {saveAmt > 0 ? (
@@ -406,13 +422,12 @@ function TierList({
                   <span className="truncate text-xs font-medium text-muted-foreground">
                     {comboLine}
                   </span>
+                ) : soldOut ? (
+                  <span className="text-xs font-bold text-red-500">
+                    Agotado
+                  </span>
                 ) : inactive && saleLabel ? (
-                  <span
-                    className={cn(
-                      "text-xs font-semibold",
-                      soldOut ? "text-destructive" : "text-muted-foreground",
-                    )}
-                  >
+                  <span className="text-xs font-semibold text-muted-foreground">
                     {saleLabel}
                   </span>
                 ) : lowStock ? (
@@ -436,45 +451,35 @@ function TierList({
                       ? "Finalizado"
                       : "Agotado"}
                 </Button>
-              ) : tier.layoutType === "general" ||
-                isLogicalGeneralSectorId(tier.seatingSectorId) ? (
-                <div className="flex h-9 items-center gap-3 rounded-xl border border-white/10 bg-black/40 px-2">
-                  <button
-                    type="button"
-                    disabled={quantity === 0 || isPending}
-                    onClick={() =>
-                      onQuantityChange(tier.id, quantity - 1, maxSelectable)
-                    }
-                    aria-label={`Quitar ${tier.name}`}
-                    className="inline-flex size-7 items-center justify-center rounded-md text-foreground hover:bg-white/5 disabled:opacity-40"
-                  >
-                    <Minus className="size-3.5" aria-hidden />
-                  </button>
-                  <span className="min-w-5 text-center text-sm font-bold tabular-nums">
-                    {quantity}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={quantity >= maxSelectable || isPending}
-                    onClick={() =>
-                      onQuantityChange(tier.id, quantity + 1, maxSelectable)
-                    }
-                    aria-label={`Agregar ${tier.name}`}
-                    className="inline-flex size-7 items-center justify-center rounded-md text-foreground hover:bg-white/5 disabled:opacity-40"
-                  >
-                    <Plus className="size-3.5" aria-hidden />
-                  </button>
-                </div>
-              ) : (
+              ) : hasSeatingFlow &&
+                isMapBackedTicket({
+                  seatingSectorId: tier.seatingSectorId,
+                  layoutType: tier.layoutType,
+                  category: tier.category,
+                }) ? (
                 <Button
                   type="button"
-                  disabled={!hasSeatingFlow || isPending}
+                  disabled={isPending}
                   onClick={onOpenSeatFlow}
                   className="h-9 rounded-xl px-3 text-sm"
                 >
                   <Armchair className="size-4" aria-hidden />
-                  Elegir {tier.layoutType === "table_combo" ? "mesa" : "asiento"}
+                  Elegir en plano
                 </Button>
+              ) : (
+                <QuantityCounter
+                  quantity={quantity}
+                  max={maxSelectable}
+                  disabled={isPending}
+                  onDecrease={() =>
+                    onQuantityChange(tier.id, quantity - 1, maxSelectable)
+                  }
+                  onIncrease={() =>
+                    onQuantityChange(tier.id, quantity + 1, maxSelectable)
+                  }
+                  decreaseLabel={`Quitar ${tier.name}`}
+                  increaseLabel={`Agregar ${tier.name}`}
+                />
               )}
             </div>
           </div>

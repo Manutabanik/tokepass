@@ -10,9 +10,9 @@ import {
 import { holdableStorefrontItems } from "@/lib/checkout/holdable-selection"
 import { hasCheckoutAuthSession } from "@/lib/checkout/guest-session"
 import {
-  CHECKOUT_SOLD_OUT_DESCRIPTION,
-  CHECKOUT_SOLD_OUT_TITLE,
-} from "@/lib/checkout/revalidate-seat-holds"
+  CHECKOUT_NO_STOCK_TOAST,
+  CHECKOUT_TOAST_ERROR_STYLE,
+} from "@/lib/checkout/checkout-feedback"
 import { minReservedUntil } from "@/lib/checkout-hold"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import { useCheckoutStore } from "@/lib/stores/checkout-store"
@@ -80,8 +80,8 @@ export function useOptimisticSeatHolds({
               if (hold.success === false && hold.error !== "auth_required") {
                 useCheckoutStore.getState().removeItem(item.id)
                 if (hold.error === "out_of_stock") {
-                  toast.error(CHECKOUT_SOLD_OUT_TITLE, {
-                    description: CHECKOUT_SOLD_OUT_DESCRIPTION,
+                  toast.error(CHECKOUT_NO_STOCK_TOAST, {
+                    style: CHECKOUT_TOAST_ERROR_STYLE,
                   })
                 } else {
                   toast.error("No se pudo reservar esa ubicación. Elegí otra opción.")

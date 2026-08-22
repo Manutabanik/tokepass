@@ -142,7 +142,7 @@ export default async function CuentaHomePage() {
               </p>
             </div>
             <span className="mt-6 inline-flex items-center gap-1 text-sm font-semibold text-emerald-700 dark:text-emerald-300">
-              Descubrir shows
+            Explorar
               <ChevronRight className="size-4" aria-hidden="true" />
             </span>
           </Link>
@@ -228,7 +228,7 @@ export default async function CuentaHomePage() {
         />
         <PortalCard
           href="/events"
-          title="Descubrir shows"
+          title="Explorar"
           description="Descubrí fiestas, recitales y más"
           icon={Compass}
           accent="sky"

@@ -35,12 +35,14 @@ export function PublishEventConfirmDialog({
   const [pending, startTransition] = useTransition()
   const [submitted, setSubmitted] = useState(false)
   const [purged, setPurged] = useState(0)
+  const [missingFields, setMissingFields] = useState<string[]>([])
 
   function handleOpenChange(next: boolean) {
     if (!next) {
       if (submitted) onPublished?.({ purgedTestTickets: purged })
       setSubmitted(false)
       setPurged(0)
+      setMissingFields([])
     }
     onOpenChange(next)
   }
@@ -49,9 +51,12 @@ export function PublishEventConfirmDialog({
     startTransition(async () => {
       const result = await publishEvent(eventId, { purgeTestTickets: true })
       if (!result.success) {
+        const pending = result.missingFields ?? []
+        setMissingFields(pending)
         toast.error(result.error)
         return
       }
+      setMissingFields([])
       setSubmitted(true)
       setPurged(result.purgedTestTickets ?? 0)
     })
@@ -99,6 +104,19 @@ export function PublishEventConfirmDialog({
                 muestra en la cartelera ni acepta cobros hasta que el equipo lo
                 apruebe. No pedimos CUIT ni DNI en este paso.
               </DialogDescription>
+              {missingFields.length > 0 ? (
+                <div
+                  role="alert"
+                  className="rounded-xl border border-amber-300/70 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100"
+                >
+                  <p className="font-medium">Pendientes antes de publicar</p>
+                  <ul className="mt-1.5 list-disc space-y-1 pl-4 text-xs leading-5">
+                    {missingFields.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </DialogHeader>
             <DialogFooter className="flex-col gap-2 sm:flex-col">
               <Button

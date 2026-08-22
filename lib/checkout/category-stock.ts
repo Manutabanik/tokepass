@@ -11,6 +11,8 @@ export type CategoryStockInput = {
   seats?: FlattenedVenueSeat[]
   occupancyBySeatId?: Record<string, SeatStatus>
   summaryAvailable?: number | null
+  summaryTotal?: number | null
+  mapSectorIds?: string[]
   mapReady?: boolean
 }
 
@@ -79,6 +81,20 @@ export function getAvailableStock(input: CategoryStockInput) {
   return Math.max(0, input.stock)
 }
 
+export function isMapSectorUnconfigured(input: CategoryStockInput): boolean {
+  if (!input.requiresMap || input.mapReady === false) return false
+  const sectorId = input.seatingSectorId?.trim()
+  if (!sectorId) return false
+  const matched = (input.seats ?? []).some((seat) =>
+    seatMatchesCategory(seat, input),
+  )
+  if (matched) return false
+  if ((input.mapSectorIds ?? []).includes(sectorId)) return false
+  if (typeof input.summaryTotal === "number") return input.summaryTotal <= 0
+  if (typeof input.summaryAvailable === "number") return false
+  return true
+}
+
 export function resolveCategoryAvailability(input: CategoryStockInput) {
   if (!input.requiresMap) {
     const available = Math.max(0, input.stock)
@@ -86,6 +102,16 @@ export function resolveCategoryAvailability(input: CategoryStockInput) {
       available,
       matchedCount: 0,
       isSoldOut: available <= 0,
+      isUnconfigured: false,
+    }
+  }
+
+  if (isMapSectorUnconfigured(input)) {
+    return {
+      available: 0,
+      matchedCount: 0,
+      isSoldOut: true,
+      isUnconfigured: true,
     }
   }
 
@@ -101,6 +127,7 @@ export function resolveCategoryAvailability(input: CategoryStockInput) {
       available: availableSeatsCount,
       matchedCount: matched.length,
       isSoldOut: availableSeatsCount === 0,
+      isUnconfigured: false,
     }
   }
 
@@ -110,6 +137,7 @@ export function resolveCategoryAvailability(input: CategoryStockInput) {
       available,
       matchedCount: 0,
       isSoldOut: available <= 0,
+      isUnconfigured: false,
     }
   }
 
@@ -119,6 +147,7 @@ export function resolveCategoryAvailability(input: CategoryStockInput) {
     available,
     matchedCount: 0,
     isSoldOut: mapPending ? false : available <= 0,
+    isUnconfigured: false,
   }
 }
 

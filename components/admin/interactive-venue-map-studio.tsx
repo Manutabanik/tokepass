@@ -19,7 +19,6 @@ export function InteractiveVenueMapStudio({
   value,
   onSave,
   onChange,
-  onAutoSave,
   onClose,
   saving = false,
   tickets,
@@ -32,7 +31,6 @@ export function InteractiveVenueMapStudio({
   value: InteractiveVenueMap
   onSave: (map: InteractiveVenueMap, layout: VenueSeatingLayout) => void
   onChange?: (map: InteractiveVenueMap) => void
-  onAutoSave?: (map: InteractiveVenueMap) => void | Promise<void>
   onClose: () => void
   saving?: boolean
   tickets?: VenueMapSkuTicketRef[] | null
@@ -80,14 +78,6 @@ export function InteractiveVenueMapStudio({
         onChange={(next) => {
           setDraft(next)
           onChange?.(next)
-        }}
-        onAutoSave={async (map) => {
-          setDraft(map)
-          if (onAutoSave) {
-            await onAutoSave(map)
-            return
-          }
-          onChange?.(map)
         }}
         onPreview={() => setPreview(true)}
         onSave={(map) => onSave(map, venueMapToSeatingLayout(map))}

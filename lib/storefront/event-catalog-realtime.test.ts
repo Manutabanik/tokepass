@@ -130,6 +130,21 @@ describe("event-catalog-realtime", () => {
     assert.equal(next.zoneTierPricing.length, 0)
   })
 
+  it("actualiza fecha, flyer y saca tarifas privadas", () => {
+    const dated = applyEventCatalogRow(sampleEvent(), {
+      date: "2026-10-12T20:00:00.000Z",
+      flyer_url: "https://cdn.example/flyer-new.jpg",
+    })
+    assert.equal(dated.date, "2026-10-12T20:00:00.000Z")
+    assert.equal(dated.imageUrl, "https://cdn.example/flyer-new.jpg")
+
+    const hidden = applyTicketTierCatalogRow(sampleEvent(), "UPDATE", {
+      id: "tier-1",
+      visibility: "private",
+    })
+    assert.equal(hidden.tiers.length, 0)
+  })
+
   it("actualiza titulo y venue_map del evento", () => {
     const map = emptyVenueMap()
     map.zones = [
@@ -170,5 +185,13 @@ describe("event-catalog-realtime", () => {
     })
     assert.equal(patch?.price, 8000)
     assert.equal(patch?.available, 7)
+    const inactive = ticketSelectorPatchFromRow({
+      id: "tier-2",
+      visibility: "private",
+      capacity: 10,
+      sold: 1,
+    })
+    assert.equal(inactive?.isActive, false)
+    assert.equal(inactive?.available, 0)
   })
 })

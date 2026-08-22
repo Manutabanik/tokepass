@@ -1,12 +1,13 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react"
+import { ChevronDown, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react"
 
 import {
   elementBelongsToZone,
   seatBelongsToZone,
 } from "@/lib/seating/venue-map-lod"
+import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import type { InteractiveVenueMap } from "@/types/venue-map"
 
@@ -95,6 +96,30 @@ function collectOpenIds(nodes: LayerNode[], selectedKey: string, acc: Set<string
   }
 }
 
+function filterLayerTree(nodes: LayerNode[], query: string): LayerNode[] {
+  const needle = query.trim().toLowerCase()
+  if (!needle) return nodes
+  return nodes.flatMap((node) => {
+    const children = node.children ? filterLayerTree(node.children, needle) : []
+    if (node.label.toLowerCase().includes(needle)) {
+      return [{ ...node, children: node.children }]
+    }
+    if (children.length > 0) {
+      return [{ ...node, children }]
+    }
+    return []
+  })
+}
+
+function collectAllOpenIds(nodes: LayerNode[], acc: Set<string>) {
+  for (const node of nodes) {
+    if (node.children?.length) {
+      acc.add(node.id)
+      collectAllOpenIds(node.children, acc)
+    }
+  }
+}
+
 export function buildVenueLayerTree(map: InteractiveVenueMap): LayerNode[] {
   const nodes: LayerNode[] = []
   const claimedElements = new Set<string>()
@@ -120,13 +145,16 @@ export function buildVenueLayerTree(map: InteractiveVenueMap): LayerNode[] {
         )
       if (!belongs) continue
       claimedSectors.add(sector.id)
-      for (const seat of sector.seats) {
-        children.push({
+      children.push({
+        id: sector.id,
+        label: sector.name.trim() || "Sector",
+        selection: { kind: "sector", id: sector.id },
+        children: sector.seats.map((seat) => ({
           id: `${sector.id}::${seat.id}`,
           label: seatNodeLabel(seat),
           selection: { kind: "seats", ids: [`${sector.id}::${seat.id}`] },
-        })
-      }
+        })),
+      })
     }
 
     for (const element of map.elements ?? []) {
@@ -137,21 +165,19 @@ export function buildVenueLayerTree(map: InteractiveVenueMap): LayerNode[] {
         continue
       }
       claimedElements.add(element.id)
-      if (element.seats.length > 0 && element.sellMode !== "group") {
-        for (const seat of element.seats) {
-          children.push({
-            id: `${element.id}::${seat.id}`,
-            label: seatNodeLabel(seat),
-            selection: { kind: "seats", ids: [`${element.id}::${seat.id}`] },
-          })
-        }
-      } else {
-        children.push({
-          id: element.id,
-          label: elementLabel(element.type, element.customLabel || element.label),
-          selection: { kind: "element", id: element.id },
-        })
-      }
+      children.push({
+        id: element.id,
+        label: elementLabel(element.type, element.customLabel || element.label),
+        selection: { kind: "element", id: element.id },
+        children:
+          element.seats.length > 0 && element.sellMode !== "group"
+            ? element.seats.map((seat) => ({
+                id: `${element.id}::${seat.id}`,
+                label: seatNodeLabel(seat),
+                selection: { kind: "seats", ids: [`${element.id}::${seat.id}`] },
+              }))
+            : undefined,
+      })
     }
 
     nodes.push({
@@ -243,17 +269,20 @@ export function VenueLayerTree({
   className?: string
 }) {
   const nodes = useMemo(() => buildVenueLayerTree(map), [map])
+  const [query, setQuery] = useState("")
+  const visibleNodes = useMemo(() => filterLayerTree(nodes, query), [nodes, query])
   const selectedKey = currentSelectionKey(selection)
   const [openIds, setOpenIds] = useState(() => new Set(nodes.map((node) => node.id)))
-  const expandKey = `${selectedKey ?? ""}:${activeZoneId ?? ""}`
+  const expandKey = `${selectedKey ?? ""}:${activeZoneId ?? ""}:${query.trim().toLowerCase()}`
   const [expandedFor, setExpandedFor] = useState(expandKey)
 
-  if ((selectedKey || activeZoneId) && expandKey !== expandedFor) {
+  if ((selectedKey || activeZoneId || query.trim()) && expandKey !== expandedFor) {
     setExpandedFor(expandKey)
     setOpenIds((current) => {
       const next = new Set(current)
       if (selectedKey) collectOpenIds(nodes, selectedKey, next)
       if (activeZoneId) next.add(activeZoneId)
+      if (query.trim()) collectAllOpenIds(visibleNodes, next)
       return next
     })
   }
@@ -295,21 +324,36 @@ export function VenueLayerTree({
         className,
       )}
     >
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
-        <p className="text-xs font-semibold tracking-wide text-foreground uppercase">
-          Estructura del Recinto
-        </p>
-        {onCollapsedChange ? (
-          <button
-            type="button"
-            title="Contraer panel"
-            aria-label="Contraer panel"
-            onClick={() => onCollapsedChange(true)}
-            className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <PanelLeftClose className="size-4" />
-          </button>
-        ) : null}
+      <div className="flex shrink-0 flex-col gap-2 border-b border-border px-3 py-2">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold tracking-wide text-foreground uppercase">
+            Estructura del Recinto
+          </p>
+          {onCollapsedChange ? (
+            <button
+              type="button"
+              title="Contraer panel"
+              aria-label="Contraer panel"
+              onClick={() => onCollapsedChange(true)}
+              className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <PanelLeftClose className="size-4" />
+            </button>
+          ) : null}
+        </div>
+        <div className="relative">
+          <Search
+            className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Buscar sector, mesa o silla..."
+            aria-label="Buscar sector, mesa o silla"
+            className="h-8 pl-8 text-xs"
+          />
+        </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2 scrollbar-thin">
         {nodes.length === 0 ? (
@@ -317,9 +361,13 @@ export function VenueLayerTree({
             Todavía no hay zonas ni elementos. Usá la barra de herramientas
             sobre el lienzo para empezar a dibujar.
           </p>
+        ) : visibleNodes.length === 0 ? (
+          <p className="px-2 py-6 text-xs leading-relaxed text-muted-foreground">
+            No hay coincidencias para “{query.trim()}”.
+          </p>
         ) : (
           <ul className="space-y-0.5">
-            {nodes.map((node) => (
+            {visibleNodes.map((node) => (
               <LayerTreeItem
                 key={node.id}
                 node={node}

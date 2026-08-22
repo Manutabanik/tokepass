@@ -156,8 +156,9 @@ export async function getMyTickets(options?: {
     query = query.eq("order_id", orderId)
   }
 
-  let { data, error } = await query
-  let rows = data as unknown
+  const queried = await query
+  let { error } = queried
+  let rows = queried.data as unknown
 
   if (
     error &&

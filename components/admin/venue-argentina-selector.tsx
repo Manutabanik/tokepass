@@ -52,6 +52,11 @@ import {
   searchNominatimArgentina,
   type NominatimResult,
 } from "@/lib/georef/nominatim"
+import {
+  STUDIO_CONTROL_CLASS,
+  STUDIO_LABEL_CLASS,
+  STUDIO_SELECT_CONTENT_CLASS,
+} from "@/lib/admin/studio-form-styles"
 import { cn } from "@/lib/utils"
 
 import "leaflet/dist/leaflet.css"
@@ -92,10 +97,7 @@ type VenueArgentinaSelectorProps = {
   disabled?: boolean
 }
 
-const inputClassName = cn(
-  "h-12 rounded-xl border-border/60 bg-muted/20 px-4 text-base text-foreground transition-all focus:bg-background sm:h-13",
-  "focus-visible:border-transparent focus-visible:ring-2 focus-visible:ring-emerald-500",
-)
+const inputClassName = STUDIO_CONTROL_CLASS
 
 function normalizeValue(
   partial?: Partial<VenueArgentinaValue>,
@@ -397,7 +399,7 @@ export function VenueArgentinaSelector({
           <div className="space-y-2 sm:col-span-2">
             <Label
               htmlFor="venue-ar-name"
-              className="mb-1.5 text-sm font-semibold text-foreground/90"
+              className={STUDIO_LABEL_CLASS}
             >
               Nombre del lugar
             </Label>
@@ -415,7 +417,7 @@ export function VenueArgentinaSelector({
           <div className="space-y-2 sm:col-span-2">
             <Label
               htmlFor="venue-ar-capacity"
-              className="mb-1.5 text-sm font-semibold text-foreground/90"
+              className={STUDIO_LABEL_CLASS}
             >
               Cantidad de personas
             </Label>
@@ -442,7 +444,7 @@ export function VenueArgentinaSelector({
         <div className="space-y-2">
           <Label
             htmlFor="venue-ar-province"
-            className="mb-1.5 text-sm font-semibold text-foreground/90"
+            className={STUDIO_LABEL_CLASS}
           >
             Provincia
           </Label>
@@ -460,7 +462,7 @@ export function VenueArgentinaSelector({
             >
               <SelectTrigger
                 id="venue-ar-province"
-                className="h-12 w-full max-w-full overflow-hidden rounded-xl border-border/60 bg-muted/20 sm:h-13"
+                className={cn(STUDIO_CONTROL_CLASS, "max-w-full overflow-hidden")}
               >
                 <SelectValue
                   placeholder={
@@ -470,7 +472,7 @@ export function VenueArgentinaSelector({
               </SelectTrigger>
               <SelectContent
                 alignItemWithTrigger={false}
-                className="max-h-60 overflow-y-auto w-full z-50 bg-popover border rounded-xl shadow-2xl"
+                className={cn(STUDIO_SELECT_CONTENT_CLASS, "z-50 w-full")}
               >
                 {uniqueProvinces.map((province) => (
                   <SelectItem key={province.id} value={province.id}>
@@ -488,7 +490,7 @@ export function VenueArgentinaSelector({
         <div className="space-y-2">
           <Label
             htmlFor="venue-ar-department"
-            className="mb-1.5 text-sm font-semibold text-foreground/90"
+            className={STUDIO_LABEL_CLASS}
           >
             Departamento / Partido
           </Label>
@@ -506,7 +508,7 @@ export function VenueArgentinaSelector({
             >
               <SelectTrigger
                 id="venue-ar-department"
-                className="h-12 w-full max-w-full overflow-hidden rounded-xl border-border/60 bg-muted/20 sm:h-13"
+                className={cn(STUDIO_CONTROL_CLASS, "max-w-full overflow-hidden")}
               >
                 <SelectValue
                   placeholder={
@@ -520,7 +522,7 @@ export function VenueArgentinaSelector({
               </SelectTrigger>
               <SelectContent
                 alignItemWithTrigger={false}
-                className="max-h-60 overflow-y-auto w-full z-50 bg-popover border rounded-xl shadow-2xl"
+                className={cn(STUDIO_SELECT_CONTENT_CLASS, "z-50 w-full")}
               >
                 {uniqueDepartments.map((department) => (
                   <SelectItem key={department.id} value={department.id}>
@@ -543,7 +545,7 @@ export function VenueArgentinaSelector({
       <div className="relative z-50 space-y-2">
         <Label
           htmlFor="venue-ar-address"
-          className="mb-1.5 text-sm font-semibold text-foreground/90"
+          className={STUDIO_LABEL_CLASS}
         >
           Dirección exacta
         </Label>

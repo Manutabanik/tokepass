@@ -71,6 +71,7 @@ function FlyerImage({
 
   return (
     <Image
+      key={src}
       src={src}
       alt={alt}
       fill

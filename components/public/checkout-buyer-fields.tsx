@@ -19,6 +19,7 @@ type CheckoutBuyerFieldsProps = {
   className?: string
   errors?: FieldErrors<CheckoutBuyerInfo> | Partial<Record<keyof CheckoutBuyerInfo, string>>
   shakeSignal?: number
+  requirePhone?: boolean
 }
 
 const fieldInputClass =
@@ -50,6 +51,7 @@ export function CheckoutBuyerFields({
   className,
   errors,
   shakeSignal = 0,
+  requirePhone = true,
 }: CheckoutBuyerFieldsProps) {
   const nameError = fieldMessage(errors, "buyerName")
   const dniError = fieldMessage(errors, "buyerDni")
@@ -221,6 +223,7 @@ export function CheckoutBuyerFields({
         <FieldHint id="buyer-dni-error" message={dniError} />
       </div>
 
+      {requirePhone ? (
       <div className="min-w-0 space-y-1.5">
         <Label
           htmlFor={CHECKOUT_BUYER_FIELD_IDS.buyerPhone}
@@ -254,6 +257,7 @@ export function CheckoutBuyerFields({
         </p>
         <FieldHint id="buyer-phone-error" message={phoneError} />
       </div>
+      ) : null}
     </div>
   )
 }

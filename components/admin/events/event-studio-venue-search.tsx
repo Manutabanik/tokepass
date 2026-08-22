@@ -6,6 +6,7 @@ import { useMemo, useState } from "react"
 import type { OrganizerVenue } from "@/app/actions/venues"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { STUDIO_CONTROL_CLASS } from "@/lib/admin/studio-form-styles"
 import { formatNumber } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
@@ -54,7 +55,7 @@ export function EventStudioVenueSearch({
             window.setTimeout(() => setOpen(false), 120)
           }}
           placeholder="Buscar un recinto guardado"
-          className="h-12 rounded-xl border-border/60 bg-muted/20 pl-9 text-base transition-all focus:bg-background sm:h-13"
+          className={cn(STUDIO_CONTROL_CLASS, "pl-9")}
           autoComplete="off"
         />
         {open ? (

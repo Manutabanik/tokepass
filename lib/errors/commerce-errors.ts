@@ -1,6 +1,13 @@
+import { CHECKOUT_NO_STOCK_MESSAGE } from "@/lib/checkout/checkout-feedback"
 import {
-  CHECKOUT_SOLD_OUT_DESCRIPTION,
+  SEAT_SELECTION_REQUIRED,
+  SEAT_UNAVAILABLE_MESSAGE,
+  SECTOR_NOT_CONFIGURED,
   isBuyerSoldOutToast,
+  isCheckoutConnectionNoise,
+  isSeatSelectionRequiredError,
+  isSeatUnavailableError,
+  parseGeneralStockUnavailable,
 } from "@/lib/checkout/revalidate-seat-holds"
 import { GENERIC_PUBLIC_ERROR, toUserFacingError } from "@/lib/errors/user-facing-error"
 import {
@@ -87,7 +94,17 @@ export function toCheckoutUserError(
   if (text === TICKET_SALE_ENDED_ERROR || text === TICKET_SALE_UPCOMING_ERROR) {
     return text
   }
-  if (isBuyerSoldOutToast(text)) return CHECKOUT_SOLD_OUT_DESCRIPTION
+  if (text === SEAT_SELECTION_REQUIRED || isSeatSelectionRequiredError(text)) {
+    return text
+  }
+  if (text === SECTOR_NOT_CONFIGURED) return text
+  if (isSeatUnavailableError(text)) return SEAT_UNAVAILABLE_MESSAGE
+  const generalStock = parseGeneralStockUnavailable(text)
+  if (generalStock) return generalStock
+  if (isCheckoutConnectionNoise(text)) {
+    return "No se pudo reservar el stock. Probá de nuevo."
+  }
+  if (isBuyerSoldOutToast(text)) return CHECKOUT_NO_STOCK_MESSAGE
   return toUserFacingError(raw, fallback)
 }
 
