@@ -10,7 +10,6 @@ import {
   useMemo,
   useState,
   useTransition,
-  type WheelEvent,
 } from "react"
 
 import { useDebounce } from "@/hooks/use-debounce"
@@ -18,6 +17,7 @@ import { useDebounce } from "@/hooks/use-debounce"
 import type { CatalogEvent } from "@/app/actions/public-events"
 import { EmptyState } from "@/components/discovery/empty-state"
 import { EventCard } from "@/components/discovery/event-card"
+import { EventsCarousel } from "@/components/discovery/events-carousel"
 import { SearchBar } from "@/components/discovery/search-bar"
 import { FeaturedHeroSection } from "@/components/public/featured-hero-section"
 import { OrganizerCtaBanner } from "@/components/discovery/organizer-cta-banner"
@@ -305,7 +305,7 @@ function DiscoveryHubInner({
               />
             ))
           ) : (
-            <UpcomingEventsRail events={gridEvents} categories={categories} />
+            <EventsCarousel events={gridEvents} categories={categories} />
           )}
         </motion.div>
       ) : (
@@ -411,40 +411,6 @@ function DiscoveryHubInner({
       </section>
 
       <OrganizerCtaBanner />
-    </div>
-  )
-}
-
-function UpcomingEventsRail({
-  events,
-  categories,
-}: {
-  events: CatalogEvent[]
-  categories?: DiscoveryCategory[]
-}) {
-  function handleWheel(event: WheelEvent<HTMLDivElement>) {
-    if (event.deltaY === 0) return
-    event.currentTarget.scrollLeft += event.deltaY
-  }
-
-  return (
-    <div
-      onWheel={handleWheel}
-      className="-mx-4 flex w-full cursor-grab gap-4 overflow-x-auto overflow-y-hidden px-4 py-4 snap-x snap-mandatory touch-pan-x scrollbar-none active:cursor-grabbing md:mx-0 md:px-0"
-    >
-      {events.map((event, index) => (
-        <div
-          key={event.id}
-          className="w-[220px] shrink-0 snap-start touch-pan-x sm:w-[260px]"
-        >
-          <EventCard
-            event={event}
-            index={index}
-            priority={index < 4}
-            categories={categories}
-          />
-        </div>
-      ))}
     </div>
   )
 }
