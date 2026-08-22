@@ -102,7 +102,7 @@ export function FeaturedHeroSection({
 
   return (
     <section
-      className="relative w-full max-w-full overflow-x-hidden bg-transparent pt-0 pb-4"
+      className="relative w-full max-w-full overflow-x-hidden bg-transparent pt-0 pb-20 md:pb-8"
       aria-label="Eventos destacados"
       aria-roledescription="carousel"
       onMouseEnter={() => setHovered(true)}
@@ -121,11 +121,11 @@ export function FeaturedHeroSection({
               <div
                 key={event.id}
                 className={cn(
-                  "min-w-0 px-2 transition-opacity duration-500 ease-out",
+                  "min-w-0 snap-center px-1.5 transition-opacity duration-500 ease-out",
                   slides.length === 1
                     ? "flex-[0_0_100%]"
-                    : "flex-[0_0_90%] md:flex-[0_0_85%] lg:flex-[0_0_80%]",
-                  index === selected ? "opacity-100" : "opacity-55",
+                    : "flex-[0_0_90vw] md:flex-[0_0_85%] lg:flex-[0_0_80%]",
+                  index === selected ? "opacity-100" : "opacity-60",
                 )}
               >
                 <FeaturedBannerCard

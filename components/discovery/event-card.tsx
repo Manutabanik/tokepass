@@ -7,24 +7,16 @@ import { useEffect, useState, type ReactNode } from "react"
 
 import type { CatalogEvent } from "@/app/actions/public-events"
 import { listMyFavoriteEventIds } from "@/app/actions/favorites"
-import {
-  EventLineupTeaser,
-  EventTypePills,
-} from "@/components/discovery/event-lineup-teaser"
+import { EventLineupTeaser } from "@/components/discovery/event-lineup-teaser"
 import { FavoriteToggleButton } from "@/components/public/favorite-toggle-button"
 import type { DiscoveryCategory } from "@/lib/discovery-categories"
-import {
-  eventCardLocationLabel,
-  eventCategoryLabel,
-  eventSecondaryBadge,
-  urgencyLabel,
-} from "@/lib/discovery-filters"
+import { eventCardLocationLabel, urgencyLabel } from "@/lib/discovery-filters"
 import { deriveEventSaleState } from "@/lib/event-status"
 import {
   getFavoriteIdsCache,
   setFavoriteIdsCache,
 } from "@/lib/favorite-ids-cache"
-import { formatDiscoveryDateTime, formatTicketPrice } from "@/lib/format"
+import { formatDiscoveryDate, formatTicketPrice } from "@/lib/format"
 import { isBoostActive } from "@/lib/services/events-service"
 import { publicEventPath } from "@/lib/seo/site"
 import { cn } from "@/lib/utils"
@@ -83,8 +75,6 @@ function EventListCard({
   finished,
   soldOut,
   urgency,
-  category,
-  genre,
 }: {
   event: CatalogEvent
   priority: boolean
@@ -94,8 +84,6 @@ function EventListCard({
   finished: boolean
   soldOut: boolean
   urgency: string | null
-  category: string | null
-  genre: string | null
 }) {
   return (
     <article
@@ -146,40 +134,18 @@ function EventListCard({
       </div>
       <div className="flex min-w-0 flex-grow flex-col justify-center">
         <span className="mb-1 truncate text-[10px] font-bold tracking-widest text-emerald-600 uppercase md:text-xs dark:text-emerald-400">
-          {formatDiscoveryDateTime(event.date)}
+          {formatDiscoveryDate(event.date)}
         </span>
-        <EventTypePills
-          category={category}
-          genre={genre}
-          className="mb-1 gap-1.5"
-        />
         <h3 className="mb-1 line-clamp-2 text-sm leading-tight font-black text-foreground md:text-lg">
           <Link href={publicEventPath(event)} className={overlayLinkClass}>
             {event.title}
           </Link>
         </h3>
         <EventLineupTeaser artists={event.artists} compact />
-        <p className="mb-2 flex items-center gap-1 text-xs text-muted-foreground">
+        <p className="flex items-center gap-1 text-xs text-muted-foreground">
           <MapPin className="size-3 shrink-0" aria-hidden="true" />
           <span className="truncate">{locationLabel}</span>
         </p>
-        <div className="mt-1 flex items-center justify-between gap-2">
-          <div className="min-w-0">
-            <span className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-              {event.startingPrice === 0 ? "Entrada" : "Entradas desde"}
-            </span>
-            <span className="whitespace-nowrap text-sm font-black text-foreground md:text-base">
-              {event.startingPrice == null
-                ? "Ver precios"
-                : event.startingPrice === 0
-                  ? "gratuita"
-                  : formatTicketPrice(event.startingPrice)}
-            </span>
-          </div>
-          <span className="relative z-0 inline-flex h-12 min-h-[48px] shrink-0 items-center rounded-xl bg-emerald-500 px-5 text-sm font-black text-slate-950 shadow-lg transition-colors duration-300 group-hover:bg-emerald-400">
-            {finished ? "Ver evento" : soldOut ? "Entradas agotadas" : "Ver entradas"}
-          </span>
-        </div>
       </div>
     </article>
   )
@@ -190,7 +156,6 @@ export function EventCard({
   priority = false,
   index = 0,
   variant = "poster",
-  categories,
 }: {
   event: CatalogEvent
   priority?: boolean
@@ -199,8 +164,6 @@ export function EventCard({
   categories?: DiscoveryCategory[]
 }) {
   const urgency = urgencyLabel(event)
-  const secondary = eventSecondaryBadge(event)
-  const category = eventCategoryLabel(event, categories)
   const locationLabel = eventCardLocationLabel(event)
   const boosted = isBoostActive(event)
   const sponsored = Boolean(event.isSponsoredByTokePass)
@@ -235,8 +198,6 @@ export function EventCard({
         finished={finished}
         soldOut={soldOut}
         urgency={urgency}
-        category={category}
-        genre={secondary}
       />
     )
   }
@@ -244,25 +205,27 @@ export function EventCard({
   const priceLabel =
     event.startingPrice == null
       ? "Ver precios"
-      : formatTicketPrice(event.startingPrice)
+      : event.startingPrice === 0
+        ? "Gratis"
+        : `Desde ${formatTicketPrice(event.startingPrice)}`
 
   return (
     <article
       className={cn(
-        "group relative flex cursor-pointer flex-col rounded-3xl border border-white/5 bg-muted/20 p-2.5 transition-all duration-300",
-        "hover:-translate-y-1 hover:border-emerald-500/30 hover:bg-muted/40 hover:shadow-2xl hover:shadow-emerald-500/10",
+        "group relative flex cursor-pointer flex-col rounded-2xl border border-white/5 bg-card/40 p-2 transition-all duration-300",
+        "hover:-translate-y-1 hover:border-emerald-500/30 hover:bg-card/80",
         highlighted && "border-emerald-500/30",
       )}
       style={{ animationDelay: `${Math.min(index * 40, 200)}ms` }}
     >
-      <div className="relative aspect-[4/5] w-full overflow-hidden rounded-2xl bg-muted">
+      <div className="relative aspect-[3/4] w-full overflow-hidden rounded-xl bg-muted">
         {event.imageUrl ? (
           <Image
             src={event.imageUrl}
             alt={event.title}
             fill
             priority={priority}
-            sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, (max-width: 1280px) 30vw, 22vw"
+            sizes="(max-width: 768px) 210px, 250px"
             className={cn(
               "object-cover transition-transform duration-500 group-hover:scale-105",
               finished && "grayscale-[50%]",
@@ -278,66 +241,41 @@ export function EventCard({
           />
         )}
 
-        <div
-          className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20"
-          aria-hidden
-        />
-
-        <div className="absolute top-3 left-3 z-10 flex max-w-[calc(100%-3.5rem)] flex-wrap gap-1.5">
-          {highlighted ? (
-            <span className="rounded-full bg-emerald-500 px-2.5 py-1 text-[10px] font-bold tracking-wider text-black uppercase">
-              Imperdible
-            </span>
-          ) : null}
-          {category ? (
-            <span className="rounded-full border border-white/10 bg-black/60 px-2.5 py-1 text-[10px] font-bold tracking-wider text-white uppercase backdrop-blur-md">
-              {category}
-            </span>
-          ) : null}
-          {urgency ? <FlyerBadge pulse>{urgency}</FlyerBadge> : null}
-        </div>
-
         {favReady ? (
           <FavoriteToggleButton
             key={`${event.id}-${favorited ? "1" : "0"}`}
             eventId={event.id}
             initiallyFavorited={favorited}
-            className="absolute top-3 right-3 z-20 size-9 p-2 text-white/80 shadow-none hover:text-red-500"
+            className="absolute top-2 right-2 z-20 size-8 p-1.5 text-white/80 shadow-none hover:text-red-500"
           />
         ) : (
-          <span className="absolute top-3 right-3 z-20 block size-9 rounded-full border border-white/10 bg-black/50 backdrop-blur-md" />
+          <span className="absolute top-2 right-2 z-20 block size-8 rounded-full bg-black/40 backdrop-blur-md" />
         )}
 
-        {soldOut ? (
-          <span className="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full bg-red-600 px-4 py-1.5 text-[11px] font-black tracking-[0.16em] text-white uppercase shadow-lg">
-            Entradas agotadas
-          </span>
-        ) : null}
-        {finished ? (
-          <span className="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full bg-zinc-800/80 px-4 py-1.5 text-[11px] font-black tracking-[0.16em] text-white uppercase backdrop-blur-md">
-            Este evento ya pasó
+        {soldOut || finished ? (
+          <span className="absolute inset-x-2 bottom-10 z-10 rounded-md bg-black/70 px-2 py-1 text-center text-[9px] font-black tracking-wider text-white uppercase">
+            {soldOut ? "Agotadas" : "Finalizado"}
           </span>
         ) : null}
 
-        <div className="absolute right-3 bottom-3 z-10">
-          <span className="rounded-xl bg-emerald-500 px-3 py-1.5 text-xs font-black text-black shadow-lg">
+        <div className="absolute right-2 bottom-2 z-10">
+          <span className="rounded-lg bg-emerald-500 px-2.5 py-1 text-[10px] font-black text-black shadow-md">
             {priceLabel}
           </span>
         </div>
       </div>
 
-      <div className="px-3 pt-3 pb-1">
-        <p className="truncate text-xs font-bold tracking-wider text-emerald-400 uppercase">
-          {formatDiscoveryDateTime(event.date)}
+      <div className="px-1 pt-2 pb-0.5">
+        <p className="truncate text-[11px] font-bold text-emerald-400 uppercase">
+          {formatDiscoveryDate(event.date)}
         </p>
-        <h3 className="line-clamp-1 text-base font-bold text-foreground transition-colors group-hover:text-emerald-400 md:text-lg">
+        <h3 className="line-clamp-1 text-sm font-bold text-foreground transition-colors group-hover:text-emerald-400">
           <Link href={publicEventPath(event)} className={overlayLinkClass}>
             {event.title}
           </Link>
         </h3>
-        <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-          <MapPin className="size-3 shrink-0" aria-hidden="true" />
-          <span className="line-clamp-1">{locationLabel}</span>
+        <p className="line-clamp-1 text-[11px] text-muted-foreground">
+          {locationLabel}
         </p>
       </div>
     </article>

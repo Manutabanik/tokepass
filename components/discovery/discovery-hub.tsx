@@ -300,15 +300,19 @@ function DiscoveryHubInner({
               />
             ))
           ) : (
-            <div className="grid grid-cols-1 items-stretch gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="-mx-4 flex gap-4 overflow-x-auto px-4 pt-2 pb-6 snap-x snap-mandatory scrollbar-none md:mx-0 md:px-0">
               {gridEvents.map((event, index) => (
-                <EventCard
+                <div
                   key={event.id}
-                  event={event}
-                  index={index}
-                  priority={index < 4}
-                  categories={categories}
-                />
+                  className="w-[210px] shrink-0 snap-start md:w-[250px]"
+                >
+                  <EventCard
+                    event={event}
+                    index={index}
+                    priority={index < 4}
+                    categories={categories}
+                  />
+                </div>
               ))}
             </div>
           )}
