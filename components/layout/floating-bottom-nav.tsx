@@ -77,10 +77,8 @@ export function FloatingBottomNav() {
     <nav
       aria-label="Cartelera de eventos"
       className={cn(
-        // Match the public navbar breakpoint (top links appear at `lg`).
-        "pointer-events-auto fixed left-1/2 z-30 flex max-w-[calc(100vw-1.5rem)] lg:hidden",
-        "bottom-[max(env(safe-area-inset-bottom),1rem)]",
-        "items-center gap-1 rounded-full border border-white/10 bg-black/80 p-1.5 shadow-2xl backdrop-blur-md",
+        "pointer-events-auto fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-50 flex w-[92%] max-w-md lg:hidden",
+        "items-center justify-between rounded-full border border-white/15 bg-black/80 p-2 shadow-2xl backdrop-blur-xl",
         "transition-transform duration-300 ease-in-out will-change-transform",
         collapsed
           ? "-translate-x-1/2 translate-y-[150%]"
@@ -95,7 +93,7 @@ export function FloatingBottomNav() {
             href={href}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "flex min-w-[4.25rem] flex-col items-center justify-center gap-0.5 rounded-full px-3 py-2 text-[10px] font-semibold tracking-wide transition-colors",
+              "flex min-h-11 min-w-11 flex-1 flex-col items-center justify-center gap-0.5 rounded-full px-2 py-2 text-[10px] font-semibold tracking-wide transition-colors",
               active
                 ? "bg-white/10 text-white"
                 : "text-gray-400 hover:text-gray-200",

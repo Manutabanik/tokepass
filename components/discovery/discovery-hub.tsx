@@ -10,6 +10,7 @@ import {
   useMemo,
   useState,
   useTransition,
+  type WheelEvent,
 } from "react"
 
 import { useDebounce } from "@/hooks/use-debounce"
@@ -286,7 +287,11 @@ function DiscoveryHubInner({
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.25 }}
-          className={variant === "directory" ? "flex flex-col gap-3" : undefined}
+          className={
+            variant === "directory"
+              ? "flex flex-col gap-3"
+              : "w-full min-w-0 max-w-full"
+          }
         >
           {variant === "directory" ? (
             gridEvents.map((event, index) => (
@@ -300,21 +305,7 @@ function DiscoveryHubInner({
               />
             ))
           ) : (
-            <div className="-mx-4 flex gap-4 overflow-x-auto px-4 pt-2 pb-6 snap-x snap-mandatory scrollbar-none md:mx-0 md:px-0">
-              {gridEvents.map((event, index) => (
-                <div
-                  key={event.id}
-                  className="w-[210px] shrink-0 snap-start md:w-[250px]"
-                >
-                  <EventCard
-                    event={event}
-                    index={index}
-                    priority={index < 4}
-                    categories={categories}
-                  />
-                </div>
-              ))}
-            </div>
+            <UpcomingEventsRail events={gridEvents} categories={categories} />
           )}
         </motion.div>
       ) : (
@@ -393,7 +384,7 @@ function DiscoveryHubInner({
   )
 
   return (
-    <div className="w-full max-w-full space-y-10 overflow-x-hidden bg-transparent sm:space-y-12">
+    <div className="w-full min-w-0 max-w-full space-y-10 overflow-x-hidden bg-transparent sm:space-y-12">
       <FeaturedHeroSection
         pool={featuredPool}
         province={city}
@@ -401,7 +392,7 @@ function DiscoveryHubInner({
       />
       {searchFilters}
 
-      <section className="space-y-6" id="discovery-results">
+      <section className="min-w-0 space-y-6" id="discovery-results">
         <div className="flex flex-col gap-4">
           <div>
             <div className="flex items-center gap-2">
@@ -420,6 +411,40 @@ function DiscoveryHubInner({
       </section>
 
       <OrganizerCtaBanner />
+    </div>
+  )
+}
+
+function UpcomingEventsRail({
+  events,
+  categories,
+}: {
+  events: CatalogEvent[]
+  categories?: DiscoveryCategory[]
+}) {
+  function handleWheel(event: WheelEvent<HTMLDivElement>) {
+    if (event.deltaY === 0) return
+    event.currentTarget.scrollLeft += event.deltaY
+  }
+
+  return (
+    <div
+      onWheel={handleWheel}
+      className="-mx-4 flex w-full cursor-grab gap-4 overflow-x-auto overflow-y-hidden px-4 py-4 snap-x snap-mandatory touch-pan-x scrollbar-none active:cursor-grabbing md:mx-0 md:px-0"
+    >
+      {events.map((event, index) => (
+        <div
+          key={event.id}
+          className="w-[220px] shrink-0 snap-start touch-pan-x sm:w-[260px]"
+        >
+          <EventCard
+            event={event}
+            index={index}
+            priority={index < 4}
+            categories={categories}
+          />
+        </div>
+      ))}
     </div>
   )
 }

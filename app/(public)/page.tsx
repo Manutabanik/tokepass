@@ -69,7 +69,7 @@ export default async function HomePage() {
       <WebsiteSchemaScript />
       <AnimatedBackground />
 
-      <div className="relative mx-auto max-w-7xl px-4 pt-4 pb-24 sm:px-6 sm:pt-6 lg:px-8 lg:pb-28">
+      <div className="relative mx-auto w-full max-w-7xl overflow-x-hidden px-4 pt-4 pb-32 sm:px-6 sm:pt-6 md:pb-12 lg:px-8">
         {loadError ? (
           <div className="mt-16 rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-10 text-center text-sm text-red-700 dark:text-red-200">
             {loadError}

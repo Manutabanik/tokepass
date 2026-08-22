@@ -212,7 +212,7 @@ export function EventCard({
   return (
     <article
       className={cn(
-        "group relative flex cursor-pointer flex-col rounded-2xl border border-white/5 bg-card/40 p-2 transition-all duration-300",
+        "group relative flex cursor-pointer flex-col touch-pan-x rounded-2xl border border-white/5 bg-card/40 p-2 transition-all duration-300",
         "hover:-translate-y-1 hover:border-emerald-500/30 hover:bg-card/80",
         highlighted && "border-emerald-500/30",
       )}

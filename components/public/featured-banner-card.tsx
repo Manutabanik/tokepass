@@ -32,14 +32,14 @@ export function FeaturedBannerCard({
   const dateLabel = formatDiscoveryDate(event.date)
 
   return (
-    <article className="group relative flex max-h-[60vh] w-full flex-col md:max-h-none">
+    <article className="group relative mx-auto flex w-full max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-3xl md:max-w-none">
       <Link
         href={href}
         className="absolute inset-0 z-10 rounded-3xl focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70"
         aria-label={`Ver ${event.title}`}
       />
 
-      <div className="relative aspect-[3/4] max-h-[min(48vh,380px)] w-full overflow-hidden rounded-3xl bg-black md:aspect-[16/9] md:max-h-[420px]">
+      <div className="relative aspect-[4/3] w-full overflow-hidden rounded-3xl bg-black sm:aspect-[16/9]">
         {coverUrl ? (
           <Image
             src={coverUrl}
