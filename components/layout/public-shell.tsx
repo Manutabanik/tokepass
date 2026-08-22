@@ -53,7 +53,7 @@ export function PublicShell({
                 "pt-[calc(4rem+env(safe-area-inset-top)+1rem)]",
                 eventStorefront
                   ? "overflow-visible pb-24"
-                  : "min-h-0 overflow-x-clip pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0",
+                  : "min-h-0 overflow-x-clip pb-[calc(6.5rem+env(safe-area-inset-bottom))] lg:pb-0",
               ),
         )}
       >
