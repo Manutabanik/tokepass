@@ -14,6 +14,22 @@ export type BeforeInstallPromptEvent = Event & {
 
 export type PwaPlatform = "ios" | "android" | "desktop"
 
+export const PWA_INSTALL_DISMISS_KEY = "tokepass-pwa-install-dismissed-at"
+export const PWA_INSTALL_DISMISS_TTL_MS = 7 * 24 * 60 * 60 * 1000
+
+export function wasPwaInstallDismissedRecently(): boolean {
+  if (typeof window === "undefined") return true
+  try {
+    const raw = window.localStorage.getItem(PWA_INSTALL_DISMISS_KEY)
+    if (!raw) return false
+    const at = Number(raw)
+    if (!Number.isFinite(at)) return false
+    return Date.now() - at < PWA_INSTALL_DISMISS_TTL_MS
+  } catch {
+    return false
+  }
+}
+
 type NavigatorStandalone = Navigator & { standalone?: boolean }
 
 export function isPwaStandalone(): boolean {
@@ -81,8 +97,8 @@ export function ensurePwaInstallCapture() {
   captureBound = true
 
   window.addEventListener("beforeinstallprompt", (event) => {
+    if (isPwaStandalone() || wasPwaInstallDismissedRecently()) return
     event.preventDefault()
-    if (isPwaStandalone()) return
     usePwaRuntimeStore
       .getState()
       .setDeferredPrompt(event as BeforeInstallPromptEvent)

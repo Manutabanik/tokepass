@@ -494,7 +494,7 @@ export function InteractiveSeatingCanvas({
         row: seat.row,
         seatNumber: seat.number,
         price: resolveVenueUnitPrice(
-          [seat.sectorId, seat.sectorName],
+          [seat.sectorId],
           Number(seat.price) || 0,
           priceBySectorId,
         ),
@@ -506,7 +506,7 @@ export function InteractiveSeatingCanvas({
       zoneById.set(zone.id, {
         sectorName: zone.name,
         price: resolveVenueUnitPrice(
-          [zone.id, zone.name],
+          [zone.id],
           Number(zone.price) || 0,
           priceBySectorId,
         ),
@@ -518,7 +518,7 @@ export function InteractiveSeatingCanvas({
       elementById.set(element.id, {
         sectorName: element.sectorName || element.customLabel || element.label || "Sector",
         price: resolveVenueUnitPrice(
-          [element.id, element.groupId, element.sectorName, element.groupName],
+          [element.ticketTypeId, element.id, element.groupId],
           Number(element.price) || 0,
           priceBySectorId,
         ),

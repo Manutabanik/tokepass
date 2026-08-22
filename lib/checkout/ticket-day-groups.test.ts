@@ -15,6 +15,7 @@ import {
   defaultCheckoutDateId,
   defaultCheckoutKindTab,
   FULL_PASS_TAB_ID,
+  groupTicketsByDate,
   isSamePriceAnyDay,
   listCheckoutDateCards,
   listCheckoutDayTabs,
@@ -175,6 +176,25 @@ describe("progressive disclosure tabs", () => {
     assert.ok(parts.weekday.length > 0)
     assert.ok(parts.dayNumber.length > 0)
     assert.ok(parts.month.length > 0)
+  })
+})
+
+describe("groupTicketsByDate", () => {
+  it("keeps unbound single-day tickets visible when there are no date cards", () => {
+    const grouped = groupTicketsByDate(
+      [
+        tier({
+          id: "gen",
+          name: "General",
+          isFullPass: false,
+          dayId: null,
+          tierType: "general",
+        }),
+      ],
+      [],
+    )
+    assert.equal(grouped.ticketsByDate.length, 1)
+    assert.equal(grouped.ticketsByDate[0]?.tickets[0]?.id, "gen")
   })
 })
 

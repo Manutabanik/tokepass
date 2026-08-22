@@ -1,5 +1,7 @@
 export type TicketStockInput = {
   available?: number | null
+  stock_available?: number | null
+  stockAvailable?: number | null
   capacity?: number | null
   sold?: number | null
 }
@@ -12,7 +14,9 @@ function asUnits(value: unknown): number | null {
 
 /** Cupo seleccionable: nunca anuncia más que `available` ni que `capacity - sold`. */
 export function selectableTicketStock(tier: TicketStockInput): number {
-  const available = asUnits(tier.available)
+  const available = asUnits(
+    tier.available ?? tier.stock_available ?? tier.stockAvailable,
+  )
   const fromLive = available == null ? 0 : Math.max(0, available)
   const capacity = asUnits(tier.capacity)
   const sold = asUnits(tier.sold)
@@ -35,3 +39,6 @@ export function isTicketCardBlocked(
 
 export const SOLD_OUT_TICKET_CARD_CLASS =
   "cursor-not-allowed opacity-50 pointer-events-none grayscale"
+
+export const SOLD_OUT_BADGE_CLASS =
+  "shrink-0 rounded-md bg-muted px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground"

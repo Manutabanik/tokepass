@@ -68,28 +68,115 @@ declare global {
         options: {
           sitekey: string
           size: "invisible"
+          execution?: "render" | "execute"
           callback: (token: string) => void
+          "error-callback"?: () => void
+          "timeout-callback"?: () => void
         },
       ) => string
       execute: (widgetId: string) => void
       reset: (widgetId: string) => void
+      remove: (widgetId: string) => void
     }
   }
+}
+
+function captchaApiReady(src: string): boolean {
+  if (src.includes("turnstile")) return Boolean(window.turnstile)
+  if (src.includes("recaptcha")) return Boolean(window.grecaptcha)
+  return false
 }
 
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const existing = document.querySelector(`script[src="${src}"]`)
     if (existing) {
-      resolve()
+      if (
+        existing.getAttribute("data-loaded") === "1" ||
+        captchaApiReady(src)
+      ) {
+        existing.setAttribute("data-loaded", "1")
+        resolve()
+        return
+      }
+      existing.addEventListener("load", () => resolve(), { once: true })
+      existing.addEventListener(
+        "error",
+        () => reject(new Error("captcha_script")),
+        { once: true },
+      )
       return
     }
     const script = document.createElement("script")
     script.src = src
     script.async = true
-    script.onload = () => resolve()
+    script.onload = () => {
+      script.setAttribute("data-loaded", "1")
+      resolve()
+    }
     script.onerror = () => reject(new Error("captcha_script"))
     document.head.appendChild(script)
+  })
+}
+
+let turnstileInflight: Promise<string | null> | null = null
+let turnstileWidgetId: string | null = null
+let turnstileHost: HTMLElement | null = null
+
+function destroyTurnstileWidget() {
+  const api = window.turnstile
+  if (api && turnstileWidgetId) {
+    try {
+      api.remove(turnstileWidgetId)
+    } catch {
+      try {
+        api.reset(turnstileWidgetId)
+      } catch {
+        // widget already gone
+      }
+    }
+  }
+  turnstileHost?.remove()
+  turnstileWidgetId = null
+  turnstileHost = null
+}
+
+async function requestTurnstileToken(siteKey: string): Promise<string | null> {
+  await loadScript(
+    "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit",
+  )
+  const turnstile = window.turnstile
+  if (!turnstile) return null
+
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = (token: string | null) => {
+      if (settled) return
+      settled = true
+      destroyTurnstileWidget()
+      resolve(token)
+    }
+
+    turnstileHost = document.createElement("div")
+    turnstileHost.setAttribute("aria-hidden", "true")
+    turnstileHost.style.cssText =
+      "position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;"
+    document.body.appendChild(turnstileHost)
+    turnstileWidgetId = turnstile.render(turnstileHost, {
+      sitekey: siteKey,
+      size: "invisible",
+      execution: "execute",
+      callback: (token) => finish(token),
+      "error-callback": () => finish(null),
+      "timeout-callback": () => finish(null),
+    })
+    try {
+      turnstile.execute(turnstileWidgetId)
+    } catch {
+      finish(null)
+      return
+    }
+    window.setTimeout(() => finish(null), 8_000)
   })
 }
 
@@ -113,26 +200,9 @@ export async function getCheckoutCaptchaToken(): Promise<string | null> {
     })
   }
 
-  await loadScript("https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit")
-  const turnstile = window.turnstile
-  if (!turnstile) return null
-
-  return new Promise((resolve) => {
-    const host = document.createElement("div")
-    host.style.cssText = "position:absolute;width:0;height:0;overflow:hidden;"
-    document.body.appendChild(host)
-    const widgetId = turnstile.render(host, {
-      sitekey: siteKey,
-      size: "invisible",
-      callback: (token) => {
-        host.remove()
-        resolve(token)
-      },
-    })
-    turnstile.execute(widgetId)
-    window.setTimeout(() => {
-      host.remove()
-      resolve(null)
-    }, 8_000)
+  if (turnstileInflight) return turnstileInflight
+  turnstileInflight = requestTurnstileToken(siteKey).finally(() => {
+    turnstileInflight = null
   })
+  return turnstileInflight
 }

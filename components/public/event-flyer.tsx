@@ -65,7 +65,12 @@ function FlyerImage({
     return (
       // Native fallback: next/image rejects hosts outside remotePatterns.
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={src} alt={alt} className={cn("size-full", imageClass)} />
+      <img
+        src={src}
+        alt={alt}
+        fetchPriority={priority ? "high" : "auto"}
+        className={cn("size-full", imageClass)}
+      />
     )
   }
 

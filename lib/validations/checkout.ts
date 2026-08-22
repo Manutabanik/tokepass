@@ -116,7 +116,13 @@ function firstString(...values: unknown[]): string | undefined {
 function normalizeIncomingCartItem(raw: unknown) {
   if (!raw || typeof raw !== "object") return raw
   const item = raw as Record<string, unknown>
-  const tierId = firstString(item.ticket_tier_id, item.ticketTierId, item.tierId)
+  const tierId = firstString(
+    item.ticket_tier_id,
+    item.ticketTierId,
+    item.tierId,
+    item.ticket_type_id,
+    item.ticketTypeId,
+  )
   const seatId = firstString(
     item.seat_id,
     item.seatId,
@@ -132,6 +138,7 @@ function normalizeIncomingCartItem(raw: unknown) {
     Boolean(elementId)
   const quantityRaw = Number(item.quantity)
   return {
+    // Client money fields (price, unit_price, total) are dropped on purpose.
     type: isMapped ? "mapped" : "general",
     ticketTierId: tierId,
     ticket_tier_id: tierId,
@@ -388,6 +395,8 @@ export type CheckoutPayload = z.infer<typeof CheckoutPayloadSchema>
 export type CheckoutCartItem = NonNullable<CheckoutPayload["items"]>[number]
 export type CheckoutCartItemInput = {
   type?: "general" | "mapped"
+  ticket_type_id?: string
+  ticketTypeId?: string
   ticket_tier_id?: string
   ticketTierId?: string
   tierId?: string
@@ -395,6 +404,8 @@ export type CheckoutCartItemInput = {
   seatingUnitId?: string
   seatingIds?: string[]
   sectorKey?: string | null
+  sector_id?: string | null
+  sectorId?: string | null
   tableNumber?: number | null
   zoneId?: string | null
   seatId?: string

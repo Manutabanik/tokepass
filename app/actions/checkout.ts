@@ -765,7 +765,19 @@ async function quoteCheckoutFromDatabase(
   phasesByTier: Map<string, PublicTicketPhase[]>,
 ): Promise<{ ok: true; total: number } | { ok: false; error: string }> {
   const tierIds = [...new Set(items.map((item) => checkoutItemTierId(item)))]
+  const { data: tierRows } = await supabase
+    .from("ticket_tiers")
+    .select("id, price")
+    .eq("event_id", eventId)
+    .in("id", tierIds)
+
   const unitPriceByTier = new Map<string, number>()
+  for (const row of tierRows ?? []) {
+    const price = Number(row.price)
+    if (Number.isFinite(price) && price >= 0) {
+      unitPriceByTier.set(row.id, price)
+    }
+  }
 
   for (const item of items) {
     const tierId = checkoutItemTierId(item)
@@ -777,17 +789,6 @@ async function quoteCheckoutFromDatabase(
       p_zone_id: item.zoneId ?? null,
     })
     if (error || data == null || !Number.isFinite(Number(data))) {
-      const { data: tierRow } = await supabase
-        .from("ticket_tiers")
-        .select("price")
-        .eq("id", tierId)
-        .eq("event_id", eventId)
-        .maybeSingle()
-      const fallback = Number(tierRow?.price)
-      if (!Number.isFinite(fallback) || fallback < 0) {
-        return { ok: false, error: "No se pudo cotizar el precio vigente." }
-      }
-      unitPriceByTier.set(tierId, fallback)
       continue
     }
     unitPriceByTier.set(tierId, Number(data))
@@ -1113,13 +1114,15 @@ export async function getSeatingUnitCartHold(
 
 export type LockTicketsItem = {
   type?: "general" | "mapped"
+  ticket_type_id?: string
   ticket_tier_id?: string
   ticketTierId?: string
-  tierId: string
+  tierId?: string
   quantity: number
   seatingUnitId?: string
   seat_id?: string
   seatingIds?: string[]
+  sector_id?: string | null
 }
 
 export type LockTicketsResult =

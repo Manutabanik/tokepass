@@ -184,6 +184,56 @@ describe("CheckoutPayloadSchema mixed inventory", () => {
     assert.equal(parsed.success, false)
   })
 
+  it("accepts ticket_type_id and sector_id without client prices", () => {
+    const parsed = CheckoutPayloadSchema.safeParse({
+      eventId,
+      buyer,
+      items: [
+        {
+          ticket_type_id: generalId,
+          sector_id: "platea-a",
+          quantity: 2,
+          price: 99,
+          total: 198,
+        },
+      ],
+    })
+    assert.equal(parsed.success, true)
+    if (!parsed.success) return
+    const item = parsed.data.items?.[0]
+    assert.ok(item)
+    assert.equal(item.ticketTierId, generalId)
+    assert.equal(item.quantity, 2)
+    assert.equal(item.sectorKey, "platea-a")
+    assert.equal("price" in item, false)
+    assert.equal("total" in item, false)
+  })
+
+  it("strips client prices and keeps only id plus quantity", () => {
+    const parsed = CheckoutPayloadSchema.safeParse({
+      eventId,
+      buyer,
+      items: [
+        {
+          tierId: generalId,
+          quantity: 2,
+          price: 1,
+          unit_price: 1,
+          total: 2,
+        },
+      ],
+    })
+    assert.equal(parsed.success, true)
+    if (!parsed.success) return
+    const item = parsed.data.items?.[0]
+    assert.ok(item)
+    assert.equal(item.ticketTierId, generalId)
+    assert.equal(item.quantity, 2)
+    assert.equal("price" in item, false)
+    assert.equal("unit_price" in item, false)
+    assert.equal("total" in item, false)
+  })
+
   it("rejects a 9-digit DNI", () => {
     const longDni = CheckoutPayloadSchema.safeParse({
       eventId,

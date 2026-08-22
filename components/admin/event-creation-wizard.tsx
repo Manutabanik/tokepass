@@ -2,14 +2,11 @@
 
 import { zodResolver } from "@hookform/resolvers/zod"
 import {
-  Armchair,
-  Building2,
   CalendarClock,
   CreditCard,
-  Globe2,
-  Lock,
   MapPin,
   MonitorPlay,
+  Plus,
   Sparkles,
   Ticket,
 } from "lucide-react"
@@ -32,24 +29,23 @@ import { EventCapacityHeader } from "@/components/admin/event-capacity-header"
 import { EventStudioDock } from "@/components/admin/event-studio-dock"
 import { EventStudioDateTimeField } from "@/components/admin/events/event-studio-datetime-field"
 import { EventStudioFlyerField } from "@/components/admin/events/event-studio-flyer-field"
-import { EventStudioPurchaseCapField } from "@/components/admin/events/event-studio-purchase-cap-field"
 import { EventStudioShell } from "@/components/admin/event-studio-shell"
 import { EventStudioStepper } from "@/components/admin/event-studio-stepper"
 import { PublishEventConfirmDialog } from "@/components/admin/publish-event-confirm-dialog"
 import type { OrganizerVenue } from "@/app/actions/venues"
 import { upsertVenue } from "@/app/actions/venues"
 import { EventSponsorsManager } from "@/components/admin/event-sponsors-manager"
-import { AgendaBuilder } from "@/components/admin/agenda-builder"
+import { EventStudioPublishStep } from "@/components/admin/events/event-studio-publish-step"
 import { EventVenueStep } from "@/components/admin/event-venue-step"
 import {
   createInventoryTicket,
   UnifiedInventoryPanel,
 } from "@/components/admin/unified-inventory-panel"
 import { ScheduleDaysBuilder } from "@/components/admin/schedule-days-builder"
+import { useDebounce } from "@/hooks/use-debounce"
 import { useEventFormAutosave } from "@/hooks/use-event-form-autosave"
 import type { ZoneTierPriceDraft } from "@/lib/stores/event-form-store"
 import { useEventFormStore } from "@/lib/stores/event-form-store"
-import { Button } from "@/components/ui/button"
 import {
   Form,
   FormDescription,
@@ -85,6 +81,7 @@ import { InteractiveVenueMapEditor } from "@/components/admin/interactive-venue-
 import { TokepassStudioOverlay } from "@/components/admin/tokepass-studio-overlay"
 import {
   seatingLayoutToVenueMap,
+  venueMapHasInventory,
   venueMapToSeatingLayout,
 } from "@/lib/seating/venue-map-geometry"
 import {
@@ -161,7 +158,7 @@ import {
 const STEP_META = {
   [WIZARD_STEP_IDENTITY]: {
     title: "Datos principales",
-    description: "Nombre, flyer y detalles del show",
+    description: "Nombre, recinto, fechas y flyer",
     icon: Sparkles,
   },
   [WIZARD_STEP_AGENDA]: {
@@ -181,7 +178,7 @@ const STEP_META = {
   },
   [WIZARD_STEP_CONFIG]: {
     title: "Publicar y cobrar",
-    description: "Comisiones y privacidad",
+    description: "Cobros, visibilidad y tope por persona",
     icon: CreditCard,
   },
 } as const
@@ -239,6 +236,10 @@ const defaultValues: EventFormValues = {
   ticketsDefaultTab: "auto",
   lineup: [],
   maxTicketsPerUser: null,
+  acceptsMercadoPago: true,
+  acceptsPosPayments: true,
+  defaultFeeStrategy: "absorb_in_price",
+  refundPolicy: "organizer",
 }
 
 export function EventCreationWizard({
@@ -274,13 +275,12 @@ export function EventCreationWizard({
   )
   const [flyerFile, setFlyerFile] = useState<File | null>(null)
   const [flyerError, setFlyerError] = useState<string | null>(null)
-  const [resultMessage, setResultMessage] = useState<{
-    type: "success" | "error"
-    text: string
-    title?: string
-    field?: string
-    conflict?: WizardConflict
-  } | null>(null)
+  const [showAdvancedDetails, setShowAdvancedDetails] = useState(() => {
+    const basics = initialData?.values.basics
+    return (
+      basics?.deliveryMode === "ONLINE" || Boolean(basics?.ageRestriction)
+    )
+  })
   const [publishConfirm, setPublishConfirm] = useState<{
     open: boolean
     eventId: string
@@ -299,7 +299,10 @@ export function EventCreationWizard({
     mode: "onChange",
     reValidateMode: "onChange",
     shouldUnregister: false,
-    defaultValues: initialData?.values ?? defaultValues,
+    defaultValues: {
+      ...defaultValues,
+      ...(initialData?.values ?? {}),
+    },
   })
 
   const capacitySnapshot = useEventCapacity(form)
@@ -365,7 +368,10 @@ export function EventCreationWizard({
     form,
     draftKey,
     eventId: initialData?.id ?? null,
-    initialValues: initialData?.values ?? defaultValues,
+    initialValues: {
+      ...defaultValues,
+      ...(initialData?.values ?? {}),
+    },
     venuePricingMap,
     onVenuePricingMapChange: setVenuePricingMap,
     zoneTierPricing,
@@ -376,6 +382,26 @@ export function EventCreationWizard({
       ? Date.parse(initialData.updatedAt)
       : null,
   })
+
+  const [draftRevision, setDraftRevision] = useState(0)
+  const debouncedDraftRevision = useDebounce(draftRevision, 1500)
+  const skipInitialAutosave = useRef(true)
+
+  useEffect(() => {
+    const subscription = form.watch(() => {
+      setDraftRevision((current) => current + 1)
+    })
+    return () => subscription.unsubscribe()
+  }, [form])
+
+  useEffect(() => {
+    if (skipInitialAutosave.current) {
+      skipInitialAutosave.current = false
+      return
+    }
+    if (debouncedDraftRevision === 0) return
+    void flushAutosave()
+  }, [debouncedDraftRevision, flushAutosave])
 
   const clearDraft = useEventFormStore((s) => s.clearDraft)
   const setWizardStep = useEventFormStore((s) => s.setWizardStep)
@@ -451,19 +477,18 @@ export function EventCreationWizard({
     if (!mapBackedTicketsUnchanged(current, next)) {
       form.setValue("tickets", next, { shouldDirty: true })
     }
-    const derived = computeEventCapacityFromForm(form.getValues()).totalCapacity
-    if (derived > 0) {
-      form.setValue("venue.capacity", derived, { shouldDirty: true })
-    }
   }
 
   function handleApplySavedVenue(venue: OrganizerVenue) {
-    applyMapInventory(
-      seatingLayoutToVenueMap(
-        venue.seatingLayout,
-        parseVenueMap(venue.venueMap),
-      ),
+    const map = seatingLayoutToVenueMap(
+      venue.seatingLayout,
+      parseVenueMap(venue.venueMap),
     )
+    if (venueMapHasInventory(map)) {
+      form.setValue("basics.hasSeatingPlan", true, { shouldDirty: true })
+      form.setValue("venue.includesSeatingMap", true, { shouldDirty: true })
+    }
+    applyMapInventory(map)
   }
 
   async function moveToStep(nextStep: number) {
@@ -619,7 +644,6 @@ export function EventCreationWizard({
   }
 
   async function onSaveIdentity(data: EventFormValues) {
-    setResultMessage(null)
     const titleOk = await form.trigger("basics.title")
     if (!titleOk || data.basics.title.trim().length < 3) {
       toast.error("Revisá el título del evento")
@@ -667,7 +691,6 @@ export function EventCreationWizard({
       useEventFormStore.getState().setEventId(result.eventId)
     }
     markSaved(data)
-    setResultMessage({ type: "success", text: "Datos principales guardados." })
     toast.success("Datos principales guardados", {
       description: "El título y los datos del evento quedaron actualizados.",
     })
@@ -714,7 +737,6 @@ export function EventCreationWizard({
       }
     }
     const payloadData = buildConsolidatedPayload(data)
-    console.info("[event-wizard] persist payload", payloadData)
     const formData = new FormData()
     formData.set("payload", JSON.stringify(payloadData))
     formData.set("draftMode", "1")
@@ -733,8 +755,6 @@ export function EventCreationWizard({
   ): Promise<boolean> {
     cancelPendingAutosave()
     await waitForInFlightAutosave()
-    setResultMessage(null)
-
     if (intent === "draft" && activeStep === 0 && !workspace) {
       await onSaveIdentity(data)
       return true
@@ -835,7 +855,6 @@ export function EventCreationWizard({
 
     const editingId = initialData?.id ?? persistedEventId
     payloadData = buildConsolidatedPayload(payloadData)
-    console.info("[event-wizard] persist payload", payloadData)
     form.setValue("tickets", payloadData.tickets, { shouldDirty: false })
     const liveSectorIds = collectLiveSeatingSectorIds({
       venueMap: payloadData.venue.venueMap,
@@ -943,7 +962,7 @@ export function EventCreationWizard({
       const result = await persistInventoryDraft(form.getValues())
       if (!result.success) {
         toast.error("No se pudo guardar el mapa", {
-          description: result.error,
+          description: toUserFacingError(result.error),
         })
         return
       }
@@ -1180,89 +1199,32 @@ export function EventCreationWizard({
                     )}
                   />
 
-                  <FormField
-                    control={form.control}
-                    name="basics.ageRestriction"
-                    render={({ field, fieldState }) => (
-                      <FormItem className="space-y-2">
-                        <FormLabel className={STUDIO_LABEL_CLASS}>
-                          Público permitido
-                        </FormLabel>
-                        <div
-                          className="flex flex-wrap gap-2"
-                          data-field="basics.ageRestriction"
-                        >
-                          {AGE_RESTRICTION_VALUES.map((value) => {
-                            const selected = field.value === value
-                            return (
-                              <button
-                                key={value}
-                                type="button"
-                                onClick={() => field.onChange(value)}
-                                className={cn(
-                                  "inline-flex min-w-16 items-center justify-center rounded-full border px-3 py-2 text-base font-semibold transition md:text-sm",
-                                    selected
-                                    ? "border-primary/40 bg-primary/10 text-foreground"
-                                    : "border-border bg-card text-muted-foreground hover:border-primary/30 hover:text-foreground",
-                                )}
-                              >
-                                {AGE_RESTRICTION_LABELS[value]}
-                              </button>
-                            )
-                          })}
-                        </div>
-                        <FormDescription className="text-xs leading-relaxed text-muted-foreground">
-                          Ej: para todo público (ATP) o solo mayores de 18. El
-                          control de DNI es de la puerta.
-                        </FormDescription>
-                        <FormMessage>{fieldState.error?.message}</FormMessage>
-                      </FormItem>
-                    )}
-                  />
-
-                  <div className="space-y-2">
-                    <p className={STUDIO_LABEL_CLASS}>
-                      Modalidad
-                    </p>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setEventModality(false)}
-                        className={cn(
-                          "rounded-2xl px-3 py-3 text-left transition",
-                          !isStreaming
-                            ? STUDIO_MODALITY_ACTIVE_CLASS
-                            : STUDIO_MODALITY_IDLE_CLASS,
-                        )}
-                      >
-                        <MapPin className="mb-2 size-4 text-emerald-400" />
-                        <span className="block text-sm font-semibold">
-                          En un lugar físico / Predio
-                        </span>
-                        <span className="mt-1 block text-xs text-muted-foreground">
-                          Recinto físico y puerta.
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEventModality(true)}
-                        className={cn(
-                          "rounded-2xl px-3 py-3 text-left transition",
-                          isStreaming
-                            ? STUDIO_MODALITY_ACTIVE_CLASS
-                            : STUDIO_MODALITY_IDLE_CLASS,
-                        )}
-                      >
-                        <MonitorPlay className="mb-2 size-4 text-emerald-400" />
-                        <span className="block text-sm font-semibold">
-                          Por internet / En vivo (Zoom, YouTube, etc.)
-                        </span>
-                        <span className="mt-1 block text-xs text-muted-foreground">
-                          Sin recinto físico.
-                        </span>
-                      </button>
+                  {isStreaming ? (
+                    <div className="space-y-2">
+                      <p className={STUDIO_LABEL_CLASS}>Ubicación y recinto</p>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
+                        El evento se publica como {STREAMING_VENUE_NAME}. No hace
+                        falta recinto ni mapa de asientos.
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className={STUDIO_LABEL_CLASS}>Ubicación y recinto</p>
+                      <EventVenueStep
+                        form={form}
+                        eventId={initialData?.id ?? persistedEventId}
+                        venues={venueCatalog}
+                        onVenuesChange={setLocalVenues}
+                        onAppliedVenue={handleApplySavedVenue}
+                        onMapInventoryChange={applyMapInventory}
+                        catalogOrganizerId={
+                          targetOrganizerId ?? initialData?.organizerId ?? null
+                        }
+                        focus="location"
+                        variant="studio"
+                      />
+                    </div>
+                  )}
 
                   <FormField
                     control={form.control}
@@ -1378,59 +1340,6 @@ export function EventCreationWizard({
                     </div>
                   )}
 
-                  {isStreaming ? (
-                    <div className="space-y-4">
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
-                        El evento se publica como {STREAMING_VENUE_NAME}. No hace
-                        falta recinto ni mapa de asientos.
-                      </div>
-                      <FormField
-                        control={form.control}
-                        name="basics.accessLink"
-                        render={({ field, fieldState }) => (
-                          <FormItem className="space-y-2">
-                            <FormLabel className={STUDIO_LABEL_CLASS}>
-                              Link de transmisión
-                            </FormLabel>
-                            <Input
-                              {...field}
-                              type="url"
-                              inputMode="url"
-                              data-field="basics.accessLink"
-                              aria-invalid={Boolean(fieldState.error)}
-                              placeholder="https://zoom.us/j/..."
-                              className={STUDIO_CONTROL_CLASS}
-                            />
-                            <FormDescription className="text-xs text-muted-foreground">
-                              Pegá acá el link de Zoom, YouTube o la sala donde
-                              vas a transmitir el vivo
-                            </FormDescription>
-                            <FormMessage>{fieldState.error?.message}</FormMessage>
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <p className={STUDIO_LABEL_CLASS}>
-                        Ubicación y recinto
-                      </p>
-                      <EventVenueStep
-                        form={form}
-                        eventId={initialData?.id ?? persistedEventId}
-                        venues={venueCatalog}
-                        onVenuesChange={setLocalVenues}
-                        onAppliedVenue={handleApplySavedVenue}
-                        onMapInventoryChange={applyMapInventory}
-                        catalogOrganizerId={
-                          targetOrganizerId ?? initialData?.organizerId ?? null
-                        }
-                        focus="location"
-                        variant="studio"
-                      />
-                    </div>
-                  )}
-
                   <FormField
                     control={form.control}
                     name="basics.description"
@@ -1456,6 +1365,156 @@ export function EventCreationWizard({
                       </FormItem>
                     )}
                   />
+
+                  <div className="space-y-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvancedDetails((open) => !open)}
+                      className={cn(
+                        "inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed px-4 py-3 text-sm font-semibold transition",
+                        "border-slate-300 text-slate-700 hover:border-emerald-400 hover:bg-emerald-50/60",
+                        "dark:border-zinc-700 dark:text-zinc-200 dark:hover:border-emerald-500/50 dark:hover:bg-emerald-950/20",
+                      )}
+                      aria-expanded={showAdvancedDetails}
+                    >
+                      <Plus
+                        className={cn(
+                          "size-4 transition-transform",
+                          showAdvancedDetails && "rotate-45",
+                        )}
+                        aria-hidden
+                      />
+                      {showAdvancedDetails
+                        ? "Ocultar detalles avanzados"
+                        : "Agregar detalles avanzados"}
+                    </button>
+                    {showAdvancedDetails ? (
+                      <div className="space-y-6 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
+                        <div className="space-y-2">
+                          <p className={STUDIO_LABEL_CLASS}>Modalidad</p>
+                          <div className="grid grid-cols-2 gap-3">
+                            <button
+                              type="button"
+                              onClick={() => setEventModality(false)}
+                              className={cn(
+                                "rounded-2xl px-3 py-3 text-left transition",
+                                !isStreaming
+                                  ? STUDIO_MODALITY_ACTIVE_CLASS
+                                  : STUDIO_MODALITY_IDLE_CLASS,
+                              )}
+                            >
+                              <MapPin className="mb-2 size-4 text-emerald-400" />
+                              <span className="block text-sm font-semibold">
+                                En un lugar físico / Predio
+                              </span>
+                              <span className="mt-1 block text-xs text-muted-foreground">
+                                Recinto físico y puerta.
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEventModality(true)}
+                              className={cn(
+                                "rounded-2xl px-3 py-3 text-left transition",
+                                isStreaming
+                                  ? STUDIO_MODALITY_ACTIVE_CLASS
+                                  : STUDIO_MODALITY_IDLE_CLASS,
+                              )}
+                            >
+                              <MonitorPlay className="mb-2 size-4 text-emerald-400" />
+                              <span className="block text-sm font-semibold">
+                                Por internet / En vivo (Zoom, YouTube, etc.)
+                              </span>
+                              <span className="mt-1 block text-xs text-muted-foreground">
+                                Sin recinto físico.
+                              </span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {isStreaming ? (
+                          <FormField
+                            control={form.control}
+                            name="basics.accessLink"
+                            render={({ field, fieldState }) => (
+                              <FormItem className="space-y-2">
+                                <FormLabel className={STUDIO_LABEL_CLASS}>
+                                  Link de transmisión
+                                </FormLabel>
+                                <Input
+                                  {...field}
+                                  type="url"
+                                  inputMode="url"
+                                  data-field="basics.accessLink"
+                                  aria-invalid={Boolean(fieldState.error)}
+                                  placeholder="https://zoom.us/j/..."
+                                  className={STUDIO_CONTROL_CLASS}
+                                />
+                                <FormDescription className="text-xs text-muted-foreground">
+                                  Pegá acá el link de Zoom, YouTube o la sala
+                                  donde vas a transmitir el vivo
+                                </FormDescription>
+                                <FormMessage>
+                                  {fieldState.error?.message}
+                                </FormMessage>
+                              </FormItem>
+                            )}
+                          />
+                        ) : null}
+
+                        <FormField
+                          control={form.control}
+                          name="basics.ageRestriction"
+                          render={({ field, fieldState }) => (
+                            <FormItem className="space-y-2">
+                              <FormLabel className={STUDIO_LABEL_CLASS}>
+                                Público permitido
+                              </FormLabel>
+                              <div
+                                className="flex flex-wrap gap-2"
+                                data-field="basics.ageRestriction"
+                              >
+                                {AGE_RESTRICTION_VALUES.map((value) => {
+                                  const selected = field.value === value
+                                  return (
+                                    <button
+                                      key={value}
+                                      type="button"
+                                      onClick={() => field.onChange(value)}
+                                      className={cn(
+                                        "inline-flex min-w-16 items-center justify-center rounded-full border px-3 py-2 text-base font-semibold transition md:text-sm",
+                                        selected
+                                          ? "border-primary/40 bg-primary/10 text-foreground"
+                                          : "border-border bg-card text-muted-foreground hover:border-primary/30 hover:text-foreground",
+                                      )}
+                                    >
+                                      {AGE_RESTRICTION_LABELS[value]}
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                              <FormDescription className="text-xs leading-relaxed text-muted-foreground">
+                                Ej: para todo público (ATP) o solo mayores de
+                                18. El control de DNI es de la puerta.
+                              </FormDescription>
+                              <FormMessage>
+                                {fieldState.error?.message}
+                              </FormMessage>
+                            </FormItem>
+                          )}
+                        />
+
+                        <div className="space-y-2">
+                          <p className={STUDIO_LABEL_CLASS}>
+                            Sponsors y marcas
+                          </p>
+                          <EventSponsorsManager
+                            eventId={initialData?.id ?? persistedEventId}
+                          />
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
 
                 <div className="min-w-0 space-y-6 lg:col-span-5">
@@ -1486,9 +1545,6 @@ export function EventCreationWizard({
                       })
                     }}
                   />
-                  <EventSponsorsManager
-                    eventId={initialData?.id ?? persistedEventId}
-                  />
                 </div>
               </div>
               </div>
@@ -1517,8 +1573,8 @@ export function EventCreationWizard({
                   Entradas y precios
                 </h2>
                 <p className="text-xs leading-relaxed text-muted-foreground">
-                  El mapa y las entradas generales suman al cupo por separado.
-                  Una general puede quedar como inventario libre, sin sector.
+                  El termómetro compara el stock de generales y del mapa con el
+                  aforo del recinto del paso anterior.
                 </p>
               </div>
               <div className="flex flex-col gap-y-4">
@@ -1549,12 +1605,13 @@ export function EventCreationWizard({
                     )}
                   />
                 ) : null}
-                <EventStudioPurchaseCapField form={form} />
                 <UnifiedInventoryPanel
                   form={form}
                   eventId={initialData?.id ?? persistedEventId}
                   feePercentage={feePercentageFromRate(organizerServiceRate)}
                   fixedFee={platformFixedFee}
+                  hideMapBlock={isStreaming}
+                  onOpenMapStudio={() => setIsStudioOpen(true)}
                 />
                 <FormMessage>
                   {form.formState.errors.tickets?.message ??
@@ -1570,217 +1627,11 @@ export function EventCreationWizard({
               id="event-wizard-step-3"
               className="animate-in fade-in slide-in-from-right-2 duration-300"
             >
-              <div className="flex flex-col gap-y-8">
-              <div className="flex flex-col gap-y-4">
-                <h3 className="text-lg font-semibold text-foreground">
-                  Publicar y cobrar
-                </h3>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="rounded-2xl bg-muted/20 p-6">
-                    <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                      <CreditCard className="size-4 shrink-0 text-primary" />
-                      Mercado Pago
-                    </p>
-                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                      Pago online con tarjeta, débito y dinero en cuenta.
-                      La comisión se incluye en el precio público.
-                    </p>
-                  </div>
-                  <div className="rounded-2xl bg-muted/20 p-6">
-                    <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                      <Building2 className="size-4 shrink-0 text-primary" />
-                      Transferencia / POS
-                    </p>
-                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                      En boletería física podés cobrar en efectivo, tarjeta o
-                      transferencia. El evento publicado habilita el POS.
-                    </p>
-                  </div>
-                </div>
-
-                <FormField
-                  control={form.control}
-                  name="basics.visibility"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className={cn(STUDIO_LABEL_CLASS, "block")}>
-                        Visibilidad del evento
-                      </FormLabel>
-                      <div className="inline-flex w-full flex-col gap-1 rounded-2xl bg-muted/20 p-1.5 sm:w-auto sm:flex-row">
-                        {(
-                          [
-                            {
-                              value: "public" as const,
-                              label: "Visible en TokePass",
-                              hint: "Aparece en la portada cuando esté a la venta",
-                              icon: Globe2,
-                            },
-                            {
-                              value: "private" as const,
-                              label: "Solo con el link",
-                              hint: "No aparece en portada. Quien tenga el enlace puede entrar",
-                              icon: Lock,
-                            },
-                          ] as const
-                        ).map((option) => {
-                          const selected = field.value === option.value
-                          const Icon = option.icon
-                          return (
-                            <button
-                              key={option.value}
-                              type="button"
-                              onClick={() => field.onChange(option.value)}
-                              className={cn(
-                                "flex flex-1 items-center gap-2 rounded-xl px-4 py-2.5 text-left text-sm transition-all",
-                                selected
-                                  ? "bg-background font-medium text-foreground shadow-sm"
-                                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                              )}
-                            >
-                              <Icon
-                                className={cn(
-                                  "size-4 shrink-0",
-                                  selected
-                                    ? "text-primary"
-                                    : "text-muted-foreground",
-                                )}
-                                aria-hidden="true"
-                              />
-                              <span>
-                                <span className="block font-medium">
-                                  {option.label}
-                                </span>
-                                <span className="block text-xs leading-relaxed text-muted-foreground">
-                                  {option.hint}
-                                </span>
-                              </span>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </FormItem>
-                  )}
-                />
-
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  Recargar la comisión al comprador o hacértela cargo se
-                  configura en cada entrada del paso 2.
-                </p>
-
-                <FormField
-                  control={form.control}
-                  name="basics.hasSchedule"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/40">
-                      <div className="min-w-0">
-                        <FormLabel className="mb-0 text-sm font-bold text-slate-800 dark:text-zinc-200">
-                          Cronograma / agenda
-                        </FormLabel>
-                        <FormDescription className="text-xs text-muted-foreground">
-                          Charlas, shows o itinerario por horarios.
-                        </FormDescription>
-                      </div>
-                      <Switch
-                        checked={Boolean(field.value)}
-                        onCheckedChange={(checked) => {
-                          field.onChange(checked)
-                        }}
-                        className="data-checked:bg-violet-500"
-                        aria-label="Habilitar cronograma o agenda del evento"
-                      />
-                    </FormItem>
-                  )}
-                />
-
-                {!isStreaming ? (
-                  <>
-                    <FormField
-                      control={form.control}
-                      name="basics.hasSeatingPlan"
-                      render={({ field }) => (
-                        <FormItem className="flex flex-row items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 dark:border-zinc-800 dark:bg-zinc-900/40">
-                          <div className="flex min-w-0 items-start gap-3">
-                            <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/15 text-emerald-600 dark:text-emerald-300">
-                              <Armchair className="size-4" aria-hidden="true" />
-                            </span>
-                            <div className="space-y-1">
-                              <FormLabel className="mb-0 text-sm font-bold leading-snug text-slate-800 dark:text-zinc-200">
-                                ¿Este evento tiene plano de asientos numerados?
-                              </FormLabel>
-                              <FormDescription className="text-xs text-muted-foreground">
-                                Activá solo si hay butacas, mesas o tablones con número. Si no, el evento es admisión general.
-                              </FormDescription>
-                            </div>
-                          </div>
-                          <Switch
-                            checked={Boolean(field.value)}
-                            onCheckedChange={(checked) => {
-                              field.onChange(checked)
-                              form.setValue(
-                                "venue.includesSeatingMap",
-                                checked,
-                                { shouldDirty: true },
-                              )
-                              form.setValue(
-                                "venue.zoneType",
-                                checked
-                                  ? "reserved_seating"
-                                  : "general_admission",
-                                { shouldDirty: true },
-                              )
-                              if (!checked) {
-                                const currentTickets =
-                                  form.getValues("tickets") ?? []
-                                if (
-                                  currentTickets.some(
-                                    (tier) => tier.seatingSectorId,
-                                  )
-                                ) {
-                                  form.setValue(
-                                    "tickets",
-                                    currentTickets.map((tier) => ({
-                                      ...tier,
-                                      seatingSectorId: null,
-                                    })),
-                                    { shouldDirty: true },
-                                  )
-                                }
-                              }
-                            }}
-                            className="data-checked:bg-emerald-500"
-                            aria-label="Requiere mapa de asientos numerados"
-                          />
-                        </FormItem>
-                      )}
-                    />
-
-                    {hasSeatingPlan ? (
-                      <Button
-                        type="button"
-                        size="lg"
-                        className="h-12 w-full bg-primary text-base font-semibold text-primary-foreground hover:bg-primary/90 md:text-sm"
-                        onClick={() => setIsStudioOpen(true)}
-                      >
-                        Abrir Diseñador de Mapa de Recinto
-                      </Button>
-                    ) : null}
-                  </>
-                ) : null}
-
-                {hasSchedule ? (
-                  <AgendaBuilder eventId={initialData?.id ?? persistedEventId} />
-                ) : null}
-
-                {resultMessage?.type === "success" ? (
-                  <p
-                    role="status"
-                    className="rounded-xl bg-primary/10 px-4 py-3 text-sm text-foreground"
-                  >
-                    {resultMessage.text}
-                  </p>
-                ) : null}
-              </div>
-              </div>
+              <EventStudioPublishStep
+                form={form}
+                eventId={initialData?.id ?? persistedEventId}
+                hasSchedule={hasSchedule}
+              />
             </TabsContent>
 
         </Tabs>
@@ -1808,7 +1659,10 @@ export function EventCreationWizard({
                   persistWorkspaceMap(next)
                   const result = await persistInventoryDraft(form.getValues())
                   if (!result.success) {
-                    throw new Error(result.error)
+                    toast.error("No se pudo guardar el mapa", {
+                      description: toUserFacingError(result.error),
+                    })
+                    return
                   }
                 }}
               />

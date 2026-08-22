@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowLeft, ArrowRight, LoaderCircle, Rocket, Save } from "lucide-react"
+import { ArrowLeft, ArrowRight, LoaderCircle, Save } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { STUDIO_SECONDARY_BUTTON_CLASS } from "@/lib/admin/studio-form-styles"
@@ -49,7 +49,7 @@ export function EventStudioDock({
         ) : (
           <Save className="size-4 shrink-0" />
         )}
-        Guardar avance
+        Guardar como borrador
       </Button>
       {!isLast ? (
         <Button
@@ -66,17 +66,13 @@ export function EventStudioDock({
           type="button"
           disabled={submitting}
           onClick={onPublish}
-          aria-label={
-            isEditing
-              ? "Lanzar el evento a la venta"
-              : "Lanzar evento a la venta"
-          }
-          className="h-12 flex-1 rounded-xl bg-purple-600 text-base font-bold text-white hover:bg-purple-500"
+          aria-label="Lanzar evento a la venta"
+          className="h-12 flex-1 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-500 text-base font-bold text-white shadow-lg shadow-fuchsia-500/30 hover:from-violet-500 hover:to-fuchsia-400"
         >
           {submitting ? (
             <LoaderCircle className="size-5 animate-spin" />
           ) : (
-            <Rocket className="size-5 shrink-0" />
+            <span aria-hidden="true">🚀</span>
           )}
           ¡Lanzar evento a la venta!
         </Button>

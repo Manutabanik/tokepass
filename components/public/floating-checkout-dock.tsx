@@ -9,12 +9,14 @@ import { cn } from "@/lib/utils"
 type FloatingCheckoutDockProps = {
   price: number | null
   actionLabel?: string
+  soldOut?: boolean
   onAcquire: (event: React.MouseEvent) => void
 }
 
 export function FloatingCheckoutDock({
   price,
   actionLabel = "Elegir entradas",
+  soldOut = false,
   onAcquire,
 }: FloatingCheckoutDockProps) {
   const mounted = useSyncExternalStore(
@@ -46,14 +48,20 @@ export function FloatingCheckoutDock({
         </div>
         <button
           type="button"
+          disabled={soldOut}
           onClick={(event) => {
             event.preventDefault()
             event.stopPropagation()
+            if (soldOut) return
             onAcquire(event)
           }}
-          className="shrink-0 whitespace-nowrap rounded-xl bg-emerald-500 px-4 py-3 text-center text-sm font-bold text-black hover:bg-emerald-400"
+          className={cn(
+            "shrink-0 whitespace-nowrap rounded-xl bg-emerald-500 px-4 py-3 text-center text-sm font-bold text-black hover:bg-emerald-400",
+            soldOut &&
+              "cursor-not-allowed bg-muted text-muted-foreground hover:bg-muted",
+          )}
         >
-          {actionLabel}
+          {soldOut ? "Agotado" : actionLabel}
         </button>
       </div>
     </div>,

@@ -66,8 +66,15 @@ import {
   formatEventDayMonthNumeric,
   formatEventWeekdayShort,
 } from "@/lib/format"
-import { publicTicketOfferKind } from "@/lib/checkout/ticket-offer-kind"
-import { normalizeDayId } from "@/lib/event-schedule"
+import {
+  publicEventTickets,
+  toPublicTicketSelectorTier,
+} from "@/lib/checkout/public-ticket-view"
+import {
+  hasSellablePublicTickets,
+  isSellablePublicTicket,
+  startingPriceFromSellable,
+} from "@/lib/checkout/sellable-tickets"
 import { deriveEventSaleState } from "@/lib/event-status"
 import { publicProducerPath } from "@/lib/seo/site"
 import { useEventCatalogRealtime } from "@/hooks/use-event-catalog-realtime"
@@ -179,10 +186,9 @@ export function EventStorefront({
     )
   }, [event.slug, pathname, router])
 
-  const startingPrice =
-    event.tiers.length > 0
-      ? Math.min(...event.tiers.map((tier) => tier.price))
-      : null
+  const admissionTickets = publicEventTickets(event)
+  const startingPrice = startingPriceFromSellable(admissionTickets)
+  const hasSellableTickets = hasSellablePublicTickets(admissionTickets)
   const saleState = deriveEventSaleState({
     date: event.date,
     endsAt: event.endsAt,
@@ -237,17 +243,9 @@ export function EventStorefront({
     window.scrollTo(0, 0)
   }, [viewMode])
 
-  const totalStock = useMemo(
-    () =>
-      event.tiers.reduce(
-        (sum, tier) => sum + Math.max(0, tier.available),
-        0,
-      ),
-    [event.tiers],
-  )
-  const isAvailable = totalStock > 0
+  const isAvailable = hasSellableTickets
   const showInfoCta = !finished && viewMode === "info"
-  const showCheckout = !finished && !soldOut && viewMode === "checkout"
+  const showCheckout = !finished && isAvailable && viewMode === "checkout"
 
   useLockBodyScroll(showCheckout)
 
@@ -289,6 +287,7 @@ export function EventStorefront({
   function enterCheckout(eventClick?: MouseEvent) {
     eventClick?.preventDefault()
     eventClick?.stopPropagation()
+    if (!hasSellableTickets) return
     const store = useCheckoutStore.getState()
     store.resetIfOtherEvent(event.id)
     store.clearCart()
@@ -319,15 +318,15 @@ export function EventStorefront({
   }
 
   const teaserPrice = useMemo(() => {
-    const available = event.tiers.filter((tier) => tier.available > 0)
-    const pool = available.length > 0 ? available : event.tiers
-    if (pool.length === 0) return null
-    const forDay = pool.filter(
+    const sellable = admissionTickets.filter((tier) =>
+      isSellablePublicTicket(tier),
+    )
+    if (sellable.length === 0) return startingPrice
+    const forDay = sellable.filter(
       (tier) => !tier.day_id || tier.day_id === selectedDate,
     )
-    const priced = (forDay.length > 0 ? forDay : pool).map((tier) => tier.price)
-    return Math.min(...priced)
-  }, [event.tiers, selectedDate])
+    return startingPriceFromSellable(forDay.length > 0 ? forDay : sellable)
+  }, [admissionTickets, selectedDate, startingPrice])
 
   function renderPurchaseAside() {
     const dateLabel = [
@@ -347,6 +346,7 @@ export function EventStorefront({
         venueLabel={venueLabel}
         limited={Boolean(demand)}
         isOnline={isOnlineEvent}
+        soldOut={!isAvailable}
         onAcquire={enterCheckout}
       />
     )
@@ -354,48 +354,12 @@ export function EventStorefront({
 
   const ticketTiers = useMemo(
     () =>
-      event.tiers.map((tier) => ({
-        id: tier.id,
-        name: tier.name,
-        price: tier.price,
-        available: tier.available,
-        isActive: (tier.visibility ?? "public") !== "private",
-        capacity: tier.capacity,
-        bonusReward: tier.bonus_reward,
-        dayId: tier.day_id,
-        dateId: normalizeDayId(tier.day_id),
-        isFullPass:
-          publicTicketOfferKind({
-            name: tier.name,
-            dayId: tier.day_id,
-            tierType: tier.tier_type,
-            bundleType: tier.bundle_type,
-            category: tier.category,
-            layoutType: tier.layout_type,
-            comboItems: event.comboItemsByTier[tier.id] ?? [],
-          }) === "PASS",
-        layoutType: tier.layout_type,
-        seatingSectorId: tier.seating_sector_id,
-        capacityPerUnit: tier.capacity_per_unit,
-        minPurchaseLimit:
-          (tier as { min_purchase_limit?: number | null }).min_purchase_limit ??
-          1,
-        maxPurchaseLimit:
-          (tier as { max_purchase_limit?: number | null }).max_purchase_limit ??
-          null,
-        category: tier.category,
-        listPrice: tier.list_price,
-        comboItems: event.comboItemsByTier[tier.id] ?? [],
-        tierType: tier.tier_type,
-        bundleType: tier.bundle_type,
-        description: tier.description,
-        highlightBadge: tier.highlight_badge,
-        sold: tier.sold,
-        saleStartsAt: tier.sale_starts_at ?? null,
-        saleEndsAt: tier.sale_ends_at ?? null,
-        phases: tier.phases ?? [],
-      })),
-    [event.comboItemsByTier, event.tiers],
+      admissionTickets.map((tier) =>
+        toPublicTicketSelectorTier(tier, {
+          comboItems: event.comboItemsByTier[tier.id] ?? [],
+        }),
+      ),
+    [admissionTickets, event.comboItemsByTier],
   )
 
   const reduceMotion = useReducedMotion()
@@ -813,10 +777,11 @@ export function EventStorefront({
 
       </div>
     </div>
-    {showInfoCta && isAvailable ? (
+    {showInfoCta ? (
       <FloatingCheckoutDock
         price={teaserPrice}
         actionLabel={isOnlineEvent ? "Elegir acceso" : "Elegir entradas"}
+        soldOut={!isAvailable}
         onAcquire={enterCheckout}
       />
     ) : null}

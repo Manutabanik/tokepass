@@ -6,6 +6,10 @@ import { useShallow } from "zustand/react/shallow"
 
 import { ABSOLUTE_MAX_ITEMS_PER_PURCHASE } from "@/lib/checkout-limits"
 import {
+  toCartItemPayload,
+  type CartItemPayload,
+} from "@/lib/checkout/cart-item-payload"
+import {
   cartItemCount,
   sumCartAmounts,
   sumCartQuantities,
@@ -39,18 +43,36 @@ export type CheckoutSavedSeat = {
 export type StorefrontCartLine = {
   id: string
   ticketTierId?: string | null
+  ticketTypeId?: string | null
   name: string
   displayName?: string
   detail?: string
   dateId?: string | null
   dateLabel?: string
   quantity: number
-  /** Precio unitario. El total de linea es `price * quantity`. */
+  /** Precio visual para el subtotal. Nunca se envía a reserva/checkout. */
   price: number
   seatId?: string | null
   elementId?: string | null
   sectorId?: string | null
   isMappedSelection?: boolean
+}
+
+export function storefrontLineToCartPayload(
+  line: StorefrontCartLine,
+): CartItemPayload {
+  return toCartItemPayload({
+    ticket_type_id: line.ticketTypeId ?? line.ticketTierId,
+    sector_id: line.sectorId,
+    seat_id: line.seatId,
+    quantity: line.quantity,
+  })
+}
+
+export type CheckoutCatalogEntry = {
+  id: string
+  name: string
+  price: number
 }
 
 export type AddToCartInput = {
@@ -94,6 +116,8 @@ type CheckoutState = {
   totalAmount: number
   itemsCount: number
   lines: StorefrontCartLine[]
+  catalogByTierId: Record<string, CheckoutCatalogEntry>
+  rememberCatalog: (tiers: CheckoutCatalogEntry[]) => void
   chooseGuest: (eventId: string, eventSlug?: string | null) => void
   chooseAccount: (eventId: string, eventSlug?: string | null) => void
   markAuthenticated: () => void
@@ -192,6 +216,30 @@ function cartTotalsFromLines(lines: StorefrontCartLine[]) {
   return { totalAmount, itemsCount, subtotal: totalAmount }
 }
 
+function mergeCatalog(
+  current: Record<string, CheckoutCatalogEntry>,
+  entries: CheckoutCatalogEntry[],
+): Record<string, CheckoutCatalogEntry> {
+  if (entries.length === 0) return current
+  let changed = false
+  const next = { ...current }
+  for (const entry of entries) {
+    const id = entry.id.trim()
+    if (!id) continue
+    const existing = next[id]
+    if (
+      existing &&
+      existing.name === entry.name &&
+      existing.price === entry.price
+    ) {
+      continue
+    }
+    next[id] = { id, name: entry.name, price: toCartNumber(entry.price) }
+    changed = true
+  }
+  return changed ? next : current
+}
+
 function upsertGeneralLine(
   lines: StorefrontCartLine[],
   input: {
@@ -211,6 +259,7 @@ function upsertGeneralLine(
     {
       id: cartTicketLineId(input.ticketTierId),
       ticketTierId: input.ticketTierId,
+      ticketTypeId: input.ticketTierId,
       name: input.name,
       quantity: input.quantity,
       price: input.price,
@@ -256,6 +305,13 @@ export const useCheckoutStore = create<CheckoutState>()(
       totalAmount: 0,
       itemsCount: 0,
       lines: [],
+      catalogByTierId: {},
+
+      rememberCatalog: (tiers) => {
+        const next = mergeCatalog(get().catalogByTierId, tiers)
+        if (next === get().catalogByTierId) return
+        set({ catalogByTierId: next })
+      },
 
       chooseGuest: (eventId, eventSlug = null) =>
         set({
@@ -347,6 +403,7 @@ export const useCheckoutStore = create<CheckoutState>()(
           totalAmount: 0,
           itemsCount: 0,
           lines: [],
+          catalogByTierId: {},
         })
       },
 
@@ -418,8 +475,20 @@ export const useCheckoutStore = create<CheckoutState>()(
       },
 
       setCartLines: (lines) => {
-        if (sameLines(get().lines, lines)) return
-        set({ lines })
+        const catalog = mergeCatalog(
+          get().catalogByTierId,
+          lines
+            .map((line) => {
+              const id = line.ticketTierId?.trim()
+              if (!id) return null
+              return { id, name: line.name, price: line.price }
+            })
+            .filter((entry): entry is CheckoutCatalogEntry => entry != null),
+        )
+        if (sameLines(get().lines, lines) && catalog === get().catalogByTierId) {
+          return
+        }
+        set({ lines, catalogByTierId: catalog })
       },
 
       addToCart: (input) => {
@@ -444,6 +513,7 @@ export const useCheckoutStore = create<CheckoutState>()(
           const line: StorefrontCartLine = {
             id,
             ticketTierId: input.ticketTierId,
+            ticketTypeId: input.ticketTierId,
             name: input.name,
             quantity,
             price: unitPrice,
@@ -453,6 +523,13 @@ export const useCheckoutStore = create<CheckoutState>()(
           const lines = [...others, line]
           set({
             lines,
+            catalogByTierId: mergeCatalog(get().catalogByTierId, [
+              {
+                id: input.ticketTierId,
+                name: input.name,
+                price: unitPrice,
+              },
+            ]),
             ...cartTotalsFromLines(lines),
             selectedSeat: seatId
               ? {
@@ -479,7 +556,18 @@ export const useCheckoutStore = create<CheckoutState>()(
           price: unitPrice,
           quantity: nextQty,
         })
-        set({ quantities, lines, ...cartTotalsFromLines(lines) })
+        set({
+          quantities,
+          lines,
+          catalogByTierId: mergeCatalog(get().catalogByTierId, [
+            {
+              id: input.ticketTierId,
+              name: input.name,
+              price: unitPrice,
+            },
+          ]),
+          ...cartTotalsFromLines(lines),
+        })
         return { ok: true, quantity: nextQty }
       },
 
@@ -492,13 +580,25 @@ export const useCheckoutStore = create<CheckoutState>()(
         if (requested > maxQuantity) return { ok: false, reason: "limit" }
         const nextQty = Math.min(Math.max(0, requested), maxQuantity)
         const quantities = { ...get().quantities, [input.ticketTierId]: nextQty }
+        const unitPrice = toCartNumber(input.price)
         const lines = upsertGeneralLine(get().lines, {
           ticketTierId: input.ticketTierId,
           name: input.name,
-          price: toCartNumber(input.price),
+          price: unitPrice,
           quantity: nextQty,
         })
-        set({ quantities, lines, ...cartTotalsFromLines(lines) })
+        set({
+          quantities,
+          lines,
+          catalogByTierId: mergeCatalog(get().catalogByTierId, [
+            {
+              id: input.ticketTierId,
+              name: input.name,
+              price: unitPrice,
+            },
+          ]),
+          ...cartTotalsFromLines(lines),
+        })
         return { ok: true, quantity: nextQty }
       },
 
@@ -515,11 +615,18 @@ export const useCheckoutStore = create<CheckoutState>()(
       },
 
       removeItem: (id) => {
-        const ticketId = parseCartTicketLineId(id)
-        if (ticketId) {
-          if ((get().quantities[ticketId] ?? 0) === 0) return
+        const line = get().lines.find(
+          (item) => item.id === id || item.ticketTierId === id,
+        )
+        const ticketId = parseCartTicketLineId(id) || line?.ticketTierId || null
+        if (ticketId && (!line || !isMapCartLine(line))) {
+          const lines = get().lines.filter(
+            (item) => generalLineTierId(item) !== ticketId,
+          )
           set({
             quantities: { ...get().quantities, [ticketId]: 0 },
+            lines,
+            ...cartTotalsFromLines(lines),
           })
           return
         }
@@ -543,6 +650,7 @@ export const useCheckoutStore = create<CheckoutState>()(
           totalAmount: 0,
           itemsCount: 0,
           subtotal: 0,
+          catalogByTierId: {},
           holdExpiresAt: null,
           checkoutStep: "tickets",
           seatSheetOpen: false,
@@ -578,6 +686,7 @@ export const useCheckoutStore = create<CheckoutState>()(
           selectedSeat: null,
           holdExpiresAt: null,
           lines: [],
+          catalogByTierId: {},
           totalAmount: 0,
           itemsCount: 0,
           subtotal: 0,

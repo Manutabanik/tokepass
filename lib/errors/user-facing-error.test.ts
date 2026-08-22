@@ -11,6 +11,11 @@ import {
 describe("toUserFacingError", () => {
   it("enmascara códigos crudos de base de datos", () => {
     assert.equal(containsInternalErrorCode("SEATING_SECTOR_NOT_FOUND"), true)
+    assert.equal(containsInternalErrorCode("SEATING_TIER_CONFIG_AMBIGUOUS"), true)
+    assert.equal(
+      toUserFacingError("SEATING_TIER_CONFIG_AMBIGUOUS"),
+      APP_ERRORS.SEATING_SECTOR_MISMATCH.message,
+    )
     assert.equal(
       toUserFacingError("SEATING_SECTOR_NOT_FOUND"),
       APP_ERRORS.SEATING_SECTOR_MISMATCH.message,

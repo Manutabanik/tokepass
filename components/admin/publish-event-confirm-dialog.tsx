@@ -5,6 +5,7 @@ import { useState, useTransition } from "react"
 import { toast } from "sonner"
 
 import { publishEvent } from "@/app/actions/events"
+import { toUserFacingError } from "@/lib/errors/user-facing-error"
 import {
   EVENT_SENT_TO_REVIEW_BODY,
   EVENT_SENT_TO_REVIEW_TITLE,
@@ -53,7 +54,7 @@ export function PublishEventConfirmDialog({
       if (!result.success) {
         const pending = result.missingFields ?? []
         setMissingFields(pending)
-        toast.error(result.error)
+        toast.error(toUserFacingError(result.error))
         return
       }
       setMissingFields([])

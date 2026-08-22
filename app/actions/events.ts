@@ -1096,16 +1096,6 @@ async function revalidatePersistedEvent(
   })
 }
 
-function persistErrorMessage(error: unknown): string {
-  if (typeof error === "string" && error.trim()) return error.trim()
-  if (error instanceof Error && error.message.trim()) return error.message.trim()
-  if (error && typeof error === "object" && "message" in error) {
-    const message = (error as { message?: unknown }).message
-    if (typeof message === "string" && message.trim()) return message.trim()
-  }
-  return mapUnknownError(error).message
-}
-
 function persistFailure(error: unknown): {
   success: false
   error: string
@@ -1121,13 +1111,12 @@ function persistFailure(error: unknown): {
     message: "SUPABASE_ERROR",
     error,
   })
-  const exact = persistErrorMessage(error)
   const mapped = mapUnknownError(error)
   const code = mapped.code === "UNKNOWN" ? "SAVE_FAILED" : mapped.code
   const field = fieldFromAppError(mapped)
   return {
     success: false,
-    error: exact || mapped.message,
+    error: mapped.message,
     code,
     title: mapped.title,
     ...(field ? { field } : {}),
@@ -1135,7 +1124,7 @@ function persistFailure(error: unknown): {
     ...(mapped.action
       ? {
           wizardConflict: {
-            summary: exact || mapped.message,
+            summary: mapped.message,
             actions: [mapped.action],
           },
         }
@@ -2896,6 +2885,14 @@ export async function getEventForEditing(
         maxTicketsPerUser: resolvePurchaseLimit(
           (event as { max_tickets_per_user?: number | null }).max_tickets_per_user,
         ),
+        acceptsMercadoPago: true,
+        acceptsPosPayments: true,
+        defaultFeeStrategy:
+          ticketValues.length > 0 &&
+          ticketValues.every((tier) => tier.feeStrategy === "pass_to_customer")
+            ? "pass_to_customer"
+            : "absorb_in_price",
+        refundPolicy: "organizer",
       },
       zoneTierPricing: (pricingRows ?? []).map((row) => ({
         id: row.id,

@@ -25,6 +25,11 @@ describe("selectableTicketStock", () => {
     )
   })
 
+  it("reads stock_available when available is missing", () => {
+    assert.equal(selectableTicketStock({ stock_available: 6 }), 6)
+    assert.equal(selectableTicketStock({ stockAvailable: 4 }), 4)
+  })
+
   it("keeps live available when it is already tighter than capacity", () => {
     assert.equal(
       selectableTicketStock({ available: 2, capacity: 100, sold: 10 }),

@@ -5,16 +5,15 @@ import { QuantityCounter } from "@/components/public/quantity-counter"
 import type { TicketSelectorTier } from "@/components/public/ticket-tier-selector"
 import { generalTicketMaxQuantity } from "@/lib/checkout/general-ticket-quantity"
 import { resolveStockScarcity } from "@/lib/checkout/stock-scarcity"
+import { ticketUsesMapSelector } from "@/lib/checkout/public-ticket-view"
 import {
+  SOLD_OUT_BADGE_CLASS,
   SOLD_OUT_TICKET_CARD_CLASS,
   isTicketCardBlocked,
 } from "@/lib/checkout/ticket-stock"
 import { formatTicketPrice } from "@/lib/format"
 import { resolveTicketSaleState } from "@/lib/inventory/ticket-sale-window"
-import {
-  isLogicalGeneralSectorId,
-  isMapBackedTicket,
-} from "@/lib/seating/venue-map-pricing"
+import { isLogicalGeneralSectorId } from "@/lib/seating/venue-map-pricing"
 import { resolveTicketSectorName } from "@/lib/seating/storefront-selection"
 import type { InteractiveVenueMap } from "@/types/venue-map"
 import { cn, tapFeedbackClass } from "@/lib/utils"
@@ -141,18 +140,12 @@ export function TicketTierList({
             const inactive = soldOut || windowClosed
             const showStock = tier.showRemainingStock !== false
             const scarcity = resolveStockScarcity(
-              tier.available,
-              tier.capacity,
+              summary?.available ?? tier.stockAvailable ?? tier.available,
+              summary?.total ?? tier.capacity,
               tier.sold,
             )
             const needsPlacePicker =
-              hasInteractiveMap &&
-              isMapBackedTicket({
-                seatingSectorId: tier.seatingSectorId,
-                layoutType: tier.layoutType,
-                tierType: tier.tierType,
-                category: tier.category,
-              })
+              hasInteractiveMap && ticketUsesMapSelector(tier)
             const selectedSeatName = selectedSeatMap[tier.id]
 
             return (
@@ -191,9 +184,7 @@ export function TicketTierList({
                       {tier.price === 0 ? "Gratis" : formatTicketPrice(tier.price)}
                     </span>
                     {soldOut ? (
-                      <span className="shrink-0 text-[10px] font-bold text-red-500">
-                        Agotado
-                      </span>
+                      <span className={SOLD_OUT_BADGE_CLASS}>Agotado</span>
                     ) : showStock && scarcity.kind === "low" ? (
                       <span className="shrink-0 text-[10px] font-bold text-amber-400">
                         Pocas disponibles

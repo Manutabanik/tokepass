@@ -179,6 +179,49 @@ describe("storefront-selection", () => {
     assert.equal(next[0]?.price, 50000)
   })
 
+  it("keeps ticketTierId and prices the zone from that id", () => {
+    const map = emptyVenueMap()
+    map.zones = [
+      {
+        id: "campo",
+        name: "General",
+        color: "#22c55e",
+        price: 5000,
+        polygon: [
+          { x: 0, y: 0 },
+          { x: 40, y: 0 },
+          { x: 40, y: 40 },
+          { x: 0, y: 40 },
+        ],
+        layoutType: "general",
+        seatingType: "GENERAL",
+        sellMode: "per_seat",
+        rows: 0,
+        itemsPerRow: 0,
+        capacityPerUnit: 1,
+        capacity: 200,
+        labelPrefix: "",
+      },
+    ]
+    const next = hydrateStorefrontItemsFromMap(
+      [
+        {
+          id: "campo",
+          name: "General",
+          type: "zone",
+          price: 5000,
+          capacity: 2,
+          ticketTierId: "tier-general",
+          inventoryType: "GENERAL_ADMISSION",
+        },
+      ],
+      map,
+      { "tier-general": 18000, "tier-parking": 5000 },
+    )
+    assert.equal(next[0]?.ticketTierId, "tier-general")
+    assert.equal(next[0]?.price, 18000)
+  })
+
   it("descarta ids duplicados al hidratar", () => {
     const next = dedupeStorefrontItemsById([
       { id: "s-1", name: "A", type: "seat", price: 10, capacity: 1, row: "1", number: 1 },

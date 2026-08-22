@@ -144,6 +144,65 @@ describe("venue-map-pricing", () => {
     assert.equal(isMapBackedTicket(next[1]!), false)
   })
 
+  it("conserva el precio cargado en la tarjeta al re-guardar el mapa", () => {
+    const map = emptyVenueMap()
+    map.zones = [
+      {
+        id: "zone-naranja",
+        name: "Naranja",
+        color: "#f97316",
+        price: 12000,
+        polygon: [
+          { x: 0, y: 0 },
+          { x: 8, y: 0 },
+          { x: 8, y: 8 },
+        ],
+        layoutType: "general",
+        sellMode: "group",
+        rows: 1,
+        itemsPerRow: 1,
+        capacityPerUnit: 1,
+        capacity: 48,
+        labelPrefix: "Naranja ",
+      },
+    ]
+
+    const next = syncMapBackedTickets(
+      [
+        {
+          id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          name: "Naranja",
+          price: 18500,
+          capacity: 40,
+          timeLimit: "",
+          saleStartsAt: "",
+          saleEndsAt: "",
+          bonusReward: "",
+          dayId: null,
+          visibility: "public",
+          layoutType: "general",
+          seatingSectorId: "zone-naranja",
+          capacityPerUnit: 1,
+          admitCount: 1,
+          tierType: "general",
+          listPrice: null,
+          bundleItems: [],
+          bundleType: null,
+          promoDiscountType: null,
+          promoDiscountValue: 0,
+          promoRequiredQty: 1,
+          promoPayQty: 1,
+          description: "",
+          highlightBadge: null,
+        },
+      ],
+      map,
+    )
+
+    assert.equal(next[0]?.price, 18500)
+    assert.equal(next[0]?.capacity, 48)
+  })
+
   it("consolida inventario libre con entradas derivadas del mapa", () => {
     const map = emptyVenueMap()
     map.zones = [

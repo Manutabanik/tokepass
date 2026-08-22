@@ -31,6 +31,7 @@ export function CartSummary({
   compact?: boolean
 }) {
   const liveLines = useCheckoutStore((state) => state.lines)
+  const catalogByTierId = useCheckoutStore((state) => state.catalogByTierId)
   const rows = liveLines
   const removeItem = useCheckoutStore((state) => state.removeItem)
   const clearCart = useCheckoutStore((state) => state.clearCart)
@@ -73,14 +74,24 @@ export function CartSummary({
         )}
       >
         {rows.map((item) => {
-          const displayName = cartLineDisplayName(item)
+          const catalog = item.ticketTierId
+            ? catalogByTierId[item.ticketTierId]
+            : undefined
+          const displayName = cartLineDisplayName({
+            ...item,
+            name: catalog?.name ?? item.name,
+          })
           const dateLabel = item.dateLabel?.trim() || ""
-          const unitPrice = formatTicketPrice(item.price)
+          const unit = catalog?.price ?? item.price
+          const unitPrice = formatTicketPrice(unit)
           const qtyLabel = `${item.quantity}x ${displayName} — ${unitPrice}`
+          const rowKey = item.ticketTierId
+            ? `${item.ticketTierId}:${item.id}`
+            : item.id
 
           return (
             <li
-              key={item.id}
+              key={rowKey}
               className={
                 compact
                   ? "flex items-center justify-between gap-3 border-b border-border py-2 last:border-b-0"
@@ -118,7 +129,9 @@ export function CartSummary({
                       : "text-sm font-bold text-foreground",
                   )}
                 >
-                  {formatTicketPrice(cartLineAmount(item))}
+                  {formatTicketPrice(
+                    cartLineAmount({ price: unit, quantity: item.quantity }),
+                  )}
                 </span>
                 <button
                   type="button"

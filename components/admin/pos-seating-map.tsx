@@ -11,6 +11,7 @@ import {
 } from "@/app/actions/public-events"
 import type { PosEventOption } from "@/app/actions/pos"
 import type { PosSeatPick } from "@/lib/pos-cart"
+import { buildTierUnitPriceIndex } from "@/lib/checkout/tier-price-index"
 import { resolveTierIdForUniversalSector } from "@/lib/seating/venue-adapter"
 import { flattenVenueMapSeats } from "@/lib/seating/venue-map-geometry"
 import { occupancyFromSeatingUnits } from "@/lib/seating/venue-map-occupancy"
@@ -46,15 +47,17 @@ export function PosSeatingMap({
     occupancy: Record<string, "available" | "occupied" | "blocked">
   } | null>(null)
 
-  const priceBySectorId = useMemo(() => {
-    const prices: Record<string, number> = {}
-    for (const tier of event.tiers) {
-      if (tier.seatingSectorId) prices[tier.seatingSectorId] = tier.price
-      prices[tier.id] = tier.price
-      prices[tier.name] = tier.price
-    }
-    return prices
-  }, [event.tiers])
+  const priceBySectorId = useMemo(
+    () =>
+      buildTierUnitPriceIndex(
+        event.tiers.map((tier) => ({
+          id: tier.id,
+          price: tier.price,
+          seatingSectorId: tier.seatingSectorId,
+        })),
+      ),
+    [event.tiers],
+  )
 
   useEffect(() => {
     let cancelled = false

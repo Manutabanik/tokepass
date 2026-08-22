@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useCallback, useEffect, useRef } from "react"
 import type { UseFormReturn } from "react-hook-form"
+import { toast } from "sonner"
 
 import { autosaveEventDraft } from "@/app/actions/event-autosave"
 import { eventInventoryFingerprint } from "@/lib/events/event-inventory-fingerprint"
@@ -12,8 +13,8 @@ import {
 import type { EventFormValues } from "@/lib/validations/event-form"
 import type { VenuePricingMap } from "@/lib/seating/venue-adapter"
 
-/** Autoguardado de edición: 1s después de que el usuario deja de escribir. */
-const DEBOUNCE_MS = 1000
+/** Autoguardado de borrador: 1.5s después de que el usuario deja de escribir. */
+const DEBOUNCE_MS = 1500
 
 function sanitizeFormValues(values: EventFormValues): EventFormValues {
   return {
@@ -87,12 +88,14 @@ export function useEventFormAutosave(input: {
   const queuedRef = useRef(false)
   const skipWatchRef = useRef(false)
   const lastSavedKeyRef = useRef<string | null>(null)
+  const lastErrorToastRef = useRef<string | null>(null)
   const flyerRef = useRef<File | null>(flyerFile)
   const inventoryFingerprintRef = useRef(
     eventInventoryFingerprint(initialValues),
   )
   const scheduleSaveRef = useRef<() => void>(() => {})
   const flushAutosaveRef = useRef<() => void | Promise<void>>(() => {})
+  const runAutosaveRef = useRef<() => Promise<void>>(async () => {})
   const latestRef = useRef({
     values: initialValues,
     venuePricingMap,
@@ -199,8 +202,15 @@ export function useEventFormAutosave(input: {
       })
       if (!result.ok) {
         setAutosaveStatus("error", result.error)
+        if (lastErrorToastRef.current !== result.error) {
+          lastErrorToastRef.current = result.error
+          toast.error("No se pudo guardar el borrador", {
+            description: result.error,
+          })
+        }
         return
       }
+      lastErrorToastRef.current = null
       if (result.mode === "skipped") {
         setAutosaveStatus("dirty")
         return
@@ -233,10 +243,15 @@ export function useEventFormAutosave(input: {
         inventoryFingerprintRef.current = eventInventoryFingerprint(values)
       }
     } catch (error) {
-      setAutosaveStatus(
-        "error",
-        error instanceof Error ? error.message : "Error de autoguardado",
-      )
+      const message =
+        error instanceof Error ? error.message : "Error de autoguardado"
+      setAutosaveStatus("error", message)
+      if (lastErrorToastRef.current !== message) {
+        lastErrorToastRef.current = message
+        toast.error("No se pudo guardar el borrador", {
+          description: message,
+        })
+      }
     } finally {
       savingRef.current = false
       if (queuedRef.current) {
@@ -267,20 +282,26 @@ export function useEventFormAutosave(input: {
     setAutosaveStatus("saved")
   }
 
-  function scheduleSave() {
+  runAutosaveRef.current = runAutosave
+
+  const scheduleSave = useCallback(() => {
     if (!readyRef.current || !latestRef.current.enabled) return
     setAutosaveStatus("dirty")
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
-      void runAutosave()
+      void runAutosaveRef.current()
     }, DEBOUNCE_MS)
-  }
+  }, [setAutosaveStatus])
 
-  async function flushAutosave() {
+  const flushAutosave = useCallback(async () => {
     if (!readyRef.current) return
-    cancelPendingAutosave()
-    await runAutosave()
-  }
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+    queuedRef.current = false
+    await runAutosaveRef.current()
+  }, [])
 
   useEffect(() => {
     scheduleSaveRef.current = scheduleSave
@@ -298,7 +319,7 @@ export function useEventFormAutosave(input: {
         skipWatchRef.current = false
         return
       }
-      scheduleSaveRef.current()
+      setAutosaveStatus("dirty")
     })
     return () => subscription.unsubscribe()
   }, [enabled, form, setFormValues])

@@ -21,25 +21,32 @@ const arrowClassName =
   "absolute top-1/2 z-20 flex size-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-black/40 text-white backdrop-blur-md transition-all hover:bg-black/60"
 
 function HeroFlyerSlide({
+  eventId,
   url,
   title,
   finished = false,
+  priority = false,
 }: {
+  eventId: string
   url: string
   title: string
   finished?: boolean
+  priority?: boolean
 }) {
   return (
-    <div className="relative h-full w-full overflow-hidden bg-muted">
-      {/* eslint-disable-next-line @next/next/no-img-element -- flyer host/blob */}
-      <img
-        key={url}
-        src={url}
-        alt={title}
-        className={cn(
-          "h-full w-full object-cover transition-all duration-300",
-          finished && "grayscale-[50%]",
-        )}
+    <div
+      className={cn(
+        "relative h-full w-full overflow-hidden bg-muted",
+        finished && "grayscale-[50%]",
+      )}
+    >
+      <EventFlyer
+        eventId={eventId}
+        title={title}
+        imageUrl={url}
+        priority={priority}
+        sizes="(max-width: 768px) 100vw, 1200px"
+        objectFit="cover"
       />
     </div>
   )
@@ -131,15 +138,17 @@ export function EventHeroMediaGallery({
         >
           <div className="flex h-full transform-gpu will-change-transform">
             {flyerUrls.length > 0 ? (
-              flyerUrls.map((url) => (
+              flyerUrls.map((url, index) => (
                 <div
                   key={url}
                   className="min-w-0 shrink-0 grow-0 basis-full snap-start"
                 >
                   <HeroFlyerSlide
+                    eventId={eventId}
                     url={url}
                     title={title}
                     finished={finished}
+                    priority={index === 0}
                   />
                 </div>
               ))
@@ -179,6 +188,7 @@ export function EventHeroMediaGallery({
                 ) : currentFlyerUrl ? (
                   <>
                     <HeroFlyerSlide
+                      eventId={`${eventId}-spot`}
                       url={currentFlyerUrl}
                       title={title}
                       finished={finished}

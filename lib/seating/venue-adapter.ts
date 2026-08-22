@@ -517,11 +517,24 @@ export function resolveTierIdForUniversalSector(
   sectorId: string,
   sectorName: string,
   tiers: CheckoutUniversalTier[],
+  preferredTierId?: string | null,
 ): string | null {
-  const bySector = tiers.find((tier) => tier.seatingSectorId === sectorId)
-  if (bySector) return bySector.id
-  const byName = tiers.find(
-    (tier) => tier.name.toLowerCase() === sectorName.toLowerCase(),
+  const preferred = preferredTierId?.trim()
+  if (preferred && tiers.some((tier) => tier.id === preferred)) {
+    return preferred
+  }
+
+  const sector = sectorId.trim()
+  if (sector) {
+    const bySector = tiers.filter((tier) => tier.seatingSectorId === sector)
+    if (bySector.length === 1) return bySector[0]?.id ?? null
+  }
+
+  const name = sectorName.trim().toLowerCase()
+  if (!name) return null
+  const byName = tiers.filter(
+    (tier) => tier.name.trim().toLowerCase() === name,
   )
-  return byName?.id ?? null
+  if (byName.length === 1) return byName[0]?.id ?? null
+  return null
 }

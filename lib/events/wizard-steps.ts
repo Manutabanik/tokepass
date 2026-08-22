@@ -28,7 +28,7 @@ const EDIT_WORKSPACE_STEP_META: Record<
   [WIZARD_STEP_IDENTITY]: {
     key: "info",
     title: "Datos principales",
-    description: "Nombre, flyer y detalles del show",
+    description: "Nombre, recinto, fechas y flyer",
   },
   [WIZARD_STEP_TICKETS]: {
     key: "pricing",
@@ -38,7 +38,7 @@ const EDIT_WORKSPACE_STEP_META: Record<
   [WIZARD_STEP_CONFIG]: {
     key: "config",
     title: "Publicar y cobrar",
-    description: "Comisiones y privacidad",
+    description: "Cobros, visibilidad y tope por persona",
   },
 }
 

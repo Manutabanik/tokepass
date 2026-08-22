@@ -5,6 +5,7 @@ import type { OrganizerVenue } from "../../app/actions/venues"
 import {
   buildEmptyPricingMap,
   mapVenueToUniversalSeatData,
+  resolveTierIdForUniversalSector,
 } from "./venue-adapter"
 
 function baseVenue(
@@ -148,5 +149,61 @@ describe("mapVenueToUniversalSeatData", () => {
       ],
     })
     assert.deepEqual(buildEmptyPricingMap(venue), { a: 0 })
+  })
+})
+
+describe("resolveTierIdForUniversalSector", () => {
+  const tiers = [
+    {
+      id: "tier-general",
+      name: "General",
+      price: 18000,
+      available: 40,
+      seatingSectorId: "sec-ga",
+      layoutType: "general" as const,
+    },
+    {
+      id: "tier-parking",
+      name: "Estacionamiento",
+      price: 5000,
+      available: 80,
+      seatingSectorId: null,
+      layoutType: "general" as const,
+    },
+  ]
+
+  it("prefers the stamped ticket id over a name match", () => {
+    assert.equal(
+      resolveTierIdForUniversalSector("sec-ga", "Estacionamiento", tiers, "tier-general"),
+      "tier-general",
+    )
+  })
+
+  it("does not pick the first name collision when two tickets share a label", () => {
+    assert.equal(
+      resolveTierIdForUniversalSector(
+        "unknown",
+        "General",
+        [
+          ...tiers,
+          {
+            id: "tier-general-sab",
+            name: "General",
+            price: 20000,
+            available: 10,
+            seatingSectorId: "sec-other",
+            layoutType: "general",
+          },
+        ],
+      ),
+      null,
+    )
+  })
+
+  it("resolves a unique seating sector id", () => {
+    assert.equal(
+      resolveTierIdForUniversalSector("sec-ga", "Otro", tiers),
+      "tier-general",
+    )
   })
 })

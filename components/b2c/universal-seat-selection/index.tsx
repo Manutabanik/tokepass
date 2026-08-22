@@ -237,7 +237,6 @@ export function UniversalSeatSelectionFlow({
     const prices: Record<string, number> = {}
     for (const item of resolvedSectors) {
       prices[item.id] = item.price
-      prices[item.name] = item.price
     }
     return prices
   }, [resolvedSectors])

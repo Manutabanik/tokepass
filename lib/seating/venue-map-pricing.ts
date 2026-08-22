@@ -333,7 +333,10 @@ export function syncMapBackedTickets(
       id: inheritedId,
       isNew: inheritedId ? false : true,
       name: group.name || existing?.name || "Zona",
-      price: group.price,
+      price:
+        existing != null && Number.isFinite(Number(existing.price))
+          ? Number(existing.price)
+          : group.price,
       capacity: mapGroupGeneratedPlaces(group, map),
       seatingSectorId: sectorId,
       layoutType,

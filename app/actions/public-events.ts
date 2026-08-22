@@ -51,6 +51,7 @@ import {
   publicCatalogTicketsLeft,
   publicTierAvailable,
 } from "@/lib/inventory/public-stock-cap"
+import { startingPriceFromSellable } from "@/lib/checkout/sellable-tickets"
 import type { Event, TicketTier, Venue } from "@/types/database"
 import type { ScheduleDay } from "@/types/events"
 import type { EventSeatingUnit, SeatingSectorSummary, VenueSeatingLayout } from "@/types/venues"
@@ -160,6 +161,7 @@ export type EventDetails = {
     tableNumberEnd: number | null
   }>
   comboItemsByTier: Record<string, Array<{ name: string; quantity: number }>>
+  /** Admission SKUs (`ticket_tiers` / ticket_types) with live stock. */
   tiers: Array<
     Pick<
       TicketTier,
@@ -307,14 +309,28 @@ type EventDetailRow = {
       | "list_price"
       | "description"
       | "highlight_badge"
+      | "sale_starts_at"
+      | "sale_ends_at"
+      | "tier_type"
     >
   > | null
   profiles?: { full_name: string | null } | null
 }
 
-function computeStartingPrice(tiers: { price: number }[] | null): number | null {
-  if (!tiers?.length) return null
-  return Math.min(...tiers.map((tier) => Number(tier.price)))
+function computeStartingPrice(
+  tiers: Array<{
+    price: number
+    capacity?: number
+    sold?: number
+    visibility?: string | null
+    sale_starts_at?: string | null
+    sale_ends_at?: string | null
+    category?: string | null
+    tier_type?: string | null
+    layout_type?: string | null
+  }> | null,
+): number | null {
+  return startingPriceFromSellable(tiers)
 }
 
 function computeInventory(
@@ -337,7 +353,7 @@ function startOfTodayIso(): string {
 }
 
 const EVENT_LIST_SELECT =
-  "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location, capacity), ticket_tiers(price, capacity, sold, visibility), profiles!events_organizer_id_fkey(full_name)"
+  "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location, capacity), ticket_tiers(price, capacity, sold, visibility, sale_starts_at, sale_ends_at, category, tier_type, layout_type), profiles!events_organizer_id_fkey(full_name)"
 const EVENT_LIST_SELECT_WITH_DELIVERY = `${EVENT_LIST_SELECT}, delivery_mode`
 
 const EVENT_ARTISTS_EMBED =
@@ -1576,7 +1592,7 @@ export async function getRelatedEvents(input: {
   const { data, error } = await supabase
     .from("events")
     .select(
-      "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location, capacity), ticket_tiers(price, capacity, sold, visibility), profiles!events_organizer_id_fkey(full_name)",
+      "id, slug, title, description, date, ends_at, schedule_days, location, image_url, flyer_url, status, visibility, is_featured, featured_tier, featured_until, is_sponsored_by_tokepass, category_id, venues(name, location, capacity), ticket_tiers(price, capacity, sold, visibility, sale_starts_at, sale_ends_at, category, tier_type, layout_type), profiles!events_organizer_id_fkey(full_name)",
     )
     .eq("status", "published")
     .eq("visibility", "public")

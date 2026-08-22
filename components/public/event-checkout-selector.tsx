@@ -36,6 +36,7 @@ import {
 import { purchaseCapForTier } from "@/lib/checkout-limits"
 import { resolveCategoryAvailability } from "@/lib/checkout/category-stock"
 import {
+  SOLD_OUT_BADGE_CLASS,
   SOLD_OUT_TICKET_CARD_CLASS,
   isTicketCardBlocked,
   selectableTicketStock,
@@ -58,9 +59,9 @@ import {
   type CheckoutKindTab,
   type TicketDayGroup,
 } from "@/lib/checkout/ticket-day-groups"
+import { ticketUsesMapSelector } from "@/lib/checkout/public-ticket-view"
 import { flattenSeatsForAvailability } from "@/lib/seating/venue-map-geometry"
 import { classifyZoneClick } from "@/lib/seating/map-click-target"
-import { isMapBackedTicket } from "@/lib/seating/venue-map-pricing"
 import type { VenueMapZone } from "@/types/venue-map"
 import { TicketTierList } from "@/components/public/ticket-tier-list"
 import { cn, tapFeedbackClass } from "@/lib/utils"
@@ -103,16 +104,7 @@ type Props = {
 const SYNTHETIC_MAP_TIER_ID = "__interactive-map__"
 
 function tierRequiresMap(tier: TicketSelectorTier): boolean {
-  return isMapBackedTicket({
-    seatingSectorId: tier.seatingSectorId,
-    layoutType: tier.layoutType,
-    tierType: tier.tierType,
-    category: tier.category,
-    bundleItems: (tier.comboItems ?? []).map((item, index) => ({
-      tierId: `${tier.id}-${index}`,
-      quantity: item.quantity,
-    })),
-  })
+  return ticketUsesMapSelector(tier)
 }
 
 export function EventCheckoutSelector({
@@ -471,7 +463,6 @@ function TicketSelectionList({
   }, [activeDateId, kindTab, listTiers, showDateCards, showKindTabs])
   const showBundles =
     bundleTiers.length > 0 && (kindTab === "passes" || !showKindTabs)
-  const noDayFunctions = kindTab === "days" && dateCards.length === 0
   const ticketGroups = useMemo<TicketDayGroup[]>(() => {
     if (kindTab === "passes") {
       return displayedTickets.length > 0
@@ -672,11 +663,7 @@ function TicketSelectionList({
           transition={{ duration: 0.3, ease: "easeInOut" }}
           className="z-0 flex flex-col gap-3 pb-32"
         >
-          {noDayFunctions ? (
-            <p className="text-sm text-muted-foreground">
-              No hay funciones individuales disponibles para este evento.
-            </p>
-          ) : ticketGroups.length > 0 || showBundles ? (
+          {ticketGroups.length > 0 || showBundles ? (
             <div className="flex flex-col gap-3">
               {ticketGroups.map((group) => {
                 const mapTickets = group.tickets.filter(ticketNeedsSeatModal)
@@ -992,9 +979,7 @@ function UnifiedTicketCard({
             </span>
           ))}
           {isSoldOut ? (
-            <span className="shrink-0 text-[10px] font-bold text-red-500">
-              Agotado
-            </span>
+            <span className={SOLD_OUT_BADGE_CLASS}>Agotado</span>
           ) : showStock ? (
             <StockHint
               available={availability.available}
@@ -1184,9 +1169,7 @@ export function QuantityList({
                     </span>
                   ) : null}
                   {soldOut ? (
-                    <span className="text-xs font-bold text-red-500">
-                      Agotado
-                    </span>
+                    <span className={SOLD_OUT_BADGE_CLASS}>Agotado</span>
                   ) : (
                     <StockHint
                       available={max}
@@ -1268,7 +1251,7 @@ function StockHint({
   const scarcity = resolveStockScarcity(available, capacity, sold)
   if (scarcity.kind === "sold_out") {
     return (
-      <span className="inline-flex items-center gap-1 text-xs font-semibold text-destructive">
+      <span className={cn(SOLD_OUT_BADGE_CLASS, "inline-flex items-center gap-1")}>
         <AlertCircle className="size-3" aria-hidden="true" />
         Agotado
       </span>

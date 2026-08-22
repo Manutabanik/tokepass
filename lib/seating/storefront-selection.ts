@@ -103,8 +103,9 @@ export function storefrontItemFromElement(
     name,
     displayName: name,
     type,
+    ticketTierId: element.ticketTypeId,
     price: resolveVenueUnitPrice(
-      [element.id, element.groupId, element.sectorName, element.groupName],
+      [element.ticketTypeId, element.id, element.groupId],
       element.price,
       priceBySectorId,
     ),
@@ -140,7 +141,7 @@ export function storefrontItemFromZone(
     name: cartName,
     displayName: cartName,
     type: "zone",
-    price: resolveVenueUnitPrice([zone.id, zone.name], zone.price, priceBySectorId),
+    price: resolveVenueUnitPrice([zone.id], zone.price, priceBySectorId),
     capacity: 1,
     sectorId: zone.id,
     sectorName: name,
@@ -164,15 +165,9 @@ export function storefrontItemFromElementSeat(
     name,
     displayName: name,
     type: "seat",
+    ticketTierId: seat.ticketTypeId ?? element.ticketTypeId,
     price: resolveVenueUnitPrice(
-      [
-        seat.ticketTypeId,
-        element.ticketTypeId,
-        element.id,
-        element.groupId,
-        element.sectorName,
-        element.groupName,
-      ],
+      [seat.ticketTypeId, element.ticketTypeId, element.id, element.groupId],
       seat.price ?? element.price,
       priceBySectorId,
     ),
@@ -221,8 +216,9 @@ export function resolveStorefrontItemFromMap(
       name,
       displayName: name,
       type: "seat",
+      ticketTierId: seat.ticketTypeId,
       price: resolveVenueUnitPrice(
-        [seat.ticketTypeId, sector.id, sector.name],
+        [seat.ticketTypeId, sector.id],
         seat.price ?? sector.price,
         priceBySectorId,
       ),
@@ -255,12 +251,18 @@ export function hydrateStorefrontItemsFromMap(
       item.type === "zone" ||
       live.inventoryType === "GENERAL_ADMISSION" ||
       item.inventoryType === "GENERAL_ADMISSION"
+    const ticketTierId = item.ticketTierId ?? live.ticketTierId
     return {
       ...item,
       ...live,
+      ticketTierId,
       name: live.name,
       displayName: live.displayName ?? live.name,
-      price: Number(live.price),
+      price: resolveVenueUnitPrice(
+        [ticketTierId],
+        Number(live.price),
+        priceBySectorId,
+      ),
       capacity: isQuantityZone
         ? Math.max(1, selectedCapacity, liveCapacity)
         : liveCapacity || selectedCapacity || 1,

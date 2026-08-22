@@ -7,6 +7,7 @@ import {
   Gift,
   Layers,
   LayoutGrid,
+  Map,
   Pencil,
   Plus,
   PlusCircle,
@@ -15,14 +16,9 @@ import {
   Trash2,
 } from "lucide-react"
 import type { ReactNode } from "react"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import type { UseFormReturn } from "react-hook-form"
 import { toast } from "sonner"
-
-import {
-  listEventGeneralSectors,
-  type EventGeneralSector,
-} from "@/app/actions/events"
 
 import {
   BundleCreatorModal,
@@ -71,25 +67,19 @@ import {
   layoutTypeForInventory,
   type InventoryTierType,
 } from "@/lib/inventory/unified-inventory"
+import { CapacityThermometer } from "@/components/admin/events/capacity-thermometer"
+import {
+  GeneralAdmissionCard,
+  MapSectorCard,
+} from "@/components/admin/events/inventory-simple-cards"
 import {
   AddTicketTypeButton,
   TicketWalletCard,
 } from "@/components/admin/events/ticket-tier-form"
 import { TicketMatrixEditor } from "@/components/admin/ticket-matrix-editor"
-import { AforoBalanceAssistant } from "@/components/admin/aforo-balance-assistant"
-import { CapacityBudgetBar } from "@/components/admin/capacity-budget-bar"
-import { MasterManifestTable } from "@/components/admin/master-manifest-table"
-import { useEventCapacity } from "@/hooks/use-event-capacity"
-import {
-  assignRemainingToGeneral,
-  computeAforoBalance,
-  findPrimaryGeneralIndex,
-  scaleTicketStockToLimit,
-} from "@/lib/inventory/aforo-balance"
 import {
   asPositiveInt,
   createBlankPhase,
-  generalRemainingForTicket,
   parseStrictInt,
   phaseLimitSum,
   ticketPhasesExceedParent,
@@ -114,16 +104,11 @@ import { isMapBackedTicket } from "@/lib/seating/venue-map-pricing"
 import {
   collectVenueMapSectorKeys,
   isMapOwnedLogicalSector,
-  listAssignableGeneralSectors,
   listGeneralLogicalSectors,
   normalizeLogicalSectors,
   UNASSIGNED_SECTOR_LABEL,
   UNASSIGNED_SECTOR_VALUE,
 } from "@/lib/inventory/logical-sectors"
-import {
-  buildMasterManifestRows,
-  excludeMapOwnedSectors,
-} from "@/lib/inventory/master-manifest"
 import { TICKET_DAY_ALL } from "@/types/tickets"
 import type { EventFormValues } from "@/lib/validations/event-form"
 
@@ -173,71 +158,37 @@ type Props = {
   feePercentage?: number
   fixedFee?: number
   isSponsored?: boolean
-}
-
-function mergeEventSectors(
-  draft: ReturnType<typeof listGeneralLogicalSectors>,
-  persisted: EventGeneralSector[],
-) {
-  const merged = new Map<string, (typeof draft)[number]>()
-  for (const sector of persisted) {
-    merged.set(sector.id, {
-      id: sector.id,
-      name: sector.name,
-      type: "general_admission",
-      capacity: sector.capacity,
-    })
-  }
-  for (const sector of draft) {
-    const duplicate = [...merged.values()].some(
-      (item) =>
-        item.id === sector.id ||
-        item.name.trim().toLocaleLowerCase("es") ===
-          sector.name.trim().toLocaleLowerCase("es"),
-    )
-    if (!duplicate) merged.set(sector.id, sector)
-  }
-  return [...merged.values()]
+  hideMapBlock?: boolean
+  onOpenMapStudio?: () => void
 }
 
 export function UnifiedInventoryPanel({
   form,
-  eventId = null,
   feePercentage = 15,
   fixedFee = 0,
   isSponsored = false,
+  hideMapBlock = false,
+  onOpenMapStudio,
 }: Props) {
   const watchedTickets = form.watch("tickets")
   const tickets = form.getValues("tickets") ?? watchedTickets ?? EMPTY_FORM_TICKETS
   const hasSeatingPlan = Boolean(form.watch("basics.hasSeatingPlan"))
-  const venueMap = form.watch("venue.venueMap")
-  const draftSectors = listAssignableGeneralSectors(
-    form.watch("venue.zones"),
-    venueMap,
-  )
-  const canLoadSectors = Boolean(eventId && hasSeatingPlan)
-  const [loadedSectors, setLoadedSectors] = useState<EventGeneralSector[]>([])
-  const [loadedSectorError, setLoadedSectorError] = useState<string | null>(
-    null,
-  )
-  const sectorLoadError = canLoadSectors ? loadedSectorError : null
-  const logicalSectors = useMemo(() => {
-    const persisted = eventId && hasSeatingPlan ? loadedSectors : []
-    const merged = eventId
-      ? mergeEventSectors(draftSectors, persisted)
-      : draftSectors
-    return listAssignableGeneralSectors(merged, venueMap)
-  }, [draftSectors, eventId, hasSeatingPlan, loadedSectors, venueMap])
 
   useEffect(() => {
     const current = form.getValues("tickets") ?? []
     if (!hasSeatingPlan) {
-      if (current.some((tier) => tier.seatingSectorId)) {
-        form.setValue(
-          "tickets",
-          current.map((tier) => ({ ...tier, seatingSectorId: null })),
-          { shouldDirty: true },
-        )
+      const mapKeys = collectVenueMapSectorKeys(
+        form.getValues("venue.venueMap"),
+      )
+      let changed = false
+      const next = current.map((tier) => {
+        const sectorId = tier.seatingSectorId?.trim()
+        if (!sectorId || mapKeys.ids.has(sectorId)) return tier
+        changed = true
+        return { ...tier, seatingSectorId: null }
+      })
+      if (changed) {
+        form.setValue("tickets", next, { shouldDirty: true })
       }
       return
     }
@@ -252,11 +203,11 @@ export function UnifiedInventoryPanel({
         tier.layoutType === "table_combo" ||
         tier.tierType === "seated"
       if (!sectorId || seated) return tier
+      if (mapKeys.ids.has(sectorId)) return tier
       const zone = draftZones.find((item) => item.id === sectorId)
       const ownedByMap =
-        mapKeys.ids.has(sectorId) ||
-        (zone != null &&
-          isMapOwnedLogicalSector(zone, form.getValues("venue.venueMap")))
+        zone != null &&
+        isMapOwnedLogicalSector(zone, form.getValues("venue.venueMap"))
       if (!ownedByMap) return tier
       changed = true
       return { ...tier, seatingSectorId: null }
@@ -266,23 +217,6 @@ export function UnifiedInventoryPanel({
     }
   }, [form, hasSeatingPlan])
 
-  useEffect(() => {
-    if (!eventId || !hasSeatingPlan) return
-    let cancelled = false
-    void listEventGeneralSectors(eventId).then((result) => {
-      if (cancelled) return
-      if (!result.ok) {
-        setLoadedSectors([])
-        setLoadedSectorError("Error al cargar sectores. Intente nuevamente.")
-        return
-      }
-      setLoadedSectors(result.sectors)
-      setLoadedSectorError(null)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [eventId, hasSeatingPlan])
   const scheduleDays = form.watch("basics.scheduleDays") ?? []
   const identityDate = form.watch("basics.date")
   const eventDates = listEventFormJornadas({
@@ -291,36 +225,22 @@ export function UnifiedInventoryPanel({
   })
   const isMultiDay =
     Boolean(form.watch("basics.isMultiDay")) || eventDates.length >= 2
-  const capacity = useEventCapacity(form)
-  const manifestRows = useMemo(
-    () =>
-      buildMasterManifestRows({
-        tickets,
-        venueMap,
-      }),
-    [tickets, venueMap],
-  )
-  const dropdownSectors = useMemo(
-    () => excludeMapOwnedSectors(logicalSectors, venueMap),
-    [logicalSectors, venueMap],
-  )
   const [bundleOpen, setBundleOpen] = useState(false)
   const [editingBundleIndex, setEditingBundleIndex] = useState<number | null>(
     null,
   )
   const [expandedIndex, setExpandedIndex] = useState<number | null>(0)
-  const venueCapacity = form.watch("venue.capacity")
-  const venueZones = form.watch("venue.zones")
-  const aforo = useMemo(
-    () =>
-      computeAforoBalance({
-        tickets,
-        venueMap,
-        zones: venueZones,
-        venueCapacity,
-      }),
-    [tickets, venueCapacity, venueMap, venueZones],
-  )
+  const [showExtras, setShowExtras] = useState(() => {
+    const current = form.getValues("tickets") ?? []
+    return current.some((tier) => {
+      const type = inferInventoryTierType({
+        tierType: tier.tierType,
+        layoutType: tier.layoutType,
+        bundleItems: tier.bundleItems,
+      })
+      return type === "addon" || type === "bundle"
+    })
+  })
 
   function append(ticket: EventFormValues["tickets"][number]) {
     const nextIndex = tickets.length
@@ -391,6 +311,20 @@ export function UnifiedInventoryPanel({
   const generals = grouped.filter((item) => item.tierType === "general")
   const addons = grouped.filter((item) => item.tierType === "addon")
   const bundles = grouped.filter((item) => item.tierType === "bundle")
+  const mapTickets = tickets
+    .map((tier, index) => ({
+      index,
+      key: tier.id ?? `map-ticket-${index}`,
+      tier,
+    }))
+    .filter((item) => isMapBackedTicket(item.tier))
+
+  function openMapStudio() {
+    form.setValue("basics.hasSeatingPlan", true, { shouldDirty: true })
+    form.setValue("venue.includesSeatingMap", true, { shouldDirty: true })
+    form.setValue("venue.zoneType", "reserved_seating", { shouldDirty: true })
+    onOpenMapStudio?.()
+  }
   const componentOptions: BundleComponentOption[] = tickets
     .map((tier, index) => ({
       id: tier.id ?? `index:${index}`,
@@ -431,40 +365,7 @@ export function UnifiedInventoryPanel({
 
   return (
     <div className="space-y-5" data-field="tickets">
-      <MasterManifestTable rows={manifestRows} capacity={capacity} />
-      <AforoBalanceAssistant
-        physicalCapacity={aforo.physicalCapacity}
-        ticketStock={aforo.ticketStock}
-        difference={aforo.difference}
-        canAssignRemaining
-        onAssignRemaining={() => {
-          const primary = findPrimaryGeneralIndex(tickets)
-          if (primary < 0) {
-            append({
-              ...createInventoryTicket("general", {
-                dayId: defaultInventoryDayId(eventDates),
-              }),
-              name: "Entrada General",
-              capacity: aforo.difference,
-            })
-            return
-          }
-          form.setValue(
-            "tickets",
-            assignRemainingToGeneral(tickets, aforo.difference),
-            { shouldDirty: true },
-          )
-          setExpandedIndex(primary)
-        }}
-        onScaleToLimit={() => {
-          form.setValue(
-            "tickets",
-            scaleTicketStockToLimit(tickets, aforo.physicalCapacity),
-            { shouldDirty: true },
-          )
-        }}
-      />
-      <CapacityBudgetBar form={form} />
+      <CapacityThermometer form={form} />
       {isMultiDay ? (
         <TicketMatrixEditor form={form} days={eventDates} />
       ) : null}
@@ -474,12 +375,11 @@ export function UnifiedInventoryPanel({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-foreground">
-            Entradas a la venta
+            Entradas y mapa
           </p>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            {hasSeatingPlan
-              ? "Campo, extras y combos. El mapa ya reservó su cupo; una general puede quedar libre o ligarse a un sector que no sea del mapa."
-              : "Nombre, capacidad y precio. Esta entrada es inventario libre: no depende de un sector."}
+            Las generales suman stock libre. El mapa aporta su propia
+            capacidad de asientos.
           </p>
         </div>
         {isMultiDay ? (
@@ -491,119 +391,136 @@ export function UnifiedInventoryPanel({
         ) : null}
       </div>
 
-      <FormField
-        control={form.control}
-        name="ticketsDefaultTab"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-foreground/90">
-              <LayoutGrid className="size-3.5" aria-hidden="true" />
-              Tab inicial en la compra
-            </FormLabel>
-            <Select
-              value={field.value ?? "auto"}
-              onValueChange={field.onChange}
-              items={defaultTabItems}
-            >
-              <SelectTrigger className="h-12 rounded-xl text-base w-full max-w-md overflow-hidden">
-                <SelectValue placeholder="Automático">
-                  {defaultTabItems.find(
-                    (item) => item.value === (field.value ?? "auto"),
-                  )?.label}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {defaultTabItems.map((item) => (
-                  <SelectItem key={item.value} value={item.value}>
-                    {item.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <FormDescription>
-              {hasSeatingPlan
-                ? "Si el 80% vende Campo, abrí Campo aunque haya mapa de ubicaciones."
-                : "Elegí qué tipo de entrada se ve primero en la compra."}
-            </FormDescription>
-          </FormItem>
-        )}
-      />
-
-      {hasSeatingPlan && sectorLoadError ? (
-        <p className="text-sm text-destructive" role="alert">
-          {sectorLoadError}
-        </p>
-      ) : null}
-
-      {isMultiDay ? null : (
       <InventoryBlock
-        title="Entradas generales y capacidad de campo"
-        description={
-          hasSeatingPlan
-            ? "Zonas sin asiento numerado: predio, campo de pie o platea libre."
-            : "Entradas simples: nombre, cupo y precio. Sin sector ni mapa."
-        }
-        icon={Ticket}
-        actionLabel="Agregar Nuevo Tipo de Entrada"
-        prominentAdd
-        onAdd={() =>
-          append({
-            ...createInventoryTicket("general", {
-              dayId: defaultInventoryDayId(eventDates),
-            }),
-            seatingSectorId: null,
-          })
-        }
-      >
-        {generals.length === 0 ? (
-          <EmptyHint
-            text={
-              hasSeatingPlan
-                ? "Opcional. Sumá una general de predio si no alcanza con las zonas del mapa."
-                : "Sumá una entrada con nombre, stock y precio."
-            }
-          />
-        ) : (
-          generals.map((item) => (
-            <InventoryTicketCard
-              key={item.key}
-              form={form}
-              index={item.index}
-              expanded={expandedIndex === item.index}
-              onToggle={() =>
-                setExpandedIndex((current) =>
-                  current === item.index ? null : item.index,
-                )
-              }
-              onDuplicate={() => duplicate(item.index)}
-              onRemove={() => remove(item.index)}
-              capacityLabel="¿Cuántas entradas ponés a la venta?"
-              scheduleDays={isMultiDay ? eventDates : []}
-              showJornada={isMultiDay}
-              venueRemaining={(() => {
-                const sectorId = tickets[item.index]?.seatingSectorId?.trim()
-                const sector = sectorId
-                  ? dropdownSectors.find((row) => row.id === sectorId)
-                  : undefined
-                if (!sector) return undefined
-                return generalRemainingForTicket(
-                  capacity,
-                  tickets[item.index],
-                  tickets,
-                  sector.capacity,
-                )
-              })()}
-              logicalSectors={hasSeatingPlan ? dropdownSectors : []}
-              showSectorSelect={hasSeatingPlan}
-              showPhases
-              feePercentage={feePercentage}
-              fixedFee={fixedFee}
-              isSponsored={isSponsored}
-            />
-          ))
-        )}
-      </InventoryBlock>
+          title="Entradas generales"
+          description="Nombre, precio y stock. Este stock alimenta el termómetro de capacidad."
+          icon={Ticket}
+          actionLabel="Agregar Entrada General"
+          prominentAdd
+          onAdd={() =>
+            append({
+              ...createInventoryTicket("general", {
+                dayId: defaultInventoryDayId(eventDates),
+              }),
+              seatingSectorId: null,
+            })
+          }
+        >
+          {generals.length === 0 ? (
+            <EmptyHint text="Sumá una entrada con nombre, precio y stock." />
+          ) : (
+            generals.map((item) => (
+              <GeneralAdmissionCard
+                key={item.key}
+                form={form}
+                index={item.index}
+                onRemove={() => remove(item.index)}
+              />
+            ))
+          )}
+        </InventoryBlock>
+
+      {hideMapBlock ? null : (
+        <section className="flex flex-col gap-y-4 rounded-2xl bg-muted/20 p-6">
+          <div className="flex gap-3">
+            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-cyan-500/10 text-cyan-800 dark:text-cyan-300">
+              <Map className="size-4" aria-hidden="true" />
+            </span>
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">
+                Mapa interactivo
+              </h3>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                Diseñá el recinto. El stock de cada sector lo define el mapa;
+                acá solo cargás el precio.
+              </p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            onClick={openMapStudio}
+            className="h-20 w-full rounded-2xl bg-primary text-base font-bold text-primary-foreground hover:bg-primary/90 sm:text-lg"
+          >
+            🗺️{" "}
+            {mapTickets.length > 0
+              ? "Editar Mapa del Recinto"
+              : "Diseñar Mapa del Recinto"}
+          </Button>
+          {mapTickets.length === 0 ? (
+            <EmptyHint text="Cuando guardes el mapa, cada sector aparece acá para ponerle precio." />
+          ) : (
+            <div className="space-y-3">
+              {mapTickets.map((item) => (
+                <MapSectorCard
+                  key={item.key}
+                  form={form}
+                  index={item.index}
+                />
+              ))}
+            </div>
+          )}
+        </section>
       )}
+
+      <div className="space-y-4">
+        <button
+          type="button"
+          onClick={() => setShowExtras((open) => !open)}
+          className={cn(
+            "inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed px-4 py-3 text-sm font-semibold transition",
+            "border-slate-300 text-slate-700 hover:border-emerald-400 hover:bg-emerald-50/60",
+            "dark:border-zinc-700 dark:text-zinc-200 dark:hover:border-emerald-500/50 dark:hover:bg-emerald-950/20",
+          )}
+          aria-expanded={showExtras}
+        >
+          <Plus
+            className={cn(
+              "size-4 transition-transform",
+              showExtras && "rotate-45",
+            )}
+            aria-hidden
+          />
+          {showExtras
+            ? "Ocultar adicionales y combos"
+            : "Configurar Adicionales y Combos"}
+        </button>
+        {showExtras ? (
+          <div className="space-y-5">
+            <FormField
+              control={form.control}
+              name="ticketsDefaultTab"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-foreground/90">
+                    <LayoutGrid className="size-3.5" aria-hidden="true" />
+                    Tab inicial en la compra
+                  </FormLabel>
+                  <Select
+                    value={field.value ?? "auto"}
+                    onValueChange={field.onChange}
+                    items={defaultTabItems}
+                  >
+                    <SelectTrigger className="h-12 rounded-xl text-base w-full max-w-md overflow-hidden">
+                      <SelectValue placeholder="Automático">
+                        {defaultTabItems.find(
+                          (item) => item.value === (field.value ?? "auto"),
+                        )?.label}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {defaultTabItems.map((item) => (
+                        <SelectItem key={item.value} value={item.value}>
+                          {item.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    Elegí qué tipo de entrada se ve primero en la compra.
+                  </FormDescription>
+                </FormItem>
+              )}
+            />
 
       <InventoryBlock
         title="Adicionales y servicios"
@@ -685,6 +602,9 @@ export function UnifiedInventoryPanel({
           ))
         )}
       </InventoryBlock>
+          </div>
+        ) : null}
+      </div>
 
       <BundleCreatorModal
         open={bundleOpen}

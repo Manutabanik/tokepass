@@ -7,28 +7,14 @@ import {
   ensurePwaInstallCapture,
   isIosDevice,
   isPwaStandalone,
+  PWA_INSTALL_DISMISS_KEY,
+  wasPwaInstallDismissedRecently,
   type BeforeInstallPromptEvent,
   type PwaPlatform,
 } from "@/lib/pwa/runtime"
 import { usePwaRuntimeStore } from "@/lib/stores/pwa-runtime-store"
 
-const DISMISS_KEY = "tokepass-pwa-install-dismissed-at"
-const DISMISS_TTL_MS = 7 * 24 * 60 * 60 * 1000
-
 export type { BeforeInstallPromptEvent, PwaPlatform }
-
-function readDismissedRecently(): boolean {
-  if (typeof window === "undefined") return true
-  try {
-    const raw = window.localStorage.getItem(DISMISS_KEY)
-    if (!raw) return false
-    const at = Number(raw)
-    if (!Number.isFinite(at)) return false
-    return Date.now() - at < DISMISS_TTL_MS
-  } catch {
-    return false
-  }
-}
 
 function subscribeStandalone(onStoreChange: () => void) {
   const media = window.matchMedia("(display-mode: standalone)")
@@ -85,7 +71,7 @@ export function usePwaInstall() {
   useEffect(() => {
     ensurePwaInstallCapture()
     const readyTimer = window.setTimeout(() => {
-      setDismissed(readDismissedRecently())
+      setDismissed(wasPwaInstallDismissedRecently())
       setClientReady(true)
     }, 0)
     return () => window.clearTimeout(readyTimer)
@@ -93,12 +79,13 @@ export function usePwaInstall() {
 
   const dismiss = useCallback(() => {
     try {
-      window.localStorage.setItem(DISMISS_KEY, String(Date.now()))
+      window.localStorage.setItem(PWA_INSTALL_DISMISS_KEY, String(Date.now()))
     } catch {
       // ignore quota / private mode
     }
     setDismissed(true)
-  }, [])
+    setDeferredPrompt(null)
+  }, [setDeferredPrompt])
 
   const openIosGuide = useCallback(() => {
     setIosGuideOpen(true)

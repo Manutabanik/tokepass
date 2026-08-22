@@ -15,7 +15,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { isFullPassDayId } from "@/lib/event-schedule"
 import { formatCurrency, formatEventDay, formatTicketPrice } from "@/lib/format"
 import { generalTicketMaxQuantity } from "@/lib/checkout/general-ticket-quantity"
+import { ticketUsesMapSelector } from "@/lib/checkout/public-ticket-view"
+import { resolveStockScarcity } from "@/lib/checkout/stock-scarcity"
 import {
+  SOLD_OUT_BADGE_CLASS,
   SOLD_OUT_TICKET_CARD_CLASS,
   isTicketCardBlocked,
 } from "@/lib/checkout/ticket-stock"
@@ -23,7 +26,6 @@ import {
   resolveTicketSaleState,
   ticketSaleWindowLabel,
 } from "@/lib/inventory/ticket-sale-window"
-import { isMapBackedTicket } from "@/lib/seating/venue-map-pricing"
 import type { TicketHighlightBadge } from "@/lib/checkout/ticket-picker"
 import type { PublicTicketPhase } from "@/lib/inventory/active-phase"
 import type { InventoryTierType } from "@/lib/inventory/unified-inventory"
@@ -41,6 +43,10 @@ export type TicketSelectorTier = {
   price: number
   available: number
   isActive?: boolean
+  hasMap?: boolean
+  isMapped?: boolean
+  status?: string
+  stockAvailable?: number
   capacity?: number
   bonusReward?: string | null
   dayId?: string | null
@@ -354,7 +360,12 @@ function TierList({
           maxSelectable <= 0 ||
           isTicketCardBlocked(tier)
         const inactive = soldOut || saleState.kind !== "active"
-        const lowStock = !inactive && tier.available <= 8
+        const scarcity = resolveStockScarcity(
+          tier.stockAvailable ?? tier.available,
+          tier.capacity,
+          tier.sold,
+        )
+        const lowStock = !inactive && scarcity.kind === "low"
         const day = scheduleDays.find((item) => item.id === tier.dayId)
         const dayLabel = isFullPassDayId(tier.dayId)
           ? scheduleDays.length > 1
@@ -423,9 +434,7 @@ function TierList({
                     {comboLine}
                   </span>
                 ) : soldOut ? (
-                  <span className="text-xs font-bold text-red-500">
-                    Agotado
-                  </span>
+                  <span className={SOLD_OUT_BADGE_CLASS}>Agotado</span>
                 ) : inactive && saleLabel ? (
                   <span className="text-xs font-semibold text-muted-foreground">
                     {saleLabel}
@@ -451,12 +460,7 @@ function TierList({
                       ? "Finalizado"
                       : "Agotado"}
                 </Button>
-              ) : hasSeatingFlow &&
-                isMapBackedTicket({
-                  seatingSectorId: tier.seatingSectorId,
-                  layoutType: tier.layoutType,
-                  category: tier.category,
-                }) ? (
+              ) : hasSeatingFlow && ticketUsesMapSelector(tier) ? (
                 <Button
                   type="button"
                   disabled={isPending}

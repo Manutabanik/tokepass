@@ -13,6 +13,7 @@ export function EventStorefrontBuyBox({
   venueLabel,
   limited,
   isOnline = false,
+  soldOut = false,
   onAcquire,
 }: {
   price: number | null
@@ -20,6 +21,7 @@ export function EventStorefrontBuyBox({
   venueLabel: string
   limited: boolean
   isOnline?: boolean
+  soldOut?: boolean
   onAcquire: (event: React.MouseEvent) => void
 }) {
   return (
@@ -32,12 +34,18 @@ export function EventStorefrontBuyBox({
         <span
           className={cn(
             "inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold",
-            limited
-              ? "border-primary/25 bg-primary/10 text-primary"
-              : "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+            soldOut
+              ? "border-border bg-muted text-muted-foreground"
+              : limited
+                ? "border-primary/25 bg-primary/10 text-primary"
+                : "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
           )}
         >
-          {limited ? "¡Quedan pocas entradas!" : "Venta activa"}
+          {soldOut
+            ? "Agotado"
+            : limited
+              ? "¡Quedan pocas entradas!"
+              : "Venta activa"}
         </span>
       </div>
 
@@ -80,17 +88,21 @@ export function EventStorefrontBuyBox({
       <Button
         type="button"
         size="storefront"
+        disabled={soldOut}
         onClick={(event) => {
           event.preventDefault()
           event.stopPropagation()
+          if (soldOut) return
           onAcquire(event)
         }}
         className={cn(
           "mt-6 h-14 w-full rounded-xl bg-emerald-500 text-lg text-slate-950",
           "shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:bg-emerald-400",
+          soldOut &&
+            "cursor-not-allowed bg-muted text-muted-foreground shadow-none hover:bg-muted",
         )}
       >
-        {isOnline ? "Elegir acceso" : "Elegir entradas"}
+        {soldOut ? "Agotado" : isOnline ? "Elegir acceso" : "Elegir entradas"}
       </Button>
 
       <div className="mt-4 flex flex-col items-center gap-2">

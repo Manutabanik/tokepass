@@ -42,6 +42,14 @@ import {
 } from "@/lib/validations/ticket-sku"
 import { validateSectorModalities } from "@/lib/seating/seating-type"
 import { EVENT_VISIBILITY_VALUES } from "@/types/events"
+
+export const EVENT_REFUND_POLICIES = [
+  "organizer",
+  "no_refunds",
+  "until_24h",
+] as const
+
+export type EventRefundPolicy = (typeof EVENT_REFUND_POLICIES)[number]
 import { parseVenueMap } from "@/types/venue-map"
 import { TICKET_TIER_VISIBILITY_VALUES } from "@/types/tickets"
 import {
@@ -287,6 +295,16 @@ const eventFormObject = z
       .max(200, "El tope de compra no puede superar 200.")
       .nullable()
       .optional(),
+    acceptsMercadoPago: z.boolean().optional().default(true),
+    acceptsPosPayments: z.boolean().optional().default(true),
+    defaultFeeStrategy: z
+      .enum(TICKET_FEE_STRATEGIES)
+      .optional()
+      .default("absorb_in_price"),
+    refundPolicy: z
+      .enum(EVENT_REFUND_POLICIES)
+      .optional()
+      .default("organizer"),
   })
   .superRefine((data, context) => {
     const tierNames = new Set<string>()
@@ -400,6 +418,14 @@ const eventFormObject = z
           message: "La hora de cierre tiene que ser posterior a la de inicio",
         })
       }
+    }
+
+    if (!data.acceptsMercadoPago && !data.acceptsPosPayments) {
+      context.addIssue({
+        code: "custom",
+        path: ["acceptsMercadoPago"],
+        message: "Elegí al menos un medio de cobro.",
+      })
     }
 
     if (data.basics.deliveryMode === "ONLINE") {
@@ -675,6 +701,13 @@ export const draftEventSchema = z.object({
     .max(200)
     .nullable()
     .optional(),
+  acceptsMercadoPago: z.boolean().optional().default(true),
+  acceptsPosPayments: z.boolean().optional().default(true),
+  defaultFeeStrategy: z
+    .enum(TICKET_FEE_STRATEGIES)
+    .optional()
+    .default("absorb_in_price"),
+  refundPolicy: z.enum(EVENT_REFUND_POLICIES).optional().default("organizer"),
 })
 
 export type EventFormValues = z.infer<typeof publishEventSchema>
@@ -913,5 +946,15 @@ export function coerceDraftEventForm(
         : raw.maxTicketsPerUser == null || Number(raw.maxTicketsPerUser) <= 0
           ? null
           : Math.floor(Number(raw.maxTicketsPerUser)),
+    acceptsMercadoPago: raw.acceptsMercadoPago !== false,
+    acceptsPosPayments: raw.acceptsPosPayments !== false,
+    defaultFeeStrategy:
+      raw.defaultFeeStrategy === "pass_to_customer"
+        ? "pass_to_customer"
+        : "absorb_in_price",
+    refundPolicy:
+      raw.refundPolicy === "no_refunds" || raw.refundPolicy === "until_24h"
+        ? raw.refundPolicy
+        : "organizer",
   } as EventFormValues
 }
