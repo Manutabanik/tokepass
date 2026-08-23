@@ -1,4 +1,4 @@
-import { defaultInventoryDayId } from "@/lib/event-schedule"
+import { defaultInventoryDayId, normalizeDayId } from "@/lib/event-schedule"
 import { inferInventoryTierType } from "@/lib/inventory/unified-inventory"
 import { parametricZoneCapacity } from "@/lib/seating/adaptive-seating"
 import type { VenuePricingMap } from "@/lib/seating/venue-adapter"
@@ -307,42 +307,72 @@ function blankMapTicket(
 export function syncMapBackedTickets(
   tickets: EventFormValues["tickets"],
   map: InteractiveVenueMap,
-  options?: { defaultDayId?: string | null },
+  options?: { defaultDayId?: string | null; dayIds?: readonly string[] },
 ): EventFormValues["tickets"] {
   const groups = listVenuePriceGroups(map)
   const liveSectorIds = new Set(groups.map((group) => priceGroupSectorId(group)))
   const commercial = tickets.filter((tier) => !isMapBackedTicket(tier))
   const existingMap = tickets.filter((tier) => isMapBackedTicket(tier))
   const defaultDayId = options?.defaultDayId ?? null
-  const nextMap = groups.map((group) => {
-    const sectorId = priceGroupSectorId(group)
-    const existing = existingMap.find(
-      (tier) => tier.seatingSectorId === sectorId,
-    )
-    const inheritedId =
-      existing?.id && existing.isNew !== true ? existing.id : undefined
-    const base = existing ?? blankMapTicket(defaultDayId)
-    const layoutType = layoutTypeFromGroup(group, map)
-    const seatingType = resolveSeatingType({
-      layoutType,
-      seatingType: (map.zones ?? []).find((zone) => zone.id === sectorId)
-        ?.seatingType,
+  const dayIds = (options?.dayIds ?? []).map((id) => id.trim()).filter(Boolean)
+  const expandDays = dayIds.length >= 2
+  const daySlots: Array<string | null> = expandDays ? dayIds : [defaultDayId]
+  const claimed = new Set<number>()
+
+  function takeExisting(sectorId: string, dayId: string | null, slotIndex: number) {
+    const exact = existingMap.findIndex((tier, index) => {
+      if (claimed.has(index) || tier.seatingSectorId !== sectorId) return false
+      if (!dayId) return true
+      return normalizeDayId(tier.dayId) === dayId
     })
-    return {
-      ...base,
-      id: inheritedId,
-      isNew: inheritedId ? false : true,
-      name: group.name || existing?.name || "Zona",
-      price:
-        existing != null && Number.isFinite(Number(existing.price))
-          ? Number(existing.price)
-          : group.price,
-      capacity: mapGroupGeneratedPlaces(group, map),
-      seatingSectorId: sectorId,
-      layoutType,
-      tierType: seatingType === "GENERAL" ? ("general" as const) : ("seated" as const),
-      capacityPerUnit: capacityPerUnitFromGroup(group, map),
+    if (exact >= 0) {
+      claimed.add(exact)
+      return existingMap[exact]
     }
+    if (slotIndex === 0 || !expandDays) {
+      const any = existingMap.findIndex(
+        (tier, index) =>
+          !claimed.has(index) && tier.seatingSectorId === sectorId,
+      )
+      if (any >= 0) {
+        claimed.add(any)
+        return existingMap[any]
+      }
+    }
+    return undefined
+  }
+
+  const nextMap = groups.flatMap((group) => {
+    const sectorId = priceGroupSectorId(group)
+    return daySlots.map((dayId, slotIndex) => {
+      const existing = takeExisting(sectorId, dayId, slotIndex)
+      const inheritedId =
+        existing?.id && existing.isNew !== true ? existing.id : undefined
+      const base = existing ?? blankMapTicket(dayId ?? defaultDayId)
+      const layoutType = layoutTypeFromGroup(group, map)
+      const seatingType = resolveSeatingType({
+        layoutType,
+        seatingType: (map.zones ?? []).find((zone) => zone.id === sectorId)
+          ?.seatingType,
+      })
+      return {
+        ...base,
+        id: inheritedId,
+        isNew: inheritedId ? false : true,
+        name: group.name || existing?.name || "Zona",
+        price:
+          existing != null && Number.isFinite(Number(existing.price))
+            ? Number(existing.price)
+            : group.price,
+        capacity: mapGroupGeneratedPlaces(group, map),
+        seatingSectorId: sectorId,
+        layoutType,
+        dayId: dayId ?? base.dayId ?? defaultDayId,
+        tierType:
+          seatingType === "GENERAL" ? ("general" as const) : ("seated" as const),
+        capacityPerUnit: capacityPerUnitFromGroup(group, map),
+      }
+    })
   })
 
   const orphanSold = existingMap.filter(
@@ -366,6 +396,7 @@ export function consolidateEventTicketsForPersist(
     parseVenueMap(data.venue.venueMap),
     {
       defaultDayId: defaultInventoryDayId(data.basics.scheduleDays),
+      dayIds: (data.basics.scheduleDays ?? []).map((day) => day.id),
     },
   )
 }

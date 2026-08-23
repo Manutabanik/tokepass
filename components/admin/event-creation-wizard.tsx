@@ -38,9 +38,9 @@ import { EventSponsorsManager } from "@/components/admin/event-sponsors-manager"
 import { EventStudioPublishStep } from "@/components/admin/events/event-studio-publish-step"
 import { EventVenueStep } from "@/components/admin/event-venue-step"
 import {
-  createInventoryTicket,
   UnifiedInventoryPanel,
 } from "@/components/admin/unified-inventory-panel"
+import { createInventoryTicket } from "@/lib/inventory/create-inventory-ticket"
 import { ScheduleDaysBuilder } from "@/components/admin/schedule-days-builder"
 import { useDebounce } from "@/hooks/use-debounce"
 import { useEventFormAutosave } from "@/hooks/use-event-form-autosave"
@@ -89,6 +89,10 @@ import {
   eventCapacityOverflowMessage,
   ticketsHavePhaseOverflow,
 } from "@/lib/inventory/capacity-budget"
+import {
+  EMPTY_MAP_ENABLE_ERROR,
+  venueMapHasConfiguredSectors,
+} from "@/lib/inventory/map-enablement"
 import { assignableLogicalSectorIds } from "@/lib/inventory/logical-sectors"
 import { useEventCapacity } from "@/hooks/use-event-capacity"
 import {
@@ -473,6 +477,7 @@ export function EventCreationWizard({
       defaultDayId: defaultInventoryDayId(
         form.getValues("basics.scheduleDays"),
       ),
+      dayIds: (form.getValues("basics.scheduleDays") ?? []).map((day) => day.id),
     })
     if (!mapBackedTicketsUnchanged(current, next)) {
       form.setValue("tickets", next, { shouldDirty: true })
@@ -948,6 +953,18 @@ export function EventCreationWizard({
     form.setValue("venue.seatingLayout", venueMapToSeatingLayout(next), {
       shouldDirty: true,
     })
+    if (!venueMapHasConfiguredSectors(next)) {
+      form.setValue("venue.includesSeatingMap", false, { shouldDirty: true })
+      form.setValue("basics.hasSeatingPlan", false, { shouldDirty: true })
+      form.setError("venue.venueMap", {
+        type: "manual",
+        message: EMPTY_MAP_ENABLE_ERROR,
+      })
+      toast.error(EMPTY_MAP_ENABLE_ERROR)
+      applyMapInventory(next)
+      return
+    }
+    form.clearErrors("venue.venueMap")
     form.setValue("venue.includesSeatingMap", true, { shouldDirty: true })
     form.setValue("basics.hasSeatingPlan", true, { shouldDirty: true })
     applyMapInventory(next)

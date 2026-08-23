@@ -41,6 +41,10 @@ import {
   resolveTicketSectorId,
 } from "@/lib/validations/ticket-sku"
 import { validateSectorModalities } from "@/lib/seating/seating-type"
+import {
+  EMPTY_MAP_ENABLE_ERROR,
+  venueMapHasConfiguredSectors,
+} from "@/lib/inventory/map-enablement"
 import { EVENT_VISIBILITY_VALUES } from "@/types/events"
 
 export const EVENT_REFUND_POLICIES = [
@@ -460,6 +464,17 @@ const eventFormObject = z
     const usesSeatingMap =
       Boolean(data.basics.hasSeatingPlan) &&
       Boolean(data.venue.includesSeatingMap)
+    if (
+      data.basics.deliveryMode !== "ONLINE" &&
+      usesSeatingMap &&
+      !venueMapHasConfiguredSectors(data.venue.venueMap)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["venue", "venueMap"],
+        message: EMPTY_MAP_ENABLE_ERROR,
+      })
+    }
     const capacitySnap = computeEventCapacity({
       tickets: data.tickets,
       venueMap: data.basics.hasSeatingPlan ? data.venue.venueMap : null,

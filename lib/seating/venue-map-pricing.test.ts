@@ -703,4 +703,40 @@ describe("venue-map-pricing", () => {
       false,
     )
   })
+
+  it("expande un sector de mapa a un ticket por día", () => {
+    const map = emptyVenueMap()
+    map.zones = [
+      {
+        id: "zone-campo",
+        name: "Campo",
+        color: "#22d3ee",
+        price: 8000,
+        polygon: [
+          { x: 0, y: 0 },
+          { x: 8, y: 0 },
+          { x: 8, y: 8 },
+        ],
+        layoutType: "general",
+        sellMode: "group",
+        rows: 1,
+        itemsPerRow: 1,
+        capacityPerUnit: 1,
+        capacity: 200,
+        labelPrefix: "Campo ",
+      },
+    ]
+    const next = syncMapBackedTickets([], map, {
+      defaultDayId: "day-a",
+      dayIds: ["day-a", "day-b"],
+    })
+    const sectorTickets = next.filter(
+      (tier) => tier.seatingSectorId === "zone-campo",
+    )
+    assert.equal(sectorTickets.length, 2)
+    assert.equal(sectorTickets[0]?.dayId, "day-a")
+    assert.equal(sectorTickets[1]?.dayId, "day-b")
+    assert.equal(sectorTickets[0]?.price, 8000)
+    assert.equal(sectorTickets[1]?.price, 8000)
+  })
 })

@@ -26,34 +26,24 @@ export function CapacityThermometer({
     customMaxCapacity,
   })
   const percent = Math.min(100, Math.round(snap.ratio * 100))
+  const totalLabel =
+    snap.venueMax > 0 ? formatNumber(snap.venueMax) : "sin aforo"
 
   return (
-    <section className="rounded-2xl border border-border bg-card p-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-foreground">
-            Capacidad del recinto
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Generales {formatNumber(snap.generalStock)} + mapa{" "}
-            {formatNumber(snap.mapCapacity)}
-            {snap.venueMax > 0
-              ? ` / ${formatNumber(snap.venueMax)} del lugar`
-              : " · definí el aforo en Ubicación"}
-          </p>
-        </div>
-        <p className="text-sm font-bold tabular-nums text-foreground">
-          {formatNumber(snap.used)}
-          {snap.venueMax > 0 ? ` / ${formatNumber(snap.venueMax)}` : ""}
-        </p>
+    <section className="space-y-1.5">
+      <div className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
+        <span>Capacidad del recinto</span>
+        <span className="font-medium tabular-nums text-foreground">
+          {formatNumber(snap.used)} / {totalLabel}
+        </span>
       </div>
       <div
-        className="mt-3 h-2.5 overflow-hidden rounded-full bg-muted"
+        className="h-1 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800"
         role="meter"
         aria-valuemin={0}
         aria-valuemax={snap.venueMax || snap.used}
         aria-valuenow={snap.used}
-        aria-label="Ocupación del recinto"
+        aria-label="Stock ocupado sobre capacidad del recinto"
       >
         <div
           className={cn(
@@ -62,16 +52,14 @@ export function CapacityThermometer({
               ? "bg-amber-500"
               : percent >= 90
                 ? "bg-amber-400"
-                : "bg-emerald-500",
+                : "bg-zinc-700 dark:bg-zinc-300",
           )}
           style={{ width: `${percent}%` }}
         />
       </div>
       {snap.overCapacity ? (
-        <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-          El stock supera el aforo del recinto por {formatNumber(snap.overflow)}{" "}
-          lugares. Podés seguir, pero conviene bajar generales o ampliar el
-          lugar.
+        <p className="text-[11px] text-amber-700 dark:text-amber-300">
+          El stock supera el aforo por {formatNumber(snap.overflow)} lugares.
         </p>
       ) : null}
     </section>
