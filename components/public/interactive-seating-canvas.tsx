@@ -43,7 +43,9 @@ import {
   resolveElementPublicPrice,
   resolveVenueUnitPrice,
   storefrontFocusCard,
+  storefrontHoldSectorId,
   storefrontItemFromElement,
+  storefrontItemFromElementSeat,
   storefrontItemFromZone,
 } from "@/lib/seating/storefront-selection"
 import {
@@ -684,6 +686,7 @@ export function InteractiveSeatingCanvas({
     const tableElement = (map.elements ?? []).find(
       (element) =>
         isTablePurchaseSku(element) &&
+        element.sellMode !== "per_seat" &&
         (element.id === seat.sectorId ||
           element.seats.some((entry) => entry.id === seat.id)),
     )
@@ -697,6 +700,15 @@ export function InteractiveSeatingCanvas({
       }
     }
 
+    const parentElement = (map.elements ?? []).find(
+      (element) =>
+        element.id === seat.sectorId ||
+        element.seats.some((entry) => entry.id === seat.id),
+    )
+    const holdSectorId = parentElement
+      ? storefrontHoldSectorId(parentElement, map)
+      : seat.sectorId
+
     vibrateTap()
     markActivity()
     if (onPickSeat) {
@@ -704,7 +716,7 @@ export function InteractiveSeatingCanvas({
         id: seat.id,
         row: seat.row,
         number: seat.number,
-        sectorId: seat.sectorId,
+        sectorId: holdSectorId,
         sectorName: seat.sectorName,
         price,
         color: seat.color,
@@ -716,7 +728,7 @@ export function InteractiveSeatingCanvas({
         id: seat.id,
         row: seat.row,
         number: seat.number,
-        sectorId: seat.sectorId,
+        sectorId: holdSectorId,
         sectorName: seat.sectorName,
         price,
         color: seat.color,
@@ -736,6 +748,34 @@ export function InteractiveSeatingCanvas({
       markActivity()
       onPickElement(live)
       return
+    }
+    if (live.sellMode === "per_seat" && seatId) {
+      const seat = live.seats.find((entry) => entry.id === seatId)
+      const item = seat
+        ? storefrontItemFromElementSeat(live, seat, priceBySectorId, map)
+        : {
+            id: seatId,
+            name: live.label?.trim() || seatId,
+            displayName: live.label?.trim() || seatId,
+            type: "seat" as const,
+            ticketTierId: live.ticketTypeId,
+            price: resolveElementPublicPrice(live, priceBySectorId, map),
+            capacity: 1,
+            sectorId: storefrontHoldSectorId(live, map),
+            sectorName:
+              live.sectorName?.trim() || live.groupName?.trim() || undefined,
+            color: live.color,
+            sellMode: "per_seat" as const,
+            priceMode: "per_person" as const,
+            inventoryType: "SEATED_NUMERATED" as const,
+            isMappedSelection: true,
+          }
+      if (item) {
+        vibrateTap()
+        markActivity()
+        applyToggle(item)
+        return
+      }
     }
     if (live.type === "vip_chair" || seatId) {
       const match = plotSeats.find(

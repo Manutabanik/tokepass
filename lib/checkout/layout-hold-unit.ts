@@ -7,10 +7,11 @@ export type LayoutHoldUnitRow = {
 export function layoutHoldSectorCandidates(
   sectorId: string,
   layoutItemId: string,
+  extraSectorIds: readonly string[] = [],
 ): string[] {
   const seen = new Set<string>()
   const next: string[] = []
-  for (const value of [sectorId, layoutItemId]) {
+  for (const value of [sectorId, layoutItemId, ...extraSectorIds]) {
     const trimmed = value.trim()
     if (!trimmed || seen.has(trimmed)) continue
     seen.add(trimmed)

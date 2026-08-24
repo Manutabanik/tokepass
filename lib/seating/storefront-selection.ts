@@ -92,11 +92,31 @@ export function resolveVenueUnitPrice(
   return isValidPublicPrice(fallback) ? Number(fallback) : 0
 }
 
-/** Sector de stock: groupId o id del elemento. No usar zoneId (rompe el hold). */
+/** Sector de agrupación visual: groupId o id del elemento. */
 export function storefrontElementSectorId(
   element: Pick<VenueMapElement, "id" | "groupId">,
 ): string {
   return element.groupId?.trim() || element.id
+}
+
+/**
+ * Sector de hold/inventario: zona del recinto (`ticket_tiers.seating_sector_id`).
+ * Si no hay zona, cae a groupId o al id del elemento.
+ */
+export function storefrontHoldSectorId(
+  element: Pick<VenueMapElement, "id" | "groupId" | "zoneId">,
+  map?: InteractiveVenueMap | null,
+): string {
+  const zoneIds = new Set((map?.zones ?? []).map((zone) => zone.id))
+  const zoneId = element.zoneId?.trim()
+  if (zoneId && zoneIds.has(zoneId)) return zoneId
+  const groupId = element.groupId?.trim()
+  if (groupId && zoneIds.has(groupId)) return groupId
+  if (map && "x" in element) {
+    const zones = belongingZoneIds(element as VenueMapElement, map)
+    if (zones.length === 1 && zones[0]) return zones[0]
+  }
+  return storefrontElementSectorId(element)
 }
 
 export function venueElementPriceLookupKeys(
@@ -201,7 +221,7 @@ export function storefrontItemFromElement(
     ticketTierId: element.ticketTypeId,
     price: resolveElementPublicPrice(element, priceBySectorId, map),
     capacity: buyerElementCapacity(element),
-    sectorId: storefrontElementSectorId(element),
+    sectorId: storefrontHoldSectorId(element, map),
     sectorName: element.sectorName?.trim() || element.groupName?.trim() || undefined,
     color: element.color,
     sellMode: tableSku ? "group" : element.sellMode,
@@ -265,7 +285,7 @@ export function storefrontItemFromElementSeat(
       priceBySectorId,
     ),
     capacity: 1,
-    sectorId: storefrontElementSectorId(element),
+    sectorId: storefrontHoldSectorId(element, map),
     color: element.color,
     row: seat.row ?? element.label,
     number: seat.number,

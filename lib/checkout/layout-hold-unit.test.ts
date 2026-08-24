@@ -13,6 +13,13 @@ describe("layout-hold-unit", () => {
       "mesa-1",
     ])
     assert.deepEqual(layoutHoldSectorCandidates("mesa-1", "mesa-1"), ["mesa-1"])
+    assert.deepEqual(
+      layoutHoldSectorCandidates("grupo-mesas", "mesa-1", [
+        "sector-naranja",
+        "grupo-mesas",
+      ]),
+      ["grupo-mesas", "mesa-1", "sector-naranja"],
+    )
   })
 
   it("elige la unidad del sector pedido y si no, la primera libre", () => {

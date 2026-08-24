@@ -12,6 +12,7 @@ import {
   resolveElementPublicPrice,
   resolveStorefrontItemFromMap,
   storefrontFocusCard,
+  storefrontHoldSectorId,
   venueElementSelectionName,
 } from "@/lib/seating/storefront-selection"
 
@@ -96,7 +97,7 @@ describe("storefront-selection", () => {
     assert.equal(item?.sectorId, "grada-amarilla")
   })
 
-  it("no usa zoneId como sector de hold y toma el precio del sector padre", () => {
+  it("usa la zona del recinto como sector de hold y toma el precio del sector padre", () => {
     const map = emptyVenueMap()
     map.zones = [
       {
@@ -141,8 +142,12 @@ describe("storefront-selection", () => {
     const item = resolveStorefrontItemFromMap(map, "mesa-1", {
       "sector-naranja": 45000,
     })
-    assert.equal(item?.sectorId, "mesa-1")
+    assert.equal(item?.sectorId, "sector-naranja")
     assert.equal(item?.price, 45000)
+    assert.equal(
+      storefrontHoldSectorId(map.elements[0]!, map),
+      "sector-naranja",
+    )
   })
 
   it("no reemplaza Gratis del mapa por el precio del SKU padre", () => {

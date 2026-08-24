@@ -932,6 +932,36 @@ export async function holdSeatingUnitForCart(
   return { success: true, reservedUntil }
 }
 
+async function loadEventSeatingSectorIds(
+  db: CheckoutSupabase,
+  eventId: string,
+): Promise<string[]> {
+  const { data, error } = await db
+    .from("ticket_tiers")
+    .select("seating_sector_id")
+    .eq("event_id", eventId)
+  if (error) {
+    logger.error({
+      context: "checkout/cart-hold",
+      message: "hold_layout_tier_sectors_failed",
+      eventId,
+      error: error.message,
+    })
+    return []
+  }
+  const seen = new Set<string>()
+  const next: string[] = []
+  for (const row of data ?? []) {
+    const id = (
+      row as { seating_sector_id?: string | null }
+    ).seating_sector_id?.trim()
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    next.push(id)
+  }
+  return next
+}
+
 export async function holdSeatingUnitForCartByLayoutItem(
   eventId: string,
   sectorId: string,
@@ -949,6 +979,13 @@ export async function holdSeatingUnitForCartByLayoutItem(
   eventId = parsed.data.eventId
   sectorId = parsed.data.sectorId
   layoutItemId = parsed.data.layoutItemId
+  logger.info({
+    context: "checkout/cart-hold",
+    message: `Intentando reservar: eventId=${eventId}, layoutItemId=${layoutItemId}, sectorId=${sectorId}`,
+    event_id: eventId,
+    layoutItemId,
+    sectorId,
+  })
 
   const supabase = await createClient()
   const {
@@ -1054,8 +1091,13 @@ export async function holdSeatingUnitForCartByLayoutItem(
     }
   }
 
+  const tierSectorIds = await loadEventSeatingSectorIds(db, eventId)
   let lastError: string | null = null
-  for (const candidate of layoutHoldSectorCandidates(sectorId, layoutItemId)) {
+  for (const candidate of layoutHoldSectorCandidates(
+    sectorId,
+    layoutItemId,
+    tierSectorIds,
+  )) {
     const { data, error } = await db.rpc(
       "hold_seating_unit_for_cart_by_layout" as never,
       {
