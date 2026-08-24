@@ -1,3 +1,4 @@
+import { CHECKOUT_PRICES_CHANGED_ERROR } from "@/lib/checkout/price-guard"
 import {
   GENERAL_STOCK_UNAVAILABLE,
   SEAT_SELECTION_REQUIRED,
@@ -16,6 +17,7 @@ export const CHECKOUT_FEEDBACK_CODE = {
   ERR_SEAT_REQUIRED: "ERR_SEAT_REQUIRED",
   ERR_SECTOR_NOT_CONFIGURED: "ERR_SECTOR_NOT_CONFIGURED",
   ERR_AUTH: "ERR_AUTH",
+  ERR_PRICE_CHANGED: "ERR_PRICE_CHANGED",
   ERR_GENERIC: "ERR_GENERIC",
 } as const
 
@@ -72,6 +74,20 @@ export function resolveCheckoutFeedback(
   const ticketId = extras?.ticketId?.trim() || stock?.ticketId
   const ticketName = stock?.name
   const explicit = extras?.code?.trim()
+
+  if (
+    explicit === CHECKOUT_FEEDBACK_CODE.ERR_PRICE_CHANGED ||
+    error === CHECKOUT_PRICES_CHANGED_ERROR ||
+    /total de la orden no coincide con el precio vigente/i.test(error)
+  ) {
+    return {
+      code: CHECKOUT_FEEDBACK_CODE.ERR_PRICE_CHANGED,
+      message: CHECKOUT_PRICES_CHANGED_ERROR,
+      inlineMessage: CHECKOUT_PRICES_CHANGED_ERROR,
+      ticketId,
+      ticketName,
+    }
+  }
 
   if (error === "auth_required" || explicit === CHECKOUT_FEEDBACK_CODE.ERR_AUTH) {
     return {

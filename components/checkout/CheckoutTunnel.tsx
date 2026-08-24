@@ -103,6 +103,7 @@ import {
   inferCheckoutTicketId,
   resolveCheckoutFeedback,
 } from "@/lib/checkout/checkout-feedback"
+import type { CheckoutCartItemInput } from "@/lib/validations/checkout"
 import {
   SEAT_SELECTION_REQUIRED_MESSAGE,
   SEAT_UNAVAILABLE_MESSAGE,
@@ -402,6 +403,8 @@ export function CheckoutTunnel({
   const [ctaBusy, setCtaBusy] = useState(false)
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const ctaBusyRef = useRef(false)
+  const checkoutAttemptKeyRef = useRef<string | null>(null)
+  const checkoutAttemptCartRef = useRef("")
   const initiatedCheckoutRef = useRef(false)
   const checkoutBusy = isPending || ctaBusy
   const controlsLocked = checkoutBusy || purchaseLocked
@@ -1842,6 +1845,27 @@ export function CheckoutTunnel({
     return sanitizeCheckoutActionItems(items)
   }
 
+  function checkoutIdempotencyKeyFor(items: CheckoutCartItemInput[]): string {
+    const fingerprint = items
+      .map((item) => {
+        const tier = item.ticketTierId || item.ticket_tier_id || item.tierId || ""
+        const seat = item.seatingUnitId || item.seatId || item.seat_id || ""
+        return `${tier}:${item.quantity}:${seat}`
+      })
+      .sort()
+      .join("|")
+    if (
+      checkoutAttemptKeyRef.current &&
+      checkoutAttemptCartRef.current === fingerprint
+    ) {
+      return checkoutAttemptKeyRef.current
+    }
+    const key = crypto.randomUUID()
+    checkoutAttemptKeyRef.current = key
+    checkoutAttemptCartRef.current = fingerprint
+    return key
+  }
+
   async function runCheckoutBusy(task: () => Promise<void> | void) {
     if (ctaBusyRef.current || purchaseLocked) return
     ctaBusyRef.current = true
@@ -1985,6 +2009,11 @@ export function CheckoutTunnel({
 
       const captchaToken =
         sandbox || isFreeCheckout ? null : await getCheckoutCaptchaToken()
+      const idempotencyKey = checkoutIdempotencyKeyFor(items)
+      const priceGuard = {
+        displayedTotal: finalTotal,
+        idempotencyKey,
+      }
 
       const result = sandbox
         ? await startSandboxCheckout(
@@ -1997,6 +2026,7 @@ export function CheckoutTunnel({
             previewKey,
             acceptedTerms,
             captchaToken,
+            priceGuard,
           )
         : await startCheckoutWithPayment(
             eventId,
@@ -2012,6 +2042,8 @@ export function CheckoutTunnel({
               dwellMs: getCheckoutDwellMs(),
               termsAccepted: isFreeCheckout ? true : acceptedTerms,
               captchaToken,
+              displayedTotal: priceGuard.displayedTotal,
+              idempotencyKey: priceGuard.idempotencyKey,
             },
           )
 
@@ -2041,11 +2073,16 @@ export function CheckoutTunnel({
           result.paymentUrl?.trim() ||
           result.initPoint?.trim() ||
           `/checkout/success?order_id=${encodeURIComponent(result.orderId)}&sandbox=1`
+        useCheckoutStore.getState().clearCart()
         enterPaymentHold({
           paymentUrl: successUrl,
           initPoint: successUrl,
         })
         return
+      }
+      const paidUrl = result.paymentUrl ?? result.initPoint ?? ""
+      if (paidUrl.includes("/checkout/success")) {
+        useCheckoutStore.getState().clearCart()
       }
       enterPaymentHold(result)
     } catch (error) {
@@ -2117,16 +2154,26 @@ export function CheckoutTunnel({
       setCheckoutStep("tickets")
       return
     }
+    if (ctaBusyRef.current || checkoutBusy) return
+    if (isFreeCheckout) {
+      void runCheckoutBusy(async () => {
+        await buyerForm.handleSubmit(
+          (values) => {
+            setBuyer(values)
+            buyerForm.reset(values)
+            return submitCheckout(undefined, simulatePayment, values)
+          },
+          (formErrors) => {
+            handleBuyerValidationFailure(formErrors)
+          },
+        )()
+      })
+      return
+    }
     void buyerForm.handleSubmit(
       (values) => {
         setBuyer(values)
         buyerForm.reset(values)
-        if (isFreeCheckout) {
-          void runCheckoutBusy(() =>
-            submitCheckout(undefined, simulatePayment, values),
-          )
-          return
-        }
         setCheckoutStep("payment")
         panelBodyRef.current?.scrollTo({ top: 0, behavior: "smooth" })
       },
@@ -2399,7 +2446,8 @@ export function CheckoutTunnel({
   const simulatePayment = isDraftPreview || sandboxEligible
 
   function handleConfirmPay() {
-    if (!acceptedTerms || !canProceedFromCart || purchaseLocked) return
+    if (ctaBusyRef.current || checkoutBusy || purchaseLocked) return
+    if (!acceptedTerms || !canProceedFromCart) return
     if (!identityReady) {
       requestIdentity("pay")
       return
@@ -2408,24 +2456,22 @@ export function CheckoutTunnel({
       setCheckoutStep("upsell")
       return
     }
-    void buyerForm.handleSubmit(
-      (values) => {
-        void runCheckoutBusy(() =>
-          submitCheckout(undefined, simulatePayment, values),
-        )
-      },
-      (formErrors) => {
-        handleBuyerValidationFailure(formErrors)
-      },
-    )()
+    void runCheckoutBusy(async () => {
+      await buyerForm.handleSubmit(
+        (values) => submitCheckout(undefined, simulatePayment, values),
+        (formErrors) => {
+          handleBuyerValidationFailure(formErrors)
+        },
+      )()
+    })
   }
 
   function handleSandboxReserve() {
+    if (ctaBusyRef.current || checkoutBusy || purchaseLocked) return
     if (
       !acceptedTerms ||
       !(isDraftPreview || sandboxEligible) ||
-      !canProceedFromCart ||
-      purchaseLocked
+      !canProceedFromCart
     ) {
       return
     }
@@ -2433,14 +2479,14 @@ export function CheckoutTunnel({
       requestIdentity("pay")
       return
     }
-    void buyerForm.handleSubmit(
-      (values) => {
-        void runCheckoutBusy(() => submitCheckout(undefined, true, values))
-      },
-      (formErrors) => {
-        handleBuyerValidationFailure(formErrors)
-      },
-    )()
+    void runCheckoutBusy(async () => {
+      await buyerForm.handleSubmit(
+        (values) => submitCheckout(undefined, true, values),
+        (formErrors) => {
+          handleBuyerValidationFailure(formErrors)
+        },
+      )()
+    })
   }
 
   function openSeatFlow() {
@@ -3090,6 +3136,7 @@ export function CheckoutTunnel({
                     : "Procesando pago..."
                   : "Procesando pago...",
               disabled:
+                checkoutBusy ||
                 (visibleStep === "tickets" && !canProceedFromCart) ||
                 (visibleStep === "payment" && !acceptedTerms),
               locked: purchaseLocked,
@@ -3125,6 +3172,7 @@ export function CheckoutTunnel({
           optionalStep={visibleStep === "upsell"}
           hasAddedItems={hasSelectedExtras}
           disabled={
+            checkoutBusy ||
             (visibleStep === "tickets" && !canProceedFromCart) ||
             (visibleStep === "payment" && !acceptedTerms)
           }

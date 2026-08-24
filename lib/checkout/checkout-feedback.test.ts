@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
+import { CHECKOUT_PRICES_CHANGED_ERROR } from "./price-guard"
 import {
   CHECKOUT_FEEDBACK_CODE,
   CHECKOUT_NO_STOCK_INLINE,
@@ -47,6 +48,17 @@ describe("checkout feedback", () => {
     assert.equal(parts?.ticketId, TIER_ID)
     assert.equal(parts?.name, "Campo")
     assert.equal(parseGeneralStockParts(GENERAL_STOCK_UNAVAILABLE)?.ticketId, undefined)
+  })
+
+  it("maps a server price mismatch to the cart-refresh copy", () => {
+    const fromLegacy = resolveCheckoutFeedback(
+      "El total de la orden no coincide con el precio vigente.",
+    )
+    assert.equal(fromLegacy.code, CHECKOUT_FEEDBACK_CODE.ERR_PRICE_CHANGED)
+    assert.equal(fromLegacy.message, CHECKOUT_PRICES_CHANGED_ERROR)
+
+    const fromExact = resolveCheckoutFeedback(CHECKOUT_PRICES_CHANGED_ERROR)
+    assert.equal(fromExact.code, CHECKOUT_FEEDBACK_CODE.ERR_PRICE_CHANGED)
   })
 
   it("infers the highlighted ticket from the cart when the id is missing", () => {

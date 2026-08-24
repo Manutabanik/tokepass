@@ -282,7 +282,22 @@ export const CheckoutEventIdSchema = z.object({
   eventId: z.string().uuid(UUID_ERROR),
 })
 
-export const CheckoutPayloadSchema = z
+function stripCheckoutClientMoneyFields(raw: unknown) {
+  if (!raw || typeof raw !== "object") return raw
+  const value = { ...(raw as Record<string, unknown>) }
+  delete value.totalPrice
+  delete value.total_price
+  delete value.unitPrice
+  delete value.unit_price
+  delete value.price
+  delete value.clientTotal
+  delete value.client_total
+  return value
+}
+
+export const CheckoutPayloadSchema = z.preprocess(
+  stripCheckoutClientMoneyFields,
+  z
   .object({
     eventId: z.string().uuid(UUID_ERROR),
     items: z.array(CheckoutCartItemSchema).max(ABSOLUTE_MAX_ITEMS_PER_PURCHASE).optional(),
@@ -319,6 +334,8 @@ export const CheckoutPayloadSchema = z
     paymentProvider: z
       .enum(["mercadopago", "payway", "naranjax", "modo"])
       .default("mercadopago"),
+    displayedTotal: z.number().finite().min(0).optional(),
+    idempotencyKey: z.string().uuid(UUID_ERROR).optional().nullable(),
   })
   .superRefine((payload, ctx) => {
     const items = payload.items ?? []
@@ -391,7 +408,8 @@ export const CheckoutPayloadSchema = z
         message: "Cada ubicación numerada requiere cantidad 1.",
       })
     }
-  })
+  }),
+)
 
 export type CheckoutBuyer = z.infer<typeof CheckoutBuyerSchema>
 export type CheckoutPayload = z.infer<typeof CheckoutPayloadSchema>

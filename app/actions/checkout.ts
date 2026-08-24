@@ -45,7 +45,22 @@ import {
   invalidateStaleCheckoutPreferences,
 } from "@/lib/payments/stale-preferences"
 import { issueCheckoutFulfillmentCookie } from "@/lib/checkout/fulfillment-cookie"
-import { checkoutActionFailure } from "@/lib/checkout/checkout-feedback"
+import {
+  CHECKOUT_FEEDBACK_CODE,
+  checkoutActionFailure,
+} from "@/lib/checkout/checkout-feedback"
+import {
+  CHECKOUT_IDEMPOTENCY_CART_MISMATCH_ERROR,
+  CHECKOUT_IDEMPOTENCY_WINDOW_MS,
+  CHECKOUT_IN_PROGRESS_ERROR,
+  checkoutCartFingerprint,
+  checkoutTicketRowsFingerprint,
+  isReusableCheckoutOrderStatus,
+} from "@/lib/checkout/idempotency"
+import {
+  CHECKOUT_PRICES_CHANGED_ERROR,
+  displayedTotalMatchesServer,
+} from "@/lib/checkout/price-guard"
 import {
   ERR_NO_STOCK,
   ERR_SEAT_TAKEN,
@@ -810,9 +825,203 @@ async function quoteCheckoutFromDatabase(
   })
 }
 
+function isMissingIdempotencySchema(
+  error: { message?: string | null } | null | undefined,
+): boolean {
+  return Boolean(
+    error?.message &&
+      /could not find|schema cache|does not exist/i.test(error.message),
+  )
+}
+
+async function claimCheckoutIdempotencyKey(
+  db: CheckoutSupabase,
+  input: {
+    buyerId: string
+    eventId: string
+    key: string
+    fingerprint: string
+  },
+): Promise<
+  | { kind: "new" }
+  | { kind: "in_progress" }
+  | { kind: "mismatch" }
+  | { kind: "reused"; orderId: string; status: string }
+  | { kind: "unavailable" }
+> {
+  const claimed = await db.rpc("claim_checkout_idempotency_key", {
+    p_buyer_id: input.buyerId,
+    p_event_id: input.eventId,
+    p_idempotency_key: input.key,
+    p_cart_fingerprint: input.fingerprint,
+  })
+  if (claimed.error) {
+    if (!isMissingIdempotencySchema(claimed.error)) {
+      logger.error({
+        context: "checkout/idempotency",
+        message: "claim_failed",
+        eventId: input.eventId,
+        error: claimed.error.message,
+      })
+    }
+    return { kind: "unavailable" }
+  }
+  const row = Array.isArray(claimed.data) ? claimed.data[0] : claimed.data
+  if (!row) return { kind: "new" }
+  if (row.fingerprint_mismatch) return { kind: "mismatch" }
+  if (row.in_progress) return { kind: "in_progress" }
+  if (
+    row.reused &&
+    row.order_id &&
+    isReusableCheckoutOrderStatus(row.order_status)
+  ) {
+    return {
+      kind: "reused",
+      orderId: row.order_id,
+      status: row.order_status ?? "pending",
+    }
+  }
+  return { kind: "new" }
+}
+
+async function attachCheckoutIdempotencyOrder(
+  db: CheckoutSupabase,
+  input: { buyerId: string; key: string | null | undefined; orderId: string },
+): Promise<void> {
+  const key = input.key?.trim()
+  if (!key) return
+  const attached = await db.rpc("attach_checkout_idempotency_order", {
+    p_buyer_id: input.buyerId,
+    p_idempotency_key: key,
+    p_order_id: input.orderId,
+  })
+  if (attached.error && !isMissingIdempotencySchema(attached.error)) {
+    logger.error({
+      context: "checkout/idempotency",
+      message: "attach_failed",
+      orderId: input.orderId,
+      error: attached.error.message,
+    })
+  }
+}
+
+async function loadReusableCheckoutOrder(
+  db: CheckoutSupabase,
+  input: {
+    orderId: string
+    buyerId: string
+    fingerprint: string
+  },
+): Promise<{
+  orderId: string
+  promoCodeId: string | null
+  rows: ReserveTxRow[]
+} | null> {
+  const { data: order } = await db
+    .from("orders")
+    .select("id, status, total_amount, promo_code_id")
+    .eq("id", input.orderId)
+    .eq("buyer_id", input.buyerId)
+    .eq("status", "pending")
+    .maybeSingle()
+  if (!order) return null
+
+  const { data: tickets } = await db
+    .from("tickets")
+    .select("id, tier_id, seating_unit_id")
+    .eq("order_id", order.id)
+    .eq("owner_id", input.buyerId)
+  if (!tickets?.length) return null
+  if (checkoutTicketRowsFingerprint(tickets) !== input.fingerprint) return null
+
+  const totalAmount = Number(order.total_amount)
+  return {
+    orderId: order.id,
+    promoCodeId: order.promo_code_id,
+    rows: tickets.map((ticket) => ({
+      order_id: order.id,
+      ticket_id: ticket.id,
+      subtotal: 0,
+      service_charge: 0,
+      total_amount: Number.isFinite(totalAmount) ? totalAmount : 0,
+    })),
+  }
+}
+
+async function findReusablePendingCheckoutOrder(
+  db: CheckoutSupabase,
+  input: {
+    userId: string
+    eventId: string
+    fingerprint: string
+  },
+): Promise<{
+  orderId: string
+  promoCodeId: string | null
+  rows: ReserveTxRow[]
+} | null> {
+  const since = new Date(Date.now() - CHECKOUT_IDEMPOTENCY_WINDOW_MS).toISOString()
+  const { data: tickets } = await db
+    .from("tickets")
+    .select("id, order_id, tier_id, seating_unit_id")
+    .eq("event_id", input.eventId)
+    .eq("owner_id", input.userId)
+    .eq("status", "pending_payment")
+  if (!tickets?.length) return null
+
+  const byOrder = new Map<string, typeof tickets>()
+  for (const row of tickets) {
+    const orderId = row.order_id?.trim()
+    if (!orderId) continue
+    const list = byOrder.get(orderId) ?? []
+    list.push(row)
+    byOrder.set(orderId, list)
+  }
+  const orderIds = [...byOrder.keys()]
+  if (orderIds.length === 0) return null
+
+  const { data: orders } = await db
+    .from("orders")
+    .select("id, status, total_amount, promo_code_id, created_at")
+    .in("id", orderIds)
+    .eq("buyer_id", input.userId)
+    .eq("status", "pending")
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+
+  for (const order of orders ?? []) {
+    const rows = byOrder.get(order.id) ?? []
+    if (checkoutTicketRowsFingerprint(rows) !== input.fingerprint) continue
+    const totalAmount = Number(order.total_amount)
+    return {
+      orderId: order.id,
+      promoCodeId: order.promo_code_id,
+      rows: rows.map((ticket) => ({
+        order_id: order.id,
+        ticket_id: ticket.id,
+        subtotal: 0,
+        service_charge: 0,
+        total_amount: Number.isFinite(totalAmount) ? totalAmount : 0,
+      })),
+    }
+  }
+  return null
+}
+
 async function cleanupPendingOrder(orderId: string): Promise<void> {
   try {
     const admin = createAdminClient()
+    const released = await admin.rpc("release_checkout_idempotency_order", {
+      p_order_id: orderId,
+    })
+    if (released.error && !isMissingIdempotencySchema(released.error)) {
+      logger.error({
+        context: "checkout/cleanup",
+        message: "idempotency_release_failed",
+        orderId,
+        error: released.error.message,
+      })
+    }
     const { error } = await admin.rpc("expire_abandoned_order", {
       p_order_id: orderId,
     })
@@ -2115,6 +2324,8 @@ export async function startCheckoutWithPayment(
     deviceHash?: string | null
     dwellMs?: number | null
     termsAccepted?: boolean
+    displayedTotal?: number
+    idempotencyKey?: string | null
   },
 ): Promise<CheckoutResult> {
   const ctx = await getCheckoutRequestContext()
@@ -2138,6 +2349,8 @@ export async function startCheckoutWithPayment(
     termsAccepted: options?.termsAccepted,
     previewKey: options?.previewKey,
     paymentProvider: options?.paymentProvider,
+    displayedTotal: options?.displayedTotal,
+    idempotencyKey: options?.idempotencyKey,
   })
   if (!parsed.success) {
     await recordCheckoutFailure(ctx)
@@ -2388,6 +2601,20 @@ export async function startCheckoutWithPayment(
     return { success: false, error: quoted.error }
   }
 
+  const displayedTotal = payload.displayedTotal ?? options?.displayedTotal
+  const idempotencyKey = payload.idempotencyKey ?? options?.idempotencyKey ?? null
+  const cartFingerprint = checkoutCartFingerprint(cartItems)
+  if (
+    !payload.promoCodeId &&
+    !displayedTotalMatchesServer(displayedTotal, quoted.total)
+  ) {
+    await recordCheckoutFailure(ctx)
+    return checkoutActionFailure(
+      CHECKOUT_FEEDBACK_CODE.ERR_PRICE_CHANGED,
+      CHECKOUT_PRICES_CHANGED_ERROR,
+    )
+  }
+
   const isFreeOrder = quoted.total === 0
   if (!isFreeOrder && !buyer.buyerPhone.trim()) {
     await recordCheckoutFailure(ctx)
@@ -2423,6 +2650,55 @@ export async function startCheckoutWithPayment(
   })
 
   let pendingOrderId: string | null = null
+  let resumedPromoCodeId: string | null = null
+  let resumedRows: ReserveTxRow[] | null = null
+
+  if (idempotencyKey) {
+    const claim = await claimCheckoutIdempotencyKey(db, {
+      buyerId: user.id,
+      eventId: payload.eventId,
+      key: idempotencyKey,
+      fingerprint: cartFingerprint,
+    })
+    if (claim.kind === "mismatch") {
+      return { success: false, error: CHECKOUT_IDEMPOTENCY_CART_MISMATCH_ERROR }
+    }
+    if (claim.kind === "in_progress") {
+      return { success: false, error: CHECKOUT_IN_PROGRESS_ERROR }
+    }
+    if (claim.kind === "reused" && claim.status === "paid") {
+      const successUrl = `/checkout/success?order_id=${claim.orderId}`
+      return {
+        success: true,
+        tickets: [],
+        orderId: claim.orderId,
+        initPoint: successUrl,
+        paymentUrl: successUrl,
+        expiresAt: new Date().toISOString(),
+      }
+    }
+    if (claim.kind === "reused") {
+      const resumed = await loadReusableCheckoutOrder(db, {
+        orderId: claim.orderId,
+        buyerId: user.id,
+        fingerprint: cartFingerprint,
+      })
+      resumedRows = resumed?.rows ?? null
+      resumedPromoCodeId = resumed?.promoCodeId ?? null
+    }
+  }
+
+  if (!resumedRows) {
+    const reusable = await findReusablePendingCheckoutOrder(db, {
+      userId: user.id,
+      eventId: payload.eventId,
+      fingerprint: cartFingerprint,
+    })
+    if (reusable) {
+      resumedRows = reusable.rows
+      resumedPromoCodeId = reusable.promoCodeId
+    }
+  }
 
   try {
     const hasSeating = seatingItems.length > 0
@@ -2479,7 +2755,9 @@ export async function startCheckoutWithPayment(
       if (mapped) return mapped
     }
 
-    if (isGaOnly) {
+    if (resumedRows) {
+      reservation = { data: resumedRows, error: null }
+    } else if (isGaOnly) {
       const claimed = await db.rpc("claim_and_reserve_ga_cart_tx", {
         p_event_id: payload.eventId,
         p_owner_id: user.id,
@@ -2597,14 +2875,21 @@ export async function startCheckoutWithPayment(
 
     const orderId = rows[0].order_id
     pendingOrderId = orderId
+    await attachCheckoutIdempotencyOrder(db, {
+      buyerId: user.id,
+      key: idempotencyKey,
+      orderId,
+    })
     const reservedRow = rows[0] as ReserveTxRow & Partial<AtomicReserveRow>
     const reservedMerchandise = Number(
       reservedRow.total_amount ??
         (reservedRow.unit_price ?? 0) * (reservedRow.quantity ?? 0),
     )
+    const skipReservedQuoteCheck = Boolean(resumedRows && resumedPromoCodeId)
     if (
-      !Number.isFinite(reservedMerchandise) ||
-      !amountsMatch(reservedMerchandise, quoted.total)
+      !skipReservedQuoteCheck &&
+      (!Number.isFinite(reservedMerchandise) ||
+        !amountsMatch(reservedMerchandise, quoted.total))
     ) {
       await cleanupPendingOrder(orderId)
       logger.error({
@@ -2614,10 +2899,10 @@ export async function startCheckoutWithPayment(
         quoted: quoted.total,
         reserved: reservedMerchandise,
       })
-      return {
-        success: false,
-        error: "El total de la orden no coincide con el precio vigente.",
-      }
+      return checkoutActionFailure(
+        CHECKOUT_FEEDBACK_CODE.ERR_PRICE_CHANGED,
+        CHECKOUT_PRICES_CHANGED_ERROR,
+      )
     }
     const reservedTickets: ReservedTicket[] = rows.map((row) => ({
       ticket_id: row.ticket_id,
@@ -2650,7 +2935,7 @@ export async function startCheckoutWithPayment(
       captchaScore,
     })
 
-    const cleanPromoId = payload.promoCodeId
+    const cleanPromoId = resumedPromoCodeId ? null : payload.promoCodeId
     if (cleanPromoId) {
       const { data: promoRows, error: promoError } = await db.rpc(
         "apply_promo_code_to_order",
@@ -2709,6 +2994,20 @@ export async function startCheckoutWithPayment(
     if (!Number.isFinite(finalTotal) || finalTotal < 0) {
       await cleanupPendingOrder(orderId)
       return { success: false, error: "El total de la orden es inválido." }
+    }
+    if (!displayedTotalMatchesServer(displayedTotal, finalTotal)) {
+      await cleanupPendingOrder(orderId)
+      logger.error({
+        context: "checkout/reservation",
+        message: "displayed_total_mismatch",
+        eventId: payload.eventId,
+        displayed: displayedTotal,
+        charged: finalTotal,
+      })
+      return checkoutActionFailure(
+        CHECKOUT_FEEDBACK_CODE.ERR_PRICE_CHANGED,
+        CHECKOUT_PRICES_CHANGED_ERROR,
+      )
     }
 
     let initPoint: string
@@ -2793,6 +3092,7 @@ export async function startCheckoutWithPayment(
 
       initPoint = `/checkout/success?order_id=${orderId}&sandbox=1`
     } else if (Number.isFinite(finalTotal) && finalTotal <= 0) {
+      // Gratis: emitir con finalize_paid_order. Nunca abrir pasarela.
       const admin = createAdminClient()
       const { data: finalized, error: finalizeError } = await admin.rpc(
         "finalize_paid_order",
@@ -3073,6 +3373,10 @@ export async function startSandboxCheckout(
   previewKey?: string | null,
   termsAccepted = true,
   captchaToken?: string | null,
+  guard?: {
+    displayedTotal?: number
+    idempotencyKey?: string | null
+  },
 ): Promise<CheckoutResult> {
   const parsed = CheckoutPayloadSchema.safeParse({
     eventId,
@@ -3084,6 +3388,8 @@ export async function startSandboxCheckout(
     sandbox: true,
     termsAccepted,
     previewKey: normalizePreviewKey(previewKey),
+    displayedTotal: guard?.displayedTotal,
+    idempotencyKey: guard?.idempotencyKey,
   })
   if (!parsed.success) {
     return { success: false, error: formatCheckoutPayloadError(parsed.error) }
@@ -3101,6 +3407,8 @@ export async function startSandboxCheckout(
       previewKey: parsed.data.previewKey,
       termsAccepted: parsed.data.termsAccepted !== false,
       captchaToken,
+      displayedTotal: parsed.data.displayedTotal ?? guard?.displayedTotal,
+      idempotencyKey: parsed.data.idempotencyKey ?? guard?.idempotencyKey,
     },
   )
 }

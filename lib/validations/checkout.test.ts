@@ -235,6 +235,24 @@ describe("CheckoutPayloadSchema mixed inventory", () => {
     assert.equal("total" in item, false)
   })
 
+  it("keeps displayedTotal only as a comparison hint and drops payload totals", () => {
+    const parsed = CheckoutPayloadSchema.safeParse({
+      eventId,
+      buyer,
+      items: [{ tierId: generalId, quantity: 1 }],
+      totalPrice: 999999,
+      clientTotal: 1,
+      displayedTotal: 0,
+      idempotencyKey: eventId,
+    })
+    assert.equal(parsed.success, true)
+    if (!parsed.success) return
+    assert.equal("totalPrice" in parsed.data, false)
+    assert.equal("clientTotal" in parsed.data, false)
+    assert.equal(parsed.data.displayedTotal, 0)
+    assert.equal(parsed.data.idempotencyKey, eventId)
+  })
+
   it("rejects a 9-digit DNI", () => {
     const longDni = CheckoutPayloadSchema.safeParse({
       eventId,

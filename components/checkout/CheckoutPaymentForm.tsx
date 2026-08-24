@@ -1,7 +1,7 @@
 "use client"
 
 import { ChevronDown } from "lucide-react"
-import { useMemo, useState, type FormEvent } from "react"
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
 import type { FieldErrors } from "react-hook-form"
 
 import type { ValidatedPromo } from "@/app/actions/coupons"
@@ -96,6 +96,13 @@ export function CheckoutPaymentForm({
 }) {
   const buyer = useCheckoutStore((state) => state.buyer)
   const cartLines = useCheckoutStore((state) => state.lines)
+  const payLockRef = useRef(false)
+
+  useEffect(() => {
+    if (!confirmPending && !controlsLocked) {
+      payLockRef.current = false
+    }
+  }, [confirmPending, controlsLocked])
 
   if (step === "details") {
     function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -129,6 +136,7 @@ export function CheckoutPaymentForm({
 
   function handlePaymentSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (payLockRef.current) return
     if (
       !acceptedTerms ||
       confirmPending ||
@@ -138,6 +146,7 @@ export function CheckoutPaymentForm({
     ) {
       return
     }
+    payLockRef.current = true
     if (isDraftPreview) {
       onSandboxReserve()
       return

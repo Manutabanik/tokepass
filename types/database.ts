@@ -2524,6 +2524,31 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      checkout_idempotency_keys: {
+        Row: {
+          buyer_id: string
+          idempotency_key: string
+          event_id: string
+          cart_fingerprint: string
+          order_id: string | null
+          created_at: string
+        }
+        Insert: {
+          buyer_id: string
+          idempotency_key: string
+          event_id: string
+          cart_fingerprint: string
+          order_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          event_id?: string
+          cart_fingerprint?: string
+          order_id?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       checkout_security_events: {
         Row: {
           id: string
@@ -3007,6 +3032,35 @@ export type Database = {
           p_event_id: string
         }
         Returns: number
+      }
+      claim_checkout_idempotency_key: {
+        Args: {
+          p_buyer_id: string
+          p_event_id: string
+          p_idempotency_key: string
+          p_cart_fingerprint: string
+        }
+        Returns: {
+          reused: boolean
+          in_progress: boolean
+          fingerprint_mismatch: boolean
+          order_id: string | null
+          order_status: string | null
+        }[]
+      }
+      attach_checkout_idempotency_order: {
+        Args: {
+          p_buyer_id: string
+          p_idempotency_key: string
+          p_order_id: string
+        }
+        Returns: undefined
+      }
+      release_checkout_idempotency_order: {
+        Args: {
+          p_order_id: string
+        }
+        Returns: undefined
       }
       count_user_event_tickets_for_limit: {
         Args: {
