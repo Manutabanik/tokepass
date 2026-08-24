@@ -5,6 +5,7 @@ import {
   collectLiveSeatingSectorIds,
   isRelationalIntegrityError,
   reconcileTicketTierIds,
+  reconcileTicketsWithExistingRows,
   sanitizeDeepSeatingRefs,
   sanitizeEventSubmitPayload,
   sanitizeSeatingSectorIds,
@@ -73,6 +74,41 @@ describe("sanitizeTicketTiersForPersist", () => {
     )
     assert.equal(next[0]?.id, persisted)
     assert.equal(next[1]?.id, undefined)
+    assert.equal(next[2]?.id, undefined)
+  })
+})
+
+describe("reconcileTicketsWithExistingRows", () => {
+  it("asigna id por nombre + jornada en eventos multi-día", () => {
+    const dayA = "8510c8f6-06f8-4eaa-9bc8-bb936f43f176"
+    const dayB = "1135985a-9c6b-46ba-b0a4-ee84022f7ebf"
+    const idA = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    const idB = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+    const next = reconcileTicketsWithExistingRows(
+      [
+        ticket({ name: "General", dayId: dayA }),
+        ticket({ name: "General", dayId: dayB }),
+        ticket({ name: "Estacionamiento Auto", tierType: "addon" }),
+      ],
+      [
+        {
+          id: idA,
+          name: "General",
+          day_id: dayA,
+          tier_type: "general",
+          seating_sector_id: null,
+        },
+        {
+          id: idB,
+          name: "General",
+          day_id: dayB,
+          tier_type: "general",
+          seating_sector_id: null,
+        },
+      ],
+    )
+    assert.equal(next[0]?.id, idA)
+    assert.equal(next[1]?.id, idB)
     assert.equal(next[2]?.id, undefined)
   })
 })

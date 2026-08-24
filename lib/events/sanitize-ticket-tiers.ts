@@ -1,5 +1,7 @@
+import { normalizeDayId } from "@/lib/event-schedule"
 import { assignableLogicalSectorIds } from "@/lib/inventory/logical-sectors"
 import { eventHasActiveSeatingMap } from "@/lib/inventory/map-enablement"
+import { ticketFamilyNameKey } from "@/lib/inventory/synced-day-tickets"
 import { listVenuePriceGroups } from "@/lib/seating/venue-price-groups"
 import { layoutTypeForMapSectorId } from "@/lib/seating/venue-map-pricing"
 import type { EventFormValues } from "@/lib/validations/event-form"
@@ -69,6 +71,56 @@ export function reconcileTicketTierIds(
       return withoutClientIdentity(tier)
     }
     const next = { ...tier }
+    delete next.isNew
+    return next
+  })
+}
+
+export type ExistingTicketTierRef = {
+  id: string
+  name: string
+  day_id: string | null
+  tier_type: string | null
+  seating_sector_id: string | null
+}
+
+function ticketTierReconcileKey(tier: {
+  name?: string | null
+  dayId?: string | null
+  day_id?: string | null
+  tierType?: string | null
+  tier_type?: string | null
+  seatingSectorId?: string | null
+  seating_sector_id?: string | null
+}): string {
+  const dayId =
+    normalizeDayId(tier.dayId ?? tier.day_id ?? undefined) ?? ""
+  const tierType = (tier.tierType ?? tier.tier_type ?? "general")
+    .trim()
+    .toLowerCase()
+  const sector = (tier.seatingSectorId ?? tier.seating_sector_id ?? "")
+    .trim()
+  return [ticketFamilyNameKey(tier.name), dayId, tierType, sector].join("::")
+}
+
+/**
+ * Asigna IDs de DB a tiers del formulario que coinciden por nombre + jornada.
+ * Evita SEATING_TIER_CONFIG_AMBIGUOUS cuando hay varios "General" multi-día.
+ */
+export function reconcileTicketsWithExistingRows(
+  tickets: TicketDraft[],
+  existing: Iterable<ExistingTicketTierRef>,
+): TicketDraft[] {
+  const byKey = new Map<string, string>()
+  for (const row of existing) {
+    byKey.set(ticketTierReconcileKey(row), row.id)
+  }
+
+  return tickets.map((tier) => {
+    if (tier.id) return tier
+    const matchId = byKey.get(ticketTierReconcileKey(tier))
+    if (!matchId) return tier
+    const next = { ...tier, id: matchId }
     delete next.isNew
     return next
   })

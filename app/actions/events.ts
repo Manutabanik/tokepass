@@ -150,6 +150,7 @@ import {
   collectLiveSeatingSectorIds,
   detachTicketsFromSeatingPlan,
   reconcileTicketTierIds,
+  reconcileTicketsWithExistingRows,
   resolvePersistableTicketSectorId,
   sanitizeDeepSeatingRefs,
   sanitizeSeatingSectorIds,
@@ -3518,16 +3519,19 @@ export async function updateCompleteEvent(
   const { data: existingTiers, error: existingTiersError } =
     await mutationClient
       .from("ticket_tiers")
-      .select("id")
+      .select("id, name, day_id, tier_type, seating_sector_id")
       .eq("event_id", eventId)
 
   if (existingTiersError) {
     return persistFailure(existingTiersError.message)
   }
 
-  formValues.tickets = reconcileTicketTierIds(
-    formValues.tickets,
-    (existingTiers ?? []).map((row) => row.id),
+  formValues.tickets = reconcileTicketsWithExistingRows(
+    reconcileTicketTierIds(
+      formValues.tickets,
+      (existingTiers ?? []).map((row) => row.id),
+    ),
+    existingTiers ?? [],
   )
   Object.assign(
     formValues,

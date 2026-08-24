@@ -1,3 +1,4 @@
+import { normalizeDayId, normalizeScheduleDaysFromForm } from "@/lib/event-schedule"
 import {
   collectLiveSeatingSectorIds,
   collectSeatingLayoutSectorIds,
@@ -7,8 +8,34 @@ import {
 import { healEventFormInventory } from "@/lib/inventory/heal-event-form-inventory"
 import { resolveVenueSeatingArtifactsForPersist } from "@/lib/inventory/venue-seating-persist"
 import { ticketFamilyNameKey, ticketSoldCount } from "@/lib/inventory/synced-day-tickets"
-import { normalizeDayId } from "@/lib/event-schedule"
 import type { EventFormValues } from "@/lib/validations/event-form"
+
+/** Quita entradas huérfanas sin jornada cuando ya existen filas por día. */
+function collapseMultiDayOrphanTickets(
+  tickets: EventFormValues["tickets"],
+  isMultiDay: boolean,
+  scheduleDayIds: readonly string[],
+): EventFormValues["tickets"] {
+  if (!isMultiDay || scheduleDayIds.length < 2) return tickets
+
+  const perDayFamilyNames = new Set<string>()
+  for (const tier of tickets) {
+    const dayId = normalizeDayId(tier.dayId)
+    if (!dayId || !scheduleDayIds.includes(dayId)) continue
+    if (tier.tierType === "addon" || tier.tierType === "bundle") continue
+    perDayFamilyNames.add(ticketFamilyNameKey(tier.name))
+  }
+  if (perDayFamilyNames.size === 0) return tickets
+
+  return tickets.filter((tier) => {
+    if (normalizeDayId(tier.dayId)) return true
+    if (tier.tierType === "addon" || tier.tierType === "bundle") return true
+    if (tier.bundleType === "multi_day_pass") return true
+    const nameKey = ticketFamilyNameKey(tier.name)
+    if (!perDayFamilyNames.has(nameKey)) return true
+    return ticketSoldCount(tier) > 0
+  })
+}
 
 function dedupeTicketsForPersist(
   tickets: EventFormValues["tickets"],
@@ -101,8 +128,17 @@ export function prepareEventForPersist(
       extraIds: options.extraSectorIds,
     })
 
+  const scheduleDayIds = next.basics.isMultiDay
+    ? normalizeScheduleDaysFromForm(next.basics.scheduleDays ?? []).map(
+        (day) => day.id,
+      )
+    : []
   const coerced = dedupeTicketsForPersist(
-    coerceTicketsToLayoutSectors(next.tickets ?? [], layoutSectorIds),
+    collapseMultiDayOrphanTickets(
+      coerceTicketsToLayoutSectors(next.tickets ?? [], layoutSectorIds),
+      Boolean(next.basics.isMultiDay),
+      scheduleDayIds,
+    ),
   )
 
   next = {
