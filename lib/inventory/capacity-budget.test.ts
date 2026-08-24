@@ -10,6 +10,7 @@ import {
   ticketInventorySignature,
   ticketPhasesExceedParent,
   venueCapacityBudget,
+  venueCapacityPersistError,
 } from "@/lib/inventory/capacity-budget"
 import type { EventFormValues } from "@/lib/validations/event-form"
 
@@ -112,6 +113,17 @@ describe("capacity-budget", () => {
       ticket({ tierType: "addon", capacity: 200, name: "Merch" }),
     ]
     assert.equal(sumVenueOccupyingTicketStock(tickets), 100)
+  })
+
+  it("venueCapacityPersistError rechaza overflow recalculado en servidor", () => {
+    const general = ticket({ tierType: "general", capacity: 1200 })
+    const error = venueCapacityPersistError({
+      tickets: [general],
+      venue: { capacity: 1000 },
+      basics: { deliveryMode: "PHYSICAL", hasSeatingPlan: false },
+    } as never)
+    assert.equal(typeof error, "string")
+    assert.match(error ?? "", /supera el aforo/)
   })
 
   it("no cuenta dos veces el mapa y las entradas map-backed", () => {

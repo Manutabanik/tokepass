@@ -13,6 +13,7 @@ import {
 import { useMemo, useState } from "react"
 
 import { Button } from "@/components/ui/button"
+import { parseStrictInt } from "@/lib/inventory/capacity-budget"
 import {
   Dialog,
   DialogContent,
@@ -196,7 +197,11 @@ export function BundleCreatorModal({
 
   function submit() {
     const parsedAccesses = Math.floor(Number(admitCount) || 0)
-    const parsedCapacity = Math.floor(Number(capacity) || 0)
+    const capacityParsed = parseStrictInt(capacity)
+    const parsedCapacity =
+      capacityParsed === "" || Number.isNaN(capacityParsed)
+        ? 0
+        : Math.max(0, capacityParsed)
     const resolvedPrice =
       stockSource === "own" || manualPrice != null ? Number(manualPrice) : sale
     const draft: BundleCreatorValue = {

@@ -247,6 +247,20 @@ export function eventCapacityOverflowMessage(
   return `El stock de un sector supera su cupo (${snapshot.overflow} lugares). Bajá el stock o ampliá ese sector.`
 }
 
+/** Revalida aforo en servidor; ignora totales agregados del cliente. */
+export function venueCapacityPersistError(
+  values: Parameters<typeof computeEventCapacityFromForm>[0],
+): string | null {
+  const deliveryMode =
+    values && "basics" in values
+      ? (values as EventFormValues).basics?.deliveryMode
+      : null
+  if (deliveryMode === "ONLINE") return null
+  const snap = computeEventCapacityFromForm(values)
+  if (!snap.exceeded) return null
+  return eventCapacityOverflowMessage(snap)
+}
+
 export function generalRemainingForTicket(
   snapshot: EventCapacitySnapshot,
   tier: CapacityTicket | undefined,

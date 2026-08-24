@@ -94,6 +94,7 @@ import {
 } from "@/lib/inventory/capacity-budget"
 import {
   EMPTY_MAP_ENABLE_ERROR,
+  eventHasActiveSeatingMap,
   venueMapHasConfiguredSectors,
 } from "@/lib/inventory/map-enablement"
 import { assignableLogicalSectorIds } from "@/lib/inventory/logical-sectors"
@@ -756,10 +757,16 @@ export function EventCreationWizard({
     })
     return {
       ...next,
-      tickets: applyMapCapacityToTickets(
-        next.tickets,
-        parseVenueMap(next.venue.venueMap),
-      ),
+      tickets: eventHasActiveSeatingMap({
+        hasSeatingPlan: next.basics.hasSeatingPlan,
+        includesSeatingMap: next.venue.includesSeatingMap,
+        venueMap: next.venue.venueMap,
+      })
+        ? applyMapCapacityToTickets(
+            next.tickets,
+            parseVenueMap(next.venue.venueMap),
+          )
+        : next.tickets,
     }
   }
 
@@ -849,7 +856,13 @@ export function EventCreationWizard({
       data.venue.saveVenueForReuse &&
       data.venue.venueName.trim().length >= 2
     if (canPersistVenue) {
-      const venueCapacity = Math.floor(Number(data.venue.capacity))
+      const capacitySnap = computeEventCapacityFromForm(data)
+      const venueCapacity = Math.max(
+        1,
+        capacitySnap.baseVenueCapacity ||
+          Math.floor(Number(data.venue.capacity)) ||
+          1,
+      )
       if (!Number.isFinite(venueCapacity) || venueCapacity < 1) {
         toast.error("Definí el aforo máximo del recinto.")
         goToWizardStep(WIZARD_STEP_IDENTITY)
