@@ -928,7 +928,7 @@ async function persistEventVenueFields(
     ) {
       const coreWrite = await client
         .from("events")
-        .update(eventCore as never)
+        .update(stripOptionalEventFlags(eventCore) as never)
         .eq("id", eventId)
       if (coreWrite.error) {
         return { venueId, error: coreWrite.error.message }
@@ -938,13 +938,13 @@ async function persistEventVenueFields(
     }
   } else if (
     withPicker.error &&
-    /province|department|schema cache|PGRST204|42703/i.test(
+    /province|department|has_seating_plan|schema cache|PGRST204|42703/i.test(
       withPicker.error.message,
     )
   ) {
     const coreWrite = await client
       .from("events")
-      .update(eventCore as never)
+      .update(stripOptionalEventFlags(eventCore) as never)
       .eq("id", eventId)
     if (coreWrite.error) {
       return { venueId, error: coreWrite.error.message }
@@ -1195,7 +1195,12 @@ function persistFailure(error: unknown): {
   const mapped = mapUnknownError(error)
   const code = mapped.code === "UNKNOWN" ? "SAVE_FAILED" : mapped.code
   const field = fieldFromAppError(mapped)
-  const message = persistErrorUserMessage(error, mapped.message)
+  const message =
+    mapped.code !== "SAVE_FAILED" &&
+    mapped.code !== "UNKNOWN" &&
+    mapped.code !== "INVENTORY_SYNC"
+      ? mapped.message
+      : persistErrorUserMessage(error, mapped.message)
   return {
     success: false,
     error: message,
@@ -1691,19 +1696,65 @@ async function resyncEventSeatingUnitsAfterMapSave(
 async function detachInactiveMapTiersInDatabase(
   client: SupabaseClient<Database>,
   eventId: string,
+  keepTierIds: Iterable<string> = [],
 ): Promise<string | null> {
-  const { error } = await client
+  const keep = new Set(
+    [...keepTierIds].filter((id) => typeof id === "string" && id.trim().length > 0),
+  )
+  const { data: tiers, error: loadError } = await client
     .from("ticket_tiers")
-    .update({
-      seating_sector_id: null,
-      layout_type: "general",
-      capacity_per_unit: 1,
-      zone_id: null,
-      updated_at: new Date().toISOString(),
-    } as never)
+    .select("id, sold, seating_sector_id")
     .eq("event_id", eventId)
-    .not("seating_sector_id", "is", null)
-  return error?.message ?? null
+  if (loadError) return loadError.message
+
+  for (const tier of tiers ?? []) {
+    const sold = Math.max(0, Number(tier.sold) || 0)
+    const hasSector = Boolean(tier.seating_sector_id?.trim())
+    if (!hasSector && (sold > 0 || keep.has(tier.id))) continue
+
+    if (sold > 0 && hasSector) {
+      const { error } = await client
+        .from("ticket_tiers")
+        .update({
+          seating_sector_id: null,
+          layout_type: "general",
+          capacity_per_unit: 1,
+          zone_id: null,
+          updated_at: new Date().toISOString(),
+        } as never)
+        .eq("id", tier.id)
+        .eq("event_id", eventId)
+      if (error) return error.message
+      continue
+    }
+
+    if (!keep.has(tier.id)) {
+      const { error } = await client
+        .from("ticket_tiers")
+        .delete()
+        .eq("id", tier.id)
+        .eq("event_id", eventId)
+      if (error) return error.message
+      continue
+    }
+
+    if (hasSector) {
+      const { error } = await client
+        .from("ticket_tiers")
+        .update({
+          seating_sector_id: null,
+          layout_type: "general",
+          capacity_per_unit: 1,
+          zone_id: null,
+          updated_at: new Date().toISOString(),
+        } as never)
+        .eq("id", tier.id)
+        .eq("event_id", eventId)
+      if (error) return error.message
+    }
+  }
+
+  return null
 }
 
 function normalizeSectorLabel(value: string | null | undefined) {
@@ -3327,10 +3378,9 @@ export async function createCompleteEvent(
   if (materializeError) {
     return persistFailure(materializeError)
   }
-  const seatingCapacityError = await syncTicketCapacityFromSeatingUnits(
-    rpcClient,
-    String(eventId),
-  )
+  const seatingCapacityError = createMapActive
+    ? await syncTicketCapacityFromSeatingUnits(rpcClient, String(eventId))
+    : null
   if (seatingCapacityError) return persistFailure(seatingCapacityError)
   const capacityError = await assertPersistedInventoryCapacity(
     rpcClient,
@@ -3417,12 +3467,18 @@ export async function updateCompleteEvent(
 
   const { data: event, error: eventError } = await reader
     .from("events")
-    .select("id, organizer_id, image_url, flyer_url, date, ends_at, schedule_days, venue_id")
+    .select(
+      "id, organizer_id, image_url, flyer_url, date, ends_at, schedule_days, venue_id, description",
+    )
     .eq("id", eventId)
     .maybeSingle()
 
   if (eventError || !event) {
     return { success: false, error: "Evento no encontrado." }
+  }
+
+  if (!formValues.basics.description?.trim()) {
+    formValues.basics.description = event.description?.trim() || "Borrador"
   }
 
   const isApprovedOrganizer =
@@ -3527,6 +3583,7 @@ export async function updateCompleteEvent(
     const detachError = await detachInactiveMapTiersInDatabase(
       mutationClient,
       eventId,
+      formValues.tickets.map((tier) => tier.id ?? ""),
     )
     if (detachError) {
       return persistFailure(detachError)
@@ -3693,10 +3750,9 @@ export async function updateCompleteEvent(
   if (materializeError) {
     return persistFailure(materializeError)
   }
-  const seatingCapacityError = await syncTicketCapacityFromSeatingUnits(
-    mutationClient,
-    eventId,
-  )
+  const seatingCapacityError = mapActive
+    ? await syncTicketCapacityFromSeatingUnits(mutationClient, eventId)
+    : null
   if (seatingCapacityError) return persistFailure(seatingCapacityError)
   const capacityError = await assertPersistedInventoryCapacity(
     mutationClient,

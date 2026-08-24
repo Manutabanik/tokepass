@@ -926,7 +926,7 @@ export function EventCreationWizard({
       if (!persist.success) {
       reportPersistError(
         persist.error,
-        "No pudimos guardar los cambios. Revisá tu conexión a internet e intentá de nuevo",
+        "No pudimos guardar los cambios. Revisá los datos del evento e intentá de nuevo",
       )
         return false
       }

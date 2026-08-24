@@ -94,7 +94,8 @@ export const APP_ERRORS: Record<AppErrorCode, AppError> = {
   INVENTORY_SYNC: {
     code: "INVENTORY_SYNC",
     title: "No pudimos guardar los cambios",
-    message: "No pudimos actualizar las entradas. Revisá tu conexión e intentá guardar de nuevo.",
+    message:
+      "No pudimos sincronizar el inventario. Revisá entradas y mapa e intentá de nuevo.",
     retryable: true,
     action: { step: 2, label: "Revisar entradas" },
   },
@@ -141,8 +142,9 @@ export const APP_ERRORS: Record<AppErrorCode, AppError> = {
   SAVE_FAILED: {
     code: "SAVE_FAILED",
     title: "No pudimos guardar los cambios",
-    message: "No pudimos guardar los cambios. Revisá tu conexión a internet e intentá de nuevo.",
-    actionHint: "Revisá tu conexión e intentá guardar de nuevo.",
+    message:
+      "No pudimos guardar los cambios. Revisá los datos del evento e intentá de nuevo.",
+    actionHint: "Si el problema continúa, recargá la página y volvé a intentar.",
     retryable: true,
     action: { step: 0, label: "Revisar formulario" },
   },

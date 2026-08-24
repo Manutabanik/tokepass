@@ -950,7 +950,7 @@ export function coerceDraftEventForm(
         isMultiDay && scheduleDays[scheduleDays.length - 1]?.endTime
           ? scheduleDays[scheduleDays.length - 1].endTime
           : toDatetimeLocal(endDate),
-      description: raw.basics.description ?? "",
+      description: raw.basics.description?.trim() || "Borrador",
       flyerName: raw.basics.flyerName ?? null,
       visibility: raw.basics.visibility ?? "public",
       isMultiDay,
