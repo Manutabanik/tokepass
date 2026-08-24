@@ -196,10 +196,16 @@ export function computeEventCapacity(
   }, 0)
 
   const generalSectorCapacity = declaredSectorCapacity
-  const totalCapacity =
+  const derivedCapacity =
     mapAllocatedCapacity + declaredSectorCapacity + unboundGeneral
+  const declaredVenueCapacity = asPositiveInt(input.baseVenueCapacity)
+  const customMaxCapacity = asPositiveInt(input.customMaxCapacity)
+  const venueCeiling = customMaxCapacity || declaredVenueCapacity
   const totalAllocated = mapAllocatedCapacity + generalAllocatedCapacity
-  const overflow = sectorOverflow
+  const totalCapacity = venueCeiling > 0 ? venueCeiling : derivedCapacity
+  const venueOverflow =
+    venueCeiling > 0 ? Math.max(0, totalAllocated - venueCeiling) : 0
+  const overflow = Math.max(sectorOverflow, venueOverflow)
   const remaining = Math.max(0, totalCapacity - totalAllocated)
 
   return {
@@ -209,9 +215,9 @@ export function computeEventCapacity(
     generalAllocatedCapacity,
     totalAllocated,
     totalCapacity,
-    baseVenueCapacity: totalCapacity,
-    customMaxCapacity: null,
-    effectiveMaxCapacity: totalCapacity,
+    baseVenueCapacity: declaredVenueCapacity || derivedCapacity,
+    customMaxCapacity: customMaxCapacity > 0 ? customMaxCapacity : null,
+    effectiveMaxCapacity: venueCeiling || derivedCapacity,
     remaining,
     overflow,
     exceeded: overflow > 0,
@@ -234,12 +240,21 @@ export function computeEventCapacityFromForm(
     venueMap: hasSeatingPlan === false ? null : values?.venue?.venueMap,
     zones: hasSeatingPlan === false ? null : values?.venue?.zones,
     hasSeatingPlan,
+    baseVenueCapacity: values?.venue?.capacity,
+    customMaxCapacity: values?.venue?.customMaxCapacity,
   })
 }
 
 export function eventCapacityOverflowMessage(
   snapshot: EventCapacitySnapshot,
 ): string {
+  const venueOver =
+    snapshot.effectiveMaxCapacity > 0
+      ? Math.max(0, snapshot.totalAllocated - snapshot.effectiveMaxCapacity)
+      : 0
+  if (venueOver > 0 && venueOver >= snapshot.overflow) {
+    return `El stock supera el aforo del recinto por ${snapshot.overflow} lugares.`
+  }
   return `El stock de un sector supera su cupo (${snapshot.overflow} lugares). Bajá el stock o ampliá ese sector.`
 }
 
@@ -285,6 +300,8 @@ export function venueCapacityBudget(
     venueMap: extras?.venueMap,
     zones: extras?.zones,
     exceptTicketIndex: exceptIndex,
+    baseVenueCapacity: _venueCapacity,
+    customMaxCapacity: extras?.customMaxCapacity,
   })
   return {
     max: snapshot.effectiveMaxCapacity,

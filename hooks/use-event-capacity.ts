@@ -22,6 +22,14 @@ export function useEventCapacity(
   })
   const venueMap = useWatch({ control: form.control, name: "venue.venueMap" })
   const zones = useWatch({ control: form.control, name: "venue.zones" })
+  const venueCapacity = useWatch({
+    control: form.control,
+    name: "venue.capacity",
+  })
+  const customMaxCapacity = useWatch({
+    control: form.control,
+    name: "venue.customMaxCapacity",
+  })
   const hasSeatingPlan = Boolean(
     useWatch({ control: form.control, name: "basics.hasSeatingPlan" }),
   )
@@ -34,5 +42,7 @@ export function useEventCapacity(
       : null,
     zones: hasSeatingPlan ? (form.getValues("venue.zones") ?? zones) : null,
     hasSeatingPlan,
+    baseVenueCapacity: venueCapacity,
+    customMaxCapacity,
   })
 }

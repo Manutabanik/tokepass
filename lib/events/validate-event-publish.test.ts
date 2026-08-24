@@ -99,6 +99,24 @@ describe("evaluateEventCompleteness", () => {
     assert.ok(result.missingFields.includes(MISSING_EVENT_DAY))
   })
 
+  it("does not require ticket stock to match venue capacity", () => {
+    const result = evaluateEventCompleteness({
+      ...complete,
+      scheduleDays: [{ id: "d1", title: "Único" }],
+      tickets: [
+        {
+          name: "General",
+          dayId: "d1",
+          visibility: "public",
+          price: 5000,
+          capacity: 20,
+        },
+      ],
+    })
+    assert.equal(result.canPublish, true)
+    assert.deepEqual(result.missingFields, [])
+  })
+
   it("rejects when there is no active ticket with stock", () => {
     const result = evaluateEventCompleteness({
       ...complete,

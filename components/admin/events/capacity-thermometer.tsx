@@ -49,8 +49,8 @@ export function CapacityThermometer({
             "h-full rounded-full transition-[width,background-color]",
             snap.overCapacity
               ? "bg-amber-500"
-              : percent >= 90
-                ? "bg-amber-400"
+              : snap.remaining > 0
+                ? "bg-emerald-600 dark:bg-emerald-400"
                 : "bg-zinc-700 dark:bg-zinc-300",
           )}
           style={{ width: `${percent}%` }}
@@ -59,6 +59,10 @@ export function CapacityThermometer({
       {snap.overCapacity ? (
         <p className="text-[11px] text-amber-700 dark:text-amber-300">
           El stock supera el aforo por {formatNumber(snap.overflow)} lugares.
+        </p>
+      ) : snap.remaining > 0 ? (
+        <p className="text-[11px] text-muted-foreground">
+          Aforo disponible: {formatNumber(snap.remaining)} lugares
         </p>
       ) : null}
     </section>

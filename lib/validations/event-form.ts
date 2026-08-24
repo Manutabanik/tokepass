@@ -523,6 +523,8 @@ const eventFormObject = z
       venueMap: data.basics.hasSeatingPlan ? data.venue.venueMap : null,
       zones: data.basics.hasSeatingPlan ? data.venue.zones : null,
       hasSeatingPlan: Boolean(data.basics.hasSeatingPlan),
+      baseVenueCapacity: data.venue.capacity,
+      customMaxCapacity: data.venue.customMaxCapacity,
     })
     if (data.basics.deliveryMode !== "ONLINE" && capacitySnap.exceeded) {
       context.addIssue({

@@ -152,6 +152,52 @@ describe("publishEventSchema completeness", () => {
     assert.equal(parsed.success, true)
   })
 
+  it("allows selling fewer tickets than the venue capacity", () => {
+    const parsed = publishEventSchema.safeParse(
+      publishPayload({
+        venue: { capacity: 1000 },
+        tickets: [
+          {
+            name: "General",
+            price: 5000,
+            capacity: 200,
+            visibility: "public",
+            layoutType: "general",
+            capacityPerUnit: 1,
+            admitCount: 1,
+          },
+        ],
+      }),
+    )
+    assert.equal(parsed.success, true)
+  })
+
+  it("rejects ticket stock above the venue capacity", () => {
+    const parsed = publishEventSchema.safeParse(
+      publishPayload({
+        venue: { capacity: 100 },
+        tickets: [
+          {
+            name: "General",
+            price: 5000,
+            capacity: 200,
+            visibility: "public",
+            layoutType: "general",
+            capacityPerUnit: 1,
+            admitCount: 1,
+          },
+        ],
+      }),
+    )
+    assert.equal(parsed.success, false)
+    assert.ok(
+      parsed.success ||
+        parsed.error.issues.some((issue) =>
+          issue.path.includes("tickets"),
+        ),
+    )
+  })
+
   it("requires at least one sellable ticket", () => {
     const parsed = publishEventSchema.safeParse(
       publishPayload({

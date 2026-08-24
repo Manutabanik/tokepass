@@ -88,6 +88,7 @@ describe("capacity thermometer", () => {
     })
     assert.equal(snap.used, 40)
     assert.equal(snap.overCapacity, false)
+    assert.equal(snap.remaining, 160)
     assert.equal(snap.ratio < 1, true)
   })
 

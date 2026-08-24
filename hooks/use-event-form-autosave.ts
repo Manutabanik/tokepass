@@ -319,6 +319,7 @@ export function useEventFormAutosave(input: {
         return
       }
       setAutosaveStatus("dirty")
+      scheduleSaveRef.current()
     })
     return () => subscription.unsubscribe()
   }, [enabled, form, setAutosaveStatus, setFormValues])

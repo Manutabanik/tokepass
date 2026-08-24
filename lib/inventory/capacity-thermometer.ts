@@ -11,6 +11,7 @@ export type CapacityThermometerSnapshot = {
   mapCapacity: number
   used: number
   venueMax: number
+  remaining: number
   ratio: number
   overCapacity: boolean
   overflow: number
@@ -32,11 +33,13 @@ export function computeCapacityThermometer(input: {
   const venueMax =
     asPositiveInt(input.customMaxCapacity) || asPositiveInt(input.venueCapacity)
   const overflow = venueMax > 0 ? Math.max(0, used - venueMax) : 0
+  const remaining = venueMax > 0 ? Math.max(0, venueMax - used) : 0
   return {
     generalStock,
     mapCapacity,
     used,
     venueMax,
+    remaining,
     ratio: venueMax > 0 ? used / venueMax : 0,
     overCapacity: overflow > 0,
     overflow,

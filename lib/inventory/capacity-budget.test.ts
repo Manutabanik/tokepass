@@ -216,6 +216,36 @@ describe("capacity-budget", () => {
     assert.equal(snap.exceeded, false)
   })
 
+  it("trata el aforo del recinto como techo y no exige igualarlo", () => {
+    const general = ticket({
+      tierType: "general",
+      capacity: 200,
+      seatingSectorId: null,
+    })
+    const snap = computeEventCapacity({
+      tickets: [general],
+      baseVenueCapacity: 1000,
+    })
+    assert.equal(snap.totalAllocated, 200)
+    assert.equal(snap.totalCapacity, 1000)
+    assert.equal(snap.remaining, 800)
+    assert.equal(snap.exceeded, false)
+  })
+
+  it("marca overflow solo si el stock supera el aforo del recinto", () => {
+    const general = ticket({
+      tierType: "general",
+      capacity: 1200,
+      seatingSectorId: null,
+    })
+    const snap = computeEventCapacity({
+      tickets: [general],
+      baseVenueCapacity: 1000,
+    })
+    assert.equal(snap.exceeded, true)
+    assert.equal(snap.overflow, 200)
+  })
+
   it("marca overflow si el stock del sector supera su cupo", () => {
     const general = ticket({
       tierType: "general",
