@@ -673,6 +673,7 @@ function mapEventFormToRpcPayload(
             ? Math.max(1, Math.min(50, tier.admitCount ?? 1))
             : 1,
         total_capacity: capacity,
+        // tier_type distingue adicionales (addon) de entradas que ocupan aforo (general/seated).
         tier_type: tierType,
         bundle_type:
           tierType === "bundle"

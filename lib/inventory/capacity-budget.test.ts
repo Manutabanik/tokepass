@@ -6,6 +6,7 @@ import {
   occupiesVenueBudget,
   parseStrictInt,
   phaseLimitSum,
+  sumVenueOccupyingTicketStock,
   ticketInventorySignature,
   ticketPhasesExceedParent,
   venueCapacityBudget,
@@ -102,6 +103,15 @@ describe("capacity-budget", () => {
     assert.equal(snap.totalAllocated, 80)
     assert.equal(snap.exceeded, false)
     assert.equal(occupiesVenueBudget(bundle), false)
+  })
+
+  it("sumVenueOccupyingTicketStock ignora adicionales aunque tengan stock alto", () => {
+    const tickets = [
+      ticket({ tierType: "general", capacity: 100 }),
+      ticket({ tierType: "addon", capacity: 500, name: "Estacionamiento" }),
+      ticket({ tierType: "addon", capacity: 200, name: "Merch" }),
+    ]
+    assert.equal(sumVenueOccupyingTicketStock(tickets), 100)
   })
 
   it("no cuenta dos veces el mapa y las entradas map-backed", () => {

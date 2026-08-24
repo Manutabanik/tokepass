@@ -1,6 +1,6 @@
 import {
   asPositiveInt,
-  occupiesGeneralCapacity,
+  sumVenueOccupyingTicketStock,
 } from "@/lib/inventory/capacity-budget"
 import { venueMapCapacity } from "@/lib/seating/venue-map-geometry"
 import type { EventFormValues } from "@/lib/validations/event-form"
@@ -25,10 +25,7 @@ export function computeCapacityThermometer(input: {
 }): CapacityThermometerSnapshot {
   const tickets = input.tickets ?? []
   const mapCapacity = venueMapCapacity(parseVenueMap(input.venueMap))
-  const generalStock = tickets.reduce((sum, tier) => {
-    if (!occupiesGeneralCapacity(tier, tickets)) return sum
-    return sum + asPositiveInt(tier.capacity)
-  }, 0)
+  const generalStock = sumVenueOccupyingTicketStock(tickets)
   const used = mapCapacity + generalStock
   const venueMax =
     asPositiveInt(input.customMaxCapacity) || asPositiveInt(input.venueCapacity)

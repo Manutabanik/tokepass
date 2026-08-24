@@ -524,6 +524,7 @@ const eventFormObject = z
         message: EMPTY_MAP_ENABLE_ERROR,
       })
     }
+    // Adicionales (tierType addon) viven en tickets[] pero no consumen aforo físico.
     const capacitySnap = computeEventCapacity({
       tickets: data.tickets,
       venueMap: data.basics.hasSeatingPlan ? data.venue.venueMap : null,
