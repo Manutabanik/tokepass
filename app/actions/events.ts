@@ -1663,8 +1663,7 @@ async function persistNewEventIdentityOnly(
   )
   if (createdCheckoutError) return persistFailure(createdCheckoutError)
 
-  revalidatePath(`/admin/events/${eventId}`)
-  revalidatePath(`/admin/events/${eventId}/edit`)
+  await revalidatePersistedEvent(mutationClient, eventId)
 
   return { success: true, eventId, venueId: null }
 }
@@ -3356,13 +3355,11 @@ export async function createCompleteEvent(
   if (feePersistError) return persistFailure(feePersistError)
 
   await revalidatePersistedEvent(rpcClient, String(eventId))
-  if (!draftMode) {
-    revalidatePath("/admin")
-    revalidatePath("/")
-    revalidatePath("/superadmin")
-    revalidatePath("/super-admin")
-    revalidatePath("/superadmin/events")
-  }
+  revalidatePath("/admin", "layout")
+  revalidatePath("/", "layout")
+  revalidatePath("/superadmin", "layout")
+  revalidatePath("/super-admin", "layout")
+  revalidatePath("/superadmin/events", "page")
 
   return { success: true, eventId: String(eventId), venueId }
 }
@@ -3698,10 +3695,8 @@ export async function updateCompleteEvent(
   if (capacityError) return persistFailure(capacityError)
 
   await revalidatePersistedEvent(mutationClient, eventId)
-  if (!draftMode) {
-    revalidatePath("/admin")
-    revalidatePath("/")
-  }
+  revalidatePath("/admin", "layout")
+  revalidatePath("/", "layout")
 
   await writeSecurityAuditLog({
     actorId: userId,
@@ -3942,7 +3937,7 @@ export async function updateEventSalesStatus(
         .update({ status: "published", updated_at: new Date().toISOString() })
         .eq("id", eventId)
       if (error) return persistFailure(error.message)
-      revalidateEventSalesPaths(eventId)
+      await revalidateEventSalesPaths(mutationClient, eventId)
       return { success: true, status: "published" }
     }
     const reviewed = await publishEvent(eventId, { purgeTestTickets: true })
@@ -3962,7 +3957,7 @@ export async function updateEventSalesStatus(
       .update({ status: "paused", updated_at: new Date().toISOString() })
       .eq("id", eventId)
     if (error) return persistFailure(error.message)
-    revalidateEventSalesPaths(eventId)
+    await revalidateEventSalesPaths(mutationClient, eventId)
     return { success: true, status: "paused" }
   }
 
@@ -3978,14 +3973,17 @@ export async function updateEventSalesStatus(
     .update({ status: "draft", updated_at: new Date().toISOString() })
     .eq("id", eventId)
   if (error) return persistFailure(error.message)
-  revalidateEventSalesPaths(eventId)
+  await revalidateEventSalesPaths(mutationClient, eventId)
   return { success: true, status: "draft" }
 }
 
-function revalidateEventSalesPaths(eventId: string) {
-  revalidatePublicEventCache({ eventId, slug: eventId })
-  revalidatePath("/admin")
-  revalidatePath("/superadmin/events")
+async function revalidateEventSalesPaths(
+  client: SupabaseClient<Database>,
+  eventId: string,
+) {
+  await revalidatePersistedEvent(client, eventId)
+  revalidatePath("/admin", "layout")
+  revalidatePath("/superadmin/events", "page")
 }
 
 export async function countEventTestTickets(

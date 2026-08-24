@@ -21,6 +21,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { PriceInput } from "@/components/ui/price-input"
@@ -80,6 +88,7 @@ type Props = {
   options: BundleComponentOption[]
   initial?: Partial<BundleCreatorValue> | null
   pending?: boolean
+  presentation?: "dialog" | "sheet"
   onSave: (value: BundleCreatorValue) => void
 }
 
@@ -90,6 +99,7 @@ export function BundleCreatorModal({
   options,
   initial,
   pending = false,
+  presentation = "dialog",
   onSave,
 }: Props) {
   const [name, setName] = useState("")
@@ -227,17 +237,10 @@ export function BundleCreatorModal({
     onSave(draft)
   }
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto border-border bg-card text-foreground sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>
-            Elegí una plantilla o una regla. El precio promocional se calcula
-            solo a partir de las entradas incluidas.
-          </DialogDescription>
-        </DialogHeader>
+  const description =
+    "Elegí una plantilla o una regla. El precio promocional se calcula solo a partir de las entradas incluidas."
 
+  const formBody = (
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="bundle-name">Nombre de la promoción</Label>
@@ -617,21 +620,58 @@ export function BundleCreatorModal({
             </p>
           ) : null}
         </div>
+  )
 
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancelar
-          </Button>
-          <Button type="button" disabled={pending} onClick={submit}>
-            {pending ? <LoaderCircle className="animate-spin" /> : null}
-            Guardar combo
-          </Button>
-        </DialogFooter>
+  const footer = (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => onOpenChange(false)}
+      >
+        Cancelar
+      </Button>
+      <Button type="button" disabled={pending} onClick={submit}>
+        {pending ? <LoaderCircle className="animate-spin" /> : null}
+        Guardar combo
+      </Button>
+    </>
+  )
+
+  if (presentation === "sheet") {
+    return (
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent
+          side="right"
+          className="flex w-[min(100%,26rem)] flex-col bg-background"
+        >
+          <SheetHeader>
+            <SheetTitle>{title}</SheetTitle>
+            <SheetDescription>{description}</SheetDescription>
+          </SheetHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4">{formBody}</div>
+          <SheetFooter>{footer}</SheetFooter>
+        </SheetContent>
+      </Sheet>
+    )
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto border-border bg-card text-foreground sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        {formBody}
+        <DialogFooter>{footer}</DialogFooter>
       </DialogContent>
     </Dialog>
   )
+}
+
+export function BundleEditorSheet(
+  props: Omit<Props, "presentation">,
+) {
+  return <BundleCreatorModal {...props} presentation="sheet" />
 }
