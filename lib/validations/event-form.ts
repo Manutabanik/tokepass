@@ -637,17 +637,17 @@ const draftTicketSchema = z.preprocess(
   ),
   isNew: z.boolean().optional(),
   name: z.string().optional().default(""),
-  price: z
+  price: z.coerce
     .number()
     .min(0, "Ingresá un precio válido o marcá la opción de entrada gratuita")
     .optional(),
-  basePrice: z.number().min(0).optional(),
+  basePrice: z.coerce.number().min(0).optional(),
   feeStrategy: z.enum(TICKET_FEE_STRATEGIES).optional().default("absorb_in_price"),
   calculationMode: z
     .enum(TICKET_CALCULATION_MODES)
     .optional()
     .default("public_price"),
-  capacity: z.number().int().optional(),
+  capacity: z.coerce.number().int().optional(),
   sold: z.number().int().min(0).optional(),
   timeLimit: z.string().optional(),
   saleStartsAt: z.string().optional().default(""),
@@ -678,7 +678,7 @@ const draftTicketSchema = z.preprocess(
     .default(null),
   admitCount: z.number().int().min(1).max(50).optional().default(1),
   tierType: z.enum(INVENTORY_TIER_TYPES).optional().default("general"),
-  listPrice: z.number().min(0).nullable().optional(),
+  listPrice: z.coerce.number().min(0).nullable().optional(),
   bundleItems: z
     .array(
       z.object({
