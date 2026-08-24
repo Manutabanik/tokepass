@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import {
+  calculateTotal,
   cartItemCount,
   cartQuantityCount,
   hasActiveCheckoutSelection,
@@ -24,6 +25,19 @@ describe("checkout cart selection", () => {
     assert.equal(cartQuantityCount({ lima: 1 }), 1)
     assert.equal(cartQuantityCount({ lima: 1, pullman: 0 }), 1)
     assert.equal(hasActiveCheckoutSelection({ lima: 1 }, false), true)
+  })
+})
+
+describe("calculateTotal", () => {
+  it("sums stamped price times quantity including Gratis", () => {
+    assert.equal(
+      calculateTotal([
+        { price: 0, quantity: 2 },
+        { price: 15000, quantity: 1 },
+      ]),
+      15000,
+    )
+    assert.equal(calculateTotal([{ price: 0, quantity: 3 }]), 0)
   })
 })
 

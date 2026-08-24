@@ -1,3 +1,4 @@
+import { isValidPublicPrice } from "@/lib/checkout/public-price"
 import { centsToMoney, moneyToCents } from "@/lib/money/cents"
 
 export const CART_TICKET_LINE_PREFIX = "ticket:"
@@ -36,6 +37,16 @@ export function parseCartTicketLineId(id: string): string | null {
   const rest = id.slice(CART_TICKET_LINE_PREFIX.length)
   const sep = rest.indexOf("__")
   return sep === -1 ? rest : rest.slice(0, sep)
+}
+
+/** Prefer the stamped line price so a later catalog mix-up cannot change it. */
+export function cartLineUnitPrice(
+  line: { price: unknown },
+  catalog?: { price: unknown } | null,
+): number {
+  if (isValidPublicPrice(line.price)) return Number(line.price)
+  if (catalog && isValidPublicPrice(catalog.price)) return Number(catalog.price)
+  return 0
 }
 
 export function cartLineAmount(line: {

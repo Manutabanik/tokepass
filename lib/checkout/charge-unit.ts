@@ -52,7 +52,11 @@ export function storefrontLineTotal(item: {
   type?: string | null
   inventoryType?: string | null
 }): number {
-  const price = Math.max(0, Number(item.price) || 0)
+  const parsed = Number(item.price)
+  const price =
+    item.price === undefined || item.price === null || !Number.isFinite(parsed)
+      ? 0
+      : Math.max(0, parsed)
   if (
     item.inventoryType === "TABLES" ||
     item.type === "table" ||

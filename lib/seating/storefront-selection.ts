@@ -125,24 +125,45 @@ function belongingZoneIds(
     .map((zone) => zone.id)
 }
 
+function elementOwnPriceKeys(
+  element: VenueMapElement,
+  map?: InteractiveVenueMap | null,
+): Set<string> {
+  const keys = new Set<string>()
+  for (const key of [
+    element.id,
+    element.groupId,
+    element.zoneId,
+    ...belongingZoneIds(element, map),
+  ]) {
+    const trimmed = key?.trim()
+    if (trimmed) keys.add(trimmed)
+  }
+  return keys
+}
+
 export function resolveElementPublicPrice(
   element: VenueMapElement,
   priceBySectorId: Record<string, number> = {},
   map?: InteractiveVenueMap | null,
 ): number {
+  const own =
+    element.price === undefined || element.price === null
+      ? Number.NaN
+      : Number(element.price)
+  const ownKeys = elementOwnPriceKeys(element, map)
+  const explicitGratis = isValidPublicPrice(own) && own === 0
+
   for (const key of venueElementPriceLookupKeys(
     element,
     belongingZoneIds(element, map),
   )) {
     const trimmed = key?.trim()
     if (!trimmed || !Object.hasOwn(priceBySectorId, trimmed)) continue
+    if (explicitGratis && !ownKeys.has(trimmed)) continue
     const priced = Number(priceBySectorId[trimmed])
     if (isValidPublicPrice(priced)) return priced
   }
-  const own =
-    element.price === undefined || element.price === null
-      ? Number.NaN
-      : Number(element.price)
   if (isValidPublicPrice(own) && own > 0) return own
   if (map) {
     for (const zone of map.zones ?? []) {
@@ -324,17 +345,21 @@ export function hydrateStorefrontItemsFromMap(
       live.inventoryType === "GENERAL_ADMISSION" ||
       item.inventoryType === "GENERAL_ADMISSION"
     const ticketTierId = item.ticketTierId ?? live.ticketTierId
+    const livePrice = Number(live.price)
+    const keepGratis = isValidPublicPrice(livePrice) && livePrice === 0
     return {
       ...item,
       ...live,
       ticketTierId,
       name: live.name,
       displayName: live.displayName ?? live.name,
-      price: resolveVenueUnitPrice(
-        [ticketTierId],
-        Number(live.price),
-        priceBySectorId,
-      ),
+      price: keepGratis
+        ? 0
+        : resolveVenueUnitPrice(
+            [ticketTierId],
+            livePrice,
+            priceBySectorId,
+          ),
       capacity: isQuantityZone
         ? Math.max(1, selectedCapacity, liveCapacity)
         : liveCapacity || selectedCapacity || 1,

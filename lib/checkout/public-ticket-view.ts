@@ -1,4 +1,5 @@
 import type { TicketSelectorTier } from "@/components/public/ticket-tier-selector"
+import { firstValidPublicPrice } from "@/lib/checkout/public-price"
 import { layoutRequiresSeatSelection } from "@/lib/checkout/revalidate-seat-holds"
 import { publicTicketOfferKind } from "@/lib/checkout/ticket-offer-kind"
 import { normalizeDayId } from "@/lib/event-schedule"
@@ -142,7 +143,7 @@ export function toPublicTicketSelectorTier(
   return {
     id: tier.id,
     name: tier.name,
-    price: Number(tier.price) || 0,
+    price: firstValidPublicPrice(tier.price),
     available: publicTicketStock(tier),
     isActive: isPublicTicketActive(tier),
     hasMap: mapped,

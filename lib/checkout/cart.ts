@@ -17,6 +17,20 @@ export function sumCartQuantities(
   )
 }
 
+/**
+ * Immutable cart total: stamped `price * quantity` only.
+ * Gratis (`0`) stays `0` — never substitute a parent/category price.
+ */
+export function calculateTotal(
+  items: ReadonlyArray<{ price?: unknown; quantity?: unknown }> | null | undefined,
+): number {
+  return (items ?? []).reduce((acc, item) => {
+    const price = toCartNumber(item.price)
+    const quantity = cartLineQuantity(item.quantity)
+    return acc + price * quantity
+  }, 0)
+}
+
 export function sumCartAmounts(
   lines: ReadonlyArray<{ price?: unknown; quantity?: unknown }> | null | undefined,
 ): number {

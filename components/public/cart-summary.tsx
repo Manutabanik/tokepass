@@ -6,6 +6,7 @@ import {
   CART_TICKET_LINE_PREFIX,
   cartLineAmount,
   cartLineDisplayName,
+  cartLineUnitPrice,
   cartTicketLineId,
   parseCartTicketLineId,
 } from "@/lib/checkout/cart-lines"
@@ -82,7 +83,7 @@ export function CartSummary({
             name: catalog?.name ?? item.name,
           })
           const dateLabel = item.dateLabel?.trim() || ""
-          const unit = catalog?.price ?? item.price
+          const unit = cartLineUnitPrice(item, catalog)
           const unitPrice = formatTicketPrice(unit)
           const qtyLabel = `${item.quantity}x ${displayName} — ${unitPrice}`
           const rowKey = item.ticketTierId

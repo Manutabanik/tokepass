@@ -484,7 +484,11 @@ export function InteractiveSeatingCanvas({
     const keys = keysAndFallback.filter(
       (value): value is string => typeof value === "string",
     )
-    return resolveVenueUnitPrice(keys, Number(fallback) || 0, priceBySectorId)
+    return resolveVenueUnitPrice(
+      keys,
+      fallback === undefined || fallback === null ? 0 : Number(fallback),
+      priceBySectorId,
+    )
   }
 
   const hoverLookup = useMemo(() => {
@@ -496,7 +500,9 @@ export function InteractiveSeatingCanvas({
         seatNumber: seat.number,
         price: resolveVenueUnitPrice(
           [seat.sectorId],
-          Number(seat.price) || 0,
+          seat.price === undefined || seat.price === null
+            ? 0
+            : Number(seat.price),
           priceBySectorId,
         ),
       }
@@ -508,7 +514,9 @@ export function InteractiveSeatingCanvas({
         sectorName: zone.name,
         price: resolveVenueUnitPrice(
           [zone.id],
-          Number(zone.price) || 0,
+          zone.price === undefined || zone.price === null
+            ? 0
+            : Number(zone.price),
           priceBySectorId,
         ),
       })

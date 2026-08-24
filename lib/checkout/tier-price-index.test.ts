@@ -42,4 +42,32 @@ describe("tier unit price index", () => {
     assert.equal(unitPriceForTierId("tier-general", prices, 1), 18000)
     assert.equal(unitPriceForTierId("missing", prices, 9), 9)
   })
+
+  it("never lets another SKU sector key overwrite a ticket price", () => {
+    const generalId = "tier-general"
+    const prices = buildTierUnitPriceIndex([
+      { id: generalId, price: 155969, seatingSectorId: "sec-ga" },
+      {
+        id: "tier-parking",
+        price: 673391,
+        seatingSectorId: generalId,
+      },
+    ])
+    assert.equal(prices[generalId], 155969)
+    assert.equal(prices["tier-parking"], 673391)
+    assert.equal(unitPriceForTierId(generalId, prices, 1), 155969)
+
+    const dayScoped = buildTierUnitPriceIndex([
+      { id: generalId, price: 155969, seatingSectorId: "sec-ga" },
+      {
+        id: "tier-parking",
+        price: 673391,
+        seatingSectorId: generalId,
+      },
+      { id: "tier-naranja", price: 50000, seatingSectorId: "sec-naranja" },
+    ])
+    const merged = { ...prices, ...dayScoped }
+    assert.equal(unitPriceForTierId(generalId, merged, 1), 155969)
+    assert.equal(unitPriceForTierId("tier-parking", merged, 1), 673391)
+  })
 })

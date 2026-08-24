@@ -11,6 +11,7 @@ import {
   SOLD_OUT_TICKET_CARD_CLASS,
   isTicketCardBlocked,
 } from "@/lib/checkout/ticket-stock"
+import { publicOfferPrice } from "@/lib/checkout/public-price"
 import { formatTicketPrice } from "@/lib/format"
 import { resolveTicketSaleState } from "@/lib/inventory/ticket-sale-window"
 import { isLogicalGeneralSectorId } from "@/lib/seating/venue-map-pricing"
@@ -147,6 +148,7 @@ export function TicketTierList({
             const needsPlacePicker =
               hasInteractiveMap && ticketUsesMapSelector(tier)
             const selectedSeatName = selectedSeatMap[tier.id]
+            const offerPrice = publicOfferPrice(tier)
 
             return (
               <div
@@ -181,7 +183,9 @@ export function TicketTierList({
                         soldOut && "text-muted-foreground line-through",
                       )}
                     >
-                      {tier.price === 0 ? "Gratis" : formatTicketPrice(tier.price)}
+                      {offerPrice === 0
+                        ? "Gratis"
+                        : formatTicketPrice(offerPrice)}
                     </span>
                     {soldOut ? (
                       <span className={SOLD_OUT_BADGE_CLASS}>Agotado</span>

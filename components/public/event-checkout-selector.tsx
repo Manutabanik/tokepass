@@ -25,6 +25,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { resolveTicketHighlightBadge } from "@/lib/checkout/ticket-picker"
 import { resolveStockScarcity } from "@/lib/checkout/stock-scarcity"
+import { publicOfferPrice } from "@/lib/checkout/public-price"
 import { formatTicketPrice } from "@/lib/format"
 import { resolveSalePhases } from "@/lib/inventory/active-phase"
 import { resolveTicketSaleState } from "@/lib/inventory/ticket-sale-window"
@@ -325,6 +326,7 @@ export function EventCheckoutSelector({
 
       {hasInteractiveMap && mapSeatSelection ? (
         <SeatSelectionSheet
+          key={selectedDateId ?? "map"}
           open={isSeatSelectionOpen}
           onOpenChange={(open) => {
             setIsSeatSelectionOpen(open)
@@ -454,19 +456,13 @@ function TicketSelectionList({
     if (kindTab === "passes") {
       return listTiers.filter((tier) => ticketMatchesTab(tier, FULL_PASS_TAB_ID))
     }
-    if (activeDateId && (showDateCards || scheduleDays.length > 1)) {
+    if (activeDateId) {
       return listTiers.filter((tier) =>
         ticketVisibleOnCheckoutDay(tier, activeDateId),
       )
     }
     return listTiers.filter((tier) => !ticketMatchesTab(tier, FULL_PASS_TAB_ID))
-  }, [
-    activeDateId,
-    kindTab,
-    listTiers,
-    scheduleDays.length,
-    showDateCards,
-  ])
+  }, [activeDateId, kindTab, listTiers])
   const showBundles =
     bundleTiers.length > 0 && (kindTab === "passes" || !showKindTabs)
   const ticketGroups = useMemo<TicketDayGroup[]>(() => {
@@ -872,8 +868,6 @@ function UnifiedTicketCard({
   onQuantityChange: (tierId: string, quantity: number, max: number) => void
   onOpenSeatSelection: () => void
 }) {
-  const sale = resolveSalePhases(tier.phases)
-  const current = sale.current
   const saleState = resolveTicketSaleState({
     available: tier.available,
     capacity: tier.capacity,
@@ -890,7 +884,7 @@ function UnifiedTicketCard({
   const skuLeft = selectableTicketStock(tier)
   const max = Math.min(skuLeft, remaining)
   const highlight = resolveTicketHighlightBadge(tier, siblingTiers)
-  const unitPrice = current?.price ?? tier.price
+  const unitPrice = publicOfferPrice(tier)
   const sectorMeta =
     requiresMap && venueMap && tier.seatingSectorId
       ? resolveSectorAssignMeta(
@@ -1132,7 +1126,7 @@ export function QuantityList({
           isTicketCardBlocked(tier)
         const description = tier.description?.trim() || ""
         const highlight = resolveTicketHighlightBadge(tier, tiers)
-        const unitPrice = current?.price ?? tier.price
+        const unitPrice = publicOfferPrice(tier)
         const phaseName = current?.name
         return (
           <li

@@ -232,15 +232,23 @@ export function EventStorefront({
       },
     ]
   }, [event.date, event.id, event.scheduleDays])
-  const [selectedDate, setSelectedDate] = useState(
-    () => availableDates[0]?.id ?? event.id,
-  )
-  const selectedDateStillValid = availableDates.some(
-    (day) => day.id === selectedDate,
-  )
-  if (!selectedDateStillValid && availableDates[0] && selectedDate !== availableDates[0].id) {
-    setSelectedDate(availableDates[0].id)
-  }
+  const storedScheduleId = useCheckoutStore((state) => state.selectedScheduleId)
+  const selectedDate =
+    storedScheduleId &&
+    availableDates.some((day) => day.id === storedScheduleId)
+      ? storedScheduleId
+      : (availableDates[0]?.id ?? event.id)
+
+  useEffect(() => {
+    if (!selectedDate) return
+    const store = useCheckoutStore.getState()
+    if (store.selectedScheduleId === selectedDate) return
+    const currentValid =
+      Boolean(store.selectedScheduleId) &&
+      availableDates.some((day) => day.id === store.selectedScheduleId)
+    if (currentValid) return
+    store.setSelectedScheduleId(selectedDate)
+  }, [availableDates, selectedDate])
   const viewMode = useCheckoutStore((state) => state.viewMode)
   const [exitDialogOpen, setExitDialogOpen] = useState(false)
 
@@ -462,7 +470,9 @@ export function EventStorefront({
             <EventDateSelector
               dates={availableDates}
               selectedId={selectedDate}
-              onChange={setSelectedDate}
+              onChange={(dateId) =>
+                useCheckoutStore.getState().setSelectedScheduleId(dateId)
+              }
             />
           </motion.div>
 

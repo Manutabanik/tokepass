@@ -145,6 +145,54 @@ describe("storefront-selection", () => {
     assert.equal(item?.price, 45000)
   })
 
+  it("no reemplaza Gratis del mapa por el precio del SKU padre", () => {
+    const map = emptyVenueMap()
+    map.elements = [
+      {
+        id: "mesa-gratis",
+        type: "round_table",
+        label: "1",
+        category: "commercial",
+        sectorName: "Campo",
+        ticketTypeId: "tier-padre",
+        x: 10,
+        y: 10,
+        width: 28,
+        height: 28,
+        rotation: 0,
+        price: 0,
+        color: "#22c55e",
+        opacity: 1,
+        chairCount: 4,
+        sideA: 0,
+        sideB: 0,
+        sellMode: "group",
+        priceMode: "closed_unit",
+        capacity: 4,
+        seats: [],
+      },
+    ]
+    const item = resolveStorefrontItemFromMap(map, "mesa-gratis", {
+      "tier-padre": 50000,
+    })
+    assert.equal(item?.price, 0)
+    const hydrated = hydrateStorefrontItemsFromMap(
+      [
+        {
+          id: "mesa-gratis",
+          name: "Campo",
+          type: "table",
+          price: 0,
+          capacity: 4,
+          ticketTierId: "tier-padre",
+        },
+      ],
+      map,
+      { "tier-padre": 155000 },
+    )
+    assert.equal(hydrated[0]?.price, 0)
+  })
+
   it("acepta precio 0 como Gratis y no lo trata como vacio", () => {
     const map = emptyVenueMap()
     map.zones = [

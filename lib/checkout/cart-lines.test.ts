@@ -1,7 +1,12 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
-import { cartLineAmount, cartLineDisplayName, cartTicketLineId } from "./cart-lines"
+import {
+  cartLineAmount,
+  cartLineDisplayName,
+  cartLineUnitPrice,
+  cartTicketLineId,
+} from "./cart-lines"
 
 describe("cartLineDisplayName", () => {
   it("appends the compact date in parentheses", () => {
@@ -46,6 +51,23 @@ describe("cartTicketLineId", () => {
   it("keeps date identity in the line id", () => {
     assert.equal(cartTicketLineId("tier-1", "d1"), "ticket:tier-1__d1")
     assert.equal(cartTicketLineId("tier-1"), "ticket:tier-1__all")
+  })
+})
+
+describe("cartLineUnitPrice", () => {
+  it("keeps the stamped line price even if the catalog mixed another SKU", () => {
+    assert.equal(
+      cartLineUnitPrice({ price: 155969 }, { price: 673391 }),
+      155969,
+    )
+    assert.equal(cartLineUnitPrice({ price: 0 }, { price: 673391 }), 0)
+  })
+
+  it("falls back to the catalog only when the line has no valid price", () => {
+    assert.equal(
+      cartLineUnitPrice({ price: Number.NaN }, { price: 155969 }),
+      155969,
+    )
   })
 })
 

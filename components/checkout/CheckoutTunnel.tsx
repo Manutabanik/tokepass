@@ -113,11 +113,12 @@ import {
 } from "@/lib/checkout/revalidate-seat-holds"
 import { sanitizeCheckoutActionItems } from "@/lib/checkout/cart-item-payload"
 import { isQuantityCheckoutTier } from "@/lib/checkout/public-ticket-view"
-import { selectableTicketStock } from "@/lib/checkout/ticket-stock"
 import {
-  buildTierUnitPriceIndex,
-  unitPriceForTierId,
-} from "@/lib/checkout/tier-price-index"
+  mapSelectionUnitPrice,
+  publicOfferPrice,
+} from "@/lib/checkout/public-price"
+import { selectableTicketStock } from "@/lib/checkout/ticket-stock"
+import { buildTierUnitPriceIndex } from "@/lib/checkout/tier-price-index"
 import { redirectToCheckoutPaymentOrToast } from "@/lib/checkout-redirect"
 import {
   ensureGuestCheckoutSession,
@@ -578,26 +579,38 @@ export function CheckoutTunnel({
         : defaultCheckoutDateId(checkoutDateCards, displayTiers),
     [checkoutDateCards, displayTiers, selectedDayId],
   )
-  const [selectedDateId, setSelectedDateId] = useState<string | null>(
-    defaultDateId,
-  )
-  const [selectedDaySeed, setSelectedDaySeed] = useState(selectedDayId ?? null)
-  if ((selectedDayId ?? null) !== selectedDaySeed) {
-    setSelectedDaySeed(selectedDayId ?? null)
-    const fromParent =
-      selectedDayId &&
-      checkoutDateCards.some((card) => card.dateId === selectedDayId)
-        ? selectedDayId
-        : defaultDateId
-    if (selectedDateId !== fromParent) {
-      setSelectedDateId(fromParent)
+  const storedScheduleId = useCheckoutStore((state) => state.selectedScheduleId)
+  const selectedDateId =
+    storedScheduleId &&
+    checkoutDateCards.some((card) => card.dateId === storedScheduleId)
+      ? storedScheduleId
+      : defaultDateId
+  const dayTiers = useMemo(() => {
+    if (!selectedDateId) return displayTiers
+    return displayTiers.filter((tier) =>
+      ticketVisibleOnCheckoutDay(tier, selectedDateId),
+    )
+  }, [displayTiers, selectedDateId])
+
+  useEffect(() => {
+    const store = useCheckoutStore.getState()
+    const current = store.selectedScheduleId
+    const currentValid =
+      Boolean(current) &&
+      checkoutDateCards.some((card) => card.dateId === current)
+    if (currentValid) return
+    if (selectedDateId && current !== selectedDateId) {
+      store.setSelectedScheduleId(selectedDateId)
     }
-  }
-  const selectedDateStillValid =
-    Boolean(selectedDateId) &&
-    checkoutDateCards.some((card) => card.dateId === selectedDateId)
-  if (!selectedDateStillValid && selectedDateId !== defaultDateId) {
-    setSelectedDateId(defaultDateId)
+  }, [checkoutDateCards, selectedDateId])
+
+  function handleSelectedDateIdChange(dateId: string) {
+    const store = useCheckoutStore.getState()
+    if (store.selectedScheduleId === dateId) return
+    const seat = store.selectedSeat
+    void releaseGaCartHolds(eventId)
+    if (seat) void releaseSeatingUnitCartHold(eventId, seat.seatingUnitId)
+    store.setSelectedScheduleId(dateId)
   }
   const funnelTiers = displayTiers
   const [appliedPromo, setAppliedPromo] = useState<ValidatedPromo | null>(null)
@@ -673,7 +686,7 @@ export function CheckoutTunnel({
   }, [eventId])
 
   const checkoutTierInput = useMemo(() => {
-    const mapped = funnelTiers.map((tier) => ({
+    return dayTiers.map((tier) => ({
       id: tier.id,
       name: tier.name,
       price: tier.price,
@@ -681,14 +694,7 @@ export function CheckoutTunnel({
       seatingSectorId: tier.seatingSectorId,
       layoutType: tier.layoutType,
     }))
-    if (!selectedDateId || checkoutDateCards.length < 2) return mapped
-    const allowed = new Set(
-      funnelTiers
-        .filter((tier) => ticketVisibleOnCheckoutDay(tier, selectedDateId))
-        .map((tier) => tier.id),
-    )
-    return mapped.filter((tier) => allowed.has(tier.id))
-  }, [checkoutDateCards.length, funnelTiers, selectedDateId])
+  }, [dayTiers])
   const mapDrivenTierIds = useRef(new Set<string>())
 
   const resolveItemTierId = useCallback(
@@ -1001,14 +1007,10 @@ export function CheckoutTunnel({
       ? focusedZoneId
       : (selectedItems.find((item) => item.type === "zone")?.id ?? null)
 
-  const priceBySectorId = useMemo(() => {
-    const all = buildTierUnitPriceIndex(funnelTiers)
-    if (!selectedDateId || checkoutDateCards.length < 2) return all
-    const dayTiers = funnelTiers.filter((tier) =>
-      ticketVisibleOnCheckoutDay(tier, selectedDateId),
-    )
-    return { ...all, ...buildTierUnitPriceIndex(dayTiers) }
-  }, [checkoutDateCards.length, funnelTiers, selectedDateId])
+  const priceBySectorId = useMemo(
+    () => buildTierUnitPriceIndex(dayTiers),
+    [dayTiers],
+  )
   const liveSelectedItems = useMemo(
     () => hydrateStorefrontItemsFromMap(selectedItems, liveMap, priceBySectorId),
     [liveMap, priceBySectorId, selectedItems],
@@ -1079,7 +1081,7 @@ export function CheckoutTunnel({
     const zones = liveMap?.zones ?? []
     if (zones.length === 0) return []
     const seats = liveMap ? flattenSeatsForAvailability(liveMap) : []
-    const tierRefs = funnelTiers.map((tier) => ({
+    const tierRefs = dayTiers.map((tier) => ({
       id: tier.id,
       name: tier.name,
       price: tier.price,
@@ -1094,7 +1096,7 @@ export function CheckoutTunnel({
           zone.name,
           tierRefs,
         )
-        const tier = funnelTiers.find((item) => item.id === tierId)
+        const tier = dayTiers.find((item) => item.id === tierId)
         const summary = seatingSectorSummaries.find(
           (row) => row.sectorId === zone.id || row.sectorName === zone.name,
         )
@@ -1111,7 +1113,7 @@ export function CheckoutTunnel({
         })
       })
       .map((zone) => zone.id)
-  }, [funnelTiers, liveMap, occupancyBySeatId, seatingSectorSummaries])
+  }, [dayTiers, liveMap, occupancyBySeatId, seatingSectorSummaries])
   const heldSeatIds = useMemo(() => {
     const ids = new Set<string>()
     for (const item of selectedItems) {
@@ -1138,7 +1140,7 @@ export function CheckoutTunnel({
       seatingLayout: resolvedSeatingLayout,
       seatingBackgroundUrl,
       capacity: venueCapacity ?? undefined,
-      tiers: funnelTiers.map((tier) => ({
+      tiers: dayTiers.map((tier) => ({
         id: tier.id,
         name: tier.name,
         price: tier.price,
@@ -1161,7 +1163,7 @@ export function CheckoutTunnel({
     seatingBackgroundUrl,
     resolvedSeatingLayout,
     seatingSectorSummaries,
-    funnelTiers,
+    dayTiers,
     venueCapacity,
     venueId,
     venueName,
@@ -1198,7 +1200,7 @@ export function CheckoutTunnel({
           return {
             ...tier,
             quantity,
-            subtotal: quantity * tier.price,
+            subtotal: quantity * publicOfferPrice(tier),
             maxSelectable: Math.min(
               purchaseCapForTier({
                 layoutType: tier.layoutType,
@@ -1239,9 +1241,15 @@ export function CheckoutTunnel({
     selectedItems.length > 0 || liveSelectedItems.length > 0
   const numberedExtra = hasMapSelection ? 0 : numberedSubtotal
   const numberedExtraCount = hasMapSelection ? 0 : seatLineCount
-  const totalMapSelectedItemsPrice = Math.max(
-    storefrontSelectionTotal(liveSelectedItems),
-    storefrontSelectionTotal(selectedItems),
+  const totalMapSelectedItemsPrice = storefrontSelectionTotal(
+    liveSelectedItems.map((item) => ({
+      ...item,
+      price: mapSelectionUnitPrice(
+        item.price,
+        resolveItemTierId(item),
+        dayTiers,
+      ),
+    })),
   )
   const totalGeneralTicketsPrice = extraQuantitySubtotal + numberedExtra
   const ticketsSubtotal = roundMoney(
@@ -1303,14 +1311,11 @@ export function CheckoutTunnel({
       const isTableSku =
         item.type === "table" || item.inventoryType === "TABLES"
       const skuQuantity = Math.max(1, storefrontLineSkuQuantity(item))
-      const catalogUnit = dateSource
-        ? unitPriceForTierId(dateSource.id, priceBySectorId, dateSource.price)
-        : unitPriceForTierId(preferredId, priceBySectorId, item.price)
-      const lineTotal = catalogUnit * skuQuantity
-      const unitPrice =
-        skuQuantity > 0
-          ? centsToMoney(Math.round(moneyToCents(lineTotal) / skuQuantity))
-          : catalogUnit
+      const unitPrice = mapSelectionUnitPrice(
+        item.price,
+        dateSource?.id ?? preferredId,
+        dayTiers,
+      )
       const tableName = `Mesa completa (Incluye ${Math.max(1, Math.floor(item.capacity) || 1)} accesos)`
       const lineName = isTableSku
         ? tableName
@@ -1324,7 +1329,7 @@ export function CheckoutTunnel({
           type: item.type,
           name: item.name,
           capacity: item.type === "zone" ? 1 : item.capacity,
-          unitPrice: catalogUnit,
+          unitPrice,
           quantity: skuQuantity,
           sellMode: item.sellMode,
           priceMode: item.priceMode,
@@ -1352,15 +1357,15 @@ export function CheckoutTunnel({
           dateId: meta.dateId,
           dateLabel: ticketDateCartLabel(tier, scheduleDays),
           quantity,
-          price: unitPriceForTierId(tier.id, priceBySectorId, tier.price),
+          price: publicOfferPrice(tier),
         }
       })
     return [...seatLines, ...ticketLines]
   }, [
+    dayTiers,
     displayTiers,
     liveSelectedItems,
     mapTierIds,
-    priceBySectorId,
     resolveItemTierId,
     scheduleDays,
     selectedDateId,
@@ -1372,7 +1377,7 @@ export function CheckoutTunnel({
       displayTiers.map((tier) => ({
         id: tier.id,
         name: tier.name,
-        price: tier.price,
+        price: publicOfferPrice(tier),
       })),
     )
     store.setCartTotals({
@@ -1527,7 +1532,7 @@ export function CheckoutTunnel({
     const result = useCheckoutStore.getState().setGeneralQuantity({
       ticketTierId: tierId,
       name: tier?.name ?? "",
-      price: tier?.price ?? 0,
+      price: tier ? publicOfferPrice(tier) : 0,
       quantity: clamped,
       maxQuantity: Math.min(max, stock),
     })
@@ -1538,7 +1543,7 @@ export function CheckoutTunnel({
     if (clamped > currentQty) {
       fireAddToCartPixels({
         contentIds: [tierId],
-        value: (tier?.price ?? 0) * (clamped - currentQty),
+        value: (tier ? publicOfferPrice(tier) : 0) * (clamped - currentQty),
         numItems: clamped - currentQty,
       })
     }
@@ -1849,7 +1854,7 @@ export function CheckoutTunnel({
       useCheckoutStore.getState().setGeneralQuantity({
         ticketTierId: tierId,
         name: tier?.name ?? "",
-        price: tier?.price ?? 0,
+        price: tier ? publicOfferPrice(tier) : 0,
         quantity: 0,
       })
     }
@@ -2197,10 +2202,10 @@ export function CheckoutTunnel({
     )
     if (zone) {
       const fromZone = storefrontItemFromZone(zone, priceBySectorId)
-      const catalogPrice = unitPriceForTierId(
+      const catalogPrice = mapSelectionUnitPrice(
+        fromZone?.price ?? zone.price,
         resolvedZoneTierId,
-        priceBySectorId,
-        fromZone?.price ?? toCartNumber(zone.price),
+        dayTiers,
       )
       const result = useStorefrontSeatStore.getState().upsertSelectedItem(
         {
@@ -2340,7 +2345,7 @@ export function CheckoutTunnel({
         {
           ...item,
           ticketTierId: tierId ?? item.ticketTierId,
-          price: unitPriceForTierId(tierId, priceBySectorId, item.price),
+          price: mapSelectionUnitPrice(item.price, tierId, dayTiers),
         },
         selectionCapForItem(item),
       )
@@ -2739,7 +2744,7 @@ export function CheckoutTunnel({
     showSeatFlow && !hasInteractiveMap ? (
       <AppTakeover className="z-[100] overscroll-none">
         <AdaptiveSeatingFlow
-          key={selectedDayId ?? "all"}
+          key={selectedDateId ?? "all"}
           takeover
           pending={controlsLocked}
           maxSelectable={mapSelectionCap}
@@ -2882,7 +2887,7 @@ export function CheckoutTunnel({
               transition={{ duration: 0.28, ease: "easeInOut" }}
             >
               <motion.div
-                key="ticket-list"
+                key={selectedDateId ?? "ticket-list"}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.22, ease: "easeInOut" }}
@@ -2919,7 +2924,7 @@ export function CheckoutTunnel({
                   }
                 }}
                 selectedDateId={selectedDateId}
-                onSelectedDateIdChange={setSelectedDateId}
+                onSelectedDateIdChange={handleSelectedDateIdChange}
               />
               </motion.div>
             </motion.div>
