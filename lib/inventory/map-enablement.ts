@@ -14,3 +14,35 @@ export function seatingMapIsEnabled(input: {
 }): boolean {
   return Boolean(input.hasSeatingPlan) && Boolean(input.includesSeatingMap)
 }
+
+export function eventHasActiveSeatingMap(input: {
+  hasSeatingPlan?: boolean | null
+  includesSeatingMap?: boolean | null
+  venueMap?: unknown
+}): boolean {
+  return (
+    seatingMapIsEnabled(input) && venueMapHasConfiguredSectors(input.venueMap)
+  )
+}
+
+export function ticketsReferenceMapSectors(
+  tickets:
+    | Array<{ seatingSectorId?: string | null } | null>
+    | null
+    | undefined,
+): boolean {
+  return Boolean(
+    tickets?.some((tier) => Boolean(tier?.seatingSectorId?.trim())),
+  )
+}
+
+/** SKU mapa↔entradas solo si el mapa está activo y hay sectores asignados. */
+export function shouldEnforceVenueMapSku(input: {
+  hasSeatingPlan?: boolean | null
+  includesSeatingMap?: boolean | null
+  venueMap?: unknown
+  tickets?: Array<{ seatingSectorId?: string | null } | null> | null
+}): boolean {
+  if (!eventHasActiveSeatingMap(input)) return false
+  return ticketsReferenceMapSectors(input.tickets)
+}

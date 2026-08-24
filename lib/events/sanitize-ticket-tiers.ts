@@ -1,4 +1,5 @@
 import { assignableLogicalSectorIds } from "@/lib/inventory/logical-sectors"
+import { eventHasActiveSeatingMap } from "@/lib/inventory/map-enablement"
 import { listVenuePriceGroups } from "@/lib/seating/venue-price-groups"
 import { layoutTypeForMapSectorId } from "@/lib/seating/venue-map-pricing"
 import type { EventFormValues } from "@/lib/validations/event-form"
@@ -252,7 +253,12 @@ export function sanitizeEventSubmitPayload(
       seatingLayout: data.venue.seatingLayout,
       extraIds: assignableIds,
     })
-  const prepared = data.basics.hasSeatingPlan
+  const mapActive = eventHasActiveSeatingMap({
+    hasSeatingPlan: data.basics.hasSeatingPlan,
+    includesSeatingMap: data.venue.includesSeatingMap,
+    venueMap: data.venue.venueMap,
+  })
+  const prepared = mapActive
     ? (data.tickets ?? []).map((tier) => ({
         ...tier,
         seatingSectorId: resolvePersistableTicketSectorId({
@@ -267,7 +273,7 @@ export function sanitizeEventSubmitPayload(
     : detachTicketsFromSeatingPlan(data.tickets ?? [])
   const tickets = sanitizeSeatingSectorIds(
     sanitizeTicketTiersForPersist(prepared, options),
-    data.basics.hasSeatingPlan ? live : [],
+    mapActive ? live : [],
   )
   return sanitizeDeepSeatingRefs({ ...data, tickets }, live)
 }

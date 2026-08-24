@@ -44,6 +44,8 @@ import {
 import { validateSectorModalities } from "@/lib/seating/seating-type"
 import {
   EMPTY_MAP_ENABLE_ERROR,
+  eventHasActiveSeatingMap,
+  ticketsReferenceMapSectors,
   venueMapHasConfiguredSectors,
 } from "@/lib/inventory/map-enablement"
 import { EVENT_VISIBILITY_VALUES } from "@/types/events"
@@ -566,9 +568,13 @@ const eventFormObject = z
     }
 
     if (
-      data.basics.hasSeatingPlan &&
       data.basics.deliveryMode !== "ONLINE" &&
-      (data.venue.includesSeatingMap || data.venue.venueMap)
+      eventHasActiveSeatingMap({
+        hasSeatingPlan: data.basics.hasSeatingPlan,
+        includesSeatingMap: data.venue.includesSeatingMap,
+        venueMap: data.venue.venueMap,
+      }) &&
+      ticketsReferenceMapSectors(data.tickets)
     ) {
       for (const issue of validateSectorModalities(
         parseVenueMap(data.venue.venueMap),

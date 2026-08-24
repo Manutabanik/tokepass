@@ -1,4 +1,8 @@
 import { defaultInventoryDayId, normalizeDayId } from "@/lib/event-schedule"
+import {
+  eventHasActiveSeatingMap,
+  ticketsReferenceMapSectors,
+} from "@/lib/inventory/map-enablement"
 import { inferInventoryTierType } from "@/lib/inventory/unified-inventory"
 import { parametricZoneCapacity } from "@/lib/seating/adaptive-seating"
 import type { VenuePricingMap } from "@/lib/seating/venue-adapter"
@@ -390,7 +394,16 @@ export function consolidateEventTicketsForPersist(
   data: Pick<EventFormValues, "tickets" | "basics" | "venue">,
 ): EventFormValues["tickets"] {
   const customTickets = data.tickets ?? []
-  if (!data.basics.hasSeatingPlan) return customTickets
+  if (
+    !eventHasActiveSeatingMap({
+      hasSeatingPlan: data.basics.hasSeatingPlan,
+      includesSeatingMap: data.venue.includesSeatingMap,
+      venueMap: data.venue.venueMap,
+    }) ||
+    !ticketsReferenceMapSectors(customTickets)
+  ) {
+    return customTickets
+  }
   return syncMapBackedTickets(
     customTickets,
     parseVenueMap(data.venue.venueMap),

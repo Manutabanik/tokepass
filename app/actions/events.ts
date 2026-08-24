@@ -138,12 +138,17 @@ import {
 } from "@/lib/seating/venue-map-sku-consistency"
 import {
   collectLiveSeatingSectorIds,
+  detachTicketsFromSeatingPlan,
   reconcileTicketTierIds,
   resolvePersistableTicketSectorId,
   sanitizeDeepSeatingRefs,
   sanitizeSeatingSectorIds,
   sanitizeTicketTiersForPersist,
 } from "@/lib/events/sanitize-ticket-tiers"
+import {
+  eventHasActiveSeatingMap,
+  shouldEnforceVenueMapSku,
+} from "@/lib/inventory/map-enablement"
 
 export type OrganizerEvent = Pick<
   Event,
@@ -606,7 +611,11 @@ function mapEventFormToRpcPayload(
               }
             })()
       const layoutType = layoutTypeForInventory(tierType, tier.layoutType)
-      const requestedSectorId = data.basics.hasSeatingPlan
+      const requestedSectorId = eventHasActiveSeatingMap({
+        hasSeatingPlan: data.basics.hasSeatingPlan,
+        includesSeatingMap: data.venue.includesSeatingMap,
+        venueMap: data.venue.venueMap,
+      })
         ? tier.seatingSectorId?.trim() || null
         : null
       const seatingSectorId = resolvePersistableTicketSectorId({
@@ -1068,13 +1077,16 @@ function applyFormSeatingSectorSanitizer(
   data: EventFormValues,
   extraIds: Iterable<string> = [],
 ): EventFormValues {
-  if (!data.basics.hasSeatingPlan) {
+  if (
+    !eventHasActiveSeatingMap({
+      hasSeatingPlan: data.basics.hasSeatingPlan,
+      includesSeatingMap: data.venue.includesSeatingMap,
+      venueMap: data.venue.venueMap,
+    })
+  ) {
     return {
       ...data,
-      tickets: data.tickets.map((tier) => ({
-        ...tier,
-        seatingSectorId: null,
-      })),
+      tickets: detachTicketsFromSeatingPlan(data.tickets),
     }
   }
   const live = collectLiveSeatingSectorIds({
@@ -1167,7 +1179,16 @@ function persistFailure(error: unknown): {
 function venueMapSkuGuard(
   data: EventFormValues,
 ): { success: false; error: string; wizardConflict: WizardConflict } | null {
-  if (!data.basics.hasSeatingPlan) return null
+  if (
+    !shouldEnforceVenueMapSku({
+      hasSeatingPlan: data.basics.hasSeatingPlan,
+      includesSeatingMap: data.venue.includesSeatingMap,
+      venueMap: data.venue.venueMap,
+      tickets: data.tickets,
+    })
+  ) {
+    return null
+  }
   const healedTickets = applyMapCapacityToTickets(
     data.tickets,
     parseVenueMap(data.venue.venueMap),
@@ -1187,6 +1208,15 @@ function venueMapSkuGuard(
 
 function withHealedMapTickets(data: EventFormValues): EventFormValues {
   const tickets = consolidateEventTicketsForPersist(data)
+  if (
+    !eventHasActiveSeatingMap({
+      hasSeatingPlan: data.basics.hasSeatingPlan,
+      includesSeatingMap: data.venue.includesSeatingMap,
+      venueMap: data.venue.venueMap,
+    })
+  ) {
+    return { ...data, tickets }
+  }
   return {
     ...data,
     tickets: applyMapCapacityToTickets(

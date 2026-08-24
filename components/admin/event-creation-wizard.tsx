@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import {
   useForm,
   useWatch,
+  type FieldErrors,
   type Resolver,
 } from "react-hook-form"
 import { toast } from "sonner"
@@ -578,8 +579,30 @@ export function EventCreationWizard({
     return () => window.removeEventListener(GUIDED_ERROR_EVENT, onGuided)
   }, [goToWizardStep])
 
+  function onFormValidationError(errors: FieldErrors<EventFormValues>) {
+    console.error("ERRORES DE VALIDACIÓN DEL FORMULARIO:", errors)
+    const fieldPath = firstFieldErrorPath(errors)
+    const step = wizardStepFromPath(fieldPath ? fieldPath.split(".") : [])
+    goToWizardStep(step)
+    window.setTimeout(() => {
+      focusInvalidFormField(fieldPath)
+    }, 80)
+    if (activeStep === 0 || step === 0) {
+      toast.error("Hay campos con errores. Revisa la consola para más detalles.")
+      return
+    }
+    const capacity = computeEventCapacityFromForm(form.getValues())
+    if (capacity.exceeded) {
+      const message = eventCapacityOverflowMessage(capacity)
+      toast.error("El aforo está excedido", { description: message })
+      goToWizardStep(WIZARD_STEP_TICKETS)
+      return
+    }
+    toast.error("Hay campos con errores. Revisa la consola para más detalles.")
+  }
+
   function retryLastSave() {
-    void form.handleSubmit((data) => onSubmit(data, "draft"))()
+    void form.handleSubmit((data) => onSubmit(data, "draft"), onFormValidationError)()
   }
 
   function showWizardConflict(conflict: WizardConflict, title: string, field?: string) {
@@ -795,6 +818,7 @@ export function EventCreationWizard({
     if (intent === "publish") {
       const strict = publishEventSchema.safeParse(data)
       if (!strict.success) {
+        console.error("ERRORES DE VALIDACIÓN DEL FORMULARIO:", strict.error.flatten())
         form.clearErrors()
         applyZodIssuesToForm(form.setError, strict.error.issues)
         const first = strict.error.issues[0]
@@ -1084,28 +1108,7 @@ export function EventCreationWizard({
         className="flex min-h-full w-full flex-1 flex-col overflow-x-hidden"
         onSubmit={form.handleSubmit(
           (data) => onSubmit(data, "draft"),
-          (errors) => {
-            const fieldPath = firstFieldErrorPath(errors)
-            const step = wizardStepFromPath(
-              fieldPath ? fieldPath.split(".") : [],
-            )
-            goToWizardStep(step)
-            window.setTimeout(() => {
-              focusInvalidFormField(fieldPath)
-            }, 80)
-            if (activeStep === 0 || step === 0) {
-              toast.error("Revisá el nombre, las fechas o el flyer.")
-              return
-            }
-            const capacity = computeEventCapacityFromForm(form.getValues())
-            if (capacity.exceeded) {
-              const message = eventCapacityOverflowMessage(capacity)
-              toast.error("El aforo está excedido", { description: message })
-              goToWizardStep(WIZARD_STEP_TICKETS)
-              return
-            }
-            toast.error("Revisá los datos obligatorios.")
-          },
+          onFormValidationError,
         )}
       >
         <EventStudioShell

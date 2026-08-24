@@ -120,7 +120,7 @@ describe("validateVenueMapSkuConsistency", () => {
     assert.equal(result.ok, true)
   })
 
-  it("detecta zona group con layout numbered_seat aunque no haya tickets", () => {
+  it("no bloquea un mapa inconsistente si no hay entradas ligadas a sectores", () => {
     const map = emptyVenueMap()
     map.zones = [
       {
@@ -143,8 +143,47 @@ describe("validateVenueMapSkuConsistency", () => {
       },
     ]
     const result = validateVenueMapSkuConsistency({ map, tickets: [] })
+    assert.equal(result.ok, true)
+  })
+
+  it("sigue validando una zona reservada cuando hay un ticket ligado", () => {
+    const map = emptyVenueMap()
+    map.zones = [
+      {
+        id: "zone-mesas",
+        name: "Salon",
+        color: "#22d3ee",
+        price: 10000,
+        polygon: [
+          { x: 0, y: 0 },
+          { x: 10, y: 0 },
+          { x: 10, y: 10 },
+        ],
+        layoutType: "numbered_seat",
+        sellMode: "group",
+        rows: 2,
+        itemsPerRow: 3,
+        capacityPerUnit: 8,
+        capacity: 48,
+        labelPrefix: "Mesa ",
+      },
+    ]
+    const result = validateVenueMapSkuConsistency({
+      map,
+      tickets: [
+        {
+          name: "Salon",
+          seatingSectorId: "zone-mesas",
+          layoutType: "numbered_seat",
+          capacityPerUnit: 1,
+        },
+      ],
+    })
     assert.equal(result.ok, false)
-    assert.match(formatVenueMapSkuErrors(result.errors), /Revisá el mapa|dibujada/)
+    assert.match(
+      formatVenueMapSkuErrors(result.errors),
+      /mesa o palco|por silla|sillas del mapa/,
+    )
   })
 
   it("resume varias gradas en un mensaje accionable", () => {

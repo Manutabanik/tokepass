@@ -203,7 +203,7 @@ describe("venue-map-pricing", () => {
     assert.equal(next[0]?.capacity, 48)
   })
 
-  it("consolida inventario libre con entradas derivadas del mapa", () => {
+  it("no inventa entradas de mapa si solo hay generales sin sector", () => {
     const map = emptyVenueMap()
     map.zones = [
       {
@@ -230,8 +230,93 @@ describe("venue-map-pricing", () => {
         hasSeatingPlan: true,
         scheduleDays: [],
       },
-      venue: { venueMap: map },
+      venue: { venueMap: map, includesSeatingMap: true },
       tickets: [
+        {
+          name: "Estacionamiento",
+          price: 3000,
+          capacity: 80,
+          timeLimit: "",
+          saleStartsAt: "",
+          saleEndsAt: "",
+          bonusReward: "",
+          dayId: null,
+          visibility: "public",
+          layoutType: "general",
+          seatingSectorId: null,
+          capacityPerUnit: 1,
+          admitCount: 1,
+          tierType: "addon",
+          listPrice: null,
+          bundleItems: [],
+          bundleType: null,
+          promoDiscountType: null,
+          promoDiscountValue: 0,
+          promoRequiredQty: 1,
+          promoPayQty: 1,
+          description: "",
+          highlightBadge: null,
+        },
+      ],
+    } as Parameters<typeof consolidateEventTicketsForPersist>[0])
+    assert.equal(next.some((tier) => tier.seatingSectorId === "zone-campo"), false)
+    assert.equal(next.some((tier) => tier.name === "Estacionamiento"), true)
+  })
+
+  it("consolida inventario libre con entradas ya ligadas al mapa", () => {
+    const map = emptyVenueMap()
+    map.zones = [
+      {
+        id: "zone-campo",
+        name: "Campo",
+        color: "#22d3ee",
+        price: 8000,
+        polygon: [
+          { x: 0, y: 0 },
+          { x: 8, y: 0 },
+          { x: 8, y: 8 },
+        ],
+        layoutType: "general",
+        sellMode: "group",
+        rows: 1,
+        itemsPerRow: 1,
+        capacityPerUnit: 1,
+        capacity: 100,
+        labelPrefix: "",
+      },
+    ]
+    const next = consolidateEventTicketsForPersist({
+      basics: {
+        hasSeatingPlan: true,
+        scheduleDays: [],
+      },
+      venue: { venueMap: map, includesSeatingMap: true },
+      tickets: [
+        {
+          name: "Campo",
+          price: 8000,
+          capacity: 100,
+          timeLimit: "",
+          saleStartsAt: "",
+          saleEndsAt: "",
+          bonusReward: "",
+          dayId: null,
+          visibility: "public",
+          layoutType: "general",
+          seatingSectorId: "zone-campo",
+          capacityPerUnit: 1,
+          admitCount: 1,
+          tierType: "general",
+          listPrice: null,
+          bundleItems: [],
+          bundleType: null,
+          promoDiscountType: null,
+          promoDiscountValue: 0,
+          promoRequiredQty: 1,
+          promoPayQty: 1,
+          description: "",
+          highlightBadge: null,
+        },
         {
           name: "Estacionamiento",
           price: 3000,

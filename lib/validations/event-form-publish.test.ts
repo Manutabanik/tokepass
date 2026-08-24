@@ -7,6 +7,7 @@ import {
   MISSING_SELLABLE_TICKET,
 } from "@/lib/events/validate-event-publish"
 import { publishEventSchema } from "@/lib/validations/event-form"
+import { emptyVenueMap } from "@/types/venue-map"
 
 function publishPayload(overrides?: {
   basics?: Record<string, unknown>
@@ -103,6 +104,52 @@ describe("publishEventSchema completeness", () => {
       serviceFeePercentage: 140,
     })
     assert.equal(parsed.success, false)
+  })
+
+  it("publishes general tickets even with leftover unused map JSON", () => {
+    const leftoverMap = emptyVenueMap()
+    leftoverMap.zones = [
+      {
+        id: "zone-mesas",
+        name: "Salon",
+        color: "#22d3ee",
+        price: 10000,
+        polygon: [
+          { x: 0, y: 0 },
+          { x: 10, y: 0 },
+          { x: 10, y: 10 },
+        ],
+        layoutType: "numbered_seat",
+        sellMode: "group",
+        rows: 2,
+        itemsPerRow: 3,
+        capacityPerUnit: 8,
+        capacity: 48,
+        labelPrefix: "Mesa ",
+      },
+    ]
+    const parsed = publishEventSchema.safeParse(
+      publishPayload({
+        basics: { hasSeatingPlan: true },
+        venue: {
+          includesSeatingMap: true,
+          venueMap: leftoverMap,
+        },
+        tickets: [
+          {
+            name: "General",
+            price: 5000,
+            capacity: 100,
+            visibility: "public",
+            layoutType: "general",
+            seatingSectorId: null,
+            capacityPerUnit: 1,
+            admitCount: 1,
+          },
+        ],
+      }),
+    )
+    assert.equal(parsed.success, true)
   })
 
   it("requires at least one sellable ticket", () => {

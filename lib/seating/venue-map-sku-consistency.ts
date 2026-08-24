@@ -97,10 +97,10 @@ function mismatch(input: Omit<VenueMapSkuMismatch, "message"> & { message: strin
 }
 
 /**
- * Canonical map vs SKU check:
+ * Canonical map vs SKU check for tickets already linked to a sector:
  * - sellMode=group requires layout_type=table_combo and matching capacity_per_unit
  * - sellMode=per_seat requires layout_type=numbered_seat
- * Standing / general-admission inventory is skipped.
+ * Standing / general-admission inventory and unused leftover geometry are skipped.
  */
 export function validateVenueMapSkuConsistency(input: {
   map: InteractiveVenueMap
@@ -119,26 +119,11 @@ export function validateVenueMapSkuConsistency(input: {
 
   for (const zone of input.map.zones ?? []) {
     if (zone.layoutType === "general") continue
+    const linked = bySector.get(zone.id) ?? []
+    if (linked.length === 0) continue
     const expectedLayout = expectedLayoutForSellMode(zone.sellMode)
-    if (zone.layoutType !== expectedLayout) {
-      pushError(
-        errors,
-        mismatch({
-          sectorId: zone.id,
-          label: zone.name || "Zona",
-          sellMode: zone.sellMode,
-          expectedLayoutType: expectedLayout,
-          actualLayoutType: zone.layoutType,
-          expectedCapacityPerUnit:
-            expectedLayout === "table_combo" ? Math.max(1, zone.capacityPerUnit || 1) : 1,
-          actualCapacityPerUnit: zone.capacityPerUnit,
-            message: `La zona "${zone.name || zone.id}" está dibujada de un modo y se vende de otro. Revisá el mapa.`,
-        }),
-      )
-    }
     const expectedCapacity =
       expectedLayout === "table_combo" ? Math.max(1, zone.capacityPerUnit || 1) : 1
-    const linked = bySector.get(zone.id) ?? []
     for (const ticket of linked) {
       const actualLayout = ticketLayoutType(ticket)
       const actualCapacity = ticketCapacityPerUnit(ticket)
@@ -187,8 +172,11 @@ export function validateVenueMapSkuConsistency(input: {
     const furniture = members.filter((item) => FURNITURE_TYPES.has(item.type))
     if (furniture.length === 0) continue
 
-    const modes = new Set(furniture.map((item) => item.sellMode))
     const sectorId = priceGroupSectorId(group)
+    const linked = bySector.get(sectorId) ?? []
+    if (linked.length === 0) continue
+
+    const modes = new Set(furniture.map((item) => item.sellMode))
     if (modes.size > 1) {
       pushError(
         errors,
@@ -228,7 +216,6 @@ export function validateVenueMapSkuConsistency(input: {
 
     const expectedCapacity =
       sellMode === "group" ? elementChairCount(furniture[0]!) : 1
-    const linked = bySector.get(sectorId) ?? []
     for (const ticket of linked) {
       const actualLayout = ticketLayoutType(ticket)
       const actualCapacity = ticketCapacityPerUnit(ticket)
