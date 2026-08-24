@@ -149,7 +149,9 @@ export function PricingStep({
             : name || ticket.name || "Entrada general",
         capacity: sheet.kind === "map" ? ticket.capacity : primary.capacity,
         price: sheet.differentiate ? ticket.price : primary.price,
-        basePrice: sheet.differentiate ? ticket.basePrice : primary.price,
+        basePrice: sheet.differentiate
+          ? ticket.basePrice
+          : primary.basePrice ?? primary.price,
       })
     }
   }

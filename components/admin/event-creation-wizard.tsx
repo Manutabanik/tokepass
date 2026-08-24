@@ -197,9 +197,6 @@ const STEP_META = {
 
 const blankTicket = (): EventFormValues["tickets"][number] => ({
   ...createInventoryTicket("general"),
-  name: "",
-  price: undefined as unknown as number,
-  capacity: undefined as unknown as number,
   phases: [],
 })
 

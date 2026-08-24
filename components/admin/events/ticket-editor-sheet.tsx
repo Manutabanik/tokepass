@@ -145,7 +145,7 @@ export function TicketEditorSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-[min(100%,26rem)] bg-background"
+        className="flex w-[min(100%,26rem)] flex-col overflow-hidden bg-background p-0"
       >
         <SheetHeader>
           <SheetTitle>
@@ -159,7 +159,7 @@ export function TicketEditorSheet({
           </SheetDescription>
         </SheetHeader>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overflow-x-hidden p-4">
           <FormField
             control={form.control}
             name={`tickets.${primaryIndex}.name`}
@@ -330,7 +330,7 @@ export function TicketEditorSheet({
               {showPurchaseRules ? "Ocultar reglas de compra" : "Reglas de compra"}
             </button>
             {showPurchaseRules ? (
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <FormField
                   control={form.control}
                   name={`tickets.${primaryIndex}.minPurchaseLimit`}

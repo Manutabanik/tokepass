@@ -234,7 +234,7 @@ export function TicketWalletCard({
   return (
     <article
       className={cn(
-        "flex flex-col gap-y-5 rounded-2xl bg-card p-6",
+        "flex min-w-0 flex-col gap-y-5 overflow-x-hidden rounded-2xl bg-card p-6",
         paused && "opacity-70",
       )}
     >
@@ -318,14 +318,16 @@ export function TicketWalletCard({
         )}
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <TierNetCalculator
-          form={form}
-          index={index}
-          feePercentage={feePercentage}
-          fixedFee={fixedFee}
-          isSponsored={isSponsored}
-        />
+      <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="min-w-0">
+          <TierNetCalculator
+            form={form}
+            index={index}
+            feePercentage={feePercentage}
+            fixedFee={fixedFee}
+            isSponsored={isSponsored}
+          />
+        </div>
         <FormField
           control={form.control}
           name={`tickets.${index}.capacity`}
@@ -381,7 +383,7 @@ export function TicketWalletCard({
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
         <FormField
           control={form.control}
           name={`tickets.${index}.saleStartsAt`}
