@@ -229,7 +229,7 @@ export function BundleCreatorModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto border-border bg-card text-foreground sm:max-w-xl">
+      <DialogContent className="max-h-[90vh] overflow-x-hidden overflow-y-auto border-border bg-card text-foreground sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
@@ -250,8 +250,8 @@ export function BundleCreatorModal({
             />
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="min-w-0 space-y-1.5">
               <Label htmlFor="bundle-accesses">
                 Cantidad de accesos que otorga
               </Label>
@@ -264,7 +264,7 @@ export function BundleCreatorModal({
                 className="h-11"
               />
             </div>
-            <div className="space-y-1.5">
+            <div className="min-w-0 space-y-1.5">
               <Label htmlFor="bundle-price">Precio total del combo</Label>
               <PriceInput
                 id="bundle-price"
@@ -309,7 +309,7 @@ export function BundleCreatorModal({
 
           <div className="space-y-2">
             <Label>Plantillas rápidas</Label>
-            <div className="grid gap-2 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <Button
                 type="button"
                 variant="outline"
@@ -358,7 +358,7 @@ export function BundleCreatorModal({
 
           <div className="space-y-2">
             <Label>Tipo de promoción</Label>
-            <div className="grid gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {PROMO_DISCOUNT_TYPES.map((type) => {
                 const selected = rule.tipoDescuento === type
                 return (
@@ -381,8 +381,8 @@ export function BundleCreatorModal({
           </div>
 
           {rule.tipoDescuento === "PORCENTAJE" ? (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="min-w-0 space-y-1.5">
                 <Label htmlFor="promo-percent">Descuento (%)</Label>
                 <Input
                   id="promo-percent"
@@ -398,7 +398,7 @@ export function BundleCreatorModal({
                   className="h-11"
                 />
               </div>
-              <div className="space-y-1.5">
+              <div className="min-w-0 space-y-1.5">
                 <Label htmlFor="promo-nth">Aplicar en la unidad N</Label>
                 <Input
                   id="promo-nth"
@@ -439,8 +439,8 @@ export function BundleCreatorModal({
           ) : null}
 
           {rule.tipoDescuento === "X_POR_Y" ? (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="min-w-0 space-y-1.5">
                 <Label htmlFor="promo-buy">Cantidad requerida (X)</Label>
                 <Input
                   id="promo-buy"
@@ -456,7 +456,7 @@ export function BundleCreatorModal({
                   className="h-11"
                 />
               </div>
-              <div className="space-y-1.5">
+              <div className="min-w-0 space-y-1.5">
                 <Label htmlFor="promo-pay">Cantidad que paga (Y)</Label>
                 <Input
                   id="promo-pay"
@@ -486,7 +486,7 @@ export function BundleCreatorModal({
               return (
                 <div
                   key={item.tierId}
-                  className="grid grid-cols-[1fr_4.5rem_auto] gap-2"
+                  className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_4.5rem_auto]"
                 >
                   <select
                     className="h-10 rounded-md border border-input bg-background px-2 text-sm"

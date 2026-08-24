@@ -61,7 +61,7 @@ function SheetContent({
         className={cn(
           "fixed z-[100] flex min-h-0 flex-col overflow-hidden outline-none duration-200 data-open:animate-in data-closed:animate-out",
           isEdge &&
-            "h-dvh w-[min(100%,20rem)] bg-background text-foreground shadow-none",
+            "h-dvh w-[min(100%,20rem)] overflow-x-hidden bg-background text-foreground shadow-none",
           side === "left" &&
             "inset-y-0 left-0 border-r border-border data-open:slide-in-from-left data-closed:slide-out-to-left",
           side === "right" &&
