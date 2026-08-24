@@ -21,6 +21,14 @@ function captureActionException(
   Sentry.captureException(error, { tags: cleaned })
 }
 
+export function captureServerActionError(
+  actionName: string,
+  error: unknown,
+  tags?: SentryActionTags,
+) {
+  captureActionException(actionName, error, tags)
+}
+
 /**
  * Envuelve una Server Action para reportar excepciones no controladas en Sentry
  * y relanzarlas al caller (útil cuando la acción ya devuelve errores tipados).
