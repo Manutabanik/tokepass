@@ -2,6 +2,7 @@ import { ZodError } from "zod"
 
 import { containsInternalErrorCode } from "@/lib/errors/error-handler"
 import { toUserFacingError } from "@/lib/errors/user-facing-error"
+import { captureServerActionError } from "@/lib/sentry-wrapper"
 
 export type PersistErrorSource = "zod" | "sql" | "network" | "app"
 
@@ -85,6 +86,9 @@ export function logPersistError(context: string, error: unknown): PersistErrorSo
   console.error(`[${label}] ${context}`, error)
   if (isZodLikeError(error) && typeof error.flatten === "function") {
     console.error(`[${label}] ${context} issues`, error.flatten())
+  }
+  if (source !== "zod") {
+    captureServerActionError(context, error, { source })
   }
   return source
 }

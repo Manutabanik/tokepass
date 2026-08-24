@@ -6,6 +6,14 @@ export function getSentryDsn(): string | undefined {
   return process.env.SENTRY_DSN?.trim() || undefined
 }
 
+export function getSentryTracesSampleRate(): number {
+  return process.env.NODE_ENV === "production" ? 0.1 : 1.0
+}
+
+export function getSentryReplaySessionSampleRate(): number {
+  return process.env.NODE_ENV === "production" ? 0.05 : 1.0
+}
+
 export function getSentryInitOptions() {
   const dsn = getSentryDsn()
 
@@ -17,7 +25,6 @@ export function getSentryInitOptions() {
       process.env.VERCEL_ENV ||
       process.env.NODE_ENV,
     sendDefaultPii: false,
-    tracesSampleRate: 0,
     beforeSend<T>(event: T) {
       return scrubSentryEvent(event)
     },

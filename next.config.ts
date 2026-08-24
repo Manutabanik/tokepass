@@ -213,15 +213,18 @@ const nextConfig: NextConfig = {
 }
 
 export default withSentryConfig(nextConfig, {
-  silent: true,
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  silent: !process.env.CI,
   telemetry: false,
-  widenClientFileUpload: false,
+  tunnelRoute: "/monitoring",
+  widenClientFileUpload: Boolean(process.env.SENTRY_AUTH_TOKEN),
   sourcemaps: {
     disable: !process.env.SENTRY_AUTH_TOKEN,
   },
   bundleSizeOptimizations: {
     excludeDebugStatements: true,
-    excludeTracing: true,
+    excludeTracing: false,
     excludeReplayShadowDom: true,
     excludeReplayIframe: true,
     excludeReplayWorker: true,

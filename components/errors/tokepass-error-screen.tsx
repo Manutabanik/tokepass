@@ -1,5 +1,6 @@
 "use client"
 
+import type { ReactNode } from "react"
 import Link from "next/link"
 
 import { BrandLogo, BrandMarkSvg } from "@/components/shared/brand-logo"
@@ -17,6 +18,8 @@ export function TokepassErrorScreen({
   lead = TOKEPASS_ERROR_LEAD,
   resetLabel = "Reintentar cargar",
   standalone = false,
+  icon,
+  resetIcon,
 }: {
   reset: () => void
   homeHref?: string
@@ -25,6 +28,8 @@ export function TokepassErrorScreen({
   lead?: string
   resetLabel?: string
   standalone?: boolean
+  icon?: ReactNode
+  resetIcon?: ReactNode
 }) {
   const homeClassName = cn(
     "inline-flex min-h-12 items-center justify-center rounded-full border px-8 py-3 text-sm font-bold transition-colors",
@@ -56,9 +61,11 @@ export function TokepassErrorScreen({
       ) : (
         <BrandLogo href={null} size="lg" />
       )}
+      {icon ? <div className="mt-8">{icon}</div> : null}
       <h1
         className={cn(
-          "mt-8 text-3xl font-black tracking-tight",
+          icon ? "mt-5" : "mt-8",
+          "text-3xl font-black tracking-tight",
           standalone ? "text-white" : "text-foreground",
         )}
       >
@@ -77,12 +84,13 @@ export function TokepassErrorScreen({
           type="button"
           onClick={() => reset()}
           className={cn(
-            "inline-flex min-h-12 items-center justify-center rounded-full px-8 py-3 text-sm font-bold text-white transition-colors",
+            "inline-flex min-h-12 items-center justify-center gap-2 rounded-full px-8 py-3 text-sm font-bold text-white transition-colors",
             standalone
               ? "bg-violet-600 hover:bg-violet-500"
               : "bg-primary text-primary-foreground hover:bg-primary/90",
           )}
         >
+          {resetIcon}
           {resetLabel}
         </button>
         {standalone ? (

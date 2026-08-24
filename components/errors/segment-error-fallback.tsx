@@ -1,6 +1,8 @@
 "use client"
 
 import { useEffect } from "react"
+import * as Sentry from "@sentry/nextjs"
+import { AlertTriangle, RefreshCw } from "lucide-react"
 
 import {
   TOKEPASS_ERROR_LEAD,
@@ -31,6 +33,16 @@ export function SegmentErrorFallback({
       digest: error.digest,
       error,
     })
+    try {
+      Sentry.captureException(error, {
+        tags: {
+          context: logContext,
+          ...(error.digest ? { digest: error.digest } : {}),
+        },
+      })
+    } catch {
+      // No bloquear la UI de recuperación si Sentry falla.
+    }
   }, [error, logContext])
 
   return (
@@ -40,7 +52,13 @@ export function SegmentErrorFallback({
       homeLabel={homeLabel}
       title={TOKEPASS_ERROR_TITLE}
       lead={TOKEPASS_ERROR_LEAD}
-      resetLabel="Reintentar cargar"
+      resetLabel="Volver a intentar"
+      icon={
+        <span className="inline-flex size-12 items-center justify-center rounded-2xl bg-red-500/10 text-red-400 ring-1 ring-red-500/20">
+          <AlertTriangle className="size-6" aria-hidden />
+        </span>
+      }
+      resetIcon={<RefreshCw className="size-4" aria-hidden />}
     />
   )
 }
