@@ -199,6 +199,7 @@ export function wizardStepFromPath(path: ReadonlyArray<PropertyKey>): 0 | 1 | 2 
     root === "acceptsMercadoPago" ||
     root === "acceptsPosPayments" ||
     root === "defaultFeeStrategy" ||
+    root === "serviceFeePercentage" ||
     root === "refundPolicy"
   ) {
     return 3

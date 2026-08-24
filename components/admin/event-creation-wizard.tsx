@@ -70,6 +70,7 @@ import {
 } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { feePercentageFromRate } from "@/lib/pricing/flexible-pricing"
+import { clampServiceFeePercentage } from "@/lib/pricing/net-profit"
 import type { VenuePricingMap } from "@/lib/seating/venue-adapter"
 import {
   applyMapCapacityToTickets,
@@ -243,7 +244,8 @@ const defaultValues: EventFormValues = {
   maxTicketsPerUser: null,
   acceptsMercadoPago: true,
   acceptsPosPayments: true,
-  defaultFeeStrategy: "absorb_in_price",
+  defaultFeeStrategy: "pass_to_customer",
+  serviceFeePercentage: 15,
   refundPolicy: "organizer",
 }
 
@@ -300,6 +302,7 @@ export function EventCreationWizard({
   const [isStudioOpen, setIsStudioOpen] = useState(false)
   const [isStudioClosing, setIsStudioClosing] = useState(false)
   const venueCatalog = localVenues ?? venues
+  const organizerFeePercentage = feePercentageFromRate(organizerServiceRate)
 
   const form = useForm<EventFormValues>({
     resolver: zodResolver(draftEventSchema) as Resolver<EventFormValues>,
@@ -308,6 +311,7 @@ export function EventCreationWizard({
     shouldUnregister: false,
     defaultValues: {
       ...defaultValues,
+      serviceFeePercentage: organizerFeePercentage,
       ...(initialData?.values ?? {}),
     },
   })
@@ -329,6 +333,13 @@ export function EventCreationWizard({
     control: form.control,
     name: "basics.deliveryMode",
   })
+  const watchedServiceFeePercentage = useWatch({
+    control: form.control,
+    name: "serviceFeePercentage",
+  })
+  const eventServiceFeePercentage = clampServiceFeePercentage(
+    watchedServiceFeePercentage ?? organizerFeePercentage,
+  )
   const isStreaming =
     watchedDeliveryMode === "ONLINE" ||
     isStreamingVenue({
@@ -377,6 +388,7 @@ export function EventCreationWizard({
     eventId: initialData?.id ?? null,
     initialValues: {
       ...defaultValues,
+      serviceFeePercentage: organizerFeePercentage,
       ...(initialData?.values ?? {}),
     },
     venuePricingMap,
@@ -1678,7 +1690,7 @@ export function EventCreationWizard({
                 <UnifiedInventoryPanel
                   form={form}
                   eventId={initialData?.id ?? persistedEventId}
-                  feePercentage={feePercentageFromRate(organizerServiceRate)}
+                  feePercentage={eventServiceFeePercentage}
                   fixedFee={platformFixedFee}
                   hideMapBlock={isStreaming}
                   onOpenMapStudio={() => setIsStudioOpen(true)}

@@ -12,9 +12,16 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form"
+import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
-import { STUDIO_LABEL_CLASS } from "@/lib/admin/studio-form-styles"
-import type { TicketFeeStrategy } from "@/lib/pricing/flexible-pricing"
+import {
+  STUDIO_CONTROL_CLASS,
+  STUDIO_LABEL_CLASS,
+} from "@/lib/admin/studio-form-styles"
+import {
+  clampServiceFeePercentage,
+  remapTicketsForServiceFee,
+} from "@/lib/pricing/net-profit"
 import type { EventFormValues } from "@/lib/validations/event-form"
 import { cn } from "@/lib/utils"
 
@@ -44,18 +51,18 @@ export function EventStudioPublishStep({
 }) {
   const [showBillingRules, setShowBillingRules] = useState(() => {
     const values = form.getValues()
-    return (
-      values.defaultFeeStrategy === "pass_to_customer" ||
-      (values.refundPolicy != null && values.refundPolicy !== "organizer")
-    )
+    return values.refundPolicy != null && values.refundPolicy !== "organizer"
   })
 
-  function applyFeeStrategy(next: TicketFeeStrategy) {
-    form.setValue("defaultFeeStrategy", next, { shouldDirty: true })
-    const tickets = form.getValues("tickets") ?? []
+  function applyServiceFeePercentage(next: number) {
+    const percentage = clampServiceFeePercentage(next)
+    form.setValue("serviceFeePercentage", percentage, {
+      shouldDirty: true,
+      shouldValidate: true,
+    })
     form.setValue(
       "tickets",
-      tickets.map((tier) => ({ ...tier, feeStrategy: next })),
+      remapTicketsForServiceFee(form.getValues("tickets") ?? [], percentage),
       { shouldDirty: true },
     )
   }
@@ -70,6 +77,58 @@ export function EventStudioPublishStep({
           Definí el tope por persona, cómo cobrás y quién puede ver el evento.
         </p>
       </div>
+
+      <FormField
+        control={form.control}
+        name="serviceFeePercentage"
+        render={({ field, fieldState }) => (
+          <FormItem>
+            <FormLabel className={STUDIO_LABEL_CLASS}>
+              Comisión de la plataforma (%)
+            </FormLabel>
+            <Input
+              type="number"
+              inputMode="decimal"
+              min={0}
+              max={95}
+              step={0.5}
+              name={field.name}
+              aria-invalid={Boolean(fieldState.error)}
+              value={
+                field.value == null || Number.isNaN(Number(field.value))
+                  ? ""
+                  : String(field.value)
+              }
+              onChange={(event) => {
+                const raw = event.target.value
+                if (raw.trim() === "") {
+                  field.onChange(undefined)
+                  return
+                }
+                const parsed = Number(raw)
+                if (!Number.isFinite(parsed)) return
+                applyServiceFeePercentage(parsed)
+              }}
+              onBlur={() => {
+                field.onBlur()
+                if (
+                  field.value == null ||
+                  !Number.isFinite(Number(field.value))
+                ) {
+                  applyServiceFeePercentage(15)
+                }
+              }}
+              placeholder="15"
+              className={cn(STUDIO_CONTROL_CLASS, "max-w-40 tabular-nums")}
+            />
+            <FormDescription>
+              Este porcentaje se sumará al precio neto de las entradas para
+              calcular el precio final al público.
+            </FormDescription>
+            <FormMessage>{fieldState.error?.message}</FormMessage>
+          </FormItem>
+        )}
+      />
 
       <EventStudioPurchaseCapField form={form} />
 
@@ -177,60 +236,6 @@ export function EventStudioPublishStep({
 
         {showBillingRules ? (
           <div className="space-y-5 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
-            <FormField
-              control={form.control}
-              name="defaultFeeStrategy"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className={STUDIO_LABEL_CLASS}>
-                    Absorción de service fee
-                  </FormLabel>
-                  <FormDescription>
-                    Se aplica a todas las entradas. El comprador ve un precio
-                    redondo o paga la comisión aparte.
-                  </FormDescription>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                    {(
-                      [
-                        {
-                          value: "absorb_in_price" as const,
-                          label: "Hacerme cargo",
-                          hint: "La comisión sale de tu precio de venta.",
-                        },
-                        {
-                          value: "pass_to_customer" as const,
-                          label: "Recargar al comprador",
-                          hint: "El cliente paga tu precio + la comisión.",
-                        },
-                      ] as const
-                    ).map((option) => {
-                      const selected = field.value === option.value
-                      return (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => applyFeeStrategy(option.value)}
-                          className={cn(
-                            "rounded-2xl px-4 py-3 text-left transition",
-                            selected
-                              ? "border border-emerald-500 bg-emerald-500/10 text-foreground"
-                              : "border border-transparent bg-background text-muted-foreground hover:bg-muted",
-                          )}
-                        >
-                          <span className="block text-sm font-semibold">
-                            {option.label}
-                          </span>
-                          <span className="mt-1 block text-xs leading-relaxed">
-                            {option.hint}
-                          </span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </FormItem>
-              )}
-            />
-
             <FormField
               control={form.control}
               name="refundPolicy"

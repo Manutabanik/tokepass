@@ -22,6 +22,7 @@ import {
 } from "@/lib/inventory/synced-day-tickets"
 import { inferInventoryTierType } from "@/lib/inventory/unified-inventory"
 import { STUDIO_LABEL_CLASS } from "@/lib/admin/studio-form-styles"
+import { clampServiceFeePercentage } from "@/lib/pricing/net-profit"
 import type { EventFormValues } from "@/lib/validations/event-form"
 import { cn } from "@/lib/utils"
 
@@ -51,6 +52,9 @@ export function PricingStep({
   onOpenMapStudio?: () => void
 }) {
   const tickets = form.watch("tickets") ?? EMPTY_FORM_TICKETS
+  const resolvedFeePercentage = clampServiceFeePercentage(
+    form.watch("serviceFeePercentage") ?? feePercentage,
+  )
   const scheduleDays = form.watch("basics.scheduleDays") ?? []
   const identityDate = form.watch("basics.date")
   const eventDates = listEventFormJornadas({
@@ -293,7 +297,7 @@ export function PricingStep({
           <div className="mt-4">
             <InventoryAdvancedTools
               form={form}
-              feePercentage={feePercentage}
+              feePercentage={resolvedFeePercentage}
               fixedFee={fixedFee}
               isSponsored={isSponsored}
             />

@@ -89,6 +89,22 @@ describe("publishEventSchema completeness", () => {
     )
   })
 
+  it("defaults the platform commission to 15%", () => {
+    const parsed = publishEventSchema.safeParse(publishPayload())
+    assert.equal(parsed.success, true)
+    if (parsed.success) {
+      assert.equal(parsed.data.serviceFeePercentage, 15)
+    }
+  })
+
+  it("rejects a platform commission above 95%", () => {
+    const parsed = publishEventSchema.safeParse({
+      ...publishPayload(),
+      serviceFeePercentage: 140,
+    })
+    assert.equal(parsed.success, false)
+  })
+
   it("requires at least one sellable ticket", () => {
     const parsed = publishEventSchema.safeParse(
       publishPayload({

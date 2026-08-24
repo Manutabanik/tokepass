@@ -65,9 +65,10 @@ import {
 } from "@/lib/inventory/unified-inventory"
 import { allInBreakdown } from "@/lib/pricing/all-in"
 import {
-  calculateTierPricing,
-  inferTicketFeeStrategy,
-} from "@/lib/pricing/flexible-pricing"
+  clampServiceFeePercentage,
+  priceFromNetProfit,
+  resolveTicketNetProfit,
+} from "@/lib/pricing/net-profit"
 import {
   defaultEventFeeConfig,
   eventFeeRate,
@@ -390,6 +391,32 @@ function persistablePublicPrice(value: unknown): number {
   return Number.isFinite(parsed) ? Math.max(0, parsed) : 0
 }
 
+function resolveFormFeeConfig(
+  data: EventFormValues,
+  fallback: EventFeeConfig,
+): EventFeeConfig {
+  if (data.serviceFeePercentage == null) return fallback
+  return {
+    ...fallback,
+    platformFeePercentage: clampServiceFeePercentage(data.serviceFeePercentage),
+  }
+}
+
+async function persistEventServiceFeePercentage(
+  eventId: string,
+  percentage: number,
+): Promise<string | null> {
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from("events")
+    .update({
+      platform_fee_percentage: clampServiceFeePercentage(percentage),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", eventId)
+  return error?.message ?? null
+}
+
 function mapEventFormToRpcPayload(
   data: EventFormValues,
   feeConfig: EventFeeConfig,
@@ -551,24 +578,31 @@ function mapEventFormToRpcPayload(
         bundleRule != null
           ? allInBreakdown(computedSale, rate, fixed)
           : (() => {
-              const mode = tier.calculationMode ?? "public_price"
-              const strategy = tier.feeStrategy ?? "absorb_in_price"
-              const inputValue =
-                mode === "net_income"
-                  ? Number(tier.basePrice ?? computedSale) || 0
-                  : Number(computedSale) || 0
-              const calc = calculateTierPricing({
-                inputValue,
+              const extras = {
+                fixedFee: fixed,
+                sponsored: feeConfig.isSponsoredByTokePass,
+              }
+              const formPublic = persistablePublicPrice(computedSale)
+              const net = resolveTicketNetProfit(
+                {
+                  price: formPublic,
+                  basePrice: tier.basePrice,
+                },
+                feeConfig.platformFeePercentage,
+                extras,
+              )
+              const calc = priceFromNetProfit({
+                netPrice: net,
                 feePercentage: feeConfig.platformFeePercentage,
                 fixedFee: fixed,
-                feeStrategy: strategy,
-                calculationMode: mode,
                 sponsored: feeConfig.isSponsoredByTokePass,
               })
+              const publicPrice =
+                formPublic > 0 || net <= 0 ? formPublic : calc.publicPrice
               return {
-                basePrice: calc.organizerNet,
-                platformFee: calc.serviceFee,
-                publicPrice: calc.publicPrice,
+                basePrice: net,
+                platformFee: Math.max(0, publicPrice - net),
+                publicPrice,
               }
             })()
       const layoutType = layoutTypeForInventory(tierType, tier.layoutType)
@@ -2583,16 +2617,9 @@ export async function getEventForEditing(
         ? null
         : Number(venue.longitude)
 
-    const ticketFeePercentage = Number(
+    const ticketFeePercentage = clampServiceFeePercentage(
       (event as { platform_fee_percentage?: number | null })
         .platform_fee_percentage ?? 15,
-    )
-    const ticketFixedFee = Number(
-      (event as { platform_fixed_fee?: number | null }).platform_fixed_fee ?? 0,
-    )
-    const ticketSponsored = Boolean(
-      (event as { is_sponsored_by_tokepass?: boolean | null })
-        .is_sponsored_by_tokepass,
     )
 
     const ticketValues: EventFormValues["tickets"] = (tiers ?? []).map((tier) => ({
@@ -2600,14 +2627,8 @@ export async function getEventForEditing(
       name: String(tier.name ?? "Entrada"),
       price: Number(tier.price) || 0,
       basePrice: Number(tier.base_price) || 0,
-      feeStrategy: inferTicketFeeStrategy({
-        publicPrice: Number(tier.price) || 0,
-        organizerNet: Number(tier.base_price) || 0,
-        feePercentage: ticketFeePercentage,
-        fixedFee: ticketFixedFee,
-        sponsored: ticketSponsored,
-      }),
-      calculationMode: "public_price",
+      feeStrategy: "pass_to_customer",
+      calculationMode: "net_income",
       capacity: Math.max(1, Number(tier.capacity) || 1),
       sold: Math.max(0, Number(tier.sold) || 0),
       timeLimit: tier.time_limit ?? "",
@@ -2887,11 +2908,8 @@ export async function getEventForEditing(
         ),
         acceptsMercadoPago: true,
         acceptsPosPayments: true,
-        defaultFeeStrategy:
-          ticketValues.length > 0 &&
-          ticketValues.every((tier) => tier.feeStrategy === "pass_to_customer")
-            ? "pass_to_customer"
-            : "absorb_in_price",
+        defaultFeeStrategy: "pass_to_customer",
+        serviceFeePercentage: ticketFeePercentage,
         refundPolicy: "organizer",
       },
       zoneTierPricing: (pricingRows ?? []).map((row) => ({
@@ -3054,9 +3072,9 @@ export async function createCompleteEvent(
     flyerUrl = uploaded.url
   }
 
+  const feeConfig = resolveFormFeeConfig(formValues, defaultEventFeeConfig())
   let rpcPayload: CreateCompleteEventRpcPayload
   try {
-    const feeConfig = defaultEventFeeConfig()
     if (!draftMode) {
       const freeCapError = assertFreeTicketCapacityAllowed(
         formValues.tickets,
@@ -3188,6 +3206,12 @@ export async function createCompleteEvent(
     String(eventId),
   )
   if (capacityError) return persistFailure(capacityError)
+
+  const feePersistError = await persistEventServiceFeePercentage(
+    String(eventId),
+    feeConfig.platformFeePercentage,
+  )
+  if (feePersistError) return persistFailure(feePersistError)
 
   await revalidatePersistedEvent(rpcClient, String(eventId))
   if (!draftMode) {
@@ -3387,6 +3411,11 @@ export async function updateCompleteEvent(
     if (purchaseLimitError) {
       return persistFailure(purchaseLimitError)
     }
+    const feePersistError = await persistEventServiceFeePercentage(
+      eventId,
+      clampServiceFeePercentage(formValues.serviceFeePercentage),
+    )
+    if (feePersistError) return persistFailure(feePersistError)
     await revalidatePersistedEvent(mutationClient, eventId)
     return { success: true, eventId, venueId }
   }
@@ -3404,9 +3433,10 @@ export async function updateCompleteEvent(
     uploadedFlyerUrl = uploaded.url
   }
 
+  const storedFeeConfig = await loadEventFeeConfig(supabase, eventId)
+  const feeConfig = resolveFormFeeConfig(formValues, storedFeeConfig)
   let rpcPayload: CreateCompleteEventRpcPayload
   try {
-    const feeConfig = await loadEventFeeConfig(supabase, eventId)
     if (!draftMode) {
       const freeCapError = assertFreeTicketCapacityAllowed(
         formValues.tickets,
@@ -3521,6 +3551,12 @@ export async function updateCompleteEvent(
     eventId,
   )
   if (capacityError) return persistFailure(capacityError)
+
+  const feePersistError = await persistEventServiceFeePercentage(
+    eventId,
+    feeConfig.platformFeePercentage,
+  )
+  if (feePersistError) return persistFailure(feePersistError)
 
   await revalidatePersistedEvent(mutationClient, eventId)
   if (!draftMode) {

@@ -312,6 +312,12 @@ const eventFormObject = z
       .enum(TICKET_FEE_STRATEGIES)
       .optional()
       .default("absorb_in_price"),
+    serviceFeePercentage: z.coerce
+      .number()
+      .min(0, "La comisión no puede ser negativa.")
+      .max(95, "La comisión no puede superar el 95%.")
+      .optional()
+      .default(15),
     refundPolicy: z
       .enum(EVENT_REFUND_POLICIES)
       .optional()
@@ -763,6 +769,12 @@ export const draftEventSchema = z.object({
     .enum(TICKET_FEE_STRATEGIES)
     .optional()
     .default("absorb_in_price"),
+  serviceFeePercentage: z.coerce
+    .number()
+    .min(0)
+    .max(95)
+    .optional()
+    .default(15),
   refundPolicy: z.enum(EVENT_REFUND_POLICIES).optional().default("organizer"),
 })
 
@@ -783,8 +795,8 @@ function blankDraftTicket(): EventFormValues["tickets"][number] {
     name: "Borrador",
     price: 0,
     basePrice: 0,
-    feeStrategy: "absorb_in_price",
-    calculationMode: "public_price",
+    feeStrategy: "pass_to_customer",
+    calculationMode: "net_income",
     capacity: 1,
     timeLimit: "",
     saleStartsAt: "",
@@ -866,8 +878,8 @@ export function coerceDraftEventForm(
       name: tier.name.trim(),
       price: Number.isFinite(tier.price) ? Number(tier.price) : 0,
       basePrice: Number.isFinite(tier.basePrice) ? Number(tier.basePrice) : 0,
-      feeStrategy: tier.feeStrategy ?? "absorb_in_price",
-      calculationMode: tier.calculationMode ?? "public_price",
+      feeStrategy: tier.feeStrategy ?? "pass_to_customer",
+      calculationMode: tier.calculationMode ?? "net_income",
       capacity:
         Number.isFinite(tier.capacity) && Number(tier.capacity) >= 1
           ? Number(tier.capacity)
@@ -1008,6 +1020,11 @@ export function coerceDraftEventForm(
       raw.defaultFeeStrategy === "pass_to_customer"
         ? "pass_to_customer"
         : "absorb_in_price",
+    serviceFeePercentage: (() => {
+      const parsed = Number(raw.serviceFeePercentage)
+      if (!Number.isFinite(parsed)) return 15
+      return Math.min(95, Math.max(0, parsed))
+    })(),
     refundPolicy:
       raw.refundPolicy === "no_refunds" || raw.refundPolicy === "until_24h"
         ? raw.refundPolicy

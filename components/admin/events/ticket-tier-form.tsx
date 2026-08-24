@@ -11,7 +11,6 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   FormDescription,
   FormField,
@@ -20,8 +19,6 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
-import { PriceInput } from "@/components/ui/price-input"
-import { formatCurrency } from "@/lib/format"
 import { ticketDisplayBadge } from "@/lib/inventory/aforo-balance"
 import {
   asPositiveInt,
@@ -32,11 +29,11 @@ import {
   ticketSoldCount,
   TIER_HAS_SALES_LOCK_HINT,
 } from "@/lib/inventory/synced-day-tickets"
+import { NetProfitCalculator } from "@/components/admin/events/net-profit-calculator"
 import {
-  calculateTierPricing,
-  type TicketCalculationMode,
-  type TicketFeeStrategy,
-} from "@/lib/pricing/flexible-pricing"
+  applyNetProfitToTicket,
+  resolveTicketNetProfit,
+} from "@/lib/pricing/net-profit"
 import {
   STUDIO_CONTROL_CLASS,
   STUDIO_LABEL_CLASS,
@@ -121,206 +118,61 @@ function StockStepper({
   )
 }
 
-function TierPricingSimulator({
+function TierNetCalculator({
   form,
   index,
   feePercentage,
   fixedFee,
   isSponsored,
-  showPrice = true,
-  showAdvanced = true,
 }: {
   form: UseFormReturn<EventFormValues>
   index: number
   feePercentage: number
   fixedFee: number
   isSponsored: boolean
-  showPrice?: boolean
-  showAdvanced?: boolean
 }) {
-  const price = form.watch(`tickets.${index}.price`)
-  const basePrice = form.watch(`tickets.${index}.basePrice`)
-  const feeStrategy =
-    form.watch(`tickets.${index}.feeStrategy`) ?? "absorb_in_price"
-  const calculationMode =
-    form.watch(`tickets.${index}.calculationMode`) ?? "public_price"
+  const ticket = form.watch(`tickets.${index}`)
+  const extras = { fixedFee, sponsored: isSponsored }
 
-  const inputValue =
-    calculationMode === "net_income"
-      ? Number(basePrice ?? price) || 0
-      : Number(price) || 0
-
-  const calculation = calculateTierPricing({
-    inputValue,
-    feePercentage,
-    fixedFee,
-    feeStrategy,
-    calculationMode,
-    sponsored: isSponsored,
-  })
-
-  function applyCalculation(
-    nextStrategy: TicketFeeStrategy,
-    nextMode: TicketCalculationMode,
-    nextInput: number | undefined,
-  ) {
-    const calc = calculateTierPricing({
-      inputValue: nextInput ?? 0,
-      feePercentage,
-      fixedFee,
-      feeStrategy: nextStrategy,
-      calculationMode: nextMode,
-      sponsored: isSponsored,
-    })
-    form.setValue(`tickets.${index}.feeStrategy`, nextStrategy, {
-      shouldDirty: true,
-    })
-    form.setValue(`tickets.${index}.calculationMode`, nextMode, {
-      shouldDirty: true,
-    })
-    form.setValue(`tickets.${index}.price`, calc.publicPrice, {
+  function writeNet(net: number) {
+    const current = form.getValues(`tickets.${index}`)
+    if (!current) return
+    const next = applyNetProfitToTicket(current, net, feePercentage, extras)
+    form.setValue(`tickets.${index}.basePrice`, next.basePrice, {
       shouldDirty: true,
       shouldValidate: true,
     })
-    form.setValue(`tickets.${index}.basePrice`, calc.organizerNet, {
+    form.setValue(`tickets.${index}.price`, next.price, {
+      shouldDirty: true,
+      shouldValidate: true,
+    })
+    form.setValue(`tickets.${index}.calculationMode`, "net_income", {
+      shouldDirty: true,
+    })
+    form.setValue(`tickets.${index}.feeStrategy`, "pass_to_customer", {
       shouldDirty: true,
     })
   }
 
   return (
-    <div className="flex flex-col gap-y-4">
-      {showPrice ? (
-        <>
-      <FormField
-        control={form.control}
-        name={
-          calculationMode === "net_income"
-            ? `tickets.${index}.basePrice`
-            : `tickets.${index}.price`
-        }
-        render={({ field, fieldState }) => (
-          <FormItem className="flex flex-col gap-y-2">
-            <FormLabel className={STUDIO_LABEL_CLASS}>
-              {calculationMode === "net_income"
-                ? "Lo que te queda a vos por entrada"
-                : "Precio por entrada ($)"}
-            </FormLabel>
-            <PriceInput
-              name={field.name}
-              aria-invalid={Boolean(fieldState.error)}
-              value={field.value}
-              onValueChange={(value) => {
-                applyCalculation(feeStrategy, calculationMode, value)
-              }}
-              placeholder="0"
-              allowEmpty
-              className={cn(STUDIO_CONTROL_CLASS, "font-semibold tabular-nums")}
-            />
-            <FormMessage>{fieldState.error?.message}</FormMessage>
-          </FormItem>
-        )}
-      />
-      {calculationMode === "net_income" ? (
-        <FormField
-          control={form.control}
-          name={`tickets.${index}.price`}
-          render={({ fieldState }) => (
-            <FormMessage>{fieldState.error?.message}</FormMessage>
-          )}
-        />
-      ) : null}
-        </>
-      ) : null}
-
-      {showAdvanced ? (
-        <div className="flex flex-col gap-y-4">
-            <div className="flex flex-col gap-y-2">
-              <p className={STUDIO_LABEL_CLASS}>
-                Comisión TokePass ({isSponsored ? 0 : feePercentage}%)
-              </p>
-              <Tabs
-                value={feeStrategy}
-                onValueChange={(value) => {
-                  if (
-                    value !== "pass_to_customer" &&
-                    value !== "absorb_in_price"
-                  ) {
-                    return
-                  }
-                  applyCalculation(
-                    value,
-                    calculationMode,
-                    calculationMode === "net_income"
-                      ? calculation.organizerNet
-                      : calculation.publicPrice,
-                  )
-                }}
-              >
-                <TabsList className="grid h-12 w-full grid-cols-2 rounded-xl">
-                  <TabsTrigger
-                    value="pass_to_customer"
-                    title="El cliente paga el precio + el costo de servicio"
-                  >
-                    Recargar la comisión al comprador
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="absorb_in_price"
-                    title="Se descuenta de tu precio de venta, el cliente ve un número redondo"
-                  >
-                    Hacerte cargo de la comisión
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </div>
-
-            <Tabs
-              value={calculationMode}
-              onValueChange={(value) => {
-                if (value !== "net_income" && value !== "public_price") return
-                applyCalculation(
-                  feeStrategy,
-                  value,
-                  value === "net_income"
-                    ? calculation.organizerNet
-                    : calculation.publicPrice,
-                )
-              }}
-            >
-              <TabsList className="grid h-12 w-full grid-cols-2 rounded-xl">
-                <TabsTrigger value="public_price">Precio público</TabsTrigger>
-                <TabsTrigger value="net_income">Quiero ganar</TabsTrigger>
-              </TabsList>
-            </Tabs>
-
-            <div className="flex flex-col gap-y-2 rounded-2xl bg-muted/30 p-4 text-xs">
-              <div className="flex items-center justify-between gap-3 text-muted-foreground">
-                <span className="min-w-0">Lo que te queda a vos por entrada</span>
-                <span className="shrink-0 font-bold text-foreground tabular-nums">
-                  {formatCurrency(calculation.organizerNet)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3 text-muted-foreground">
-                <span className="min-w-0">
-                  Comisión ({isSponsored ? 0 : feePercentage}%
-                  {fixedFee > 0 && !isSponsored
-                    ? ` + ${formatCurrency(fixedFee)}`
-                    : ""}
-                  )
-                </span>
-                <span className="shrink-0 font-semibold text-foreground tabular-nums">
-                  {formatCurrency(calculation.serviceFee)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3 border-t border-border/50 pt-2 text-sm font-bold text-foreground">
-                <span className="min-w-0">Precio final</span>
-                <span className="shrink-0 tabular-nums">
-                  {formatCurrency(calculation.publicPrice)}
-                </span>
-              </div>
-            </div>
-        </div>
-      ) : null}
-    </div>
+    <FormField
+      control={form.control}
+      name={`tickets.${index}.price`}
+      render={({ fieldState }) => (
+        <FormItem>
+          <NetProfitCalculator
+            name={`tickets.${index}.basePrice`}
+            netPrice={resolveTicketNetProfit(ticket ?? {}, feePercentage, extras)}
+            onNetChange={writeNet}
+            feePercentage={feePercentage}
+            fixedFee={fixedFee}
+            isSponsored={isSponsored}
+            invalid={Boolean(fieldState.error)}
+            error={fieldState.error?.message}
+          />
+        </FormItem>
+      )}
+    />
   )
 }
 
@@ -467,13 +319,12 @@ export function TicketWalletCard({
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <TierPricingSimulator
+        <TierNetCalculator
           form={form}
           index={index}
           feePercentage={feePercentage}
           fixedFee={fixedFee}
           isSponsored={isSponsored}
-          showAdvanced={false}
         />
         <FormField
           control={form.control}
@@ -578,17 +429,9 @@ export function TicketWalletCard({
       <Accordion className="rounded-2xl bg-muted/20 px-4">
         <AccordionItem value={`limits-${index}`} className="border-0">
           <AccordionTrigger className="py-3 text-sm text-foreground hover:no-underline">
-            Configuraciones adicionales de venta
+            Reglas de compra
           </AccordionTrigger>
           <AccordionContent className="flex flex-col gap-y-4 pb-4">
-            <TierPricingSimulator
-              form={form}
-              index={index}
-              feePercentage={feePercentage}
-              fixedFee={fixedFee}
-              isSponsored={isSponsored}
-              showPrice={false}
-            />
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <FormField
                 control={form.control}
@@ -596,7 +439,7 @@ export function TicketWalletCard({
                 render={({ field, fieldState }) => (
                   <FormItem className="flex min-w-0 flex-col gap-y-2">
                     <FormLabel className={STUDIO_LABEL_CLASS}>
-                      Límite de entradas por persona
+                      Mínimo de tickets por compra
                     </FormLabel>
                     <Input
                       type="text"
@@ -632,7 +475,7 @@ export function TicketWalletCard({
                 render={({ field, fieldState }) => (
                   <FormItem className="flex min-w-0 flex-col gap-y-2">
                     <FormLabel className={STUDIO_LABEL_CLASS}>
-                      Máximo por compra
+                      Máximo de tickets por compra
                     </FormLabel>
                     <Input
                       type="text"
