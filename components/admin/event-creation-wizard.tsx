@@ -979,7 +979,10 @@ export function EventCreationWizard({
     return true
   }
 
-  function persistWorkspaceMap(next: ReturnType<typeof parseVenueMap>) {
+  function persistWorkspaceMap(
+    next: ReturnType<typeof parseVenueMap>,
+    options?: { announceEmpty?: boolean },
+  ) {
     form.setValue("venue.venueMap", next, { shouldDirty: true })
     form.setValue("venue.seatingLayout", venueMapToSeatingLayout(next), {
       shouldDirty: true,
@@ -991,7 +994,9 @@ export function EventCreationWizard({
         type: "manual",
         message: EMPTY_MAP_ENABLE_ERROR,
       })
-      toast.error(EMPTY_MAP_ENABLE_ERROR)
+      if (options?.announceEmpty !== false) {
+        toast.error(EMPTY_MAP_ENABLE_ERROR)
+      }
       applyMapInventory(next)
       return
     }
@@ -1739,15 +1744,16 @@ export function EventCreationWizard({
                 tickets={watchedTickets}
                 saving={form.formState.isSubmitting || isStudioClosing}
                 onClose={() => void closeStudio()}
-                onChange={(next) => persistWorkspaceMap(next)}
+                onChange={(next) =>
+                  persistWorkspaceMap(next, { announceEmpty: false })
+                }
                 onSave={async (next) => {
-                  persistWorkspaceMap(next)
+                  persistWorkspaceMap(next, { announceEmpty: false })
+                  const eventId = initialData?.id ?? persistedEventId
+                  if (!eventId) return
                   const result = await persistInventoryDraft(form.getValues())
                   if (!result.success) {
-                    toast.error("No se pudo guardar el mapa", {
-                      description: toUserFacingError(result.error),
-                    })
-                    return
+                    throw new Error(toUserFacingError(result.error))
                   }
                 }}
               />

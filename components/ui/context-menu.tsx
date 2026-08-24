@@ -54,7 +54,7 @@ function ContextMenu({
       data-slot="context-menu"
       style={{ left, top }}
       className={cn(
-        "fixed z-[80] min-w-52 overflow-hidden rounded-xl border border-border bg-popover p-1 text-popover-foreground shadow-lg outline-none",
+        "fixed z-[100] min-w-52 overflow-hidden rounded-xl border border-border bg-popover p-1 text-popover-foreground shadow-lg outline-none",
         "animate-in fade-in-0 zoom-in-95",
         className,
       )}

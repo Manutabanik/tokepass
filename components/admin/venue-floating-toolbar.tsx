@@ -67,15 +67,20 @@ export function VenueFloatingToolbar({
   onPlace,
   constraintRef,
   className,
+  geometryLocked = false,
 }: {
   active: FloatingDrawTool
   onChange: (tool: FloatingDrawTool) => void
   onPlace?: (placement: PalettePlacement) => void
   constraintRef?: RefObject<HTMLElement | null>
   className?: string
+  geometryLocked?: boolean
 }) {
   const dragControls = useDragControls()
   const [menuOpen, setMenuOpen] = useState(false)
+  const visibleTools = geometryLocked
+    ? TOOLS.filter((item) => item.id === "select" || item.id === "pan")
+    : TOOLS
 
   return (
     <motion.div
@@ -87,6 +92,7 @@ export function VenueFloatingToolbar({
       dragMomentum={false}
       dragConstraints={constraintRef}
       onPointerDown={stopCanvas}
+      data-editor-chrome
       className={cn(
         "absolute top-24 left-1/2 z-50 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border bg-card/90 p-2 text-foreground shadow-2xl backdrop-blur-md",
         className,
@@ -104,7 +110,7 @@ export function VenueFloatingToolbar({
         <GripVertical className="size-4" aria-hidden="true" />
       </button>
 
-      {TOOLS.map((item) => {
+      {visibleTools.map((item) => {
         const Icon = item.icon
         const selected = active === item.id
         return (
@@ -132,7 +138,7 @@ export function VenueFloatingToolbar({
         )
       })}
 
-      {onPlace ? (
+      {onPlace && !geometryLocked ? (
         <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
           <DropdownMenuTrigger
             className="inline-flex size-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"

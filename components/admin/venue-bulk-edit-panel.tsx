@@ -93,6 +93,7 @@ export function VenueBulkEditPanel({
   onTicketType,
   onApplyElements,
   showNumbering = true,
+  showPricing = true,
 }: {
   elements: VenueMapElement[]
   allElements: VenueMapElement[]
@@ -105,6 +106,7 @@ export function VenueBulkEditPanel({
   onTicketType: (ticket: { id: string; name?: string; price?: number }) => void
   onApplyElements: (next: VenueMapElement[]) => void
   showNumbering?: boolean
+  showPricing?: boolean
 }) {
   const sharedColor = elements.every((item) => item.color === elements[0]?.color)
     ? (elements[0]?.color ?? "#888888")
@@ -172,37 +174,41 @@ export function VenueBulkEditPanel({
         />
       </Field>
 
-      <Field
-        label={venueUnitPriceLabel({
-          type: elements[0]?.type,
-          sellMode: elements.every((item) => item.sellMode === elements[0]?.sellMode)
-            ? elements[0]?.sellMode
-            : undefined,
-          priceMode: elements.every((item) => item.priceMode === elements[0]?.priceMode)
-            ? elements[0]?.priceMode
-            : undefined,
-        })}
-      >
-        <PriceInput
-          value={
-            elements.every((item) => item.price === elements[0]?.price)
-              ? elements[0]?.price
-              : undefined
-          }
-          onValueChange={(value) => {
-            if (value == null) return
-            onPrice(value)
-          }}
-        />
-      </Field>
+      {showPricing ? (
+        <Field
+          label={venueUnitPriceLabel({
+            type: elements[0]?.type,
+            sellMode: elements.every((item) => item.sellMode === elements[0]?.sellMode)
+              ? elements[0]?.sellMode
+              : undefined,
+            priceMode: elements.every((item) => item.priceMode === elements[0]?.priceMode)
+              ? elements[0]?.priceMode
+              : undefined,
+          })}
+        >
+          <PriceInput
+            value={
+              elements.every((item) => item.price === elements[0]?.price)
+                ? elements[0]?.price
+                : undefined
+            }
+            onValueChange={(value) => {
+              if (value == null) return
+              onPrice(value)
+            }}
+          />
+        </Field>
+      ) : null}
 
-      <Field label="Tipo de ticket">
-        <VenueTicketTypeSelect
-          tickets={tickets}
-          value={sharedTicketTypeId}
-          onChange={onTicketType}
-        />
-      </Field>
+      {showPricing ? (
+        <Field label="Tipo de ticket">
+          <VenueTicketTypeSelect
+            tickets={tickets}
+            value={sharedTicketTypeId}
+            onChange={onTicketType}
+          />
+        </Field>
+      ) : null}
 
       <Field label="Color Global">
         <div className="flex items-center gap-2">

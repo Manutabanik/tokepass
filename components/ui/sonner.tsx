@@ -104,7 +104,7 @@ export function Toaster({ className, ...props }: ToasterProps) {
   return (
     <Sonner
       theme="dark"
-      className={cn("toaster group z-50", className)}
+      className={cn("toaster group z-[100]", className)}
       toastOptions={{
         classNames: {
           toast:

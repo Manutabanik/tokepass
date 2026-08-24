@@ -61,7 +61,6 @@ import { VenueSelectionToolbar } from "@/components/admin/venue-selection-toolba
 import { VenueMobileFabBar } from "@/components/admin/venue-mobile-fab-bar"
 import { VenueNudgePad } from "@/components/admin/venue-nudge-pad"
 import { InspectorShapeSelector } from "@/components/admin/inspector-shape-selector"
-import { VenuePriceModeControl } from "@/components/admin/venue-price-mode-control"
 import { TheatreSeatSymbol } from "@/components/admin/venue-svg-symbols"
 import { VenueStudioHud } from "@/components/admin/venue-studio-hud"
 import { VenueTemplateLibrary } from "@/components/admin/venue-template-selector"
@@ -255,7 +254,6 @@ import {
   isInfrastructureElement,
   resolveVenuePricing,
   venuePriceModeFromSellMode,
-  venueUnitPriceLabel,
   type InteractiveVenueMap,
   type VenueMapAisle,
   type VenueMapElement,
@@ -349,6 +347,15 @@ function newId(prefix: string) {
 
 function seatKey(sectorId: string, seatId: string) {
   return `${sectorId}::${seatId}`
+}
+
+function isEditorChromeTarget(target: EventTarget | null) {
+  if (!(target instanceof Element)) return false
+  return Boolean(
+    target.closest(
+      "[data-editor-chrome], [role='toolbar'], [data-slot='dropdown-menu-trigger'], [data-slot='dropdown-menu-content']",
+    ),
+  )
 }
 
 export function InteractiveVenueMapEditor({
@@ -471,10 +478,10 @@ export function InteractiveVenueMapEditor({
     if (!onSave) return
     setExplicitSaveStatus("saving")
     try {
-      await onSave(mapRef.current)
+      await onSave(parseVenueMap(mapRef.current))
       setExplicitSaveStatus("saved")
       setIsCanvasDirty(false)
-      toast.success("Guardado")
+      toast.success("Mapa guardado correctamente")
     } catch (error) {
       setExplicitSaveStatus("error")
       toast.error(
@@ -1748,6 +1755,7 @@ export function InteractiveVenueMapEditor({
   }
 
   function onCanvasPointerDownCapture(event: React.PointerEvent) {
+    if (isEditorChromeTarget(event.target)) return
     if (event.button === 2) return
     pointersRef.current.set(event.pointerId, {
       x: event.clientX,
@@ -3681,6 +3689,9 @@ export function InteractiveVenueMapEditor({
   }
 
   function pickFloatingTool(next: FloatingDrawTool) {
+    if (workModeRef.current === "pricing" && next !== "select" && next !== "pan") {
+      return
+    }
     if (next === "select") {
       setHandPan(false)
       setTool("select")
@@ -3740,6 +3751,10 @@ export function InteractiveVenueMapEditor({
         : selection && "id" in selection && selection.id
           ? selection.id
           : "predio"
+  useEffect(() => {
+    if (!isStudio || compactChrome || !selection) return
+    setInspectorCollapsed(false)
+  }, [compactChrome, isStudio, propertiesTargetKey, selection])
   const mobileSheetOpen = toolsOpen || propertiesOpen || modesOpen
   const showSelectionToolbar =
     selectedElementIds.length >= 1 &&
@@ -3771,7 +3786,7 @@ export function InteractiveVenueMapEditor({
   const saveChangesButton = onSave ? (
     <Button
       type="button"
-      disabled={mapBusy || !hasUnsavedChanges}
+      disabled={mapBusy}
       onClick={() => {
         void persistEditorMap()
       }}
@@ -3873,7 +3888,7 @@ export function InteractiveVenueMapEditor({
             "relative overflow-hidden touch-none overscroll-none select-none bg-slate-100 bg-[radial-gradient(circle_at_1px_1px,#cbd5e1_1px,transparent_0)] bg-[size:20px_20px] dark:bg-zinc-950 dark:bg-[radial-gradient(circle_at_1px_1px,#27272a_1px,transparent_0)]",
             "relative min-h-0 flex-1 overflow-hidden",
             isStudio && "h-full w-full",
-              (spacePan || handPan) && !isPanning && "cursor-grab [&_*]:cursor-grab",
+              (spacePan || handPan) && !isPanning && "cursor-grab",
             isPanning && "cursor-grabbing [&_*]:cursor-grabbing",
           )}
           style={{ touchAction: "none" }}
@@ -3917,7 +3932,7 @@ export function InteractiveVenueMapEditor({
             preserveAspectRatio="xMidYMid meet"
             className={cn(
               "w-full touch-none select-none",
-              "absolute inset-0 h-full min-h-0",
+              "absolute inset-0 z-0 h-full min-h-0",
               tool === "polygon" && "cursor-crosshair",
               (spacePan || handPan || isPanning) && tool !== "polygon" && "cursor-grab",
               isPanning && "cursor-grabbing",
@@ -4394,35 +4409,39 @@ export function InteractiveVenueMapEditor({
               active={floatingTool}
               onChange={pickFloatingTool}
               onPlace={pickPaletteItem}
+              geometryLocked={geometryLocked}
               constraintRef={canvasRef}
               className={compactChrome ? "top-16" : undefined}
             />
           ) : null}
           {!preview && !libraryOpen ? (
-            <div className="absolute top-4 right-4 z-40">
+            <div className="absolute top-4 right-4 z-40" data-editor-chrome>
               <DropdownMenu>
                 <DropdownMenuTrigger
                   className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-card/85 px-3 text-xs font-semibold text-foreground shadow-lg backdrop-blur-md hover:bg-card"
-                  onPointerDown={(event) => event.stopPropagation()}
                 >
                   Herramientas
                   <ChevronDown className="size-3.5" aria-hidden="true" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="min-w-48">
-                  <DropdownMenuItem onClick={addStage}>
-                    <Square className="size-4" />
-                    Agregar escenario
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={addAisle}>
-                    <Minus className="size-4" />
-                    Agregar pasillo
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => setLibraryOpen(true)}
-                  >
-                    <LayoutTemplate className="size-4" />
-                    Plantillas
-                  </DropdownMenuItem>
+                  {geometryLocked ? null : (
+                    <>
+                      <DropdownMenuItem onClick={addStage}>
+                        <Square className="size-4" />
+                        Agregar escenario
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={addAisle}>
+                        <Minus className="size-4" />
+                        Agregar pasillo
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => setLibraryOpen(true)}
+                      >
+                        <LayoutTemplate className="size-4" />
+                        Plantillas
+                      </DropdownMenuItem>
+                    </>
+                  )}
                   <DropdownMenuItem
                     onClick={() => {
                       setTemplateName(eventTitle || "Mi recinto")
@@ -4437,10 +4456,12 @@ export function InteractiveVenueMapEditor({
                     <Eye className="size-4" />
                     Vista previa del comprador
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleClearMap}>
-                    <Trash2 className="size-4" />
-                    Limpiar Mapa
-                  </DropdownMenuItem>
+                  {geometryLocked ? null : (
+                    <DropdownMenuItem onClick={handleClearMap}>
+                      <Trash2 className="size-4" />
+                      Limpiar Mapa
+                    </DropdownMenuItem>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -4458,7 +4479,10 @@ export function InteractiveVenueMapEditor({
                 compactChrome ? "bottom-24" : "bottom-6",
               )}
             >
-              <div className="pointer-events-auto inline-flex items-center gap-1 rounded-full border border-border bg-card/80 px-2 py-1 text-foreground shadow-lg backdrop-blur-md">
+              <div
+                data-editor-chrome
+                className="pointer-events-auto inline-flex items-center gap-1 rounded-full border border-border bg-card/80 px-2 py-1 text-foreground shadow-lg backdrop-blur-md"
+              >
                 <button
                   type="button"
                   onPointerDown={(event) => event.stopPropagation()}
@@ -4886,22 +4910,6 @@ export function InteractiveVenueMapEditor({
                     </Button>
                   </AccordionContent>
                 </AccordionItem>
-                <AccordionItem value="tarifas" className="border-border">
-                  <AccordionTrigger className="py-2.5 text-xs font-semibold tracking-wide uppercase hover:no-underline">
-                    Tarifas
-                  </AccordionTrigger>
-                  <AccordionContent className="space-y-3 pb-3">
-                    <Field label="Precio (ARS)">
-                      <PriceInput
-                        value={selectedSector.price}
-                        onValueChange={(value) => {
-                          if (value == null) return
-                          patchSector(selectedSector.id, { price: value })
-                        }}
-                      />
-                    </Field>
-                  </AccordionContent>
-                </AccordionItem>
               </Accordion>
             </div>
           ) : selectedElement && isInfrastructureElement(selectedElement) ? (
@@ -4982,93 +4990,13 @@ export function InteractiveVenueMapEditor({
             </div>
           ) : selectedElement ? (
             <div className="space-y-3">
-              <Field label="Etiqueta personalizada (boleto)">
-                <Input
-                  value={selectedElement.label}
-                  onChange={(event) =>
-                    patchElement(selectedElement.id, {
-                      label: event.target.value,
-                      customLabel: event.target.value.trim() || undefined,
-                      labelLocked: true,
-                    })
-                  }
-                />
-                <div className="flex items-center justify-between gap-3 pt-1">
-                  <Label
-                    htmlFor="label-locked"
-                    className="text-xs font-normal leading-snug text-muted-foreground"
-                  >
-                    No cambiar al numerar el bloque
-                  </Label>
-                  <Switch
-                    id="label-locked"
-                    size="sm"
-                    checked={selectedElement.labelLocked === true}
-                    onCheckedChange={(checked) =>
-                      patchElement(selectedElement.id, { labelLocked: checked })
-                    }
-                    aria-label="No cambiar al numerar el bloque"
-                  />
-                </div>
-              </Field>
-              <Field label="Nombre del sector (para el precio)">
-                <Input
-                  value={selectedElement.sectorName}
-                  onChange={(event) =>
-                    patchElement(selectedElement.id, {
-                      sectorName: event.target.value,
-                    })
-                  }
-                />
-              </Field>
-              <Field label={venueUnitPriceLabel({ type: selectedElement.type, sellMode: selectedElement.sellMode, priceMode: selectedElement.priceMode })}>
-                <PriceField
-                  value={selectedElement.price}
-                  onValueChange={(value) => {
-                    if (value == null) return
-                    patchElement(selectedElement.id, { price: value })
-                  }}
-                />
-              </Field>
-              <Field label="Tipo de ticket">
-                <VenueTicketTypeSelect
-                  tickets={tickets}
-                  value={selectedElement.ticketTypeId}
-                  onChange={(ticket) =>
-                    patchElement(selectedElement.id, {
-                      ticketTypeId: ticket.id,
-                      ...(ticket.name ? { sectorName: ticket.name } : {}),
-                      ...(ticket.price != null ? { price: ticket.price } : {}),
-                    })
-                  }
-                />
-              </Field>
-              <Field label="Color del Sector">
-                <div className="space-y-2">
-                  <VenueSectorColorPicker
-                    value={selectedElement.color}
-                    onChange={(color) =>
-                      patchElement(selectedElement.id, { color })
-                    }
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="min-h-[44px] w-full"
-                    onClick={selectSimilarByColor}
-                  >
-                    <Wand2 className="size-4" />
-                    Seleccionar todos de este color
-                  </Button>
-                </div>
-              </Field>
               <InspectorShapeSelector
                 element={selectedElement}
                 onChange={(patch) => patchElement(selectedElement.id, patch)}
               />
               {selectedElement.type === "round_table" ||
               selectedElement.type === "vip_box" ? (
-                <Field label="Sillas">
+                <Field label="Cantidad de sillas">
                   <Input
                     type="number"
                     min={2}
@@ -5126,18 +5054,37 @@ export function InteractiveVenueMapEditor({
                   />
                 </Field>
               ) : null}
-              {selectedElement.type === "round_table" ||
-              selectedElement.type === "long_table" ||
-              selectedElement.type === "vip_box" ? (
-                <VenuePriceModeControl
-                  id={selectedElement.id}
-                  value={
-                    selectedElement.priceMode ??
-                    venuePriceModeFromSellMode(selectedElement.sellMode)
+              <Field label="Nombre">
+                <Input
+                  value={selectedElement.label}
+                  onChange={(event) =>
+                    patchElement(selectedElement.id, {
+                      label: event.target.value,
+                      customLabel: event.target.value.trim() || undefined,
+                      labelLocked: true,
+                    })
                   }
-                  onChange={(next) => patchElement(selectedElement.id, next)}
                 />
-              ) : null}
+              </Field>
+              <Field label="Color del Sector">
+                <div className="space-y-2">
+                  <VenueSectorColorPicker
+                    value={selectedElement.color}
+                    onChange={(color) =>
+                      patchElement(selectedElement.id, { color })
+                    }
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-[44px] w-full"
+                    onClick={selectSimilarByColor}
+                  >
+                    <Wand2 className="size-4" />
+                    Seleccionar todos de este color
+                  </Button>
+                </div>
+              </Field>
               {selectedElement.groupId ? (
                 <Button
                   type="button"
@@ -5194,6 +5141,7 @@ export function InteractiveVenueMapEditor({
                 onTicketType={batchTicketType}
                 onApplyElements={applySelectedElements}
                 showNumbering={false}
+                showPricing={false}
               />
               <div className="grid grid-cols-2 gap-1.5">
                 <Button

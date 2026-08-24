@@ -87,25 +87,20 @@ export function VenueWorkModeTabs({
           const Icon = mode.icon
           const stepper = layout === "stepper"
           return (
-            <span key={mode.id} className="inline-flex items-center">
-              {stepper && index > 0 ? (
-                <span className="px-1 text-muted-foreground" aria-hidden="true">
-                  ›
-                </span>
-              ) : null}
-              <TabsTrigger
-                value={mode.id}
-                className={cn(
-                  "h-8 shrink-0 gap-1 px-2.5 text-xs data-active:bg-background data-active:text-foreground",
-                  stepper && "px-3 text-[13px] font-medium",
-                )}
-              >
-                {stepper ? null : (
-                  <Icon className="size-3.5" aria-hidden="true" />
-                )}
-                <span>{mode.label}</span>
-              </TabsTrigger>
-            </span>
+            <TabsTrigger
+              key={mode.id}
+              value={mode.id}
+              className={cn(
+                "h-8 shrink-0 gap-1 px-2.5 text-xs data-active:bg-background data-active:text-foreground",
+                stepper && "px-3 text-[13px] font-medium",
+                stepper && index > 0 && "before:mr-1 before:text-muted-foreground before:content-['›']",
+              )}
+            >
+              {stepper ? null : (
+                <Icon className="size-3.5" aria-hidden="true" />
+              )}
+              <span>{mode.label}</span>
+            </TabsTrigger>
           )
         })}
       </TabsList>
