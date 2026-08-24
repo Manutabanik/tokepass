@@ -20,6 +20,7 @@ import {
 } from "react"
 
 import type { EventDetails } from "@/app/actions/public-events"
+import { refreshPublishedEventDetails } from "@/app/actions/public-events"
 import { refundPolicyBuyerCopy } from "@/lib/events/refund-policy"
 import type { ResaleListingPublic } from "@/app/actions/resale"
 import { EventDateSelector } from "@/components/public/event-date-selector"
@@ -293,11 +294,23 @@ export function EventStorefront({
 
   useEffect(() => {
     const store = useCheckoutStore.getState()
-    if (store.eventId && store.eventId !== event.id) {
-      store.resetIfOtherEvent(event.id)
-      store.setViewMode("info")
+    store.resetIfOtherEvent(event.id)
+    if (store.eventSlug !== event.slug) {
+      useCheckoutStore.setState({ eventSlug: event.slug })
     }
-  }, [event.id])
+  }, [event.id, event.slug])
+
+  useEffect(() => {
+    if (event.isDraftPreview) return
+    let cancelled = false
+    void refreshPublishedEventDetails(event.slug || event.id).then((fresh) => {
+      if (cancelled || !fresh) return
+      setEvent(fresh)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [event.id, event.isDraftPreview, event.slug])
 
   useEffect(() => {
     const bind = () => useStorefrontSeatStore.getState().bindEvent(event.id)

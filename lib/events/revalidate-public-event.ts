@@ -1,9 +1,16 @@
-import { revalidatePath, revalidateTag } from "next/cache"
+import { revalidatePath, revalidateTag, updateTag } from "next/cache"
 
 import { publicEventSlugsForRevalidate } from "@/lib/events/public-event-slugs"
 
+const TAG_PROFILE = "seconds" as const
+
+function invalidateCacheTag(tag: string) {
+  updateTag(tag)
+  revalidateTag(tag, TAG_PROFILE)
+}
+
 /**
- * Limpia ISR + Data Cache del evento en admin y en la vitrina pública.
+ * Limpia ISR + Data Cache del evento en admin y en la vitrina publica.
  * Si el slug cambia, invalida la URL anterior y la nueva.
  */
 export function revalidatePublicEventCache(input: {
@@ -20,27 +27,30 @@ export function revalidatePublicEventCache(input: {
     eventId,
   )
 
-  revalidatePath("/")
-  revalidatePath("/eventos")
-  revalidatePath("/events")
-  revalidatePath("/admin/events")
-  revalidatePath(`/admin/events/${eventId}`)
-  revalidatePath(`/admin/events/${eventId}/edit`)
-  revalidatePath(`/events/${eventId}`)
-  revalidatePath(`/events/preview/${eventId}`)
+  revalidatePath("/", "layout")
+  revalidatePath("/eventos", "page")
+  revalidatePath("/events", "layout")
+  revalidatePath("/admin/events", "layout")
+  revalidatePath(`/admin/events/${eventId}`, "layout")
+  revalidatePath(`/admin/events/${eventId}/edit`, "layout")
+  revalidatePath(`/events/${eventId}`, "page")
+  revalidatePath(`/events/preview/${eventId}`, "page")
+  revalidatePath(`/superadmin/events/${eventId}`, "page")
 
   for (const slug of slugs) {
-    revalidatePath(`/eventos/${slug}`)
-    revalidatePath(`/eventos/${slug}/entradas`)
-    revalidatePath(`/e/${slug}`)
-    revalidateTag(`event-${slug}`, "max")
-    revalidateTag(`event-gate-${slug}`, "max")
+    revalidatePath(`/eventos/${slug}`, "page")
+    revalidatePath(`/eventos/${slug}/entradas`, "page")
+    revalidatePath(`/e/${slug}`, "page")
+    invalidateCacheTag(`event-${slug}`)
+    invalidateCacheTag(`event-gate-${slug}`)
+    invalidateCacheTag(`event-details-${slug}`)
   }
 
-  revalidateTag(`event-${eventId}`, "max")
-  revalidateTag(`related-${eventId}`, "max")
-  revalidateTag("catalog-events", "max")
-  revalidateTag("catalog-published-events", "max")
-  revalidateTag("catalog-featured-events", "max")
+  invalidateCacheTag(`event-${eventId}`)
+  invalidateCacheTag(`related-${eventId}`)
+  invalidateCacheTag(`resale-${eventId}`)
+  invalidateCacheTag("catalog-events")
+  invalidateCacheTag("catalog-published-events")
+  invalidateCacheTag("catalog-featured-events")
+  invalidateCacheTag("catalog-event-categories")
 }
-

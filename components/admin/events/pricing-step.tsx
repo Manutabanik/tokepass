@@ -8,13 +8,16 @@ import { CapacityThermometer } from "@/components/admin/events/capacity-thermome
 import { InventoryAdvancedTools } from "@/components/admin/events/inventory-advanced-tools"
 import { InventorySummaryRow } from "@/components/admin/events/inventory-summary-row"
 import {
+  commitTicketFamily,
   sheetDifferentiateDefault,
   TicketEditorSheet,
 } from "@/components/admin/events/ticket-editor-sheet"
+import { Button } from "@/components/ui/button"
 import { FormLabel, FormMessage } from "@/components/ui/form"
+import { Switch } from "@/components/ui/switch"
 import { listEventFormJornadas } from "@/lib/event-schedule"
 import { createInventoryTicket } from "@/lib/inventory/create-inventory-ticket"
-import { EMPTY_MAP_ENABLE_ERROR } from "@/lib/inventory/map-enablement"
+import { eventHasActiveSeatingMap } from "@/lib/inventory/map-enablement"
 import {
   listInventoryFamilies,
   planMissingFamilyDayTickets,
@@ -33,6 +36,7 @@ type SheetState = {
   kind: "general" | "map"
   created: boolean
   differentiate: boolean
+  appendedIndexes: number[]
 }
 
 export function PricingStep({
@@ -42,6 +46,9 @@ export function PricingStep({
   isSponsored = false,
   hideMapBlock = false,
   onOpenMapStudio,
+  onSyncMapToTickets,
+  onDisableMap,
+  onRemoveMapSector,
 }: {
   form: UseFormReturn<EventFormValues>
   eventId?: string | null
@@ -50,6 +57,9 @@ export function PricingStep({
   isSponsored?: boolean
   hideMapBlock?: boolean
   onOpenMapStudio?: () => void
+  onSyncMapToTickets?: () => void
+  onDisableMap?: () => void
+  onRemoveMapSector?: (sectorId: string | null) => void
 }) {
   const { append, update, remove } = useFieldArray({
     control: form.control,
@@ -62,13 +72,21 @@ export function PricingStep({
   )
   const scheduleDays = form.watch("basics.scheduleDays") ?? []
   const identityDate = form.watch("basics.date")
+  const hasSeatingPlan = Boolean(form.watch("basics.hasSeatingPlan"))
+  const includesSeatingMap = Boolean(form.watch("venue.includesSeatingMap"))
+  const venueMap = form.watch("venue.venueMap")
+  const mapToggleOn = hasSeatingPlan && includesSeatingMap
+  const mapEnabled = eventHasActiveSeatingMap({
+    hasSeatingPlan,
+    includesSeatingMap,
+    venueMap,
+  })
   const eventDates = listEventFormJornadas({
     scheduleDays,
     date: identityDate,
   })
   const isMultiDay =
     Boolean(form.watch("basics.isMultiDay")) || eventDates.length >= 2
-  const mapError = form.formState.errors.venue?.venueMap?.message
   const [sheet, setSheet] = useState<SheetState | null>(null)
   const [showExtras, setShowExtras] = useState(() => {
     const current = form.getValues("tickets") ?? []
@@ -88,7 +106,29 @@ export function PricingStep({
   )
   const hasSellableRows = families.length > 0
 
+  function resolveFamilyIndexes(family: InventoryFamily): number[] {
+    const current = form.getValues("tickets") ?? []
+    const refreshed = listInventoryFamilies(current).find(
+      (candidate) => candidate.key === family.key,
+    )
+    return refreshed?.indexes ?? family.indexes
+  }
+
   function openFamily(family: InventoryFamily, created = false) {
+    if (family.kind === "map") {
+      onSyncMapToTickets?.()
+      const indexes = resolveFamilyIndexes(family)
+      const current = form.getValues("tickets") ?? []
+      setSheet({
+        indexes,
+        kind: "map",
+        created,
+        differentiate: sheetDifferentiateDefault(current, indexes),
+        appendedIndexes: [],
+      })
+      return
+    }
+
     const current = form.getValues("tickets") ?? []
     const dayIds = eventDates.map((day) => day.id)
     const plan = planMissingFamilyDayTickets({
@@ -98,19 +138,21 @@ export function PricingStep({
       isMultiDay,
     })
     const start = current.length
+    const appendedIndexes: number[] = []
     if (plan.append.length > 0) {
       append(plan.append)
+      for (let offset = 0; offset < plan.append.length; offset += 1) {
+        appendedIndexes.push(start + offset)
+      }
     }
-    const indexes = [
-      ...plan.keepIndexes,
-      ...plan.append.map((_, offset) => start + offset),
-    ]
+    const indexes = [...plan.keepIndexes, ...appendedIndexes]
     const nextTickets = form.getValues("tickets") ?? []
     setSheet({
       indexes,
       kind: family.kind,
       created,
       differentiate: sheetDifferentiateDefault(nextTickets, indexes),
+      appendedIndexes,
     })
   }
 
@@ -128,30 +170,8 @@ export function PricingStep({
       kind: "general",
       created: true,
       differentiate: false,
+      appendedIndexes: [],
     })
-  }
-
-  function commitSheetFamily() {
-    if (!sheet) return
-    const current = form.getValues("tickets") ?? []
-    const primaryIndex = sheet.indexes[0]
-    const primary = primaryIndex == null ? undefined : current[primaryIndex]
-    if (!primary) return
-    const name = (primary.name ?? "").trim()
-    for (const index of sheet.indexes) {
-      const ticket = current[index]
-      if (!ticket) continue
-      update(index, {
-        ...ticket,
-        name:
-          sheet.kind === "map"
-            ? ticket.name
-            : name || ticket.name || "Entrada general",
-        capacity: sheet.kind === "map" ? ticket.capacity : primary.capacity,
-        price: sheet.differentiate ? ticket.price : primary.price,
-        basePrice: sheet.differentiate ? ticket.basePrice : primary.price,
-      })
-    }
   }
 
   function closeSheet(open: boolean) {
@@ -167,10 +187,28 @@ export function PricingStep({
           !(Number(ticket?.capacity) > 0) &&
           !(Number(ticket?.price) > 0),
       )
+      const appendedStillBlank =
+        sheet.appendedIndexes.length > 0 &&
+        sheet.appendedIndexes.every((index) => {
+          const ticket = current[index]
+          return (
+            !ticket?.name?.trim() &&
+            !(Number(ticket?.capacity) > 0) &&
+            !(Number(ticket?.price) > 0)
+          )
+        })
       if (sheet.created && stillBlank) {
         remove(sheet.indexes)
+      } else if (!sheet.created && appendedStillBlank) {
+        remove(sheet.appendedIndexes)
       } else {
-        commitSheetFamily()
+        commitTicketFamily({
+          form,
+          update,
+          indexes: sheet.indexes,
+          kind: sheet.kind,
+          differentiate: sheet.differentiate,
+        })
       }
     }
     setSheet(null)
@@ -184,6 +222,25 @@ export function PricingStep({
     }
   }
 
+  function removeMapFamily(family: InventoryFamily) {
+    if (family.sold > 0) return
+    if (family.seatingSectorId?.trim()) {
+      onRemoveMapSector?.(family.seatingSectorId)
+      return
+    }
+    removeFamily(family)
+  }
+
+  function handleMapToggle(checked: boolean) {
+    if (checked) {
+      form.setValue("basics.hasSeatingPlan", true, { shouldDirty: true })
+      form.setValue("venue.includesSeatingMap", true, { shouldDirty: true })
+      onOpenMapStudio?.()
+      return
+    }
+    onDisableMap?.()
+  }
+
   return (
     <div className="space-y-6" data-field="tickets">
       <FormLabel className={STUDIO_LABEL_CLASS} required>
@@ -193,11 +250,23 @@ export function PricingStep({
       {typeof form.formState.errors.tickets?.message === "string" ? (
         <FormMessage>{form.formState.errors.tickets.message}</FormMessage>
       ) : null}
-      {typeof mapError === "string" ? (
-        <p className="text-sm text-destructive" role="alert">
-          {mapError || EMPTY_MAP_ENABLE_ERROR}
-        </p>
-      ) : null}
+
+      {hideMapBlock ? null : (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-card/40 px-3 py-2.5">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-foreground">Mapa de sectores</p>
+            <p className="text-xs text-muted-foreground">
+              Activá esta opción si tu evento cuenta con sectores, mesas o
+              ubicaciones numeradas.
+            </p>
+          </div>
+          <Switch
+            checked={mapToggleOn}
+            onCheckedChange={handleMapToggle}
+            aria-label="Activar mapa de sectores"
+          />
+        </div>
+      )}
 
       {hasSellableRows ? (
         <div className="space-y-2">
@@ -209,7 +278,7 @@ export function PricingStep({
               onRemove={
                 family.kind === "general"
                   ? () => removeFamily(family)
-                  : undefined
+                  : () => removeMapFamily(family)
               }
             />
           ))}
@@ -222,17 +291,11 @@ export function PricingStep({
               <Plus className="size-3" aria-hidden="true" />
               Agregar Entrada General
             </button>
-            {hideMapBlock ? null : (
-              <button
-                type="button"
+            {hideMapBlock || !mapToggleOn ? null : (
+              <MapConfigureButton
+                hasMapSectors={mapEnabled}
                 onClick={() => onOpenMapStudio?.()}
-                className="inline-flex items-center gap-1 rounded-xl border border-zinc-300 px-3 py-1.5 text-xs font-medium text-foreground hover:border-emerald-500 dark:border-zinc-700"
-              >
-                <Plus className="size-3" aria-hidden="true" />
-                {families.some((family) => family.kind === "map")
-                  ? "Editar mapa de sectores"
-                  : "Configurar Mapa de Sectores"}
-              </button>
+              />
             )}
           </div>
         </div>
@@ -243,11 +306,11 @@ export function PricingStep({
             label="Agregar Entrada General"
             onClick={addGeneral}
           />
-          {hideMapBlock ? null : (
-            <ZeroStateButton
-              icon={Map}
-              label="Configurar Mapa de Sectores"
+          {hideMapBlock || !mapToggleOn ? null : (
+            <MapConfigureButton
+              hasMapSectors={mapEnabled}
               onClick={() => onOpenMapStudio?.()}
+              prominent
             />
           )}
         </div>
@@ -299,6 +362,50 @@ export function PricingStep({
         />
       ) : null}
     </div>
+  )
+}
+
+function MapConfigureButton({
+  hasMapSectors,
+  onClick,
+  prominent = false,
+}: {
+  hasMapSectors: boolean
+  onClick: () => void
+  prominent?: boolean
+}) {
+  const label = hasMapSectors
+    ? "Editar mapa de sectores"
+    : "Configurar Mapa de Sectores"
+
+  if (prominent) {
+    return (
+      <Button
+        type="button"
+        variant="default"
+        className="min-h-28 h-auto flex-1 flex-col gap-2 rounded-2xl px-4 py-6 text-sm"
+        onClick={onClick}
+      >
+        <span className="inline-flex items-center gap-1.5">
+          <Plus className="size-4" aria-hidden="true" />
+          <Map className="size-4" aria-hidden="true" />
+        </span>
+        {label}
+      </Button>
+    )
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="default"
+      size="sm"
+      className="rounded-xl"
+      onClick={onClick}
+    >
+      <Plus className="size-3" aria-hidden="true" />
+      {label}
+    </Button>
   )
 }
 

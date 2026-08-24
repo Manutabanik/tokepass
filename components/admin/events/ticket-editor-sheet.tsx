@@ -27,8 +27,10 @@ import {
   STUDIO_CONTROL_CLASS,
   STUDIO_LABEL_CLASS,
 } from "@/lib/admin/studio-form-styles"
+import { formatCurrency } from "@/lib/format"
 import { formatInventoryDayOption } from "@/lib/event-schedule"
 import { asPositiveInt, parseStrictInt } from "@/lib/inventory/capacity-budget"
+import { normalizeTicketRow } from "@/lib/inventory/normalize-ticket-row"
 import {
   familyHasDifferentiatedPrices,
   ticketSoldCount,
@@ -43,6 +45,53 @@ import type { EventFormValues } from "@/lib/validations/event-form"
 import { cn } from "@/lib/utils"
 
 type DayOption = EventFormValues["basics"]["scheduleDays"][number]
+
+export function commitTicketFamily(input: {
+  form: UseFormReturn<EventFormValues>
+  update: UseFieldArrayUpdate<EventFormValues, "tickets">
+  indexes: number[]
+  kind: "general" | "map"
+  differentiate: boolean
+}) {
+  const { form, update, indexes, kind, differentiate } = input
+  const current = form.getValues("tickets") ?? []
+  const primaryIndex = indexes[0]
+  const primary =
+    primaryIndex == null ? undefined : current[primaryIndex]
+  if (!primary) return
+
+  const normalizedPrimary = normalizeTicketRow(primary)
+  const sharedName =
+    normalizedPrimary.name.trim() || "Entrada general"
+  const sharedCapacity = normalizedPrimary.capacity
+  const sharedPrice = normalizedPrimary.price
+  const sharedBasePrice = normalizedPrimary.basePrice
+
+  for (const index of indexes) {
+    const ticket = current[index]
+    if (!ticket) continue
+    const normalized = normalizeTicketRow(ticket)
+    update(index, {
+      ...ticket,
+      name:
+        kind === "map"
+          ? normalized.name
+          : differentiate
+            ? normalized.name || sharedName
+            : sharedName,
+      capacity:
+        kind === "map"
+          ? normalized.capacity
+          : differentiate
+            ? normalized.capacity
+            : sharedCapacity,
+      price: differentiate ? normalized.price : sharedPrice,
+      basePrice: differentiate ? normalized.basePrice : sharedBasePrice,
+      minPurchaseLimit: normalized.minPurchaseLimit,
+      maxPurchaseLimit: normalized.maxPurchaseLimit,
+    })
+  }
+}
 
 export function TicketEditorSheet({
   form,
@@ -98,7 +147,17 @@ export function TicketEditorSheet({
   ) {
     const current = form.getValues(`tickets.${index}`)
     if (!current) return
-    update(index, { ...current, ...patch })
+    const merged = { ...current, ...patch }
+    if ("capacity" in patch) {
+      merged.capacity = Number(merged.capacity) || 0
+    }
+    if ("price" in patch) {
+      merged.price = Number(merged.price) || 0
+    }
+    if ("basePrice" in patch) {
+      merged.basePrice = Number(merged.basePrice) || 0
+    }
+    update(index, merged)
   }
 
   function syncField(
@@ -153,7 +212,7 @@ export function TicketEditorSheet({
           </SheetTitle>
           <SheetDescription>
             {mapLocked
-              ? "El aforo lo define el mapa. Acá cargás la ganancia neta y el precio público se calcula solo."
+              ? "El stock y precio de este sector se gestionan directamente desde el editor del mapa."
               : "Nombre, aforo y ganancia neta. El precio al público incluye la comisión."}
             {familySold > 0 ? ` ${TIER_HAS_SALES_LOCK_HINT}` : ""}
           </SheetDescription>
@@ -216,8 +275,8 @@ export function TicketEditorSheet({
                 />
                 {mapLocked ? (
                   <p className="text-[11px] text-muted-foreground">
-                    Lo define el dibujo del mapa ({asPositiveInt(field.value)}{" "}
-                    lugares)
+                    El stock y precio de este sector se gestionan directamente desde
+                    el editor del mapa ({asPositiveInt(field.value)} lugares).
                   </p>
                 ) : null}
                 <FormMessage>{fieldState.error?.message}</FormMessage>
@@ -226,30 +285,46 @@ export function TicketEditorSheet({
           />
 
           {!differentiate || !showDays ? (
-            <FormField
-              control={form.control}
-              name={`tickets.${primaryIndex}.price`}
-              render={({ fieldState }) => (
-                <FormItem>
-                  <NetProfitCalculator
-                    name={`tickets.${primaryIndex}.basePrice`}
-                    netPrice={resolveTicketNetProfit(
-                      watchedTickets?.[primaryIndex] ?? {},
-                      feePercentage,
-                    )}
-                    onNetChange={(net) =>
-                      writeNet(primaryIndex, net, !differentiate)
-                    }
-                    feePercentage={feePercentage}
-                    invalid={Boolean(fieldState.error)}
-                    error={fieldState.error?.message}
-                  />
-                </FormItem>
-              )}
-            />
+            mapLocked ? (
+              <FormItem>
+                <FormLabel className={STUDIO_LABEL_CLASS}>Precio público</FormLabel>
+                <Input
+                  disabled
+                  readOnly
+                  value={formatCurrency(Number(watchedTickets?.[primaryIndex]?.price) || 0)}
+                  className={cn(STUDIO_CONTROL_CLASS, "tabular-nums")}
+                />
+                <FormDescription className="text-[11px]">
+                  El stock y precio de este sector se gestionan directamente desde
+                  el editor del mapa.
+                </FormDescription>
+              </FormItem>
+            ) : (
+              <FormField
+                control={form.control}
+                name={`tickets.${primaryIndex}.price`}
+                render={({ fieldState }) => (
+                  <FormItem>
+                    <NetProfitCalculator
+                      name={`tickets.${primaryIndex}.basePrice`}
+                      netPrice={resolveTicketNetProfit(
+                        watchedTickets?.[primaryIndex] ?? {},
+                        feePercentage,
+                      )}
+                      onNetChange={(net) =>
+                        writeNet(primaryIndex, net, !differentiate)
+                      }
+                      feePercentage={feePercentage}
+                      invalid={Boolean(fieldState.error)}
+                      error={fieldState.error?.message}
+                    />
+                  </FormItem>
+                )}
+              />
+            )
           ) : null}
 
-          {showDays ? (
+          {showDays && !mapLocked ? (
             <div className="space-y-3 rounded-xl border border-border/70 p-3">
               <label className="flex items-center justify-between gap-3">
                 <span className="text-sm text-foreground">

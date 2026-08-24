@@ -18,6 +18,9 @@ type Props = {
   isSponsored?: boolean
   hideMapBlock?: boolean
   onOpenMapStudio?: () => void
+  onSyncMapToTickets?: () => void
+  onDisableMap?: () => void
+  onRemoveMapSector?: (sectorId: string | null) => void
 }
 
 export function UnifiedInventoryPanel(props: Props) {

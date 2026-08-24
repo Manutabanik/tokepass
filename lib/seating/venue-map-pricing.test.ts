@@ -9,6 +9,7 @@ import {
   migrateLegacyWizardStep,
   sectorUsesNumberedMap,
   syncMapBackedTickets,
+  syncMapToTickets,
   ticketRequiresInteractiveMap,
   venueMapToPricingMap,
 } from "@/lib/seating/venue-map-pricing"
@@ -144,7 +145,7 @@ describe("venue-map-pricing", () => {
     assert.equal(isMapBackedTicket(next[1]!), false)
   })
 
-  it("conserva el precio cargado en la tarjeta al re-guardar el mapa", () => {
+  it("aplica el precio del mapa como fuente de verdad al re-guardar", () => {
     const map = emptyVenueMap()
     map.zones = [
       {
@@ -199,11 +200,12 @@ describe("venue-map-pricing", () => {
       map,
     )
 
-    assert.equal(next[0]?.price, 18500)
+    assert.equal(next[0]?.price, 12000)
+    assert.equal(next[0]?.basePrice, 12000)
     assert.equal(next[0]?.capacity, 48)
   })
 
-  it("no inventa entradas de mapa si solo hay generales sin sector", () => {
+  it("auto-genera entradas de mapa cuando el mapa está activo", () => {
     const map = emptyVenueMap()
     map.zones = [
       {
@@ -259,7 +261,7 @@ describe("venue-map-pricing", () => {
         },
       ],
     } as Parameters<typeof consolidateEventTicketsForPersist>[0])
-    assert.equal(next.some((tier) => tier.seatingSectorId === "zone-campo"), false)
+    assert.equal(next.some((tier) => tier.seatingSectorId === "zone-campo"), true)
     assert.equal(next.some((tier) => tier.name === "Estacionamiento"), true)
   })
 
@@ -865,5 +867,89 @@ describe("venue-map-pricing", () => {
     assert.equal(sectorTickets[1]?.dayId, "day-b")
     assert.equal(sectorTickets[0]?.price, 8000)
     assert.equal(sectorTickets[1]?.price, 8000)
+  })
+
+  it("syncMapToTickets usa append y update sin reemplazar todo el array", () => {
+    const map = emptyVenueMap()
+    map.zones = [
+      {
+        id: "zone-campo",
+        name: "Campo",
+        color: "#22d3ee",
+        price: 8000,
+        polygon: [
+          { x: 0, y: 0 },
+          { x: 8, y: 0 },
+          { x: 8, y: 8 },
+        ],
+        layoutType: "general",
+        sellMode: "group",
+        rows: 1,
+        itemsPerRow: 1,
+        capacityPerUnit: 1,
+        capacity: 100,
+        labelPrefix: "",
+      },
+    ]
+
+    let tickets: Parameters<typeof syncMapToTickets>[0]["getTickets"] extends () => infer R
+      ? R
+      : never = [
+      {
+        id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        name: "Campo",
+        price: 5000,
+        basePrice: 5000,
+        capacity: 50,
+        timeLimit: "",
+        saleStartsAt: "",
+        saleEndsAt: "",
+        bonusReward: "",
+        dayId: null,
+        visibility: "public",
+        layoutType: "general",
+        seatingSectorId: "zone-campo",
+        capacityPerUnit: 1,
+        admitCount: 1,
+        tierType: "general",
+        listPrice: null,
+        bundleItems: [],
+        bundleType: null,
+        promoDiscountType: null,
+        promoDiscountValue: 0,
+        promoRequiredQty: 1,
+        promoPayQty: 1,
+        description: "",
+        highlightBadge: null,
+        phases: [],
+      },
+    ]
+
+    const updates: number[] = []
+    const appends: number[] = []
+
+    syncMapToTickets({
+      getTickets: () => tickets,
+      map,
+      append: (ticket) => {
+        appends.push(1)
+        tickets = [...tickets, ticket]
+      },
+      update: (index, ticket) => {
+        updates.push(index)
+        tickets = tickets.map((row, rowIndex) =>
+          rowIndex === index ? ticket : row,
+        )
+      },
+      remove: (index) => {
+        tickets = tickets.filter((_, rowIndex) => rowIndex !== index)
+      },
+    })
+
+    assert.equal(updates.length, 1)
+    assert.equal(appends.length, 0)
+    assert.equal(tickets[0]?.id, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+    assert.equal(tickets[0]?.price, 8000)
+    assert.equal(tickets[0]?.capacity, 100)
   })
 })

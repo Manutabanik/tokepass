@@ -62,9 +62,14 @@ export const cachedEventDetails = cache((slug: string) =>
   unstable_cache(
     () => getEventDetails(slug),
     ["event-details", slug],
-    { 
+    {
       revalidate: 30,
-      tags: ["catalog-events", `event-${slug}`, `event-gate-${slug}`],
+      tags: [
+        "catalog-events",
+        `event-${slug}`,
+        `event-gate-${slug}`,
+        `event-details-${slug}`,
+      ],
     },
   )(),
 )
