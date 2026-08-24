@@ -115,6 +115,7 @@ import {
   conflictFromPersistError,
   type WizardConflict,
 } from "@/lib/seating/venue-map-sku-consistency"
+import { formHasInventoryOrVenue } from "@/lib/events/event-inventory-fingerprint"
 import {
   collectLiveSeatingSectorIds,
   sanitizeEventSubmitPayload,
@@ -684,7 +685,9 @@ export function EventCreationWizard({
     const formData = new FormData()
     formData.set("payload", JSON.stringify(data))
     formData.set("draftMode", "1")
-    formData.set("identityOnly", "1")
+    if (!formHasInventoryOrVenue(data)) {
+      formData.set("identityOnly", "1")
+    }
     if (flyerFile) formData.set("flyer", flyerFile)
     if (targetOrganizerId) formData.set("targetOrganizerId", targetOrganizerId)
 

@@ -82,11 +82,13 @@ import {
   MAX_EVENT_FLYER_BYTES,
   coerceDraftEventForm,
   draftEventSchema,
+  parseEventRefundPolicy,
   publishEventSchema,
   type AgeRestriction,
   type DraftEventFormValues,
   type EventFormValues,
 } from "@/lib/validations/event-form"
+import { formHasInventoryOrVenue } from "@/lib/events/event-inventory-fingerprint"
 import { resolvePurchaseLimit } from "@/lib/checkout-limits"
 import { asUuidOrNull } from "@/lib/validations/relation-id"
 import type { Database, Event, EventStatus, Json, Venue } from "@/types/database"
@@ -768,17 +770,19 @@ async function persistEventVenueFields(
   const organizerId = eventRow?.organizer_id ?? ""
   const creatingNewCatalogVenue =
     data.venue.mode === "new" && !data.venue.existingVenueId?.trim()
+  const allowCreate = options?.allowCreate !== false
 
   let venueId: string | null = null
-  if (!creatingNewCatalogVenue && organizerId) {
-    venueId =
-      (await findOwnedVenueId(
-        client,
-        organizerId,
-        data.venue.existingVenueId,
-      )) ||
-      (await findOwnedVenueId(client, organizerId, eventRow?.venue_id)) ||
-      (await findVenueIdByExactName(client, organizerId, venueName))
+  if (organizerId) {
+    venueId = creatingNewCatalogVenue
+      ? await findOwnedVenueId(client, organizerId, eventRow?.venue_id)
+      : (await findOwnedVenueId(
+          client,
+          organizerId,
+          data.venue.existingVenueId,
+        )) ||
+        (await findOwnedVenueId(client, organizerId, eventRow?.venue_id)) ||
+        (await findVenueIdByExactName(client, organizerId, venueName))
   }
 
   const venuePatch = {
@@ -823,8 +827,7 @@ async function persistEventVenueFields(
       return { venueId, error: updated.error.message }
     }
   } else if (
-    !creatingNewCatalogVenue &&
-    options?.allowCreate &&
+    allowCreate &&
     canPersistCatalogVenueName(venueName) &&
     organizerId
   ) {
@@ -874,9 +877,7 @@ async function persistEventVenueFields(
   }
 
   const eventCore = {
-    venue_id: creatingNewCatalogVenue
-      ? (eventRow?.venue_id ?? null)
-      : venueId,
+    venue_id: venueId ?? eventRow?.venue_id ?? null,
     location,
     venue_map: venueMap,
     updated_at: now,
@@ -1265,7 +1266,7 @@ function identityAgeRestriction(
 }
 
 const OPTIONAL_EVENT_FLAG_COLUMNS_RE =
-  /has_seating_plan|has_schedule|delivery_mode|access_link|schema cache|PGRST204|42703/i
+  /has_seating_plan|has_schedule|delivery_mode|access_link|accepts_mercado_pago|accepts_pos_payments|refund_policy|schema cache|PGRST204|42703/i
 
 async function persistEventDeliveryProfile(
   client: SupabaseClient<Database>,
@@ -1316,7 +1317,46 @@ function stripOptionalEventFlags<T extends Record<string, unknown>>(payload: T):
   delete (next as { has_schedule?: boolean }).has_schedule
   delete (next as { delivery_mode?: unknown }).delivery_mode
   delete (next as { access_link?: unknown }).access_link
+  delete (next as { accepts_mercado_pago?: boolean }).accepts_mercado_pago
+  delete (next as { accepts_pos_payments?: boolean }).accepts_pos_payments
+  delete (next as { refund_policy?: string }).refund_policy
   return next
+}
+
+function checkoutPolicyFromForm(
+  data: EventFormValues | DraftEventFormValues,
+): {
+  accepts_mercado_pago: boolean
+  accepts_pos_payments: boolean
+  refund_policy: ReturnType<typeof parseEventRefundPolicy>
+} {
+  return {
+    accepts_mercado_pago: data.acceptsMercadoPago !== false,
+    accepts_pos_payments: data.acceptsPosPayments !== false,
+    refund_policy: parseEventRefundPolicy(data.refundPolicy),
+  }
+}
+
+async function persistEventCheckoutPolicy(
+  client: SupabaseClient<Database>,
+  eventId: string,
+  formValues: EventFormValues | DraftEventFormValues,
+): Promise<string | null> {
+  const { error } = await client
+    .from("events")
+    .update({
+      ...checkoutPolicyFromForm(formValues),
+      updated_at: new Date().toISOString(),
+    } as never)
+    .eq("id", eventId)
+  if (error && OPTIONAL_EVENT_FLAG_COLUMNS_RE.test(error.message)) {
+    return null
+  }
+  if (error) {
+    console.error("SUPABASE_ERROR:", error)
+    return error.message
+  }
+  return null
 }
 
 async function persistEventIdentityOnly(input: {
@@ -1412,6 +1452,12 @@ async function persistEventIdentityOnly(input: {
     input.venueId,
   )
   if (venueLabelError) return persistFailure(venueLabelError)
+  const checkoutError = await persistEventCheckoutPolicy(
+    input.mutationClient,
+    input.eventId,
+    formValues,
+  )
+  if (checkoutError) return persistFailure(checkoutError)
   const venueId =
     formValues.venue.existingVenueId?.trim() || input.venueId
 
@@ -1550,6 +1596,7 @@ async function persistNewEventIdentityOnly(
     ...(flyerUrl ? { image_url: flyerUrl, flyer_url: flyerUrl } : {}),
     has_seating_plan: Boolean(raw.basics.hasSeatingPlan),
     has_schedule: Boolean(raw.basics.hasSchedule),
+    ...checkoutPolicyFromForm(raw),
   }
 
   let created = await mutationClient
@@ -1596,6 +1643,12 @@ async function persistNewEventIdentityOnly(
     raw.lineup,
   )
   if (createdLineupError) return persistFailure(createdLineupError)
+  const createdCheckoutError = await persistEventCheckoutPolicy(
+    mutationClient,
+    eventId,
+    raw,
+  )
+  if (createdCheckoutError) return persistFailure(createdCheckoutError)
 
   revalidatePath(`/admin/events/${eventId}`)
   revalidatePath(`/admin/events/${eventId}/edit`)
@@ -2514,6 +2567,8 @@ export async function getEventForEditing(
     const isSuperAdmin = profile?.role === "super_admin"
     const reader = isSuperAdmin ? createAdminClient() : supabase
 
+    const eventSelectWithCheckout =
+      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, status, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, has_schedule, delivery_mode, access_link, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, is_sponsored_by_tokepass, accepts_mercado_pago, accepts_pos_payments, refund_policy, updated_at"
     const eventSelectWithAgenda =
       "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, status, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, has_schedule, delivery_mode, access_link, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, is_sponsored_by_tokepass, updated_at"
     const eventSelectWithPicker =
@@ -2525,9 +2580,22 @@ export async function getEventForEditing(
 
     let eventQuery = await reader
       .from("events")
-      .select(eventSelectWithAgenda)
+      .select(eventSelectWithCheckout)
       .eq("id", eventId)
       .maybeSingle()
+
+    if (
+      eventQuery.error &&
+      /accepts_mercado_pago|accepts_pos_payments|refund_policy|schema cache|PGRST204|42703/i.test(
+        eventQuery.error.message,
+      )
+    ) {
+      eventQuery = await reader
+        .from("events")
+        .select(eventSelectWithAgenda)
+        .eq("id", eventId)
+        .maybeSingle()
+    }
 
     if (
       eventQuery.error &&
@@ -2956,11 +3024,17 @@ export async function getEventForEditing(
         maxTicketsPerUser: resolvePurchaseLimit(
           (event as { max_tickets_per_user?: number | null }).max_tickets_per_user,
         ),
-        acceptsMercadoPago: true,
-        acceptsPosPayments: true,
+        acceptsMercadoPago:
+          (event as { accepts_mercado_pago?: boolean | null })
+            .accepts_mercado_pago !== false,
+        acceptsPosPayments:
+          (event as { accepts_pos_payments?: boolean | null })
+            .accepts_pos_payments !== false,
         defaultFeeStrategy: "pass_to_customer",
         serviceFeePercentage: ticketFeePercentage,
-        refundPolicy: "organizer",
+        refundPolicy: parseEventRefundPolicy(
+          (event as { refund_policy?: unknown }).refund_policy,
+        ),
       },
       zoneTierPricing: (pricingRows ?? []).map((row) => ({
         id: row.id,
@@ -3006,7 +3080,7 @@ export async function createCompleteEvent(
   }
 
   const draftMode = formData.get("draftMode") === "1"
-  const identityOnly = formData.get("identityOnly") === "1"
+  let identityOnly = formData.get("identityOnly") === "1"
   const parsed =
     draftMode || identityOnly
       ? draftEventSchema.safeParse(parsedJson)
@@ -3019,6 +3093,10 @@ export async function createCompleteEvent(
         parsed.error.issues[0]?.message ??
         "La configuración del evento no es válida.",
     }
+  }
+
+  if (identityOnly && formHasInventoryOrVenue(parsed.data)) {
+    identityOnly = false
   }
 
   if (identityOnly) {
@@ -3220,7 +3298,7 @@ export async function createCompleteEvent(
     rpcClient,
     String(eventId),
     formValues,
-    { allowCreate: !draftMode },
+    { allowCreate: true },
   )
   if (venuePersist.error) {
     return persistFailure(venuePersist.error)
@@ -3232,6 +3310,12 @@ export async function createCompleteEvent(
     formValues,
   )
   if (deliveryError) return persistFailure(deliveryError)
+  const checkoutError = await persistEventCheckoutPolicy(
+    rpcClient,
+    String(eventId),
+    formValues,
+  )
+  if (checkoutError) return persistFailure(checkoutError)
   const zonesError = await persistLogicalEventZones(
     rpcClient,
     String(eventId),
@@ -3300,7 +3384,7 @@ export async function updateCompleteEvent(
   }
 
   const draftMode = formData.get("draftMode") === "1"
-  const identityOnly = formData.get("identityOnly") === "1"
+  let identityOnly = formData.get("identityOnly") === "1"
   const parsed =
     draftMode || identityOnly
       ? draftEventSchema.safeParse(parsedJson)
@@ -3312,6 +3396,10 @@ export async function updateCompleteEvent(
         parsed.error.issues[0]?.message ??
         "La configuración del evento no es válida.",
     }
+  }
+
+  if (identityOnly && formHasInventoryOrVenue(parsed.data)) {
+    identityOnly = false
   }
 
   const formValues = identityOnly
@@ -3405,7 +3493,7 @@ export async function updateCompleteEvent(
     mutationClient,
     eventId,
     formValues,
-    { allowCreate: !draftMode },
+    { allowCreate: true },
   )
   if (venuePersist.error) {
     return persistFailure(venuePersist.error)
@@ -3417,6 +3505,12 @@ export async function updateCompleteEvent(
     formValues,
   )
   if (deliveryError) return persistFailure(deliveryError)
+  const checkoutError = await persistEventCheckoutPolicy(
+    mutationClient,
+    eventId,
+    formValues,
+  )
+  if (checkoutError) return persistFailure(checkoutError)
   if (venueId) {
     formValues.venue.existingVenueId = venueId
   }
@@ -3461,6 +3555,12 @@ export async function updateCompleteEvent(
     if (purchaseLimitError) {
       return persistFailure(purchaseLimitError)
     }
+    const emptyCheckoutError = await persistEventCheckoutPolicy(
+      mutationClient,
+      eventId,
+      formValues,
+    )
+    if (emptyCheckoutError) return persistFailure(emptyCheckoutError)
     await revalidatePersistedEvent(mutationClient, eventId)
     return { success: true, eventId, venueId }
   }

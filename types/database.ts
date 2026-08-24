@@ -334,6 +334,12 @@ export type Event = {
   event_artists?: EventArtist[]
   /** Relación inversa AgendaBlock[] (agenda universal). */
   agenda_blocks?: AgendaBlock[]
+  /** Paso 3: cobro online Mercado Pago. */
+  accepts_mercado_pago: boolean
+  /** Paso 3: cobro en boletería / POS / transferencia. */
+  accepts_pos_payments: boolean
+  /** Paso 3: política de devolución. */
+  refund_policy: "organizer" | "no_refunds" | "until_24h"
   created_at: string
   updated_at: string
   /** Enlace de preview del borrador (?preview_key=). No exponer en EventDetails público. */
@@ -1241,6 +1247,9 @@ type EventInsert = Omit<
   | "location"
   | "delivery_mode"
   | "access_link"
+  | "accepts_mercado_pago"
+  | "accepts_pos_payments"
+  | "refund_policy"
   | "status"
   | "max_tickets_per_user"
   | "qr_type"

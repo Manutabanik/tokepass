@@ -49,14 +49,6 @@ import {
   venueMapHasConfiguredSectors,
 } from "@/lib/inventory/map-enablement"
 import { EVENT_VISIBILITY_VALUES } from "@/types/events"
-
-export const EVENT_REFUND_POLICIES = [
-  "organizer",
-  "no_refunds",
-  "until_24h",
-] as const
-
-export type EventRefundPolicy = (typeof EVENT_REFUND_POLICIES)[number]
 import { parseVenueMap } from "@/types/venue-map"
 import { TICKET_TIER_VISIBILITY_VALUES } from "@/types/tickets"
 import {
@@ -69,6 +61,20 @@ import {
   MISSING_EVENT_LOCATION,
   MISSING_SELLABLE_TICKET,
 } from "@/lib/events/validate-event-publish"
+
+export const EVENT_REFUND_POLICIES = [
+  "organizer",
+  "no_refunds",
+  "until_24h",
+] as const
+
+export type EventRefundPolicy = (typeof EVENT_REFUND_POLICIES)[number]
+
+export function parseEventRefundPolicy(value: unknown): EventRefundPolicy {
+  return value === "no_refunds" || value === "until_24h" || value === "organizer"
+    ? value
+    : "organizer"
+}
 
 /** ATP = Apta Todo Público. */
 export const AGE_RESTRICTION_VALUES = ["atp", "16", "18"] as const

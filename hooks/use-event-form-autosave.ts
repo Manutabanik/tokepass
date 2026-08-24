@@ -5,7 +5,10 @@ import type { UseFormReturn } from "react-hook-form"
 import { toast } from "sonner"
 
 import { autosaveEventDraft } from "@/app/actions/event-autosave"
-import { eventInventoryFingerprint } from "@/lib/events/event-inventory-fingerprint"
+import {
+  eventInventoryFingerprint,
+  formHasInventoryOrVenue,
+} from "@/lib/events/event-inventory-fingerprint"
 import {
   useEventFormStore,
   type ZoneTierPriceDraft,
@@ -187,8 +190,9 @@ export function useEventFormAutosave(input: {
       return
     }
     const identityOnly =
-      !snapshot.eventId ||
-      eventInventoryFingerprint(values) === inventoryFingerprintRef.current
+      !formHasInventoryOrVenue(values) &&
+      (!snapshot.eventId ||
+        eventInventoryFingerprint(values) === inventoryFingerprintRef.current)
     savingRef.current = true
     setAutosaveStatus("saving")
     try {

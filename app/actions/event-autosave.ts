@@ -15,6 +15,7 @@ import {
 } from "@/app/actions/events"
 import { toUserFacingError } from "@/lib/errors/user-facing-error"
 import { writeSecurityAuditLog } from "@/lib/security/audit-log"
+import { formHasInventoryOrVenue } from "@/lib/events/event-inventory-fingerprint"
 import {
   collectLiveSeatingSectorIds,
   sanitizeEventSubmitPayload,
@@ -94,7 +95,7 @@ export async function autosaveEventDraft(input: {
   if (input.targetOrganizerId) {
     formData.set("targetOrganizerId", input.targetOrganizerId)
   }
-  if (input.identityOnly) {
+  if (input.identityOnly && !formHasInventoryOrVenue(parsed.data)) {
     formData.set("identityOnly", "1")
   }
   if (input.flyer && input.flyer.size > 0) {
