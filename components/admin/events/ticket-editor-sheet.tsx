@@ -30,6 +30,7 @@ import {
 import { formatCurrency } from "@/lib/format"
 import { formatInventoryDayOption } from "@/lib/event-schedule"
 import { asPositiveInt, parseStrictInt } from "@/lib/inventory/capacity-budget"
+import { normalizeTicketRow } from "@/lib/inventory/normalize-ticket-row"
 import {
   familyHasDifferentiatedPrices,
   ticketSoldCount,
@@ -44,6 +45,53 @@ import type { EventFormValues } from "@/lib/validations/event-form"
 import { cn } from "@/lib/utils"
 
 type DayOption = EventFormValues["basics"]["scheduleDays"][number]
+
+export function commitTicketFamily(input: {
+  form: UseFormReturn<EventFormValues>
+  update: UseFieldArrayUpdate<EventFormValues, "tickets">
+  indexes: number[]
+  kind: "general" | "map"
+  differentiate: boolean
+}) {
+  const { form, update, indexes, kind, differentiate } = input
+  const current = form.getValues("tickets") ?? []
+  const primaryIndex = indexes[0]
+  const primary =
+    primaryIndex == null ? undefined : current[primaryIndex]
+  if (!primary) return
+
+  const normalizedPrimary = normalizeTicketRow(primary)
+  const sharedName =
+    normalizedPrimary.name.trim() || "Entrada general"
+  const sharedCapacity = normalizedPrimary.capacity
+  const sharedPrice = normalizedPrimary.price
+  const sharedBasePrice = normalizedPrimary.basePrice
+
+  for (const index of indexes) {
+    const ticket = current[index]
+    if (!ticket) continue
+    const normalized = normalizeTicketRow(ticket)
+    update(index, {
+      ...ticket,
+      name:
+        kind === "map"
+          ? normalized.name
+          : differentiate
+            ? normalized.name || sharedName
+            : sharedName,
+      capacity:
+        kind === "map"
+          ? normalized.capacity
+          : differentiate
+            ? normalized.capacity
+            : sharedCapacity,
+      price: differentiate ? normalized.price : sharedPrice,
+      basePrice: differentiate ? normalized.basePrice : sharedBasePrice,
+      minPurchaseLimit: normalized.minPurchaseLimit,
+      maxPurchaseLimit: normalized.maxPurchaseLimit,
+    })
+  }
+}
 
 export function TicketEditorSheet({
   form,
@@ -99,7 +147,17 @@ export function TicketEditorSheet({
   ) {
     const current = form.getValues(`tickets.${index}`)
     if (!current) return
-    update(index, { ...current, ...patch })
+    const merged = { ...current, ...patch }
+    if ("capacity" in patch) {
+      merged.capacity = Number(merged.capacity) || 0
+    }
+    if ("price" in patch) {
+      merged.price = Number(merged.price) || 0
+    }
+    if ("basePrice" in patch) {
+      merged.basePrice = Number(merged.basePrice) || 0
+    }
+    update(index, merged)
   }
 
   function syncField(

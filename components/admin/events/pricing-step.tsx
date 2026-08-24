@@ -8,9 +8,11 @@ import { CapacityThermometer } from "@/components/admin/events/capacity-thermome
 import { InventoryAdvancedTools } from "@/components/admin/events/inventory-advanced-tools"
 import { InventorySummaryRow } from "@/components/admin/events/inventory-summary-row"
 import {
+  commitTicketFamily,
   sheetDifferentiateDefault,
   TicketEditorSheet,
 } from "@/components/admin/events/ticket-editor-sheet"
+import { Button } from "@/components/ui/button"
 import { FormLabel, FormMessage } from "@/components/ui/form"
 import { Switch } from "@/components/ui/switch"
 import { listEventFormJornadas } from "@/lib/event-schedule"
@@ -73,6 +75,7 @@ export function PricingStep({
   const hasSeatingPlan = Boolean(form.watch("basics.hasSeatingPlan"))
   const includesSeatingMap = Boolean(form.watch("venue.includesSeatingMap"))
   const venueMap = form.watch("venue.venueMap")
+  const mapToggleOn = hasSeatingPlan && includesSeatingMap
   const mapEnabled = eventHasActiveSeatingMap({
     hasSeatingPlan,
     includesSeatingMap,
@@ -171,29 +174,6 @@ export function PricingStep({
     })
   }
 
-  function commitSheetFamily() {
-    if (!sheet) return
-    const current = form.getValues("tickets") ?? []
-    const primaryIndex = sheet.indexes[0]
-    const primary = primaryIndex == null ? undefined : current[primaryIndex]
-    if (!primary) return
-    const name = (primary.name ?? "").trim()
-    for (const index of sheet.indexes) {
-      const ticket = current[index]
-      if (!ticket) continue
-      update(index, {
-        ...ticket,
-        name:
-          sheet.kind === "map"
-            ? ticket.name
-            : name || ticket.name || "Entrada general",
-        capacity: sheet.kind === "map" ? ticket.capacity : primary.capacity,
-        price: sheet.differentiate ? ticket.price : primary.price,
-        basePrice: sheet.differentiate ? ticket.basePrice : primary.price,
-      })
-    }
-  }
-
   function closeSheet(open: boolean) {
     if (open) return
     if (sheet) {
@@ -207,12 +187,28 @@ export function PricingStep({
           !(Number(ticket?.capacity) > 0) &&
           !(Number(ticket?.price) > 0),
       )
+      const appendedStillBlank =
+        sheet.appendedIndexes.length > 0 &&
+        sheet.appendedIndexes.every((index) => {
+          const ticket = current[index]
+          return (
+            !ticket?.name?.trim() &&
+            !(Number(ticket?.capacity) > 0) &&
+            !(Number(ticket?.price) > 0)
+          )
+        })
       if (sheet.created && stillBlank) {
         remove(sheet.indexes)
-      } else if (!sheet.created && sheet.appendedIndexes.length > 0) {
+      } else if (!sheet.created && appendedStillBlank) {
         remove(sheet.appendedIndexes)
       } else {
-        commitSheetFamily()
+        commitTicketFamily({
+          form,
+          update,
+          indexes: sheet.indexes,
+          kind: sheet.kind,
+          differentiate: sheet.differentiate,
+        })
       }
     }
     setSheet(null)
@@ -260,11 +256,12 @@ export function PricingStep({
           <div className="min-w-0">
             <p className="text-sm font-medium text-foreground">Mapa de sectores</p>
             <p className="text-xs text-muted-foreground">
-              Opcional. Podés vender solo con entradas generales.
+              Activá esta opción si tu evento cuenta con sectores, mesas o
+              ubicaciones numeradas.
             </p>
           </div>
           <Switch
-            checked={mapEnabled}
+            checked={mapToggleOn}
             onCheckedChange={handleMapToggle}
             aria-label="Activar mapa de sectores"
           />
@@ -294,17 +291,11 @@ export function PricingStep({
               <Plus className="size-3" aria-hidden="true" />
               Agregar Entrada General
             </button>
-            {hideMapBlock ? null : (
-              <button
-                type="button"
+            {hideMapBlock || !mapToggleOn ? null : (
+              <MapConfigureButton
+                hasMapSectors={mapEnabled}
                 onClick={() => onOpenMapStudio?.()}
-                className="inline-flex items-center gap-1 rounded-xl border border-zinc-300 px-3 py-1.5 text-xs font-medium text-foreground hover:border-emerald-500 dark:border-zinc-700"
-              >
-                <Plus className="size-3" aria-hidden="true" />
-                {families.some((family) => family.kind === "map")
-                  ? "Editar mapa de sectores"
-                  : "Configurar Mapa de Sectores"}
-              </button>
+              />
             )}
           </div>
         </div>
@@ -315,11 +306,11 @@ export function PricingStep({
             label="Agregar Entrada General"
             onClick={addGeneral}
           />
-          {hideMapBlock ? null : (
-            <ZeroStateButton
-              icon={Map}
-              label="Configurar Mapa de Sectores"
+          {hideMapBlock || !mapToggleOn ? null : (
+            <MapConfigureButton
+              hasMapSectors={mapEnabled}
               onClick={() => onOpenMapStudio?.()}
+              prominent
             />
           )}
         </div>
@@ -371,6 +362,50 @@ export function PricingStep({
         />
       ) : null}
     </div>
+  )
+}
+
+function MapConfigureButton({
+  hasMapSectors,
+  onClick,
+  prominent = false,
+}: {
+  hasMapSectors: boolean
+  onClick: () => void
+  prominent?: boolean
+}) {
+  const label = hasMapSectors
+    ? "Editar mapa de sectores"
+    : "Configurar Mapa de Sectores"
+
+  if (prominent) {
+    return (
+      <Button
+        type="button"
+        variant="default"
+        className="min-h-28 h-auto flex-1 flex-col gap-2 rounded-2xl px-4 py-6 text-sm"
+        onClick={onClick}
+      >
+        <span className="inline-flex items-center gap-1.5">
+          <Plus className="size-4" aria-hidden="true" />
+          <Map className="size-4" aria-hidden="true" />
+        </span>
+        {label}
+      </Button>
+    )
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="default"
+      size="sm"
+      className="rounded-xl"
+      onClick={onClick}
+    >
+      <Plus className="size-3" aria-hidden="true" />
+      {label}
+    </Button>
   )
 }
 
