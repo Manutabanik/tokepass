@@ -79,7 +79,7 @@ import {
   syncMapToTickets,
   venueMapToPricingMap,
 } from "@/lib/seating/venue-map-pricing"
-import { healEventFormInventory } from "@/lib/inventory/heal-event-form-inventory"
+import { prepareEventForPersist } from "@/lib/inventory/prepare-event-persist"
 import { InteractiveVenueMapEditor } from "@/components/admin/interactive-venue-map-editor"
 import { TokepassStudioOverlay } from "@/components/admin/tokepass-studio-overlay"
 import {
@@ -331,7 +331,9 @@ export function EventCreationWizard({
   useEffect(() => {
     if (!initialData?.id || inventoryHealedRef.current) return
     inventoryHealedRef.current = true
-    const healed = healEventFormInventory(form.getValues())
+    const healed = prepareEventForPersist(form.getValues(), {
+      mode: initialData?.id ? "update" : "create",
+    })
     replaceTickets(healed.tickets)
     form.setValue("basics.hasSeatingPlan", healed.basics.hasSeatingPlan, {
       shouldDirty: false,
@@ -802,21 +804,15 @@ export function EventCreationWizard({
 
   function buildConsolidatedPayload(data: EventFormValues): EventFormValues {
     const editingId = initialData?.id ?? persistedEventId
-    const healed = healEventFormInventory(data)
-    const liveSectorIds = collectLiveSeatingSectorIds({
-      venueMap: healed.venue.venueMap,
-      seatingLayout: healed.venue.seatingLayout,
-      extraIds: assignableLogicalSectorIds(
-        healed.venue.zones,
-        healed.venue.venueMap,
-      ),
-    })
-    return sanitizeEventSubmitPayload(healed, {
+    return prepareEventForPersist(data, {
       mode: editingId ? "update" : "create",
       persistedIds: (initialData?.values.tickets ?? [])
         .map((tier) => tier.id)
         .filter((id): id is string => Boolean(id)),
-      liveSectorIds,
+      extraSectorIds: assignableLogicalSectorIds(
+        data.venue.zones,
+        data.venue.venueMap,
+      ),
     })
   }
 

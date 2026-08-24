@@ -131,6 +131,8 @@ describe("map enablement", () => {
       }),
       false,
     )
+  })
+
   it("desactiva flags de mapa cuando no hay sectores dibujados", () => {
     const map = emptyVenueMap()
     map.zones = [

@@ -3,7 +3,6 @@ import {
   eventHasActiveSeatingMap,
   resolveActiveSeatingMapFlags,
 } from "@/lib/inventory/map-enablement"
-import { ticketSoldCount } from "@/lib/inventory/synced-day-tickets"
 import {
   applyMapCapacityToTickets,
   consolidateEventTicketsForPersist,
@@ -16,7 +15,26 @@ import { parseVenueMap } from "@/types/venue-map"
 function detachTicketsFromSeatingPlan(
   tickets: EventFormValues["tickets"],
 ): EventFormValues["tickets"] {
-  return tickets.map((tier) => ({ ...tier, seatingSectorId: null }))
+  return tickets.map((tier) => {
+    const detachLayout =
+      tier.layoutType === "numbered_seat" || tier.layoutType === "table_combo"
+    const detachSeated =
+      detachLayout ||
+      Boolean(tier.seatingSectorId?.trim()) ||
+      tier.tierType === "seated"
+    return {
+      ...tier,
+      seatingSectorId: null,
+      layoutType: detachLayout ? ("general" as const) : tier.layoutType,
+      tierType:
+        tier.tierType === "bundle" || tier.tierType === "addon"
+          ? tier.tierType
+          : detachSeated
+            ? ("general" as const)
+            : tier.tierType,
+      capacityPerUnit: 1,
+    }
+  })
 }
 
 function dedupeMapBackedTickets(
@@ -67,11 +85,7 @@ export function healEventFormInventory<T extends EventFormValues>(data: T): T {
   })
 
   if (!mapActive) {
-    const tickets = detachTicketsFromSeatingPlan(
-      (normalized.tickets ?? []).filter(
-        (tier) => !isMapBackedTicket(tier) || ticketSoldCount(tier) > 0,
-      ),
-    )
+    const tickets = detachTicketsFromSeatingPlan(normalized.tickets ?? [])
     return { ...normalized, tickets }
   }
 
@@ -81,16 +95,18 @@ export function healEventFormInventory<T extends EventFormValues>(data: T): T {
     seatingLayout: normalized.venue.seatingLayout,
   })
 
-  const filtered = (normalized.tickets ?? []).filter((tier) => {
-    if (!isMapBackedTicket(tier)) return true
+  const reconciledTickets = (normalized.tickets ?? []).flatMap((tier) => {
+    if (!isMapBackedTicket(tier)) return [tier]
     const sectorId = tier.seatingSectorId?.trim()
-    if (!sectorId) return ticketSoldCount(tier) > 0
-    return liveSectorIds.has(sectorId) || ticketSoldCount(tier) > 0
+    if (!sectorId || !liveSectorIds.has(sectorId)) {
+      return detachTicketsFromSeatingPlan([tier])
+    }
+    return [tier]
   })
 
   const consolidated = consolidateEventTicketsForPersist({
     ...normalized,
-    tickets: filtered,
+    tickets: reconciledTickets,
   })
   const tickets = dedupeMapBackedTickets(
     applyMapCapacityToTickets(consolidated, map),

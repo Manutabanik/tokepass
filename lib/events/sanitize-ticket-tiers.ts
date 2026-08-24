@@ -94,6 +94,13 @@ function addIdsFromSeatingLayout(target: Set<string>, layout: unknown) {
   }
 }
 
+/** IDs presentes en seating_layout (fuente de verdad del RPC de sectores). */
+export function collectSeatingLayoutSectorIds(layout: unknown): Set<string> {
+  const ids = new Set<string>()
+  addIdsFromSeatingLayout(ids, layout)
+  return ids
+}
+
 /**
  * IDs de sector que existen en el plano actual (mapa + seating_layout).
  * No usa claves huérfanas del pricing map: esas son las que rompen el RPC.

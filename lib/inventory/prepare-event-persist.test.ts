@@ -1,7 +1,10 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
-import { healEventFormInventory } from "./heal-event-form-inventory"
+import {
+  isSeatingPersistMismatchError,
+  prepareEventForPersist,
+} from "./prepare-event-persist"
 import { emptyVenueMap } from "@/types/venue-map"
 
 function baseForm() {
@@ -33,21 +36,12 @@ function baseForm() {
     },
     tickets: [
       {
-        name: "General",
-        price: 1000,
-        basePrice: 1000,
-        capacity: 100,
-        layoutType: "general" as const,
-        seatingSectorId: null,
-        tierType: "general" as const,
-      },
-      {
         name: "Sector Naranja",
         price: 5000,
         basePrice: 5000,
         capacity: 40,
         layoutType: "general" as const,
-        seatingSectorId: "orphan-sector",
+        seatingSectorId: "missing-sector",
         tierType: "seated" as const,
       },
       {
@@ -56,7 +50,7 @@ function baseForm() {
         basePrice: 5000,
         capacity: 40,
         layoutType: "general" as const,
-        seatingSectorId: "orphan-sector",
+        seatingSectorId: "missing-sector",
         tierType: "seated" as const,
       },
     ],
@@ -70,14 +64,27 @@ function baseForm() {
   }
 }
 
-describe("healEventFormInventory", () => {
-  it("desactiva el mapa y desacopla tickets map-backed cuando no hay sectores", () => {
-    const healed = healEventFormInventory(baseForm() as never)
-    assert.equal(healed.basics.hasSeatingPlan, false)
-    assert.equal(healed.venue.includesSeatingMap, false)
-    assert.equal(healed.tickets.length, 3)
-    assert.equal(healed.tickets[0]?.name, "General")
-    assert.equal(healed.tickets[1]?.seatingSectorId, null)
-    assert.equal(healed.tickets[2]?.seatingSectorId, null)
+describe("prepareEventForPersist", () => {
+  it("deduplica entradas y desacopla sectores inválidos del mapa", () => {
+    const prepared = prepareEventForPersist(baseForm() as never, {
+      mode: "update",
+    })
+    assert.equal(prepared.basics.hasSeatingPlan, false)
+    assert.equal(prepared.tickets.length, 1)
+    assert.equal(prepared.tickets[0]?.layoutType, "general")
+    assert.equal(prepared.tickets[0]?.seatingSectorId, null)
+  })
+
+  it("detecta errores de seating persist", () => {
+    assert.equal(
+      isSeatingPersistMismatchError(
+        "El mapa y las entradas no coinciden. Revisá sectores y precios.",
+      ),
+      true,
+    )
+    assert.equal(
+      isSeatingPersistMismatchError("SEATING_TIER_CONFIG_AMBIGUOUS: Sector"),
+      true,
+    )
   })
 })

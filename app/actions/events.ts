@@ -158,7 +158,7 @@ import {
 import {
   eventHasActiveSeatingMap,
 } from "@/lib/inventory/map-enablement"
-import { healEventFormInventory } from "@/lib/inventory/heal-event-form-inventory"
+import { prepareEventForPersist } from "@/lib/inventory/prepare-event-persist"
 
 export type OrganizerEvent = Pick<
   Event,
@@ -632,6 +632,9 @@ function mapEventFormToRpcPayload(
         assignableSectorIds,
         venueMap: data.venue.venueMap,
       })
+      const persistedLayoutType = seatingSectorId
+        ? layoutType
+        : ("general" as const)
       const capacity = positiveInventoryCapacity(tier.capacity)
       const publicPrice = persistablePublicPrice(breakdown.publicPrice)
       const isActive = (tier.visibility ?? "public") !== "private"
@@ -652,11 +655,11 @@ function mapEventFormToRpcPayload(
         visibility: tier.visibility ?? "public",
         is_free: publicPrice === 0,
         is_active: isActive,
-        layout_type: layoutType,
+        layout_type: persistedLayoutType,
         seating_sector_id: seatingSectorId,
         sector_id: seatingSectorId,
         capacity_per_unit:
-          layoutType === "general" ? 1 : tier.capacityPerUnit,
+          persistedLayoutType === "general" ? 1 : tier.capacityPerUnit,
         min_purchase_limit: Math.max(
           1,
           Math.floor(Number(tier.minPurchaseLimit) || 1),
@@ -666,7 +669,7 @@ function mapEventFormToRpcPayload(
             ? null
             : Math.floor(Number(tier.maxPurchaseLimit)),
         admit_count:
-          layoutType === "general"
+          persistedLayoutType === "general"
             ? Math.max(1, Math.min(50, tier.admitCount ?? 1))
             : 1,
         total_capacity: capacity,
@@ -1215,8 +1218,11 @@ function venueMapSkuGuard(
   return null
 }
 
-function withHealedMapTickets(data: EventFormValues): EventFormValues {
-  return healEventFormInventory(data)
+function withHealedMapTickets(
+  data: EventFormValues,
+  persistedIds?: Iterable<string>,
+): EventFormValues {
+  return prepareEventForPersist(data, { mode: "update", persistedIds })
 }
 
 const EVENT_IDENTITY_UUID_RE =
@@ -2862,7 +2868,7 @@ export async function getEventForEditing(
       }
     }
 
-    const healedValues = healEventFormInventory({
+    const healedValues = prepareEventForPersist({
       basics: {
           title: event.title,
           date: toLocalDateTimeInput(event.date),
@@ -3442,7 +3448,13 @@ export async function updateCompleteEvent(
     formValues.tickets,
     (existingTiers ?? []).map((row) => row.id),
   )
-  Object.assign(formValues, withHealedMapTickets(formValues))
+  Object.assign(
+    formValues,
+    withHealedMapTickets(
+      formValues,
+      (existingTiers ?? []).map((row) => row.id),
+    ),
+  )
 
   const skuError = draftMode ? null : venueMapSkuGuard(formValues)
   if (skuError) return skuError
