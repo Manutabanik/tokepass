@@ -719,6 +719,13 @@ export async function getEventDetails(
   return loadEventDetails(eventId, { mode: "public" })
 }
 
+/** Consulta fresca (sin unstable_cache) para hidratar la vitrina en el cliente. */
+export async function refreshPublishedEventDetails(
+  slugOrId: string,
+): Promise<EventDetails | null> {
+  return loadEventDetails(slugOrId, { mode: "public" })
+}
+
 export type EventAccessGate = {
   eventId: string
   title: string

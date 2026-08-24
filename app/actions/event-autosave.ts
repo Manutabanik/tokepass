@@ -162,6 +162,19 @@ export async function autosaveEventDraft(input: {
     }
   }
 
+  if (eventId) {
+    const admin = createAdminClient()
+    const { data: row } = await admin
+      .from("events")
+      .select("slug")
+      .eq("id", eventId)
+      .maybeSingle()
+    revalidatePublicEventCache({
+      eventId,
+      slug: row?.slug ?? null,
+    })
+  }
+
   return {
     ok: true,
     eventId,
