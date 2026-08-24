@@ -14,16 +14,25 @@ import {
 import { FormLabel, FormMessage } from "@/components/ui/form"
 import { listEventFormJornadas } from "@/lib/event-schedule"
 import { createInventoryTicket } from "@/lib/inventory/create-inventory-ticket"
-import { EMPTY_MAP_ENABLE_ERROR } from "@/lib/inventory/map-enablement"
+import {
+  EMPTY_MAP_ENABLE_ERROR,
+  shouldEnforceVenueMapSku,
+} from "@/lib/inventory/map-enablement"
 import {
   listInventoryFamilies,
   planMissingFamilyDayTickets,
   type InventoryFamily,
 } from "@/lib/inventory/synced-day-tickets"
 import { inferInventoryTierType } from "@/lib/inventory/unified-inventory"
+import { applyMapCapacityToTickets } from "@/lib/seating/venue-map-pricing"
+import {
+  summarizeVenueMapSkuConflicts,
+  validateVenueMapSkuConsistency,
+} from "@/lib/seating/venue-map-sku-consistency"
 import { STUDIO_LABEL_CLASS } from "@/lib/admin/studio-form-styles"
 import { clampServiceFeePercentage } from "@/lib/pricing/net-profit"
 import type { EventFormValues } from "@/lib/validations/event-form"
+import { parseVenueMap } from "@/types/venue-map"
 import { cn } from "@/lib/utils"
 
 const EMPTY_FORM_TICKETS: EventFormValues["tickets"] = []
@@ -68,7 +77,38 @@ export function PricingStep({
   })
   const isMultiDay =
     Boolean(form.watch("basics.isMultiDay")) || eventDates.length >= 2
-  const mapError = form.formState.errors.venue?.venueMap?.message
+  const hasSeatingPlan = Boolean(form.watch("basics.hasSeatingPlan"))
+  const includesSeatingMap = Boolean(form.watch("venue.includesSeatingMap"))
+  const venueMap = form.watch("venue.venueMap")
+  const mapFieldError = form.formState.errors.venue?.venueMap?.message
+  const mapSkuWarning = useMemo(() => {
+    if (
+      !shouldEnforceVenueMapSku({
+        hasSeatingPlan,
+        includesSeatingMap,
+        venueMap,
+        tickets,
+      })
+    ) {
+      return null
+    }
+    const healedTickets = applyMapCapacityToTickets(
+      tickets,
+      parseVenueMap(venueMap),
+    )
+    const result = validateVenueMapSkuConsistency({
+      map: parseVenueMap(venueMap),
+      tickets: healedTickets,
+    })
+    if (result.ok) return null
+    return summarizeVenueMapSkuConflicts(result.errors).summary
+  }, [hasSeatingPlan, includesSeatingMap, venueMap, tickets])
+  const mapBlockingError =
+    typeof mapFieldError === "string" &&
+    mapFieldError !== mapSkuWarning &&
+    mapFieldError !== EMPTY_MAP_ENABLE_ERROR
+      ? mapFieldError
+      : null
   const [sheet, setSheet] = useState<SheetState | null>(null)
   const [showExtras, setShowExtras] = useState(() => {
     const current = form.getValues("tickets") ?? []
@@ -193,9 +233,21 @@ export function PricingStep({
       {typeof form.formState.errors.tickets?.message === "string" ? (
         <FormMessage>{form.formState.errors.tickets.message}</FormMessage>
       ) : null}
-      {typeof mapError === "string" ? (
+      {typeof mapBlockingError === "string" ? (
         <p className="text-sm text-destructive" role="alert">
-          {mapError || EMPTY_MAP_ENABLE_ERROR}
+          {mapBlockingError}
+        </p>
+      ) : null}
+      {typeof mapFieldError === "string" &&
+      mapFieldError === EMPTY_MAP_ENABLE_ERROR ? (
+        <p className="text-sm text-destructive" role="alert">
+          {mapFieldError}
+        </p>
+      ) : null}
+      {mapSkuWarning ? (
+        <p className="text-sm text-amber-600 dark:text-amber-400" role="status">
+          {mapSkuWarning} Podés seguir guardando el borrador y ajustar el mapa
+          más tarde.
         </p>
       ) : null}
 
