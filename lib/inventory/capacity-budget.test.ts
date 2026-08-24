@@ -90,6 +90,20 @@ describe("capacity-budget", () => {
     assert.equal(occupiesVenueBudget(addon), false)
   })
 
+  it("deja afuera combos y adicionales del aforo del recinto", () => {
+    const general = ticket({ tierType: "general", capacity: 80 })
+    const addon = ticket({ tierType: "addon", capacity: 40 })
+    const bundle = ticket({ tierType: "bundle", capacity: 25 })
+    const snap = computeEventCapacity({
+      tickets: [general, addon, bundle],
+      baseVenueCapacity: 100,
+    })
+    assert.equal(snap.generalAllocatedCapacity, 80)
+    assert.equal(snap.totalAllocated, 80)
+    assert.equal(snap.exceeded, false)
+    assert.equal(occupiesVenueBudget(bundle), false)
+  })
+
   it("no cuenta dos veces el mapa y las entradas map-backed", () => {
     const mapTicket = ticket({
       tierType: "seated",

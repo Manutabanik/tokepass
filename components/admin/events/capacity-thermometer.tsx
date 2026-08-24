@@ -1,6 +1,6 @@
 "use client"
 
-import { useWatch, type UseFormReturn } from "react-hook-form"
+import type { UseFormReturn } from "react-hook-form"
 
 import { computeCapacityThermometer } from "@/lib/inventory/capacity-thermometer"
 import { formatNumber } from "@/lib/format"
@@ -12,13 +12,10 @@ export function CapacityThermometer({
 }: {
   form: UseFormReturn<EventFormValues>
 }) {
-  const tickets = useWatch({ control: form.control, name: "tickets" }) ?? []
-  const venueMap = useWatch({ control: form.control, name: "venue.venueMap" })
-  const venueCapacity = useWatch({ control: form.control, name: "venue.capacity" })
-  const customMaxCapacity = useWatch({
-    control: form.control,
-    name: "venue.customMaxCapacity",
-  })
+  const tickets = form.watch("tickets") ?? []
+  const venueMap = form.watch("venue.venueMap")
+  const venueCapacity = form.watch("venue.capacity")
+  const customMaxCapacity = form.watch("venue.customMaxCapacity")
   const snap = computeCapacityThermometer({
     tickets,
     venueMap,

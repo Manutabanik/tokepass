@@ -510,14 +510,12 @@ export function EventCreationWizard({
       const capacity = computeEventCapacityFromForm(form.getValues())
       if (capacity.exceeded) {
         const message = eventCapacityOverflowMessage(capacity)
-        form.setError("tickets", { type: "manual", message })
         toast.error("El aforo está excedido", { description: message })
         return
       }
       if (ticketsHavePhaseOverflow(form.getValues("tickets") ?? [])) {
         const message =
           "La suma de los lotes de precio no puede superar la capacidad máxima del ticket."
-        form.setError("tickets", { type: "manual", message })
         toast.error("Lotes de precio excedidos", { description: message })
         return
       }
@@ -802,7 +800,6 @@ export function EventCreationWizard({
     const capacity = computeEventCapacityFromForm(data)
     if (capacity.exceeded) {
       const message = eventCapacityOverflowMessage(capacity)
-      form.setError("tickets", { type: "manual", message })
       toast.error("El aforo está excedido", { description: message })
       goToWizardStep(2)
       return false

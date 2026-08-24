@@ -1,4 +1,3 @@
-import { bundleIncludesSeating } from "@/lib/inventory/flexible-bundles"
 import {
   assignableGeneralSectorCapacity,
   listAssignableGeneralSectors,
@@ -107,26 +106,10 @@ export function ticketsHavePhaseOverflow(
   return tickets.some((tier) => ticketPhasesExceedParent(tier))
 }
 
-function componentTierTypes(
-  tickets: readonly CapacityTicket[],
-): Record<string, string> {
-  const types: Record<string, string> = {}
-  for (const [index, tier] of tickets.entries()) {
-    const type = inferInventoryTierType({
-      tierType: tier.tierType,
-      layoutType: tier.layoutType,
-      bundleItems: tier.bundleItems,
-    })
-    if (tier.id) types[tier.id] = type
-    types[`index:${index}`] = type
-  }
-  return types
-}
-
-/** Stock general/combo de predio. El mapa no entra: es otra cuenta. */
+/** Stock general del predio. Excluye adicionales, combos y mapa. */
 export function occupiesGeneralCapacity(
   tier: CapacityTicket,
-  tickets: readonly CapacityTicket[] = [],
+  _tickets: readonly CapacityTicket[] = [],
 ): boolean {
   if (isMapBackedTicket(tier)) return false
   const type = inferInventoryTierType({
@@ -134,10 +117,7 @@ export function occupiesGeneralCapacity(
     layoutType: tier.layoutType,
     bundleItems: tier.bundleItems,
   })
-  if (type === "addon" || type === "seated") return false
-  if (type === "bundle") {
-    return !bundleIncludesSeating(tier.bundleItems ?? [], componentTierTypes(tickets))
-  }
+  if (type === "addon" || type === "seated" || type === "bundle") return false
   return type === "general"
 }
 
