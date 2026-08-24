@@ -1,5 +1,3 @@
-import * as Sentry from "@sentry/nextjs"
+// Client SDK init lives in instrumentation-client.ts (Next.js 15+).
 
-import { getSentryInitOptions } from "@/lib/sentry/options"
-
-Sentry.init(getSentryInitOptions())
+export {}
