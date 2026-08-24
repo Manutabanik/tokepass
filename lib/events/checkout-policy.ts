@@ -6,3 +6,7 @@ export function eventAcceptsMercadoPago(value: unknown): boolean {
 export function eventAcceptsPosPayments(value: unknown): boolean {
   return value !== false
 }
+
+export function eventAcceptsBankTransfer(value: unknown): boolean {
+  return value !== false
+}

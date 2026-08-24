@@ -23,6 +23,7 @@ import { toast } from "sonner"
 
 import {
   createCompleteEvent,
+  getOrganizerPreviewShareUrl,
   updateCompleteEvent,
   type EditableEventData,
 } from "@/app/actions/events"
@@ -143,6 +144,7 @@ import {
   isLastVisibleWizardStep,
   nextWizardStep,
   prevWizardStep,
+  usesWizardUpdateActions,
   visibleWizardSteps,
   WIZARD_STEP_AGENDA,
   WIZARD_STEP_CONFIG,
@@ -152,6 +154,7 @@ import {
   WIZARD_STEP_TICKETS,
   type WizardVisibility,
 } from "@/lib/events/wizard-steps"
+import { organizerPreviewOpenUrl } from "@/lib/preview/sandbox"
 import { resolveCategoryIcon } from "@/lib/category-icons"
 import {
   STREAMING_VENUE_LOCATION,
@@ -249,6 +252,7 @@ const defaultValues: EventFormValues = {
   lineup: [],
   maxTicketsPerUser: null,
   acceptsMercadoPago: true,
+  acceptsBankTransfer: true,
   acceptsPosPayments: true,
   defaultFeeStrategy: "pass_to_customer",
   serviceFeePercentage: 8,
@@ -1096,6 +1100,47 @@ export function EventCreationWizard({
       : "Creá tu evento"
   const studioSubtitle =
     "Completá los datos del evento. Los cambios se guardan automáticamente."
+  const updateOnly = usesWizardUpdateActions(initialData?.status ?? null)
+  const previewEventId = initialData?.id ?? persistedEventId
+  const canPreview = Boolean(
+    previewEventId || (watchedTitle?.trim().length ?? 0) >= 3,
+  )
+
+  async function onPreview() {
+    const saved = await onSubmit(form.getValues(), "draft")
+    if (!saved) return
+    const eventId =
+      initialData?.id ?? persistedEventId ?? useEventFormStore.getState().eventId
+    if (!eventId) {
+      toast.error("Guardá el borrador antes de previsualizar.")
+      return
+    }
+    if (updateOnly) {
+      const slug = initialData?.slug?.trim()
+      if (!slug) {
+        toast.error("No encontramos el enlace público del evento.")
+        return
+      }
+      window.open(
+        organizerPreviewOpenUrl({
+          slug,
+          id: eventId,
+          published: true,
+        }),
+        "_blank",
+        "noopener,noreferrer",
+      )
+      return
+    }
+    const result = await getOrganizerPreviewShareUrl(eventId)
+    if (!result.success) {
+      toast.error("No se pudo abrir la previsualización", {
+        description: result.error,
+      })
+      return
+    }
+    window.open(result.url, "_blank", "noopener,noreferrer")
+  }
 
   return (
     <>
@@ -1140,12 +1185,20 @@ export function EventCreationWizard({
               isLast={isLastVisibleWizardStep(resolvedStep, wizardFlags)}
               submitting={form.formState.isSubmitting}
               nextDisabled={inventoryBlocked}
+              previewDisabled={!canPreview}
               eventStatus={initialData?.status ?? null}
               onBack={() =>
                 void moveToStep(prevWizardStep(resolvedStep, wizardFlags))
               }
               onNext={() =>
                 void moveToStep(nextWizardStep(resolvedStep, wizardFlags))
+              }
+              onPreview={() => void onPreview()}
+              onSaveDraft={() =>
+                void onSubmit(
+                  form.getValues(),
+                  updateOnly ? "update" : "draft",
+                )
               }
               onPublish={() => void onSubmit(form.getValues(), "publish")}
               onUpdate={() => void onSubmit(form.getValues(), "update")}

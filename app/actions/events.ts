@@ -90,6 +90,7 @@ import {
 } from "@/lib/validations/event-form"
 import {
   eventAcceptsMercadoPago,
+  eventAcceptsBankTransfer,
   eventAcceptsPosPayments,
 } from "@/lib/events/checkout-policy"
 import { formHasInventoryOrVenue } from "@/lib/events/event-inventory-fingerprint"
@@ -1279,7 +1280,7 @@ function identityAgeRestriction(
 }
 
 const OPTIONAL_EVENT_FLAG_COLUMNS_RE =
-  /has_seating_plan|has_schedule|delivery_mode|access_link|accepts_mercado_pago|accepts_pos_payments|refund_policy|schema cache|PGRST204|42703/i
+  /has_seating_plan|has_schedule|delivery_mode|access_link|accepts_mercado_pago|accepts_bank_transfer|accepts_pos_payments|refund_policy|schema cache|PGRST204|42703/i
 
 async function persistEventDeliveryProfile(
   client: SupabaseClient<Database>,
@@ -1331,6 +1332,7 @@ function stripOptionalEventFlags<T extends Record<string, unknown>>(payload: T):
   delete (next as { delivery_mode?: unknown }).delivery_mode
   delete (next as { access_link?: unknown }).access_link
   delete (next as { accepts_mercado_pago?: boolean }).accepts_mercado_pago
+  delete (next as { accepts_bank_transfer?: boolean }).accepts_bank_transfer
   delete (next as { accepts_pos_payments?: boolean }).accepts_pos_payments
   delete (next as { refund_policy?: string }).refund_policy
   return next
@@ -1340,11 +1342,13 @@ function checkoutPolicyFromForm(
   data: EventFormValues | DraftEventFormValues,
 ): {
   accepts_mercado_pago: boolean
+  accepts_bank_transfer: boolean
   accepts_pos_payments: boolean
   refund_policy: ReturnType<typeof parseEventRefundPolicy>
 } {
   return {
     accepts_mercado_pago: data.acceptsMercadoPago !== false,
+    accepts_bank_transfer: data.acceptsBankTransfer !== false,
     accepts_pos_payments: data.acceptsPosPayments !== false,
     refund_policy: parseEventRefundPolicy(data.refundPolicy),
   }
@@ -2276,6 +2280,7 @@ export type CreateCompleteEventResult =
 
 export type EditableEventData = {
   id: string
+  slug: string | null
   organizerId: string
   title: string
   flyerUrl: string | null
@@ -2582,15 +2587,15 @@ export async function getEventForEditing(
     const reader = isSuperAdmin ? createAdminClient() : supabase
 
     const eventSelectWithCheckout =
-      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, status, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, has_schedule, delivery_mode, access_link, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, is_sponsored_by_tokepass, accepts_mercado_pago, accepts_pos_payments, refund_policy, updated_at"
+      "id, slug, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, status, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, has_schedule, delivery_mode, access_link, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, is_sponsored_by_tokepass, accepts_mercado_pago, accepts_bank_transfer, accepts_pos_payments, refund_policy, updated_at"
     const eventSelectWithAgenda =
-      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, status, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, has_schedule, delivery_mode, access_link, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, is_sponsored_by_tokepass, updated_at"
+      "id, slug, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, status, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, has_schedule, delivery_mode, access_link, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, is_sponsored_by_tokepass, updated_at"
     const eventSelectWithPicker =
-      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, status, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, max_tickets_per_user, updated_at"
+      "id, slug, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, status, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, max_tickets_per_user, updated_at"
     const eventSelectWithPlace =
-      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, status, schedule_days, category_id, age_restriction, province, department, venue_map, max_tickets_per_user, updated_at"
+      "id, slug, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, status, schedule_days, category_id, age_restriction, province, department, venue_map, max_tickets_per_user, updated_at"
     const eventSelectCore =
-      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, status, schedule_days, category_id, age_restriction, venue_map, max_tickets_per_user, updated_at"
+      "id, slug, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, status, schedule_days, category_id, age_restriction, venue_map, max_tickets_per_user, updated_at"
 
     let eventQuery = await reader
       .from("events")
@@ -2600,7 +2605,7 @@ export async function getEventForEditing(
 
     if (
       eventQuery.error &&
-      /accepts_mercado_pago|accepts_pos_payments|refund_policy|schema cache|PGRST204|42703/i.test(
+      /accepts_mercado_pago|accepts_bank_transfer|accepts_pos_payments|refund_policy|schema cache|PGRST204|42703/i.test(
         eventQuery.error.message,
       )
     ) {
@@ -2908,6 +2913,7 @@ export async function getEventForEditing(
 
     return {
       id: event.id,
+      slug: (event as { slug?: string | null }).slug ?? null,
       organizerId: event.organizer_id,
       title: event.title,
       flyerUrl: event.flyer_url ?? event.image_url,
@@ -3041,6 +3047,12 @@ export async function getEventForEditing(
         acceptsMercadoPago: eventAcceptsMercadoPago(
           (event as { accepts_mercado_pago?: boolean | null })
             .accepts_mercado_pago,
+        ),
+        acceptsBankTransfer: eventAcceptsBankTransfer(
+          (event as { accepts_bank_transfer?: boolean | null })
+            .accepts_bank_transfer ??
+            (event as { accepts_pos_payments?: boolean | null })
+              .accepts_pos_payments,
         ),
         acceptsPosPayments: eventAcceptsPosPayments(
           (event as { accepts_pos_payments?: boolean | null })

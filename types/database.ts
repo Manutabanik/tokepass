@@ -336,7 +336,9 @@ export type Event = {
   agenda_blocks?: AgendaBlock[]
   /** Paso 3: cobro online Mercado Pago. */
   accepts_mercado_pago: boolean
-  /** Paso 3: cobro en boletería / POS / transferencia. */
+  /** Paso 3: transferencia bancaria con validación manual. */
+  accepts_bank_transfer: boolean
+  /** Paso 3: cobro presencial en taquilla / POS. */
   accepts_pos_payments: boolean
   /** Paso 3: política de devolución. */
   refund_policy: "organizer" | "no_refunds" | "until_24h"

@@ -2,6 +2,7 @@ import { eventNeedsInteractiveCanvas } from "@/lib/seating/venue-map-pricing"
 import { hasInteractiveVenueMap } from "@/lib/seating/venue-map-geometry"
 import { parseScheduleDays } from "@/lib/event-schedule"
 import {
+  eventAcceptsBankTransfer,
   eventAcceptsMercadoPago,
   eventAcceptsPosPayments,
 } from "@/lib/events/checkout-policy"
@@ -24,6 +25,7 @@ export type EventCatalogEventRow = {
   schedule_days?: unknown
   venue_map?: unknown
   accepts_mercado_pago?: boolean | null
+  accepts_bank_transfer?: boolean | null
   accepts_pos_payments?: boolean | null
   refund_policy?: unknown
 }
@@ -102,6 +104,13 @@ export function applyEventCatalogRow(
       ? {
           acceptsMercadoPago: eventAcceptsMercadoPago(
             row.accepts_mercado_pago,
+          ),
+        }
+      : {}),
+    ...(row.accepts_bank_transfer !== undefined
+      ? {
+          acceptsBankTransfer: eventAcceptsBankTransfer(
+            row.accepts_bank_transfer,
           ),
         }
       : {}),

@@ -1,6 +1,6 @@
 "use client"
 
-import { Globe2, Lock } from "lucide-react"
+import { Globe2, Info, Lock } from "lucide-react"
 import type { UseFormReturn } from "react-hook-form"
 
 import {
@@ -106,9 +106,15 @@ export function EventStudioPublishStep({
         />
         <PaymentMethodSwitch
           form={form}
+          name="acceptsBankTransfer"
+          title="Transferencia bancaria"
+          description="El comprador sube comprobante y vos validás el pago manualmente."
+        />
+        <PaymentMethodSwitch
+          form={form}
           name="acceptsPosPayments"
-          title="Transferencia / POS"
-          description="Cobro en boletería: efectivo, tarjeta o transferencia."
+          title="Efectivo en taquilla / POS"
+          description="Cobro presencial en boletería con efectivo o tarjeta."
         />
         <FormMessage />
       </div>
@@ -146,6 +152,14 @@ export function EventStudioPublishStep({
                 )
               })}
             </div>
+            <div className="mt-3 flex items-start gap-2 rounded-2xl border border-border/70 bg-muted/30 px-3 py-3 text-xs leading-relaxed text-muted-foreground">
+              <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <p>
+                Importante: Por normativas de defensa al consumidor, si el
+                evento es cancelado o reprogramado, TokePass emitirá reembolsos
+                automáticos sin importar la política seleccionada aquí.
+              </p>
+            </div>
           </FormItem>
         )}
       />
@@ -160,7 +174,7 @@ function PaymentMethodSwitch({
   description,
 }: {
   form: UseFormReturn<EventFormValues>
-  name: "acceptsMercadoPago" | "acceptsPosPayments"
+  name: "acceptsMercadoPago" | "acceptsBankTransfer" | "acceptsPosPayments"
   title: string
   description: string
 }) {

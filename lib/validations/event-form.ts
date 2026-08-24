@@ -309,6 +309,7 @@ const eventFormObject = z
     lineup: z.array(lineupDraftItemSchema).optional().default([]),
     maxTicketsPerUser: z.number().int().nullable().optional(),
     acceptsMercadoPago: z.boolean().optional().default(true),
+    acceptsBankTransfer: z.boolean().optional().default(true),
     acceptsPosPayments: z.boolean().optional().default(true),
     defaultFeeStrategy: z
       .enum(TICKET_FEE_STRATEGIES)
@@ -766,6 +767,7 @@ export const draftEventSchema = z.object({
   lineup: z.array(lineupDraftItemSchema).optional().default([]),
   maxTicketsPerUser: z.number().int().nullable().optional(),
   acceptsMercadoPago: z.boolean().optional().default(true),
+  acceptsBankTransfer: z.boolean().optional().default(true),
   acceptsPosPayments: z.boolean().optional().default(true),
   defaultFeeStrategy: z
     .enum(TICKET_FEE_STRATEGIES)
@@ -1043,6 +1045,10 @@ export function coerceDraftEventForm(
           ? null
           : Math.floor(Number(raw.maxTicketsPerUser)),
     acceptsMercadoPago: raw.acceptsMercadoPago !== false,
+    acceptsBankTransfer:
+      raw.acceptsBankTransfer !== undefined
+        ? raw.acceptsBankTransfer !== false
+        : raw.acceptsPosPayments !== false,
     acceptsPosPayments: raw.acceptsPosPayments !== false,
     defaultFeeStrategy:
       raw.defaultFeeStrategy === "pass_to_customer"

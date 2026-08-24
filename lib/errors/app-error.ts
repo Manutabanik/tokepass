@@ -196,6 +196,7 @@ export function wizardStepFromPath(path: ReadonlyArray<PropertyKey>): 0 | 1 | 2 
   if (root === "tickets") return 2
   if (
     root === "acceptsMercadoPago" ||
+    root === "acceptsBankTransfer" ||
     root === "acceptsPosPayments" ||
     root === "defaultFeeStrategy" ||
     root === "refundPolicy"

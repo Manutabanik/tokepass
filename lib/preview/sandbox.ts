@@ -22,7 +22,25 @@ export function publicEventPreviewPath(
   previewKey: string,
 ): string {
   const slug = event.slug?.trim() || event.id
-  return `/eventos/${slug}?preview_key=${encodeURIComponent(previewKey)}`
+  return `/eventos/${slug}?preview=true&preview_key=${encodeURIComponent(previewKey)}`
+}
+
+/** URL de previsualización para el organizador (borrador o publicado). */
+export function organizerPreviewOpenUrl(input: {
+  slug?: string | null
+  id: string
+  previewKey?: string | null
+  published?: boolean
+}): string {
+  const slug = input.slug?.trim() || input.id
+  if (input.published) {
+    return `/eventos/${slug}?preview=true`
+  }
+  const key = input.previewKey?.trim()
+  if (key) {
+    return `/eventos/${slug}?preview=true&preview_key=${encodeURIComponent(key)}`
+  }
+  return `/eventos/${slug}?preview=true`
 }
 
 export function withPreviewKey(

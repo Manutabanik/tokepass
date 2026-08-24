@@ -31,6 +31,7 @@ export const dynamicParams = true
 
 type EventPageSearch = {
   preview_key?: string | string[]
+  preview?: string | string[]
 }
 
 async function loadPublishedEvent(rawSlug: string): Promise<EventDetails | null> {
@@ -68,6 +69,9 @@ export async function generateMetadata({
   const { slug: rawSlug } = await params
   const query = await searchParams
   const previewKey = normalizePreviewKey(query.preview_key)
+  const wantsPreview =
+    query.preview === "true" ||
+    (Array.isArray(query.preview) && query.preview[0] === "true")
 
   const published = await loadPublishedEvent(rawSlug)
   if (published) {
@@ -106,6 +110,9 @@ export default async function PublicEventPage({
   const { slug: rawSlug } = await params
   const query = await searchParams
   const previewKey = normalizePreviewKey(query.preview_key)
+  const wantsPreview =
+    query.preview === "true" ||
+    (Array.isArray(query.preview) && query.preview[0] === "true")
   const fullSlug = decodeURIComponent(rawSlug)
 
   let event = await loadPublishedEvent(rawSlug)
