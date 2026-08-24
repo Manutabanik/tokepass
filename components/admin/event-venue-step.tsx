@@ -283,24 +283,30 @@ export function EventVenueStep({
     const nextStructured =
       venue.seatingLayout.some((s) => s.layout_type !== "general") ||
       firstZone?.type === "reserved_seating"
+    const dirty = { shouldDirty: true as const }
 
-    form.setValue("venue.mode", "existing")
-    form.setValue("venue.existingVenueId", venue.id)
-    form.setValue("venue.venueName", venue.name)
-    form.setValue("venue.venueLocation", venue.address || venue.location)
-    form.setValue("venue.venueCity", venue.city ?? "")
+    form.setValue("venue.mode", "existing", dirty)
+    form.setValue("venue.existingVenueId", venue.id, dirty)
+    form.setValue("venue.venueName", venue.name, dirty)
+    form.setValue("venue.venueLocation", venue.address || venue.location, dirty)
+    form.setValue("venue.venueCity", venue.city ?? "", dirty)
     const parsed = parsePlaceParts(venue.city)
-    form.setValue("venue.department", parsed.department)
-    form.setValue("venue.province", parsed.province)
-    form.setValue("venue.capacity", venue.capacity)
-    form.setValue("venue.latitude", venue.latitude)
-    form.setValue("venue.longitude", venue.longitude)
-    form.setValue("venue.seatingBackgroundUrl", venue.seatingBackgroundUrl)
+    form.setValue("venue.department", parsed.department, dirty)
+    form.setValue("venue.province", parsed.province, dirty)
+    form.setValue(
+      "venue.capacity",
+      venue.capacity > 0 ? venue.capacity : undefined,
+      dirty,
+    )
+    form.setValue("venue.latitude", venue.latitude, dirty)
+    form.setValue("venue.longitude", venue.longitude, dirty)
+    form.setValue("venue.seatingBackgroundUrl", venue.seatingBackgroundUrl, dirty)
     form.setValue(
       "venue.zoneType",
       nextStructured ? "reserved_seating" : "general_admission",
+      dirty,
     )
-    form.setValue("venue.includesSeatingMap", nextStructured)
+    form.setValue("venue.includesSeatingMap", nextStructured, dirty)
     const currentZones = form.getValues("venue.zones") ?? []
     const keepEventZones =
       Boolean(eventId) &&
@@ -315,17 +321,18 @@ export function EventVenueStep({
           rows: zone.rows ?? null,
           seatsPerRow: zone.seatsPerRow ?? null,
         })),
+        dirty,
       )
     }
-    form.setValue("venue.saveVenueForReuse", false)
+    form.setValue("venue.saveVenueForReuse", false, dirty)
     setBackgroundUrl(venue.seatingBackgroundUrl)
     const nextMap = seatingLayoutToVenueMap(
       venue.seatingLayout,
       parseVenueMap(venue.venueMap),
     )
     setVenueMap(nextMap)
-    form.setValue("venue.venueMap", nextMap)
-    form.setValue("venue.seatingLayout", venue.seatingLayout)
+    form.setValue("venue.venueMap", nextMap, dirty)
+    form.setValue("venue.seatingLayout", venue.seatingLayout, dirty)
     setZoneDrafts(
       nextMap.sectors.length > 0 || (nextMap.elements?.length ?? 0) > 0
         ? venueMapToZoneDrafts(nextMap)
@@ -360,6 +367,11 @@ export function EventVenueStep({
       toast.error("Falta el pin en el mapa.")
       return
     }
+    const declaredCapacity = Math.floor(Number(values.capacity))
+    if (!Number.isFinite(declaredCapacity) || declaredCapacity < 1) {
+      toast.error("Ingresá el aforo máximo del recinto.")
+      return
+    }
 
     const nextStructured =
       Boolean(values.includesSeatingMap) ||
@@ -376,9 +388,7 @@ export function EventVenueStep({
     const capacity =
       (fromMap
         ? venueMapCapacity(venueMap)
-        : totalDraftCapacity(mapDrafts, nextStructured)) ||
-      values.capacity ||
-      1
+        : totalDraftCapacity(mapDrafts, nextStructured)) || declaredCapacity
 
     startSaveTransition(async () => {
       const place = composeVenuePlace({
@@ -990,6 +1000,7 @@ export function EventVenueStep({
         open={managerOpen}
         onOpenChange={setManagerOpen}
         onCatalogChange={handleCatalogChange}
+        onSelect={applySavedVenue}
         catalogOrganizerId={catalogOrganizerId}
       />
     </div>
@@ -1075,8 +1086,9 @@ export function buildVenuePersistPayload(input: {
     longitude: input.formValues.longitude ?? null,
     capacity:
       (fromMap ? venueMapCapacity(map) : totalDraftCapacity(input.zoneDrafts, structured)) ||
-      input.formValues.capacity ||
-      1,
+      (Number(input.formValues.capacity) > 0
+        ? Number(input.formValues.capacity)
+        : 0),
     zones: fromMap
       ? draftZonesToBlueprint(venueMapToZoneDrafts(map), structured)
       : draftZonesToBlueprint(input.zoneDrafts, structured),

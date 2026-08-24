@@ -844,6 +844,7 @@ export async function updateVenueIdentity(input: {
   city?: string | null
   latitude?: number | null
   longitude?: number | null
+  capacity?: number | null
 }): Promise<ActionResult> {
   try {
     const { supabase, userId } = await requireOrganizer()
@@ -873,6 +874,15 @@ export async function updateVenueIdentity(input: {
       return { success: false, error: "Las coordenadas del lugar son inválidas." }
     }
 
+    const capacity = Math.floor(Number(input.capacity))
+    const hasCapacity = Number.isFinite(capacity) && capacity >= 1
+    if (input.capacity != null && !hasCapacity) {
+      return {
+        success: false,
+        error: "Ingresá el aforo máximo del recinto.",
+      }
+    }
+
     const { data, error } = await supabase
       .from("venues")
       .update({
@@ -882,6 +892,7 @@ export async function updateVenueIdentity(input: {
         city,
         latitude,
         longitude,
+        ...(hasCapacity ? { capacity } : {}),
         updated_at: new Date().toISOString(),
       } as never)
       .eq("id", input.id)

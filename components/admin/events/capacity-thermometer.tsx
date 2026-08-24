@@ -26,8 +26,7 @@ export function CapacityThermometer({
     customMaxCapacity,
   })
   const percent = Math.min(100, Math.round(snap.ratio * 100))
-  const totalLabel =
-    snap.venueMax > 0 ? formatNumber(snap.venueMax) : "sin aforo"
+  const totalLabel = snap.venueMax > 0 ? formatNumber(snap.venueMax) : "—"
 
   return (
     <section className="space-y-1.5">

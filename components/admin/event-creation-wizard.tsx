@@ -451,7 +451,7 @@ export function EventCreationWizard({
     setActiveStep(resolvedStep)
     setWizardStep(resolvedStep)
   }
-  if (resolvedStep !== WIZARD_STEP_CONFIG && isStudioOpen) {
+  if (resolvedStep !== WIZARD_STEP_TICKETS && isStudioOpen) {
     setIsStudioOpen(false)
   }
 
@@ -820,6 +820,12 @@ export function EventCreationWizard({
       data.venue.saveVenueForReuse &&
       data.venue.venueName.trim().length >= 2
     if (canPersistVenue) {
+      const venueCapacity = Math.floor(Number(data.venue.capacity))
+      if (!Number.isFinite(venueCapacity) || venueCapacity < 1) {
+        toast.error("Definí el aforo máximo del recinto.")
+        goToWizardStep(WIZARD_STEP_IDENTITY)
+        return false
+      }
       const persist = await upsertVenue({
         id: data.venue.existingVenueId,
         name: data.venue.venueName.trim(),
@@ -831,7 +837,7 @@ export function EventCreationWizard({
         city: data.venue.venueCity?.trim() || undefined,
         latitude: data.venue.latitude ?? null,
         longitude: data.venue.longitude ?? null,
-        capacity: data.venue.capacity ?? 1,
+        capacity: venueCapacity,
         zones: data.venue.zones,
         seatingBackgroundUrl: data.venue.seatingBackgroundUrl ?? null,
         seatingLayout: Array.isArray(data.venue.seatingLayout)

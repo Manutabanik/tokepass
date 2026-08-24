@@ -117,11 +117,7 @@ export function listInventoryFamilies(
       mapBuckets.set(sectorId, bucket)
       return
     }
-    if (
-      !isGeneralAdmissionTicket(ticket) ||
-      isBlankInventoryTicket(ticket) ||
-      !ticket.name?.trim()
-    ) {
+    if (!isGeneralAdmissionTicket(ticket) || isBlankInventoryTicket(ticket)) {
       return
     }
     const nameKey = ticketFamilyNameKey(ticket.name) || `ga-${index}`

@@ -90,4 +90,14 @@ describe("capacity thermometer", () => {
     assert.equal(snap.overCapacity, false)
     assert.equal(snap.ratio < 1, true)
   })
+
+  it("does not invent a venue max of 1 when the recinto has no aforo", () => {
+    const snap = computeCapacityThermometer({
+      tickets: [ticket({ tierType: "general", capacity: 40 })],
+      venueCapacity: undefined,
+    })
+    assert.equal(snap.venueMax, 0)
+    assert.equal(snap.overCapacity, false)
+    assert.equal(snap.ratio, 0)
+  })
 })

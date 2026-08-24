@@ -3,6 +3,7 @@
 import {
   Archive,
   ArchiveRestore,
+  Check,
   MapPin,
   Pencil,
   Plus,
@@ -43,6 +44,7 @@ type VenueDraft = {
   city: string
   latitude: number | null
   longitude: number | null
+  capacity: number | ""
 }
 
 function emptyDraft(): VenueDraft {
@@ -52,6 +54,7 @@ function emptyDraft(): VenueDraft {
     city: "",
     latitude: null,
     longitude: null,
+    capacity: "",
   }
 }
 
@@ -63,6 +66,7 @@ function draftFromVenue(venue: OrganizerVenue): VenueDraft {
     city: venue.city ?? "",
     latitude: venue.latitude,
     longitude: venue.longitude,
+    capacity: venue.capacity > 0 ? venue.capacity : "",
   }
 }
 
@@ -81,11 +85,13 @@ export function VenueManagerModal({
   open,
   onOpenChange,
   onCatalogChange,
+  onSelect,
   catalogOrganizerId = null,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   onCatalogChange: (venues: OrganizerVenue[]) => void
+  onSelect?: (venue: OrganizerVenue) => void
   catalogOrganizerId?: string | null
 }) {
   const [venues, setVenues] = useState<OrganizerVenue[]>([])
@@ -157,6 +163,11 @@ export function VenueManagerModal({
 
   function saveDraft() {
     if (!draft) return
+    const capacity = Math.floor(Number(draft.capacity))
+    if (!Number.isFinite(capacity) || capacity < 1) {
+      toast.error("Ingresá el aforo máximo del recinto.")
+      return
+    }
     startTransition(async () => {
       const payload = {
         name: draft.name,
@@ -164,6 +175,7 @@ export function VenueManagerModal({
         city: draft.city,
         latitude: draft.latitude,
         longitude: draft.longitude,
+        capacity,
       }
       const result = draft.id
         ? await updateVenueIdentity({ id: draft.id, ...payload })
@@ -173,7 +185,7 @@ export function VenueManagerModal({
             city: payload.city,
             latitude: payload.latitude,
             longitude: payload.longitude,
-            capacity: 1,
+            capacity,
             zones: [],
             seatingLayout: [],
             venueMap: emptyVenueMap(),
@@ -236,8 +248,8 @@ export function VenueManagerModal({
         <DialogHeader>
           <DialogTitle>Gestionar lugares</DialogTitle>
           <DialogDescription>
-            Edita, archiva o elimina recintos. Los archivados no aparecen al
-            crear un evento nuevo.
+            Seleccioná un recinto para este evento, o editalo. Los archivados no
+            aparecen al crear un evento nuevo.
           </DialogDescription>
         </DialogHeader>
 
@@ -250,6 +262,27 @@ export function VenueManagerModal({
                 value={draft.name}
                 onChange={(event) => updateDraft({ name: event.target.value })}
                 placeholder="Estadio, teatro o salon"
+                className="h-10"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="venue-manager-capacity">
+                Aforo máximo <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="venue-manager-capacity"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                required
+                value={draft.capacity}
+                onChange={(event) => {
+                  const raw = event.target.value
+                  updateDraft({
+                    capacity: raw === "" ? "" : Math.floor(Number(raw)),
+                  })
+                }}
+                placeholder="Ej. 1200"
                 className="h-10"
               />
             </div>
@@ -359,22 +392,39 @@ export function VenueManagerModal({
                               .join(" · ")}
                           </span>
                         </p>
-                        {place.province ? (
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {place.province}
-                          </p>
-                        ) : null}
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {venue.capacity > 0
+                            ? `Aforo ${venue.capacity}`
+                            : "Sin aforo cargado"}
+                          {place.province ? ` · ${place.province}` : ""}
+                        </p>
                       </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={busy}
-                        onClick={() => setDraft(draftFromVenue(venue))}
-                      >
-                        <Pencil className="size-3.5" aria-hidden="true" />
-                        Editar
-                      </Button>
+                      <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                        {onSelect && !venue.isArchived ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={busy}
+                            onClick={() => {
+                              onSelect(venue)
+                              onOpenChange(false)
+                            }}
+                          >
+                            <Check className="size-3.5" aria-hidden="true" />
+                            Seleccionar
+                          </Button>
+                        ) : null}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => setDraft(draftFromVenue(venue))}
+                        >
+                          <Pencil className="size-3.5" aria-hidden="true" />
+                          Editar
+                        </Button>
+                      </div>
                     </div>
                     <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3">
                       <label className="flex items-center gap-2 text-sm text-foreground">

@@ -37,7 +37,7 @@ export function computeCapacityThermometer(input: {
     mapCapacity,
     used,
     venueMax,
-    ratio: venueMax > 0 ? used / venueMax : used > 0 ? 1 : 0,
+    ratio: venueMax > 0 ? used / venueMax : 0,
     overCapacity: overflow > 0,
     overflow,
   }

@@ -50,8 +50,7 @@ export function PricingStep({
   hideMapBlock?: boolean
   onOpenMapStudio?: () => void
 }) {
-  const watchedTickets = form.watch("tickets")
-  const tickets = form.getValues("tickets") ?? watchedTickets ?? EMPTY_FORM_TICKETS
+  const tickets = form.watch("tickets") ?? EMPTY_FORM_TICKETS
   const scheduleDays = form.watch("basics.scheduleDays") ?? []
   const identityDate = form.watch("basics.date")
   const eventDates = listEventFormJornadas({
@@ -105,7 +104,10 @@ export function PricingStep({
           seatingSectorId: family.seatingSectorId,
         })
     if (upserted.tickets !== current) {
-      form.setValue("tickets", upserted.tickets, { shouldDirty: true })
+      form.setValue("tickets", upserted.tickets, {
+        shouldDirty: true,
+        shouldValidate: true,
+      })
     }
     setSheet({
       indexes: upserted.indexes,
@@ -131,7 +133,10 @@ export function PricingStep({
       differentiate: false,
       kind: "general",
     })
-    form.setValue("tickets", next.tickets, { shouldDirty: true })
+    form.setValue("tickets", next.tickets, {
+      shouldDirty: true,
+      shouldValidate: true,
+    })
     setSheet({
       indexes: next.indexes,
       kind: "general",
@@ -140,9 +145,35 @@ export function PricingStep({
     })
   }
 
+  function commitSheetFamily() {
+    if (!sheet) return
+    const current = form.getValues("tickets") ?? []
+    const primaryIndex = sheet.indexes[0]
+    const primary = primaryIndex == null ? undefined : current[primaryIndex]
+    if (!primary) return
+    const name = (primary.name ?? "").trim()
+    const next = current.map((ticket, index) => {
+      if (!sheet.indexes.includes(index)) return ticket
+      return {
+        ...ticket,
+        name:
+          sheet.kind === "map"
+            ? ticket.name
+            : name || ticket.name || "Entrada general",
+        capacity: sheet.kind === "map" ? ticket.capacity : primary.capacity,
+        price: sheet.differentiate ? ticket.price : primary.price,
+        basePrice: sheet.differentiate ? ticket.basePrice : primary.price,
+      }
+    })
+    form.setValue("tickets", next, {
+      shouldDirty: true,
+      shouldValidate: true,
+    })
+  }
+
   function closeSheet(open: boolean) {
     if (open) return
-    if (sheet?.created) {
+    if (sheet) {
       const current = form.getValues("tickets") ?? []
       const familyTickets = sheet.indexes
         .map((index) => current[index])
@@ -153,10 +184,13 @@ export function PricingStep({
           !(Number(ticket?.capacity) > 0) &&
           !(Number(ticket?.price) > 0),
       )
-      if (stillBlank) {
+      if (sheet.created && stillBlank) {
         form.setValue("tickets", removeTicketFamily(current, sheet.indexes), {
           shouldDirty: true,
+          shouldValidate: true,
         })
+      } else {
+        commitSheetFamily()
       }
     }
     setSheet(null)

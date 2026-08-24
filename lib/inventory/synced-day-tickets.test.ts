@@ -77,4 +77,13 @@ describe("synced day tickets", () => {
     assert.equal(ticketSoldCount(tickets[0]), 3)
     assert.equal(family?.sold, 5)
   })
+
+  it("keeps unnamed general tickets that already have stock", () => {
+    const ticket = createInventoryTicket("general")
+    ticket.capacity = 40
+    const family = listInventoryFamilies([ticket])[0]
+    assert.ok(family)
+    assert.equal(family.stock, 40)
+    assert.equal(family.name, "Entrada")
+  })
 })

@@ -419,12 +419,13 @@ export function VenueArgentinaSelector({
               htmlFor="venue-ar-capacity"
               className={STUDIO_LABEL_CLASS}
             >
-              Cantidad de personas
+              Aforo máximo <span className="text-red-500">*</span>
             </Label>
             <Input
               id="venue-ar-capacity"
               type="number"
-              min={0}
+              min={1}
+              required
               disabled={disabled}
               value={state.capacity || ""}
               onChange={(event) =>

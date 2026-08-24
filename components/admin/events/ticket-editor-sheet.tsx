@@ -80,6 +80,7 @@ export function TicketEditorSheet({
     for (const index of indexes) {
       form.setValue(`tickets.${index}.${field}`, value as never, {
         shouldDirty: true,
+        shouldValidate: true,
       })
     }
   }
@@ -187,6 +188,7 @@ export function TicketEditorSheet({
                     else {
                       form.setValue(`tickets.${primaryIndex}.basePrice`, next, {
                         shouldDirty: true,
+                        shouldValidate: true,
                       })
                     }
                   }}
@@ -220,7 +222,7 @@ export function TicketEditorSheet({
                           indexes,
                           base,
                         ),
-                        { shouldDirty: true },
+                        { shouldDirty: true, shouldValidate: true },
                       )
                     }
                   }}

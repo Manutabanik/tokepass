@@ -32,6 +32,7 @@ export function EventStudioDateTimeField({
   invalid = false,
   dateLabel = "Fecha",
   timeLabel = "Hora",
+  compact = false,
 }: {
   id: string
   fieldName?: string
@@ -40,6 +41,7 @@ export function EventStudioDateTimeField({
   invalid?: boolean
   dateLabel?: string
   timeLabel?: string
+  compact?: boolean
 }) {
   const parts = splitDateTime(value)
   const minuteOptions = MINUTES.includes(parts.minute)
@@ -59,9 +61,9 @@ export function EventStudioDateTimeField({
   }
 
   return (
-    <div className="space-y-2">
-      <div className="space-y-2">
-        <label className="block min-w-0">
+    <div className={compact ? "min-w-0" : "space-y-2"}>
+      <div className={compact ? "flex min-w-0 items-center gap-1.5" : "space-y-2"}>
+        <label className={cn("block min-w-0", compact && "flex-1")}>
           <span className="sr-only">{dateLabel}</span>
           <input
             id={id}
@@ -70,16 +72,16 @@ export function EventStudioDateTimeField({
             value={parts.date}
             onChange={(event) => update({ date: event.target.value })}
             aria-invalid={invalid || undefined}
-            className={cn(selectClass, "w-full px-3")}
+            className={cn(selectClass, "w-full px-3", compact && "h-9")}
           />
         </label>
-        <div className="grid grid-cols-2 gap-2">
+        <div className={cn("grid grid-cols-2 gap-2", compact && "w-[7.5rem] shrink-0")}>
           <label className="min-w-0">
             <span className="sr-only">{timeLabel} hora</span>
             <select
               value={parts.hour}
               onChange={(event) => update({ hour: event.target.value })}
-              className={cn(selectClass, "w-full")}
+              className={cn(selectClass, "w-full", compact && "h-9 px-1.5")}
               aria-invalid={invalid || undefined}
               aria-label={`${timeLabel} hora`}
             >
@@ -96,7 +98,7 @@ export function EventStudioDateTimeField({
             <select
               value={parts.minute}
               onChange={(event) => update({ minute: event.target.value })}
-              className={cn(selectClass, "w-full")}
+              className={cn(selectClass, "w-full", compact && "h-9 px-1.5")}
               aria-label={`${timeLabel} minutos`}
             >
               <option value="">MM</option>
