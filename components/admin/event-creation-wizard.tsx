@@ -76,8 +76,7 @@ import type { VenuePricingMap } from "@/lib/seating/venue-adapter"
 import {
   applyMapCapacityToTickets,
   consolidateEventTicketsForPersist,
-  mapBackedTicketsUnchanged,
-  syncMapBackedTickets,
+  syncMapToTickets,
   venueMapToPricingMap,
 } from "@/lib/seating/venue-map-pricing"
 import { InteractiveVenueMapEditor } from "@/components/admin/interactive-venue-map-editor"
@@ -321,7 +320,7 @@ export function EventCreationWizard({
       ...(initialData?.values ?? {}),
     },
   })
-  const { replace: replaceTickets } = useFieldArray({
+  const { replace: replaceTickets, append: appendTicket, update: updateTicket, remove: removeTicket } = useFieldArray({
     control: form.control,
     name: "tickets",
     keyName: "_rowId",
@@ -478,16 +477,19 @@ export function EventCreationWizard({
     const pricing = venueMapToPricingMap(map)
     setVenuePricingMap(pricing)
     useEventFormStore.getState().setVenuePricingMap(pricing)
-    const current = form.getValues("tickets") ?? []
-    const next = syncMapBackedTickets(current, map, {
-      defaultDayId: defaultInventoryDayId(
-        form.getValues("basics.scheduleDays"),
-      ),
-      dayIds: (form.getValues("basics.scheduleDays") ?? []).map((day) => day.id),
+    syncMapToTickets({
+      getTickets: () => form.getValues("tickets") ?? [],
+      map,
+      append: appendTicket,
+      update: updateTicket,
+      remove: removeTicket,
+      options: {
+        defaultDayId: defaultInventoryDayId(
+          form.getValues("basics.scheduleDays"),
+        ),
+        dayIds: (form.getValues("basics.scheduleDays") ?? []).map((day) => day.id),
+      },
     })
-    if (!mapBackedTicketsUnchanged(current, next)) {
-      replaceTickets(next)
-    }
   }
 
   function handleApplySavedVenue(venue: OrganizerVenue) {
@@ -1701,6 +1703,9 @@ export function EventCreationWizard({
                   fixedFee={platformFixedFee}
                   hideMapBlock={isStreaming}
                   onOpenMapStudio={() => setIsStudioOpen(true)}
+                  onSyncMapToTickets={() =>
+                    applyMapInventory(parseVenueMap(form.getValues("venue.venueMap")))
+                  }
                 />
                 <FormMessage>
                   {form.formState.errors.tickets?.message ??

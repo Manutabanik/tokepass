@@ -12,6 +12,7 @@ import {
   TicketEditorSheet,
 } from "@/components/admin/events/ticket-editor-sheet"
 import { FormLabel, FormMessage } from "@/components/ui/form"
+import { Button } from "@/components/ui/button"
 import { listEventFormJornadas } from "@/lib/event-schedule"
 import { createInventoryTicket } from "@/lib/inventory/create-inventory-ticket"
 import {
@@ -51,6 +52,7 @@ export function PricingStep({
   isSponsored = false,
   hideMapBlock = false,
   onOpenMapStudio,
+  onSyncMapToTickets,
 }: {
   form: UseFormReturn<EventFormValues>
   eventId?: string | null
@@ -59,6 +61,7 @@ export function PricingStep({
   isSponsored?: boolean
   hideMapBlock?: boolean
   onOpenMapStudio?: () => void
+  onSyncMapToTickets?: () => void
 }) {
   const { append, update, remove } = useFieldArray({
     control: form.control,
@@ -245,10 +248,29 @@ export function PricingStep({
         </p>
       ) : null}
       {mapSkuWarning ? (
-        <p className="text-sm text-amber-600 dark:text-amber-400" role="status">
-          {mapSkuWarning} Podés seguir guardando el borrador y ajustar el mapa
-          más tarde.
-        </p>
+        <div
+          className="flex flex-col gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2.5"
+          role="status"
+        >
+          <p className="text-sm text-amber-700 dark:text-amber-300">
+            {mapSkuWarning}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Podés seguir guardando el borrador. Si el mapa cambió, sincronizá las
+            entradas con un clic.
+          </p>
+          {onSyncMapToTickets ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="self-start"
+              onClick={onSyncMapToTickets}
+            >
+              Sincronizar mapa con entradas
+            </Button>
+          ) : null}
+        </div>
       ) : null}
 
       {hasSellableRows ? (
