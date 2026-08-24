@@ -99,7 +99,7 @@ describe("map enablement", () => {
     )
   })
 
-  it("skips SKU enforcement for general tickets without map sectors", () => {
+  it("no fuerza SKU enforcement aunque haya tickets map-backed", () => {
     const map = emptyVenueMap()
     map.zones = [
       {
@@ -126,18 +126,9 @@ describe("map enablement", () => {
         hasSeatingPlan: true,
         includesSeatingMap: true,
         venueMap: map,
-        tickets: [{ seatingSectorId: null }],
-      }),
-      false,
-    )
-    assert.equal(
-      shouldEnforceVenueMapSku({
-        hasSeatingPlan: true,
-        includesSeatingMap: true,
-        venueMap: map,
         tickets: [{ seatingSectorId: "zone-campo" }],
       }),
-      true,
+      false,
     )
   })
 })

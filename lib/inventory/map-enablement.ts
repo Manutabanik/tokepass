@@ -36,13 +36,12 @@ export function ticketsReferenceMapSectors(
   )
 }
 
-/** SKU mapa↔entradas solo si el mapa está activo y hay sectores asignados. */
-export function shouldEnforceVenueMapSku(input: {
+/** SKU mapa↔entradas deshabilitado: no bloquear guardado por desajuste mapa/tickets. */
+export function shouldEnforceVenueMapSku(_input: {
   hasSeatingPlan?: boolean | null
   includesSeatingMap?: boolean | null
   venueMap?: unknown
   tickets?: Array<{ seatingSectorId?: string | null } | null> | null
 }): boolean {
-  if (!eventHasActiveSeatingMap(input)) return false
-  return ticketsReferenceMapSectors(input.tickets)
+  return false
 }

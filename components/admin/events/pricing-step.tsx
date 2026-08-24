@@ -12,28 +12,18 @@ import {
   TicketEditorSheet,
 } from "@/components/admin/events/ticket-editor-sheet"
 import { FormLabel, FormMessage } from "@/components/ui/form"
-import { Button } from "@/components/ui/button"
 import { listEventFormJornadas } from "@/lib/event-schedule"
 import { createInventoryTicket } from "@/lib/inventory/create-inventory-ticket"
-import {
-  EMPTY_MAP_ENABLE_ERROR,
-  shouldEnforceVenueMapSku,
-} from "@/lib/inventory/map-enablement"
+import { EMPTY_MAP_ENABLE_ERROR } from "@/lib/inventory/map-enablement"
 import {
   listInventoryFamilies,
   planMissingFamilyDayTickets,
   type InventoryFamily,
 } from "@/lib/inventory/synced-day-tickets"
 import { inferInventoryTierType } from "@/lib/inventory/unified-inventory"
-import { applyMapCapacityToTickets } from "@/lib/seating/venue-map-pricing"
-import {
-  summarizeVenueMapSkuConflicts,
-  validateVenueMapSkuConsistency,
-} from "@/lib/seating/venue-map-sku-consistency"
 import { STUDIO_LABEL_CLASS } from "@/lib/admin/studio-form-styles"
 import { clampServiceFeePercentage } from "@/lib/pricing/net-profit"
 import type { EventFormValues } from "@/lib/validations/event-form"
-import { parseVenueMap } from "@/types/venue-map"
 import { cn } from "@/lib/utils"
 
 const EMPTY_FORM_TICKETS: EventFormValues["tickets"] = []
@@ -52,7 +42,6 @@ export function PricingStep({
   isSponsored = false,
   hideMapBlock = false,
   onOpenMapStudio,
-  onSyncMapToTickets,
 }: {
   form: UseFormReturn<EventFormValues>
   eventId?: string | null
@@ -80,38 +69,7 @@ export function PricingStep({
   })
   const isMultiDay =
     Boolean(form.watch("basics.isMultiDay")) || eventDates.length >= 2
-  const hasSeatingPlan = Boolean(form.watch("basics.hasSeatingPlan"))
-  const includesSeatingMap = Boolean(form.watch("venue.includesSeatingMap"))
-  const venueMap = form.watch("venue.venueMap")
   const mapFieldError = form.formState.errors.venue?.venueMap?.message
-  const mapSkuWarning = useMemo(() => {
-    if (
-      !shouldEnforceVenueMapSku({
-        hasSeatingPlan,
-        includesSeatingMap,
-        venueMap,
-        tickets,
-      })
-    ) {
-      return null
-    }
-    const healedTickets = applyMapCapacityToTickets(
-      tickets,
-      parseVenueMap(venueMap),
-    )
-    const result = validateVenueMapSkuConsistency({
-      map: parseVenueMap(venueMap),
-      tickets: healedTickets,
-    })
-    if (result.ok) return null
-    return summarizeVenueMapSkuConflicts(result.errors).summary
-  }, [hasSeatingPlan, includesSeatingMap, venueMap, tickets])
-  const mapBlockingError =
-    typeof mapFieldError === "string" &&
-    mapFieldError !== mapSkuWarning &&
-    mapFieldError !== EMPTY_MAP_ENABLE_ERROR
-      ? mapFieldError
-      : null
   const [sheet, setSheet] = useState<SheetState | null>(null)
   const [showExtras, setShowExtras] = useState(() => {
     const current = form.getValues("tickets") ?? []
@@ -236,41 +194,11 @@ export function PricingStep({
       {typeof form.formState.errors.tickets?.message === "string" ? (
         <FormMessage>{form.formState.errors.tickets.message}</FormMessage>
       ) : null}
-      {typeof mapBlockingError === "string" ? (
-        <p className="text-sm text-destructive" role="alert">
-          {mapBlockingError}
-        </p>
-      ) : null}
       {typeof mapFieldError === "string" &&
       mapFieldError === EMPTY_MAP_ENABLE_ERROR ? (
         <p className="text-sm text-destructive" role="alert">
           {mapFieldError}
         </p>
-      ) : null}
-      {mapSkuWarning ? (
-        <div
-          className="flex flex-col gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2.5"
-          role="status"
-        >
-          <p className="text-sm text-amber-700 dark:text-amber-300">
-            {mapSkuWarning}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Podés seguir guardando el borrador. Si el mapa cambió, sincronizá las
-            entradas con un clic.
-          </p>
-          {onSyncMapToTickets ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="self-start"
-              onClick={onSyncMapToTickets}
-            >
-              Sincronizar mapa con entradas
-            </Button>
-          ) : null}
-        </div>
       ) : null}
 
       {hasSellableRows ? (

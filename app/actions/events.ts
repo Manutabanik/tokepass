@@ -145,8 +145,6 @@ import {
 import { fieldFromAppError } from "@/lib/errors/form-field"
 import { actionHintFromError } from "@/lib/errors/guided-action"
 import {
-  summarizeVenueMapSkuConflicts,
-  validateVenueMapSkuConsistency,
   type WizardConflict,
 } from "@/lib/seating/venue-map-sku-consistency"
 import {
@@ -160,7 +158,6 @@ import {
 } from "@/lib/events/sanitize-ticket-tiers"
 import {
   eventHasActiveSeatingMap,
-  shouldEnforceVenueMapSku,
 } from "@/lib/inventory/map-enablement"
 
 export type OrganizerEvent = Pick<
@@ -1213,33 +1210,9 @@ function persistFailure(error: unknown): {
 }
 
 function venueMapSkuGuard(
-  data: EventFormValues,
+  _data: EventFormValues,
 ): { success: false; error: string; wizardConflict: WizardConflict } | null {
-  if (
-    !shouldEnforceVenueMapSku({
-      hasSeatingPlan: data.basics.hasSeatingPlan,
-      includesSeatingMap: data.venue.includesSeatingMap,
-      venueMap: data.venue.venueMap,
-      tickets: data.tickets,
-    })
-  ) {
-    return null
-  }
-  const healedTickets = applyMapCapacityToTickets(
-    data.tickets,
-    parseVenueMap(data.venue.venueMap),
-  )
-  const result = validateVenueMapSkuConsistency({
-    map: parseVenueMap(data.venue.venueMap),
-    tickets: healedTickets,
-  })
-  if (result.ok) return null
-  const conflict = summarizeVenueMapSkuConflicts(result.errors)
-  return {
-    success: false,
-    error: conflict.summary,
-    wizardConflict: conflict,
-  }
+  return null
 }
 
 function withHealedMapTickets(data: EventFormValues): EventFormValues {

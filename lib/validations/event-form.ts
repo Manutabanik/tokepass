@@ -41,15 +41,11 @@ import {
   normalizeTicketSectorInput,
   resolveTicketSectorId,
 } from "@/lib/validations/ticket-sku"
-import { validateSectorModalities } from "@/lib/seating/seating-type"
 import {
   EMPTY_MAP_ENABLE_ERROR,
-  eventHasActiveSeatingMap,
-  ticketsReferenceMapSectors,
   venueMapHasConfiguredSectors,
 } from "@/lib/inventory/map-enablement"
 import { EVENT_VISIBILITY_VALUES } from "@/types/events"
-import { parseVenueMap } from "@/types/venue-map"
 import { TICKET_TIER_VISIBILITY_VALUES } from "@/types/tickets"
 import {
   EVENT_DELIVERY_MODES,
@@ -571,26 +567,6 @@ const eventFormObject = z
           code: "custom",
           path: ["tickets", index, "phases"],
           message: `La suma de los lotes no puede superar la capacidad de ${sector.name}.`,
-        })
-      }
-    }
-
-    if (
-      data.basics.deliveryMode !== "ONLINE" &&
-      eventHasActiveSeatingMap({
-        hasSeatingPlan: data.basics.hasSeatingPlan,
-        includesSeatingMap: data.venue.includesSeatingMap,
-        venueMap: data.venue.venueMap,
-      }) &&
-      ticketsReferenceMapSectors(data.tickets)
-    ) {
-      for (const issue of validateSectorModalities(
-        parseVenueMap(data.venue.venueMap),
-      )) {
-        context.addIssue({
-          code: "custom",
-          path: ["venue", "venueMap"],
-          message: issue.message,
         })
       }
     }
