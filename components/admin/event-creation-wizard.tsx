@@ -44,7 +44,6 @@ import {
 } from "@/components/admin/unified-inventory-panel"
 import { createInventoryTicket } from "@/lib/inventory/create-inventory-ticket"
 import { ScheduleDaysBuilder } from "@/components/admin/schedule-days-builder"
-import { useDebounce } from "@/hooks/use-debounce"
 import { useEventFormAutosave } from "@/hooks/use-event-form-autosave"
 import type { ZoneTierPriceDraft } from "@/lib/stores/event-form-store"
 import { useEventFormStore } from "@/lib/stores/event-form-store"
@@ -402,25 +401,6 @@ export function EventCreationWizard({
       ? Date.parse(initialData.updatedAt)
       : null,
   })
-
-  const [draftRevision, setDraftRevision] = useState(0)
-  const debouncedDraftRevision = useDebounce(draftRevision, 1500)
-  const skipInitialAutosave = useRef(true)
-  const draftWatch = useWatch({ control: form.control })
-  const [seenDraftWatch, setSeenDraftWatch] = useState(draftWatch)
-  if (draftWatch !== seenDraftWatch) {
-    setSeenDraftWatch(draftWatch)
-    setDraftRevision((current) => current + 1)
-  }
-
-  useEffect(() => {
-    if (skipInitialAutosave.current) {
-      skipInitialAutosave.current = false
-      return
-    }
-    if (debouncedDraftRevision === 0) return
-    void flushAutosave()
-  }, [debouncedDraftRevision, flushAutosave])
 
   const clearDraft = useEventFormStore((s) => s.clearDraft)
   const setWizardStep = useEventFormStore((s) => s.setWizardStep)

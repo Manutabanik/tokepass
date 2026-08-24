@@ -1100,6 +1100,21 @@ function applyFormSeatingSectorSanitizer(
   )
 }
 
+function explicitPurchaseLimit(
+  raw: number | null | undefined,
+): number | undefined {
+  if (raw == null) return undefined
+  const parsed = Math.floor(Number(raw))
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+}
+
+function explicitLineup(
+  lineup: EventFormValues["lineup"] | null | undefined,
+): EventFormValues["lineup"] | null {
+  if (!Array.isArray(lineup) || lineup.length === 0) return null
+  return lineup
+}
+
 async function persistEventMaxTicketsPerUser(
   client: SupabaseClient<Database>,
   eventId: string,
@@ -1118,6 +1133,16 @@ async function persistEventMaxTicketsPerUser(
     })
     .eq("id", eventId)
   return error?.message ?? null
+}
+
+async function persistEventLineupIfProvided(
+  eventId: string,
+  lineup: EventFormValues["lineup"] | null | undefined,
+): Promise<string | null> {
+  const next = explicitLineup(lineup)
+  if (!next) return null
+  const result = await persistEventLineupSnapshot(eventId, next)
+  return result.success ? null : result.error
 }
 
 async function revalidatePersistedEvent(
@@ -1373,11 +1398,11 @@ async function persistEventIdentityOnly(input: {
     input.existing,
   )
   if (scheduleError) return persistFailure(scheduleError)
-  const lineupError = await persistEventLineupSnapshot(
+  const lineupError = await persistEventLineupIfProvided(
     input.eventId,
-    input.formValues.lineup ?? [],
+    input.formValues.lineup,
   )
-  if (!lineupError.success) return persistFailure(lineupError.error)
+  if (lineupError) return persistFailure(lineupError)
 
   const formValues = input.formValues as EventFormValues
   const venueLabelError = await persistEventIdentityVenueLabel(
@@ -1566,13 +1591,11 @@ async function persistNewEventIdentityOnly(
     if (scheduleError) return persistFailure(scheduleError)
   }
 
-  if ((raw.lineup ?? []).length > 0) {
-    const lineupError = await persistEventLineupSnapshot(
-      eventId,
-      raw.lineup ?? [],
-    )
-    if (!lineupError.success) return persistFailure(lineupError.error)
-  }
+  const createdLineupError = await persistEventLineupIfProvided(
+    eventId,
+    raw.lineup,
+  )
+  if (createdLineupError) return persistFailure(createdLineupError)
 
   revalidatePath(`/admin/events/${eventId}`)
   revalidatePath(`/admin/events/${eventId}/edit`)
@@ -3174,11 +3197,11 @@ export async function createCompleteEvent(
     formValues.tickets,
   )
   if (saleWindowError) return persistFailure(saleWindowError)
-  const lineupError = await persistEventLineupSnapshot(
+  const lineupError = await persistEventLineupIfProvided(
     String(eventId),
-    formValues.lineup ?? [],
+    formValues.lineup,
   )
-  if (!lineupError.success) return persistFailure(lineupError.error)
+  if (lineupError) return persistFailure(lineupError)
   const scheduleError = await persistEventSchedule(
     rpcClient,
     String(eventId),
@@ -3188,7 +3211,7 @@ export async function createCompleteEvent(
   const purchaseLimitError = await persistEventMaxTicketsPerUser(
     rpcClient,
     String(eventId),
-    null,
+    explicitPurchaseLimit(formValues.maxTicketsPerUser),
   )
   if (purchaseLimitError) {
     return persistFailure(purchaseLimitError)
@@ -3425,15 +3448,15 @@ export async function updateCompleteEvent(
         "El inventario no se pudo guardar: las entradas se vaciaron al validar sectores. Revisá el mapa y los combos.",
       )
     }
-    const lineupOnlyError = await persistEventLineupSnapshot(
+    const lineupOnlyError = await persistEventLineupIfProvided(
       eventId,
-      formValues.lineup ?? [],
+      formValues.lineup,
     )
-    if (!lineupOnlyError.success) return persistFailure(lineupOnlyError.error)
+    if (lineupOnlyError) return persistFailure(lineupOnlyError)
     const purchaseLimitError = await persistEventMaxTicketsPerUser(
       mutationClient,
       eventId,
-      null,
+      explicitPurchaseLimit(formValues.maxTicketsPerUser),
     )
     if (purchaseLimitError) {
       return persistFailure(purchaseLimitError)
@@ -3536,11 +3559,11 @@ export async function updateCompleteEvent(
   if (phasesError) return persistFailure(phasesError)
   const saleWindowError = await syncTicketSaleWindows(eventId, formValues.tickets)
   if (saleWindowError) return persistFailure(saleWindowError)
-  const lineupError = await persistEventLineupSnapshot(
+  const lineupError = await persistEventLineupIfProvided(
     eventId,
-    formValues.lineup ?? [],
+    formValues.lineup,
   )
-  if (!lineupError.success) return persistFailure(lineupError.error)
+  if (lineupError) return persistFailure(lineupError)
   const scheduleError = await persistEventSchedule(mutationClient, eventId, formValues, {
     date: event.date,
     ends_at: event.ends_at,
@@ -3550,7 +3573,7 @@ export async function updateCompleteEvent(
   const purchaseLimitError = await persistEventMaxTicketsPerUser(
     mutationClient,
     eventId,
-    null,
+    explicitPurchaseLimit(formValues.maxTicketsPerUser),
   )
   if (purchaseLimitError) {
     return persistFailure(purchaseLimitError)

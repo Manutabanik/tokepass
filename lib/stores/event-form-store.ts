@@ -88,11 +88,12 @@ export const useEventFormStore = create<EventFormStore>()(
           typeof serverUpdatedAt === "number" && Number.isFinite(serverUpdatedAt)
             ? serverUpdatedAt
             : 0
+        const hasServerSnapshot = Boolean(eventId) || serverMs > 0
         const preferLocal =
+          !hasServerSnapshot &&
           sameSession &&
           current.values != null &&
-          current.updatedAt > 0 &&
-          (serverMs <= 0 || current.updatedAt > serverMs)
+          current.updatedAt > 0
 
         set({
           draftKey,
