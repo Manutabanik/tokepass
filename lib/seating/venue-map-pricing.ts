@@ -550,6 +550,62 @@ export function applyMapCapacityToTickets<
   })
 }
 
+/** Quita un sector comercial del mapa (zona, grupo o elemento) por su id de inventario. */
+export function removeVenueMapSector(
+  map: InteractiveVenueMap,
+  sectorId: string,
+): InteractiveVenueMap {
+  const id = sectorId.trim()
+  if (!id) return map
+
+  const group = listVenuePriceGroups(map).find(
+    (candidate) => priceGroupSectorId(candidate) === id,
+  )
+  if (!group) {
+    return {
+      ...map,
+      zones: (map.zones ?? []).filter((zone) => zone.id !== id),
+      elements: (map.elements ?? []).filter(
+        (element) => element.id !== id && element.groupId !== id,
+      ),
+    }
+  }
+
+  const match = group.match
+  if (match.kind === "zone") {
+    return {
+      ...map,
+      zones: (map.zones ?? []).filter((zone) => zone.id !== match.id),
+    }
+  }
+
+  if (match.kind === "group") {
+    return {
+      ...map,
+      elements: (map.elements ?? []).filter(
+        (element) => element.groupId !== match.groupId,
+      ),
+    }
+  }
+
+  if (match.kind === "ids") {
+    const removeIds = new Set(match.ids)
+    return {
+      ...map,
+      elements: (map.elements ?? []).filter(
+        (element) => !removeIds.has(element.id),
+      ),
+    }
+  }
+
+  return {
+    ...map,
+    elements: (map.elements ?? []).filter(
+      (element) => element.id !== match.id && element.groupId !== id,
+    ),
+  }
+}
+
 export function mapBackedTicketsUnchanged(
   previous: EventFormValues["tickets"],
   next: EventFormValues["tickets"],

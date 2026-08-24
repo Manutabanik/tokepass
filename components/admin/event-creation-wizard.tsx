@@ -76,6 +76,8 @@ import type { VenuePricingMap } from "@/lib/seating/venue-adapter"
 import {
   applyMapCapacityToTickets,
   consolidateEventTicketsForPersist,
+  isMapBackedTicket,
+  removeVenueMapSector,
   syncMapToTickets,
   venueMapToPricingMap,
 } from "@/lib/seating/venue-map-pricing"
@@ -133,6 +135,7 @@ import {
   type EventFormValues,
 } from "@/lib/validations/event-form"
 import { defaultInventoryDayId, seedTwoScheduleDays } from "@/lib/event-schedule"
+import { ticketSoldCount } from "@/lib/inventory/synced-day-tickets"
 import { uncoveredScheduleDays } from "@/lib/inventory/day-ticket-coverage"
 import {
   clampWizardStep,
@@ -456,6 +459,20 @@ export function EventCreationWizard({
     setIsStudioOpen(false)
   }
 
+  const ticketsStepSyncedRef = useRef(false)
+  useEffect(() => {
+    if (resolvedStep !== WIZARD_STEP_TICKETS) {
+      ticketsStepSyncedRef.current = false
+      return
+    }
+    if (ticketsStepSyncedRef.current) return
+    ticketsStepSyncedRef.current = true
+    const map = parseVenueMap(form.getValues("venue.venueMap"))
+    if (!venueMapHasConfiguredSectors(map)) return
+    applyMapInventory(map)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync once per visit to tickets step
+  }, [resolvedStep])
+
   useEffect(() => {
     if (!workspace) return
     const key = editWorkspaceStepKey(resolvedStep)
@@ -489,6 +506,34 @@ export function EventCreationWizard({
         dayIds: (form.getValues("basics.scheduleDays") ?? []).map((day) => day.id),
       },
     })
+    form.clearErrors("venue.venueMap")
+    form.clearErrors("tickets")
+  }
+
+  function handleDisableMap() {
+    form.setValue("basics.hasSeatingPlan", false, { shouldDirty: true })
+    form.setValue("venue.includesSeatingMap", false, { shouldDirty: true })
+    const tickets = form.getValues("tickets") ?? []
+    const removeIndices = tickets
+      .map((tier, index) => ({ tier, index }))
+      .filter(
+        ({ tier }) => isMapBackedTicket(tier) && ticketSoldCount(tier) === 0,
+      )
+      .map(({ index }) => index)
+      .sort((a, b) => b - a)
+    if (removeIndices.length > 0) {
+      removeTicket(removeIndices)
+    }
+    form.clearErrors("venue.venueMap")
+    form.clearErrors("tickets")
+  }
+
+  function handleRemoveMapSector(sectorId: string | null) {
+    const id = sectorId?.trim()
+    if (!id) return
+    const map = parseVenueMap(form.getValues("venue.venueMap"))
+    persistWorkspaceMap(removeVenueMapSector(map, id), { announceEmpty: false })
+    form.clearErrors("tickets")
   }
 
   function handleApplySavedVenue(venue: OrganizerVenue) {
@@ -1014,6 +1059,7 @@ export function EventCreationWizard({
       return
     }
     form.clearErrors("venue.venueMap")
+    form.clearErrors("tickets")
     form.setValue("venue.includesSeatingMap", true, { shouldDirty: true })
     form.setValue("basics.hasSeatingPlan", true, { shouldDirty: true })
     applyMapInventory(next)
@@ -1699,6 +1745,8 @@ export function EventCreationWizard({
                   onSyncMapToTickets={() =>
                     applyMapInventory(parseVenueMap(form.getValues("venue.venueMap")))
                   }
+                  onDisableMap={handleDisableMap}
+                  onRemoveMapSector={handleRemoveMapSector}
                 />
                 <FormMessage>
                   {form.formState.errors.tickets?.message ??
