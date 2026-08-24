@@ -26,6 +26,15 @@ describe("tier unit price index", () => {
     assert.equal(prices.campo, undefined)
   })
 
+  it("indexes a free ticket at price 0", () => {
+    const prices = buildTierUnitPriceIndex([
+      { id: "tier-free", price: 0, seatingSectorId: "campo" },
+    ])
+    assert.equal(prices["tier-free"], 0)
+    assert.equal(prices.campo, 0)
+    assert.equal(unitPriceForTierId("tier-free", prices, 99), 0)
+  })
+
   it("reads a unit price by ticket id", () => {
     const prices = buildTierUnitPriceIndex([
       { id: "tier-general", price: 18000 },

@@ -1,3 +1,4 @@
+import { isValidPublicPrice } from "@/lib/checkout/public-price"
 import { inferInventoryTierType } from "@/lib/inventory/unified-inventory"
 import {
   isTicketOnSale,
@@ -61,8 +62,7 @@ export function isSellablePublicTicket(
   if ((ticket.visibility ?? "public") === "private") return false
   if (!isSellableTicketActive(ticket)) return false
   if (!isAdmissionTicket(ticket)) return false
-  const price = Number(ticket.price)
-  if (!Number.isFinite(price) || price < 0) return false
+  if (!isValidPublicPrice(ticket.price)) return false
   return isTicketOnSale(
     resolveTicketSaleState({
       available: sellableAvailable(ticket),

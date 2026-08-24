@@ -56,6 +56,7 @@ import {
   shouldShowCheckoutKindTabs,
   ticketDateSectionLabel,
   ticketMatchesTab,
+  ticketVisibleOnCheckoutDay,
   type CheckoutKindTab,
   type TicketDayGroup,
 } from "@/lib/checkout/ticket-day-groups"
@@ -453,14 +454,19 @@ function TicketSelectionList({
     if (kindTab === "passes") {
       return listTiers.filter((tier) => ticketMatchesTab(tier, FULL_PASS_TAB_ID))
     }
-    if (!showKindTabs && !showDateCards) {
-      return listTiers.filter((tier) => !ticketMatchesTab(tier, FULL_PASS_TAB_ID))
+    if (activeDateId && (showDateCards || scheduleDays.length > 1)) {
+      return listTiers.filter((tier) =>
+        ticketVisibleOnCheckoutDay(tier, activeDateId),
+      )
     }
-    if (!activeDateId) {
-      return listTiers.filter((tier) => !ticketMatchesTab(tier, FULL_PASS_TAB_ID))
-    }
-    return listTiers.filter((tier) => ticketMatchesTab(tier, activeDateId))
-  }, [activeDateId, kindTab, listTiers, showDateCards, showKindTabs])
+    return listTiers.filter((tier) => !ticketMatchesTab(tier, FULL_PASS_TAB_ID))
+  }, [
+    activeDateId,
+    kindTab,
+    listTiers,
+    scheduleDays.length,
+    showDateCards,
+  ])
   const showBundles =
     bundleTiers.length > 0 && (kindTab === "passes" || !showKindTabs)
   const ticketGroups = useMemo<TicketDayGroup[]>(() => {
@@ -482,10 +488,12 @@ function TicketSelectionList({
         ticketDateSectionLabel(group.dateId, scheduleDays) || group.dateLabel,
     }))
   }, [displayedTickets, kindTab, scheduleDays])
-  const showDateHeaders =
-    kindTab === "days" &&
-    (ticketGroups.length > 1 || dateCards.length > 1 || scheduleDays.length > 1)
+  const showDateHeaders = kindTab === "days" && ticketGroups.length > 1
 
+  const selectorTitle =
+    kindTab === "passes"
+      ? "Combos y Promos"
+      : ticketDateSectionLabel(activeDateId, scheduleDays) || "Elegí tu entrada"
   const listKey =
     kindTab === "passes" ? "passes" : (activeDateId ?? "days")
 
@@ -573,8 +581,8 @@ function TicketSelectionList({
 
   return (
     <div className="relative flex w-full flex-col">
-      <h2 className="mb-3 pt-2 text-lg font-black text-foreground md:mb-4 md:text-xl">
-        Elegí tu entrada
+      <h2 className="mb-3 pt-2 text-lg font-black text-foreground first-letter:uppercase md:mb-4 md:text-xl">
+        {selectorTitle}
       </h2>
       {showKindTabs ? (
         <div
@@ -651,9 +659,11 @@ function TicketSelectionList({
         </p>
       ) : null}
 
-      <h3 className="mb-3 mt-4 text-sm font-bold text-foreground">
-        Seleccioná tus entradas
-      </h3>
+      {kindTab === "passes" || !ticketDateSectionLabel(activeDateId, scheduleDays) ? (
+        <h3 className="mb-3 mt-4 text-sm font-bold text-foreground">
+          Seleccioná tus entradas
+        </h3>
+      ) : null}
       <AnimatePresence initial={false} mode="wait">
         <motion.div
           key={listKey}

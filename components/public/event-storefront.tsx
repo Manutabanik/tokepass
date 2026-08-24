@@ -235,6 +235,12 @@ export function EventStorefront({
   const [selectedDate, setSelectedDate] = useState(
     () => availableDates[0]?.id ?? event.id,
   )
+  const selectedDateStillValid = availableDates.some(
+    (day) => day.id === selectedDate,
+  )
+  if (!selectedDateStillValid && availableDates[0] && selectedDate !== availableDates[0].id) {
+    setSelectedDate(availableDates[0].id)
+  }
   const viewMode = useCheckoutStore((state) => state.viewMode)
   const [exitDialogOpen, setExitDialogOpen] = useState(false)
 

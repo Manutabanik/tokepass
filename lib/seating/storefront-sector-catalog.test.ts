@@ -78,4 +78,39 @@ describe("storefront-sector-catalog", () => {
     assert.equal(catalog[0]?.options.length, 0)
     assert.equal(catalog[0]?.price, 15000)
   })
+
+  it("conserva precio 0 como Gratis y no lo reemplaza por el fallback", () => {
+    const map = emptyVenueMap()
+    map.zones = [
+      {
+        id: "campo-gratis",
+        name: "Campo",
+        color: "#22c55e",
+        price: 18000,
+        seatingType: "GENERAL",
+        layoutType: "general",
+        polygon: [
+          { x: 10, y: 10 },
+          { x: 40, y: 10 },
+          { x: 40, y: 40 },
+          { x: 10, y: 40 },
+        ],
+      },
+    ]
+    const mesa = createVenueElement("round_table", 0, { x: 200, y: 140 })
+    mesa.id = "mesa-gratis"
+    mesa.zoneId = "campo-gratis"
+    mesa.price = 0
+    mesa.sellMode = "group"
+    mesa.priceMode = "closed_unit"
+    map.elements = [mesa]
+
+    const catalog = listStorefrontSectorCatalog({
+      map,
+      priceBySectorId: { "campo-gratis": 0 },
+    })
+    const sector = catalog.find((item) => item.id === "campo-gratis")
+    assert.equal(sector?.price, 0)
+    assert.equal(sector?.options[0]?.price, 0)
+  })
 })

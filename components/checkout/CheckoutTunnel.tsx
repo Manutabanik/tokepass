@@ -146,6 +146,7 @@ import {
   scheduleDayCartLabel,
   ticketDateCartLabel,
   ticketMatchesTab,
+  ticketVisibleOnCheckoutDay,
 } from "@/lib/checkout/ticket-day-groups"
 import { getStoredReferralCode, persistReferralCode } from "@/lib/referral"
 import {
@@ -580,6 +581,18 @@ export function CheckoutTunnel({
   const [selectedDateId, setSelectedDateId] = useState<string | null>(
     defaultDateId,
   )
+  const [selectedDaySeed, setSelectedDaySeed] = useState(selectedDayId ?? null)
+  if ((selectedDayId ?? null) !== selectedDaySeed) {
+    setSelectedDaySeed(selectedDayId ?? null)
+    const fromParent =
+      selectedDayId &&
+      checkoutDateCards.some((card) => card.dateId === selectedDayId)
+        ? selectedDayId
+        : defaultDateId
+    if (selectedDateId !== fromParent) {
+      setSelectedDateId(fromParent)
+    }
+  }
   const selectedDateStillValid =
     Boolean(selectedDateId) &&
     checkoutDateCards.some((card) => card.dateId === selectedDateId)
@@ -659,18 +672,23 @@ export function CheckoutTunnel({
     }
   }, [eventId])
 
-  const checkoutTierInput = useMemo(
-    () =>
-      funnelTiers.map((tier) => ({
-        id: tier.id,
-        name: tier.name,
-        price: tier.price,
-        available: tier.available,
-        seatingSectorId: tier.seatingSectorId,
-        layoutType: tier.layoutType,
-      })),
-    [funnelTiers],
-  )
+  const checkoutTierInput = useMemo(() => {
+    const mapped = funnelTiers.map((tier) => ({
+      id: tier.id,
+      name: tier.name,
+      price: tier.price,
+      available: tier.available,
+      seatingSectorId: tier.seatingSectorId,
+      layoutType: tier.layoutType,
+    }))
+    if (!selectedDateId || checkoutDateCards.length < 2) return mapped
+    const allowed = new Set(
+      funnelTiers
+        .filter((tier) => ticketVisibleOnCheckoutDay(tier, selectedDateId))
+        .map((tier) => tier.id),
+    )
+    return mapped.filter((tier) => allowed.has(tier.id))
+  }, [checkoutDateCards.length, funnelTiers, selectedDateId])
   const mapDrivenTierIds = useRef(new Set<string>())
 
   const resolveItemTierId = useCallback(
@@ -983,10 +1001,14 @@ export function CheckoutTunnel({
       ? focusedZoneId
       : (selectedItems.find((item) => item.type === "zone")?.id ?? null)
 
-  const priceBySectorId = useMemo(
-    () => buildTierUnitPriceIndex(funnelTiers),
-    [funnelTiers],
-  )
+  const priceBySectorId = useMemo(() => {
+    const all = buildTierUnitPriceIndex(funnelTiers)
+    if (!selectedDateId || checkoutDateCards.length < 2) return all
+    const dayTiers = funnelTiers.filter((tier) =>
+      ticketVisibleOnCheckoutDay(tier, selectedDateId),
+    )
+    return { ...all, ...buildTierUnitPriceIndex(dayTiers) }
+  }, [checkoutDateCards.length, funnelTiers, selectedDateId])
   const liveSelectedItems = useMemo(
     () => hydrateStorefrontItemsFromMap(selectedItems, liveMap, priceBySectorId),
     [liveMap, priceBySectorId, selectedItems],
@@ -2766,7 +2788,7 @@ export function CheckoutTunnel({
   const stepCta =
     visibleStep === "tickets"
       ? ticketQty > 0 && finalTotal === 0
-        ? `Continuar gratis (${ticketQty} ${ticketsCtaNoun})`
+        ? "Continuar - Gratis"
         : `Continuar · ${ticketQty} ${ticketsCtaNoun}`
       : visibleStep === "upsell"
         ? hasSelectedExtras

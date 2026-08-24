@@ -4,6 +4,7 @@ import { describe, it } from "node:test"
 import {
   CheckoutPayloadSchema,
   CheckoutSeatHoldSchema,
+  PublicTicketPriceSchema,
 } from "@/lib/validations/checkout"
 
 const buyer = {
@@ -259,5 +260,13 @@ describe("CheckoutSeatHoldSchema", () => {
       seatingUnitId: seatId,
     })
     assert.equal(parsed.success, true)
+  })
+})
+
+describe("PublicTicketPriceSchema", () => {
+  it("allows Gratis at 0 and rejects negatives", () => {
+    assert.equal(PublicTicketPriceSchema.safeParse(0).success, true)
+    assert.equal(PublicTicketPriceSchema.safeParse(15000).success, true)
+    assert.equal(PublicTicketPriceSchema.safeParse(-1).success, false)
   })
 })

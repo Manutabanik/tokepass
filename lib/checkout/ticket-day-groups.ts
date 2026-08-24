@@ -131,6 +131,12 @@ export function listCheckoutDateCards(
   scheduleDays: ScheduleDay[] = [],
   tiers: TicketSelectorTier[] = [],
 ): CheckoutDateCard[] {
+  if (scheduleDays.length > 0) {
+    return scheduleDays.map((day) => ({
+      dateId: day.id,
+      ...checkoutDateCardParts(day.start_time),
+    }))
+  }
   return listCheckoutDayTabs(scheduleDays, tiers).map((tab) => {
     const day = scheduleDays.find((item) => item.id === tab.dateId)
     const parts = day
@@ -188,6 +194,17 @@ export function ticketMatchesTab(
   if (activeTabId === FULL_PASS_TAB_ID) return passOrCombo
   if (passOrCombo) return Boolean(options?.treatFullPassAsAnyDay)
   return resolveTicketDateMeta(tier).dateId === activeTabId
+}
+
+/** Tickets of the selected jornada, plus unbound SKUs that are not combos. */
+export function ticketVisibleOnCheckoutDay(
+  tier: TicketSelectorTier,
+  dateId: string | null | undefined,
+): boolean {
+  if (!dateId) return !isComboOrPassOffer(tier)
+  if (ticketMatchesTab(tier, dateId)) return true
+  if (isComboOrPassOffer(tier)) return false
+  return resolveTicketDateMeta(tier).dateId == null
 }
 
 export function listCheckoutDayTabs(

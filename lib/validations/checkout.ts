@@ -256,6 +256,9 @@ export const CheckoutAddonItemSchema = z.object({
   quantity: z.number().int().positive().max(20),
 })
 
+/** All-In public price. Gratis (`0`) is valid. */
+export const PublicTicketPriceSchema = z.number().min(0)
+
 export const CheckoutSeatHoldSchema = z.object({
   eventId: z.string().uuid(UUID_ERROR),
   seatingUnitId: z.string().uuid(UUID_ERROR),

@@ -1,4 +1,5 @@
 import { toCartNumber } from "@/lib/checkout/cart-lines"
+import { isValidPublicPrice } from "@/lib/checkout/public-price"
 
 export type TierPriceSource = {
   id: string
@@ -24,7 +25,7 @@ export function buildTierUnitPriceIndex(
   for (const tier of tiers) {
     const id = tier.id.trim()
     const price = toCartNumber(tier.price)
-    if (!id || !Number.isFinite(price) || price < 0) continue
+    if (!id || !isValidPublicPrice(price)) continue
     prices[id] = price
     const sector = tier.seatingSectorId?.trim()
     if (sector && sectorCounts.get(sector) === 1) {

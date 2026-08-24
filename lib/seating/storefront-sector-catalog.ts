@@ -1,3 +1,4 @@
+import { firstValidPublicPrice } from "@/lib/checkout/public-price"
 import {
   isTablePurchaseSku,
   resolveElementPublicPrice,
@@ -214,7 +215,7 @@ export function listStorefrontSectorCatalog(input: {
     })
     const zonePrice = resolveVenueUnitPrice(
       [zone.id],
-      Number(zone.price) || 0,
+      zone.price,
       priceBySectorId,
     )
     sectors.push({
@@ -222,7 +223,7 @@ export function listStorefrontSectorCatalog(input: {
       name: zone.name,
       color: zone.color || "#22d3ee",
       kind: options.length > 0 ? "reserved" : "ga",
-      price: options[0]?.price || zonePrice,
+      price: firstValidPublicPrice(options[0]?.price, zonePrice),
       options,
     })
   }
@@ -260,7 +261,7 @@ export function listStorefrontSectorCatalog(input: {
       name: sector.name,
       color: sector.color,
       kind: options.length > 0 ? "reserved" : "ga",
-      price: options[0]?.price || sector.price,
+      price: firstValidPublicPrice(options[0]?.price, sector.price),
       options,
     })
   }
@@ -287,9 +288,10 @@ export function listStorefrontSectorCatalog(input: {
         "Sector",
       color: head.color || "#22d3ee",
       kind: standingOnly || options.length === 0 ? "ga" : "reserved",
-      price:
-        options[0]?.price ||
+      price: firstValidPublicPrice(
+        options[0]?.price,
         resolveElementPublicPrice(head, priceBySectorId, input.map),
+      ),
       options,
     })
   }

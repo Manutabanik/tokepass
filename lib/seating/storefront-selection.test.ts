@@ -9,6 +9,7 @@ import {
   formatStorefrontSelectionGroups,
   formatStorefrontSelectionLabel,
   hydrateStorefrontItemsFromMap,
+  resolveElementPublicPrice,
   resolveStorefrontItemFromMap,
   storefrontFocusCard,
   venueElementSelectionName,
@@ -142,6 +143,57 @@ describe("storefront-selection", () => {
     })
     assert.equal(item?.sectorId, "mesa-1")
     assert.equal(item?.price, 45000)
+  })
+
+  it("acepta precio 0 como Gratis y no lo trata como vacio", () => {
+    const map = emptyVenueMap()
+    map.zones = [
+      {
+        id: "sector-gratis",
+        name: "Campo",
+        color: "#22c55e",
+        price: 0,
+        polygon: [
+          { x: 0, y: 0 },
+          { x: 40, y: 0 },
+          { x: 40, y: 40 },
+          { x: 0, y: 40 },
+        ],
+      },
+    ]
+    map.elements = [
+      {
+        id: "mesa-gratis",
+        type: "round_table",
+        label: "1",
+        category: "commercial",
+        sectorName: "Campo",
+        zoneId: "sector-gratis",
+        x: 10,
+        y: 10,
+        width: 28,
+        height: 28,
+        rotation: 0,
+        price: 0,
+        color: "#22c55e",
+        opacity: 1,
+        chairCount: 4,
+        sideA: 0,
+        sideB: 0,
+        sellMode: "group",
+        priceMode: "closed_unit",
+        capacity: 4,
+        seats: [],
+      },
+    ]
+    const item = resolveStorefrontItemFromMap(map, "mesa-gratis", {
+      "sector-gratis": 0,
+    })
+    assert.equal(item?.price, 0)
+    assert.equal(
+      resolveElementPublicPrice(map.elements[0]!, { "sector-gratis": 0 }, map),
+      0,
+    )
   })
 
   it("hidrata el carrito con el objeto vivo del mapa", () => {

@@ -118,6 +118,28 @@ describe("sellable public tickets", () => {
     )
   })
 
+  it("keeps a free public ticket with price 0", () => {
+    assert.equal(
+      isSellablePublicTicket(
+        {
+          price: 0,
+          available: 20,
+          visibility: "public",
+          tier_type: "general",
+        },
+        now,
+      ),
+      true,
+    )
+    assert.equal(
+      startingPriceFromSellable(
+        [{ price: 0, available: 20, visibility: "public", tier_type: "general" }],
+        now,
+      ),
+      0,
+    )
+  })
+
   it("uses the cheapest sellable admission price, never an addon", () => {
     assert.equal(
       startingPriceFromSellable(

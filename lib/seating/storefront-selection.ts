@@ -10,6 +10,7 @@ import type {
 import { venuePriceModeFromSellMode } from "@/types/venue-map"
 import { elementBelongsToZone } from "@/lib/seating/venue-map-lod"
 import { storefrontLineTotal } from "@/lib/checkout/charge-unit"
+import { isValidPublicPrice } from "@/lib/checkout/public-price"
 import {
   getSeatDisplayName,
   getVenueElementDisplayName,
@@ -86,9 +87,9 @@ export function resolveVenueUnitPrice(
     const trimmed = key?.trim()
     if (!trimmed) continue
     const priced = priceBySectorId[trimmed]
-    if (Number.isFinite(priced)) return Number(priced)
+    if (isValidPublicPrice(priced)) return Number(priced)
   }
-  return Number.isFinite(fallback) ? Number(fallback) : 0
+  return isValidPublicPrice(fallback) ? Number(fallback) : 0
 }
 
 /** Sector de stock: groupId o id del elemento. No usar zoneId (rompe el hold). */
@@ -136,22 +137,30 @@ export function resolveElementPublicPrice(
     const trimmed = key?.trim()
     if (!trimmed || !Object.hasOwn(priceBySectorId, trimmed)) continue
     const priced = Number(priceBySectorId[trimmed])
-    if (Number.isFinite(priced)) return priced
+    if (isValidPublicPrice(priced)) return priced
   }
-  const own = Number(element.price)
-  if (Number.isFinite(own) && own > 0) return own
+  const own =
+    element.price === undefined || element.price === null
+      ? Number.NaN
+      : Number(element.price)
+  if (isValidPublicPrice(own) && own > 0) return own
   if (map) {
     for (const zone of map.zones ?? []) {
       if (!elementBelongsToZone(element, zone)) continue
       const zonePrice = resolveVenueUnitPrice(
         [zone.id],
-        Number(zone.price) || 0,
+        zone.price,
         priceBySectorId,
       )
-      if (zonePrice > 0) return zonePrice
+      if (
+        isValidPublicPrice(zonePrice) &&
+        (zonePrice > 0 || Object.hasOwn(priceBySectorId, zone.id))
+      ) {
+        return zonePrice
+      }
     }
   }
-  return Number.isFinite(own) ? own : 0
+  return isValidPublicPrice(own) ? own : 0
 }
 
 export function storefrontItemFromElement(

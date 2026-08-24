@@ -24,6 +24,7 @@ import {
   ticketDateSectionLabel,
   ticketDayBadgeLabel,
   ticketMatchesTab,
+  ticketVisibleOnCheckoutDay,
 } from "./ticket-day-groups"
 
 const days = [
@@ -78,6 +79,35 @@ describe("isSamePriceAnyDay", () => {
       isSamePriceAnyDay([tier({ id: "a", name: "General" })], days),
       true,
     )
+  })
+})
+
+describe("ticketVisibleOnCheckoutDay", () => {
+  it("shows only the selected day's tickets and unbound SKUs", () => {
+    const friday = tier({
+      id: "vie",
+      name: "Viernes",
+      isFullPass: false,
+      dayId: "d1",
+    })
+    const saturday = tier({
+      id: "sab",
+      name: "Sabado",
+      isFullPass: false,
+      dayId: "d2",
+    })
+    const unbound = tier({
+      id: "gen",
+      name: "General",
+      isFullPass: false,
+      dayId: null,
+      tierType: "general",
+    })
+    const pass = tier({ id: "abono", name: "Abono", isFullPass: true })
+    assert.equal(ticketVisibleOnCheckoutDay(friday, "d2"), false)
+    assert.equal(ticketVisibleOnCheckoutDay(saturday, "d2"), true)
+    assert.equal(ticketVisibleOnCheckoutDay(unbound, "d2"), true)
+    assert.equal(ticketVisibleOnCheckoutDay(pass, "d2"), false)
   })
 })
 
@@ -162,9 +192,21 @@ describe("progressive disclosure tabs", () => {
   it("preselects the first date that actually has tickets", () => {
     const cards = listCheckoutDateCards(days, [dayTicket, pass])
     assert.equal(defaultCheckoutDateId(cards, [dayTicket]), "d1")
+    assert.deepEqual(
+      cards.map((card) => card.dateId),
+      ["d1", "d2"],
+    )
     assert.equal(cards[0]?.weekday, formatEventWeekdayShort(days[0].start_time))
     assert.equal(cards[0]?.dayNumber, formatEventDayNumber(days[0].start_time))
     assert.equal(cards[0]?.month, formatEventMonthShort(days[0].start_time))
+  })
+
+  it("lists every schedule day even when a jornada still has no SKUs", () => {
+    const cards = listCheckoutDateCards(days, [dayTicket])
+    assert.deepEqual(
+      cards.map((card) => card.dateId),
+      ["d1", "d2"],
+    )
   })
 
   it("formats a calendar card from an ISO date without hardcoded labels", () => {
