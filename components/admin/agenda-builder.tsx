@@ -149,6 +149,11 @@ export function AgendaBuilder({ eventId }: { eventId?: string | null }) {
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const saveTimers = useRef(new Map<string, number>())
   const saving = useRef(new Set<string>())
+  const pendingPersist = useRef(new Set<string>())
+  const pendingOrder = useRef<{
+    dayId: string | null
+    cards: AgendaCard[]
+  } | null>(null)
   const hydratedFor = useRef<string | null>(null)
   const cardsRef = useRef(cards)
   const previousDayIds = useRef<string[] | null>(null)
@@ -174,8 +179,12 @@ export function AgendaBuilder({ eventId }: { eventId?: string | null }) {
   const officialDayIds = dayTabs.map((day) => day.id)
 
   async function persistCard(card: AgendaCard) {
-    if (!eventId || saving.current.has(card.clientId)) return
     if (!canPersistAgendaBlock(card)) return
+    if (!eventId) {
+      pendingPersist.current.add(card.clientId)
+      return
+    }
+    if (saving.current.has(card.clientId)) return
 
     saving.current.add(card.clientId)
     const latest =
@@ -333,7 +342,10 @@ export function AgendaBuilder({ eventId }: { eventId?: string | null }) {
   }
 
   async function persistOrder(next: AgendaCard[], dayId: string | null) {
-    if (!eventId) return
+    if (!eventId) {
+      pendingOrder.current = { dayId, cards: next }
+      return
+    }
     const ids = cardsForDay(next, dayId, isMultiDay)
       .map((card) => card.id)
       .filter((id): id is string => Boolean(id))
@@ -356,10 +368,20 @@ export function AgendaBuilder({ eventId }: { eventId?: string | null }) {
 
   useEffect(() => {
     if (!eventId || loading) return
+    const queued = [...pendingPersist.current]
+    pendingPersist.current.clear()
     for (const card of cardsRef.current) {
-      if (!card.id && canPersistAgendaBlock(card)) {
+      if (
+        queued.includes(card.clientId) ||
+        (!card.id && canPersistAgendaBlock(card))
+      ) {
         scheduleSave(card.clientId)
       }
+    }
+    const order = pendingOrder.current
+    pendingOrder.current = null
+    if (order) {
+      void persistOrder(order.cards, order.dayId)
     }
     // scheduleSave lee cardsRef; no hace falta re-suscribirse en cada render.
     // eslint-disable-next-line react-hooks/exhaustive-deps

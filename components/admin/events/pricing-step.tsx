@@ -269,6 +269,9 @@ export function PricingStep({
           <div className="mt-4">
             <InventoryAdvancedTools
               form={form}
+              appendTicket={append}
+              updateTicket={update}
+              removeTicket={remove}
               feePercentage={resolvedFeePercentage}
               fixedFee={fixedFee}
               isSponsored={isSponsored}

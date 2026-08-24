@@ -27,6 +27,7 @@ import {
   ticketSaleWindowError,
 } from "@/lib/inventory/ticket-sale-window"
 import { isPastEvent, isSoldOut } from "@/lib/event-status"
+import { eventAcceptsMercadoPago } from "@/lib/events/checkout-policy"
 import { isSandboxEventStatus } from "@/lib/events/review-status"
 import { orderTestFlags } from "@/lib/finance/order-test-flags"
 import { logger } from "@/lib/logger"
@@ -2171,10 +2172,12 @@ export async function startCheckoutWithPayment(
     }
   }
 
-  const [{ data: eventRow }, { data: eventTiers }] = await Promise.all([
+  const [eventResult, { data: eventTiers }] = await Promise.all([
     db
       .from("events")
-      .select("date, ends_at, schedule_days, title, max_tickets_per_user")
+      .select(
+        "date, ends_at, schedule_days, title, max_tickets_per_user, accepts_mercado_pago",
+      )
       .eq("id", payload.eventId)
       .maybeSingle(),
     db
@@ -2184,6 +2187,27 @@ export async function startCheckoutWithPayment(
       )
       .eq("event_id", payload.eventId),
   ])
+  let eventRow = eventResult.data as {
+    date: string
+    ends_at: string | null
+    schedule_days: unknown
+    title: string
+    max_tickets_per_user: number | null
+    accepts_mercado_pago?: boolean | null
+  } | null
+  if (
+    eventResult.error &&
+    /accepts_mercado_pago|schema cache|PGRST204|42703/i.test(
+      eventResult.error.message,
+    )
+  ) {
+    const retry = await db
+      .from("events")
+      .select("date, ends_at, schedule_days, title, max_tickets_per_user")
+      .eq("id", payload.eventId)
+      .maybeSingle()
+    eventRow = retry.data as typeof eventRow
+  }
 
   if (
     eventRow &&
@@ -2194,6 +2218,16 @@ export async function startCheckoutWithPayment(
     })
   ) {
     return { success: false, error: EVENT_FINISHED_ERROR }
+  }
+
+  if (
+    payload.paymentProvider === "mercadopago" &&
+    !eventAcceptsMercadoPago(eventRow?.accepts_mercado_pago)
+  ) {
+    return {
+      success: false,
+      error: "Este evento no acepta cobro con Mercado Pago.",
+    }
   }
 
   if (isSoldOut({ tiers: eventTiers })) {

@@ -20,6 +20,21 @@ export interface PaymentMethodSelectorProps {
   selectedProvider: CheckoutPaymentProvider
   onSelectProvider: (provider: CheckoutPaymentProvider) => void
   disabled?: boolean
+  acceptsMercadoPago?: boolean
+}
+
+export function listCheckoutPaymentOptions(acceptsMercadoPago = true) {
+  return OPTIONS.filter(
+    (option) => option.value !== "mercadopago" || acceptsMercadoPago,
+  )
+}
+
+export function resolveCheckoutPaymentProvider(
+  selected: CheckoutPaymentProvider,
+  acceptsMercadoPago = true,
+): CheckoutPaymentProvider {
+  if (!acceptsMercadoPago && selected === "mercadopago") return "payway"
+  return selected
 }
 
 const OPTIONS: Array<{
@@ -67,14 +82,20 @@ export function PaymentMethodSelector({
   selectedProvider,
   onSelectProvider,
   disabled = false,
+  acceptsMercadoPago = true,
 }: PaymentMethodSelectorProps) {
+  const options = listCheckoutPaymentOptions(acceptsMercadoPago)
+  const resolvedProvider = resolveCheckoutPaymentProvider(
+    selectedProvider,
+    acceptsMercadoPago,
+  )
   return (
     <div className="space-y-3">
       <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
         Medio de pago
       </p>
       <RadioGroup
-        value={selectedProvider}
+        value={resolvedProvider}
         disabled={disabled}
         onValueChange={(value) => {
           if (isCheckoutPaymentProvider(value)) onSelectProvider(value)
@@ -82,8 +103,8 @@ export function PaymentMethodSelector({
         className="grid gap-3"
         aria-label="Método de pago"
       >
-        {OPTIONS.map((option) => {
-          const selected = selectedProvider === option.value
+        {options.map((option) => {
+          const selected = resolvedProvider === option.value
           const Icon = option.icon
           return (
             <label

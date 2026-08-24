@@ -104,6 +104,9 @@ function sampleEvent(): EventDetails {
     categoryId: null,
     createdAt: null,
     isDraftPreview: false,
+    acceptsMercadoPago: true,
+    acceptsPosPayments: true,
+    refundPolicy: "organizer",
   }
 }
 
@@ -143,6 +146,17 @@ describe("event-catalog-realtime", () => {
       visibility: "private",
     })
     assert.equal(hidden.tiers.length, 0)
+  })
+
+  it("aplica medios de cobro y politica de devolucion", () => {
+    const next = applyEventCatalogRow(sampleEvent(), {
+      accepts_mercado_pago: false,
+      accepts_pos_payments: false,
+      refund_policy: "no_refunds",
+    })
+    assert.equal(next.acceptsMercadoPago, false)
+    assert.equal(next.acceptsPosPayments, false)
+    assert.equal(next.refundPolicy, "no_refunds")
   })
 
   it("actualiza titulo y venue_map del evento", () => {

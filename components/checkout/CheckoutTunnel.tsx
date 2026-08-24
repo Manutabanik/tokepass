@@ -57,6 +57,7 @@ import { cartTicketLineId } from "@/lib/checkout/cart-lines"
 import { CheckoutUpsellStep } from "@/components/public/checkout-upsell-step"
 import { groupCheckoutTiers } from "@/components/public/event-checkout-selector"
 import {
+  resolveCheckoutPaymentProvider,
   type CheckoutPaymentProvider,
 } from "@/components/public/payment-method-selector"
 import type { TicketSelectorTier } from "@/components/public/ticket-tier-selector"
@@ -300,6 +301,7 @@ type TicketSelectorProps = {
   /** Flatten the checkout panel to fill a 100dvh tunnel. */
   fillViewport?: boolean
   isOnline?: boolean
+  acceptsMercadoPago?: boolean
   onReservationExpired?: () => void
   onLeaveCheckout?: () => void
   renderLayout?: (parts: { map: ReactNode; panel: ReactNode }) => ReactNode
@@ -390,6 +392,7 @@ export function CheckoutTunnel({
   maxTicketsPerUser = null,
   fillViewport = false,
   isOnline = false,
+  acceptsMercadoPago = true,
   onReservationExpired,
   onLeaveCheckout,
   renderLayout,
@@ -622,7 +625,13 @@ export function CheckoutTunnel({
     (CheckoutPromoterPreview & { source: "coupon" | "manual" | "link" }) | null
   >(null)
   const [selectedProvider, setSelectedProvider] =
-    useState<CheckoutPaymentProvider>("mercadopago")
+    useState<CheckoutPaymentProvider>(() =>
+      acceptsMercadoPago ? "mercadopago" : "payway",
+    )
+  const paymentProvider = resolveCheckoutPaymentProvider(
+    selectedProvider,
+    acceptsMercadoPago,
+  )
   const storedRef = useSyncExternalStore(
     (onChange) => {
       window.addEventListener("popstate", onChange)
@@ -1997,7 +2006,7 @@ export function CheckoutTunnel({
             buyerCheck.buyer,
             appliedPromo?.promoCodeId ?? null,
             {
-              paymentProvider: selectedProvider,
+              paymentProvider: paymentProvider,
               previewKey,
               deviceHash: getOrCreateDeviceHash(),
               dwellMs: getCheckoutDwellMs(),
@@ -2965,7 +2974,8 @@ export function CheckoutTunnel({
                 appliedPromoter={appliedPromoter}
                 attributionLocked={Boolean(appliedPromo?.promoterId)}
                 initialPromoterCode={resolvedRef}
-                selectedProvider={selectedProvider}
+                selectedProvider={paymentProvider}
+                acceptsMercadoPago={acceptsMercadoPago}
                 sandboxEligible={sandboxEligible}
                 isDraftPreview={isDraftPreview}
                 controlsLocked={controlsLocked}
@@ -3020,7 +3030,8 @@ export function CheckoutTunnel({
                 appliedPromoter={appliedPromoter}
                 attributionLocked={Boolean(appliedPromo?.promoterId)}
                 initialPromoterCode={resolvedRef}
-                selectedProvider={selectedProvider}
+                selectedProvider={paymentProvider}
+                acceptsMercadoPago={acceptsMercadoPago}
                 sandboxEligible={sandboxEligible}
                 isDraftPreview={isDraftPreview}
                 controlsLocked={controlsLocked}

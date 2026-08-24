@@ -88,6 +88,10 @@ import {
   type DraftEventFormValues,
   type EventFormValues,
 } from "@/lib/validations/event-form"
+import {
+  eventAcceptsMercadoPago,
+  eventAcceptsPosPayments,
+} from "@/lib/events/checkout-policy"
 import { formHasInventoryOrVenue } from "@/lib/events/event-inventory-fingerprint"
 import { resolvePurchaseLimit } from "@/lib/checkout-limits"
 import { asUuidOrNull } from "@/lib/validations/relation-id"
@@ -3034,12 +3038,14 @@ export async function getEventForEditing(
         maxTicketsPerUser: resolvePurchaseLimit(
           (event as { max_tickets_per_user?: number | null }).max_tickets_per_user,
         ),
-        acceptsMercadoPago:
+        acceptsMercadoPago: eventAcceptsMercadoPago(
           (event as { accepts_mercado_pago?: boolean | null })
-            .accepts_mercado_pago !== false,
-        acceptsPosPayments:
+            .accepts_mercado_pago,
+        ),
+        acceptsPosPayments: eventAcceptsPosPayments(
           (event as { accepts_pos_payments?: boolean | null })
-            .accepts_pos_payments !== false,
+            .accepts_pos_payments,
+        ),
         defaultFeeStrategy: "pass_to_customer",
         serviceFeePercentage: ticketFeePercentage,
         refundPolicy: parseEventRefundPolicy(

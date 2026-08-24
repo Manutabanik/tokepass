@@ -13,6 +13,7 @@ import {
 import { usePathname, useRouter } from "next/navigation"
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
+  useFieldArray,
   useForm,
   useWatch,
   type FieldErrors,
@@ -320,6 +321,11 @@ export function EventCreationWizard({
       ...(initialData?.values ?? {}),
     },
   })
+  const { replace: replaceTickets } = useFieldArray({
+    control: form.control,
+    name: "tickets",
+    keyName: "_rowId",
+  })
 
   const capacitySnapshot = useEventCapacity(form)
   const watchedTickets = useWatch({ control: form.control, name: "tickets" })
@@ -480,7 +486,7 @@ export function EventCreationWizard({
       dayIds: (form.getValues("basics.scheduleDays") ?? []).map((day) => day.id),
     })
     if (!mapBackedTicketsUnchanged(current, next)) {
-      form.setValue("tickets", next, { shouldDirty: true })
+      replaceTickets(next)
     }
   }
 
@@ -895,7 +901,7 @@ export function EventCreationWizard({
 
     const editingId = initialData?.id ?? persistedEventId
     payloadData = buildConsolidatedPayload(payloadData)
-    form.setValue("tickets", payloadData.tickets, { shouldDirty: false })
+    replaceTickets(payloadData.tickets)
     const liveSectorIds = collectLiveSeatingSectorIds({
       venueMap: payloadData.venue.venueMap,
       seatingLayout: payloadData.venue.seatingLayout,

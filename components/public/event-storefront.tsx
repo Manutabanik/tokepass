@@ -6,13 +6,21 @@ import {
   ShieldCheck,
   Sparkles,
 } from "lucide-react"
-import { motion, useReducedMotion } from "motion/react"
+import { motion } from "motion/react"
 import dynamic from "next/dynamic"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type MouseEvent,
+} from "react"
 
 import type { EventDetails } from "@/app/actions/public-events"
+import { refundPolicyBuyerCopy } from "@/lib/events/refund-policy"
 import type { ResaleListingPublic } from "@/app/actions/resale"
 import { EventDateSelector } from "@/components/public/event-date-selector"
 import { EventActionBar } from "@/components/public/event-action-bar"
@@ -98,6 +106,16 @@ const TicketSelector = dynamic(
     ),
   },
 )
+
+function subscribePrefersReducedMotion(onStoreChange: () => void) {
+  const media = window.matchMedia("(prefers-reduced-motion: reduce)")
+  media.addEventListener("change", onStoreChange)
+  return () => media.removeEventListener("change", onStoreChange)
+}
+
+function prefersReducedMotionSnapshot() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches
+}
 
 const storefrontStagger = {
   hidden: {},
@@ -376,7 +394,11 @@ export function EventStorefront({
     [admissionTickets, event.comboItemsByTier],
   )
 
-  const reduceMotion = useReducedMotion()
+  const reduceMotion = useSyncExternalStore(
+    subscribePrefersReducedMotion,
+    prefersReducedMotionSnapshot,
+    () => false,
+  )
 
   function renderDiscoveryColumn() {
     return (
@@ -544,9 +566,7 @@ export function EventStorefront({
                 Política de devoluciones
               </AccordionTrigger>
               <AccordionContent className="text-muted-foreground">
-                Las devoluciones dependen de la política del organizador y de
-                la normativa vigente. Si el evento se cancela, TokePass
-                gestiona el proceso de reintegro según el estado del pago.
+                {refundPolicyBuyerCopy(event.refundPolicy)}
               </AccordionContent>
             </AccordionItem>
           </Accordion>
@@ -664,6 +684,7 @@ export function EventStorefront({
             maxTicketsPerUser={event.maxTicketsPerUser}
             fillViewport
             isOnline={isOnlineEvent}
+            acceptsMercadoPago={event.acceptsMercadoPago}
             onReservationExpired={leaveCheckout}
             onLeaveCheckout={requestLeaveCheckout}
             renderLayout={({ panel }) => panel}

@@ -2,7 +2,12 @@
 
 import { Car, Gift, LayoutGrid, Pencil, Plus } from "lucide-react"
 import { useState, type ReactNode } from "react"
-import type { UseFormReturn } from "react-hook-form"
+import type {
+  UseFieldArrayAppend,
+  UseFieldArrayRemove,
+  UseFieldArrayUpdate,
+  UseFormReturn,
+} from "react-hook-form"
 
 import {
   BundleCreatorModal,
@@ -44,11 +49,17 @@ const EMPTY_FORM_TICKETS: EventFormValues["tickets"] = []
 
 export function InventoryAdvancedTools({
   form,
+  appendTicket,
+  updateTicket,
+  removeTicket,
   feePercentage = 15,
   fixedFee = 0,
   isSponsored = false,
 }: {
   form: UseFormReturn<EventFormValues>
+  appendTicket: UseFieldArrayAppend<EventFormValues, "tickets">
+  updateTicket: UseFieldArrayUpdate<EventFormValues, "tickets">
+  removeTicket: UseFieldArrayRemove
   feePercentage?: number
   fixedFee?: number
   isSponsored?: boolean
@@ -75,16 +86,12 @@ export function InventoryAdvancedTools({
   const bundles = grouped.filter((item) => item.tierType === "bundle")
 
   function append(ticket: EventFormValues["tickets"][number]) {
-    form.setValue("tickets", [...tickets, ticket], { shouldDirty: true })
+    appendTicket(ticket)
   }
 
   function remove(index: number) {
     if (ticketSoldCount(tickets[index]) > 0) return
-    form.setValue(
-      "tickets",
-      tickets.filter((_, current) => current !== index),
-      { shouldDirty: true },
-    )
+    removeTicket(index)
   }
 
   function duplicate(index: number) {
@@ -337,19 +344,16 @@ export function InventoryAdvancedTools({
                 : defaultInventoryDayId(eventDates),
           }
           if (editingBundleIndex == null) {
-            form.setValue("tickets", [...tickets, nextTicket], {
-              shouldDirty: true,
-            })
+            appendTicket(nextTicket)
           } else {
-            form.setValue(
-              "tickets",
-              tickets.map((ticket, index) =>
-                index === editingBundleIndex
-                  ? { ...ticket, ...nextTicket, id: ticket.id }
-                  : ticket,
-              ),
-              { shouldDirty: true },
-            )
+            const current = tickets[editingBundleIndex]
+            if (current) {
+              updateTicket(editingBundleIndex, {
+                ...current,
+                ...nextTicket,
+                id: current.id,
+              })
+            }
           }
           setBundleOpen(false)
           setEditingBundleIndex(null)

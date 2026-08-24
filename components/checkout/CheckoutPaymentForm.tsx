@@ -40,6 +40,7 @@ export function CheckoutPaymentForm({
   attributionLocked,
   initialPromoterCode,
   selectedProvider,
+  acceptsMercadoPago = true,
   isDraftPreview,
   controlsLocked,
   canProceedFromCart,
@@ -72,6 +73,7 @@ export function CheckoutPaymentForm({
   attributionLocked?: boolean
   initialPromoterCode?: string | null
   selectedProvider: CheckoutPaymentProvider
+  acceptsMercadoPago?: boolean
   sandboxEligible: boolean
   isDraftPreview?: boolean
   controlsLocked: boolean
@@ -196,6 +198,7 @@ export function CheckoutPaymentForm({
             selectedProvider={selectedProvider}
             onSelectProvider={onSelectProvider}
             disabled={controlsLocked}
+            acceptsMercadoPago={acceptsMercadoPago}
           />
 
           <p className="text-sm leading-relaxed text-muted-foreground">

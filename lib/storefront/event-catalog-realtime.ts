@@ -1,6 +1,11 @@
 import { eventNeedsInteractiveCanvas } from "@/lib/seating/venue-map-pricing"
 import { hasInteractiveVenueMap } from "@/lib/seating/venue-map-geometry"
 import { parseScheduleDays } from "@/lib/event-schedule"
+import {
+  eventAcceptsMercadoPago,
+  eventAcceptsPosPayments,
+} from "@/lib/events/checkout-policy"
+import { parseEventRefundPolicy } from "@/lib/validations/event-form"
 import { parseVenueMap } from "@/types/venue-map"
 import type { EventDetails } from "@/app/actions/public-events"
 import type { TicketSelectorTier } from "@/components/public/ticket-tier-selector"
@@ -18,6 +23,9 @@ export type EventCatalogEventRow = {
   flyer_url?: string | null
   schedule_days?: unknown
   venue_map?: unknown
+  accepts_mercado_pago?: boolean | null
+  accepts_pos_payments?: boolean | null
+  refund_policy?: unknown
 }
 
 export type EventCatalogTierRow = {
@@ -90,6 +98,23 @@ export function applyEventCatalogRow(
       ? { scheduleDays: parseScheduleDays(row.schedule_days) }
       : {}),
     ...(row.status ? { status: row.status } : {}),
+    ...(row.accepts_mercado_pago !== undefined
+      ? {
+          acceptsMercadoPago: eventAcceptsMercadoPago(
+            row.accepts_mercado_pago,
+          ),
+        }
+      : {}),
+    ...(row.accepts_pos_payments !== undefined
+      ? {
+          acceptsPosPayments: eventAcceptsPosPayments(
+            row.accepts_pos_payments,
+          ),
+        }
+      : {}),
+    ...(row.refund_policy !== undefined
+      ? { refundPolicy: parseEventRefundPolicy(row.refund_policy) }
+      : {}),
   }
 
   if (row.venue_map === undefined || !event.venue) return next

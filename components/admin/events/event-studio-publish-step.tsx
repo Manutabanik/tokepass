@@ -12,26 +12,9 @@ import {
 } from "@/components/ui/form"
 import { Switch } from "@/components/ui/switch"
 import { STUDIO_LABEL_CLASS } from "@/lib/admin/studio-form-styles"
+import { REFUND_POLICY_OPTIONS } from "@/lib/events/refund-policy"
 import type { EventFormValues } from "@/lib/validations/event-form"
 import { cn } from "@/lib/utils"
-
-const REFUND_OPTIONS = [
-  {
-    value: "organizer" as const,
-    label: "A criterio del organizador",
-    hint: "Las devoluciones se resuelven caso por caso.",
-  },
-  {
-    value: "no_refunds" as const,
-    label: "Sin devoluciones",
-    hint: "Salvo cancelación del evento.",
-  },
-  {
-    value: "until_24h" as const,
-    label: "Hasta 24 h antes",
-    hint: "Después de ese plazo no hay reembolso.",
-  },
-]
 
 export function EventStudioPublishStep({
   form,
@@ -139,7 +122,7 @@ export function EventStudioPublishStep({
               Políticas de devolución
             </FormLabel>
             <div className="mt-2 grid gap-2">
-              {REFUND_OPTIONS.map((option) => {
+              {REFUND_POLICY_OPTIONS.map((option) => {
                 const selected = (field.value ?? "organizer") === option.value
                 return (
                   <button

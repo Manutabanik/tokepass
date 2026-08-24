@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 
+import { eventAcceptsPosPayments } from "@/lib/events/checkout-policy"
 import { isSandboxEventStatus } from "@/lib/events/review-status"
 import { findScheduleDay, parseScheduleDays } from "@/lib/event-schedule"
 import { orderTestFlags } from "@/lib/finance/order-test-flags"
@@ -298,27 +299,93 @@ async function loadPosInteractiveMapFlags(
   return flags
 }
 
+async function assertEventAcceptsPosPayments(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  eventId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const query = await supabase
+    .from("events")
+    .select("accepts_pos_payments")
+    .eq("id", eventId)
+    .maybeSingle()
+  if (
+    query.error &&
+    /accepts_pos_payments|schema cache|PGRST204|42703/i.test(query.error.message)
+  ) {
+    return { ok: true }
+  }
+  if (query.error) {
+    return {
+      ok: false,
+      error: toPosUserError(query.error, "No se pudo validar el evento."),
+    }
+  }
+  if (
+    !eventAcceptsPosPayments(
+      (query.data as { accepts_pos_payments?: boolean | null } | null)
+        ?.accepts_pos_payments,
+    )
+  ) {
+    return {
+      ok: false,
+      error: "Este evento no admite cobro en boletería.",
+    }
+  }
+  return { ok: true }
+}
+
 export async function getPosEvents(): Promise<PosEventOption[]> {
   const rows = await listOperableEvents({ roles: [...POS_STAFF_ROLES] })
 
   const supabase = await createClient()
   const eventIds = rows.map((event) => event.id)
   const pinByEvent = new Map<string, boolean>()
+  const posEnabledByEvent = new Map<string, boolean>()
   if (eventIds.length > 0) {
-    const { data: pinRows } = await supabase
+    let pinRows: {
+      data: Array<{
+        id: string
+        pos_supervisor_pin_hash?: string | null
+        accepts_pos_payments?: boolean | null
+      }> | null
+      error: { message: string } | null
+    } = await supabase
       .from("events")
-      .select("id, pos_supervisor_pin_hash")
+      .select("id, pos_supervisor_pin_hash, accepts_pos_payments")
       .in("id", eventIds)
-    for (const row of pinRows ?? []) {
+    if (
+      pinRows.error &&
+      /accepts_pos_payments|schema cache|PGRST204|42703/i.test(
+        pinRows.error.message,
+      )
+    ) {
+      pinRows = (await supabase
+        .from("events")
+        .select("id, pos_supervisor_pin_hash")
+        .in("id", eventIds)) as typeof pinRows
+    }
+    for (const row of pinRows.data ?? []) {
       pinByEvent.set(
         row.id as string,
         Boolean((row as { pos_supervisor_pin_hash?: string | null }).pos_supervisor_pin_hash),
       )
+      if ("accepts_pos_payments" in row) {
+        posEnabledByEvent.set(
+          row.id as string,
+          eventAcceptsPosPayments(
+            (row as { accepts_pos_payments?: boolean | null })
+              .accepts_pos_payments,
+          ),
+        )
+      }
     }
   }
   const mapByEvent = await loadPosInteractiveMapFlags(eventIds)
+  const operable = rows.filter(
+    (event) => posEnabledByEvent.get(event.id) !== false,
+  )
 
-  return rows.map((event) => {
+  return operable.map((event) => {
     const hasSupervisorPin = pinByEvent.get(event.id) ?? false
     return {
       id: event.id,
@@ -411,6 +478,14 @@ export async function openCashierShift(input: {
             ? "Tu sesión venció por seguridad. Volvé a ingresar con tu cuenta"
             : "No tenés permiso para abrir caja en este evento.",
       }
+    }
+
+    const posEnabled = await assertEventAcceptsPosPayments(
+      supabase,
+      parsed.data.eventId,
+    )
+    if (!posEnabled.ok) {
+      return { success: false, error: posEnabled.error }
     }
 
     const { data, error } = await supabase.rpc("open_cashier_shift", {
@@ -641,6 +716,14 @@ export async function createPosSale(input: {
             ? "Tu sesión venció por seguridad. Volvé a ingresar con tu cuenta"
             : "No tenés permiso para cobrar en este evento.",
       }
+    }
+
+    const posEnabled = await assertEventAcceptsPosPayments(
+      supabase,
+      sale.eventId,
+    )
+    if (!posEnabled.ok) {
+      return { success: false, error: posEnabled.error }
     }
 
     const paymentMethod = normalizePosPaymentMethod(sale.paymentMethod)
