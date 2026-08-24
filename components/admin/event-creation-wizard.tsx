@@ -124,7 +124,7 @@ import {
   collectLiveSeatingSectorIds,
   sanitizeEventSubmitPayload,
 } from "@/lib/events/sanitize-ticket-tiers"
-import { parseVenueMap } from "@/types/venue-map"
+import { parseVenueMap, emptyVenueMap } from "@/types/venue-map"
 import {
   AGE_RESTRICTION_LABELS,
   AGE_RESTRICTION_VALUES,
@@ -534,17 +534,10 @@ export function EventCreationWizard({
   function handleDisableMap() {
     form.setValue("basics.hasSeatingPlan", false, { shouldDirty: true })
     form.setValue("venue.includesSeatingMap", false, { shouldDirty: true })
-    const tickets = form.getValues("tickets") ?? []
-    const removeIndices = tickets
-      .map((tier, index) => ({ tier, index }))
-      .filter(
-        ({ tier }) => isMapBackedTicket(tier) && ticketSoldCount(tier) === 0,
-      )
-      .map(({ index }) => index)
-      .sort((a, b) => b - a)
-    if (removeIndices.length > 0) {
-      removeTicket(removeIndices)
-    }
+    form.setValue("venue.venueMap", emptyVenueMap(), { shouldDirty: true })
+    form.setValue("venue.seatingLayout", [], { shouldDirty: true })
+    const healed = prepareEventForPersist(form.getValues(), { mode: "update" })
+    form.setValue("tickets", healed.tickets, { shouldDirty: true })
     form.clearErrors("venue.venueMap")
     form.clearErrors("tickets")
   }

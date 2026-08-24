@@ -5,14 +5,10 @@ import {
   type SanitizeTicketTiersOptions,
 } from "@/lib/events/sanitize-ticket-tiers"
 import { healEventFormInventory } from "@/lib/inventory/heal-event-form-inventory"
+import { resolveVenueSeatingArtifactsForPersist } from "@/lib/inventory/venue-seating-persist"
 import { ticketFamilyNameKey, ticketSoldCount } from "@/lib/inventory/synced-day-tickets"
 import { normalizeDayId } from "@/lib/event-schedule"
-import {
-  venueMapHasInventory,
-  venueMapToSeatingLayout,
-} from "@/lib/seating/venue-map-geometry"
 import type { EventFormValues } from "@/lib/validations/event-form"
-import { parseVenueMap } from "@/types/venue-map"
 
 function dedupeTicketsForPersist(
   tickets: EventFormValues["tickets"],
@@ -88,10 +84,14 @@ export function prepareEventForPersist(
   } = { mode: "update" },
 ): EventFormValues {
   let next = healEventFormInventory(data)
-  const map = parseVenueMap(next.venue.venueMap)
-  const seatingLayout = venueMapHasInventory(map)
-    ? venueMapToSeatingLayout(map)
-    : next.venue.seatingLayout
+  const seatingArtifacts = resolveVenueSeatingArtifactsForPersist({
+    hasSeatingPlan: next.basics.hasSeatingPlan,
+    includesSeatingMap: next.venue.includesSeatingMap,
+    venueMap: next.venue.venueMap,
+    seatingLayout: next.venue.seatingLayout,
+  })
+  const map = seatingArtifacts.venueMap
+  const seatingLayout = seatingArtifacts.seatingLayout
   const layoutSectorIds = collectSeatingLayoutSectorIds(seatingLayout)
   const liveSectorIds =
     options.liveSectorIds ??
@@ -109,6 +109,7 @@ export function prepareEventForPersist(
     ...next,
     venue: {
       ...next.venue,
+      venueMap: map,
       seatingLayout,
     },
     tickets: coerced,

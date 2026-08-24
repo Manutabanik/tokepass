@@ -159,6 +159,7 @@ import {
   eventHasActiveSeatingMap,
 } from "@/lib/inventory/map-enablement"
 import { prepareEventForPersist } from "@/lib/inventory/prepare-event-persist"
+import { resolveVenueSeatingArtifactsForPersist } from "@/lib/inventory/venue-seating-persist"
 
 export type OrganizerEvent = Pick<
   Event,
@@ -769,13 +770,14 @@ async function persistEventVenueFields(
   const department = data.venue.department?.trim() || null
   const venueName = normalizeExactVenueName(data.venue.venueName)
   const location = place.display || venueName
-  const parsedMap = parseVenueMap(data.venue.venueMap)
-  const venueMap = serializeVenueMap(parsedMap) as unknown as Json
-  const seatingLayout = (
-    venueMapHasInventory(parsedMap)
-      ? venueMapToSeatingLayout(parsedMap)
-      : (data.venue.seatingLayout ?? [])
-  ) as unknown as Json
+  const seatingArtifacts = resolveVenueSeatingArtifactsForPersist({
+    hasSeatingPlan: data.basics.hasSeatingPlan,
+    includesSeatingMap: data.venue.includesSeatingMap,
+    venueMap: data.venue.venueMap,
+    seatingLayout: data.venue.seatingLayout,
+  })
+  const venueMap = serializeVenueMap(seatingArtifacts.venueMap) as unknown as Json
+  const seatingLayout = seatingArtifacts.seatingLayout as unknown as Json
   const now = new Date().toISOString()
   const organizerId = eventRow?.organizer_id ?? ""
   const creatingNewCatalogVenue =
@@ -890,6 +892,7 @@ async function persistEventVenueFields(
     venue_id: venueId ?? eventRow?.venue_id ?? null,
     location,
     venue_map: venueMap,
+    has_seating_plan: seatingArtifacts.mapActive,
     updated_at: now,
   }
   const defaultTicketTab = parseDefaultTicketTab(data.ticketsDefaultTab)
@@ -1683,6 +1686,24 @@ async function resyncEventSeatingUnitsAfterMapSave(
   eventId: string,
 ): Promise<string | null> {
   return materializeEventSeatingUnits(client, eventId)
+}
+
+async function detachInactiveMapTiersInDatabase(
+  client: SupabaseClient<Database>,
+  eventId: string,
+): Promise<string | null> {
+  const { error } = await client
+    .from("ticket_tiers")
+    .update({
+      seating_sector_id: null,
+      layout_type: "general",
+      capacity_per_unit: 1,
+      zone_id: null,
+      updated_at: new Date().toISOString(),
+    } as never)
+    .eq("event_id", eventId)
+    .not("seating_sector_id", "is", null)
+  return error?.message ?? null
 }
 
 function normalizeSectorLabel(value: string | null | undefined) {
@@ -3295,10 +3316,14 @@ export async function createCompleteEvent(
   )
   if (zonesError) return persistFailure(zonesError)
 
-  const materializeError = await resyncEventSeatingUnitsAfterMapSave(
-    rpcClient,
-    String(eventId),
-  )
+  const createMapActive = eventHasActiveSeatingMap({
+    hasSeatingPlan: formValues.basics.hasSeatingPlan,
+    includesSeatingMap: formValues.venue.includesSeatingMap,
+    venueMap: formValues.venue.venueMap,
+  })
+  const materializeError = createMapActive
+    ? await resyncEventSeatingUnitsAfterMapSave(rpcClient, String(eventId))
+    : null
   if (materializeError) {
     return persistFailure(materializeError)
   }
@@ -3485,12 +3510,27 @@ export async function updateCompleteEvent(
   if (venueId) {
     formValues.venue.existingVenueId = venueId
   }
-  const materializeBeforeTickets = await resyncEventSeatingUnitsAfterMapSave(
-    mutationClient,
-    eventId,
-  )
-  if (materializeBeforeTickets) {
-    return persistFailure(materializeBeforeTickets)
+  const mapActive = eventHasActiveSeatingMap({
+    hasSeatingPlan: formValues.basics.hasSeatingPlan,
+    includesSeatingMap: formValues.venue.includesSeatingMap,
+    venueMap: formValues.venue.venueMap,
+  })
+  if (mapActive) {
+    const materializeBeforeTickets = await resyncEventSeatingUnitsAfterMapSave(
+      mutationClient,
+      eventId,
+    )
+    if (materializeBeforeTickets) {
+      return persistFailure(materializeBeforeTickets)
+    }
+  } else {
+    const detachError = await detachInactiveMapTiersInDatabase(
+      mutationClient,
+      eventId,
+    )
+    if (detachError) {
+      return persistFailure(detachError)
+    }
   }
   const zonesError = await persistLogicalEventZones(
     mutationClient,
@@ -3647,10 +3687,9 @@ export async function updateCompleteEvent(
     return persistFailure(purchaseLimitError)
   }
 
-  const materializeError = await resyncEventSeatingUnitsAfterMapSave(
-    mutationClient,
-    eventId,
-  )
+  const materializeError = mapActive
+    ? await resyncEventSeatingUnitsAfterMapSave(mutationClient, eventId)
+    : null
   if (materializeError) {
     return persistFailure(materializeError)
   }
