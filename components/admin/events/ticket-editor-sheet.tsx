@@ -2,7 +2,7 @@
 
 import { Plus } from "lucide-react"
 import { useState } from "react"
-import type { UseFormReturn } from "react-hook-form"
+import type { UseFieldArrayUpdate, UseFormReturn } from "react-hook-form"
 
 import { NetProfitCalculator } from "@/components/admin/events/net-profit-calculator"
 import { Button } from "@/components/ui/button"
@@ -46,6 +46,7 @@ type DayOption = EventFormValues["basics"]["scheduleDays"][number]
 
 export function TicketEditorSheet({
   form,
+  update,
   open,
   onOpenChange,
   indexes,
@@ -56,6 +57,7 @@ export function TicketEditorSheet({
   onDifferentiateChange,
 }: {
   form: UseFormReturn<EventFormValues>
+  update: UseFieldArrayUpdate<EventFormValues, "tickets">
   open: boolean
   onOpenChange: (open: boolean) => void
   indexes: number[]
@@ -90,15 +92,23 @@ export function TicketEditorSheet({
     )
   })
 
+  function patchTicket(
+    index: number,
+    patch: Partial<EventFormValues["tickets"][number]>,
+  ) {
+    const current = form.getValues(`tickets.${index}`)
+    if (!current) return
+    update(index, { ...current, ...patch })
+  }
+
   function syncField(
     field: "name" | "capacity" | "price" | "basePrice" | "minPurchaseLimit" | "maxPurchaseLimit",
     value: string | number | null | undefined,
   ) {
     for (const index of indexes) {
-      form.setValue(`tickets.${index}.${field}`, value as never, {
-        shouldDirty: true,
-        shouldValidate: true,
-      })
+      patchTicket(index, { [field]: value } as Partial<
+        EventFormValues["tickets"][number]
+      >)
     }
   }
 
@@ -107,19 +117,11 @@ export function TicketEditorSheet({
     const ticket = current[index]
     if (!ticket) return
     const next = applyNetProfitToTicket(ticket, net, feePercentage)
-    form.setValue(`tickets.${index}.basePrice`, next.basePrice, {
-      shouldDirty: true,
-      shouldValidate: true,
-    })
-    form.setValue(`tickets.${index}.price`, next.price, {
-      shouldDirty: true,
-      shouldValidate: true,
-    })
-    form.setValue(`tickets.${index}.calculationMode`, "net_income", {
-      shouldDirty: true,
-    })
-    form.setValue(`tickets.${index}.feeStrategy`, "pass_to_customer", {
-      shouldDirty: true,
+    update(index, {
+      ...ticket,
+      ...next,
+      calculationMode: "net_income",
+      feeStrategy: "pass_to_customer",
     })
     if (allDays) {
       for (const other of indexes) {
@@ -127,13 +129,11 @@ export function TicketEditorSheet({
         const row = current[other]
         if (!row) continue
         const mapped = applyNetProfitToTicket(row, net, feePercentage)
-        form.setValue(`tickets.${other}.basePrice`, mapped.basePrice, {
-          shouldDirty: true,
-          shouldValidate: true,
-        })
-        form.setValue(`tickets.${other}.price`, mapped.price, {
-          shouldDirty: true,
-          shouldValidate: true,
+        update(other, {
+          ...row,
+          ...mapped,
+          calculationMode: "net_income",
+          feeStrategy: "pass_to_customer",
         })
       }
     }

@@ -112,6 +112,10 @@ import {
 } from "@/lib/errors/form-field"
 import { toUserFacingError } from "@/lib/errors/user-facing-error"
 import {
+  type PersistErrorSource,
+  PERSIST_ERROR_TITLES,
+} from "@/lib/errors/persist-error"
+import {
   conflictFromPersistError,
   type WizardConflict,
 } from "@/lib/seating/venue-map-sku-consistency"
@@ -607,6 +611,7 @@ export function EventCreationWizard({
     code?: string,
     field?: string,
     actionHint?: string,
+    source?: PersistErrorSource,
   ) {
     const mapped = mapUnknownError({
       code,
@@ -639,10 +644,11 @@ export function EventCreationWizard({
       }, 80)
       return
     }
-    toast.error(safeMessage, {
+    toast.error(source ? PERSIST_ERROR_TITLES[source] : safeMessage, {
       duration: 5000,
-      description:
-        actionHint?.trim() || mapped.actionHint || FIELD_REVIEW_HINT,
+      description: source
+        ? safeMessage
+        : actionHint?.trim() || mapped.actionHint || FIELD_REVIEW_HINT,
       action:
         resolvedField || mapped.action
           ? {
@@ -708,6 +714,8 @@ export function EventCreationWizard({
         result.wizardConflict,
         result.code,
         result.field,
+        result.actionHint,
+        result.source,
       )
       return
     }
@@ -928,6 +936,7 @@ export function EventCreationWizard({
         result.code,
         result.field,
         result.actionHint,
+        result.source,
       )
       return false
     }

@@ -15,6 +15,11 @@ import {
 } from "@/lib/stores/event-form-store"
 import type { EventFormValues } from "@/lib/validations/event-form"
 import type { VenuePricingMap } from "@/lib/seating/venue-adapter"
+import {
+  classifyPersistError,
+  persistErrorUserMessage,
+  PERSIST_ERROR_TITLES,
+} from "@/lib/errors/persist-error"
 
 /** Autoguardado de borrador: 1.5s después de que el usuario deja de escribir. */
 const DEBOUNCE_MS = 1500
@@ -208,7 +213,7 @@ export function useEventFormAutosave(input: {
         setAutosaveStatus("error", result.error)
         if (lastErrorToastRef.current !== result.error) {
           lastErrorToastRef.current = result.error
-          toast.error("No se pudo guardar el borrador", {
+          toast.error(PERSIST_ERROR_TITLES[result.source], {
             description: result.error,
           })
         }
@@ -247,12 +252,12 @@ export function useEventFormAutosave(input: {
         inventoryFingerprintRef.current = eventInventoryFingerprint(values)
       }
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Error de autoguardado"
+      const source = classifyPersistError(error)
+      const message = persistErrorUserMessage(error, "Error de autoguardado")
       setAutosaveStatus("error", message)
       if (lastErrorToastRef.current !== message) {
         lastErrorToastRef.current = message
-        toast.error("No se pudo guardar el borrador", {
+        toast.error(PERSIST_ERROR_TITLES[source], {
           description: message,
         })
       }

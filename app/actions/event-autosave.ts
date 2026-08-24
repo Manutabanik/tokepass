@@ -14,6 +14,12 @@ import {
   updateCompleteEvent,
 } from "@/app/actions/events"
 import { toUserFacingError } from "@/lib/errors/user-facing-error"
+import {
+  classifyPersistError,
+  logPersistError,
+  persistErrorUserMessage,
+  type PersistErrorSource,
+} from "@/lib/errors/persist-error"
 import { writeSecurityAuditLog } from "@/lib/security/audit-log"
 import { formHasInventoryOrVenue } from "@/lib/events/event-inventory-fingerprint"
 import {
@@ -29,7 +35,7 @@ export type AutosaveEventDraftResult =
       venueId?: string | null
       mode: "created" | "updated" | "skipped"
     }
-  | { ok: false; error: string }
+  | { ok: false; error: string; source: PersistErrorSource }
 
 function hasMinimumDraftContent(values: EventFormValues): boolean {
   return values.basics.title.trim().length >= 3
@@ -78,13 +84,14 @@ export async function autosaveEventDraft(input: {
 
   const parsed = draftEventSchema.safeParse(values)
   if (!parsed.success) {
-    const issue = parsed.error.issues[0]
-    console.error("SUPABASE_ERROR:", parsed.error)
+    logPersistError("event-autosave validation", parsed.error)
     return {
       ok: false,
-      error:
-        issue?.message ??
+      source: "zod",
+      error: persistErrorUserMessage(
+        parsed.error,
         "El borrador no se pudo validar. Revisá sectores, combos y el mapa.",
+      ),
     }
   }
 
@@ -105,21 +112,38 @@ export async function autosaveEventDraft(input: {
   let eventId = input.eventId
   let venueId: string | null = null
 
-  if (eventId) {
-    formData.set("eventId", eventId)
-    const result = await updateCompleteEvent(formData)
-    if (!result.success) {
-      return { ok: false, error: result.error }
+  try {
+    if (eventId) {
+      formData.set("eventId", eventId)
+      const result = await updateCompleteEvent(formData)
+      if (!result.success) {
+        return {
+          ok: false,
+          source: result.source ?? classifyPersistError(result.error),
+          error: result.error,
+        }
+      }
+      eventId = result.eventId
+      venueId = result.venueId
+    } else {
+      const result = await createCompleteEvent(formData)
+      if (!result.success) {
+        return {
+          ok: false,
+          source: result.source ?? classifyPersistError(result.error),
+          error: result.error,
+        }
+      }
+      eventId = result.eventId
+      venueId = result.venueId
     }
-    eventId = result.eventId
-    venueId = result.venueId
-  } else {
-    const result = await createCompleteEvent(formData)
-    if (!result.success) {
-      return { ok: false, error: result.error }
+  } catch (error) {
+    logPersistError("event-autosave persist", error)
+    return {
+      ok: false,
+      source: classifyPersistError(error),
+      error: persistErrorUserMessage(error),
     }
-    eventId = result.eventId
-    venueId = result.venueId
   }
 
   if (input.zoneTierPricing && input.zoneTierPricing.length > 0) {
@@ -129,8 +153,12 @@ export async function autosaveEventDraft(input: {
       revalidate: false,
     })
     if (!pricing.success) {
-      console.error("SUPABASE_ERROR:", pricing.error)
-      return { ok: false, error: pricing.error }
+      logPersistError("event-autosave zone pricing", pricing.error)
+      return {
+        ok: false,
+        source: classifyPersistError(pricing.error),
+        error: pricing.error,
+      }
     }
   }
 

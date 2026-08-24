@@ -7,6 +7,7 @@ import {
   familyHasDifferentiatedPrices,
   isBlankInventoryTicket,
   listInventoryFamilies,
+  planMissingFamilyDayTickets,
   ticketSoldCount,
   upsertSyncedDayTickets,
 } from "./synced-day-tickets"
@@ -76,6 +77,30 @@ describe("synced day tickets", () => {
     const family = listInventoryFamilies(tickets)[0]
     assert.equal(ticketSoldCount(tickets[0]), 3)
     assert.equal(family?.sold, 5)
+  })
+
+  it("plans missing family days without rebuilding the whole array", () => {
+    const tickets = [
+      { ...createInventoryTicket("addon"), name: "Estacionamiento" },
+      {
+        ...createInventoryTicket("general"),
+        name: "General",
+        dayId: "day-a",
+        capacity: 80,
+        price: 1000,
+      },
+    ]
+    const plan = planMissingFamilyDayTickets({
+      tickets,
+      indexes: [1],
+      dayIds: ["day-a", "day-b"],
+      isMultiDay: true,
+    })
+    assert.deepEqual(plan.keepIndexes, [1])
+    assert.equal(plan.append.length, 1)
+    assert.equal(plan.append[0]?.dayId, "day-b")
+    assert.equal(plan.append[0]?.name, "General")
+    assert.equal(tickets[0]?.name, "Estacionamiento")
   })
 
   it("keeps unnamed general tickets that already have stock", () => {

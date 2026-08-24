@@ -154,7 +154,7 @@ export function removeTicketFamily(
   return tickets.filter((_, index) => !drop.has(index))
 }
 
-function cloneTicketForDay(
+export function cloneTicketForDay(
   source: InventoryTicket,
   dayId: string | null,
   keepIdentity: boolean,
@@ -173,6 +173,42 @@ function cloneTicketForDay(
           sold: 0,
         })),
   }
+}
+
+/** Completa días faltantes de una familia sin reordenar el array entero. */
+export function planMissingFamilyDayTickets(input: {
+  tickets: readonly InventoryTicket[]
+  indexes: readonly number[]
+  dayIds: readonly string[]
+  isMultiDay: boolean
+}): { keepIndexes: number[]; append: InventoryTicket[] } {
+  const existing = input.indexes
+    .map((index) => ({ index, ticket: input.tickets[index] }))
+    .filter(
+      (row): row is { index: number; ticket: InventoryTicket } =>
+        Boolean(row.ticket),
+    )
+  if (!input.isMultiDay || input.dayIds.length < 2) {
+    return { keepIndexes: existing.map((row) => row.index), append: [] }
+  }
+  const claimed = new Set<number>()
+  const keepIndexes: number[] = []
+  const append: InventoryTicket[] = []
+  const template =
+    existing[0]?.ticket ?? createInventoryTicket("general")
+  for (const dayId of input.dayIds) {
+    const match = existing.find((row) => {
+      if (claimed.has(row.index)) return false
+      return normalizeDayId(row.ticket.dayId) === dayId
+    })
+    if (match) {
+      claimed.add(match.index)
+      keepIndexes.push(match.index)
+      continue
+    }
+    append.push(cloneTicketForDay(template, dayId, false))
+  }
+  return { keepIndexes, append }
 }
 
 export function upsertSyncedDayTickets(input: {

@@ -132,6 +132,12 @@ import { logger } from "@/lib/logger"
 import { writeSecurityAuditLog } from "@/lib/security/audit-log"
 import { mapUnknownError } from "@/lib/errors/error-handler"
 import type { AppErrorCode } from "@/lib/errors/app-error"
+import {
+  logPersistError,
+  persistErrorLogLabel,
+  persistErrorUserMessage,
+  type PersistErrorSource,
+} from "@/lib/errors/persist-error"
 import { fieldFromAppError } from "@/lib/errors/form-field"
 import { actionHintFromError } from "@/lib/errors/guided-action"
 import {
@@ -1026,7 +1032,7 @@ async function persistEventSchedule(
     } as never)
     .eq("id", eventId)
   if (error) {
-    console.error("SUPABASE_ERROR:", error)
+    logPersistError("event-persist", error)
     return error.message
   }
   return null
@@ -1167,31 +1173,34 @@ function persistFailure(error: unknown): {
   success: false
   error: string
   code: AppErrorCode
+  source: PersistErrorSource
   title?: string
   field?: string
   actionHint?: string
   wizardConflict?: WizardConflict
 } {
-  console.error("SUPABASE_ERROR:", error)
+  const source = logPersistError("event-persist", error)
   logger.error({
     context: "event-persist",
-    message: "SUPABASE_ERROR",
+    message: persistErrorLogLabel(source),
     error,
   })
   const mapped = mapUnknownError(error)
   const code = mapped.code === "UNKNOWN" ? "SAVE_FAILED" : mapped.code
   const field = fieldFromAppError(mapped)
+  const message = persistErrorUserMessage(error, mapped.message)
   return {
     success: false,
-    error: mapped.message,
+    error: message,
     code,
+    source,
     title: mapped.title,
     ...(field ? { field } : {}),
     actionHint: actionHintFromError(mapped),
     ...(mapped.action
       ? {
           wizardConflict: {
-            summary: mapped.message,
+            summary: message,
             actions: [mapped.action],
           },
         }
@@ -1299,13 +1308,13 @@ async function persistEventDeliveryProfile(
       } as never)
       .eq("id", eventId)
     if (retry.error) {
-      console.error("SUPABASE_ERROR:", retry.error)
+      logPersistError("event-persist", retry.error)
       return retry.error.message
     }
     return null
   }
   if (error) {
-    console.error("SUPABASE_ERROR:", error)
+    logPersistError("event-persist", error)
     return error.message
   }
   return null
@@ -1353,7 +1362,7 @@ async function persistEventCheckoutPolicy(
     return null
   }
   if (error) {
-    console.error("SUPABASE_ERROR:", error)
+    logPersistError("event-persist", error)
     return error.message
   }
   return null
@@ -1667,7 +1676,7 @@ async function runSeatingRpcWithRetry<T>(input: {
   try {
     const first = await input.execute(input.payload)
     if (first.error) {
-      console.error("SUPABASE_ERROR:", first.error)
+      logPersistError(input.context, first.error)
       logger.error({
         context: input.context,
         event_id: input.eventId,
@@ -1677,7 +1686,7 @@ async function runSeatingRpcWithRetry<T>(input: {
     return first
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    console.error("SUPABASE_ERROR:", error)
+    logPersistError(input.context, error)
     logger.error({
       context: input.context,
       event_id: input.eventId,
@@ -1831,7 +1840,7 @@ async function assertPersistedInventoryCapacity(
     .select("id, name, capacity")
     .eq("event_id", eventId)
   if (error) {
-    console.error("SUPABASE_ERROR:", error)
+    logPersistError("event-persist", error)
     return error.message
   }
   const broken = (tiers ?? []).filter(
@@ -1856,7 +1865,7 @@ async function syncTierAdmitCounts(
     .eq("event_id", eventId)
 
   if (tiersLoadError) {
-    console.error("SUPABASE_ERROR:", tiersLoadError)
+    logPersistError("event-persist", tiersLoadError)
     return tiersLoadError.message
   }
 
@@ -2037,7 +2046,7 @@ async function syncTicketTierPhases(
     .eq("event_id", eventId)
 
   if (tiersError) {
-    console.error("SUPABASE_ERROR:", tiersError)
+    logPersistError("event-persist", tiersError)
     return tiersError.message
   }
   if (!tiers?.length) return null
@@ -2052,7 +2061,7 @@ async function syncTicketTierPhases(
 
   if (existingError) {
     if (isMissingPhasesTable(existingError.message)) return null
-    console.error("SUPABASE_ERROR:", existingError)
+    logPersistError("event-persist", existingError)
     return existingError.message
   }
 
@@ -2097,7 +2106,7 @@ async function syncTicketTierPhases(
           .eq("id", phase.id)
           .eq("tier_id", tier.id)
         if (error) {
-          console.error("SUPABASE_ERROR:", error)
+          logPersistError("event-persist", error)
           return error.message
         }
         keepIds.add(phase.id)
@@ -2110,7 +2119,7 @@ async function syncTicketTierPhases(
         .select("id")
         .maybeSingle()
       if (error) {
-        console.error("SUPABASE_ERROR:", error)
+        logPersistError("event-persist", error)
         return error.message
       }
       if (created?.id) keepIds.add(created.id)
@@ -2148,7 +2157,7 @@ async function syncTicketSaleWindows(
     .eq("event_id", eventId)
 
   if (tiersError) {
-    console.error("SUPABASE_ERROR:", tiersError)
+    logPersistError("event-persist", tiersError)
     return tiersError.message
   }
 
@@ -2165,7 +2174,7 @@ async function syncTicketSaleWindows(
       .eq("id", tier.id)
     if (error) {
       if (isMissingSaleWindowSchema(error.message)) return null
-      console.error("SUPABASE_ERROR:", error)
+      logPersistError("event-persist", error)
       return error.message
     }
   }
@@ -2254,6 +2263,7 @@ export type CreateCompleteEventResult =
       success: false
       error: string
       code?: AppErrorCode
+      source?: PersistErrorSource
       title?: string
       field?: string
       actionHint?: string
@@ -2430,7 +2440,7 @@ async function persistLogicalEventZones(
     .select("id, name, type")
     .eq("event_id", eventId)
   if (existingError) {
-    console.error("SUPABASE_ERROR:", existingError)
+    logPersistError("event-persist", existingError)
     return existingError.message
   }
 
@@ -2447,7 +2457,7 @@ async function persistLogicalEventZones(
       .eq("id", row.id)
       .eq("event_id", eventId)
     if (error) {
-      console.error("SUPABASE_ERROR:", error)
+      logPersistError("event-persist", error)
       return error.message
     }
   }
@@ -2477,7 +2487,7 @@ async function persistLogicalEventZones(
         .eq("id", currentId)
         .eq("event_id", eventId)
       if (error) {
-        console.error("SUPABASE_ERROR:", error)
+        logPersistError("event-persist", error)
         return error.message
       }
       continue
@@ -2489,7 +2499,7 @@ async function persistLogicalEventZones(
       capacity: positiveInventoryCapacity(zone.capacity),
     } as never)
     if (error) {
-      console.error("SUPABASE_ERROR:", error)
+      logPersistError("event-persist", error)
       return error.message
     }
   }
@@ -3087,12 +3097,7 @@ export async function createCompleteEvent(
       : publishEventSchema.safeParse(parsedJson)
 
   if (!parsed.success) {
-    return {
-      success: false,
-      error:
-        parsed.error.issues[0]?.message ??
-        "La configuración del evento no es válida.",
-    }
+    return persistFailure(parsed.error)
   }
 
   if (identityOnly && formHasInventoryOrVenue(parsed.data)) {
@@ -3222,11 +3227,8 @@ export async function createCompleteEvent(
       zones: rpcPayload.zones.length,
     })
   } catch (error) {
-    return persistFailure(
-      error instanceof Error
-        ? error.message
-        : "No se pudo armar el payload del evento.",
-    )
+    logPersistError("create_complete_event payload", error)
+    return persistFailure(error)
   }
 
   const { data: eventId, error } = await runSeatingRpcWithRetry<string | null>({
@@ -3390,12 +3392,7 @@ export async function updateCompleteEvent(
       ? draftEventSchema.safeParse(parsedJson)
       : publishEventSchema.safeParse(parsedJson)
   if (!parsed.success) {
-    return {
-      success: false,
-      error:
-        parsed.error.issues[0]?.message ??
-        "La configuración del evento no es válida.",
-    }
+    return persistFailure(parsed.error)
   }
 
   if (identityOnly && formHasInventoryOrVenue(parsed.data)) {
@@ -3611,11 +3608,8 @@ export async function updateCompleteEvent(
       zones: rpcPayload.zones.length,
     })
   } catch (error) {
-    return persistFailure(
-      error instanceof Error
-        ? error.message
-        : "No se pudo armar la actualización.",
-    )
+    logPersistError("update_complete_event payload", error)
+    return persistFailure(error)
   }
 
   const rpcResult = await runSeatingRpcWithRetry<string | null>({

@@ -153,6 +153,57 @@ describe("multi-day draft coercion", () => {
     assert.equal(coerced.tickets[0]?.dayId, null)
   })
 
+  it("keeps a short name and a ticket without sector instead of dropping the row", () => {
+    const coerced = coerceDraftEventForm({
+      ...draftWithDays(false, []),
+      tickets: [
+        {
+          name: "A",
+          price: 0,
+          capacity: 10,
+          visibility: "public",
+          layoutType: "general",
+          capacityPerUnit: 1,
+          admitCount: 1,
+        },
+        {
+          name: "",
+          price: 2500,
+          capacity: 20,
+          visibility: "public",
+          layoutType: "general",
+          seatingSectorId: null,
+          capacityPerUnit: 1,
+          admitCount: 1,
+        },
+      ],
+    })
+    assert.equal(coerced.tickets.length, 2)
+    assert.equal(coerced.tickets[0]?.name, "A")
+    assert.equal(coerced.tickets[0]?.visibility, "private")
+    assert.equal(coerced.tickets[1]?.name, "Borrador")
+    assert.equal(coerced.tickets[1]?.visibility, "private")
+    assert.equal(coerced.tickets[1]?.price, 2500)
+  })
+
+  it("does not invent a placeholder ticket when the draft has none", () => {
+    const coerced = coerceDraftEventForm({
+      ...draftWithDays(false, []),
+      tickets: [
+        {
+          name: "",
+          price: 0,
+          capacity: 1,
+          visibility: "public",
+          layoutType: "general",
+          capacityPerUnit: 1,
+          admitCount: 1,
+        },
+      ],
+    })
+    assert.equal(coerced.tickets.length, 0)
+  })
+
   it("keeps unnamed map-sector tickets so they are not dropped on save", () => {
     const coerced = coerceDraftEventForm({
       ...draftWithDays(false, []),

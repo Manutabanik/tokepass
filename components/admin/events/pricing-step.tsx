@@ -2,7 +2,7 @@
 
 import { Map, Plus, Ticket } from "lucide-react"
 import { useMemo, useState } from "react"
-import type { UseFormReturn } from "react-hook-form"
+import { useFieldArray, type UseFormReturn } from "react-hook-form"
 
 import { CapacityThermometer } from "@/components/admin/events/capacity-thermometer"
 import { InventoryAdvancedTools } from "@/components/admin/events/inventory-advanced-tools"
@@ -13,11 +13,11 @@ import {
 } from "@/components/admin/events/ticket-editor-sheet"
 import { FormLabel, FormMessage } from "@/components/ui/form"
 import { listEventFormJornadas } from "@/lib/event-schedule"
+import { createInventoryTicket } from "@/lib/inventory/create-inventory-ticket"
 import { EMPTY_MAP_ENABLE_ERROR } from "@/lib/inventory/map-enablement"
 import {
   listInventoryFamilies,
-  removeTicketFamily,
-  upsertSyncedDayTickets,
+  planMissingFamilyDayTickets,
   type InventoryFamily,
 } from "@/lib/inventory/synced-day-tickets"
 import { inferInventoryTierType } from "@/lib/inventory/unified-inventory"
@@ -51,6 +51,11 @@ export function PricingStep({
   hideMapBlock?: boolean
   onOpenMapStudio?: () => void
 }) {
+  const { append, update, remove } = useFieldArray({
+    control: form.control,
+    name: "tickets",
+    keyName: "_rowId",
+  })
   const tickets = form.watch("tickets") ?? EMPTY_FORM_TICKETS
   const resolvedFeePercentage = clampServiceFeePercentage(
     form.watch("serviceFeePercentage") ?? feePercentage,
@@ -82,67 +87,44 @@ export function PricingStep({
     [tickets],
   )
   const hasSellableRows = families.length > 0
+
   function openFamily(family: InventoryFamily, created = false) {
     const current = form.getValues("tickets") ?? []
     const dayIds = eventDates.map((day) => day.id)
-    const covered =
-      !isMultiDay ||
-      dayIds.length < 2 ||
-      dayIds.every((dayId) =>
-        family.indexes.some(
-          (index) => current[index]?.dayId === dayId,
-        ),
-      )
-    const upserted = covered
-      ? { tickets: current, indexes: family.indexes }
-      : upsertSyncedDayTickets({
-          tickets: current,
-          dayIds,
-          isMultiDay,
-          indexes: family.indexes,
-          name: family.name,
-          capacity: current[family.indexes[0] ?? 0]?.capacity,
-          basePrice: family.price,
-          differentiate: sheetDifferentiateDefault(current, family.indexes),
-          kind: family.kind,
-          seatingSectorId: family.seatingSectorId,
-        })
-    if (upserted.tickets !== current) {
-      form.setValue("tickets", upserted.tickets, {
-        shouldDirty: true,
-        shouldValidate: true,
-      })
+    const plan = planMissingFamilyDayTickets({
+      tickets: current,
+      indexes: family.indexes,
+      dayIds,
+      isMultiDay,
+    })
+    const start = current.length
+    if (plan.append.length > 0) {
+      append(plan.append)
     }
+    const indexes = [
+      ...plan.keepIndexes,
+      ...plan.append.map((_, offset) => start + offset),
+    ]
+    const nextTickets = form.getValues("tickets") ?? []
     setSheet({
-      indexes: upserted.indexes,
+      indexes,
       kind: family.kind,
       created,
-      differentiate: sheetDifferentiateDefault(
-        upserted.tickets,
-        upserted.indexes,
-      ),
+      differentiate: sheetDifferentiateDefault(nextTickets, indexes),
     })
   }
 
   function addGeneral() {
-    const current = form.getValues("tickets") ?? []
-    const next = upsertSyncedDayTickets({
-      tickets: current,
-      dayIds: eventDates.map((day) => day.id),
-      isMultiDay,
-      indexes: [],
-      name: "",
-      capacity: undefined,
-      basePrice: 0,
-      differentiate: false,
-      kind: "general",
-    })
-    form.setValue("tickets", next.tickets, {
-      shouldDirty: true,
-      shouldValidate: true,
-    })
+    const dayIds = eventDates.map((day) => day.id)
+    const slots =
+      isMultiDay && dayIds.length >= 2 ? dayIds : [dayIds[0] ?? null]
+    const start = (form.getValues("tickets") ?? []).length
+    const created = slots.map((dayId) =>
+      createInventoryTicket("general", { dayId }),
+    )
+    append(created)
     setSheet({
-      indexes: next.indexes,
+      indexes: created.map((_, offset) => start + offset),
       kind: "general",
       created: true,
       differentiate: false,
@@ -156,9 +138,10 @@ export function PricingStep({
     const primary = primaryIndex == null ? undefined : current[primaryIndex]
     if (!primary) return
     const name = (primary.name ?? "").trim()
-    const next = current.map((ticket, index) => {
-      if (!sheet.indexes.includes(index)) return ticket
-      return {
+    for (const index of sheet.indexes) {
+      const ticket = current[index]
+      if (!ticket) continue
+      update(index, {
         ...ticket,
         name:
           sheet.kind === "map"
@@ -167,12 +150,8 @@ export function PricingStep({
         capacity: sheet.kind === "map" ? ticket.capacity : primary.capacity,
         price: sheet.differentiate ? ticket.price : primary.price,
         basePrice: sheet.differentiate ? ticket.basePrice : primary.price,
-      }
-    })
-    form.setValue("tickets", next, {
-      shouldDirty: true,
-      shouldValidate: true,
-    })
+      })
+    }
   }
 
   function closeSheet(open: boolean) {
@@ -189,10 +168,7 @@ export function PricingStep({
           !(Number(ticket?.price) > 0),
       )
       if (sheet.created && stillBlank) {
-        form.setValue("tickets", removeTicketFamily(current, sheet.indexes), {
-          shouldDirty: true,
-          shouldValidate: true,
-        })
+        remove(sheet.indexes)
       } else {
         commitSheetFamily()
       }
@@ -202,11 +178,7 @@ export function PricingStep({
 
   function removeFamily(family: InventoryFamily) {
     if (family.sold > 0) return
-    form.setValue(
-      "tickets",
-      removeTicketFamily(form.getValues("tickets") ?? [], family.indexes),
-      { shouldDirty: true },
-    )
+    remove(family.indexes)
     if (sheet && family.indexes.some((index) => sheet.indexes.includes(index))) {
       setSheet(null)
     }
@@ -308,6 +280,7 @@ export function PricingStep({
       {sheet ? (
         <TicketEditorSheet
           form={form}
+          update={update}
           open
           onOpenChange={closeSheet}
           indexes={sheet.indexes}

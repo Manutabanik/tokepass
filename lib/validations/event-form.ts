@@ -826,6 +826,22 @@ function blankDraftTicket(): EventFormValues["tickets"][number] {
   }
 }
 
+function isPristinePlaceholderTicket(
+  tier: EventFormValues["tickets"][number] | DraftEventFormValues["tickets"][number],
+): boolean {
+  if (tier.id) return false
+  if ((tier.name ?? "").trim().length > 0) return false
+  if (Number(tier.price) > 0 || Number(tier.basePrice) > 0) return false
+  if (resolveTicketSectorId(tier)) return false
+  if (tier.layoutType === "table_combo" || tier.layoutType === "numbered_seat") {
+    return false
+  }
+  if (tier.dayId) return false
+  if (tier.tierType && tier.tierType !== "general") return false
+  const capacity = Number(tier.capacity)
+  return !Number.isFinite(capacity) || capacity <= 1
+}
+
 /** Completa huecos para persistir un draft en el RPC sin perder el trabajo. */
 export function coerceDraftEventForm(
   raw: EventFormValues | DraftEventFormValues,
@@ -870,57 +886,68 @@ export function coerceDraftEventForm(
 
   const incomingTickets = (raw.tickets ?? []) as EventFormValues["tickets"]
   const tickets = incomingTickets
-    .filter((tier) => {
-      if ((tier.name ?? "").trim().length >= 2) return true
-      return Boolean(resolveTicketSectorId(tier))
-    })
-    .map((tier) => ({
-      ...blankDraftTicket(),
-      ...tier,
-      name: tier.name.trim(),
-      price: Number.isFinite(tier.price) ? Number(tier.price) : 0,
-      basePrice: Number.isFinite(tier.basePrice) ? Number(tier.basePrice) : 0,
-      feeStrategy: tier.feeStrategy ?? "pass_to_customer",
-      calculationMode: tier.calculationMode ?? "net_income",
-      capacity:
-        Number.isFinite(tier.capacity) && Number(tier.capacity) >= 1
-          ? Number(tier.capacity)
-          : 1,
-      layoutType:
-        tier.layoutType === "table_combo" || tier.layoutType === "numbered_seat"
-          ? tier.layoutType
-          : "general",
-      visibility: tier.visibility ?? "public",
-      capacityPerUnit: tier.capacityPerUnit ?? 1,
-      minPurchaseLimit: Math.max(1, Math.floor(Number(tier.minPurchaseLimit) || 1)),
-      maxPurchaseLimit:
-        tier.maxPurchaseLimit == null || Number(tier.maxPurchaseLimit) <= 0
+    .filter((tier) => !isPristinePlaceholderTicket(tier))
+    .map((tier) => {
+      const name = (tier.name ?? "").trim()
+      const seatingSectorId = resolveTicketSectorId(tier)
+      const incomplete = name.length < 2
+      return {
+        ...blankDraftTicket(),
+        ...tier,
+        name: name || "Borrador",
+        price: Number.isFinite(Number(tier.price)) ? Number(tier.price) : 0,
+        basePrice: Number.isFinite(Number(tier.basePrice))
+          ? Number(tier.basePrice)
+          : 0,
+        feeStrategy: tier.feeStrategy ?? "pass_to_customer",
+        calculationMode: tier.calculationMode ?? "net_income",
+        capacity:
+          Number.isFinite(Number(tier.capacity)) && Number(tier.capacity) >= 1
+            ? Number(tier.capacity)
+            : 1,
+        layoutType:
+          tier.layoutType === "table_combo" || tier.layoutType === "numbered_seat"
+            ? tier.layoutType
+            : "general",
+        visibility: incomplete
+          ? "private"
+          : (tier.visibility ?? "public"),
+        capacityPerUnit: tier.capacityPerUnit ?? 1,
+        minPurchaseLimit: Math.max(
+          1,
+          Math.floor(Number(tier.minPurchaseLimit) || 1),
+        ),
+        maxPurchaseLimit:
+          tier.maxPurchaseLimit == null || Number(tier.maxPurchaseLimit) <= 0
+            ? null
+            : Math.floor(Number(tier.maxPurchaseLimit)),
+        admitCount: tier.admitCount ?? 1,
+        saleStartsAt: tier.saleStartsAt ?? "",
+        saleEndsAt: tier.saleEndsAt ?? "",
+        seatingSectorId,
+        tierType: tier.tierType ?? "general",
+        listPrice: tier.listPrice ?? null,
+        bundleItems: tier.bundleItems ?? [],
+        bundleType: tier.bundleType ?? null,
+        promoDiscountType: tier.promoDiscountType ?? null,
+        promoDiscountValue: Number(tier.promoDiscountValue) || 0,
+        promoRequiredQty: Math.max(
+          1,
+          Math.floor(Number(tier.promoRequiredQty) || 1),
+        ),
+        promoPayQty: Math.max(0, Math.floor(Number(tier.promoPayQty) || 1)),
+        description: (tier.description ?? "")
+          .trim()
+          .slice(0, TICKET_DESCRIPTION_MAX),
+        highlightBadge: tier.highlightBadge === "bestseller" ? "bestseller" : null,
+        dayId: isPassOrComboTicket(tier)
           ? null
-          : Math.floor(Number(tier.maxPurchaseLimit)),
-      admitCount: tier.admitCount ?? 1,
-      saleStartsAt: tier.saleStartsAt ?? "",
-      saleEndsAt: tier.saleEndsAt ?? "",
-      seatingSectorId: resolveTicketSectorId(tier),
-      tierType: tier.tierType ?? "general",
-      listPrice: tier.listPrice ?? null,
-      bundleItems: tier.bundleItems ?? [],
-      bundleType: tier.bundleType ?? null,
-      promoDiscountType: tier.promoDiscountType ?? null,
-      promoDiscountValue: Number(tier.promoDiscountValue) || 0,
-      promoRequiredQty: Math.max(
-        1,
-        Math.floor(Number(tier.promoRequiredQty) || 1),
-      ),
-      promoPayQty: Math.max(0, Math.floor(Number(tier.promoPayQty) || 1)),
-      description: (tier.description ?? "").trim().slice(0, TICKET_DESCRIPTION_MAX),
-      highlightBadge: tier.highlightBadge === "bestseller" ? "bestseller" : null,
-      dayId: isPassOrComboTicket(tier)
-        ? null
-        : isMultiDay
-          ? remapBoundDayId(asUuidOrNull(tier.dayId, ["all"]), validDayIds)
-          : null,
-      phases: tier.phases ?? [],
-    }))
+          : isMultiDay
+            ? remapBoundDayId(asUuidOrNull(tier.dayId, ["all"]), validDayIds)
+            : null,
+        phases: tier.phases ?? [],
+      }
+    })
 
   const zones = Array.isArray(venue.zones)
     ? venue.zones.map((zone) => {
@@ -1000,8 +1027,7 @@ export function coerceDraftEventForm(
       saveVenueForReuse: venue.saveVenueForReuse ?? true,
       zones: zones as EventFormValues["venue"]["zones"],
     },
-    tickets:
-      tickets.length > 0 ? tickets : [blankDraftTicket()],
+    tickets,
     ticketsDefaultTab:
       raw.ticketsDefaultTab === "seated" ||
       raw.ticketsDefaultTab === "general" ||
