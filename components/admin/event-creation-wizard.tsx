@@ -38,7 +38,6 @@ import { upsertVenue } from "@/app/actions/venues"
 import { AgendaBuilder } from "@/components/admin/agenda-builder"
 import { EventSponsorsManager } from "@/components/admin/event-sponsors-manager"
 import { EventStudioPublishStep } from "@/components/admin/events/event-studio-publish-step"
-import { EventStudioServiceFeeField } from "@/components/admin/events/event-studio-service-fee-field"
 import { EventVenueStep } from "@/components/admin/event-venue-step"
 import {
   UnifiedInventoryPanel,
@@ -247,7 +246,7 @@ const defaultValues: EventFormValues = {
   acceptsMercadoPago: true,
   acceptsPosPayments: true,
   defaultFeeStrategy: "pass_to_customer",
-  serviceFeePercentage: 15,
+  serviceFeePercentage: 8,
   refundPolicy: "organizer",
 }
 
@@ -286,12 +285,10 @@ export function EventCreationWizard({
   const [flyerError, setFlyerError] = useState<string | null>(null)
   const [showAdvancedDetails, setShowAdvancedDetails] = useState(() => {
     const basics = initialData?.values.basics
-    const fee = initialData?.values.serviceFeePercentage
     return (
       basics?.deliveryMode === "ONLINE" ||
       Boolean(basics?.ageRestriction) ||
-      Boolean(basics?.categoryId) ||
-      (fee != null && fee !== 15)
+      Boolean(basics?.categoryId)
     )
   })
   const [publishConfirm, setPublishConfirm] = useState<{
@@ -409,13 +406,12 @@ export function EventCreationWizard({
   const [draftRevision, setDraftRevision] = useState(0)
   const debouncedDraftRevision = useDebounce(draftRevision, 1500)
   const skipInitialAutosave = useRef(true)
-
-  useEffect(() => {
-    const subscription = form.watch(() => {
-      setDraftRevision((current) => current + 1)
-    })
-    return () => subscription.unsubscribe()
-  }, [form])
+  const draftWatch = useWatch({ control: form.control })
+  const [seenDraftWatch, setSeenDraftWatch] = useState(draftWatch)
+  if (draftWatch !== seenDraftWatch) {
+    setSeenDraftWatch(draftWatch)
+    setDraftRevision((current) => current + 1)
+  }
 
   useEffect(() => {
     if (skipInitialAutosave.current) {
@@ -1034,18 +1030,20 @@ export function EventCreationWizard({
     if (isStudioClosing) return
     setIsStudioClosing(true)
     try {
-      const map = parseVenueMap(form.getValues("venue.venueMap"))
-      persistWorkspaceMap(map)
-      const result = await persistInventoryDraft(form.getValues())
-      if (!result.success) {
-        toast.error("No se pudo guardar el mapa", {
-          description: toUserFacingError(result.error),
-        })
-        return
-      }
+      persistWorkspaceMap(parseVenueMap(form.getValues("venue.venueMap")), {
+        announceEmpty: false,
+      })
       setIsStudioOpen(false)
     } finally {
       setIsStudioClosing(false)
+    }
+    const eventId = initialData?.id ?? persistedEventId
+    if (!eventId) return
+    const result = await persistInventoryDraft(form.getValues())
+    if (!result.success) {
+      toast.error("El mapa quedó en el evento, pero no se pudo sincronizar", {
+        description: toUserFacingError(result.error),
+      })
     }
   }
 
@@ -1423,7 +1421,6 @@ export function EventCreationWizard({
                     </button>
                     {showAdvancedDetails ? (
                       <div className="space-y-6 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
-                        <EventStudioServiceFeeField form={form} />
                         <FormField
                           control={form.control}
                           name="basics.categoryId"
@@ -1756,6 +1753,11 @@ export function EventCreationWizard({
                   if (!eventId) return
                   const result = await persistInventoryDraft(form.getValues())
                   if (!result.success) {
+                    console.error(
+                      "ERRORES AL GUARDAR EL MAPA:",
+                      result.error,
+                      result.wizardConflict,
+                    )
                     throw new Error(toUserFacingError(result.error))
                   }
                 }}

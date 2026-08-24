@@ -282,8 +282,6 @@ export function useEventFormAutosave(input: {
     setAutosaveStatus("saved")
   }
 
-  runAutosaveRef.current = runAutosave
-
   const scheduleSave = useCallback(() => {
     if (!readyRef.current || !latestRef.current.enabled) return
     setAutosaveStatus("dirty")
@@ -304,6 +302,7 @@ export function useEventFormAutosave(input: {
   }, [])
 
   useEffect(() => {
+    runAutosaveRef.current = runAutosave
     scheduleSaveRef.current = scheduleSave
     flushAutosaveRef.current = flushAutosave
   })
@@ -322,7 +321,7 @@ export function useEventFormAutosave(input: {
       setAutosaveStatus("dirty")
     })
     return () => subscription.unsubscribe()
-  }, [enabled, form, setFormValues])
+  }, [enabled, form, setAutosaveStatus, setFormValues])
 
   useEffect(() => {
     if (!enabled || !readyRef.current) return

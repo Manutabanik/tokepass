@@ -1,10 +1,10 @@
 "use client"
 
-import { Component, type ErrorInfo, type ReactNode, useEffect, useMemo, useRef, useState } from "react"
+import { Component, type ErrorInfo, type ReactNode, useEffect, useMemo, useRef } from "react"
 import { toast } from "sonner"
 
-import { QuantityCounter } from "@/components/public/quantity-counter"
 import { InteractiveMapViewer } from "@/components/public/interactive-map-viewer"
+import { SeatSelectionQuickList } from "@/components/public/seat-selection-quick-list"
 import { Button } from "@/components/ui/button"
 import {
   Sheet,
@@ -23,14 +23,6 @@ import {
 } from "@/lib/checkout-limits"
 import { formatTicketPrice } from "@/lib/format"
 import { logger } from "@/lib/logger"
-import {
-  compactSeatToken,
-  groupSeatsForMatrix,
-} from "@/lib/seating/accessible-seat-matrix"
-import type {
-  AccessibleRowNode,
-  AccessibleSeatNode,
-} from "@/lib/seating/accessible-seat-tree"
 import { buildAccessibleSeatTree } from "@/lib/seating/accessible-seat-tree"
 import { resolveSectorAssignMeta } from "@/lib/seating/assign-best-seats"
 import {
@@ -39,13 +31,14 @@ import {
   storefrontItemFromElement,
   storefrontItemFromZone,
 } from "@/lib/seating/storefront-selection"
+import { listStorefrontSectorCatalog } from "@/lib/seating/storefront-sector-catalog"
 import type {
   UniversalSeatSelection,
   UniversalSector,
   SeatStatus,
 } from "@/lib/seating/universal-seat-types"
-import { resolveEffectiveSeatingType } from "@/lib/seating/seating-type"
 import { sectorUsesNumberedMap } from "@/lib/seating/venue-map-pricing"
+import { elementBelongsToZone } from "@/lib/seating/venue-map-lod"
 import {
   elementInventorySectorId,
   flattenSeatsForAvailability,
@@ -175,23 +168,19 @@ export function SeatSelectionSheet({
       (item) => item.type === "zone" || item.type === "standing",
     ),
   )
-  const selectedQuantity =
-    numberedSector && zoneCount <= 0
-      ? numberedPlaces.length
-      : Math.max(placeCount, zoneCount)
+  const selectedQuantity = Math.max(placeCount, zoneCount, numberedPlaces.length)
   const isValidSelection = selectedQuantity > 0
 
   useLockBodyScroll(open)
 
   function handleConfirm() {
     if (pending) return
-    if (numberedSector && zoneCount <= 0) {
-      if (numberedPlaces.length === 0) {
-        toast.error("Debes seleccionar un asiento o mesa específica.")
-        return
-      }
-    } else if (selectedQuantity <= 0) {
-      toast.error("Debes indicar cuántas entradas querés para esta zona.")
+    if (selectedQuantity <= 0) {
+      toast.error(
+        numberedSector
+          ? "Debes seleccionar un asiento o mesa específica."
+          : "Debes indicar cuántas entradas querés para esta zona.",
+      )
       return
     }
     context.onConfirmed()
@@ -285,7 +274,6 @@ function SeatSelectionModalInner({
     () => selectedItems.map((item) => item.id),
     [selectedItems],
   )
-  const [peopleCount, setPeopleCount] = useState(1)
 
   const mapSeats = useMemo(() => {
     if (!context.map) return []
@@ -352,68 +340,55 @@ function SeatSelectionModalInner({
     fallbackMax: maxTicketsPerUser,
     isTable: isTableSector,
   })
-  const seatingType = targetZone
-    ? resolveEffectiveSeatingType(targetZone, context.map)
-    : targetSector?.seatingType
-  const inventoryType = resolveSectorInventoryType({
-    layoutType: targetZone?.layoutType,
-    isTableSector,
-    seatingType,
-  })
-  const seatsPerTable =
-    targetZone?.capacityPerUnit || assignMeta.capacityPerUnit || 0
-  const isGaSector =
-    Boolean(focusedSectorId) &&
-    (inventoryType === "GENERAL_ADMISSION" ||
-      seatingType === "GENERAL" ||
-      targetSector?.kind === "ga")
-  const isGeneralAdmission = isGaSector && selectionMode === "counter"
-  const zoneAvailable = (() => {
-    const summary = context.sectorSummaries?.find(
-      (row) =>
-        row.sectorId === focusedSectorId ||
-        (selectedSectorName &&
-          row.sectorName.trim().toLowerCase() ===
-            selectedSectorName.trim().toLowerCase()),
-    )
-    if (typeof summary?.available === "number") {
-      return Math.max(0, summary.available)
-    }
-    const capacity = Math.floor(Number(targetZone?.capacity) || 0)
-    return capacity > 0 ? capacity : null
-  })()
-  const maxPeople = Math.max(
-    0,
-    Math.min(
-      resolvePurchaseLimit(maxTicketsPerUser) ?? 20,
-      zoneAvailable ?? resolvePurchaseLimit(maxTicketsPerUser) ?? 20,
-    ),
-  )
-  const hasZoneStock = maxPeople > 0
-
-  const fallbackPrice =
-    (focusedSectorId ? context.priceBySectorId[focusedSectorId] : undefined) ??
-    targetZone?.price ??
-    targetSector?.price ??
-    0
-
-  const quickPlaces = useMemo(
+  const catalog = useMemo(
     () =>
-      buildQuickPlaces({
-        rows: targetSector?.rows ?? [],
-        inventoryType,
-        sellMode: assignMeta.sellMode,
-        unitNoun: assignMeta.unitNoun,
-        fallbackPrice,
-      }),
+      context.map
+        ? listStorefrontSectorCatalog({
+            map: context.map,
+            occupancyBySeatId: context.occupancyBySeatId,
+            selectedItems,
+            priceBySectorId: context.priceBySectorId,
+          })
+        : [],
     [
-      assignMeta.sellMode,
-      assignMeta.unitNoun,
-      fallbackPrice,
-      inventoryType,
-      targetSector?.rows,
+      context.map,
+      context.occupancyBySeatId,
+      context.priceBySectorId,
+      selectedItems,
     ],
   )
+  const purchaseLimit = resolvePurchaseLimit(maxTicketsPerUser) ?? 20
+  const gaQuantityBySector = useMemo(() => {
+    const next: Record<string, number> = {}
+    for (const item of selectedItems) {
+      if (item.type !== "zone" && item.type !== "standing") continue
+      const count = storefrontSelectionCount([item])
+      next[item.id] = count
+      if (item.sectorId) next[item.sectorId] = count
+    }
+    return next
+  }, [selectedItems])
+  const gaMaxBySector = useMemo(() => {
+    const next: Record<string, number> = {}
+    for (const sector of catalog) {
+      const summary = context.sectorSummaries?.find(
+        (row) =>
+          row.sectorId === sector.id ||
+          row.sectorName.trim().toLowerCase() === sector.name.trim().toLowerCase(),
+      )
+      const zone = (context.map?.zones ?? []).find((item) => item.id === sector.id)
+      const available =
+        typeof summary?.available === "number"
+          ? Math.max(0, summary.available)
+          : Math.max(0, Math.floor(Number(zone?.capacity) || 0) || purchaseLimit)
+      next[sector.id] = Math.max(0, Math.min(purchaseLimit, available))
+    }
+    return next
+  }, [catalog, context.map?.zones, context.sectorSummaries, purchaseLimit])
+  const focusedCatalogKind = catalog.find(
+    (sector) => sector.id === focusedSectorId,
+  )?.kind
+  const shouldSeedGa = focusedCatalogKind === "ga"
 
   const focusedMap = useMemo(() => {
     if (!context.map) return context.map
@@ -445,15 +420,14 @@ function SeatSelectionModalInner({
           )
         : store.selectedItems
       const existing = storefrontSelectionCount(scopedItems)
-      const nextQty = Math.max(1, existing || 1)
-      setPeopleCount(nextQty)
       const ids = store.selectedItems.map((item) => item.id)
       if (ids.length > 0) store.pulseFocus(ids)
+      const stock = focusedSectorId ? (gaMaxBySector[focusedSectorId] ?? 0) : 0
       if (
-        (selectionMode === "counter" || isGaSector) &&
+        shouldSeedGa &&
         existing <= 0 &&
         focusedSectorId &&
-        hasZoneStock &&
+        stock > 0 &&
         seededSectorRef.current !== focusedSectorId
       ) {
         seededSectorRef.current = focusedSectorId
@@ -461,13 +435,7 @@ function SeatSelectionModalInner({
       }
     }, 0)
     return () => window.clearTimeout(timer)
-  }, [
-    focusedSectorId,
-    hasZoneStock,
-    isGaSector,
-    open,
-    selectionMode,
-  ])
+  }, [focusedSectorId, gaMaxBySector, open, shouldSeedGa])
 
   function handleTogglePlace(seatId: string) {
     if (pending || !context.map) return
@@ -479,7 +447,11 @@ function SeatSelectionModalInner({
         (item.id === seatId || item.seats.some((seat) => seat.id === seatId)),
     )
     if (element && (isTablePurchaseSku(element) || element.type === "standing_zone")) {
-      const item = storefrontItemFromElement(element, context.priceBySectorId)
+      const item = storefrontItemFromElement(
+        element,
+        context.priceBySectorId,
+        context.map,
+      )
       if (!item) return
       const result = store.toggleSelectedItem(item, placeSelectionCap)
       if (!result.ok) {
@@ -490,7 +462,11 @@ function SeatSelectionModalInner({
       return
     }
     if (tableParent) {
-      const item = storefrontItemFromElement(tableParent, context.priceBySectorId)
+      const item = storefrontItemFromElement(
+        tableParent,
+        context.priceBySectorId,
+        context.map,
+      )
       if (!item) return
       const result = store.toggleSelectedItem(item, placeSelectionCap)
       if (!result.ok) {
@@ -536,36 +512,6 @@ function SeatSelectionModalInner({
     store.pulseFocus([source.id])
   }
 
-  if (isGeneralAdmission) {
-    return (
-      <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
-        {hasZoneStock ? (
-          <GeneralAdmissionPicker
-            pending={pending}
-            peopleCount={peopleCount}
-            maxPeople={maxPeople}
-            sectorName={selectedSectorName}
-            inventoryType={inventoryType}
-            seatsPerTable={seatsPerTable}
-            unitKind="ticket"
-            onChange={(next) => {
-              setPeopleCount(next)
-              if (targetSector) {
-                context.onAssignZoneQuantity(targetSector.id, next)
-              } else if (targetZone) {
-                context.onAssignZoneQuantity(targetZone.id, next)
-              }
-            }}
-          />
-        ) : (
-          <p className="px-1 py-10 text-center text-sm text-muted-foreground">
-            No hay lugares disponibles
-          </p>
-        )}
-      </div>
-    )
-  }
-
   return (
     <Tabs
       key={`${open}-${focusedSectorId ?? "sector"}`}
@@ -593,76 +539,18 @@ function SeatSelectionModalInner({
         value="lista"
         className="no-scrollbar mt-0 min-h-0 flex-1 overflow-y-auto overscroll-contain p-4"
       >
-        {isGaSector && hasZoneStock ? (
-          <GeneralAdmissionPicker
-            pending={pending}
-            peopleCount={peopleCount}
-            maxPeople={maxPeople}
-            sectorName={selectedSectorName}
-            inventoryType={inventoryType}
-            seatsPerTable={seatsPerTable}
-            unitKind="ticket"
-            onChange={(next) => {
-              setPeopleCount(next)
-              if (targetSector) {
-                context.onAssignZoneQuantity(targetSector.id, next)
-              } else if (targetZone) {
-                context.onAssignZoneQuantity(targetZone.id, next)
-              }
-            }}
-          />
-        ) : isGaSector ? (
-          <p className="px-1 py-10 text-center text-sm text-muted-foreground">
-            No hay lugares disponibles
-          </p>
-        ) : !focusedSectorId ? (
-          <p className="px-1 py-10 text-center text-sm text-muted-foreground">
-            Elegí un sector en el mapa para continuar.
-          </p>
-        ) : (
-          <>
-        <div className="mb-4 text-center">
-          <h3 className="text-lg font-bold text-foreground">
-            {selectedSectorName}
-          </h3>
-          <SectorInventoryDescription
-            inventoryType={inventoryType}
-            seatsPerTable={seatsPerTable}
-          />
-        </div>
         {isLoadingPlaces ? (
           <QuickPlaceSkeleton />
-        ) : quickPlaces.length === 0 ? (
-          <p className="px-1 py-10 text-center text-sm text-muted-foreground">
-            No hay lugares disponibles
-          </p>
         ) : (
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {quickPlaces.map((place) => (
-              <button
-                key={place.id}
-                type="button"
-                disabled={pending}
-                aria-pressed={place.selected}
-                onClick={() => handleTogglePlace(place.id)}
-                className={cn(
-                  tapFeedbackClass,
-                  "flex min-h-12 items-center justify-between gap-3 rounded-xl border-2 px-4 py-3 text-left font-semibold transition-all",
-                  place.selected
-                    ? "border-emerald-500 bg-emerald-600 text-white"
-                    : "border-border bg-card text-foreground hover:border-emerald-500/60",
-                  pending && "pointer-events-none opacity-60",
-                )}
-              >
-                <span className="truncate">{place.label}</span>
-                <span className="shrink-0 tabular-nums">
-                  {formatTicketPrice(place.price)}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-          </>
+          <SeatSelectionQuickList
+            sectors={catalog}
+            focusedSectorId={focusedSectorId}
+            pending={pending}
+            gaQuantityBySector={gaQuantityBySector}
+            gaMaxBySector={gaMaxBySector}
+            onTogglePlace={handleTogglePlace}
+            onAssignZoneQuantity={context.onAssignZoneQuantity}
+          />
         )}
       </TabsContent>
 
@@ -696,78 +584,6 @@ function SeatSelectionModalInner({
   )
 }
 
-type QuickPlace = {
-  id: string
-  label: string
-  price: number
-  selected: boolean
-}
-
-function buildQuickPlaces(input: {
-  rows: AccessibleRowNode[]
-  inventoryType: SectorInventoryType
-  sellMode: "per_seat" | "group"
-  unitNoun: "mesa" | "palco"
-  fallbackPrice: number
-}): QuickPlace[] {
-  if (input.inventoryType === "TABLES") {
-    return groupSeatsForMatrix(input.rows).flatMap((group) => {
-      const selectable = group.seats.filter(isSelectablePlace)
-      if (selectable.length === 0) return []
-      const price = selectable[0]?.price || input.fallbackPrice
-      const label = formatTablePlaceLabel(group.title, input.unitNoun)
-      if (input.sellMode === "group") {
-        return [
-          {
-            id: selectable[0]!.id,
-            label,
-            price,
-            selected: selectable.some((seat) => seat.status === "selected"),
-          },
-        ]
-      }
-      return selectable.map((seat) => ({
-        id: seat.id,
-        label: `${label} · ${unpaddedToken(seat)}`,
-        price: seat.price || input.fallbackPrice,
-        selected: seat.status === "selected",
-      }))
-    })
-  }
-
-  return input.rows.flatMap((row) =>
-    row.seats.filter(isSelectablePlace).map((seat) => ({
-      id: seat.id,
-      label: formatNumberedPlaceLabel(row.label, seat),
-      price: seat.price || input.fallbackPrice,
-      selected: seat.status === "selected",
-    })),
-  )
-}
-
-function isSelectablePlace(seat: AccessibleSeatNode) {
-  return seat.status === "available" || seat.status === "selected"
-}
-
-function unpaddedToken(seat: AccessibleSeatNode) {
-  return compactSeatToken(seat.label, seat.number).replace(/^0+(?=\d)/, "")
-}
-
-function formatTablePlaceLabel(title: string, unitNoun: "mesa" | "palco") {
-  const trimmed = title.trim()
-  if (/mesa|palco/i.test(trimmed)) return trimmed
-  const noun = unitNoun === "palco" ? "Palco" : "Mesa"
-  return `${noun} ${trimmed.replace(/^fila\s+/i, "")}`.trim()
-}
-
-function formatNumberedPlaceLabel(rowLabel: string, seat: AccessibleSeatNode) {
-  const seatName = seat.label.trim() || `Asiento ${seat.number}`
-  const row = rowLabel.trim()
-  if (!row || row === seatName) return seatName
-  if (/^fila\b/i.test(row)) return `${row} · ${seatName}`
-  return `Fila ${row} · ${seatName}`
-}
-
 function isolateSectorMap(
   map: InteractiveVenueMap,
   sectorId: string,
@@ -777,13 +593,18 @@ function isolateSectorMap(
   return {
     ...map,
     zones,
-    sectors: map.sectors.filter((sector) => sector.id === sectorId),
+    sectors: map.sectors.filter(
+      (sector) =>
+        sector.id === sectorId ||
+        sector.name.trim().toLowerCase() ===
+          (zones[0]?.name ?? "").trim().toLowerCase(),
+    ),
     elements: (map.elements ?? []).filter((element) => {
       if (element.category !== "commercial") return true
-      const zoneId = element.zoneId?.trim()
-      if (!zoneId) return true
+      const zone = zones[0]
+      if (!zone) return true
       return (
-        zoneId === sectorId ||
+        elementBelongsToZone(element, zone) ||
         element.groupId === sectorId ||
         elementInventorySectorId(element) === sectorId
       )
@@ -813,108 +634,4 @@ function formatAssistantLine(
   const ticketLabel = accesses === 1 ? "1 entrada" : `${accesses} entradas`
   const heading = names.join(" · ") || "Selección"
   return `${heading} · ${ticketLabel} · ${formatTicketPrice(total)}`
-}
-
-type SectorInventoryType =
-  | "TABLES"
-  | "SEATED_NUMERATED"
-  | "GENERAL_ADMISSION"
-
-function resolveSectorInventoryType(input: {
-  layoutType?: string | null
-  isTableSector: boolean
-  seatingType?: string | null
-}): SectorInventoryType {
-  if (input.layoutType === "table_combo" || input.isTableSector) {
-    return "TABLES"
-  }
-  if (
-    input.layoutType === "numbered_seat" ||
-    input.seatingType === "RESERVED"
-  ) {
-    return "SEATED_NUMERATED"
-  }
-  return "GENERAL_ADMISSION"
-}
-
-function SectorInventoryDescription({
-  inventoryType,
-  seatsPerTable,
-}: {
-  inventoryType: SectorInventoryType
-  seatsPerTable: number
-}) {
-  return (
-    <div className="mt-2 text-center text-sm text-muted-foreground">
-      {inventoryType === "TABLES" && (
-        <p>
-          Mesa completa. Incluye {seatsPerTable || "X"} sillas exclusivas.
-        </p>
-      )}
-      {inventoryType === "SEATED_NUMERATED" && (
-        <p>Asiento numerado. Elegí tu ubicación en el plano.</p>
-      )}
-      {(inventoryType === "GENERAL_ADMISSION" || !inventoryType) && (
-        <p>
-          Acceso general (sin asiento asignado). Indicá cuántas entradas
-          querés.
-        </p>
-      )}
-    </div>
-  )
-}
-
-function quantityUnitLabel(
-  count: number,
-  unitKind: "ticket" | "person",
-): string {
-  if (unitKind === "person") {
-    return count === 1 ? "1 persona" : `${count} personas`
-  }
-  return count === 1 ? "1 entrada" : `${count} entradas`
-}
-
-function GeneralAdmissionPicker({
-  sectorName,
-  peopleCount,
-  maxPeople,
-  pending,
-  unitKind,
-  inventoryType,
-  seatsPerTable,
-  onChange,
-}: {
-  sectorName: string
-  peopleCount: number
-  maxPeople: number
-  pending: boolean
-  unitKind: "ticket" | "person"
-  inventoryType: SectorInventoryType
-  seatsPerTable: number
-  onChange: (next: number) => void
-}) {
-  return (
-    <div className="flex flex-col items-center gap-4 py-6">
-      <h3 className="mb-2 text-center text-lg font-bold text-foreground">
-        {sectorName}
-      </h3>
-      <SectorInventoryDescription
-        inventoryType={inventoryType}
-        seatsPerTable={seatsPerTable}
-      />
-      <div className="flex flex-col items-center gap-2">
-        <QuantityCounter
-          quantity={peopleCount}
-          min={1}
-          max={maxPeople}
-          disabled={pending}
-          onDecrease={() => onChange(Math.max(1, peopleCount - 1))}
-          onIncrease={() => onChange(Math.min(maxPeople, peopleCount + 1))}
-        />
-        <p className="text-sm font-semibold text-muted-foreground">
-          {quantityUnitLabel(peopleCount, unitKind)}
-        </p>
-      </div>
-    </div>
-  )
 }

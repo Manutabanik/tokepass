@@ -3,6 +3,7 @@ import { describe, it } from "node:test"
 
 import {
   isPublicTicketActive,
+  isQuantityCheckoutTier,
   publicEventTickets,
   ticketUsesMapSelector,
   toPublicTicketSelectorTier,
@@ -66,5 +67,11 @@ describe("public ticket view", () => {
     assert.equal(mapped.isMapped, true)
     assert.equal(mapped.available, 12)
     assert.equal(mapped.isActive, true)
+  })
+
+  it("keeps general tickets on the quantity stepper even next to a map", () => {
+    assert.equal(isQuantityCheckoutTier({ layoutType: "general" }), true)
+    assert.equal(isQuantityCheckoutTier({ layout_type: "table_combo" }), false)
+    assert.equal(isQuantityCheckoutTier({ layoutType: "numbered_seat" }), false)
   })
 })

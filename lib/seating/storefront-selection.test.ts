@@ -92,6 +92,56 @@ describe("storefront-selection", () => {
     assert.equal(item?.capacity, 6)
     assert.equal(item?.sellMode, "group")
     assert.equal(item?.priceMode, "closed_unit")
+    assert.equal(item?.sectorId, "grada-amarilla")
+  })
+
+  it("no usa zoneId como sector de hold y toma el precio del sector padre", () => {
+    const map = emptyVenueMap()
+    map.zones = [
+      {
+        id: "sector-naranja",
+        name: "Sector Naranja",
+        color: "#f97316",
+        price: 0,
+        polygon: [
+          { x: 0, y: 0 },
+          { x: 80, y: 0 },
+          { x: 80, y: 80 },
+          { x: 0, y: 80 },
+        ],
+      },
+    ]
+    map.elements = [
+      {
+        id: "mesa-1",
+        type: "round_table",
+        label: "1",
+        category: "commercial",
+        sectorName: "Mesas",
+        groupName: "Mesas",
+        zoneId: "sector-naranja",
+        x: 20,
+        y: 20,
+        width: 28,
+        height: 28,
+        rotation: 0,
+        price: 0,
+        color: "#f97316",
+        opacity: 1,
+        chairCount: 4,
+        sideA: 0,
+        sideB: 0,
+        sellMode: "group",
+        priceMode: "closed_unit",
+        capacity: 4,
+        seats: [],
+      },
+    ]
+    const item = resolveStorefrontItemFromMap(map, "mesa-1", {
+      "sector-naranja": 45000,
+    })
+    assert.equal(item?.sectorId, "mesa-1")
+    assert.equal(item?.price, 45000)
   })
 
   it("hidrata el carrito con el objeto vivo del mapa", () => {

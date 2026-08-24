@@ -789,6 +789,48 @@ describe("venue-map-pricing", () => {
     )
   })
 
+  it("no pide plano a una entrada general aunque el recinto tenga mesas", () => {
+    const map = emptyVenueMap()
+    map.elements = [
+      {
+        id: "mesa-1",
+        type: "round_table",
+        label: "Mesa 1",
+        category: "commercial",
+        sectorName: "VIP",
+        x: 10,
+        y: 10,
+        width: 28,
+        height: 28,
+        rotation: 0,
+        price: 50000,
+        color: "#f97316",
+        opacity: 1,
+        chairCount: 8,
+        sideA: 0,
+        sideB: 0,
+        sellMode: "group",
+        capacity: 8,
+        seats: [],
+      },
+    ]
+    assert.equal(
+      sectorUsesNumberedMap({
+        layoutType: "general",
+        map,
+      }),
+      false,
+    )
+    assert.equal(
+      ticketRequiresInteractiveMap({
+        layoutType: "general",
+        tierType: "general",
+        map,
+      }),
+      false,
+    )
+  })
+
   it("expande un sector de mapa a un ticket por día", () => {
     const map = emptyVenueMap()
     map.zones = [

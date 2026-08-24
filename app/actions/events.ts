@@ -70,6 +70,7 @@ import {
   resolveTicketNetProfit,
 } from "@/lib/pricing/net-profit"
 import {
+  DEFAULT_PLATFORM_FEE_PERCENTAGE,
   defaultEventFeeConfig,
   eventFeeRate,
   eventFixedFee,
@@ -397,14 +398,10 @@ function persistablePublicPrice(value: unknown): number {
 }
 
 function resolveFormFeeConfig(
-  data: EventFormValues,
+  _data: EventFormValues,
   fallback: EventFeeConfig,
 ): EventFeeConfig {
-  if (data.serviceFeePercentage == null) return fallback
-  return {
-    ...fallback,
-    platformFeePercentage: clampServiceFeePercentage(data.serviceFeePercentage),
-  }
+  return fallback
 }
 
 async function persistEventServiceFeePercentage(
@@ -2649,7 +2646,7 @@ export async function getEventForEditing(
 
     const ticketFeePercentage = clampServiceFeePercentage(
       (event as { platform_fee_percentage?: number | null })
-        .platform_fee_percentage ?? 15,
+        .platform_fee_percentage ?? DEFAULT_PLATFORM_FEE_PERCENTAGE,
     )
 
     const ticketValues: EventFormValues["tickets"] = (tiers ?? []).map((tier) => ({
@@ -3018,7 +3015,7 @@ export async function createCompleteEvent(
     ),
   )
 
-  const skuError = venueMapSkuGuard(formValues)
+  const skuError = draftMode ? null : venueMapSkuGuard(formValues)
   if (skuError) return skuError
 
   let supabase: Awaited<ReturnType<typeof createClient>>
@@ -3377,7 +3374,7 @@ export async function updateCompleteEvent(
   )
   Object.assign(formValues, withHealedMapTickets(formValues))
 
-  const skuError = venueMapSkuGuard(formValues)
+  const skuError = draftMode ? null : venueMapSkuGuard(formValues)
   if (skuError) return skuError
 
   const healedTicketCount = formValues.tickets.length
@@ -3441,11 +3438,6 @@ export async function updateCompleteEvent(
     if (purchaseLimitError) {
       return persistFailure(purchaseLimitError)
     }
-    const feePersistError = await persistEventServiceFeePercentage(
-      eventId,
-      clampServiceFeePercentage(formValues.serviceFeePercentage),
-    )
-    if (feePersistError) return persistFailure(feePersistError)
     await revalidatePersistedEvent(mutationClient, eventId)
     return { success: true, eventId, venueId }
   }
@@ -3581,12 +3573,6 @@ export async function updateCompleteEvent(
     eventId,
   )
   if (capacityError) return persistFailure(capacityError)
-
-  const feePersistError = await persistEventServiceFeePercentage(
-    eventId,
-    feeConfig.platformFeePercentage,
-  )
-  if (feePersistError) return persistFailure(feePersistError)
 
   await revalidatePersistedEvent(mutationClient, eventId)
   if (!draftMode) {

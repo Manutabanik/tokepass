@@ -106,7 +106,6 @@ import {
 import { Input } from "@/components/ui/input"
 import { PriceInput } from "@/components/ui/price-input"
 import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
 import { VenueMapBackgroundLayer } from "@/components/venue/venue-map-background-layer"
 import { VenueMapElementLayer } from "@/components/venue/venue-map-element-layer"
 import { VenueMapZoneLayer } from "@/components/venue/venue-map-zone-layer"
@@ -401,6 +400,9 @@ export function InteractiveVenueMapEditor({
   const [zoom, setZoom] = useState(1)
   const [paletteCollapsed, setPaletteCollapsed] = useState(false)
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false)
+  const [inspectorOpenedFor, setInspectorOpenedFor] = useState<Selection | null>(
+    null,
+  )
   const [svgViewBox, setSvgViewBox] = useState<{
     x: number
     y: number
@@ -3751,10 +3753,10 @@ export function InteractiveVenueMapEditor({
         : selection && "id" in selection && selection.id
           ? selection.id
           : "predio"
-  useEffect(() => {
-    if (!isStudio || compactChrome || !selection) return
+  if (isStudio && !compactChrome && selection && selection !== inspectorOpenedFor) {
+    setInspectorOpenedFor(selection)
     setInspectorCollapsed(false)
-  }, [compactChrome, isStudio, propertiesTargetKey, selection])
+  }
   const mobileSheetOpen = toolsOpen || propertiesOpen || modesOpen
   const showSelectionToolbar =
     selectedElementIds.length >= 1 &&

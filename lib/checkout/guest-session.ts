@@ -11,8 +11,8 @@ export async function hasCheckoutAuthSession(): Promise<boolean> {
 }
 
 /**
- * Anonymous Auth is created only at pay confirmation.
- * Do not call this when entering the tunnel or choosing guest.
+ * Anonymous Auth for cart holds and pay. Call on Continuar / pagar,
+ * not when the buyer only opens the ticket list.
  */
 export async function ensureGuestCheckoutSession(): Promise<boolean> {
   const supabase = createClient()

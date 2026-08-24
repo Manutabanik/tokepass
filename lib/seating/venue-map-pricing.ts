@@ -124,6 +124,8 @@ export function sectorUsesNumberedMap(input: {
   )
   if (input.map) {
     if (sectorId) return modality === "RESERVED"
+    const layout = (input.layoutType ?? "").trim()
+    if (layout === "general") return false
     return mapHasReservedInventory(input.map)
   }
   if (modality === "RESERVED") return true

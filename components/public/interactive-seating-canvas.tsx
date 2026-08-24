@@ -40,6 +40,7 @@ import {
 import {
   hydrateStorefrontItemsFromMap,
   isTablePurchaseSku,
+  resolveElementPublicPrice,
   resolveVenueUnitPrice,
   storefrontFocusCard,
   storefrontItemFromElement,
@@ -516,16 +517,17 @@ export function InteractiveSeatingCanvas({
     for (const element of map.elements ?? []) {
       if (isInfrastructureElement(element)) continue
       elementById.set(element.id, {
-        sectorName: element.sectorName || element.customLabel || element.label || "Sector",
-        price: resolveVenueUnitPrice(
-          [element.ticketTypeId, element.id, element.groupId],
-          Number(element.price) || 0,
-          priceBySectorId,
-        ),
+        sectorName:
+          element.groupName ||
+          element.sectorName ||
+          element.customLabel ||
+          element.label ||
+          "Sector",
+        price: resolveElementPublicPrice(element, priceBySectorId, map),
       })
     }
     return { seatById, zoneById, elementById }
-  }, [hoverSeats, map.elements, map.zones, priceBySectorId])
+  }, [hoverSeats, map, priceBySectorId])
 
   function updateHoverFromEvent(event: React.PointerEvent) {
     if (silentHover) return
@@ -678,7 +680,7 @@ export function InteractiveSeatingCanvas({
           element.seats.some((entry) => entry.id === seat.id)),
     )
     if (tableElement && !onPickSeat) {
-      const item = storefrontItemFromElement(tableElement, priceBySectorId)
+      const item = storefrontItemFromElement(tableElement, priceBySectorId, map)
       if (item) {
         vibrateTap()
         markActivity()
@@ -748,7 +750,7 @@ export function InteractiveSeatingCanvas({
     ) {
       return
     }
-    const item = storefrontItemFromElement(live, priceBySectorId)
+    const item = storefrontItemFromElement(live, priceBySectorId, map)
     if (!item) return
     vibrateTap()
     markActivity()

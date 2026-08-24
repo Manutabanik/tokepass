@@ -8,6 +8,7 @@ import type {
   VenueMapZone,
 } from "@/types/venue-map"
 import { venuePriceModeFromSellMode } from "@/types/venue-map"
+import { elementBelongsToZone } from "@/lib/seating/venue-map-lod"
 import { storefrontLineTotal } from "@/lib/checkout/charge-unit"
 import {
   getSeatDisplayName,
@@ -90,9 +91,73 @@ export function resolveVenueUnitPrice(
   return Number.isFinite(fallback) ? Number(fallback) : 0
 }
 
+/** Sector de stock: groupId o id del elemento. No usar zoneId (rompe el hold). */
+export function storefrontElementSectorId(
+  element: Pick<VenueMapElement, "id" | "groupId">,
+): string {
+  return element.groupId?.trim() || element.id
+}
+
+export function venueElementPriceLookupKeys(
+  element: Pick<
+    VenueMapElement,
+    "ticketTypeId" | "id" | "groupId" | "zoneId"
+  >,
+  extraKeys: Array<string | null | undefined> = [],
+): Array<string | null | undefined> {
+  return [
+    element.ticketTypeId,
+    element.id,
+    element.groupId,
+    element.zoneId,
+    ...extraKeys,
+  ]
+}
+
+function belongingZoneIds(
+  element: VenueMapElement,
+  map?: InteractiveVenueMap | null,
+): string[] {
+  if (!map) return []
+  return (map.zones ?? [])
+    .filter((zone) => elementBelongsToZone(element, zone))
+    .map((zone) => zone.id)
+}
+
+export function resolveElementPublicPrice(
+  element: VenueMapElement,
+  priceBySectorId: Record<string, number> = {},
+  map?: InteractiveVenueMap | null,
+): number {
+  for (const key of venueElementPriceLookupKeys(
+    element,
+    belongingZoneIds(element, map),
+  )) {
+    const trimmed = key?.trim()
+    if (!trimmed || !Object.hasOwn(priceBySectorId, trimmed)) continue
+    const priced = Number(priceBySectorId[trimmed])
+    if (Number.isFinite(priced)) return priced
+  }
+  const own = Number(element.price)
+  if (Number.isFinite(own) && own > 0) return own
+  if (map) {
+    for (const zone of map.zones ?? []) {
+      if (!elementBelongsToZone(element, zone)) continue
+      const zonePrice = resolveVenueUnitPrice(
+        [zone.id],
+        Number(zone.price) || 0,
+        priceBySectorId,
+      )
+      if (zonePrice > 0) return zonePrice
+    }
+  }
+  return Number.isFinite(own) ? own : 0
+}
+
 export function storefrontItemFromElement(
   element: VenueMapElement,
   priceBySectorId: Record<string, number> = {},
+  map?: InteractiveVenueMap | null,
 ): StorefrontSelectedItem | null {
   const name = venueElementSelectionName(element)
   if (!name) return null
@@ -104,13 +169,9 @@ export function storefrontItemFromElement(
     displayName: name,
     type,
     ticketTierId: element.ticketTypeId,
-    price: resolveVenueUnitPrice(
-      [element.ticketTypeId, element.id, element.groupId],
-      element.price,
-      priceBySectorId,
-    ),
+    price: resolveElementPublicPrice(element, priceBySectorId, map),
     capacity: buyerElementCapacity(element),
-    sectorId: element.groupId?.trim() || element.zoneId?.trim() || element.id,
+    sectorId: storefrontElementSectorId(element),
     sectorName: element.sectorName?.trim() || element.groupName?.trim() || undefined,
     color: element.color,
     sellMode: tableSku ? "group" : element.sellMode,
@@ -157,9 +218,11 @@ export function storefrontItemFromElementSeat(
   element: VenueMapElement,
   seat: VenueMapElement["seats"][number],
   priceBySectorId: Record<string, number> = {},
+  map?: InteractiveVenueMap | null,
 ): StorefrontSelectedItem | null {
   const name = getVenueSeatDisplayName(element, seat)
   if (!name) return null
+  const elementPrice = resolveElementPublicPrice(element, priceBySectorId, map)
   return {
     id: seat.id,
     name,
@@ -167,12 +230,12 @@ export function storefrontItemFromElementSeat(
     type: "seat",
     ticketTierId: seat.ticketTypeId ?? element.ticketTypeId,
     price: resolveVenueUnitPrice(
-      [seat.ticketTypeId, element.ticketTypeId, element.id, element.groupId],
-      seat.price ?? element.price,
+      [seat.ticketTypeId],
+      seat.price ?? elementPrice,
       priceBySectorId,
     ),
     capacity: 1,
-    sectorId: element.groupId?.trim() || element.id,
+    sectorId: storefrontElementSectorId(element),
     color: element.color,
     row: seat.row ?? element.label,
     number: seat.number,
@@ -190,11 +253,11 @@ export function resolveStorefrontItemFromMap(
   priceBySectorId: Record<string, number> = {},
 ): StorefrontSelectedItem | null {
   const element = (map.elements ?? []).find((item) => item.id === selectedId)
-  if (element) return storefrontItemFromElement(element, priceBySectorId)
+  if (element) return storefrontItemFromElement(element, priceBySectorId, map)
   for (const furniture of map.elements ?? []) {
     const seat = furniture.seats.find((item) => item.id === selectedId)
     if (!seat) continue
-    return storefrontItemFromElementSeat(furniture, seat, priceBySectorId)
+    return storefrontItemFromElementSeat(furniture, seat, priceBySectorId, map)
   }
   const zone = (map.zones ?? []).find((item) => item.id === selectedId)
   if (zone) return storefrontItemFromZone(zone, priceBySectorId)

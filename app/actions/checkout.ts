@@ -56,6 +56,10 @@ import {
   layoutRequiresSeatSelection,
 } from "@/lib/checkout/revalidate-seat-holds"
 import {
+  layoutHoldSectorCandidates,
+  pickSeatingUnitForLayoutHold,
+} from "@/lib/checkout/layout-hold-unit"
+import {
   generalTierRemaining,
   partitionMixedCartItems,
   tierIsNumbered,
@@ -982,28 +986,104 @@ export async function holdSeatingUnitForCartByLayoutItem(
     }
   }
 
-  const { data: unitRow } = await db
+  const { data: unitRows, error: lookupError } = await db
     .from("event_seating_units")
-    .select("status")
+    .select("id, status, sector_id")
     .eq("event_id", eventId)
     .eq("layout_item_id", layoutItemId)
-    .maybeSingle()
-  if (unitRow && unitRow.status !== "available" && unitRow.status !== "reserved") {
+    .limit(12)
+  if (lookupError) {
+    logger.error({
+      context: "checkout/cart-hold",
+      message: "hold_layout_unit_lookup_failed",
+      eventId,
+      sectorId,
+      layoutItemId,
+      error: lookupError.message,
+    })
+  }
+  const matchedUnit = pickSeatingUnitForLayoutHold(
+    (unitRows ?? []).map((row) => ({
+      id: row.id,
+      status: row.status,
+      sector_id: row.sector_id,
+    })),
+    sectorId,
+  )
+  if (
+    matchedUnit &&
+    matchedUnit.status !== "available" &&
+    matchedUnit.status !== "reserved"
+  ) {
     return { success: false, error: "out_of_stock" }
   }
 
-  const { data, error } = await db.rpc(
-    "hold_seating_unit_for_cart_by_layout" as never,
-    {
+  if (matchedUnit) {
+    const { data, error } = await db.rpc("hold_seating_unit_for_cart", {
       p_event_id: eventId,
       p_owner_id: user.id,
-      p_sector_id: sectorId,
-      p_layout_item_id: layoutItemId,
-    } as never,
-  )
+      p_seating_unit_id: matchedUnit.id,
+    })
+    if (error) {
+      const mapped = mapReserveRpcError(reserveRpcErrorText(error))
+      if (mapped) {
+        return { success: false, error: mapped.error }
+      }
+      logger.error({
+        context: "checkout/cart-hold",
+        message: "hold_seating_unit_for_cart_failed",
+        eventId,
+        seatingUnitId: matchedUnit.id,
+        error: error.message,
+      })
+      return {
+        success: false,
+        error: "No se pudo reservar esa ubicación. Elegí otra.",
+      }
+    }
+    const row = Array.isArray(data) ? data[0] : data
+    const reservedUntil = row?.reserved_until
+    if (!reservedUntil) {
+      return { success: false, error: "out_of_stock" }
+    }
+    return {
+      success: true,
+      reservedUntil,
+      seatingUnitId: matchedUnit.id,
+    }
+  }
 
-  if (error) {
-    const mapped = mapReserveRpcError(reserveRpcErrorText(error))
+  let lastError: string | null = null
+  for (const candidate of layoutHoldSectorCandidates(sectorId, layoutItemId)) {
+    const { data, error } = await db.rpc(
+      "hold_seating_unit_for_cart_by_layout" as never,
+      {
+        p_event_id: eventId,
+        p_owner_id: user.id,
+        p_sector_id: candidate,
+        p_layout_item_id: layoutItemId,
+      } as never,
+    )
+    if (error) {
+      lastError = reserveRpcErrorText(error)
+      const mapped = mapReserveRpcError(lastError)
+      if (mapped?.error === "out_of_stock") {
+        return { success: false, error: mapped.error }
+      }
+      continue
+    }
+    const row = (Array.isArray(data) ? data[0] : data) as
+      | { reserved_until?: string; seating_unit_id?: string }
+      | null
+    const reservedUntil = row?.reserved_until
+    const seatingUnitId = row?.seating_unit_id
+    if (reservedUntil && seatingUnitId) {
+      return { success: true, reservedUntil, seatingUnitId }
+    }
+  }
+
+  if (lastError) {
+    const mapped = mapReserveRpcError(lastError)
     if (mapped) {
       return { success: false, error: mapped.error }
     }
@@ -1013,24 +1093,10 @@ export async function holdSeatingUnitForCartByLayoutItem(
       eventId,
       sectorId,
       layoutItemId,
-      error: error.message,
+      error: lastError,
     })
-    return {
-      success: false,
-      error: "No se pudo reservar esa ubicación. Elegí otra.",
-    }
   }
-
-  const row = (Array.isArray(data) ? data[0] : data) as
-    | { reserved_until?: string; seating_unit_id?: string }
-    | null
-  const reservedUntil = row?.reserved_until
-  const seatingUnitId = row?.seating_unit_id
-  if (!reservedUntil || !seatingUnitId) {
-    return { success: false, error: "not_materialized" }
-  }
-
-  return { success: true, reservedUntil, seatingUnitId }
+  return { success: false, error: "not_materialized" }
 }
 
 export async function releaseSeatingUnitCartHold(
@@ -1271,7 +1337,7 @@ async function executeLockTickets(
       name: tier.name,
       layoutType: tier.layout_type,
       seatingSectorId: tier.seating_sector_id,
-      hasMap: Boolean(tier.seating_sector_id?.trim() || holdEvent?.has_seating_plan),
+      hasMap: Boolean(tier.seating_sector_id?.trim()),
       isNumbered: layoutRequiresSeatSelection(tier.layout_type),
     })),
     linkedSectorIds: linkedSectors,

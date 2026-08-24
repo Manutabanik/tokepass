@@ -1,4 +1,5 @@
 import type { TicketSelectorTier } from "@/components/public/ticket-tier-selector"
+import { layoutRequiresSeatSelection } from "@/lib/checkout/revalidate-seat-holds"
 import { publicTicketOfferKind } from "@/lib/checkout/ticket-offer-kind"
 import { normalizeDayId } from "@/lib/event-schedule"
 import { isMapBackedTicket } from "@/lib/seating/venue-map-pricing"
@@ -97,6 +98,14 @@ export function ticketUsesMapSelector(tier: {
       quantity: item.quantity,
     })),
   })
+}
+
+/** General / extras van por cantidad. Mesa o butaca van por el plano. */
+export function isQuantityCheckoutTier(tier: {
+  layoutType?: string | null
+  layout_type?: string | null
+}): boolean {
+  return !layoutRequiresSeatSelection(tier.layoutType ?? tier.layout_type)
 }
 
 const EMPTY_PUBLIC_TICKETS: readonly never[] = []

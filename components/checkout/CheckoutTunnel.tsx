@@ -112,7 +112,7 @@ import {
   isSectorNotConfiguredError,
 } from "@/lib/checkout/revalidate-seat-holds"
 import { sanitizeCheckoutActionItems } from "@/lib/checkout/cart-item-payload"
-import { ticketUsesMapSelector } from "@/lib/checkout/public-ticket-view"
+import { isQuantityCheckoutTier } from "@/lib/checkout/public-ticket-view"
 import { selectableTicketStock } from "@/lib/checkout/ticket-stock"
 import {
   buildTierUnitPriceIndex,
@@ -744,7 +744,7 @@ export function CheckoutTunnel({
       }
       for (const tier of displayTiers) {
         if (
-          ticketUsesMapSelector(tier) &&
+          !isQuantityCheckoutTier(tier) &&
           !nextDriven.has(tier.id) &&
           (next[tier.id] ?? 0) !== 0
         ) {
@@ -956,6 +956,10 @@ export function CheckoutTunnel({
       } else {
         setShowSeatFlow(true)
       }
+      return
+    }
+    if (action === "pay") {
+      void runCheckoutBusy(goToDetailsStep)
     }
   }
 
@@ -1204,10 +1208,10 @@ export function CheckoutTunnel({
     return ids
   }, [liveSelectedItems, resolveItemTierId, selectedItems])
   const extraQuantitySubtotal = selection
-    .filter((tier) => !mapTierIds.has(tier.id) && !ticketUsesMapSelector(tier))
+    .filter((tier) => !mapTierIds.has(tier.id) && isQuantityCheckoutTier(tier))
     .reduce((sum, tier) => sum + toCartNumber(tier.subtotal), 0)
   const extraQuantityCount = selection
-    .filter((tier) => !mapTierIds.has(tier.id) && !ticketUsesMapSelector(tier))
+    .filter((tier) => !mapTierIds.has(tier.id) && isQuantityCheckoutTier(tier))
     .reduce((sum, tier) => sum + cartLineQuantity(tier.quantity), 0)
   const hasMapSelection =
     selectedItems.length > 0 || liveSelectedItems.length > 0
@@ -1314,7 +1318,7 @@ export function CheckoutTunnel({
       }
     })
     const ticketLines = selection
-      .filter((tier) => !mapTierIds.has(tier.id) && !ticketUsesMapSelector(tier))
+      .filter((tier) => !mapTierIds.has(tier.id) && isQuantityCheckoutTier(tier))
       .map((tier) => {
         const meta = resolveTicketDateMeta(tier)
         const quantity = Math.max(0, tier.quantity)
@@ -1718,7 +1722,7 @@ export function CheckoutTunnel({
       [...seatedById.values()].map((line) => line.tierId),
     )
     for (const tier of displayTiers) {
-      if (tierNeedsNumberedPlace(tier) || ticketUsesMapSelector(tier)) {
+      if (!isQuantityCheckoutTier(tier) && tierNeedsNumberedPlace(tier)) {
         mapBackedTierIds.add(tier.id)
       }
     }
@@ -1913,7 +1917,10 @@ export function CheckoutTunnel({
   ) {
     if (purchaseLocked) return
     const items = buildCheckoutItems(extraAddonId)
-    if (items.length === 0) return
+    if (items.length === 0) {
+      toast.error("Elegí al menos una entrada para continuar.")
+      return
+    }
 
     const source = buyerOverride ?? buyerForm.getValues()
     const buyerCheck = validateCheckoutBuyer(source, {
@@ -2142,6 +2149,19 @@ export function CheckoutTunnel({
   function applyZoneQuantity(sectorId: string, quantity: number) {
     const previous = selectedItems.find((item) => item.id === sectorId)
     const previousQty = previous ? Math.max(1, previous.capacity || 1) : 0
+    if (quantity <= 0) {
+      useStorefrontSeatStore.getState().removeSelectedItem(sectorId)
+      const clearedTierId = resolveTierIdForUniversalSector(
+        sectorId,
+        (liveMap?.zones ?? []).find((item) => item.id === sectorId)?.name ??
+          (liveMap?.sectors ?? []).find((item) => item.id === sectorId)?.name ??
+          "",
+        checkoutTierInput,
+        previous?.ticketTierId,
+      )
+      if (clearedTierId) updateQuantity(clearedTierId, 0, 0)
+      return
+    }
     const zone = (liveMap?.zones ?? []).find((item) => item.id === sectorId)
     const sectorName =
       zone?.name ??
@@ -2291,7 +2311,7 @@ export function CheckoutTunnel({
     const store = useStorefrontSeatStore.getState()
     const ids: string[] = []
     for (const table of tables) {
-      const item = storefrontItemFromElement(table, priceBySectorId)
+      const item = storefrontItemFromElement(table, priceBySectorId, liveMap)
       if (!item) continue
       const tierId = resolveItemTierId(item)
       const result = store.upsertSelectedItem(
@@ -2321,7 +2341,10 @@ export function CheckoutTunnel({
   function handlePrimaryCta() {
     if (ctaBusyRef.current || checkoutBusy || purchaseLocked) return
     if (visibleStep === "tickets") {
-      if (!canProceedFromCart) return
+      if (!canProceedFromCart) {
+        toast.error("Elegí al menos una entrada para continuar.")
+        return
+      }
       void runCheckoutBusy(goToDetailsStep)
       return
     }
@@ -2427,10 +2450,18 @@ export function CheckoutTunnel({
   async function lockCheckoutStock(): Promise<boolean> {
     const items = buildCheckoutItems()
     if (items.length === 0) {
+      toast.error("Elegí al menos una entrada para continuar.")
       return false
     }
     if (!(await ensureGuestAuthForHold())) return false
-    if (!(await hasCheckoutAuthSession())) return false
+    if (!(await hasCheckoutAuthSession())) {
+      const created = await ensureGuestCheckoutSession()
+      if (!created) {
+        requestIdentity("continue")
+        toast.error("Elegí ingresar o continuar como invitado para reservar.")
+        return false
+      }
+    }
     useCheckoutStore.getState().clearTicketError()
     try {
       const result = await lockTickets(eventId, items, previewKey)
