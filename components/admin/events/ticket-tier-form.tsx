@@ -321,12 +321,12 @@ export function TicketWalletCard({
       <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="min-w-0">
           <TierNetCalculator
-          form={form}
-          index={index}
-          feePercentage={feePercentage}
-          fixedFee={fixedFee}
-          isSponsored={isSponsored}
-        />
+            form={form}
+            index={index}
+            feePercentage={feePercentage}
+            fixedFee={fixedFee}
+            isSponsored={isSponsored}
+          />
         </div>
         <FormField
           control={form.control}
