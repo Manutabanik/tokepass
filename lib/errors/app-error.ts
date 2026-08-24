@@ -195,15 +195,14 @@ export function wizardStepFromPath(path: ReadonlyArray<PropertyKey>): 0 | 1 | 2 
   if (root === "lineup") return 4
   if (root === "tickets") return 2
   if (
-    root === "maxTicketsPerUser" ||
     root === "acceptsMercadoPago" ||
     root === "acceptsPosPayments" ||
     root === "defaultFeeStrategy" ||
-    root === "serviceFeePercentage" ||
     root === "refundPolicy"
   ) {
     return 3
   }
+  if (root === "serviceFeePercentage") return 0
   if (root === "venue") return 0
   if (root === "basics") {
     if (

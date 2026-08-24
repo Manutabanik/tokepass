@@ -299,13 +299,7 @@ const eventFormObject = z
       .min(1, "Creá al menos un tipo de entrada."),
     ticketsDefaultTab: z.enum(DEFAULT_TICKET_TABS).optional().default("auto"),
     lineup: z.array(lineupDraftItemSchema).optional().default([]),
-    maxTicketsPerUser: z
-      .number()
-      .int()
-      .min(1, "El tope de compra debe ser al menos 1.")
-      .max(200, "El tope de compra no puede superar 200.")
-      .nullable()
-      .optional(),
+    maxTicketsPerUser: z.number().int().nullable().optional(),
     acceptsMercadoPago: z.boolean().optional().default(true),
     acceptsPosPayments: z.boolean().optional().default(true),
     defaultFeeStrategy: z
@@ -756,13 +750,7 @@ export const draftEventSchema = z.object({
   tickets: z.array(draftTicketSchema).optional().default([]),
   ticketsDefaultTab: z.enum(DEFAULT_TICKET_TABS).optional().default("auto"),
   lineup: z.array(lineupDraftItemSchema).optional().default([]),
-  maxTicketsPerUser: z
-    .number()
-    .int()
-    .min(1)
-    .max(200)
-    .nullable()
-    .optional(),
+  maxTicketsPerUser: z.number().int().nullable().optional(),
   acceptsMercadoPago: z.boolean().optional().default(true),
   acceptsPosPayments: z.boolean().optional().default(true),
   defaultFeeStrategy: z

@@ -37,6 +37,7 @@ import { upsertVenue } from "@/app/actions/venues"
 import { AgendaBuilder } from "@/components/admin/agenda-builder"
 import { EventSponsorsManager } from "@/components/admin/event-sponsors-manager"
 import { EventStudioPublishStep } from "@/components/admin/events/event-studio-publish-step"
+import { EventStudioServiceFeeField } from "@/components/admin/events/event-studio-service-fee-field"
 import { EventVenueStep } from "@/components/admin/event-venue-step"
 import {
   UnifiedInventoryPanel,
@@ -184,7 +185,7 @@ const STEP_META = {
   },
   [WIZARD_STEP_CONFIG]: {
     title: "Publicar y cobrar",
-    description: "Cobros, visibilidad y tope por persona",
+    description: "Visibilidad, cobros y devoluciones",
     icon: CreditCard,
   },
 } as const
@@ -284,10 +285,12 @@ export function EventCreationWizard({
   const [flyerError, setFlyerError] = useState<string | null>(null)
   const [showAdvancedDetails, setShowAdvancedDetails] = useState(() => {
     const basics = initialData?.values.basics
+    const fee = initialData?.values.serviceFeePercentage
     return (
       basics?.deliveryMode === "ONLINE" ||
       Boolean(basics?.ageRestriction) ||
-      Boolean(basics?.categoryId)
+      Boolean(basics?.categoryId) ||
+      (fee != null && fee !== 15)
     )
   })
   const [publishConfirm, setPublishConfirm] = useState<{
@@ -1412,6 +1415,7 @@ export function EventCreationWizard({
                     </button>
                     {showAdvancedDetails ? (
                       <div className="space-y-6 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
+                        <EventStudioServiceFeeField form={form} />
                         <FormField
                           control={form.control}
                           name="basics.categoryId"

@@ -439,7 +439,7 @@ export function TicketWalletCard({
                 render={({ field, fieldState }) => (
                   <FormItem className="flex min-w-0 flex-col gap-y-2">
                     <FormLabel className={STUDIO_LABEL_CLASS}>
-                      Mínimo de tickets por compra
+                      Mínimo por compra
                     </FormLabel>
                     <Input
                       type="text"
@@ -475,7 +475,7 @@ export function TicketWalletCard({
                 render={({ field, fieldState }) => (
                   <FormItem className="flex min-w-0 flex-col gap-y-2">
                     <FormLabel className={STUDIO_LABEL_CLASS}>
-                      Máximo de tickets por compra
+                      Máximo por compra
                     </FormLabel>
                     <Input
                       type="text"

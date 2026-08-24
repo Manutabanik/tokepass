@@ -3161,7 +3161,7 @@ export async function createCompleteEvent(
   const purchaseLimitError = await persistEventMaxTicketsPerUser(
     rpcClient,
     String(eventId),
-    formValues.maxTicketsPerUser,
+    null,
   )
   if (purchaseLimitError) {
     return persistFailure(purchaseLimitError)
@@ -3406,7 +3406,7 @@ export async function updateCompleteEvent(
     const purchaseLimitError = await persistEventMaxTicketsPerUser(
       mutationClient,
       eventId,
-      formValues.maxTicketsPerUser,
+      null,
     )
     if (purchaseLimitError) {
       return persistFailure(purchaseLimitError)
@@ -3528,7 +3528,7 @@ export async function updateCompleteEvent(
   const purchaseLimitError = await persistEventMaxTicketsPerUser(
     mutationClient,
     eventId,
-    formValues.maxTicketsPerUser,
+    null,
   )
   if (purchaseLimitError) {
     return persistFailure(purchaseLimitError)

@@ -38,7 +38,7 @@ const EDIT_WORKSPACE_STEP_META: Record<
   [WIZARD_STEP_CONFIG]: {
     key: "config",
     title: "Publicar y cobrar",
-    description: "Cobros, visibilidad y tope por persona",
+    description: "Visibilidad, cobros y devoluciones",
   },
 }
 

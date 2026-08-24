@@ -337,7 +337,7 @@ export function TicketEditorSheet({
                   render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel className={STUDIO_LABEL_CLASS}>
-                        Mínimo de tickets por compra
+                        Mínimo por compra
                       </FormLabel>
                       <Input
                         inputMode="numeric"
@@ -371,7 +371,7 @@ export function TicketEditorSheet({
                   render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel className={STUDIO_LABEL_CLASS}>
-                        Máximo de tickets por compra
+                        Máximo por compra
                       </FormLabel>
                       <Input
                         inputMode="numeric"
