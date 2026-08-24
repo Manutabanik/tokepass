@@ -119,7 +119,6 @@ import {
 } from "@/lib/events/delivery-mode"
 import {
   applyMapCapacityToTickets,
-  consolidateEventTicketsForPersist,
   layoutTypeForMapSectorId,
   priceGroupSectorId,
 } from "@/lib/seating/venue-map-pricing"
@@ -159,6 +158,7 @@ import {
 import {
   eventHasActiveSeatingMap,
 } from "@/lib/inventory/map-enablement"
+import { healEventFormInventory } from "@/lib/inventory/heal-event-form-inventory"
 
 export type OrganizerEvent = Pick<
   Event,
@@ -1216,23 +1216,7 @@ function venueMapSkuGuard(
 }
 
 function withHealedMapTickets(data: EventFormValues): EventFormValues {
-  const tickets = consolidateEventTicketsForPersist(data)
-  if (
-    !eventHasActiveSeatingMap({
-      hasSeatingPlan: data.basics.hasSeatingPlan,
-      includesSeatingMap: data.venue.includesSeatingMap,
-      venueMap: data.venue.venueMap,
-    })
-  ) {
-    return { ...data, tickets }
-  }
-  return {
-    ...data,
-    tickets: applyMapCapacityToTickets(
-      tickets,
-      parseVenueMap(data.venue.venueMap),
-    ),
-  }
+  return healEventFormInventory(data)
 }
 
 const EVENT_IDENTITY_UUID_RE =
@@ -2878,18 +2862,8 @@ export async function getEventForEditing(
       }
     }
 
-    return {
-      id: event.id,
-      organizerId: event.organizer_id,
-      title: event.title,
-      flyerUrl: event.flyer_url ?? event.image_url,
-      status: (event.status as EventStatus) || "draft",
-      updatedAt:
-        typeof event.updated_at === "string" && event.updated_at
-          ? event.updated_at
-          : new Date().toISOString(),
-      values: {
-        basics: {
+    const healedValues = healEventFormInventory({
+      basics: {
           title: event.title,
           date: toLocalDateTimeInput(event.date),
           endDate: event.ends_at ? toLocalDateTimeInput(event.ends_at) : "",
@@ -3023,7 +2997,19 @@ export async function getEventForEditing(
         refundPolicy: parseEventRefundPolicy(
           (event as { refund_policy?: unknown }).refund_policy,
         ),
-      },
+    })
+
+    return {
+      id: event.id,
+      organizerId: event.organizer_id,
+      title: event.title,
+      flyerUrl: event.flyer_url ?? event.image_url,
+      status: (event.status as EventStatus) || "draft",
+      updatedAt:
+        typeof event.updated_at === "string" && event.updated_at
+          ? event.updated_at
+          : new Date().toISOString(),
+      values: healedValues,
       zoneTierPricing: (pricingRows ?? []).map((row) => ({
         id: row.id,
         sectorKey: row.sector_key,

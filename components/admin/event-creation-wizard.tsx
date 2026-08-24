@@ -74,13 +74,12 @@ import { feePercentageFromRate } from "@/lib/pricing/flexible-pricing"
 import { clampServiceFeePercentage } from "@/lib/pricing/net-profit"
 import type { VenuePricingMap } from "@/lib/seating/venue-adapter"
 import {
-  applyMapCapacityToTickets,
-  consolidateEventTicketsForPersist,
   isMapBackedTicket,
   removeVenueMapSector,
   syncMapToTickets,
   venueMapToPricingMap,
 } from "@/lib/seating/venue-map-pricing"
+import { healEventFormInventory } from "@/lib/inventory/heal-event-form-inventory"
 import { InteractiveVenueMapEditor } from "@/components/admin/interactive-venue-map-editor"
 import { TokepassStudioOverlay } from "@/components/admin/tokepass-studio-overlay"
 import {
@@ -327,6 +326,26 @@ export function EventCreationWizard({
     name: "tickets",
     keyName: "_rowId",
   })
+  const inventoryHealedRef = useRef(false)
+
+  useEffect(() => {
+    if (!initialData?.id || inventoryHealedRef.current) return
+    inventoryHealedRef.current = true
+    const healed = healEventFormInventory(form.getValues())
+    replaceTickets(healed.tickets)
+    form.setValue("basics.hasSeatingPlan", healed.basics.hasSeatingPlan, {
+      shouldDirty: false,
+      shouldValidate: false,
+    })
+    form.setValue("venue.includesSeatingMap", healed.venue.includesSeatingMap, {
+      shouldDirty: false,
+      shouldValidate: false,
+    })
+    form.clearErrors("venue.venueMap")
+    form.clearErrors("tickets")
+    useEventFormStore.getState().setAutosaveStatus("saved")
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- heal inventory once on edit load
+  }, [initialData?.id])
 
   const capacitySnapshot = useEventCapacity(form)
   const watchedTickets = useWatch({ control: form.control, name: "tickets" })
@@ -783,32 +802,22 @@ export function EventCreationWizard({
 
   function buildConsolidatedPayload(data: EventFormValues): EventFormValues {
     const editingId = initialData?.id ?? persistedEventId
-    let next: EventFormValues = {
-      ...data,
-      tickets: consolidateEventTicketsForPersist(data),
-    }
+    const healed = healEventFormInventory(data)
     const liveSectorIds = collectLiveSeatingSectorIds({
-      venueMap: next.venue.venueMap,
-      seatingLayout: next.venue.seatingLayout,
+      venueMap: healed.venue.venueMap,
+      seatingLayout: healed.venue.seatingLayout,
       extraIds: assignableLogicalSectorIds(
-        next.venue.zones,
-        next.venue.venueMap,
+        healed.venue.zones,
+        healed.venue.venueMap,
       ),
     })
-    next = sanitizeEventSubmitPayload(next, {
+    return sanitizeEventSubmitPayload(healed, {
       mode: editingId ? "update" : "create",
       persistedIds: (initialData?.values.tickets ?? [])
         .map((tier) => tier.id)
         .filter((id): id is string => Boolean(id)),
       liveSectorIds,
     })
-    return {
-      ...next,
-      tickets: applyMapCapacityToTickets(
-        next.tickets,
-        parseVenueMap(next.venue.venueMap),
-      ),
-    }
   }
 
   async function persistInventoryDraft(data: EventFormValues) {

@@ -26,7 +26,7 @@ import {
   collectLiveSeatingSectorIds,
   sanitizeEventSubmitPayload,
 } from "@/lib/events/sanitize-ticket-tiers"
-import { consolidateEventTicketsForPersist } from "@/lib/seating/venue-map-pricing"
+import { healEventFormInventory } from "@/lib/inventory/heal-event-form-inventory"
 
 export type AutosaveEventDraftResult =
   | {
@@ -45,7 +45,7 @@ function sanitizeAutosaveValues(
   values: EventFormValues,
   eventId: string | null,
 ): EventFormValues {
-  const tickets = consolidateEventTicketsForPersist({
+  const healed = healEventFormInventory({
     ...values,
     tickets: (values.tickets ?? []).map((tier) => ({
       ...tier,
@@ -53,15 +53,14 @@ function sanitizeAutosaveValues(
     })),
   })
   return {
-    ...values,
+    ...healed,
     venue: {
-      ...values.venue,
-      existingVenueId: values.venue.existingVenueId || null,
+      ...healed.venue,
+      existingVenueId: healed.venue.existingVenueId || null,
     },
-    tickets: sanitizeEventSubmitPayload(
-      { ...values, tickets },
-      { mode: eventId ? "update" : "create" },
-    ).tickets,
+    tickets: sanitizeEventSubmitPayload(healed, {
+      mode: eventId ? "update" : "create",
+    }).tickets,
   }
 }
 
