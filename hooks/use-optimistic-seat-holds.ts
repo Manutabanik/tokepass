@@ -13,6 +13,10 @@ import {
   CHECKOUT_NO_STOCK_TOAST,
   CHECKOUT_TOAST_ERROR_STYLE,
 } from "@/lib/checkout/checkout-feedback"
+import {
+  isSeatUnavailableError,
+  isSectorNotConfiguredError,
+} from "@/lib/checkout/revalidate-seat-holds"
 import { minReservedUntil } from "@/lib/checkout-hold"
 import type { SeatStatus } from "@/lib/seating/universal-seat-types"
 import { useCheckoutStore } from "@/lib/stores/checkout-store"
@@ -20,6 +24,22 @@ import {
   useStorefrontSeatStore,
   type StorefrontSelectedItem,
 } from "@/lib/stores/storefront-seat-store"
+
+function optimisticHoldErrorMessage(error: string): string {
+  if (error === "not_materialized") {
+    return "El sector o asiento no está disponible para la venta (no materializado)."
+  }
+  if (isSeatUnavailableError(error)) {
+    return "Este lugar ya fue reservado por otra persona."
+  }
+  if (isSectorNotConfiguredError(error)) {
+    return "Error de configuración: El sector del mapa no coincide con el inventario."
+  }
+  if (error === "out_of_stock") {
+    return CHECKOUT_NO_STOCK_TOAST
+  }
+  return error.trim() || "No se pudo reservar esa ubicación. Elegí otra opción."
+}
 
 type OptimisticSeatHoldsInput = {
   eventId: string
@@ -79,13 +99,14 @@ export function useOptimisticSeatHolds({
               useStorefrontSeatStore.getState().removeSelectedItem(item.id)
               if (hold.success === false && hold.error !== "auth_required") {
                 useCheckoutStore.getState().removeItem(item.id)
-                if (hold.error === "out_of_stock") {
-                  toast.error(CHECKOUT_NO_STOCK_TOAST, {
-                    style: CHECKOUT_TOAST_ERROR_STYLE,
-                  })
-                } else {
-                  toast.error("No se pudo reservar esa ubicación. Elegí otra opción.")
-                }
+                console.error("[optimistic-seat-hold] reserva rechazada", {
+                  layoutItemId: item.id,
+                  sectorId: item.sectorId ?? item.id,
+                  error: hold.error,
+                })
+                toast.error(optimisticHoldErrorMessage(hold.error), {
+                  style: CHECKOUT_TOAST_ERROR_STYLE,
+                })
               }
               return null
             }
