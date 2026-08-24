@@ -311,7 +311,8 @@ export function EventStudioFlyerField({
   return (
     <div className="min-w-0 space-y-2">
       <p className="mb-1.5 text-sm font-semibold text-foreground/90">
-        Cartel principal del evento
+        Cartel principal del evento{" "}
+        <span className="text-red-500">*</span>
       </p>
       <input
         ref={inputRef}
@@ -326,8 +327,8 @@ export function EventStudioFlyerField({
       />
 
       {hasPreview ? (
-        <div className="overflow-hidden rounded-xl border border-border bg-card">
-          <div className="aspect-[4/5] w-full overflow-hidden bg-slate-950">
+        <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+          <div className="aspect-[4/5] w-full overflow-hidden bg-zinc-100 dark:bg-zinc-900">
             {/* eslint-disable-next-line @next/next/no-img-element -- flyer host/blob */}
             <img
               src={previewUrl ?? ""}
@@ -336,10 +337,10 @@ export function EventStudioFlyerField({
                   ? `Flyer de ${existingTitle}`
                   : "Flyer del evento"
               }
-              className="h-full w-full object-cover"
+              className="h-full w-full object-cover object-center"
             />
           </div>
-          <div className="flex items-center gap-2 border-t border-white/10 p-3">
+          <div className="flex items-center gap-2 border-t border-zinc-200 p-3 dark:border-zinc-800">
             <Button
               type="button"
               variant="outline"
@@ -395,7 +396,7 @@ export function EventStudioFlyerField({
               Subí una imagen para el cartel principal de tu evento
             </p>
             <p className="text-xs leading-relaxed text-muted-foreground">
-              PNG, JPG o WEBP. Máximo 5MB. Recorte 4:5.
+              PNG, JPG o WEBP.
             </p>
           </div>
           <Button
@@ -408,6 +409,10 @@ export function EventStudioFlyerField({
           </Button>
         </div>
       )}
+
+      <p className="mt-3 text-center text-xs text-zinc-500 md:text-left dark:text-zinc-400">
+        Recomendado: 16:9 o 1:1. Mínimo 1080x1080px. Peso máx: 5MB.
+      </p>
 
       {(localError || error) && (
         <FormMessage>{localError ?? error}</FormMessage>

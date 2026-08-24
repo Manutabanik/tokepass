@@ -29,6 +29,8 @@ import { asPositiveInt, parseStrictInt } from "@/lib/inventory/capacity-budget"
 import {
   applyFamilyBasePrice,
   familyHasDifferentiatedPrices,
+  ticketSoldCount,
+  TIER_HAS_SALES_LOCK_HINT,
 } from "@/lib/inventory/synced-day-tickets"
 import type { EventFormValues } from "@/lib/validations/event-form"
 import { cn } from "@/lib/utils"
@@ -60,6 +62,10 @@ export function TicketEditorSheet({
   const mapLocked = kind === "map"
   const showDays = isMultiDay && days.length >= 2
   const watchedTickets = form.watch("tickets")
+  const familySold = indexes.reduce(
+    (sum, index) => sum + ticketSoldCount(watchedTickets?.[index]),
+    0,
+  )
   const indexByDay = new Map(
     indexes.map((index) => {
       const dayId = watchedTickets?.[index]?.dayId
@@ -94,6 +100,7 @@ export function TicketEditorSheet({
             {mapLocked
               ? "El aforo lo define el mapa. Acá solo se carga el precio."
               : "Nombre, aforo y precio. En eventos de varios días el precio se replica solo."}
+            {familySold > 0 ? ` ${TIER_HAS_SALES_LOCK_HINT}` : ""}
           </SheetDescription>
         </SheetHeader>
 

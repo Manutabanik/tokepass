@@ -1,6 +1,6 @@
 "use client"
 
-import { Copy, Minus, Pause, Play, Plus, Trash2 } from "lucide-react"
+import { Copy, Lock, Minus, Pause, Play, Plus, Trash2 } from "lucide-react"
 import type { ReactNode } from "react"
 import type { UseFormReturn } from "react-hook-form"
 
@@ -28,6 +28,10 @@ import {
   parseStrictInt,
 } from "@/lib/inventory/capacity-budget"
 import { inferInventoryTierType } from "@/lib/inventory/unified-inventory"
+import {
+  ticketSoldCount,
+  TIER_HAS_SALES_LOCK_HINT,
+} from "@/lib/inventory/synced-day-tickets"
 import {
   calculateTierPricing,
   type TicketCalculationMode,
@@ -370,6 +374,10 @@ export function TicketWalletCard({
   })
   const stock = asPositiveInt(capacity)
   const overflow = venueRemaining != null && stock > venueRemaining
+  const sold = ticketSoldCount({
+    sold: form.watch(`tickets.${index}.sold`),
+  })
+  const lockedBySales = sold > 0
 
   return (
     <article
@@ -419,13 +427,26 @@ export function TicketWalletCard({
             variant="ghost"
             size="icon"
             onClick={onRemove}
+            disabled={lockedBySales}
             className="size-11 shrink-0 text-muted-foreground hover:text-destructive"
-            aria-label="Eliminar tarifa"
+            aria-label={
+              lockedBySales ? TIER_HAS_SALES_LOCK_HINT : "Eliminar tarifa"
+            }
+            title={lockedBySales ? TIER_HAS_SALES_LOCK_HINT : undefined}
           >
-            <Trash2 />
+            {lockedBySales ? (
+              <Lock className="h-3 w-3 text-zinc-400" aria-hidden="true" />
+            ) : (
+              <Trash2 />
+            )}
           </Button>
         </div>
       </div>
+      {lockedBySales ? (
+        <p className="text-[11px] leading-4 text-muted-foreground">
+          {TIER_HAS_SALES_LOCK_HINT}
+        </p>
+      ) : null}
 
       <FormField
         control={form.control}

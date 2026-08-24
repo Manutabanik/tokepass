@@ -7,6 +7,7 @@ import {
   familyHasDifferentiatedPrices,
   isBlankInventoryTicket,
   listInventoryFamilies,
+  ticketSoldCount,
   upsertSyncedDayTickets,
 } from "./synced-day-tickets"
 
@@ -56,5 +57,24 @@ describe("synced day tickets", () => {
     const synced = applyFamilyBasePrice(created, family.indexes, 20000)
     assert.equal(familyHasDifferentiatedPrices(synced, family.indexes), false)
     assert.equal(synced[1]?.price, 20000)
+  })
+
+  it("sums sold across family rows", () => {
+    const { tickets } = upsertSyncedDayTickets({
+      tickets: [],
+      dayIds: ["day-a", "day-b"],
+      isMultiDay: true,
+      indexes: [],
+      name: "General",
+      capacity: 80,
+      basePrice: 15000,
+      differentiate: false,
+      kind: "general",
+    })
+    tickets[0] = { ...tickets[0]!, sold: 3 }
+    tickets[1] = { ...tickets[1]!, sold: 2 }
+    const family = listInventoryFamilies(tickets)[0]
+    assert.equal(ticketSoldCount(tickets[0]), 3)
+    assert.equal(family?.sold, 5)
   })
 })

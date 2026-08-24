@@ -76,6 +76,7 @@ export function ScheduleDaysBuilder({
                     <FormLabel
                       htmlFor={`schedule-day-${index}-title`}
                       className={STUDIO_LABEL_CLASS}
+                      required
                     >
                       Nombre de la jornada
                     </FormLabel>
@@ -103,6 +104,7 @@ export function ScheduleDaysBuilder({
                       <FormLabel
                         htmlFor={`schedule-day-${index}-start`}
                         className={STUDIO_LABEL_CLASS}
+                        required
                       >
                         Inicio
                       </FormLabel>
@@ -124,6 +126,7 @@ export function ScheduleDaysBuilder({
                       <FormLabel
                         htmlFor={`schedule-day-${index}-end`}
                         className={STUDIO_LABEL_CLASS}
+                        required
                       >
                         Cierre
                       </FormLabel>

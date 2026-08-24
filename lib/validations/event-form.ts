@@ -15,6 +15,7 @@ import {
   PROMO_DISCOUNT_TYPES,
 } from "@/lib/inventory/flexible-bundles"
 import {
+  isActiveInventoryTicket,
   isPassOrComboTicket,
   scheduleDaysMissingTicketsMessage,
 } from "@/lib/inventory/day-ticket-coverage"
@@ -58,8 +59,14 @@ import { parseVenueMap } from "@/types/venue-map"
 import { TICKET_TIER_VISIBILITY_VALUES } from "@/types/tickets"
 import {
   EVENT_DELIVERY_MODES,
+  isOnlineDelivery,
   normalizeAccessLink,
 } from "@/lib/events/delivery-mode"
+import {
+  MISSING_EVENT_FLYER,
+  MISSING_EVENT_LOCATION,
+  MISSING_SELLABLE_TICKET,
+} from "@/lib/events/validate-event-publish"
 
 /** ATP = Apta Todo Público. */
 export const AGE_RESTRICTION_VALUES = ["atp", "16", "18"] as const
@@ -232,21 +239,21 @@ const eventFormObject = z
       description: z
         .string()
         .trim()
-        .min(10, "Tiene que tener al menos 10 caracteres")
-        .max(2000, "La descripción es demasiado extensa."),
-      flyerName: z.string().nullable(),
+        .max(2000, "La descripción es demasiado extensa.")
+        .optional()
+        .default(""),
+      flyerName: z.string().nullable().optional().default(null),
       visibility: z.enum(EVENT_VISIBILITY_VALUES),
       isMultiDay: z.boolean(),
       scheduleDays: z.array(scheduleDaySchema),
       categoryId: z.preprocess(
-        (value) => (typeof value === "string" && value.trim() === "" ? null : value),
-        z
-          .string({ error: "Seleccioná una categoría para tu show" })
-          .uuid("Seleccioná una categoría para tu show"),
+        (value) => (typeof value === "string" && value.trim() === "" ? "" : value),
+        z.string().optional().default(""),
       ),
-      ageRestriction: z.enum(AGE_RESTRICTION_VALUES, {
-        error: "Seleccioná la restricción de edad.",
-      }),
+      ageRestriction: z
+        .union([z.enum(AGE_RESTRICTION_VALUES), z.literal("")])
+        .optional()
+        .default(""),
       hasSeatingPlan: z.boolean().optional().default(false),
       hasSchedule: z.boolean().optional().default(false),
       deliveryMode: z.enum(EVENT_DELIVERY_MODES).optional().default("PRESENCIAL"),
@@ -424,11 +431,45 @@ const eventFormObject = z
       }
     }
 
-    if (!data.acceptsMercadoPago && !data.acceptsPosPayments) {
+    if (!(data.basics.flyerName ?? "").trim()) {
       context.addIssue({
         code: "custom",
-        path: ["acceptsMercadoPago"],
-        message: "Elegí al menos un medio de cobro.",
+        path: ["basics", "flyerName"],
+        message: MISSING_EVENT_FLYER,
+      })
+    }
+
+    if (!isOnlineDelivery(data.basics.deliveryMode)) {
+      const venueOk = Boolean(
+        data.venue.existingVenueId?.trim() &&
+          data.venue.venueName.trim() &&
+          (data.venue.venueLocation ?? "").trim(),
+      )
+      const locationOk =
+        (data.venue.venueLocation ?? "").trim().length >= 3 ||
+        data.venue.venueName.trim().length >= 3
+      if (!venueOk && !locationOk) {
+        context.addIssue({
+          code: "custom",
+          path: ["venue", "venueName"],
+          message: MISSING_EVENT_LOCATION,
+        })
+      }
+    }
+
+    const sellableActive = data.tickets.filter(
+      (ticket) =>
+        isActiveInventoryTicket(ticket) &&
+        Number.isFinite(Number(ticket.price)) &&
+        Number(ticket.price) >= 0 &&
+        Number.isFinite(Number(ticket.capacity)) &&
+        Number(ticket.capacity) > 0,
+    )
+    if (sellableActive.length === 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["tickets"],
+        message: MISSING_SELLABLE_TICKET,
       })
     }
 

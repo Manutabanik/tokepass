@@ -11,7 +11,7 @@ import {
   sheetDifferentiateDefault,
   TicketEditorSheet,
 } from "@/components/admin/events/ticket-editor-sheet"
-import { FormMessage } from "@/components/ui/form"
+import { FormLabel, FormMessage } from "@/components/ui/form"
 import { listEventFormJornadas } from "@/lib/event-schedule"
 import { EMPTY_MAP_ENABLE_ERROR } from "@/lib/inventory/map-enablement"
 import {
@@ -21,6 +21,7 @@ import {
   type InventoryFamily,
 } from "@/lib/inventory/synced-day-tickets"
 import { inferInventoryTierType } from "@/lib/inventory/unified-inventory"
+import { STUDIO_LABEL_CLASS } from "@/lib/admin/studio-form-styles"
 import type { EventFormValues } from "@/lib/validations/event-form"
 import { cn } from "@/lib/utils"
 
@@ -162,6 +163,7 @@ export function PricingStep({
   }
 
   function removeFamily(family: InventoryFamily) {
+    if (family.sold > 0) return
     form.setValue(
       "tickets",
       removeTicketFamily(form.getValues("tickets") ?? [], family.indexes),
@@ -174,6 +176,9 @@ export function PricingStep({
 
   return (
     <div className="space-y-6" data-field="tickets">
+      <FormLabel className={STUDIO_LABEL_CLASS} required>
+        Entradas
+      </FormLabel>
       <CapacityThermometer form={form} />
       {typeof form.formState.errors.tickets?.message === "string" ? (
         <FormMessage>{form.formState.errors.tickets.message}</FormMessage>
@@ -202,19 +207,21 @@ export function PricingStep({
             <button
               type="button"
               onClick={addGeneral}
-              className="text-xs font-medium text-muted-foreground hover:text-foreground"
+              className="inline-flex items-center gap-1 rounded-xl border border-zinc-300 px-3 py-1.5 text-xs font-medium text-foreground hover:border-emerald-500 dark:border-zinc-700"
             >
-              Agregar entrada general
+              <Plus className="size-3" aria-hidden="true" />
+              Agregar Entrada General
             </button>
             {hideMapBlock ? null : (
               <button
                 type="button"
                 onClick={() => onOpenMapStudio?.()}
-                className="text-xs font-medium text-muted-foreground hover:text-foreground"
+                className="inline-flex items-center gap-1 rounded-xl border border-zinc-300 px-3 py-1.5 text-xs font-medium text-foreground hover:border-emerald-500 dark:border-zinc-700"
               >
+                <Plus className="size-3" aria-hidden="true" />
                 {families.some((family) => family.kind === "map")
                   ? "Editar mapa de sectores"
-                  : "Configurar mapa de sectores"}
+                  : "Configurar Mapa de Sectores"}
               </button>
             )}
           </div>
@@ -295,8 +302,8 @@ function ZeroStateButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex min-h-28 flex-1 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-zinc-700 bg-transparent px-4 py-6 text-sm text-muted-foreground transition",
-        "hover:border-zinc-500 hover:text-foreground",
+        "flex min-h-28 flex-1 flex-col items-center justify-center gap-2 rounded-2xl border border-zinc-300 bg-transparent px-4 py-6 text-sm text-muted-foreground transition dark:border-zinc-700",
+        "hover:border-emerald-500 hover:text-foreground",
       )}
     >
       <span className="inline-flex items-center gap-1.5">

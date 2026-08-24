@@ -34,6 +34,7 @@ import { EventStudioStepper } from "@/components/admin/event-studio-stepper"
 import { PublishEventConfirmDialog } from "@/components/admin/publish-event-confirm-dialog"
 import type { OrganizerVenue } from "@/app/actions/venues"
 import { upsertVenue } from "@/app/actions/venues"
+import { AgendaBuilder } from "@/components/admin/agenda-builder"
 import { EventSponsorsManager } from "@/components/admin/event-sponsors-manager"
 import { EventStudioPublishStep } from "@/components/admin/events/event-studio-publish-step"
 import { EventVenueStep } from "@/components/admin/event-venue-step"
@@ -206,7 +207,7 @@ const defaultValues: EventFormValues = {
     isMultiDay: false,
     scheduleDays: [],
     categoryId: "",
-    ageRestriction: "" as unknown as EventFormValues["basics"]["ageRestriction"],
+    ageRestriction: "",
     hasSeatingPlan: false,
     hasSchedule: false,
     deliveryMode: "PRESENCIAL",
@@ -282,7 +283,9 @@ export function EventCreationWizard({
   const [showAdvancedDetails, setShowAdvancedDetails] = useState(() => {
     const basics = initialData?.values.basics
     return (
-      basics?.deliveryMode === "ONLINE" || Boolean(basics?.ageRestriction)
+      basics?.deliveryMode === "ONLINE" ||
+      Boolean(basics?.ageRestriction) ||
+      Boolean(basics?.categoryId)
     )
   })
   const [publishConfirm, setPublishConfirm] = useState<{
@@ -756,7 +759,7 @@ export function EventCreationWizard({
 
   async function onSubmit(
     data: EventFormValues,
-    intent: "draft" | "publish" = "draft",
+    intent: "draft" | "publish" | "update" = "draft",
   ): Promise<boolean> {
     cancelPendingAutosave()
     await waitForInFlightAutosave()
@@ -872,7 +875,7 @@ export function EventCreationWizard({
 
     const formData = new FormData()
     formData.set("payload", JSON.stringify(payloadData))
-    if (intent === "draft") {
+    if (intent !== "publish") {
       formData.set("draftMode", "1")
     }
     if (flyerFile) {
@@ -937,6 +940,13 @@ export function EventCreationWizard({
         },
       )
       setPublishConfirm({ open: true, eventId: result.eventId })
+      return true
+    }
+
+    if (intent === "update") {
+      toast.success("Cambios actualizados", {
+        description: "El estado del evento no cambió. Los datos ya están guardados.",
+      })
       return true
     }
 
@@ -1103,9 +1113,9 @@ export function EventCreationWizard({
             <EventStudioDock
               canGoBack={resolvedStep !== WIZARD_STEP_IDENTITY}
               isLast={isLastVisibleWizardStep(resolvedStep, wizardFlags)}
-              isEditing={isEditing}
               submitting={form.formState.isSubmitting}
               nextDisabled={inventoryBlocked}
+              eventStatus={initialData?.status ?? null}
               onBack={() =>
                 void moveToStep(prevWizardStep(resolvedStep, wizardFlags))
               }
@@ -1113,6 +1123,7 @@ export function EventCreationWizard({
                 void moveToStep(nextWizardStep(resolvedStep, wizardFlags))
               }
               onPublish={() => void onSubmit(form.getValues(), "publish")}
+              onUpdate={() => void onSubmit(form.getValues(), "update")}
             />
           }
         >
@@ -1142,6 +1153,7 @@ export function EventCreationWizard({
                         <FormLabel
                           htmlFor="event-title"
                           className={STUDIO_LABEL_CLASS}
+                          required
                         >
                           Nombre de tu evento
                         </FormLabel>
@@ -1158,64 +1170,6 @@ export function EventCreationWizard({
                     )}
                   />
 
-                  <FormField
-                    control={form.control}
-                    name="basics.categoryId"
-                    render={({ field, fieldState }) => (
-                      <FormItem className="space-y-2">
-                        <FormLabel className={STUDIO_LABEL_CLASS}>
-                          Categoría
-                        </FormLabel>
-                        {categories.length === 0 ? (
-                          <p className="text-sm text-muted-foreground">
-                            No hay categorías activas.
-                          </p>
-                        ) : (
-                          <Select
-                            value={field.value || ""}
-                            onValueChange={field.onChange}
-                            items={categories.map((category) => ({
-                              value: category.id,
-                              label: category.name,
-                            }))}
-                          >
-                            <SelectTrigger
-                              data-field="basics.categoryId"
-                              className={STUDIO_CONTROL_CLASS}
-                            >
-                              <SelectValue placeholder="Elegí una categoría" />
-                            </SelectTrigger>
-                            <SelectContent
-                              alignItemWithTrigger={false}
-                              className={STUDIO_SELECT_CONTENT_CLASS}
-                            >
-                              {categories.map((category) => {
-                                const Icon = resolveCategoryIcon(
-                                  category.iconName,
-                                )
-                                return (
-                                  <SelectItem
-                                    key={category.id}
-                                    value={category.id}
-                                  >
-                                    <span className="inline-flex items-center gap-2">
-                                      <Icon className="size-3.5 shrink-0" />
-                                      {category.name}
-                                    </span>
-                                  </SelectItem>
-                                )
-                              })}
-                            </SelectContent>
-                          </Select>
-                        )}
-                        <p className="text-xs leading-relaxed text-muted-foreground">
-                          ¿Qué tipo de evento es?
-                        </p>
-                        <FormMessage>{fieldState.error?.message}</FormMessage>
-                      </FormItem>
-                    )}
-                  />
-
                   {isStreaming ? (
                     <div className="space-y-2">
                       <p className={STUDIO_LABEL_CLASS}>Ubicación y recinto</p>
@@ -1226,7 +1180,10 @@ export function EventCreationWizard({
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      <p className={STUDIO_LABEL_CLASS}>Ubicación y recinto</p>
+                      <p className={STUDIO_LABEL_CLASS}>
+                        Ubicación y recinto{" "}
+                        <span className="text-red-500">*</span>
+                      </p>
                       <EventVenueStep
                         form={form}
                         eventId={initialData?.id ?? persistedEventId}
@@ -1314,6 +1271,7 @@ export function EventCreationWizard({
                             <FormLabel
                               htmlFor="event-date"
                               className={cn(STUDIO_LABEL_CLASS, "block")}
+                              required
                             >
                               Apertura y comienzo
                             </FormLabel>
@@ -1336,6 +1294,7 @@ export function EventCreationWizard({
                             <FormLabel
                               htmlFor="event-end-date"
                               className={cn(STUDIO_LABEL_CLASS, "block")}
+                              required
                             >
                               Hora estimada de cierre
                             </FormLabel>
@@ -1356,6 +1315,34 @@ export function EventCreationWizard({
                       />
                     </div>
                   )}
+
+                  <FormField
+                    control={form.control}
+                    name="basics.hasSchedule"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/40">
+                        <div>
+                          <FormLabel className="mb-0 text-sm font-bold text-slate-800 dark:text-zinc-200">
+                            Añadir cronograma de actividades (Opcional)
+                          </FormLabel>
+                          <FormDescription className="text-xs text-muted-foreground">
+                            Charlas, shows o itinerario por horarios.
+                          </FormDescription>
+                        </div>
+                        <Switch
+                          checked={Boolean(field.value)}
+                          onCheckedChange={field.onChange}
+                          className="data-checked:bg-violet-500"
+                          aria-label="Añadir cronograma de actividades"
+                        />
+                      </FormItem>
+                    )}
+                  />
+                  {hasSchedule ? (
+                    <AgendaBuilder
+                      eventId={initialData?.id ?? persistedEventId}
+                    />
+                  ) : null}
 
                   <FormField
                     control={form.control}
@@ -1407,6 +1394,66 @@ export function EventCreationWizard({
                     </button>
                     {showAdvancedDetails ? (
                       <div className="space-y-6 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
+                        <FormField
+                          control={form.control}
+                          name="basics.categoryId"
+                          render={({ field, fieldState }) => (
+                            <FormItem className="space-y-2">
+                              <FormLabel className={STUDIO_LABEL_CLASS}>
+                                Categoría
+                              </FormLabel>
+                              {categories.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">
+                                  No hay categorías activas.
+                                </p>
+                              ) : (
+                                <Select
+                                  value={field.value || ""}
+                                  onValueChange={field.onChange}
+                                  items={categories.map((category) => ({
+                                    value: category.id,
+                                    label: category.name,
+                                  }))}
+                                >
+                                  <SelectTrigger
+                                    data-field="basics.categoryId"
+                                    className={STUDIO_CONTROL_CLASS}
+                                  >
+                                    <SelectValue placeholder="Elegí una categoría" />
+                                  </SelectTrigger>
+                                  <SelectContent
+                                    alignItemWithTrigger={false}
+                                    className={STUDIO_SELECT_CONTENT_CLASS}
+                                  >
+                                    {categories.map((category) => {
+                                      const Icon = resolveCategoryIcon(
+                                        category.iconName,
+                                      )
+                                      return (
+                                        <SelectItem
+                                          key={category.id}
+                                          value={category.id}
+                                        >
+                                          <span className="inline-flex items-center gap-2">
+                                            <Icon className="size-3.5 shrink-0" />
+                                            {category.name}
+                                          </span>
+                                        </SelectItem>
+                                      )
+                                    })}
+                                  </SelectContent>
+                                </Select>
+                              )}
+                              <p className="text-xs leading-relaxed text-muted-foreground">
+                                ¿Qué tipo de evento es?
+                              </p>
+                              <FormMessage>
+                                {fieldState.error?.message}
+                              </FormMessage>
+                            </FormItem>
+                          )}
+                        />
+
                         <div className="space-y-2">
                           <p className={STUDIO_LABEL_CLASS}>Modalidad</p>
                           <div className="grid grid-cols-2 gap-3">
@@ -1647,7 +1694,6 @@ export function EventCreationWizard({
               <EventStudioPublishStep
                 form={form}
                 eventId={initialData?.id ?? persistedEventId}
-                hasSchedule={hasSchedule}
               />
             </TabsContent>
 

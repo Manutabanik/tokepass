@@ -487,10 +487,8 @@ function mapEventFormToRpcPayload(
     image_url: flyerUrl,
     flyer_url: flyerUrl,
     visibility: data.basics.visibility,
-    category_id: data.basics.categoryId?.trim() || "",
-    age_restriction: AGE_RESTRICTION_VALUES.includes(data.basics.ageRestriction)
-      ? data.basics.ageRestriction
-      : "atp",
+    category_id: identityCategoryId(data.basics.categoryId) ?? "",
+    age_restriction: identityAgeRestriction(data.basics.ageRestriction) ?? "atp",
     schedule_days: scheduleDays,
     venue_id: data.venue.existingVenueId?.trim() || null,
     venue: {
@@ -2131,6 +2129,7 @@ export type EditableEventData = {
   title: string
   flyerUrl: string | null
   updatedAt: string
+  status: EventStatus
   values: EventFormValues
   zoneTierPricing: Array<{
     id: string
@@ -2432,13 +2431,13 @@ export async function getEventForEditing(
     const reader = isSuperAdmin ? createAdminClient() : supabase
 
     const eventSelectWithAgenda =
-      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, has_schedule, delivery_mode, access_link, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, is_sponsored_by_tokepass, updated_at"
+      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, status, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, has_schedule, delivery_mode, access_link, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, is_sponsored_by_tokepass, updated_at"
     const eventSelectWithPicker =
-      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, max_tickets_per_user, updated_at"
+      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, status, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, max_tickets_per_user, updated_at"
     const eventSelectWithPlace =
-      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, province, department, venue_map, max_tickets_per_user, updated_at"
+      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, status, schedule_days, category_id, age_restriction, province, department, venue_map, max_tickets_per_user, updated_at"
     const eventSelectCore =
-      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, schedule_days, category_id, age_restriction, venue_map, max_tickets_per_user, updated_at"
+      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, status, schedule_days, category_id, age_restriction, venue_map, max_tickets_per_user, updated_at"
 
     let eventQuery = await reader
       .from("events")
@@ -2759,6 +2758,7 @@ export async function getEventForEditing(
       organizerId: event.organizer_id,
       title: event.title,
       flyerUrl: event.flyer_url ?? event.image_url,
+      status: (event.status as EventStatus) || "draft",
       updatedAt:
         typeof event.updated_at === "string" && event.updated_at
           ? event.updated_at

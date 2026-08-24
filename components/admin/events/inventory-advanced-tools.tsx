@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { createInventoryTicket } from "@/lib/inventory/create-inventory-ticket"
+import { ticketSoldCount } from "@/lib/inventory/synced-day-tickets"
 import {
   inferBundleType,
   inferPromoRule,
@@ -78,6 +79,7 @@ export function InventoryAdvancedTools({
   }
 
   function remove(index: number) {
+    if (ticketSoldCount(tickets[index]) > 0) return
     form.setValue(
       "tickets",
       tickets.filter((_, current) => current !== index),

@@ -8,6 +8,7 @@ import {
   nextWizardStep,
   parseEditWorkspaceStep,
   prevWizardStep,
+  usesWizardUpdateActions,
   visibleWizardSteps,
   WIZARD_STEP_AGENDA,
   WIZARD_STEP_CONFIG,
@@ -70,5 +71,15 @@ describe("wizard-steps", () => {
     assert.equal(parseEditWorkspaceStep("unknown"), WIZARD_STEP_IDENTITY)
     assert.equal(editWorkspaceStepKey(WIZARD_STEP_TICKETS), "pricing")
     assert.equal(editWorkspaceStepKey(WIZARD_STEP_CONFIG), "config")
+  })
+
+  it("uses update actions only for events already in review or live", () => {
+    assert.equal(usesWizardUpdateActions(undefined), false)
+    assert.equal(usesWizardUpdateActions("draft"), false)
+    assert.equal(usesWizardUpdateActions("needs_revision"), false)
+    assert.equal(usesWizardUpdateActions("rejected"), false)
+    assert.equal(usesWizardUpdateActions("pending_approval"), true)
+    assert.equal(usesWizardUpdateActions("published"), true)
+    assert.equal(usesWizardUpdateActions("paused"), true)
   })
 })

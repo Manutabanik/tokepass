@@ -1,10 +1,9 @@
 "use client"
 
-import { Building2, CreditCard, Globe2, Lock, Plus } from "lucide-react"
+import { Globe2, Lock, Plus } from "lucide-react"
 import { useState } from "react"
 import type { UseFormReturn } from "react-hook-form"
 
-import { AgendaBuilder } from "@/components/admin/agenda-builder"
 import { EventStudioPurchaseCapField } from "@/components/admin/events/event-studio-purchase-cap-field"
 import {
   FormDescription,
@@ -14,9 +13,7 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Switch } from "@/components/ui/switch"
-import {
-  STUDIO_LABEL_CLASS,
-} from "@/lib/admin/studio-form-styles"
+import { STUDIO_LABEL_CLASS } from "@/lib/admin/studio-form-styles"
 import type { TicketFeeStrategy } from "@/lib/pricing/flexible-pricing"
 import type { EventFormValues } from "@/lib/validations/event-form"
 import { cn } from "@/lib/utils"
@@ -41,19 +38,15 @@ const REFUND_OPTIONS = [
 
 export function EventStudioPublishStep({
   form,
-  eventId,
-  hasSchedule,
 }: {
   form: UseFormReturn<EventFormValues>
   eventId?: string | null
-  hasSchedule: boolean
 }) {
   const [showBillingRules, setShowBillingRules] = useState(() => {
     const values = form.getValues()
     return (
       values.defaultFeeStrategy === "pass_to_customer" ||
-      (values.refundPolicy != null && values.refundPolicy !== "organizer") ||
-      Boolean(values.basics.hasSchedule)
+      (values.refundPolicy != null && values.refundPolicy !== "organizer")
     )
   })
 
@@ -80,34 +73,24 @@ export function EventStudioPublishStep({
 
       <EventStudioPurchaseCapField form={form} />
 
-      <FormField
-        control={form.control}
-        name="acceptsMercadoPago"
-        render={() => (
-          <FormItem className="space-y-3">
-            <FormLabel className={cn(STUDIO_LABEL_CLASS, "block")}>
-              Medios de cobro
-            </FormLabel>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <PaymentMethodCheckbox
-                form={form}
-                name="acceptsMercadoPago"
-                title="Mercado Pago"
-                description="Pago online con tarjeta, débito y dinero en cuenta."
-                icon={CreditCard}
-              />
-              <PaymentMethodCheckbox
-                form={form}
-                name="acceptsPosPayments"
-                title="Transferencia / POS"
-                description="Cobro en boletería: efectivo, tarjeta o transferencia."
-                icon={Building2}
-              />
-            </div>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
+      <div className="space-y-3">
+        <FormLabel className={cn(STUDIO_LABEL_CLASS, "block")}>
+          Medios de cobro
+        </FormLabel>
+        <PaymentMethodSwitch
+          form={form}
+          name="acceptsMercadoPago"
+          title="Mercado Pago"
+          description="Pago online con tarjeta, débito y dinero en cuenta."
+        />
+        <PaymentMethodSwitch
+          form={form}
+          name="acceptsPosPayments"
+          title="Transferencia / POS"
+          description="Cobro en boletería: efectivo, tarjeta o transferencia."
+        />
+        <FormMessage />
+      </div>
 
       <FormField
         control={form.control}
@@ -189,7 +172,7 @@ export function EventStudioPublishStep({
           />
           {showBillingRules
             ? "Ocultar reglas de facturación"
-            : "Reglas de Facturación avanzadas"}
+            : "Mostrar reglas de facturación"}
         </button>
 
         {showBillingRules ? (
@@ -258,7 +241,8 @@ export function EventStudioPublishStep({
                   </FormLabel>
                   <div className="mt-2 grid gap-2">
                     {REFUND_OPTIONS.map((option) => {
-                      const selected = (field.value ?? "organizer") === option.value
+                      const selected =
+                        (field.value ?? "organizer") === option.value
                       return (
                         <button
                           key={option.value}
@@ -284,33 +268,6 @@ export function EventStudioPublishStep({
                 </FormItem>
               )}
             />
-
-            <FormField
-              control={form.control}
-              name="basics.hasSchedule"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-950/50">
-                  <div className="min-w-0">
-                    <FormLabel className="mb-0 text-sm font-bold text-slate-800 dark:text-zinc-200">
-                      Cronograma / agenda
-                    </FormLabel>
-                    <FormDescription className="text-xs text-muted-foreground">
-                      Charlas, shows o itinerario por horarios.
-                    </FormDescription>
-                  </div>
-                  <Switch
-                    checked={Boolean(field.value)}
-                    onCheckedChange={field.onChange}
-                    className="data-checked:bg-violet-500"
-                    aria-label="Habilitar cronograma o agenda del evento"
-                  />
-                </FormItem>
-              )}
-            />
-
-            {hasSchedule ? (
-              <AgendaBuilder eventId={eventId} />
-            ) : null}
           </div>
         ) : null}
       </div>
@@ -318,48 +275,38 @@ export function EventStudioPublishStep({
   )
 }
 
-function PaymentMethodCheckbox({
+function PaymentMethodSwitch({
   form,
   name,
   title,
   description,
-  icon: Icon,
 }: {
   form: UseFormReturn<EventFormValues>
   name: "acceptsMercadoPago" | "acceptsPosPayments"
   title: string
   description: string
-  icon: typeof CreditCard
 }) {
   return (
     <FormField
       control={form.control}
       name={name}
       render={({ field }) => (
-        <label
-          className={cn(
-            "flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition",
-            field.value
-              ? "border-emerald-500 bg-emerald-500/10"
-              : "border-border bg-muted/20 hover:bg-muted/40",
-          )}
-        >
-          <input
-            type="checkbox"
-            checked={Boolean(field.value)}
-            onChange={(event) => field.onChange(event.target.checked)}
-            className="mt-1 size-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-          />
-          <span className="min-w-0">
-            <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
-              <Icon className="size-4 shrink-0 text-primary" />
+        <FormItem className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/40">
+          <div className="min-w-0">
+            <FormLabel className="mb-0 text-sm font-bold text-slate-800 dark:text-zinc-200">
               {title}
-            </span>
-            <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+            </FormLabel>
+            <FormDescription className="text-xs text-muted-foreground">
               {description}
-            </span>
-          </span>
-        </label>
+            </FormDescription>
+          </div>
+          <Switch
+            checked={Boolean(field.value)}
+            onCheckedChange={field.onChange}
+            className="data-checked:bg-emerald-500"
+            aria-label={title}
+          />
+        </FormItem>
       )}
     />
   )

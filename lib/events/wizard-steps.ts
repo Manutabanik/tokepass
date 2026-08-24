@@ -157,3 +157,16 @@ export function isLastVisibleWizardStep(
   const from = clampWizardStep(current, flags)
   return nextWizardStep(from, flags) === from
 }
+
+/** Eventos ya enviados o en venta: el wizard guarda, no relanza. */
+export function usesWizardUpdateActions(status: string | null | undefined) {
+  if (
+    !status ||
+    status === "draft" ||
+    status === "needs_revision" ||
+    status === "rejected"
+  ) {
+    return false
+  }
+  return true
+}

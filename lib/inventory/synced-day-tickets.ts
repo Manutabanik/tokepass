@@ -14,6 +14,7 @@ export type InventoryFamily = {
   kind: InventoryFamilyKind
   indexes: number[]
   stock: number
+  sold: number
   price: number
   priceMixed: boolean
   seatingSectorId: string | null
@@ -28,6 +29,14 @@ function asStock(value: unknown): number {
   const parsed = Math.floor(Number(value))
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
 }
+
+export function ticketSoldCount(ticket: Pick<InventoryTicket, "sold"> | null | undefined) {
+  const parsed = Math.floor(Number(ticket?.sold))
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
+export const TIER_HAS_SALES_LOCK_HINT =
+  "No se puede eliminar porque ya tiene ventas registradas."
 
 export function ticketFamilyNameKey(name: string | null | undefined): string {
   return (name ?? "").trim().toLocaleLowerCase("es")
@@ -85,6 +94,7 @@ function familyFromIndexes(
     kind,
     indexes,
     stock: asStock(rows[0]?.capacity),
+    sold: rows.reduce((sum, row) => sum + ticketSoldCount(row), 0),
     price: Math.min(...prices),
     priceMixed: pricesAreDifferentiated(prices),
     seatingSectorId,

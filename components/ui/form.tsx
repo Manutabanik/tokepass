@@ -32,7 +32,12 @@ function FormItem({ className, ...props }: ComponentProps<"div">) {
   )
 }
 
-function FormLabel({ className, ...props }: ComponentProps<typeof Label>) {
+function FormLabel({
+  className,
+  required,
+  children,
+  ...props
+}: ComponentProps<typeof Label> & { required?: boolean }) {
   return (
     <Label
       data-slot="form-label"
@@ -41,7 +46,15 @@ function FormLabel({ className, ...props }: ComponentProps<typeof Label>) {
         className,
       )}
       {...props}
-    />
+    >
+      {children}
+      {required ? (
+        <>
+          {" "}
+          <span className="text-red-500">*</span>
+        </>
+      ) : null}
+    </Label>
   )
 }
 
