@@ -42,8 +42,7 @@ import {
   resolveTicketSectorId,
 } from "@/lib/validations/ticket-sku"
 import {
-  EMPTY_MAP_ENABLE_ERROR,
-  venueMapHasConfiguredSectors,
+  resolveActiveSeatingMapFlags,
 } from "@/lib/inventory/map-enablement"
 import { EVENT_VISIBILITY_VALUES } from "@/types/events"
 import { TICKET_TIER_VISIBILITY_VALUES } from "@/types/tickets"
@@ -509,17 +508,6 @@ const eventFormObject = z
     const usesSeatingMap =
       Boolean(data.basics.hasSeatingPlan) &&
       Boolean(data.venue.includesSeatingMap)
-    if (
-      data.basics.deliveryMode !== "ONLINE" &&
-      usesSeatingMap &&
-      !venueMapHasConfiguredSectors(data.venue.venueMap)
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["venue", "venueMap"],
-        message: EMPTY_MAP_ENABLE_ERROR,
-      })
-    }
     const capacitySnap = computeEventCapacity({
       tickets: data.tickets,
       venueMap: data.basics.hasSeatingPlan ? data.venue.venueMap : null,
@@ -945,6 +933,12 @@ export function coerceDraftEventForm(
       })
     : venue.zones
 
+  const seatingFlags = resolveActiveSeatingMapFlags({
+    hasSeatingPlan: raw.basics.hasSeatingPlan,
+    includesSeatingMap: venue.includesSeatingMap,
+    venueMap: venue.venueMap,
+  })
+
   return {
     basics: {
       title: raw.basics.title.trim() || "Evento sin título",
@@ -965,7 +959,7 @@ export function coerceDraftEventForm(
         ? raw.basics.categoryId
         : "",
       ageRestriction: age,
-      hasSeatingPlan: Boolean(raw.basics.hasSeatingPlan),
+      hasSeatingPlan: seatingFlags.hasSeatingPlan,
       hasSchedule: Boolean(raw.basics.hasSchedule),
       deliveryMode:
         raw.basics.deliveryMode === "ONLINE" ? "ONLINE" : "PRESENCIAL",
@@ -999,7 +993,7 @@ export function coerceDraftEventForm(
       seatingBackgroundUrl: venue.seatingBackgroundUrl ?? null,
       venueMap: venue.venueMap ?? null,
       seatingLayout: venue.seatingLayout,
-      includesSeatingMap: Boolean(venue.includesSeatingMap),
+      includesSeatingMap: seatingFlags.includesSeatingMap,
       saveVenueForReuse: venue.saveVenueForReuse ?? true,
       zones: zones as EventFormValues["venue"]["zones"],
     },

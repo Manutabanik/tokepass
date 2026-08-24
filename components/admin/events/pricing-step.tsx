@@ -14,7 +14,6 @@ import {
 import { FormLabel, FormMessage } from "@/components/ui/form"
 import { listEventFormJornadas } from "@/lib/event-schedule"
 import { createInventoryTicket } from "@/lib/inventory/create-inventory-ticket"
-import { EMPTY_MAP_ENABLE_ERROR } from "@/lib/inventory/map-enablement"
 import {
   listInventoryFamilies,
   planMissingFamilyDayTickets,
@@ -69,7 +68,6 @@ export function PricingStep({
   })
   const isMultiDay =
     Boolean(form.watch("basics.isMultiDay")) || eventDates.length >= 2
-  const mapFieldError = form.formState.errors.venue?.venueMap?.message
   const [sheet, setSheet] = useState<SheetState | null>(null)
   const [showExtras, setShowExtras] = useState(() => {
     const current = form.getValues("tickets") ?? []
@@ -193,12 +191,6 @@ export function PricingStep({
       <CapacityThermometer form={form} />
       {typeof form.formState.errors.tickets?.message === "string" ? (
         <FormMessage>{form.formState.errors.tickets.message}</FormMessage>
-      ) : null}
-      {typeof mapFieldError === "string" &&
-      mapFieldError === EMPTY_MAP_ENABLE_ERROR ? (
-        <p className="text-sm text-destructive" role="alert">
-          {mapFieldError}
-        </p>
       ) : null}
 
       {hasSellableRows ? (

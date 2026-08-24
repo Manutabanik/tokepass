@@ -92,7 +92,6 @@ import {
   ticketsHavePhaseOverflow,
 } from "@/lib/inventory/capacity-budget"
 import {
-  EMPTY_MAP_ENABLE_ERROR,
   venueMapHasConfiguredSectors,
 } from "@/lib/inventory/map-enablement"
 import { assignableLogicalSectorIds } from "@/lib/inventory/logical-sectors"
@@ -1010,13 +1009,7 @@ export function EventCreationWizard({
     if (!venueMapHasConfiguredSectors(next)) {
       form.setValue("venue.includesSeatingMap", false, { shouldDirty: true })
       form.setValue("basics.hasSeatingPlan", false, { shouldDirty: true })
-      form.setError("venue.venueMap", {
-        type: "manual",
-        message: EMPTY_MAP_ENABLE_ERROR,
-      })
-      if (options?.announceEmpty !== false) {
-        toast.error(EMPTY_MAP_ENABLE_ERROR)
-      }
+      form.clearErrors("venue.venueMap")
       applyMapInventory(next)
       return
     }

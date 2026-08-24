@@ -25,6 +25,19 @@ export function eventHasActiveSeatingMap(input: {
   )
 }
 
+/** Deriva flags de mapa solo cuando hay sectores dibujados; si no, venta general. */
+export function resolveActiveSeatingMapFlags(input: {
+  hasSeatingPlan?: boolean | null
+  includesSeatingMap?: boolean | null
+  venueMap?: unknown
+}): { hasSeatingPlan: boolean; includesSeatingMap: boolean } {
+  const active = eventHasActiveSeatingMap(input)
+  return {
+    hasSeatingPlan: active,
+    includesSeatingMap: active,
+  }
+}
+
 export function ticketsReferenceMapSectors(
   tickets:
     | Array<{ seatingSectorId?: string | null } | null>
