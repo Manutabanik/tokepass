@@ -27,6 +27,7 @@ import {
   STUDIO_CONTROL_CLASS,
   STUDIO_LABEL_CLASS,
 } from "@/lib/admin/studio-form-styles"
+import { formatCurrency } from "@/lib/format"
 import { formatInventoryDayOption } from "@/lib/event-schedule"
 import { asPositiveInt, parseStrictInt } from "@/lib/inventory/capacity-budget"
 import {
@@ -153,7 +154,7 @@ export function TicketEditorSheet({
           </SheetTitle>
           <SheetDescription>
             {mapLocked
-              ? "El aforo lo define el mapa. Acá cargás la ganancia neta y el precio público se calcula solo."
+              ? "El stock y precio de este sector se gestionan directamente desde el editor del mapa."
               : "Nombre, aforo y ganancia neta. El precio al público incluye la comisión."}
             {familySold > 0 ? ` ${TIER_HAS_SALES_LOCK_HINT}` : ""}
           </SheetDescription>
@@ -216,8 +217,8 @@ export function TicketEditorSheet({
                 />
                 {mapLocked ? (
                   <p className="text-[11px] text-muted-foreground">
-                    Lo define el dibujo del mapa ({asPositiveInt(field.value)}{" "}
-                    lugares)
+                    El stock y precio de este sector se gestionan directamente desde
+                    el editor del mapa ({asPositiveInt(field.value)} lugares).
                   </p>
                 ) : null}
                 <FormMessage>{fieldState.error?.message}</FormMessage>
@@ -226,30 +227,46 @@ export function TicketEditorSheet({
           />
 
           {!differentiate || !showDays ? (
-            <FormField
-              control={form.control}
-              name={`tickets.${primaryIndex}.price`}
-              render={({ fieldState }) => (
-                <FormItem>
-                  <NetProfitCalculator
-                    name={`tickets.${primaryIndex}.basePrice`}
-                    netPrice={resolveTicketNetProfit(
-                      watchedTickets?.[primaryIndex] ?? {},
-                      feePercentage,
-                    )}
-                    onNetChange={(net) =>
-                      writeNet(primaryIndex, net, !differentiate)
-                    }
-                    feePercentage={feePercentage}
-                    invalid={Boolean(fieldState.error)}
-                    error={fieldState.error?.message}
-                  />
-                </FormItem>
-              )}
-            />
+            mapLocked ? (
+              <FormItem>
+                <FormLabel className={STUDIO_LABEL_CLASS}>Precio público</FormLabel>
+                <Input
+                  disabled
+                  readOnly
+                  value={formatCurrency(Number(watchedTickets?.[primaryIndex]?.price) || 0)}
+                  className={cn(STUDIO_CONTROL_CLASS, "tabular-nums")}
+                />
+                <FormDescription className="text-[11px]">
+                  El stock y precio de este sector se gestionan directamente desde
+                  el editor del mapa.
+                </FormDescription>
+              </FormItem>
+            ) : (
+              <FormField
+                control={form.control}
+                name={`tickets.${primaryIndex}.price`}
+                render={({ fieldState }) => (
+                  <FormItem>
+                    <NetProfitCalculator
+                      name={`tickets.${primaryIndex}.basePrice`}
+                      netPrice={resolveTicketNetProfit(
+                        watchedTickets?.[primaryIndex] ?? {},
+                        feePercentage,
+                      )}
+                      onNetChange={(net) =>
+                        writeNet(primaryIndex, net, !differentiate)
+                      }
+                      feePercentage={feePercentage}
+                      invalid={Boolean(fieldState.error)}
+                      error={fieldState.error?.message}
+                    />
+                  </FormItem>
+                )}
+              />
+            )
           ) : null}
 
-          {showDays ? (
+          {showDays && !mapLocked ? (
             <div className="space-y-3 rounded-xl border border-border/70 p-3">
               <label className="flex items-center justify-between gap-3">
                 <span className="text-sm text-foreground">

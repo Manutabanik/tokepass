@@ -1,7 +1,12 @@
+import type {
+  UseFieldArrayAppend,
+  UseFieldArrayRemove,
+  UseFieldArrayUpdate,
+} from "react-hook-form"
+
 import { defaultInventoryDayId, normalizeDayId } from "@/lib/event-schedule"
 import {
   eventHasActiveSeatingMap,
-  ticketsReferenceMapSectors,
 } from "@/lib/inventory/map-enablement"
 import { inferInventoryTierType } from "@/lib/inventory/unified-inventory"
 import { parametricZoneCapacity } from "@/lib/seating/adaptive-seating"
@@ -361,15 +366,16 @@ export function syncMapBackedTickets(
         seatingType: (map.zones ?? []).find((zone) => zone.id === sectorId)
           ?.seatingType,
       })
+      const mapPrice = Number.isFinite(Number(group.price))
+        ? Number(group.price)
+        : 0
       return {
         ...base,
         id: inheritedId,
         isNew: inheritedId ? false : true,
         name: group.name || existing?.name || "Zona",
-        price:
-          existing != null && Number.isFinite(Number(existing.price))
-            ? Number(existing.price)
-            : group.price,
+        price: mapPrice,
+        basePrice: mapPrice,
         capacity: mapGroupGeneratedPlaces(group, map),
         seatingSectorId: sectorId,
         layoutType,
@@ -401,8 +407,7 @@ export function consolidateEventTicketsForPersist(
       hasSeatingPlan: data.basics.hasSeatingPlan,
       includesSeatingMap: data.venue.includesSeatingMap,
       venueMap: data.venue.venueMap,
-    }) ||
-    !ticketsReferenceMapSectors(customTickets)
+    })
   ) {
     return customTickets
   }
@@ -414,6 +419,98 @@ export function consolidateEventTicketsForPersist(
       dayIds: (data.basics.scheduleDays ?? []).map((day) => day.id),
     },
   )
+}
+
+export function mapTicketSyncKey(tier: {
+  seatingSectorId?: string | null
+  dayId?: string | null
+}): string {
+  return `${(tier.seatingSectorId ?? "").trim()}::${normalizeDayId(tier.dayId) ?? ""}`
+}
+
+function tierSoldCount(
+  ticket: Pick<EventFormValues["tickets"][number], "sold"> | null | undefined,
+): number {
+  const parsed = Math.floor(Number(ticket?.sold))
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
+function mapBackedTicketFieldsMatch(
+  current: EventFormValues["tickets"][number],
+  desired: EventFormValues["tickets"][number],
+): boolean {
+  return (
+    current.name === desired.name &&
+    current.price === desired.price &&
+    current.basePrice === desired.basePrice &&
+    current.capacity === desired.capacity &&
+    current.layoutType === desired.layoutType &&
+    current.capacityPerUnit === desired.capacityPerUnit &&
+    current.tierType === desired.tierType &&
+    current.seatingSectorId === desired.seatingSectorId &&
+    normalizeDayId(current.dayId) === normalizeDayId(desired.dayId)
+  )
+}
+
+/** Aplica sync mapa -> tickets con append/update/remove (preserva IDs persistidos). */
+export function syncMapToTickets(input: {
+  getTickets: () => EventFormValues["tickets"]
+  map: InteractiveVenueMap
+  append: UseFieldArrayAppend<EventFormValues, "tickets">
+  update: UseFieldArrayUpdate<EventFormValues, "tickets">
+  remove: UseFieldArrayRemove
+  options?: { defaultDayId?: string | null; dayIds?: readonly string[] }
+}): boolean {
+  const current = input.getTickets()
+  const target = syncMapBackedTickets(current, input.map, input.options)
+  const desiredMapBacked = target.filter(isMapBackedTicket)
+  const desiredByKey = new Map(
+    desiredMapBacked.map((tier) => [mapTicketSyncKey(tier), tier]),
+  )
+  let changed = false
+
+  const removeIndices = current
+    .map((tier, index) => ({ tier, index }))
+    .filter(
+      ({ tier }) =>
+        isMapBackedTicket(tier) &&
+        !desiredByKey.has(mapTicketSyncKey(tier)) &&
+        tierSoldCount(tier) === 0,
+    )
+    .map(({ index }) => index)
+    .sort((a, b) => b - a)
+
+  for (const index of removeIndices) {
+    input.remove(index)
+    changed = true
+  }
+
+  const afterRemove = input.getTickets()
+  for (let index = 0; index < afterRemove.length; index += 1) {
+    const tier = afterRemove[index]
+    if (!tier || !isMapBackedTicket(tier)) continue
+    const desired = desiredByKey.get(mapTicketSyncKey(tier))
+    if (!desired) continue
+    const merged: EventFormValues["tickets"][number] = {
+      ...tier,
+      ...desired,
+      id: tier.id,
+      sold: tier.sold,
+      isNew: tier.isNew,
+    }
+    if (!mapBackedTicketFieldsMatch(tier, merged)) {
+      input.update(index, merged)
+      changed = true
+    }
+    desiredByKey.delete(mapTicketSyncKey(tier))
+  }
+
+  for (const desired of desiredByKey.values()) {
+    input.append(desired)
+    changed = true
+  }
+
+  return changed
 }
 
 export function applyMapCapacityToTickets<
@@ -451,6 +548,62 @@ export function applyMapCapacityToTickets<
       capacity: Math.max(generated, sold),
     }
   })
+}
+
+/** Quita un sector comercial del mapa (zona, grupo o elemento) por su id de inventario. */
+export function removeVenueMapSector(
+  map: InteractiveVenueMap,
+  sectorId: string,
+): InteractiveVenueMap {
+  const id = sectorId.trim()
+  if (!id) return map
+
+  const group = listVenuePriceGroups(map).find(
+    (candidate) => priceGroupSectorId(candidate) === id,
+  )
+  if (!group) {
+    return {
+      ...map,
+      zones: (map.zones ?? []).filter((zone) => zone.id !== id),
+      elements: (map.elements ?? []).filter(
+        (element) => element.id !== id && element.groupId !== id,
+      ),
+    }
+  }
+
+  const match = group.match
+  if (match.kind === "zone") {
+    return {
+      ...map,
+      zones: (map.zones ?? []).filter((zone) => zone.id !== match.id),
+    }
+  }
+
+  if (match.kind === "group") {
+    return {
+      ...map,
+      elements: (map.elements ?? []).filter(
+        (element) => element.groupId !== match.groupId,
+      ),
+    }
+  }
+
+  if (match.kind === "ids") {
+    const removeIds = new Set(match.ids)
+    return {
+      ...map,
+      elements: (map.elements ?? []).filter(
+        (element) => !removeIds.has(element.id),
+      ),
+    }
+  }
+
+  return {
+    ...map,
+    elements: (map.elements ?? []).filter(
+      (element) => element.id !== match.id && element.groupId !== id,
+    ),
+  }
 }
 
 export function mapBackedTicketsUnchanged(

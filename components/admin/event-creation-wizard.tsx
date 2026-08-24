@@ -74,12 +74,12 @@ import { feePercentageFromRate } from "@/lib/pricing/flexible-pricing"
 import { clampServiceFeePercentage } from "@/lib/pricing/net-profit"
 import type { VenuePricingMap } from "@/lib/seating/venue-adapter"
 import {
-  applyMapCapacityToTickets,
-  consolidateEventTicketsForPersist,
-  mapBackedTicketsUnchanged,
-  syncMapBackedTickets,
+  isMapBackedTicket,
+  removeVenueMapSector,
+  syncMapToTickets,
   venueMapToPricingMap,
 } from "@/lib/seating/venue-map-pricing"
+import { prepareEventForPersist } from "@/lib/inventory/prepare-event-persist"
 import { InteractiveVenueMapEditor } from "@/components/admin/interactive-venue-map-editor"
 import { TokepassStudioOverlay } from "@/components/admin/tokepass-studio-overlay"
 import {
@@ -93,7 +93,6 @@ import {
   ticketsHavePhaseOverflow,
 } from "@/lib/inventory/capacity-budget"
 import {
-  EMPTY_MAP_ENABLE_ERROR,
   venueMapHasConfiguredSectors,
 } from "@/lib/inventory/map-enablement"
 import { assignableLogicalSectorIds } from "@/lib/inventory/logical-sectors"
@@ -125,7 +124,7 @@ import {
   collectLiveSeatingSectorIds,
   sanitizeEventSubmitPayload,
 } from "@/lib/events/sanitize-ticket-tiers"
-import { parseVenueMap } from "@/types/venue-map"
+import { parseVenueMap, emptyVenueMap } from "@/types/venue-map"
 import {
   AGE_RESTRICTION_LABELS,
   AGE_RESTRICTION_VALUES,
@@ -135,6 +134,7 @@ import {
   type EventFormValues,
 } from "@/lib/validations/event-form"
 import { defaultInventoryDayId, seedTwoScheduleDays } from "@/lib/event-schedule"
+import { ticketSoldCount } from "@/lib/inventory/synced-day-tickets"
 import { uncoveredScheduleDays } from "@/lib/inventory/day-ticket-coverage"
 import {
   clampWizardStep,
@@ -321,11 +321,33 @@ export function EventCreationWizard({
       ...(initialData?.values ?? {}),
     },
   })
-  const { replace: replaceTickets } = useFieldArray({
+  const { replace: replaceTickets, append: appendTicket, update: updateTicket, remove: removeTicket } = useFieldArray({
     control: form.control,
     name: "tickets",
     keyName: "_rowId",
   })
+  const inventoryHealedRef = useRef(false)
+
+  useEffect(() => {
+    if (!initialData?.id || inventoryHealedRef.current) return
+    inventoryHealedRef.current = true
+    const healed = prepareEventForPersist(form.getValues(), {
+      mode: initialData?.id ? "update" : "create",
+    })
+    replaceTickets(healed.tickets)
+    form.setValue("basics.hasSeatingPlan", healed.basics.hasSeatingPlan, {
+      shouldDirty: false,
+      shouldValidate: false,
+    })
+    form.setValue("venue.includesSeatingMap", healed.venue.includesSeatingMap, {
+      shouldDirty: false,
+      shouldValidate: false,
+    })
+    form.clearErrors("venue.venueMap")
+    form.clearErrors("tickets")
+    useEventFormStore.getState().setAutosaveStatus("saved")
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- heal inventory once on edit load
+  }, [initialData?.id])
 
   const capacitySnapshot = useEventCapacity(form)
   const watchedTickets = useWatch({ control: form.control, name: "tickets" })
@@ -458,6 +480,20 @@ export function EventCreationWizard({
     setIsStudioOpen(false)
   }
 
+  const ticketsStepSyncedRef = useRef(false)
+  useEffect(() => {
+    if (resolvedStep !== WIZARD_STEP_TICKETS) {
+      ticketsStepSyncedRef.current = false
+      return
+    }
+    if (ticketsStepSyncedRef.current) return
+    ticketsStepSyncedRef.current = true
+    const map = parseVenueMap(form.getValues("venue.venueMap"))
+    if (!venueMapHasConfiguredSectors(map)) return
+    applyMapInventory(map)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync once per visit to tickets step
+  }, [resolvedStep])
+
   useEffect(() => {
     if (!workspace) return
     const key = editWorkspaceStepKey(resolvedStep)
@@ -478,16 +514,40 @@ export function EventCreationWizard({
     const pricing = venueMapToPricingMap(map)
     setVenuePricingMap(pricing)
     useEventFormStore.getState().setVenuePricingMap(pricing)
-    const current = form.getValues("tickets") ?? []
-    const next = syncMapBackedTickets(current, map, {
-      defaultDayId: defaultInventoryDayId(
-        form.getValues("basics.scheduleDays"),
-      ),
-      dayIds: (form.getValues("basics.scheduleDays") ?? []).map((day) => day.id),
+    syncMapToTickets({
+      getTickets: () => form.getValues("tickets") ?? [],
+      map,
+      append: appendTicket,
+      update: updateTicket,
+      remove: removeTicket,
+      options: {
+        defaultDayId: defaultInventoryDayId(
+          form.getValues("basics.scheduleDays"),
+        ),
+        dayIds: (form.getValues("basics.scheduleDays") ?? []).map((day) => day.id),
+      },
     })
-    if (!mapBackedTicketsUnchanged(current, next)) {
-      replaceTickets(next)
-    }
+    form.clearErrors("venue.venueMap")
+    form.clearErrors("tickets")
+  }
+
+  function handleDisableMap() {
+    form.setValue("basics.hasSeatingPlan", false, { shouldDirty: true })
+    form.setValue("venue.includesSeatingMap", false, { shouldDirty: true })
+    form.setValue("venue.venueMap", emptyVenueMap(), { shouldDirty: true })
+    form.setValue("venue.seatingLayout", [], { shouldDirty: true })
+    const healed = prepareEventForPersist(form.getValues(), { mode: "update" })
+    form.setValue("tickets", healed.tickets, { shouldDirty: true })
+    form.clearErrors("venue.venueMap")
+    form.clearErrors("tickets")
+  }
+
+  function handleRemoveMapSector(sectorId: string | null) {
+    const id = sectorId?.trim()
+    if (!id) return
+    const map = parseVenueMap(form.getValues("venue.venueMap"))
+    persistWorkspaceMap(removeVenueMapSector(map, id), { announceEmpty: false })
+    form.clearErrors("tickets")
   }
 
   function handleApplySavedVenue(venue: OrganizerVenue) {
@@ -737,32 +797,16 @@ export function EventCreationWizard({
 
   function buildConsolidatedPayload(data: EventFormValues): EventFormValues {
     const editingId = initialData?.id ?? persistedEventId
-    let next: EventFormValues = {
-      ...data,
-      tickets: consolidateEventTicketsForPersist(data),
-    }
-    const liveSectorIds = collectLiveSeatingSectorIds({
-      venueMap: next.venue.venueMap,
-      seatingLayout: next.venue.seatingLayout,
-      extraIds: assignableLogicalSectorIds(
-        next.venue.zones,
-        next.venue.venueMap,
-      ),
-    })
-    next = sanitizeEventSubmitPayload(next, {
+    return prepareEventForPersist(data, {
       mode: editingId ? "update" : "create",
       persistedIds: (initialData?.values.tickets ?? [])
         .map((tier) => tier.id)
         .filter((id): id is string => Boolean(id)),
-      liveSectorIds,
-    })
-    return {
-      ...next,
-      tickets: applyMapCapacityToTickets(
-        next.tickets,
-        parseVenueMap(next.venue.venueMap),
+      extraSectorIds: assignableLogicalSectorIds(
+        data.venue.zones,
+        data.venue.venueMap,
       ),
-    }
+    })
   }
 
   async function persistInventoryDraft(data: EventFormValues) {
@@ -882,7 +926,7 @@ export function EventCreationWizard({
       if (!persist.success) {
       reportPersistError(
         persist.error,
-        "No pudimos guardar los cambios. Revisá tu conexión a internet e intentá de nuevo",
+        "No pudimos guardar los cambios. Revisá los datos del evento e intentá de nuevo",
       )
         return false
       }
@@ -1008,17 +1052,12 @@ export function EventCreationWizard({
     if (!venueMapHasConfiguredSectors(next)) {
       form.setValue("venue.includesSeatingMap", false, { shouldDirty: true })
       form.setValue("basics.hasSeatingPlan", false, { shouldDirty: true })
-      form.setError("venue.venueMap", {
-        type: "manual",
-        message: EMPTY_MAP_ENABLE_ERROR,
-      })
-      if (options?.announceEmpty !== false) {
-        toast.error(EMPTY_MAP_ENABLE_ERROR)
-      }
+      form.clearErrors("venue.venueMap")
       applyMapInventory(next)
       return
     }
     form.clearErrors("venue.venueMap")
+    form.clearErrors("tickets")
     form.setValue("venue.includesSeatingMap", true, { shouldDirty: true })
     form.setValue("basics.hasSeatingPlan", true, { shouldDirty: true })
     applyMapInventory(next)
@@ -1701,6 +1740,11 @@ export function EventCreationWizard({
                   fixedFee={platformFixedFee}
                   hideMapBlock={isStreaming}
                   onOpenMapStudio={() => setIsStudioOpen(true)}
+                  onSyncMapToTickets={() =>
+                    applyMapInventory(parseVenueMap(form.getValues("venue.venueMap")))
+                  }
+                  onDisableMap={handleDisableMap}
+                  onRemoveMapSector={handleRemoveMapSector}
                 />
                 <FormMessage>
                   {form.formState.errors.tickets?.message ??

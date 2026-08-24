@@ -41,15 +41,10 @@ import {
   normalizeTicketSectorInput,
   resolveTicketSectorId,
 } from "@/lib/validations/ticket-sku"
-import { validateSectorModalities } from "@/lib/seating/seating-type"
 import {
-  EMPTY_MAP_ENABLE_ERROR,
-  eventHasActiveSeatingMap,
-  ticketsReferenceMapSectors,
-  venueMapHasConfiguredSectors,
+  resolveActiveSeatingMapFlags,
 } from "@/lib/inventory/map-enablement"
 import { EVENT_VISIBILITY_VALUES } from "@/types/events"
-import { parseVenueMap } from "@/types/venue-map"
 import { TICKET_TIER_VISIBILITY_VALUES } from "@/types/tickets"
 import {
   EVENT_DELIVERY_MODES,
@@ -513,17 +508,6 @@ const eventFormObject = z
     const usesSeatingMap =
       Boolean(data.basics.hasSeatingPlan) &&
       Boolean(data.venue.includesSeatingMap)
-    if (
-      data.basics.deliveryMode !== "ONLINE" &&
-      usesSeatingMap &&
-      !venueMapHasConfiguredSectors(data.venue.venueMap)
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["venue", "venueMap"],
-        message: EMPTY_MAP_ENABLE_ERROR,
-      })
-    }
     const capacitySnap = computeEventCapacity({
       tickets: data.tickets,
       venueMap: data.basics.hasSeatingPlan ? data.venue.venueMap : null,
@@ -577,26 +561,6 @@ const eventFormObject = z
 
     if (
       data.basics.deliveryMode !== "ONLINE" &&
-      eventHasActiveSeatingMap({
-        hasSeatingPlan: data.basics.hasSeatingPlan,
-        includesSeatingMap: data.venue.includesSeatingMap,
-        venueMap: data.venue.venueMap,
-      }) &&
-      ticketsReferenceMapSectors(data.tickets)
-    ) {
-      for (const issue of validateSectorModalities(
-        parseVenueMap(data.venue.venueMap),
-      )) {
-        context.addIssue({
-          code: "custom",
-          path: ["venue", "venueMap"],
-          message: issue.message,
-        })
-      }
-    }
-
-    if (
-      data.basics.deliveryMode !== "ONLINE" &&
       data.basics.hasSeatingPlan &&
       !hasBlueprintZones &&
       !usesSeatingMap
@@ -637,17 +601,17 @@ const draftTicketSchema = z.preprocess(
   ),
   isNew: z.boolean().optional(),
   name: z.string().optional().default(""),
-  price: z
+  price: z.coerce
     .number()
     .min(0, "Ingresá un precio válido o marcá la opción de entrada gratuita")
     .optional(),
-  basePrice: z.number().min(0).optional(),
+  basePrice: z.coerce.number().min(0).optional(),
   feeStrategy: z.enum(TICKET_FEE_STRATEGIES).optional().default("absorb_in_price"),
   calculationMode: z
     .enum(TICKET_CALCULATION_MODES)
     .optional()
     .default("public_price"),
-  capacity: z.number().int().optional(),
+  capacity: z.coerce.number().int().optional(),
   sold: z.number().int().min(0).optional(),
   timeLimit: z.string().optional(),
   saleStartsAt: z.string().optional().default(""),
@@ -678,7 +642,7 @@ const draftTicketSchema = z.preprocess(
     .default(null),
   admitCount: z.number().int().min(1).max(50).optional().default(1),
   tierType: z.enum(INVENTORY_TIER_TYPES).optional().default("general"),
-  listPrice: z.number().min(0).nullable().optional(),
+  listPrice: z.coerce.number().min(0).nullable().optional(),
   bundleItems: z
     .array(
       z.object({
@@ -969,6 +933,12 @@ export function coerceDraftEventForm(
       })
     : venue.zones
 
+  const seatingFlags = resolveActiveSeatingMapFlags({
+    hasSeatingPlan: raw.basics.hasSeatingPlan,
+    includesSeatingMap: venue.includesSeatingMap,
+    venueMap: venue.venueMap,
+  })
+
   return {
     basics: {
       title: raw.basics.title.trim() || "Evento sin título",
@@ -980,7 +950,7 @@ export function coerceDraftEventForm(
         isMultiDay && scheduleDays[scheduleDays.length - 1]?.endTime
           ? scheduleDays[scheduleDays.length - 1].endTime
           : toDatetimeLocal(endDate),
-      description: raw.basics.description ?? "",
+      description: raw.basics.description?.trim() || "Borrador",
       flyerName: raw.basics.flyerName ?? null,
       visibility: raw.basics.visibility ?? "public",
       isMultiDay,
@@ -989,7 +959,7 @@ export function coerceDraftEventForm(
         ? raw.basics.categoryId
         : "",
       ageRestriction: age,
-      hasSeatingPlan: Boolean(raw.basics.hasSeatingPlan),
+      hasSeatingPlan: seatingFlags.hasSeatingPlan,
       hasSchedule: Boolean(raw.basics.hasSchedule),
       deliveryMode:
         raw.basics.deliveryMode === "ONLINE" ? "ONLINE" : "PRESENCIAL",
@@ -1023,7 +993,7 @@ export function coerceDraftEventForm(
       seatingBackgroundUrl: venue.seatingBackgroundUrl ?? null,
       venueMap: venue.venueMap ?? null,
       seatingLayout: venue.seatingLayout,
-      includesSeatingMap: Boolean(venue.includesSeatingMap),
+      includesSeatingMap: seatingFlags.includesSeatingMap,
       saveVenueForReuse: venue.saveVenueForReuse ?? true,
       zones: zones as EventFormValues["venue"]["zones"],
     },

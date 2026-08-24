@@ -12,7 +12,7 @@ describe("guided action errors", () => {
     )
     assert.match(
       actionHintFromError(APP_ERRORS.SAVE_FAILED),
-      /conexión/i,
+      /recargá la página/i,
     )
   })
 

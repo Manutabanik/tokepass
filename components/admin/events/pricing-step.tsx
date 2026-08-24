@@ -12,9 +12,10 @@ import {
   TicketEditorSheet,
 } from "@/components/admin/events/ticket-editor-sheet"
 import { FormLabel, FormMessage } from "@/components/ui/form"
+import { Switch } from "@/components/ui/switch"
 import { listEventFormJornadas } from "@/lib/event-schedule"
 import { createInventoryTicket } from "@/lib/inventory/create-inventory-ticket"
-import { EMPTY_MAP_ENABLE_ERROR } from "@/lib/inventory/map-enablement"
+import { eventHasActiveSeatingMap } from "@/lib/inventory/map-enablement"
 import {
   listInventoryFamilies,
   planMissingFamilyDayTickets,
@@ -33,6 +34,7 @@ type SheetState = {
   kind: "general" | "map"
   created: boolean
   differentiate: boolean
+  appendedIndexes: number[]
 }
 
 export function PricingStep({
@@ -42,6 +44,9 @@ export function PricingStep({
   isSponsored = false,
   hideMapBlock = false,
   onOpenMapStudio,
+  onSyncMapToTickets,
+  onDisableMap,
+  onRemoveMapSector,
 }: {
   form: UseFormReturn<EventFormValues>
   eventId?: string | null
@@ -50,6 +55,9 @@ export function PricingStep({
   isSponsored?: boolean
   hideMapBlock?: boolean
   onOpenMapStudio?: () => void
+  onSyncMapToTickets?: () => void
+  onDisableMap?: () => void
+  onRemoveMapSector?: (sectorId: string | null) => void
 }) {
   const { append, update, remove } = useFieldArray({
     control: form.control,
@@ -62,13 +70,20 @@ export function PricingStep({
   )
   const scheduleDays = form.watch("basics.scheduleDays") ?? []
   const identityDate = form.watch("basics.date")
+  const hasSeatingPlan = Boolean(form.watch("basics.hasSeatingPlan"))
+  const includesSeatingMap = Boolean(form.watch("venue.includesSeatingMap"))
+  const venueMap = form.watch("venue.venueMap")
+  const mapEnabled = eventHasActiveSeatingMap({
+    hasSeatingPlan,
+    includesSeatingMap,
+    venueMap,
+  })
   const eventDates = listEventFormJornadas({
     scheduleDays,
     date: identityDate,
   })
   const isMultiDay =
     Boolean(form.watch("basics.isMultiDay")) || eventDates.length >= 2
-  const mapError = form.formState.errors.venue?.venueMap?.message
   const [sheet, setSheet] = useState<SheetState | null>(null)
   const [showExtras, setShowExtras] = useState(() => {
     const current = form.getValues("tickets") ?? []
@@ -88,7 +103,29 @@ export function PricingStep({
   )
   const hasSellableRows = families.length > 0
 
+  function resolveFamilyIndexes(family: InventoryFamily): number[] {
+    const current = form.getValues("tickets") ?? []
+    const refreshed = listInventoryFamilies(current).find(
+      (candidate) => candidate.key === family.key,
+    )
+    return refreshed?.indexes ?? family.indexes
+  }
+
   function openFamily(family: InventoryFamily, created = false) {
+    if (family.kind === "map") {
+      onSyncMapToTickets?.()
+      const indexes = resolveFamilyIndexes(family)
+      const current = form.getValues("tickets") ?? []
+      setSheet({
+        indexes,
+        kind: "map",
+        created,
+        differentiate: sheetDifferentiateDefault(current, indexes),
+        appendedIndexes: [],
+      })
+      return
+    }
+
     const current = form.getValues("tickets") ?? []
     const dayIds = eventDates.map((day) => day.id)
     const plan = planMissingFamilyDayTickets({
@@ -98,19 +135,21 @@ export function PricingStep({
       isMultiDay,
     })
     const start = current.length
+    const appendedIndexes: number[] = []
     if (plan.append.length > 0) {
       append(plan.append)
+      for (let offset = 0; offset < plan.append.length; offset += 1) {
+        appendedIndexes.push(start + offset)
+      }
     }
-    const indexes = [
-      ...plan.keepIndexes,
-      ...plan.append.map((_, offset) => start + offset),
-    ]
+    const indexes = [...plan.keepIndexes, ...appendedIndexes]
     const nextTickets = form.getValues("tickets") ?? []
     setSheet({
       indexes,
       kind: family.kind,
       created,
       differentiate: sheetDifferentiateDefault(nextTickets, indexes),
+      appendedIndexes,
     })
   }
 
@@ -128,6 +167,7 @@ export function PricingStep({
       kind: "general",
       created: true,
       differentiate: false,
+      appendedIndexes: [],
     })
   }
 
@@ -169,6 +209,8 @@ export function PricingStep({
       )
       if (sheet.created && stillBlank) {
         remove(sheet.indexes)
+      } else if (!sheet.created && sheet.appendedIndexes.length > 0) {
+        remove(sheet.appendedIndexes)
       } else {
         commitSheetFamily()
       }
@@ -184,6 +226,25 @@ export function PricingStep({
     }
   }
 
+  function removeMapFamily(family: InventoryFamily) {
+    if (family.sold > 0) return
+    if (family.seatingSectorId?.trim()) {
+      onRemoveMapSector?.(family.seatingSectorId)
+      return
+    }
+    removeFamily(family)
+  }
+
+  function handleMapToggle(checked: boolean) {
+    if (checked) {
+      form.setValue("basics.hasSeatingPlan", true, { shouldDirty: true })
+      form.setValue("venue.includesSeatingMap", true, { shouldDirty: true })
+      onOpenMapStudio?.()
+      return
+    }
+    onDisableMap?.()
+  }
+
   return (
     <div className="space-y-6" data-field="tickets">
       <FormLabel className={STUDIO_LABEL_CLASS} required>
@@ -193,11 +254,22 @@ export function PricingStep({
       {typeof form.formState.errors.tickets?.message === "string" ? (
         <FormMessage>{form.formState.errors.tickets.message}</FormMessage>
       ) : null}
-      {typeof mapError === "string" ? (
-        <p className="text-sm text-destructive" role="alert">
-          {mapError || EMPTY_MAP_ENABLE_ERROR}
-        </p>
-      ) : null}
+
+      {hideMapBlock ? null : (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-card/40 px-3 py-2.5">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-foreground">Mapa de sectores</p>
+            <p className="text-xs text-muted-foreground">
+              Opcional. Podés vender solo con entradas generales.
+            </p>
+          </div>
+          <Switch
+            checked={mapEnabled}
+            onCheckedChange={handleMapToggle}
+            aria-label="Activar mapa de sectores"
+          />
+        </div>
+      )}
 
       {hasSellableRows ? (
         <div className="space-y-2">
@@ -209,7 +281,7 @@ export function PricingStep({
               onRemove={
                 family.kind === "general"
                   ? () => removeFamily(family)
-                  : undefined
+                  : () => removeMapFamily(family)
               }
             />
           ))}

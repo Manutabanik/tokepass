@@ -25,6 +25,12 @@ import {
 const DEBOUNCE_MS = 1500
 
 function sanitizeFormValues(values: EventFormValues): EventFormValues {
+  function coerceTicketNumber(value: unknown): number | undefined {
+    if (value == null || value === "") return undefined
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+
   return {
     ...values,
     venue: {
@@ -41,14 +47,12 @@ function sanitizeFormValues(values: EventFormValues): EventFormValues {
     },
     tickets: (values.tickets ?? []).map((tier) => ({
       ...tier,
-      price: Number.isFinite(Number(tier.price)) ? Number(tier.price) : 0,
-      capacity: Number.isFinite(Number(tier.capacity))
-        ? Number(tier.capacity)
-        : 1,
+      price: coerceTicketNumber(tier.price) ?? tier.price,
+      capacity: coerceTicketNumber(tier.capacity) ?? tier.capacity,
       listPrice:
-        tier.listPrice == null || !Number.isFinite(Number(tier.listPrice))
+        tier.listPrice == null
           ? null
-          : Number(tier.listPrice),
+          : (coerceTicketNumber(tier.listPrice) ?? tier.listPrice),
     })),
   }
 }

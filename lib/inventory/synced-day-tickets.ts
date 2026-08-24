@@ -111,10 +111,12 @@ export function listInventoryFamilies(
 
   rows.forEach((ticket, index) => {
     if (isMapBackedTicket(ticket)) {
-      const sectorId = ticket.seatingSectorId?.trim() || `map-${index}`
-      const bucket = mapBuckets.get(sectorId) ?? []
+      const sectorId = ticket.seatingSectorId?.trim()
+      const bucketKey =
+        sectorId || `name:${ticketFamilyNameKey(ticket.name)}`
+      const bucket = mapBuckets.get(bucketKey) ?? []
       bucket.push(index)
-      mapBuckets.set(sectorId, bucket)
+      mapBuckets.set(bucketKey, bucket)
       return
     }
     if (!isGeneralAdmissionTicket(ticket) || isBlankInventoryTicket(ticket)) {

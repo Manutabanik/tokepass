@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import type { ZoneTierPriceDraft } from "@/lib/stores/event-form-store"
 import {
+  coerceDraftEventForm,
   draftEventSchema,
   type EventFormValues,
 } from "@/lib/validations/event-form"
@@ -22,11 +23,11 @@ import {
 } from "@/lib/errors/persist-error"
 import { writeSecurityAuditLog } from "@/lib/security/audit-log"
 import { formHasInventoryOrVenue } from "@/lib/events/event-inventory-fingerprint"
+import { collectLiveSeatingSectorIds } from "@/lib/events/sanitize-ticket-tiers"
 import {
-  collectLiveSeatingSectorIds,
-  sanitizeEventSubmitPayload,
-} from "@/lib/events/sanitize-ticket-tiers"
-import { consolidateEventTicketsForPersist } from "@/lib/seating/venue-map-pricing"
+  isSeatingPersistMismatchError,
+  prepareEventForPersist,
+} from "@/lib/inventory/prepare-event-persist"
 
 export type AutosaveEventDraftResult =
   | {
@@ -45,24 +46,16 @@ function sanitizeAutosaveValues(
   values: EventFormValues,
   eventId: string | null,
 ): EventFormValues {
-  const tickets = consolidateEventTicketsForPersist({
-    ...values,
-    tickets: (values.tickets ?? []).map((tier) => ({
-      ...tier,
-      price: Number.isFinite(Number(tier.price)) ? Number(tier.price) : 0,
-    })),
-  })
-  return {
-    ...values,
-    venue: {
-      ...values.venue,
-      existingVenueId: values.venue.existingVenueId || null,
+  return prepareEventForPersist(
+    {
+      ...values,
+      tickets: (values.tickets ?? []).map((tier) => ({
+        ...tier,
+        price: Number.isFinite(Number(tier.price)) ? Number(tier.price) : 0,
+      })),
     },
-    tickets: sanitizeEventSubmitPayload(
-      { ...values, tickets },
-      { mode: eventId ? "update" : "create" },
-    ).tickets,
-  }
+    { mode: eventId ? "update" : "create" },
+  )
 }
 
 /**
@@ -115,7 +108,32 @@ export async function autosaveEventDraft(input: {
   try {
     if (eventId) {
       formData.set("eventId", eventId)
-      const result = await updateCompleteEvent(formData)
+      let result = await updateCompleteEvent(formData)
+      if (
+        !result.success &&
+        isSeatingPersistMismatchError(result.error ?? "")
+      ) {
+        const retried = prepareEventForPersist(
+          coerceDraftEventForm(parsed.data),
+          {
+            mode: "update",
+          },
+        )
+        const retryForm = new FormData()
+        retryForm.set("payload", JSON.stringify(retried))
+        retryForm.set("draftMode", "1")
+        retryForm.set("eventId", eventId)
+        if (input.targetOrganizerId) {
+          retryForm.set("targetOrganizerId", input.targetOrganizerId)
+        }
+        if (input.identityOnly && !formHasInventoryOrVenue(retried)) {
+          retryForm.set("identityOnly", "1")
+        }
+        if (input.flyer && input.flyer.size > 0) {
+          retryForm.set("flyer", input.flyer)
+        }
+        result = await updateCompleteEvent(retryForm)
+      }
       if (!result.success) {
         return {
           ok: false,
@@ -160,6 +178,19 @@ export async function autosaveEventDraft(input: {
         error: pricing.error,
       }
     }
+  }
+
+  if (eventId) {
+    const admin = createAdminClient()
+    const { data: row } = await admin
+      .from("events")
+      .select("slug")
+      .eq("id", eventId)
+      .maybeSingle()
+    revalidatePublicEventCache({
+      eventId,
+      slug: row?.slug ?? null,
+    })
   }
 
   return {

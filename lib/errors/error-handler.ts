@@ -113,6 +113,10 @@ const ERROR_RULES: ErrorRule[] = [
   },
   {
     code: "SAVE_FAILED",
+    match: /descripción es obligatoria|description is required/i,
+  },
+  {
+    code: "SAVE_FAILED",
     match:
       /duplicate key|unique constraint|null value in column|violates not-null|internal server error|error 500|error al procesar|\bunknown\b/i,
   },
@@ -222,6 +226,14 @@ export function mapUnknownError(
       ...APP_ERRORS.SAVE_FAILED,
       title: "Términos y condiciones",
       message: "Debés aceptar los términos y condiciones para continuar.",
+    })
+  }
+  if (/descripción es obligatoria/i.test(text)) {
+    return sanitizeMappedError({
+      ...APP_ERRORS.SAVE_FAILED,
+      message: "Completá la descripción del evento antes de guardar.",
+      field: "basics.description",
+      action: { step: 0, label: "Corregir descripción", field: "basics.description" },
     })
   }
   if (isAppErrorCode(text) && text !== "UNKNOWN") {
