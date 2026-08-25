@@ -97,7 +97,7 @@ describe("buildPublishEventV2Payload", () => {
     assert.equal(payload.venue.latitude, -34.6037)
     assert.equal(payload.delivery_mode, "PRESENCIAL")
     assert.equal(payload.visibility, "public")
-    assert.equal(payload.refund_policy, "no_refunds")
+    assert.equal("refund_policy" in payload, false)
     assert.equal(payload.description, "Gracias por venir")
     assert.equal(payload.flyer_url, "https://cdn.example/flyer.jpg")
     assert.equal(payload.social_share_image_url, "https://cdn.example/banner.jpg")
@@ -256,7 +256,7 @@ describe("buildPublishEventV2Payload", () => {
     draft.settings.refundPolicy = "Reintegro a criterio"
     const payload = buildPublishEventV2Payload(draft)
     assert.equal(payload.visibility, "private")
-    assert.equal(payload.refund_policy, "organizer")
+    assert.equal("refund_policy" in payload, false)
     assert.match(payload.description, /Reintegro a criterio/)
   })
 })

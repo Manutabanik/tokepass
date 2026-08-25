@@ -5,7 +5,6 @@ import {
   sumFreeTicketCapacity,
   type EventFeeConfig,
 } from "@/lib/pricing/event-fees"
-import { parseEventRefundPolicy } from "@/lib/validations/event-form"
 import { flattenDraftScheduleOccurrences } from "@/lib/events/draft-schedule-slots-v2"
 import {
   eventPublishSchema,
@@ -64,7 +63,6 @@ export type PublishEventV2Payload = {
   image_url: string | null
   social_share_image_url: string | null
   description: string
-  refund_policy: "organizer" | "no_refunds" | "until_24h"
   venue: {
     name: string
     location: string
@@ -284,7 +282,6 @@ export function buildPublishEventV2Payload(
       checkoutMessage: parsed.settings?.checkoutMessage,
       refundPolicy: parsed.settings?.refundPolicy,
     }),
-    refund_policy: parseEventRefundPolicy(parsed.settings?.refundPolicy),
     venue: {
       name: isOnline ? STREAMING_VENUE_NAME : venueName,
       location,

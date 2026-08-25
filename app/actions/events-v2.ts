@@ -37,7 +37,7 @@ import {
   toEventDraftV2Payload,
 } from "@/lib/validations/event-draft-v2"
 import { MAX_EVENT_FLYER_BYTES } from "@/lib/validations/event-form"
-import type { Json, TicketTier } from "@/types/database"
+import type { EventDeliveryMode, EventStatus, Json, TicketTier } from "@/types/database"
 
 export type SaveEventDraftV2Result =
   | { success: true; eventId: string; draftState: Json }
@@ -358,7 +358,7 @@ function isMissingPublishRpc(error: { code?: string; message?: string } | null) 
   return code === "PGRST202" || code === "42883"
 }
 
-function isCategoryEnumMismatch(error: {
+function isPublishEnumMismatch(error: {
   code?: string
   message?: string
   details?: string
@@ -367,7 +367,14 @@ function isCategoryEnumMismatch(error: {
   if (!error) return false
   const code = String(error.code ?? "")
   const text = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`.toLowerCase()
-  return code === "42804" && text.includes("category")
+  return (
+    code === "42804" &&
+    (text.includes("category") ||
+      text.includes("refund_policy") ||
+      text.includes("delivery_mode") ||
+      text.includes("event_status") ||
+      text.includes("column \"status\""))
+  )
 }
 
 function shouldFallbackPublishRpc(error: {
@@ -376,7 +383,7 @@ function shouldFallbackPublishRpc(error: {
   details?: string
   hint?: string
 } | null) {
-  return isMissingPublishRpc(error) || isCategoryEnumMismatch(error)
+  return isMissingPublishRpc(error) || isPublishEnumMismatch(error)
 }
 
 async function upsertPublishedVenue(input: {
@@ -618,7 +625,7 @@ async function unpackPublishEventV2Sequential(input: {
       location: input.payload.location,
       province: input.payload.venue.province,
       department: input.payload.venue.city,
-      delivery_mode: input.payload.delivery_mode,
+      delivery_mode: input.payload.delivery_mode as EventDeliveryMode,
       visibility: input.payload.visibility,
       flyer_url: input.payload.flyer_url ?? input.existingFlyerUrl,
       image_url:
@@ -627,11 +634,10 @@ async function unpackPublishEventV2Sequential(input: {
         input.existingImageUrl,
       social_share_image_url:
         input.payload.social_share_image_url ?? input.existingShareUrl,
-      refund_policy: input.payload.refund_policy,
       venue_id: venueId,
       ...(input.payload.venue_map ? { venue_map: input.payload.venue_map } : {}),
       has_seating_plan: input.payload.has_seating_plan,
-      status: "published",
+      status: "published" as EventStatus,
       draft_state: null,
       updated_at: new Date().toISOString(),
     } as never)
