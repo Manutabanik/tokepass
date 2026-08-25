@@ -1,23 +1,19 @@
 "use client"
 
-import { Package, Plus, Ticket, Trash2, Users } from "lucide-react"
+import { Package, Plus, Ticket, Users } from "lucide-react"
 import { useFieldArray, useFormContext, useWatch } from "react-hook-form"
 
+import { DraftInventoryAccordionCard } from "./event-editor-v2-inventory-card"
 import { InventorySummaryTable } from "./event-editor-v2-inventory-table"
 import { EventEditorV2SeatingMap } from "./event-editor-v2-seating-map"
 import {
   DRAFT_FIELD_CLASS,
-  DRAFT_TEXTAREA_CLASS,
-  DRAFT_TICKET_CARD_CLASS,
   DraftAddButton,
   DraftCard,
-  DraftFieldError,
   DraftHint,
 } from "./event-editor-v2-ui"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { formatNumber } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import {
@@ -172,11 +168,7 @@ function DraftLineItemList({
   emptyHint: string
   emptyIcon: typeof Ticket
 }) {
-  const {
-    control,
-    register,
-    formState: { errors },
-  } = useFormContext<EventDraftV2>()
+  const { control, register } = useFormContext<EventDraftV2>()
   const { fields, append, remove } = useFieldArray({
     control,
     name,
@@ -225,7 +217,6 @@ function DraftLineItemList({
       {fields.length > 0 ? (
         <ul className={visibleCount === 0 ? "hidden" : "space-y-3"}>
           {fields.map((field, index) => {
-            const itemErrors = errors[name]?.[index]
             if (name === "tickets" && isMapDraftTicket(field)) {
               return (
                 <li key={field._rowId} className="hidden">
@@ -243,143 +234,14 @@ function DraftLineItemList({
               )
             }
             return (
-              <li key={field._rowId} className={DRAFT_TICKET_CARD_CLASS}>
-                <input type="hidden" {...register(`${name}.${index}.id`)} />
-                <input type="hidden" {...register(`${name}.${index}.source`)} />
-                <input type="hidden" {...register(`${name}.${index}.sectorId`)} />
-                <input type="hidden" {...register(`${name}.${index}.layoutType`)} />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute top-3 right-3 text-muted-foreground hover:text-red-500"
-                  aria-label={`Eliminar ${title.toLowerCase()} ${index + 1}`}
-                  onClick={() => remove(index)}
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_8rem_8rem]">
-                  <div className="grid gap-1.5">
-                    <Label
-                      htmlFor={`event-v2-${name}-${index}-name`}
-                      className="text-xs font-bold text-slate-800 dark:text-zinc-200"
-                    >
-                      Nombre
-                    </Label>
-                    <Input
-                      id={`event-v2-${name}-${index}-name`}
-                      className={DRAFT_FIELD_CLASS}
-                      placeholder={name === "tickets" ? "General" : "Cerveza"}
-                      {...register(`${name}.${index}.name`)}
-                    />
-                    <DraftFieldError message={itemErrors?.name?.message} />
-                  </div>
-                  <div className="grid gap-1.5">
-                    <Label
-                      htmlFor={`event-v2-${name}-${index}-price`}
-                      className="text-xs font-bold text-slate-800 dark:text-zinc-200"
-                    >
-                      Precio
-                    </Label>
-                    <Input
-                      id={`event-v2-${name}-${index}-price`}
-                      type="number"
-                      min={0}
-                      step={1}
-                      inputMode="numeric"
-                      className={DRAFT_FIELD_CLASS}
-                      {...register(`${name}.${index}.price`, {
-                        setValueAs: draftNumberValue,
-                      })}
-                    />
-                    <DraftFieldError message={itemErrors?.price?.message} />
-                  </div>
-                  <div className="grid gap-1.5">
-                    <Label
-                      htmlFor={`event-v2-${name}-${index}-stock`}
-                      className="text-xs font-bold text-slate-800 dark:text-zinc-200"
-                    >
-                      Stock
-                    </Label>
-                    <Input
-                      id={`event-v2-${name}-${index}-stock`}
-                      type="number"
-                      min={0}
-                      step={1}
-                      inputMode="numeric"
-                      className={DRAFT_FIELD_CLASS}
-                      {...register(`${name}.${index}.stock`, {
-                        setValueAs: draftNumberValue,
-                      })}
-                    />
-                    <DraftFieldError message={itemErrors?.stock?.message} />
-                  </div>
-                </div>
-
-                <div className="mt-3 grid gap-1.5">
-                  <Label
-                    htmlFor={`event-v2-${name}-${index}-description`}
-                    className="text-xs font-bold text-slate-800 dark:text-zinc-200"
-                  >
-                    Descripción breve
-                  </Label>
-                  <Textarea
-                    id={`event-v2-${name}-${index}-description`}
-                    rows={2}
-                    className={DRAFT_TEXTAREA_CLASS}
-                    placeholder="Qué incluye o cómo se usa."
-                    {...register(`${name}.${index}.description`)}
-                  />
-                  <DraftHint>Una línea alcanza. El comprador lo ve en el checkout.</DraftHint>
-                  <DraftFieldError message={itemErrors?.description?.message} />
-                </div>
-
-                <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <div className="grid gap-1.5">
-                    <Label
-                      htmlFor={`event-v2-${name}-${index}-min`}
-                      className="text-xs font-bold text-slate-800 dark:text-zinc-200"
-                    >
-                      Mínimo por persona
-                    </Label>
-                    <Input
-                      id={`event-v2-${name}-${index}-min`}
-                      type="number"
-                      min={0}
-                      step={1}
-                      inputMode="numeric"
-                      className={DRAFT_FIELD_CLASS}
-                      {...register(`${name}.${index}.minOrder`, {
-                        setValueAs: (value) => draftNumberValue(value, 1),
-                      })}
-                    />
-                    <DraftHint>Mínimo que puede llevar cada persona.</DraftHint>
-                    <DraftFieldError message={itemErrors?.minOrder?.message} />
-                  </div>
-                  <div className="grid gap-1.5">
-                    <Label
-                      htmlFor={`event-v2-${name}-${index}-max`}
-                      className="text-xs font-bold text-slate-800 dark:text-zinc-200"
-                    >
-                      Máximo por persona
-                    </Label>
-                    <Input
-                      id={`event-v2-${name}-${index}-max`}
-                      type="number"
-                      min={0}
-                      step={1}
-                      inputMode="numeric"
-                      className={DRAFT_FIELD_CLASS}
-                      {...register(`${name}.${index}.maxOrder`, {
-                        setValueAs: (value) => draftNumberValue(value, 10),
-                      })}
-                    />
-                    <DraftHint>Tope por compra. Evita acaparamientos.</DraftHint>
-                    <DraftFieldError message={itemErrors?.maxOrder?.message} />
-                  </div>
-                </div>
-              </li>
+              <DraftInventoryAccordionCard
+                key={field._rowId}
+                name={name}
+                index={index}
+                initialName={field.name}
+                emptyTitle={name === "tickets" ? "Nueva Entrada" : "Nuevo adicional"}
+                onRemove={() => remove(index)}
+              />
             )
           })}
         </ul>
