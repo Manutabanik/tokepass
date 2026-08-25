@@ -88,6 +88,17 @@ export const AGE_RESTRICTION_LABELS: Record<AgeRestriction, string> = {
 
 export const MAX_EVENT_FLYER_BYTES = 5 * 1024 * 1024
 
+function emptyToUndefined(value: unknown) {
+  if (value === "" || value === null) return undefined
+  if (typeof value === "number" && Number.isNaN(value)) return undefined
+  return value
+}
+
+const optionalDraftInt = z.preprocess(
+  emptyToUndefined,
+  z.number().int().optional(),
+)
+
 export const lineupDraftItemSchema = z.object({
   id: z.string().min(1),
   artistId: z.string().nullable().optional().default(null),
@@ -637,17 +648,20 @@ const draftTicketSchema = z.preprocess(
   ),
   isNew: z.boolean().optional(),
   name: z.string().optional().default(""),
-  price: z
-    .number()
-    .min(0, "Ingresá un precio válido o marcá la opción de entrada gratuita")
-    .optional(),
+  price: z.preprocess(
+    emptyToUndefined,
+    z
+      .number()
+      .min(0, "Ingresá un precio válido o marcá la opción de entrada gratuita")
+      .optional(),
+  ),
   basePrice: z.number().min(0).optional(),
   feeStrategy: z.enum(TICKET_FEE_STRATEGIES).optional().default("absorb_in_price"),
   calculationMode: z
     .enum(TICKET_CALCULATION_MODES)
     .optional()
     .default("public_price"),
-  capacity: z.number().int().optional(),
+  capacity: optionalDraftInt,
   sold: z.number().int().min(0).optional(),
   timeLimit: z.string().optional(),
   saleStartsAt: z.string().optional().default(""),
@@ -713,8 +727,9 @@ export const draftEventSchema = z.object({
     scheduleDays: z.array(z.any()).optional().default([]),
     categoryId: z.string().optional().default(""),
     ageRestriction: z
-      .union([z.enum(AGE_RESTRICTION_VALUES), z.literal("")])
+      .union([z.enum(AGE_RESTRICTION_VALUES), z.literal(""), z.null()])
       .optional()
+      .transform((value) => value ?? "")
       .default(""),
     hasSeatingPlan: z.boolean().optional().default(false),
     hasSchedule: z.boolean().optional().default(false),
@@ -739,10 +754,10 @@ export const draftEventSchema = z.object({
       department: z.string().optional(),
       provinceId: z.string().optional().nullable(),
       departmentId: z.string().optional().nullable(),
-      capacity: z.number().int().optional(),
+      capacity: optionalDraftInt,
       customMaxCapacity: z.number().int().min(0).nullable().optional(),
-      rows: z.number().int().optional(),
-      seatsPerRow: z.number().int().optional(),
+      rows: optionalDraftInt,
+      seatsPerRow: optionalDraftInt,
       latitude: z.number().nullable().optional(),
       longitude: z.number().nullable().optional(),
       seatingBackgroundUrl: z.string().nullable().optional(),
@@ -842,27 +857,51 @@ function isPristinePlaceholderTicket(
   return !Number.isFinite(capacity) || capacity <= 1
 }
 
+export function isCoercedDraftPlaceholderTicket(
+  tier: {
+    name?: string | null
+    price?: number | null
+    capacity?: number | null
+    visibility?: string | null
+  },
+): boolean {
+  return (
+    (tier.name ?? "").trim().toLocaleLowerCase("es") === "borrador" &&
+    (Number(tier.price) || 0) <= 0 &&
+    (Number(tier.capacity) || 0) <= 1 &&
+    tier.visibility === "private"
+  )
+}
+
 /** Completa huecos para persistir un draft en el RPC sin perder el trabajo. */
 export function coerceDraftEventForm(
   raw: EventFormValues | DraftEventFormValues,
+  options?: { inventPlaceholders?: boolean },
 ): EventFormValues {
+  const invent = options?.inventPlaceholders !== false
   const startRaw = parseDateTimeLocal(raw.basics.date ?? "")
   const startOk = startRaw != null
   const startDate = startOk
     ? startRaw
-    : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+    : invent
+      ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+      : new Date()
   const endParsed = parseDateTimeLocal(raw.basics.endDate ?? "")
   const endOk =
     endParsed != null && endParsed.getTime() > startDate.getTime()
   const endDate = endOk
     ? endParsed
-    : new Date(startDate.getTime() + 4 * 60 * 60 * 1000)
+    : invent
+      ? new Date(startDate.getTime() + 4 * 60 * 60 * 1000)
+      : startDate
 
   const age = AGE_RESTRICTION_VALUES.includes(
     raw.basics.ageRestriction as AgeRestriction,
   )
     ? (raw.basics.ageRestriction as AgeRestriction)
-    : "atp"
+    : invent
+      ? "atp"
+      : ""
 
   const venue = raw.venue ?? {
     mode: "new" as const,
@@ -975,11 +1014,19 @@ export function coerceDraftEventForm(
       date:
         isMultiDay && scheduleDays[0]?.startTime
           ? scheduleDays[0].startTime
-          : toDatetimeLocal(startDate),
+          : startOk
+            ? toDatetimeLocal(startDate)
+            : invent
+              ? toDatetimeLocal(startDate)
+              : (raw.basics.date ?? ""),
       endDate:
         isMultiDay && scheduleDays[scheduleDays.length - 1]?.endTime
           ? scheduleDays[scheduleDays.length - 1].endTime
-          : toDatetimeLocal(endDate),
+          : endOk
+            ? toDatetimeLocal(endDate)
+            : invent
+              ? toDatetimeLocal(endDate)
+              : (raw.basics.endDate ?? ""),
       description: raw.basics.description ?? "",
       flyerName: raw.basics.flyerName ?? null,
       visibility: raw.basics.visibility ?? "public",
@@ -988,7 +1035,7 @@ export function coerceDraftEventForm(
       categoryId: UUID_RE.test(raw.basics.categoryId ?? "")
         ? raw.basics.categoryId
         : "",
-      ageRestriction: age,
+      ageRestriction: age || "",
       hasSeatingPlan: Boolean(raw.basics.hasSeatingPlan),
       hasSchedule: Boolean(raw.basics.hasSchedule),
       deliveryMode:
@@ -1004,14 +1051,20 @@ export function coerceDraftEventForm(
       zoneType: reservedIncomplete
         ? "general_admission"
         : (venue.zoneType ?? "general_admission"),
-      venueName: (venue.venueName ?? "").trim() || "Por definir",
+      venueName:
+        (venue.venueName ?? "").trim() || (invent ? "Por definir" : ""),
       venueLocation: venue.venueLocation,
       venueCity: venue.venueCity,
       province: venue.province,
       department: venue.department,
       provinceId: venue.provinceId ?? null,
       departmentId: venue.departmentId ?? null,
-      capacity: venue.capacity && venue.capacity > 0 ? venue.capacity : 1,
+      capacity:
+        venue.capacity && venue.capacity > 0
+          ? venue.capacity
+          : invent
+            ? 1
+            : undefined,
       customMaxCapacity:
         venue.customMaxCapacity != null && venue.customMaxCapacity > 0
           ? venue.customMaxCapacity

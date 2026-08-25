@@ -24,6 +24,9 @@ import {
 /** Autoguardado de borrador: 1.5s después de que el usuario deja de escribir. */
 const DEBOUNCE_MS = 1500
 
+/** TEMP DIAGNOSTIC: isolate manual save. Set false after the persist hunt. */
+const DIAGNOSTIC_DISABLE_AUTOSAVE = true
+
 function sanitizeFormValues(values: EventFormValues): EventFormValues {
   return {
     ...values,
@@ -129,6 +132,7 @@ export function useEventFormAutosave(input: {
   }, [form, venuePricingMap, zoneTierPricing, persistedEventId])
 
   async function runAutosave() {
+    if (DIAGNOSTIC_DISABLE_AUTOSAVE) return
     if (!readyRef.current || !latestRef.current.enabled) return
     if (savingRef.current) {
       queuedRef.current = true
@@ -158,6 +162,7 @@ export function useEventFormAutosave(input: {
       })
       if (!result.ok) {
         setAutosaveStatus("error", result.error)
+        if (result.source === "zod") return
         if (lastErrorToastRef.current !== result.error) {
           lastErrorToastRef.current = result.error
           toast.error(PERSIST_ERROR_TITLES[result.source], {

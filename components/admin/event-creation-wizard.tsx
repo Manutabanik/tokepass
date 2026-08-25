@@ -109,11 +109,13 @@ import {
 import {
   applyZodIssuesToForm,
   fieldFromAppError,
+  firstFieldErrorMessage,
   firstFieldErrorPath,
   focusInvalidFormField,
 } from "@/lib/errors/form-field"
 import { toUserFacingError } from "@/lib/errors/user-facing-error"
 import { formHasInventoryOrVenue } from "@/lib/events/event-inventory-fingerprint"
+import { mergePersistedEventForm } from "@/lib/events/merge-persisted-event-form"
 import {
   collectLiveSeatingSectorIds,
   sanitizeEventSubmitPayload,
@@ -305,13 +307,22 @@ export function EventCreationWizard({
 
   const form = useForm<EventFormValues>({
     resolver: zodResolver(draftEventSchema) as Resolver<EventFormValues>,
-    mode: "onChange",
+    mode: "onTouched",
     reValidateMode: "onChange",
     shouldUnregister: false,
     defaultValues: {
       ...defaultValues,
       serviceFeePercentage: organizerFeePercentage,
       ...(initialData?.values ?? {}),
+      basics: {
+        ...defaultValues.basics,
+        ...(initialData?.values.basics ?? {}),
+        ageRestriction: initialData?.values.basics.ageRestriction ?? "",
+      },
+      tickets:
+        initialData?.values.tickets && initialData.values.tickets.length > 0
+          ? initialData.values.tickets
+          : defaultValues.tickets,
     },
   })
   const { replace: replaceTickets } = useFieldArray({
@@ -389,6 +400,8 @@ export function EventCreationWizard({
   } = useEventFormAutosave({
     form,
     draftKey,
+    // TEMP DIAGNOSTIC: isolate manual save. Re-enable after the persist hunt.
+    enabled: false,
     eventId: initialData?.id ?? null,
     initialValues: {
       ...defaultValues,
@@ -530,8 +543,9 @@ export function EventCreationWizard({
     window.setTimeout(() => {
       focusInvalidFormField(fieldPath)
     }, 80)
+    const firstMessage = firstFieldErrorMessage(errors)
     if (activeStep === 0 || step === 0) {
-      toast.error("Hay campos con errores. Revisa la consola para más detalles.")
+      toast.error(firstMessage ?? "Revisá los campos marcados para continuar.")
       return
     }
     const capacity = computeEventCapacityFromForm(form.getValues())
@@ -541,7 +555,13 @@ export function EventCreationWizard({
       goToWizardStep(WIZARD_STEP_TICKETS)
       return
     }
-    toast.error("Hay campos con errores. Revisa la consola para más detalles.")
+    toast.error(firstMessage ?? "Revisá los campos marcados para continuar.")
+  }
+
+  function rememberCreatedEventUrl(eventId: string) {
+    if (isEditing || typeof window === "undefined") return
+    const nextUrl = `/admin/events/${eventId}/edit`
+    window.history.replaceState(window.history.state, "", nextUrl)
   }
 
   function rehydrateFromServer(
@@ -553,29 +573,65 @@ export function EventCreationWizard({
   ) {
     const snapshot = result.data
     setEventId(snapshot.eventId)
-    setZoneTierPricing(snapshot.zoneTierPricing)
+    if (snapshot.zoneTierPricing.length > 0) {
+      setZoneTierPricing(snapshot.zoneTierPricing)
+    }
     if (snapshot.values.venue.venueMap) {
       setVenuePricingMap(
         venueMapToPricingMap(parseVenueMap(snapshot.values.venue.venueMap)),
       )
     }
-    if (options?.refresh !== false) {
+    const merged = mergePersistedEventForm(form.getValues(), snapshot.values)
+    if (options?.refresh !== false && isEditing) {
       startTransition(() => {
         router.refresh()
       })
     }
-    form.reset(snapshot.values)
-    acknowledgeServerSnapshot(snapshot.values)
+    form.reset(merged)
+    acknowledgeServerSnapshot(merged)
+    rememberCreatedEventUrl(snapshot.eventId)
+  }
+
+  function reportPersistError(
+    result: Extract<
+      Awaited<ReturnType<typeof updateCompleteEvent>>,
+      { success: false }
+    >,
+  ) {
+    const mapped = mapUnknownError(result.error)
+    const field = result.field ?? fieldFromAppError(mapped)
+    if (field) {
+      form.setError(field as never, {
+        type: "server",
+        message: result.error,
+      })
+    }
+    console.error("Fallo al guardar:", result.error)
+    toast.error(JSON.stringify(result.error))
+    const action = result.wizardConflict?.actions[0]
+    if (action?.step != null) {
+      goToWizardStep(action.step, undefined, action.field ?? field)
+      return
+    }
+    if (field) {
+      goToWizardStep(wizardStepFromPath(field.split(".")), undefined, field)
+    }
   }
 
   function buildPersistFormData(
     payload: EventFormValues,
-    options?: { draftMode?: boolean; identityOnly?: boolean; eventId?: string | null },
+    options?: {
+      draftMode?: boolean
+      identityOnly?: boolean
+      eventId?: string | null
+      rehydrate?: boolean
+    },
   ) {
     const formData = new FormData()
     formData.set("payload", JSON.stringify(payload))
     if (options?.draftMode !== false) formData.set("draftMode", "1")
     if (options?.identityOnly) formData.set("identityOnly", "1")
+    if (options?.rehydrate) formData.set("rehydrate", "1")
     if (flyerFile) formData.set("flyer", flyerFile)
     if (targetOrganizerId) formData.set("targetOrganizerId", targetOrganizerId)
     if (options?.eventId) formData.set("eventId", options.eventId)
@@ -604,13 +660,14 @@ export function EventCreationWizard({
       draftMode: true,
       identityOnly: !formHasInventoryOrVenue(payload),
       eventId: editingId,
+      rehydrate: true,
     })
     const result = editingId
       ? await updateCompleteEvent(formData)
       : await createCompleteEvent(formData)
 
     if (!result.success) {
-      toast.error(result.error)
+      reportPersistError(result)
       return
     }
 
@@ -618,11 +675,6 @@ export function EventCreationWizard({
       description: "El título y los datos del evento quedaron actualizados.",
     })
     rehydrateFromServer(result)
-    if (!isEditing && result.data.eventId) {
-      startTransition(() => {
-        router.replace(`/admin/events/${result.data.eventId}/edit`)
-      })
-    }
   }
 
   function buildConsolidatedPayload(data: EventFormValues): EventFormValues {
@@ -667,7 +719,11 @@ export function EventCreationWizard({
     }
     const payloadData = buildConsolidatedPayload(form.getValues())
     const result = await updateCompleteEvent(
-      buildPersistFormData(payloadData, { draftMode: true, eventId }),
+      buildPersistFormData(payloadData, {
+        draftMode: true,
+        eventId,
+        rehydrate: true,
+      }),
     )
     if (result.success) {
       rehydrateFromServer(result, { refresh: false })
@@ -768,7 +824,8 @@ export function EventCreationWizard({
           : undefined,
       })
       if (!persist.success) {
-        toast.error(persist.error)
+        console.error("Fallo al guardar:", persist.error)
+        toast.error(JSON.stringify(persist.error))
         return false
       }
       payloadData = {
@@ -799,6 +856,7 @@ export function EventCreationWizard({
     const formData = buildPersistFormData(payloadData, {
       draftMode: intent !== "publish",
       eventId: editingId,
+      rehydrate: true,
     })
 
     const result = editingId
@@ -806,7 +864,7 @@ export function EventCreationWizard({
       : await createCompleteEvent(formData)
 
     if (!result.success) {
-      toast.error(result.error)
+      reportPersistError(result)
       return false
     }
 
@@ -819,7 +877,8 @@ export function EventCreationWizard({
         ),
       })
       if (!pricingResult.success) {
-        toast.error(pricingResult.error)
+        console.error("Fallo al guardar:", pricingResult.error)
+        toast.error(JSON.stringify(pricingResult.error))
         return false
       }
     }
@@ -851,11 +910,6 @@ export function EventCreationWizard({
         : "Podés seguir editando en esta pestaña.",
     })
     rehydrateFromServer(result)
-    if (!isEditing && result.data.eventId) {
-      startTransition(() => {
-        router.replace(`/admin/events/${result.data.eventId}/edit`)
-      })
-    }
     return true
   }
 

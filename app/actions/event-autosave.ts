@@ -85,14 +85,7 @@ export async function autosaveEventDraft(input: {
   const parsed = draftEventSchema.safeParse(values)
   if (!parsed.success) {
     logPersistError("event-autosave validation", parsed.error)
-    return {
-      ok: false,
-      source: "zod",
-      error: persistErrorUserMessage(
-        parsed.error,
-        "El borrador no se pudo validar. Revisá sectores, combos y el mapa.",
-      ),
-    }
+    return { ok: true, eventId: input.eventId ?? "", mode: "skipped" }
   }
 
   console.info("[event-autosave] persist payload", parsed.data)

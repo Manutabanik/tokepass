@@ -82,6 +82,7 @@ import {
   MAX_EVENT_FLYER_BYTES,
   coerceDraftEventForm,
   draftEventSchema,
+  isCoercedDraftPlaceholderTicket,
   parseEventRefundPolicy,
   publishEventSchema,
   type AgeRestriction,
@@ -109,6 +110,7 @@ import {
 import { composeVenuePlace } from "@/lib/venues/compose-location"
 import {
   canPersistCatalogVenueName,
+  isDraftPlaceholderVenueName,
   normalizeExactVenueName,
 } from "@/lib/venues/venue-identity"
 import { isStreamingVenue } from "@/lib/venues/streaming-venue"
@@ -137,9 +139,9 @@ import { writeSecurityAuditLog } from "@/lib/security/audit-log"
 import { mapUnknownError } from "@/lib/errors/error-handler"
 import type { AppErrorCode } from "@/lib/errors/app-error"
 import {
+  isZodLikeError,
   logPersistError,
   persistErrorLogLabel,
-  persistErrorUserMessage,
   type PersistErrorSource,
 } from "@/lib/errors/persist-error"
 import { fieldFromAppError } from "@/lib/errors/form-field"
@@ -820,7 +822,7 @@ async function persistEventVenueFields(
       .update(withMax as never)
       .eq("id", venueId)
       .select("id")
-      .single()
+      .maybeSingle()
     if (
       updated.error &&
       /max_capacity|schema cache|PGRST204|42703/i.test(updated.error.message)
@@ -830,7 +832,7 @@ async function persistEventVenueFields(
         .update({ ...venuePatch, capacity: officialCapacity } as never)
         .eq("id", venueId)
         .select("id")
-        .single()
+        .maybeSingle()
       if (retry.error) {
         return { venueId, error: retry.error.message }
       }
@@ -1006,6 +1008,12 @@ async function persistEventSchedule(
       ends_at: endsAt,
     } as never)
     .eq("id", eventId)
+  console.log("RESPUESTA SUPABASE:", {
+    op: "events.update.schedule",
+    eventId,
+    data: null,
+    error,
+  })
   if (error) {
     logPersistError("event-persist", error)
     return error.message
@@ -1144,6 +1152,40 @@ async function revalidatePersistedEvent(
   })
 }
 
+function diagnosticErrorMessage(error: unknown): string {
+  if (typeof error === "string" && error.trim()) return error
+  if (isZodLikeError(error)) {
+    try {
+      return JSON.stringify(
+        typeof error.flatten === "function" ? error.flatten() : error.issues,
+      )
+    } catch {
+      return error.issues?.[0]?.message || "ZodError"
+    }
+  }
+  if (error && typeof error === "object") {
+    const record = error as {
+      message?: unknown
+      details?: unknown
+      hint?: unknown
+      code?: unknown
+    }
+    const parts = [
+      typeof record.message === "string" ? record.message : null,
+      typeof record.details === "string" ? `details=${record.details}` : null,
+      typeof record.hint === "string" ? `hint=${record.hint}` : null,
+      record.code != null ? `code=${String(record.code)}` : null,
+    ].filter(Boolean)
+    if (parts.length > 0) return parts.join(" | ")
+  }
+  if (error instanceof Error && error.message) return error.message
+  try {
+    return JSON.stringify(error)
+  } catch {
+    return String(error)
+  }
+}
+
 function persistFailure(error: unknown): {
   success: false
   error: string
@@ -1155,6 +1197,8 @@ function persistFailure(error: unknown): {
   wizardConflict?: WizardConflict
 } {
   const source = logPersistError("event-persist", error)
+  const message = diagnosticErrorMessage(error)
+  console.log("PERSIST FAILURE:", message, error)
   logger.error({
     context: "event-persist",
     message: persistErrorLogLabel(source),
@@ -1163,7 +1207,6 @@ function persistFailure(error: unknown): {
   const mapped = mapUnknownError(error)
   const code = mapped.code === "UNKNOWN" ? "SAVE_FAILED" : mapped.code
   const field = fieldFromAppError(mapped)
-  const message = persistErrorUserMessage(error, mapped.message)
   return {
     success: false,
     error: message,
@@ -1252,6 +1295,14 @@ function identityAgeRestriction(
 const OPTIONAL_EVENT_FLAG_COLUMNS_RE =
   /has_seating_plan|has_schedule|delivery_mode|access_link|accepts_mercado_pago|accepts_pos_payments|refund_policy|schema cache|PGRST204|42703/i
 
+function persistFlags(formData: FormData) {
+  return {
+    draftMode: formData.get("draftMode") === "1",
+    identityOnly: formData.get("identityOnly") === "1",
+    rehydrate: formData.get("rehydrate") === "1",
+  }
+}
+
 async function updateEventReturning(
   client: SupabaseClient<Database>,
   eventId: string,
@@ -1261,12 +1312,19 @@ async function updateEventReturning(
     .from("events")
     .update(patch as never)
     .eq("id", eventId)
-    .select()
-    .single()
-  if (error || !data) {
-    return { error: error?.message ?? "No se pudo actualizar el evento." }
+    .select("id")
+    .maybeSingle()
+  console.log("RESPUESTA SUPABASE:", {
+    op: "events.update",
+    eventId,
+    patchKeys: Object.keys(patch),
+    data,
+    error,
+  })
+  if (error) {
+    return { error: error.message }
   }
-  return { data: data as Record<string, unknown> }
+  return { data: (data as Record<string, unknown> | null) ?? { id: eventId } }
 }
 
 function revalidateEventWizardPath(eventId: string) {
@@ -1469,6 +1527,7 @@ async function persistEventIdentityOnly(input: {
     input.eventId,
     venueId,
     input.formValues as EventFormValues,
+    persistFlags(input.formData).rehydrate,
   )
 }
 
@@ -1616,6 +1675,11 @@ async function persistNewEventIdentityOnly(
       .maybeSingle()
     insertError = created.error
   }
+  console.log("RESPUESTA SUPABASE:", {
+    op: "events.insert",
+    data: created.data,
+    error: insertError,
+  })
 
   if (insertError || !created.data?.id) {
     if (flyerUrl) {
@@ -1625,7 +1689,7 @@ async function persistNewEventIdentityOnly(
       }
     }
     return persistFailure(
-      insertError?.message ?? "La base de datos no devolvió el ID del evento.",
+      insertError ?? "La base de datos no devolvió el ID del evento.",
     )
   }
 
@@ -1655,7 +1719,12 @@ async function persistNewEventIdentityOnly(
   revalidatePath(`/admin/events/${eventId}`)
   await revalidatePersistedEvent(mutationClient, eventId)
 
-  return finalizePersistedEvent(eventId, null, raw as EventFormValues)
+  return finalizePersistedEvent(
+    eventId,
+    null,
+    raw as EventFormValues,
+    persistFlags(formData).rehydrate,
+  )
 }
 
 async function runSeatingRpcWithRetry<T>(input: {
@@ -2294,6 +2363,25 @@ function toLocalDateTimeInput(value: string): string {
   return toDatetimeLocalInput(value)
 }
 
+function isDraftScheduleAnchor(event: {
+  status?: string | null
+  date?: string | null
+  ends_at?: string | null
+  schedule_days?: unknown
+  created_at?: string | null
+  updated_at?: string | null
+}): boolean {
+  if (event.status && event.status !== "draft") return false
+  if (event.ends_at) return false
+  if (parseScheduleDays(event.schedule_days).length > 0) return false
+  const dateMs = Date.parse(String(event.date ?? ""))
+  const anchorMs = Date.parse(
+    String(event.created_at ?? event.updated_at ?? ""),
+  )
+  if (!Number.isFinite(dateMs) || !Number.isFinite(anchorMs)) return false
+  return Math.abs(dateMs - anchorMs) < 15_000
+}
+
 function resolveEventSectorId(
   raw: string | null | undefined,
   zones: EventFormValues["venue"]["zones"],
@@ -2578,15 +2666,15 @@ export async function getEventForEditing(
     const reader = isSuperAdmin ? createAdminClient() : supabase
 
     const eventSelectWithCheckout =
-      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, status, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, has_schedule, delivery_mode, access_link, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, is_sponsored_by_tokepass, accepts_mercado_pago, accepts_pos_payments, refund_policy, updated_at"
+      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, status, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, has_schedule, delivery_mode, access_link, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, is_sponsored_by_tokepass, accepts_mercado_pago, accepts_pos_payments, refund_policy, updated_at, created_at"
     const eventSelectWithAgenda =
-      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, status, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, has_schedule, delivery_mode, access_link, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, is_sponsored_by_tokepass, updated_at"
+      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, status, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, has_schedule, delivery_mode, access_link, max_tickets_per_user, platform_fee_percentage, platform_fixed_fee, is_sponsored_by_tokepass, updated_at, created_at"
     const eventSelectWithPicker =
-      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, status, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, max_tickets_per_user, updated_at"
+      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, status, schedule_days, category_id, age_restriction, province, department, venue_map, default_ticket_tab, lineup, has_seating_plan, max_tickets_per_user, updated_at, created_at"
     const eventSelectWithPlace =
-      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, status, schedule_days, category_id, age_restriction, province, department, venue_map, max_tickets_per_user, updated_at"
+      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, status, schedule_days, category_id, age_restriction, province, department, venue_map, max_tickets_per_user, updated_at, created_at"
     const eventSelectCore =
-      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, status, schedule_days, category_id, age_restriction, venue_map, max_tickets_per_user, updated_at"
+      "id, organizer_id, title, description, date, ends_at, location, image_url, flyer_url, venue_id, visibility, status, schedule_days, category_id, age_restriction, venue_map, max_tickets_per_user, updated_at, created_at"
 
     let eventQuery = await reader
       .from("events")
@@ -2750,7 +2838,8 @@ export async function getEventForEditing(
         .platform_fee_percentage ?? DEFAULT_PLATFORM_FEE_PERCENTAGE,
     )
 
-    const ticketValues: EventFormValues["tickets"] = (tiers ?? []).map((tier) => ({
+    const ticketValues: EventFormValues["tickets"] = (tiers ?? [])
+      .map((tier) => ({
       id: tier.id,
       name: String(tier.name ?? "Entrada"),
       price: Number(tier.price) || 0,
@@ -2842,6 +2931,7 @@ export async function getEventForEditing(
       ),
       phases: [],
     }))
+      .filter((tier) => !isCoercedDraftPlaceholderTicket(tier))
 
     const tierIds = tiers.map((tier) => tier.id)
     if (tierIds.length > 0) {
@@ -2863,7 +2953,12 @@ export async function getEventForEditing(
             capacityLimit: Math.max(1, Number(row.capacity_limit) || 1),
             startTime: row.start_time,
             endTime: row.end_time,
-            status: row.status,
+            status:
+              row.status === "active" ||
+              row.status === "sold_out" ||
+              row.status === "scheduled"
+                ? row.status
+                : "scheduled",
             sold: Math.max(0, Number(row.sold) || 0),
           })
           byTier.set(row.tier_id, list)
@@ -2915,7 +3010,9 @@ export async function getEventForEditing(
       values: {
         basics: {
           title: event.title,
-          date: toLocalDateTimeInput(event.date),
+          date: isDraftScheduleAnchor(event)
+            ? ""
+            : toLocalDateTimeInput(event.date),
           endDate: event.ends_at ? toLocalDateTimeInput(event.ends_at) : "",
           description: event.description ?? "",
           flyerName: event.flyer_url || event.image_url ? "Flyer actual" : null,
@@ -2923,7 +3020,7 @@ export async function getEventForEditing(
           isMultiDay,
           scheduleDays,
           categoryId: event.category_id ?? "",
-          ageRestriction: parseAgeRestriction(event.age_restriction),
+          ageRestriction: parseAgeRestriction(event.age_restriction) ?? "",
           hasSeatingPlan: (() => {
             const stored = (event as { has_seating_plan?: boolean | null })
               .has_seating_plan
@@ -2959,7 +3056,10 @@ export async function getEventForEditing(
           mode: event.venue_id ? "existing" : "new",
           existingVenueId: event.venue_id,
           zoneType: firstZone?.type ?? "general_admission",
-          venueName: venue?.name ?? event.location ?? "",
+          venueName: (() => {
+            const rawName = venue?.name ?? event.location ?? ""
+            return isDraftPlaceholderVenueName(rawName) ? "" : rawName
+          })(),
           venueLocation: composeVenuePlace({
             street:
               (typeof venue?.address === "string" && venue.address.trim()) ||
@@ -2987,7 +3087,13 @@ export async function getEventForEditing(
             : ""),
           provinceId: null,
           departmentId: null,
-          capacity: firstZone?.capacity ?? venueCapacity,
+          capacity: (() => {
+            const rawName = venue?.name ?? event.location ?? ""
+            if (isDraftPlaceholderVenueName(rawName) && venueCapacity <= 1) {
+              return undefined
+            }
+            return firstZone?.capacity ?? venueCapacity
+          })(),
           customMaxCapacity:
             venueMaxCapacity > (firstZone?.capacity ?? venueCapacity)
               ? venueMaxCapacity
@@ -3069,18 +3175,21 @@ async function finalizePersistedEvent(
   eventId: string,
   venueId: string | null,
   fallbackValues?: EventFormValues,
+  rehydrate = false,
 ): Promise<CreateCompleteEventResult> {
-  revalidateEventWizardPath(eventId)
-  const fresh = await getEventForEditing(eventId)
-  if (fresh) {
-    return {
-      success: true,
-      data: {
-        eventId: fresh.id,
-        venueId: venueId ?? fresh.values.venue.existingVenueId ?? null,
-        values: fresh.values,
-        zoneTierPricing: fresh.zoneTierPricing,
-      },
+  if (rehydrate) {
+    revalidateEventWizardPath(eventId)
+    const fresh = await getEventForEditing(eventId)
+    if (fresh) {
+      return {
+        success: true,
+        data: {
+          eventId: fresh.id,
+          venueId: venueId ?? fresh.values.venue.existingVenueId ?? null,
+          values: fresh.values,
+          zoneTierPricing: fresh.zoneTierPricing,
+        },
+      }
     }
   }
   if (fallbackValues) {
@@ -3126,26 +3235,34 @@ export async function createCompleteEvent(
     }
   }
 
-  const draftMode = formData.get("draftMode") === "1"
-  let identityOnly = formData.get("identityOnly") === "1"
+  const { draftMode, identityOnly: identityOnlyFlag, rehydrate } =
+    persistFlags(formData)
+  let identityOnly = identityOnlyFlag
+  console.log("PAYLOAD RECIBIDO:", parsedJson)
+  console.log("PERSIST FLAGS:", { draftMode, identityOnly, rehydrate })
   const parsed =
     draftMode || identityOnly
       ? draftEventSchema.safeParse(parsedJson)
       : publishEventSchema.safeParse(parsedJson)
 
   if (!parsed.success) {
+    console.log("RESULTADO ZOD:", parsed.error)
     return persistFailure(parsed.error)
   }
+  console.log("RESULTADO ZOD:", "ok")
 
   if (identityOnly && formHasInventoryOrVenue(parsed.data)) {
     identityOnly = false
   }
 
   if (identityOnly) {
+    console.log("CREATE PATH:", "identityOnly")
     return persistNewEventIdentityOnly(formData, parsed.data)
   }
 
-  const drafted = coerceDraftEventForm(parsed.data)
+  const drafted = coerceDraftEventForm(parsed.data, {
+    inventPlaceholders: !draftMode,
+  })
   const formValues = withHealedMapTickets(
     applyFormSeatingSectorSanitizer(
       {
@@ -3279,6 +3396,11 @@ export async function createCompleteEvent(
       return { data: result.data ?? null, error: result.error }
     },
   })
+  console.log("RESPUESTA SUPABASE:", {
+    op: "create_complete_event_with_seating_tx",
+    data: eventId,
+    error,
+  })
 
   if (error) {
     if (flyerUrl) {
@@ -3288,12 +3410,7 @@ export async function createCompleteEvent(
       }
     }
 
-    return persistFailure(
-      error.message.replace(
-        /^create_complete_event_with_seating_tx:\s*/i,
-        "",
-      ),
-    )
+    return persistFailure(error)
   }
 
   if (!eventId) {
@@ -3395,7 +3512,7 @@ export async function createCompleteEvent(
     revalidatePath("/superadmin/events")
   }
 
-  return finalizePersistedEvent(String(eventId), venueId, formValues)
+  return finalizePersistedEvent(String(eventId), venueId, formValues, rehydrate)
 }
 
 /**
@@ -3422,15 +3539,25 @@ export async function updateCompleteEvent(
     }
   }
 
-  const draftMode = formData.get("draftMode") === "1"
-  let identityOnly = formData.get("identityOnly") === "1"
+  const { draftMode, identityOnly: identityOnlyFlag, rehydrate } =
+    persistFlags(formData)
+  let identityOnly = identityOnlyFlag
+  console.log("PAYLOAD RECIBIDO:", parsedJson)
+  console.log("PERSIST FLAGS:", {
+    eventId,
+    draftMode,
+    identityOnly,
+    rehydrate,
+  })
   const parsed =
     draftMode || identityOnly
       ? draftEventSchema.safeParse(parsedJson)
       : publishEventSchema.safeParse(parsedJson)
   if (!parsed.success) {
+    console.log("RESULTADO ZOD:", parsed.error)
     return persistFailure(parsed.error)
   }
+  console.log("RESULTADO ZOD:", "ok")
 
   if (identityOnly && formHasInventoryOrVenue(parsed.data)) {
     identityOnly = false
@@ -3438,7 +3565,11 @@ export async function updateCompleteEvent(
 
   const formValues = identityOnly
     ? (parsed.data as EventFormValues)
-    : { ...coerceDraftEventForm(parsed.data) }
+    : {
+        ...coerceDraftEventForm(parsed.data, {
+          inventPlaceholders: !draftMode,
+        }),
+      }
 
   let supabase: Awaited<ReturnType<typeof createClient>>
   let userId: string
@@ -3464,8 +3595,17 @@ export async function updateCompleteEvent(
     .select("id, organizer_id, image_url, flyer_url, date, ends_at, schedule_days, venue_id")
     .eq("id", eventId)
     .maybeSingle()
+  console.log("RESPUESTA SUPABASE:", {
+    op: "events.select",
+    eventId,
+    data: event,
+    error: eventError,
+  })
 
-  if (eventError || !event) {
+  if (eventError) {
+    return { success: false, error: eventError.message }
+  }
+  if (!event) {
     return { success: false, error: "Evento no encontrado." }
   }
 
@@ -3487,6 +3627,7 @@ export async function updateCompleteEvent(
     event.organizer_id !== userId ? createAdminClient() : supabase
 
   if (identityOnly) {
+    console.log("UPDATE PATH:", "identityOnly")
     return persistEventIdentityOnly({
       formData,
       formValues,
@@ -3509,8 +3650,14 @@ export async function updateCompleteEvent(
       .select("id")
       .eq("event_id", eventId)
 
+  console.log("RESPUESTA SUPABASE:", {
+    op: "ticket_tiers.select",
+    eventId,
+    data: existingTiers,
+    error: existingTiersError,
+  })
   if (existingTiersError) {
-    return persistFailure(existingTiersError.message)
+    return persistFailure(existingTiersError)
   }
 
   formValues.tickets = reconcileTicketTierIds(
@@ -3596,7 +3743,7 @@ export async function updateCompleteEvent(
     )
     if (emptyCheckoutError) return persistFailure(emptyCheckoutError)
     await revalidatePersistedEvent(mutationClient, eventId)
-    return finalizePersistedEvent(eventId, venueId, formValues)
+    return finalizePersistedEvent(eventId, venueId, formValues, rehydrate)
   }
 
   const flyerEntry = formData.get("flyer")
@@ -3664,6 +3811,12 @@ export async function updateCompleteEvent(
       return { data: result.data ?? null, error: result.error }
     },
   })
+  console.log("RESPUESTA SUPABASE:", {
+    op: "update_complete_event_with_seating_tx",
+    eventId,
+    data: rpcResult.data,
+    error: rpcResult.error,
+  })
 
   if (rpcResult.error) {
     if (uploadedFlyerUrl) {
@@ -3672,12 +3825,7 @@ export async function updateCompleteEvent(
         await mutationClient.storage.from("event-flyers").remove([path])
       }
     }
-    return persistFailure(
-      rpcResult.error.message.replace(
-        /^update_complete_event_with_seating_tx:\s*/i,
-        "",
-      ),
-    )
+    return persistFailure(rpcResult.error)
   }
 
   const updatedId = rpcResult.data
@@ -3749,7 +3897,12 @@ export async function updateCompleteEvent(
     },
   })
 
-  return finalizePersistedEvent(String(updatedId ?? eventId), venueId, formValues)
+  return finalizePersistedEvent(
+    String(updatedId ?? eventId),
+    venueId,
+    formValues,
+    rehydrate,
+  )
 }
 
 export type PublishEventResult =

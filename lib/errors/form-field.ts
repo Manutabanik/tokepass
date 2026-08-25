@@ -34,6 +34,40 @@ export function applyZodIssuesToForm<TFieldValues extends FieldValues>(
   }
 }
 
+export function firstFieldErrorMessage(errors: FieldErrors): string | null {
+  function walk(node: unknown): string | null {
+    if (!node || typeof node !== "object") return null
+    const record = node as Record<string, unknown>
+    if (typeof record.message === "string" && record.message) {
+      return record.message
+    }
+    const root = record.root
+    if (
+      root &&
+      typeof root === "object" &&
+      typeof (root as { message?: string }).message === "string" &&
+      (root as { message: string }).message
+    ) {
+      return (root as { message: string }).message
+    }
+    for (const [key, value] of Object.entries(record)) {
+      if (
+        key === "message" ||
+        key === "type" ||
+        key === "ref" ||
+        key === "types" ||
+        key === "root"
+      ) {
+        continue
+      }
+      const found = walk(value)
+      if (found) return found
+    }
+    return null
+  }
+  return walk(errors)
+}
+
 export function firstFieldErrorPath(errors: FieldErrors): string | null {
   function walk(node: unknown, prefix: string[]): string | null {
     if (!node || typeof node !== "object") return null

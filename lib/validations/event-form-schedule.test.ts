@@ -223,4 +223,38 @@ describe("multi-day draft coercion", () => {
     assert.equal(coerced.tickets.length, 1)
     assert.equal(coerced.tickets[0]?.seatingSectorId, "zone-campo")
   })
+
+  it("does not invent venue, age or dates when drafting", () => {
+    const coerced = coerceDraftEventForm(
+      {
+        basics: {
+          title: "Borrador nuevo",
+          date: "",
+          endDate: "",
+          description: "",
+          flyerName: null,
+          visibility: "public",
+          isMultiDay: false,
+          scheduleDays: [],
+          categoryId: "",
+          ageRestriction: "",
+        },
+        venue: {
+          mode: "new",
+          existingVenueId: null,
+          zoneType: "general_admission",
+          venueName: "",
+          includesSeatingMap: false,
+          saveVenueForReuse: true,
+        },
+        tickets: [],
+      },
+      { inventPlaceholders: false },
+    )
+    assert.equal(coerced.basics.date, "")
+    assert.equal(coerced.basics.endDate, "")
+    assert.equal(coerced.basics.ageRestriction, "")
+    assert.equal(coerced.venue.venueName, "")
+    assert.equal(coerced.venue.capacity, undefined)
+  })
 })
