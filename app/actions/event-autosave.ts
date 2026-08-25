@@ -4,7 +4,7 @@ import { revalidatePublicEventCache } from "@/lib/events/revalidate-public-event
 
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
-import type { ZoneTierPriceDraft } from "@/lib/stores/event-form-store"
+import type { ZoneTierPriceDraft } from "@/lib/events/event-form-types"
 import {
   draftEventSchema,
   type EventFormValues,

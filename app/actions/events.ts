@@ -3365,6 +3365,7 @@ export async function createCompleteEvent(
   if (feePersistError) return persistFailure(feePersistError)
 
   await revalidatePersistedEvent(rpcClient, String(eventId))
+  revalidatePath(`/admin/events/${eventId}/edit`)
   if (!draftMode) {
     revalidatePath("/admin")
     revalidatePath("/")
@@ -3574,6 +3575,7 @@ export async function updateCompleteEvent(
     )
     if (emptyCheckoutError) return persistFailure(emptyCheckoutError)
     await revalidatePersistedEvent(mutationClient, eventId)
+    revalidatePath(`/admin/events/${eventId}/edit`)
     return { success: true, eventId, venueId }
   }
 
@@ -3711,6 +3713,7 @@ export async function updateCompleteEvent(
   if (capacityError) return persistFailure(capacityError)
 
   await revalidatePersistedEvent(mutationClient, eventId)
+  revalidatePath(`/admin/events/${eventId}/edit`)
   if (!draftMode) {
     revalidatePath("/admin")
     revalidatePath("/")

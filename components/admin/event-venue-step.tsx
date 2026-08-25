@@ -28,8 +28,6 @@ import { InteractiveVenueMapStudio } from "@/components/admin/interactive-venue-
 import { LogicalSectorsPanel } from "@/components/admin/logical-sectors-panel"
 import { VenueManagerModal } from "@/components/admin/venue-manager-modal"
 import { VenueMapStudioSummary } from "@/components/admin/venue-map-studio-summary"
-import { useEventFormStore } from "@/lib/stores/event-form-store"
-import { venueMapToPricingMap } from "@/lib/seating/venue-map-pricing"
 import {
   createEmptyZone,
   type VenueZoneDraft,
@@ -174,8 +172,6 @@ export function EventVenueStep({
   const [pendingUpload, startUploadTransition] = useTransition()
 
   function emitMapInventory(next: ReturnType<typeof parseVenueMap>) {
-    const pricing = venueMapToPricingMap(next)
-    useEventFormStore.getState().setVenuePricingMap(pricing)
     onMapInventoryChange?.(next)
   }
 

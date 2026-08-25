@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { ZoneTierPriceDraft } from "@/lib/stores/event-form-store"
+import type { ZoneTierPriceDraft } from "@/lib/events/event-form-types"
 import { formatCurrency } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
