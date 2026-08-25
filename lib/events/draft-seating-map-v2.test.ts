@@ -2,6 +2,8 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import {
+  cloneDraftSeatingMapInstance,
+  configuredDraftSeatingMapDateIds,
   isMapDraftTicket,
   mergeDraftTicketsWithDayMap,
   mergeDraftTicketsWithMap,
@@ -158,5 +160,30 @@ describe("draft seating map isolation", () => {
     assert.equal(next.length, 2)
     assert.equal(next[0]?.dateId, "day-a")
     assert.equal(next[1]?.dateId, "day-b")
+  })
+
+  it("lists only days that already have a valid mapConfig", () => {
+    const maps = upsertDraftSeatingMapInstance([], "day-a", plateaMap())
+    maps.push({
+      dateId: "day-empty",
+      mapConfig: toDraftSeatingMap(emptyVenueMap()),
+      pricing: { sectorPrices: {}, blockedSeatIds: [] },
+    })
+    assert.deepEqual(configuredDraftSeatingMapDateIds(maps), ["day-a"])
+  })
+
+  it("deep-clones geometry and pricing onto another day", () => {
+    const [source] = upsertDraftSeatingMapInstance([], "day-a", plateaMap())
+    assert.ok(source)
+    const cloned = cloneDraftSeatingMapInstance(source, "day-b")
+    assert.equal(cloned.dateId, "day-b")
+    assert.notEqual(cloned.mapConfig, source.mapConfig)
+    assert.notEqual(cloned.pricing, source.pricing)
+    cloned.pricing.sectorPrices["sector-platea"] = 1
+    assert.equal(source.pricing.sectorPrices["sector-platea"], 18000)
+    const clonedSectors = cloned.mapConfig.sectors as Array<{ price?: number }>
+    if (clonedSectors[0]) clonedSectors[0].price = 1
+    const sourceSectors = source.mapConfig.sectors as Array<{ price?: number }>
+    assert.equal(sourceSectors[0]?.price, 18000)
   })
 })

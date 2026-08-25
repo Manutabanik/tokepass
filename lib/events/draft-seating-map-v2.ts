@@ -242,9 +242,52 @@ export function seatingInstanceToVenueMap(
   return applyDraftMapPricing(instance.mapConfig, instance.pricing)
 }
 
-function hasDraftMapContent(raw: unknown): boolean {
+export function hasDraftSeatingMapContent(raw: unknown): boolean {
   const map = draftSeatingMapToVenueMap(raw)
   return hasInteractiveVenueMap(map) || venueMapHasInventory(map)
+}
+
+function hasDraftMapContent(raw: unknown): boolean {
+  return hasDraftSeatingMapContent(raw)
+}
+
+export function configuredDraftSeatingMapDateIds(
+  maps: Array<{ dateId?: string; mapConfig?: unknown }> | null | undefined,
+): string[] {
+  if (!Array.isArray(maps)) return []
+  const ids: string[] = []
+  for (const item of maps) {
+    const dateId = typeof item?.dateId === "string" ? item.dateId.trim() : ""
+    if (!dateId || !hasDraftSeatingMapContent(item.mapConfig)) continue
+    if (!ids.includes(dateId)) ids.push(dateId)
+  }
+  return ids
+}
+
+function deepCloneJson<T>(value: T): T {
+  if (typeof structuredClone === "function") {
+    try {
+      return structuredClone(value)
+    } catch {
+      // Fall through to JSON when the value is not structured-cloneable.
+    }
+  }
+  return JSON.parse(JSON.stringify(value)) as T
+}
+
+export function cloneDraftSeatingMapInstance(
+  source: DraftSeatingMapInstance,
+  targetDateId: string,
+): DraftSeatingMapInstance {
+  const cloned = deepCloneJson({
+    mapConfig: source.mapConfig,
+    pricing: source.pricing,
+  })
+  return {
+    dateId: targetDateId,
+    mapConfig: toDraftSeatingMap(cloned.mapConfig),
+    pricing: parseDraftMapPricing(cloned.pricing),
+  }
 }
 
 export function parseDraftSeatingMaps(
