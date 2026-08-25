@@ -448,7 +448,7 @@ function asOptionalString(value: unknown): string {
 
 export function resolveDraftSchedule(values: {
   schedule?: unknown
-  basicInfo?: { startDate?: string | null; endDate?: string | null }
+  basicInfo?: { startDate?: string | null; endDate?: string | null } | null
 }): EventDraftV2ScheduleDay[] {
   return resolveNormalizedDraftSchedule(values)
 }

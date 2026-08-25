@@ -193,7 +193,7 @@ export function normalizeDraftScheduleDay(
 
 export function resolveNormalizedDraftSchedule(values: {
   schedule?: unknown
-  basicInfo?: { startDate?: string | null; endDate?: string | null }
+  basicInfo?: { startDate?: string | null; endDate?: string | null } | null
 }): EventDraftV2ScheduleDay[] {
   const raw = Array.isArray(values.schedule)
     ? values.schedule.map((item, index) => normalizeDraftScheduleDay(item, index))
