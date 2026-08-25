@@ -12,7 +12,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
   emptyEventDraftV2,
-  eventDraftV2Schema,
+  eventDraftV2UiSchema,
+  toEventDraftV2Payload,
   type EventDraftV2,
 } from "@/lib/validations/event-draft-v2"
 
@@ -35,15 +36,15 @@ export function EventCreatorV2Form({
   const skipAutosave = useRef(true)
 
   const form = useForm<EventDraftV2>({
-    resolver: zodResolver(eventDraftV2Schema) as Resolver<EventDraftV2>,
+    resolver: zodResolver(eventDraftV2UiSchema) as Resolver<EventDraftV2>,
     defaultValues: initialDraft ?? emptyEventDraftV2(),
-    mode: "onChange",
+    mode: "onTouched",
   })
 
-  const title = form.watch("title")
+  const title = form.watch("basicInfo.name")
 
   async function persistDraft(id: string, values: EventDraftV2) {
-    const result = await saveEventDraftV2(id, values)
+    const result = await saveEventDraftV2(id, toEventDraftV2Payload(values))
     if (!result.success) {
       setStatus("error")
       setMessage(result.error)
@@ -81,11 +82,12 @@ export function EventCreatorV2Form({
       return
     }
     if (!eventId) return
-    const parsed = eventDraftV2Schema.safeParse({ title })
-    if (!parsed.success) return
     const timer = window.setTimeout(() => {
       setStatus("saving")
-      void saveEventDraftV2(eventId, parsed.data).then((result) => {
+      void saveEventDraftV2(
+        eventId,
+        toEventDraftV2Payload(form.getValues()),
+      ).then((result) => {
         if (!result.success) {
           setStatus("error")
           setMessage(result.error)
@@ -112,11 +114,11 @@ export function EventCreatorV2Form({
           id="event-v2-title"
           className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-slate-900 dark:border-zinc-800 dark:bg-zinc-900/90 dark:text-white"
           placeholder="Ej. After en la terraza"
-          {...form.register("title")}
+          {...form.register("basicInfo.name")}
         />
-        {form.formState.errors.title ? (
-          <p className="text-sm text-red-600">
-            {form.formState.errors.title.message}
+        {form.formState.errors.basicInfo?.name ? (
+          <p className="text-xs text-red-500">
+            {form.formState.errors.basicInfo.name.message}
           </p>
         ) : null}
       </div>

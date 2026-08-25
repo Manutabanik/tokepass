@@ -3,24 +3,59 @@ import { z } from "zod"
 export const eventDraftV2LineItemSchema = z.object({
   id: z.string(),
   name: z.string(),
-  price: z.coerce.number(),
-  stock: z.coerce.number(),
+  description: z.string().optional(),
+  price: z.coerce.number().min(0),
+  stock: z.coerce.number().min(0),
+  minOrder: z.coerce.number().default(1),
+  maxOrder: z.coerce.number().default(10),
 })
 
+export const eventDraftV2LineItemUiSchema = eventDraftV2LineItemSchema.extend({
+  name: z.string().min(1, "Requerido"),
+})
+
+const eventDraftV2BasicInfoSchema = z
+  .object({
+    name: z.string().default(""),
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
+    locationName: z.string().optional(),
+  })
+  .default({ name: "" })
+
+const eventDraftV2SettingsSchema = z
+  .object({
+    isPublic: z.boolean().default(false),
+    absorbFees: z.boolean().default(false),
+    refundPolicy: z.string().optional(),
+    checkoutMessage: z.string().optional(),
+  })
+  .default({ isPublic: false, absorbFees: false })
+
 const eventDraftV2FieldsSchema = z.object({
-  title: z.string(),
-  venueCapacity: z.coerce.number().optional().default(0),
+  basicInfo: eventDraftV2BasicInfoSchema,
+  venueCapacity: z.coerce.number().min(0).default(0),
   tickets: z.array(eventDraftV2LineItemSchema).default([]),
   extras: z.array(eventDraftV2LineItemSchema).default([]),
-  settings: z
-    .object({
-      isPublic: z.boolean().default(false),
-      refundPolicy: z.string().optional(),
-    })
-    .default({ isPublic: false }),
+  settings: eventDraftV2SettingsSchema,
 })
 
 export const eventDraftV2Schema = eventDraftV2FieldsSchema.passthrough()
+
+export const eventDraftV2UiSchema = eventDraftV2FieldsSchema
+  .extend({
+    basicInfo: z
+      .object({
+        name: z.string().min(1, "El nombre es obligatorio").default(""),
+        startDate: z.string().optional(),
+        endDate: z.string().optional(),
+        locationName: z.string().optional(),
+      })
+      .default({ name: "" }),
+    tickets: z.array(eventDraftV2LineItemUiSchema).default([]),
+    extras: z.array(eventDraftV2LineItemUiSchema).default([]),
+  })
+  .passthrough()
 
 export type EventDraftV2LineItem = z.infer<typeof eventDraftV2LineItemSchema>
 export type EventDraftV2 = z.infer<typeof eventDraftV2FieldsSchema>
@@ -28,16 +63,29 @@ export type EventDraftV2 = z.infer<typeof eventDraftV2FieldsSchema>
 export function emptyEventDraftV2LineItem(
   id = "item-0",
 ): EventDraftV2LineItem {
-  return { id, name: "", price: 0, stock: 0 }
+  return {
+    id,
+    name: "",
+    description: "",
+    price: 0,
+    stock: 0,
+    minOrder: 1,
+    maxOrder: 10,
+  }
 }
 
 export function emptyEventDraftV2(): EventDraftV2 {
   return {
-    title: "",
+    basicInfo: { name: "", startDate: "", endDate: "", locationName: "" },
     venueCapacity: 0,
     tickets: [],
     extras: [],
-    settings: { isPublic: false, refundPolicy: "" },
+    settings: {
+      isPublic: false,
+      absorbFees: false,
+      refundPolicy: "",
+      checkoutMessage: "",
+    },
   }
 }
 
@@ -55,6 +103,10 @@ function asFiniteNumber(value: unknown, fallback = 0): number {
   return draftNumberValue(value, fallback)
 }
 
+function asOptionalString(value: unknown): string {
+  return typeof value === "string" ? value : ""
+}
+
 function parseDraftLineItems(raw: unknown): EventDraftV2LineItem[] {
   if (!Array.isArray(raw)) return []
   return raw.map((item, index) => {
@@ -68,11 +120,28 @@ function parseDraftLineItems(raw: unknown): EventDraftV2LineItem[] {
         : `item-${index}`
     return {
       id,
-      name: typeof record.name === "string" ? record.name : "",
+      name: asOptionalString(record.name),
+      description: asOptionalString(record.description),
       price: asFiniteNumber(record.price),
       stock: asFiniteNumber(record.stock),
+      minOrder:
+        record.minOrder == null || record.minOrder === ""
+          ? 1
+          : asFiniteNumber(record.minOrder, 1),
+      maxOrder:
+        record.maxOrder == null || record.maxOrder === ""
+          ? 10
+          : asFiniteNumber(record.maxOrder, 10),
     }
   })
+}
+
+export function toEventDraftV2Payload(values: EventDraftV2) {
+  const name = values.basicInfo?.name ?? ""
+  return {
+    ...values,
+    title: name,
+  }
 }
 
 export function parseEventDraftV2(raw: unknown): EventDraftV2 {
@@ -80,6 +149,12 @@ export function parseEventDraftV2(raw: unknown): EventDraftV2 {
     return emptyEventDraftV2()
   }
   const record = raw as Record<string, unknown>
+  const basicRaw =
+    record.basicInfo &&
+    typeof record.basicInfo === "object" &&
+    !Array.isArray(record.basicInfo)
+      ? (record.basicInfo as Record<string, unknown>)
+      : {}
   const settingsRaw =
     record.settings &&
     typeof record.settings === "object" &&
@@ -87,18 +162,25 @@ export function parseEventDraftV2(raw: unknown): EventDraftV2 {
       ? (record.settings as Record<string, unknown>)
       : {}
 
+  const name =
+    asOptionalString(basicRaw.name) || asOptionalString(record.title)
+
   return {
     ...record,
-    title: typeof record.title === "string" ? record.title : "",
+    basicInfo: {
+      name,
+      startDate: asOptionalString(basicRaw.startDate),
+      endDate: asOptionalString(basicRaw.endDate),
+      locationName: asOptionalString(basicRaw.locationName),
+    },
     venueCapacity: asFiniteNumber(record.venueCapacity),
     tickets: parseDraftLineItems(record.tickets),
     extras: parseDraftLineItems(record.extras),
     settings: {
       isPublic: settingsRaw.isPublic === true,
-      refundPolicy:
-        typeof settingsRaw.refundPolicy === "string"
-          ? settingsRaw.refundPolicy
-          : "",
+      absorbFees: settingsRaw.absorbFees === true,
+      refundPolicy: asOptionalString(settingsRaw.refundPolicy),
+      checkoutMessage: asOptionalString(settingsRaw.checkoutMessage),
     },
   }
 }

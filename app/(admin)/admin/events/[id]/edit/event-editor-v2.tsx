@@ -1,9 +1,10 @@
 "use client"
 
-import { ArrowLeft } from "lucide-react"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { ArrowLeft, Settings2, Ticket, Type } from "lucide-react"
 import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
-import { FormProvider, useForm } from "react-hook-form"
+import { FormProvider, useForm, type Resolver } from "react-hook-form"
 
 import { EventEditorV2InfoStep } from "./event-editor-v2-info"
 import { EventEditorV2InventoryStep } from "./event-editor-v2-inventory"
@@ -11,12 +12,16 @@ import { EventEditorV2SettingsStep } from "./event-editor-v2-settings"
 import { saveEventDraftV2 } from "@/app/actions/events-v2"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import type { EventDraftV2 } from "@/lib/validations/event-draft-v2"
+import {
+  eventDraftV2UiSchema,
+  toEventDraftV2Payload,
+  type EventDraftV2,
+} from "@/lib/validations/event-draft-v2"
 
 const STEPS = [
-  { id: 1, label: "1. Información" },
-  { id: 2, label: "2. Entradas y Aforo" },
-  { id: 3, label: "3. Configuración" },
+  { id: 1, label: "1. Información", icon: Type },
+  { id: 2, label: "2. Entradas y Aforo", icon: Ticket },
+  { id: 3, label: "3. Configuración", icon: Settings2 },
 ] as const
 
 type EventEditorV2Props = {
@@ -34,12 +39,13 @@ export function EventEditorV2({ eventId, initialDraft }: EventEditorV2Props) {
   const saveGeneration = useRef(0)
 
   const form = useForm<EventDraftV2>({
+    resolver: zodResolver(eventDraftV2UiSchema) as Resolver<EventDraftV2>,
     defaultValues: initialDraft,
-    mode: "onChange",
+    mode: "onTouched",
     shouldUnregister: false,
   })
   const { watch, getValues } = form
-  const title = watch("title")
+  const title = watch("basicInfo.name")
 
   useEffect(() => {
     let timer: number | undefined
@@ -50,7 +56,10 @@ export function EventEditorV2({ eventId, initialDraft }: EventEditorV2Props) {
         const generation = ++saveGeneration.current
         setSaveStatus("saving")
         setSaveError("")
-        void saveEventDraftV2(eventId, getValues()).then((result) => {
+        void saveEventDraftV2(
+          eventId,
+          toEventDraftV2Payload(getValues()),
+        ).then((result) => {
           if (generation !== saveGeneration.current) return
           if (!result.success) {
             setSaveStatus("error")
@@ -127,12 +136,13 @@ export function EventEditorV2({ eventId, initialDraft }: EventEditorV2Props) {
                   type="button"
                   onClick={() => setStep(item.id)}
                   className={cn(
-                    "shrink-0 rounded-lg border px-3 py-2 text-left text-sm font-medium transition-colors",
+                    "inline-flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-medium transition-colors",
                     step === item.id
                       ? "border-emerald-500/40 bg-emerald-500/10 text-foreground"
                       : "border-border/60 text-muted-foreground hover:bg-white/5 hover:text-foreground",
                   )}
                 >
+                  <item.icon className="mb-0.5 size-3.5 lg:mb-0" aria-hidden />
                   {item.label}
                 </button>
               ))}
