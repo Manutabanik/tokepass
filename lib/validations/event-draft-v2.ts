@@ -1,64 +1,120 @@
 import { z } from "zod"
 
-export const eventDraftV2LineItemSchema = z.object({
+const draftLineItemSchema = z.object({
+  id: z.string().optional().default(""),
+  name: z.string().optional().default(""),
+  description: z.string().optional().default(""),
+  price: z.coerce.number().optional().default(0),
+  stock: z.coerce.number().optional().default(0),
+  minOrder: z.coerce.number().optional().default(1),
+  maxOrder: z.coerce.number().optional().default(10),
+})
+
+const draftBasicInfoSchema = z
+  .object({
+    name: z.string().optional().default(""),
+    startDate: z.string().optional().default(""),
+    endDate: z.string().optional().default(""),
+    locationName: z.string().optional().default(""),
+  })
+  .default({ name: "", startDate: "", endDate: "", locationName: "" })
+
+const draftSettingsSchema = z
+  .object({
+    isPublic: z.boolean().optional().default(false),
+    absorbFees: z.boolean().optional().default(false),
+    refundPolicy: z.string().optional().default(""),
+    checkoutMessage: z.string().optional().default(""),
+  })
+  .default({
+    isPublic: false,
+    absorbFees: false,
+    refundPolicy: "",
+    checkoutMessage: "",
+  })
+
+const draftSeatingMapSchema = z
+  .object({
+    url: z.string().optional().default(""),
+    sectors: z.array(z.any()).default([]),
+  })
+  .default({ url: "", sectors: [] })
+
+const eventDraftFieldsSchema = z.object({
+  basicInfo: draftBasicInfoSchema,
+  flyerUrl: z.string().optional().default(""),
+  bannerUrl: z.string().optional().default(""),
+  venueCapacity: z.coerce.number().optional().default(0),
+  tickets: z.array(draftLineItemSchema).default([]),
+  extras: z.array(draftLineItemSchema).default([]),
+  seatingMap: draftSeatingMapSchema,
+  settings: draftSettingsSchema,
+})
+
+export const eventDraftSchema = eventDraftFieldsSchema.passthrough()
+
+const publishLineItemSchema = z.object({
   id: z.string(),
-  name: z.string(),
+  name: z.string().min(1, "Requerido"),
   description: z.string().optional(),
   price: z.coerce.number().min(0),
-  stock: z.coerce.number().min(0),
-  minOrder: z.coerce.number().default(1),
-  maxOrder: z.coerce.number().default(10),
+  stock: z.coerce.number().min(1, "El stock debe ser mayor a 0"),
+  minOrder: z.coerce.number().optional(),
+  maxOrder: z.coerce.number().optional(),
 })
 
-export const eventDraftV2LineItemUiSchema = eventDraftV2LineItemSchema.extend({
-  name: z.string().min(1, "Requerido"),
-})
-
-const eventDraftV2BasicInfoSchema = z
+export const eventPublishSchema = z
   .object({
-    name: z.string().default(""),
-    startDate: z.string().optional(),
-    endDate: z.string().optional(),
-    locationName: z.string().optional(),
-  })
-  .default({ name: "" })
-
-const eventDraftV2SettingsSchema = z
-  .object({
-    isPublic: z.boolean().default(false),
-    absorbFees: z.boolean().default(false),
-    refundPolicy: z.string().optional(),
-    checkoutMessage: z.string().optional(),
-  })
-  .default({ isPublic: false, absorbFees: false })
-
-const eventDraftV2FieldsSchema = z.object({
-  basicInfo: eventDraftV2BasicInfoSchema,
-  venueCapacity: z.coerce.number().min(0).default(0),
-  tickets: z.array(eventDraftV2LineItemSchema).default([]),
-  extras: z.array(eventDraftV2LineItemSchema).default([]),
-  settings: eventDraftV2SettingsSchema,
-})
-
-export const eventDraftV2Schema = eventDraftV2FieldsSchema.passthrough()
-
-export const eventDraftV2UiSchema = eventDraftV2FieldsSchema
-  .extend({
-    basicInfo: z
+    basicInfo: z.object({
+      name: z.string().min(1, "El nombre es obligatorio"),
+      startDate: z.string().min(1, "La fecha de inicio es obligatoria"),
+      endDate: z.string().optional(),
+      locationName: z.string().min(1, "El lugar es obligatorio"),
+    }),
+    flyerUrl: z.string().optional(),
+    bannerUrl: z.string().optional(),
+    venueCapacity: z.coerce.number().min(1, "Definí el aforo del recinto"),
+    tickets: z
+      .array(publishLineItemSchema)
+      .min(1, "Agregá al menos una entrada"),
+    extras: z.array(draftLineItemSchema).optional(),
+    seatingMap: z
       .object({
-        name: z.string().min(1, "El nombre es obligatorio").default(""),
-        startDate: z.string().optional(),
-        endDate: z.string().optional(),
-        locationName: z.string().optional(),
+        url: z.string().optional(),
+        sectors: z.array(z.any()).optional(),
       })
-      .default({ name: "" }),
-    tickets: z.array(eventDraftV2LineItemUiSchema).default([]),
-    extras: z.array(eventDraftV2LineItemUiSchema).default([]),
+      .optional(),
+    settings: z
+      .object({
+        isPublic: z.boolean().optional(),
+        absorbFees: z.boolean().optional(),
+        refundPolicy: z.string().optional(),
+        checkoutMessage: z.string().optional(),
+      })
+      .optional(),
   })
-  .passthrough()
+  .superRefine((data, ctx) => {
+    const start = data.basicInfo.startDate?.trim()
+    const end = data.basicInfo.endDate?.trim()
+    if (!start || !end) return
+    const startMs = Date.parse(start)
+    const endMs = Date.parse(end)
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return
+    if (endMs <= startMs) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["basicInfo", "endDate"],
+        message: "La fecha de fin debe ser posterior al inicio",
+      })
+    }
+  })
 
-export type EventDraftV2LineItem = z.infer<typeof eventDraftV2LineItemSchema>
-export type EventDraftV2 = z.infer<typeof eventDraftV2FieldsSchema>
+export const eventDraftV2Schema = eventDraftSchema
+export const eventDraftV2UiSchema = eventPublishSchema
+export const eventDraftV2LineItemSchema = draftLineItemSchema
+
+export type EventDraftV2LineItem = z.infer<typeof draftLineItemSchema>
+export type EventDraftV2 = z.infer<typeof eventDraftFieldsSchema>
 
 export function emptyEventDraftV2LineItem(
   id = "item-0",
@@ -77,9 +133,12 @@ export function emptyEventDraftV2LineItem(
 export function emptyEventDraftV2(): EventDraftV2 {
   return {
     basicInfo: { name: "", startDate: "", endDate: "", locationName: "" },
+    flyerUrl: "",
+    bannerUrl: "",
     venueCapacity: 0,
     tickets: [],
     extras: [],
+    seatingMap: { url: "", sectors: [] },
     settings: {
       isPublic: false,
       absorbFees: false,
@@ -144,6 +203,10 @@ export function toEventDraftV2Payload(values: EventDraftV2) {
   }
 }
 
+export function isEventDraftPublishable(values: unknown) {
+  return eventPublishSchema.safeParse(values).success
+}
+
 export function parseEventDraftV2(raw: unknown): EventDraftV2 {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     return emptyEventDraftV2()
@@ -161,6 +224,12 @@ export function parseEventDraftV2(raw: unknown): EventDraftV2 {
     !Array.isArray(record.settings)
       ? (record.settings as Record<string, unknown>)
       : {}
+  const seatingRaw =
+    record.seatingMap &&
+    typeof record.seatingMap === "object" &&
+    !Array.isArray(record.seatingMap)
+      ? (record.seatingMap as Record<string, unknown>)
+      : {}
 
   const name =
     asOptionalString(basicRaw.name) || asOptionalString(record.title)
@@ -173,9 +242,15 @@ export function parseEventDraftV2(raw: unknown): EventDraftV2 {
       endDate: asOptionalString(basicRaw.endDate),
       locationName: asOptionalString(basicRaw.locationName),
     },
+    flyerUrl: asOptionalString(record.flyerUrl),
+    bannerUrl: asOptionalString(record.bannerUrl),
     venueCapacity: asFiniteNumber(record.venueCapacity),
     tickets: parseDraftLineItems(record.tickets),
     extras: parseDraftLineItems(record.extras),
+    seatingMap: {
+      url: asOptionalString(seatingRaw.url),
+      sectors: Array.isArray(seatingRaw.sectors) ? seatingRaw.sectors : [],
+    },
     settings: {
       isPublic: settingsRaw.isPublic === true,
       absorbFees: settingsRaw.absorbFees === true,

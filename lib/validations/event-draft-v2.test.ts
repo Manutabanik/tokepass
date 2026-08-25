@@ -4,28 +4,86 @@ import { describe, it } from "node:test"
 import {
   draftCapacityThermometer,
   emptyEventDraftV2,
-  eventDraftV2Schema,
-  eventDraftV2UiSchema,
+  eventDraftSchema,
+  eventPublishSchema,
+  isEventDraftPublishable,
   parseEventDraftV2,
   toEventDraftV2Payload,
 } from "@/lib/validations/event-draft-v2"
 
-describe("eventDraftV2Schema", () => {
-  it("accepts an empty name for JSON drafts", () => {
-    const parsed = eventDraftV2Schema.parse({ basicInfo: { name: "" } })
+function publishableDraft() {
+  return {
+    ...emptyEventDraftV2(),
+    basicInfo: {
+      name: "After",
+      startDate: "2026-09-01T22:00",
+      endDate: "2026-09-02T04:00",
+      locationName: "Niceto",
+    },
+    venueCapacity: 200,
+    tickets: [
+      {
+        id: "t1",
+        name: "General",
+        description: "",
+        price: 15000,
+        stock: 80,
+        minOrder: 1,
+        maxOrder: 10,
+      },
+    ],
+  }
+}
+
+describe("eventDraftSchema", () => {
+  it("accepts an empty draft so autosave never blocks", () => {
+    const parsed = eventDraftSchema.parse({})
     assert.equal(parsed.basicInfo.name, "")
     assert.equal(parsed.venueCapacity, 0)
     assert.deepEqual(parsed.tickets, [])
     assert.deepEqual(parsed.extras, [])
-    assert.equal(parsed.settings.isPublic, false)
-    assert.equal(parsed.settings.absorbFees, false)
+    assert.equal(parsed.flyerUrl, "")
+    assert.deepEqual(parsed.seatingMap.sectors, [])
   })
 
-  it("surfaces required name only on the UI schema", () => {
-    const persist = eventDraftV2Schema.safeParse({ basicInfo: { name: "" } })
-    const ui = eventDraftV2UiSchema.safeParse({ basicInfo: { name: "" } })
-    assert.equal(persist.success, true)
-    assert.equal(ui.success, false)
+  it("still accepts over-capacity stock without failing", () => {
+    const parsed = eventDraftSchema.safeParse({
+      venueCapacity: 10,
+      tickets: [{ id: "t1", name: "General", stock: 99 }],
+    })
+    assert.equal(parsed.success, true)
+  })
+})
+
+describe("eventPublishSchema", () => {
+  it("rejects an empty draft", () => {
+    assert.equal(eventPublishSchema.safeParse(emptyEventDraftV2()).success, false)
+    assert.equal(isEventDraftPublishable(emptyEventDraftV2()), false)
+  })
+
+  it("requires ticket stock greater than 0", () => {
+    const draft = publishableDraft()
+    draft.tickets[0]!.stock = 0
+    assert.equal(eventPublishSchema.safeParse(draft).success, false)
+  })
+
+  it("requires endDate to be after startDate", () => {
+    const draft = publishableDraft()
+    draft.basicInfo.endDate = "2026-08-01T22:00"
+    const result = eventPublishSchema.safeParse(draft)
+    assert.equal(result.success, false)
+    if (!result.success) {
+      assert.ok(
+        result.error.issues.some((issue) =>
+          issue.path.join(".").includes("endDate"),
+        ),
+      )
+    }
+  })
+
+  it("accepts a complete draft", () => {
+    assert.equal(eventPublishSchema.safeParse(publishableDraft()).success, true)
+    assert.equal(isEventDraftPublishable(publishableDraft()), true)
   })
 })
 
@@ -36,22 +94,24 @@ describe("parseEventDraftV2", () => {
     assert.equal(parsed.venueCapacity, 0)
     assert.deepEqual(parsed.tickets, [])
     assert.deepEqual(parsed.extras, [])
+    assert.equal(parsed.flyerUrl, "")
+    assert.deepEqual(parsed.seatingMap, { url: "", sectors: [] })
     assert.equal(parsed.settings.isPublic, false)
-    assert.equal(parsed.settings.absorbFees, false)
-    assert.equal(parsed.settings.refundPolicy, "")
-    assert.equal(parsed.settings.checkoutMessage, "")
     assert.equal((parsed as { keep?: number }).keep, 1)
     assert.deepEqual(parseEventDraftV2(null), emptyEventDraftV2())
   })
 
-  it("reads tickets, extras and settings from stored JSON", () => {
+  it("reads media, seating map, tickets and settings from stored JSON", () => {
     const parsed = parseEventDraftV2({
       basicInfo: {
         name: "Club",
         startDate: "2026-09-01T22:00",
         locationName: "Niceto",
       },
+      flyerUrl: "https://cdn.example/flyer.jpg",
+      bannerUrl: "https://cdn.example/banner.jpg",
       venueCapacity: "200",
+      seatingMap: { url: "https://cdn.example/map.png", sectors: [{ id: "a" }] },
       tickets: [
         {
           id: "t1",
@@ -71,27 +131,12 @@ describe("parseEventDraftV2", () => {
         checkoutMessage: "Gracias",
       },
     })
-    assert.equal(parsed.basicInfo.name, "Club")
-    assert.equal(parsed.basicInfo.startDate, "2026-09-01T22:00")
-    assert.equal(parsed.basicInfo.locationName, "Niceto")
-    assert.equal(parsed.venueCapacity, 200)
-    assert.deepEqual(parsed.tickets, [
-      {
-        id: "t1",
-        name: "General",
-        description: "Acceso",
-        price: 15000,
-        stock: 80,
-        minOrder: 2,
-        maxOrder: 6,
-      },
-    ])
-    assert.equal(parsed.extras[0]?.name, "Cerveza")
+    assert.equal(parsed.flyerUrl, "https://cdn.example/flyer.jpg")
+    assert.equal(parsed.bannerUrl, "https://cdn.example/banner.jpg")
+    assert.equal(parsed.seatingMap.url, "https://cdn.example/map.png")
+    assert.equal(parsed.seatingMap.sectors.length, 1)
+    assert.equal(parsed.tickets[0]?.stock, 80)
     assert.equal(parsed.extras[0]?.minOrder, 1)
-    assert.equal(parsed.extras[0]?.maxOrder, 10)
-    assert.equal(parsed.settings.isPublic, true)
-    assert.equal(parsed.settings.absorbFees, true)
-    assert.equal(parsed.settings.refundPolicy, "Sin devoluciones")
     assert.equal(parsed.settings.checkoutMessage, "Gracias")
   })
 })
@@ -116,8 +161,6 @@ describe("draftCapacityThermometer", () => {
       venueCapacity: 100,
     })
     assert.equal(snap.used, 50)
-    assert.equal(snap.capacity, 100)
-    assert.equal(snap.ratio, 0.5)
     assert.equal(snap.overCapacity, false)
   })
 

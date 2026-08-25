@@ -2,7 +2,14 @@
 
 import { formatSupabaseError } from "@/lib/errors/supabase-error"
 import { isPlatformOwnerRole } from "@/lib/auth/platform-owner"
+import {
+  bytesToBlob,
+  detectRasterImageMagic,
+  rasterContentType,
+  readFileBytes,
+} from "@/lib/media/image-magic"
 import { createClient } from "@/lib/supabase/server"
+import { MAX_EVENT_FLYER_BYTES } from "@/lib/validations/event-form"
 import type { Json } from "@/types/database"
 
 export type SaveEventDraftV2Result =
@@ -136,4 +143,84 @@ export async function saveEventDraftV2(
     eventId: data.id,
     draftState: (data.draft_state ?? draftState) as Json,
   }
+}
+
+export type UploadEventDraftMediaV2Result =
+  | { success: true; url: string }
+  | { success: false; error: string }
+
+function sanitizeMediaFileName(name: string): string {
+  return name
+    .normalize("NFKD")
+    .replace(/[^\w.\-]+/g, "-")
+    .replace(/-+/g, "-")
+    .toLowerCase()
+    .slice(0, 80)
+}
+
+/**
+ * Uploads an image to Storage and returns a public URL.
+ * Does not write ticket_tiers, venues, or events.flyer_url.
+ */
+export async function uploadEventDraftMediaV2(
+  eventId: string,
+  formData: FormData,
+): Promise<UploadEventDraftMediaV2Result> {
+  const id = eventId.trim()
+  if (!id) return { success: false, error: "Evento inválido." }
+
+  const gate = await requireDraftWriter()
+  if (!gate.ok) return { success: false, error: gate.error }
+
+  const { data: event, error: eventError } = await gate.supabase
+    .from("events")
+    .select("id, organizer_id")
+    .eq("id", id)
+    .maybeSingle()
+  if (eventError) return { success: false, error: formatSupabaseError(eventError) }
+  if (!event) return { success: false, error: "Evento no encontrado." }
+  if (event.organizer_id !== gate.userId && !gate.isSuperAdmin) {
+    return { success: false, error: "No tenés permiso para editar este evento." }
+  }
+
+  const file = formData.get("file")
+  if (!(file instanceof File) || file.size === 0) {
+    return { success: false, error: "Elegí una imagen para subir." }
+  }
+  if (file.size > MAX_EVENT_FLYER_BYTES) {
+    return { success: false, error: "La imagen no puede superar los 5 MB." }
+  }
+
+  const kindRaw = String(formData.get("kind") ?? "flyer")
+  const kind = kindRaw === "banner" ? "banner" : "flyer"
+  const bytes = await readFileBytes(file)
+  const raster = detectRasterImageMagic(bytes)
+  if (!raster) {
+    return { success: false, error: "La imagen debe ser JPG, PNG o WEBP." }
+  }
+  const contentType = rasterContentType(raster)
+  const uniqueName = `${kind}-${Date.now()}-${sanitizeMediaFileName(file.name || `${kind}.jpg`)}`
+  const path = `${gate.userId}/draft-v2/${id}/${uniqueName}`
+
+  const { error: uploadError } = await gate.supabase.storage
+    .from("event-flyers")
+    .upload(path, bytesToBlob(bytes, contentType), {
+      cacheControl: "60",
+      upsert: false,
+      contentType,
+    })
+  if (uploadError) {
+    return {
+      success: false,
+      error: `No se pudo subir la imagen: ${uploadError.message}`,
+    }
+  }
+
+  const { data } = gate.supabase.storage.from("event-flyers").getPublicUrl(path)
+  if (!data?.publicUrl) {
+    await gate.supabase.storage.from("event-flyers").remove([path])
+    return { success: false, error: "No se pudo obtener la URL pública." }
+  }
+
+  return { success: true, url: data.publicUrl }
 }

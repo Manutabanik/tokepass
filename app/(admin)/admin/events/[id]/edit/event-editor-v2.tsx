@@ -1,10 +1,10 @@
 "use client"
 
-import { zodResolver } from "@hookform/resolvers/zod"
 import { ArrowLeft, Settings2, Ticket, Type } from "lucide-react"
 import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
-import { FormProvider, useForm, type Resolver } from "react-hook-form"
+import { FormProvider, useForm } from "react-hook-form"
+import { toast } from "sonner"
 
 import { EventEditorV2InfoStep } from "./event-editor-v2-info"
 import { EventEditorV2InventoryStep } from "./event-editor-v2-inventory"
@@ -13,7 +13,7 @@ import { saveEventDraftV2 } from "@/app/actions/events-v2"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import {
-  eventDraftV2UiSchema,
+  isEventDraftPublishable,
   toEventDraftV2Payload,
   type EventDraftV2,
 } from "@/lib/validations/event-draft-v2"
@@ -39,13 +39,13 @@ export function EventEditorV2({ eventId, initialDraft }: EventEditorV2Props) {
   const saveGeneration = useRef(0)
 
   const form = useForm<EventDraftV2>({
-    resolver: zodResolver(eventDraftV2UiSchema) as Resolver<EventDraftV2>,
     defaultValues: initialDraft,
     mode: "onTouched",
     shouldUnregister: false,
   })
   const { watch, getValues } = form
   const title = watch("basicInfo.name")
+  const canPublish = isEventDraftPublishable(watch())
 
   useEffect(() => {
     let timer: number | undefined
@@ -122,7 +122,16 @@ export function EventEditorV2({ eventId, initialDraft }: EventEditorV2Props) {
                       ? "Error al guardar"
                       : "Sin cambios"}
               </p>
-              <Button type="button" disabled>
+              <Button
+                type="button"
+                disabled={!canPublish}
+                onClick={() =>
+                  toast.message("El borrador ya cumple lo mínimo para publicar.", {
+                    description:
+                      "Publicar V2 todavía no materializa tickets ni recinto.",
+                  })
+                }
+              >
                 Publicar V2
               </Button>
             </div>
@@ -149,7 +158,7 @@ export function EventEditorV2({ eventId, initialDraft }: EventEditorV2Props) {
             </nav>
 
             <section className="min-w-0 rounded-2xl border border-border/50 bg-white/40 p-5 dark:bg-zinc-950/40">
-              {step === 1 ? <EventEditorV2InfoStep /> : null}
+              {step === 1 ? <EventEditorV2InfoStep eventId={eventId} /> : null}
               {step === 2 ? <EventEditorV2InventoryStep /> : null}
               {step === 3 ? <EventEditorV2SettingsStep /> : null}
 

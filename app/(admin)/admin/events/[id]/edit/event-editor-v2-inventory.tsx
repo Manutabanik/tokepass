@@ -1,6 +1,7 @@
 "use client"
 
-import { Package, Plus, Ticket, Trash2, Users } from "lucide-react"
+import { MapPinned, Package, Plus, Ticket, Trash2, Users } from "lucide-react"
+import { useState } from "react"
 import { useFieldArray, useFormContext, useWatch } from "react-hook-form"
 
 import {
@@ -9,6 +10,14 @@ import {
   DraftFieldError,
 } from "./event-editor-v2-ui"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -52,9 +61,19 @@ export function EventEditorV2InventoryStep() {
             className={DRAFT_FIELD_CLASS}
             {...register("venueCapacity", { setValueAs: draftNumberValue })}
           />
+          {meter.overCapacity ? (
+            <p
+              role="status"
+              className="rounded-lg bg-orange-500/10 px-3 py-2 text-sm text-orange-400"
+            >
+              Atención: El stock de tus entradas supera la capacidad del recinto
+            </p>
+          ) : null}
           <CapacityBar meter={meter} />
         </div>
       </DraftCard>
+
+      <SeatingMapPlaceholder />
 
       <DraftLineItemList
         name="tickets"
@@ -76,6 +95,47 @@ export function EventEditorV2InventoryStep() {
         emptyIcon={Package}
       />
     </div>
+  )
+}
+
+function SeatingMapPlaceholder() {
+  const [open, setOpen] = useState(false)
+  const seatingMap = useWatch({ name: "seatingMap" })
+  const sectorCount = seatingMap?.sectors?.length ?? 0
+
+  return (
+    <DraftCard>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-zinc-100">
+            <MapPinned className="size-4 text-emerald-400" aria-hidden />
+            Mapa de asientos
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Opcional. La estructura vive en el JSON, no en tablas relacionales.
+            {sectorCount > 0
+              ? ` ${sectorCount} sector${sectorCount === 1 ? "" : "es"} en el borrador.`
+              : ""}
+          </p>
+        </div>
+        <Button type="button" variant="outline" onClick={() => setOpen(true)}>
+          Configurar Mapa (Opcional)
+        </Button>
+      </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="border-border bg-card text-foreground sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Mapa de asientos</DialogTitle>
+            <DialogDescription>
+              El editor de mapa llega en un próximo paso. El campo{" "}
+              <code>seatingMap</code> ya forma parte de <code>draft_state</code>.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter showCloseButton />
+        </DialogContent>
+      </Dialog>
+    </DraftCard>
   )
 }
 
